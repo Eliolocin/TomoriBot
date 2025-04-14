@@ -1,203 +1,221 @@
 {
-  "economy": {
-    "balance": {
-      "title": "残高",
-      "description": "💰 **TomoCoins**: {coins}\n🏦 **銀行残高**: {bank}",
-      "footer": "もっとTomoCoinを貯めてね！(￣▽￣*)ゞ"
-    },
-    "daily": {
-      "title": "新しい残高:",
-      "claim_success": "🎉 **{claimed}** TomoCoinsを受け取りました！\n💰 **新しい残高:** {new_balance}",
-      "footer_lucky": "おめでとうございます！ラッキーな報酬でした！🎉",
-      "footer": "もっとTomoCoinを貯めてね！(￣▽￣*)ゞ",
-      "cooldown": "⏳ 今日のデイリー報酬は既に受け取り済みです。{hours}時間後にまた来てください。"
-    },
-    "deposit": {
-      "invalid_amount_title": "金額が無効です",
-      "invalid_amount_description": "🚫 有効な金額を入力してください。正の値でなければなりません。",
-      "insufficient_funds_title": "残高不足",
-      "insufficient_funds_description": "💸 この金額を預けるための十分なTomoCoinがありません！\n\n💰 **現在の財布残高:** {wallet_balance}\n🏦 **預金しようとした額:** {attempted}",
-      "success_title": "預金完了！",
-      "success_description": "✅ **{amount}** TomoCoinsを銀行に預けました！\n\n💰 **新しい財布残高:** {wallet_balance}\n🏦 **新しい銀行残高:** {bank_balance}",
-      "invalid_amount_footer": "もう一度お試しください！",
-      "insufficient_funds_footer": "もっとTomoCoinを稼いで再度挑戦してください！",
-      "success_footer": "貯金完了です！ 🏦"
-    },
-    "donate": {
-      "invalid_amount_title": "金額が無効です",
-      "invalid_amount_description": "🚫 寄付する金額を正の値で入力してください。",
-      "insufficient_funds_title": "残高不足",
-      "insufficient_funds_description": "💸 この金額を寄付するための十分なTomoCoinがありません！\n\n💰 **現在の財布残高:** {wallet_balance}\n🎁 **寄付しようとした額:** {attempted}",
-      "success_title": "寄付成功!",
-      "success_description": "✅ **{recipient}**に**{amount}** TomoCoinsを寄付しました！\n\n💰 **新しい財布残高:** {wallet_balance}",
-      "success_footer": "あなたはとても親切です！ 🎁",
-      "recipient_notification_title": "寄付が届きました！",
-      "recipient_notification_description": "🎉 **{donor}**から**{amount}** TomoCoinsを受け取りました！\n\n🏦 **新しい銀行残高:** {new_bank_balance}"
-    },
-    "withdraw": {
-      "invalid_amount_title": "金額が無効です",
-      "invalid_amount_description": "🚫 有効な金額を入力してください。正の値でなければなりません。",
-      "insufficient_balance_title": "銀行残高不足",
-      "insufficient_balance_description": "🏦 この金額を引き出すための十分な銀行残高がありません！\n\n💰 **現在の銀行残高:** {bank_balance}\n🏧 **引き出そうとした額:** {attempted}",
-      "success_title": "引き出し完了！",
-      "success_description": "✅ **{amount}** TomoCoinsを銀行から財布に引き出しました！\n\n💰 **新しい財布残高:** {wallet_balance}\n🏦 **新しい銀行残高:** {bank_balance}",
-      "invalid_amount_footer": "もう一度お試しください！",
-      "insufficient_balance_footer": "もっとTomoCoinを貯めて再挑戦してください！",
-      "success_footer": "お金を賢く使ってね！ 💸"
-    }
-  },
-  "scrape": {
-    "booru": {
-      "title": "Booru検索",
-      "description": "以下の検索ワードに基づきランダムな「SFW」高画質投稿を最大4つ取得します: `{query}`\nフィルタ済み検索クエリ: `{filtered_query}`",
-      "error_not_nsfw": "申し訳ありませんが、このコマンドはNSFWチャンネルのみで使用できます！",
-      "error_no_results": "ごめんなさい、以下の検索ワードでは投稿が見つかりませんでした: `{query}`。\n別の検索ワードを試すか、`/rule34`を試してみてください！",
-      "progress_message": "投稿をランダムに取得してアップロード中です...",
-      "query_comparison_title": "検索クエリの変換",
-      "query_comparison_description": "入力されたタグ: `{original}`\n検索クエリ: `{filtered}`",
-      "result_title": "出典: {source}",
-      "result_original": "(ソース未提供)",
-      "result_footer": "スコア: {score} | タグ: {tags}"
-    },
-    "doujin": {
-      "title_random": "ランダムな同人誌をどうぞ...変態!",
-      "title_tags": "同人誌ID {doujin_id}のタグ",
-      "embed": {
-        "title": "{title} ({index}/{total})",
-        "url": "https://nhentai.net/g/{doujin_id}/",
-        "image_url": "https://t.nhentai.net/galleries/{media_id}/thumb.jpg"
-      },
-      "buttons": {
-        "prev": "前へ",
-        "next": "次へ"
-      },
-      "error_no_results": "申し訳ありませんが、同人誌を取得できませんでした。",
-      "footer_tags": "タグ: {tags}"
-    },
-    "rule34": {
-      "title": "Rule34検索",
-      "description": "以下の検索ワードに基づきランダムな「NSFW」高画質投稿を最大4つ取得します: `{query}`\nフィルタ済み検索クエリ: `{filtered_query}`",
-      "error_not_nsfw": "申し訳ありませんが、このコマンドはNSFWチャンネルのみで使用できます！",
-      "error_no_results": "ごめんなさい、以下の検索ワードでは投稿が見つかりませんでした: `{query}`。\n別の検索ワードを試すか、`/booru`を試してみてください！",
-      "progress_message": "投稿をランダムに取得してアップロード中です...",
-      "query_comparison_title": "検索クエリの変換",
-      "query_comparison_description": "入力されたタグ: `{original}`\n検索クエリ: `{filtered}`",
-      "result_title": "出典: {source}",
-      "result_original": "(ソース未提供)",
-      "result_footer": "スコア: {score} | タグ: {tags}"
-    }
-  },
-  "fun": {
-    "gamba": {
-      "insufficient_funds_title": "残高不足",
-      "insufficient_funds_description": "💸 この金額をギャンブルするために十分なTomoCoinがありません！\n\n💰 **残高:** {balance}\n🎲 **ギャンブルした額:** {attempted}",
-      "win_title": "勝利！",
-      "win_description": "🎉 おめでとうございます！ギャンブルで**{winnings}** TomoCoinsを獲得しました！\n\n💰 **新しい残高:** {new_balance}",
-      "lose_title": "敗北…",
-      "lose_description": "💔 残念！**{amount_lost}** TomoCoinsを失いました。\n\n💰 **新しい残高:** {new_balance}",
-      "insufficient_funds_footer": "小さい金額で試してみて！頑張って！",
-      "win_footer": "大勝利！運が良いですね？",
-      "lose_footer": "痛い！ギャンブルはリスクがあります！"
-    },
-    "generate": {
-      "description": "Stable Diffusionを使用して、プロンプトからイメージを素早く生成します！",
-      "progress": "🎨 `{prompt}` のイメージを生成中です...",
-      "result": "✨ `{prompt}` に基づいて生成したイメージはこちらです (b ᵔ▽ᵔ)b",
-      "error": "🚫 イメージを生成中にエラーが発生しました。後でもう一度試してください。"
-    }
-  },
-  "tool": {
-    "setlanguage": {
-      "success_english": "✅ 言語が英語に設定されました！",
-      "success_japanese": "✅ 言語が日本語に設定されました！",
-      "description": "ボットの優先言語を設定します。"
-    },
-    "ping": {
-      "description": "ポン！",
-      "response_fast": "ポン！Discordに**{response_time}ms**で応答しました！| Discordの応答速度は**{discord_response}ms**です！",
-      "response_slow": "ポン！Discordに**{response_time}ms**で応答しました！| Discordの応答速度は**{discord_response}ms**です！今日はちょっと遅れてるみたいです (￣▽￣*)ゞ"
-    },
+	"economy": {
+		"balance": {
+			"title": "残高",
+			"description": "💰 **TomoCoins**: {coins}\n🏦 **銀行残高**: {bank}",
+			"footer": "もっとTomoCoinを貯めてね！(￣▽￣*)ゞ"
+		},
+		"daily": {
+			"title": "新しい残高:",
+			"claim_success": "🎉 **{claimed}** TomoCoinsを受け取りました！\n💰 **新しい残高:** {new_balance}",
+			"footer_lucky": "おめでとうございます！ラッキーな報酬でした！🎉",
+			"footer": "もっとTomoCoinを貯めてね！(￣▽￣*)ゞ",
+			"cooldown": "⏳ 今日のデイリー報酬は既に受け取り済みです。{hours}時間後にまた来てください。"
+		},
+		"deposit": {
+			"invalid_amount_title": "金額が無効です",
+			"invalid_amount_description": "🚫 有効な金額を入力してください。正の値でなければなりません。",
+			"insufficient_funds_title": "残高不足",
+			"insufficient_funds_description": "💸 この金額を預けるための十分なTomoCoinがありません！\n\n💰 **現在の財布残高:** {wallet_balance}\n🏦 **預金しようとした額:** {attempted}",
+			"success_title": "預金完了！",
+			"success_description": "✅ **{amount}** TomoCoinsを銀行に預けました！\n\n💰 **新しい財布残高:** {wallet_balance}\n🏦 **新しい銀行残高:** {bank_balance}",
+			"invalid_amount_footer": "もう一度お試しください！",
+			"insufficient_funds_footer": "もっとTomoCoinを稼いで再度挑戦してください！",
+			"success_footer": "貯金完了です！ 🏦"
+		},
+		"donate": {
+			"invalid_amount_title": "金額が無効です",
+			"invalid_amount_description": "🚫 寄付する金額を正の値で入力してください。",
+			"insufficient_funds_title": "残高不足",
+			"insufficient_funds_description": "💸 この金額を寄付するための十分なTomoCoinがありません！\n\n💰 **現在の財布残高:** {wallet_balance}\n🎁 **寄付しようとした額:** {attempted}",
+			"success_title": "寄付成功!",
+			"success_description": "✅ **{recipient}**に**{amount}** TomoCoinsを寄付しました！\n\n💰 **新しい財布残高:** {wallet_balance}",
+			"success_footer": "あなたはとても親切です！ 🎁",
+			"recipient_notification_title": "寄付が届きました！",
+			"recipient_notification_description": "🎉 **{donor}**から**{amount}** TomoCoinsを受け取りました！\n\n🏦 **新しい銀行残高:** {new_bank_balance}"
+		},
+		"withdraw": {
+			"invalid_amount_title": "金額が無効です",
+			"invalid_amount_description": "🚫 有効な金額を入力してください。正の値でなければなりません。",
+			"insufficient_balance_title": "銀行残高不足",
+			"insufficient_balance_description": "🏦 この金額を引き出すための十分な銀行残高がありません！\n\n💰 **現在の銀行残高:** {bank_balance}\n🏧 **引き出そうとした額:** {attempted}",
+			"success_title": "引き出し完了！",
+			"success_description": "✅ **{amount}** TomoCoinsを銀行から財布に引き出しました！\n\n💰 **新しい財布残高:** {wallet_balance}\n🏦 **新しい銀行残高:** {bank_balance}",
+			"invalid_amount_footer": "もう一度お試しください！",
+			"insufficient_balance_footer": "もっとTomoCoinを貯めて再挑戦してください！",
+			"success_footer": "お金を賢く使ってね！ 💸"
+		}
+	},
+	"scrape": {
+		"booru": {
+			"title": "Booru検索",
+			"description": "以下の検索ワードに基づきランダムな「SFW」高画質投稿を最大4つ取得します: `{query}`\nフィルタ済み検索クエリ: `{filtered_query}`",
+			"error_not_nsfw": "申し訳ありませんが、このコマンドはNSFWチャンネルのみで使用できます！",
+			"error_no_results": "ごめんなさい、以下の検索ワードでは投稿が見つかりませんでした: `{query}`。\n別の検索ワードを試すか、`/rule34`を試してみてください！",
+			"progress_message": "投稿をランダムに取得してアップロード中です...",
+			"query_comparison_title": "検索クエリの変換",
+			"query_comparison_description": "入力されたタグ: `{original}`\n検索クエリ: `{filtered}`",
+			"result_title": "出典: {source}",
+			"result_original": "(ソース未提供)",
+			"result_footer": "スコア: {score} | タグ: {tags}"
+		},
+		"doujin": {
+			"title_random": "ランダムな同人誌をどうぞ...変態!",
+			"title_tags": "同人誌ID {doujin_id}のタグ",
+			"embed": {
+				"title": "{title} ({index}/{total})",
+				"url": "https://nhentai.net/g/{doujin_id}/",
+				"image_url": "https://t.nhentai.net/galleries/{media_id}/thumb.jpg"
+			},
+			"buttons": {
+				"prev": "前へ",
+				"next": "次へ"
+			},
+			"error_no_results": "申し訳ありませんが、同人誌を取得できませんでした。",
+			"footer_tags": "タグ: {tags}"
+		},
+		"rule34": {
+			"title": "Rule34検索",
+			"description": "以下の検索ワードに基づきランダムな「NSFW」高画質投稿を最大4つ取得します: `{query}`\nフィルタ済み検索クエリ: `{filtered_query}`",
+			"error_not_nsfw": "申し訳ありませんが、このコマンドはNSFWチャンネルのみで使用できます！",
+			"error_no_results": "ごめんなさい、以下の検索ワードでは投稿が見つかりませんでした: `{query}`。\n別の検索ワードを試すか、`/booru`を試してみてください！",
+			"progress_message": "投稿をランダムに取得してアップロード中です...",
+			"query_comparison_title": "検索クエリの変換",
+			"query_comparison_description": "入力されたタグ: `{original}`\n検索クエリ: `{filtered}`",
+			"result_title": "出典: {source}",
+			"result_original": "(ソース未提供)",
+			"result_footer": "スコア: {score} | タグ: {tags}"
+		}
+	},
+	"fun": {
+		"gamba": {
+			"insufficient_funds_title": "残高不足",
+			"insufficient_funds_description": "💸 この金額をギャンブルするために十分なTomoCoinがありません！\n\n💰 **残高:** {balance}\n🎲 **ギャンブルした額:** {attempted}",
+			"win_title": "勝利！",
+			"win_description": "🎉 おめでとうございます！ギャンブルで**{winnings}** TomoCoinsを獲得しました！\n\n💰 **新しい残高:** {new_balance}",
+			"lose_title": "敗北…",
+			"lose_description": "💔 残念！**{amount_lost}** TomoCoinsを失いました。\n\n💰 **新しい残高:** {new_balance}",
+			"insufficient_funds_footer": "小さい金額で試してみて！頑張って！",
+			"win_footer": "大勝利！運が良いですね？",
+			"lose_footer": "痛い！ギャンブルはリスクがあります！"
+		},
+		"generate": {
+			"description": "Stable Diffusionを使用して、プロンプトからイメージを素早く生成します！",
+			"progress": "🎨 `{prompt}` のイメージを生成中です...",
+			"result": "✨ `{prompt}` に基づいて生成したイメージはこちらです (b ᵔ▽ᵔ)b",
+			"error": "🚫 イメージを生成中にエラーが発生しました。後でもう一度試してください。"
+		}
+	},
+	"tool": {
+		"setlanguage": {
+			"success_english": "✅ 言語が英語に設定されました！",
+			"success_japanese": "✅ 言語が日本語に設定されました！",
+			"description": "ボットの優先言語を設定します。"
+		},
+		"ping": {
+			"description": "ポン！",
+			"response_fast": "ポン！Discordに**{response_time}ms**で応答しました！| Discordの応答速度は**{discord_response}ms**です！",
+			"response_slow": "ポン！Discordに**{response_time}ms**で応答しました！| Discordの応答速度は**{discord_response}ms**です！今日はちょっと遅れてるみたいです (￣▽￣*)ゞ"
+		},
 
-    "language": {
-      "description": "ボットの優先言語を設定します。",
-      "success_title": "言語設定完了",
-      "success_description": "✅ 言語設定を{language}に更新しました！",
-      "error_title": "エラー",
-      "error_description": "言語設定の更新中にエラーが発生しました。もう一度お試しください！"
-    },
-    "teach": {
-      "error_title": "エラー",
-      "error_description": "問題が発生しました。もう一度お試しください！",
-      "info_prompt_title": "新しい情報の追加",
-      "info_prompt_description": "教えたい情報を入力してください！ユーザーをメンションすると、そのニックネームを覚えます。",
-      "info_success_title": "情報を追加しました！",
-      "info_success_description": "✅ 覚えました：{info}",
-      "info_empty_title": "情報なし",
-      "info_empty_description": "データベースにはまだ情報が保存されていません！",
-      "info_list_title": "保存された情報",
-      "info_remove_success_title": "情報を削除しました",
-      "info_remove_success_description": "✅ 削除しました：{info}",
-      "convo_prompt_title": "新しい会話の追加",
-      "convo_prompt_description": "覚えさせたい質問を入力してください！",
-      "convo_answer_prompt": "その質問への回答を入力してください！",
-      "convo_success_title": "会話を追加しました！",
-      "convo_success_description": "✅ 覚えました：\n質問：{question}\n回答：{answer}",
-      "convo_empty_title": "会話例なし",
-      "convo_empty_description": "まだ会話例が保存されていません！",
-      "convo_list_title": "保存された会話",
-      "convo_remove_success_title": "会話を削除しました",
-      "convo_remove_success_description": "✅ 削除しました：\n質問：{question}\n回答：{answer}",
-      "remove_prompt": "削除したいエントリの番号を入力してください",
-      "cancelled_title": "操作がキャンセルされました",
-      "cancelled_description": "教育操作がキャンセルされました。",
-      "trigger_error_title": "トリガーエラー",
-      "trigger_missing_word": "🚫 追加するトリガーワードを入力してください！",
-      "trigger_duplicate": "🚫 このトリガーワードは既に存在します！",
-      "trigger_success_title": "トリガー追加完了！",
-      "trigger_success_description": "✅ 新しいトリガーワードを追加しました：**{trigger}**",
-      "trigger_empty_title": "トリガーなし",
-      "trigger_empty_description": "トリガーワードがまだ保存されていません！",
-      "trigger_list_title": "保存されたトリガーワード",
-      "trigger_remove_success_title": "トリガー削除完了",
-      "trigger_remove_success_description": "✅ トリガーワードを削除しました：**{trigger}**",
-      "nickname_success_title": "ニックネーム更新完了！",
-      "nickname_success_description": "✅ ニックネームを「**{nickname}**」に設定しました",
-      "nickname_error_title": "エラー",
-      "nickname_error_description": "ニックネームの更新中にエラーが発生しました。もう一度お試しください！",
-      "botname_success_title": "ボット名を更新しました！",
-      "botname_success_description": "✅ ボットの名前を「**{name}**」に設定しました",
-      "botname_error_title": "エラー",
-      "botname_error_description": "ボット名の更新中にエラーが発生しました。もう一度お試しください！"
-    },
-    "settings": {
-      "error_title": "設定エラー",
-      "error_description": "問題が発生しました。もう一度お試しください。",
-      "no_permission": "🚫 この設定を変更するにはチャンネル管理権限が必要です！",
-      "automsg_minimum": "🚫 自動メッセージの間隔は0（無効）または30以上である必要があります。",
-      "automsg_success_title": "自動メッセージを更新しました！",
-      "automsg_success_description": "✅ ボットは{count}メッセージごとに応答します。（0 = 無効）",
-      "teachperms_success_title": "教育権限を更新しました！",
-      "teachperms_success_description": "✅ 教育権限を**{mode}**に設定しました",
-      "language_success_title": "言語を更新しました！",
-      "language_success_description": "✅ 言語を日本語に設定しました。"
-    }
-  },
-  "general": {
-    "cooldown": "⏳ このコマンドを使用するには{seconds}秒待つ必要があります。",
-    "errors": {
-      "command_timeout": "コマンドがタイムアウトしました！もう一度お試しください。",
-      "dev_only": "申し訳ありませんが、この機能は開発者専用です！",
-      "test_only": "申し訳ありませんが、これはテスト用コマンドです！",
-      "insufficient_permissions": "権限が不足しています！",
-      "generic_error": "コマンドの実行中にエラーが発生しました！"
-    }
-  },
-  "events": {
-    "geminiBot": {
-      "setup_required_title": "ボットのセットアップが必要です",
-      "setup_required_description": "チャット機能を使用するには、以下の設定が必要です：\n• `/teach convo`で少なくとも2つの会話例を追加\n• `/teach info`で少なくとも1つの情報を追加\nボットの性格プリセットを簡単に選択するには、`/setup`コマンドを使用してください。",
-      "safety_error_title": "セーフティフィルターが作動しました",
-      "safety_error_description": "🚫 Geminiのセーフティフィルターが応答をブロックしました。これは通常、コンテンツがGoogleの安全基準に違反する可能性がある場合に発生します"
-    }
-  }
+		"language": {
+			"description": "ボットの優先言語を設定します。",
+			"success_title": "言語設定完了",
+			"success_description": "✅ 言語設定を{language}に更新しました！",
+			"error_title": "エラー",
+			"error_description": "言語設定の更新中にエラーが発生しました。もう一度お試しください！"
+		},
+		"teach": {
+			"error_title": "エラー",
+			"error_description": "問題が発生しました。もう一度お試しください！",
+			"info_prompt_title": "新しい情報の追加",
+			"info_prompt_description": "教えたい情報を入力してください！ユーザーをメンションすると、そのニックネームを覚えます。",
+			"info_success_title": "情報を追加しました！",
+			"info_success_description": "✅ 覚えました：{info}",
+			"info_empty_title": "情報なし",
+			"info_empty_description": "データベースにはまだ情報が保存されていません！",
+			"info_list_title": "保存された情報",
+			"info_remove_success_title": "情報を削除しました",
+			"info_remove_success_description": "✅ 削除しました：{info}",
+			"convo_prompt_title": "新しい会話の追加",
+			"convo_prompt_description": "覚えさせたい質問を入力してください！",
+			"convo_answer_prompt": "その質問への回答を入力してください！",
+			"convo_success_title": "会話を追加しました！",
+			"convo_success_description": "✅ 覚えました：{convo}",
+			"convo_empty_title": "会話例なし",
+			"convo_empty_description": "まだ会話例が保存されていません！",
+			"convo_list_title": "保存された会話",
+			"convo_remove_success_title": "会話を削除しました",
+			"convo_remove_success_description": "✅ 削除しました：\n質問：{question}\n回答：{answer}",
+			"remove_prompt": "削除したいエントリの番号を入力してください",
+			"cancelled_title": "操作がキャンセルされました",
+			"cancelled_description": "教育操作がキャンセルされました。",
+			"trigger_error_title": "トリガーエラー",
+			"trigger_missing_word": "🚫 追加するトリガーワードを入力してください！",
+			"trigger_duplicate": "🚫 このトリガーワードは既に存在します！",
+			"trigger_success_title": "トリガー追加完了！",
+			"trigger_success_description": "✅ 新しいトリガーワードを追加しました：**{trigger}**",
+			"trigger_empty_title": "トリガーなし",
+			"trigger_empty_description": "トリガーワードがまだ保存されていません！",
+			"trigger_list_title": "保存されたトリガーワード",
+			"trigger_remove_success_title": "トリガー削除完了",
+			"trigger_remove_success_description": "✅ トリガーワードを削除しました：**{trigger}**",
+			"nickname_success_title": "ニックネーム更新完了！",
+			"nickname_success_description": "✅ ニックネームを「**{nickname}**」に設定しました",
+			"nickname_error_title": "エラー",
+			"nickname_error_description": "ニックネームの更新中にエラーが発生しました。もう一度お試しください！",
+			"botname_success_title": "ボット名を更新しました！",
+			"botname_success_description": "✅ ボットの名前を「**{name}**」に設定しました",
+			"botname_error_title": "エラー",
+			"botname_error_description": "ボット名の更新中にエラーが発生しました。もう一度お試しください！",
+			"preset_confirm_title": "性格変更の確認",
+			"preset_confirm_description": "本当にボットの性格を「{personality}」に変更しますか？現在の設定のバックアップJSONファイルが提供されます。",
+			"preset_success_title": "性格プリセットを適用しました",
+			"preset_success_description": "✅ ボットの性格を「{personality}」に設定しました！前の設定のバックアップをJSONファイルで添付しました。",
+			"preset_timeout_title": "操作がタイムアウトしました",
+			"preset_timeout_description": "タイムアウトのため、性格の変更がキャンセルされました。もう一度お試しください。",
+			"preset_error_title": "プリセットエラー",
+			"preset_error_description": "性格プリセットの適用中にエラーが発生しました。もう一度お試しください！",
+			"no_permission": "🚫 この操作にはチャンネル管理権限が必要です！",
+			"personality_prompt_title": "ボットの性格設定",
+			"personality_prompt_description": "ボットの新しい性格説明を入力してください。",
+			"personality_warning": "⚠️ 注意：現在の性格設定は上書きされます。バックアップはJSONファイルとして提供されます。",
+			"personality_success_title": "性格を更新しました！",
+			"personality_success_description": "✅ ボットの性格が正常に更新されました！以前の性格設定のバックアップをJSONファイルで添付しています。"
+		},
+		"settings": {
+			"error_title": "設定エラー",
+			"error_description": "問題が発生しました。もう一度お試しください。",
+			"no_permission": "🚫 この設定を変更するにはチャンネル管理権限が必要です！",
+			"automsg_minimum": "🚫 自動メッセージの間隔は0（無効）または30以上である必要があります。",
+			"automsg_success_title": "自動メッセージを更新しました！",
+			"automsg_success_description": "✅ ボットは{count}メッセージごとに応答します。（0 = 無効）",
+			"teachperms_success_title": "教育権限を更新しました！",
+			"teachperms_success_description": "✅ 教育権限を**{mode}**に設定しました",
+			"language_success_title": "言語を更新しました！",
+			"language_success_description": "✅ 言語を日本語に設定しました。"
+		},
+		"refresh": {
+			"success_title": "AIリフレッシュ完了！",
+			"success_description": "✅ AIモデルがリフレッシュされました！"
+		}
+	},
+	"general": {
+		"cooldown": "⏳ このコマンドを使用するには{seconds}秒待つ必要があります。",
+		"errors": {
+			"command_timeout": "コマンドがタイムアウトしました！もう一度お試しください。",
+			"dev_only": "申し訳ありませんが、この機能は開発者専用です！",
+			"test_only": "申し訳ありませんが、これはテスト用コマンドです！",
+			"insufficient_permissions": "権限が不足しています！",
+			"generic_error": "コマンドの実行中にエラーが発生しました！"
+		}
+	},
+	"events": {
+		"geminiBot": {
+			"setup_required_title": "ボットのセットアップが必要です",
+			"setup_required_description": "チャット機能を使用するには、以下の設定が必要です：\n• `/teach convo`で少なくとも2つの会話例を追加\n• `/teach info`で少なくとも1つの情報を追加\nボットの性格プリセットを簡単に選択するには、`/setup`コマンドを使用してください。",
+			"safety_error_title": "セーフティフィルターが作動しました",
+			"safety_error_description": "🚫 Geminiのセーフティフィルターが応答をブロックしました。これは通常、コンテンツがGoogleの安全基準に違反する可能性がある場合に発生します"
+		}
+	}
 }

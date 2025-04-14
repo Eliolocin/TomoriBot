@@ -1,202 +1,220 @@
 {
-  "economy": {
-    "balance": {
-      "title": "Your Balance",
-      "description": "💰 **TomoCoins**: {coins}\n🏦 **Bank Balance**: {bank}",
-      "footer": "Keep earning those TomoCoins! (￣▽￣*)ゞ"
-    },
-    "daily": {
-      "title": "New Balance:",
-      "claim_success": "🎉 You claimed **{claimed}** TomoCoins!\n💰 **New Balance:** {new_balance}",
-      "footer_lucky": "Congratulations! That was a lucky claim! 🎉",
-      "footer": "Keep earning those TomoCoins! (￣▽￣*)ゞ",
-      "cooldown": "⏳ You've already claimed your daily reward. Please come back in {hours} hours."
-    },
-    "deposit": {
-      "invalid_amount_title": "Invalid Amount",
-      "invalid_amount_description": "🚫 You must deposit a valid positive amount greater than 0.",
-      "insufficient_funds_title": "Insufficient Funds",
-      "insufficient_funds_description": "💸 You don't have enough TomoCoins in your wallet to deposit that amount!\n\n💰 **Your Wallet Balance:** {wallet_balance}\n🏦 **Attempted Deposit:** {attempted}",
-      "success_title": "Deposit Successful!",
-      "success_description": "✅ You’ve successfully deposited **{amount}** TomoCoins into your bank!\n\n💰 **New Wallet Balance:** {wallet_balance}\n🏦 **New Bank Balance:** {bank_balance}",
-      "invalid_amount_footer": "Please try again!",
-      "insufficient_funds_footer": "Earn more TomoCoins and try again!",
-      "success_footer": "Savings secured! 🏦"
-    },
-    "donate": {
-      "invalid_amount_title": "Invalid Amount",
-      "invalid_amount_description": "🚫 You must donate a valid positive amount greater than 0.",
-      "insufficient_funds_title": "Insufficient Funds",
-      "insufficient_funds_description": "💸 You don't have enough TomoCoins in your wallet to make this donation!\n\n💰 **Your Wallet Balance:** {wallet_balance}\n🎁 **Attempted Donation:** {attempted}",
-      "success_title": "Donation Successful!",
-      "success_description": "✅ You’ve successfully donated **{amount}** TomoCoins to **{recipient}**.\n\n💰 **Your New Wallet Balance:** {wallet_balance}",
-      "success_footer": "You're so generous! 🎁",
-      "recipient_notification_title": "You’ve Received a Donation!",
-      "recipient_notification_description": "🎉 You’ve received **{amount}** TomoCoins from **{donor}**!\n\n🏦 **Your New Bank Balance:** {new_bank_balance}"
-    },
-    "withdraw": {
-      "invalid_amount_title": "Invalid Amount",
-      "invalid_amount_description": "🚫 You must withdraw a valid positive amount greater than 0.",
-      "insufficient_balance_title": "Insufficient Bank Balance",
-      "insufficient_balance_description": "🏦 You don't have enough TomoCoins in your bank to withdraw that amount!\n\n💰 **Your Bank Balance:** {bank_balance}\n🏧 **Attempted Withdrawal:** {attempted}",
-      "success_title": "Withdrawal Successful!",
-      "success_description": "✅ You’ve successfully withdrawn **{amount}** TomoCoins from your bank to your wallet!\n\n💰 **New Wallet Balance:** {wallet_balance}\n🏦 **New Bank Balance:** {bank_balance}",
-      "invalid_amount_footer": "Please try again!",
-      "insufficient_balance_footer": "Save up more TomoCoins and try again!",
-      "success_footer": "Spend wisely! 💸"
-    }
-  },
-  "scrape": {
-    "booru": {
-      "title": "Booru Search",
-      "description": "Quickly get up to 4 random 'SFW' HQ posts for: `{query}`\nFiltered Query: `{filtered_query}`",
-      "error_not_nsfw": "Sorry, you can only use this command in NSFW channels!",
-      "error_no_results": "Sowwy, I didn't find any posts for: `{query}`.\nTry a different prompt or try `/rule34` instead!",
-      "progress_message": "Downloading posts and uploading them in random...",
-      "query_comparison_title": "Search Query Translation",
-      "query_comparison_description": "Your tags: `{original}`\nSearching for: `{filtered}`",
-      "result_title": "Original: {source}",
-      "result_original": "(No source provided)",
-      "result_footer": "Score: {score} | Tags: {tags}"
-    },
-    "doujin": {
-      "title_random": "Here are some random Doujins...変態!",
-      "title_tags": "Tags for Doujin ID {doujin_id}",
-      "embed": {
-        "title": "{title} ({index}/{total})",
-        "url": "https://nhentai.net/g/{doujin_id}/",
-        "image_url": "https://t.nhentai.net/galleries/{media_id}/thumb.jpg"
-      },
-      "buttons": {
-        "prev": "Previous",
-        "next": "Next"
-      },
-      "error_no_results": "Sorry, no doujins could be fetched at this time.",
-      "footer_tags": "Tags: {tags}"
-    },
-    "rule34": {
-      "title": "Rule34 Search",
-      "description": "Quickly get up to 4 random 'NSFW' HQ posts for: `{query}`\nFiltered Query: `{filtered_query}`",
-      "error_not_nsfw": "Sorry, you can only use this command in NSFW channels!",
-      "error_no_results": "Sowwy, I didn't find any posts for: `{query}`.\nTry a different prompt or try `/booru` instead!",
-      "progress_message": "Downloading posts and uploading them in random...",
-      "query_comparison_title": "Search Query Translation",
-      "query_comparison_description": "Your tags: `{original}`\nSearching for: `{filtered}`",
-      "result_title": "Original: {source}",
-      "result_original": "(No source provided)",
-      "result_footer": "Score: {score} | Tags: {tags}"
-    }
-  },
-  "fun": {
-    "gamba": {
-      "insufficient_funds_title": "Insufficient Funds",
-      "insufficient_funds_description": "💸 You don't have enough TomoCoins to gamble that amount!\n\n💰 **Your Balance:** {balance}\n🎲 **Attempted Gamble:** {attempted}",
-      "win_title": "You Win!",
-      "win_description": "🎉 Congratulations! You doubled your gamble and won **{winnings}** TomoCoins!\n\n💰 **New Balance:** {new_balance}",
-      "lose_title": "You Lost!",
-      "lose_description": "💔 Better luck next time! You lost **{amount_lost}** TomoCoins.\n\n💰 **New Balance:** {new_balance}",
-      "insufficient_funds_footer": "Try a smaller amount! Good luck!",
-      "win_footer": "Big win! Feeling lucky?",
-      "lose_footer": "Ouch! Gambling is risky!"
-    },
-    "generate": {
-      "description": "Quickly generate an image from a prompt using Stable Diffusion!",
-      "progress": "🎨 Generating your image for: `{prompt}`...",
-      "result": "✨ Here's what I generated for `{prompt}` (b ᵔ▽ᵔ)b",
-      "error": "🚫 Something went wrong while generating the image. Please try again later."
-    }
-  },
-  "tool": {
-    "setlanguage": {
-      "success_english": "✅ Language set to English!",
-      "success_japanese": "✅ 言語が日本語に設定されました！",
-      "description": "Set your preferred language for the bot."
-    },
-    "ping": {
-      "description": "Pong!",
-      "response_fast": "Pong! I responded to Discord within **{response_time}ms**! | Discord is responding to me **{discord_response}ms** fast!",
-      "response_slow": "Pong! I responded to Discord within **{response_time}ms**! | Discord is responding to me **{discord_response}ms** fast! Looks like I am a bit laggy today (￣▽￣*)ゞ"
-    },
-    "language": {
-      "description": "Set your preferred language for the bot.",
-      "success_title": "Language Set",
-      "success_description": "✅ Your language preference has been updated to {language}!",
-      "error_title": "Error",
-      "error_description": "There was an error updating your language preference. Please try again!"
-    },
-    "teach": {
-      "error_title": "Error",
-      "error_description": "Something went wrong. Please try again!",
-      "info_prompt_title": "Add New Information",
-      "info_prompt_description": "Please enter the information you want to teach me! You can mention users and I'll remember their nicknames.",
-      "info_success_title": "Information Added!",
-      "info_success_description": "✅ I've learned: {info}",
-      "info_empty_title": "No Information",
-      "info_empty_description": "There's no information stored in my database yet!",
-      "info_list_title": "Stored Information",
-      "info_remove_success_title": "Information Removed",
-      "info_remove_success_description": "✅ Removed: {info}",
-      "convo_prompt_title": "Add New Conversation",
-      "convo_prompt_description": "Please enter the question you want me to learn!",
-      "convo_answer_prompt": "Now enter how I should answer that question!",
-      "convo_success_title": "Conversation Added!",
-      "convo_success_description": "✅ I've learned:\nQ: {question}\nA: {answer}",
-      "convo_empty_title": "No Conversations",
-      "convo_empty_description": "There are no conversation examples stored yet!",
-      "convo_list_title": "Stored Conversations",
-      "convo_remove_success_title": "Conversation Removed",
-      "convo_remove_success_description": "✅ Removed:\nQ: {question}\nA: {answer}",
-      "remove_prompt": "Enter the number of the entry you want to remove",
-      "cancelled_title": "Operation Cancelled",
-      "cancelled_description": "The teaching operation has been cancelled.",
-      "trigger_error_title": "Trigger Error",
-      "trigger_missing_word": "🚫 You must provide a trigger word to add!",
-      "trigger_duplicate": "🚫 This trigger word already exists!",
-      "trigger_success_title": "Trigger Added!",
-      "trigger_success_description": "✅ Added new trigger word: **{trigger}**",
-      "trigger_empty_title": "No Triggers",
-      "trigger_empty_description": "There are no trigger words stored yet!",
-      "trigger_list_title": "Stored Trigger Words",
-      "trigger_remove_success_title": "Trigger Removed",
-      "trigger_remove_success_description": "✅ Removed trigger word: **{trigger}**",
-      "nickname_success_title": "Nickname Updated!",
-      "nickname_success_description": "✅ Your nickname has been set to: **{nickname}**",
-      "nickname_error_title": "Error",
-      "nickname_error_description": "There was an error updating your nickname. Please try again!",
-      "botname_success_title": "Bot Name Updated!",
-      "botname_success_description": "✅ The bot's name has been set to: **{name}**",
-      "botname_error_title": "Error",
-      "botname_error_description": "There was an error updating the bot's name. Please try again!"
-    },
-    "settings": {
-      "error_title": "Settings Error",
-      "error_description": "Something went wrong. Please try again.",
-      "no_permission": "🚫 You need Manage Channels permission to do this!",
-      "automsg_minimum": "🚫 Auto-message count must be 0 (disabled) or at least 30.",
-      "automsg_success_title": "Auto-Message Updated!",
-      "automsg_success_description": "✅ Bot will now respond every {count} messages. (0 = disabled)",
-      "teachperms_success_title": "Teaching Permissions Updated!",
-      "teachperms_success_description": "✅ Teaching permissions set to: **{mode}**",
-      "language_success_title": "Language Updated!",
-      "language_success_description": "✅ Your language has been set to English."
-    }
-  },
-  "general": {
-    "cooldown": "⏳ You need to wait {seconds} seconds before using this command again.",
-    "errors": {
-      "command_timeout": "This command has timed out! Please try again.",
-      "dev_only": "Sorry, only developers are allowed to run this command!",
-      "test_only": "Sorry, this is a test command!",
-      "insufficient_permissions": "Not enough permissions!",
-      "generic_error": "There was an error executing this command!"
-    }
-  },
-  "events": {
-    "geminiBot": {
-      "setup_required_title": "Bot Setup Required",
-      "setup_required_description": "To use the chat feature, please set up the following:\n• At least 2 conversation examples using `/teach convo`\n• At least 1 info entry using `/teach info`\nYou may also use `/setup` to easily choose a personality preset for the bot.",
-      "safety_error_title": "Safety Filter Triggered",
-      "safety_error_description": "🚫 Gemini's safety filters blocked the response. This usually happens when the content might violate Google's safety measures."
-    }
-  }
+	"economy": {
+		"balance": {
+			"title": "Your Balance",
+			"description": "💰 **TomoCoins**: {coins}\n🏦 **Bank Balance**: {bank}",
+			"footer": "Keep earning those TomoCoins! (￣▽￣*)ゞ"
+		},
+		"daily": {
+			"title": "New Balance:",
+			"claim_success": "🎉 You claimed **{claimed}** TomoCoins!\n💰 **New Balance:** {new_balance}",
+			"footer_lucky": "Congratulations! That was a lucky claim! 🎉",
+			"footer": "Keep earning those TomoCoins! (￣▽￣*)ゞ",
+			"cooldown": "⏳ You've already claimed your daily reward. Please come back in {hours} hours."
+		},
+		"deposit": {
+			"invalid_amount_title": "Invalid Amount",
+			"invalid_amount_description": "🚫 You must deposit a valid positive amount greater than 0.",
+			"insufficient_funds_title": "Insufficient Funds",
+			"insufficient_funds_description": "💸 You don't have enough TomoCoins in your wallet to deposit that amount!\n\n💰 **Your Wallet Balance:** {wallet_balance}\n🏦 **Attempted Deposit:** {attempted}",
+			"success_title": "Deposit Successful!",
+			"success_description": "✅ You’ve successfully deposited **{amount}** TomoCoins into your bank!\n\n💰 **New Wallet Balance:** {wallet_balance}\n🏦 **New Bank Balance:** {bank_balance}",
+			"invalid_amount_footer": "Please try again!",
+			"insufficient_funds_footer": "Earn more TomoCoins and try again!",
+			"success_footer": "Savings secured! 🏦"
+		},
+		"donate": {
+			"invalid_amount_title": "Invalid Amount",
+			"invalid_amount_description": "🚫 You must donate a valid positive amount greater than 0.",
+			"insufficient_funds_title": "Insufficient Funds",
+			"insufficient_funds_description": "💸 You don't have enough TomoCoins in your wallet to make this donation!\n\n💰 **Your Wallet Balance:** {wallet_balance}\n🎁 **Attempted Donation:** {attempted}",
+			"success_title": "Donation Successful!",
+			"success_description": "✅ You’ve successfully donated **{amount}** TomoCoins to **{recipient}**.\n\n💰 **Your New Wallet Balance:** {wallet_balance}",
+			"success_footer": "You're so generous! 🎁",
+			"recipient_notification_title": "You’ve Received a Donation!",
+			"recipient_notification_description": "🎉 You’ve received **{amount}** TomoCoins from **{donor}**!\n\n🏦 **Your New Bank Balance:** {new_bank_balance}"
+		},
+		"withdraw": {
+			"invalid_amount_title": "Invalid Amount",
+			"invalid_amount_description": "🚫 You must withdraw a valid positive amount greater than 0.",
+			"insufficient_balance_title": "Insufficient Bank Balance",
+			"insufficient_balance_description": "🏦 You don't have enough TomoCoins in your bank to withdraw that amount!\n\n💰 **Your Bank Balance:** {bank_balance}\n🏧 **Attempted Withdrawal:** {attempted}",
+			"success_title": "Withdrawal Successful!",
+			"success_description": "✅ You’ve successfully withdrawn **{amount}** TomoCoins from your bank to your wallet!\n\n💰 **New Wallet Balance:** {wallet_balance}\n🏦 **New Bank Balance:** {bank_balance}",
+			"invalid_amount_footer": "Please try again!",
+			"insufficient_balance_footer": "Save up more TomoCoins and try again!",
+			"success_footer": "Spend wisely! 💸"
+		}
+	},
+	"scrape": {
+		"booru": {
+			"title": "Booru Search",
+			"description": "Quickly get up to 4 random 'SFW' HQ posts for: `{query}`\nFiltered Query: `{filtered_query}`",
+			"error_not_nsfw": "Sorry, you can only use this command in NSFW channels!",
+			"error_no_results": "Sowwy, I didn't find any posts for: `{query}`.\nTry a different prompt or try `/rule34` instead!",
+			"progress_message": "Downloading posts and uploading them in random...",
+			"query_comparison_title": "Search Query Translation",
+			"query_comparison_description": "Your tags: `{original}`\nSearching for: `{filtered}`",
+			"result_title": "Original: {source}",
+			"result_original": "(No source provided)",
+			"result_footer": "Score: {score} | Tags: {tags}"
+		},
+		"doujin": {
+			"title_random": "Here are some random Doujins...変態!",
+			"title_tags": "Tags for Doujin ID {doujin_id}",
+			"embed": {
+				"title": "{title} ({index}/{total})",
+				"url": "https://nhentai.net/g/{doujin_id}/",
+				"image_url": "https://t.nhentai.net/galleries/{media_id}/thumb.jpg"
+			},
+			"buttons": {
+				"prev": "Previous",
+				"next": "Next"
+			},
+			"error_no_results": "Sorry, no doujins could be fetched at this time.",
+			"footer_tags": "Tags: {tags}"
+		},
+		"rule34": {
+			"title": "Rule34 Search",
+			"description": "Quickly get up to 4 random 'NSFW' HQ posts for: `{query}`\nFiltered Query: `{filtered_query}`",
+			"error_not_nsfw": "Sorry, you can only use this command in NSFW channels!",
+			"error_no_results": "Sowwy, I didn't find any posts for: `{query}`.\nTry a different prompt or try `/booru` instead!",
+			"progress_message": "Downloading posts and uploading them in random...",
+			"query_comparison_title": "Search Query Translation",
+			"query_comparison_description": "Your tags: `{original}`\nSearching for: `{filtered}`",
+			"result_title": "Original: {source}",
+			"result_original": "(No source provided)",
+			"result_footer": "Score: {score} | Tags: {tags}"
+		}
+	},
+	"fun": {
+		"gamba": {
+			"insufficient_funds_title": "Insufficient Funds",
+			"insufficient_funds_description": "💸 You don't have enough TomoCoins to gamble that amount!\n\n💰 **Your Balance:** {balance}\n🎲 **Attempted Gamble:** {attempted}",
+			"win_title": "You Win!",
+			"win_description": "🎉 Congratulations! You doubled your gamble and won **{winnings}** TomoCoins!\n\n💰 **New Balance:** {new_balance}",
+			"lose_title": "You Lost!",
+			"lose_description": "💔 Better luck next time! You lost **{amount_lost}** TomoCoins.\n\n💰 **New Balance:** {new_balance}",
+			"insufficient_funds_footer": "Try a smaller amount! Good luck!",
+			"win_footer": "Big win! Feeling lucky?",
+			"lose_footer": "Ouch! Gambling is risky!"
+		},
+		"generate": {
+			"description": "Quickly generate an image from a prompt using Stable Diffusion!",
+			"progress": "🎨 Generating your image for: `{prompt}`...",
+			"result": "✨ Here's what I generated for `{prompt}` (b ᵔ▽ᵔ)b",
+			"error": "🚫 Something went wrong while generating the image. Please try again later."
+		}
+	},
+	"tool": {
+		"setlanguage": {
+			"success_english": "✅ Language set to English!",
+			"success_japanese": "✅ 言語が日本語に設定されました！",
+			"description": "Set your preferred language for the bot."
+		},
+		"ping": {
+			"description": "Pong!",
+			"response_fast": "Pong! I responded to Discord within **{response_time}ms**! | Discord is responding to me **{discord_response}ms** fast!",
+			"response_slow": "Pong! I responded to Discord within **{response_time}ms**! | Discord is responding to me **{discord_response}ms** fast! Looks like I am a bit laggy today (￣▽￣*)ゞ"
+		},
+		"language": {
+			"description": "Set your preferred language for the bot.",
+			"success_title": "Language Set",
+			"success_description": "✅ Your language preference has been updated to {language}!",
+			"error_title": "Error",
+			"error_description": "There was an error updating your language preference. Please try again!"
+		},
+		"teach": {
+			"error_title": "Error",
+			"error_description": "Something went wrong. Please try again!",
+			"info_prompt_title": "Add New Information",
+			"info_prompt_description": "Please enter the information you want to teach me! You can mention users and I'll remember their nicknames.",
+			"info_success_title": "Information Added!",
+			"info_success_description": "✅ I've learned: {info}",
+			"info_empty_title": "No Information",
+			"info_empty_description": "There's no information stored in my database yet!",
+			"info_list_title": "Stored Information",
+			"info_remove_success_title": "Information Removed",
+			"info_remove_success_description": "✅ Removed: {info}",
+			"convo_prompt_title": "Add New Conversation",
+			"convo_prompt_description": "Please enter the question you want me to learn!",
+			"convo_answer_prompt": "Now enter how I should answer that question!",
+			"convo_success_title": "Conversation Added!",
+			"convo_success_description": "✅ I've learned: {convo}",
+			"convo_empty_title": "No Conversations",
+			"convo_empty_description": "There are no conversation examples stored yet!",
+			"convo_list_title": "Stored Conversations",
+			"convo_remove_success_title": "Conversation Removed",
+			"convo_remove_success_description": "✅ Removed:\nQ: {question}\nA: {answer}",
+			"remove_prompt": "Enter the number of the entry you want to remove",
+			"cancelled_title": "Operation Cancelled",
+			"cancelled_description": "The teaching operation has been cancelled.",
+			"trigger_error_title": "Trigger Error",
+			"trigger_missing_word": "🚫 You must provide a trigger word to add!",
+			"trigger_duplicate": "🚫 This trigger word already exists!",
+			"trigger_success_title": "Trigger Added!",
+			"trigger_success_description": "✅ Added new trigger word: **{trigger}**",
+			"trigger_empty_title": "No Triggers",
+			"trigger_empty_description": "There are no trigger words stored yet!",
+			"trigger_list_title": "Stored Trigger Words",
+			"trigger_remove_success_title": "Trigger Removed",
+			"trigger_remove_success_description": "✅ Removed trigger word: **{trigger}**",
+			"nickname_success_title": "Nickname Updated!",
+			"nickname_success_description": "✅ Your nickname has been set to: **{nickname}**",
+			"nickname_error_title": "Error",
+			"nickname_error_description": "There was an error updating your nickname. Please try again!",
+			"botname_success_title": "Bot Name Updated!",
+			"botname_success_description": "✅ The bot's name has been set to: **{name}**",
+			"botname_error_title": "Error",
+			"botname_error_description": "There was an error updating the bot's name. Please try again!",
+			"preset_confirm_title": "Confirm Personality Change",
+			"preset_confirm_description": "Are you sure you want to change the bot's personality to {personality}? A backup of the current personality will be provided as a JSON file.",
+			"preset_success_title": "Personality Preset Applied",
+			"preset_success_description": "✅ Bot's personality has been set to {personality}! I've attached a backup of the previous personality settings as a JSON file.",
+			"preset_timeout_title": "Operation Timed Out",
+			"preset_timeout_description": "The personality change has been cancelled due to timeout. Please try again.",
+			"preset_error_title": "Preset Error",
+			"preset_error_description": "There was an error applying the personality preset. Please try again!",
+			"no_permission": "🚫 You need Manage Channels permission to do this!"
+		},
+		"settings": {
+			"error_title": "Settings Error",
+			"error_description": "Something went wrong. Please try again.",
+			"no_permission": "🚫 You need Manage Channels permission to do this!",
+			"personality_prompt_title": "Set Bot Personality",
+			"personality_prompt_description": "Please enter the new personality description for the bot.",
+			"personality_warning": "⚠️ Warning: This will replace the current personality. A backup will be provided as a JSON file.",
+			"personality_success_title": "Personality Updated!",
+			"personality_success_description": "✅ The bot's personality has been updated successfully! A backup of the previous personality is attached as a JSON file.",
+			"automsg_minimum": "🚫 Auto-message count must be 0 (disabled) or at least 30.",
+			"automsg_success_title": "Auto-Message Updated!",
+			"automsg_success_description": "✅ Bot will now respond every {count} messages. (0 = disabled)",
+			"teachperms_success_title": "Teaching Permissions Updated!",
+			"teachperms_success_description": "✅ Teaching permissions set to: **{mode}**",
+			"language_success_title": "Language Updated!",
+			"language_success_description": "✅ Your language has been set to English."
+		},
+		"refresh": {
+			"success_title": "AI Personality Refreshed!",
+			"success_description": "✅ The AI has been refreshed and is ready to chat!"
+		}
+	},
+	"general": {
+		"cooldown": "⏳ You need to wait {seconds} seconds before using this command again.",
+		"errors": {
+			"command_timeout": "This command has timed out! Please try again.",
+			"dev_only": "Sorry, only developers are allowed to run this command!",
+			"test_only": "Sorry, this is a test command!",
+			"insufficient_permissions": "Not enough permissions!",
+			"generic_error": "There was an error executing this command!"
+		}
+	},
+	"events": {
+		"geminiBot": {
+			"setup_required_title": "Bot Setup Required",
+			"setup_required_description": "To use the chat feature, please set up the following:\n• At least 2 conversation examples using `/teach convo`\n• At least 1 info entry using `/teach info`\nYou may also use `/setup` to easily choose a personality preset for the bot.",
+			"safety_error_title": "Safety Filter Triggered",
+			"safety_error_description": "🚫 Gemini's safety filters blocked the response. This usually happens when the content might violate Google's safety measures."
+		}
+	}
 }

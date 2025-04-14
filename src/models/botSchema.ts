@@ -10,25 +10,16 @@ const botSchema = new Schema<IBot>({
       output: { type: String, required: true },
     },
   ],
+  botPersonality: { type: String, required: true, default: "" },
   botDatabase: { type: [String], default: [] },
-  settings: {
-    type: [
-      {
-        key: { type: String, required: true },
-        value: { type: Schema.Types.Mixed, required: true },
-        description: { type: String, required: true },
-      },
-    ],
-    default: [
-      { key: "prefix", value: "=", description: "Command prefix for the bot" },
-      { key: "automsg", value: "50", description: "Number of messages before auto-response" },
-      { key: "teachperms", value: "chmanager", description: "Who can use teaching commands" },
-      { key: "inputsanitizer", value: "true", description: "Sanitize input in chat responses" },
-    ],
-  },
+  settings: [{
+    key: { type: String, required: true },
+    value: { type: String, required: true },
+    description: { type: String, required: true },
+  }],
   triggers: {
     type: [String],
-    default: ["tomo", "tomobot", "とも", "トモ"],
+    default: ["tomo", "tomobot", process.env.TOMO_ID, "トモ", "とも"],
   },
   counters: { type: [Number], default: [] },
 });

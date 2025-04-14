@@ -8,11 +8,11 @@ const localesPath: string = path.join(__dirname, "../locales");
 
 // Read all JSON files from locales directory
 fs.readdirSync(localesPath)
-  .filter((file: string) => file.endsWith(".json"))
-  .forEach((file: string) => {
-    const locale: string = path.basename(file, ".json");
-    locales[locale] = require(`../locales/${file}`);
-  });
+	.filter((file: string) => file.endsWith(".json"))
+	.forEach((file: string) => {
+		const locale: string = path.basename(file, ".json");
+		locales[locale] = require(`../locales/${file}`);
+	});
 
 /**
  * Get a localized string for a specific key.
@@ -22,26 +22,26 @@ fs.readdirSync(localesPath)
  * @returns The localized string.
  */
 const localizer = (
-  locale: string,
-  key: string,
-  variables: LocalizerVariables = {}
+	locale: string,
+	key: string,
+	variables: LocalizerVariables = {},
 ): string => {
-  const keys: string[] = key.split(".");
-  let translation: any = locales[locale];
+	const keys: string[] = key.split(".");
+	let translation: any = locales[locale];
 
-  for (const k of keys) {
-    if (!translation[k]) {
-      return key;
-    }
-    translation = translation[k];
-  }
+	for (const k of keys) {
+		if (!translation[k]) {
+			return key;
+		}
+		translation = translation[k];
+	}
 
-  let result: string = translation;
-  for (const [placeholder, value] of Object.entries(variables)) {
-    result = result.replace(`{${placeholder}}`, String(value));
-  }
+	let result: string = translation;
+	for (const [placeholder, value] of Object.entries(variables)) {
+		result = result.replace(`{${placeholder}}`, String(value));
+	}
 
-  return result;
+	return result;
 };
 
 export { localizer };

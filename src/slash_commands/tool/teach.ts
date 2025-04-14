@@ -1,5 +1,6 @@
 import {
   ApplicationCommandOptionType,
+  AttachmentBuilder,
   EmbedBuilder,
   Client,
   ChatInputCommandInteraction,
@@ -80,7 +81,7 @@ const command: Command = {
           name: "triggerword",
           description: "The trigger word to add (only for add action)",
           type: ApplicationCommandOptionType.String,
-          required: false,
+          required: true,
         },
       ],
     },
@@ -109,6 +110,11 @@ const command: Command = {
           required: true,
         },
       ],
+    },
+    {
+      name: "personality",
+      description: "Change bot's personality directly",
+      type: ApplicationCommandOptionType.Subcommand,
     },
     {
       name: "preset",
@@ -211,7 +217,7 @@ const command: Command = {
         case "info":
           const infoAction = interaction.options.getString("action", true);
           if (infoAction === "add") {
-            await handleInfoAdd(interaction, botData, locale);
+            await handleInfoAdd(interaction, botData, locale, client);
           } else {
             await handleInfoRemove(interaction, botData, locale);
           }
@@ -219,7 +225,7 @@ const command: Command = {
         case "convo":
           const convoAction = interaction.options.getString("action", true);
           if (convoAction === "add") {
-            await handleConvoAdd(interaction, botData, locale);
+            await handleConvoAdd(interaction, botData, locale, client);
           } else {
             await handleConvoRemove(interaction, botData, locale);
           }
@@ -231,6 +237,9 @@ const command: Command = {
           } else {
             await handleTriggerRemove(interaction, botData, locale);
           }
+          break;
+        case "personality":
+          await handlePersonality(interaction, botData, locale);
           break;
         case "preset":
           await handlePreset(interaction, botData, locale);
@@ -260,7 +269,8 @@ function createCancelButton() {
 async function handleInfoAdd(
   interaction: ChatInputCommandInteraction,
   botData: IBot,
-  locale: string
+  locale: string,
+  client: Client
 ): Promise<void> {
   const promptEmbed = new EmbedBuilder()
     .setColor("#3498DB")
@@ -324,7 +334,7 @@ async function handleInfoAdd(
           })
         );
 
-      await interaction.followUp({ embeds: [successEmbed], ephemeral: true });
+      await interaction.followUp({ embeds: [successEmbed], ephemeral: false });
     });
 
   } catch (error) {
@@ -349,7 +359,7 @@ async function handleInfoRemove(
       .setTitle(localizer(locale, "tool.teach.info_empty_title"))
       .setDescription(localizer(locale, "tool.teach.info_empty_description"));
 
-    await interaction.reply({ embeds: [emptyEmbed], ephemeral: true });
+    await interaction.reply({ embeds: [emptyEmbed], ephemeral: false });
     return;
   }
 
@@ -420,7 +430,7 @@ async function handleInfoRemove(
           })
         );
 
-      await interaction.followUp({ embeds: [successEmbed], ephemeral: true });
+      await interaction.followUp({ embeds: [successEmbed], ephemeral: false });
     });
 
   } catch (error) {
@@ -436,14 +446,13 @@ async function handleInfoRemove(
 async function handleConvoAdd(
   interaction: ChatInputCommandInteraction,
   botData: IBot,
-  locale: string
+  locale: string,
+  client: Client
 ): Promise<void> {
   const promptEmbed = new EmbedBuilder()
     .setColor("#3498DB")
     .setTitle(localizer(locale, "tool.teach.convo_prompt_title"))
     .setDescription(localizer(locale, "tool.teach.convo_prompt_description"));
-
-  await interaction.reply({ embeds: [promptEmbed], components: [createCancelButton()] });
 
   try {
     if (!(interaction.channel instanceof TextChannel)) return;
@@ -497,7 +506,7 @@ async function handleConvoAdd(
           })
         );
 
-      await interaction.followUp({ embeds: [successEmbed], ephemeral: true });
+      await interaction.followUp({ embeds: [successEmbed], ephemeral: false });
     });
 
   } catch (error) {
@@ -522,7 +531,7 @@ async function handleConvoRemove(
       .setTitle(localizer(locale, "tool.teach.convo_empty_title"))
       .setDescription(localizer(locale, "tool.teach.convo_empty_description"));
 
-    await interaction.reply({ embeds: [emptyEmbed], ephemeral: true });
+    await interaction.reply({ embeds: [emptyEmbed], ephemeral: false });
     return;
   }
 
@@ -596,7 +605,7 @@ async function handleConvoRemove(
           })
         );
 
-      await interaction.followUp({ embeds: [successEmbed], ephemeral: true });
+      await interaction.followUp({ embeds: [successEmbed], ephemeral: false });
     });
 
   } catch (error) {
@@ -614,7 +623,7 @@ async function handleTriggerAdd(
   botData: IBot,
   locale: string
 ): Promise<void> {
-  const triggerWord = interaction.options.getString("trigger_word");
+  const triggerWord = interaction.options.getString("triggerword");
   
   if (!triggerWord) {
     const errorEmbed = new EmbedBuilder()
@@ -646,7 +655,7 @@ async function handleTriggerAdd(
       })
     );
 
-  await interaction.reply({ embeds: [successEmbed], ephemeral: true });
+  await interaction.reply({ embeds: [successEmbed], ephemeral: false });
 }
 
 async function handleTriggerRemove(
@@ -660,7 +669,7 @@ async function handleTriggerRemove(
       .setTitle(localizer(locale, "tool.teach.trigger_empty_title"))
       .setDescription(localizer(locale, "tool.teach.trigger_empty_description"));
 
-    await interaction.reply({ embeds: [emptyEmbed], ephemeral: true });
+    await interaction.reply({ embeds: [emptyEmbed], ephemeral: false });
     return;
   }
 
@@ -731,7 +740,7 @@ async function handleTriggerRemove(
           })
         );
 
-      await interaction.followUp({ embeds: [successEmbed], ephemeral: true });
+      await interaction.followUp({ embeds: [successEmbed], ephemeral: false });
     });
 
   } catch (error) {
@@ -767,7 +776,7 @@ async function handleNickname(
         })
       );
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], ephemeral: false });
   } catch (err) {
     console.error("Error in nickname command:", err);
     const embed = new EmbedBuilder()
@@ -799,7 +808,7 @@ async function handleBotname(
         })
       );
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], ephemeral: false });
   } catch (err) {
     console.error("Error in botname command:", err);
     const embed = new EmbedBuilder()
@@ -808,6 +817,127 @@ async function handleBotname(
       .setDescription(localizer(locale, "tool.teach.botname_error_description"));
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
+  }
+}
+async function handlePersonality(
+  interaction: ChatInputCommandInteraction,
+  botData: IBot,
+  locale: string
+): Promise<void> {
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageChannels)) {
+    const embed = new EmbedBuilder()
+      .setColor("#E74C3C")
+      .setDescription(localizer(locale, "tool.teach.no_permission"));
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+    return;
+  }
+
+  const promptEmbed = new EmbedBuilder()
+    .setColor("#3498DB")
+    .setTitle(localizer(locale, "tool.teach.personality_prompt_title"))
+    .setDescription(localizer(locale, "tool.teach.personality_prompt_description"))
+    .setFooter({
+      text: localizer(locale, "tool.teach.personality_warning")
+    });
+
+  await interaction.reply({
+    embeds: [promptEmbed],
+    components: [createCancelButton()],
+    ephemeral: false
+  });
+
+  if (!(interaction.channel instanceof TextChannel)) return;
+
+  try {
+    const messageFilter = (m: { author: { id: string }; content: string }) =>
+      m.author.id === interaction.user.id;
+    const buttonFilter = (i: { user: { id: string }; customId: string }) =>
+      i.user.id === interaction.user.id && i.customId === 'cancel';
+
+    const messageCollector = interaction.channel.createMessageCollector({
+      filter: messageFilter,
+      time: 300000,
+      max: 1
+    });
+
+    const buttonCollector = interaction.channel.createMessageComponentCollector({
+      filter: buttonFilter,
+      componentType: ComponentType.Button,
+      time: 300000
+    });
+
+    buttonCollector.on('collect', async () => {
+      messageCollector.stop('cancelled');
+      buttonCollector.stop();
+      const cancelEmbed = new EmbedBuilder()
+        .setColor("#E74C3C")
+        .setTitle(localizer(locale, "tool.teach.cancelled_title"))
+        .setDescription(localizer(locale, "tool.teach.cancelled_description"));
+      await interaction.editReply({
+        embeds: [cancelEmbed],
+        components: []
+      });
+    });
+
+    messageCollector.on('collect', async (message) => {
+      buttonCollector.stop();
+      const personalityText = message.content;
+      const convertedText = await convertMentionsToNicknames(
+        personalityText,
+        interaction.guild?.id || ''
+      );
+
+      // Create backup before updating
+      const oldPersonality = botData.botPersonality;
+
+      // Update personality
+      botData.botPersonality = convertedText;
+      await botData.save();
+
+      const backupAttachment = new AttachmentBuilder(
+        Buffer.from(JSON.stringify({ oldPersonality }, null, 2)),
+        { name: 'personality_backup.json' }
+      );
+
+      const successEmbed = new EmbedBuilder()
+        .setColor("#2ECC71")
+        .setTitle(localizer(locale, "tool.teach.personality_success_title"))
+        .setDescription(
+          localizer(locale, "tool.teach.personality_success_description")
+        );
+
+      await interaction.editReply({
+        embeds: [successEmbed],
+        components: [],
+        files: [backupAttachment]
+      });
+    });
+
+    messageCollector.on('end', async (collected) => {
+      if (collected.size === 0) {
+        const timeoutEmbed = new EmbedBuilder()
+          .setColor("#E74C3C")
+          .setTitle(localizer(locale, "tool.teach.preset_timeout_title"))
+          .setDescription(localizer(locale, "tool.teach.preset_timeout_description"));
+
+        await interaction.editReply({
+          embeds: [timeoutEmbed],
+          components: []
+        });
+      }
+    });
+  } catch (error) {
+    console.error("Error in personality command:", error);
+    const errorEmbed = new EmbedBuilder()
+      .setColor("#E74C3C")
+      .setTitle(localizer(locale, "tool.teach.error_title"))
+      .setDescription(localizer(locale, "tool.teach.error_description"));
+
+    if (!interaction.replied) {
+      await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+    } else {
+      await interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
+    }
   }
 }
 
@@ -834,48 +964,102 @@ async function handlePreset(
     const personalityData = defaultData[personality];
     const generalInfo = Array.isArray(defaultData.generalInfo) ? defaultData.generalInfo : [];
 
-    if (!personalityData || !Array.isArray(personalityData.botDatabase) || !Array.isArray(personalityData.conversationExamples)) {
+    if (!personalityData || !Array.isArray(personalityData.botPersonality) || !Array.isArray(personalityData.conversationExamples)) {
       throw new Error("Invalid personality preset data");
     }
 
     // Save old data for backup
     const oldData = {
       conversationExamples: botData.conversationExamples,
-      botDatabase: botData.botDatabase,
+      botPersonality: botData.botPersonality,
     };
 
-    // Update with new personality
-    botData.conversationExamples = personalityData.conversationExamples;
-    botData.botDatabase = [...generalInfo, ...personalityData.botDatabase];
+    // Create confirmation buttons
+    const row = new ActionRowBuilder<ButtonBuilder>()
+      .addComponents(
+        new ButtonBuilder()
+          .setCustomId('confirm')
+          .setLabel('✔ Confirm')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId('cancel')
+          .setLabel('✖ Cancel')
+          .setStyle(ButtonStyle.Danger)
+      );
 
-    await botData.save();
-
-    // Create backup embed
-    const backupEmbed = new EmbedBuilder()
-      .setColor("#2ECC71")
-      .setTitle(localizer(locale, "tool.teach.preset_success_title"))
-      .setDescription(localizer(locale, "tool.teach.preset_success_description", {
+    // Create confirmation embed
+    const confirmEmbed = new EmbedBuilder()
+      .setColor("#3498DB")
+      .setTitle(localizer(locale, "tool.teach.preset_confirm_title"))
+      .setDescription(localizer(locale, "tool.teach.preset_confirm_description", {
         personality: personality
-      }))
-      .addFields([
-        {
-          name: localizer(locale, "tool.teach.preset_backup_title"),
-          value: localizer(locale, "tool.teach.preset_backup_description"),
-        },
-        {
-          name: "Conversations",
-          value: oldData.conversationExamples
-            .map((c) => `Q: ${c.input}\nA: ${c.output}`)
-            .join("\n\n")
-            .slice(0, 1024) || "None",
-        },
-        {
-          name: "Information",
-          value: oldData.botDatabase.join("\n").slice(0, 1024) || "None",
-        },
-      ]);
+      }));
 
-    await interaction.reply({ embeds: [backupEmbed], ephemeral: true });
+    const response = await interaction.reply({
+      embeds: [confirmEmbed],
+      components: [row],
+      ephemeral: false
+    });
+
+    const collector = response.createMessageComponentCollector<ComponentType.Button>({
+      filter: (i) => i.user.id === interaction.user.id,
+      time: 30000,
+      max: 1
+    });
+
+    collector.on('collect', async (i) => {
+      if (i.customId === 'confirm') {
+        // Update with new personality
+        botData.conversationExamples = personalityData.conversationExamples;
+        botData.botPersonality = [...generalInfo, ...personalityData.botPersonality].join('\n');
+        await botData.save();
+
+        // Create backup file
+        const backupData = JSON.stringify(oldData, null, 2);
+        const backupAttachment = new AttachmentBuilder(
+          Buffer.from(backupData),
+          { name: 'personality_backup.json' }
+        );
+
+        // Send success message with backup file
+        const successEmbed = new EmbedBuilder()
+          .setColor("#2ECC71")
+          .setTitle(localizer(locale, "tool.teach.preset_success_title"))
+          .setDescription(localizer(locale, "tool.teach.preset_success_description", {
+            personality: personality
+          }));
+
+        await i.update({
+          embeds: [successEmbed],
+          components: [],
+          files: [backupAttachment]
+        });
+      } else {
+        const cancelEmbed = new EmbedBuilder()
+          .setColor("#E74C3C")
+          .setTitle(localizer(locale, "tool.teach.cancelled_title"))
+          .setDescription(localizer(locale, "tool.teach.cancelled_description"));
+
+        await i.update({
+          embeds: [cancelEmbed],
+          components: []
+        });
+      }
+    });
+
+    collector.on('end', async (collected) => {
+      if (collected.size === 0) {
+        const timeoutEmbed = new EmbedBuilder()
+          .setColor("#E74C3C")
+          .setTitle(localizer(locale, "tool.teach.preset_timeout_title"))
+          .setDescription(localizer(locale, "tool.teach.preset_timeout_description"));
+
+        await interaction.editReply({
+          embeds: [timeoutEmbed],
+          components: []
+        });
+      }
+    });
   } catch (error) {
     console.error("Error in preset command:", error);
     const errorEmbed = new EmbedBuilder()
@@ -888,3 +1072,4 @@ async function handlePreset(
 }
 
 export default command;
+
