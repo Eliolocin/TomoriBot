@@ -1,11 +1,16 @@
-import path from "path";
-import { LocalCommand } from "../types/global";
+import path from "node:path";
+import type { LocalCommand } from "../types/global";
 import getAllFiles from "./getAllFiles";
 
+/**
+ * Loads all local command modules from the slash_commands directory.
+ * @param exceptions - An array of command names to exclude.
+ * @returns A promise resolving to an array of local command objects.
+ */
 const getLocalCommands = async (
 	exceptions: string[] = [],
 ): Promise<LocalCommand[]> => {
-	let localCommands: LocalCommand[] = [];
+	const localCommands: LocalCommand[] = [];
 
 	const commandCategories = getAllFiles(
 		path.join(__dirname, "..", "slash_commands"),

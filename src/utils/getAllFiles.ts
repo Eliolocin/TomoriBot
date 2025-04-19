@@ -1,11 +1,14 @@
 import fs from "fs";
-import path from "path";
+import path from "node:path";
 
-const getAllFiles = (
-	directory: string,
-	foldersOnly: boolean = false,
-): string[] => {
-	let fileNames: string[] = [];
+/**
+ * Recursively retrieves all files or folders from a directory.
+ * @param directory - The directory to search.
+ * @param foldersOnly - If true, only folders are returned; otherwise, only files.
+ * @returns An array of file or folder paths.
+ */
+const getAllFiles = (directory: string, foldersOnly = false): string[] => {
+	const fileNames: string[] = [];
 
 	const files = fs.readdirSync(directory, { withFileTypes: true });
 

@@ -1,13 +1,14 @@
 import {
-	ChatInputCommandInteraction,
-	Client,
-	EmbedBuilder,
+	type ChatInputCommandInteraction,
+	type Client,
 	PermissionsBitField,
 } from "discord.js";
-import { Command, IUser } from "../../types/global";
-import { localizer } from "../../utils/textLocalizer";
+import type { BaseCommand } from "../../types/global";
+import type { UserRow } from "../../types/db";
+import { showInfoEmbed } from "../../utils/interactionHelpers";
+import { ColorScheme } from "../../utils/logBeautifier";
 
-const command: Command = {
+const command: BaseCommand = {
 	name: "ping",
 	description: "Check the bot's ping",
 	category: "tool",
@@ -18,9 +19,9 @@ const command: Command = {
 	callback: async (
 		client: Client,
 		interaction: ChatInputCommandInteraction,
-		userData: IUser,
+		userData: UserRow,
 	): Promise<void> => {
-		const locale = userData.language || "en";
+		const locale = userData.language_pref;
 		await interaction.deferReply();
 
 		const reply = await interaction.fetchReply();
@@ -28,22 +29,17 @@ const command: Command = {
 		const discordPing = client.ws.ping;
 
 		const isLaggy = responseTime > 250;
-		const responseEmbed = new EmbedBuilder()
-			.setColor(isLaggy ? "#E74C3C" : "#2ECC71")
-			.setTitle(localizer(locale, "tool.ping.description"))
-			.setDescription(
-				isLaggy
-					? localizer(locale, "tool.ping.response_slow", {
-							response_time: responseTime,
-							discord_response: discordPing,
-						})
-					: localizer(locale, "tool.ping.response_fast", {
-							response_time: responseTime,
-							discord_response: discordPing,
-						}),
-			);
-
-		await interaction.editReply({ embeds: [responseEmbed] });
+		await showInfoEmbed(interaction, locale, {
+			titleKey: "tool.ping.description",
+			descriptionKey: isLaggy
+				? "tool.ping.response_slow"
+				: "tool.ping.response_fast",
+			descriptionVars: {
+				response_time: responseTime,
+				discord_response: discordPing,
+			},
+			color: isLaggy ? ColorScheme.ERROR : ColorScheme.SUCCESS,
+		});
 	},
 } as const;
 

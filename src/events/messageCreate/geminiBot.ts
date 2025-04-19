@@ -1,16 +1,21 @@
 import fs from "fs";
 import {
-	GenerationConfig,
+	type GenerationConfig,
 	GoogleGenerativeAI,
 	HarmBlockThreshold,
 	HarmCategory,
 } from "@google/generative-ai";
 // geminiBot.ts
-import { Client, EmbedBuilder, Message, TextChannel } from "discord.js";
+import {
+	type Client,
+	EmbedBuilder,
+	type Message,
+	TextChannel,
+} from "discord.js";
 import { config } from "dotenv";
 import BotModel from "../../models/botSchema"; // Adjust import path if needed
 import UserModel from "../../models/userSchema";
-import { IBot, IUser } from "../../types/global"; // Adjust if you have a separate IBot interface file
+import type { IBot, IUser } from "../../types/global"; // Adjust if you have a separate IBot interface file
 import { convertMentionsToNicknames } from "../../utils/mentionConverter";
 import { localizer } from "../../utils/textLocalizer";
 
@@ -37,7 +42,7 @@ const safetySettings = [
 	},
 ];
 // const googleModel = "gemini-2.0-flash-exp"; // Google model to use
-const googleModel = "gemini-2.5-pro-exp-03-25"; // Google model to use 
+const googleModel = "gemini-2.5-pro-exp-03-25"; // Google model to use
 
 // Main exported function
 export default async function geminiBot(
@@ -137,8 +142,6 @@ export default async function geminiBot(
 				topP: 0.9,
 			};
 
-			
-
 			await message.channel.sendTyping();
 
 			const currentTime = getCurrentTime();
@@ -154,7 +157,8 @@ export default async function geminiBot(
 
 			// Prepare the context as in the original code
 			let context = `\n[The current date and time is ${currentTime}. ${botData.botName} is a Discord bot created to assist users. Currently lurking around the ${guildName} Discord server, specifically at the text channel named "${channelName}", chatting with server members there and assisting those in need.]\n`;
-			let preamble = '\n[Additional Instructions: Unless a chat member explicitly asks you for comprehensive information or help, do not type messages that are too long, no one in a public chatroom wants to read a wall of text (unless they really ask for it!)]\n';
+			let preamble =
+				"\n[Additional Instructions: Unless a chat member explicitly asks you for comprehensive information or help, do not type messages that are too long, no one in a public chatroom wants to read a wall of text (unless they really ask for it!)]\n";
 			if (isAutoMsgHit) {
 				preamble = `\n[Additional Instructions: When voluntarily making a reply without being explicitly mentioned or called, do NOT send a reply that simply summarizes the conversation history and its old messages, focus on the most recent messages and make a short but engaging comment on that to keep the conversation going. Try to engage with the latest Discord member that sent a message instead of talking to everyone at once. No one in a public chatroom wants to read a wall of text (unless they really ask for it!)]\n`;
 			}
@@ -168,7 +172,7 @@ export default async function geminiBot(
 				model: googleModel,
 				generationConfig: config,
 				safetySettings,
-				systemInstruction: botData.botPersonality+context+preamble
+				systemInstruction: botData.botPersonality + context + preamble,
 			});
 
 			// Build the injection

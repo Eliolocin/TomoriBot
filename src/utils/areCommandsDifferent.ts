@@ -1,19 +1,19 @@
-import { ApplicationCommand, ApplicationCommandOptionData } from "discord.js";
-import { LocalCommand } from "../types/global";
+import {
+	type ApplicationCommand,
+	ApplicationCommandOptionData,
+} from "discord.js";
+import type {
+	LocalCommand,
+	CommandChoice,
+	CommandOption,
+} from "../types/global";
 
-interface CommandChoice {
-	name: string;
-	value: string | number;
-}
-
-interface CommandOption {
-	name: string;
-	description: string;
-	type: number;
-	required?: boolean;
-	choices?: CommandChoice[];
-}
-
+/**
+ * Compares an existing application command with a local command definition to determine if they are different.
+ * @param existingCommand - The command currently registered with Discord.
+ * @param localCommand - The local command definition.
+ * @returns True if the commands differ, false otherwise.
+ */
 const areCommandsDifferent = (
 	existingCommand: ApplicationCommand,
 	localCommand: LocalCommand,

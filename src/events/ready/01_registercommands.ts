@@ -1,4 +1,4 @@
-import {
+import type {
 	ApplicationCommand,
 	ApplicationCommandData,
 	ApplicationCommandOptionData,
@@ -7,6 +7,7 @@ import {
 import areCommandsDifferent from "../../utils/areCommandsDifferent";
 import getApplicationCommands from "../../utils/getApplicationCommands";
 import getLocalCommands from "../../utils/getLocalCommands";
+import { log } from "../../utils/logBeautifier";
 
 interface ExtendedLocalCommand {
 	name: string;
@@ -15,15 +16,17 @@ interface ExtendedLocalCommand {
 	deleted?: boolean;
 }
 
+/**
+ * Registers, updates, or deletes Discord slash commands to match local definitions.
+ * @param client - The Discord client instance.
+ * @returns Promise<void>
+ */
 const handler = async (client: Client): Promise<void> => {
-	const testServer = process.env.JACKO_ID as string;
-
 	try {
+		log.section("Reading Slash Command List...");
 		const localCommands = (await getLocalCommands()) as ExtendedLocalCommand[];
-		const applicationCommandManager = await getApplicationCommands(
-			client,
-			testServer,
-		);
+		const applicationCommandManager = await getApplicationCommands(client);
+		const localCommandNames = new Set(localCommands.map((cmd) => cmd.name));
 
 		for (const localCommand of localCommands) {
 			const { name, description, options } = localCommand;
@@ -35,7 +38,7 @@ const handler = async (client: Client): Promise<void> => {
 			if (existingCommand) {
 				if (localCommand.deleted) {
 					await applicationCommandManager.delete(existingCommand.id);
-					console.log(`(Deleted command "${name}")`);
+					log.success(`Deleted command "${name}"`);
 					continue;
 				}
 
@@ -52,9 +55,7 @@ const handler = async (client: Client): Promise<void> => {
 				}
 			} else {
 				if (localCommand.deleted) {
-					console.log(
-						`(Skipping registering command "${name}" as it's set to be deleted)`,
-					);
+					log.info(`Skipping command "${name}" as it's set for deletion`);
 					continue;
 				}
 
@@ -64,11 +65,20 @@ const handler = async (client: Client): Promise<void> => {
 					options: options as ApplicationCommandOptionData[],
 				};
 				await client.application?.commands.create(commandData);
-				console.log(`(Registered command "${name}")`);
+				log.success(`Registered command "${name}"`);
 			}
 		}
+		for (const [id, appCommand] of applicationCommandManager) {
+			if (!localCommandNames.has(appCommand.name)) {
+				await applicationCommandManager.delete(id);
+				log.success(
+					`Deleted command "${appCommand.name}" (file missing locally)`,
+				);
+			}
+		}
+		log.success("Slash commands up to date");
 	} catch (error) {
-		console.log(
+		log.error(
 			`There was a slash command registration error: ${error instanceof Error ? error.message : String(error)}`,
 		);
 	}

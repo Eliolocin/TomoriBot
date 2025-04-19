@@ -1,9 +1,23 @@
-import path from "path";
-import { Client, Presence, VoiceState } from "discord.js";
-import { EventFunction } from "../types/global";
+import path from "node:path";
+import type {
+	Client,
+	Presence,
+	VoiceState,
+	Guild,
+	GuildMember,
+	Interaction,
+	Message,
+} from "discord.js";
+import type { EventFunction } from "../types/global";
 import getAllFiles from "../utils/getAllFiles";
+import { log } from "../utils/logBeautifier";
 
-const handleEvent = (client: Client): void => {
+/**
+ * Sets up all event listeners for the Discord client by dynamically importing event modules.
+ * @param client - The Discord client instance.
+ */
+const setupEventListeners = (client: Client): void => {
+	log.section("Starting Event Listeners...");
 	const eventFolders = getAllFiles(path.join(__dirname, "..", "events"), true);
 
 	for (const eventFolder of eventFolders) {
@@ -38,33 +52,80 @@ const handleEvent = (client: Client): void => {
 							const eventModule = await import(eventFile);
 							const eventFunction: EventFunction = eventModule.default;
 							if (typeof eventFunction === "function") {
-								await eventFunction(client, oldPresence, newPresence);
+								if (oldPresence !== null) {
+									await eventFunction(client, oldPresence, newPresence);
+								}
 							}
 						}
 					},
 				);
 				break;
 
-			default:
-				client.on(eventName, async (arg: any) => {
+			case "guildCreate":
+				client.on(eventName, async (guild: Guild) => {
 					for (const eventFile of eventFiles) {
-						try {
-							const eventModule = await import(eventFile);
-							const eventFunction: EventFunction = eventModule.default;
-							if (typeof eventFunction === "function") {
-								await eventFunction(client, arg);
-							} else {
-								console.error(
-									`Event file ${eventFile} does not export a default function`,
-								);
-							}
-						} catch (error) {
-							console.error(`Error loading event file ${eventFile}:`, error);
+						const eventModule = await import(eventFile);
+						const eventFunction: EventFunction = eventModule.default;
+						if (typeof eventFunction === "function") {
+							await eventFunction(client, guild);
 						}
 					}
 				});
+				break;
+
+			case "guildMemberAdd":
+				client.on(eventName, async (member: GuildMember) => {
+					for (const eventFile of eventFiles) {
+						const eventModule = await import(eventFile);
+						const eventFunction: EventFunction = eventModule.default;
+						if (typeof eventFunction === "function") {
+							await eventFunction(client, member);
+						}
+					}
+				});
+				break;
+
+			case "interactionCreate":
+				client.on(eventName, async (interaction: Interaction) => {
+					for (const eventFile of eventFiles) {
+						const eventModule = await import(eventFile);
+						const eventFunction: EventFunction = eventModule.default;
+						if (typeof eventFunction === "function") {
+							await eventFunction(client, interaction);
+						}
+					}
+				});
+				break;
+
+			case "messageCreate":
+				client.on(eventName, async (message: Message) => {
+					for (const eventFile of eventFiles) {
+						const eventModule = await import(eventFile);
+						const eventFunction: EventFunction = eventModule.default;
+						if (typeof eventFunction === "function") {
+							await eventFunction(client, message);
+						}
+					}
+				});
+				break;
+
+			case "ready":
+				client.on(eventName, async () => {
+					for (const eventFile of eventFiles) {
+						const eventModule = await import(eventFile);
+						const eventFunction: EventFunction = eventModule.default;
+						if (typeof eventFunction === "function") {
+							await eventFunction(client);
+						}
+					}
+				});
+				break;
+
+			default:
+				break;
 		}
+		log.success(`"${eventName}" listener ready`);
 	}
 };
 
-export default handleEvent;
+export default setupEventListeners;

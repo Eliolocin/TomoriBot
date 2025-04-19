@@ -1,5 +1,11 @@
-# Trash folder
+# Other folders
 .deprecated/
+.vscode/
+.temp/
+
+# Proompting
+.roo/
+.rooignore
 
 # Logs
 logs

@@ -198,6 +198,55 @@
 		"refresh": {
 			"success_title": "AIリフレッシュ完了！",
 			"success_description": "✅ AIモデルがリフレッシュされました！"
+		},
+		"setup": {
+			"command_description": "このサーバーで初めてともりをセットアップします。",
+			"error_title": "セットアップエラー",
+			"no_permission": "🚫 この初期セットアップを実行するには、サーバー管理権限が必要です！",
+			"already_exists": "ともりは既にこのサーバーに設定されています！`/settings` または `/teach` を使用して変更してください。",
+			"api_prep_title": "ステップ1：Google AI APIキー",
+			"api_prep_description": "ともりのコアAI機能を有効にするには、Google AI APIキーが必要です。\n\n• **理由：** このキーにより、ともりがAIモデル（Gemini）に接続できます。\n• **安全性：** キーはデータベース内で**暗号化**され、このサーバーからのAIリクエストにのみ使用されます。`/settings` でいつでも削除できます。\n• **プライバシー：** まだの場合は、このコマンドをプライベートチャンネルで実行してください。\n\n✅ を押してAPIキー入力に進むか、❌ を押してセットアップをキャンセルします。",
+			"button_continue": "✅ 続ける",
+			"button_cancel": "❌ キャンセル",
+			"api_modal_title": "Google AI APIキーを入力",
+			"api_modal_label": "Google AI APIキー",
+			"api_modal_placeholder": "APIキーをここに貼り付けてください...",
+			"api_modal_success": "APIキーを受け取りました（暗号化されます）。",
+			"preset_select_title": "ステップ2：初期性格の選択",
+			"preset_select_description": "ともりの初期性格プリセットを選択してください。後で `/teach` を使用して広範囲にカスタマイズできます。",
+			"preset_select_placeholder": "性格を選択...",
+			"preset_fetch_error": "データベースから性格プリセットを取得できませんでした。もう一度お試しください。",
+			"autoch_select_title": "ステップ3：自動チャットチャンネル（任意）",
+			"autoch_select_description": "ともりに自動的にチャットしてほしいテキストチャンネルをメンションしてください。スペースで区切って複数のチャンネルをメンションできます。この機能が不要な場合は「スキップ」を押してください。",
+			"button_skip": "スキップ",
+			"autoch_prompt": "チャンネルをメンションするか、「スキップ」を押してください。",
+			"autoch_invalid_channel": "メンションされた項目の一部が有効なテキストチャンネルではありませんでした。もう一度試すか、「スキップ」を押してください。",
+			"autoch_success": "自動チャットチャンネルを記録しました。",
+			"autoch_threshold_title": "ステップ4：自動チャット頻度",
+			"autoch_threshold_description": "選択したチャンネルで何メッセージ後にともりがチャットを検討すべきですか？数値を入力してください（例：`50`）。これを無効にするには `0` を入力します（チャンネルが選択されていても）。",
+			"autoch_threshold_prompt": "数値（0以上）を入力してください。",
+			"autoch_threshold_invalid": "無効な数値です。0または正の整数を入力してください。",
+			"autoch_threshold_success": "自動チャット頻度を設定しました。",
+			"humanizer_toggle_title": "ステップ5：実験的なヒューマナイザーを有効にしますか？",
+			"humanizer_toggle_description": "「ヒューマナイザー」は、ともりの応答をロボットっぽくなくす試みです（例：タイピングインジケーター、わずかな遅延を追加）。実験的な機能です。有効にしますか？",
+			"button_yes": "はい",
+			"button_no": "いいえ",
+			"humanizer_success": "ヒューマナイザーの設定を記録しました。",
+			"confirm_title": "ステップ6：セットアップ詳細の確認",
+			"confirm_description": "以下の設定を確認してください。✅ を押して保存しセットアップを完了するか、❌ を押してキャンセルします。\n\n**性格：** {personality_name}\n**APIキー提供状況：** {api_key_status}\n**自動チャットチャンネル：** {autoch_channels}\n**自動チャット閾値：** {autoch_threshold}\n**ヒューマナイザー有効：** {humanizer_status}",
+			"confirm_api_yes": "はい（暗号化済み）",
+			"confirm_api_no": "いいえ",
+			"confirm_channels_none": "なし",
+			"confirm_humanizer_yes": "はい",
+			"confirm_humanizer_no": "いいえ",
+			"success_title": "セットアップ完了！",
+			"success_description": "素晴らしい！ともりは **{personality_name}** の性格で設定されました。\n私にメンションするか、トリガーワード（デフォルト：Tomori, とも）を使ってチャットを開始できます。\n`/teach` と `/settings` を使用してさらにカスタマイズしてください！",
+			"cancel_title": "セットアップキャンセル",
+			"cancel_description": "わかりました、セットアッププロセスはキャンセルされました。いつでも `/setup` を再実行できます！",
+			"timeout_title": "セットアップタイムアウト",
+			"timeout_description": "時間内に応答しなかったようです。セットアップはキャンセルされました。設定したい場合は、もう一度 `/setup` を実行してください。",
+			"error_description": "セットアップ中に問題が発生しました。もう一度 `/setup` を実行してみてください。",
+			"db_error": "設定の保存中にデータベースエラーが発生しました。もう一度お試しください。"
 		}
 	},
 	"general": {
@@ -216,6 +265,12 @@
 			"setup_required_description": "チャット機能を使用するには、以下の設定が必要です：\n• `/teach convo`で少なくとも2つの会話例を追加\n• `/teach info`で少なくとも1つの情報を追加\nボットの性格プリセットを簡単に選択するには、`/setup`コマンドを使用してください。",
 			"safety_error_title": "セーフティフィルターが作動しました",
 			"safety_error_description": "🚫 Geminiのセーフティフィルターが応答をブロックしました。これは通常、コンテンツがGoogleの安全基準に違反する可能性がある場合に発生します"
+		},
+		"initializeBot": {
+			"rejoin_title": "戻ってきました！",
+			"rejoin_description": "やあ！このサーバーに再招待されたみたいだね。前の設定と性格はそのまま残ってるよ！`/teach` や `/settings` コマンドで管理できるからね。",
+			"setup_prompt_title": "ようこそ！セットアップが必要です",
+			"setup_prompt_description": "こんにちは！追加してくれてありがとう！始めるには、**サーバー管理**権限を持つ人が `/setup` コマンドを実行して、私の初期性格を選択し、AI機能を設定する必要があります。"
 		}
 	}
 }

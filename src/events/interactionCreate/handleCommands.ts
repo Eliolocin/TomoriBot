@@ -1,32 +1,67 @@
-import { ChatInputCommandInteraction, Client, Interaction } from "discord.js";
-import UserModel from "../../models/userSchema";
-import { IUser } from "../../types/global";
+import type {
+	ChatInputCommandInteraction,
+	Client,
+	Interaction,
+} from "discord.js";
+import { sql } from "bun";
+import { showInfoEmbed } from "../../utils/interactionHelpers";
+import { ColorScheme } from "../../utils/logBeautifier";
+import type { ExtendedCommand } from "../../types/global";
+import { userSchema, type UserRow } from "../../types/db";
 import getLocalCommands from "../../utils/getLocalCommands";
 import { localizer } from "../../utils/textLocalizer";
-
-interface ExtendedCommand {
-	name: string;
-	description: string;
-	devOnly?: boolean;
-	testOnly?: boolean;
-	deleted?: boolean;
-	permissionsRequired?: bigint[];
-	botPermissions?: bigint[];
-	category?: string;
-	callback: (
-		client: Client,
-		interaction: ChatInputCommandInteraction,
-		userData: IUser,
-	) => Promise<void>;
-}
+import { log } from "../../utils/logBeautifier";
 
 const TIMEOUT_DURATION = 30000;
-const cooldownDurations = new Map<string, number>([
+const COOLDOWN_MAP = new Map<string, number>([
 	["economy", 2000],
 	["scrape", 10000],
 	["tool", 10000],
 	["fun", 2000],
 ]);
+
+/**
+ * Checks if a command is on cooldown for a user
+ * @param userId - Discord user ID
+ * @param category - Command category
+ * @returns Time remaining in milliseconds, or 0 if no cooldown
+ */
+async function checkCooldown(
+	userId: string,
+	category: string,
+): Promise<number> {
+	const now = Date.now();
+	const [cooldown] = await sql`
+		SELECT expiry_time 
+		FROM cooldowns 
+		WHERE user_disc_id = ${userId} 
+		AND command_category = ${category}
+		AND expiry_time > ${now}
+	`;
+
+	return cooldown ? Number(cooldown.expiry_time) - now : 0;
+}
+
+/**
+ * Sets a cooldown for a command category
+ * @param userId - Discord user ID
+ * @param category - Command category
+ * @param duration - Cooldown duration in milliseconds
+ */
+async function setCooldown(
+	userId: string,
+	category: string,
+	duration: number,
+): Promise<void> {
+	const expiryTime = Date.now() + duration;
+
+	await sql`
+		INSERT INTO cooldowns (user_disc_id, command_category, expiry_time)
+		VALUES (${userId}, ${category}, ${expiryTime})
+		ON CONFLICT (user_disc_id, command_category) DO UPDATE
+		SET expiry_time = ${expiryTime}
+	`;
+}
 
 const handler = async (
 	client: Client,
@@ -34,9 +69,8 @@ const handler = async (
 ): Promise<void> => {
 	if (!interaction.isChatInputCommand()) return;
 
-	const userModel = UserModel;
 	const { TESTSRV_ID, DEV_ID } = process.env;
-	let userData = await userModel.findOne({ userID: interaction.user.id });
+	const locale = interaction.locale || "en";
 
 	try {
 		const localCommands = (await getLocalCommands()) as ExtendedCommand[];
@@ -48,122 +82,106 @@ const handler = async (
 
 		// Command execution logic with timeout
 		const mainLogicPromise = async () => {
-			// Initialize userData if it doesn't exist
-			if (!userData && interaction.guild) {
-				const serverLocale = interaction.guild.preferredLocale;
-				const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en";
-
-				userData = await userModel.create({
-					userID: interaction.user.id,
-					serverID: interaction.guildId,
-					nickname: interaction.user.displayName,
-					language: userLanguage,
-				});
-				await userData.save();
-			}
-
+			// 1. Check for dev/test only restrictions
 			if (commandObject.devOnly && interaction.user.id !== DEV_ID) {
-				try {
-					await interaction.reply({
-						content: localizer(
-							userData?.language || "en",
-							"general.errors.dev_only",
-						),
-						ephemeral: true,
-					});
-				} catch (error: any) {
-					if (error.code === 10062) {
-						// Interaction expired or invalid after bot restart; ignore
-						return;
-					}
-					console.error("Reply error:", error);
-				}
+				await showInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.dev_only",
+					descriptionKey: "general.errors.dev_only",
+					color: ColorScheme.ERROR,
+				});
 				return;
 			}
 
 			if (commandObject.testOnly && interaction.guildId !== TESTSRV_ID) {
-				try {
-					await interaction.reply({
-						content: localizer(
-							userData?.language || "en",
-							"general.errors.test_only",
-						),
-						ephemeral: true,
-					});
-				} catch (error: any) {
-					if (error.code === 10062) {
-						// Interaction expired or invalid after bot restart; ignore
-						return;
-					}
-					console.error("Reply error:", error);
-				}
+				await showInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.test_only",
+					descriptionKey: "general.errors.test_only",
+					color: ColorScheme.ERROR,
+				});
 				return;
 			}
 
-			// Permission checks
+			// 2. Check permissions
 			if (commandObject.permissionsRequired?.length) {
 				for (const permission of commandObject.permissionsRequired) {
 					if (!interaction.memberPermissions?.has(permission)) {
-						try {
-							await interaction.reply({
-								content: localizer(
-									userData?.language || "en",
-									"general.errors.insufficient_permissions",
-								),
-								ephemeral: true,
-							});
-						} catch (error: any) {
-							if (error.code === 10062) {
-								// Interaction expired or invalid after bot restart; ignore
-								return;
-							}
-							console.error("Reply error:", error);
-						}
+						await showInfoEmbed(interaction, locale, {
+							titleKey: "general.errors.insufficient_permissions",
+							descriptionKey: "general.errors.insufficient_permissions",
+							color: ColorScheme.ERROR,
+						});
 						return;
 					}
 				}
 			}
 
-			// Cooldown check
-			if (userData && commandObject.category) {
-				const cooldownDuration = cooldownDurations.get(commandObject.category);
+			// 3. Check cooldowns if category exists
+			if (commandObject.category) {
+				const cooldownDuration = COOLDOWN_MAP.get(commandObject.category);
 				if (cooldownDuration) {
-					const now = Date.now();
-					const userCooldowns = userData.cooldowns || new Map<string, number>();
+					const timeLeft = await checkCooldown(
+						interaction.user.id,
+						commandObject.category,
+					);
 
-					if (
-						userCooldowns.has(commandObject.category) &&
-						userCooldowns.get(commandObject.category)! > now
-					) {
-						const remaining = Math.ceil(
-							(userCooldowns.get(commandObject.category)! - now) / 1000,
-						);
-						try {
-							await interaction.reply({
-								content: localizer(
-									userData?.language || "en",
-									"general.cooldown",
-									{ seconds: remaining },
-								),
-								ephemeral: true,
-							});
-						} catch (error: any) {
-							if (error.code === 10062) {
-								// Interaction expired or invalid after bot restart; ignore
-								return;
-							}
-							console.error("Reply error:", error);
-						}
+					if (timeLeft > 0) {
+						const timeLeftSeconds = Math.ceil(timeLeft / 1000);
+						await showInfoEmbed(interaction, locale, {
+							titleKey: "general.cooldown",
+							descriptionKey: "general.cooldown",
+							descriptionVars: { seconds: timeLeftSeconds },
+							color: ColorScheme.WARN,
+						});
 						return;
 					}
 
-					userCooldowns.set(commandObject.category, now + cooldownDuration);
-					userData.cooldowns = userCooldowns;
-					await userData.save();
+					// Set new cooldown if no active one exists
+					await setCooldown(
+						interaction.user.id,
+						commandObject.category,
+						cooldownDuration,
+					);
 				}
 			}
 
-			await commandObject.callback(client, interaction, userData!);
+			// 4. Get or create user data with Bun SQL and Zod validation
+			let userData: UserRow | undefined;
+			const [existingUser] = await sql`
+				SELECT * FROM users WHERE user_disc_id = ${interaction.user.id}
+			`;
+
+			if (existingUser) {
+				userData = userSchema.parse(existingUser);
+			} else if (interaction.guild) {
+				const serverLocale = interaction.guild.preferredLocale;
+				const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en";
+
+				const [newUser] = await sql`
+					INSERT INTO users (
+						user_disc_id,
+						user_nickname,
+						language_pref
+					) VALUES (
+						${interaction.user.id},
+						${interaction.user.displayName},
+						${userLanguage}
+					)
+					RETURNING *
+				`;
+				userData = userSchema.parse(newUser);
+			}
+
+			// 5. Execute command
+			if (userData) {
+				await commandObject.callback(client, interaction, userData);
+			} else {
+				log.error("No user data available for command execution");
+				await showInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.generic_error",
+					descriptionKey: "general.errors.generic_error",
+					color: ColorScheme.ERROR,
+				});
+			}
 		};
 
 		await Promise.race([
@@ -172,33 +190,21 @@ const handler = async (
 				setTimeout(
 					() =>
 						reject(
-							localizer(
-								userData?.language || "en",
-								"general.errors.command_timeout",
-							),
+							new Error(localizer(locale, "general.errors.command_timeout")),
 						),
 					TIMEOUT_DURATION,
 				),
 			),
 		]);
 	} catch (error) {
-		console.error("Error in command execution:", error);
+		log.error("Error in command execution:", error);
+
 		if (!interaction.replied && !interaction.deferred) {
-			try {
-				await interaction.reply({
-					content: localizer(
-						userData?.language || "en",
-						"general.errors.generic_error",
-					),
-					ephemeral: true,
-				});
-			} catch (error: any) {
-				if (error.code === 10062) {
-					// Interaction expired or invalid after bot restart; ignore
-					return;
-				}
-				console.error("Reply error:", error);
-			}
+			await showInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.generic_error",
+				descriptionKey: "general.errors.generic_error",
+				color: ColorScheme.ERROR,
+			});
 		}
 	}
 };

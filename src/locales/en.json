@@ -18,7 +18,7 @@
 			"insufficient_funds_title": "Insufficient Funds",
 			"insufficient_funds_description": "💸 You don't have enough TomoCoins in your wallet to deposit that amount!\n\n💰 **Your Wallet Balance:** {wallet_balance}\n🏦 **Attempted Deposit:** {attempted}",
 			"success_title": "Deposit Successful!",
-			"success_description": "✅ You’ve successfully deposited **{amount}** TomoCoins into your bank!\n\n💰 **New Wallet Balance:** {wallet_balance}\n🏦 **New Bank Balance:** {bank_balance}",
+			"success_description": "✅ You've successfully deposited **{amount}** TomoCoins into your bank!\n\n💰 **New Wallet Balance:** {wallet_balance}\n🏦 **New Bank Balance:** {bank_balance}",
 			"invalid_amount_footer": "Please try again!",
 			"insufficient_funds_footer": "Earn more TomoCoins and try again!",
 			"success_footer": "Savings secured! 🏦"
@@ -29,10 +29,10 @@
 			"insufficient_funds_title": "Insufficient Funds",
 			"insufficient_funds_description": "💸 You don't have enough TomoCoins in your wallet to make this donation!\n\n💰 **Your Wallet Balance:** {wallet_balance}\n🎁 **Attempted Donation:** {attempted}",
 			"success_title": "Donation Successful!",
-			"success_description": "✅ You’ve successfully donated **{amount}** TomoCoins to **{recipient}**.\n\n💰 **Your New Wallet Balance:** {wallet_balance}",
+			"success_description": "✅ You've successfully donated **{amount}** TomoCoins to **{recipient}**.\n\n💰 **Your New Wallet Balance:** {wallet_balance}",
 			"success_footer": "You're so generous! 🎁",
-			"recipient_notification_title": "You’ve Received a Donation!",
-			"recipient_notification_description": "🎉 You’ve received **{amount}** TomoCoins from **{donor}**!\n\n🏦 **Your New Bank Balance:** {new_bank_balance}"
+			"recipient_notification_title": "You've Received a Donation!",
+			"recipient_notification_description": "🎉 You've received **{amount}** TomoCoins from **{donor}**!\n\n🏦 **Your New Bank Balance:** {new_bank_balance}"
 		},
 		"withdraw": {
 			"invalid_amount_title": "Invalid Amount",
@@ -40,7 +40,7 @@
 			"insufficient_balance_title": "Insufficient Bank Balance",
 			"insufficient_balance_description": "🏦 You don't have enough TomoCoins in your bank to withdraw that amount!\n\n💰 **Your Bank Balance:** {bank_balance}\n🏧 **Attempted Withdrawal:** {attempted}",
 			"success_title": "Withdrawal Successful!",
-			"success_description": "✅ You’ve successfully withdrawn **{amount}** TomoCoins from your bank to your wallet!\n\n💰 **New Wallet Balance:** {wallet_balance}\n🏦 **New Bank Balance:** {bank_balance}",
+			"success_description": "✅ You've successfully withdrawn **{amount}** TomoCoins from your bank to your wallet!\n\n💰 **New Wallet Balance:** {wallet_balance}\n🏦 **New Bank Balance:** {bank_balance}",
 			"invalid_amount_footer": "Please try again!",
 			"insufficient_balance_footer": "Save up more TomoCoins and try again!",
 			"success_footer": "Spend wisely! 💸"
@@ -197,6 +197,55 @@
 		"refresh": {
 			"success_title": "AI Personality Refreshed!",
 			"success_description": "✅ The AI has been refreshed and is ready to chat!"
+		},
+		"setup": {
+			"command_description": "Set up Tomori for the first time in this server.",
+			"error_title": "Setup Error",
+			"no_permission": "🚫 You need Manage Server permission to run the initial setup!",
+			"already_exists": "Tomori is already set up on this server! Use `/settings` or `/teach` to modify.",
+			"api_prep_title": "Step 1: Google AI API Key",
+			"api_prep_description": "To enable Tomori's core AI features, a Google AI API key is required.\n\n• **Why?** This key allows Tomori to connect to the AI model (Gemini).\n• **Safety:** Your key will be **encrypted** in the database and only used for AI requests from this server. You can delete it anytime via `/settings`.\n• **Privacy:** Please ensure you run this command in a private channel if you haven't already.\n\nPress ✅ to continue to the API key input, or ❌ to cancel setup.",
+			"button_continue": "✅ Continue",
+			"button_cancel": "❌ Cancel",
+			"api_modal_title": "Enter Google AI API Key",
+			"api_modal_label": "Google AI API Key",
+			"api_modal_placeholder": "Paste your API key here...",
+			"api_modal_success": "API Key received (it will be encrypted).",
+			"preset_select_title": "Step 2: Choose Initial Personality",
+			"preset_select_description": "Select a starting personality preset for Tomori. You can customize this extensively later using `/teach`.",
+			"preset_select_placeholder": "Select a personality...",
+			"preset_fetch_error": "Could not fetch personality presets from the database. Please try again.",
+			"autoch_select_title": "Step 3: Automatic Chat Channels (Optional)",
+			"autoch_select_description": "Mention the text channels where you'd like Tomori to sometimes chat automatically. You can mention multiple channels separated by spaces. Press 'Skip' if you don't want this feature.",
+			"button_skip": "Skip",
+			"autoch_prompt": "Please mention the channel(s) now, or press Skip.",
+			"autoch_invalid_channel": "One or more mentioned items were not valid text channels. Please try again or Skip.",
+			"autoch_success": "Auto-chat channels noted.",
+			"autoch_threshold_title": "Step 4: Auto-Chat Frequency",
+			"autoch_threshold_description": "After how many messages in the selected channel(s) should Tomori consider chatting? Enter a number (e.g., `50`). Enter `0` to disable this (even if channels were selected).",
+			"autoch_threshold_prompt": "Please enter a number (0 or higher).",
+			"autoch_threshold_invalid": "Invalid number. Please enter 0 or a positive whole number.",
+			"autoch_threshold_success": "Auto-chat frequency set.",
+			"humanizer_toggle_title": "Step 5: Enable Experimental Humanizer?",
+			"humanizer_toggle_description": "The 'Humanizer' attempts to make Tomori's responses feel less robotic (e.g., adds typing indicators, slight delays). It's experimental. Enable it?",
+			"button_yes": "Yes",
+			"button_no": "No",
+			"humanizer_success": "Humanizer preference noted.",
+			"confirm_title": "Step 6: Confirm Setup Details",
+			"confirm_description": "Please review the settings below. Press ✅ to save and complete setup, or ❌ to cancel.\n\n**Personality:** {personality_name}\n**API Key Provided:** {api_key_status}\n**Auto-Chat Channels:** {autoch_channels}\n**Auto-Chat Threshold:** {autoch_threshold}\n**Humanizer Enabled:** {humanizer_status}",
+			"confirm_api_yes": "Yes (Encrypted)",
+			"confirm_api_no": "No",
+			"confirm_channels_none": "None",
+			"confirm_humanizer_yes": "Yes",
+			"confirm_humanizer_no": "No",
+			"success_title": "Setup Complete!",
+			"success_description": "Great! Tomori is configured with the **{personality_name}** personality.\nYou can start chatting by mentioning me or using trigger words (default: Tomori, とも).\nUse `/teach` and `/settings` to customize further!",
+			"cancel_title": "Setup Cancelled",
+			"cancel_description": "Okay, the setup process has been cancelled. You can run `/setup` again anytime!",
+			"timeout_title": "Setup Timed Out",
+			"timeout_description": "Looks like you didn't respond in time. The setup has been cancelled. Please run `/setup` again if you'd like to configure me.",
+			"error_description": "Something went wrong during setup. Please try running `/setup` again.",
+			"db_error": "A database error occurred while saving settings. Please try again."
 		}
 	},
 	"general": {
@@ -207,6 +256,12 @@
 			"test_only": "Sorry, this is a test command!",
 			"insufficient_permissions": "Not enough permissions!",
 			"generic_error": "There was an error executing this command!"
+		},
+		"interaction": {
+			"cancel_title": "❌ Operation Cancelled",
+			"cancel_description": "The operation has been cancelled. You can try again anytime!",
+			"timeout_title": "⏰ Operation Timed Out",
+			"timeout_description": "You didn't respond in time. Please try again if you'd like to continue."
 		}
 	},
 	"events": {
@@ -215,6 +270,12 @@
 			"setup_required_description": "To use the chat feature, please set up the following:\n• At least 2 conversation examples using `/teach convo`\n• At least 1 info entry using `/teach info`\nYou may also use `/setup` to easily choose a personality preset for the bot.",
 			"safety_error_title": "Safety Filter Triggered",
 			"safety_error_description": "🚫 Gemini's safety filters blocked the response. This usually happens when the content might violate Google's safety measures."
+		},
+		"welcomeBot": {
+			"rejoin_title": "I'm Back!",
+			"rejoin_description": "Hey there! Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the `/teach` and `/settings` commands.",
+			"setup_prompt_title": "Thanks for adding TomoriBot!",
+			"setup_prompt_description": "Hello! Thanks for adding me! To get started, someone with the **Manage Server** permission needs to run my `/setup` command to choose my initial personality and configure my AI features."
 		}
 	}
 }

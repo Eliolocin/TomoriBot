@@ -1,4 +1,4 @@
-import { Client, GuildMember } from "discord.js";
+import type { Client, GuildMember } from "discord.js";
 import UserModel from "../../models/userSchema";
 
 const handler = async (_client: Client, member: GuildMember): Promise<void> => {
