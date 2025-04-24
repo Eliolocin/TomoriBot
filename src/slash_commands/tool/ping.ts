@@ -3,10 +3,10 @@ import {
 	type Client,
 	PermissionsBitField,
 } from "discord.js";
-import type { BaseCommand } from "../../types/global";
-import type { UserRow } from "../../types/db";
-import { showInfoEmbed } from "../../utils/interactionHelpers";
-import { ColorScheme } from "../../utils/logBeautifier";
+import type { BaseCommand } from "../../types/discord/global";
+import type { UserRow } from "../../types/db/schema";
+import { showInfoEmbed } from "../../utils/discord/interactionHelper";
+import { ColorCode } from "../../utils/misc/logger";
 
 const command: BaseCommand = {
 	name: "ping",
@@ -38,7 +38,7 @@ const command: BaseCommand = {
 				response_time: responseTime,
 				discord_response: discordPing,
 			},
-			color: isLaggy ? ColorScheme.ERROR : ColorScheme.SUCCESS,
+			color: isLaggy ? ColorCode.ERROR : ColorCode.SUCCESS,
 		});
 	},
 } as const;

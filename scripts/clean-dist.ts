@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { rmdir } from "node:fs/promises";
-import { log } from "../src/utils/logBeautifier";
+import { log } from "../src/utils/misc/logger";
 
 const distPath = join(process.cwd(), "dist");
 

@@ -1,5 +1,5 @@
 import { sql } from "bun";
-import { log } from "../src/utils/logBeautifier";
+import { log } from "../src/utils/misc/logger";
 import { config } from "dotenv";
 
 config();
@@ -9,11 +9,14 @@ const tables = [
 	"personalization_blacklist",
 	"tomori_configs",
 	"tomori_presets",
-	"tomori_emojis",
+	"server_emojis",
+	"server_stickers",
+	"server_memories",
 	"tomoris",
 	"users",
 	"llms",
 	"servers",
+	"cooldowns",
 ];
 
 async function nukeDatabase() {

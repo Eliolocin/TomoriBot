@@ -8,9 +8,9 @@ import type {
 	Interaction,
 	Message,
 } from "discord.js";
-import type { EventFunction } from "../types/global";
-import getAllFiles from "../utils/getAllFiles";
-import { log } from "../utils/logBeautifier";
+import type { EventFunction } from "../types/discord/global";
+import getAllFiles from "../utils/misc/getAllFiles";
+import { log } from "../utils/misc/logger";
 
 /**
  * Sets up all event listeners for the Discord client by dynamically importing event modules.

@@ -44,6 +44,17 @@
 			"invalid_amount_footer": "もう一度お試しください！",
 			"insufficient_balance_footer": "もっとTomoCoinを貯めて再挑戦してください！",
 			"success_footer": "お金を賢く使ってね！ 💸"
+		},
+		"gamba": {
+			"insufficient_funds_title": "残高不足",
+			"insufficient_funds_description": "💸 この金額をギャンブルするために十分なTomoCoinがありません！\n\n💰 **残高:** {balance}\n🎲 **ギャンブルした額:** {attempted}",
+			"win_title": "勝利！",
+			"win_description": "🎉 おめでとうございます！ギャンブルで**{winnings}** TomoCoinsを獲得しました！\n\n💰 **新しい残高:** {new_balance}",
+			"lose_title": "敗北…",
+			"lose_description": "💔 残念！**{amount_lost}** TomoCoinsを失いました。\n\n💰 **新しい残高:** {new_balance}",
+			"insufficient_funds_footer": "小さい金額で試してみて！頑張って！",
+			"win_footer": "大勝利！運が良いですね？",
+			"lose_footer": "痛い！ギャンブルはリスクがあります！"
 		}
 	},
 	"scrape": {
@@ -87,19 +98,8 @@
 			"result_footer": "スコア: {score} | タグ: {tags}"
 		}
 	},
-	"fun": {
-		"gamba": {
-			"insufficient_funds_title": "残高不足",
-			"insufficient_funds_description": "💸 この金額をギャンブルするために十分なTomoCoinがありません！\n\n💰 **残高:** {balance}\n🎲 **ギャンブルした額:** {attempted}",
-			"win_title": "勝利！",
-			"win_description": "🎉 おめでとうございます！ギャンブルで**{winnings}** TomoCoinsを獲得しました！\n\n💰 **新しい残高:** {new_balance}",
-			"lose_title": "敗北…",
-			"lose_description": "💔 残念！**{amount_lost}** TomoCoinsを失いました。\n\n💰 **新しい残高:** {new_balance}",
-			"insufficient_funds_footer": "小さい金額で試してみて！頑張って！",
-			"win_footer": "大勝利！運が良いですね？",
-			"lose_footer": "痛い！ギャンブルはリスクがあります！"
-		},
-		"generate": {
+	"generate": {
+		"image": {
 			"description": "Stable Diffusionを使用して、プロンプトからイメージを素早く生成します！",
 			"progress": "🎨 `{prompt}` のイメージを生成中です...",
 			"result": "✨ `{prompt}` に基づいて生成したイメージはこちらです (b ᵔ▽ᵔ)b",
@@ -260,7 +260,7 @@
 		}
 	},
 	"events": {
-		"geminiBot": {
+		"tomoriChat": {
 			"setup_required_title": "ボットのセットアップが必要です",
 			"setup_required_description": "チャット機能を使用するには、以下の設定が必要です：\n• `/teach convo`で少なくとも2つの会話例を追加\n• `/teach info`で少なくとも1つの情報を追加\nボットの性格プリセットを簡単に選択するには、`/setup`コマンドを使用してください。",
 			"safety_error_title": "セーフティフィルターが作動しました",

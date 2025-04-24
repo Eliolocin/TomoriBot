@@ -44,6 +44,17 @@
 			"invalid_amount_footer": "Please try again!",
 			"insufficient_balance_footer": "Save up more TomoCoins and try again!",
 			"success_footer": "Spend wisely! 💸"
+		},
+		"gamba": {
+			"insufficient_funds_title": "Insufficient Funds",
+			"insufficient_funds_description": "💸 You don't have enough TomoCoins to gamble that amount!\n\n💰 **Your Balance:** {balance}\n🎲 **Attempted Gamble:** {attempted}",
+			"win_title": "You Win!",
+			"win_description": "🎉 Congratulations! You doubled your gamble and won **{winnings}** TomoCoins!\n\n💰 **New Balance:** {new_balance}",
+			"lose_title": "You Lost!",
+			"lose_description": "💔 Better luck next time! You lost **{amount_lost}** TomoCoins.\n\n💰 **New Balance:** {new_balance}",
+			"insufficient_funds_footer": "Try a smaller amount! Good luck!",
+			"win_footer": "Big win! Feeling lucky?",
+			"lose_footer": "Ouch! Gambling is risky!"
 		}
 	},
 	"scrape": {
@@ -87,19 +98,8 @@
 			"result_footer": "Score: {score} | Tags: {tags}"
 		}
 	},
-	"fun": {
-		"gamba": {
-			"insufficient_funds_title": "Insufficient Funds",
-			"insufficient_funds_description": "💸 You don't have enough TomoCoins to gamble that amount!\n\n💰 **Your Balance:** {balance}\n🎲 **Attempted Gamble:** {attempted}",
-			"win_title": "You Win!",
-			"win_description": "🎉 Congratulations! You doubled your gamble and won **{winnings}** TomoCoins!\n\n💰 **New Balance:** {new_balance}",
-			"lose_title": "You Lost!",
-			"lose_description": "💔 Better luck next time! You lost **{amount_lost}** TomoCoins.\n\n💰 **New Balance:** {new_balance}",
-			"insufficient_funds_footer": "Try a smaller amount! Good luck!",
-			"win_footer": "Big win! Feeling lucky?",
-			"lose_footer": "Ouch! Gambling is risky!"
-		},
-		"generate": {
+	"generate": {
+		"image": {
 			"description": "Quickly generate an image from a prompt using Stable Diffusion!",
 			"progress": "🎨 Generating your image for: `{prompt}`...",
 			"result": "✨ Here's what I generated for `{prompt}` (b ᵔ▽ᵔ)b",
@@ -211,6 +211,9 @@
 			"api_modal_label": "Google AI API Key",
 			"api_modal_placeholder": "Paste your API key here...",
 			"api_modal_success": "API Key received (it will be encrypted).",
+			"api_key_invalid": "🚫 The API key you entered is too short or invalid. Please try again with a valid Google AI API key.",
+			"api_key_validating": "🔍 Validating your Google API key... This may take a moment.",
+			"api_key_invalid_api": "❌ The API key validation failed. Google rejected this key as invalid. Please check your key and try again.",
 			"preset_select_title": "Step 2: Choose Initial Personality",
 			"preset_select_description": "Select a starting personality preset for Tomori. You can customize this extensively later using `/teach`.",
 			"preset_select_placeholder": "Select a personality...",
@@ -265,13 +268,13 @@
 		}
 	},
 	"events": {
-		"geminiBot": {
+		"tomoriChat": {
 			"setup_required_title": "Bot Setup Required",
 			"setup_required_description": "To use the chat feature, please set up the following:\n• At least 2 conversation examples using `/teach convo`\n• At least 1 info entry using `/teach info`\nYou may also use `/setup` to easily choose a personality preset for the bot.",
 			"safety_error_title": "Safety Filter Triggered",
 			"safety_error_description": "🚫 Gemini's safety filters blocked the response. This usually happens when the content might violate Google's safety measures."
 		},
-		"welcomeBot": {
+		"addBot": {
 			"rejoin_title": "I'm Back!",
 			"rejoin_description": "Hey there! Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the `/teach` and `/settings` commands.",
 			"setup_prompt_title": "Thanks for adding TomoriBot!",

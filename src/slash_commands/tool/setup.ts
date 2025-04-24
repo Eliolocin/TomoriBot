@@ -1,275 +1,347 @@
 import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ButtonStyle,
 	type ChatInputCommandInteraction,
 	type Client,
-	EmbedBuilder,
-	ModalBuilder,
 	PermissionsBitField,
-	StringSelectMenuBuilder,
-	TextInputBuilder,
+	ActionRowBuilder,
 	TextInputStyle,
-	ComponentType, // Import ComponentType for button collector filter
-	InteractionCollector, // Import InteractionCollector for button handling
-	type ButtonInteraction, // Import ButtonInteraction type
-	// Add other necessary discord.js types like TextChannel, ComponentType etc.
+	ModalBuilder,
+	TextInputBuilder,
 } from "discord.js";
 import { sql } from "bun";
-import type { Command } from "../../types/global";
-import type {
-	UserRow,
-	TomoriPresetRow,
-	ServerRow,
-	TomoriRow,
-	LlmRow,
-} from "../../types/db"; // Import necessary DB types
-import { localizer } from "../../utils/textLocalizer";
-import { log } from "../../utils/logBeautifier";
-
-// Define the structure for temporarily storing setup data
-interface SetupData {
-	encryptedApiKey: Buffer | null;
-	presetId: number | null;
-	autochChannelIds: string[];
-	autochThreshold: number;
-	humanizerEnabled: boolean;
-	serverId: number | null; // To store server_id if we insert it early
-}
+import type { BaseCommand } from "../../types/discord/global";
+import type { SetupConfig, TomoriPresetRow } from "../../types/db/schema";
+import { setupConfigSchema, tomoriPresetSchema } from "../../types/db/schema";
+import { localizer } from "../../utils/text/localizer";
+import { log, ColorCode } from "../../utils/misc/logger";
+import {
+	showInfoEmbed,
+	showSummaryEmbed,
+} from "../../utils/discord/interactionHelper";
+import { validateApiKey } from "../../providers/google";
+import { encryptApiKey } from "../../utils/security/crypto";
+import { setupServer } from "../../utils/db/setupHelper";
 
 /**
- * @description Command to guide users through the initial setup of TomoriBot for their server.
+ * Command to guide users through the initial setup of TomoriBot for their server
+ * @description Collects configuration and initializes TomoriBot's database state
  */
-const command: Command = {
+const command: BaseCommand = {
 	name: "setup",
-	description: localizer("en", "tool.setup.command_description"), // Use a default locale for the base description
+	description: localizer("en", "tool.setup.command_description"),
 	category: "tool",
-	// Require 'Manage Server' permission
 	permissionsRequired: [
 		new PermissionsBitField(PermissionsBitField.Flags.ManageGuild),
 	],
-
-	/**
-	 * @description Executes the multi-step setup process for TomoriBot.
-	 * @param client The Discord client instance.
-	 * @param interaction The ChatInputCommandInteraction object.
-	 * @param _userData User data (not typically needed for server setup).
-	 */
 	callback: async (
-		client: Client,
+		_client: Client,
 		interaction: ChatInputCommandInteraction,
-		_userData: UserRow, // Mark as unused if not needed
 	): Promise<void> => {
-		// 0. Ensure command is run in a guild
+		// Ensure command is run in a guild
 		if (!interaction.guild || !interaction.channel) {
-			// Should theoretically not happen for guild commands, but good practice
 			await interaction.reply({
-				content: "This command can only be used in a server.",
+				content: localizer(interaction.locale, "errors.guild_only"),
 				ephemeral: true,
 			});
 			return;
 		}
 
-		// Determine locale for responses (use interaction locale or guild preferred locale if available, fallback to 'en')
 		const locale = interaction.locale ?? interaction.guildLocale ?? "en";
 
-		// Check user permissions again (belt-and-suspenders)
+		// Check permissions again (belt-and-suspenders)
 		const memberPermissions = interaction.member?.permissions;
 		if (
 			!memberPermissions ||
-			!(memberPermissions instanceof PermissionsBitField) || // Type guard
+			!(memberPermissions instanceof PermissionsBitField) ||
 			!memberPermissions.has(PermissionsBitField.Flags.ManageGuild)
 		) {
-			const embed = new EmbedBuilder()
-				.setColor("#E74C3C") // Red
-				.setTitle(localizer(locale, "tool.setup.error_title"))
-				.setDescription(localizer(locale, "tool.setup.no_permission"));
-			await interaction.reply({ embeds: [embed], ephemeral: true });
+			await showInfoEmbed(interaction, locale, {
+				titleKey: "tool.setup.error_title",
+				descriptionKey: "tool.setup.no_permission",
+				color: ColorCode.ERROR,
+			});
 			return;
 		}
 
-		// Check if Tomori already exists for this server
 		try {
-			const [existingServer] = await sql`
-				SELECT s.server_id
-				FROM servers s
-				JOIN tomoris t ON s.server_id = t.server_id
-				WHERE s.server_disc_id = ${interaction.guild.id}
+			// First, load available presets for the server's locale (or fallback to English)
+			// This helps us create an informative placeholder showing available options
+			const presetRows = await sql`
+				SELECT tomori_preset_id, tomori_preset_name, tomori_preset_desc, preset_language
+				FROM tomori_presets
+				WHERE preset_language = ${locale} OR preset_language = 'en'
+				ORDER BY tomori_preset_id
 			`;
 
-			if (existingServer) {
-				const embed = new EmbedBuilder()
-					.setColor("#E74C3C") // Red
-					.setTitle(localizer(locale, "tool.setup.error_title"))
-					// TODO: Add locale string 'tool.setup.already_exists'
-					.setDescription(
-						localizer(
-							locale,
-							"tool.setup.already_exists" /*"Tomori is already set up on this server! Use /settings or /teach to modify."*/,
-						),
-					);
-				await interaction.reply({ embeds: [embed], ephemeral: true });
-				return;
-			}
-		} catch (error) {
-			log.error("Error checking for existing Tomori during setup:", error);
-			const embed = new EmbedBuilder()
-				.setColor("#E74C3C") // Red
-				.setTitle(localizer(locale, "tool.setup.error_title"))
-				.setDescription(localizer(locale, "general.errors.generic_error"));
-			await interaction.reply({ embeds: [embed], ephemeral: true });
-			return;
-		}
-
-		// Initialize temporary storage for setup data
-		const setupData: SetupData = {
-			encryptedApiKey: null,
-			presetId: null,
-			autochChannelIds: [],
-			autochThreshold: 0,
-			humanizerEnabled: true, // Default to true
-			serverId: null,
-		};
-
-		// Defer reply to allow time for multi-step interaction
-		await interaction.deferReply({ ephemeral: true });
-
-		try {
-			// --- Step 1: API Key Prep ---
-			// 1. Create the explanation embed
-			const apiKeyPrepEmbed = new EmbedBuilder()
-				.setColor("#FEE75C") // Yellow
-				.setTitle(localizer(locale, "tool.setup.api_prep_title"))
-				.setDescription(localizer(locale, "tool.setup.api_prep_description"));
-
-			// 2. Create Continue and Cancel buttons
-			const continueButton = new ButtonBuilder()
-				.setCustomId("setup_api_continue")
-				.setLabel(localizer(locale, "tool.setup.button_continue"))
-				.setStyle(ButtonStyle.Success); // Green for continue
-
-			const cancelButton = new ButtonBuilder()
-				.setCustomId("setup_api_cancel")
-				.setLabel(localizer(locale, "tool.setup.button_cancel"))
-				.setStyle(ButtonStyle.Danger); // Red for cancel
-
-			// 3. Create an action row for the buttons
-			const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-				continueButton,
-				cancelButton,
+			// Validate preset data
+			const availablePresets: TomoriPresetRow[] = presetRows.map(
+				(row: Record<string, unknown>) => tomoriPresetSchema.parse(row),
 			);
 
-			// 4. Send the embed and buttons as the initial reply edit
-			const prepMessage = await interaction.editReply({
-				embeds: [apiKeyPrepEmbed],
-				components: [buttonRow],
-			});
-
-			// 5. Create a collector to wait for the user's button click
-			// Filter ensures only the original command user can interact
-			const buttonCollectorFilter = (i: ButtonInteraction) => {
-				// Defer update to prevent "interaction failed" message
-				i.deferUpdate();
-				// Check if the interaction is from the original user
-				return i.user.id === interaction.user.id;
-			};
-
-			let proceedToApiKey = false; // Flag to control flow
-
-			try {
-				// Wait for a button interaction for 15 seconds
-				const buttonInteraction = await prepMessage.awaitMessageComponent({
-					filter: buttonCollectorFilter,
-					componentType: ComponentType.Button,
-					time: 15000, // 15 seconds timeout
+			if (availablePresets.length === 0) {
+				log.warn(`No presets found for locale '${locale}' or fallback 'en'`);
+				await interaction.reply({
+					content: localizer(locale, "tool.setup.no_presets_found"),
+					ephemeral: true,
 				});
-
-				// 6. Handle the button click
-				if (buttonInteraction.customId === "setup_api_continue") {
-					proceedToApiKey = true;
-					// (We'll proceed to Step 2 after this block)
-				} else if (buttonInteraction.customId === "setup_api_cancel") {
-					// User cancelled
-					const cancelEmbed = new EmbedBuilder()
-						.setColor("#E74C3C") // Red
-						.setTitle(localizer(locale, "tool.setup.cancel_title"))
-						.setDescription(localizer(locale, "tool.setup.cancel_description"));
-					await interaction.editReply({
-						embeds: [cancelEmbed],
-						components: [],
-					});
-					return; // End setup
-				}
-			} catch (timeoutError) {
-				// Handle timeout specifically
-				const timeoutEmbed = new EmbedBuilder()
-					.setColor("#E74C3C") // Red
-					.setTitle(localizer(locale, "tool.setup.timeout_title"))
-					.setDescription(localizer(locale, "tool.setup.timeout_description"));
-				await interaction.editReply({ embeds: [timeoutEmbed], components: [] });
-				return; // End setup due to timeout
-			}
-
-			// --- Step 2: API Key Input (Modal) ---
-			if (proceedToApiKey) {
-				// TODO: Implement Modal for API Key Input
-				// Show the modal using interaction.showModal()
-				// Await modal submission using interaction.awaitModalSubmit()
-				// Encrypt the key and store in setupData.encryptedApiKey
-				// Edit the reply to confirm key receipt (tool.setup.api_modal_success)
-				log.info("Proceeding to API Key Input Modal..."); // Placeholder
-			} else {
-				// This case should ideally not be reached if cancel/timeout is handled
-				log.warn(
-					"API Key Prep step ended without proceeding or explicit cancel/timeout.",
-				);
 				return;
 			}
-			// --- Step 3: Preset Selection ---
-			// TODO: Fetch presets matching locale
-			// TODO: Show Preset Selection Embed + Reactions (1, 2, 3..., Cancel)
-			// TODO: Store chosen presetId in setupData
-			// --- Step 4: Autoch Channels ---
-			// TODO: Show Autoch Channel Embed + Message Collector + Skip Button
-			// TODO: Store channel IDs in setupData
-			// --- Step 5: Autoch Threshold ---
-			// TODO: Show Autoch Threshold Embed + Message Collector
-			// TODO: Store threshold in setupData
-			// --- Step 6: Humanizer ---
-			// TODO: Show Humanizer Embed + Yes/No Buttons
-			// TODO: Store boolean in setupData
-			// --- Step 7: Confirmation & Saving ---
-			// TODO: Show Confirmation Embed summarizing choices + Confirm/Cancel Buttons
-			// TODO: If confirmed, perform DB transaction:
-			//      1. INSERT INTO servers ... RETURNING server_id
-			//      2. INSERT INTO tomoris ... RETURNING tomori_id
-			//      3. INSERT INTO tomori_configs ...
-			// --- Step 8: Final Message ---
-			// TODO: Edit reply with Success/Cancelled/Timeout/Error embed based on outcome
-		} catch (error) {
-			// Handle timeouts or other errors during the interaction flow
-			if (error instanceof Error && error.message.includes("time")) {
-				// Basic timeout check
-				const embed = new EmbedBuilder()
-					.setColor("#E74C3C") // Red
-					.setTitle(localizer(locale, "tool.setup.timeout_title"))
-					.setDescription(localizer(locale, "tool.setup.timeout_description"));
-				await interaction.editReply({ embeds: [embed], components: [] }); // Clear components
-			} else {
-				log.error("Error during setup command execution:", error);
-				const embed = new EmbedBuilder()
-					.setColor("#E74C3C") // Red
-					.setTitle(localizer(locale, "tool.setup.error_title"))
-					.setDescription(localizer(locale, "general.errors.generic_error"));
-				// Attempt to edit reply, might fail if interaction already ended
-				try {
-					await interaction.editReply({ embeds: [embed], components: [] });
-				} catch (editError) {
-					log.error("Failed to edit reply after setup error:", editError);
+
+			// Create a placeholder showing available preset options
+			const presetOptions = availablePresets
+				.map((preset) => preset.tomori_preset_name)
+				.join(", ");
+			const presetPlaceholder = `Available: ${
+				presetOptions.length > 50
+					? `${presetOptions.substring(0, 47)}...`
+					: presetOptions
+			}`;
+
+			// Create a comprehensive single setup modal
+			const modal = new ModalBuilder()
+				.setCustomId("tomori_setup_modal")
+				.setTitle(localizer(locale, "tool.setup.modal_title"));
+
+			// API Key input
+			const apiKeyInput = new TextInputBuilder()
+				.setCustomId("api_key")
+				.setLabel(localizer(locale, "tool.setup.api_key_label"))
+				.setStyle(TextInputStyle.Short)
+				.setPlaceholder("Enter your Gemini API Key")
+				.setRequired(true);
+
+			// Personality preset input with choices in placeholder
+			const presetInput = new TextInputBuilder()
+				.setCustomId("preset_name")
+				.setLabel(localizer(locale, "tool.setup.preset_label"))
+				.setStyle(TextInputStyle.Short)
+				.setPlaceholder(presetPlaceholder)
+				.setRequired(true);
+			//.setValue(availablePresets[0].tomori_preset_name); // Default to first preset
+
+			// Auto-chat channels input
+			const autoChInput = new TextInputBuilder()
+				.setCustomId("auto_channels")
+				.setLabel(localizer(locale, "tool.setup.channels_label"))
+				.setStyle(TextInputStyle.Short)
+				.setPlaceholder("general,chat,random (leave empty to disable)")
+				.setRequired(false);
+
+			// Auto-chat threshold
+			const thresholdInput = new TextInputBuilder()
+				.setCustomId("threshold")
+				.setLabel(localizer(locale, "tool.setup.threshold_label"))
+				.setStyle(TextInputStyle.Short)
+				.setPlaceholder("Range: 30-100, recommended: 30")
+				//.setValue("15")
+				.setRequired(false);
+
+			// Humanizer toggle - make it clear it's a yes/no field
+			const humanizerInput = new TextInputBuilder()
+				.setCustomId("humanizer")
+				.setLabel(localizer(locale, "tool.setup.humanizer_label"))
+				.setStyle(TextInputStyle.Short)
+				.setPlaceholder("Enter 'yes' or 'no'")
+				//.setValue("yes")
+				.setRequired(true);
+
+			// Add inputs to the modal
+			modal.addComponents(
+				new ActionRowBuilder<TextInputBuilder>().addComponents(apiKeyInput),
+				new ActionRowBuilder<TextInputBuilder>().addComponents(presetInput),
+				new ActionRowBuilder<TextInputBuilder>().addComponents(autoChInput),
+				new ActionRowBuilder<TextInputBuilder>().addComponents(thresholdInput),
+				new ActionRowBuilder<TextInputBuilder>().addComponents(humanizerInput),
+			);
+
+			// Show the modal
+			await interaction.showModal(modal);
+
+			// Wait for the modal submission
+			try {
+				const submission = await interaction.awaitModalSubmit({
+					time: 300000, // 5 minutes to complete setup
+					filter: (i) =>
+						i.customId === "tomori_setup_modal" &&
+						i.user.id === interaction.user.id,
+				});
+
+				// Process the submission
+				await submission.deferReply({ ephemeral: true });
+
+				// Extract values from the modal
+				const apiKey = submission.fields.getTextInputValue("api_key");
+				const presetName = submission.fields.getTextInputValue("preset_name");
+				const autoChannelsText =
+					submission.fields.getTextInputValue("auto_channels");
+				const thresholdText = submission.fields.getTextInputValue("threshold");
+				const humanizerText = submission.fields
+					.getTextInputValue("humanizer")
+					.toLowerCase();
+
+				// Validate and transform inputs
+
+				// 1. Validate API Key with length check and actual API test
+				if (!apiKey || apiKey.length < 10) {
+					await submission.editReply({
+						content: localizer(locale, "tool.setup.api_key_invalid"),
+					});
+					return;
 				}
+
+				// Test the API key with a real API call to Google
+				await submission.editReply({
+					content: localizer(locale, "tool.setup.api_key_validating"),
+				});
+
+				const isApiKeyValid = await validateApiKey(apiKey);
+				if (!isApiKeyValid) {
+					await submission.editReply({
+						content: localizer(locale, "tool.setup.api_key_invalid_api"),
+					});
+					return;
+				}
+
+				// API key is valid, proceed with encryption
+				const encryptedKey = await encryptApiKey(apiKey);
+
+				// 2. Validate preset name against available presets
+				// Find the preset with the closest name (case-insensitive)
+				const selectedPreset = availablePresets.find(
+					(p) =>
+						p.tomori_preset_name.toLowerCase() === presetName.toLowerCase(),
+				);
+
+				if (!selectedPreset) {
+					await submission.editReply({
+						content: localizer(locale, "tool.setup.preset_invalid", {
+							available: presetOptions,
+						}),
+					});
+					return;
+				}
+
+				const selectedPresetId = selectedPreset.tomori_preset_id;
+				log.info(
+					`Selected preset ID: ${selectedPresetId} (${selectedPreset.tomori_preset_name})`,
+				);
+
+				// 3. Process auto-chat channels
+				const autochChannels = autoChannelsText.trim()
+					? autoChannelsText.split(",").map((channel) => channel.trim())
+					: [];
+
+				// 4. Process threshold
+				const autochThreshold = Number.parseInt(thresholdText, 10);
+				if (
+					Number.isNaN(autochThreshold) ||
+					autochThreshold < 5 ||
+					autochThreshold > 100
+				) {
+					await submission.editReply({
+						content: localizer(locale, "tool.setup.threshold_invalid_desc"),
+					});
+					return;
+				}
+
+				// 5. Process humanizer setting
+				if (!["yes", "no", "true", "false", "y", "n"].includes(humanizerText)) {
+					await submission.editReply({
+						content: localizer(locale, "tool.setup.humanizer_invalid"),
+					});
+					return;
+				}
+				const humanizerEnabled = ["yes", "true", "y"].includes(humanizerText);
+
+				// Create setup config
+				const setupConfig: SetupConfig = {
+					serverId: interaction.guild.id,
+					encryptedApiKey: encryptedKey,
+					presetId: selectedPresetId,
+					autochChannels,
+					autochThreshold,
+					humanizer: humanizerEnabled,
+					tomoriName: locale === "ja" ? "ともり" : "Tomori", // Default name
+					locale,
+				};
+
+				// Validate config using zod schema
+				try {
+					setupConfigSchema.parse(setupConfig);
+				} catch (error) {
+					log.error("Setup config validation failed:", error);
+					await submission.editReply({
+						content: localizer(locale, "tool.setup.config_invalid"),
+					});
+					return;
+				}
+
+				// Setup the server
+				try {
+					await setupServer(interaction.guild, setupConfig);
+				} catch (error) {
+					log.error("Server setup failed:", error);
+					await submission.editReply({
+						content: localizer(locale, "tool.setup.setup_failed"),
+					});
+					return;
+				}
+
+				// Show success message
+				await showSummaryEmbed(submission, locale, {
+					titleKey: "tool.setup.success_title",
+					descriptionKey: "tool.setup.success_desc",
+					color: ColorCode.SUCCESS,
+					fields: [
+						{
+							nameKey: "tool.setup.preset_field",
+							value: selectedPreset.tomori_preset_name,
+						},
+						{
+							nameKey: "tool.setup.autoch_field",
+							value: autochChannels.length
+								? "tool.setup.autoch_enabled"
+								: "tool.setup.autoch_disabled",
+							vars: autochChannels.length
+								? {
+										channels: autochChannels.length,
+										threshold: autochThreshold,
+									}
+								: undefined,
+						},
+						{
+							nameKey: "tool.setup.humanizer_field",
+							value: humanizerEnabled
+								? "tool.setup.humanizer_enabled"
+								: "tool.setup.humanizer_disabled",
+						},
+						{
+							nameKey: "tool.setup.name_field",
+							value: locale === "ja" ? "ともり" : "Tomori",
+						},
+					],
+				});
+			} catch (error) {
+				log.error("Modal submission error:", error);
+				await interaction.followUp({
+					content: localizer(locale, "tool.setup.modal_timeout"),
+					ephemeral: true,
+				});
+			}
+		} catch (error) {
+			log.error("Error during setup process:", error);
+			if (!interaction.replied && !interaction.deferred) {
+				await interaction.reply({
+					content: localizer(locale, "general.errors.generic_error"),
+					ephemeral: true,
+				});
+			} else {
+				await interaction.followUp({
+					content: localizer(locale, "general.errors.generic_error"),
+					ephemeral: true,
+				});
 			}
 		}
 	},
-} as const; // Use 'as const' for stricter typing
+} as const;
 
 export default command;

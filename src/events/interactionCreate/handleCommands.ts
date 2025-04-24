@@ -1,18 +1,15 @@
-import type {
-	ChatInputCommandInteraction,
-	Client,
-	Interaction,
-} from "discord.js";
+import type { Client, Interaction } from "discord.js";
 import { sql } from "bun";
-import { showInfoEmbed } from "../../utils/interactionHelpers";
-import { ColorScheme } from "../../utils/logBeautifier";
-import type { ExtendedCommand } from "../../types/global";
-import { userSchema, type UserRow } from "../../types/db";
-import getLocalCommands from "../../utils/getLocalCommands";
-import { localizer } from "../../utils/textLocalizer";
-import { log } from "../../utils/logBeautifier";
+import { showInfoEmbed } from "../../utils/discord/interactionHelper";
+import { ColorCode } from "../../utils/misc/logger";
+import type { ExtendedCommand } from "../../types/discord/global";
+import { userSchema, type UserRow } from "../../types/db/schema";
+import getLocalCommands from "../../utils/commands/getLocalCommands";
+import { localizer } from "../../utils/text/localizer";
+import { log } from "../../utils/misc/logger";
+import { registerUser } from "../../utils/db/sessionHelper";
 
-const TIMEOUT_DURATION = 30000;
+const TIMEOUT_DURATION = 100000;
 const COOLDOWN_MAP = new Map<string, number>([
 	["economy", 2000],
 	["scrape", 10000],
@@ -87,7 +84,7 @@ const handler = async (
 				await showInfoEmbed(interaction, locale, {
 					titleKey: "general.errors.dev_only",
 					descriptionKey: "general.errors.dev_only",
-					color: ColorScheme.ERROR,
+					color: ColorCode.ERROR,
 				});
 				return;
 			}
@@ -96,7 +93,7 @@ const handler = async (
 				await showInfoEmbed(interaction, locale, {
 					titleKey: "general.errors.test_only",
 					descriptionKey: "general.errors.test_only",
-					color: ColorScheme.ERROR,
+					color: ColorCode.ERROR,
 				});
 				return;
 			}
@@ -108,7 +105,7 @@ const handler = async (
 						await showInfoEmbed(interaction, locale, {
 							titleKey: "general.errors.insufficient_permissions",
 							descriptionKey: "general.errors.insufficient_permissions",
-							color: ColorScheme.ERROR,
+							color: ColorCode.ERROR,
 						});
 						return;
 					}
@@ -130,7 +127,7 @@ const handler = async (
 							titleKey: "general.cooldown",
 							descriptionKey: "general.cooldown",
 							descriptionVars: { seconds: timeLeftSeconds },
-							color: ColorScheme.WARN,
+							color: ColorCode.WARN,
 						});
 						return;
 					}
@@ -144,7 +141,7 @@ const handler = async (
 				}
 			}
 
-			// 4. Get or create user data with Bun SQL and Zod validation
+			// 4. Get or create user data using the centralized registerUser function
 			let userData: UserRow | undefined;
 			const [existingUser] = await sql`
 				SELECT * FROM users WHERE user_disc_id = ${interaction.user.id}
@@ -156,19 +153,17 @@ const handler = async (
 				const serverLocale = interaction.guild.preferredLocale;
 				const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en";
 
-				const [newUser] = await sql`
-					INSERT INTO users (
-						user_disc_id,
-						user_nickname,
-						language_pref
-					) VALUES (
-						${interaction.user.id},
-						${interaction.user.displayName},
-						${userLanguage}
-					)
-					RETURNING *
-				`;
-				userData = userSchema.parse(newUser);
+				// Use the centralized registerUser function from sessionHelper (Rule #17)
+				const registeredUser = await registerUser(
+					interaction.user.id,
+					interaction.user.displayName,
+					userLanguage,
+				);
+
+				// Only assign if not null
+				if (registeredUser) {
+					userData = registeredUser;
+				}
 			}
 
 			// 5. Execute command
@@ -179,7 +174,7 @@ const handler = async (
 				await showInfoEmbed(interaction, locale, {
 					titleKey: "general.errors.generic_error",
 					descriptionKey: "general.errors.generic_error",
-					color: ColorScheme.ERROR,
+					color: ColorCode.ERROR,
 				});
 			}
 		};
@@ -203,7 +198,7 @@ const handler = async (
 			await showInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.generic_error",
 				descriptionKey: "general.errors.generic_error",
-				color: ColorScheme.ERROR,
+				color: ColorCode.ERROR,
 			});
 		}
 	}

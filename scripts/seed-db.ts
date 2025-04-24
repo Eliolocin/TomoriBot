@@ -1,5 +1,5 @@
 import { sql } from "bun";
-import { log } from "../src/utils/logBeautifier";
+import { log } from "../src/utils/misc/logger";
 import path from "node:path";
 
 log.section("TomoriBot Database Seeding...");

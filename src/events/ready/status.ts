@@ -1,6 +1,6 @@
 import { type ActivityOptions, ActivityType, type Client } from "discord.js";
 import pkg from "../../../package.json";
-import { log } from "../../utils/logBeautifier";
+import { log } from "../../utils/misc/logger";
 
 /**
  * Sets the bot's status and logs startup information.

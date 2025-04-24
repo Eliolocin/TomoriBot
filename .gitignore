@@ -6,6 +6,7 @@
 # Proompting
 .roo/
 .rooignore
+.github/copilot-instructions.md
 
 # Logs
 logs

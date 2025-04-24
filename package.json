@@ -21,6 +21,7 @@
 		"@distube/ytpl": "^1.2.1",
 		"@distube/ytsr": "^2.0.4",
 		"@google-cloud/vertexai": "^1.9.3",
+		"@google/genai": "^0.9.0",
 		"@google/generative-ai": "^0.21.0",
 		"@haileybot/language-detector": "^1.1.1",
 		"@ibaraki-douji/novelai": "^0.0.1-alpha.7",

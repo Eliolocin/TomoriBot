@@ -1,32 +1,37 @@
 import type { Client, GuildMember } from "discord.js";
-import UserModel from "../../models/userSchema";
+import { registerUser } from "../../utils/db/sessionHelper";
+import { log } from "../../utils/misc/logger";
 
+/**
+ * Handles registration of new users when they join a guild.
+ * Creates user record if new, and logs the action.
+ * @param client - The Discord client instance
+ * @param member - The guild member who joined
+ * @returns Promise<void>
+ */
 const handler = async (_client: Client, member: GuildMember): Promise<void> => {
 	try {
-		// Determine the server's language from preferredLocale
+		// 1. Determine the server and user's preferred language
 		const serverLocale = member.guild.preferredLocale;
-		console.log(`Server language detected: ${serverLocale}`);
-
-		// Default to "en" unless the locale indicates Japanese
 		const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en";
+		log.info(
+			`New user ${member.user.tag} joined server, registering with language: ${userLanguage}`,
+		);
 
-		// Check if the user exists
-		let user = await UserModel.findOne({
-			userID: member.id,
-			serverID: member.guild.id,
-		});
-		if (!user) {
-			user = await UserModel.create({
-				userID: member.id,
-				serverID: member.guild.id,
-				nickname: member.displayName,
-				language: userLanguage,
-			});
-			await user.save();
-			console.log(`User created with language set to ${userLanguage}`);
+		// 2. Register user using our centralized function (Rule #17)
+		const userData = await registerUser(
+			member.id,
+			member.displayName,
+			userLanguage,
+		);
+
+		if (userData) {
+			log.success(`User ${member.user.tag} registered successfully`);
+		} else {
+			log.error(`Failed to register user ${member.user.tag}`);
 		}
-	} catch (err) {
-		console.error("Error handling user creation:", err);
+	} catch (error) {
+		log.error(`Error in guildMemberAdd handler for ${member.user.tag}:`, error);
 	}
 };
 

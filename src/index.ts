@@ -1,15 +1,9 @@
-import {
-	Client,
-	GatewayIntentBits,
-	IntentsBitField,
-	Partials,
-} from "discord.js";
+import { Client, GatewayIntentBits, Partials } from "discord.js";
 import { config } from "dotenv";
 import { sql } from "bun";
-import { log } from "./utils/logBeautifier";
+import { log } from "./utils/misc/logger";
 import path from "node:path";
 import eventHandler from "./handlers/eventHandler";
-import { localizer } from "./utils/textLocalizer";
 
 config();
 
