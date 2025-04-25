@@ -6,20 +6,25 @@ import {
 	TextInputStyle,
 	ModalBuilder,
 	TextInputBuilder,
+	MessageFlags,
 } from "discord.js";
 import { sql } from "bun";
 import type { BaseCommand } from "../../types/discord/global";
-import type { SetupConfig, TomoriPresetRow } from "../../types/db/schema";
+import type {
+	SetupConfig,
+	TomoriPresetRow,
+	UserRow,
+} from "../../types/db/schema";
 import { setupConfigSchema, tomoriPresetSchema } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
-	showInfoEmbed,
-	showSummaryEmbed,
+	replyInfoEmbed,
+	replySummaryEmbed,
 } from "../../utils/discord/interactionHelper";
 import { validateApiKey } from "../../providers/google";
 import { encryptApiKey } from "../../utils/security/crypto";
-import { setupServer } from "../../utils/db/setupHelper";
+import { setupServer } from "../../utils/db/configHelper";
 
 /**
  * Command to guide users through the initial setup of TomoriBot for their server
@@ -27,7 +32,7 @@ import { setupServer } from "../../utils/db/setupHelper";
  */
 const command: BaseCommand = {
 	name: "setup",
-	description: localizer("en", "tool.setup.command_description"),
+	description: localizer("en", "commands.setup.command_description"),
 	category: "tool",
 	permissionsRequired: [
 		new PermissionsBitField(PermissionsBitField.Flags.ManageGuild),
@@ -35,17 +40,18 @@ const command: BaseCommand = {
 	callback: async (
 		_client: Client,
 		interaction: ChatInputCommandInteraction,
+		userData: UserRow,
 	): Promise<void> => {
 		// Ensure command is run in a guild
 		if (!interaction.guild || !interaction.channel) {
 			await interaction.reply({
 				content: localizer(interaction.locale, "errors.guild_only"),
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		const locale = interaction.locale ?? interaction.guildLocale ?? "en";
+		const locale = userData.language_pref ?? interaction.guildLocale ?? "en";
 
 		// Check permissions again (belt-and-suspenders)
 		const memberPermissions = interaction.member?.permissions;
@@ -54,9 +60,9 @@ const command: BaseCommand = {
 			!(memberPermissions instanceof PermissionsBitField) ||
 			!memberPermissions.has(PermissionsBitField.Flags.ManageGuild)
 		) {
-			await showInfoEmbed(interaction, locale, {
-				titleKey: "tool.setup.error_title",
-				descriptionKey: "tool.setup.no_permission",
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.setup.error_title",
+				descriptionKey: "commands.setup.no_permission",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -68,7 +74,7 @@ const command: BaseCommand = {
 			const presetRows = await sql`
 				SELECT tomori_preset_id, tomori_preset_name, tomori_preset_desc, preset_language
 				FROM tomori_presets
-				WHERE preset_language = ${locale} OR preset_language = 'en'
+				WHERE preset_language = ${locale}
 				ORDER BY tomori_preset_id
 			`;
 
@@ -78,10 +84,10 @@ const command: BaseCommand = {
 			);
 
 			if (availablePresets.length === 0) {
-				log.warn(`No presets found for locale '${locale}' or fallback 'en'`);
+				log.warn(`No presets found for locale '${locale}'`);
 				await interaction.reply({
-					content: localizer(locale, "tool.setup.no_presets_found"),
-					ephemeral: true,
+					content: localizer(locale, "commands.setup.no_presets_found"),
+					flags: MessageFlags.Ephemeral,
 				});
 				return;
 			}
@@ -90,57 +96,38 @@ const command: BaseCommand = {
 			const presetOptions = availablePresets
 				.map((preset) => preset.tomori_preset_name)
 				.join(", ");
-			const presetPlaceholder = `Available: ${
-				presetOptions.length > 50
-					? `${presetOptions.substring(0, 47)}...`
-					: presetOptions
-			}`;
+			// Build a multi-line placeholder with name and description for each preset
+			const presetPlaceholder = availablePresets
+				.map((preset, i) => `${i + 1}. ${preset.tomori_preset_name}`)
+				.join("\n");
 
 			// Create a comprehensive single setup modal
 			const modal = new ModalBuilder()
 				.setCustomId("tomori_setup_modal")
-				.setTitle(localizer(locale, "tool.setup.modal_title"));
+				.setTitle(localizer(locale, "commands.setup.modal_title"));
 
 			// API Key input
 			const apiKeyInput = new TextInputBuilder()
 				.setCustomId("api_key")
-				.setLabel(localizer(locale, "tool.setup.api_key_label"))
+				.setLabel(localizer(locale, "commands.setup.api_key_label"))
 				.setStyle(TextInputStyle.Short)
 				.setPlaceholder("Enter your Gemini API Key")
 				.setRequired(true);
 
-			// Personality preset input with choices in placeholder
+			// Personality preset input as a large text area with detailed placeholder
 			const presetInput = new TextInputBuilder()
 				.setCustomId("preset_name")
-				.setLabel(localizer(locale, "tool.setup.preset_label"))
-				.setStyle(TextInputStyle.Short)
-				.setPlaceholder(presetPlaceholder)
+				.setLabel(localizer(locale, "commands.setup.preset_label"))
+				.setStyle(TextInputStyle.Paragraph) // Use Paragraph for large text area
+				.setPlaceholder(presetPlaceholder.slice(0, 100)) // Discord limit: 400 chars
 				.setRequired(true);
-			//.setValue(availablePresets[0].tomori_preset_name); // Default to first preset
-
-			// Auto-chat channels input
-			const autoChInput = new TextInputBuilder()
-				.setCustomId("auto_channels")
-				.setLabel(localizer(locale, "tool.setup.channels_label"))
-				.setStyle(TextInputStyle.Short)
-				.setPlaceholder("general,chat,random (leave empty to disable)")
-				.setRequired(false);
-
-			// Auto-chat threshold
-			const thresholdInput = new TextInputBuilder()
-				.setCustomId("threshold")
-				.setLabel(localizer(locale, "tool.setup.threshold_label"))
-				.setStyle(TextInputStyle.Short)
-				.setPlaceholder("Range: 30-100, recommended: 30")
-				//.setValue("15")
-				.setRequired(false);
 
 			// Humanizer toggle - make it clear it's a yes/no field
 			const humanizerInput = new TextInputBuilder()
 				.setCustomId("humanizer")
-				.setLabel(localizer(locale, "tool.setup.humanizer_label"))
+				.setLabel(localizer(locale, "commands.setup.humanizer_label"))
 				.setStyle(TextInputStyle.Short)
-				.setPlaceholder("Enter 'yes' or 'no'")
+				.setPlaceholder("Enter a value from 0 to 3.")
 				//.setValue("yes")
 				.setRequired(true);
 
@@ -148,8 +135,6 @@ const command: BaseCommand = {
 			modal.addComponents(
 				new ActionRowBuilder<TextInputBuilder>().addComponents(apiKeyInput),
 				new ActionRowBuilder<TextInputBuilder>().addComponents(presetInput),
-				new ActionRowBuilder<TextInputBuilder>().addComponents(autoChInput),
-				new ActionRowBuilder<TextInputBuilder>().addComponents(thresholdInput),
 				new ActionRowBuilder<TextInputBuilder>().addComponents(humanizerInput),
 			);
 
@@ -171,32 +156,29 @@ const command: BaseCommand = {
 				// Extract values from the modal
 				const apiKey = submission.fields.getTextInputValue("api_key");
 				const presetName = submission.fields.getTextInputValue("preset_name");
-				const autoChannelsText =
-					submission.fields.getTextInputValue("auto_channels");
-				const thresholdText = submission.fields.getTextInputValue("threshold");
 				const humanizerText = submission.fields
 					.getTextInputValue("humanizer")
-					.toLowerCase();
+					.trim();
 
 				// Validate and transform inputs
 
 				// 1. Validate API Key with length check and actual API test
 				if (!apiKey || apiKey.length < 10) {
 					await submission.editReply({
-						content: localizer(locale, "tool.setup.api_key_invalid"),
+						content: localizer(locale, "commands.setup.api_key_invalid"),
 					});
 					return;
 				}
 
 				// Test the API key with a real API call to Google
 				await submission.editReply({
-					content: localizer(locale, "tool.setup.api_key_validating"),
+					content: localizer(locale, "commands.setup.api_key_validating"),
 				});
 
 				const isApiKeyValid = await validateApiKey(apiKey);
 				if (!isApiKeyValid) {
 					await submission.editReply({
-						content: localizer(locale, "tool.setup.api_key_invalid_api"),
+						content: localizer(locale, "commands.setup.api_key_invalid_api"),
 					});
 					return;
 				}
@@ -208,12 +190,13 @@ const command: BaseCommand = {
 				// Find the preset with the closest name (case-insensitive)
 				const selectedPreset = availablePresets.find(
 					(p) =>
-						p.tomori_preset_name.toLowerCase() === presetName.toLowerCase(),
+						p.tomori_preset_name.toLowerCase() ===
+						presetName.trim().toLowerCase(),
 				);
 
 				if (!selectedPreset) {
 					await submission.editReply({
-						content: localizer(locale, "tool.setup.preset_invalid", {
+						content: localizer(locale, "commands.setup.preset_invalid", {
 							available: presetOptions,
 						}),
 					});
@@ -225,41 +208,21 @@ const command: BaseCommand = {
 					`Selected preset ID: ${selectedPresetId} (${selectedPreset.tomori_preset_name})`,
 				);
 
-				// 3. Process auto-chat channels
-				const autochChannels = autoChannelsText.trim()
-					? autoChannelsText.split(",").map((channel) => channel.trim())
-					: [];
-
-				// 4. Process threshold
-				const autochThreshold = Number.parseInt(thresholdText, 10);
-				if (
-					Number.isNaN(autochThreshold) ||
-					autochThreshold < 5 ||
-					autochThreshold > 100
-				) {
+				const humanizerValue = Number.parseInt(humanizerText);
+				// 3. Process humanizer setting
+				if (humanizerValue < 0 || humanizerValue > 3) {
 					await submission.editReply({
-						content: localizer(locale, "tool.setup.threshold_invalid_desc"),
+						content: localizer(locale, "commands.setup.humanizer_invalid"),
 					});
 					return;
 				}
-
-				// 5. Process humanizer setting
-				if (!["yes", "no", "true", "false", "y", "n"].includes(humanizerText)) {
-					await submission.editReply({
-						content: localizer(locale, "tool.setup.humanizer_invalid"),
-					});
-					return;
-				}
-				const humanizerEnabled = ["yes", "true", "y"].includes(humanizerText);
 
 				// Create setup config
 				const setupConfig: SetupConfig = {
 					serverId: interaction.guild.id,
 					encryptedApiKey: encryptedKey,
 					presetId: selectedPresetId,
-					autochChannels,
-					autochThreshold,
-					humanizer: humanizerEnabled,
+					humanizer: humanizerValue,
 					tomoriName: locale === "ja" ? "ともり" : "Tomori", // Default name
 					locale,
 				};
@@ -270,7 +233,7 @@ const command: BaseCommand = {
 				} catch (error) {
 					log.error("Setup config validation failed:", error);
 					await submission.editReply({
-						content: localizer(locale, "tool.setup.config_invalid"),
+						content: localizer(locale, "commands.setup.config_invalid"),
 					});
 					return;
 				}
@@ -281,41 +244,27 @@ const command: BaseCommand = {
 				} catch (error) {
 					log.error("Server setup failed:", error);
 					await submission.editReply({
-						content: localizer(locale, "tool.setup.setup_failed"),
+						content: localizer(locale, "commands.setup.setup_failed"),
 					});
 					return;
 				}
 
 				// Show success message
-				await showSummaryEmbed(submission, locale, {
-					titleKey: "tool.setup.success_title",
-					descriptionKey: "tool.setup.success_desc",
+				await replySummaryEmbed(submission, locale, {
+					titleKey: "commands.setup.success_title",
+					descriptionKey: "commands.setup.success_desc",
 					color: ColorCode.SUCCESS,
 					fields: [
 						{
-							nameKey: "tool.setup.preset_field",
+							nameKey: "commands.setup.preset_field",
 							value: selectedPreset.tomori_preset_name,
 						},
 						{
-							nameKey: "tool.setup.autoch_field",
-							value: autochChannels.length
-								? "tool.setup.autoch_enabled"
-								: "tool.setup.autoch_disabled",
-							vars: autochChannels.length
-								? {
-										channels: autochChannels.length,
-										threshold: autochThreshold,
-									}
-								: undefined,
+							nameKey: "commands.setup.humanizer_field",
+							value: String(humanizerValue),
 						},
 						{
-							nameKey: "tool.setup.humanizer_field",
-							value: humanizerEnabled
-								? "tool.setup.humanizer_enabled"
-								: "tool.setup.humanizer_disabled",
-						},
-						{
-							nameKey: "tool.setup.name_field",
+							nameKey: "commands.setup.name_field",
 							value: locale === "ja" ? "ともり" : "Tomori",
 						},
 					],
@@ -323,8 +272,8 @@ const command: BaseCommand = {
 			} catch (error) {
 				log.error("Modal submission error:", error);
 				await interaction.followUp({
-					content: localizer(locale, "tool.setup.modal_timeout"),
-					ephemeral: true,
+					content: localizer(locale, "commands.setup.modal_timeout"),
+					flags: MessageFlags.Ephemeral,
 				});
 			}
 		} catch (error) {
@@ -332,12 +281,12 @@ const command: BaseCommand = {
 			if (!interaction.replied && !interaction.deferred) {
 				await interaction.reply({
 					content: localizer(locale, "general.errors.generic_error"),
-					ephemeral: true,
+					flags: MessageFlags.Ephemeral,
 				});
 			} else {
 				await interaction.followUp({
 					content: localizer(locale, "general.errors.generic_error"),
-					ephemeral: true,
+					flags: MessageFlags.Ephemeral,
 				});
 			}
 		}

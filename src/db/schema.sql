@@ -110,8 +110,10 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   autoch_threshold INT DEFAULT 0, -- set to 0 for no autoch
   teach_cost INT DEFAULT 1000, 
   gamba_limit INT DEFAULT 3,
+  free_teaching_enabled BOOLEAN DEFAULT true,
+  self_teaching_enabled BOOLEAN DEFAULT true,
   personal_memories_enabled BOOLEAN DEFAULT true,
-  humanizer_enabled BOOLEAN DEFAULT true,
+  humanizer_degree INT DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE CASCADE,

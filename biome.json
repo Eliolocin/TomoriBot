@@ -10,5 +10,6 @@
 			"recommended": true
 		}
 	},
-	"javascript": { "formatter": { "quoteStyle": "double" } }
+	"javascript": { "formatter": { "quoteStyle": "double" } },
+	"json": { "formatter": { "enabled": true, "indentStyle": "tab" } }
 }

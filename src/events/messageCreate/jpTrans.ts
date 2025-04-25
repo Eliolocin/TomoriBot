@@ -3,8 +3,7 @@ import type { Client, Message } from "discord.js";
 import deepl from "deepl";
 import { translate as googleTranslate } from "google-translate-api-x";
 import { log } from "../../utils/misc/logger";
-import { showTranslationEmbed } from "../../utils/discord/eventHelper";
-import { hasJapanese } from "nihongo";
+import { sendTranslationEmbed } from "../../utils/discord/embedHelper";
 import type {
 	BingResponse,
 	DeeplResponse,
@@ -21,17 +20,22 @@ import { TranslationProvider } from "../../types/discord/embed";
 const handler = async (_client: Client, message: Message): Promise<void> => {
 	try {
 		// Skip if message has translation flag or is from a bot
+		// EXPERIMENTAL FEATURE ONLY FOR TESTING
 		if (
 			message.content.includes("><") ||
 			message.author.bot ||
 			message.guildId !== process.env.TESTSRV_ID ||
-			message.channelId === process.env.TOMOYARD_ID
+			message.channelId === process.env.TESTCH_ID
 		) {
 			return;
 		}
 
-		// Check for Japanese text (removed English count check for better sensitivity)
-		if (!hasJapanese(message.content)) {
+		// Check for Japanese text using a native regex (matches Kanji, Hiragana, or Katakana)
+		// 1. Kanji: \u4E00-\u9FFF
+		// 2. Hiragana: \u3040-\u309F
+		// 3. Katakana: \u30A0-\u30FF
+		// This ensures we only proceed if any Japanese character is present.
+		if (!/[\u3040-\u30FF\u4E00-\u9FFF]/.test(message.content)) {
 			return;
 		}
 
@@ -53,7 +57,7 @@ const handler = async (_client: Client, message: Message): Promise<void> => {
 		]);
 
 		// Show translations with swappable buttons
-		await showTranslationEmbed(message, {
+		await sendTranslationEmbed(message, {
 			text: message.content,
 			translations: {
 				[TranslationProvider.GOOGLE]: googleResult.text,

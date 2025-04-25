@@ -1,151 +1,68 @@
-import {
-	ActionRowBuilder,
-	ButtonBuilder,
-	ComponentType,
-	EmbedBuilder,
-	type ButtonInteraction,
-	type TextChannel,
-	type NewsChannel,
-	type DMChannel,
-	type Message,
-} from "discord.js";
-import { ColorCode } from "../misc/logger";
-import { localizer } from "../text/localizer";
-import type {
-	StandardEmbedOptions,
-	TranslationEmbedOptions,
-} from "../../types/discord/embed";
-import {
-	TRANSLATOR_COLORS,
-	TRANSLATOR_STYLES,
-	TranslationProvider,
-} from "../../types/discord/embed";
-
-type Provider = keyof typeof TRANSLATOR_COLORS;
+import type { Client, Guild, TextChannel } from "discord.js";
+import { log } from "../misc/logger";
 
 /**
- * Creates a standard info embed for non-interaction contexts.
- * This is a low-level utility - prefer using showEventEmbed for consistency.
- * @param locale - The locale to use for strings
- * @param options - Configuration for the embed
- * @returns EmbedBuilder instance
+ * Analyzes recent messages in a channel to determine activity level
+ * @param channel - The channel to analyze
+ * @returns Promise<number> Number of non-bot messages in last 24h
  */
-export function createStandardEmbed(
-	locale: string,
-	options: StandardEmbedOptions,
-): EmbedBuilder {
-	const {
-		titleKey,
-		descriptionKey,
-		descriptionVars = {},
-		color = ColorCode.INFO,
-		footerKey,
-		footerVars = {},
-		thumbnailUrl,
-	} = options;
+export async function getChannelActivity(
+	channel: TextChannel,
+): Promise<number> {
+	try {
+		const messages = await channel.messages.fetch({ limit: 50 });
+		const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
 
-	const embed = new EmbedBuilder()
-		.setColor(color)
-		.setTitle(localizer(locale, titleKey))
-		.setDescription(localizer(locale, descriptionKey, descriptionVars));
-
-	if (footerKey) {
-		embed.setFooter({
-			text: localizer(locale, footerKey, footerVars),
-		});
+		return messages.filter(
+			(msg) => !msg.author.bot && msg.createdTimestamp > oneDayAgo,
+		).size;
+	} catch {
+		// If we can't fetch messages, assume no activity
+		return 0;
 	}
-
-	if (thumbnailUrl) {
-		embed.setThumbnail(thumbnailUrl);
-	}
-
-	return embed;
 }
 
 /**
- * Shows a standard embed in a text channel. This follows the pattern of interactionHelpers
- * by handling the sending of the embed directly.
- * @param channel - The channel to send the embed to
- * @param locale - The locale to use for strings
- * @param options - Configuration for the embed
- * @returns Promise<void>
+ * Finds the most active text channel that's accessible to the bot
+ * @param guild - The Discord guild to search in
+ * @param client - The Discord client instance
+ * @returns Promise<TextChannel | null>
  */
-export async function showEventEmbed(
-	channel: TextChannel | NewsChannel | DMChannel,
-	locale: string,
-	options: StandardEmbedOptions,
-): Promise<void> {
-	const embed = createStandardEmbed(locale, options);
-	await channel.send({ embeds: [embed] });
-}
+export async function findBestChannel(
+	guild: Guild,
+	client: Client,
+): Promise<TextChannel | null> {
+	try {
+		// 1. Get all text channels we can send messages in
+		const textChannels = guild.channels.cache
+			.filter(
+				(ch): ch is TextChannel =>
+					ch.isTextBased() &&
+					// biome-ignore lint/style/noNonNullAssertion: Client user is guaranteed to exist here
+					!!ch.permissionsFor(client.user!)?.has("SendMessages"),
+			)
+			.sort((a, b) => a.position - b.position);
 
-/**
- * Creates an embed with translation buttons that cycle between different translations.
- * Returns a promise that resolves when the buttons are disabled (timeout or all providers shown).
- * @param message - The message to reply to
- * @param options - Configuration for the translation embed
- * @returns Promise<void>
- */
-export async function showTranslationEmbed(
-	message: Message,
-	options: TranslationEmbedOptions,
-): Promise<void> {
-	const {
-		translations,
-		initialProvider = TranslationProvider.GOOGLE,
-		timeout = 90000,
-	} = options;
+		if (textChannels.size === 0) return null;
 
-	// Create buttons for each provider with their brand colors
-	const createButtons = (activeProvider: Provider) => {
-		const buttons = Object.values(TranslationProvider).map((provider) => {
-			return new ButtonBuilder()
-				.setLabel(provider.charAt(0).toUpperCase() + provider.slice(1))
-				.setStyle(TRANSLATOR_STYLES[provider])
-				.setCustomId(`${provider}-trans`)
-				.setDisabled(provider === activeProvider);
-		});
-		return new ActionRowBuilder<ButtonBuilder>().addComponents(buttons);
-	};
-
-	// Create embed with initial translation
-	const embed = new EmbedBuilder()
-		.setColor(TRANSLATOR_COLORS[initialProvider])
-		.setDescription(translations[initialProvider]);
-
-	// Send initial message
-	const sentMessage = await message.reply({
-		embeds: [embed],
-		components: [createButtons(initialProvider)],
-	});
-
-	// Set up collector
-	const collector = sentMessage.createMessageComponentCollector({
-		componentType: ComponentType.Button,
-		time: timeout,
-	});
-
-	collector.on("collect", async (interaction: ButtonInteraction) => {
-		const provider = interaction.customId.split("-")[0] as Provider;
-
-		embed.setColor(TRANSLATOR_COLORS[provider]);
-		embed.setDescription(translations[provider]);
-
-		await interaction.update({
-			embeds: [embed],
-			components: [createButtons(provider)],
-		});
-	});
-
-	collector.on("end", async () => {
-		const disabledButtons = createButtons(initialProvider);
-		for (const button of disabledButtons.components) {
-			button.setDisabled(true);
+		// 2. Analyze activity for each channel
+		const channelActivity = new Map<TextChannel, number>();
+		for (const channel of textChannels.values()) {
+			const activity = await getChannelActivity(channel);
+			channelActivity.set(channel, activity);
 		}
 
-		await sentMessage.edit({
-			embeds: [embed],
-			components: [disabledButtons],
-		});
-	});
+		// 3. Find channel with most activity
+		return (
+			[...channelActivity.entries()].sort(([ch1, act1], [ch2, act2]) => {
+				// First by activity
+				if (act1 !== act2) return act2 - act1;
+				// Then by position (higher = closer to top)
+				return ch1.position - ch2.position;
+			})[0]?.[0] ?? null
+		);
+	} catch (error) {
+		log.error("Error finding best channel:", error);
+		return null;
+	}
 }

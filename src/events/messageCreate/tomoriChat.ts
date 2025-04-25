@@ -9,10 +9,10 @@ import {
 	incrementTomoriCounter,
 	loadTomoriState,
 	loadUserRow,
-} from "../../utils/db/sessionHelper";
-import { createStandardEmbed } from "../../utils/discord/eventHelper";
+} from "../../utils/db/configHelper";
+import { createStandardEmbed } from "../../utils/discord/embedHelper";
 import { ColorCode, log } from "../../utils/misc/logger";
-import { shouldBotReply } from "../../utils/misc/messageUtils";
+import { shouldBotReply } from "../../utils/misc/boolUtils";
 import { buildContext } from "../../utils/text/contextBuilder";
 import {
 	replaceTemplateVariables,
@@ -20,6 +20,10 @@ import {
 	chunkMessage,
 } from "@/utils/text/stringHelper";
 import { decryptApiKey } from "@/utils/security/crypto";
+import {
+	humanizeString,
+	sendWithTypingSimulation,
+} from "@/utils/text/humanizer";
 
 // Constants
 const MESSAGE_FETCH_LIMIT = 80;
@@ -27,6 +31,11 @@ const DEFAULT_TOP_K = 1;
 const DEFAULT_TOP_P = 0.9;
 const MAX_OUTPUT_TOKENS = 8192;
 const CHUNK_LENGTH = 1900;
+const HUMANIZE_INSTRUCTION =
+	"\nTry to limit yourself to only 0 to 2 emojis per response (from the available server emojis or kaomojis, if your personality uses those) and make sure to respond short and concisely, as a human would in public chatrooms. Only make lengthy responses if and only if a user is asking for assistance or an explanation that warrants it.";
+
+// 5a. Define conversation reset markers
+const CONVERSATION_RESET_MARKERS = ["REFRESH"];
 
 /**
  * Handles incoming messages to potentially generate a response using Gemini.
@@ -130,24 +139,62 @@ export default async function tomoriChat(
 		// 5. Prepare Data for buildContext
 		await channel.sendTyping();
 
-		const messages = await channel.messages.fetch({
+		// Fetch messages (newest to oldest is default)
+		const fetchedMessages = await channel.messages.fetch({
 			limit: MESSAGE_FETCH_LIMIT,
 		});
+
+		// Convert to array and reverse to get chronological order (oldest first)
+		const messagesArray = Array.from(fetchedMessages.values()).reverse();
+
+		// 5b. Find the index of the *last* reset message (most recent)
+		let resetIndex = -1;
+		// Iterate backwards through the chronologically ordered array
+		for (let i = messagesArray.length - 1; i >= 0; i--) {
+			const msg = messagesArray[i];
+			// Check only non-empty messages from users (not the bot itself)
+			if (msg.content && msg.author.id !== client.user?.id) {
+				const isResetMessage = CONVERSATION_RESET_MARKERS.some(
+					(marker) => msg.content.toLowerCase() === marker.toLowerCase(),
+				);
+				if (isResetMessage) {
+					// 1. Record the index of the latest reset message found
+					resetIndex = i;
+					log.info(
+						`Reset marker detected at index ${i} (message: "${msg.content}") from ${msg.author.username}. History will start after this message.`,
+					);
+					// 2. Stop searching once the latest reset is found
+					break;
+				}
+			}
+		}
+
+		// 5c. Determine the messages to include in the history
+		// If a reset was found (resetIndex > -1), start from the message *after* it.
+		// Otherwise (resetIndex === -1), start from the beginning (index 0).
+		const startIndex = resetIndex === -1 ? 0 : resetIndex + 1;
+		// 3. Slice the array to get only messages from the startIndex onwards
+		const relevantMessagesArray = messagesArray.slice(startIndex);
+
+		// 5d. Build the final conversationHistory string array and user list from relevant messages
 		const conversationHistory: string[] = [];
 		const userListSet = new Set<string>();
+		let lastMessageAuthorId: string | null = null;
 
-		for (const msg of messages.values()) {
+		// 4. Iterate through the relevant messages (now guaranteed to be after the last reset, or all messages if no reset)
+		for (const msg of relevantMessagesArray) {
+			// Only process messages with content
 			if (msg.content) {
 				const authorId = msg.author.id;
+				// 5. Collect all unique user IDs found in the relevant history
 				userListSet.add(authorId);
 				let authorName = msg.author.username;
 
-				// Check if this is Tomori's message
+				// Resolve author name (Tomori or User Nickname)
 				if (msg.author.id === client.user?.id) {
-					// We already have tomoriState from earlier in the function
-					authorName = tomoriState.tomori_nickname;
+					// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked earlier
+					authorName = tomoriState!.tomori_nickname;
 				} else {
-					// Otherwise look up the user's nickname
 					try {
 						const authorRow = await loadUserRow(authorId);
 						if (authorRow?.user_nickname) {
@@ -160,9 +207,27 @@ export default async function tomoriChat(
 						);
 					}
 				}
-				conversationHistory.unshift(`${authorName}: ${msg.content}`);
+
+				// 6. Merge consecutive bot messages or add new entry
+				// Check if this message is from the same author as the last one AND that author is the bot
+				if (
+					authorId === lastMessageAuthorId &&
+					authorId === client.user?.id && // Ensure it's the bot
+					conversationHistory.length > 0
+				) {
+					// Append content with a newline to the last entry (using push means last entry is at the end)
+					conversationHistory[conversationHistory.length - 1] +=
+						`\n${msg.content}`;
+				} else {
+					// Add a new entry with the "Author: Content" format using push (since iterating oldest-to-newest)
+					conversationHistory.push(`${authorName}: ${msg.content}`);
+					// Update tracking for the next iteration
+					lastMessageAuthorId = authorId;
+				}
 			}
 		}
+
+		// Convert the set of users found in the relevant history to an array
 		const userList = Array.from(userListSet);
 
 		const channelName = channel.name;
@@ -254,6 +319,8 @@ export default async function tomoriChat(
 				.map((segment) => segment.content)
 				.join("\n");
 			let systemInstruction = tomoriState.attribute_list.join("\n");
+			if (config.humanizer_degree >= 1)
+				systemInstruction += HUMANIZE_INSTRUCTION;
 
 			// Replace placeholder tokens in system instruction
 			const tomoriNickname = tomoriState.tomori_nickname;
@@ -272,21 +339,39 @@ export default async function tomoriChat(
 
 			log.success(`Gemini generated response for server ${serverDiscId}.`);
 
+			log.section("Raw response");
+			console.log(responseText);
+
 			// 8. Sanitize and Send Response
-			const sanitizedReply = cleanLLMOutput(
+			let sanitizedReply = cleanLLMOutput(
 				responseText,
 				tomoriState.tomori_nickname,
 			);
 
 			if (sanitizedReply.length > 0) {
+				// Smartly lowercases words and removes punctuations at level 3+
+				if (config.humanizer_degree >= 3)
+					sanitizedReply = humanizeString(sanitizedReply);
+
+				log.section("Cleaned response");
+				console.log(sanitizedReply);
+
 				// Use our dedicated chunkMessage function for intelligent message splitting
-				const messageChunks = chunkMessage(sanitizedReply, CHUNK_LENGTH);
+				const messageChunks = chunkMessage(
+					sanitizedReply,
+					config.humanizer_degree,
+					CHUNK_LENGTH,
+				);
 				log.info(`Sending response in ${messageChunks.length} chunks`);
 
-				// Send each chunk as a separate message
-				for (const chunk of messageChunks) {
-					await channel.send(chunk);
-				}
+				// Send each chunk as a separate message at level 2+
+				if (config.humanizer_degree >= 2)
+					// Simulate human typing
+					sendWithTypingSimulation(channel, messageChunks);
+				else
+					for (const chunk of messageChunks) {
+						await channel.send(chunk);
+					}
 			} else {
 				log.warn("Sanitized reply resulted in empty string. Not sending.");
 			}

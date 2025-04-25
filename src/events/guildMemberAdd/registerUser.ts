@@ -1,5 +1,5 @@
 import type { Client, GuildMember } from "discord.js";
-import { registerUser } from "../../utils/db/sessionHelper";
+import { registerUser } from "../../utils/db/configHelper";
 import { log } from "../../utils/misc/logger";
 
 /**

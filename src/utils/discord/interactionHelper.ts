@@ -4,11 +4,11 @@ import {
 	ButtonStyle,
 	ComponentType,
 	EmbedBuilder,
+	MessageFlags,
 	ModalBuilder,
 	TextInputBuilder,
 	TextInputStyle,
 } from "discord.js";
-import type { APIEmbedField } from "discord.js";
 import type {
 	ButtonInteraction,
 	ChatInputCommandInteraction,
@@ -20,12 +20,13 @@ import { log, ColorCode } from "../misc/logger";
 import type {
 	ConfirmationOptions,
 	ConfirmationResult,
-	InfoEmbedOptions,
+	StandardEmbedOptions,
 	SummaryEmbedOptions,
-	SummaryField,
 } from "../../types/discord/embed";
 import type { ModalOptions, ModalResult } from "../../types/discord/modal";
+import { createStandardEmbed, createSummaryEmbed } from "./embedHelper";
 
+const PROMPT_TIMEOUT = 15000;
 /**
  * @description Prompts the user with an embed and Continue/Cancel buttons, awaiting their response.
  * Handles interaction replies, button filtering, and timeouts.
@@ -49,7 +50,7 @@ export async function promptWithConfirmation(
 		cancelLabelKey,
 		continueCustomId,
 		cancelCustomId,
-		timeout = 15000, // Default 15 seconds
+		timeout = PROMPT_TIMEOUT, // Default 15 seconds
 	} = options;
 
 	// 2. Create Embed
@@ -91,7 +92,7 @@ export async function promptWithConfirmation(
 			message = (await interaction.reply({
 				embeds: [embed],
 				components: [buttonRow],
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 				fetchReply: true, // Important: we need the Message object
 			})) as Message;
 		}
@@ -102,7 +103,7 @@ export async function promptWithConfirmation(
 			message = (await interaction.followUp({
 				embeds: [embed],
 				components: [buttonRow],
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			})) as Message;
 		} catch (followUpError) {
 			log.error(
@@ -158,6 +159,7 @@ export async function promptWithConfirmation(
 	}
 }
 
+const MODAL_TIMEOUT = 180000;
 /**
  * @description Prompts the user with a modal form and awaits their response.
  * @param interaction The interaction to show the modal for
@@ -174,7 +176,7 @@ export async function promptWithModal(
 		modalTitleKey,
 		modalCustomId,
 		inputs,
-		timeout = 180000, // Default 3 minutes for modal input
+		timeout = MODAL_TIMEOUT, // Default 3 minutes for modal input
 	} = options;
 
 	// 1. Create Modal
@@ -255,25 +257,16 @@ export async function promptWithModal(
  * @param locale The locale for localization
  * @param options Configuration for the embed
  */
-export async function showInfoEmbed(
+export async function replyInfoEmbed(
 	interaction:
 		| ChatInputCommandInteraction
 		| ButtonInteraction
 		| ModalSubmitInteraction,
 	locale: string,
-	options: InfoEmbedOptions,
+	options: StandardEmbedOptions,
 ): Promise<void> {
-	const {
-		titleKey,
-		descriptionKey,
-		descriptionVars = {},
-		color = ColorCode.INFO,
-	} = options;
-
-	const embed = new EmbedBuilder()
-		.setColor(color)
-		.setTitle(localizer(locale, titleKey))
-		.setDescription(localizer(locale, descriptionKey, descriptionVars));
+	// 1. Build the embed using the shared helper for consistency
+	const embed = createStandardEmbed(locale, options);
 
 	try {
 		if (interaction.deferred || interaction.replied) {
@@ -287,7 +280,7 @@ export async function showInfoEmbed(
 			await interaction.followUp({
 				embeds: [embed],
 				components: [],
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		} catch (followUpError) {
 			log.error("Failed to follow up with info embed:", followUpError);
@@ -302,7 +295,7 @@ export async function showInfoEmbed(
  * @param locale The locale for localization
  * @param options Configuration for the summary embed and its fields
  */
-export async function showSummaryEmbed(
+export async function replySummaryEmbed(
 	interaction:
 		| ChatInputCommandInteraction
 		| ButtonInteraction
@@ -310,36 +303,9 @@ export async function showSummaryEmbed(
 	locale: string,
 	options: SummaryEmbedOptions,
 ): Promise<void> {
-	const {
-		titleKey,
-		descriptionKey,
-		descriptionVars = {},
-		color = ColorCode.INFO,
-		fields,
-	} = options;
-
-	// Create base embed with title and description
-	const embed = new EmbedBuilder()
-		.setColor(color)
-		.setTitle(localizer(locale, titleKey))
-		.setDescription(localizer(locale, descriptionKey, descriptionVars))
-		.addFields(
-			fields.map(
-				(field: SummaryField): APIEmbedField => ({
-					name: localizer(locale, field.nameKey),
-					value:
-						typeof field.value === "object"
-							? field.value.value // If it's already an EmbedField or APIEmbedField, use its value
-							: field.vars
-								? localizer(locale, field.value.toString(), field.vars)
-								: field.value.toString(),
-					inline: false, // Keep fields full-width for better readability
-				}),
-			),
-		);
+	const embed = createSummaryEmbed(locale, options);
 
 	try {
-		// Handle different interaction states
 		if (interaction.deferred || interaction.replied) {
 			await interaction.editReply({ embeds: [embed], components: [] });
 		} else {
@@ -351,7 +317,7 @@ export async function showSummaryEmbed(
 			await interaction.followUp({
 				embeds: [embed],
 				components: [],
-				ephemeral: true,
+				flags: MessageFlags.Ephemeral,
 			});
 		} catch (followUpError) {
 			log.error("Failed to follow up with summary embed:", followUpError);

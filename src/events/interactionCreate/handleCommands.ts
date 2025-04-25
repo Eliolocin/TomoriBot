@@ -1,13 +1,13 @@
 import type { Client, Interaction } from "discord.js";
 import { sql } from "bun";
-import { showInfoEmbed } from "../../utils/discord/interactionHelper";
+import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import { ColorCode } from "../../utils/misc/logger";
 import type { ExtendedCommand } from "../../types/discord/global";
 import { userSchema, type UserRow } from "../../types/db/schema";
 import getLocalCommands from "../../utils/commands/getLocalCommands";
 import { localizer } from "../../utils/text/localizer";
 import { log } from "../../utils/misc/logger";
-import { registerUser } from "../../utils/db/sessionHelper";
+import { registerUser } from "../../utils/db/configHelper";
 
 const TIMEOUT_DURATION = 100000;
 const COOLDOWN_MAP = new Map<string, number>([
@@ -81,7 +81,7 @@ const handler = async (
 		const mainLogicPromise = async () => {
 			// 1. Check for dev/test only restrictions
 			if (commandObject.devOnly && interaction.user.id !== DEV_ID) {
-				await showInfoEmbed(interaction, locale, {
+				await replyInfoEmbed(interaction, locale, {
 					titleKey: "general.errors.dev_only",
 					descriptionKey: "general.errors.dev_only",
 					color: ColorCode.ERROR,
@@ -90,7 +90,7 @@ const handler = async (
 			}
 
 			if (commandObject.testOnly && interaction.guildId !== TESTSRV_ID) {
-				await showInfoEmbed(interaction, locale, {
+				await replyInfoEmbed(interaction, locale, {
 					titleKey: "general.errors.test_only",
 					descriptionKey: "general.errors.test_only",
 					color: ColorCode.ERROR,
@@ -102,7 +102,7 @@ const handler = async (
 			if (commandObject.permissionsRequired?.length) {
 				for (const permission of commandObject.permissionsRequired) {
 					if (!interaction.memberPermissions?.has(permission)) {
-						await showInfoEmbed(interaction, locale, {
+						await replyInfoEmbed(interaction, locale, {
 							titleKey: "general.errors.insufficient_permissions",
 							descriptionKey: "general.errors.insufficient_permissions",
 							color: ColorCode.ERROR,
@@ -123,7 +123,7 @@ const handler = async (
 
 					if (timeLeft > 0) {
 						const timeLeftSeconds = Math.ceil(timeLeft / 1000);
-						await showInfoEmbed(interaction, locale, {
+						await replyInfoEmbed(interaction, locale, {
 							titleKey: "general.cooldown",
 							descriptionKey: "general.cooldown",
 							descriptionVars: { seconds: timeLeftSeconds },
@@ -153,7 +153,7 @@ const handler = async (
 				const serverLocale = interaction.guild.preferredLocale;
 				const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en";
 
-				// Use the centralized registerUser function from sessionHelper (Rule #17)
+				// Use the centralized registerUser function from configHelper (Rule #17)
 				const registeredUser = await registerUser(
 					interaction.user.id,
 					interaction.user.displayName,
@@ -171,7 +171,7 @@ const handler = async (
 				await commandObject.callback(client, interaction, userData);
 			} else {
 				log.error("No user data available for command execution");
-				await showInfoEmbed(interaction, locale, {
+				await replyInfoEmbed(interaction, locale, {
 					titleKey: "general.errors.generic_error",
 					descriptionKey: "general.errors.generic_error",
 					color: ColorCode.ERROR,
@@ -195,7 +195,7 @@ const handler = async (
 		log.error("Error in command execution:", error);
 
 		if (!interaction.replied && !interaction.deferred) {
-			await showInfoEmbed(interaction, locale, {
+			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.generic_error",
 				descriptionKey: "general.errors.generic_error",
 				color: ColorCode.ERROR,

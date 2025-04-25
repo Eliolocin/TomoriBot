@@ -99,97 +99,132 @@ function getDayOfWeek(date: Date): string {
 /**
  * Splits a long message into smaller chunks for Discord's limits, preserving code blocks and natural breakpoints
  * @param inputText - Text to split into chunks
+ * @param humanizerIsEnabled - When true, also breaks messages at consecutive newlines *outside* of code blocks
  * @param chunkLength - Optional max length for each chunk (defaults to 1900, just below Discord's 2000 char limit)
  * @returns Array of message chunks under Discord's limit
  */
-export function chunkMessage(inputText: string, chunkLength = 1900): string[] {
-	// 1. Initialize our result array and handle empty input
+export function chunkMessage(
+	inputText: string,
+	humanizerDegree: number,
+	chunkLength = 1900,
+): string[] {
+	// 1. Initialize and handle empty input
 	const chunkedMessages: string[] = [];
 	if (!inputText || inputText.length === 0) {
 		return chunkedMessages;
 	}
 
-	// 2. Check for code blocks and handle them separately
+	// 2. Find all code blocks first to treat them as atomic units (unless they exceed chunkLength)
 	const codeBlockRegex = /```(?:(\w+)\n)?([\s\S]*?)```/g;
-	const codeBlocks: { start: number; end: number; content: string }[] = [];
+	const blocks: Array<{
+		content: string;
+		isCode: boolean;
+		start: number;
+		end: number;
+	}> = [];
+	let lastIndex = 0;
 	let match: RegExpExecArray | null;
 
-	// Find all code blocks in the text - fixing assignment in expression
-	while (true) {
-		match = codeBlockRegex.exec(inputText);
-		if (match === null) break;
-
-		codeBlocks.push({
+	// biome-ignore lint/suspicious/noAssignInExpressions: Separate match assignment from null check
+	while ((match = codeBlockRegex.exec(inputText)) !== null) {
+		// 2a. Add text segment before the code block
+		if (match.index > lastIndex) {
+			blocks.push({
+				content: inputText.substring(lastIndex, match.index),
+				isCode: false,
+				start: lastIndex,
+				end: match.index,
+			});
+		}
+		// 2b. Add the code block itself
+		blocks.push({
+			content: match[0],
+			isCode: true,
 			start: match.index,
 			end: match.index + match[0].length,
-			content: match[0],
+		});
+		lastIndex = match.index + match[0].length;
+	}
+	// 2c. Add any remaining text after the last code block
+	if (lastIndex < inputText.length) {
+		blocks.push({
+			content: inputText.substring(lastIndex),
+			isCode: false,
+			start: lastIndex,
+			end: inputText.length,
 		});
 	}
 
-	// 3. If no code blocks, process normally with newline splitting
-	if (codeBlocks.length === 0) {
-		return splitByNewlines(inputText, chunkLength);
-	}
-
-	// 4. Handle text with code blocks - keep code blocks intact
-	let currentPosition = 0;
+	// 3. Process blocks (text segments and code blocks) in order
 	let currentChunk = "";
 
-	// Process text segments and code blocks in order
-	for (const block of codeBlocks) {
-		// Add text before the code block
-		if (block.start > currentPosition) {
-			const textBefore = inputText.substring(currentPosition, block.start);
-			currentChunk = addTextSegment(
-				textBefore,
-				currentChunk,
-				chunkedMessages,
-				chunkLength,
-			);
-		}
-
-		// Handle the code block - never split within a code block if possible
-		if (currentChunk.length + block.content.length > chunkLength) {
-			// If we can't fit the code block, finish current chunk
-			if (currentChunk.length > 0) {
-				chunkedMessages.push(currentChunk);
-				currentChunk = "";
-			}
-
-			// If code block itself is too large, we must split it
-			if (block.content.length > chunkLength) {
-				const codeChunks = splitCodeBlock(block.content, chunkLength);
-				chunkedMessages.push(...codeChunks);
+	for (const block of blocks) {
+		if (block.isCode) {
+			// 3a. Handle Code Blocks (existing logic is mostly fine)
+			// Check if adding the code block exceeds the limit
+			if (currentChunk.length + block.content.length > chunkLength) {
+				// Finish current chunk if it has content
+				if (currentChunk.length > 0) {
+					chunkedMessages.push(currentChunk);
+					currentChunk = "";
+				}
+				// If code block itself is too large, split it
+				if (block.content.length > chunkLength) {
+					const codeChunks = splitCodeBlock(block.content, chunkLength);
+					chunkedMessages.push(...codeChunks);
+				} else {
+					// Add the whole code block as a new chunk
+					chunkedMessages.push(block.content);
+				}
 			} else {
-				// Otherwise, add the whole code block as a single chunk
-				chunkedMessages.push(block.content);
+				// Code block fits, add it to the current chunk (prepend newline if needed)
+				currentChunk += (currentChunk.length > 0 ? "\n" : "") + block.content;
 			}
 		} else {
-			// Code block fits in current chunk - fixing template literal issue
-			currentChunk +=
-				currentChunk.length > 0 ? `\n${block.content}` : block.content;
+			// 3b. Handle Text Segments (Integrate Humanizer Logic Here)
+			const textToAdd = block.content;
+
+			if (humanizerDegree >= 2) {
+				// 3b-i. Split *this text segment* by any newlines (single or consecutive)
+				const subSegments = textToAdd.split(/(\n+)/); // Keep separators to identify breaks
+
+				for (let i = 0; i < subSegments.length; i++) {
+					const subSegment = subSegments[i];
+					if (!subSegment) continue; // Skip empty strings
+
+					// If it's a separator (\n+) and we have content, force a chunk break
+					if (subSegment.match(/^\n+$/) && currentChunk.length > 0) {
+						chunkedMessages.push(currentChunk);
+						currentChunk = "";
+						continue; // Don't add the separator itself
+					}
+
+					// Process the actual text part using addTextSegment logic
+					currentChunk = addTextSegment(
+						subSegment,
+						currentChunk,
+						chunkedMessages,
+						chunkLength,
+					);
+				}
+			} else {
+				// 3b-ii. Not humanizing, process the whole text segment normally
+				currentChunk = addTextSegment(
+					textToAdd,
+					currentChunk,
+					chunkedMessages,
+					chunkLength,
+				);
+			}
 		}
-
-		currentPosition = block.end;
 	}
 
-	// Add any remaining text after the last code block
-	if (currentPosition < inputText.length) {
-		const textAfter = inputText.substring(currentPosition);
-		currentChunk = addTextSegment(
-			textAfter,
-			currentChunk,
-			chunkedMessages,
-			chunkLength,
-		);
-	}
-
-	// Add final chunk if not empty
+	// 4. Add the final remaining chunk if not empty
 	if (currentChunk.length > 0) {
 		chunkedMessages.push(currentChunk);
 	}
 
-	// 5. Handle the edge case of an empty result
+	// 5. Handle edge case: input text was non-empty but resulted in zero chunks (should be rare)
 	if (chunkedMessages.length === 0 && inputText.length > 0) {
 		// Fallback to simple chunking by length
 		let remainingInput = inputText;
@@ -383,6 +418,8 @@ export function cleanLLMOutput(text: string, botName?: string): string {
 		.replace(/\n{3,}/g, "\n\n")
 		.replace(/<\|im_end\|>(\s*)$/, "")
 		.replace(/<\|file_separator\|>(\s*)$/, "")
+		// Remove failed emoji attempts like ":smile:", ":thumbsup:", etc.
+		.replace(/\s+:[a-zA-Z0-9_]+:\s+/g, " ")
 		.trim();
 
 	if (botName) {
@@ -397,7 +434,7 @@ export function cleanLLMOutput(text: string, botName?: string): string {
 }
 
 /**
- * Helper to format basic input text
+ * Helper to format basic input text to be more "AI"
  * @param text - Raw input text
  * @param options - Text formatting options
  * @param options.capitalizeFirst - Capitalize the first letter.

@@ -53,16 +53,6 @@ export type ConfirmationResult = {
 };
 
 /**
- * Options for simple info embeds
- */
-export interface InfoEmbedOptions {
-	titleKey: string;
-	descriptionKey: string;
-	descriptionVars?: Record<string, string | number>;
-	color?: ColorResolvable;
-}
-
-/**
  * Available translation providers
  */
 export enum TranslationProvider {

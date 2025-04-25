@@ -11,6 +11,7 @@ import { log } from "../utils/misc/logger";
 const DEFAULT_MODEL = "gemini-2.5-flash-preview-04-17";
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 3000; // 3 seconds between retries
+const DYNAMIC_SEARCH_THRESHOLD = 0.5;
 
 /**
  * Validates a Google API key by making a small request to check its validity
@@ -119,7 +120,6 @@ export async function generateGeminiResponse(
 
 				// Return cleaned response
 				const result = cleanLLMOutput(response.text);
-				console.log(result);
 
 				log.success("Successfully generated response");
 				return result;
@@ -174,7 +174,7 @@ export function getGeminiTools(
 			{
 				googleSearchRetrieval: {
 					dynamicRetrievalConfig: {
-						dynamicThreshold: 0.5,
+						dynamicThreshold: DYNAMIC_SEARCH_THRESHOLD,
 						mode: DynamicRetrievalConfigMode.MODE_DYNAMIC,
 					},
 				},

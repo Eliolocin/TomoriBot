@@ -26,7 +26,7 @@
 - Updated project rules to enforce co-located schemas/types and `.partial()` for updates.
 - Created eventHelpers.ts for standardized non-interaction embeds.
 - Moved color scheme to logger.ts for better organization.
-- Created session management helpers in `src/utils/db/sessionHelper.ts` for state loading.
+- Created session management helpers in `src/utils/db/configHelper.ts` for state loading.
 - Refactored GeminiBot (now `tomoriChat`) to:
   - Use session helpers for all state access
   - Use contextBuilder for mention conversion and context assembly

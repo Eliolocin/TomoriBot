@@ -2,6 +2,7 @@ import { type ActivityOptions, ActivityType, type Client } from "discord.js";
 import pkg from "../../../package.json";
 import { log } from "../../utils/misc/logger";
 
+const CYCLE_DELAY = 600000;
 /**
  * Sets the bot's status and logs startup information.
  * @param client - The Discord client instance.
@@ -28,7 +29,7 @@ const handler = async (client: Client): Promise<void> => {
 	setInterval(() => {
 		const random = Math.floor(Math.random() * status.length);
 		client.user?.setActivity(status[random]);
-	}, 600000);
+	}, CYCLE_DELAY);
 
 	client.user?.setActivity(status[1]);
 };

@@ -7,7 +7,7 @@
 - **Locale Handling:** All user-facing text is localized using the `localizer` utility and JSON files in `src/locales/` (Rule 9).
 - **Helper Utilities:**
   - Found in `src/utils/`
-  - `sessionHelper.ts`: Bot and user state management (NEW)
+  - `configHelper.ts`: Bot and user state management (NEW)
   - `contextBuilder.ts`: Text processing and sanitization (NEW)
   - `interactionHelper.ts`: Command interaction patterns
   - `eventHelper.ts`: Standardized non-interaction event messages
@@ -19,7 +19,7 @@
 
 ### Helper Utilities
 
-#### Session Helpers (`src/utils/db/sessionHelper.ts`)
+#### Session Helpers (`src/utils/db/configHelper.ts`)
 - Centralizes all database state access:
   - `loadTomoriState`: Gets Tomori (bot) instance and config
   - `loadUserRow`: Retrieves user data and preferences
@@ -39,7 +39,7 @@
 - Provides DRY functions for command interactions:
   - `promptWithConfirmation` for yes/no decisions
   - `promptWithModal` for form inputs
-  - `showInfoEmbed` for status/info messages
+  - `replyInfoEmbed` for status/info messages
 - Used in all slash commands and interaction flows
 
 #### Event Helpers (`src/utils/discord/eventHelper.ts`)

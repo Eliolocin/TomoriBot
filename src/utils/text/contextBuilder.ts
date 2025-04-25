@@ -7,9 +7,10 @@ import {
 	loadTomoriState,
 	loadUserRow,
 	registerUser,
-} from "../db/sessionHelper"; // Import session helpers
+} from "../db/configHelper"; // Import session helpers
 import { log } from "../misc/logger";
 import { replaceTemplateVariables, getCurrentTime } from "./stringHelper";
+import { humanizeString } from "./humanizer";
 // Import ServerEmojiRow if needed for emoji query result type
 // import type { ServerEmojiRow } from "../../types/db/schema";
 
@@ -398,6 +399,9 @@ export async function buildContext({
 		for (let i = 0; i < tomoriState.sample_dialogues_in.length; i++) {
 			sampleContent += `\n${triggererName}: ${tomoriState.sample_dialogues_in[i]}\n${tomoriState.tomori_nickname}: ${tomoriState.sample_dialogues_out[i]}`;
 		}
+
+		if (tomoriState.config.humanizer_degree >= 3)
+			sampleContent = humanizeString(sampleContent);
 		segments.push({
 			type: "sample",
 			content: sampleContent.trim(),
@@ -407,8 +411,10 @@ export async function buildContext({
 
 	// --- Segment 7: Conversation History ---
 	if (conversationHistory.length > 0) {
-		const historyString = conversationHistory.join("\n");
+		let historyString = conversationHistory.join("\n");
 
+		if (tomoriState.config.humanizer_degree >= 3)
+			historyString = humanizeString(historyString);
 		segments.push({
 			type: "history",
 			content: `${historyString}\n${botName}:`,

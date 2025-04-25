@@ -52,17 +52,5 @@ await sql
 // such as registering or updating of commands upon startup
 eventHandler(client);
 
-///////////// TO BE REMOVED ////////////////
-import mongoose from "mongoose";
-// Connect to MongoDB
-const mongoUri = process.env.MONGODB_SRV;
-if (!mongoUri) {
-	throw new Error(
-		"MongoDB connection string is not defined in environment variables",
-	);
-}
-mongoose.connect(mongoUri);
-///////////// TO BE REMOVED ////////////////
-
 // Login Bot using Discord Token
 client.login(process.env.DISCORD_TOKEN);

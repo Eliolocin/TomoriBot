@@ -54,8 +54,10 @@ export const tomoriConfigSchema = z.object({
 	autoch_threshold: z.number().default(0),
 	teach_cost: z.number().default(1000),
 	gamba_limit: z.number().default(3),
+	free_teaching_enabled: z.boolean().default(true),
+	self_teaching_enabled: z.boolean().default(true),
 	personal_memories_enabled: z.boolean().default(true),
-	humanizer_enabled: z.boolean().default(true),
+	humanizer_degree: z.number().default(1),
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
@@ -166,9 +168,7 @@ export const setupConfigSchema = z.object({
 	serverId: z.string(),
 	encryptedApiKey: z.instanceof(Buffer),
 	presetId: z.number(),
-	autochChannels: z.array(z.string()).default([]),
-	autochThreshold: z.number().min(0).max(100).default(0),
-	humanizer: z.boolean().default(true),
+	humanizer: z.number().default(1),
 	tomoriName: z.string(),
 	locale: z.string(),
 });
