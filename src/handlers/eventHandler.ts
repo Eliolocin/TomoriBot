@@ -9,7 +9,7 @@ import type {
 	Message,
 } from "discord.js";
 import type { EventFunction } from "../types/discord/global";
-import getAllFiles from "../utils/misc/getAllFiles";
+import getAllFiles from "../utils/misc/ioHelper";
 import { log } from "../utils/misc/logger";
 
 /**

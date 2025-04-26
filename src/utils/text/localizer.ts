@@ -37,7 +37,7 @@ const localizer = (
 	key: string,
 	variables: LocalizerVariables = {},
 ): string => {
-	// 1. Split the key into parts (e.g., 'commands.ping.description' -> ['tool', 'ping', 'description'])
+	// 1. Split the key into parts (e.g., 'commands.tool.ping.description' -> ['tool', 'ping', 'description'])
 	const keys: string[] = key.split(".");
 	// 2. Start with the top-level object for the requested locale, typed as unknown for safety
 	let translation: unknown = locales[locale];

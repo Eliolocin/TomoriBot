@@ -124,17 +124,29 @@ export type PersonalizationBlacklistRow = z.infer<
 >;
 
 export const errorLogSchema = z.object({
-	error_log_id: z.number().optional(),
-	tomori_id: z.number(),
-	user_id: z.number(),
-	server_id: z.number(),
-	error_type: z.string(),
-	error_message: z.string(),
-	error_metadata: z.record(z.unknown()),
-	created_at: z.date().optional(),
-	updated_at: z.date().optional(),
+	error_log_id: z.number().optional(), // Primary key, optional as it's generated
+	// Context IDs - Optional because errors can occur outside specific contexts
+	tomori_id: z.number().nullable().optional(),
+	user_id: z.number().nullable().optional(),
+	server_id: z.number().nullable().optional(),
+	// Error Details
+	error_type: z.string().default("GenericError"), // Categorize the error, default if not specified
+	error_message: z.string(), // The main error message, required
+	stack_trace: z.string().nullable().optional(), // Dedicated field for stack trace, optional
+	error_metadata: z.record(z.unknown()).nullable().optional().default({}), // Flexible JSON for extra context, optional
+	// Timestamps
+	created_at: z.date().optional(), // Handled by DB default
+	updated_at: z.date().optional(), // Handled by DB default/trigger
 });
 export type ErrorLogRow = z.infer<typeof errorLogSchema>;
+
+export interface ErrorContext {
+	tomoriId?: number | null;
+	userId?: number | null;
+	serverId?: number | null;
+	errorType?: string;
+	metadata?: Record<string, unknown> | null;
+}
 
 export const cooldownSchema = z.object({
 	user_disc_id: z.string(),

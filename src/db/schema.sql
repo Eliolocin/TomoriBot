@@ -248,17 +248,22 @@ EXECUTE FUNCTION update_timestamp();
 
 CREATE TABLE IF NOT EXISTS error_logs (
   error_log_id SERIAL PRIMARY KEY,
-  tomori_id INT NOT NULL,
-  user_id INT NOT NULL,
-  server_id INT NOT NULL,
-  error_type TEXT NOT NULL,
-  error_message TEXT NOT NULL,
-  error_metadata JSONB DEFAULT '{}',
+  -- Context IDs - Made nullable as errors can happen outside these contexts
+  tomori_id INT NULL,
+  user_id INT NULL,
+  server_id INT NULL,
+  -- Error Details
+  error_type TEXT NOT NULL DEFAULT 'GenericError', -- Type/category of error
+  error_message TEXT NOT NULL,                     -- Main error message
+  stack_trace TEXT NULL,                           -- Dedicated column for stack trace
+  error_metadata JSONB DEFAULT '{}',               -- Flexible JSON for extra context
+  -- Timestamps
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+  -- Foreign Keys - Changed to SET NULL to preserve logs even if related entity is deleted
+  FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE SET NULL,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE SET NULL
 );
 
 -- Create updated_at trigger for error_logs table
@@ -292,6 +297,25 @@ $$ LANGUAGE plpgsql;
 
 -- Make sure pgcrypto extension is enabled
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Temporarily disable pg_cron setup until deployed to a Linux/cloud environment
+-- CREATE EXTENSION IF NOT EXISTS pg_cron; -- Ensure pg_cron is enabled before scheduling
+
+-- Schedule the cleanup function to run every hour using pg_cron
+-- Use ON CONFLICT to make this command idempotent (safe to run multiple times)
+/* -- Temporarily disabled block
+INSERT INTO cron.job (schedule, command, nodename, nodeport, database, username)
+VALUES (
+    '0 * * * *', -- Run at the start of every hour
+    'SELECT cleanup_expired_cooldowns();',
+    'localhost', -- Adjust if your DB host is different
+    5432,        -- Adjust if your DB port is different
+    current_database(),
+    current_user
+)
+ON CONFLICT (command, database, username, nodename, nodeport)
+DO UPDATE SET schedule = EXCLUDED.schedule; -- Update schedule if job already exists
+*/ -- End of temporarily disabled block
 
 -- Example usage - This shows how to add columns to existing tables
 -- You can add these calls whenever you need to introduce schema changes

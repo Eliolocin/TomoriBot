@@ -1,87 +1,72 @@
-import type {
-	ApplicationCommand,
-	ApplicationCommandData,
-	Client,
-} from "discord.js";
-import type { LocalCommand } from "../../types/discord/global";
-import areCommandsDifferent from "../../utils/commands/areCommandsDifferent";
-import getApplicationCommands from "../../utils/commands/getApplicationCommands";
-import getLocalCommands from "../../utils/commands/getLocalCommands";
+import { REST, Routes } from "discord.js";
 import { log } from "../../utils/misc/logger";
+import { loadCommandModules } from "../../utils/discord/commandLoader";
 
 /**
- * Registers, updates, or deletes Discord slash commands to match local definitions.
- * @param client - The Discord client instance.
- * @returns Promise<void>
+ * Event handler for registering commands when the bot is ready
  */
-const handler = async (client: Client): Promise<void> => {
+export default async (): Promise<void> => {
 	try {
-		log.section("Reading Slash Command List...");
-		const localCommands = (await getLocalCommands()) as LocalCommand[];
-		const applicationCommandManager = await getApplicationCommands(client);
-		const localCommandNames = new Set(localCommands.map((cmd) => cmd.name));
+		log.section("Registering application commands");
 
-		for (const localCommand of localCommands) {
-			const { name, description, options } = localCommand;
-
-			const existingCommand = applicationCommandManager.find(
-				(cmd: ApplicationCommand) => cmd.name === name,
+		const { DISCORD_TOKEN, TOMORI_ID, TESTSRV_ID } = process.env;
+		if (!DISCORD_TOKEN || !TOMORI_ID) {
+			log.error(
+				"Missing required environment variables for command registration",
 			);
-
-			if (existingCommand) {
-				if (localCommand.deleted) {
-					await applicationCommandManager.delete(existingCommand.id);
-					log.success(`Deleted command "${name}"`);
-					continue;
-				}
-
-				if (areCommandsDifferent(existingCommand, localCommand)) {
-					const commandData: ApplicationCommandData = {
-						name,
-						description,
-						options,
-					};
-
-					// biome-ignore lint/style/noNonNullAssertion: Client application is guaranteed to exist in ready event
-					await client.application!.commands.edit(
-						existingCommand.id,
-						commandData,
-					);
-					log.success(`Updated command "${name}"`);
-				}
-			} else {
-				if (localCommand.deleted) {
-					log.info(`Skipping command "${name}" as it's set for deletion`);
-					continue;
-				}
-
-				const commandData: ApplicationCommandData = {
-					name,
-					description,
-					options,
-				};
-				// biome-ignore lint/style/noNonNullAssertion: Client application is guaranteed to exist in ready event
-				await client.application!.commands.create(commandData);
-				log.success(`Registered command "${name}"`);
-			}
+			return;
 		}
 
-		// Clean up deleted commands that still exist on Discord
-		for (const [id, appCommand] of applicationCommandManager) {
-			if (!localCommandNames.has(appCommand.name)) {
-				await applicationCommandManager.delete(id);
-				log.success(
-					`Deleted command "${appCommand.name}" (file missing locally)`,
-				);
-			}
+		// Load all command modules
+		const commandModules = await loadCommandModules();
+
+		if (commandModules.size === 0) {
+			log.warn("No commands found to register");
+			return;
 		}
 
-		log.success("Slash commands up to date");
-	} catch (error) {
-		log.error(
-			`There was a slash command registration error: ${error instanceof Error ? error.message : String(error)}`,
+		// Extract command data for registration
+		const commandData = Array.from(commandModules.values()).map(
+			(cmd) => cmd.data,
 		);
+		log.info(`Preparing to register ${commandData.length} commands`);
+
+		// Initialize REST API for command registration
+		const rest = new REST().setToken(DISCORD_TOKEN);
+
+		// Determine if we're in development (register to dev guild only) or production (register globally)
+		const isDev = process.env.RUN_ENV === "development";
+
+		if (isDev && TESTSRV_ID) {
+			// Register to development guild for faster testing
+			log.info(`Registering commands to development guild: ${TESTSRV_ID}`);
+
+			try {
+				await rest.put(Routes.applicationGuildCommands(TOMORI_ID, TESTSRV_ID), {
+					body: commandData,
+				});
+				log.success(
+					`Successfully registered ${commandData.length} commands to development guild`,
+				);
+			} catch (error) {
+				log.error("Failed to register commands to development guild:", error);
+			}
+		} else {
+			// Register globally (takes up to an hour to update)
+			log.info("Registering commands globally");
+
+			try {
+				await rest.put(Routes.applicationCommands(TOMORI_ID), {
+					body: commandData,
+				});
+				log.success(
+					`Successfully registered ${commandData.length} commands globally`,
+				);
+			} catch (error) {
+				log.error("Failed to register commands globally:", error);
+			}
+		}
+	} catch (error) {
+		log.error("Error during command registration:", error);
 	}
 };
-
-export default handler;

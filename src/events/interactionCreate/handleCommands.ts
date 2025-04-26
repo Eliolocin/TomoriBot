@@ -1,21 +1,24 @@
 import type { Client, Interaction } from "discord.js";
 import { sql } from "bun";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import { ColorCode } from "../../utils/misc/logger";
-import type { ExtendedCommand } from "../../types/discord/global";
+import { ColorCode, log } from "../../utils/misc/logger";
 import { userSchema, type UserRow } from "../../types/db/schema";
-import getLocalCommands from "../../utils/commands/getLocalCommands";
 import { localizer } from "../../utils/text/localizer";
-import { log } from "../../utils/misc/logger";
 import { registerUser } from "../../utils/db/configHelper";
+import { loadCommandModules } from "../../utils/discord/commandLoader";
+import type { Command } from "../../utils/discord/commandLoader"; // Import Command type
 
-const TIMEOUT_DURATION = 100000;
+const TIMEOUT_DURATION = 100000; // 100 Seconds
 const COOLDOWN_MAP = new Map<string, number>([
 	["economy", 2000],
 	["scrape", 10000],
 	["tool", 10000],
 	["fun", 2000],
+	["config", 5000], // Add cooldown for config category
 ]);
+
+// Cache for commands - stored at module level
+let commandCache: Map<string, Command> | null = null; // Use the Command type
 
 /**
  * Checks if a command is on cooldown for a user
@@ -29,12 +32,12 @@ async function checkCooldown(
 ): Promise<number> {
 	const now = Date.now();
 	const [cooldown] = await sql`
-		SELECT expiry_time 
-		FROM cooldowns 
-		WHERE user_disc_id = ${userId} 
-		AND command_category = ${category}
-		AND expiry_time > ${now}
-	`;
+    SELECT expiry_time 
+    FROM cooldowns 
+    WHERE user_disc_id = ${userId} 
+    AND command_category = ${category}
+    AND expiry_time > ${now}
+  `;
 
 	return cooldown ? Number(cooldown.expiry_time) - now : 0;
 }
@@ -53,11 +56,11 @@ async function setCooldown(
 	const expiryTime = Date.now() + duration;
 
 	await sql`
-		INSERT INTO cooldowns (user_disc_id, command_category, expiry_time)
-		VALUES (${userId}, ${category}, ${expiryTime})
-		ON CONFLICT (user_disc_id, command_category) DO UPDATE
-		SET expiry_time = ${expiryTime}
-	`;
+    INSERT INTO cooldowns (user_disc_id, command_category, expiry_time)
+    VALUES (${userId}, ${category}, ${expiryTime})
+    ON CONFLICT (user_disc_id, command_category) DO UPDATE
+    SET expiry_time = ${expiryTime}
+  `;
 }
 
 const handler = async (
@@ -66,60 +69,36 @@ const handler = async (
 ): Promise<void> => {
 	if (!interaction.isChatInputCommand()) return;
 
-	const { TESTSRV_ID, DEV_ID } = process.env;
-	const locale = interaction.locale || "en";
+	const locale = interaction.locale || interaction.guildLocale || "en";
 
 	try {
-		const localCommands = (await getLocalCommands()) as ExtendedCommand[];
-		const commandObject = localCommands.find(
-			(cmd) => cmd.name === interaction.commandName,
-		);
+		// Load commands on first use if cache is empty
+		if (!commandCache) {
+			commandCache = await loadCommandModules();
+		}
 
-		if (!commandObject) return;
+		const commandObject = commandCache.get(interaction.commandName);
+		if (!commandObject) {
+			log.warn(`Command not found in cache: ${interaction.commandName}`);
+			// Optionally reply to user
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.command_not_found_title",
+				descriptionKey: "general.errors.command_not_found_desc",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
 
 		// Command execution logic with timeout
 		const mainLogicPromise = async () => {
-			// 1. Check for dev/test only restrictions
-			if (commandObject.devOnly && interaction.user.id !== DEV_ID) {
-				await replyInfoEmbed(interaction, locale, {
-					titleKey: "general.errors.dev_only",
-					descriptionKey: "general.errors.dev_only",
-					color: ColorCode.ERROR,
-				});
-				return;
-			}
+			// Get command category directly from the command object
+			const category = commandObject.category;
 
-			if (commandObject.testOnly && interaction.guildId !== TESTSRV_ID) {
-				await replyInfoEmbed(interaction, locale, {
-					titleKey: "general.errors.test_only",
-					descriptionKey: "general.errors.test_only",
-					color: ColorCode.ERROR,
-				});
-				return;
-			}
-
-			// 2. Check permissions
-			if (commandObject.permissionsRequired?.length) {
-				for (const permission of commandObject.permissionsRequired) {
-					if (!interaction.memberPermissions?.has(permission)) {
-						await replyInfoEmbed(interaction, locale, {
-							titleKey: "general.errors.insufficient_permissions",
-							descriptionKey: "general.errors.insufficient_permissions",
-							color: ColorCode.ERROR,
-						});
-						return;
-					}
-				}
-			}
-
-			// 3. Check cooldowns if category exists
-			if (commandObject.category) {
-				const cooldownDuration = COOLDOWN_MAP.get(commandObject.category);
+			// 1. Check for command category-based cooldowns
+			if (category) {
+				const cooldownDuration = COOLDOWN_MAP.get(category);
 				if (cooldownDuration) {
-					const timeLeft = await checkCooldown(
-						interaction.user.id,
-						commandObject.category,
-					);
+					const timeLeft = await checkCooldown(interaction.user.id, category);
 
 					if (timeLeft > 0) {
 						const timeLeftSeconds = Math.ceil(timeLeft / 1000);
@@ -133,19 +112,15 @@ const handler = async (
 					}
 
 					// Set new cooldown if no active one exists
-					await setCooldown(
-						interaction.user.id,
-						commandObject.category,
-						cooldownDuration,
-					);
+					await setCooldown(interaction.user.id, category, cooldownDuration);
 				}
 			}
 
-			// 4. Get or create user data using the centralized registerUser function
+			// 2. Get or create user data
 			let userData: UserRow | undefined;
 			const [existingUser] = await sql`
-				SELECT * FROM users WHERE user_disc_id = ${interaction.user.id}
-			`;
+        SELECT * FROM users WHERE user_disc_id = ${interaction.user.id}
+      `;
 
 			if (existingUser) {
 				userData = userSchema.parse(existingUser);
@@ -166,9 +141,9 @@ const handler = async (
 				}
 			}
 
-			// 5. Execute command
+			// 3. Execute command
 			if (userData) {
-				await commandObject.callback(client, interaction, userData);
+				await commandObject.execute(client, interaction, userData);
 			} else {
 				log.error("No user data available for command execution");
 				await replyInfoEmbed(interaction, locale, {
