@@ -6,8 +6,8 @@ import {
 	loadServerEmojis, // Import emoji loader
 	loadTomoriState,
 	loadUserRow,
-	registerUser,
-} from "../db/configHelper"; // Import session helpers
+} from "../db/dbRead"; // Import session helpers
+import { registerUser } from "../db/dbWrite";
 import { log } from "../misc/logger";
 import { replaceTemplateVariables, getCurrentTime } from "./stringHelper";
 import { humanizeString } from "./humanizer";

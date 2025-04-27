@@ -1,5 +1,4 @@
 import {
-	SlashCommandBuilder,
 	PermissionsBitField,
 	ActionRowBuilder,
 	TextInputStyle,
@@ -7,9 +6,17 @@ import {
 	TextInputBuilder,
 	MessageFlags,
 } from "discord.js";
-import type { ChatInputCommandInteraction, Client } from "discord.js";
+import type {
+	ChatInputCommandInteraction,
+	Client,
+	SlashCommandSubcommandBuilder,
+} from "discord.js";
 import { sql } from "bun";
-import type { SetupConfig, TomoriPresetRow } from "../../types/db/schema";
+import type {
+	SetupConfig,
+	TomoriPresetRow,
+	UserRow,
+} from "../../types/db/schema";
 import { setupConfigSchema, tomoriPresetSchema } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
@@ -19,7 +26,7 @@ import {
 } from "../../utils/discord/interactionHelper";
 import { validateApiKey } from "../../providers/google";
 import { encryptApiKey } from "../../utils/security/crypto";
-import { setupServer } from "../../utils/db/configHelper";
+import { setupServer } from "../../utils/db/dbWrite";
 
 // Define constants at the top (Rule #20)
 const MODAL_TIMEOUT_MS = 300000; // 5 minutes
@@ -27,15 +34,18 @@ const HUMANIZER_MIN = 0;
 const HUMANIZER_MAX = 3;
 const PRESET_PLACEHOLDER_MAX_LENGTH = 100; // Discord limit for placeholder text
 
-// Build the command data using SlashCommandBuilder
-export const data = new SlashCommandBuilder()
-	.setName("setup")
-	.setDescription(localizer("en", "commands.config.setup.command_description"))
-	.setDescriptionLocalizations({
-		ja: localizer("ja", "commands.config.setup.command_description"),
-	})
-	.setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-	.toJSON();
+// Configure the subcommand
+export const configureSubcommand = (
+	subcommand: SlashCommandSubcommandBuilder,
+) =>
+	subcommand
+		.setName("setup")
+		.setDescription(
+			localizer("en", "commands.config.setup.command_description"),
+		)
+		.setDescriptionLocalizations({
+			ja: localizer("ja", "commands.config.setup.command_description"),
+		});
 
 /**
  * Execute the setup command - guides users through the initial setup of TomoriBot for their server
@@ -44,17 +54,19 @@ export const data = new SlashCommandBuilder()
 export async function execute(
 	_client: Client,
 	interaction: ChatInputCommandInteraction,
+	userData: UserRow,
 ): Promise<void> {
 	// Ensure command is run in a guild
 	if (!interaction.guild || !interaction.channel) {
 		await interaction.reply({
-			content: localizer(interaction.locale, "errors.guild_only"),
+			content: localizer(userData.language_pref, "errors.guild_only"),
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
 
-	const locale = interaction.locale ?? interaction.guildLocale ?? "en";
+	// Use userData.language_pref for consistent localization
+	const locale = userData.language_pref ?? interaction.guildLocale ?? "en";
 
 	// Check permissions again (belt-and-suspenders)
 	const memberPermissions = interaction.member?.permissions;
@@ -154,7 +166,7 @@ export async function execute(
 			});
 
 			// Process the submission
-			await submission.deferReply({ ephemeral: true });
+			await submission.deferReply({ flags: MessageFlags.Ephemeral });
 
 			// Extract values from the modal
 			const apiKey = submission.fields.getTextInputValue("api_key");

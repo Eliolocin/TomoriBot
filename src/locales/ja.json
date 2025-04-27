@@ -250,27 +250,122 @@
 		}
 	},
 	"general": {
-		"cooldown": "⏳ このコマンドを使用するには{seconds}秒待つ必要があります。",
+		"cooldown": "⏳ このコマンドを使うには{seconds}秒待つ必要があります。",
 		"errors": {
 			"command_timeout": "コマンドがタイムアウトしました！もう一度お試しください。",
-			"dev_only": "申し訳ありませんが、この機能は開発者専用です！",
-			"test_only": "申し訳ありませんが、これはテスト用コマンドです！",
+			"dev_only": "申し訳ありませんが、開発者のみがこのコマンドを実行できます！",
+			"test_only": "申し訳ありませんが、これはテストコマンドです！",
 			"insufficient_permissions": "権限が不足しています！",
 			"generic_error": "コマンドの実行中にエラーが発生しました！"
+		},
+		"interaction": {
+			"cancel_title": "❌ 操作がキャンセルされました",
+			"cancel_description": "操作はキャンセルされました。いつでももう一度お試しください！",
+			"timeout_title": "⏰ 操作がタイムアウトしました",
+			"timeout_description": "時間内に応答がありませんでした。続行したい場合は、もう一度お試しください。"
+		}
+	},
+	"functions": {
+		"scrapeBooru": {
+			"title": "画像検索",
+			"description": "`{query}`の高品質な「SFW」投稿を最大4つランダムに取得します\nフィルタリングされたクエリ: `{filtered_query}`",
+			"error_not_nsfw": "申し訳ありませんが、このコマンドはNSFWチャンネルでのみ使用できます！",
+			"error_no_results": "すみません、`{query}`の投稿は見つかりませんでした。\n別のプロンプトを試すか、`/rule34`を試してください！",
+			"progress_message": "投稿をダウンロードしてランダムにアップロードしています...",
+			"query_comparison_title": "検索クエリの翻訳",
+			"query_comparison_description": "あなたのタグ: `{original}`\n検索対象: `{filtered}`",
+			"result_title": "オリジナル: {source}",
+			"result_original": "（ソースの提供なし）",
+			"result_footer": "スコア: {score} | タグ: {tags}"
+		},
+		"generateImage": {
+			"description": "Stable Diffusionを使用してプロンプトから画像を素早く生成します！",
+			"progress": "🎨 `{prompt}`の画像を生成しています...",
+			"result": "✨ `{prompt}`のために生成したものです (b ᵔ▽ᵔ)b",
+			"error": "🚫 画像の生成中に問題が発生しました。後でもう一度お試しください。"
+		}
+	},
+	"commands": {
+		"tool": {
+			"description": "サーバー管理とボット情報のためのユーティリティツール",
+			"ping": {
+				"description": "ポン！",
+				"response_fast": "ポン！Discordに**{response_time}ms**で応答しました！ | Discordは私に**{discord_response}ms**で応答しています！",
+				"response_slow": "ポン！Discordに**{response_time}ms**で応答しました！ | Discordは私に**{discord_response}ms**で応答しています！今日は少し遅れているようです (￣▽￣*)ゞ"
+			},
+			"refresh": {
+				"success_title": "AIパーソナリティをリフレッシュしました！",
+				"success_description": "✅ AIはリフレッシュされ、チャットの準備ができています！"
+			}
+		},
+		"config": {
+			"description": "ともりの設定と個性を設定する",
+			"setup": {
+				"command_description": "このサーバーで初めてともりをセットアップします。",
+				"error_title": "セットアップエラー",
+				"no_permission": "🚫 初期セットアップを実行するには、サーバー管理権限が必要です！",
+				"already_exists": "ともりはすでにこのサーバーにセットアップされています！`/settings`または`/teach`を使用して変更してください。",
+				"api_prep_title": "ステップ1：Google AI APIキー",
+				"api_prep_description": "ともりのコアAI機能を有効にするには、Google AI APIキーが必要です。\n\n• **なぜ？** このキーにより、ともりはAIモデル（Gemini）に接続できます。\n• **安全性：** あなたのキーはデータベースで**暗号化**され、このサーバーからのAIリクエストにのみ使用されます。`/settings`からいつでも削除できます。\n• **プライバシー：** まだの場合は、プライベートチャンネルでこのコマンドを実行してください。\n\nAPIキー入力に進むには✅を、セットアップをキャンセルするには❌を押してください。",
+				"button_continue": "✅ 続ける",
+				"button_cancel": "❌ キャンセル",
+				"api_modal_title": "Google AI APIキーを入力",
+				"api_modal_label": "Google AI APIキー",
+				"api_modal_placeholder": "APIキーをここに貼り付けてください...",
+				"api_modal_success": "APIキーを受け取りました（暗号化されます）。",
+				"api_key_invalid": "🚫 入力されたAPIキーは短すぎるか無効です。有効なGoogle AI APIキーで再試行してください。",
+				"api_key_validating": "🔍 Google APIキーを検証しています... しばらくお待ちください。",
+				"api_key_invalid_api": "❌ APIキーの検証に失敗しました。Googleはこのキーを無効として拒否しました。キーを確認して再試行してください。",
+				"preset_select_title": "ステップ2：初期パーソナリティの選択",
+				"preset_select_description": "ともりの初期パーソナリティプリセットを選択してください。後で`/teach`を使用して広範囲にカスタマイズできます。",
+				"preset_select_placeholder": "パーソナリティを選択...",
+				"preset_fetch_error": "データベースからパーソナリティプリセットを取得できませんでした。もう一度お試しください。",
+				"autoch_select_title": "ステップ3：自動チャットチャンネル（オプション）",
+				"autoch_select_description": "ともりが時々自動的にチャットするテキストチャンネルを指定してください。スペースで区切って複数のチャンネルを指定できます。この機能が不要な場合は「スキップ」を押してください。",
+				"button_skip": "スキップ",
+				"autoch_prompt": "今すぐチャンネルを指定するか、スキップを押してください。",
+				"autoch_invalid_channel": "指定されたアイテムの1つ以上が有効なテキストチャンネルではありませんでした。もう一度試すかスキップしてください。",
+				"autoch_success": "自動チャットチャンネルを記録しました。",
+				"autoch_threshold_title": "ステップ4：自動チャットの頻度",
+				"autoch_threshold_description": "選択したチャンネルで何件のメッセージ後にともりがチャットを検討するべきですか？数値を入力してください（例：`50`）。この機能を無効にするには`0`を入力してください（チャンネルが選択されていても）。",
+				"autoch_threshold_prompt": "数値（0以上）を入力してください。",
+				"autoch_threshold_invalid": "無効な数値です。0または正の整数を入力してください。",
+				"autoch_threshold_success": "自動チャット頻度を設定しました。",
+				"humanizer_toggle_title": "ステップ5：実験的なヒューマナイザーを有効にしますか？",
+				"humanizer_toggle_description": "「ヒューマナイザー」は、ともりの応答をよりロボットっぽくなくす試みです（例：タイピングインジケーター、わずかな遅延の追加）。これは実験的です。有効にしますか？",
+				"button_yes": "はい",
+				"button_no": "いいえ",
+				"humanizer_success": "ヒューマナイザーの設定を記録しました。",
+				"confirm_title": "ステップ6：セットアップ詳細の確認",
+				"confirm_description": "以下の設定を確認してください。セットアップを完了して保存するには✅を、キャンセルするには❌を押してください。\n\n**パーソナリティ：** {personality_name}\n**APIキー提供：** {api_key_status}\n**自動チャットチャンネル：** {autoch_channels}\n**自動チャットしきい値：** {autoch_threshold}\n**ヒューマナイザー有効：** {humanizer_status}",
+				"confirm_api_yes": "はい（暗号化）",
+				"confirm_api_no": "いいえ",
+				"confirm_channels_none": "なし",
+				"confirm_humanizer_yes": "はい",
+				"confirm_humanizer_no": "いいえ",
+				"success_title": "セットアップ完了！",
+				"success_description": "素晴らしい！ともりは**{personality_name}**パーソナリティで設定されました。\n私をメンションするか、トリガーワード（デフォルト：Tomori、とも）を使用してチャットを開始できます。\nさらにカスタマイズするには`/teach`と`/settings`を使用してください！",
+				"cancel_title": "セットアップがキャンセルされました",
+				"cancel_description": "了解しました。セットアップ過程はキャンセルされました。いつでも`/setup`を再度実行できます！",
+				"timeout_title": "セットアップがタイムアウトしました",
+				"timeout_description": "時間内に応答がなかったようです。セットアップはキャンセルされました。設定したい場合は、`/setup`を再度実行してください。",
+				"error_description": "セットアップ中に問題が発生しました。`/setup`をもう一度実行してみてください。",
+				"db_error": "設定の保存中にデータベースエラーが発生しました。もう一度お試しください。"
+			}
 		}
 	},
 	"events": {
 		"tomoriChat": {
 			"setup_required_title": "ボットのセットアップが必要です",
-			"setup_required_description": "チャット機能を使用するには、以下の設定が必要です：\n• `/teach convo`で少なくとも2つの会話例を追加\n• `/teach info`で少なくとも1つの情報を追加\nボットの性格プリセットを簡単に選択するには、`/setup`コマンドを使用してください。",
+			"setup_required_description": "チャット機能を使用するには、以下の設定が必要です：\n• `/teach convo`を使用して少なくとも2つの会話例\n• `/teach info`を使用して少なくとも1つの情報エントリー\nまた、`/setup`を使用してボットのパーソナリティプリセットを簡単に選択することもできます。",
 			"safety_error_title": "セーフティフィルターが作動しました",
-			"safety_error_description": "🚫 Geminiのセーフティフィルターが応答をブロックしました。これは通常、コンテンツがGoogleの安全基準に違反する可能性がある場合に発生します"
+			"safety_error_description": "🚫 Geminiのセーフティフィルターが応答をブロックしました。これは通常、コンテンツがGoogleの安全対策に違反する可能性がある場合に発生します。"
 		},
-		"initializeBot": {
+		"addBot": {
 			"rejoin_title": "戻ってきました！",
-			"rejoin_description": "やあ！このサーバーに再招待されたみたいだね。前の設定と性格はそのまま残ってるよ！`/teach` や `/settings` コマンドで管理できるからね。",
-			"setup_prompt_title": "ようこそ！セットアップが必要です",
-			"setup_prompt_description": "こんにちは！追加してくれてありがとう！始めるには、**サーバー管理**権限を持つ人が `/setup` コマンドを実行して、私の初期性格を選択し、AI機能を設定する必要があります。"
+			"rejoin_description": "こんにちは！このサーバーに再追加されたようです。以前の設定とパーソナリティはそのまま維持されています！`/teach`と`/settings`コマンドを使用して管理できます。",
+			"setup_prompt_title": "ともりボットを追加していただきありがとうございます！",
+			"setup_prompt_description": "こんにちは！追加していただきありがとうございます！始めるには、**サーバー管理**権限を持つ誰かが`/setup`コマンドを実行して、私の初期パーソナリティとAI機能を設定する必要があります。"
 		}
 	}
 }

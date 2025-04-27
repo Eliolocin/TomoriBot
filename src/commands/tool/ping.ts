@@ -1,24 +1,29 @@
-import { SlashCommandBuilder } from "discord.js";
+import type { SlashCommandSubcommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import { ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
+import type { UserRow } from "../../types/db/schema";
 
-// Build the command data using SlashCommandBuilder
-export const data = new SlashCommandBuilder()
-	.setName("ping")
-	.setDescription(localizer("en", "commands.tool.ping.description"))
-	.setDescriptionLocalizations({
-		ja: localizer("ja", "commands.tool.ping.description"),
-	})
-	.toJSON();
+// Define how the subcommand is configured
+export const configureSubcommand = (
+	subcommand: SlashCommandSubcommandBuilder,
+) =>
+	subcommand
+		.setName("ping")
+		.setDescription(localizer("en", "commands.tool.ping.description"))
+		.setDescriptionLocalizations({
+			ja: localizer("ja", "commands.tool.ping.description"),
+		});
 
-// Separate execute function containing the command logic
+// Command logic with the UserRow parameter
 export async function execute(
 	client: Client,
 	interaction: ChatInputCommandInteraction,
+	userData: UserRow,
 ): Promise<void> {
-	const locale = interaction.locale ?? interaction.guildLocale ?? "en";
+	// Use userData for locale preference
+	const locale = userData.language_pref ?? interaction.guildLocale ?? "en";
 	await interaction.deferReply();
 
 	const reply = await interaction.fetchReply();

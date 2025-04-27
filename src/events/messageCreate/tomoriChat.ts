@@ -5,11 +5,8 @@ import type { TomoriState, UserRow } from "../../types/db/schema";
 import type { ContextSegment } from "../../types/misc/context";
 import { HarmCategory, HarmBlockThreshold } from "@google/genai";
 import type { GeminiConfig } from "../../types/api/gemini";
-import {
-	incrementTomoriCounter,
-	loadTomoriState,
-	loadUserRow,
-} from "../../utils/db/configHelper";
+import { loadTomoriState, loadUserRow } from "../../utils/db/dbRead";
+import { incrementTomoriCounter } from "@/utils/db/dbWrite";
 import { createStandardEmbed } from "../../utils/discord/embedHelper";
 import { ColorCode, log } from "../../utils/misc/logger";
 import { shouldBotReply } from "../../utils/misc/boolUtils";

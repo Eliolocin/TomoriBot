@@ -1,6 +1,7 @@
 import { REST, Routes } from "discord.js";
 import { log } from "../../utils/misc/logger";
-import { loadCommandModules } from "../../utils/discord/commandLoader";
+import { loadCommandData } from "../../utils/discord/commandLoader";
+import type { ErrorContext } from "../../types/db/schema";
 
 /**
  * Event handler for registering commands when the bot is ready
@@ -11,25 +12,29 @@ export default async (): Promise<void> => {
 
 		const { DISCORD_TOKEN, TOMORI_ID, TESTSRV_ID } = process.env;
 		if (!DISCORD_TOKEN || !TOMORI_ID) {
-			log.error(
+			const context: ErrorContext = {
+				errorType: "CommandRegistrationError",
+				metadata: { stage: "environment" },
+			};
+			await log.error(
 				"Missing required environment variables for command registration",
+				new Error("DISCORD_TOKEN or TOMORI_ID not found"),
+				context,
 			);
 			return;
 		}
 
-		// Load all command modules
-		const commandModules = await loadCommandModules();
+		// Load command data using our new function
+		const { registrationData } = await loadCommandData();
 
-		if (commandModules.size === 0) {
+		if (registrationData.length === 0) {
 			log.warn("No commands found to register");
 			return;
 		}
 
-		// Extract command data for registration
-		const commandData = Array.from(commandModules.values()).map(
-			(cmd) => cmd.data,
+		log.info(
+			`Preparing to register ${registrationData.length} top-level commands`,
 		);
-		log.info(`Preparing to register ${commandData.length} commands`);
 
 		// Initialize REST API for command registration
 		const rest = new REST().setToken(DISCORD_TOKEN);
@@ -43,13 +48,24 @@ export default async (): Promise<void> => {
 
 			try {
 				await rest.put(Routes.applicationGuildCommands(TOMORI_ID, TESTSRV_ID), {
-					body: commandData,
+					body: registrationData,
 				});
 				log.success(
-					`Successfully registered ${commandData.length} commands to development guild`,
+					`Successfully registered ${registrationData.length} commands to development guild`,
 				);
 			} catch (error) {
-				log.error("Failed to register commands to development guild:", error);
+				const context: ErrorContext = {
+					errorType: "CommandRegistrationError",
+					metadata: {
+						scope: "guild",
+						guildId: TESTSRV_ID,
+					},
+				};
+				await log.error(
+					"Failed to register commands to development guild:",
+					error,
+					context,
+				);
 			}
 		} else {
 			// Register globally (takes up to an hour to update)
@@ -57,16 +73,32 @@ export default async (): Promise<void> => {
 
 			try {
 				await rest.put(Routes.applicationCommands(TOMORI_ID), {
-					body: commandData,
+					body: registrationData,
 				});
 				log.success(
-					`Successfully registered ${commandData.length} commands globally`,
+					`Successfully registered ${registrationData.length} commands globally`,
 				);
 			} catch (error) {
-				log.error("Failed to register commands globally:", error);
+				const context: ErrorContext = {
+					errorType: "CommandRegistrationError",
+					metadata: { scope: "global" },
+				};
+				await log.error(
+					"Failed to register commands globally:",
+					error,
+					context,
+				);
 			}
 		}
 	} catch (error) {
-		log.error("Error during command registration:", error);
+		const context: ErrorContext = {
+			errorType: "CommandRegistrationError",
+			metadata: { stage: "initialization" },
+		};
+		await log.error(
+			"Error during command registration process:",
+			error,
+			context,
+		);
 	}
 };

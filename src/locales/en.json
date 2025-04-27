@@ -37,6 +37,7 @@
 	},
 	"commands": {
 		"tool": {
+			"description": "Utility tools for server management and bot info",
 			"ping": {
 				"description": "Pong!",
 				"response_fast": "Pong! I responded to Discord within **{response_time}ms**! | Discord is responding to me **{discord_response}ms** fast!",
@@ -48,6 +49,7 @@
 			}
 		},
 		"config": {
+			"description": "Configure Tomori's settings and personality",
 			"setup": {
 				"command_description": "Set up Tomori for the first time in this server.",
 				"error_title": "Setup Error",

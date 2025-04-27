@@ -264,6 +264,10 @@ export async function replyInfoEmbed(
 		| ModalSubmitInteraction,
 	locale: string,
 	options: StandardEmbedOptions,
+	flags?:
+		| MessageFlags.SuppressEmbeds
+		| MessageFlags.Ephemeral
+		| MessageFlags.SuppressNotifications,
 ): Promise<void> {
 	// 1. Build the embed using the shared helper for consistency
 	const embed = createStandardEmbed(locale, options);
@@ -280,7 +284,7 @@ export async function replyInfoEmbed(
 			await interaction.followUp({
 				embeds: [embed],
 				components: [],
-				flags: MessageFlags.Ephemeral,
+				flags,
 			});
 		} catch (followUpError) {
 			log.error("Failed to follow up with info embed:", followUpError);

@@ -4,33 +4,55 @@
  */
 import path from "node:path";
 import { log } from "../misc/logger";
-import type {
-	ApplicationCommandData,
-	Client,
-	ChatInputCommandInteraction,
+import {
+	SlashCommandBuilder,
+	type ApplicationCommandData,
+	type Client,
+	type ChatInputCommandInteraction,
 } from "discord.js";
-import type { UserRow } from "../../types/db/schema";
+import type { SlashCommandSubcommandBuilder } from "discord.js";
+import type { UserRow, ErrorContext } from "../../types/db/schema";
 import getAllFiles from "../misc/ioHelper";
+import { localizer } from "../text/localizer";
 
 /**
- * Command interface representing a Discord slash command
+ * Type for the command execution function
  */
-export interface Command {
-	data: ApplicationCommandData;
-	category: string; // Add category field to store command category
-	execute: (
-		client: Client,
-		interaction: ChatInputCommandInteraction,
-		userData: UserRow,
-	) => Promise<void>;
-}
+export type CommandExecuteFunction = (
+	client: Client,
+	interaction: ChatInputCommandInteraction,
+	userData: UserRow,
+) => Promise<void>;
 
 /**
- * Loads all command modules from the commands directory
- * @returns Map of command names to command objects
+ * Map structure for the command execution functions
+ * First level: category name (e.g., 'config')
+ * Second level: subcommand name (e.g., 'setup')
  */
-export async function loadCommandModules(): Promise<Map<string, Command>> {
-	const commandMap = new Map<string, Command>();
+export type CommandExecutionMap = Map<
+	string,
+	Map<string, CommandExecuteFunction>
+>;
+
+/**
+ * Map for command cooldowns (category -> duration)
+ */
+export type CommandCooldownMap = Map<string, number>;
+
+/**
+ * Loads all command modules, builds registration data and command maps
+ * @returns Object containing command data for registration and execution maps
+ */
+export async function loadCommandData(): Promise<{
+	registrationData: ApplicationCommandData[];
+	executionMap: CommandExecutionMap;
+	cooldownMap: CommandCooldownMap;
+}> {
+	// Initialize our maps
+	const executionMap: CommandExecutionMap = new Map();
+	const cooldownMap: CommandCooldownMap = new Map();
+	// This will store our category builders (one per directory)
+	const builders = new Map<string, SlashCommandBuilder>();
 	let commandCount = 0;
 
 	try {
@@ -40,57 +62,127 @@ export async function loadCommandModules(): Promise<Map<string, Command>> {
 
 		// 2. Process each category directory
 		for (const categoryDir of categoryDirs) {
-			const categoryName = path.basename(categoryDir); // Get category name from directory
-			log.info(`Loading commands from category: ${categoryName}`);
+			const categoryName = path.basename(categoryDir);
+			log.info(`Processing category: ${categoryName}`);
 
-			// 3. Get all command files in this category
+			// 3. Create or get the SlashCommandBuilder for this category
+			let categoryBuilder = builders.get(categoryName);
+			if (!categoryBuilder) {
+				// Initialize a new builder for this category
+				// Get category description from localizations (try to find 'commands.<category>.description')
+				const categoryDescription =
+					localizer("en", `commands.${categoryName}.description`) ||
+					`${categoryName} commands`; // Fallback if no localization exists
+
+				const categoryLocalizationsMap: { [key: string]: string } = {};
+				// Add Japanese localization if available
+				const jaDesc = localizer("ja", `commands.${categoryName}.description`);
+				if (jaDesc && jaDesc !== `commands.${categoryName}.description`) {
+					categoryLocalizationsMap.ja = jaDesc;
+				}
+
+				categoryBuilder = new SlashCommandBuilder()
+					.setName(categoryName)
+					.setDescription(categoryDescription);
+
+				// Add localizations if we have any
+				if (Object.keys(categoryLocalizationsMap).length > 0) {
+					categoryBuilder.setDescriptionLocalizations(categoryLocalizationsMap);
+				}
+
+				builders.set(categoryName, categoryBuilder);
+				executionMap.set(categoryName, new Map()); // Initialize subcommand map
+			}
+
+			// 4. Get all command files in this category
 			const commandFiles = getAllFiles(categoryDir);
 
-			// 4. Import each command module
+			// 5. Process each command file
 			for (const commandFile of commandFiles) {
 				try {
-					// Dynamic import of the command module
+					// Import the command module
 					const commandModule = await import(commandFile);
 
-					// Each command must export data and execute
-					if (!commandModule.data || !commandModule.execute) {
+					// Validate exports: must have configureSubcommand and execute
+					if (!commandModule.configureSubcommand || !commandModule.execute) {
 						log.warn(
-							`Command at ${commandFile} is missing required exports (data or execute)`,
+							`Command at ${commandFile} is missing required exports (configureSubcommand or execute)`,
 						);
 						continue;
 					}
 
-					// Extract command name from the data
-					const commandName = commandModule.data.name;
+					// Use a temporary variable to store the subcommand name
+					let subcommandName = "";
 
-					if (!commandName) {
-						log.warn(
-							`Command at ${commandFile} has invalid data format (missing name)`,
-						);
+					// 6. Add the subcommand to the category builder
+					categoryBuilder.addSubcommand(
+						(subcommand: SlashCommandSubcommandBuilder) => {
+							// Call the module's configureSubcommand function and capture its result
+							const configuredSubcommand =
+								commandModule.configureSubcommand(subcommand);
+							// Get the name that was set
+							subcommandName = configuredSubcommand.name;
+							return configuredSubcommand;
+						},
+					);
+
+					if (!subcommandName) {
+						log.warn(`Subcommand in ${commandFile} did not set a name`);
 						continue;
 					}
 
-					// Add to command map with category information
-					commandMap.set(commandName, {
-						data: commandModule.data,
-						category: categoryName, // Store the category based on directory name
-						execute: commandModule.execute,
-					});
+					// 7. Store the execute function in the map
+					executionMap
+						.get(categoryName)
+						?.set(subcommandName, commandModule.execute);
+
+					// 8. Store cooldown if defined (optional feature)
+					if (
+						commandModule.cooldown &&
+						typeof commandModule.cooldown === "number"
+					) {
+						cooldownMap.set(categoryName, commandModule.cooldown);
+					}
 
 					commandCount++;
-					log.info(
-						`Loaded command: ${commandName} (Category: ${categoryName})`,
-					);
+					log.info(`Loaded subcommand: ${categoryName} ${subcommandName}`);
 				} catch (error) {
-					log.error(`Failed to load command from ${commandFile}:`, error);
+					const context: ErrorContext = {
+						errorType: "CommandLoadingError",
+						metadata: {
+							commandFile,
+							categoryName,
+						},
+					};
+					await log.error(
+						`Failed to load command from ${commandFile}:`,
+						error,
+						context,
+					);
 				}
 			}
 		}
 
-		log.success(`Successfully loaded ${commandCount} commands`);
-		return commandMap;
+		// Convert builders to the registration data array
+		const registrationData = Array.from(builders.values()).map(
+			(builder) => builder.toJSON() as ApplicationCommandData, // Add 'as ApplicationCommandData'
+		);
+
+		log.success(
+			`Successfully loaded ${commandCount} subcommands in ${builders.size} categories`,
+		);
+		return { registrationData, executionMap, cooldownMap };
 	} catch (error) {
-		log.error("Error loading commands:", error);
-		return commandMap;
+		const context: ErrorContext = {
+			errorType: "CommandLoaderError",
+			metadata: { stage: "initializing" },
+		};
+		await log.error("Error loading command data:", error, context);
+		// Return empty data in case of errors to prevent crashes
+		return {
+			registrationData: [],
+			executionMap: new Map(),
+			cooldownMap: new Map(),
+		};
 	}
 }
