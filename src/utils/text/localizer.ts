@@ -37,10 +37,14 @@ const localizer = (
 	key: string,
 	variables: LocalizerVariables = {},
 ): string => {
+	// Check if the locale exists, if not default to "en-US" or "en" as fallback
+	const fallbackLocale = "en-US";
+	const usedLocale = locales[locale] ? locale : fallbackLocale;
+
 	// 1. Split the key into parts (e.g., 'commands.tool.ping.description' -> ['tool', 'ping', 'description'])
 	const keys: string[] = key.split(".");
 	// 2. Start with the top-level object for the requested locale, typed as unknown for safety
-	let translation: unknown = locales[locale];
+	let translation: unknown = locales[usedLocale];
 
 	// 3. Traverse the locale object using the key parts
 	for (const k of keys) {

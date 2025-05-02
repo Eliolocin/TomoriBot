@@ -6,7 +6,7 @@ export const userSchema = z.object({
 	user_nickname: z.string(),
 	tomocoins_held: z.number().default(0),
 	tomocoins_deposited: z.number().default(0),
-	language_pref: z.string().default("en"),
+	language_pref: z.string().default("en-US"),
 	personal_memories: z.array(z.string()).default([]),
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),

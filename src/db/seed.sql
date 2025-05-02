@@ -1,7 +1,7 @@
 -- Insert LLMs
 INSERT INTO llms (llm_provider, llm_codename)
 VALUES
-  ('Google', 'gemini-2.5-pro-preview-03-25'),
+  ('Google', 'gemini-2.5-pro-exp-03-25'),
   ('Google', 'gemini-2.0-flash-thinking-exp-01-21'),
   ('Google', 'gemini-2.0-flash'),
   ('Google', 'gemini-2.0-flash-lite'),

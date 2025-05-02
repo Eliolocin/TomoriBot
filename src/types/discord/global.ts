@@ -81,7 +81,7 @@ export interface Locales {
 }
 
 export interface LocalizerVariables {
-	[key: string]: string | number;
+	[key: string]: string | number | boolean;
 }
 
 export enum TeachPerms {

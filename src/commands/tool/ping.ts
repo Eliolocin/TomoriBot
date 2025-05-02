@@ -11,7 +11,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("ping")
-		.setDescription(localizer("en", "commands.tool.ping.description"))
+		.setDescription(localizer("en-US", "commands.tool.ping.description"))
 		.setDescriptionLocalizations({
 			ja: localizer("ja", "commands.tool.ping.description"),
 		});
@@ -20,10 +20,10 @@ export const configureSubcommand = (
 export async function execute(
 	client: Client,
 	interaction: ChatInputCommandInteraction,
-	userData: UserRow,
+	_userData: UserRow,
+	locale: string,
 ): Promise<void> {
 	// Use userData for locale preference
-	const locale = userData.language_pref ?? interaction.guildLocale ?? "en";
 	await interaction.deferReply();
 
 	const reply = await interaction.fetchReply();

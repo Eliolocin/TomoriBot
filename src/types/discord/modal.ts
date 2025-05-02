@@ -1,4 +1,4 @@
-import type { TextInputStyle } from "discord.js";
+import type { ModalSubmitInteraction, TextInputStyle } from "discord.js";
 
 /**
  * Options for text input fields in a modal
@@ -30,4 +30,5 @@ export interface ModalOptions {
 export type ModalResult = {
 	outcome: "submit" | "timeout";
 	values?: Record<string, string>; // The collected field values if outcome is 'submit'
+	interaction?: ModalSubmitInteraction; // Add this property
 };

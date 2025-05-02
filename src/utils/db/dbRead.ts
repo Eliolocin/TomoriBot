@@ -6,6 +6,8 @@ import {
 	type TomoriState,
 	type UserRow,
 	type ServerEmojiRow,
+	type LlmRow,
+	llmSchema,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 
@@ -211,6 +213,45 @@ export async function loadServerEmojis(
 		return parsedEmojis.data;
 	} catch (error) {
 		log.error(`Error loading emojis for server ID ${internalServerId}:`, error);
+		return null;
+	}
+}
+
+/**
+ * Loads all available LLM models from the database.
+ * @returns An array of validated LlmRow objects, or null if none found or error.
+ */
+export async function loadAvailableLlms(): Promise<LlmRow[] | null> {
+	try {
+		// 1. Fetch all rows from the llms table
+		const llmRows = await sql`
+            SELECT * FROM llms
+            ORDER BY llm_id ASC -- Optional: Order for consistency
+        `;
+
+		// 2. Check if any rows were returned
+		if (!llmRows || llmRows.length === 0) {
+			log.warn("No LLM models found in the database.");
+			return null;
+		}
+
+		// 3. Validate the array of LLM rows against the schema (Rule 5, Rule 6)
+		const parsedLlms = llmSchema.array().safeParse(llmRows);
+
+		// 4. Handle validation failure
+		if (!parsedLlms.success) {
+			log.error(
+				"Failed to validate LLM data from database:",
+				parsedLlms.error.flatten(),
+			);
+			return null;
+		}
+
+		// 5. Return the validated array of LLM rows
+		return parsedLlms.data;
+	} catch (error) {
+		// 6. Log any unexpected errors during the database query (Rule 22)
+		log.error("Error loading available LLMs from database:", error);
 		return null;
 	}
 }

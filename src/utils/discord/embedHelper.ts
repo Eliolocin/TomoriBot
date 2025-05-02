@@ -15,7 +15,6 @@ import { localizer } from "../text/localizer";
 import type {
 	StandardEmbedOptions,
 	SummaryEmbedOptions,
-	SummaryField,
 	TranslationEmbedOptions,
 } from "../../types/discord/embed";
 import {
@@ -82,17 +81,27 @@ export function createSummaryEmbed(
 		.setTitle(localizer(locale, titleKey))
 		.setDescription(localizer(locale, descriptionKey, descriptionVars))
 		.addFields(
+			// 1. Map over the fields provided in options
 			fields.map(
-				(field: SummaryField): APIEmbedField => ({
-					name: localizer(locale, field.nameKey),
-					value:
-						typeof field.value === "object"
-							? field.value.value
-							: field.vars
-								? localizer(locale, field.value.toString(), field.vars)
-								: field.value.toString(),
-					inline: false,
-				}),
+				// 2. Define the transformation for each field
+				(field): APIEmbedField => {
+					// 3. Determine the field name: Use localized nameKey if present, otherwise use direct name, fallback to empty string
+					const name = field.nameKey
+						? localizer(locale, field.nameKey, field.nameVars) // Use nameVars for name
+						: (field.name ?? "");
+
+					// 4. Determine the field value: Handle potential localization if 'valueVars' are present
+					const value = field.valueVars // Check for valueVars
+						? localizer(locale, field.value, field.valueVars) // Localize value using valueVars
+						: field.value; // Otherwise, use the value directly
+
+					// 5. Return the structured APIEmbedField object
+					return {
+						name,
+						value,
+						inline: field.inline ?? false,
+					};
+				},
 			),
 		);
 }

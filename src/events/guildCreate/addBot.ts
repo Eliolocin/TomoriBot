@@ -41,7 +41,7 @@ const handler = async (client: Client, guild: Guild): Promise<void> => {
 		}
 
 		// 4. Create and send appropriate embed using sendStandardEmbed
-		const serverLocale = guild.preferredLocale.startsWith("ja") ? "ja" : "en";
+		const serverLocale = guild.preferredLocale;
 		await sendStandardEmbed(channel, serverLocale, {
 			titleKey: tomoriExists
 				? "events.addBot.rejoin_title"

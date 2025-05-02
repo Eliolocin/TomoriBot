@@ -20,9 +20,10 @@ const TIMEOUT_DURATION = 100000; // 100 Seconds
 const COOLDOWN_MAP = new Map<string, number>([
 	["economy", 2000],
 	["scrape", 10000],
-	["tool", 10000],
+	["tool", 1000],
 	["fun", 2000],
 	["config", 5000], // Add cooldown for config category
+	["teach", 5000], // Add cooldown for config category
 ]);
 
 // Cache for command execution maps - stored at module level
@@ -102,7 +103,8 @@ const handler = async (
 	if (!interaction.isChatInputCommand()) return;
 
 	// Determine locale early for potential error messages
-	const initialLocale = interaction.locale ?? interaction.guildLocale ?? "en";
+	const initialLocale =
+		interaction.locale ?? interaction.guildLocale ?? "en-US";
 
 	try {
 		// 1. Load command data on first run if cache is empty
@@ -135,8 +137,8 @@ const handler = async (
 				interaction,
 				initialLocale,
 				{
-					titleKey: "general.errors.generic_error",
-					descriptionKey: "general.errors.generic_error",
+					titleKey: "general.errors.unknown_error_title",
+					descriptionKey: "general.errors.unknown_error_description",
 					color: ColorCode.ERROR,
 				},
 				MessageFlags.Ephemeral,
@@ -151,8 +153,8 @@ const handler = async (
 				interaction,
 				initialLocale,
 				{
-					titleKey: "general.errors.generic_error",
-					descriptionKey: "general.errors.generic_error",
+					titleKey: "general.errors.unknown_error_title",
+					descriptionKey: "general.errors.unknown_error_description",
 					color: ColorCode.ERROR,
 				},
 				MessageFlags.Ephemeral,
@@ -168,8 +170,8 @@ const handler = async (
 				interaction,
 				initialLocale,
 				{
-					titleKey: "general.errors.generic_error",
-					descriptionKey: "general.errors.generic_error",
+					titleKey: "general.errors.unknown_error_title",
+					descriptionKey: "general.errors.unknown_error_description",
 					color: ColorCode.ERROR,
 				},
 				MessageFlags.Ephemeral,
@@ -197,9 +199,12 @@ const handler = async (
 						interaction,
 						initialLocale,
 						{
-							titleKey: "general.cooldown",
+							titleKey: "general.cooldown_title",
 							descriptionKey: "general.cooldown",
-							descriptionVars: { seconds: remainingSeconds },
+							descriptionVars: {
+								seconds: remainingSeconds,
+								category: commandName,
+							},
 							color: ColorCode.WARN,
 						},
 						MessageFlags.Ephemeral,
@@ -221,8 +226,7 @@ const handler = async (
 				userData = userSchema.parse(existingUser);
 			} else if (interaction.guild) {
 				// Get locale to use for new user
-				const serverLocale = interaction.guild.preferredLocale;
-				const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en";
+				const userLanguage = interaction.locale;
 
 				// Use the registerUser helper (Rule #17)
 				const registeredUser = await registerUser(
@@ -238,11 +242,11 @@ const handler = async (
 
 			// Get the final locale once user data is potentially available
 			const finalLocale =
-				userData?.language_pref ?? interaction.guildLocale ?? "en";
+				userData?.language_pref ?? interaction.guildLocale ?? "en-US";
 
 			// 6. Execute command
 			if (userData) {
-				await executeFunction(client, interaction, userData);
+				await executeFunction(client, interaction, userData, finalLocale);
 			} else {
 				// Handle case where user data couldn't be obtained
 				const context: ErrorContext = {
@@ -259,8 +263,8 @@ const handler = async (
 				);
 
 				await replyInfoEmbed(interaction, finalLocale, {
-					titleKey: "general.errors.generic_error",
-					descriptionKey: "general.errors.generic_error",
+					titleKey: "general.errors.unknown_error_title",
+					descriptionKey: "general.errors.unknown_error_description",
 					color: ColorCode.ERROR,
 				});
 			}
@@ -301,8 +305,8 @@ const handler = async (
 		// Reply to user if possible
 		if (!interaction.replied && !interaction.deferred) {
 			await replyInfoEmbed(interaction, initialLocale, {
-				titleKey: "general.errors.generic_error",
-				descriptionKey: "general.errors.generic_error",
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
 				color: ColorCode.ERROR,
 			});
 		}

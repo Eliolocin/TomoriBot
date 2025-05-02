@@ -99,7 +99,7 @@ function getDayOfWeek(date: Date): string {
 /**
  * Splits a long message into smaller chunks for Discord's limits, preserving code blocks and natural breakpoints
  * @param inputText - Text to split into chunks
- * @param humanizerIsEnabled - When true, also breaks messages at consecutive newlines *outside* of code blocks
+ * @param humanizerDegree - Controls how aggressive text chunking should be (0-3)
  * @param chunkLength - Optional max length for each chunk (defaults to 1900, just below Discord's 2000 char limit)
  * @returns Array of message chunks under Discord's limit
  */
@@ -114,107 +114,216 @@ export function chunkMessage(
 		return chunkedMessages;
 	}
 
-	// 2. Find all code blocks first to treat them as atomic units (unless they exceed chunkLength)
-	const codeBlockRegex = /```(?:(\w+)\n)?([\s\S]*?)```/g;
+	// 2. Find all code blocks and emojis first to treat them as atomic units
 	const blocks: Array<{
 		content: string;
-		isCode: boolean;
+		type: "text" | "code" | "emoji";
 		start: number;
 		end: number;
 	}> = [];
+
+	// 2a. First pass: Find code blocks
+	const codeBlockRegex = /```(?:(\w+)\n)?([\s\S]*?)```/g;
 	let lastIndex = 0;
 	let match: RegExpExecArray | null;
 
 	// biome-ignore lint/suspicious/noAssignInExpressions: Separate match assignment from null check
 	while ((match = codeBlockRegex.exec(inputText)) !== null) {
-		// 2a. Add text segment before the code block
+		// Add text segment before the code block
 		if (match.index > lastIndex) {
 			blocks.push({
 				content: inputText.substring(lastIndex, match.index),
-				isCode: false,
+				type: "text",
 				start: lastIndex,
 				end: match.index,
 			});
 		}
-		// 2b. Add the code block itself
+		// Add the code block itself
 		blocks.push({
 			content: match[0],
-			isCode: true,
+			type: "code",
 			start: match.index,
 			end: match.index + match[0].length,
 		});
 		lastIndex = match.index + match[0].length;
 	}
-	// 2c. Add any remaining text after the last code block
+
+	// Add any remaining text after the last code block
 	if (lastIndex < inputText.length) {
 		blocks.push({
 			content: inputText.substring(lastIndex),
-			isCode: false,
+			type: "text",
 			start: lastIndex,
 			end: inputText.length,
 		});
 	}
 
-	// 3. Process blocks (text segments and code blocks) in order
+	// 2b. Second pass: Split text blocks to separate emojis
+	const emojiPattern = /<(a?):([^:]+):([^>]+)>/g;
+	const processedBlocks: typeof blocks = [];
+
+	// Process each text block to find emojis
+	for (const block of blocks) {
+		if (block.type !== "text") {
+			// Keep code blocks as is
+			processedBlocks.push(block);
+			continue;
+		}
+
+		// Reset for emoji matching within this text block
+		const textContent = block.content;
+		lastIndex = 0;
+		let emojiMatch: RegExpExecArray | null;
+
+		// biome-ignore lint/suspicious/noAssignInExpressions: Separate emoji match assignment from null check
+		while ((emojiMatch = emojiPattern.exec(textContent)) !== null) {
+			// Add text before emoji if any
+			if (emojiMatch.index > lastIndex) {
+				processedBlocks.push({
+					content: textContent.substring(lastIndex, emojiMatch.index),
+					type: "text",
+					start: block.start + lastIndex,
+					end: block.start + emojiMatch.index,
+				});
+			}
+
+			// Add the emoji as an atomic unit
+			processedBlocks.push({
+				content: emojiMatch[0],
+				type: "emoji",
+				start: block.start + emojiMatch.index,
+				end: block.start + emojiMatch.index + emojiMatch[0].length,
+			});
+
+			lastIndex = emojiMatch.index + emojiMatch[0].length;
+		}
+
+		// Add remaining text after the last emoji
+		if (lastIndex < textContent.length) {
+			processedBlocks.push({
+				content: textContent.substring(lastIndex),
+				type: "text",
+				start: block.start + lastIndex,
+				end: block.start + textContent.length,
+			});
+		}
+	}
+
+	// 3. Process all blocks in order
 	let currentChunk = "";
 
-	for (const block of blocks) {
-		if (block.isCode) {
-			// 3a. Handle Code Blocks (existing logic is mostly fine)
-			// Check if adding the code block exceeds the limit
-			if (currentChunk.length + block.content.length > chunkLength) {
-				// Finish current chunk if it has content
+	for (const block of processedBlocks) {
+		// Handle each block type appropriately
+		switch (block.type) {
+			case "code":
+				// 3a. Handle Code Blocks - same as before
+				if (currentChunk.length + block.content.length > chunkLength) {
+					// Finish current chunk if it has content
+					if (currentChunk.length > 0) {
+						chunkedMessages.push(currentChunk);
+						currentChunk = "";
+					}
+					// If code block itself is too large, split it
+					if (block.content.length > chunkLength) {
+						const codeChunks = splitCodeBlock(block.content, chunkLength);
+						chunkedMessages.push(...codeChunks);
+					} else {
+						// Add the whole code block as a new chunk
+						chunkedMessages.push(block.content);
+					}
+				} else {
+					// Code block fits, add it to current chunk
+					currentChunk += (currentChunk.length > 0 ? "\n" : "") + block.content;
+				}
+				break;
+
+			case "emoji":
+				// 3b. Handle Emojis - always treated as their own chunk
+				// First, save any current chunk
 				if (currentChunk.length > 0) {
 					chunkedMessages.push(currentChunk);
 					currentChunk = "";
 				}
-				// If code block itself is too large, split it
-				if (block.content.length > chunkLength) {
-					const codeChunks = splitCodeBlock(block.content, chunkLength);
-					chunkedMessages.push(...codeChunks);
-				} else {
-					// Add the whole code block as a new chunk
-					chunkedMessages.push(block.content);
-				}
-			} else {
-				// Code block fits, add it to the current chunk (prepend newline if needed)
-				currentChunk += (currentChunk.length > 0 ? "\n" : "") + block.content;
-			}
-		} else {
-			// 3b. Handle Text Segments (Integrate Humanizer Logic Here)
-			const textToAdd = block.content;
 
-			if (humanizerDegree >= 2) {
-				// 3b-i. Split *this text segment* by any newlines (single or consecutive)
-				const subSegments = textToAdd.split(/(\n+)/); // Keep separators to identify breaks
+				// Add emoji as its own standalone chunk
+				chunkedMessages.push(block.content);
+				break;
 
-				for (let i = 0; i < subSegments.length; i++) {
-					const subSegment = subSegments[i];
-					if (!subSegment) continue; // Skip empty strings
+			case "text": {
+				// 3c. Handle Text - based on humanizer degree
+				const textToAdd = block.content.trim();
+				if (!textToAdd) continue; // Skip empty text
 
-					// If it's a separator (\n+) and we have content, force a chunk break
-					if (subSegment.match(/^\n+$/) && currentChunk.length > 0) {
-						chunkedMessages.push(currentChunk);
-						currentChunk = "";
-						continue; // Don't add the separator itself
+				if (humanizerDegree === 2) {
+					// 3c-i. Humanizer Degree 2: Break at newlines, keep punctuation
+					const paragraphs = textToAdd.split(/\n+/);
+
+					for (const paragraph of paragraphs) {
+						if (!paragraph.trim()) continue;
+						chunkedMessages.push(paragraph);
 					}
+				} else if (humanizerDegree >= 3) {
+					// 3c-ii. Humanizer Degree 3+: Break at newlines AND sentence endings
+					const paragraphs = textToAdd.split(/\n+/);
 
-					// Process the actual text part using addTextSegment logic
+					for (let paragraph of paragraphs) {
+						if (!paragraph.trim()) continue;
+
+						//chunkedMessages.push(paragraph);
+						// Compensate for ... period deletion by adding one more period
+						// Replace exactly three periods with four periods when they aren't part of a longer sequence
+						paragraph = paragraph.replace(/\.{3}(?!\.)(?!\d)/g, "....");
+
+						// Remove all commas from the text
+						paragraph = paragraph.replace(/,/g, "");
+
+						// Split by sentence endings
+						const sentences = paragraph.split(/(?<=[.])(?=\s|$)/);
+
+						// Then split by sentence endings but keep the punctuation
+						// This looks for punctuation followed by end of string
+
+						//const sentences = paragraph.split(/(?<=[.])(?=\s|$)/);
+
+						/*
+
+						for (const sentence of sentences) {
+							const trimmedSentence = sentence.trim();
+							if (!trimmedSentence) continue;
+
+							// Add this processed sentence as its own chunk
+							chunkedMessages.push(trimmedSentence);
+						}*/
+
+						for (let sentence of sentences) {
+							sentence = sentence.trim();
+							if (!sentence) continue;
+
+							// Process ending punctuation
+							let processedSentence = sentence;
+							if (sentence.endsWith("."))
+								processedSentence = sentence.slice(0, -1).trim();
+
+							if (!processedSentence) continue;
+
+							if (currentChunk.length > 0) {
+								chunkedMessages.push(currentChunk);
+								currentChunk = "";
+							}
+
+							chunkedMessages.push(processedSentence);
+						}
+					}
+				} else {
+					// 3c-iii. Low or no humanization, use normal text chunking
 					currentChunk = addTextSegment(
-						subSegment,
+						textToAdd,
 						currentChunk,
 						chunkedMessages,
 						chunkLength,
 					);
 				}
-			} else {
-				// 3b-ii. Not humanizing, process the whole text segment normally
-				currentChunk = addTextSegment(
-					textToAdd,
-					currentChunk,
-					chunkedMessages,
-					chunkLength,
-				);
+				break;
 			}
 		}
 	}
@@ -224,7 +333,7 @@ export function chunkMessage(
 		chunkedMessages.push(currentChunk);
 	}
 
-	// 5. Handle edge case: input text was non-empty but resulted in zero chunks (should be rare)
+	// 5. Handle edge case: input text was non-empty but resulted in zero chunks
 	if (chunkedMessages.length === 0 && inputText.length > 0) {
 		// Fallback to simple chunking by length
 		let remainingInput = inputText;
@@ -407,21 +516,97 @@ function addTextSegment(
 	return segmentedChunk;
 }
 
+// This matches anything inside <> that contains at least one colon
+// Could be <:name:id>, <a:name:id>, or any malformed variant
+// const EMOJI_ATTEMPT_PATTERN = /<(a?):?([^:>]+):?([^>]*)>/g;
+
 /**
  * Cleans raw LLM output for Discord display
  * @param text - Raw text from LLM
  * @param botName - Optional bot name to remove from response
+ * @param emojiStrings - Array of properly formatted Discord emoji strings
  * @returns Cleaned text suitable for Discord messages
  */
-export function cleanLLMOutput(text: string, botName?: string): string {
+/**
+ * Cleans raw LLM output for Discord display
+ * @param text - Raw text from LLM
+ * @param botName - Optional bot name to remove from response
+ * @param emojiStrings - Array of properly formatted Discord emoji strings
+ * @returns Cleaned text suitable for Discord messages
+ */
+export function cleanLLMOutput(
+	text: string,
+	botName?: string,
+	emojiStrings?: string[],
+): string {
+	// 1. Basic whitespace and separator cleanup
 	let cleanedText = text
 		.replace(/\n{3,}/g, "\n\n")
 		.replace(/<\|im_end\|>(\s*)$/, "")
 		.replace(/<\|file_separator\|>(\s*)$/, "")
-		// Remove failed emoji attempts like ":smile:", ":thumbsup:", etc.
-		.replace(/\s+:[a-zA-Z0-9_]+:\s+/g, " ")
 		.trim();
 
+	// 2. Emoji handling, only if we have a list of valid emojis
+	if (emojiStrings && emojiStrings.length > 0) {
+		// 2.1 Build a set of exact valid emoji strings
+		const validEmojiSet = new Set(emojiStrings);
+
+		// 2.2 Build a map from emoji name → its correct full format
+		const emojiNameMap = new Map<string, string>();
+		for (const emoji of emojiStrings) {
+			const m = emoji.match(/<(a?):([^:]+):([^>]+)>/);
+			if (m) {
+				const [, , name] = m;
+				emojiNameMap.set(name, emoji);
+			}
+		}
+
+		// 2.3 Protect valid emojis by replacing them with placeholders
+		const preserved = new Map<string, string>();
+		let placeholderCount = 0;
+		for (const emoji of validEmojiSet) {
+			const key = `__EMOJI_PLACEHOLDER_${placeholderCount++}__`;
+			cleanedText = cleanedText.replace(
+				new RegExp(escapeRegExp(emoji), "g"),
+				key,
+			);
+			preserved.set(key, emoji);
+		}
+
+		// 2.4 Replace any :name: occurrences with the correct emoji
+		for (const [name, full] of emojiNameMap.entries()) {
+			const pattern = new RegExp(
+				`(?<!<[^>]*)\\s*:${escapeRegExp(name)}:\\s*`,
+				"g",
+			);
+			cleanedText = cleanedText.replace(pattern, ` ${full} `);
+		}
+
+		// 2.5 Correct or drop any remaining <...> emoji attempts
+		cleanedText = cleanedText.replace(
+			/<(a?):([^:>]+):([^>]+)>/g,
+			(_match, animated, name, id) => {
+				const full = `<${animated}:${name}:${id}>`;
+				// a) exact valid → keep
+				if (validEmojiSet.has(full)) return full;
+				// b) name match → use canonical
+				const canonical = emojiNameMap.get(name);
+				if (canonical) return canonical;
+				// c) unknown → remove
+				return "";
+			},
+		);
+
+		// 2.6 Restore preserved valid emojis
+		for (const [key, emoji] of preserved.entries()) {
+			cleanedText = cleanedText.replace(
+				new RegExp(escapeRegExp(key), "g"),
+				emoji,
+			);
+		}
+	}
+
+	// 3. Remove bot name prefix if present
 	if (botName) {
 		const prefix = `${botName}:`;
 		if (cleanedText.startsWith(prefix)) {
@@ -429,8 +614,16 @@ export function cleanLLMOutput(text: string, botName?: string): string {
 		}
 	}
 
-	// Only remove speaker indicator if it's on the last line of the response
-	return cleanedText.replace(/\n([^:]+):$/g, "");
+	// 4. Final generic cleanup for any stray :name: patterns
+	cleanedText = cleanedText.replace(/\s+:[a-zA-Z0-9_]+:\s+/g, " ");
+
+	// 5. Remove trailing speaker indicator
+	return cleanedText.replace(/\n([^:]+):$/, "");
+}
+
+/** Helper to escape special RegExp characters in a string */
+function escapeRegExp(s: string): string {
+	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

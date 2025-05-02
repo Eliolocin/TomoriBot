@@ -12,8 +12,7 @@ import { log } from "../../utils/misc/logger";
 const handler = async (_client: Client, member: GuildMember): Promise<void> => {
 	try {
 		// 1. Determine the server and user's preferred language
-		const serverLocale = member.guild.preferredLocale;
-		const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en";
+		const userLanguage = member.guild.preferredLocale;
 		log.info(
 			`New user ${member.user.tag} joined server, registering with language: ${userLanguage}`,
 		);

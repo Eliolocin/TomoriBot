@@ -1,5 +1,5 @@
 import { log } from "../misc/logger";
-import type { TextChannel } from "discord.js";
+import type { BaseGuildTextChannel } from "discord.js";
 
 /**
  * List of common internet expressions that should be converted to lowercase
@@ -82,10 +82,10 @@ export function humanizeString(text: string): string {
 	});
 
 	// 6. Remove periods and commas, but keep question marks and exclamation points
-	processedText = processedText.replace(/[.,;]/g, ""); // Remove periods, commas, semicolons, colons
+	processedText = processedText.replace(/[;]/g, ""); // Remove periods, commas, semicolons, colons
 
 	// 7. Fix potential issues with multiple punctuation
-	processedText = processedText.replace(/([?!])+/g, "$1"); // Replace multiple ???? or !!!! with single one
+	//processedText = processedText.replace(/([?!])+/g, "$1"); // Replace multiple ???? or !!!! with single one
 
 	// 8. Restore placeholders in reverse order to avoid index issues
 	// First restore sender strings
@@ -118,7 +118,7 @@ export function humanizeString(text: string): string {
  * @returns Promise that resolves when all chunks are sent
  */
 export async function sendWithTypingSimulation(
-	channel: TextChannel,
+	channel: BaseGuildTextChannel,
 	chunks: string[],
 ): Promise<void> {
 	if (!chunks.length) return;

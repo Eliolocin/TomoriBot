@@ -2,8 +2,11 @@ import { sql } from "bun";
 import {
 	tomoriSchema,
 	userSchema,
+	tomoriConfigSchema,
 	type TomoriRow,
 	type UserRow,
+	type TomoriConfigRow,
+	type ErrorContext,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import type { Guild } from "discord.js";
@@ -63,7 +66,7 @@ export async function registerUser(
 
 /**
  * Increments the autoch_counter for a Tomori instance.
- * If the counter reaches the threshold, it resets to 0.
+ * When the counter reaches the threshold, it resets to 0.
  * @param tomoriId - The ID of the Tomori instance.
  * @param threshold - The autoch_threshold value from config.
  * @returns The updated TomoriRow with the new counter value, or null on error.
@@ -73,55 +76,89 @@ export async function incrementTomoriCounter(
 	threshold: number,
 ): Promise<TomoriRow | null> {
 	try {
-		// Atomically increment and check threshold using RETURNING
-		const updatedRows = await sql`
-            WITH updated AS (
-                UPDATE tomori
-                SET autoch_counter = autoch_counter + 1
-                WHERE tomori_id = ${tomoriId}
-                RETURNING tomori_id, autoch_counter
-            )
-            UPDATE tomori
-            SET autoch_counter = 0
-            FROM updated
-            WHERE 
-                tomori.tomori_id = updated.tomori_id 
-                AND ${threshold > 0} -- Only reset if threshold is active
-                AND updated.autoch_counter % ${threshold} = 0
-            RETURNING tomori.*; -- Return the final state of the row
-        `;
+		// 1. First check if the threshold is positive and active
+		if (threshold <= 0) {
+			// If threshold is inactive, just increment without resetting
+			const [incrementedTomori] = await sql`
+				UPDATE tomoris
+				SET autoch_counter = autoch_counter + 1
+				WHERE tomori_id = ${tomoriId}
+				RETURNING *
+			`;
 
-		// If the threshold wasn't met, the second UPDATE won't run,
-		// so we need to fetch the result from the first increment.
-		if (!updatedRows.length) {
-			const incrementedRows = await sql`
-                SELECT * FROM tomori WHERE tomori_id = ${tomoriId} LIMIT 1
-            `;
-			if (!incrementedRows.length) {
-				log.error(
-					`Failed to retrieve Tomori row ${tomoriId} after incrementing counter.`,
-				);
-				return null;
-			}
 			// Validate and return
-			const parsedTomori = tomoriSchema.safeParse(incrementedRows[0]);
+			const parsedTomori = tomoriSchema.safeParse(incrementedTomori);
 			return parsedTomori.success ? parsedTomori.data : null;
 		}
 
-		// If threshold was met and reset occurred, validate and return
-		const parsedTomori = tomoriSchema.safeParse(updatedRows[0]);
-		if (!parsedTomori.success) {
-			log.error(
-				`Failed to validate updated Tomori row ${tomoriId} after counter reset:`,
-				parsedTomori.error.flatten(),
+		// 2. If threshold is active, use CTE to check if we've reached it
+		const [updatedTomori] = await sql`
+			WITH incremented AS (
+				UPDATE tomoris
+				SET autoch_counter = 
+					CASE 
+						WHEN autoch_counter + 1 > ${threshold} THEN 0  -- Reset to 0 when threshold reached
+						ELSE autoch_counter + 1                         -- Otherwise increment
+					END
+				WHERE tomori_id = ${tomoriId}
+				RETURNING *
+			)
+			SELECT * FROM incremented
+		`;
+
+		if (!updatedTomori) {
+			const context: ErrorContext = {
+				tomoriId,
+				errorType: "DatabaseUpdateError",
+				metadata: {
+					operation: "incrementTomoriCounter",
+					threshold,
+				},
+			};
+
+			await log.error(
+				`Failed to increment/reset counter for Tomori ${tomoriId}`,
+				new Error("Tomori not found"),
+				context,
 			);
 			return null;
 		}
+
+		// Validate the returned data
+		const parsedTomori = tomoriSchema.safeParse(updatedTomori);
+		if (!parsedTomori.success) {
+			const context: ErrorContext = {
+				tomoriId,
+				errorType: "SchemaValidationError",
+				metadata: {
+					operation: "incrementTomoriCounter",
+					validationErrors: parsedTomori.error.flatten(),
+				},
+			};
+
+			await log.error(
+				"Failed to validate Tomori data after counter update",
+				parsedTomori.error,
+				context,
+			);
+			return null;
+		}
+
 		return parsedTomori.data;
 	} catch (error) {
-		log.error(
-			`Error incrementing/resetting auto counter for ${tomoriId}:`,
+		const context: ErrorContext = {
+			tomoriId,
+			errorType: "DatabaseOperationError",
+			metadata: {
+				operation: "incrementTomoriCounter",
+				threshold,
+			},
+		};
+
+		await log.error(
+			`Error incrementing/resetting auto counter for Tomori ${tomoriId}`,
 			error,
+			context,
 		);
 		return null;
 	}
@@ -271,5 +308,332 @@ export async function setupServer(
 	} catch (error) {
 		log.error("Server setup transaction failed:", error);
 		throw error; // Re-throw to let caller handle the error
+	}
+}
+
+/**
+ * Updates a TomoriConfig record with partial data.
+ * Uses zod's .partial() schema for validation and SQL RETURNING for atomicity.
+ *
+ * @param tomoriId - The tomori_id of the config to update
+ * @param configData - Partial data to update (only specified fields will be changed)
+ * @returns The updated TomoriConfigRow or null if update failed
+ */
+export async function updateTomoriConfig(
+	tomoriId: number,
+	configData: Partial<TomoriConfigRow>,
+): Promise<TomoriConfigRow | null> {
+	try {
+		// Validate the partial data with Zod (Rule #7)
+		const validConfigData = tomoriConfigSchema.partial().parse(configData);
+
+		// Extract field names and values for the SQL query
+		const fields = Object.keys(validConfigData).filter(
+			(key) => key !== "tomori_id" && key !== "tomori_config_id",
+		);
+
+		if (fields.length === 0) {
+			log.warn(`No fields provided to update for tomori_id: ${tomoriId}`);
+			return null;
+		}
+
+		// Dynamically build the SQL SET clause
+		// 1. Prepare arrays for placeholders and values
+		const setParts: string[] = [];
+		// biome-ignore lint/suspicious/noExplicitAny: Using any[] to ensure compatibility with sql.unsafe's spread argument signature
+		const values: any[] = [];
+
+		// 2. Iterate through fields to build SET clause parts and collect values
+		fields.forEach((field, index) => {
+			// Use PostgreSQL standard placeholders ($1, $2, etc.)
+			setParts.push(`${field} = $${index + 1}`);
+			// Add the corresponding value to the values array
+			values.push(validConfigData[field as keyof typeof validConfigData]);
+		});
+
+		// 3. Join the SET parts
+		const setClause = setParts.join(", ");
+
+		// 4. Add the tomoriId as the last parameter for the WHERE clause
+		const finalPlaceholderIndex = values.length + 1;
+		values.push(tomoriId);
+
+		// 5. Execute the UPDATE using sql.unsafe() but with proper placeholders and arguments
+		// Bun's sql will correctly handle parameterization for different types (including arrays) here.
+		const result = await sql.unsafe(
+			`
+			UPDATE tomori_configs
+			SET ${setClause}
+			WHERE tomori_id = $${finalPlaceholderIndex}
+			RETURNING *
+		`,
+			...values, // Pass the values array directly with spreading
+		);
+
+		if (!result.length) {
+			const context: ErrorContext = {
+				tomoriId,
+				errorType: "DatabaseUpdateError",
+				metadata: {
+					operation: "updateTomoriConfig",
+					fields,
+				},
+			};
+			await log.error(
+				`No tomori_config found with tomori_id: ${tomoriId}`,
+				new Error("Config not found"),
+				context,
+			);
+			return null;
+		}
+
+		// Validate the returned data for type safety (Rule #5)
+		const updatedConfig = tomoriConfigSchema.safeParse(result[0]);
+		if (!updatedConfig.success) {
+			const context: ErrorContext = {
+				tomoriId,
+				errorType: "SchemaValidationError",
+				metadata: {
+					operation: "updateTomoriConfig",
+					validationErrors: updatedConfig.error.flatten(),
+				},
+			};
+			await log.error(
+				`Failed to validate updated config for tomori_id: ${tomoriId}`,
+				updatedConfig.error,
+				context,
+			);
+			return null;
+		}
+
+		return updatedConfig.data;
+	} catch (error) {
+		const context: ErrorContext = {
+			tomoriId,
+			errorType: "DatabaseUpdateError",
+			metadata: {
+				operation: "updateTomoriConfig",
+			},
+		};
+		await log.error(
+			`Error updating tomori_config for tomori_id: ${tomoriId}`,
+			error,
+			context,
+		);
+		return null;
+	}
+}
+
+/**
+ * Updates a Tomori record with partial data.
+ * Uses zod's .partial() schema for validation and SQL RETURNING for atomicity.
+ *
+ * @param tomoriId - The tomori_id to update
+ * @param tomoriData - Partial data to update (only specified fields will be changed)
+ * @returns The updated TomoriRow or null if update failed
+ */
+export async function updateTomori(
+	tomoriId: number,
+	tomoriData: Partial<TomoriRow>,
+): Promise<TomoriRow | null> {
+	try {
+		// Validate the partial data with Zod (Rule #7)
+		const validTomoriData = tomoriSchema.partial().parse(tomoriData);
+
+		// Extract field names and values for the SQL query
+		const fields = Object.keys(validTomoriData).filter(
+			(key) => key !== "tomori_id", // Exclude the primary key
+		);
+
+		if (fields.length === 0) {
+			log.warn(`No fields provided to update for tomori_id: ${tomoriId}`);
+			return null;
+		}
+
+		// 1. Prepare arrays for placeholders and values
+		const setParts: string[] = [];
+		// biome-ignore lint/suspicious/noExplicitAny: Using any[] to ensure compatibility with sql.unsafe's spread argument signature
+		const values: any[] = [];
+
+		// 2. Iterate through fields to build SET clause parts and collect values
+		fields.forEach((field, index) => {
+			setParts.push(`${field} = $${index + 1}`); // Use $1, $2, etc.
+			values.push(validTomoriData[field as keyof typeof validTomoriData]);
+		});
+
+		// 3. Join the SET parts
+		const setClause = setParts.join(", ");
+
+		// 4. Add the tomoriId as the last parameter for the WHERE clause
+		const finalPlaceholderIndex = values.length + 1;
+		values.push(tomoriId);
+
+		// 5. Execute the UPDATE using sql.unsafe() with placeholders and arguments
+		const result = await sql.unsafe(
+			`
+			UPDATE tomoris
+			SET ${setClause}
+			WHERE tomori_id = $${finalPlaceholderIndex}
+			RETURNING *
+		`,
+			...values, // Pass the values array directly spreading
+		);
+
+		if (!result.length) {
+			const context: ErrorContext = {
+				tomoriId,
+				errorType: "DatabaseUpdateError",
+				metadata: {
+					operation: "updateTomori",
+					fields,
+				},
+			};
+			await log.error(
+				`No tomori found with id: ${tomoriId}`,
+				new Error("Tomori not found"),
+				context,
+			);
+			return null;
+		}
+
+		// Validate the returned data for type safety
+		const updatedTomori = tomoriSchema.safeParse(result[0]);
+		if (!updatedTomori.success) {
+			const context: ErrorContext = {
+				tomoriId,
+				errorType: "SchemaValidationError",
+				metadata: {
+					operation: "updateTomori",
+					validationErrors: updatedTomori.error.flatten(),
+				},
+			};
+			await log.error(
+				`Failed to validate updated tomori for id: ${tomoriId}`,
+				updatedTomori.error,
+				context,
+			);
+			return null;
+		}
+
+		return updatedTomori.data;
+	} catch (error) {
+		const context: ErrorContext = {
+			tomoriId,
+			errorType: "DatabaseUpdateError",
+			metadata: {
+				operation: "updateTomori",
+			},
+		};
+		await log.error(
+			`Error updating tomori for id: ${tomoriId}`,
+			error,
+			context,
+		);
+		return null;
+	}
+}
+
+/**
+ * Updates a User record with partial data.
+ * Uses zod's .partial() schema for validation and SQL RETURNING for atomicity.
+ *
+ * @param userId - The user_id to update
+ * @param userData - Partial data to update (only specified fields will be changed)
+ * @returns The updated UserRow or null if update failed
+ */
+export async function updateUser(
+	userId: number,
+	userData: Partial<UserRow>,
+): Promise<UserRow | null> {
+	try {
+		// Validate the partial data with Zod (Rule #7)
+		const validUserData = userSchema.partial().parse(userData);
+
+		// Extract field names and values for the SQL query
+		const fields = Object.keys(validUserData).filter(
+			(key) => key !== "user_id", // Exclude the primary key
+		);
+
+		if (fields.length === 0) {
+			log.warn(`No fields provided to update for user_id: ${userId}`);
+			return null;
+		}
+
+		// 1. Prepare arrays for placeholders and values
+		const setParts: string[] = [];
+		// biome-ignore lint/suspicious/noExplicitAny: Using any[] to ensure compatibility with sql.unsafe's spread argument signature
+		const values: any[] = [];
+
+		// 2. Iterate through fields to build SET clause parts and collect values
+		fields.forEach((field, index) => {
+			setParts.push(`${field} = $${index + 1}`); // Use $1, $2, etc.
+			values.push(validUserData[field as keyof typeof validUserData]);
+		});
+
+		// 3. Join the SET parts
+		const setClause = setParts.join(", ");
+
+		// 4. Add the userId as the last parameter for the WHERE clause
+		const finalPlaceholderIndex = values.length + 1;
+		values.push(userId);
+
+		// 5. Execute the UPDATE using sql.unsafe() with placeholders and arguments
+		const result = await sql.unsafe(
+			`
+            UPDATE users
+            SET ${setClause}
+            WHERE user_id = $${finalPlaceholderIndex}
+            RETURNING *
+        `,
+			...values, // Spread the values array as arguments
+		);
+
+		if (!result.length) {
+			const context: ErrorContext = {
+				userId,
+				errorType: "DatabaseUpdateError",
+				metadata: {
+					operation: "updateUser",
+					fields,
+				},
+			};
+			await log.error(
+				`No user found with id: ${userId}`,
+				new Error("User not found"),
+				context,
+			);
+			return null;
+		}
+
+		// Validate the returned data for type safety
+		const updatedUser = userSchema.safeParse(result[0]);
+		if (!updatedUser.success) {
+			const context: ErrorContext = {
+				userId,
+				errorType: "SchemaValidationError",
+				metadata: {
+					operation: "updateUser",
+					validationErrors: updatedUser.error.flatten(),
+				},
+			};
+			await log.error(
+				`Failed to validate updated user for id: ${userId}`,
+				updatedUser.error,
+				context,
+			);
+			return null;
+		}
+
+		return updatedUser.data;
+	} catch (error) {
+		const context: ErrorContext = {
+			userId,
+			errorType: "DatabaseUpdateError",
+			metadata: {
+				operation: "updateUser",
+			},
+		};
+		await log.error(`Error updating user for id: ${userId}`, error, context);
+		return null;
 	}
 }

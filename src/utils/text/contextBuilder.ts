@@ -3,7 +3,6 @@ import { GatewayIntentBits } from "discord.js";
 import type { ContextSegment } from "../../types/misc/context"; // Import ContextSegment type
 import {
 	isBlacklisted, // Import blacklist checker
-	loadServerEmojis, // Import emoji loader
 	loadTomoriState,
 	loadUserRow,
 } from "../db/dbRead"; // Import session helpers
@@ -66,29 +65,41 @@ export async function convertMentions(
 				// --- User Mentions ---
 				if (match.startsWith("<@")) {
 					const cachedName = mentionCache.get(id);
-					if (cachedName) return `@${cachedName}`;
+					if (cachedName) return `${cachedName}`;
 					try {
 						// Check if this is Tomori herself
 						if (client.user && id === client.user.id && tomoriNickname) {
 							mentionCache.set(id, tomoriNickname);
-							return `@${tomoriNickname}`;
+							return `${tomoriNickname}`;
 						}
+
+						// Check if user is blacklisted
+						const isUserBlacklisted = await isBlacklisted(serverId, id);
 
 						// Otherwise process as normal user
 						const userData = await loadUserRow(id);
-						if (userData?.user_nickname) {
+
+						// If user is blacklisted, use Discord display name instead of custom nickname
+						if (isUserBlacklisted || !userData?.user_nickname) {
+							// Try getting user from cache first
+							const user = client.users.cache.get(id);
+							if (user) {
+								mentionCache.set(id, user.displayName);
+								return `${user.displayName}`;
+							}
+
+							// If not in cache, fetch the user
+							const fetchedUser = await client.users
+								.fetch(id)
+								.catch(() => null);
+							if (fetchedUser) {
+								mentionCache.set(id, fetchedUser.displayName);
+								return `${fetchedUser.displayName}`;
+							}
+						} else {
+							// User not blacklisted and has custom nickname
 							mentionCache.set(id, userData.user_nickname);
-							return `@${userData.user_nickname}`;
-						}
-						const user = client.users.cache.get(id);
-						if (user) {
-							mentionCache.set(id, user.username);
-							return `@${user.username}`;
-						}
-						const fetchedUser = await client.users.fetch(id).catch(() => null);
-						if (fetchedUser) {
-							mentionCache.set(id, fetchedUser.username);
-							return `@${fetchedUser.username}`;
+							return `${userData.user_nickname}`;
 						}
 					} catch (error) {
 						log.error(`Error resolving nickname for user ${id}: ${error}`);
@@ -124,11 +135,11 @@ export async function convertMentions(
 						const guild = client.guilds.cache.get(serverId);
 						const role = guild?.roles.cache.get(id);
 						if (role) {
-							return `${role.name}`;
+							return `@${role.name}`;
 						}
 						const fetchedRole = await guild?.roles.fetch(id).catch(() => null);
 						if (fetchedRole) {
-							return `${fetchedRole.name}`;
+							return `@${fetchedRole.name}`;
 						}
 					} catch (error) {
 						log.error(`Error resolving role mention ${id}: ${error}`);
@@ -184,6 +195,7 @@ export async function buildContext({
 	channelName,
 	client,
 	triggererName,
+	emojiStrings,
 }: {
 	guildId: string;
 	serverName: string;
@@ -194,6 +206,7 @@ export async function buildContext({
 	channelName: string;
 	client: Client;
 	triggererName: string;
+	emojiStrings?: string[];
 }): Promise<ContextSegment[]> {
 	const segments: ContextSegment[] = [];
 
@@ -204,8 +217,6 @@ export async function buildContext({
 		throw new Error(`Failed to load server state for guild ${guildId}`);
 	}
 	const botName = tomoriState.tomori_nickname || "Tomori";
-	// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees server_id exists
-	const internalServerId = tomoriState.server_id!;
 
 	// --- Segment 1: Server Description ---
 	let serverInfoContent = `You are ${botName}, currently in the Discord server named "${serverName}".\n`;
@@ -218,11 +229,7 @@ export async function buildContext({
 	});
 
 	// --- Segment 2: Emojis ---
-	const emojis = await loadServerEmojis(internalServerId);
-	if (emojis && emojis.length > 0) {
-		const emojiStrings = emojis.map(
-			(e) => `<${e.is_animated ? "a" : ""}:${e.emoji_name}:${e.emoji_disc_id}>`,
-		);
+	if (emojiStrings && emojiStrings.length > 0) {
 		// Declare with const inside the block to fix Biome lint error
 		const emojiContent = `${serverName}'s Emojis:\n${emojiStrings.join(", ")}.`;
 		const emojiUsage = `\nIn order to use ${serverName}'s Emojis, input the name and the code like such: <:name:numbercode>\nAnimated emojis require an 'a' flag in the beginning like such: <a:name:numbercode>\n`;
@@ -241,7 +248,7 @@ export async function buildContext({
 	) {
 		segments.push({
 			type: "memory",
-			content: `\n${botName}'s Memories about ${serverName}:\n${tomoriState.server_memories.join("\n")}`,
+			content: `\n${botName}'s Memories about ${serverName}:\n${tomoriState.server_memories.join("\n")}\n`,
 			order: 3, // Order 3
 		});
 	}
@@ -286,7 +293,9 @@ export async function buildContext({
 						if (member) {
 							// Register user with our centralized function
 							const serverLocale = guild.preferredLocale;
-							const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en";
+							const userLanguage = serverLocale.startsWith("ja")
+								? "ja"
+								: "en-US";
 							userRow = await registerUser(
 								userId,
 								member.displayName,

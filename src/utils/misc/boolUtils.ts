@@ -75,3 +75,12 @@ export function shouldBotReply(
 	// Reply if (it's a reply to the bot OR triggers are active) OR if the auto-message threshold is hit
 	return isReplyToBot || triggersActive || isAutoMsgHit;
 }
+
+/**
+ * Formats a boolean value into a user-friendly string ("Enabled" or "Disabled").
+ * @param value - The boolean value to format.
+ * @returns "Enabled" if true, "Disabled" if false.
+ */
+export function formatBoolean(value: boolean): string {
+	return value ? "Enabled" : "Disabled";
+}

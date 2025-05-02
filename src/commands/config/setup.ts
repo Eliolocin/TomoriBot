@@ -1,5 +1,4 @@
 import {
-	PermissionsBitField,
 	ActionRowBuilder,
 	TextInputStyle,
 	ModalBuilder,
@@ -20,10 +19,7 @@ import type {
 import { setupConfigSchema, tomoriPresetSchema } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import {
-	replyInfoEmbed,
-	replySummaryEmbed,
-} from "../../utils/discord/interactionHelper";
+import { replySummaryEmbed } from "../../utils/discord/interactionHelper";
 import { validateApiKey } from "../../providers/google";
 import { encryptApiKey } from "../../utils/security/crypto";
 import { setupServer } from "../../utils/db/dbWrite";
@@ -41,7 +37,7 @@ export const configureSubcommand = (
 	subcommand
 		.setName("setup")
 		.setDescription(
-			localizer("en", "commands.config.setup.command_description"),
+			localizer("en-US", "commands.config.setup.command_description"),
 		)
 		.setDescriptionLocalizations({
 			ja: localizer("ja", "commands.config.setup.command_description"),
@@ -49,36 +45,22 @@ export const configureSubcommand = (
 
 /**
  * Execute the setup command - guides users through the initial setup of TomoriBot for their server
- * @description Collects configuration and initializes TomoriBot's database state
+ * @param _client - Discord client instance
+ * @param interaction - Command interaction
+ * @param userData - User data from database
+ * @param locale - Locale of the interaction
  */
 export async function execute(
 	_client: Client,
 	interaction: ChatInputCommandInteraction,
 	userData: UserRow,
+	locale: string,
 ): Promise<void> {
 	// Ensure command is run in a guild
 	if (!interaction.guild || !interaction.channel) {
 		await interaction.reply({
-			content: localizer(userData.language_pref, "errors.guild_only"),
+			content: localizer(userData.language_pref, "general.errors.guild_only"),
 			flags: MessageFlags.Ephemeral,
-		});
-		return;
-	}
-
-	// Use userData.language_pref for consistent localization
-	const locale = userData.language_pref ?? interaction.guildLocale ?? "en";
-
-	// Check permissions again (belt-and-suspenders)
-	const memberPermissions = interaction.member?.permissions;
-	if (
-		!memberPermissions ||
-		!(memberPermissions instanceof PermissionsBitField) ||
-		!memberPermissions.has(PermissionsBitField.Flags.ManageGuild)
-	) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.setup.error_title",
-			descriptionKey: "commands.config.setup.no_permission",
-			color: ColorCode.ERROR,
 		});
 		return;
 	}
@@ -263,7 +245,10 @@ export async function execute(
 			} catch (error) {
 				log.error("Server setup failed:", error);
 				await submission.editReply({
-					content: localizer(locale, "commands.config.setup.setup_failed"),
+					content: localizer(
+						locale,
+						"commands.config.setup.setup_failed_description",
+					),
 				});
 				return;
 			}
@@ -299,12 +284,12 @@ export async function execute(
 		log.error("Error during setup process:", error);
 		if (!interaction.replied && !interaction.deferred) {
 			await interaction.reply({
-				content: localizer(locale, "general.errors.generic_error"),
+				content: localizer(locale, "general.errors.unknown_error_description"),
 				flags: MessageFlags.Ephemeral,
 			});
 		} else {
 			await interaction.followUp({
-				content: localizer(locale, "general.errors.generic_error"),
+				content: localizer(locale, "general.errors.unknown_error_description"),
 				flags: MessageFlags.Ephemeral,
 			});
 		}

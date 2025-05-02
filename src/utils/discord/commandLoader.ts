@@ -9,6 +9,8 @@ import {
 	type ApplicationCommandData,
 	type Client,
 	type ChatInputCommandInteraction,
+	PermissionsBitField,
+	InteractionContextType,
 } from "discord.js";
 import type { SlashCommandSubcommandBuilder } from "discord.js";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
@@ -22,6 +24,7 @@ export type CommandExecuteFunction = (
 	client: Client,
 	interaction: ChatInputCommandInteraction,
 	userData: UserRow,
+	locale: string,
 ) => Promise<void>;
 
 /**
@@ -38,6 +41,8 @@ export type CommandExecutionMap = Map<
  * Map for command cooldowns (category -> duration)
  */
 export type CommandCooldownMap = Map<string, number>;
+const GUILD_ONLY_CATEGORIES = ["config", "teach"];
+const MANAGER_ONLY_CATEGORIES = ["config"];
 
 /**
  * Loads all command modules, builds registration data and command maps
@@ -71,7 +76,7 @@ export async function loadCommandData(): Promise<{
 				// Initialize a new builder for this category
 				// Get category description from localizations (try to find 'commands.<category>.description')
 				const categoryDescription =
-					localizer("en", `commands.${categoryName}.description`) ||
+					localizer("en-US", `commands.${categoryName}.description`) ||
 					`${categoryName} commands`; // Fallback if no localization exists
 
 				const categoryLocalizationsMap: { [key: string]: string } = {};
@@ -84,6 +89,22 @@ export async function loadCommandData(): Promise<{
 				categoryBuilder = new SlashCommandBuilder()
 					.setName(categoryName)
 					.setDescription(categoryDescription);
+
+				// Apply specific settings for the 'config' command group (Rule 21)
+				// Category constants defined at the top for easy maintenance
+
+				if (GUILD_ONLY_CATEGORIES.includes(categoryName)) {
+					categoryBuilder.setContexts(InteractionContextType.Guild); // Disallow use in DMs
+					log.info(`Applied Guild Only Restriction to /${categoryName}`);
+				}
+				if (MANAGER_ONLY_CATEGORIES.includes(categoryName)) {
+					categoryBuilder.setDefaultMemberPermissions(
+						PermissionsBitField.Flags.ManageGuild,
+					); // Require Manage Guild permission
+					log.info(
+						`Applied ManageGuild permission requirement to /${categoryName}`,
+					);
+				}
 
 				// Add localizations if we have any
 				if (Object.keys(categoryLocalizationsMap).length > 0) {
