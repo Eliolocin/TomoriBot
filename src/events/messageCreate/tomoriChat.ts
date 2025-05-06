@@ -38,7 +38,9 @@ const HUMANIZE_INSTRUCTION =
 	"\nTry to limit yourself to only 0 to 2 emojis per response (from the available server emojis or kaomojis, if your personality uses those) and make sure to respond short and concisely, as a human would in public chatrooms. Only make lengthy responses if and only if a user is asking for assistance or an explanation that warrants it.";
 
 // Base trigger words that will always work (with or without spaces for English)
-const BASE_TRIGGER_WORDS = ["tomori", "トモリ", "ともり"];
+const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
+	(word) => word.trim(),
+) || ["tomori", "tomo", "トモリ", "ともり"];
 
 // Conversation reset markers
 const CONVERSATION_RESET_MARKERS = ["REFRESH", "refresh", "リフレッシュ"];
@@ -306,15 +308,19 @@ export default async function tomoriChat(
 		const serverName = guild.name;
 		const serverDescription = guild.description;
 
-		// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees server_id exists
-		const emojis = await loadServerEmojis(tomoriState.server_id!);
-		// Initialize emojiStrings as an empty array of strings
 		let emojiStrings: string[] = [];
-		if (emojis && emojis.length > 0) {
-			emojiStrings = emojis.map(
-				(e) =>
-					`<${e.is_animated ? "a" : ""}:${e.emoji_name}:${e.emoji_disc_id}>`,
-			);
+
+		if (tomoriState.config.emoji_usage_enabled) {
+			// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees server_id exists
+			const emojis = await loadServerEmojis(tomoriState.server_id!);
+			if (emojis && emojis.length > 0) {
+				// Initialize emojiStrings as an empty array of strings
+
+				emojiStrings = emojis.map(
+					(e) =>
+						`<${e.is_animated ? "a" : ""}:${e.emoji_name}:${e.emoji_disc_id}>`,
+				);
+			}
 		}
 
 		// 11. Build Context
@@ -397,7 +403,7 @@ export default async function tomoriChat(
 					],
 				},
 				// Tools are determined by the provider function now
-				tools: getGeminiTools(tomoriState.llm.llm_codename),
+				tools: getGeminiTools(tomoriState),
 			};
 
 			const promptString = contextSegments
@@ -430,6 +436,7 @@ export default async function tomoriChat(
 				responseText,
 				tomoriState.tomori_nickname,
 				emojiStrings,
+				tomoriState.config.emoji_usage_enabled,
 			);
 
 			if (sanitizedReply.length > 0) {

@@ -1,82 +1,187 @@
-import path from "node:path"; // Still needed for path.basename
-import { Glob } from "bun"; // Import Glob for finding files
-import type { Locales, LocalizerVariables } from "../../types/discord/global";
+import path from "node:path";
+import { Glob } from "bun";
+import type {
+	LocaleObject,
+	Locales,
+	LocaleValue,
+	LocalizerVariables,
+} from "../../types/discord/global";
 import { log } from "../misc/logger";
 
 // 1. Initialize locales object
 const locales: Locales = {};
-// Define the pattern for locale files relative to the project root
-const glob = new Glob("src/locales/*.json");
+let isInitialized = false; // Track initialization state
 
-// 2. Asynchronously load language files using Bun APIs
-// We wrap this in an immediately invoked async function to use await at the top level
-(async () => {
-	// Use Bun.glob to find all matching files
-	// Use for...of loop instead of forEach (Biome suggestion)
-	for await (const file of glob.scan(".")) {
-		// Get the locale name (e.g., 'en') from the filename
-		const locale: string = path.basename(file, ".json");
-		// Read the file content using Bun.file
-		const fileContent = Bun.file(file);
-		// Parse the JSON content
-		locales[locale] = await fileContent.json();
+/**
+ * Removes common indentation from multi-line strings.
+ * Allows for proper indentation in locale files without affecting output.
+ * @param str - The string to dedent
+ * @returns The dedented string with common leading whitespace removed
+ */
+function dedent(str: string): string {
+	// If string is empty or has only one line, return it as is
+	if (!str || !str.includes("\n")) return str;
+
+	// Split into lines
+	const lines = str.split("\n");
+
+	// Find first non-empty line to determine indent pattern
+	const firstNonEmptyLine = lines.find((line) => line.trim().length > 0);
+	if (!firstNonEmptyLine) return str; // All lines are empty
+
+	// Calculate common indent by counting leading spaces/tabs in first non-empty line
+	const match = firstNonEmptyLine.match(/^[ \t]+/);
+	if (!match) return str; // No common indent
+
+	const indent = match[0];
+	const indentRegex = new RegExp(`^${indent}`);
+
+	// Remove indent from all lines (except completely empty lines)
+	return lines
+		.map((line) =>
+			line.trim().length > 0 ? line.replace(indentRegex, "") : line,
+		)
+		.join("\n");
+}
+
+/**
+ * Initialize the localization system by loading all locale files.
+ * This must be called and awaited before using the localizer.
+ * @returns A promise that resolves when all locale files are loaded
+ */
+export async function initializeLocalizer(): Promise<void> {
+	if (isInitialized) {
+		return; // Already initialized
 	}
-	// Log loaded locales for verification during startup
-	log.success(`Loaded locales: [${Object.keys(locales)}]`);
-})();
+
+	try {
+		// Define the pattern for locale files
+		const glob = new Glob("src/locales/*.ts");
+
+		// Use Bun.glob to find all matching files
+		for await (const file of glob.scan(".")) {
+			// Get the locale name (e.g., 'en-US') from the filename
+			const locale: string = path.basename(file, ".ts");
+			try {
+				// Dynamically import the TypeScript module
+				const module = await import(path.resolve(file));
+				// Process all strings in the locale object to remove indentation
+				const processedLocale = processLocaleStrings(module.default);
+				// Assign the default export to the locales object
+				locales[locale] = processedLocale as LocaleObject;
+				log.info(`Loaded locale module: ${locale} from ${file}`);
+			} catch (importError) {
+				log.error(`Failed to import locale file: ${file}`, importError, {
+					errorType: "LocaleLoadError",
+					metadata: { file },
+				});
+			}
+		}
+
+		// Log loaded locales for verification during startup
+		if (Object.keys(locales).length > 0) {
+			log.success(
+				`Successfully loaded locales: [${Object.keys(locales).join(", ")}]`,
+			);
+			isInitialized = true;
+		} else {
+			log.warn("No locale files were loaded. Check the src/locales directory.");
+			throw new Error("No locale files were loaded");
+		}
+	} catch (globError) {
+		log.error("Error scanning for locale files", globError, {
+			errorType: "LocaleLoadError",
+		});
+		throw globError; // Re-throw to indicate initialization failure
+	}
+}
+
+/**
+ * Recursively processes an object, applying dedent to all string values
+ * @param obj - The object containing locale strings
+ * @returns A new object with all strings dedented
+ */
+function processLocaleStrings(obj: unknown): LocaleValue {
+	// 1. If it's a string, dedent it
+	if (typeof obj === "string") {
+		return dedent(obj);
+	}
+
+	// 2. If it's an object, process each value recursively
+	if (typeof obj === "object" && obj !== null) {
+		// Use LocaleObject type to match our type definition
+		const result: LocaleObject = {};
+
+		for (const [key, value] of Object.entries(obj)) {
+			result[key] = processLocaleStrings(value);
+		}
+
+		return result;
+	}
+
+	// 3. For any other type (unlikely in locale files), convert to string
+	return String(obj);
+}
 
 /**
  * Get a localized string for a specific key.
- * @param locale - The locale code (e.g., 'en', 'ja').
- * @param key - The key path from the JSON files (e.g., 'commands.deposit.success').
+ * @param locale - The locale code (e.g., 'en-US', 'ja').
+ * @param key - The key path from the locale object (e.g., 'commands.help.apikey.title').
  * @param variables - Key-value pairs to replace placeholders in the localized string.
  * @returns The localized string, or the key itself if not found.
  */
-const localizer = (
+export const localizer = (
 	locale: string,
 	key: string,
 	variables: LocalizerVariables = {},
 ): string => {
-	// Check if the locale exists, if not default to "en-US" or "en" as fallback
+	// Check if localization system is initialized
+	if (!isInitialized) {
+		log.warn(`Localization system not initialized when requesting key: ${key}`);
+		return key;
+	}
+
+	// Determine the locale to use, falling back to 'en-US'
 	const fallbackLocale = "en-US";
+	// Check if the specific locale exists, otherwise use the fallback
 	const usedLocale = locales[locale] ? locale : fallbackLocale;
 
-	// 1. Split the key into parts (e.g., 'commands.tool.ping.description' -> ['tool', 'ping', 'description'])
+	// If even the fallback locale isn't loaded, return the key immediately
+	if (!locales[usedLocale]) {
+		// Log a warning if this happens, as it indicates a loading issue
+		log.warn(`Locale '${usedLocale}' not loaded. Returning key: ${key}`);
+		return key;
+	}
+
+	// 1. Split the key into parts
 	const keys: string[] = key.split(".");
-	// 2. Start with the top-level object for the requested locale, typed as unknown for safety
+	// 2. Start with the top-level object for the used locale
 	let translation: unknown = locales[usedLocale];
 
 	// 3. Traverse the locale object using the key parts
 	for (const k of keys) {
-		// Check if the current level is a valid object and contains the next key
 		if (
-			typeof translation !== "object" || // Ensure it's an object
-			translation === null || // Ensure it's not null
-			!Object.prototype.hasOwnProperty.call(translation, k) // Ensure the key exists
+			typeof translation !== "object" ||
+			translation === null ||
+			!Object.prototype.hasOwnProperty.call(translation, k)
 		) {
-			// If the path is invalid, return the original key as a fallback
+			// If path is invalid, return the key
 			return key;
 		}
-		// Move to the next level, casting to Record<string, unknown> after check
 		translation = (translation as Record<string, unknown>)[k];
 	}
 
-	// 4. After traversing, check if the final value is a string
+	// 4. Check if the final value is a string
 	if (typeof translation !== "string") {
-		// If the final value isn't a string (e.g., it's an object because the key was too short), return the key
 		return key;
 	}
 
-	// 5. Replace placeholders like {variable_name} with values from the variables object
-	let result: string = translation; // Now we know translation is a string
-	// Use for...of for iterating over object entries
+	// 5. Replace placeholders
+	let result: string = translation as string;
 	for (const [placeholder, value] of Object.entries(variables)) {
-		// Use a RegExp for global replacement just in case a placeholder appears multiple times
 		result = result.replace(new RegExp(`{${placeholder}}`, "g"), String(value));
 	}
 
-	// 6. Return the final localized and formatted string
+	// 6. Return the final string
 	return result;
 };
-
-export { localizer };

@@ -516,17 +516,6 @@ function addTextSegment(
 	return segmentedChunk;
 }
 
-// This matches anything inside <> that contains at least one colon
-// Could be <:name:id>, <a:name:id>, or any malformed variant
-// const EMOJI_ATTEMPT_PATTERN = /<(a?):?([^:>]+):?([^>]*)>/g;
-
-/**
- * Cleans raw LLM output for Discord display
- * @param text - Raw text from LLM
- * @param botName - Optional bot name to remove from response
- * @param emojiStrings - Array of properly formatted Discord emoji strings
- * @returns Cleaned text suitable for Discord messages
- */
 /**
  * Cleans raw LLM output for Discord display
  * @param text - Raw text from LLM
@@ -538,22 +527,33 @@ export function cleanLLMOutput(
 	text: string,
 	botName?: string,
 	emojiStrings?: string[],
+	emojiUsageEnabled = true, // New parameter, defaults to true
 ): string {
 	// 1. Basic whitespace and separator cleanup
+	if (text.startsWith("```") || text.endsWith("```")) return text;
 	let cleanedText = text
 		.replace(/\n{3,}/g, "\n\n")
 		.replace(/<\|im_end\|>(\s*)$/, "")
-		.replace(/<\|file_separator\|>(\s*)$/, "")
+		.replace(/<\|file_separator\|>(\s*)$/, "") // Old Gemini bug when using inline markers
+		// Replace bold/italic markers around angle brackets that can break emoji syntax
+		.replace(/\*\*<(.*?)>\*\*/g, "<$1>") // Bold **<emoji>**
+		.replace(/\*<(.*?)>\*/g, "<$1>") // Italic *<emoji>*
+		.replace(/<([a-zA-Z0-9_]+)>[\s\S]*?<\/\1>/g, "")
 		.trim();
 
 	// 2. Emoji handling, only if we have a list of valid emojis
-	if (emojiStrings && emojiStrings.length > 0) {
+	if (emojiUsageEnabled === false)
+		cleanedText = cleanedText.replace(/<(a?):[^:]+:[^>]+>/g, "");
+	else if (emojiStrings && emojiStrings.length > 0) {
 		// 2.1 Build a set of exact valid emoji strings
 		const validEmojiSet = new Set(emojiStrings);
 
 		// 2.2 Build a map from emoji name → its correct full format
 		const emojiNameMap = new Map<string, string>();
 		for (const emoji of emojiStrings) {
+			// This matches anything inside <> that contains at least one colon
+			// Could be <:name:id>, <a:name:id>, or any malformed variant
+			// const EMOJI_ATTEMPT_PATTERN = /<(a?):?([^:>]+):?([^>]*)>/g;
 			const m = emoji.match(/<(a?):([^:]+):([^>]+)>/);
 			if (m) {
 				const [, , name] = m;

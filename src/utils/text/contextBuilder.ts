@@ -43,7 +43,7 @@ export async function convertMentions(
 	const matches = Array.from(text.matchAll(mentionPattern));
 
 	// Load Tomori's state for her nickname if needed
-	let tomoriNickname: string | null = "Tomori";
+	let tomoriNickname: string | null = process.env.DEFAULT_BOTNAME || "Tomori";
 	const tomoriState = await loadTomoriState(serverId);
 	if (tomoriState?.tomori_nickname) {
 		tomoriNickname = tomoriState.tomori_nickname;
@@ -216,12 +216,13 @@ export async function buildContext({
 		log.error(`buildContext: Failed to load TomoriState for guild ${guildId}.`);
 		throw new Error(`Failed to load server state for guild ${guildId}`);
 	}
-	const botName = tomoriState.tomori_nickname || "Tomori";
+	const botName =
+		tomoriState.tomori_nickname || process.env.DEFAULT_BOTNAME || "Tomori";
 
 	// --- Segment 1: Server Description ---
-	let serverInfoContent = `You are ${botName}, currently in the Discord server named "${serverName}".\n`;
+	let serverInfoContent = `# Knowledge Base\n${botName} is currently in the Discord server named "${serverName}".\n`;
 	if (serverDescription)
-		serverInfoContent += `${serverName}'s Description: ${serverDescription}`;
+		serverInfoContent += `## ${serverName}'s Description\n${serverDescription}`;
 	segments.push({
 		type: "preamble",
 		content: serverInfoContent,
@@ -231,7 +232,7 @@ export async function buildContext({
 	// --- Segment 2: Emojis ---
 	if (emojiStrings && emojiStrings.length > 0) {
 		// Declare with const inside the block to fix Biome lint error
-		const emojiContent = `${serverName}'s Emojis:\n${emojiStrings.join(", ")}.`;
+		const emojiContent = `## ${serverName}'s Emojis\n${emojiStrings.join(", ")}.`;
 		const emojiUsage = `\nIn order to use ${serverName}'s Emojis, input the name and the code like such: <:name:numbercode>\nAnimated emojis require an 'a' flag in the beginning like such: <a:name:numbercode>\n`;
 		segments.push({
 			type: "preamble",
@@ -248,7 +249,7 @@ export async function buildContext({
 	) {
 		segments.push({
 			type: "memory",
-			content: `\n${botName}'s Memories about ${serverName}:\n${tomoriState.server_memories.join("\n")}\n`,
+			content: `\n## ${botName}'s Memories about ${serverName}\n${tomoriState.server_memories.join("\n")}\n`,
 			order: 3, // Order 3
 		});
 	}
@@ -354,14 +355,21 @@ export async function buildContext({
 					log.info(
 						`Adding ${userRow.personal_memories.length} memories for ${userNickname}`,
 					);
-					personalMemoriesContent += `${botName}'s Memories about ${userNickname}:\n${userRow.personal_memories.join("\n")}\n`;
+					personalMemoriesContent += `## ${botName}'s Memories about ${userNickname}\n${userRow.personal_memories.join("\n")}\n`;
+					personalMemoriesContent = replaceTemplateVariables(
+						personalMemoriesContent,
+						{
+							bot: botName,
+							user: userNickname,
+						},
+					);
 				} else {
 					log.info(`No personal memories found for ${userNickname}`);
 				}
 
 				// Always add status information for non-blacklisted users
 				log.info(`Adding status information for ${userNickname}`);
-				personalMemoriesContent += `${userNickname}'s current status: ${presenceInfo}\n\n`;
+				personalMemoriesContent += `### ${userNickname}'s current status\n${presenceInfo}\n\n`;
 			}
 		}
 
@@ -387,9 +395,9 @@ export async function buildContext({
 	}
 
 	// --- Segment 5: Current Context (Time, Channel) ---
-	let currentContextContent = `\nCurrent Time: ${getCurrentTime()}.\n${botName} is currently in text channel #${channelName}.`;
+	let currentContextContent = `\n# Current Context\nCurrent Time: ${getCurrentTime()}.\n${botName} is currently in text channel #${channelName}.`;
 	if (channelDesc) {
-		currentContextContent += `\n${channelName}'s Description: ${channelDesc}\n`;
+		currentContextContent += ` ${channelDesc}\n`;
 	}
 	segments.push({
 		type: "preamble",
@@ -484,7 +492,7 @@ async function getUserPresenceDetails(
 		const member = await guild.members
 			.fetch({ user: userId, force: true })
 			.catch((error) => {
-				log.warn(`Failed to fetch member ${userId}: ${error.message}`);
+				log.warn(`Failed to fetch member ${userId}: ${error}`);
 				return null;
 			});
 

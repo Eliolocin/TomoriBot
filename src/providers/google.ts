@@ -7,6 +7,7 @@ import {
 } from "@google/genai";
 import { type GeminiConfig, GeminiConfigSchema } from "../types/api/gemini";
 import { log } from "../utils/misc/logger";
+import type { TomoriState } from "@/types/db/schema";
 
 // Default values for Gemini API
 const DEFAULT_MODEL = "gemini-2.5-flash-preview-04-17";
@@ -110,7 +111,8 @@ export async function generateGeminiResponse(
 			log.info(
 				`Generating content with model ${validatedConfig.model || DEFAULT_MODEL} and config: ${JSON.stringify(requestConfig, null, 2)}`,
 			);
-			log.info(`Prompt: ${prompt}`); // Log prompt separately for clarity
+			log.section("Full Prompt");
+			log.info(`${prompt}`); // Log prompt separately for clarity
 
 			// const response = await model.generateContent(prompt, requestConfig);
 			const response = await genAI.models.generateContent({
@@ -241,10 +243,11 @@ export async function generateGeminiResponse(
  * @returns The tools configuration array for Gemini
  */
 export function getGeminiTools(
-	modelName: string,
+	tomoriState: TomoriState,
 ): Array<Record<string, unknown>> {
+	const tools: Array<Record<string, unknown>> = [];
 	// Convert to lowercase for case-insensitive comparison
-	const modelNameLower = modelName.toLowerCase();
+	const modelNameLower = tomoriState.llm.llm_codename.toLowerCase();
 
 	// Check if the model supports function calling/tools (most recent models do)
 	// Gemini 1.5 Flash/Pro and newer generally support search/retrieval
@@ -255,13 +258,20 @@ export function getGeminiTools(
 		modelNameLower.includes("flash") &&
 		(modelNameLower.includes("2.5") || modelNameLower.includes("2.0"))
 	) {
-		return [{ googleSearch: {} }];
+		tools.push({ googleSearch: {} });
 	}
 
-	// 2. Pro models with advanced retrieval
-	/*
+	if (tomoriState.config.sticker_usage_enabled)
+		if (tools.length <= 0)
+			// Default: no tools for older or unrecognized models
+			log.info(`No specific tools enabled for model: ${modelNameLower}`);
+	return tools;
+}
+
+// 2. Pro models with advanced retrieval
+/*
 	if (modelNameLower.includes("pro") && modelNameLower.includes("2.5")) {
-		return [
+		tools.push(
 			{
 				googleSearchRetrieval: {
 					dynamicRetrievalConfig: {
@@ -270,9 +280,5 @@ export function getGeminiTools(
 					},
 				},
 			},
-		];
+		);
 	}*/
-	// Default: no tools for older or unrecognized models
-	log.info(`No specific tools enabled for model: ${modelName}`);
-	return [];
-}

@@ -10,6 +10,8 @@ import type {
 	ApplicationCommandOptionData,
 	ApplicationCommandOptionType,
 	ChatInputCommandInteraction,
+	GuildEmoji,
+	Sticker,
 } from "discord.js";
 import type { UserRow } from "../db/schema";
 
@@ -61,8 +63,7 @@ export interface EventFile {
 
 export type EventFunction = (
 	client: Client,
-	arg1?: EventArg,
-	arg2?: EventArg,
+	...args: EventArg[] // Use rest parameters for flexibility across different events
 ) => Promise<void>;
 
 export type EventArg =
@@ -72,20 +73,20 @@ export type EventArg =
 	| Guild
 	| GuildMember
 	| Interaction
-	| Message;
+	| Message
+	| GuildEmoji
+	| Sticker;
+
+// i18n
+export interface LocaleObject {
+	[key: string]: LocaleValue;
+}
+
+export type LocaleValue = string | LocaleObject;
 
 export interface Locales {
-	[key: string]: {
-		[key: string]: string;
-	};
+	[locale: string]: LocaleObject;
 }
-
 export interface LocalizerVariables {
 	[key: string]: string | number | boolean;
-}
-
-export enum TeachPerms {
-	CHANNEL_MANAGER = "chmanager",
-	PRICED = "priced",
-	FREE = "free",
 }

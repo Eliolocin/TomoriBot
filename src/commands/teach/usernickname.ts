@@ -9,46 +9,37 @@ import {
 	userSchema,
 	type UserRow,
 	type ErrorContext,
-	type TomoriState, // Import TomoriRow type
+	type TomoriState,
 } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import { loadTomoriState } from "../../utils/db/dbRead"; // Import loadTomoriState
+import { loadTomoriState } from "../../utils/db/dbRead";
 
 // Rule 20: Constants for static values at the top
 const NICKNAME_MIN_LENGTH = 2;
 const NICKNAME_MAX_LENGTH = 32;
 
-// Rule 21: Configure the subcommand
+// Rule 21: Configure the subcommand (Using updated localization keys)
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("personalnickname")
+		.setName("usernickname") // Keep name simple as per refactor
 		.setDescription(
-			localizer("en-US", "commands.teach.personalnickname.command_description"),
+			localizer("en-US", "commands.teach.usernickname.command_description"),
 		)
 		.setDescriptionLocalizations({
-			ja: localizer(
-				"ja",
-				"commands.teach.personalnickname.command_description",
-			),
+			ja: localizer("ja", "commands.teach.usernickname.command_description"),
 		})
 		.addStringOption((option) =>
 			option
 				.setName("name")
 				.setDescription(
-					localizer(
-						"en-US",
-						"commands.teach.personalnickname.option_description",
-					),
+					localizer("en-US", "commands.teach.usernickname.option_description"),
 				)
 				.setDescriptionLocalizations({
-					ja: localizer(
-						"ja",
-						"commands.teach.personalnickname.option_description",
-					),
+					ja: localizer("ja", "commands.teach.usernickname.option_description"),
 				})
 				.setRequired(true)
 				.setMinLength(NICKNAME_MIN_LENGTH)
@@ -57,7 +48,7 @@ export const configureSubcommand = (
 
 /**
  * Rule 1: JSDoc comment for exported function
- * Updates how Tomori refers to the user
+ * Updates how Tomori refers to the user.
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -80,62 +71,69 @@ export async function execute(
 		return;
 	}
 
+	let tomoriState: TomoriState | null = null; // Define outside for catch block
+
 	try {
+		// 1. Defer reply early (Ephemeral)
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-		// 1. Get the new nickname from the command options
+
+		// 2. Get the new nickname from the command options
 		const newNickname = interaction.options.getString("name", true);
 
-		// 2. Validate nickname length (redundant check, Discord handles this, but good for safety)
+		// 3. Validate nickname length (redundant check, Discord handles this, but good for safety)
 		if (
 			newNickname.length < NICKNAME_MIN_LENGTH ||
 			newNickname.length > NICKNAME_MAX_LENGTH
 		) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.personalnickname.invalid_length_title",
-				descriptionKey: "commands.teach.personalnickname.invalid_length",
+				titleKey: "commands.teach.usernickname.invalid_length_title",
+				descriptionKey: "commands.teach.usernickname.invalid_length",
 				descriptionVars: {
 					min: NICKNAME_MIN_LENGTH.toString(),
 					max: NICKNAME_MAX_LENGTH.toString(),
 				},
 				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
+				// No flags needed, already deferred
 			});
 			return;
 		}
 
-		// 3. Defer reply to indicate processing
-		await interaction.deferReply({ ephemeral: true });
-
 		// 4. Load server's Tomori state to check personalization setting
-		const tomoriState: TomoriState | null = await loadTomoriState(
-			interaction.guild.id,
-		);
+		tomoriState = await loadTomoriState(interaction.guild.id);
 
-		// 5. Store the old nickname for the success message
+		// 5. Check if Tomori is set up (needed for config check)
+		if (!tomoriState) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.not_setup_title",
+				descriptionKey: "general.errors.not_setup_description",
+				color: ColorCode.ERROR,
+				// No flags needed
+			});
+			return;
+		}
+
+		// 6. Store the old nickname for the success message
 		const oldNickname = userData.user_nickname;
 
-		// 6. Update the user's nickname in the database using Bun SQL
-
+		// 7. Update the user's nickname in the database using Bun SQL
 		const [updatedResult] = await sql`
             UPDATE users
             SET user_nickname = ${newNickname}
-            WHERE user_id = ${
-							// biome-ignore lint/style/noNonNullAssertion: <explanation>
-							userData.user_id!
-						}
+            WHERE user_id = ${userData.user_id}
             RETURNING *
         `;
 
-		// 7. Validate the result from the database
+		// 8. Validate the result from the database
 		const validationResult = userSchema.safeParse(updatedResult);
 
 		if (!validationResult.success) {
 			const context: ErrorContext = {
 				userId: userData.user_id,
-				serverId: tomoriState?.server_id, // Include server ID if available
+				serverId: tomoriState.server_id, // Include server ID
+				tomoriId: tomoriState.tomori_id, // Include tomori ID
 				errorType: "DatabaseValidationError",
 				metadata: {
-					command: "teach personalnickname",
+					command: "teach usernickname",
 					userDiscordId: interaction.user.id,
 					newNickname,
 					validationErrors: validationResult.error.issues,
@@ -151,46 +149,71 @@ export async function execute(
 				titleKey: "general.errors.update_failed_title",
 				descriptionKey: "general.errors.update_failed_description",
 				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
+				// No flags needed
 			});
 			return;
 		}
 
+		// 9. Check if personalization is disabled on this server and prepare message
+		let descriptionKey = "commands.teach.usernickname.success_description";
+		let embedColor = ColorCode.SUCCESS;
+
+		// Assuming 'personalization_enabled' is the single config key
+		// biome-ignore lint/style/noNonNullAssertion: tomoriState checked earlier
+		if (!tomoriState!.config.personal_memories_enabled) {
+			descriptionKey =
+				"commands.teach.usernickname.success_but_disabled_description"; // Use the warning description
+			embedColor = ColorCode.WARN; // Use warning color
+		}
+
 		// 10. Success! Show the nickname change (with potential warning)
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.teach.personalnickname.success_title",
-			descriptionKey: "commands.teach.personalnickname.success_description", // Use the potentially modified description
+			titleKey: "commands.teach.usernickname.success_title",
+			descriptionKey: descriptionKey, // Use the determined description key
 			descriptionVars: {
 				old_nickname: oldNickname,
 				new_nickname: newNickname,
 			},
-			color: ColorCode.SUCCESS,
-			flags: MessageFlags.Ephemeral,
+			color: embedColor, // Use the determined color
+			// No flags needed
 		});
 	} catch (error) {
 		// Rule 22: Log error with context
 		const context: ErrorContext = {
 			userId: userData.user_id,
+			serverId: tomoriState?.server_id, // Use optional chaining
+			tomoriId: tomoriState?.tomori_id, // Use optional chaining
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "teach personalnickname",
+				command: "teach usernickname",
 				userDiscordId: interaction.user.id,
-				guildId: interaction.guild?.id, // Add guild ID for context
+				guildId: interaction.guild?.id,
 			},
 		};
-		await log.error("Error in /teach personalnickname command", error, context);
+		await log.error("Error in /teach usernickname command", error, context);
 
 		// Rule 12 & 19: Use helper for unknown error embed
-		if (interaction.replied || interaction.deferred) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.unknown_error_title",
-				descriptionKey: "general.errors.unknown_error_description",
-				color: ColorCode.ERROR,
-				flags: MessageFlags.Ephemeral,
-			});
+		// Use followUp since we deferred initially
+		if (interaction.deferred || interaction.replied) {
+			try {
+				await interaction.followUp({
+					// Use followUp
+					content: localizer(
+						locale,
+						"general.errors.unknown_error_description",
+					),
+					flags: MessageFlags.Ephemeral,
+				});
+			} catch (followUpError) {
+				log.error(
+					"Failed to send follow-up error message in usernickname catch block",
+					followUpError,
+				);
+			}
 		} else {
+			// This case should be rare after initial deferReply
 			log.warn(
-				"Interaction was not replied or deferred, cannot send error message to user.",
+				"Interaction was not replied or deferred in usernickname catch block, cannot send error message.",
 				context,
 			);
 		}

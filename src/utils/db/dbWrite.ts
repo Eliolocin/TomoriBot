@@ -201,7 +201,9 @@ export async function setupServer(
 			`;
 			*/
 
-			const defaultTriggers = ["tomori", "tomo", "ともり", "トモリ"];
+			const defaultTriggers = process.env.BASE_TRIGGER_WORDS?.split(",").map(
+				(word) => word.trim(),
+			) || ["tomori", "tomo", "トモリ", "ともり"];
 
 			// 1. Create or update server record with RETURNING (Rule 15)
 			const [server] = await tx`
@@ -286,6 +288,54 @@ export async function setupServer(
 			`;
 				emojis.push(row);
 			}
+
+			// 5. Register guild stickers
+			log.info(`Registering stickers for server ${server.server_id}`);
+			const stickerValues = Array.from(guild.stickers.cache.values()).map(
+				(s) => ({
+					sticker_disc_id: s.id,
+					sticker_name: s.name,
+					sticker_desc: s.description ?? "",
+					emotion_key: "unset",
+					// is_animated: s.format === StickerFormatType.Lottie, // Remove this line
+					sticker_format: s.format, // Store the actual format type enum value
+				}),
+			);
+
+			const stickers = [];
+			for (const {
+				sticker_disc_id,
+				sticker_name,
+				sticker_desc,
+				emotion_key,
+				// is_animated, // Remove from destructuring
+				sticker_format, // Add to destructuring
+			} of stickerValues) {
+				const [row] = await tx`
+                    INSERT INTO server_stickers (
+                        server_id,
+                        sticker_disc_id,
+                        sticker_name,
+                        sticker_desc,
+                        emotion_key,
+                        sticker_format -- Add to INSERT
+                        -- is_global defaults to false in DB schema
+                    ) VALUES (
+                        ${server.server_id},
+                        ${sticker_disc_id},
+                        ${sticker_name},
+                        ${sticker_desc},
+                        ${emotion_key},
+                        ${sticker_format} -- Add value
+                    )
+                    ON CONFLICT (server_id, sticker_disc_id) DO NOTHING
+                    RETURNING *
+                `;
+				if (row) {
+					stickers.push(row);
+				}
+			}
+			log.info(`Finished registering ${stickers.length} stickers.`);
 
 			// Return all created records
 			return {

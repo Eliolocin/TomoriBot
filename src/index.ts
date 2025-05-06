@@ -4,6 +4,7 @@ import { sql } from "bun";
 import { log } from "./utils/misc/logger";
 import path from "node:path";
 import eventHandler from "./handlers/eventHandler";
+import { initializeLocalizer } from "./utils/text/localizer";
 
 config();
 
@@ -27,6 +28,7 @@ const client = new Client({
 		GatewayIntentBits.GuildVoiceStates,
 		GatewayIntentBits.DirectMessages,
 		GatewayIntentBits.GuildMessageReactions,
+		GatewayIntentBits.GuildExpressions,
 	],
 	partials: [Partials.Channel, Partials.Message],
 });
@@ -106,6 +108,11 @@ if (!postgresUrl) {
 		// process.exit(1);
 	}
 }
+
+// Initialize localization first
+log.section("Initializing Locales...");
+await initializeLocalizer();
+
 // Starts the event handler, which also runs important 'ready' functions
 // such as registering or updating of commands upon startup
 eventHandler(client);

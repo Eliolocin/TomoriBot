@@ -1,3 +1,4 @@
+import { StickerFormatType } from "discord.js";
 import { z } from "zod";
 
 export const userSchema = z.object({
@@ -60,6 +61,8 @@ export const tomoriConfigSchema = z.object({
 	self_teaching_enabled: z.boolean().default(true),
 	personal_memories_enabled: z.boolean().default(true),
 	humanizer_degree: z.number().default(1),
+	emoji_usage_enabled: z.boolean().default(true), // Added May 5, 2025
+	sticker_usage_enabled: z.boolean().default(true), // Added May 5, 2025
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
@@ -99,7 +102,10 @@ export const serverStickerSchema = z.object({
 	sticker_desc: z.string().default(""),
 	emotion_key: z.string(),
 	is_global: z.boolean().default(false),
-	is_animated: z.boolean().default(false),
+	//is_animated: z.boolean().default(false),
+	sticker_format: z
+		.nativeEnum(StickerFormatType)
+		.default(StickerFormatType.PNG),
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
@@ -145,7 +151,7 @@ export type ErrorLogRow = z.infer<typeof errorLogSchema>;
 export interface ErrorContext {
 	tomoriId?: number | null;
 	userId?: number | null;
-	serverId?: number | null;
+	serverId?: number | string | null;
 	errorType?: string;
 	metadata?: Record<string, unknown> | null;
 }

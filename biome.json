@@ -11,5 +11,17 @@
 		}
 	},
 	"javascript": { "formatter": { "quoteStyle": "double" } },
-	"json": { "formatter": { "enabled": true, "indentStyle": "tab" } }
+	"json": { "formatter": { "enabled": true, "indentStyle": "tab" } },
+	"overrides": [
+		{
+			"include": ["src/locales/**/*.ts"],
+			"linter": {
+				"rules": {
+					"style": {
+						"noUnusedTemplateLiteral": "off"
+					}
+				}
+			}
+		}
+	]
 }

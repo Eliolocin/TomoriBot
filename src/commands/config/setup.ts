@@ -19,10 +19,14 @@ import type {
 import { setupConfigSchema, tomoriPresetSchema } from "../../types/db/schema";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import { replySummaryEmbed } from "../../utils/discord/interactionHelper";
+import {
+	replyInfoEmbed,
+	replySummaryEmbed,
+} from "../../utils/discord/interactionHelper";
 import { validateApiKey } from "../../providers/google";
 import { encryptApiKey } from "../../utils/security/crypto";
 import { setupServer } from "../../utils/db/dbWrite";
+import { loadTomoriState } from "@/utils/db/dbRead";
 
 // Define constants at the top (Rule #20)
 const MODAL_TIMEOUT_MS = 300000; // 5 minutes
@@ -66,6 +70,20 @@ export async function execute(
 	}
 
 	try {
+		// 2. Check if Tomori already exists for this server - NEW CHECK
+		const existingTomoriState = await loadTomoriState(interaction.guild.id);
+
+		// 3. If Tomori already exists, inform user and exit early
+		if (existingTomoriState) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.config.setup.already_setup_title",
+				descriptionKey: "commands.config.setup.already_setup_description",
+				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
 		// First, load available presets for the server's locale (or fallback to English)
 		// This helps us create an informative placeholder showing available options
 		const presetRows = await sql`
@@ -224,7 +242,10 @@ export async function execute(
 				encryptedApiKey: encryptedKey,
 				presetId: selectedPresetId,
 				humanizer: humanizerValue,
-				tomoriName: locale === "ja" ? "ともり" : "Tomori", // Default name
+				tomoriName:
+					locale === "ja"
+						? process.env.DEFAULT_BOTNAME_JP || "ともり" // Use environment variable with fallback
+						: process.env.DEFAULT_BOTNAME || "Tomori", // Use environment variable with fallback
 				locale,
 			};
 
@@ -269,7 +290,10 @@ export async function execute(
 					},
 					{
 						nameKey: "commands.config.setup.name_field",
-						value: locale === "ja" ? "ともり" : "Tomori",
+						value:
+							locale === "ja"
+								? process.env.DEFAULT_BOTNAME_JP || "ともり" // Use environment variable with fallback
+								: process.env.DEFAULT_BOTNAME || "Tomori", // Use environment variable with fallback
 					},
 				],
 			});

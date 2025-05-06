@@ -47,6 +47,31 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Create a function to drop columns if they exist (idempotent)
+CREATE OR REPLACE FUNCTION drop_column_if_exists(
+    _table TEXT,
+    _column TEXT
+) RETURNS VOID AS $$
+DECLARE
+    _column_exists BOOLEAN;
+BEGIN
+    -- Check if the column exists
+    SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = _table
+        AND column_name = _column
+    ) INTO _column_exists;
+
+    -- If it exists, drop it
+    IF _column_exists THEN
+        EXECUTE format('ALTER TABLE %I DROP COLUMN %I',
+                     _table, _column);
+        RAISE NOTICE 'Dropped column %.%', _table, _column;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TABLE IF NOT EXISTS servers (
   server_id SERIAL PRIMARY KEY,
   server_disc_id TEXT UNIQUE NOT NULL,
@@ -122,6 +147,10 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   FOREIGN KEY (llm_id) REFERENCES llms(llm_id) ON DELETE RESTRICT
 );
 
+-- Add columns for emoji and sticker usage permissions (May 5, 2025)
+SELECT add_column_if_not_exists('tomori_configs', 'emoji_usage_enabled', 'BOOLEAN', 'true');
+SELECT add_column_if_not_exists('tomori_configs', 'sticker_usage_enabled', 'BOOLEAN', 'true');
+
 -- Create updated_at trigger for tomori_configs table
 DROP TRIGGER IF EXISTS update_tomori_configs_timestamp ON tomori_configs;
 CREATE TRIGGER update_tomori_configs_timestamp
@@ -177,12 +206,15 @@ CREATE TABLE IF NOT EXISTS server_stickers (
   sticker_desc TEXT DEFAULT '',
   emotion_key TEXT NOT NULL, -- e.g. "happy", "smug", "embarrassed"
   is_global BOOLEAN DEFAULT false, -- If sticker is a Tomori global
-  is_animated BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (server_id, sticker_disc_id),
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
 );
+
+SELECT add_column_if_not_exists('server_stickers', 'sticker_format', 'INT', '1'); -- Default to PNG (1)
+-- Drop the old is_animated column from server_stickers (May 5, 2025)
+SELECT drop_column_if_exists('server_stickers', 'is_animated');
 
 -- Create updated_at trigger for server_stickers table
 DROP TRIGGER IF EXISTS update_server_stickers_timestamp ON server_stickers;

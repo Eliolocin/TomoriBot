@@ -28,23 +28,17 @@ export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("sampledialoguedelete")
+		.setName("attribute")
 		.setDescription(
-			localizer(
-				"en-US",
-				"commands.teach.sampledialoguedelete.command_description",
-			),
+			localizer("en-US", "commands.unlearn.attribute.command_description"),
 		)
 		.setDescriptionLocalizations({
-			ja: localizer(
-				"ja",
-				"commands.teach.sampledialoguedelete.command_description",
-			),
+			ja: localizer("ja", "commands.unlearn.attribute.command_description"),
 		});
 
 /**
  * Rule 1: JSDoc comment for exported function
- * Removes a sample dialogue pair from Tomori's memory using a paginated embed
+ * Removes a personality attribute from Tomori's memory using a paginated embed
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -90,88 +84,66 @@ export async function execute(
 		const hasManagePermission =
 			interaction.memberPermissions?.has("ManageGuild") ?? false;
 
-		// 4. Check if teaching is enabled - FIX: Access through config object
+		// 4. Check if teaching is enabled
 		if (
-			!tomoriState.config.sampledialogue_memteaching_enabled &&
+			!tomoriState.config.attribute_memteaching_enabled &&
 			!hasManagePermission
 		) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.sampledialogueadd.teaching_disabled_title",
+				titleKey: "commands.unlearn.attributeadd.teaching_disabled_title",
 				descriptionKey:
-					"commands.teach.sampledialogueadd.teaching_disabled_description",
+					"commands.unlearn.attributeadd.teaching_disabled_description",
 				color: ColorCode.ERROR,
 			});
 			return;
 		}
 
-		// 5. Get the current dialogue pairs
-		const currentIn = tomoriState.sample_dialogues_in ?? [];
-		const currentOut = tomoriState.sample_dialogues_out ?? [];
+		// 5. Get the current attribute list
+		const currentAttributes = tomoriState.attribute_list ?? [];
 
-		// 6. Check if there are any dialogues to remove or if arrays mismatch
-		if (currentIn.length === 0 || currentIn.length !== currentOut.length) {
-			if (currentIn.length !== currentOut.length) {
-				log.warn(
-					`Sample dialogue array length mismatch for tomori ${tomoriState.tomori_id} (in: ${currentIn.length}, out: ${currentOut.length})`,
-				);
-			}
+		// 6. Check if there are any attributes to remove
+		if (currentAttributes.length === 0) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.sampledialoguedelete.no_dialogues_title",
-				descriptionKey: "commands.teach.sampledialoguedelete.no_dialogues",
+				titleKey: "commands.unlearn.attribute.no_attributes_title",
+				descriptionKey: "commands.unlearn.attribute.no_attributes",
 				color: ColorCode.WARN,
 			});
 			return;
 		}
 
-		// 7. Format dialogue pairs for display, truncating long ones
-		const displayItems = currentIn.map((input, index) => {
-			const output = currentOut[index]; // Get corresponding output
-			const truncatedInput =
-				input.length > DISPLAY_TRUNCATE_LENGTH
-					? `${input.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
-					: input;
-			const truncatedOutput =
-				output.length > DISPLAY_TRUNCATE_LENGTH
-					? `${output.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
-					: output;
-			// Format for display in the selection list
-			return `User: "${truncatedInput}" → Bot: "${truncatedOutput}"`;
+		// 7. Format attributes for display, truncating long ones
+		const displayItems = currentAttributes.map((attribute) => {
+			return attribute.length > DISPLAY_TRUNCATE_LENGTH
+				? `${attribute.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
+				: attribute;
 		});
 
 		// 8. Use the replyPaginatedChoices helper
-		// FIX: Simplify onSelect and onCancel signatures to match what's expected
 		result = await replyPaginatedChoices(interaction, locale, {
-			titleKey: "commands.teach.sampledialoguedelete.select_title",
-			descriptionKey: "commands.teach.sampledialoguedelete.select_description",
-			itemLabelKey: "commands.teach.sampledialoguedelete.dialogue_label",
+			titleKey: "commands.unlearn.attribute.select_title",
+			descriptionKey: "commands.unlearn.attribute.select_description",
+			itemLabelKey: "commands.unlearn.attribute.attribute_label",
 			items: displayItems,
 			color: ColorCode.INFO,
 			flags: MessageFlags.Ephemeral, // Make the pagination ephemeral
 
-			// FIX: Simplify to match expected signature (index: number) => Promise<void>
+			// Use simplified signature as expected by PaginatedChoiceOptions
 			onSelect: async (selectedIndex: number) => {
-				// 9. Create new arrays without the selected pair
-				const updatedIn = currentIn.filter(
-					(_, index) => index !== selectedIndex,
-				);
-				const updatedOut = currentOut.filter(
+				// 9. Create new array without the selected attribute
+				const attributeToRemove = currentAttributes[selectedIndex];
+				const updatedAttributes = currentAttributes.filter(
 					(_, index) => index !== selectedIndex,
 				);
 
-				// 10. Format arrays for PostgreSQL update (Rule 23)
-				const inArrayLiteral = `{${updatedIn
-					.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-					.join(",")}}`;
-				const outArrayLiteral = `{${updatedOut
+				// 10. Format array for PostgreSQL update (Rule 23)
+				const attributeArrayLiteral = `{${updatedAttributes
 					.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
 					.join(",")}}`;
 
-				// 11. Update both arrays in the database using Bun SQL (Rule 4, 15)
+				// 11. Update the attribute_list in the database using Bun SQL (Rule 4, 15)
 				const [updatedRow] = await sql`
                     UPDATE tomoris
-                    SET
-                        sample_dialogues_in = ${inArrayLiteral}::text[],
-                        sample_dialogues_out = ${outArrayLiteral}::text[]
+                    SET attribute_list = ${attributeArrayLiteral}::text[]
                     WHERE tomori_id = ${
 											// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
 											tomoriState!.tomori_id
@@ -192,9 +164,10 @@ export async function execute(
 						userId: userData.user_id,
 						errorType: "DatabaseUpdateError",
 						metadata: {
-							command: "teach sampledialoguedelete",
+							command: "teach attribute",
 							guildId: interaction.guild?.id,
 							selectedIndex,
+							attributeToRemove,
 							validationErrors: validatedTomori.success
 								? null
 								: validatedTomori.error.flatten(),
@@ -202,7 +175,7 @@ export async function execute(
 					};
 					// Throw error to be caught by replyPaginatedChoices's handler
 					throw await log.error(
-						"Failed to update or validate sample_dialogues in tomoris table",
+						"Failed to update or validate attribute_list in tomoris table",
 						validatedTomori.success
 							? new Error("Database update returned no rows or unexpected data")
 							: new Error("Updated tomori data failed validation"),
@@ -211,9 +184,8 @@ export async function execute(
 				}
 
 				// 13. Log success (onSelect doesn't handle user feedback directly)
-
 				log.success(
-					`Removed sample dialogue pair at index ${selectedIndex} for tomori ${
+					`Removed attribute "${attributeToRemove}" for tomori ${
 						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
 						tomoriState!.tomori_id
 					} by user ${userData.user_disc_id}`,
@@ -221,12 +193,11 @@ export async function execute(
 				// The replyPaginatedChoices helper will show the success message
 			},
 
-			// FIX: Simplify to match expected signature () => Promise<void>
+			// Simplified onCancel handler as expected by PaginatedChoiceOptions
 			onCancel: async () => {
 				// This runs if the user clicks Cancel
-
 				log.info(
-					`User ${userData.user_disc_id} cancelled removing a sample dialogue for tomori ${
+					`User ${userData.user_disc_id} cancelled removing an attribute for tomori ${
 						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
 						tomoriState!.tomori_id
 					}`,
@@ -238,11 +209,11 @@ export async function execute(
 		// 14. Handle potential errors from the helper itself
 		if (!result.success && result.reason === "error") {
 			log.warn(
-				`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /teach sampledialoguedelete`,
+				`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /teach attribute`,
 			);
 		} else if (!result.success && result.reason === "timeout") {
 			log.warn(
-				`Sample dialogue removal timed out for user ${userData.user_disc_id} (Tomori ID: ${
+				`Attribute removal timed out for user ${userData.user_disc_id} (Tomori ID: ${
 					// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
 					tomoriState!.tomori_id
 				})`,
@@ -256,20 +227,18 @@ export async function execute(
 			tomoriId: tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "teach sampledialoguedelete",
+				command: "teach attribute",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 			},
 		};
 		await log.error(
-			`Unexpected error in /teach sampledialoguedelete for user ${userData.user_disc_id}`,
+			`Unexpected error in /teach attribute for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);
 
 		// 16. Inform user of unknown error
-		// FIX: PaginatedChoiceResult doesn't have an interaction property
-		// Just use the original interaction since it was deferred
 		if (interaction.deferred || interaction.replied) {
 			try {
 				await interaction.followUp({
@@ -281,13 +250,13 @@ export async function execute(
 				});
 			} catch (followUpError) {
 				log.error(
-					"Failed to send follow-up error message in sampledialoguedelete catch block",
+					"Failed to send follow-up error message in attribute catch block",
 					followUpError,
 				);
 			}
 		} else {
 			log.warn(
-				"Could not determine valid interaction to send error message in sampledialoguedelete catch block",
+				"Could not determine valid interaction to send error message in attribute catch block",
 			);
 		}
 	}

@@ -82,5 +82,5 @@ export function shouldBotReply(
  * @returns "Enabled" if true, "Disabled" if false.
  */
 export function formatBoolean(value: boolean): string {
-	return value ? "Enabled" : "Disabled";
+	return value ? "`Enabled`" : "`Disabled`";
 }

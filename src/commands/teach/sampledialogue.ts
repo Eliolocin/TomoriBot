@@ -29,18 +29,12 @@ export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("sampledialogueadd")
+		.setName("sampledialogue")
 		.setDescription(
-			localizer(
-				"en-US",
-				"commands.teach.sampledialogueadd.command_description",
-			), // Rule 9
+			localizer("en-US", "commands.teach.sampledialogue.command_description"), // Rule 9
 		)
 		.setDescriptionLocalizations({
-			ja: localizer(
-				"ja",
-				"commands.teach.sampledialogueadd.command_description",
-			),
+			ja: localizer("ja", "commands.teach.sampledialogue.command_description"),
 		});
 
 /**
@@ -93,9 +87,9 @@ export async function execute(
 			hasManagePermission
 		) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.sampledialogueadd.teaching_disabled_title",
+				titleKey: "commands.teach.sampledialogue.teaching_disabled_title",
 				descriptionKey:
-					"commands.teach.sampledialogueadd.teaching_disabled_description",
+					"commands.teach.sampledialogue.teaching_disabled_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
@@ -106,19 +100,19 @@ export async function execute(
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
 		const modalResult = await promptWithModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: "commands.teach.sampledialogueadd.modal_title",
+			modalTitleKey: "commands.teach.sampledialogue.modal_title",
 			inputs: [
 				{
 					customId: USER_INPUT_ID,
 					// Ensure this locale key's value is <= 45 chars
-					labelKey: "commands.teach.sampledialogueadd.user_input_label",
+					labelKey: "commands.teach.sampledialogue.user_input_label",
 					style: TextInputStyle.Paragraph,
 					required: true,
 				},
 				{
 					customId: BOT_INPUT_ID,
 					// Ensure this locale key's value is <= 45 chars
-					labelKey: "commands.teach.sampledialogueadd.bot_input_label",
+					labelKey: "commands.teach.sampledialogue.bot_input_label",
 					style: TextInputStyle.Paragraph,
 					required: true,
 				},
@@ -186,7 +180,7 @@ export async function execute(
 				tomoriId: tomoriState.tomori_id, // Direct access
 				errorType: "DatabaseValidationError",
 				metadata: {
-					command: "teach sampledialogueadd",
+					command: "teach sampledialogue",
 					userDiscordId: interaction.user.id,
 					validationErrors: validationResult.error.issues,
 				},
@@ -208,8 +202,8 @@ export async function execute(
 
 		// 11. Success! Confirm addition (Rule 12, 19)
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.teach.sampledialogueadd.success_title",
-			descriptionKey: "commands.teach.sampledialogueadd.success_description",
+			titleKey: "commands.teach.sampledialogue.success_title",
+			descriptionKey: "commands.teach.sampledialogue.success_description",
 			descriptionVars: {
 				user_input:
 					userInput.length > 96 ? `${userInput.slice(0, 96)}...` : userInput,
@@ -225,16 +219,12 @@ export async function execute(
 			userId: userData.user_id,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "teach sampledialogueadd",
+				command: "teach sampledialogue",
 				userDiscordId: interaction.user.id,
 				guildId: interaction.guild?.id,
 			},
 		};
-		await log.error(
-			"Error in /teach sampledialogueadd command",
-			error,
-			context,
-		);
+		await log.error("Error in /teach sampledialogue command", error, context);
 
 		if (interaction.replied || interaction.deferred) {
 			await replyInfoEmbed(interaction, locale, {
@@ -245,7 +235,7 @@ export async function execute(
 			});
 		} else {
 			log.warn(
-				"Interaction was not replied or deferred in sampledialogueadd, cannot send error message to user.",
+				"Interaction was not replied or deferred in sampledialogue, cannot send error message to user.",
 				context,
 			);
 		}

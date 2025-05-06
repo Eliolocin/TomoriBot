@@ -12,6 +12,7 @@
 		"incremental": true,
 		"tsBuildInfoFile": "./node_modules/.cache/.tsbuildinfo",
 		"typeRoots": ["./node_modules/@types", "./src/types/*"],
+		"types": ["node", "bun"],
 		"baseUrl": "./src",
 		"paths": {
 			"@/*": ["./*"]

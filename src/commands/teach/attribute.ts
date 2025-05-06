@@ -30,12 +30,12 @@ export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("attributeadd")
+		.setName("attribute")
 		.setDescription(
-			localizer("en-US", "commands.teach.attributeadd.command_description"), // Rule 9
+			localizer("en-US", "commands.teach.attribute.command_description"), // Rule 9
 		)
 		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.teach.attributeadd.command_description"),
+			ja: localizer("ja", "commands.teach.attribute.command_description"),
 		});
 
 /**
@@ -94,9 +94,9 @@ export async function execute(
 			!hasManagePermission
 		) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.attributeadd.teaching_disabled_title", // New locale key needed
+				titleKey: "commands.teach.attribute.teaching_disabled_title", // New locale key needed
 				descriptionKey:
-					"commands.teach.attributeadd.teaching_disabled_description", // New locale key needed
+					"commands.teach.attribute.teaching_disabled_description", // New locale key needed
 				color: ColorCode.ERROR,
 				// No flags needed
 			});
@@ -107,11 +107,11 @@ export async function execute(
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
 		modalResult = await promptWithModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: "commands.teach.attributeadd.modal_title", // New locale key
+			modalTitleKey: "commands.teach.attribute.modal_title", // New locale key
 			inputs: [
 				{
 					customId: ATTRIBUTE_INPUT_ID,
-					labelKey: "commands.teach.attributeadd.attribute_input_label", // New locale key (<= 45 chars)
+					labelKey: "commands.teach.attribute.attribute_input_label", // New locale key (<= 45 chars)
 					style: TextInputStyle.Paragraph, // Allow longer attributes
 					required: true,
 					maxLength: ATTRIBUTE_MAX_LENGTH, // Set a max length
@@ -145,8 +145,8 @@ export async function execute(
 		// Optional: Check for duplicates before adding
 		if (currentAttributes.includes(newAttribute)) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.attributeadd.duplicate_title", // New locale key
-				descriptionKey: "commands.teach.attributeadd.duplicate_description", // New locale key
+				titleKey: "commands.teach.attribute.duplicate_title", // New locale key
+				descriptionKey: "commands.teach.attribute.duplicate_description", // New locale key
 				descriptionVars: { attribute: newAttribute },
 				color: ColorCode.WARN,
 				// No flags needed
@@ -183,7 +183,7 @@ export async function execute(
 				tomoriId: tomoriState.tomori_id,
 				errorType: "DatabaseValidationError",
 				metadata: {
-					command: "teach attributeadd",
+					command: "teach attribute",
 					userDiscordId: interaction.user.id, // Keep Discord ID for easier user lookup
 					newAttribute,
 					validationErrors: validationResult.error.issues,
@@ -207,8 +207,8 @@ export async function execute(
 
 		// 13. Success! Confirm addition (Rule 12, 19)
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.teach.attributeadd.success_title", // New locale key
-			descriptionKey: "commands.teach.attributeadd.success_description", // New locale key
+			titleKey: "commands.teach.attribute.success_title", // New locale key
+			descriptionKey: "commands.teach.attribute.success_description", // New locale key
 			descriptionVars: {
 				attribute: newAttribute,
 			},
@@ -223,12 +223,12 @@ export async function execute(
 			tomoriId: tomoriState?.tomori_id,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "teach attributeadd",
+				command: "teach attribute",
 				userDiscordId: interaction.user.id,
 				guildId: interaction.guild?.id,
 			},
 		};
-		await log.error("Error in /teach attributeadd command", error, context);
+		await log.error("Error in /teach attribute command", error, context);
 
 		// Rule 12, 19: Reply with unknown error embed
 		// Determine which interaction to use
@@ -245,7 +245,7 @@ export async function execute(
 			});
 		} else {
 			log.warn(
-				"Interaction was not replied or deferred in attributeadd catch block, cannot send error message to user.",
+				"Interaction was not replied or deferred in attribute catch block, cannot send error message to user.",
 				context,
 			);
 		}
