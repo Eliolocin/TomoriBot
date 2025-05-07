@@ -5,7 +5,7 @@ import {
 	generateGeminiResponse,
 	getGeminiTools,
 } from "../../providers/google";
-import type { ContextSegment } from "../../types/misc/context";
+import type { StructuredContextItem } from "../../types/misc/context";
 import {
 	HarmCategory,
 	HarmBlockThreshold,
@@ -26,11 +26,7 @@ import {
 import { ColorCode, log } from "../../utils/misc/logger";
 import { shouldBotReply } from "../../utils/misc/boolUtils";
 import { buildContext } from "../../utils/text/contextBuilder";
-import {
-	replaceTemplateVariables,
-	cleanLLMOutput,
-	chunkMessage,
-} from "@/utils/text/stringHelper";
+import { cleanLLMOutput, chunkMessage } from "@/utils/text/stringHelper";
 import { decryptApiKey } from "@/utils/security/crypto";
 import {
 	humanizeString,
@@ -44,8 +40,6 @@ const DEFAULT_TOP_K = 1;
 const DEFAULT_TOP_P = 0.9;
 const MAX_OUTPUT_TOKENS = 8192;
 const CHUNK_LENGTH = 1900;
-const HUMANIZE_INSTRUCTION =
-	"\nTry to limit yourself to only 0 to 2 emojis per response (from the available server emojis or kaomojis, if your personality uses those) and make sure to respond short and concisely, as a human would in public chatrooms. Only make lengthy responses if and only if a user is asking for assistance or an explanation that warrants it.";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
@@ -56,6 +50,27 @@ const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
 const CONVERSATION_RESET_MARKERS = ["REFRESH", "refresh", "リフレッシュ"];
 
 const MAX_FUNCTION_CALL_ITERATIONS = 5; // Safety break for function call loops
+
+// Regex to identify if a string is solely a Tenor GIF URL
+//const TENOR_GIF_REGEX = /^(https?:\/\/)?(www\.)?tenor\.com\/view\/[a-zA-Z0-9-]+-gif-\d+(\?.*)?$/i;
+
+// Define a type for our simplified message structure.
+// This will be passed to buildContext, which will then convert it into StructuredContextItem[].
+// Rule 13: This type is local to this file's processing logic for now.
+// If it becomes shared across multiple files for context building, we can move it to /types/.
+type SimplifiedMessageForContext = {
+	authorId: string;
+	authorName: string; // Resolved name (Tomori's nickname or user's display name)
+	content: string | null; // Message text content
+	imageAttachments: Array<{
+		url: string; // Original URL of the image
+		proxyUrl: string; // Discord's proxy URL, often more stable for fetching
+		mimeType: string | null; // e.g., 'image/png', 'image/jpeg'
+		filename: string; // Original filename
+	}>;
+	// Future consideration: user-sent stickers
+	// stickerAttachments: Array<{ name: string; id: string; formatType: StickerFormatType }>;
+};
 
 /**
  * Handles incoming messages to potentially generate a response using genai.
@@ -288,29 +303,95 @@ export default async function tomoriChat(
 		// 9. Determine the messages to include in the history
 		const startIndex = resetIndex === -1 ? 0 : resetIndex + 1;
 		const relevantMessagesArray = messagesArray.slice(startIndex);
-
-		// 10. Build the final conversationHistory string array and user list from relevant messages
-		const conversationHistory: string[] = [];
-		const userListSet = new Set<string>();
-		let lastMessageAuthorId: string | null = null;
+		// 10. Build the `SimplifiedMessageForContext` array and user list from relevant messages
+		const simplifiedMessages: SimplifiedMessageForContext[] = []; // Array for structured messages
+		const userListSet = new Set<string>(); // Still useful for fetching user-specific memories/data
 
 		for (const msg of relevantMessagesArray) {
-			if (msg.content) {
-				const authorId = msg.author.id;
-				userListSet.add(authorId);
-				const authorName = `<@${authorId}>`;
+			const authorId = msg.author.id;
 
-				if (
-					authorId === lastMessageAuthorId &&
-					authorId === client.user?.id &&
-					conversationHistory.length > 0
-				) {
-					conversationHistory[conversationHistory.length - 1] +=
-						`\n${msg.content}`;
-				} else {
-					conversationHistory.push(`${authorName}: ${msg.content}`);
-					lastMessageAuthorId = authorId;
+			const authorName =
+				msg.author.id === client.user?.id
+					? tomoriState?.tomori_nickname // tomoriState is guaranteed to be non-null if we reach here and bot is replying
+					: msg.author.displayName;
+			userListSet.add(authorId);
+
+			const imageAttachments: SimplifiedMessageForContext["imageAttachments"] =
+				[];
+			const messageContentForLlm: string | null = msg.content; // Start with original content
+
+			// 10.a. Process direct image attachments
+			if (msg.attachments.size > 0) {
+				for (const attachment of msg.attachments.values()) {
+					if (
+						attachment.contentType?.startsWith("image/png") ||
+						attachment.contentType?.startsWith("image/jpeg") ||
+						attachment.contentType?.startsWith("image/webp") ||
+						attachment.contentType?.startsWith("image/heic") ||
+						attachment.contentType?.startsWith("image/heif")
+					) {
+						imageAttachments.push({
+							url: attachment.url,
+							proxyUrl: attachment.proxyURL,
+							mimeType: attachment.contentType,
+							filename: attachment.name,
+						});
+					}
 				}
+			}
+
+			// 10.b. Check for Tenor GIF links if no direct image attachments were found
+			// and the message content solely consists of a Tenor link.
+			/*
+			if (
+				imageAttachments.length === 0 &&
+				msg.content &&
+				TENOR_GIF_REGEX.test(msg.content.trim())
+			) {
+				const tenorUrl = msg.content.trim();
+				imageAttachments.push({
+					url: tenorUrl,
+					proxyUrl: tenorUrl, // For Tenor links, original URL is the proxy for now
+					mimeType: "image/gif", // Assume GIF for Tenor links
+					filename: "tenor.gif", // Generic filename for Tenor GIFs
+				});
+				// If the content was *only* a Tenor link, we can set content to null
+				// as the image part will represent it.
+				messageContentForLlm = null;
+				log.info(
+					`Detected Tenor GIF link as image content: ${tenorUrl} for msg ID ${msg.id}`,
+				);
+			}*/
+
+			// 10.c. Check if this message is from the same author as the previous one
+			const prevMessage = simplifiedMessages[simplifiedMessages.length - 1];
+			const isSameAuthorAsPrevious =
+				prevMessage && prevMessage.authorId === authorId;
+
+			// 10.d. Determine if we should combine with the previous message or create a new entry
+			if (
+				isSameAuthorAsPrevious &&
+				messageContentForLlm &&
+				prevMessage.content
+			) {
+				// Append this message's content to the previous message with a newline
+				prevMessage.content += `\n${messageContentForLlm}`;
+
+				// If this message has images, add them to the previous message's images
+				if (imageAttachments.length > 0) {
+					prevMessage.imageAttachments = [
+						...prevMessage.imageAttachments,
+						...imageAttachments,
+					];
+				}
+			} else if (messageContentForLlm || imageAttachments.length > 0) {
+				// Create a new entry if it's a different author or the previous has no content
+				simplifiedMessages.push({
+					authorId,
+					authorName,
+					content: messageContentForLlm,
+					imageAttachments,
+				});
 			}
 		}
 
@@ -336,22 +417,43 @@ export default async function tomoriChat(
 		}
 
 		// 11. Build Context
-		let contextSegments: ContextSegment[] = [];
+		// The `buildContext` function will be refactored in a subsequent step to accept
+		// `simplifiedMessages` and produce `StructuredContextItem[]`.
+		// For now, its signature and output type (ContextSegment[]) remain, but we pass the new data.
+		let contextSegments: StructuredContextItem[] = [];
 		try {
+			// NOTE: The `buildContext` call signature will change.
+			// It will take `simplifiedMessageHistory: simplifiedMessages` instead of `conversationHistory`.
+			// It will also need `tomoriNickname`, `tomoriAttributes`, and `tomoriConfig` to build system instructions.
 			contextSegments = await buildContext({
 				guildId: serverDiscId,
 				serverName,
 				serverDescription,
-				conversationHistory,
+				// conversationHistory: conversationHistory, // This parameter will be removed
+				simplifiedMessageHistory: simplifiedMessages, // New parameter for structured history
 				userList,
 				channelDesc,
 				channelName,
 				client,
 				triggererName,
 				emojiStrings,
+				// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
+				tomoriNickname: tomoriState!.tomori_nickname,
+				// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
+				tomoriAttributes: tomoriState!.attribute_list,
+				// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
+				tomoriConfig: tomoriState!.config,
 			});
 		} catch (error) {
-			log.error("Error building context for LLM API Call:", error);
+			log.error("Error building context for LLM API Call:", error, {
+				serverId: tomoriState?.server_id, // Use internal DB ID if available
+				errorType: "ContextBuildingError",
+				metadata: {
+					guildId: serverDiscId,
+					channelName: channel.name,
+					userCountInContext: userList.length,
+				},
+			});
 			await sendStandardEmbed(channel, locale, {
 				color: ColorCode.ERROR,
 				titleKey: "general.errors.context_error_title",
@@ -360,10 +462,13 @@ export default async function tomoriChat(
 			return;
 		}
 
-		// biome-ignore lint/style/noNonNullAssertion: API key presence was validated earlier for triggered messages
-		const decryptedApiKey = await decryptApiKey(tomoriState.config.api_key!);
+		// biome-ignore lint/style/noNonNullAssertion: API key presence was validated earlier for triggered messages, tomoriState is checked
+		const decryptedApiKey = await decryptApiKey(tomoriState!.config.api_key!);
 		if (!decryptedApiKey) {
-			log.error("API Key is not set or failed to decrypt.");
+			log.error("API Key is not set or failed to decrypt.", undefined, {
+				serverId: tomoriState?.server_id,
+				errorType: "ApiKeyError",
+			});
 			await sendStandardEmbed(channel, locale, {
 				color: ColorCode.ERROR,
 				titleKey: "general.errors.api_key_error_title",
@@ -374,20 +479,24 @@ export default async function tomoriChat(
 
 		// 12. Generate Response
 		try {
-			// Only support Google for now
-			if (tomoriState.llm.llm_provider.toLowerCase() !== "google") {
+			// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
+			if (tomoriState!.llm.llm_provider.toLowerCase() !== "google") {
 				log.warn(
-					`Unsupported LLM provider configured: ${tomoriState.llm.llm_provider}`,
+					`Unsupported LLM provider configured: ${tomoriState?.llm.llm_provider}`,
+					{
+						serverId: tomoriState?.server_id,
+						errorType: "ConfigurationError",
+						metadata: { provider: tomoriState?.llm.llm_provider },
+					},
 				);
-				// Optionally send a message if needed, or just return silently
 				return;
 			}
 
 			const geminiConfig: GeminiConfig = {
-				model: tomoriState.llm.llm_codename,
+				// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
+				model: tomoriState!.llm.llm_codename,
 				apiKey: decryptedApiKey,
 				safetySettings: [
-					// Example: Adjust safety settings if needed, BLOCK_NONE can be risky
 					{
 						category: HarmCategory.HARM_CATEGORY_HARASSMENT,
 						threshold: HarmBlockThreshold.BLOCK_NONE,
@@ -406,32 +515,20 @@ export default async function tomoriChat(
 					},
 				],
 				generationConfig: {
-					temperature: config.llm_temperature,
+					// biome-ignore lint/style/noNonNullAssertion: tomoriState and config are checked
+					temperature: tomoriState!.config.llm_temperature,
 					topK: DEFAULT_TOP_K,
 					topP: DEFAULT_TOP_P,
 					maxOutputTokens: MAX_OUTPUT_TOKENS,
 					stopSequences: [
-						`\n${tomoriState.tomori_nickname}:`,
+						// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
+						`\n${tomoriState!.tomori_nickname}:`,
 						`\n${triggererName}:`,
 					],
 				},
-				// Tools are determined by the provider function now
-				tools: getGeminiTools(tomoriState),
+				// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
+				tools: getGeminiTools(tomoriState!),
 			};
-
-			const promptString = contextSegments
-				.sort((a, b) => a.order - b.order)
-				.map((segment) => segment.content)
-				.join("\n");
-			let systemInstruction = tomoriState.attribute_list.join("\n");
-			if (config.humanizer_degree >= 1)
-				systemInstruction += HUMANIZE_INSTRUCTION;
-
-			const tomoriNickname = tomoriState.tomori_nickname;
-			systemInstruction = replaceTemplateVariables(systemInstruction, {
-				bot: tomoriNickname,
-				user: triggererName,
-			});
 
 			// --- Function Calling Loop ---
 			let llmFinalResponseText: string | undefined;
@@ -447,8 +544,7 @@ export default async function tomoriChat(
 				);
 				const llmOutput: GeminiResponseOutput = await generateGeminiResponse(
 					geminiConfig,
-					promptString, // Original full prompt is always sent
-					systemInstruction, // System instruction is always sent
+					contextSegments, // Original full prompt is always sent
 					functionInteractionHistory.length > 0
 						? functionInteractionHistory
 						: undefined,

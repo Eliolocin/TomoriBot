@@ -1,15 +1,20 @@
 import type { Client, PresenceStatus } from "discord.js";
 import { GatewayIntentBits } from "discord.js";
-import type { ContextSegment } from "../../types/misc/context"; // Import ContextSegment type
 import {
 	isBlacklisted, // Import blacklist checker
 	loadTomoriState,
 	loadUserRow,
 } from "../db/dbRead"; // Import session helpers
+import {
+	ContextItemTag,
+	type ContextPart, // New: For text/image parts
+	type StructuredContextItem, // New: The main output type
+} from "../../types/misc/context";
 import { registerUser } from "../db/dbWrite";
 import { log } from "../misc/logger";
 import { replaceTemplateVariables, getCurrentTime } from "./stringHelper";
 import { humanizeString } from "./humanizer";
+import type { TomoriConfigRow } from "@/types/db/schema";
 // Import ServerEmojiRow if needed for emoji query result type
 // import type { ServerEmojiRow } from "../../types/db/schema";
 
@@ -19,6 +24,25 @@ import { humanizeString } from "./humanizer";
  */
 const mentionCache = new Map<string, string>();
 
+const HUMANIZE_INSTRUCTION =
+	"\nTry to limit yourself to only 0 to 2 emojis per response (from the available server emojis or kaomojis, if your personality uses those) and make sure to respond short and concisely, as a human would in public chatrooms. Only make lengthy responses if and only if a user is asking for assistance or an explanation that warrants it.";
+
+/**
+ * Simplified message structure received from tomoriChat.ts.
+ * This is an internal representation before converting to StructuredContextItem.
+ */
+type SimplifiedMessageForContext = {
+	authorId: string;
+	authorName: string;
+	content: string | null;
+	imageAttachments: Array<{
+		url: string;
+		proxyUrl: string;
+		mimeType: string | null;
+		filename: string;
+	}>;
+};
+
 /**
  * Converts Discord mention IDs to human-readable names using cached database lookups.
  * Also handles special placeholders like {user} and {bot}.
@@ -27,6 +51,7 @@ const mentionCache = new Map<string, string>();
  * @param client - Discord client for user/role lookups
  * @param serverId - Discord server ID for context
  * @param triggererName - Name of the user who triggered the action (for {user} replacement)
+ * @param tomoriNickname - The bot's current nickname for {bot} replacement.
  * @returns Text with mentions and placeholders replaced by human-readable names
  */
 export async function convertMentions(
@@ -34,26 +59,28 @@ export async function convertMentions(
 	client: Client,
 	serverId: string,
 	triggererName?: string,
+	tomoriNickname?: string, // Added tomoriNickname parameter
 ): Promise<string> {
 	// Clear the cache before processing new text
 	mentionCache.clear();
 
-	// First handle Discord mentions
-	const mentionPattern = /<[@#][!&]?(\d{17,19})>/g;
-	const matches = Array.from(text.matchAll(mentionPattern));
-
-	// Load Tomori's state for her nickname if needed
-	let tomoriNickname: string | null = process.env.DEFAULT_BOTNAME || "Tomori";
-	const tomoriState = await loadTomoriState(serverId);
-	if (tomoriState?.tomori_nickname) {
-		tomoriNickname = tomoriState.tomori_nickname;
+	// 1. Determine Tomori's nickname for {bot} replacement.
+	//    If not passed, load it. If passed, use the provided one.
+	let currentTomoriNickname = tomoriNickname;
+	if (!currentTomoriNickname) {
+		const tomoriState = await loadTomoriState(serverId);
+		currentTomoriNickname =
+			tomoriState?.tomori_nickname || process.env.DEFAULT_BOTNAME || "Tomori";
 	}
 
+	// 2. First handle Discord mentions
+	const mentionPattern = /<[@#][!&]?(\d{17,19})>/g;
+	const matches = Array.from(text.matchAll(mentionPattern));
 	let result = text;
 
-	// Process Discord mentions
+	// 3. Process Discord mentions
 	if (matches.length > 0) {
-		const mentions = matches.map((match) => ({
+		const mentionsData = matches.map((match) => ({
 			match: match[0],
 			id: match[1],
 			start: match.index ?? 0,
@@ -61,69 +88,60 @@ export async function convertMentions(
 		}));
 
 		const replacements = await Promise.all(
-			mentions.map(async ({ match, id }) => {
+			mentionsData.map(async ({ match, id }) => {
 				// --- User Mentions ---
 				if (match.startsWith("<@")) {
 					const cachedName = mentionCache.get(id);
 					if (cachedName) return `${cachedName}`;
 					try {
 						// Check if this is Tomori herself
-						if (client.user && id === client.user.id && tomoriNickname) {
-							mentionCache.set(id, tomoriNickname);
-							return `${tomoriNickname}`;
+						if (client.user && id === client.user.id && currentTomoriNickname) {
+							mentionCache.set(id, currentTomoriNickname);
+							return `${currentTomoriNickname}`;
 						}
 
-						// Check if user is blacklisted
 						const isUserBlacklisted = await isBlacklisted(serverId, id);
-
-						// Otherwise process as normal user
 						const userData = await loadUserRow(id);
 
-						// If user is blacklisted, use Discord display name instead of custom nickname
 						if (isUserBlacklisted || !userData?.user_nickname) {
-							// Try getting user from cache first
-							const user = client.users.cache.get(id);
+							const user =
+								client.users.cache.get(id) ||
+								(await client.users.fetch(id).catch(() => null));
 							if (user) {
 								mentionCache.set(id, user.displayName);
 								return `${user.displayName}`;
 							}
-
-							// If not in cache, fetch the user
-							const fetchedUser = await client.users
-								.fetch(id)
-								.catch(() => null);
-							if (fetchedUser) {
-								mentionCache.set(id, fetchedUser.displayName);
-								return `${fetchedUser.displayName}`;
-							}
 						} else {
-							// User not blacklisted and has custom nickname
 							mentionCache.set(id, userData.user_nickname);
 							return `${userData.user_nickname}`;
 						}
 					} catch (error) {
-						log.error(`Error resolving nickname for user ${id}: ${error}`);
+						log.error(
+							`Error resolving nickname for user ${id} in convertMentions:`,
+							error,
+							{ serverId, metadata: { userIdToResolve: id } },
+						);
 					}
 					log.warn(`Could not resolve user mention: ${match}`);
-					return match;
+					return match; // Return original mention if resolution fails
 				}
 
 				// --- Channel Mentions ---
 				if (match.startsWith("<#")) {
 					try {
 						const guild = client.guilds.cache.get(serverId);
-						const channel = guild?.channels.cache.get(id);
-						if (channel) {
+						const channel =
+							guild?.channels.cache.get(id) ||
+							(await client.channels.fetch(id).catch(() => null));
+						if (channel?.isTextBased() && !channel.isDMBased()) {
 							return `#${channel.name}`;
 						}
-						const fetchedChannel = await client.channels
-							.fetch(id)
-							.catch(() => null);
-						if (fetchedChannel?.isTextBased() && !fetchedChannel.isDMBased()) {
-							return `#${fetchedChannel.name}`;
-						}
 					} catch (error) {
-						log.error(`Error resolving channel mention ${id}: ${error}`);
+						log.error(
+							`Error resolving channel mention ${id} in convertMentions:`,
+							error,
+							{ serverId, metadata: { channelIdToResolve: id } },
+						);
 					}
 					log.warn(`Could not resolve channel mention: ${match}`);
 					return match;
@@ -133,154 +151,216 @@ export async function convertMentions(
 				if (match.startsWith("<@&")) {
 					try {
 						const guild = client.guilds.cache.get(serverId);
-						const role = guild?.roles.cache.get(id);
+						const role =
+							guild?.roles.cache.get(id) ||
+							(await guild?.roles.fetch(id).catch(() => null));
 						if (role) {
 							return `@${role.name}`;
 						}
-						const fetchedRole = await guild?.roles.fetch(id).catch(() => null);
-						if (fetchedRole) {
-							return `@${fetchedRole.name}`;
-						}
 					} catch (error) {
-						log.error(`Error resolving role mention ${id}: ${error}`);
+						log.error(
+							`Error resolving role mention ${id} in convertMentions:`,
+							error,
+							{ serverId, metadata: { roleIdToResolve: id } },
+						);
 					}
 					log.warn(`Could not resolve role mention: ${match}`);
 					return match;
 				}
-
-				return match;
+				return match; // Should not happen if regex is correct
 			}),
 		);
 
-		// Apply replacements for Discord mentions (from end to start to avoid index issues)
-		for (let i = mentions.length - 1; i >= 0; i--) {
-			const { start, end } = mentions[i];
-			if (start !== undefined && end !== undefined && start < end) {
+		// 4. Apply replacements for Discord mentions (from end to start to avoid index issues)
+		for (let i = mentionsData.length - 1; i >= 0; i--) {
+			const { start, end } = mentionsData[i];
+			// Ensure start and end are valid before attempting substring
+			if (
+				typeof start === "number" &&
+				typeof end === "number" &&
+				start < end &&
+				start < result.length &&
+				end <= result.length
+			) {
 				result =
 					result.substring(0, start) + replacements[i] + result.substring(end);
+			} else {
+				log.warn(
+					`Invalid mention indices for replacement: start=${start}, end=${end}, match=${mentionsData[i].match}`,
+				);
 			}
 		}
 	}
 
+	// 5. Apply template variable replacements (like {bot} and {user})
+	// Ensure triggererName is defined, default to "User" if not.
+	const finalTriggererName = triggererName || "User";
 	result = replaceTemplateVariables(result, {
-		bot: tomoriNickname,
-		user: triggererName,
+		bot: currentTomoriNickname,
+		user: finalTriggererName,
 	});
 
 	return result;
 }
-
-/**
- * Builds an array of context segments for the LLM prompt based on the provided data.
- * Segments are ordered based on the 'order' property.
- * @param options - Options containing data needed to build the context.
- * @param options.guildId - The Discord ID of the server (used for DB lookups).
- * @param options.serverName - The name of the Discord server.
- * @param options.serverDescription - The description of the Discord server (can be null).
- * @param options.conversationHistory - Array of recent messages as strings ("Nickname: Message content").
- * @param options.userList - Array of unique user IDs involved in the conversation history.
- * @param options.channelDesc - The description/topic of the current channel (can be null).
- * @param options.channelName - The name of the current channel.
- * @param options.client - The Discord client instance (for mention conversion).
- * @param options.triggererName - Name of the user who triggered the action.
- * @returns A promise resolving to an array of ContextSegment objects.
- */
 export async function buildContext({
 	guildId,
 	serverName,
 	serverDescription,
-	conversationHistory,
+	simplifiedMessageHistory,
 	userList,
 	channelDesc,
 	channelName,
 	client,
 	triggererName,
 	emojiStrings,
+	tomoriNickname,
+	tomoriAttributes,
+	tomoriConfig,
 }: {
 	guildId: string;
 	serverName: string;
 	serverDescription: string | null;
-	conversationHistory: string[];
+	simplifiedMessageHistory: SimplifiedMessageForContext[];
 	userList: string[];
 	channelDesc: string | null;
 	channelName: string;
 	client: Client;
 	triggererName: string;
 	emojiStrings?: string[];
-}): Promise<ContextSegment[]> {
-	const segments: ContextSegment[] = [];
+	tomoriNickname: string;
+	tomoriAttributes: string[];
+	tomoriConfig: TomoriConfigRow;
+}): Promise<StructuredContextItem[]> {
+	const contextItems: StructuredContextItem[] = [];
+	const botName = tomoriNickname;
 
-	// 1. Load Server-Specific Bot State (TomoriState) using guildId
-	const tomoriState = await loadTomoriState(guildId);
-	if (!tomoriState) {
-		log.error(`buildContext: Failed to load TomoriState for guild ${guildId}.`);
-		throw new Error(`Failed to load server state for guild ${guildId}`);
+	// 1. System Instruction (Tomori's Personality and Humanizer)
+	// This will be expanded in Phase 2 to include all non-dialogue context.
+	// For now, it's just personality and humanizer rules.
+	let personalityInstructionText = tomoriAttributes.join("\n");
+	if (tomoriConfig.humanizer_degree >= 1) {
+		personalityInstructionText += HUMANIZE_INSTRUCTION;
 	}
-	const botName =
-		tomoriState.tomori_nickname || process.env.DEFAULT_BOTNAME || "Tomori";
-
-	// --- Segment 1: Server Description ---
-	let serverInfoContent = `# Knowledge Base\n${botName} is currently in the Discord server named "${serverName}".\n`;
-	if (serverDescription)
-		serverInfoContent += `## ${serverName}'s Description\n${serverDescription}`;
-	segments.push({
-		type: "preamble",
-		content: serverInfoContent,
-		order: 1, // Order 1
+	personalityInstructionText = await convertMentions(
+		personalityInstructionText,
+		client,
+		guildId,
+		triggererName,
+		botName,
+	);
+	contextItems.push({
+		role: "system",
+		parts: [{ type: "text", text: personalityInstructionText }],
+		metadataTag: ContextItemTag.SYSTEM_PERSONALITY, // Tagging for personality
 	});
 
-	// --- Segment 2: Emojis ---
+	// --- Preamble/Knowledge Base Segments ---
+	// These will be consolidated into the system prompt in Phase 2.
+	// For now, they are tagged individually.
+
+	// 2. Server Description
+	let serverInfoContent = `# Knowledge Base\n${botName} is currently in the Discord server named "${serverName}".\n`;
+	if (serverDescription) {
+		serverInfoContent += `## ${serverName}'s Description\n${serverDescription}`;
+	}
+	contextItems.push({
+		role: "system",
+		parts: [
+			{
+				type: "text",
+				text: await convertMentions(
+					serverInfoContent,
+					client,
+					guildId,
+					triggererName,
+					botName,
+				),
+			},
+		],
+		metadataTag: ContextItemTag.KNOWLEDGE_SERVER_INFO, // Tagging
+	});
+
+	// 3. Emojis
 	if (emojiStrings && emojiStrings.length > 0) {
-		// Declare with const inside the block to fix Biome lint error
-		const emojiContent = `## ${serverName}'s Emojis\n${emojiStrings.join(", ")}.`;
+		const emojiContent = `## ${serverName}'s Emojis\n- ${emojiStrings.join("\n- ")}.`;
 		const emojiUsage = `\nIn order to use ${serverName}'s Emojis, input the name and the code like such: <:name:numbercode>\nAnimated emojis require an 'a' flag in the beginning like such: <a:name:numbercode>\n`;
-		segments.push({
-			type: "preamble",
-			content: emojiContent + emojiUsage,
-			order: 2, // Order 2
+		contextItems.push({
+			role: "system",
+			parts: [
+				{
+					type: "text",
+					text: await convertMentions(
+						emojiContent + emojiUsage,
+						client,
+						guildId,
+						triggererName,
+						botName,
+					),
+				},
+			],
+			metadataTag: ContextItemTag.KNOWLEDGE_SERVER_EMOJIS, // Tagging
 		});
 	}
 
-	// --- Segment 3: Stickers --- (NEW SEGMENT)
-	if (tomoriState.config.sticker_usage_enabled) {
+	// 4. Stickers
+	if (tomoriConfig.sticker_usage_enabled) {
 		const guild = client.guilds.cache.get(guildId);
 		const serverStickers = guild?.stickers.cache;
 		if (serverStickers && serverStickers.size > 0) {
 			let stickerContent = `## ${serverName}'s Stickers\nThis server has the following stickers available for ${botName} to use with the 'select_sticker_for_response' function:\n`;
 			for (const sticker of serverStickers.values()) {
-				stickerContent += `- Name: "${sticker.name}", ID: "${sticker.id}"${sticker.description ? `, Description: "${sticker.description}"` : ""}\n`;
+				stickerContent += `- Name: "${sticker.name}", ID: "${sticker.id}"${sticker.description ? `, Description/Usage: "${sticker.description}"` : ""}\n`;
 			}
 			stickerContent += `To use a sticker, the 'select_sticker_for_response' function should be called with the exact 'sticker_id' of the desired sticker.\n`;
-			segments.push({
-				type: "preamble", // Or "tool_guide", "server_feature" - "preamble" fits general info
-				content: stickerContent,
-				order: 3, // Order 3
+			contextItems.push({
+				role: "system",
+				parts: [
+					{
+						type: "text",
+						text: await convertMentions(
+							stickerContent,
+							client,
+							guildId,
+							triggererName,
+							botName,
+						),
+					},
+				],
+				metadataTag: ContextItemTag.KNOWLEDGE_SERVER_STICKERS, // Tagging
 			});
-		} else {
-			log.info(
-				`Sticker usage enabled for guild ${guildId}, but no server stickers found or guild not in cache.`,
-			);
 		}
 	}
 
-	// --- Segment 4: Server Memories ---
+	// 5. Server Memories
+	const tomoriState = await loadTomoriState(guildId);
 	if (
-		tomoriState.server_memories &&
+		tomoriState?.server_memories &&
 		Array.isArray(tomoriState.server_memories) &&
 		tomoriState.server_memories.length > 0
 	) {
-		segments.push({
-			type: "memory",
-			content: `\n## ${botName}'s Memories about ${serverName}\n${tomoriState.server_memories.join("\n")}\n`,
-			order: 4, // Order 3
+		const serverMemoriesText = `\n## ${botName}'s Memories about ${serverName}\n${tomoriState.server_memories.join("\n")}\n`;
+		contextItems.push({
+			role: "system",
+			parts: [
+				{
+					type: "text",
+					text: await convertMentions(
+						serverMemoriesText,
+						client,
+						guildId,
+						triggererName,
+						botName,
+					),
+				},
+			],
+			metadataTag: ContextItemTag.KNOWLEDGE_SERVER_MEMORIES, // Tagging
 		});
 	}
 
-	// --- Segment 5: Personal Memories ---
-	const personalizationEnabled =
-		tomoriState.config?.personal_memories_enabled ?? true;
+	// 6. Personal Memories & User Status
+	const personalizationEnabled = tomoriConfig.personal_memories_enabled ?? true;
 	if (personalizationEnabled && userList.length > 0) {
-		let personalMemoriesContent = "";
+		let personalMemoriesCombinedText = "";
 		log.info(
 			`Building personal memories content for ${userList.length} users in guild ${guildId}`,
 		);
@@ -300,19 +380,22 @@ export async function buildContext({
 		);
 
 		// Process each user, registering those not found in the database
-		for (let i = 0; i < userList.length; i++) {
-			const userId = userList[i];
-			let userRow = userRows[i];
+		for (const userIdToProcess of userList) {
+			let userRow = await loadUserRow(userIdToProcess);
 
-			// If user not found in database, try to fetch from Discord and register them
 			if (!userRow) {
+				// Simplified for example
+
+				// If user not found in database, try to fetch from Discord and register them
 				try {
 					log.info(
-						`User ${userId} not found in database, fetching from Discord and registering`,
+						`User ${userIdToProcess} not found in database, fetching from Discord and registering`,
 					);
 					const guild = client.guilds.cache.get(guildId);
 					if (guild) {
-						const member = await guild.members.fetch(userId).catch(() => null);
+						const member = await guild.members
+							.fetch(userIdToProcess)
+							.catch(() => null);
 						if (member) {
 							// Register user with our centralized function
 							const serverLocale = guild.preferredLocale;
@@ -320,33 +403,35 @@ export async function buildContext({
 								? "ja"
 								: "en-US";
 							userRow = await registerUser(
-								userId,
+								userIdToProcess,
 								member.displayName,
 								userLanguage,
 							);
 							log.info(
-								`Successfully registered user ${userId} (${member.displayName})`,
+								`Successfully registered user ${userIdToProcess} (${member.displayName})`,
 							);
 						} else {
-							log.warn(`Could not fetch member ${userId} from Discord`);
+							log.warn(
+								`Could not fetch member ${userIdToProcess} from Discord`,
+							);
 						}
 					}
 				} catch (error) {
 					log.error(
-						`Error registering user ${userId} during context building:`,
+						`Error registering user ${userIdToProcess} during context building:`,
 						error,
 					);
 				}
 			}
 
-			// Skip if user is still null after registration attempt
 			if (
 				!userRow ||
 				typeof userRow.user_id !== "number" ||
 				!userRow.user_disc_id
 			) {
+				// Skip if user is still null after registration attempt
 				log.warn(
-					`Skipping invalid user row for ${userId}: ${JSON.stringify(userRow)}`,
+					`Skipping invalid user row for ${userIdToProcess}: ${JSON.stringify(userRow)}`,
 				);
 				continue;
 			}
@@ -359,53 +444,39 @@ export async function buildContext({
 
 			log.info(`User ${userRow.user_disc_id} blacklisted: ${userBlacklisted}`);
 
-			if (!userBlacklisted) {
+			if (userRow && !(await isBlacklisted(guildId, userRow.user_disc_id))) {
 				const userNickname = userRow.user_nickname || userRow.user_disc_id;
-				log.info(`Processing user ${userNickname} (${userRow.user_disc_id})`);
-
-				// Get the user's current presence and activity information regardless of memories
 				const presenceInfo = await getUserPresenceDetails(
 					client,
 					userRow.user_disc_id,
 					guildId,
 				);
 
-				log.info(`Got presence for ${userNickname}: "${presenceInfo}"`);
-
-				// Add any personal memories if they exist
+				let userSpecificContent = "";
 				if (userRow.personal_memories && userRow.personal_memories.length > 0) {
-					log.info(
-						`Adding ${userRow.personal_memories.length} memories for ${userNickname}`,
-					);
-					personalMemoriesContent += `## ${botName}'s Memories about ${userNickname}\n${userRow.personal_memories.join("\n")}\n`;
-					personalMemoriesContent = replaceTemplateVariables(
-						personalMemoriesContent,
-						{
-							bot: botName,
-							user: userNickname,
-						},
-					);
-				} else {
-					log.info(`No personal memories found for ${userNickname}`);
+					userSpecificContent += `## ${botName}'s Memories about ${userNickname}\n${userRow.personal_memories.join("\n")}\n`;
 				}
-
-				// Always add status information for non-blacklisted users
-				log.info(`Adding status information for ${userNickname}`);
-				personalMemoriesContent += `### ${userNickname}'s current status\n${presenceInfo}\n\n`;
+				userSpecificContent += `### ${userNickname}'s current status\n${presenceInfo}\n\n`;
+				personalMemoriesCombinedText += userSpecificContent;
 			}
 		}
 
-		if (personalMemoriesContent) {
-			log.info(
-				`Adding personal memories segment with ${personalMemoriesContent.length} characters`,
-			);
-			log.info(
-				`Personal memories: ${personalMemoriesContent.substring(0, 100)}...`,
-			);
-			segments.push({
-				type: "memory",
-				content: personalMemoriesContent.trim(),
-				order: 5, // Order 5
+		if (personalMemoriesCombinedText) {
+			contextItems.push({
+				role: "system",
+				parts: [
+					{
+						type: "text",
+						text: await convertMentions(
+							personalMemoriesCombinedText.trim(),
+							client,
+							guildId,
+							triggererName,
+							botName,
+						),
+					},
+				],
+				metadataTag: ContextItemTag.KNOWLEDGE_USER_MEMORIES,
 			});
 		} else {
 			log.warn(`No personal memories content generated for guild ${guildId}`);
@@ -416,74 +487,142 @@ export async function buildContext({
 		);
 	}
 
-	// --- Segment 6: Current Context (Time, Channel) ---
+	// 7. Current Context (Time, Channel)
 	let currentContextContent = `\n# Current Context\nCurrent Time: ${getCurrentTime()}.\n${botName} is currently in text channel #${channelName}.`;
 	if (channelDesc) {
 		currentContextContent += ` ${channelDesc}\n`;
 	}
-	segments.push({
-		type: "preamble",
-		content: currentContextContent,
-		order: 6, // Order 6
+	contextItems.push({
+		role: "system",
+		parts: [
+			{
+				type: "text",
+				text: await convertMentions(
+					currentContextContent,
+					client,
+					guildId,
+					triggererName,
+					botName,
+				),
+			},
+		],
+		metadataTag: ContextItemTag.KNOWLEDGE_CURRENT_CONTEXT, // Tagging
 	});
 
-	// --- Segment 7: Sample Dialogues ---
 	if (
+		tomoriState &&
 		tomoriState.sample_dialogues_in.length > 0 &&
 		tomoriState.sample_dialogues_out.length > 0 &&
 		tomoriState.sample_dialogues_in.length ===
 			tomoriState.sample_dialogues_out.length
 	) {
-		let sampleContent = "";
-		for (let i = 0; i < tomoriState.sample_dialogues_in.length; i++) {
-			sampleContent += `\n${triggererName}: ${tomoriState.sample_dialogues_in[i]}\n${tomoriState.tomori_nickname}: ${tomoriState.sample_dialogues_out[i]}`;
+		// 8. Sample Dialogues (Request 3: Changed to alternating user/model turns)
+		// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+		for (let i = 0; i < tomoriState!.sample_dialogues_in.length; i++) {
+			// 8.a. User's part of the sample dialogue
+			// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+			let userSampleText = tomoriState!.sample_dialogues_in[i];
+			// Prepend a generic "User:" for sample dialogues, or use triggererName if preferred.
+			userSampleText = `${triggererName}: ${userSampleText}`; // Or `${triggererName}: ${userSampleText}`
+			if (tomoriConfig.humanizer_degree >= 3) {
+				userSampleText = humanizeString(userSampleText);
+			}
+			contextItems.push({
+				role: "user",
+				parts: [
+					{
+						type: "text",
+						text: await convertMentions(
+							userSampleText,
+							client,
+							guildId,
+							triggererName, // triggererName for {user} if it appears in sample
+							botName,
+						),
+					},
+				],
+				metadataTag: ContextItemTag.DIALOGUE_SAMPLE, // Tagging
+			});
+
+			// 8.b. Bot's part of the sample dialogue
+			// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+			let modelSampleText = tomoriState!.sample_dialogues_out[i];
+			modelSampleText = `${botName}: ${modelSampleText}`; // Prepend bot's name
+			if (tomoriConfig.humanizer_degree >= 3) {
+				modelSampleText = humanizeString(modelSampleText);
+			}
+			contextItems.push({
+				role: "model",
+				parts: [
+					{
+						type: "text",
+						text: await convertMentions(
+							modelSampleText,
+							client,
+							guildId,
+							triggererName,
+							botName, // botName for {bot} if it appears in sample
+						),
+					},
+				],
+				metadataTag: ContextItemTag.DIALOGUE_SAMPLE, // Tagging
+			});
+		}
+	}
+
+	// 9. Conversation History (Main Dialogue)
+	for (const msg of simplifiedMessageHistory) {
+		const role = msg.authorId === client.user?.id ? "model" : "user";
+		const parts: ContextPart[] = [];
+
+		// 9.a. Add text part if content exists
+		if (msg.content) {
+			// Request 4: Prepend speaker name to content
+			let processedContent = `${msg.authorName}: ${msg.content}`;
+
+			if (tomoriConfig.humanizer_degree >= 3 && role === "model") {
+				processedContent = humanizeString(processedContent);
+			}
+			// convertMentions will handle {user} and {bot} replacements.
+			// The {user} in convertMentions will refer to msg.authorName if it's a user message.
+			processedContent = await convertMentions(
+				processedContent,
+				client,
+				guildId,
+				msg.authorName, // Pass the actual author of this historical message
+				botName,
+			);
+			parts.push({ type: "text", text: processedContent });
 		}
 
-		if (tomoriState.config.humanizer_degree >= 3)
-			sampleContent = humanizeString(sampleContent);
-		segments.push({
-			type: "sample",
-			content: sampleContent.trim(),
-			order: 7, // Order 7
-		});
+		// 9.b. Add image parts if attachments exist
+		for (const attachment of msg.imageAttachments) {
+			if (attachment.mimeType) {
+				parts.push({
+					type: "image",
+					uri: attachment.proxyUrl,
+					mimeType: attachment.mimeType,
+				});
+			} else {
+				log.warn(
+					`Skipping image attachment due to missing mimeType: ${attachment.filename} from user ${msg.authorName}`,
+				);
+			}
+		}
+
+		if (parts.length > 0) {
+			contextItems.push({
+				role,
+				parts,
+				metadataTag: ContextItemTag.DIALOGUE_HISTORY, // Tagging
+			});
+		}
 	}
-
-	// --- Segment 8: Conversation History ---
-	if (conversationHistory.length > 0) {
-		let historyString = conversationHistory.join("\n");
-
-		if (tomoriState.config.humanizer_degree >= 3)
-			historyString = humanizeString(historyString);
-		segments.push({
-			type: "history",
-			content: `${historyString}\n${botName}:`,
-			order: 8, // Order 8
-		});
-	}
-
-	// Sort segments by order before finalizing
-	segments.sort((a, b) => a.order - b.order);
-
-	// Now we process all segments at once with convertMentions
-	// This is much more efficient than processing each segment individually
-	const processedSegments = await Promise.all(
-		segments.map(async (segment) => {
-			return {
-				...segment,
-				content: await convertMentions(
-					segment.content,
-					client,
-					guildId,
-					triggererName,
-				),
-			};
-		}),
-	);
 
 	log.info(
-		`Built ${processedSegments.length} context segments for guild ${guildId}.`,
+		`Built ${contextItems.length} structured context items for guild ${guildId}.`,
 	);
-	return processedSegments;
+	return contextItems;
 }
 
 /**

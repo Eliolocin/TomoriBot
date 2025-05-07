@@ -539,6 +539,7 @@ export function cleanLLMOutput(
 		.replace(/\*\*<(.*?)>\*\*/g, "<$1>") // Bold **<emoji>**
 		.replace(/\*<(.*?)>\*/g, "<$1>") // Italic *<emoji>*
 		.replace(/<([a-zA-Z0-9_]+)>[\s\S]*?<\/\1>/g, "")
+		.replace(new RegExp(`^${botName ? botName : "Tomori"}:\\s*`, "i"), "") // Remove bot name prefix from start of text
 		.trim();
 
 	// 2. Emoji handling, only if we have a list of valid emojis

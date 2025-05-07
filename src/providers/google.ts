@@ -12,6 +12,10 @@ import { type GeminiConfig, GeminiConfigSchema } from "../types/api/gemini";
 import { log } from "../utils/misc/logger";
 import type { TomoriState } from "@/types/db/schema";
 import { selectStickerFunctionDeclaration } from "@/functions/sendSticker";
+import {
+	ContextItemTag,
+	type StructuredContextItem,
+} from "@/types/misc/context";
 
 // Default values for Gemini API
 const DEFAULT_MODEL =
@@ -76,7 +80,7 @@ export type GeminiResponseOutput =
  * Can return either a text response or a function call request.
  * This function handles a single turn; multi-turn function calling loops are managed by the caller.
  * @param config - Configuration for the Gemini API.
- * @param prompt - The primary context/prompt string to send to the LLM. For the first turn, this contains all context.
+ * @param contextItems - An array of structured context items (system, user, model turns with text/image parts).
  * @param functionInteractionHistory - Optional. For subsequent turns in a function calling sequence,
  *                                   this provides the history of previous function calls and their results.
  * @returns A Promise resolving to a GeminiResponseOutput object.
@@ -84,70 +88,189 @@ export type GeminiResponseOutput =
  */
 export async function generateGeminiResponse(
 	config: GeminiConfig,
-	prompt: string, // This is the comprehensive prompt for the first turn
-	systemInstruction?: string,
+	contextItems: StructuredContextItem[],
 	functionInteractionHistory?: {
 		functionCall: FunctionCall;
 		functionResponse: Part;
-	}[], // For subsequent turns
+	}[],
 ): Promise<GeminiResponseOutput> {
-	// Rule 1
-	log.section("Gemini API Request");
+	// Rule 18
+	log.section("Gemini API Request Preparation");
 
-	const validatedConfig = GeminiConfigSchema.parse(config); // Rule 3
+	// 1. Validate the incoming configuration (Rule 3)
+	const validatedConfig = GeminiConfigSchema.parse(config);
 	log.info("Configuration validated successfully");
 
 	let lastError: Error | undefined;
 
 	for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
 		try {
-			log.info(`Attempt ${attempt}/${MAX_RETRIES}`);
+			log.info(`Attempt ${attempt}/${MAX_RETRIES} to generate Gemini content.`);
 			const genAI = new GoogleGenAI({ apiKey: validatedConfig.apiKey });
+
+			// 2. Prepare the request configuration for Gemini
 			const requestConfig: GenerateContentConfig = {
 				...validatedConfig.generationConfig,
 				safetySettings: validatedConfig.safetySettings,
+				// systemInstruction will be built and set below
 			};
 
-			// 1. Prepare contents array (always Content[])
-			const contents: Content[] = [];
+			// 3. Initialize arrays for building system instruction and dialogue contents
+			const systemInstructionParts: string[] = [];
+			const dialogueContents: Content[] = []; // This will become the 'contents' for Gemini
 
-			// Add system instruction if provided
-			if (systemInstruction) {
-				requestConfig.systemInstruction = {
-					role: "system",
-					parts: [{ text: systemInstruction }],
-				}; // Format system instruction correctly
+			// 4. Define which metadataTags (for role 'user') should be part of system instruction
+			const systemInstructionTags: ContextItemTag[] = [
+				ContextItemTag.KNOWLEDGE_SERVER_INFO,
+				ContextItemTag.KNOWLEDGE_SERVER_EMOJIS,
+				ContextItemTag.KNOWLEDGE_SERVER_STICKERS,
+				ContextItemTag.KNOWLEDGE_SERVER_MEMORIES,
+				ContextItemTag.KNOWLEDGE_USER_MEMORIES, // Includes user status as per buildContext
+				ContextItemTag.KNOWLEDGE_CURRENT_CONTEXT,
+			];
+
+			// 5. Process StructuredContextItems:
+			//    - Consolidate system-related and knowledge-base items into systemInstruction.
+			//    - Convert dialogue items (history, samples) into Gemini's 'contents' format.
+			for (const item of contextItems) {
+				let itemTextContent = ""; // To store text from text parts
+
+				// 5.a. Extract text content if the item has text parts
+				if (item.parts.some((p) => p.type === "text")) {
+					itemTextContent = item.parts
+						.filter((p) => p.type === "text")
+						.map((p) => (p as { type: "text"; text: string }).text) // Type assertion
+						.join("\n"); // Join multiple text parts if any
+				}
+
+				// 5.b. Check if item should be part of the system instruction
+				if (
+					item.role === "system" ||
+					(item.role === "user" &&
+						item.metadataTag &&
+						systemInstructionTags.includes(item.metadataTag))
+				) {
+					if (itemTextContent) {
+						systemInstructionParts.push(itemTextContent);
+					}
+					// If a system/knowledge item also had images, they are currently ignored for systemInstruction.
+					// Gemini's systemInstruction is primarily text-based.
+					if (item.parts.some((p) => p.type === "image")) {
+						log.warn(
+							`Image parts found in an item designated for system instruction (tag: ${item.metadataTag}, role: ${item.role}). Images in system instructions are not typically supported by Gemini. Image content will be ignored for this item.`,
+						);
+					}
+				}
+				// 5.c. Else, if it's a dialogue item (user/model role for history or samples)
+				else if (
+					(item.role === "user" || item.role === "model") &&
+					item.metadataTag &&
+					(item.metadataTag === ContextItemTag.DIALOGUE_HISTORY ||
+						item.metadataTag === ContextItemTag.DIALOGUE_SAMPLE)
+				) {
+					const geminiParts: Part[] = [];
+					for (const part of item.parts) {
+						if (part.type === "text") {
+							geminiParts.push({ text: part.text });
+						} else if (part.type === "image") {
+							try {
+								log.info(
+									`Fetching image from URI: ${part.uri} for dialogue content.`,
+								);
+								const imageResponse = await fetch(part.uri); // Rule 2: Bun.fetch is native
+								if (!imageResponse.ok) {
+									throw new Error(
+										`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`,
+									);
+								}
+								const imageArrayBuffer = await imageResponse.arrayBuffer();
+								const base64ImageData =
+									Buffer.from(imageArrayBuffer).toString("base64");
+
+								if (part.mimeType) {
+									geminiParts.push({
+										inlineData: {
+											mimeType: part.mimeType,
+											data: base64ImageData,
+										},
+									});
+									log.info(
+										`Successfully processed and added image to dialogue: ${part.mimeType}`,
+									);
+								} else {
+									log.warn(
+										`Skipping image part in dialogue due to missing mimeType. URI: ${part.uri}`,
+									);
+								}
+							} catch (imageError) {
+								log.error(
+									// Rule 22
+									`Failed to process image part for dialogue (URI: ${part.uri}): ${imageError instanceof Error ? imageError.message : String(imageError)}. Skipping image.`,
+									imageError instanceof Error
+										? imageError
+										: new Error(String(imageError)),
+									{ metadata: { imageUri: part.uri, contextType: "dialogue" } },
+								);
+							}
+						}
+					}
+					if (geminiParts.length > 0) {
+						dialogueContents.push({ role: item.role, parts: geminiParts });
+					}
+				} else {
+					// This case handles items that don't fit the above criteria,
+					// e.g., a 'user' role item without a recognized systemInstructionTag or dialogue tag.
+					// Depending on desired behavior, these could be ignored, logged, or added to dialogueContents.
+					// For now, let's log and ignore them to keep the prompt clean.
+					log.warn(
+						`Skipping StructuredContextItem with role '${item.role}' and tag '${item.metadataTag}' as it doesn't fit system instruction or dialogue criteria.`,
+						{
+							itemDetails: {
+								role: item.role,
+								metadataTag: item.metadataTag,
+								hasText: !!itemTextContent,
+								imageCount: item.parts.filter((p) => p.type === "image").length,
+							},
+						},
+					);
+				}
 			}
 
-			// 2. The main prompt string is always the first 'user' part.
-			// For multi-turn, this 'prompt' might be just the latest user message if history is handled separately,
-			// but per your design, 'prompt' is the comprehensive context for the *start* of an interaction.
-			// For subsequent calls in a function-calling loop, this initial 'prompt' part ensures
-			// the original context is always present.
-			contents.push({ role: "user", parts: [{ text: prompt }] });
+			if (systemInstructionParts.length > 0) {
+				const fullSystemInstructionText =
+					systemInstructionParts.join("\n\n---\n\n"); // Use a clear separator
 
-			// 3. Append function call/response history if provided (for multi-turn function calling)
-			if (functionInteractionHistory && functionInteractionHistory.length > 0) {
-				for (const interaction of functionInteractionHistory) {
-					// Add the model's previous function call request
-					contents.push({
-						role: "model", // The model's turn
-						parts: [{ functionCall: interaction.functionCall }],
-					});
-					// Add our (the user/tool's) response to that function call
-					contents.push({
-						role: "user", // Per Google's docs, function responses are sent as 'user' role.
-						// It can also be role: "function" with specific SDK versions/models.
-						// Sticking to 'user' as per the common JS examples for genai SDK.
-						parts: [interaction.functionResponse], // functionResponse should be a Part object
-					});
-				}
+				// Change: Assign the string directly
+				requestConfig.systemInstruction = fullSystemInstructionText;
+
 				log.info(
-					`Appended ${functionInteractionHistory.length} function interaction(s) to the history.`,
+					`Assembled system instruction. Length: ${fullSystemInstructionText.length}`,
+				);
+			} else {
+				log.warn(
+					"No system instruction parts were assembled. Ensure this is intended.",
 				);
 			}
 
-			// 4. Add tools (function declarations) to the request config
+			// 6. Append function call/response history if provided
+			const finalContents = [...dialogueContents]; // Start with processed dialogue items
+			if (functionInteractionHistory && functionInteractionHistory.length > 0) {
+				for (const interaction of functionInteractionHistory) {
+					finalContents.push({
+						role: "model",
+						parts: [{ functionCall: interaction.functionCall }],
+					});
+					finalContents.push({
+						role: "user", // Gemini uses "user" role for function responses
+						parts: [interaction.functionResponse],
+					});
+				}
+				log.info(
+					`Appended ${functionInteractionHistory.length} function interaction(s) to the history. Total content items: ${finalContents.length}`,
+				);
+			}
+
+			// 7. Add tools (function declarations) to the request config
 			if (validatedConfig.tools && validatedConfig.tools.length > 0) {
 				requestConfig.tools = validatedConfig.tools;
 				log.info(
@@ -155,18 +278,33 @@ export async function generateGeminiResponse(
 				);
 			}
 
+			// 8. Log the final request details
 			log.info(
-				`Generating content with model ${validatedConfig.model || DEFAULT_MODEL} and config: ${JSON.stringify(requestConfig, null, 2)}`,
+				`Generating content with model ${validatedConfig.model || DEFAULT_MODEL}.`,
 			);
-			// Log the content being sent for debugging
-			// log.info(`Full 'contents' being sent: ${JSON.stringify(contents, null, 2)}`);
+			log.section("Full Gemini Request Details"); // Rule 18
+			log.info(
+				`Request Config (systemInstruction might be long): ${JSON.stringify(
+					{
+						...requestConfig,
+						// Change: Simplified logging for system instruction
+						systemInstruction: requestConfig.systemInstruction
+							? `${requestConfig.systemInstruction}`
+							: undefined,
+					},
+					null,
+					2,
+				)}`,
+			);
+			// log.info(`Full System Instruction: ${requestConfig.systemInstruction}`); // Uncomment for debugging, can be very long
+			log.info(
+				`Contents being sent (${finalContents.length} items): ${JSON.stringify(finalContents, null, 2)}`,
+			);
 
-			log.section("Full Prompt");
-			log.info(prompt);
-
+			// 9. Make the API call
 			const response = await genAI.models.generateContent({
 				model: validatedConfig.model || DEFAULT_MODEL,
-				contents: contents, // Use the constructed contents array
+				contents: finalContents, // Use the assembled dialogue contents
 				config: requestConfig,
 			});
 
@@ -227,22 +365,21 @@ export async function generateGeminiResponse(
 			}
 			// --- End Block Checks ---
 
-			// 5. Check for Function Calls from Gemini
+			// 10. Check for Function Calls from Gemini
 			const functionCalls = response.functionCalls;
 			if (functionCalls && functionCalls.length > 0) {
-				const firstFunctionCall = functionCalls[0]; // SDK parses args
+				const firstFunctionCall = functionCalls[0];
 				log.success(
 					`Gemini requested function call: ${firstFunctionCall.name}`,
 				);
 				log.info(`Arguments: ${JSON.stringify(firstFunctionCall.args)}`);
-				// Return an object indicating a function call is requested, with the full FunctionCall object
 				return {
 					type: "function_call",
-					call: firstFunctionCall, // Return the entire FunctionCall object
+					call: firstFunctionCall,
 				};
 			}
 
-			// 6. If no function call, proceed as a regular Text Response
+			// 11. If no function call, proceed as a regular Text Response
 			const responseText = response.text;
 			if (responseText === undefined || responseText === null) {
 				log.warn(
@@ -253,7 +390,7 @@ export async function generateGeminiResponse(
 				);
 			}
 
-			log.success("Successfully generated text response");
+			log.success("Successfully generated text response from Gemini.");
 			return { type: "text_response", text: responseText };
 		} catch (error) {
 			lastError = error as Error;
@@ -261,30 +398,49 @@ export async function generateGeminiResponse(
 				`Attempt ${attempt}/${MAX_RETRIES} failed: ${lastError.message}`,
 			);
 
-			// ... (existing non-retryable error check and retry delay logic) ...
 			if (
 				lastError.message.includes("API key not valid") ||
 				lastError.message.includes("PERMISSION_DENIED") ||
-				lastError.message.includes("INVALID_ARGUMENT")
+				lastError.message.includes("INVALID_ARGUMENT") ||
+				lastError.message.toLowerCase().includes("billing account")
 			) {
-				log.error("Non-retryable error encountered, failing fast.", lastError);
-				throw lastError;
+				log.error(
+					"Non-retryable error encountered with Gemini API, failing fast.",
+					lastError,
+				);
+				throw lastError; // Rule 22: log.error should be used for tracked errors
 			}
 
 			if (attempt === MAX_RETRIES) {
 				log.error(
-					`Failed to generate response after ${MAX_RETRIES} attempts. Last error: ${lastError.message}`,
+					// Rule 22
+					`Failed to generate Gemini response after ${MAX_RETRIES} attempts. Last error: ${lastError.message}`,
+					lastError,
+					{
+						errorType: "APIAttemptsFailed",
+						metadata: { attempts: MAX_RETRIES },
+					},
 				);
 				throw lastError;
 			}
-			log.info(`Waiting ${RETRY_DELAY_MS / 1000} seconds before retry...`);
+			log.info(
+				`Waiting ${RETRY_DELAY_MS / 1000} seconds before next Gemini API retry...`,
+			);
 			await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
 		}
 	}
 
-	throw (
-		lastError || new Error("Unknown error in Gemini provider after retries")
+	// This line should ideally not be reached if retry logic is correct
+	// Log error before throwing (Rule 22)
+	const finalError =
+		lastError ||
+		new Error("Unknown error in Gemini provider after all retries.");
+	await log.error(
+		"Exhausted retries for Gemini provider or encountered unknown error.",
+		finalError,
+		{ errorType: "APIProviderFailure", metadata: { attempts: MAX_RETRIES } },
 	);
+	throw finalError;
 }
 
 /**
