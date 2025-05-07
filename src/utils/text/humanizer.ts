@@ -76,9 +76,11 @@ export function humanizeString(text: string): string {
 	processedText = processedText.replace(/\b([A-Za-z][a-zA-Z']*)\b/g, (word) => {
 		const isAcronym = /^[A-Z]{2,}$/.test(word);
 		const isInternet = INTERNET_EXPRESSIONS.has(word.toLowerCase());
-		// Preserve standalone "I" pronoun
-		const isStandaloneI = word === "I";
-		return isAcronym || isInternet || isStandaloneI ? word : word.toLowerCase();
+		// Preserve standalone "I" pronoun and any single letters (for slang like "B", "F", "L", etc.)
+		const isSingleLetter = word.length === 1;
+		return isAcronym || isInternet || isSingleLetter
+			? word
+			: word.toLowerCase();
 	});
 
 	// 6. Remove periods and commas, but keep question marks and exclamation points

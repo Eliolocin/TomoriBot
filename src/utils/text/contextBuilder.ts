@@ -25,7 +25,7 @@ import type { TomoriConfigRow } from "@/types/db/schema";
 const mentionCache = new Map<string, string>();
 
 const HUMANIZE_INSTRUCTION =
-	"\nTry to limit yourself to only 0 to 2 emojis per response (from the available server emojis or kaomojis, if your personality uses those) and make sure to respond short and concisely, as a human would in public chatrooms. Only make lengthy responses if and only if a user is asking for assistance or an explanation that warrants it.";
+	"\n{bot} limits themselves to only 0 to 2 emojis per response (from the available server emojis) and makes sure to respond short and concisely, as {bot} is aware that no one really likes to read walls of text. {bot} only makes lengthy responses if and only if people are asking for assistance or an explanation that warrants it.";
 
 /**
  * Simplified message structure received from tomoriChat.ts.
@@ -575,7 +575,22 @@ export async function buildContext({
 		const role = msg.authorId === client.user?.id ? "model" : "user";
 		const parts: ContextPart[] = [];
 
-		// 9.a. Add text part if content exists
+		// 9.a. Add image parts if attachments exist
+		for (const attachment of msg.imageAttachments) {
+			if (attachment.mimeType) {
+				parts.push({
+					type: "image",
+					uri: attachment.proxyUrl,
+					mimeType: attachment.mimeType,
+				});
+			} else {
+				log.warn(
+					`Skipping image attachment due to missing mimeType: ${attachment.filename} from user ${msg.authorName}`,
+				);
+			}
+		}
+
+		// 9.b. Add text part if content exists
 		if (msg.content) {
 			// Request 4: Prepend speaker name to content
 			let processedContent = `${msg.authorName}: ${msg.content}`;
@@ -593,21 +608,6 @@ export async function buildContext({
 				botName,
 			);
 			parts.push({ type: "text", text: processedContent });
-		}
-
-		// 9.b. Add image parts if attachments exist
-		for (const attachment of msg.imageAttachments) {
-			if (attachment.mimeType) {
-				parts.push({
-					type: "image",
-					uri: attachment.proxyUrl,
-					mimeType: attachment.mimeType,
-				});
-			} else {
-				log.warn(
-					`Skipping image attachment due to missing mimeType: ${attachment.filename} from user ${msg.authorName}`,
-				);
-			}
 		}
 
 		if (parts.length > 0) {

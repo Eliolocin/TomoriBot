@@ -289,16 +289,33 @@ export async function generateGeminiResponse(
 						...requestConfig,
 						// Change: Simplified logging for system instruction
 						systemInstruction: requestConfig.systemInstruction
-							? `${requestConfig.systemInstruction}`
+							? `${requestConfig.systemInstruction}...`
 							: undefined,
 					},
 					null,
 					2,
 				)}`,
 			);
-			// log.info(`Full System Instruction: ${requestConfig.systemInstruction}`); // Uncomment for debugging, can be very long
+
+			// Create a sanitized version of finalContents that hides image data
+			const sanitizedContents = finalContents.map((content) => ({
+				...content,
+				parts: content.parts?.map((part) => {
+					if (part.inlineData) {
+						// Replace base64 image data with a placeholder
+						return {
+							inlineData: {
+								mimeType: part.inlineData.mimeType,
+								data: "[BASE64_IMAGE_DATA_HIDDEN]",
+							},
+						};
+					}
+					return part;
+				}),
+			}));
+
 			log.info(
-				`Contents being sent (${finalContents.length} items): ${JSON.stringify(finalContents, null, 2)}`,
+				`Contents being sent (${finalContents.length} items): ${JSON.stringify(sanitizedContents, null, 2)}`,
 			);
 
 			// 9. Make the API call
@@ -459,7 +476,6 @@ export function getGeminiTools(
 
 	const modelNameLower = tomoriState.llm.llm_codename.toLowerCase();
 
-	/*
 	// 3. Add Google Search for capable Flash models (existing logic)
 	if (
 		modelNameLower.includes("flash") &&
@@ -467,7 +483,9 @@ export function getGeminiTools(
 	) {
 		toolsConfig.push({ googleSearch: {} }); // googleSearch is a distinct tool type
 		log.info(`Enabled Google Search tool for model: ${modelNameLower}`);
-	}*/
+	}
+
+	/*
 
 	// 4. Add Sticker Function Calling if enabled in Tomori's config (Rule 20: Using config)
 	if (tomoriState.config.sticker_usage_enabled) {
@@ -480,7 +498,7 @@ export function getGeminiTools(
 	// 5. If there are any function declarations, package them correctly for the tools array
 	if (functionDeclarations.length > 0) {
 		toolsConfig.push({ functionDeclarations }); // Gemini expects function declarations under this key
-	}
+	}*/
 
 	// 6. Log if no tools are enabled
 	if (toolsConfig.length === 0) {

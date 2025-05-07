@@ -320,7 +320,7 @@ export default async function tomoriChat(
 				[];
 			const messageContentForLlm: string | null = msg.content; // Start with original content
 
-			// 10.a. Process direct image attachments
+			// 10.a. Process direct image attachments and stickers
 			if (msg.attachments.size > 0) {
 				for (const attachment of msg.attachments.values()) {
 					if (
@@ -337,6 +337,24 @@ export default async function tomoriChat(
 							filename: attachment.name,
 						});
 					}
+				}
+			}
+
+			// Process stickers sent in the message
+			if (msg.stickers.size > 0) {
+				for (const sticker of msg.stickers.values()) {
+					// Get the sticker URL for Lottie, PNG, or other formats
+					// Discord CDN URL follows a consistent pattern
+					const stickerUrl = `https://cdn.discordapp.com/stickers/${sticker.id}.png`;
+
+					imageAttachments.push({
+						url: stickerUrl,
+						proxyUrl: stickerUrl, // Use same URL for proxy
+						mimeType: "image/png", // Discord serves PNG version for stickers
+						filename: `${sticker.name}.png`,
+					});
+
+					log.info(`Processed sticker: ${sticker.name} (${sticker.id})`);
 				}
 			}
 

@@ -16,8 +16,7 @@ export function shouldBotReply(
 	if (
 		message.author.bot ||
 		message.content.startsWith("!") || // Basic command prefix check
-		!(message.channel instanceof TextChannel) || // Use TextChannel as value
-		message.content.length === 0
+		!(message.channel instanceof TextChannel) // Use TextChannel as value
 	) {
 		return false;
 	}
