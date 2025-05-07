@@ -188,7 +188,7 @@ export async function setupServer(
 			// Use Gemini 2.5 Flash as default
 			const [defaultLlm] = await tx`
 				SELECT llm_id FROM llms 
-				WHERE llm_codename = 'gemini-2.5-flash-preview-04-17'
+				WHERE llm_codename = '${process.env.DEFAULT_GEMINI_MODEL}'
 				LIMIT 1
 			`;
 

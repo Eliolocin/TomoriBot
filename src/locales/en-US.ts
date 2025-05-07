@@ -52,8 +52,8 @@ export default {
 		},
 	},
 
-	gemini: {
-		// Errors related to Gemini API generation
+	genai: {
+		// Errors related to LLM API generation
 		generic_error_title: `Generation Error`,
 		generic_error_description: `Sorry, I encountered an error while trying to generate a response. Please try again later.`,
 		safety_block_title: `Content Blocked`,

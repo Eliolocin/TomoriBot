@@ -108,18 +108,20 @@ export function humanizeString(text: string): string {
 
 	return processedText;
 }
-
 /**
  * Sends message chunks with realistic typing simulation.
  * Calculates typing speed based on message length and adds random "thinking" pauses.
+ * Attaches stickers only to the last chunk if provided.
  *
  * @param channel - The Discord text channel to send messages to
  * @param chunks - Array of message chunks to send
+ * @param stickerPayload - Optional array of sticker IDs to send with the last chunk
  * @returns Promise that resolves when all chunks are sent
  */
 export async function sendWithTypingSimulation(
 	channel: BaseGuildTextChannel,
 	chunks: string[],
+	stickerPayload?: string[], // 1. Added optional stickerPayload parameter
 ): Promise<void> {
 	if (!chunks.length) return;
 
@@ -130,55 +132,69 @@ export async function sendWithTypingSimulation(
 	const MAX_RANDOM_PAUSE = 2000; // maximum pause between messages
 	const THINKING_PAUSE_CHANCE = 0.3; // 30% chance of a longer "thinking" pause
 
-	log.info(`Humanizer: Sending ${chunks.length} chunks with typing simulation`);
-	// 1. Send the first chunk immediately without delay
+	log.info(
+		`Humanizer: Sending ${chunks.length} chunks with typing simulation.${stickerPayload ? ` Sticker payload: ${stickerPayload.join(", ")}` : ""}`,
+	);
+
+	// 2. Handle the first chunk (which might also be the only chunk)
 	if (chunks.length > 0) {
-		await channel.send(chunks[0]);
-		log.info("Humanizer: Sent first chunk immediately");
+		const firstChunk = chunks[0];
+		const isOnlyChunk = chunks.length === 1;
+		await channel.send({
+			content: firstChunk,
+			stickers: isOnlyChunk ? stickerPayload : undefined, // 3. Send stickers if it's the only chunk
+		});
+		log.info(
+			`Humanizer: Sent first chunk immediately${isOnlyChunk && stickerPayload ? " with sticker(s)" : ""}`,
+		);
 	}
 
+	// 4. Loop for subsequent chunks (if any)
 	for (let i = 1; i < chunks.length; i++) {
 		const chunk = chunks[i];
+		const isLastChunk = i === chunks.length - 1; // 5. Check if this is the last chunk
 
-		// 1. Start typing indicator
+		// Start typing indicator
 		await channel.sendTyping();
 
-		// 2. Calculate a realistic typing delay
-		// Formula: length × speed, but capped to avoid extremely long waits
+		// Calculate a realistic typing delay
 		let typingTime = Math.min(chunk.length * BASE_TYPE_SPEED, MAX_TYPING_TIME);
-
-		// Adjust typing time based on chunk complexity (code blocks take longer)
 		if (chunk.includes("```")) {
-			typingTime *= 1.5; // Code blocks take longer to "type"
+			typingTime *= 1.5;
 		}
 
-		// 3. Wait for the calculated typing time
 		log.info(`Humanizer: Simulating typing for ${Math.round(typingTime)}ms`);
 		await new Promise((resolve) => setTimeout(resolve, typingTime));
 
-		// 4. Send the message
-		await channel.send(chunk);
+		// Send the message chunk
+		await channel.send({
+			content: chunk,
+			stickers: isLastChunk ? stickerPayload : undefined, // 6. Send stickers if it's the last chunk
+		});
+		log.info(
+			`Humanizer: Sent chunk ${i + 1}/${chunks.length}${isLastChunk && stickerPayload ? " with sticker(s)" : ""}`,
+		);
 
-		// 5. Add a random pause between chunks (simulates thinking)
-		if (i < chunks.length - 1) {
-			// Determine if this should be a longer "thinking" pause
+		// Add a random pause between chunks (simulates thinking)
+		if (!isLastChunk) {
+			// Only pause if there are more chunks to send
 			const isThinkingPause = Math.random() < THINKING_PAUSE_CHANCE;
-
 			let pauseTime = Math.floor(
 				MIN_RANDOM_PAUSE +
 					Math.random() * (MAX_RANDOM_PAUSE - MIN_RANDOM_PAUSE),
 			);
 
-			// Longer pause if "thinking"
 			if (isThinkingPause) {
 				pauseTime *= 2;
-				// Show typing indicator again briefly during the thinking pause
 				setTimeout(() => {
-					channel
-						.sendTyping()
-						.catch((err) =>
-							log.error("Error sending typing indicator during pause:", err),
-						);
+					channel.sendTyping().catch((err) =>
+						log.error(
+							// Rule 22: Use log.error for actual errors
+							"Error sending typing indicator during pause:",
+							err,
+							{ errorType: "DiscordAPIError" }, // Provide context
+						),
+					);
 				}, pauseTime / 2);
 			}
 

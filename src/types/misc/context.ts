@@ -17,6 +17,15 @@ export interface ContextSegment {
 	tokens?: number; // Optional token count for context pruning
 }
 
+export type ContextPart =
+	| { type: "text"; text: string }
+	| { type: "image"; uri: string; mimeType: string }; // URI could be a public URL or a data URI
+
+export type StructuredContextItem = {
+	role: "system" | "user" | "model"; // 'system' for initial instructions, 'user' for user/tool inputs, 'model' for LLM responses
+	parts: ContextPart[];
+};
+
 /**
  * Full context assembly options
  */

@@ -241,7 +241,29 @@ export async function buildContext({
 		});
 	}
 
-	// --- Segment 3: Server Memories ---
+	// --- Segment 3: Stickers --- (NEW SEGMENT)
+	if (tomoriState.config.sticker_usage_enabled) {
+		const guild = client.guilds.cache.get(guildId);
+		const serverStickers = guild?.stickers.cache;
+		if (serverStickers && serverStickers.size > 0) {
+			let stickerContent = `## ${serverName}'s Stickers\nThis server has the following stickers available for ${botName} to use with the 'select_sticker_for_response' function:\n`;
+			for (const sticker of serverStickers.values()) {
+				stickerContent += `- Name: "${sticker.name}", ID: "${sticker.id}"${sticker.description ? `, Description: "${sticker.description}"` : ""}\n`;
+			}
+			stickerContent += `To use a sticker, the 'select_sticker_for_response' function should be called with the exact 'sticker_id' of the desired sticker.\n`;
+			segments.push({
+				type: "preamble", // Or "tool_guide", "server_feature" - "preamble" fits general info
+				content: stickerContent,
+				order: 3, // Order 3
+			});
+		} else {
+			log.info(
+				`Sticker usage enabled for guild ${guildId}, but no server stickers found or guild not in cache.`,
+			);
+		}
+	}
+
+	// --- Segment 4: Server Memories ---
 	if (
 		tomoriState.server_memories &&
 		Array.isArray(tomoriState.server_memories) &&
@@ -250,11 +272,11 @@ export async function buildContext({
 		segments.push({
 			type: "memory",
 			content: `\n## ${botName}'s Memories about ${serverName}\n${tomoriState.server_memories.join("\n")}\n`,
-			order: 3, // Order 3
+			order: 4, // Order 3
 		});
 	}
 
-	// --- Segment 4: Personal Memories ---
+	// --- Segment 5: Personal Memories ---
 	const personalizationEnabled =
 		tomoriState.config?.personal_memories_enabled ?? true;
 	if (personalizationEnabled && userList.length > 0) {
@@ -383,7 +405,7 @@ export async function buildContext({
 			segments.push({
 				type: "memory",
 				content: personalMemoriesContent.trim(),
-				order: 4, // Order 4
+				order: 5, // Order 5
 			});
 		} else {
 			log.warn(`No personal memories content generated for guild ${guildId}`);
@@ -394,7 +416,7 @@ export async function buildContext({
 		);
 	}
 
-	// --- Segment 5: Current Context (Time, Channel) ---
+	// --- Segment 6: Current Context (Time, Channel) ---
 	let currentContextContent = `\n# Current Context\nCurrent Time: ${getCurrentTime()}.\n${botName} is currently in text channel #${channelName}.`;
 	if (channelDesc) {
 		currentContextContent += ` ${channelDesc}\n`;
@@ -402,10 +424,10 @@ export async function buildContext({
 	segments.push({
 		type: "preamble",
 		content: currentContextContent,
-		order: 5, // Order 5
+		order: 6, // Order 6
 	});
 
-	// --- Segment 6: Sample Dialogues ---
+	// --- Segment 7: Sample Dialogues ---
 	if (
 		tomoriState.sample_dialogues_in.length > 0 &&
 		tomoriState.sample_dialogues_out.length > 0 &&
@@ -422,11 +444,11 @@ export async function buildContext({
 		segments.push({
 			type: "sample",
 			content: sampleContent.trim(),
-			order: 6, // Order 6
+			order: 7, // Order 7
 		});
 	}
 
-	// --- Segment 7: Conversation History ---
+	// --- Segment 8: Conversation History ---
 	if (conversationHistory.length > 0) {
 		let historyString = conversationHistory.join("\n");
 
@@ -435,7 +457,7 @@ export async function buildContext({
 		segments.push({
 			type: "history",
 			content: `${historyString}\n${botName}:`,
-			order: 7, // Order 7
+			order: 8, // Order 8
 		});
 	}
 

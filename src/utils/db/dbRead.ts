@@ -8,6 +8,8 @@ import {
 	type ServerEmojiRow,
 	type LlmRow,
 	llmSchema,
+	type ServerStickerRow,
+	serverStickerSchema,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 
@@ -253,5 +255,76 @@ export async function loadAvailableLlms(): Promise<LlmRow[] | null> {
 		// 6. Log any unexpected errors during the database query (Rule 22)
 		log.error("Error loading available LLMs from database:", error);
 		return null;
+	}
+}
+
+/**
+ * Loads all stickers for a given server's Discord ID from the database.
+ * @param serverDiscId - The Discord ID of the server.
+ * @returns A promise that resolves to an array of ServerStickerRow or null if server not found/error.
+ *          Returns an empty array if the server is found but has no stickers.
+ */
+export async function loadServerStickers(
+	serverDiscId: string,
+): Promise<ServerStickerRow[] | null> {
+	try {
+		// 1. Get the internal server_id from server_disc_id
+		const [server] = await sql`
+            SELECT server_id FROM servers WHERE server_disc_id = ${serverDiscId} LIMIT 1
+        `;
+
+		if (!server || !server.server_id) {
+			log.warn(
+				`Server not found in DB with Discord ID: ${serverDiscId} when trying to load stickers.`,
+			);
+			return null; // Server itself not found
+		}
+		// biome-ignore lint/style/noNonNullAssertion: server check guarantees server_id (Rule 8)
+		const serverId = server.server_id!;
+
+		// 2. Fetch all stickers for that server_id, selecting only necessary fields
+		const stickersData = await sql`
+            SELECT sticker_id, server_id, sticker_disc_id, sticker_name, sticker_desc, emotion_key, format_type, is_global, created_at, updated_at
+            FROM server_stickers
+            WHERE server_id = ${serverId}
+        `; // Rule 16: Explicit columns
+
+		if (!stickersData) {
+			// This case should ideally not happen with current bun-postgres; an empty array is more likely.
+			log.warn(
+				`Stickers data was unexpectedly null for server ID: ${serverId} (Discord ID: ${serverDiscId})`,
+			);
+			return []; // Treat as no stickers found
+		}
+		if (stickersData.length === 0) {
+			log.info(
+				`No stickers found in DB for server ID: ${serverId} (Discord ID: ${serverDiscId})`,
+			);
+			return []; // Explicitly return empty array if no stickers
+		}
+
+		// 3. Validate each sticker row (Rule 6, Rule 5 - data integrity for function calling)
+		const validatedStickers: ServerStickerRow[] = [];
+		for (const sticker of stickersData) {
+			const parsed = serverStickerSchema.safeParse(sticker);
+			if (parsed.success) {
+				validatedStickers.push(parsed.data);
+			} else {
+				log.warn(
+					`Invalid sticker data found in DB for server ${serverId}, sticker_disc_id ${sticker.sticker_disc_id}: ${JSON.stringify(sticker)}. Errors: ${parsed.error.flatten()}`,
+				);
+				// Optionally skip adding invalid stickers
+			}
+		}
+		log.info(
+			`Loaded ${validatedStickers.length} stickers for server ID ${serverId}.`,
+		);
+		return validatedStickers;
+	} catch (error) {
+		log.error(
+			`Error loading stickers for server Discord ID ${serverDiscId}:`,
+			error,
+		);
+		return null; // Error during DB operation
 	}
 }

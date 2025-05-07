@@ -1,8 +1,17 @@
-import type { Client, Message } from "discord.js";
+import type { Client, Message, Sticker } from "discord.js";
 import { BaseGuildTextChannel, DMChannel } from "discord.js"; // Import value for instanceof check
-import { generateGeminiResponse, getGeminiTools } from "../../providers/google";
+import {
+	type GeminiResponseOutput,
+	generateGeminiResponse,
+	getGeminiTools,
+} from "../../providers/google";
 import type { ContextSegment } from "../../types/misc/context";
-import { HarmCategory, HarmBlockThreshold } from "@google/genai";
+import {
+	HarmCategory,
+	HarmBlockThreshold,
+	type FunctionCall,
+	type Part,
+} from "@google/genai";
 import type { GeminiConfig } from "../../types/api/gemini";
 import {
 	loadServerEmojis,
@@ -27,6 +36,7 @@ import {
 	humanizeString,
 	sendWithTypingSimulation,
 } from "@/utils/text/humanizer";
+import { selectStickerFunctionDeclaration } from "@/functions/sendSticker";
 
 // Constants
 const MESSAGE_FETCH_LIMIT = 80;
@@ -45,8 +55,10 @@ const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
 // Conversation reset markers
 const CONVERSATION_RESET_MARKERS = ["REFRESH", "refresh", "リフレッシュ"];
 
+const MAX_FUNCTION_CALL_ITERATIONS = 5; // Safety break for function call loops
+
 /**
- * Handles incoming messages to potentially generate a response using Gemini.
+ * Handles incoming messages to potentially generate a response using genai.
  * @param client - The Discord client instance.
  * @param message - The incoming Discord message.
  */
@@ -348,25 +360,26 @@ export default async function tomoriChat(
 			return;
 		}
 
+		// biome-ignore lint/style/noNonNullAssertion: API key presence was validated earlier for triggered messages
+		const decryptedApiKey = await decryptApiKey(tomoriState.config.api_key!);
+		if (!decryptedApiKey) {
+			log.error("API Key is not set or failed to decrypt.");
+			await sendStandardEmbed(channel, locale, {
+				color: ColorCode.ERROR,
+				titleKey: "general.errors.api_key_error_title",
+				descriptionKey: "general.errors.api_key_error_description",
+			});
+			return;
+		}
+
 		// 12. Generate Response
 		try {
+			// Only support Google for now
 			if (tomoriState.llm.llm_provider.toLowerCase() !== "google") {
 				log.warn(
 					`Unsupported LLM provider configured: ${tomoriState.llm.llm_provider}`,
 				);
 				// Optionally send a message if needed, or just return silently
-				return;
-			}
-
-			// biome-ignore lint/style/noNonNullAssertion: API key presence was validated earlier for triggered messages
-			const decryptedApiKey = await decryptApiKey(tomoriState.config.api_key!);
-			if (!decryptedApiKey) {
-				log.error("API Key is not set or failed to decrypt.");
-				await sendStandardEmbed(channel, locale, {
-					color: ColorCode.ERROR,
-					titleKey: "general.errors.api_key_error_title",
-					descriptionKey: "general.errors.api_key_error_description",
-				});
 				return;
 			}
 
@@ -420,20 +433,151 @@ export default async function tomoriChat(
 				user: triggererName,
 			});
 
-			const responseText = await generateGeminiResponse(
-				geminiConfig,
-				promptString,
-				systemInstruction,
+			// --- Function Calling Loop ---
+			let llmFinalResponseText: string | undefined;
+			let selectedStickerToSend: Sticker | null = null; // Store the Discord Sticker object
+			const functionInteractionHistory: {
+				functionCall: FunctionCall;
+				functionResponse: Part;
+			}[] = [];
+
+			for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
+				log.info(
+					`LLM Call Iteration: ${i + 1}/${MAX_FUNCTION_CALL_ITERATIONS}. History items: ${functionInteractionHistory.length}`,
+				);
+				const llmOutput: GeminiResponseOutput = await generateGeminiResponse(
+					geminiConfig,
+					promptString, // Original full prompt is always sent
+					systemInstruction, // System instruction is always sent
+					functionInteractionHistory.length > 0
+						? functionInteractionHistory
+						: undefined,
+				);
+
+				if (llmOutput.type === "text_response") {
+					llmFinalResponseText = llmOutput.text;
+					log.success(
+						`LLM provided final text response after ${i + 1} iteration(s).`,
+					);
+					break; // Exit loop, we have the final text
+				}
+
+				if (llmOutput.type === "function_call") {
+					const funcCall = llmOutput.call;
+					log.info(
+						`LLM wants to call function: ${funcCall.name} with args: ${JSON.stringify(funcCall.args)}`,
+					);
+
+					let functionExecutionResult: Record<string, unknown>; // To hold the outcome of our local function execution
+
+					// 12.a. Execute the function locally based on its name
+					if (funcCall.name === selectStickerFunctionDeclaration.name) {
+						const stickerIdArg = funcCall.args?.sticker_id;
+						if (typeof stickerIdArg === "string") {
+							// biome-ignore lint/style/noNonNullAssertion: Guild is checked and asserted earlier
+							const discordSticker = guild!.stickers.cache.get(stickerIdArg);
+							if (discordSticker) {
+								log.success(
+									`Sticker '${discordSticker.name}' (${stickerIdArg}) found locally.`,
+								);
+								functionExecutionResult = {
+									status: "sticker_selected_successfully",
+									sticker_id: discordSticker.id,
+									sticker_name: discordSticker.name,
+									sticker_description: discordSticker.description,
+									// Potentially add sticker_description if available and useful for LLM
+								};
+								selectedStickerToSend = discordSticker; // Store the actual Sticker object
+							} else {
+								log.warn(
+									`Sticker with ID ${stickerIdArg} not found in server cache. Informing LLM.`,
+								);
+								functionExecutionResult = {
+									status: "sticker_not_found",
+									sticker_id_attempted: stickerIdArg,
+									reason:
+										"The sticker ID provided was not found among the available server stickers. Please choose from the provided list or do not use a sticker.",
+								};
+								selectedStickerToSend = null; // Ensure no sticker is sent if selection fails this turn
+							}
+						} else {
+							log.warn(
+								"Invalid or missing sticker_id in function call arguments for select_sticker_for_response.",
+							);
+							functionExecutionResult = {
+								status: "sticker_selection_failed_invalid_args",
+								reason:
+									"The sticker_id argument was missing or not in the expected format. Please provide a valid sticker_id string.",
+							};
+							selectedStickerToSend = null;
+						}
+					} else {
+						log.warn(
+							`LLM called unknown function: ${funcCall.name}. Informing LLM.`,
+						);
+						functionExecutionResult = {
+							status: "unknown_function_called",
+							function_name_called: funcCall.name,
+							message: `The function '${funcCall.name}' is not recognized or implemented. Please proceed without calling this function, or use one of the available functions.`,
+						};
+						// We don't break here; let the LLM decide what to do next based on this feedback.
+					}
+
+					// 12.b. Add the model's function call and our function's result to the history
+					functionInteractionHistory.push({
+						functionCall: funcCall, // The FunctionCall object from the LLM
+						functionResponse: {
+							// This is the 'Part' object for the function response
+							functionResponse: {
+								name: funcCall.name, // The name of the function that was called
+								response: {
+									// The actual result of our local execution
+									// Wrapping in 'result' is a common pattern shown in Google's examples
+									result: functionExecutionResult,
+								},
+							},
+						},
+					});
+
+					// 12.c. Safety break if max iterations reached
+					if (i === MAX_FUNCTION_CALL_ITERATIONS - 1) {
+						log.warn(
+							"Max function call iterations reached. LLM did not provide a final text response.",
+						);
+						llmFinalResponseText =
+							"I tried to use a special tool but got a bit stuck. Could you try rephrasing your request?"; // Fallback message
+						selectedStickerToSend = null; // Clear any potentially selected sticker
+						break;
+					}
+				}
+			}
+			if (!llmFinalResponseText) {
+				// --- End Function Calling Loop ---
+
+				log.error(
+					"LLM interaction finished without a discernible text response after loop.",
+				);
+				await sendStandardEmbed(channel, locale, {
+					color: ColorCode.ERROR,
+					titleKey: "genai.generic_error_title",
+					descriptionKey: "genai.no_final_response_description", // Create this locale key
+				});
+				return; // Exit early
+			}
+
+			log.success(
+				`Tomori generated final response for server ${serverDiscId}.`,
 			);
+			if (selectedStickerToSend) {
+				log.info(`A sticker was selected: ${selectedStickerToSend.name}`);
+			}
 
-			log.success(`Gemini generated response for server ${serverDiscId}.`);
-
-			log.section("Raw response");
-			console.log(responseText);
+			log.section("Raw final response from LLM");
+			console.log(llmFinalResponseText);
 
 			// 13. Sanitize and Send Response
 			let sanitizedReply = cleanLLMOutput(
-				responseText,
+				llmFinalResponseText, // Use the final text from the loop
 				tomoriState.tomori_nickname,
 				emojiStrings,
 				tomoriState.config.emoji_usage_enabled,
@@ -451,29 +595,46 @@ export default async function tomoriChat(
 					config.humanizer_degree,
 					CHUNK_LENGTH,
 				);
-				log.info(`Sending response in ${messageChunks.length} chunks`);
+				log.info(`Sending response in ${messageChunks.length} chunks.`);
 
-				if (config.humanizer_degree >= 2)
-					await sendWithTypingSimulation(channel, messageChunks);
-				else
-					for (const chunk of messageChunks) {
-						await channel.send(chunk);
+				// Prepare sticker payload for sending
+				const stickerPayload = selectedStickerToSend
+					? [selectedStickerToSend.id]
+					: undefined;
+
+				if (config.humanizer_degree >= 2) {
+					// Assuming sendWithTypingSimulation can handle a sticker payload
+					// It should attach stickers only to the last message it sends.
+					await sendWithTypingSimulation(
+						channel,
+						messageChunks,
+						stickerPayload,
+					);
+				} else {
+					for (let j = 0; j < messageChunks.length; j++) {
+						const chunk = messageChunks[j];
+						const isLastChunk = j === messageChunks.length - 1;
+						await channel.send({
+							content: chunk,
+							stickers: isLastChunk ? stickerPayload : undefined,
+						});
 					}
+				}
 			} else {
+				// ... (existing logic for empty sanitized reply) ...
 				log.warn("Sanitized reply resulted in empty string. Not sending.");
-				// Optionally send a message indicating no response could be generated
 				await sendStandardEmbed(channel, locale, {
 					color: ColorCode.WARN,
-					titleKey: "gemini.empty_response_title",
-					descriptionKey: "gemini.empty_response_description",
+					titleKey: "genai.empty_response_title",
+					descriptionKey: "genai.empty_response_description",
 				});
 			}
 		} catch (error) {
 			// --- Enhanced Error Handling ---
-			log.error("Error during Gemini generation or sending:", error);
+			log.error("Error during Response generation or sending:", error);
 
-			let titleKey = "gemini.generic_error_title";
-			let descriptionKey = "gemini.generic_error_description";
+			let titleKey = "genai.generic_error_title";
+			let descriptionKey = "genai.generic_error_description";
 			let descriptionVars: Record<string, string> = {};
 
 			if (error instanceof Error) {
@@ -481,52 +642,52 @@ export default async function tomoriChat(
 
 				// 1. Safety Block Check
 				if (errorMessage.startsWith("safetyblock:")) {
-					titleKey = "gemini.safety_block_title";
-					descriptionKey = "gemini.safety_block_description";
+					titleKey = "genai.safety_block_title";
+					descriptionKey = "genai.safety_block_description";
 					// Extract reason if possible
 					const reasonMatch = errorMessage.match(/due to (\w+)/);
 					descriptionVars = {
 						reason: reasonMatch ? reasonMatch[1] : "Unknown Safety Reason",
 					};
 				}
-				// 2. Specific API Error Checks (using regex on error.message)
+				// 2. Specific GEmini API Error Checks (using regex on error.message)
 				else if (
 					errorMessage.includes("permission_denied") ||
 					errorMessage.includes("api key not valid")
 				) {
-					titleKey = "gemini.api_error_title";
-					descriptionKey = "gemini.403_permission_denied_description";
+					titleKey = "genai.api_error_title";
+					descriptionKey = "genai.403_permission_denied_description";
 				} else if (errorMessage.includes("invalid_argument")) {
-					titleKey = "gemini.api_error_title";
-					descriptionKey = "gemini.400_invalid_argument_description";
+					titleKey = "genai.api_error_title";
+					descriptionKey = "genai.400_invalid_argument_description";
 				} else if (errorMessage.includes("failed_precondition")) {
-					titleKey = "gemini.api_error_title";
-					descriptionKey = "gemini.400_failed_precondition_description";
+					titleKey = "genai.api_error_title";
+					descriptionKey = "genai.400_failed_precondition_description";
 				} else if (errorMessage.includes("not_found")) {
-					titleKey = "gemini.api_error_title";
-					descriptionKey = "gemini.404_not_found_description";
+					titleKey = "genai.api_error_title";
+					descriptionKey = "genai.404_not_found_description";
 				} else if (
 					errorMessage.includes("resource_exhausted") ||
 					errorMessage.includes("quota exceeded")
 				) {
-					titleKey = "gemini.api_error_title";
-					descriptionKey = "gemini.429_resource_exhausted_description";
+					titleKey = "genai.api_error_title";
+					descriptionKey = "genai.429_resource_exhausted_description";
 				} else if (errorMessage.includes("internal")) {
 					// 500
-					titleKey = "gemini.api_error_title";
-					descriptionKey = "gemini.500_internal_description";
+					titleKey = "genai.api_error_title";
+					descriptionKey = "genai.500_internal_description";
 				} else if (errorMessage.includes("unavailable")) {
 					// 503
-					titleKey = "gemini.api_error_title";
-					descriptionKey = "gemini.503_unavailable_description";
+					titleKey = "genai.api_error_title";
+					descriptionKey = "genai.503_unavailable_description";
 				} else if (errorMessage.includes("deadline_exceeded")) {
 					// 504
-					titleKey = "gemini.api_error_title";
-					descriptionKey = "gemini.504_deadline_exceeded_description";
+					titleKey = "genai.api_error_title";
+					descriptionKey = "genai.504_deadline_exceeded_description";
 				} else {
 					// Fallback for other Gemini errors not explicitly listed
-					titleKey = "gemini.api_error_title";
-					descriptionKey = "gemini.unknown_api_error_description";
+					titleKey = "genai.api_error_title";
+					descriptionKey = "genai.unknown_api_error_description";
 					descriptionVars = { error: error.message }; // Include the raw error message
 				}
 			}
