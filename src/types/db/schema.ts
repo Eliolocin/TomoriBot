@@ -1,7 +1,7 @@
 import { StickerFormatType } from "discord.js";
 import { z } from "zod";
 
-export enum HumanizerLevel {
+export enum HumanizerDegree {
 	NONE = 0,
 	LIGHT = 1,
 	MEDIUM = 2,
@@ -67,7 +67,9 @@ export const tomoriConfigSchema = z.object({
 	sampledialogue_memteaching_enabled: z.boolean().default(false),
 	self_teaching_enabled: z.boolean().default(true),
 	personal_memories_enabled: z.boolean().default(true),
-	humanizer_degree: z.nativeEnum(HumanizerLevel).default(HumanizerLevel.LIGHT),
+	humanizer_degree: z
+		.nativeEnum(HumanizerDegree)
+		.default(HumanizerDegree.LIGHT),
 	emoji_usage_enabled: z.boolean().default(true), // Added May 5, 2025
 	sticker_usage_enabled: z.boolean().default(true), // Added May 5, 2025
 	created_at: z.date().optional(),

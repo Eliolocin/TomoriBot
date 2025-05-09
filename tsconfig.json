@@ -18,5 +18,9 @@
 			"@/*": ["./*"]
 		}
 	},
-	"include": ["src/**/*", "src/events/messageCreate/tomoriChat.ts"]
+	"include": [
+		"src/**/*",
+		"src/events/messageCreate/tomoriChat.ts",
+		".deprecated/formatSource.ts"
+	]
 }

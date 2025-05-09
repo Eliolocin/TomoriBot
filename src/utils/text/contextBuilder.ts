@@ -12,9 +12,12 @@ import {
 } from "../../types/misc/context";
 import { registerUser } from "../db/dbWrite";
 import { log } from "../misc/logger";
-import { replaceTemplateVariables, getCurrentTime } from "./stringHelper";
-import { humanizeString } from "./humanizer";
-import { HumanizerLevel, type TomoriConfigRow } from "@/types/db/schema";
+import {
+	replaceTemplateVariables,
+	getCurrentTime,
+	humanizeString,
+} from "./stringHelper";
+import { HumanizerDegree, type TomoriConfigRow } from "@/types/db/schema";
 // Import ServerEmojiRow if needed for emoji query result type
 // import type { ServerEmojiRow } from "../../types/db/schema";
 
@@ -238,7 +241,7 @@ export async function buildContext({
 	// This will be expanded in Phase 2 to include all non-dialogue context.
 	// For now, it's just personality and humanizer rules.
 	let personalityInstructionText = tomoriAttributes.join("\n");
-	if (tomoriConfig.humanizer_degree >= HumanizerLevel.LIGHT) {
+	if (tomoriConfig.humanizer_degree >= HumanizerDegree.LIGHT) {
 		personalityInstructionText += HUMANIZE_INSTRUCTION;
 	}
 	personalityInstructionText = await convertMentions(
@@ -524,7 +527,7 @@ export async function buildContext({
 			let userSampleText = tomoriState!.sample_dialogues_in[i];
 			// Prepend a generic "User:" for sample dialogues, or use triggererName if preferred.
 			userSampleText = `${triggererName}: ${userSampleText}`; // Or `${triggererName}: ${userSampleText}`
-			if (tomoriConfig.humanizer_degree >= HumanizerLevel.HEAVY) {
+			if (tomoriConfig.humanizer_degree >= HumanizerDegree.HEAVY) {
 				userSampleText = humanizeString(userSampleText);
 			}
 			contextItems.push({
@@ -548,7 +551,7 @@ export async function buildContext({
 			// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
 			let modelSampleText = tomoriState!.sample_dialogues_out[i];
 			modelSampleText = `${botName}: ${modelSampleText}`; // Prepend bot's name
-			if (tomoriConfig.humanizer_degree >= HumanizerLevel.HEAVY) {
+			if (tomoriConfig.humanizer_degree >= HumanizerDegree.HEAVY) {
 				modelSampleText = humanizeString(modelSampleText);
 			}
 			contextItems.push({
@@ -596,7 +599,7 @@ export async function buildContext({
 			let processedContent = `${msg.authorName}: ${msg.content}`;
 
 			if (
-				tomoriConfig.humanizer_degree >= HumanizerLevel.HEAVY &&
+				tomoriConfig.humanizer_degree >= HumanizerDegree.HEAVY &&
 				role === "model"
 			) {
 				processedContent = humanizeString(processedContent);

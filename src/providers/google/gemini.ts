@@ -10,7 +10,7 @@ import {
 } from "@google/genai";
 import { type GeminiConfig, GeminiConfigSchema } from "../../types/api/gemini";
 import { log } from "../../utils/misc/logger";
-import { HumanizerLevel, type TomoriState } from "@/types/db/schema";
+import { HumanizerDegree, type TomoriState } from "@/types/db/schema";
 // import { selectStickerFunctionDeclaration } from "@/functions/sendSticker";
 import {
 	ContextItemTag,
@@ -23,8 +23,11 @@ import {
 	type Message,
 	MessageFlags,
 } from "discord.js";
-import { chunkMessage, cleanLLMOutput } from "@/utils/text/stringHelper";
-import { humanizeString } from "@/utils/text/humanizer";
+import {
+	chunkMessage,
+	cleanLLMOutput,
+	humanizeString,
+} from "@/utils/text/stringHelper";
 import { selectStickerFunctionDeclaration } from "./functionCalls";
 
 // Default values for Gemini API
@@ -356,7 +359,7 @@ export async function streamGeminiToDiscord(
 			const finalMessageChunks: string[] = [];
 			for (let chunk of rawMessageChunks) {
 				const originalChunkForProcessing = chunk;
-				if (currentHumanizerDegree === HumanizerLevel.HEAVY) {
+				if (currentHumanizerDegree === HumanizerDegree.HEAVY) {
 					chunk = humanizeString(chunk);
 					if (chunk !== originalChunkForProcessing) {
 						log.info(
@@ -370,7 +373,7 @@ export async function streamGeminiToDiscord(
 			}
 			if (!finalMessageChunks.length) return;
 
-			if (currentHumanizerDegree === HumanizerLevel.LIGHT) {
+			if (currentHumanizerDegree === HumanizerDegree.LIGHT) {
 				for (let i = 0; i < finalMessageChunks.length; i++) {
 					const chunkToSend = finalMessageChunks[i];
 					await channel
@@ -394,7 +397,7 @@ export async function streamGeminiToDiscord(
 						`Stream Send: Sent (D1, C${i + 1}/${finalMessageChunks.length}): "${chunkToSend}"`, // No substring
 					);
 				}
-			} else if (currentHumanizerDegree >= HumanizerLevel.MEDIUM) {
+			} else if (currentHumanizerDegree >= HumanizerDegree.MEDIUM) {
 				const firstChunk = finalMessageChunks[0];
 				// MODIFIED: Check if we need to reply or send for the first chunk
 				if (!hasRepliedToOriginalMessage && replyToMessage) {
@@ -598,7 +601,7 @@ export async function streamGeminiToDiscord(
 						);
 						isInsideCodeBlock = false; // Exiting code block mode due to function call
 					}
-					if (humanizerDegree >= HumanizerLevel.LIGHT) {
+					if (humanizerDegree >= HumanizerDegree.LIGHT) {
 						await channel
 							.sendTyping()
 							.catch((e) =>
@@ -691,8 +694,8 @@ export async function streamGeminiToDiscord(
 							breakType = "newline";
 						}
 						// 2.c. MODIFIED: Conditionally check for period flush ONLY if humanizerDegree is HEAVY (3)
-						// Assuming HumanizerLevel.HEAVY will correspond to numeric value 3
-						if (humanizerDegree === HumanizerLevel.HEAVY) {
+						// Assuming HumanizerDegree.HEAVY will correspond to numeric value 3
+						if (humanizerDegree === HumanizerDegree.HEAVY) {
 							if (
 								periodEndIndex !== -1 && // A period was found
 								(earliestBreakIndex === -1 || // And it's the first break found, OR
@@ -764,7 +767,7 @@ export async function streamGeminiToDiscord(
 					}
 
 					if (segmentToFlush) {
-						if (humanizerDegree >= HumanizerLevel.LIGHT) {
+						if (humanizerDegree >= HumanizerDegree.LIGHT) {
 							await channel
 								.sendTyping()
 								.catch((e) => log.warn("Stream Seg: sendTyping failed", e));
@@ -799,7 +802,7 @@ export async function streamGeminiToDiscord(
 					log.info(
 						`Stream Seg: Flushing oversized regular buffer (no delimiter): "${streamBuffer}"`,
 					); // No substring
-					if (humanizerDegree >= HumanizerLevel.LIGHT) {
+					if (humanizerDegree >= HumanizerDegree.LIGHT) {
 						await channel
 							.sendTyping()
 							.catch((e) =>
@@ -832,7 +835,7 @@ export async function streamGeminiToDiscord(
 					"Stream Seg: Final flush occurred while still inside a code block. The block might be incomplete.",
 				);
 			}
-			if (humanizerDegree >= HumanizerLevel.LIGHT) {
+			if (humanizerDegree >= HumanizerDegree.LIGHT) {
 				await channel
 					.sendTyping()
 					.catch((e) =>

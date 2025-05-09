@@ -12,8 +12,8 @@ import {
 import { ColorCode, log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { loadTomoriState } from "../../utils/db/dbRead";
-import { formatBoolean } from "../../utils/misc/boolUtils";
 import type { UserRow } from "../../types/db/schema";
+import { formatBoolean } from "@/utils/text/stringHelper";
 
 // Constants
 const MAX_ITEMS_DISPLAY = 5; // Max number of items to list directly (e.g., trigger words, channels)
