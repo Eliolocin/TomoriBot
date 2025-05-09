@@ -50,6 +50,9 @@ export default {
 			invalid_option_title: `Invalid Option`,
 			invalid_option_description: `The selected option is invalid. Please choose a valid option.`,
 		},
+		tomori_busy_title: "Busy Replying to Someone Else!",
+		tomori_busy_replying:
+			"I'm currently working on {message_link}. I'll get to your message next! Hang tight! 😊",
 	},
 
 	genai: {
@@ -209,7 +212,7 @@ Discord API Latency: \`{discord_response}ms\``,
 				removed_title: `Member Unblacklisted`,
 				removed_description: `Removed \`{user_name}\` from the personalization blacklist. Their personal memories and nickname can now be used.`,
 			},
-			humanizerdegree: {
+			humanizerlevel: {
 				command_description: `Set how 'human-like' Tomori's responses should feel.`,
 				value_description: `The level of humanization (0=None, 1=Prompt, 2=Typing/Chunking, 3=Lowercase/No Punctuation).`,
 				choice_none: `0: None (Raw AI Output)`,
@@ -303,7 +306,7 @@ Discord API Latency: \`{discord_response}ms\``,
 				name_field: `Tomori's Name`,
 				modal_timeout: `Setup timed out. Please run \`/config setup\` again.`,
 				already_setup_title: `Tomori Already Set Up`,
-				already_setup_description: `Tomori is already set up for this server. To modify Tomori's configuration, please use other commands like \`/config humanizerdegree\`, \`/config temperature\`, \`/teach attribute\`, etc.`,
+				already_setup_description: `Tomori is already set up for this server. To modify Tomori's configuration, please use other commands like \`/config humanizerlevel\`, \`/config temperature\`, \`/teach attribute\`, etc.`,
 			},
 			temperature: {
 				command_description: `Set the creativity/randomness of Tomori's responses (0.1-2.0).`,

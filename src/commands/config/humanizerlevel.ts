@@ -16,7 +16,7 @@ import {
 import { sql } from "bun";
 
 // Define constants at the top (Rule #20)
-const HUMANIZER_MIN = 0;
+const HUMANIZER_MIN = 1;
 const HUMANIZER_MAX = 3;
 const HUMANIZER_DEFAULT = 1;
 
@@ -25,15 +25,12 @@ export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("humanizerdegree")
+		.setName("humanizerlevel")
 		.setDescription(
-			localizer("en-US", "commands.config.humanizerdegree.command_description"),
+			localizer("en-US", "commands.config.humanizerlevel.command_description"),
 		)
 		.setDescriptionLocalizations({
-			ja: localizer(
-				"ja",
-				"commands.config.humanizerdegree.command_description",
-			),
+			ja: localizer("ja", "commands.config.humanizerlevel.command_description"),
 		})
 		.addIntegerOption((option) =>
 			option
@@ -41,13 +38,13 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.humanizerdegree.value_description",
+						"commands.config.humanizerlevel.value_description",
 					),
 				)
 				.setDescriptionLocalizations({
 					ja: localizer(
 						"ja",
-						"commands.config.humanizerdegree.value_description",
+						"commands.config.humanizerlevel.value_description",
 					),
 				})
 				.setMinValue(HUMANIZER_MIN)
@@ -57,28 +54,21 @@ export const configureSubcommand = (
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.humanizerdegree.choice_none",
-						),
-						value: 0,
-					},
-					{
-						name: localizer(
-							"en-US",
-							"commands.config.humanizerdegree.choice_light",
+							"commands.config.humanizerlevel.choice_light",
 						),
 						value: 1,
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.humanizerdegree.choice_medium",
+							"commands.config.humanizerlevel.choice_medium",
 						),
 						value: 2,
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.humanizerdegree.choice_heavy",
+							"commands.config.humanizerlevel.choice_heavy",
 						),
 						value: 3,
 					},
@@ -120,9 +110,9 @@ export async function execute(
 		// 3. Additional validation (Discord already handles min/max, but just in case)
 		if (humanizerValue < HUMANIZER_MIN || humanizerValue > HUMANIZER_MAX) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.humanizerdegree.invalid_value_title",
+				titleKey: "commands.config.humanizerlevel.invalid_value_title",
 				descriptionKey:
-					"commands.config.humanizerdegree.invalid_value_description",
+					"commands.config.humanizerlevel.invalid_value_description",
 				descriptionVars: {
 					min: HUMANIZER_MIN.toString(), // Ensure strings for localizer
 					max: HUMANIZER_MAX.toString(),
@@ -151,9 +141,9 @@ export async function execute(
 			tomoriState.config.humanizer_degree ?? HUMANIZER_DEFAULT;
 		if (humanizerValue === currentHumanizer) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.humanizerdegree.already_set_title",
+				titleKey: "commands.config.humanizerlevel.already_set_title",
 				descriptionKey:
-					"commands.config.humanizerdegree.already_set_description",
+					"commands.config.humanizerlevel.already_set_description",
 				descriptionVars: {
 					value: getHumanizerLabel(locale, humanizerValue),
 				},
@@ -180,7 +170,7 @@ export async function execute(
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config humanizerdegree",
+					command: "config humanizerlevel",
 					guildId: interaction.guild.id,
 					humanizerValue,
 					validationErrors: validatedConfig.success
@@ -207,8 +197,8 @@ export async function execute(
 
 		// 9. Success message with explanation of the humanizer effect
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.humanizerdegree.success_title",
-			descriptionKey: "commands.config.humanizerdegree.success_description",
+			titleKey: "commands.config.humanizerlevel.success_title",
+			descriptionKey: "commands.config.humanizerlevel.success_description",
 			descriptionVars: {
 				value: getHumanizerLabel(locale, humanizerValue),
 				previous_value: getHumanizerLabel(locale, currentHumanizer),
@@ -232,14 +222,14 @@ export async function execute(
 			tomoriId: tomoriIdForError,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config humanizerdegree",
+				command: "config humanizerlevel",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 				valueAttempted: interaction.options.getInteger("value"), // Log attempted value
 			},
 		};
 		await log.error(
-			`Error executing /config humanizerdegree for user ${userData.user_disc_id}`,
+			`Error executing /config humanizerlevel for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);
@@ -268,19 +258,17 @@ export async function execute(
  */
 function getHumanizerLabel(locale: string, value: number): string {
 	switch (value) {
-		case 0:
-			return localizer(locale, "commands.config.humanizerdegree.choice_none");
 		case 1:
-			return localizer(locale, "commands.config.humanizerdegree.choice_light");
+			return localizer(locale, "commands.config.humanizerlevel.choice_light");
 		case 2:
-			return localizer(locale, "commands.config.humanizerdegree.choice_medium");
+			return localizer(locale, "commands.config.humanizerlevel.choice_medium");
 		case 3:
-			return localizer(locale, "commands.config.humanizerdegree.choice_heavy");
+			return localizer(locale, "commands.config.humanizerlevel.choice_heavy");
 		default:
 			// Default to light if value is somehow unexpected, though validation should prevent this
 			log.warn(
 				`Unexpected humanizer value encountered in getHumanizerLabel: ${value}`,
 			);
-			return localizer(locale, "commands.config.humanizerdegree.choice_light");
+			return localizer(locale, "commands.config.humanizerlevel.choice_light");
 	}
 }

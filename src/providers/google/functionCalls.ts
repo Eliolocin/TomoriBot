@@ -25,3 +25,8 @@ export const selectStickerFunctionDeclaration = {
 		required: ["sticker_id"], // Only sticker_id is required from the LLM at this stage
 	},
 };
+
+// Future plans:
+// 1. Google Search
+// 2. Tomori Self-Teaching
+// 3. Scrape Danbooru/Gelbooru

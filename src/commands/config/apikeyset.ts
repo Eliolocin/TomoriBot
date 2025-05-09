@@ -13,7 +13,7 @@ import {
 	type ErrorContext,
 	tomoriConfigSchema,
 } from "../../types/db/schema";
-import { validateApiKey } from "../../providers/google";
+import { validateApiKey } from "../../providers/google/gemini";
 import { encryptApiKey } from "../../utils/security/crypto";
 import { sql } from "bun";
 

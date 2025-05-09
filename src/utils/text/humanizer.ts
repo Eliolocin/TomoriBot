@@ -72,19 +72,27 @@ export function humanizeString(text: string): string {
 			return `__SENDER_${senderStrings.length - 1}__`;
 		},
 	);
-	// 5. Apply lowercase transformation to text outside code blocks
-	processedText = processedText.replace(/\b([A-Za-z][a-zA-Z']*)\b/g, (word) => {
-		const isAcronym = /^[A-Z]{2,}$/.test(word);
-		const isInternet = INTERNET_EXPRESSIONS.has(word.toLowerCase());
-		// Preserve standalone "I" pronoun and any single letters (for slang like "B", "F", "L", etc.)
-		const isSingleLetter = word.length === 1;
-		return isAcronym || isInternet || isSingleLetter
-			? word
-			: word.toLowerCase();
-	});
+	// 5. Apply lowercase transformation to text outside code blocks,
+	//    now including hyphenated words like "E-ew" or "D-don't" as single words
+	processedText = processedText.replace(
+		/\b([A-Za-z][A-Za-z'-]*)\b/g,
+		(word) => {
+			// 5.1 Check for all-uppercase acronyms (allow hyphens in acronyms if needed)
+			const isAcronym = /^[A-Z](?:[A-Z'-]*[A-Z])?$/.test(word);
+			// 5.2 Check for known internet expressions (lowercased set)
+			const isInternet = INTERNET_EXPRESSIONS.has(word.toLowerCase());
+			// 5.3 Preserve standalone single letters (e.g., "I", "B", "F")
+			const isSingleLetter = word.length === 1;
+			// If it's an acronym, internet expression, or single letter, leave it;
+			// otherwise lowercase the whole hyphenated or single word.
+			return isAcronym || isInternet || isSingleLetter
+				? word
+				: word.toLowerCase();
+		},
+	);
 
-	// 6. Remove periods and commas, but keep question marks and exclamation points
-	processedText = processedText.replace(/[;]/g, ""); // Remove periods, commas, semicolons, colons
+	// 6. Remove commas and semicolons but keep question marks and exclamation points
+	processedText = processedText.replace(/[;,]/g, ""); // Remove periods, commas, semicolons, colons
 
 	// 7. Fix potential issues with multiple punctuation
 	//processedText = processedText.replace(/([?!])+/g, "$1"); // Replace multiple ???? or !!!! with single one

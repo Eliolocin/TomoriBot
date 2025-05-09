@@ -1,3 +1,5 @@
+import { HumanizerLevel } from "@/types/db/schema";
+
 /**
  * Replaces template variables in a text string with their corresponding values.
  *
@@ -254,7 +256,10 @@ export function chunkMessage(
 				const textToAdd = block.content.trim();
 				if (!textToAdd) continue; // Skip empty text
 
-				if (humanizerDegree === 2) {
+				if (
+					humanizerDegree >= HumanizerLevel.LIGHT &&
+					humanizerDegree < HumanizerLevel.HEAVY
+				) {
 					// 3c-i. Humanizer Degree 2: Break at newlines, keep punctuation
 					const paragraphs = textToAdd.split(/\n+/);
 
@@ -262,7 +267,7 @@ export function chunkMessage(
 						if (!paragraph.trim()) continue;
 						chunkedMessages.push(paragraph);
 					}
-				} else if (humanizerDegree >= 3) {
+				} else if (humanizerDegree >= HumanizerLevel.HEAVY) {
 					// 3c-ii. Humanizer Degree 3+: Break at newlines AND sentence endings
 					const paragraphs = textToAdd.split(/\n+/);
 
@@ -275,10 +280,13 @@ export function chunkMessage(
 						paragraph = paragraph.replace(/\.{3}(?!\.)(?!\d)/g, "....");
 
 						// Remove all commas from the text
-						paragraph = paragraph.replace(/,/g, "");
+						// paragraph = paragraph.replace(/,/g, ""); Already in humanizer
 
-						// Split by sentence endings
-						const sentences = paragraph.split(/(?<=[.])(?=\s|$)/);
+						// Split on periods at end of sentences but skip common abbreviations and numbered lists like "1.", "2.", etc.
+						// Also handles Japanese period (。) as a sentence boundary
+						const sentences = paragraph.split(
+							/(?<!(?:\b(?:vs|mr|mrs|dr|prof|inc|ltd|co|etc|e\.g|i\.e)|\d))[.。](?=\s|$)/i,
+						);
 
 						// Then split by sentence endings but keep the punctuation
 						// This looks for punctuation followed by end of string
@@ -301,8 +309,15 @@ export function chunkMessage(
 
 							// Process ending punctuation
 							let processedSentence = sentence;
-							if (sentence.endsWith("."))
+							// Ensure we don't shorten "..." to ".." here.
+							// Only remove a trailing period if it's a single period, not part of an ellipsis.
+							if (
+								(sentence.endsWith(".") || sentence.endsWith("。")) &&
+								!sentence.endsWith("...")
+							) {
+								// MODIFIED LINE
 								processedSentence = sentence.slice(0, -1).trim();
+							}
 
 							if (!processedSentence) continue;
 
@@ -582,6 +597,15 @@ export function cleanLLMOutput(
 			);
 			cleanedText = cleanedText.replace(pattern, ` ${full} `);
 		}
+
+		// 2.4.5 Handle empty‐ID emoji attempts like `<:name:>`
+		cleanedText = cleanedText.replace(
+			/<(a?):([^:>]+):?>/g, // match `<:name:>` or `<a:name:>`
+			(_match, _animated, name) => {
+				const canonical = emojiNameMap.get(name); // look up `:name:` in your map
+				return canonical ?? ""; // replace with correct emoji or drop it
+			},
+		);
 
 		// 2.5 Correct or drop any remaining <...> emoji attempts
 		cleanedText = cleanedText.replace(

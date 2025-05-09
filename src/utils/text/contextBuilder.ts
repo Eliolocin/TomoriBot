@@ -14,7 +14,7 @@ import { registerUser } from "../db/dbWrite";
 import { log } from "../misc/logger";
 import { replaceTemplateVariables, getCurrentTime } from "./stringHelper";
 import { humanizeString } from "./humanizer";
-import type { TomoriConfigRow } from "@/types/db/schema";
+import { HumanizerLevel, type TomoriConfigRow } from "@/types/db/schema";
 // Import ServerEmojiRow if needed for emoji query result type
 // import type { ServerEmojiRow } from "../../types/db/schema";
 
@@ -238,7 +238,7 @@ export async function buildContext({
 	// This will be expanded in Phase 2 to include all non-dialogue context.
 	// For now, it's just personality and humanizer rules.
 	let personalityInstructionText = tomoriAttributes.join("\n");
-	if (tomoriConfig.humanizer_degree >= 1) {
+	if (tomoriConfig.humanizer_degree >= HumanizerLevel.LIGHT) {
 		personalityInstructionText += HUMANIZE_INSTRUCTION;
 	}
 	personalityInstructionText = await convertMentions(
@@ -524,7 +524,7 @@ export async function buildContext({
 			let userSampleText = tomoriState!.sample_dialogues_in[i];
 			// Prepend a generic "User:" for sample dialogues, or use triggererName if preferred.
 			userSampleText = `${triggererName}: ${userSampleText}`; // Or `${triggererName}: ${userSampleText}`
-			if (tomoriConfig.humanizer_degree >= 3) {
+			if (tomoriConfig.humanizer_degree >= HumanizerLevel.HEAVY) {
 				userSampleText = humanizeString(userSampleText);
 			}
 			contextItems.push({
@@ -548,7 +548,7 @@ export async function buildContext({
 			// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
 			let modelSampleText = tomoriState!.sample_dialogues_out[i];
 			modelSampleText = `${botName}: ${modelSampleText}`; // Prepend bot's name
-			if (tomoriConfig.humanizer_degree >= 3) {
+			if (tomoriConfig.humanizer_degree >= HumanizerLevel.HEAVY) {
 				modelSampleText = humanizeString(modelSampleText);
 			}
 			contextItems.push({
@@ -595,7 +595,10 @@ export async function buildContext({
 			// Request 4: Prepend speaker name to content
 			let processedContent = `${msg.authorName}: ${msg.content}`;
 
-			if (tomoriConfig.humanizer_degree >= 3 && role === "model") {
+			if (
+				tomoriConfig.humanizer_degree >= HumanizerLevel.HEAVY &&
+				role === "model"
+			) {
 				processedContent = humanizeString(processedContent);
 			}
 			// convertMentions will handle {user} and {bot} replacements.
