@@ -77,6 +77,35 @@ export default {
 		// Empty response from API
 		empty_response_title: `Empty Response`,
 		empty_response_description: `I received an empty response from the AI. This might happen sometimes. Please try rephrasing or try again.`,
+		// New: Max iterations for function calls
+		max_iterations_title: "Thinking Loop",
+		max_iterations_streaming_description:
+			"Tomori got stuck in a thinking loop and couldn't complete the request. Please try rephrasing or try again later.",
+
+		// New: Search related messages
+		search: {
+			disclaimer_title: "🔍 Performing Google Search...",
+			disclaimer_description:
+				"Tomori is searching the web to answer your query. \n\n⚠️ **Please note:** AI-generated information, including search results, may sometimes be inaccurate or incomplete. Always verify important information.",
+		},
+
+		// New: Stream specific error messages
+		stream: {
+			prompt_blocked_title: "Request Blocked",
+			prompt_blocked_description:
+				"Your request couldn't be processed because it was blocked for the following reason: {reason}. Please try modifying your request.",
+			response_stopped_title: "Response Interrupted",
+			response_stopped_description:
+				"The response was interrupted for the following reason: {reason}. The output may be incomplete.",
+			// For generic stream errors, we can reuse:
+			// genai.generic_error_title
+			// genai.generic_error_description
+			// or define new ones if more specificity is needed for stream-only generic errors.
+			// For now, assuming the existing generic ones are sufficient for a general stream failure.
+			// If a specific "streaming_failed_description" is needed distinct from "generic_error_description":
+			streaming_failed_description:
+				"Tomori encountered an issue while trying to stream the response. Please try again.",
+		},
 	},
 
 	functions: {
@@ -339,6 +368,7 @@ Discord API Latency: \`{discord_response}ms\``,
 				personalization_option: `Personalization (Memories/Nicknames)`,
 				emojiusage_option: `Emoji Usage`,
 				stickerusage_option: `Sticker Usage`,
+				googlesearch_option: "Google Search Permission",
 				set_description: `Enable or disable this permission for Tomori.`,
 				already_set_title: `Permission Already Set`,
 				already_enabled_description: `The permission \`{permission_type}\` is already **enabled**.`,

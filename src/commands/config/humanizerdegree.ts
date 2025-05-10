@@ -16,7 +16,7 @@ import {
 import { sql } from "bun";
 
 // Define constants at the top (Rule #20)
-const HUMANIZER_MIN = 1;
+const HUMANIZER_MIN = 0;
 const HUMANIZER_MAX = 3;
 const HUMANIZER_DEFAULT = 1;
 
@@ -54,6 +54,13 @@ export const configureSubcommand = (
 				.setMaxValue(HUMANIZER_MAX)
 				.setRequired(true)
 				.addChoices(
+					{
+						name: localizer(
+							"en-US",
+							"commands.config.humanizerdegree.choice_none",
+						),
+						value: 0,
+					},
 					{
 						name: localizer(
 							"en-US",
@@ -261,6 +268,8 @@ export async function execute(
  */
 function getHumanizerLabel(locale: string, value: number): string {
 	switch (value) {
+		case 0:
+			return localizer(locale, "commands.config.humanizerdegree.choice_none");
 		case 1:
 			return localizer(locale, "commands.config.humanizerdegree.choice_light");
 		case 2:

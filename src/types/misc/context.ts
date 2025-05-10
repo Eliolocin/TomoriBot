@@ -20,6 +20,7 @@ export enum ContextItemTag {
 	SYSTEM_INSTRUCTION_BLOCK = "system_instruction_block", // For the main consolidated system prompt
 	SYSTEM_PERSONALITY = "system_personality", // Specific to bot's core personality attributes
 	SYSTEM_HUMANIZER_RULES = "system_humanizer_rules", // Specific to humanization instructions
+	SYSTEM_FUNCTION_GUIDE = "system_function_guide", // New: For instructions on using available functions
 
 	// Knowledge base and environmental context
 	KNOWLEDGE_SERVER_INFO = "knowledge_server_info",

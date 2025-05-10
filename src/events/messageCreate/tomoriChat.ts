@@ -9,7 +9,10 @@ import {
 	getGeminiTools,
 	streamGeminiToDiscord,
 } from "../../providers/google/gemini";
-import type { StructuredContextItem } from "../../types/misc/context";
+import {
+	ContextItemTag,
+	type StructuredContextItem,
+} from "../../types/misc/context";
 import {
 	HarmCategory,
 	HarmBlockThreshold,
@@ -31,12 +34,12 @@ import { ColorCode, log } from "../../utils/misc/logger";
 import { buildContext } from "../../utils/text/contextBuilder";
 import { decryptApiKey } from "@/utils/security/crypto";
 
+import type { TomoriState } from "@/types/db/schema";
 import {
-	HumanizerDegree,
-	type ErrorContext,
-	type TomoriState,
-} from "@/types/db/schema";
-import { selectStickerFunctionDeclaration } from "@/providers/google/functionCalls";
+	queryGoogleSearchFunctionDeclaration,
+	selectStickerFunctionDeclaration,
+} from "@/providers/google/functionCalls";
+import { executeSearchSubAgent } from "@/providers/google/subAgents";
 
 // Constants
 const MESSAGE_FETCH_LIMIT = 80;
@@ -146,6 +149,27 @@ export default async function tomoriChat(
 	const channelLockId = channel.id;
 	let lockEntry = channelLocks.get(channelLockId);
 
+	// --- Pre-Semaphore Tomori State Loading for shouldBotReply check ---
+	// Attempt to load Tomori state early to determine if a reply would even be considered.
+	// This helps decide if a "busy" message is warranted.
+	let earlyTomoriState: TomoriState | null = null;
+	try {
+		earlyTomoriState = await loadTomoriState(serverDiscId);
+	} catch (e) {
+		// Log the error but don't stop; the main logic will try to load it again
+		// and handle errors more comprehensively.
+		await log.error(
+			// Rule 22
+			`Failed to load TomoriState early for server ${serverDiscId} in tomoriChat's lock check phase.`,
+			e,
+			{
+				// serverId will be the Discord ID here as internal might not be known
+				errorType: "EarlyStateLoadingError",
+				metadata: { serverDiscId: serverDiscId, channelId: channel.id },
+			},
+		);
+	}
+
 	if (!lockEntry) {
 		// 2. Initialize lock entry if it doesn't exist
 		lockEntry = {
@@ -170,92 +194,76 @@ export default async function tomoriChat(
 		// The current message will now attempt to acquire the lock.
 	}
 
+	// MODIFIED: Check if locked AND if Tomori would reply
 	if (lockEntry.isLocked) {
-		// 4. If channel is locked by another message, enqueue this message
-		lockEntry.messageQueue.push({ message });
-		log.info(
-			`Channel ${channelLockId} is busy processing message ${lockEntry.currentMessageId}. Enqueued message ${message.id}. Queue size: ${lockEntry.messageQueue.length}`,
-		);
-		// Send "waiting line" message (only if it's not the bot itself causing a loop)
-		if (message.author.id !== client.user?.id) {
-			try {
-				// For an ephemeral message, we might not need to load full tomoriState
-				// just for the locale if guild.preferredLocale is sufficient or a default.
-				const tempUserRow = await loadUserRow(userDiscId); // userDiscId is string
-				// Attempt to load tomoriState to get server_id for logging if needed,
-				// but don't let it block the ephemeral reply.
-				let tempTomoriStateForLog: TomoriState | null;
+		// Only enqueue and send "busy" message if Tomori is set up and would have replied.
+		if (earlyTomoriState && shouldBotReply(message, earlyTomoriState)) {
+			lockEntry.messageQueue.push({ message });
+			log.info(
+				`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}). Enqueued message ${message.id}. Queue: ${lockEntry.messageQueue.length}. Tomori would reply.`,
+			);
+
+			if (message.author.id !== client.user?.id) {
 				try {
-					tempTomoriStateForLog = await loadTomoriState(guild.id);
-				} catch {
-					/* ignore, just for logging context */
-				}
+					const tempUserRow = await loadUserRow(userDiscId);
+					const waitingLocale =
+						tempUserRow?.language_pref ?? guild.preferredLocale ?? "en-US";
+					const currentMessageLink = lockEntry.currentMessageId
+						? `https://discord.com/channels/${guild.id}/${channel.id}/${lockEntry.currentMessageId}`
+						: "a previous message";
 
-				const waitingLocale =
-					tempUserRow?.language_pref ?? guild.preferredLocale ?? "en-US";
-
-				const currentMessageLink = lockEntry.currentMessageId
-					? `https://discord.com/channels/${guild.id}/${channel.id}/${lockEntry.currentMessageId}`
-					: "a previous message";
-
-				// 1. Create the embed using our helper
-				const busyEmbed = createStandardEmbed(waitingLocale, {
-					titleKey: "general.tomori_busy_title", // New locale key for the title
-					descriptionKey: "general.tomori_busy_replying",
-					descriptionVars: { message_link: currentMessageLink },
-					color: ColorCode.INFO, // Or ColorCode.WARN if you prefer
-					flags: MessageFlags.Ephemeral,
-				});
-
-				// 2. Send the embed as an ephemeral reply
-				await message
-					.reply({
-						embeds: [busyEmbed], // Pass the created embed
-						// flags: MessageFlags.SuppressEmbeds, // Generally not needed for embed-only replies, but harmless
-					})
-					.catch((e) => {
-						// Log with more context if ephemeral reply fails
-						const errorContext: ErrorContext = {
-							// Ensure ErrorContext type is imported or defined
-							// MODIFIED: Use internal DB IDs (numbers) if available, otherwise undefined
-							userId: tempUserRow?.user_id,
-							serverId: tempTomoriStateForLog?.server_id,
-							errorType: "EphemeralReplyError",
+					const busyEmbed = createStandardEmbed(waitingLocale, {
+						titleKey: "general.tomori_busy_title",
+						descriptionKey: "general.tomori_busy_replying",
+						descriptionVars: { message_link: currentMessageLink },
+						color: ColorCode.INFO,
+						flags: MessageFlags.Ephemeral,
+					});
+					await message.reply({ embeds: [busyEmbed] }).catch((e) => {
+						log.error(
+							// Rule 22
+							"Failed to send ephemeral 'Tomori busy' reply",
+							e,
+							{
+								userId: tempUserRow?.user_id,
+								serverId: earlyTomoriState?.server_id, // Use earlyTomoriState's internal ID if available
+								errorType: "EphemeralReplyError",
+								metadata: {
+									messageId: message.id,
+									channelId: channel.id,
+									currentMessageIdInQueue: lockEntry.currentMessageId,
+									userDiscId,
+									guildDiscId: guild.id,
+								},
+							},
+						);
+					});
+				} catch (e) {
+					log.error(
+						// Rule 22
+						"Failed to prepare 'Tomori busy' ephemeral reply (state/locale error)",
+						e,
+						{
+							errorType: "BusyReplyPrepError",
 							metadata: {
 								messageId: message.id,
 								channelId: channel.id,
-								currentMessageIdInQueue: lockEntry.currentMessageId,
-								userDiscId: userDiscId, // Keep Discord ID for metadata if internal is not found
-								guildDiscId: guild.id, // Keep Discord ID for metadata
+								userDiscId,
+								guildDiscId: guild.id,
 							},
-						};
-						log.error(
-							"Failed to send ephemeral 'Tomori busy' reply",
-							e,
-							errorContext,
-						);
-					});
-			} catch (e) {
-				// This catch is for errors during loadUserRow or localizer
-				const errorContext: ErrorContext = {
-					// MODIFIED: Use internal DB IDs (numbers) if available, otherwise undefined
-					userId: undefined, // tempUserRow might not be available if loadUserRow failed
-					errorType: "BusyReplyPrepError",
-					metadata: {
-						messageId: message.id,
-						channelId: channel.id,
-						userDiscId: userDiscId, // Keep Discord ID for metadata
-						guildDiscId: guild.id, // Keep Discord ID for metadata
-					},
-				};
-				log.error(
-					"Failed to prepare 'Tomori busy' ephemeral reply due to state loading or localization error",
-					e,
-					errorContext,
-				);
+						},
+					);
+				}
 			}
+		} else {
+			// If locked, but Tomori wouldn't reply anyway (e.g., not setup, or message doesn't trigger),
+			// then don't enqueue or send busy message. Just let the current message processing finish.
+			// This message will effectively be ignored by Tomori for a reply.
+			log.info(
+				`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}), but message ${message.id} would not have triggered a reply from Tomori. Ignoring for queue.`,
+			);
 		}
-		return; // Stop processing for this message instance, it's in the queue
+		return; // Message enqueued, or ignored because Tomori wouldn't reply anyway.
 	}
 
 	// 5. Acquire the lock for the current message
@@ -268,7 +276,8 @@ export default async function tomoriChat(
 	try {
 		try {
 			// Load Tomori configuration and user data early
-			const tomoriState = await loadTomoriState(serverDiscId);
+			const tomoriState =
+				earlyTomoriState ?? (await loadTomoriState(serverDiscId));
 			const userRow = await loadUserRow(userDiscId);
 			locale = userRow?.language_pref ?? "en-US"; // Set locale based on user pref
 			triggererName = userRow?.user_nickname ?? message.author.displayName;
@@ -711,221 +720,303 @@ export default async function tomoriChat(
 					topP: DEFAULT_TOP_P,
 					maxOutputTokens: MAX_OUTPUT_TOKENS,
 					stopSequences: [
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
-						`\n${tomoriState!.tomori_nickname}:`,
-						`\n${triggererName}:`,
+						//`\n${tomoriState!.tomori_nickname}:`,
+						//`\n${triggererName}:`,
 					],
 				},
 				// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
 				tools: getGeminiTools(tomoriState!),
 			};
 
-			if (tomoriState.config.humanizer_degree >= HumanizerDegree.LIGHT) {
+			log.info(
+				"Streaming mode enabled. Attempting to stream response to Discord.",
+			);
+
+			// 1. Initialize variables for the function calling loop in streaming mode
+			let selectedStickerToSend: Sticker | null = null;
+			const functionInteractionHistory: {
+				functionCall: FunctionCall;
+				functionResponse: Part;
+			}[] = [];
+			let finalStreamCompleted = false;
+
+			for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
 				log.info(
-					"Streaming mode enabled. Attempting to stream response to Discord.",
+					`Streaming LLM Call Iteration: ${i + 1}/${MAX_FUNCTION_CALL_ITERATIONS}. History items: ${functionInteractionHistory.length}`,
 				);
-
-				// 1. Initialize variables for the function calling loop in streaming mode
-				let selectedStickerToSend: Sticker | null = null;
-				const functionInteractionHistory: {
-					functionCall: FunctionCall;
-					functionResponse: Part;
-				}[] = [];
-				let finalStreamCompleted = false;
-
-				for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
-					log.info(
-						`Streaming LLM Call Iteration: ${i + 1}/${MAX_FUNCTION_CALL_ITERATIONS}. History items: ${functionInteractionHistory.length}`,
+				try {
+					const streamResult = await streamGeminiToDiscord(
+						channel,
+						client,
+						// biome-ignore lint/style/noNonNullAssertion: Missing Tomoristate handled at start of TomoriChat
+						tomoriState!,
+						geminiConfig,
+						contextSegments, // Original full prompt context
+						emojiStrings,
+						functionInteractionHistory.length > 0
+							? functionInteractionHistory
+							: undefined, // Pass history if it exists
+						undefined,
+						isFromQueue ? message : undefined,
 					);
-					try {
-						const streamResult = await streamGeminiToDiscord(
-							channel,
-							client,
-							// biome-ignore lint/style/noNonNullAssertion: Missing Tomoristate handled at start of TomoriChat
-							tomoriState!,
-							geminiConfig,
-							contextSegments, // Original full prompt context
-							emojiStrings,
-							functionInteractionHistory.length > 0
-								? functionInteractionHistory
-								: undefined, // Pass history if it exists
-							undefined,
-							isFromQueue ? message : undefined,
+
+					if (streamResult.status === "completed") {
+						log.success("Streaming to Discord completed successfully.");
+						finalStreamCompleted = true;
+						break; // Exit loop, final text stream was handled by streamGeminiToDiscord
+					}
+
+					if (streamResult.status === "error") {
+						log.error(
+							"Streaming to Discord reported an error.",
+							streamResult.data,
+							{
+								serverId: tomoriState?.server_id,
+								errorType: "StreamingError",
+							},
+						);
+						// streamGeminiToDiscord already attempts to send an error message.
+						finalStreamCompleted = true; // Consider it "completed" to break loop, error handled.
+						break;
+					}
+
+					if (streamResult.status === "function_call" && streamResult.data) {
+						const funcCall = streamResult.data as FunctionCall; // Type assertion
+						const funcName = funcCall.name?.trim() ?? "";
+						log.info(
+							`Stream LLM wants to call function: ${funcName} with args: ${JSON.stringify(funcCall.args)}`,
 						);
 
-						if (streamResult.status === "completed") {
-							log.success("Streaming to Discord completed successfully.");
-							finalStreamCompleted = true;
-							break; // Exit loop, final text stream was handled by streamGeminiToDiscord
-						}
+						let functionExecutionResult: Record<string, unknown>;
 
-						if (streamResult.status === "error") {
-							log.error(
-								"Streaming to Discord reported an error.",
-								streamResult.data,
-								{
-									serverId: tomoriState?.server_id,
-									errorType: "StreamingError",
-								},
-							);
-							// streamGeminiToDiscord already attempts to send an error message.
-							finalStreamCompleted = true; // Consider it "completed" to break loop, error handled.
-							break;
-						}
-
-						if (streamResult.status === "function_call" && streamResult.data) {
-							const funcCall = streamResult.data as FunctionCall; // Type assertion
-							log.info(
-								`Stream LLM wants to call function: ${funcCall.name} with args: ${JSON.stringify(funcCall.args)}`,
-							);
-
-							let functionExecutionResult: Record<string, unknown>;
-
-							// 2. Execute the function locally based on its name
-							if (funcCall.name === selectStickerFunctionDeclaration.name) {
-								const stickerIdArg = funcCall.args?.sticker_id;
-								if (typeof stickerIdArg === "string") {
-									const discordSticker =
-										// biome-ignore lint/style/noNonNullAssertion: TomoriChat checks for guild
-										guild!.stickers.cache.get(stickerIdArg);
-									if (discordSticker) {
-										log.success(
-											`Sticker '${discordSticker.name}' (${stickerIdArg}) found locally for stream.`,
-										);
-										functionExecutionResult = {
-											status: "sticker_selected_successfully",
-											sticker_id: discordSticker.id,
-											sticker_name: discordSticker.name,
-											sticker_description: discordSticker.description,
-										};
-										selectedStickerToSend = discordSticker;
-									} else {
-										log.warn(
-											`Sticker with ID ${stickerIdArg} not found in server cache for stream. Informing LLM.`,
-										);
-										functionExecutionResult = {
-											status: "sticker_not_found",
-											sticker_id_attempted: stickerIdArg,
-											reason:
-												"The sticker ID provided was not found among the available server stickers. Please choose from the provided list or do not use a sticker.",
-										};
-										selectedStickerToSend = null;
-									}
-								} else {
-									log.warn(
-										"Invalid or missing sticker_id in stream function call args for select_sticker_for_response.",
+						// 2. Execute the function locally based on its name
+						if (funcName === selectStickerFunctionDeclaration.name) {
+							const stickerIdArg = funcCall.args?.sticker_id;
+							if (typeof stickerIdArg === "string") {
+								const discordSticker =
+									// biome-ignore lint/style/noNonNullAssertion: TomoriChat checks for guild
+									guild!.stickers.cache.get(stickerIdArg);
+								if (discordSticker) {
+									log.success(
+										`Sticker '${discordSticker.name}' (${stickerIdArg}) found locally for stream.`,
 									);
 									functionExecutionResult = {
-										status: "sticker_selection_failed_invalid_args",
+										status: "sticker_selected_successfully",
+										sticker_id: discordSticker.id,
+										sticker_name: discordSticker.name,
+										sticker_description: discordSticker.description,
+									};
+									selectedStickerToSend = discordSticker;
+								} else {
+									log.warn(
+										`Sticker with ID ${stickerIdArg} not found in server cache for stream. Informing LLM.`,
+									);
+									functionExecutionResult = {
+										status: "sticker_not_found",
+										sticker_id_attempted: stickerIdArg,
 										reason:
-											"The sticker_id argument was missing or not in the expected format. Please provide a valid sticker_id string.",
+											"The sticker ID provided was not found among the available server stickers. Please choose from the provided list or do not use a sticker.",
 									};
 									selectedStickerToSend = null;
 								}
-							}
-							// TODO: Add handling for self_teach_tomori here when implemented
-							// else if (funcCall.name === selfTeachTomoriFunctionDeclaration.name) { ... }
-							else {
+							} else {
 								log.warn(
-									`Stream LLM called unknown function: ${funcCall.name}. Informing LLM.`,
+									"Invalid or missing sticker_id in stream function call args for select_sticker_for_response.",
 								);
 								functionExecutionResult = {
-									status: "unknown_function_called",
-									function_name_called: funcCall.name,
-									message: `The function '${funcCall.name}' is not recognized or implemented. Please proceed without calling this function, or use one of the available functions.`,
+									status: "sticker_selection_failed_invalid_args",
+									reason:
+										"The sticker_id argument was missing or not in the expected format. Please provide a valid sticker_id string.",
+								};
+								selectedStickerToSend = null;
+							}
+						} else if (funcName === queryGoogleSearchFunctionDeclaration.name) {
+							const searchQueryArg = funcCall.args?.search_query;
+							if (typeof searchQueryArg === "string" && searchQueryArg.trim()) {
+								// 1. Send disclaimer embed BEFORE executing the search (Rule 12, 19)
+								// This informs the user while the search is happening.
+								await sendStandardEmbed(channel, locale, {
+									color: ColorCode.INFO, // Or WARN if preferred for a disclaimer
+									titleKey: "genai.search.disclaimer_title", // New locale key
+									descriptionKey: "genai.search.disclaimer_description", // New locale key
+									// Not ephemeral, as it's a general notice.
+								});
+								// Send typing indicator as search might take a moment
+								await channel.sendTyping();
+
+								// 1. Construct conversationHistory string from contextSegments
+								const dialogueHistoryStrings: string[] = [];
+								for (const item of contextSegments) {
+									if (
+										item.metadataTag === ContextItemTag.DIALOGUE_HISTORY ||
+										item.metadataTag === ContextItemTag.DIALOGUE_SAMPLE
+									) {
+										let turnText = "";
+										for (const part of item.parts) {
+											if (part.type === "text") {
+												turnText += part.text; // Text parts should already be formatted with speaker names by buildContext
+											}
+										}
+										if (turnText.trim()) {
+											dialogueHistoryStrings.push(turnText.trim());
+										}
+									}
+								}
+								const conversationHistoryString =
+									dialogueHistoryStrings.join("\n");
+								// Log the length or a snippet for debugging if needed
+								log.info(
+									`Constructed conversation history string for sub-agent. Length: ${conversationHistoryString.length}`,
+								);
+
+								log.info(
+									`Executing Google Search sub-agent for query: "${searchQueryArg}"`,
+								);
+
+								const searchResult = await executeSearchSubAgent(
+									searchQueryArg,
+									conversationHistoryString,
+									// biome-ignore lint/style/noNonNullAssertion: API key presence was validated earlier for triggered messages, tomoriState is checked
+									tomoriState!,
+									// biome-ignore lint/style/noNonNullAssertion: API key presence was validated earlier for triggered messages, tomoriState is checked
+									decryptedApiKey!,
+								);
+
+								if (searchResult.summary) {
+									log.success("Google Search sub-agent returned a summary.");
+									functionExecutionResult = {
+										status: "search_completed_successfully",
+										summary: searchResult.summary,
+										original_query: searchQueryArg,
+									};
+								} else {
+									log.warn(
+										`Google Search sub-agent failed or returned no summary. Error: ${searchResult.error}`,
+									);
+									functionExecutionResult = {
+										status: "search_failed",
+										error_message:
+											searchResult.error ||
+											"The search sub-agent did not return a summary.",
+										original_query: searchQueryArg,
+									};
+									// Optionally, inform the user if the search itself failed critically
+									// before the LLM gets a chance to respond.
+									// However, usually, we let the LLM explain based on the error_message.
+								}
+							} else {
+								log.warn(
+									"Invalid or missing search_query in stream function call args for query_google_search.",
+								);
+								functionExecutionResult = {
+									status: "search_failed_invalid_args",
+									reason:
+										"The search_query argument was missing, empty, or not in the expected string format. Please provide a valid search query.",
 								};
 							}
-
-							// 3. Add the model's function call and our function's result to the history
-							functionInteractionHistory.push({
-								functionCall: funcCall,
-								functionResponse: {
-									functionResponse: {
-										name: funcCall.name,
-										response: { result: functionExecutionResult },
-									},
-								},
-							});
-
-							// 4. Safety break if max iterations reached
-							if (i === MAX_FUNCTION_CALL_ITERATIONS - 1) {
-								log.warn(
-									"Max function call iterations reached in streaming mode. LLM did not provide a final text stream.",
-								);
-								// Send a fallback message if no stream occurred.
-								// If some text was streamed before this, this might be redundant.
-								// For now, assume streamGeminiToDiscord handles its own errors if it starts streaming.
-								// If it returns function_call repeatedly, this is the fallback.
-								await sendStandardEmbed(channel, locale, {
-									color: ColorCode.WARN,
-									titleKey: "genai.max_iterations_title", // New locale key
-									descriptionKey: "genai.max_iterations_streaming_description", // New locale key
-								});
-								finalStreamCompleted = true; // Mark as "completed" to exit loop
-								selectedStickerToSend = null; // Clear sticker
-								break;
-							}
-							// Continue to the next iteration of the loop to call streamGeminiToDiscord again with updated history
-						} else {
-							// Should not happen if status is not completed, error, or function_call
-							log.error(
-								"Unexpected streamResult status in streaming loop:",
-								streamResult,
+						}
+						// TODO: Add handling for self_teach_tomori here when implemented
+						// else if (funcName === selfTeachTomoriFunctionDeclaration.name) { ... }
+						else {
+							log.warn(
+								`Stream LLM called unknown function: ${funcName}. Informing LLM.`,
 							);
-							finalStreamCompleted = true; // Break loop on unexpected status
+							functionExecutionResult = {
+								status: "unknown_function_called",
+								function_name_called: funcName,
+								message: `The function '${funcName}' is not recognized or implemented. Please proceed without calling this function, or use one of the available functions.`,
+							};
+						}
+
+						// 3. Add the model's function call and our function's result to the history
+						functionInteractionHistory.push({
+							functionCall: funcCall,
+							functionResponse: {
+								functionResponse: {
+									name: funcName,
+									response: { result: functionExecutionResult },
+								},
+							},
+						});
+
+						// 4. Safety break if max iterations reached
+						if (i === MAX_FUNCTION_CALL_ITERATIONS - 1) {
+							log.warn(
+								"Max function call iterations reached in streaming mode. LLM did not provide a final text stream.",
+							);
+							// Send a fallback message if no stream occurred.
+							// If some text was streamed before this, this might be redundant.
+							// For now, assume streamGeminiToDiscord handles its own errors if it starts streaming.
+							// If it returns function_call repeatedly, this is the fallback.
+							await sendStandardEmbed(channel, locale, {
+								color: ColorCode.WARN,
+								titleKey: "genai.max_iterations_title", // New locale key
+								descriptionKey: "genai.max_iterations_streaming_description", // New locale key
+							});
+							finalStreamCompleted = true; // Mark as "completed" to exit loop
+							selectedStickerToSend = null; // Clear sticker
 							break;
 						}
-					} catch (streamingError) {
+						// Continue to the next iteration of the loop to call streamGeminiToDiscord again with updated history
+					} else {
+						// Should not happen if status is not completed, error, or function_call
 						log.error(
-							"Critical error during streamGeminiToDiscord call within streaming loop:",
-							streamingError,
-							{
-								serverId: tomoriState?.server_id,
-								errorType: "StreamingInvocationError",
-								metadata: { channelId: channel.id, iteration: i + 1 },
-							},
+							"Unexpected streamResult status in streaming loop:",
+							streamResult,
 						);
-						await sendStandardEmbed(channel, locale, {
-							color: ColorCode.ERROR,
-							titleKey: "genai.generic_error_title",
-							descriptionKey: "genai.streaming_failed_description",
-						});
-						finalStreamCompleted = true; // Break loop on critical error
+						finalStreamCompleted = true; // Break loop on unexpected status
 						break;
 					}
-				} // End of for loop for function call iterations
-
-				// 5. After the loop, if a sticker was selected and a stream completed, send the sticker.
-				// This is a simple approach; sticker will appear after the streamed text.
-				if (selectedStickerToSend && finalStreamCompleted) {
-					try {
-						// If the last interaction was a reply (isFromQueue), try to reply with sticker too.
-						// Otherwise, just send to channel.
-						if (isFromQueue) {
-							await message.reply({ stickers: [selectedStickerToSend.id] });
-						} else {
-							await channel.send({ stickers: [selectedStickerToSend.id] });
-						}
-						log.info(
-							`Sent selected sticker '${selectedStickerToSend.name}' after stream.`,
-						);
-					} catch (stickerError) {
-						log.error(
-							"Failed to send selected sticker after stream:",
-							stickerError,
-							{
-								serverId: tomoriState?.server_id,
-								errorType: "StickerSendError",
-								metadata: { stickerId: selectedStickerToSend.id },
-							},
-						);
-					}
-				} else if (!finalStreamCompleted) {
-					log.warn(
-						"Streaming process did not complete successfully, final response might be missing.",
+				} catch (streamingError) {
+					log.error(
+						"Critical error during streamGeminiToDiscord call within streaming loop:",
+						streamingError,
+						{
+							serverId: tomoriState?.server_id,
+							errorType: "StreamingInvocationError",
+							metadata: { channelId: channel.id, iteration: i + 1 },
+						},
 					);
-					// Potentially send a message indicating an issue if no error was already sent.
+					await sendStandardEmbed(channel, locale, {
+						color: ColorCode.ERROR,
+						titleKey: "genai.generic_error_title",
+						descriptionKey: "genai.streaming_failed_description",
+					});
+					finalStreamCompleted = true; // Break loop on critical error
+					break;
 				}
+			} // End of for loop for function call iterations
+
+			// 5. After the loop, if a sticker was selected and a stream completed, send the sticker.
+			// This is a simple approach; sticker will appear after the streamed text.
+			if (selectedStickerToSend && finalStreamCompleted) {
+				try {
+					// If the last interaction was a reply (isFromQueue), try to reply with sticker too.
+					// Otherwise, just send to channel.
+					if (isFromQueue) {
+						await message.reply({ stickers: [selectedStickerToSend.id] });
+					} else {
+						await channel.send({ stickers: [selectedStickerToSend.id] });
+					}
+					log.info(
+						`Sent selected sticker '${selectedStickerToSend.name}' after stream.`,
+					);
+				} catch (stickerError) {
+					log.error(
+						"Failed to send selected sticker after stream:",
+						stickerError,
+						{
+							serverId: tomoriState?.server_id,
+							errorType: "StickerSendError",
+							metadata: { stickerId: selectedStickerToSend.id },
+						},
+					);
+				}
+			} else if (!finalStreamCompleted) {
+				log.warn(
+					"Streaming process did not complete successfully, final response might be missing.",
+				);
+				// Potentially send a message indicating an issue if no error was already sent.
 			}
 		} catch (error) {
 			// 14. Global error handler for entire function

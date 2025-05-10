@@ -26,7 +26,29 @@ export const selectStickerFunctionDeclaration = {
 	},
 };
 
+/**
+ * Function declaration for Gemini to call when it needs to search the web
+ * for real-time information or facts not present in its existing knowledge.
+ * The LLM will provide a search query and will be given a summary of the findings.
+ */
+export const queryGoogleSearchFunctionDeclaration = {
+	name: "query_google_search", // Function name Gemini will use
+	description:
+		"Queries the Google search engine with a given search term and returns a concise summary of the findings. Use this to find real-time information, facts, or details not present in your existing knowledge. You will be informed of the search result and will then generate the final text message for the user.",
+	parameters: {
+		type: Type.OBJECT,
+		properties: {
+			search_query: {
+				type: Type.STRING,
+				description:
+					"The specific search query string to use for the Google search. Be concise and clear.",
+			},
+		},
+		required: ["search_query"],
+	},
+};
+
 // Future plans:
-// 1. Google Search
+// 1. Google Search [X]
 // 2. Tomori Self-Teaching
 // 3. Scrape Danbooru/Gelbooru

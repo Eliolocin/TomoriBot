@@ -18,6 +18,10 @@ import {
 	humanizeString,
 } from "./stringHelper";
 import { HumanizerDegree, type TomoriConfigRow } from "@/types/db/schema";
+import {
+	queryGoogleSearchFunctionDeclaration,
+	selectStickerFunctionDeclaration,
+} from "@/providers/google/functionCalls";
 // Import ServerEmojiRow if needed for emoji query result type
 // import type { ServerEmojiRow } from "../../types/db/schema";
 
@@ -260,6 +264,63 @@ export async function buildContext({
 	// --- Preamble/Knowledge Base Segments ---
 	// These will be consolidated into the system prompt in Phase 2.
 	// For now, they are tagged individually.
+
+	// NEW SECTION: 8. Function Usage Guide
+	// This section guides the LLM on when to use its available tools.
+	const functionUsageInstructions: string[] = [];
+
+	if (tomoriConfig.sticker_usage_enabled) {
+		// 8.a. Sticker Function Guidance
+		functionUsageInstructions.push(
+			`- **Stickers ('${selectStickerFunctionDeclaration.name}')**: ${selectStickerFunctionDeclaration.description} ${botName} considers using this to add more personality or visual cues to their responses, especially when an emotion or reaction can be well-represented by an available sticker.`,
+		);
+	}
+
+	if (tomoriConfig.google_search_enabled) {
+		// 8.b. Google Search Function Guidance
+		// Assuming tomoriConfig has a flag like 'google_search_enabled'
+		// You'll need to add this flag to TomoriConfigRow and manage it
+		functionUsageInstructions.push(
+			`- **Google Search ('${queryGoogleSearchFunctionDeclaration.name}')**: ${queryGoogleSearchFunctionDeclaration.description} ${botName} uses this tool whenever a user's query implies a need for current events, specific facts not in your training data, or any information that would typically be found by searching the web.`,
+		);
+	}
+
+	// 8.c. Self-Teach Function Guidance (Placeholder for when implemented)
+	const selfTeachFunctionNamePlaceholder = "self_teach_tomori"; // Replace with actual declaration name later
+	const selfTeachFunctionDescriptionPlaceholder =
+		"Allows you to learn new information or update your existing knowledge based on the current conversation. Provide the key information you want to remember and optionally a category.";
+	if (tomoriConfig.self_teaching_enabled) {
+		// Example description
+		// You'll need to add this flag to TomoriConfigRow and manage it
+		functionUsageInstructions.push(
+			`- **Self-Teaching ('${selfTeachFunctionNamePlaceholder}')**: ${selfTeachFunctionDescriptionPlaceholder} If a user provides new, correct information or clarifies a topic, consider using this function to update your knowledge for future interactions.`,
+		);
+	}
+
+	if (functionUsageInstructions.length > 0) {
+		let functionGuidanceText = `\n# Tool Usage Guidance for ${botName}\n${botName} has access to the following tools/functions. ${botName} thinks carefully about when to use them to best assist users:\n`;
+		functionGuidanceText += functionUsageInstructions.join("\n");
+
+		contextItems.push({
+			role: "system",
+			parts: [
+				{
+					type: "text",
+					text: await convertMentions(
+						functionGuidanceText,
+						client,
+						guildId,
+						triggererName,
+						botName,
+					),
+				},
+			],
+			metadataTag: ContextItemTag.SYSTEM_FUNCTION_GUIDE,
+		});
+		log.info(
+			`Added SYSTEM_FUNCTION_GUIDE with ${functionUsageInstructions.length} instructions.`,
+		);
+	}
 
 	// 2. Server Description
 	let serverInfoContent = `# Knowledge Base\n${botName} is currently in the Discord server named "${serverName}".\n`;

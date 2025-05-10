@@ -256,11 +256,8 @@ export function chunkMessage(
 				const textToAdd = block.content.trim();
 				if (!textToAdd) continue; // Skip empty text
 
-				if (
-					humanizerDegree >= HumanizerDegree.LIGHT &&
-					humanizerDegree < HumanizerDegree.HEAVY
-				) {
-					// 3c-i. Humanizer Degree 2: Break at newlines, keep punctuation
+				if (humanizerDegree < HumanizerDegree.HEAVY) {
+					// 3c-i. Break at newlines, keep punctuation
 					const paragraphs = textToAdd.split(/\n+/);
 
 					for (const paragraph of paragraphs) {

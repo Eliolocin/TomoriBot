@@ -14,7 +14,6 @@ import {
 	tomoriConfigSchema, // Rule 6
 } from "../../types/db/schema";
 import { sql } from "bun"; // Rule 4
-
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
@@ -28,7 +27,6 @@ export const configureSubcommand = (
 			),
 		)
 		.setDescriptionLocalizations({
-			// TODO: Add other locales like 'ja'
 			ja: localizer(
 				"ja",
 				"commands.config.tomoripermissions.command_description",
@@ -54,30 +52,38 @@ export const configureSubcommand = (
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.tomoripermissions.selfteaching_option", // For self_teaching_enabled
+							"commands.config.tomoripermissions.selfteaching_option",
 						),
 						value: "selfteaching",
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.tomoripermissions.personalization_option", // For personal_memories_enabled
+							"commands.config.tomoripermissions.personalization_option",
 						),
 						value: "personalization",
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.tomoripermissions.emojiusage_option", // For emoji_usage_enabled
+							"commands.config.tomoripermissions.emojiusage_option",
 						),
 						value: "emojiusage",
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.tomoripermissions.stickerusage_option", // For sticker_usage_enabled
+							"commands.config.tomoripermissions.stickerusage_option",
 						),
 						value: "stickerusage",
+					},
+					// New: Added Google Search permission choice
+					{
+						name: localizer(
+							"en-US",
+							"commands.config.tomoripermissions.googlesearch_option",
+						),
+						value: "googlesearch",
 					},
 				),
 		)
@@ -182,6 +188,13 @@ export async function execute(
 				permissionTypeKey =
 					"commands.config.tomoripermissions.stickerusage_option";
 				currentSetting = tomoriState.config.sticker_usage_enabled;
+				break;
+			// New: Handle Google Search permission
+			case "googlesearch":
+				dbColumnName = "google_search_enabled";
+				permissionTypeKey =
+					"commands.config.tomoripermissions.googlesearch_option";
+				currentSetting = tomoriState.config.google_search_enabled;
 				break;
 			default:
 				// This should not happen due to Discord's option validation

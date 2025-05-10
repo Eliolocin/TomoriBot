@@ -9,7 +9,7 @@ import {
 	type Content, // Added import for finish reason check
 } from "@google/genai";
 import { type GeminiConfig, GeminiConfigSchema } from "../../types/api/gemini";
-import { log } from "../../utils/misc/logger";
+import { ColorCode, log } from "../../utils/misc/logger";
 import { HumanizerDegree, type TomoriState } from "@/types/db/schema";
 // import { selectStickerFunctionDeclaration } from "@/functions/sendSticker";
 import {
@@ -28,7 +28,11 @@ import {
 	cleanLLMOutput,
 	humanizeString,
 } from "@/utils/text/stringHelper";
-import { selectStickerFunctionDeclaration } from "./functionCalls";
+import {
+	queryGoogleSearchFunctionDeclaration,
+	selectStickerFunctionDeclaration,
+} from "./functionCalls";
+import { sendStandardEmbed } from "@/utils/discord/embedHelper";
 
 // Default values for Gemini API
 const DEFAULT_MODEL =
@@ -118,6 +122,14 @@ export function getGeminiTools(
 		functionDeclarations.push(selectStickerFunctionDeclaration);
 		log.info(
 			`Enabled '${selectStickerFunctionDeclaration.name}' function calling for model: ${modelNameLower}`, // Use the actual function name
+		);
+	}
+
+	// New: 4b. Add Query Google Search Function Calling if enabled in Tomori's config
+	if (tomoriState.config.google_search_enabled) {
+		functionDeclarations.push(queryGoogleSearchFunctionDeclaration);
+		log.info(
+			`Enabled '${queryGoogleSearchFunctionDeclaration.name}' function calling for model: ${modelNameLower}`,
 		);
 	}
 
@@ -373,7 +385,7 @@ export async function streamGeminiToDiscord(
 			}
 			if (!finalMessageChunks.length) return;
 
-			if (currentHumanizerDegree === HumanizerDegree.LIGHT) {
+			if (currentHumanizerDegree < HumanizerDegree.MEDIUM) {
 				for (let i = 0; i < finalMessageChunks.length; i++) {
 					const chunkToSend = finalMessageChunks[i];
 					await channel
@@ -532,11 +544,14 @@ export async function streamGeminiToDiscord(
 						);
 				} else {
 					// Otherwise, send to channel (less ideal for blocks, but provides feedback)
-					await channel
-						.send({ content: `⚠️ ${msg}` })
-						.catch((e) =>
-							log.warn("Stream: Failed to send block error to channel", e),
-						);
+					await sendStandardEmbed(channel, channel.guild.preferredLocale, {
+						titleKey: "genai.stream.prompt_blocked_title",
+						descriptionKey: "genai.stream.prompt_blocked_description",
+						descriptionVars: { reason: reason.toString() }, // 'reason' is from chunkResponse.promptFeedback.blockReason
+						color: ColorCode.ERROR,
+					}).catch((e) =>
+						log.warn("Stream: Failed to send block error embed to channel", e),
+					);
 				}
 				return { status: "error", data: new Error(msg) };
 			}
@@ -578,11 +593,15 @@ export async function streamGeminiToDiscord(
 							),
 						);
 				} else {
-					await channel
-						.send({ content: `⚠️ ${msg}` })
-						.catch((e) =>
-							log.warn("Stream: Failed to send block error to channel", e),
-						);
+					await sendStandardEmbed(channel, channel.guild.preferredLocale, {
+						titleKey: "genai.stream.response_stopped_title",
+						descriptionKey: "genai.stream.response_stopped_description",
+						// Corrected: Use candidate.finishReason as 'reason' is not defined here
+						descriptionVars: { reason: candidate.finishReason.toString() },
+						color: ColorCode.ERROR,
+					}).catch((e) =>
+						log.warn("Stream: Failed to send stop error embed to channel", e),
+					);
 				}
 				return { status: "error", data: new Error(msg) };
 			}
@@ -601,13 +620,13 @@ export async function streamGeminiToDiscord(
 						);
 						isInsideCodeBlock = false; // Exiting code block mode due to function call
 					}
-					if (humanizerDegree >= HumanizerDegree.LIGHT) {
-						await channel
-							.sendTyping()
-							.catch((e) =>
-								log.warn("Stream Seg: sendTyping before FC flush failed", e),
-							);
-					}
+
+					await channel
+						.sendTyping()
+						.catch((e) =>
+							log.warn("Stream Seg: sendTyping before FC flush failed", e),
+						);
+
 					const segmentToProcessBeforeFC = streamBuffer;
 					log.info(
 						`Stream Seg: Flushing buffer for FC: "${segmentToProcessBeforeFC}"`,
@@ -767,11 +786,10 @@ export async function streamGeminiToDiscord(
 					}
 
 					if (segmentToFlush) {
-						if (humanizerDegree >= HumanizerDegree.LIGHT) {
-							await channel
-								.sendTyping()
-								.catch((e) => log.warn("Stream Seg: sendTyping failed", e));
-						}
+						await channel
+							.sendTyping()
+							.catch((e) => log.warn("Stream Seg: sendTyping failed", e));
+
 						const cleanedSegment = cleanLLMOutput(
 							segmentToFlush,
 							botName,
@@ -802,13 +820,12 @@ export async function streamGeminiToDiscord(
 					log.info(
 						`Stream Seg: Flushing oversized regular buffer (no delimiter): "${streamBuffer}"`,
 					); // No substring
-					if (humanizerDegree >= HumanizerDegree.LIGHT) {
-						await channel
-							.sendTyping()
-							.catch((e) =>
-								log.warn("Stream Seg: sendTyping for oversized failed", e),
-							);
-					}
+					await channel
+						.sendTyping()
+						.catch((e) =>
+							log.warn("Stream Seg: sendTyping for oversized failed", e),
+						);
+
 					const segmentToFlushOversized = streamBuffer;
 					streamBuffer = ""; // Clear before async operation
 					const cleanedRemainder = cleanLLMOutput(
@@ -835,13 +852,12 @@ export async function streamGeminiToDiscord(
 					"Stream Seg: Final flush occurred while still inside a code block. The block might be incomplete.",
 				);
 			}
-			if (humanizerDegree >= HumanizerDegree.LIGHT) {
-				await channel
-					.sendTyping()
-					.catch((e) =>
-						log.warn("Stream Seg: sendTyping for final flush failed", e),
-					);
-			}
+			await channel
+				.sendTyping()
+				.catch((e) =>
+					log.warn("Stream Seg: sendTyping for final flush failed", e),
+				);
+
 			const finalSegmentToFlush = streamBuffer;
 			streamBuffer = ""; // Clear before async
 			isInsideCodeBlock = false; // Reset state
@@ -863,9 +879,14 @@ export async function streamGeminiToDiscord(
 			log.warn("Stream completed without sending any messages.", {
 				channelId: channel.id,
 			});
-			// Send a generic "empty response" or handle as an error/silent completion
-			// For now, let's ensure we send something to the channel.
-			await channel.send({ content: "..." }); // Placeholder for "no response"
+			await sendStandardEmbed(channel, channel.guild.preferredLocale, {
+				// 'locale' is a parameter of streamGeminiToDiscord
+				titleKey: "genai.empty_response_title",
+				descriptionKey: "genai.empty_response_description",
+				color: ColorCode.WARN, // WARN is suitable for an unexpected but non-critical outcome
+			}).catch((e) =>
+				log.warn("Stream: Failed to send empty response embed to channel", e),
+			);
 			messageSentCount++;
 		}
 
@@ -914,11 +935,14 @@ export async function streamGeminiToDiscord(
 			// Avoid sending detailed errors directly to public channels unless necessary
 			// Consider a more generic message or logging only.
 			// For now, sending a simplified error.
-			await channel
-				.send({
-					content: "⚠️ An error occurred while generating the response.",
-				})
-				.catch((e) => log.warn("Stream: Failed to send error to channel", e));
+			await sendStandardEmbed(channel, channel.guild.preferredLocale, {
+				titleKey: "genai.stream.generic_error_title",
+				descriptionKey: "genai.stream.generic_error_description",
+				descriptionVars: { error_message: lastError.message }, // 'lastError' is the caught error
+				color: ColorCode.ERROR,
+			}).catch((e) =>
+				log.warn("Stream: Failed to send generic error embed to channel", e),
+			);
 		}
 		return { status: "error", data: lastError };
 	}

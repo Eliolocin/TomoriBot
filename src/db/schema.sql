@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
 -- Add columns for emoji and sticker usage permissions (May 5, 2025)
 SELECT add_column_if_not_exists('tomori_configs', 'emoji_usage_enabled', 'BOOLEAN', 'true');
 SELECT add_column_if_not_exists('tomori_configs', 'sticker_usage_enabled', 'BOOLEAN', 'true');
+SELECT add_column_if_not_exists('tomori_configs', 'google_search_enabled', 'BOOLEAN', 'true');
 
 -- Create updated_at trigger for tomori_configs table
 DROP TRIGGER IF EXISTS update_tomori_configs_timestamp ON tomori_configs;

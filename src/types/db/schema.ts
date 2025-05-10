@@ -66,6 +66,7 @@ export const tomoriConfigSchema = z.object({
 	attribute_memteaching_enabled: z.boolean().default(false),
 	sampledialogue_memteaching_enabled: z.boolean().default(false),
 	self_teaching_enabled: z.boolean().default(true),
+	google_search_enabled: z.boolean().default(true), // New: Added for Google Search permission
 	personal_memories_enabled: z.boolean().default(true),
 	humanizer_degree: z
 		.nativeEnum(HumanizerDegree)
