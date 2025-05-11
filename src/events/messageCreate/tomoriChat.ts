@@ -25,7 +25,11 @@ import {
 	loadTomoriState,
 	loadUserRow,
 } from "../../utils/db/dbRead";
-import { incrementTomoriCounter } from "@/utils/db/dbWrite";
+import {
+	addPersonalMemoryByTomori,
+	addServerMemoryByTomori,
+	incrementTomoriCounter,
+} from "@/utils/db/dbWrite";
 import {
 	createStandardEmbed,
 	sendStandardEmbed,
@@ -37,6 +41,7 @@ import { decryptApiKey } from "@/utils/security/crypto";
 import type { TomoriState } from "@/types/db/schema";
 import {
 	queryGoogleSearchFunctionDeclaration,
+	rememberThisFactFunctionDeclaration,
 	selectStickerFunctionDeclaration,
 } from "@/providers/google/functionCalls";
 import { executeSearchSubAgent } from "@/providers/google/subAgents";
@@ -197,70 +202,88 @@ export default async function tomoriChat(
 	// MODIFIED: Check if locked AND if Tomori would reply
 	if (lockEntry.isLocked) {
 		// Only enqueue and send "busy" message if Tomori is set up and would have replied.
-		if (earlyTomoriState && shouldBotReply(message, earlyTomoriState)) {
-			lockEntry.messageQueue.push({ message });
-			log.info(
-				`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}). Enqueued message ${message.id}. Queue: ${lockEntry.messageQueue.length}. Tomori would reply.`,
-			);
+		if (earlyTomoriState) {
+			// 1. Create a modified version of earlyTomoriState for the shouldBotReply check.
+			// This simulates the autoch_counter as 1 for the decision to queue,
+			// preventing queueing based solely on an auto-reply hit while Tomori is busy.
+			const modifiedEarlyTomoriStateForCheck: TomoriState = {
+				...earlyTomoriState,
+				autoch_counter: 1, // Simulate counter as 1 for this check
+			};
 
-			if (message.author.id !== client.user?.id) {
-				try {
-					const tempUserRow = await loadUserRow(userDiscId);
-					const waitingLocale =
-						tempUserRow?.language_pref ?? guild.preferredLocale ?? "en-US";
-					const currentMessageLink = lockEntry.currentMessageId
-						? `https://discord.com/channels/${guild.id}/${channel.id}/${lockEntry.currentMessageId}`
-						: "a previous message";
+			// 2. Decide whether to enqueue based on the modified state.
+			if (shouldBotReply(message, modifiedEarlyTomoriStateForCheck)) {
+				lockEntry.messageQueue.push({ message });
+				log.info(
+					`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}). Enqueued message ${message.id}. Queue: ${lockEntry.messageQueue.length}. Tomori would reply (autoch_counter simulated as 0 for this check).`,
+				);
 
-					const busyEmbed = createStandardEmbed(waitingLocale, {
-						titleKey: "general.tomori_busy_title",
-						descriptionKey: "general.tomori_busy_replying",
-						descriptionVars: { message_link: currentMessageLink },
-						color: ColorCode.INFO,
-						flags: MessageFlags.Ephemeral,
-					});
-					await message.reply({ embeds: [busyEmbed] }).catch((e) => {
+				// 3. Send "busy" reply to the user if not the bot itself.
+				// biome-ignore lint/style/noNonNullAssertion: client.user is checked during startup
+				if (message.author.id !== client.user!.id) {
+					try {
+						const tempUserRow = await loadUserRow(userDiscId);
+						const waitingLocale =
+							tempUserRow?.language_pref ?? guild.preferredLocale ?? "en-US";
+						const currentMessageLink = lockEntry.currentMessageId
+							? `https://discord.com/channels/${guild.id}/${channel.id}/${lockEntry.currentMessageId}`
+							: "a previous message";
+
+						const busyEmbed = createStandardEmbed(waitingLocale, {
+							titleKey: "general.tomori_busy_title",
+							descriptionKey: "general.tomori_busy_replying",
+							descriptionVars: { message_link: currentMessageLink },
+							color: ColorCode.INFO,
+							flags: MessageFlags.Ephemeral,
+						});
+						await message.reply({ embeds: [busyEmbed] }).catch((e) => {
+							log.error(
+								// Rule 22
+								"Failed to send ephemeral 'Tomori busy' reply",
+								e,
+								{
+									userId: tempUserRow?.user_id,
+									serverId: earlyTomoriState?.server_id, // Use original earlyTomoriState for accurate ID
+									errorType: "EphemeralReplyError",
+									metadata: {
+										messageId: message.id,
+										channelId: channel.id,
+										currentMessageIdInQueue: lockEntry.currentMessageId,
+										userDiscId,
+										guildDiscId: guild.id,
+									},
+								},
+							);
+						});
+					} catch (e) {
 						log.error(
 							// Rule 22
-							"Failed to send ephemeral 'Tomori busy' reply",
+							"Failed to prepare 'Tomori busy' ephemeral reply (state/locale error)",
 							e,
 							{
-								userId: tempUserRow?.user_id,
-								serverId: earlyTomoriState?.server_id, // Use earlyTomoriState's internal ID if available
-								errorType: "EphemeralReplyError",
+								errorType: "BusyReplyPrepError",
 								metadata: {
 									messageId: message.id,
 									channelId: channel.id,
-									currentMessageIdInQueue: lockEntry.currentMessageId,
 									userDiscId,
 									guildDiscId: guild.id,
 								},
 							},
 						);
-					});
-				} catch (e) {
-					log.error(
-						// Rule 22
-						"Failed to prepare 'Tomori busy' ephemeral reply (state/locale error)",
-						e,
-						{
-							errorType: "BusyReplyPrepError",
-							metadata: {
-								messageId: message.id,
-								channelId: channel.id,
-								userDiscId,
-								guildDiscId: guild.id,
-							},
-						},
-					);
+					}
 				}
+			} else {
+				// If locked, but Tomori wouldn't reply anyway (e.g., not setup, or message doesn't trigger,
+				// even with simulated counter reset), then don't enqueue or send busy message.
+				log.info(
+					`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}), but message ${message.id} would not have triggered a reply from Tomori (autoch_counter simulated as 0 for this check). Ignoring for queue.`,
+				);
 			}
 		} else {
-			// If locked, but Tomori wouldn't reply anyway (e.g., not setup, or message doesn't trigger),
-			// then don't enqueue or send busy message. Just let the current message processing finish.
-			// This message will effectively be ignored by Tomori for a reply.
+			// earlyTomoriState is null, meaning Tomori is not set up on this server.
+			// In this case, Tomori wouldn't reply anyway, so don't enqueue.
 			log.info(
-				`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}), but message ${message.id} would not have triggered a reply from Tomori. Ignoring for queue.`,
+				`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}), but Tomori is not set up on this server (earlyTomoriState is null). Message ${message.id} ignored for queue.`,
 			);
 		}
 		return; // Message enqueued, or ignored because Tomori wouldn't reply anyway.
@@ -739,6 +762,7 @@ export default async function tomoriChat(
 				functionResponse: Part;
 			}[] = [];
 			let finalStreamCompleted = false;
+			const accumulatedStreamedModelParts: Part[] = [];
 
 			for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
 				log.info(
@@ -752,6 +776,7 @@ export default async function tomoriChat(
 						tomoriState!,
 						geminiConfig,
 						contextSegments, // Original full prompt context
+						accumulatedStreamedModelParts, // MODIFIED: Pass the accumulator (Rule 26)
 						emojiStrings,
 						functionInteractionHistory.length > 0
 							? functionInteractionHistory
@@ -787,7 +812,11 @@ export default async function tomoriChat(
 							`Stream LLM wants to call function: ${funcName} with args: ${JSON.stringify(funcCall.args)}`,
 						);
 
-						let functionExecutionResult: Record<string, unknown>;
+						// Initialize functionExecutionResult to an empty object or a default error state.
+						let functionExecutionResult: Record<string, unknown> = {
+							status: "processing_error",
+							reason: "Function execution result was not properly set.",
+						};
 
 						// 2. Execute the function locally based on its name
 						if (funcName === selectStickerFunctionDeclaration.name) {
@@ -917,7 +946,200 @@ export default async function tomoriChat(
 						}
 						// TODO: Add handling for self_teach_tomori here when implemented
 						// else if (funcName === selfTeachTomoriFunctionDeclaration.name) { ... }
-						else {
+						else if (funcName === rememberThisFactFunctionDeclaration.name) {
+							// 1. Extract arguments from the function call
+							const memoryContentArg = funcCall.args?.memory_content;
+							const memoryScopeArg = funcCall.args?.memory_scope;
+							const currentUserNicknameArg =
+								funcCall.args?.current_user_nickname;
+
+							// 2. Validate arguments
+							if (
+								!tomoriState ||
+								!userRow ||
+								!userRow.user_id ||
+								!tomoriState.server_id
+							) {
+								// This is a critical internal state error if these are null here.
+								log.error(
+									"Critical state missing (tomoriState, userRow, or their IDs) before handling remember_this_fact.",
+									undefined,
+									{
+										serverId: tomoriState?.server_id,
+										userId: userRow?.user_id,
+										errorType: "SelfTeachStateError",
+										metadata: {
+											hasTomoriState: !!tomoriState,
+											hasUserRow: !!userRow,
+											hasUserId: !!userRow?.user_id,
+											hasServerId: !!tomoriState?.server_id,
+										},
+									},
+								);
+								functionExecutionResult = {
+									status: "memory_save_failed_internal_error",
+									reason:
+										"Internal bot error: Critical state information is missing.",
+								};
+							} else if (
+								typeof memoryContentArg !== "string" ||
+								!memoryContentArg.trim()
+							) {
+								functionExecutionResult = {
+									status: "memory_save_failed_invalid_args",
+									reason:
+										"The 'memory_content' argument was missing, empty, or not a string.",
+								};
+							} else if (
+								typeof memoryScopeArg !== "string" ||
+								!["server_wide", "about_current_user"].includes(memoryScopeArg)
+							) {
+								functionExecutionResult = {
+									status: "memory_save_failed_invalid_args",
+									reason:
+										"The 'memory_scope' argument was missing or invalid. Must be 'server_wide' or 'about_current_user'.",
+								};
+							} else {
+								// Arguments seem valid enough to proceed
+								const memoryContent = memoryContentArg.trim();
+
+								if (memoryScopeArg === "server_wide") {
+									// 3.a. Handle server-wide memory
+									const dbResult = await addServerMemoryByTomori(
+										tomoriState.server_id, // tomoriState.server_id is non-null due to check above
+										userRow.user_id, // userRow.user_id is non-null due to check above
+										memoryContent,
+									);
+									if (dbResult) {
+										functionExecutionResult = {
+											status: "memory_saved_successfully",
+											scope: "server_wide",
+											content_saved: memoryContent,
+											memory_id: dbResult.server_memory_id,
+										};
+										log.success(
+											`Tomori self-taught a server-wide memory (ID: ${dbResult.server_memory_id}): "${memoryContent}"`,
+										);
+										// Send notification embed to the channel
+										await sendStandardEmbed(channel, locale, {
+											color: ColorCode.SUCCESS, // Or ColorCode.INFO
+											titleKey: "genai.self_teach.server_memory_learned_title",
+											descriptionKey:
+												"genai.self_teach.server_memory_learned_description",
+											descriptionVars: {
+												memory_content:
+													memoryContent.length > 200
+														? `${memoryContent.substring(0, 197)}...`
+														: memoryContent,
+											},
+											// Not ephemeral, so everyone sees it
+										});
+									} else {
+										functionExecutionResult = {
+											status: "memory_save_failed_db_error",
+											scope: "server_wide",
+											reason:
+												"Database operation failed to save server-wide memory.",
+										};
+										log.error(
+											"Failed to save server-wide memory via self-teach (DB error).",
+											undefined,
+											{
+												serverId: tomoriState.server_id,
+												userId: userRow.user_id,
+												errorType: "SelfTeachDBError",
+												metadata: {
+													scope: "server_wide",
+													content: memoryContent,
+												},
+											},
+										);
+									}
+								} else if (memoryScopeArg === "about_current_user") {
+									// 3.b. Handle user-specific memory
+									if (
+										typeof currentUserNicknameArg !== "string" ||
+										!currentUserNicknameArg.trim()
+									) {
+										functionExecutionResult = {
+											status: "memory_save_failed_invalid_args",
+											scope: "about_current_user",
+											reason:
+												"The 'current_user_nickname' argument was missing or empty, which is required when 'memory_scope' is 'about_current_user'.",
+										};
+									} else if (
+										currentUserNicknameArg.trim().toLowerCase() !==
+										triggererName.toLowerCase()
+									) {
+										functionExecutionResult = {
+											status: "memory_save_failed_nickname_mismatch",
+											scope: "about_current_user",
+											reason: `The provided 'current_user_nickname' ('${currentUserNicknameArg}') does not match the current user ('${triggererName}'). Please provide the correct nickname or ensure the memory scope is appropriate.`,
+											expected_nickname: triggererName,
+											provided_nickname: currentUserNicknameArg,
+										};
+										log.warn(
+											`Self-teach nickname mismatch for user ${userRow.user_id}: LLM provided '${currentUserNicknameArg}', expected '${triggererName}'.`,
+										);
+									} else {
+										// Nickname matches, proceed to save personal memory
+										const dbResult = await addPersonalMemoryByTomori(
+											userRow.user_id, // userRow.user_id is non-null due to check above
+											memoryContent,
+										);
+										if (dbResult) {
+											functionExecutionResult = {
+												status: "memory_saved_successfully",
+												scope: "about_current_user",
+												user_nickname: triggererName,
+												content_saved: memoryContent,
+											};
+											log.success(
+												`Tomori self-taught a personal memory for ${triggererName} (User ID: ${userRow.user_id}): "${memoryContent}"`,
+											);
+											// Send notification embed to the channel
+											await sendStandardEmbed(channel, locale, {
+												color: ColorCode.SUCCESS, // Or ColorCode.INFO
+												titleKey:
+													"genai.self_teach.personal_memory_learned_title",
+												descriptionKey:
+													"genai.self_teach.personal_memory_learned_description",
+												descriptionVars: {
+													user_nickname: triggererName,
+													memory_content:
+														memoryContent.length > 200
+															? `${memoryContent.substring(0, 197)}...`
+															: memoryContent,
+												},
+												// Not ephemeral, so everyone sees it (or consider ephemeral if it's too noisy)
+												// For now, making it public as per your suggestion.
+											});
+										} else {
+											functionExecutionResult = {
+												status: "memory_save_failed_db_error",
+												scope: "about_current_user",
+												reason:
+													"Database operation failed to save personal memory.",
+											};
+											log.error(
+												`Failed to save personal memory for ${triggererName} (User ID: ${userRow.user_id}) via self-teach (DB error).`,
+												undefined,
+												{
+													userId: userRow.user_id,
+													serverId: tomoriState.server_id,
+													errorType: "SelfTeachDBError",
+													metadata: {
+														scope: "about_current_user",
+														content: memoryContent,
+														nickname: triggererName,
+													},
+												},
+											);
+										}
+									}
+								}
+							}
+						} else {
 							log.warn(
 								`Stream LLM called unknown function: ${funcName}. Informing LLM.`,
 							);

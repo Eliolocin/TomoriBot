@@ -20,6 +20,7 @@ import {
 import { HumanizerDegree, type TomoriConfigRow } from "@/types/db/schema";
 import {
 	queryGoogleSearchFunctionDeclaration,
+	rememberThisFactFunctionDeclaration,
 	selectStickerFunctionDeclaration,
 } from "@/providers/google/functionCalls";
 // Import ServerEmojiRow if needed for emoji query result type
@@ -285,15 +286,22 @@ export async function buildContext({
 		);
 	}
 
-	// 8.c. Self-Teach Function Guidance (Placeholder for when implemented)
-	const selfTeachFunctionNamePlaceholder = "self_teach_tomori"; // Replace with actual declaration name later
-	const selfTeachFunctionDescriptionPlaceholder =
-		"Allows you to learn new information or update your existing knowledge based on the current conversation. Provide the key information you want to remember and optionally a category.";
+	// 8.c. Self-Teach Function Guidance
 	if (tomoriConfig.self_teaching_enabled) {
-		// Example description
-		// You'll need to add this flag to TomoriConfigRow and manage it
+		// 1. Use the actual function name and description from the declaration.
+		const selfTeachFuncName = rememberThisFactFunctionDeclaration.name;
+		// 2. Craft a more detailed instruction based on the function's parameters and purpose.
+		const selfTeachInstruction =
+			`When a user provides a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important for ${botName} to remember for future interactions, ${botName} should use this tool. ` +
+			`This helps ${botName} learn and adapt. ` +
+			`Key considerations for ${botName}:\n` +
+			`  - **Memory Content**: Provide the specific piece of information to remember. It should be concise, clear, and represent new knowledge not already in ${botName}'s existing server or user memories.\n` +
+			`  - **Memory Scope**: Specify if the information is a general 'server_wide' fact (relevant to the whole server community) or 'about_current_user' (specific to the user ${botName} is currently interacting with, ${triggererName}).\n` +
+			`  - **Current User Nickname**: If the scope is 'about_current_user', ${botName} MUST provide the nickname of the current user (${triggererName}) as seen in the conversation. This is for confirmation.\n` +
+			`  - **Avoid Redundancy**: ${botName} must critically evaluate if the information is genuinely new and not something already known or easily inferred. Do not save trivial or redundant facts.`;
+
 		functionUsageInstructions.push(
-			`- **Self-Teaching ('${selfTeachFunctionNamePlaceholder}')**: ${selfTeachFunctionDescriptionPlaceholder} If a user provides new, correct information or clarifies a topic, consider using this function to update your knowledge for future interactions.`,
+			`- **Remember This Fact ('${selfTeachFuncName}')**: ${selfTeachInstruction}`,
 		);
 	}
 

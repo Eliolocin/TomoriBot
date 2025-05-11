@@ -108,16 +108,10 @@ export async function execute(
 		// Update the trigger words array
 		const updatedTriggerWords = [...currentTriggerWords, triggerWord];
 
-		// Format trigger words as PostgreSQL array literal with proper escaping
-		// This follows the same pattern as your working code example
-		const triggerWordsArrayLiteral = `{${updatedTriggerWords
-			.map((t) => `"${t.replace(/(["\\])/g, "\\$1")}"`)
-			.join(",")}}`;
-
 		// Update the config in the database with the manually constructed array literal
 		const [updatedConfig] = await sql`
             UPDATE tomori_configs
-            SET trigger_words = ${triggerWordsArrayLiteral}::text[]
+            SET trigger_words = array_append(trigger_words, ${triggerWord})
             WHERE tomori_id = ${tomoriState.tomori_id}
             RETURNING *
         `;

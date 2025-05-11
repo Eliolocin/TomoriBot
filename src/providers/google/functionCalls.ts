@@ -48,6 +48,39 @@ export const queryGoogleSearchFunctionDeclaration = {
 	},
 };
 
+/**
+ * Function declaration for Gemini to call when it identifies new information
+ * during a conversation that it should remember for future interactions.
+ * This allows Tomori to learn and adapt.
+ */
+export const rememberThisFactFunctionDeclaration = {
+	name: "remember_this_fact", // Function name Gemini will use
+	description:
+		"Use this function when you identify a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important to remember for future interactions. This helps you learn and adapt. Specify if the information is a general server-wide fact or something specific about the current user you are talking to. Avoid saving information that is already known or redundant.",
+	parameters: {
+		type: Type.OBJECT,
+		properties: {
+			memory_content: {
+				type: Type.STRING,
+				description:
+					"The specific piece of information, fact, or preference to remember. Be concise, clear, and ensure it's new information not already in your knowledge base.",
+			},
+			memory_scope: {
+				type: Type.STRING,
+				description:
+					"Specify the scope of this memory. Use 'server_wide' for general information applicable to the whole server, or 'about_current_user' for information specific to the user you are currently interacting with.",
+				enum: ["server_wide", "about_current_user"],
+			},
+			current_user_nickname: {
+				type: Type.STRING,
+				description:
+					"If memory_scope is 'about_current_user', provide the nickname of the user this memory pertains to, as you see them in the current conversation. This helps confirm the memory is for the correct user.",
+			},
+		},
+		required: ["memory_content", "memory_scope"], // current_user_nickname is conditionally required by logic, not strictly by schema here for simplicity, but will be validated in the backend.
+	},
+};
+
 // Future plans:
 // 1. Google Search [X]
 // 2. Tomori Self-Teaching

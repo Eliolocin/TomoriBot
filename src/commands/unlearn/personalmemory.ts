@@ -125,24 +125,14 @@ export async function execute(
 				// 8. Get the memory to delete
 				const memoryToRemove = currentMemories[selectedIndex];
 
-				// 9. Create new array without the selected memory
-				const updatedMemories = currentMemories.filter(
-					(_, index) => index !== selectedIndex,
-				);
-
-				// 10. Format array for PostgreSQL update (Rule 23)
-				const memoriesArrayLiteral = `{${updatedMemories
-					.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-					.join(",")}}`;
-
-				// 11. Update the user's row in the database using Bun SQL (Rule 4, 15)
-				// Remember: No type parameters needed for sql template literal
+				// 9. Update the user's row in the database using array_remove (Rule 23)
+				// This performs an atomic operation at the database level
 				const [updatedUserResult] = await sql`
-                    UPDATE users
-                    SET personal_memories = ${memoriesArrayLiteral}::text[]
-                    WHERE user_id = ${userData.user_id}
-                    RETURNING *
-                `;
+					UPDATE users
+					SET personal_memories = array_remove(personal_memories, ${memoryToRemove})
+					WHERE user_id = ${userData.user_id}
+					RETURNING *
+				`;
 
 				// 12. Validate the returned (updated) data (Rule 3, 5, 6)
 				const validationResult = userSchema.safeParse(updatedUserResult);

@@ -194,16 +194,12 @@ export async function execute(
 		// 11. Update trigger_words in `tomori_configs` if needed (Rule #4, #15, #23)
 		if (triggerUpdateNeeded) {
 			// Construct properly escaped PostgreSQL array literal (Rule #23)
-			const triggerArrayLiteral = `{${updatedTriggers
-				.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`) // Escape quotes and backslashes
-				.join(",")}}`;
-
 			const [updatedConfigRow] = await sql`
-                UPDATE tomori_configs
-                SET trigger_words = ${triggerArrayLiteral}::text[]
-                WHERE tomori_id = ${tomoriState.tomori_id}
-                RETURNING *
-            `;
+            UPDATE tomori_configs
+            SET trigger_words = array_append(trigger_words, ${newNickname})
+            WHERE tomori_id = ${tomoriState.tomori_id}
+            RETURNING *
+        `;
 
 			// 12. Validate the returned `tomori_configs` data (Rules #3, #5)
 			const validatedConfig = tomoriConfigSchema.safeParse(updatedConfigRow);

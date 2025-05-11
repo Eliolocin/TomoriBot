@@ -7,10 +7,15 @@ import {
 	type UserRow,
 	type TomoriConfigRow,
 	type ErrorContext,
+	serverMemorySchema,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import type { Guild } from "discord.js";
-import type { SetupConfig, SetupResult } from "../../types/db/schema";
+import type {
+	ServerMemoryRow,
+	SetupConfig,
+	SetupResult,
+} from "../../types/db/schema";
 import { setupConfigSchema, setupResultSchema } from "../../types/db/schema";
 
 /**
@@ -684,6 +689,161 @@ export async function updateUser(
 			},
 		};
 		await log.error(`Error updating user for id: ${userId}`, error, context);
+		return null;
+	}
+}
+
+/**
+ * Adds a new server-wide memory, initiated by Tomori itself due to an interaction.
+ * This memory is associated with a specific server and the user whose interaction triggered the learning.
+ *
+ * @param serverId - The internal ID of the server this memory pertains to.
+ * @param taughtByUserId - The internal ID of the user whose interaction led to Tomori learning this.
+ * @param content - The text content of the memory to be saved.
+ * @returns The newly created ServerMemoryRow, or null if the operation failed.
+ */
+export async function addServerMemoryByTomori(
+	serverId: number,
+	taughtByUserId: number,
+	content: string,
+): Promise<ServerMemoryRow | null> {
+	// 1. Log the attempt to add a server memory.
+	log.info(
+		`Tomori is attempting to self-learn a server memory for server ID ${serverId} (triggered by user ID ${taughtByUserId}): "${content.substring(0, 50)}..."`,
+	);
+
+	try {
+		// 2. Insert the new memory into the server_memories table.
+		// The columns now correctly match the serverMemorySchema.
+		const [newMemory] = await sql`
+            INSERT INTO server_memories (server_id, user_id, content)
+            VALUES (${serverId}, ${taughtByUserId}, ${content})
+            RETURNING *
+        `;
+
+		// 3. Validate the returned data using Zod schema (Rule 3, Rule 5, Rule 6).
+		const validatedMemory = serverMemorySchema.safeParse(newMemory);
+
+		if (!validatedMemory.success) {
+			const context: ErrorContext = {
+				serverId,
+				userId: taughtByUserId,
+				errorType: "SchemaValidationError",
+				metadata: {
+					operation: "addServerMemoryByTomori",
+					contentAttempted: content.substring(0, 100),
+					validationErrors: validatedMemory.error.flatten(),
+				},
+			};
+			await log.error(
+				`Failed to validate new server memory for server ID ${serverId}`,
+				validatedMemory.error,
+				context,
+			);
+			return null;
+		}
+
+		// 4. Log success and return the validated memory.
+		log.success(
+			`Tomori successfully saved a new server memory (ID: ${validatedMemory.data.server_memory_id}) for server ID ${serverId}, taught by user ID ${taughtByUserId}.`,
+		);
+		return validatedMemory.data;
+	} catch (error) {
+		const context: ErrorContext = {
+			serverId,
+			userId: taughtByUserId,
+			errorType: "DatabaseInsertError",
+			metadata: {
+				operation: "addServerMemoryByTomori",
+				contentAttempted: content.substring(0, 100),
+			},
+		};
+		await log.error(
+			`Error adding server memory for server ID ${serverId}`,
+			error,
+			context,
+		);
+		return null;
+	}
+}
+/**
+ * Adds a new personal memory for a user by atomically appending to their
+ * 'personal_memories' array using PostgreSQL's array_append function.
+ * This is initiated by Tomori itself.
+ *
+ * @param userId - The internal ID of the user for whom the memory is being saved.
+ * @param content - The text content of the memory to be appended.
+ * @returns The updated UserRow with the new memory, or null if the operation failed.
+ */
+export async function addPersonalMemoryByTomori(
+	userId: number,
+	content: string,
+): Promise<UserRow | null> {
+	// 1. Log the attempt to add a personal memory.
+	log.info(
+		`Tomori is attempting to self-learn and append a personal memory for User ID ${userId} using array_append: "${content.substring(0, 50)}..."`,
+	);
+
+	try {
+		// 2. Atomically update the user's personal_memories array using array_append.
+		// This is generally safer for concurrent appends than read-modify-write from the application.
+		// Rule 23 applies to formatting a full array literal; for appends, array_append is preferred.
+		const [updatedUserResult] = await sql`
+            UPDATE users
+            SET personal_memories = array_append(personal_memories, ${content})
+            WHERE user_id = ${userId}
+            RETURNING *
+        `;
+
+		// 3. Check if the user row was found and updated.
+		if (!updatedUserResult) {
+			// This could happen if the userId doesn't exist, though in self-teach, it should.
+			log.warn(
+				`Attempted to append personal memory for non-existent User ID ${userId} (self-teach with array_append).`,
+			);
+			return null;
+		}
+
+		// 4. Validate the returned user data using Zod schema.
+		const validatedUser = userSchema.safeParse(updatedUserResult);
+
+		if (!validatedUser.success) {
+			const context: ErrorContext = {
+				userId,
+				errorType: "SchemaValidationError",
+				metadata: {
+					operation: "addPersonalMemoryByTomori (array_append)",
+					contentAttempted: content.substring(0, 100),
+					validationErrors: validatedUser.error.flatten(),
+				},
+			};
+			await log.error(
+				`Failed to validate updated user row after appending personal memory for User ID ${userId} (self-teach)`,
+				validatedUser.error,
+				context,
+			);
+			return null;
+		}
+
+		// 5. Log success and return the validated user row.
+		log.success(
+			`Tomori successfully appended a personal memory for User ID ${userId} (self-teach using array_append). New array size: ${validatedUser.data.personal_memories.length}.`,
+		);
+		return validatedUser.data;
+	} catch (error) {
+		const context: ErrorContext = {
+			userId,
+			errorType: "DatabaseUpdateError",
+			metadata: {
+				operation: "addPersonalMemoryByTomori (array_append)",
+				contentAttempted: content.substring(0, 100),
+			},
+		};
+		await log.error(
+			`Error appending personal memory for User ID ${userId} (self-teach using array_append)`,
+			error,
+			context,
+		);
 		return null;
 	}
 }

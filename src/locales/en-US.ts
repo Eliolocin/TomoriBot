@@ -86,7 +86,7 @@ export default {
 		search: {
 			disclaimer_title: "🔍 Performing Google Search...",
 			disclaimer_description:
-				"Tomori is searching the web to answer your query. \n\n⚠️ **Please note:** AI-generated information, including search results, may sometimes be inaccurate or incomplete. Always verify important information.",
+				"⚠️ **Please note:** AI-generated information, including search results, may sometimes be inaccurate or incomplete. Always verify important information.",
 		},
 
 		// New: Stream specific error messages
@@ -105,6 +105,17 @@ export default {
 			// If a specific "streaming_failed_description" is needed distinct from "generic_error_description":
 			streaming_failed_description:
 				"Tomori encountered an issue while trying to stream the response. Please try again.",
+		},
+
+		self_teach: {
+			server_memory_learned_title:
+				"🧠 Tomori Learned Something New (Server-Wide!)",
+			server_memory_learned_description:
+				'I\'ve just learned this about our server: "{memory_content}"',
+			personal_memory_learned_title:
+				"💡 Tomori Learned Something About A User!",
+			personal_memory_learned_description:
+				'I\'ve just learned this about {user_nickname}: "{memory_content}"',
 		},
 	},
 

@@ -147,34 +147,22 @@ export async function execute(
 
 			// FIX: Simplify to match expected signature (index: number) => Promise<void>
 			onSelect: async (selectedIndex: number) => {
-				// 9. Create new arrays without the selected pair
-				const updatedIn = currentIn.filter(
-					(_, index) => index !== selectedIndex,
-				);
-				const updatedOut = currentOut.filter(
-					(_, index) => index !== selectedIndex,
-				);
+				// 9. Get the item being removed
+				const itemToRemoveIn = currentIn[selectedIndex];
+				const itemToRemoveOut = currentOut[selectedIndex];
 
-				// 10. Format arrays for PostgreSQL update (Rule 23)
-				const inArrayLiteral = `{${updatedIn
-					.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-					.join(",")}}`;
-				const outArrayLiteral = `{${updatedOut
-					.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-					.join(",")}}`;
-
-				// 11. Update both arrays in the database using Bun SQL (Rule 4, 15)
+				// 10. Update both arrays in the database using array_remove for atomic operations (Rule 23)
 				const [updatedRow] = await sql`
-                    UPDATE tomoris
-                    SET
-                        sample_dialogues_in = ${inArrayLiteral}::text[],
-                        sample_dialogues_out = ${outArrayLiteral}::text[]
-                    WHERE tomori_id = ${
-											// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
-											tomoriState!.tomori_id
-										}
-                    RETURNING *
-                `;
+					UPDATE tomoris
+					SET
+						sample_dialogues_in = array_remove(sample_dialogues_in, ${itemToRemoveIn}),
+						sample_dialogues_out = array_remove(sample_dialogues_out, ${itemToRemoveOut})
+					WHERE tomori_id = ${
+						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
+						tomoriState!.tomori_id
+					}
+					RETURNING *
+				`;
 
 				// 12. Validate the returned data (Rule 3, 5, 6)
 				const validatedTomori = tomoriSchema.safeParse(updatedRow);

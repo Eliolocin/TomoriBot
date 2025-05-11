@@ -129,27 +129,19 @@ export async function execute(
 
 			// Use simplified signature as expected by PaginatedChoiceOptions
 			onSelect: async (selectedIndex: number) => {
-				// 9. Create new array without the selected attribute
+				// 9. Get the attribute to remove
 				const attributeToRemove = currentAttributes[selectedIndex];
-				const updatedAttributes = currentAttributes.filter(
-					(_, index) => index !== selectedIndex,
-				);
 
-				// 10. Format array for PostgreSQL update (Rule 23)
-				const attributeArrayLiteral = `{${updatedAttributes
-					.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-					.join(",")}}`;
-
-				// 11. Update the attribute_list in the database using Bun SQL (Rule 4, 15)
+				// 10. Update the attribute_list in the database using array_remove (Rule 4, 15, 23)
 				const [updatedRow] = await sql`
-                    UPDATE tomoris
-                    SET attribute_list = ${attributeArrayLiteral}::text[]
-                    WHERE tomori_id = ${
-											// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
-											tomoriState!.tomori_id
-										}
-                    RETURNING *
-                `;
+					UPDATE tomoris
+					SET attribute_list = array_remove(attribute_list, ${attributeToRemove})
+					WHERE tomori_id = ${
+						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
+						tomoriState!.tomori_id
+					}
+					RETURNING *
+				`;
 
 				// 12. Validate the returned data (Rule 3, 5, 6)
 				const validatedTomori = tomoriSchema.safeParse(updatedRow);

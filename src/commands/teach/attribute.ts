@@ -154,23 +154,13 @@ export async function execute(
 			return;
 		}
 
-		const updatedAttributes = [...currentAttributes, newAttribute];
-
-		// 10. Format array for PostgreSQL update (Rule 23)
-		const attributeArrayLiteral = `{${updatedAttributes
-			.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-			.join(",")}}`;
-
-		// 11. Update Tomori row in the database using Bun SQL (Rule 4, 15)
+		// 11. Update Tomori row in the database using array_append (Rule 4, 15, 23)
 		const [updatedTomoriResult] = await sql`
-            UPDATE tomoris
-            SET attribute_list = ${attributeArrayLiteral}::text[]
-            WHERE tomori_id = ${
-							// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees tomori_id
-							tomoriState.tomori_id!
-						}
-            RETURNING *
-        `;
+			UPDATE tomoris
+			SET attribute_list = array_append(attribute_list, ${newAttribute})
+			WHERE tomori_id = ${tomoriState.tomori_id}
+			RETURNING *
+		`;
 
 		// 12. Validate the result from the database (Rule 3, 5, 6)
 		const validationResult = tomoriSchema.safeParse(updatedTomoriResult);

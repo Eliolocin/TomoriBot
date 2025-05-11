@@ -139,34 +139,16 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees values exist
 		const botInput = modalResult.values![BOT_INPUT_ID];
 
-		// 7. Prepare updated arrays (Access directly from tomoriState)
-		const currentIn = tomoriState.sample_dialogues_in || [];
-		const currentOut = tomoriState.sample_dialogues_out || [];
-
-		const updatedIn = [...currentIn, userInput];
-		const updatedOut = [...currentOut, botInput];
-
-		// 8. Format arrays for PostgreSQL update (Rule 23)
-		const inArrayLiteral = `{${updatedIn
-			.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-			.join(",")}}`;
-		const outArrayLiteral = `{${updatedOut
-			.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-			.join(",")}}`;
-
-		// 9. Update Tomori row in the database using Bun SQL (Rule 4, 15)
-		// Access tomori_id directly from tomoriState
+		// 9. Update Tomori row in the database using Bun SQL (Rule 4, 15, 23)
+		// Use array_append for atomic array operations
 		const [updatedTomoriResult] = await sql`
-            UPDATE tomoris
-            SET
-                sample_dialogues_in = ${inArrayLiteral}::text[],
-                sample_dialogues_out = ${outArrayLiteral}::text[]
-            WHERE tomori_id = ${
-							// biome-ignore lint/style/noNonNullAssertion: tomoriState check guarantees tomori_id
-							tomoriState.tomori_id!
-						}
-            RETURNING *
-        `;
+			UPDATE tomoris
+			SET
+				sample_dialogues_in = array_append(sample_dialogues_in, ${userInput}),
+				sample_dialogues_out = array_append(sample_dialogues_out, ${botInput})
+			WHERE tomori_id = ${tomoriState.tomori_id}
+			RETURNING *
+		`;
 
 		// 10. Validate the result from the database (Rule 3, 5, 6)
 		// Note: tomoriSchema validates a TomoriRow, not the full TomoriState

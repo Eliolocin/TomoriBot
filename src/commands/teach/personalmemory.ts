@@ -131,19 +131,13 @@ export async function execute(
 			return;
 		}
 
-		// 10. Add the new memory to the list
-		const updatedMemories = [...currentMemories, newMemory];
-
-		// 11. Format array for PostgreSQL update (Rule 23)
-		const memoriesArrayLiteral = `{${updatedMemories
-			.map((item) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-			.join(",")}}`;
-
-		// 12. Update the user's row in the database using Bun SQL (Rule 4, 15)
-		// Remember: No type parameters needed for sql template literal
+		// 10. Update the user's row in the database using array_append (Rule 4)
+		// This directly appends the new memory to the existing array in the database.
+		// This is a test to see if this approach is more robust for appends than
+		// constructing the full array literal as per original Rule 23.
 		const [updatedUserResult] = await sql`
             UPDATE users
-            SET personal_memories = ${memoriesArrayLiteral}::text[]
+            SET personal_memories = array_append(personal_memories, ${newMemory})
             WHERE user_id = ${userData.user_id}
             RETURNING *
         `;

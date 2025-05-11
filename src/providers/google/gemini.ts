@@ -30,6 +30,7 @@ import {
 } from "@/utils/text/stringHelper";
 import {
 	queryGoogleSearchFunctionDeclaration,
+	rememberThisFactFunctionDeclaration,
 	selectStickerFunctionDeclaration,
 } from "./functionCalls";
 import { sendStandardEmbed } from "@/utils/discord/embedHelper";
@@ -133,6 +134,15 @@ export function getGeminiTools(
 		);
 	}
 
+	// 5. Add Self-Teach Function Calling if enabled
+	if (tomoriState.config.self_teaching_enabled) {
+		// Assumes self_teach_enabled is added to TomoriConfigRow
+		functionDeclarations.push(rememberThisFactFunctionDeclaration);
+		log.info(
+			`Enabled '${rememberThisFactFunctionDeclaration.name}' function calling for model: ${modelNameLower}`,
+		);
+	}
+
 	// 5. If there are any function declarations, package them correctly for the tools array
 	if (functionDeclarations.length > 0) {
 		toolsConfig.push({ functionDeclarations }); // Gemini expects function declarations under this key
@@ -201,6 +211,7 @@ export async function streamGeminiToDiscord(
 	tomoriState: TomoriState,
 	geminiConfig: GeminiConfig,
 	contextItems: StructuredContextItem[],
+	currentTurnModelParts: Part[], // MODIFIED: Added to accept and update model's streamed parts
 	emojiStrings?: string[], // Made optional as it was in the provided snippet
 	functionInteractionHistory?: {
 		functionCall: FunctionCall;
@@ -273,7 +284,8 @@ export async function streamGeminiToDiscord(
 				const geminiParts: Part[] = [];
 				for (const part of item.parts) {
 					if (part.type === "text") geminiParts.push({ text: part.text });
-					else if (part.type === "image") {
+					else if (part.type === "image" && part.uri && part.mimeType) {
+						// Added null checks for uri and mimeType
 						try {
 							const imageResponse = await fetch(part.uri);
 							if (!imageResponse.ok)
@@ -309,6 +321,14 @@ export async function streamGeminiToDiscord(
 			// log.info(`System Instruction: ${requestConfig.systemInstruction}`); // Potentially very long
 		}
 		const finalContents = [...dialogueContents];
+
+		// Add parts that the model has already streamed in the current turn (Rule 26)
+		if (currentTurnModelParts.length > 0) {
+			finalContents.push({ role: "model", parts: [...currentTurnModelParts] });
+			log.info(
+				`Added ${currentTurnModelParts.length} accumulated model text parts to current turn API history.`,
+			);
+		}
 		if (functionInteractionHistory && functionInteractionHistory.length > 0) {
 			for (const item of functionInteractionHistory) {
 				finalContents.push({
@@ -650,6 +670,12 @@ export async function streamGeminiToDiscord(
 			const textPart = chunkResponse.text;
 			if (textPart) {
 				log.info(`Stream API: Raw chunk received: "${textPart}"`); // No substring
+
+				// Add the raw textPart to currentTurnModelParts immediately
+				if (textPart.trim()) {
+					currentTurnModelParts.push({ text: textPart });
+				}
+
 				streamBuffer += textPart;
 
 				let processedSomethingInIteration: boolean;
