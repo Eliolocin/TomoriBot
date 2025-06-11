@@ -1,11 +1,11 @@
 -- Insert LLMs
 INSERT INTO llms (llm_provider, llm_codename)
 VALUES
-  ('google', 'gemini-2.5-pro-exp-03-25'),
+  ('google', 'gemini-2.5-pro-preview-05-06'),
   ('google', 'gemini-2.0-flash-thinking-exp-01-21'),
   ('google', 'gemini-2.0-flash'),
   ('google', 'gemini-2.0-flash-lite'),
-  ('google', 'gemini-2.5-flash-preview-04-17'),
+  ('google', 'gemini-2.5-flash-preview-05-20'),
   ('google', 'gemini-2.0-flash-exp-image-generation')
 ON CONFLICT (llm_codename) DO NOTHING;
 

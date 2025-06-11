@@ -24,7 +24,8 @@ const handler = async (_client: Client, message: Message): Promise<void> => {
 		if (
 			message.content.includes("><") ||
 			message.author.bot ||
-			message.guildId !== process.env.TESTSRV_ID ||
+			(message.guildId !== process.env.TESTSRV_ID &&
+				message.guildId !== process.env.HAVENSRV_ID) ||
 			message.channelId === process.env.TESTCH_ID
 		) {
 			return;

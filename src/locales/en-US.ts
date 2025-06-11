@@ -58,10 +58,13 @@ export default {
 	genai: {
 		// Errors related to LLM API generation
 		generic_error_title: `Generation Error`,
-		generic_error_description: `Sorry, I encountered an error while trying to generate a response. Please try again later.`,
+		generic_error_description: `Sorry, I encountered an error while trying to generate a response ({error_message}). Please try again later.`,
 		safety_block_title: `Content Blocked`,
 		safety_block_description: `I couldn't process the request or generate a response because it was flagged for safety reasons ({reason}). Please modify your prompt or try something different.`,
 		api_error_title: `Gemini API Error`,
+		error_stream_timeout_title: "Connection Timeout",
+		error_stream_timeout_description:
+			"I'm having trouble connecting to my brain right now. Please try your request again in a moment or use `/tools refresh` to refresh the context history. If this keeps happening, there might be a temporary issue with the service.",
 
 		// Specific Gemini API error codes
 		"400_invalid_argument_description": `**400 INVALID_ARGUMENT:** The request was malformed (e.g., typo, missing field). Check API documentation if configuring manually.`,
@@ -105,6 +108,9 @@ export default {
 			// If a specific "streaming_failed_description" is needed distinct from "generic_error_description":
 			streaming_failed_description:
 				"Tomori encountered an issue while trying to stream the response. Please try again.",
+			generic_error_title: "Unknown Error", // Ensure this exists
+			generic_error_description:
+				"An unknown error occured during text generation. Please try again in a moment.", // Ensure this exists
 		},
 
 		self_teach: {
@@ -116,6 +122,14 @@ export default {
 				"💡 Tomori Learned Something About A User!",
 			personal_memory_learned_description:
 				'I\'ve just learned this about {user_nickname}: "{memory_content}"',
+			server_memory_footer:
+				"Server managers can manage this memory using `/teach` and `/unlearn` commands.",
+			personal_memory_footer_manage:
+				"You can manage your personal memories using `/teach` and `/unlearn` commands.",
+			personal_memory_footer_personalization_disabled:
+				"Note: This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here.",
+			personal_memory_footer_user_blacklisted:
+				"Note: This memory was saved, but the user in question is currently blacklisted from personalization features on this server.",
 		},
 	},
 
@@ -442,7 +456,7 @@ Discord API Latency: \`{discord_response}ms\``,
 
 **Warning:** Personalization is currently disabled on this server, so this memory won't be used here. It will still be available on other servers where personalization is enabled.`, // Natural line break
 			},
-			usernickname: {
+			nickname: {
 				command_description: `Change the name Tomori uses to refer to you.`,
 				option_description: `The nickname Tomori should use for you (2-32 characters).`,
 				invalid_length_title: `Invalid Nickname Length`,
@@ -531,7 +545,7 @@ You may also use \`/setup\` to easily choose a personality preset for the bot.`,
 		// Messages for when the bot is added to a server
 		addBot: {
 			rejoin_title: `I'm Back!`,
-			rejoin_description: `Hey there! Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the \`/teach\` and \`/settings\` commands.`,
+			rejoin_description: `Hey there! Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the \`/teach\` and \`/unlearn\` commands.`,
 			setup_prompt_title: `Thanks for adding TomoriBot!`,
 			setup_prompt_description: `Hello! Thanks for adding me! To get started, someone with the **Manage Server** permission needs to run my \`/setup\` command to choose my initial personality and configure my AI features.`,
 		},

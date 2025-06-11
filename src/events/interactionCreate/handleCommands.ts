@@ -231,7 +231,7 @@ const handler = async (
 				// Use the registerUser helper (Rule #17)
 				const registeredUser = await registerUser(
 					interaction.user.id,
-					interaction.user.displayName || interaction.user.username,
+					interaction.user.username,
 					userLanguage,
 				);
 

@@ -169,9 +169,9 @@ export async function isBlacklisted(
 			) as "exists";
 		`;
 
-		// Bun's sql returns [{ exists: 1 }] or [{ exists: 0 }]
+		// Bun's sql returns [{ exists: true }] or [{ exists: false }]
 		// biome-ignore lint/style/noNonNullAssertion: Query guarantees result[0] exists
-		return result[0]!.exists === 1;
+		return result[0]!.exists;
 	} catch (error) {
 		log.error(
 			`Error checking blacklist for user ${userDiscId} in server ${serverDiscId}:`,

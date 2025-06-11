@@ -56,7 +56,7 @@ export const queryGoogleSearchFunctionDeclaration = {
 export const rememberThisFactFunctionDeclaration = {
 	name: "remember_this_fact", // Function name Gemini will use
 	description:
-		"Use this function when you identify a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important to remember for future interactions. This helps you learn and adapt. Specify if the information is a general server-wide fact or something specific about the current user you are talking to. Avoid saving information that is already known or redundant.",
+		"Use this function when you identify a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important to remember for future interactions. This helps you learn and adapt. Specify if the information is a general server-wide fact or something specific about a user. Avoid saving information that is already known or redundant.",
 	parameters: {
 		type: Type.OBJECT,
 		properties: {
@@ -68,20 +68,30 @@ export const rememberThisFactFunctionDeclaration = {
 			memory_scope: {
 				type: Type.STRING,
 				description:
-					"Specify the scope of this memory. Use 'server_wide' for general information applicable to the whole server, or 'about_current_user' for information specific to the user you are currently interacting with.",
-				enum: ["server_wide", "about_current_user"],
+					"Specify the scope of this memory. Use 'server_wide' for general information applicable to the whole server, or 'target_user' for information specific to a particular user.",
+				enum: ["server_wide", "target_user"],
 			},
-			current_user_nickname: {
+			target_user_discord_id: {
+				// NEW parameter
 				type: Type.STRING,
 				description:
-					"If memory_scope is 'about_current_user', provide the nickname of the user this memory pertains to, as you see them in the current conversation. This helps confirm the memory is for the correct user.",
+					"If memory_scope is 'target_user', provide the unique Discord ID of the user this memory pertains to (e.g., '123456789012345678'). This ID should be obtained from the user's information visible in the context.",
+			},
+			target_user_nickname: {
+				// Existing parameter, description updated
+				type: Type.STRING,
+				description:
+					"If memory_scope is 'target_user', also provide the nickname of the user this memory pertains to, as you see them in the current conversation or their user profile information. This is used to confirm the target user alongside their Discord ID.",
 			},
 		},
-		required: ["memory_content", "memory_scope"], // current_user_nickname is conditionally required by logic, not strictly by schema here for simplicity, but will be validated in the backend.
+		// Both memory_content and memory_scope are always required.
+		// target_user_discord_id and target_user_nickname will be conditionally required by backend logic
+		// if memory_scope is 'target_user'. The schema reflects the always-required fields.
+		required: ["memory_content", "memory_scope"],
 	},
 };
 
 // Future plans:
 // 1. Google Search [X]
-// 2. Tomori Self-Teaching
+// 2. Tomori Self-Teaching [x]
 // 3. Scrape Danbooru/Gelbooru

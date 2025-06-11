@@ -20,7 +20,7 @@ const handler = async (_client: Client, member: GuildMember): Promise<void> => {
 		// 2. Register user using our centralized function (Rule #17)
 		const userData = await registerUser(
 			member.id,
-			member.displayName,
+			member.user.username,
 			userLanguage,
 		);
 

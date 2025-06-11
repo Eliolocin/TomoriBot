@@ -116,8 +116,8 @@ export async function convertMentions(
 								client.users.cache.get(id) ||
 								(await client.users.fetch(id).catch(() => null));
 							if (user) {
-								mentionCache.set(id, user.displayName);
-								return `${user.displayName}`;
+								mentionCache.set(id, user.username);
+								return `${user.username}`;
 							}
 						} else {
 							mentionCache.set(id, userData.user_nickname);
@@ -256,6 +256,8 @@ export async function buildContext({
 		triggererName,
 		botName,
 	);
+	personalityInstructionText += `\nWhen ${botName} wants to mention and ping a specific user in their response, they MUST use the format <@USER_DISCORD_ID> (e.g., <@123456789012345678>). The USER_DISCORD_ID can be found in the user's status block in this context (e.g., "Nickname (User ID: 123...)"). This ensures the user gets a notification.`;
+
 	contextItems.push({
 		role: "system",
 		parts: [{ type: "text", text: personalityInstructionText }],
@@ -292,12 +294,15 @@ export async function buildContext({
 		const selfTeachFuncName = rememberThisFactFunctionDeclaration.name;
 		// 2. Craft a more detailed instruction based on the function's parameters and purpose.
 		const selfTeachInstruction =
+			// biome-ignore lint/style/useTemplate: Line breaks for readability.
 			`When a user provides a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important for ${botName} to remember for future interactions, ${botName} should use this tool. ` +
 			`This helps ${botName} learn and adapt. ` +
 			`Key considerations for ${botName}:\n` +
 			`  - **Memory Content**: Provide the specific piece of information to remember. It should be concise, clear, and represent new knowledge not already in ${botName}'s existing server or user memories.\n` +
-			`  - **Memory Scope**: Specify if the information is a general 'server_wide' fact (relevant to the whole server community) or 'about_current_user' (specific to the user ${botName} is currently interacting with, ${triggererName}).\n` +
-			`  - **Current User Nickname**: If the scope is 'about_current_user', ${botName} MUST provide the nickname of the current user (${triggererName}) as seen in the conversation. This is for confirmation.\n` +
+			`  - **Memory Scope**: Specify if the information is a general 'server_wide' fact (relevant to the whole server community) or 'target_user' (specific to a user).\n` +
+			// MODIFIED: Changed to target_user_discord_id and added nickname for confirmation
+			`  - **Target User Discord ID**: If the scope is 'target_user', ${botName} MUST provide the unique Discord ID of the user this memory pertains to (e.g., '123456789012345678'). This ID can be found in the user's status block in the context (e.g., "Nickname (User ID: 123...)").\n` +
+			`  - **Target User Nickname for Confirmation**: If the scope is 'target_user', ${botName} MUST also provide the nickname of the user (e.g., '${triggererName}') as seen in their status block or the conversation. This is used to double-check the target user along with their Discord ID.\n` +
 			`  - **Avoid Redundancy**: ${botName} must critically evaluate if the information is genuinely new and not something already known or easily inferred. Do not save trivial or redundant facts.`;
 
 		functionUsageInstructions.push(
@@ -429,39 +434,42 @@ export async function buildContext({
 		});
 	}
 
-	// 6. Personal Memories & User Status
-	const personalizationEnabled = tomoriConfig.personal_memories_enabled ?? true;
-	if (personalizationEnabled && userList.length > 0) {
-		let personalMemoriesCombinedText = "";
+	// 6. User Context (Status & Conditional Personal Memories)
+	// This section will now always try to add user status for users in userList.
+	// Personal memories will only be added if server personalization is enabled AND the specific user is not blacklisted.
+	if (userList.length > 0) {
+		// MODIFIED: Loop if there are users, status is always relevant.
+		let combinedUserContextText = ""; // MODIFIED: Renamed for clarity
 		log.info(
-			`Building personal memories content for ${userList.length} users in guild ${guildId}`,
+			`Building user context (status and conditional memories) for ${userList.length} users in guild ${guildId}`,
 		);
 
 		// First attempt to load users from database
-		const userRows = await Promise.all(
+		const userRowsAttempt = await Promise.all(
+			// Renamed for clarity
 			userList.map((id) =>
-				loadUserRow(id).catch((e) => {
-					log.warn(`buildContext: Failed to load user ${id} for memories`, e);
-					return null;
+				loadUserRow(id).catch(() => {
+					log.warn(`buildContext: Failed to load user ${id} initially`);
+					return null; // Return null on error to continue processing others
 				}),
 			),
 		);
 
 		log.info(
-			`Successfully loaded ${userRows.filter(Boolean).length}/${userList.length} user rows`,
+			`Initial load attempt: ${userRowsAttempt.filter(Boolean).length}/${userList.length} user rows from DB.`,
 		);
 
-		// Process each user, registering those not found in the database
+		// Process each user, registering those not found or failed to load initially
 		for (const userIdToProcess of userList) {
-			let userRow = await loadUserRow(userIdToProcess);
+			let userRow =
+				userRowsAttempt.find((u) => u?.user_disc_id === userIdToProcess) ||
+				null;
 
 			if (!userRow) {
-				// Simplified for example
-
-				// If user not found in database, try to fetch from Discord and register them
+				// If user not found in initial batch load (or failed), try to fetch from Discord and register them
 				try {
 					log.info(
-						`User ${userIdToProcess} not found in database, fetching from Discord and registering`,
+						`User ${userIdToProcess} not found in initial DB load, attempting to fetch from Discord and register.`,
 					);
 					const guild = client.guilds.cache.get(guildId);
 					if (guild) {
@@ -469,78 +477,111 @@ export async function buildContext({
 							.fetch(userIdToProcess)
 							.catch(() => null);
 						if (member) {
-							// Register user with our centralized function
 							const serverLocale = guild.preferredLocale;
 							const userLanguage = serverLocale.startsWith("ja")
 								? "ja"
 								: "en-US";
 							userRow = await registerUser(
+								// This will UPSERT
 								userIdToProcess,
-								member.displayName,
+								member.user.username, // Base username for registration
 								userLanguage,
 							);
-							log.info(
-								`Successfully registered user ${userIdToProcess} (${member.displayName})`,
-							);
+							if (userRow) {
+								log.info(
+									`Successfully registered/loaded user ${userIdToProcess} (${member.user.username}) after fetch.`,
+								);
+							} else {
+								log.warn(
+									`Failed to register user ${userIdToProcess} after fetching from Discord.`,
+								);
+							}
 						} else {
 							log.warn(
-								`Could not fetch member ${userIdToProcess} from Discord`,
+								`Could not fetch member ${userIdToProcess} from Discord for registration.`,
 							);
 						}
+					} else {
+						log.warn(
+							`Guild ${guildId} not found in cache for user registration process.`,
+						);
 					}
 				} catch (error) {
-					log.error(
+					await log.error(
 						`Error registering user ${userIdToProcess} during context building:`,
 						error,
+						{
+							serverId: guildId,
+							errorType: "UserRegistrationError",
+						},
 					);
 				}
 			}
 
 			if (
-				!userRow ||
+				!userRow || // Check if userRow is still null or invalid
 				typeof userRow.user_id !== "number" ||
 				!userRow.user_disc_id
 			) {
-				// Skip if user is still null after registration attempt
 				log.warn(
-					`Skipping invalid user row for ${userIdToProcess}: ${JSON.stringify(userRow)}`,
+					`Skipping user context for ${userIdToProcess} due to invalid/missing user data after all attempts. UserRow: ${JSON.stringify(userRow)}`,
 				);
-				continue;
+				continue; // Skip to the next user if userRow is still not valid
 			}
 
-			// Use the imported isBlacklisted function
-			const userBlacklisted = await isBlacklisted(
+			// At this point, userRow is considered valid.
+			const nickname = userRow.user_nickname || `<@${userRow.user_disc_id}>`; // Fallback to mention format
+			const userDiscordId = userRow.user_disc_id;
+
+			let userSpecificContent = "";
+
+			// 6.a. Add Personal Memories (conditionally)
+			const serverPersonalizationEnabled =
+				tomoriConfig.personal_memories_enabled ?? true;
+			const userIsBlacklisted = await isBlacklisted(
 				guildId,
 				userRow.user_disc_id,
 			);
 
-			log.info(`User ${userRow.user_disc_id} blacklisted: ${userBlacklisted}`);
+			log.info(
+				`User ${userDiscordId}: Server Personalization Enabled: ${serverPersonalizationEnabled}, User Blacklisted: ${userIsBlacklisted}`,
+			);
 
-			if (userRow && !(await isBlacklisted(guildId, userRow.user_disc_id))) {
-				const userNickname = userRow.user_nickname || userRow.user_disc_id;
-				const presenceInfo = await getUserPresenceDetails(
-					client,
-					userRow.user_disc_id,
-					guildId,
-				);
-
-				let userSpecificContent = "";
+			if (serverPersonalizationEnabled && !userIsBlacklisted) {
 				if (userRow.personal_memories && userRow.personal_memories.length > 0) {
-					userSpecificContent += `## ${botName}'s Memories about ${userNickname}\n${userRow.personal_memories.join("\n")}\n`;
+					userSpecificContent += `## ${botName}'s Memories about ${nickname} (User ID: ${userDiscordId})\n${userRow.personal_memories.join("\n")}\n`;
 				}
-				userSpecificContent += `### ${userNickname}'s current status\n${presenceInfo}\n\n`;
-				personalMemoriesCombinedText += userSpecificContent;
+			} else {
+				if (!serverPersonalizationEnabled) {
+					log.info(
+						`Personal memories omitted for ${userDiscordId}: Server personalization is disabled.`,
+					);
+				}
+				if (userIsBlacklisted) {
+					log.info(
+						`Personal memories omitted for ${userDiscordId}: User is blacklisted.`,
+					);
+				}
 			}
+
+			// 6.b. Add User Status (always, if userRow is valid)
+			const presenceInfo = await getUserPresenceDetails(
+				client,
+				userRow.user_disc_id,
+				guildId,
+			);
+			userSpecificContent += `### ${nickname} (User ID: ${userDiscordId})'s current status\n${presenceInfo}\n\n`;
+			combinedUserContextText += userSpecificContent;
 		}
 
-		if (personalMemoriesCombinedText) {
+		if (combinedUserContextText) {
 			contextItems.push({
 				role: "system",
 				parts: [
 					{
 						type: "text",
 						text: await convertMentions(
-							personalMemoriesCombinedText.trim(),
+							combinedUserContextText.trim(), // MODIFIED: Use new variable
 							client,
 							guildId,
 							triggererName,
@@ -548,17 +589,18 @@ export async function buildContext({
 						),
 					},
 				],
-				metadataTag: ContextItemTag.KNOWLEDGE_USER_MEMORIES,
+				metadataTag: ContextItemTag.KNOWLEDGE_USER_MEMORIES, // MODIFIED: More generic tag
 			});
 		} else {
-			log.warn(`No personal memories content generated for guild ${guildId}`);
+			log.warn(
+				`No user context (status/memories) content generated for guild ${guildId}`,
+			);
 		}
 	} else {
 		log.info(
-			`Skipping personal memories: personalization enabled: ${personalizationEnabled}, user count: ${userList.length}`,
+			"Skipping user context section: userList is empty.", // MODIFIED: Updated log message
 		);
 	}
-
 	// 7. Current Context (Time, Channel)
 	let currentContextContent = `\n# Current Context\nCurrent Time: ${getCurrentTime()}.\n${botName} is currently in text channel #${channelName}.`;
 	if (channelDesc) {
@@ -737,11 +779,11 @@ async function getUserPresenceDetails(
 			return "Offline or status unknown";
 		}
 
-		log.info(`Member found: ${member.displayName} (${member.id})`);
+		log.info(`Member found: ${member.user.username} (${member.id})`);
 
 		if (!member.presence) {
 			log.warn(
-				`No presence data available for ${member.displayName} (${member.id})`,
+				`No presence data available for ${member.user.username} (${member.id})`,
 			);
 			log.info(
 				`Presence permission check: GUILD_PRESENCES intent enabled: ${Boolean(client.options.intents?.has(GatewayIntentBits.GuildPresences))}`,
@@ -761,12 +803,12 @@ async function getUserPresenceDetails(
 		const status = statusMap[member.presence.status] || "Status unknown";
 		let result = status;
 
-		log.info(`User ${member.displayName} status: ${status}`);
+		log.info(`User ${member.user.username} status: ${status}`);
 
 		// 4. Format activities if present
 		if (member.presence.activities && member.presence.activities.length > 0) {
 			log.info(
-				`User ${member.displayName} has ${member.presence.activities.length} activities`,
+				`User ${member.user.username} has ${member.presence.activities.length} activities`,
 			);
 
 			const activityDetails = member.presence.activities.map((activity) => {
@@ -807,7 +849,7 @@ async function getUserPresenceDetails(
 			result += ` - ${activityDetails.join(", ")}`;
 			log.info(`Final presence string: "${result}"`);
 		} else {
-			log.info(`User ${member.displayName} has no activities`);
+			log.info(`User ${member.user.username} has no activities`);
 		}
 
 		return result;

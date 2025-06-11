@@ -181,8 +181,8 @@ const DISCORD_STREAM_FLUSH_BUFFER_SIZE_CODE_BLOCK = 15000; // Increased signific
 // 2. Non-capturing group for OR condition:
 //    a. Captures English period `.` only if followed by whitespace `\s` or end-of-string `$`.
 //    b. OR captures Japanese period `。` without the strict whitespace/EOL lookahead.
-const DISCORD_STREAM_PUNCTUATION_FLUSH =
-	/(?<!(?:\b(?:vs|mr|mrs|dr|prof|inc|ltd|co|etc|e\.g|i\.e)|\d))(?:(\.)(?=\s|$)|(。))/i;
+// const DISCORD_STREAM_PUNCTUATION_FLUSH =
+//	/(?<!(?:\b(?:vs|mr|mrs|dr|prof|inc|ltd|co|etc|e\.g|i\.e)|\d))(?:(\.)(?=\s|$)|(。))/i;
 
 // Constants for typing simulation in sendSegment
 const BASE_TYPE_SPEED_MS_PER_CHAR = 10;
@@ -191,6 +191,7 @@ const MIN_RANDOM_PAUSE_MS = 250;
 const MAX_RANDOM_PAUSE_MS = 1500;
 const THINKING_PAUSE_CHANCE = 0.25;
 const MIN_VISIBLE_TYPING_DURATION_MS = 750;
+const STREAM_INACTIVITY_TIMEOUT_MS = 30000; // 30 seconds
 /**
  * Streams a response from Google's Gemini LLM API directly to a Discord channel,
  * sending new messages for segments of the stream.
@@ -220,7 +221,7 @@ export async function streamGeminiToDiscord(
 	initialInteraction?: CommandInteraction, // Optional: for initial error reporting if applicable
 	replyToMessage?: Message, // New parameter: The message to reply to
 ): Promise<{
-	status: "completed" | "function_call" | "error";
+	status: "completed" | "function_call" | "error" | "timeout";
 	data?: FunctionCall | Error;
 }> {
 	// 1. Log and Validate Inputs
@@ -239,6 +240,25 @@ export async function streamGeminiToDiscord(
 	let lastError: Error | undefined;
 	// MODIFIED: Flag to track if we've sent the initial reply for a queued message
 	let hasRepliedToOriginalMessage = false;
+
+	// MODIFIED: For stream timeout
+	//let lastChunkTime = Date.now();
+	let inactivityTimer: NodeJS.Timeout | null = null;
+	let streamTimedOut = false;
+
+	const resetInactivityTimer = () => {
+		//lastChunkTime = Date.now();
+		if (inactivityTimer) clearTimeout(inactivityTimer);
+		inactivityTimer = setTimeout(() => {
+			log.warn(`Gemini stream to ${channel.id} timed out due to inactivity.`);
+			streamTimedOut = true;
+			// We can't directly abort streamResultFromSDK.stream,
+			// so we'll rely on the loop checking streamTimedOut.
+			// If the SDK call itself hangs, this won't help that initial hang.
+			// This primarily handles hangs *during* streaming of chunks.
+			if (inactivityTimer) clearTimeout(inactivityTimer); // Clear again just in case
+		}, STREAM_INACTIVITY_TIMEOUT_MS);
+	};
 
 	try {
 		const genAI = new GoogleGenAI({ apiKey: validatedConfig.apiKey });
@@ -522,6 +542,8 @@ export async function streamGeminiToDiscord(
 		await channel
 			.sendTyping()
 			.catch((e) => log.warn("Stream: Initial sendTyping failed", e));
+
+		resetInactivityTimer(); // Start timer before the first chunk is expected
 		const stream = await genAI.models.generateContentStream({
 			model: validatedConfig.model || DEFAULT_MODEL,
 			contents: finalContents,
@@ -530,12 +552,21 @@ export async function streamGeminiToDiscord(
 
 		// 5. Process the stream
 		for await (const chunkResponse of stream) {
-			// 5a. Handle blocks and critical errors
+			if (streamTimedOut) {
+				// Check timeout flag
+				log.warn(
+					`Stream loop breaking due to timeout for channel ${channel.id}.`,
+				);
+				break;
+			}
+			resetInactivityTimer();
 			if (
 				chunkResponse.promptFeedback?.blockReason &&
 				chunkResponse.promptFeedback.blockReason !==
 					BlockedReason.BLOCKED_REASON_UNSPECIFIED
 			) {
+				// Reset timer on new chunk
+				// 5a. Handle blocks and critical errors
 				const reason = chunkResponse.promptFeedback.blockReason;
 				const msg = `Stream prompt blocked by API. Reason: ${reason}.`;
 				log.warn(msg, chunkResponse.promptFeedback);
@@ -663,13 +694,15 @@ export async function streamGeminiToDiscord(
 					await sendSegment(cleanedBuffer, humanizerDegree);
 					streamBuffer = "";
 				}
+
+				if (inactivityTimer) clearTimeout(inactivityTimer); // Clear timer before returning
 				return { status: "function_call", data: functionCallsInChunk[0] };
 			}
 
 			// 5c. Process text parts
 			const textPart = chunkResponse.text;
 			if (textPart) {
-				log.info(`Stream API: Raw chunk received: "${textPart}"`); // No substring
+				log.info(`Stream API: Raw chunk received: "${textPart}"`);
 
 				// Add the raw textPart to currentTurnModelParts immediately
 				if (textPart.trim()) {
@@ -677,6 +710,10 @@ export async function streamGeminiToDiscord(
 				}
 
 				streamBuffer += textPart;
+				// MODIFIED: Add debug logging for code block state
+				log.info(
+					`Stream Debug: Buffer now "${streamBuffer.length > 100 ? `${streamBuffer.substring(0, 100)}...` : streamBuffer}", isInsideCodeBlock: ${isInsideCodeBlock}`,
+				);
 
 				let processedSomethingInIteration: boolean;
 				do {
@@ -685,7 +722,12 @@ export async function streamGeminiToDiscord(
 
 					if (isInsideCodeBlock) {
 						// 1. We are inside a code block, look for the closing triple backticks
-						const closingBackticksIndex = streamBuffer.indexOf("```");
+						// MODIFIED: Search for closing backticks starting from position 3 (after opening ```)
+						const closingBackticksIndex = streamBuffer.indexOf("```", 3);
+						log.info(
+							`Stream Debug: Looking for closing backticks (starting from pos 3), found at index: ${closingBackticksIndex}`,
+						);
+
 						if (closingBackticksIndex !== -1) {
 							segmentToFlush = streamBuffer.substring(
 								0,
@@ -694,34 +736,44 @@ export async function streamGeminiToDiscord(
 							streamBuffer = streamBuffer.substring(closingBackticksIndex + 3);
 							isInsideCodeBlock = false;
 							log.info(
-								`Stream Seg: Code block closed. Flushing: "${segmentToFlush}"`,
-							); // No substring
+								`Stream Seg: Code block closed. Flushing: "${segmentToFlush.length > 100 ? `${segmentToFlush.substring(0, 100)}...` : segmentToFlush}"`,
+							);
 						} else if (
 							streamBuffer.length >= DISCORD_STREAM_FLUSH_BUFFER_SIZE_CODE_BLOCK
 						) {
 							// Safety flush for excessively long code block without a closing marker
 							log.warn(
-								`Stream Seg: Flushing oversized code block (no closing found): "${streamBuffer}"`,
-							); // No substring
+								`Stream Seg: Flushing oversized code block (no closing found): "${streamBuffer.length} chars"`,
+							);
 							segmentToFlush = streamBuffer;
 							streamBuffer = "";
-							isInsideCodeBlock = false; // Assume it's broken or done, exit code block mode
+							isInsideCodeBlock = false;
 						}
-						// If still in code block, no closing found, and not oversized: continue accumulating by breaking the loop
+						// If still in code block, no closing found, and not oversized: continue accumulating
 						else {
+							log.info(
+								`Stream Debug: Still in code block, continuing to accumulate. Buffer length: ${streamBuffer.length}`,
+							);
 							break; // Break do...while to accumulate more for the code block
 						}
 					} else {
 						// Not currently inside a code block
-						// 2. Look for the start of a new code block or natural break points (newline/period)
+						// 2. Look for the start of a new code block or natural break points
 						const openingBackticksIndex = streamBuffer.indexOf("```");
 						const newlineIndex = streamBuffer.indexOf("\n");
-						const periodMatch =
-							DISCORD_STREAM_PUNCTUATION_FLUSH.exec(streamBuffer);
+
+						// MODIFIED: Create a new regex instance to avoid state issues
+						const periodRegex =
+							/(?<!(?:\b(?:vs|mr|mrs|dr|prof|inc|ltd|co|etc|e\.g|i\.e)|\d))(?:(\.)(?=\s|$)|(。))/i;
+						const periodMatch = periodRegex.exec(streamBuffer);
 						let periodEndIndex = -1;
 						if (periodMatch) {
 							periodEndIndex = periodMatch.index + periodMatch[0].length;
 						}
+
+						log.info(
+							`Stream Debug: Break points - opening: ${openingBackticksIndex}, newline: ${newlineIndex}, period: ${periodEndIndex}`,
+						);
 
 						// Determine the earliest relevant break point
 						let earliestBreakIndex = -1;
@@ -738,20 +790,22 @@ export async function streamGeminiToDiscord(
 							earliestBreakIndex = newlineIndex;
 							breakType = "newline";
 						}
-						// 2.c. MODIFIED: Conditionally check for period flush ONLY if humanizerDegree is HEAVY (3)
-						// Assuming HumanizerDegree.HEAVY will correspond to numeric value 3
+						// Only check for period flush if humanizerDegree is HEAVY
 						if (humanizerDegree === HumanizerDegree.HEAVY) {
 							if (
-								periodEndIndex !== -1 && // A period was found
-								(earliestBreakIndex === -1 || // And it's the first break found, OR
-									(periodMatch?.index ?? -1) < earliestBreakIndex) // It occurs before any other break
+								periodEndIndex !== -1 &&
+								(earliestBreakIndex === -1 ||
+									(periodMatch?.index ?? -1) < earliestBreakIndex)
 							) {
-								// Use periodMatch.index for comparison, periodEndIndex for slicing
 								// biome-ignore lint/style/noNonNullAssertion: periodMatch existence verified by periodEndIndex check above
 								earliestBreakIndex = periodMatch!.index;
 								breakType = "period";
 							}
 						}
+
+						log.info(
+							`Stream Debug: Earliest break at ${earliestBreakIndex}, type: ${breakType}`,
+						);
 
 						if (earliestBreakIndex !== -1) {
 							if (breakType === "code_open") {
@@ -763,12 +817,16 @@ export async function streamGeminiToDiscord(
 									);
 									streamBuffer = streamBuffer.substring(earliestBreakIndex);
 									log.info(
-										`Stream Seg: Flushing text before code block: "${segmentToFlush}". Rem: "${streamBuffer}"`,
-									); // No substring
+										`Stream Seg: Flushing text before code block: "${segmentToFlush.length > 50 ? `${segmentToFlush.substring(0, 50)}...` : segmentToFlush}"`,
+									);
 								} else {
 									// Code block starts at the beginning of the current buffer
-									// Check if the *entire* code block is already in the buffer
-									const closingInThisSegment = streamBuffer.indexOf("```", 3); // Start search after opening ```
+									// MODIFIED: Search for closing backticks starting from position 3 (after opening ```)
+									const closingInThisSegment = streamBuffer.indexOf("```", 3);
+									log.info(
+										`Stream Debug: Complete code block check - closing found at: ${closingInThisSegment}`,
+									);
+
 									if (closingInThisSegment !== -1) {
 										// Complete block found
 										segmentToFlush = streamBuffer.substring(
@@ -779,15 +837,14 @@ export async function streamGeminiToDiscord(
 											closingInThisSegment + 3,
 										);
 										log.info(
-											`Stream Seg: Flushing complete code block: "${segmentToFlush}". Rem: "${streamBuffer}"`,
-										); // No substring
-										// isInsideCodeBlock remains false
+											`Stream Seg: Flushing complete code block: "${segmentToFlush.length > 100 ? `${segmentToFlush.substring(0, 100)}...` : segmentToFlush}"`,
+										);
 									} else {
 										// Code block starts but doesn't end in the current buffer
 										isInsideCodeBlock = true;
 										log.info(
-											`Stream Seg: Entering code block mode. Buffer: "${streamBuffer}"`,
-										); // No substring
+											`Stream Seg: Entering code block mode. Buffer length: ${streamBuffer.length}`,
+										);
 										break; // Break do...while to accumulate for the code block
 									}
 								}
@@ -795,20 +852,15 @@ export async function streamGeminiToDiscord(
 								segmentToFlush = streamBuffer.substring(
 									0,
 									earliestBreakIndex + 1,
-								); // Include newline
+								);
 								streamBuffer = streamBuffer.substring(earliestBreakIndex + 1);
-								log.info(
-									`Stream Seg: Extracted by newline: "${segmentToFlush}". Rem: "${streamBuffer}"`,
-								); // No substring
+								log.info("Stream Seg: Extracted by newline");
 							} else if (breakType === "period") {
-								segmentToFlush = streamBuffer.substring(0, periodEndIndex); // periodEndIndex includes the period
+								segmentToFlush = streamBuffer.substring(0, periodEndIndex);
 								streamBuffer = streamBuffer.substring(periodEndIndex);
-								log.info(
-									`Stream Seg: Extracted by period: "${segmentToFlush}". Rem: "${streamBuffer}"`,
-								); // No substring
+								log.info("Stream Seg: Extracted by period");
 							}
 						}
-						// If no break point found and not entering code block, buffer will be checked for size later
 					}
 
 					if (segmentToFlush) {
@@ -822,21 +874,14 @@ export async function streamGeminiToDiscord(
 							finalEmojiStrings,
 							emojiUsageEnabled,
 						);
-						if (cleanedSegment !== segmentToFlush) {
-							log.info(`Stream Seg: Cleaned to: "${cleanedSegment}"`); // No substring
-						}
 						await sendSegment(cleanedSegment, humanizerDegree);
-						processedSomethingInIteration = true; // Indicate that we processed and sent something
+						processedSomethingInIteration = true;
 					}
 				} while (
 					processedSomethingInIteration &&
 					streamBuffer.length > 0 &&
 					!isInsideCodeBlock
 				);
-				// Loop continues if:
-				// - We processed something in this iteration.
-				// - There's still content in the buffer.
-				// - We are NOT waiting to accumulate more for a code block.
 
 				// After iterative processing, handle buffer size flush for REGULAR text (if not in code block)
 				if (
@@ -844,8 +889,8 @@ export async function streamGeminiToDiscord(
 					streamBuffer.length >= DISCORD_STREAM_FLUSH_BUFFER_SIZE_REGULAR
 				) {
 					log.info(
-						`Stream Seg: Flushing oversized regular buffer (no delimiter): "${streamBuffer}"`,
-					); // No substring
+						`Stream Seg: Flushing oversized regular buffer: ${streamBuffer.length} chars`,
+					);
 					await channel
 						.sendTyping()
 						.catch((e) =>
@@ -853,20 +898,32 @@ export async function streamGeminiToDiscord(
 						);
 
 					const segmentToFlushOversized = streamBuffer;
-					streamBuffer = ""; // Clear before async operation
+					streamBuffer = "";
 					const cleanedRemainder = cleanLLMOutput(
 						segmentToFlushOversized,
 						botName,
 						finalEmojiStrings,
 						emojiUsageEnabled,
 					);
-					if (cleanedRemainder !== segmentToFlushOversized) {
-						log.info(`Stream Seg: Cleaned oversized to: "${cleanedRemainder}"`); // No substring
-					}
 					await sendSegment(cleanedRemainder, humanizerDegree);
 				}
-			} // End of if (textPart)
+			}
 		} // End of stream for-await loop
+
+		if (inactivityTimer)
+			// End of stream for-await loop
+
+			clearTimeout(inactivityTimer);
+
+		if (streamTimedOut) {
+			// Clear timer at the end of successful stream or if loop finishes
+
+			// Check after loop if timeout occurred
+			return {
+				status: "timeout",
+				data: new Error("Stream timed out due to inactivity."),
+			};
+		}
 
 		// Final flush at the end of the stream
 		if (streamBuffer.length > 0) {
@@ -921,6 +978,7 @@ export async function streamGeminiToDiscord(
 		);
 		return { status: "completed" };
 	} catch (error) {
+		if (inactivityTimer) clearTimeout(inactivityTimer); // Clear timer on error
 		lastError = error as Error;
 		// Corrected: tomoriState.server_id is directly on tomoriState
 		const errorContext = {
@@ -962,8 +1020,8 @@ export async function streamGeminiToDiscord(
 			// Consider a more generic message or logging only.
 			// For now, sending a simplified error.
 			await sendStandardEmbed(channel, channel.guild.preferredLocale, {
-				titleKey: "genai.stream.generic_error_title",
-				descriptionKey: "genai.stream.generic_error_description",
+				titleKey: "genai.generic_error_title",
+				descriptionKey: "genai.generic_error_description",
 				descriptionVars: { error_message: lastError.message }, // 'lastError' is the caught error
 				color: ColorCode.ERROR,
 			}).catch((e) =>

@@ -21,6 +21,7 @@ import {
 } from "@google/genai";
 import type { GeminiConfig } from "../../types/api/gemini";
 import {
+	isBlacklisted,
 	loadServerEmojis,
 	loadTomoriState,
 	loadUserRow,
@@ -58,9 +59,15 @@ const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
 ) || ["tomori", "tomo", "トモリ", "ともり"];
 
 // Conversation reset markers
-const CONVERSATION_RESET_MARKERS = ["REFRESH", "refresh", "リフレッシュ"];
+const CONVERSATION_RESET_MARKERS = [
+	"REFRESH",
+	"refresh",
+	"リフレッシュ",
+	"会話履歴がクリア",
+];
 
 const MAX_FUNCTION_CALL_ITERATIONS = 5; // Safety break for function call loops
+const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
 
 // Regex to identify if a string is solely a Tenor GIF URL
 //const TENOR_GIF_REGEX = /^(https?:\/\/)?(www\.)?tenor\.com\/view\/[a-zA-Z0-9-]+-gif-\d+(\?.*)?$/i;
@@ -148,7 +155,6 @@ export default async function tomoriChat(
 
 	// biome-ignore lint/style/noNonNullAssertion: Author is always present in non-system messages
 	const userDiscId = message.author!.id;
-	let triggererName = message.author.displayName;
 
 	// --- New Semaphore Logic ---
 	const channelLockId = channel.id;
@@ -303,7 +309,7 @@ export default async function tomoriChat(
 				earlyTomoriState ?? (await loadTomoriState(serverDiscId));
 			const userRow = await loadUserRow(userDiscId);
 			locale = userRow?.language_pref ?? "en-US"; // Set locale based on user pref
-			triggererName = userRow?.user_nickname ?? message.author.displayName;
+			const triggererName = userRow?.user_nickname ?? message.author.username;
 
 			// Function to check for base trigger words - stays contained within the try block
 			function checkForBaseTriggerWords(content: string): boolean {
@@ -516,8 +522,8 @@ export default async function tomoriChat(
 
 				const authorName =
 					msg.author.id === client.user?.id
-						? tomoriState?.tomori_nickname // tomoriState is guaranteed to be non-null if we reach here and bot is replying
-						: msg.author.displayName;
+						? tomoriState?.tomori_nickname // Use Tomori's nickname for bot messages
+						: `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
 				userListSet.add(authorId);
 
 				const imageAttachments: SimplifiedMessageForContext["imageAttachments"] =
@@ -768,8 +774,9 @@ export default async function tomoriChat(
 				log.info(
 					`Streaming LLM Call Iteration: ${i + 1}/${MAX_FUNCTION_CALL_ITERATIONS}. History items: ${functionInteractionHistory.length}`,
 				);
+
 				try {
-					const streamResult = await streamGeminiToDiscord(
+					const streamGeminiPromise = await streamGeminiToDiscord(
 						channel,
 						client,
 						// biome-ignore lint/style/noNonNullAssertion: Missing Tomoristate handled at start of TomoriChat
@@ -784,6 +791,55 @@ export default async function tomoriChat(
 						undefined,
 						isFromQueue ? message : undefined,
 					);
+					const timeoutPromise = new Promise<never>(
+						(
+							_,
+							reject, // Promise<never> indicates it only rejects
+						) =>
+							setTimeout(
+								() =>
+									reject(
+										new Error(
+											"SDK_CALL_TIMEOUT: streamGeminiToDiscord call timed out.",
+										),
+									),
+								STREAM_SDK_CALL_TIMEOUT_MS,
+							),
+					);
+
+					let streamResult: Awaited<ReturnType<typeof streamGeminiToDiscord>>;
+					try {
+						// Promise.race will settle as soon as one of the promises settles
+						streamResult = await Promise.race([
+							streamGeminiPromise,
+							timeoutPromise,
+						]);
+					} catch (raceError) {
+						// This catch block will execute if timeoutPromise rejects first,
+						// or if streamGeminiPromise itself rejects *before* the timeout.
+						if (
+							raceError instanceof Error &&
+							raceError.message.startsWith("SDK_CALL_TIMEOUT:")
+						) {
+							log.error(
+								`SDK call to streamGeminiToDiscord timed out for channel ${channel.id}.`,
+								raceError, // Log the timeout error
+								{
+									serverId: tomoriState?.server_id,
+									errorType: "SDKTimeoutError",
+								},
+							);
+							await sendStandardEmbed(channel, locale, {
+								color: ColorCode.ERROR, // Using ERROR as it's a more critical failure
+								titleKey: "genai.error_stream_timeout_title", // New locale key
+								descriptionKey: "genai.error_stream_timeout_description", // New locale key
+							});
+							finalStreamCompleted = true; // Consider it "completed" to break the loop
+							break;
+						}
+						// If it's not our specific timeout error, re-throw to be caught by the outer catch
+						throw raceError;
+					}
 
 					if (streamResult.status === "completed") {
 						log.success("Streaming to Discord completed successfully.");
@@ -802,6 +858,21 @@ export default async function tomoriChat(
 						);
 						// streamGeminiToDiscord already attempts to send an error message.
 						finalStreamCompleted = true; // Consider it "completed" to break loop, error handled.
+						break;
+					}
+
+					// This is the internal stream inactivity timeout from streamGeminiToDiscord
+					if (streamResult.status === "timeout") {
+						log.warn(
+							`Streaming to Discord timed out due to inactivity for channel ${channel.id}.`,
+							streamResult.data,
+						);
+						await sendStandardEmbed(channel, locale, {
+							color: ColorCode.WARN,
+							titleKey: "genai.error_stream_timeout_title",
+							descriptionKey: "genai.error_stream_timeout_description",
+						});
+						finalStreamCompleted = true;
 						break;
 					}
 
@@ -950,16 +1021,18 @@ export default async function tomoriChat(
 							// 1. Extract arguments from the function call
 							const memoryContentArg = funcCall.args?.memory_content;
 							const memoryScopeArg = funcCall.args?.memory_scope;
-							const currentUserNicknameArg =
-								funcCall.args?.current_user_nickname;
+							// MODIFIED: Extract new arguments for targeted user memory
+							const targetUserDiscordIdArg =
+								funcCall.args?.target_user_discord_id;
+							const targetUserNicknameArg = funcCall.args?.target_user_nickname;
 
-							// 2. Validate arguments
 							if (
 								!tomoriState ||
 								!userRow ||
 								!userRow.user_id ||
 								!tomoriState.server_id
 							) {
+								// 2. Validate arguments
 								// This is a critical internal state error if these are null here.
 								log.error(
 									"Critical state missing (tomoriState, userRow, or their IDs) before handling remember_this_fact.",
@@ -992,12 +1065,12 @@ export default async function tomoriChat(
 								};
 							} else if (
 								typeof memoryScopeArg !== "string" ||
-								!["server_wide", "about_current_user"].includes(memoryScopeArg)
+								!["server_wide", "target_user"].includes(memoryScopeArg)
 							) {
 								functionExecutionResult = {
 									status: "memory_save_failed_invalid_args",
 									reason:
-										"The 'memory_scope' argument was missing or invalid. Must be 'server_wide' or 'about_current_user'.",
+										"The 'memory_scope' argument was missing or invalid. Must be 'server_wide' or 'target_user'.",
 								};
 							} else {
 								// Arguments seem valid enough to proceed
@@ -1032,6 +1105,7 @@ export default async function tomoriChat(
 														? `${memoryContent.substring(0, 197)}...`
 														: memoryContent,
 											},
+											footerKey: "genai.self_teach.server_memory_footer", // Add footer
 											// Not ephemeral, so everyone sees it
 										});
 									} else {
@@ -1055,86 +1129,163 @@ export default async function tomoriChat(
 											},
 										);
 									}
-								} else if (memoryScopeArg === "about_current_user") {
-									// 3.b. Handle user-specific memory
+								} else if (memoryScopeArg === "target_user") {
+									// 3.b. MODIFIED: Handle user-specific memory with Discord ID and Nickname
 									if (
-										typeof currentUserNicknameArg !== "string" ||
-										!currentUserNicknameArg.trim()
+										typeof targetUserDiscordIdArg !== "string" ||
+										!targetUserDiscordIdArg.trim()
 									) {
 										functionExecutionResult = {
 											status: "memory_save_failed_invalid_args",
-											scope: "about_current_user",
+											scope: "target_user",
 											reason:
-												"The 'current_user_nickname' argument was missing or empty, which is required when 'memory_scope' is 'about_current_user'.",
+												"The 'target_user_discord_id' argument was missing or empty, which is required when 'memory_scope' is 'target_user'.",
 										};
 									} else if (
-										currentUserNicknameArg.trim().toLowerCase() !==
-										triggererName.toLowerCase()
+										typeof targetUserNicknameArg !== "string" ||
+										!targetUserNicknameArg.trim()
 									) {
 										functionExecutionResult = {
-											status: "memory_save_failed_nickname_mismatch",
-											scope: "about_current_user",
-											reason: `The provided 'current_user_nickname' ('${currentUserNicknameArg}') does not match the current user ('${triggererName}'). Please provide the correct nickname or ensure the memory scope is appropriate.`,
-											expected_nickname: triggererName,
-											provided_nickname: currentUserNicknameArg,
+											status: "memory_save_failed_invalid_args",
+											scope: "target_user",
+											reason:
+												"The 'target_user_nickname' argument was missing or empty, which is required when 'memory_scope' is 'target_user'.",
 										};
-										log.warn(
-											`Self-teach nickname mismatch for user ${userRow.user_id}: LLM provided '${currentUserNicknameArg}', expected '${triggererName}'.`,
-										);
 									} else {
-										// Nickname matches, proceed to save personal memory
-										const dbResult = await addPersonalMemoryByTomori(
-											userRow.user_id, // userRow.user_id is non-null due to check above
-											memoryContent,
+										// Attempt to load the target user by their Discord ID
+										const targetUserRow = await loadUserRow(
+											targetUserDiscordIdArg,
 										);
-										if (dbResult) {
+
+										if (!targetUserRow || !targetUserRow.user_id) {
 											functionExecutionResult = {
-												status: "memory_saved_successfully",
-												scope: "about_current_user",
-												user_nickname: triggererName,
-												content_saved: memoryContent,
+												status: "memory_save_failed_user_not_found",
+												scope: "target_user",
+												target_user_discord_id: targetUserDiscordIdArg,
+												reason: `The user with Discord ID '${targetUserDiscordIdArg}' was not found in Tomori's records. Tomori can only save memories for users she knows.`,
 											};
-											log.success(
-												`Tomori self-taught a personal memory for ${triggererName} (User ID: ${userRow.user_id}): "${memoryContent}"`,
-											);
-											// Send notification embed to the channel
-											await sendStandardEmbed(channel, locale, {
-												color: ColorCode.SUCCESS, // Or ColorCode.INFO
-												titleKey:
-													"genai.self_teach.personal_memory_learned_title",
-												descriptionKey:
-													"genai.self_teach.personal_memory_learned_description",
-												descriptionVars: {
-													user_nickname: triggererName,
-													memory_content:
-														memoryContent.length > 200
-															? `${memoryContent.substring(0, 197)}...`
-															: memoryContent,
-												},
-												// Not ephemeral, so everyone sees it (or consider ephemeral if it's too noisy)
-												// For now, making it public as per your suggestion.
-											});
-										} else {
-											functionExecutionResult = {
-												status: "memory_save_failed_db_error",
-												scope: "about_current_user",
-												reason:
-													"Database operation failed to save personal memory.",
-											};
-											log.error(
-												`Failed to save personal memory for ${triggererName} (User ID: ${userRow.user_id}) via self-teach (DB error).`,
-												undefined,
+											log.warn(
+												`Self-teach: Target user with Discord ID ${targetUserDiscordIdArg} not found.`,
 												{
-													userId: userRow.user_id,
-													serverId: tomoriState.server_id,
-													errorType: "SelfTeachDBError",
+													// biome-ignore lint/style/noNonNullAssertion: tomoriState.server_id checked above
+													serverId: tomoriState!.server_id,
 													metadata: {
-														scope: "about_current_user",
-														content: memoryContent,
-														nickname: triggererName,
+														targetDiscordId: targetUserDiscordIdArg,
+														targetNicknameAttempt: targetUserNicknameArg,
 													},
 												},
 											);
+										} else {
+											// User found, now verify nickname as a "two-factor" check
+											// Get the actual nickname from DB, falling back to guild nickname or Discord ID
+											const actualNicknameInDB = targetUserRow.user_nickname;
+											// Case-insensitive comparison for nickname
+											if (
+												actualNicknameInDB.toLowerCase() !==
+													targetUserNicknameArg.toLowerCase() &&
+												actualNicknameInDB.toLowerCase() !==
+													message.guild?.members.cache
+														.get(targetUserDiscordIdArg)
+														?.displayName?.toLowerCase() // Fallback to guild nickname if available
+											) {
+												functionExecutionResult = {
+													status: "memory_save_failed_nickname_mismatch",
+													scope: "target_user",
+													target_user_discord_id: targetUserDiscordIdArg,
+													provided_nickname: targetUserNicknameArg,
+													actual_nickname: actualNicknameInDB,
+													reason: `The provided nickname '${targetUserNicknameArg}' does not match the records for user ID '${targetUserDiscordIdArg}' (Tomori knows them as '${actualNicknameInDB}'). Please ensure the Discord ID and nickname correspond to the same user.`,
+												};
+												log.warn(
+													`Self-teach: Nickname mismatch for target user ${targetUserDiscordIdArg}. LLM provided: '${targetUserNicknameArg}', DB has: '${actualNicknameInDB}'.`,
+													{
+														// biome-ignore lint/style/noNonNullAssertion: tomoriState.server_id checked above
+														serverId: tomoriState!.server_id,
+														userId: targetUserRow.user_id, // Target user's internal ID
+														errorType: "SelfTeachVerificationError",
+														metadata: {
+															targetDiscordId: targetUserDiscordIdArg,
+															providedNickname: targetUserNicknameArg,
+															dbNickname: actualNicknameInDB,
+														},
+													},
+												);
+											} else {
+												// Nickname matches, proceed to save personal memory for the targetUserRow
+												const dbResult = await addPersonalMemoryByTomori(
+													targetUserRow.user_id, // Use the target user's internal ID
+													memoryContent,
+												);
+												if (dbResult) {
+													functionExecutionResult = {
+														status: "memory_saved_successfully",
+														scope: "target_user",
+														user_discord_id: targetUserDiscordIdArg,
+														user_nickname: targetUserNicknameArg, // Use the verified nickname
+														content_saved: memoryContent,
+													};
+													log.success(
+														`Tomori self-taught a personal memory for ${targetUserNicknameArg} (Discord ID: ${targetUserDiscordIdArg}, Internal ID: ${targetUserRow.user_id}): "${memoryContent}"`,
+													);
+
+													let personalMemoryFooterKey: string | undefined;
+													const personalizationEnabled =
+														tomoriState?.config.personal_memories_enabled ??
+														true;
+													const targetUserIsBlacklisted =
+														(await isBlacklisted(serverDiscId, userDiscId)) ??
+														false;
+
+													if (!personalizationEnabled) {
+														personalMemoryFooterKey =
+															"genai.self_teach.personal_memory_footer_personalization_disabled";
+													} else if (targetUserIsBlacklisted) {
+														personalMemoryFooterKey =
+															"genai.self_teach.personal_memory_footer_user_blacklisted";
+													} else {
+														personalMemoryFooterKey =
+															"genai.self_teach.personal_memory_footer_manage";
+													}
+													await sendStandardEmbed(channel, locale, {
+														color: ColorCode.SUCCESS,
+														titleKey:
+															"genai.self_teach.personal_memory_learned_title",
+														descriptionKey:
+															"genai.self_teach.personal_memory_learned_description",
+														descriptionVars: {
+															user_nickname: targetUserNicknameArg, // Display the name Tomori used
+															memory_content:
+																memoryContent.length > 200
+																	? `${memoryContent.substring(0, 197)}...`
+																	: memoryContent,
+														},
+														footerKey: personalMemoryFooterKey,
+													});
+												} else {
+													functionExecutionResult = {
+														status: "memory_save_failed_db_error",
+														scope: "target_user",
+														reason:
+															"Database operation failed to save personal memory for the target user.",
+													};
+													await log.error(
+														`Failed to save personal memory for ${targetUserNicknameArg} (Discord ID: ${targetUserDiscordIdArg}) via self-teach (DB error).`,
+														undefined,
+														{
+															userId: targetUserRow.user_id, // Target user's internal ID
+															// biome-ignore lint/style/noNonNullAssertion: tomoriState.server_id checked above
+															serverId: tomoriState!.server_id,
+															errorType: "SelfTeachDBError",
+															metadata: {
+																scope: "target_user",
+																content: memoryContent,
+																targetDiscordId: targetUserDiscordIdArg,
+																targetNickname: targetUserNicknameArg,
+															},
+														},
+													);
+												}
+											}
 										}
 									}
 								}
@@ -1203,6 +1354,12 @@ export default async function tomoriChat(
 						color: ColorCode.ERROR,
 						titleKey: "genai.generic_error_title",
 						descriptionKey: "genai.streaming_failed_description",
+						descriptionVars: {
+							error_message:
+								streamingError instanceof Error
+									? streamingError.message
+									: "Unknown Error",
+						},
 					});
 					finalStreamCompleted = true; // Break loop on critical error
 					break;

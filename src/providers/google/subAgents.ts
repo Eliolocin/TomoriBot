@@ -26,7 +26,7 @@ export async function executeSearchSubAgent(
 
 	// 1. Pick the sub-agent model
 	const subAgentModel =
-		process.env.DEFAULT_GEMINI_MODEL_FOR_SUBAGENT ||
+		process.env.DEFAULT_GEMINI_SUBAGENT_MODEL ||
 		"gemini-2.5-flash-preview-04-17";
 
 	try {
@@ -38,7 +38,7 @@ export async function executeSearchSubAgent(
 			role: "system",
 			parts: [
 				{
-					text: `You are an advanced Google search assistant whose goal is to thoroughly research and gather detailed information from Google based on the user's 'Primary Search Query'.
+					text: `You are an advanced Google search assistant whose goal is to thoroughly research and gather detailed information from Google based on the 'Primary Search Query' in order to help the main assistant.
 
 **Instructions:**
 
@@ -64,7 +64,7 @@ Your response format should be:
 ### Comprehensive Summary
 - [A brief synthesis that integrates the details above clearly and cohesively.]
 
-**Remember:** prioritize detailed information first, then summarize clearly at the end. Provide as much context and depth as possible to help the main assistant (Tomori) fully understand the topic.
+**Remember:** prioritize detailed information first, then summarize clearly at the end. Provide as much context and depth as possible to help the main assistant fully understand the topic.
 `,
 				},
 			],

@@ -191,12 +191,13 @@ export async function setupServer(
 		// Start transaction for atomicity (Rule 15)
 		const result = await sql.transaction(async (tx) => {
 			// Use Gemini 2.5 Flash as default
+			const defaultModelName =
+				process.env.DEFAULT_GEMINI_MODEL || "gemini-2.5-flash-preview-05-20";
 			const [defaultLlm] = await tx`
-				SELECT llm_id FROM llms 
-				WHERE llm_codename = '${process.env.DEFAULT_GEMINI_MODEL}'
-				LIMIT 1
-			`;
-
+                SELECT llm_id FROM llms 
+                WHERE llm_codename = ${defaultModelName}
+                LIMIT 1
+            `;
 			/*
 			// Get default LLM ID - for now we use the first available one
 			const [defaultLlm] = await tx`

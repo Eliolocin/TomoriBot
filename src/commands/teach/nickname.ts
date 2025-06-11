@@ -25,21 +25,21 @@ export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("usernickname") // Keep name simple as per refactor
+		.setName("nickname") // Keep name simple as per refactor
 		.setDescription(
-			localizer("en-US", "commands.teach.usernickname.command_description"),
+			localizer("en-US", "commands.teach.nickname.command_description"),
 		)
 		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.teach.usernickname.command_description"),
+			ja: localizer("ja", "commands.teach.nickname.command_description"),
 		})
 		.addStringOption((option) =>
 			option
 				.setName("name")
 				.setDescription(
-					localizer("en-US", "commands.teach.usernickname.option_description"),
+					localizer("en-US", "commands.teach.nickname.option_description"),
 				)
 				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.teach.usernickname.option_description"),
+					ja: localizer("ja", "commands.teach.nickname.option_description"),
 				})
 				.setRequired(true)
 				.setMinLength(NICKNAME_MIN_LENGTH)
@@ -86,8 +86,8 @@ export async function execute(
 			newNickname.length > NICKNAME_MAX_LENGTH
 		) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.teach.usernickname.invalid_length_title",
-				descriptionKey: "commands.teach.usernickname.invalid_length",
+				titleKey: "commands.teach.nickname.invalid_length_title",
+				descriptionKey: "commands.teach.nickname.invalid_length",
 				descriptionVars: {
 					min: NICKNAME_MIN_LENGTH.toString(),
 					max: NICKNAME_MAX_LENGTH.toString(),
@@ -133,7 +133,7 @@ export async function execute(
 				tomoriId: tomoriState.tomori_id, // Include tomori ID
 				errorType: "DatabaseValidationError",
 				metadata: {
-					command: "teach usernickname",
+					command: "teach nickname",
 					userDiscordId: interaction.user.id,
 					newNickname,
 					validationErrors: validationResult.error.issues,
@@ -155,20 +155,20 @@ export async function execute(
 		}
 
 		// 9. Check if personalization is disabled on this server and prepare message
-		let descriptionKey = "commands.teach.usernickname.success_description";
+		let descriptionKey = "commands.teach.nickname.success_description";
 		let embedColor = ColorCode.SUCCESS;
 
 		// Assuming 'personalization_enabled' is the single config key
 		// biome-ignore lint/style/noNonNullAssertion: tomoriState checked earlier
 		if (!tomoriState!.config.personal_memories_enabled) {
 			descriptionKey =
-				"commands.teach.usernickname.success_but_disabled_description"; // Use the warning description
+				"commands.teach.nickname.success_but_disabled_description"; // Use the warning description
 			embedColor = ColorCode.WARN; // Use warning color
 		}
 
 		// 10. Success! Show the nickname change (with potential warning)
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.teach.usernickname.success_title",
+			titleKey: "commands.teach.nickname.success_title",
 			descriptionKey: descriptionKey, // Use the determined description key
 			descriptionVars: {
 				old_nickname: oldNickname,
@@ -185,12 +185,12 @@ export async function execute(
 			tomoriId: tomoriState?.tomori_id, // Use optional chaining
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "teach usernickname",
+				command: "teach nickname",
 				userDiscordId: interaction.user.id,
 				guildId: interaction.guild?.id,
 			},
 		};
-		await log.error("Error in /teach usernickname command", error, context);
+		await log.error("Error in /teach nickname command", error, context);
 
 		// Rule 12 & 19: Use helper for unknown error embed
 		// Use followUp since we deferred initially
@@ -206,14 +206,14 @@ export async function execute(
 				});
 			} catch (followUpError) {
 				log.error(
-					"Failed to send follow-up error message in usernickname catch block",
+					"Failed to send follow-up error message in nickname catch block",
 					followUpError,
 				);
 			}
 		} else {
 			// This case should be rare after initial deferReply
 			log.warn(
-				"Interaction was not replied or deferred in usernickname catch block, cannot send error message.",
+				"Interaction was not replied or deferred in nickname catch block, cannot send error message.",
 				context,
 			);
 		}

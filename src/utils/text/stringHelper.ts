@@ -561,6 +561,14 @@ export function cleanLLMOutput(
 		// 2.1 Build a set of exact valid emoji strings
 		const validEmojiSet = new Set(emojiStrings);
 
+		// 2.1.5 Normalize any malformed emoji tags
+		// like "<_name:id>" or "<(Name:id>"
+		// to proper "<:name:id>"
+		cleanedText = cleanedText.replace(
+			/<[^:>\s]*:([A-Za-z0-9_]+):(\d+)>/g,
+			"<:$1:$2>",
+		);
+
 		// 2.2 Build a map from emoji name → its correct full format
 		const emojiNameMap = new Map<string, string>();
 		for (const emoji of emojiStrings) {
