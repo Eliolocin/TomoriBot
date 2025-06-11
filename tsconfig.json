@@ -1,0 +1,26 @@
+{
+	"compilerOptions": {
+		"target": "ESNext",
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"strict": true,
+		"skipLibCheck": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true,
+		"forceConsistentCasingInFileNames": true,
+		"incremental": true,
+		"tsBuildInfoFile": "./node_modules/.cache/.tsbuildinfo",
+		"typeRoots": ["./node_modules/@types", "./src/types/*"],
+		"types": ["node", "bun"],
+		"baseUrl": "./src",
+		"paths": {
+			"@/*": ["./*"]
+		}
+	},
+	"include": [
+		"src/**/*",
+		"src/events/messageCreate/tomoriChat.ts",
+		".deprecated/formatSource.ts"
+	]
+}
