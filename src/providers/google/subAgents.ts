@@ -27,7 +27,7 @@ export async function executeSearchSubAgent(
 	// 1. Pick the sub-agent model
 	const subAgentModel =
 		process.env.DEFAULT_GEMINI_SUBAGENT_MODEL ||
-		"gemini-2.5-flash-preview-04-17";
+		"gemini-2.5-flash-preview-05-20";
 
 	try {
 		// 2. Instantiate the same GoogleGenerativeAI client we use elsewhere

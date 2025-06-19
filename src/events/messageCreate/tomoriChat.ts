@@ -50,7 +50,7 @@ import { executeSearchSubAgent } from "@/providers/google/subAgents";
 // Constants
 const MESSAGE_FETCH_LIMIT = 80;
 const DEFAULT_TOP_K = 1;
-const DEFAULT_TOP_P = 0.9;
+const DEFAULT_TOP_P = 0.95;
 const MAX_OUTPUT_TOKENS = 8192;
 
 // Base trigger words that will always work (with or without spaces for English)

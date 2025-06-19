@@ -37,7 +37,7 @@ import { sendStandardEmbed } from "@/utils/discord/embedHelper";
 
 // Default values for Gemini API
 const DEFAULT_MODEL =
-	process.env.DEFAULT_GEMINI_MODEL || "gemini-2.5-flash-preview-04-17";
+	process.env.DEFAULT_GEMINI_MODEL || "gemini-2.5-flash-preview-05-20";
 
 // const DYNAMIC_SEARCH_THRESHOLD = 0.5;
 
