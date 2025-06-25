@@ -191,7 +191,7 @@ const MIN_RANDOM_PAUSE_MS = 250;
 const MAX_RANDOM_PAUSE_MS = 1500;
 const THINKING_PAUSE_CHANCE = 0.25;
 const MIN_VISIBLE_TYPING_DURATION_MS = 750;
-const STREAM_INACTIVITY_TIMEOUT_MS = 30000; // 30 seconds
+const STREAM_INACTIVITY_TIMEOUT_MS = 120000; // 120 seconds
 /**
  * Streams a response from Google's Gemini LLM API directly to a Discord channel,
  * sending new messages for segments of the stream.
@@ -324,6 +324,59 @@ export async function streamGeminiToDiscord(
 							log.warn(`Stream: Img proc. error ${part.uri}`, {
 								error:
 									imgErr instanceof Error ? imgErr.message : String(imgErr),
+							});
+						}
+					} else if (part.type === "video" && part.uri && part.mimeType) {
+						// Video processing: YouTube links vs direct video uploads
+						try {
+							if (part.isYouTubeLink) {
+								// For YouTube links, use fileData format as per Gemini API docs
+								geminiParts.push({
+									fileData: {
+										fileUri: part.uri,
+									},
+								});
+								log.info(`Stream: Added YouTube video: ${part.uri}`);
+							} else {
+								// For direct video uploads, handle based on file size (20MB limit for inline)
+								const videoResponse = await fetch(part.uri);
+								if (!videoResponse.ok)
+									throw new Error(`Video fetch fail: ${videoResponse.status}`);
+
+								const contentLength =
+									videoResponse.headers.get("content-length");
+								const fileSizeBytes = contentLength
+									? Number.parseInt(contentLength)
+									: 0;
+								const maxInlineSize = 20 * 1024 * 1024; // 20MB limit per Gemini API docs
+
+								if (fileSizeBytes > 0 && fileSizeBytes < maxInlineSize) {
+									// Use inline data for smaller videos (<20MB)
+									const videoArrayBuffer = await videoResponse.arrayBuffer();
+									const base64VideoData =
+										Buffer.from(videoArrayBuffer).toString("base64");
+									geminiParts.push({
+										inlineData: {
+											mimeType: part.mimeType,
+											data: base64VideoData,
+										},
+									});
+									log.info(
+										`Stream: Added inline video: ${part.uri} (${fileSizeBytes} bytes)`,
+									);
+								} else {
+									// For larger videos, log warning (File API upload would be needed for production)
+									log.warn(
+										`Stream: Video too large for inline processing: ${part.uri} (${fileSizeBytes} bytes). Consider implementing File API upload for videos >20MB.`,
+									);
+								}
+							}
+						} catch (videoErr) {
+							log.warn(`Stream: Video proc. error ${part.uri}`, {
+								error:
+									videoErr instanceof Error
+										? videoErr.message
+										: String(videoErr),
 							});
 						}
 					}

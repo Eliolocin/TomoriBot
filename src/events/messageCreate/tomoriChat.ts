@@ -69,6 +69,27 @@ const CONVERSATION_RESET_MARKERS = [
 const MAX_FUNCTION_CALL_ITERATIONS = 5; // Safety break for function call loops
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
 
+// YouTube URL detection patterns for video analysis
+const YOUTUBE_URL_PATTERNS = [
+	/(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/i,
+	/(?:https?:\/\/)?(?:www\.)?youtu\.be\/([a-zA-Z0-9_-]{11})/i,
+	/(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/i,
+	/(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/i, // YouTube Shorts support
+];
+
+// Supported video MIME types for direct video uploads (following Gemini API documentation)
+const SUPPORTED_VIDEO_MIME_TYPES = [
+	"video/mp4",
+	"video/mpeg",
+	"video/mov",
+	"video/avi",
+	"video/x-flv",
+	"video/mpg",
+	"video/webm",
+	"video/wmv",
+	"video/3gpp",
+];
+
 // Regex to identify if a string is solely a Tenor GIF URL
 //const TENOR_GIF_REGEX = /^(https?:\/\/)?(www\.)?tenor\.com\/view\/[a-zA-Z0-9-]+-gif-\d+(\?.*)?$/i;
 
@@ -85,6 +106,13 @@ type SimplifiedMessageForContext = {
 		proxyUrl: string; // Discord's proxy URL, often more stable for fetching
 		mimeType: string | null; // e.g., 'image/png', 'image/jpeg'
 		filename: string; // Original filename
+	}>;
+	videoAttachments: Array<{
+		url: string; // Original URL of the video
+		proxyUrl: string; // Discord's proxy URL, often more stable for fetching
+		mimeType: string | null; // e.g., 'video/mp4', 'video/webm', or 'video/youtube' for YouTube links
+		filename: string; // Original filename or generated name for YouTube videos
+		isYouTubeLink: boolean; // True if this is a YouTube URL, false for direct video uploads
 	}>;
 	// Future consideration: user-sent stickers
 	// stickerAttachments: Array<{ name: string; id: string; formatType: StickerFormatType }>;
@@ -525,12 +553,11 @@ export default async function tomoriChat(
 						? tomoriState?.tomori_nickname // Use Tomori's nickname for bot messages
 						: `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
 				userListSet.add(authorId);
-
 				const imageAttachments: SimplifiedMessageForContext["imageAttachments"] =
 					[];
-				const messageContentForLlm: string | null = msg.content; // Start with original content
-
-				// 10.a. Process direct image attachments and stickers
+				const videoAttachments: SimplifiedMessageForContext["videoAttachments"] =
+					[];
+				const messageContentForLlm: string | null = msg.content; // Start with original content				// 10.a. Process direct image attachments and stickers
 				if (msg.attachments.size > 0) {
 					for (const attachment of msg.attachments.values()) {
 						if (
@@ -546,6 +573,24 @@ export default async function tomoriChat(
 								mimeType: attachment.contentType,
 								filename: attachment.name,
 							});
+						}
+						// 1. Check for video attachments using supported MIME types
+						else if (
+							attachment.contentType &&
+							SUPPORTED_VIDEO_MIME_TYPES.some((type) =>
+								attachment.contentType?.startsWith(type),
+							)
+						) {
+							videoAttachments.push({
+								url: attachment.url,
+								proxyUrl: attachment.proxyURL,
+								mimeType: attachment.contentType,
+								filename: attachment.name,
+								isYouTubeLink: false,
+							});
+							log.info(
+								`Processed video attachment: ${attachment.name} (${attachment.contentType})`,
+							);
 						}
 					}
 				}
@@ -563,8 +608,27 @@ export default async function tomoriChat(
 							mimeType: "image/png", // Discord serves PNG version for stickers
 							filename: `${sticker.name}.png`,
 						});
-
 						log.info(`Processed sticker: ${sticker.name} (${sticker.id})`);
+					}
+				}
+
+				// 2. Process YouTube links in message content
+				if (msg.content) {
+					for (const pattern of YOUTUBE_URL_PATTERNS) {
+						const match = msg.content.match(pattern);
+						if (match) {
+							const youtubeUrl = match[0];
+							const videoId = match[1];
+							videoAttachments.push({
+								url: youtubeUrl,
+								proxyUrl: youtubeUrl, // YouTube links don't need proxy
+								mimeType: "video/youtube", // Custom MIME type for YouTube
+								filename: `youtube_video_${videoId}.mp4`,
+								isYouTubeLink: true,
+							});
+							log.info(`Detected YouTube link: ${youtubeUrl} (ID: ${videoId})`);
+							break; // Only process the first YouTube link found to avoid duplicates
+						}
 					}
 				}
 
@@ -603,22 +667,32 @@ export default async function tomoriChat(
 					prevMessage.content
 				) {
 					// Append this message's content to the previous message with a newline
-					prevMessage.content += `\n${messageContentForLlm}`;
-
-					// If this message has images, add them to the previous message's images
+					prevMessage.content += `\n${messageContentForLlm}`; // If this message has images, add them to the previous message's images
 					if (imageAttachments.length > 0) {
 						prevMessage.imageAttachments = [
 							...prevMessage.imageAttachments,
 							...imageAttachments,
 						];
 					}
-				} else if (messageContentForLlm || imageAttachments.length > 0) {
+					// If this message has videos, add them to the previous message's videos
+					if (videoAttachments.length > 0) {
+						prevMessage.videoAttachments = [
+							...prevMessage.videoAttachments,
+							...videoAttachments,
+						];
+					}
+				} else if (
+					messageContentForLlm ||
+					imageAttachments.length > 0 ||
+					videoAttachments.length > 0
+				) {
 					// Create a new entry if it's a different author or the previous has no content
 					simplifiedMessages.push({
 						authorId,
 						authorName,
 						content: messageContentForLlm,
 						imageAttachments,
+						videoAttachments,
 					});
 				}
 			}
@@ -1485,7 +1559,11 @@ export function shouldBotReply(
 		isReplyToBot = referenceMessage?.author.id === message.client.user!.id;
 	}
 
-	// 3. Check if the message content triggers the bot based on configured triggers
+	// 3. Check if the bot is mentioned directly
+	// biome-ignore lint/style/noNonNullAssertion: client.user is available in messageCreate event
+	const isBotMentioned = message.mentions.users.has(message.client.user!.id);
+
+	// 4. Check if the message content triggers the bot based on configured triggers
 	// Use 'trigger_words' from the config object
 	const triggersActive = config.trigger_words.some((trigger: string) => {
 		// Check if trigger is a mention (starts with <@)
@@ -1505,7 +1583,7 @@ export function shouldBotReply(
 		return regex.test(message.content);
 	});
 
-	// 4. Check if the auto-message counter threshold is met
+	// 5. Check if the auto-message counter threshold is met
 	const autoMsgThreshold = config.autoch_threshold;
 	const isAutoChannelActive =
 		autoMsgThreshold > 0 && config.autoch_disc_ids.length > 0;
@@ -1520,7 +1598,7 @@ export function shouldBotReply(
 		currentCount > 0 && // Ensure counter has started (avoid trigger on first message after reset)
 		currentCount % autoMsgThreshold === 0;
 
-	// 5. Determine if bot should reply:
-	// Reply if (it's a reply to the bot OR triggers are active) OR if the auto-message threshold is hit
-	return isReplyToBot || triggersActive || isAutoMsgHit;
+	// 6. Determine if bot should reply:
+	// Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the auto-message threshold is hit
+	return isReplyToBot || isBotMentioned || triggersActive || isAutoMsgHit;
 }
