@@ -1,0 +1,53 @@
+name: Deploy TomoriBot
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Stop existing containers
+        run: |
+          echo "🛑 Stopping existing TomoriBot containers..."
+          docker-compose down
+        continue-on-error: true
+        
+      - name: Build new image
+        run: |
+          echo "🏗️ Building new TomoriBot image..."
+          docker-compose build --no-cache
+          
+      - name: Start updated containers
+        run: |
+          echo "🚀 Starting updated TomoriBot..."
+          docker-compose up -d
+          
+      - name: Verify deployment
+        run: |
+          echo "✅ Verifying TomoriBot is running..."
+          Start-Sleep 30
+          $containers = docker ps --filter "name=tomoribot" --format "table {{.Names}}\t{{.Status}}"
+          echo $containers
+          
+          # Check if both containers are running
+          if ((docker ps --filter "name=tomoribot-app" --filter "status=running" -q) -and 
+              (docker ps --filter "name=tomoribot-db" --filter "status=running" -q)) {
+            echo "🎉 TomoriBot deployment successful!"
+          } else {
+            echo "❌ TomoriBot deployment failed!"
+            exit 1
+          }
+          
+      - name: Discord notification
+        if: always()
+        run: |
+          if ($LASTEXITCODE -eq 0) {
+            echo "✅ Would send success notification to Discord"
+          } else {
+            echo "❌ Would send failure notification to Discord"
+          }
