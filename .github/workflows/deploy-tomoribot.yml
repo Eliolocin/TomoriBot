@@ -70,7 +70,7 @@ jobs:
       - name: Verify deployment
         run: |
           echo "✅ Verifying TomoriBot is running..."
-          Start-Sleep 30
+          Start-Sleep 90
           $containers = docker ps --filter "name=tomoribot" --format "table {{.Names}}\t{{.Status}}"
           echo $containers
           
