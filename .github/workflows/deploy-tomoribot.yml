@@ -54,30 +54,27 @@ jobs:
           echo "📋 POSTGRES_PASSWORD specifically:"
           Get-Content .env | Select-String "POSTGRES_PASSWORD"
           
-      - name: Force stop all TomoriBot containers
+      - name: Stop ALL TomoriBot containers globally
         run: |
-          echo "🛑 Force stopping all TomoriBot containers..."
-          docker ps -q --filter "name=tomoribot" | ForEach-Object { docker stop $_ }
-          docker ps -aq --filter "name=tomoribot" | ForEach-Object { docker rm $_ }
-          docker-compose down --remove-orphans
-          docker network prune -f
-        continue-on-error: true
-        
-      - name: Clean Docker build cache
-        run: |
-          echo "🧹 Cleaning Docker build cache..."
-          docker builder prune -f
-        continue-on-error: true
-        
-      - name: Build new image
-        run: |
-          echo "🏗️ Building new TomoriBot image..."
-          docker-compose build --no-cache
+          echo "🛑 Stopping ALL TomoriBot containers..."
+          # Stop by container name (global approach)
+          docker stop tomoribot-app tomoribot-db 2>$null || echo "Containers already stopped"
+          docker rm tomoribot-app tomoribot-db 2>$null || echo "Containers already removed"
           
-      - name: Start updated containers
+          # Remove networks
+          docker network rm tomoribot_tomori-network 2>$null || echo "Network already removed"
+          
+          # Clean up any orphaned resources
+          docker system prune -f --volumes
+        continue-on-error: true
+        
+      - name: Wait for Docker cleanup
+        run: Start-Sleep 10
+        
+      - name: Build and start new containers
         run: |
-          echo "🚀 Starting updated TomoriBot..."
-          docker-compose up -d
+          echo "🏗️ Building and starting new TomoriBot..."
+          docker-compose up -d --build --force-recreate
           
       - name: Verify deployment
         run: |
