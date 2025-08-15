@@ -54,11 +54,25 @@ jobs:
           echo "📋 POSTGRES_PASSWORD specifically:"
           Get-Content .env | Select-String "POSTGRES_PASSWORD"
           
-      - name: Stop existing containers
+      - name: Force stop all TomoriBot containers
         run: |
-          echo "🛑 Stopping existing TomoriBot containers..."
-          docker-compose down
+          echo "🛑 Force stopping all TomoriBot containers..."
+          docker ps -q --filter "name=tomoribot" | ForEach-Object { docker stop $_ }
+          docker ps -aq --filter "name=tomoribot" | ForEach-Object { docker rm $_ }
+          docker-compose down --remove-orphans
+          docker network prune -f
         continue-on-error: true
+        
+      - name: Clean Docker build cache
+        run: |
+          echo "🧹 Cleaning Docker build cache..."
+          docker builder prune -f
+        continue-on-error: true
+        
+      - name: Build new image
+        run: |
+          echo "🏗️ Building new TomoriBot image..."
+          docker-compose build --no-cache
         
       - name: Build new image
         run: |
