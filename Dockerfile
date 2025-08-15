@@ -27,10 +27,6 @@ RUN bun install --frozen-lockfile --production
 # This is like moving TomoriBot's belongings into her new apartment
 COPY src/ ./src/
 
-# Copy the rest of the application code
-# This is like moving TomoriBot's belongings into her new apartment
-COPY src/ ./src/
-
 # No build step needed - Bun runs TypeScript natively!
 # This matches your proven development setup
 
