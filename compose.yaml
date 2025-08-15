@@ -1,0 +1,56 @@
+services:
+  # TomoriBot's PostgreSQL database - her private storage room
+  postgres:
+    image: postgres:15-alpine
+    container_name: tomoribot-db
+    environment:
+      # Hard-coded for Docker - users don't need to configure these
+      POSTGRES_DB: tomodb
+      POSTGRES_USER: tomori
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_default_password}
+    volumes:
+      # Persistent storage - data survives container restarts
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Only expose internally - not accessible from outside Docker network
+      - "15432:5432"  # Expose on port 5433 to avoid conflict with your Windows PostgreSQL
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tomori -d tomodb"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - tomori-network
+
+  # TomoriBot application - the main apartment
+  tomoribot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tomoribot-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Use env_file to automatically pass ALL variables from .env.docker
+    env_file: .env.docker
+    environment:
+      # Hard-coded Docker-specific database connection
+      POSTGRES_URL: postgresql://tomori:${POSTGRES_PASSWORD:-secure_default_password}@postgres:5432/tomodb
+      NODE_ENV: production
+    restart: unless-stopped
+    networks:
+      - tomori-network
+    # Optional: Mount logs directory for debugging
+    volumes:
+      - ./logs:/app/logs:rw
+
+# Named volumes for persistent data
+volumes:
+  postgres_data:
+    driver: local
+
+# Private network for TomoriBot's services
+networks:
+  tomori-network:
+    driver: bridge
