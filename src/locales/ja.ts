@@ -50,7 +50,7 @@ export default {
 		},
 		tomori_busy_title: "他の人に返信中です！",
 		tomori_busy_replying:
-			"現在 {message_link} に対応中です。次にあなたのメッセージにお答えします！しばらくお待ちください！ 😊",
+			"現在 {message_link} に対応中です。あなたのメッセージはキューに入れられました。",
 	},
 
 	genai: {

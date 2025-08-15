@@ -291,7 +291,7 @@ export async function buildContext({
 		// Assuming tomoriConfig has a flag like 'google_search_enabled'
 		// You'll need to add this flag to TomoriConfigRow and manage it
 		functionUsageInstructions.push(
-			`- **Google Search ('${queryGoogleSearchFunctionDeclaration.name}')**: ${queryGoogleSearchFunctionDeclaration.description} ${botName} uses this tool whenever a user's query implies a need for current events, specific facts not in your training data, or any information that would typically be found by searching the web.`,
+			`- **Google Search ('${queryGoogleSearchFunctionDeclaration.name}')**: ${queryGoogleSearchFunctionDeclaration.description} ${botName} uses this tool whenever a user's query implies a need for current events, specific facts not in your training data, or any information that would typically be found by searching the web. Do NOT use on YouTube links or video content because you are already able to parse them on your own.`,
 		);
 	}
 

@@ -52,7 +52,7 @@ export default {
 		},
 		tomori_busy_title: "Busy Replying to Someone Else!",
 		tomori_busy_replying:
-			"I'm currently working on {message_link}. I'll get to your message next! Hang tight! 😊",
+			"Currently responding to {message_link}. Your message has been queued.",
 	},
 
 	genai: {

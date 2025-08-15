@@ -2,7 +2,7 @@ import { type ActivityOptions, ActivityType, type Client } from "discord.js";
 import pkg from "../../../package.json";
 import { log } from "../../utils/misc/logger";
 
-const CYCLE_DELAY = 600000;
+const CYCLE_DELAY = 300000;
 /**
  * Sets the bot's status and logs startup information.
  * @param client - The Discord client instance.
@@ -23,6 +23,10 @@ const handler = async (client: Client): Promise<void> => {
 		{
 			name: "/help",
 			type: ActivityType.Listening,
+		},
+		{
+			name: "myself get refactored (again)",
+			type: ActivityType.Watching,
 		},
 	];
 
