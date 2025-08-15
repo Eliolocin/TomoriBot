@@ -3,6 +3,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: tomoribot-db
+    env_file: .env
     environment:
       # Hard-coded for Docker - users don't need to configure these
       POSTGRES_DB: tomodb
@@ -32,8 +33,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # Use env_file to automatically pass ALL variables from .env.docker
-    env_file: .env.docker
+    env_file: .env
     environment:
       # Hard-coded Docker-specific database connection
       POSTGRES_URL: postgresql://tomori:${POSTGRES_PASSWORD:-secure_default_password}@postgres:5432/tomodb

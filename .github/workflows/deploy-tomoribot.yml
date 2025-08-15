@@ -14,42 +14,45 @@ jobs:
       - name: Create environment file
         run: |
           echo "🔐 Creating environment file from secrets..."
-          echo "DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}" > .env.docker
-          echo "CRYPTO_SECRET=${{ secrets.CRYPTO_SECRET }}" >> .env.docker
-          echo "POSTGRES_HOST=postgres" >> .env.docker
-          echo "POSTGRES_PORT=5432" >> .env.docker
-          echo "POSTGRES_USER=tomori" >> .env.docker
-          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env.docker
-          echo "POSTGRES_DB=tomodb" >> .env.docker
-          echo "" >> .env.docker
-          echo "DEFAULT_BOTNAME=Tomori" >> .env.docker
-          echo "DEFAULT_BOTNAME_JP=ともり" >> .env.docker
-          echo "BASE_TRIGGER_WORDS=tomori,tomo,トモリ,ともり" >> .env.docker
-          echo "RUN_ENV=production" >> .env.docker
-          echo "" >> .env.docker
-          echo "GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY || '' }}" >> .env.docker
-          echo "DEEPL_KEY=${{ secrets.DEEPL_KEY || '' }}" >> .env.docker
-          echo "" >> .env.docker
-          echo "DEFAULT_GEMINI_MODEL=gemini-2.5-flash-preview-05-20" >> .env.docker
-          echo "DEFAULT_GEMINI_SUBAGENT_MODEL=gemini-2.5-flash-preview-05-20" >> .env.docker
-          echo "STREAMING_ENABLED=true" >> .env.docker
-          echo "PREFIX==" >> .env.docker
-          echo "" >> .env.docker
-          echo "GENCH_ID=877047848330465294" >> .env.docker
-          echo "DEV_ID=684462114022490125" >> .env.docker
-          echo "TESTSRV_ID=877047847214792705" >> .env.docker
-          echo "TESTCH_ID=1135045786699309056" >> .env.docker
-          echo "TOMORI_ID=841644102059556915" >> .env.docker
-          echo "TOMORI_DMS=1112155828263338024" >> .env.docker
-          echo "STRING_FOR_DEV=development" >> .env.docker
-          echo "HAVENSRV_ID=1040174444074782802" >> .env.docker
+          $envContent = @"
+          DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
+          CRYPTO_SECRET=${{ secrets.CRYPTO_SECRET }}
+          POSTGRES_HOST=postgres
+          POSTGRES_PORT=5432
+          POSTGRES_USER=tomori
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=tomodb
+
+          DEFAULT_BOTNAME=Tomori
+          DEFAULT_BOTNAME_JP=ともり
+          BASE_TRIGGER_WORDS=tomori,tomo,トモリ,ともり
+          RUN_ENV=production
+
+          GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+          DEEPL_KEY=${{ secrets.DEEPL_KEY }}
+
+          DEFAULT_GEMINI_MODEL=gemini-2.5-flash-preview-05-20
+          DEFAULT_GEMINI_SUBAGENT_MODEL=gemini-2.5-flash-preview-05-20
+          STREAMING_ENABLED=true
+          PREFIX==
+
+          GENCH_ID=877047848330465294
+          DEV_ID=684462114022490125
+          TESTSRV_ID=877047847214792705
+          TESTCH_ID=1135045786699309056
+          TOMORI_ID=841644102059556915
+          TOMORI_DMS=1112155828263338024
+          STRING_FOR_DEV=development
+          HAVENSRV_ID=1040174444074782802
+          "@
+          [System.IO.File]::WriteAllText("$PWD\.env", $envContent, [System.Text.Encoding]::UTF8)
       
       - name: Debug environment file
         run: |
           echo "📋 Environment file contents:"
-          Get-Content .env.docker
+          Get-Content .env
           echo "📋 POSTGRES_PASSWORD specifically:"
-          Get-Content .env.docker | Select-String "POSTGRES_PASSWORD"
+          Get-Content .env | Select-String "POSTGRES_PASSWORD"
           
       - name: Stop existing containers
         run: |

@@ -160,7 +160,7 @@ bun run dev
 docker-compose build
 
 # Start TomoriBot and her database
-# Make sure .env.docker is set properly (same format, but only POSTGRES_PASSWORD is needed for the database)!
+# Docker version only needs POSTGRES_PASSWORD variable for its database
 docker-compose up
 
 # Or run in background (detached mode)
