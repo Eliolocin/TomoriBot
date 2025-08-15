@@ -1,0 +1,47 @@
+# Git and development files
+.git
+.gitignore
+*.md
+README.md
+
+# Node/Bun development files
+node_modules
+dist
+.env
+.env.*
+!.env.example
+
+# Development and build artifacts
+coverage
+.nyc_output
+*.log
+logs
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Docker files (we don't need these inside the container)
+Dockerfile
+.dockerignore
+compose.yaml
+docker-compose.yml
+
+# Build outputs (we'll create fresh ones)
+dist/
+
+# Temporary files
+tmp/
+temp/

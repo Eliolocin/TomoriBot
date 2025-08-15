@@ -6,7 +6,7 @@
 	"type": "module",
 	"scripts": {
 		"clean-dist": "bun run scripts/clean-dist.ts",
-		"build": "bun run clean-dist && bun build ./src/index.ts --outdir dist --target node",
+		"build": "bun run clean-dist && bun build ./src/index.ts --outdir dist --target bun",
 		"start": "bun run dist/index.js",
 		"dev": "bun --watch src/index.ts",
 		"watch": "bun build ./src/index.ts --outdir dist --target node --watch",

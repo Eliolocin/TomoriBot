@@ -120,21 +120,25 @@ Before running TomoriBot, ensure you have the following installed:
 1. **Create environment file**
    
    Fill in the required variables on your `.env` file:
-   ```env
-   # Discord Bot Configuration (Required)
-   DISCORD_TOKEN=your_discord_bot_token_here
-   
-   # Security (Required)
-   CRYPTO_SECRET=your_32_character_crypto_secret_here
-   
-   # Database (Required)
-   POSTGRES_URL=postgresql://username:password@localhost:5432/tomodb
-   
-   # Bot Configuration (Optional)
-   DEFAULT_BOTNAME=Tomori
-   DEFAULT_BOTNAME_JP=ともり
-   BASE_TRIGGER_WORDS=tomori,tomo,トモリ,ともり
-   RUN_ENV=development
+   ```
+    # Discord Bot Configuration (Required)
+    DISCORD_TOKEN = your_discord_bot_token_here
+
+    # Security (Required)
+    CRYPTO_SECRET = your_32_character_crypto_secret_here
+
+    # Database Configuration (Required)
+    POSTGRES_HOST = localhost
+    POSTGRES_PORT = 5432
+    POSTGRES_USER = your_username
+    POSTGRES_PASSWORD = your_password
+    POSTGRES_DB = tomodb
+
+    # Bot Configuration (Optional)
+    DEFAULT_BOTNAME = Tomori
+    DEFAULT_BOTNAME_JP = ともり
+    BASE_TRIGGER_WORDS = tomori,tomo,トモリ,ともり
+    RUN_ENV = development
    ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -144,9 +148,23 @@ Before running TomoriBot, ensure you have the following installed:
 
 ### Starting the Bot
 
+#### Simple Launch
 ```sh
 # Development mode with hot reload
 bun run dev
+```
+
+#### Docker Compose
+```sh
+# Build TomoriBot's container (first time or after code changes)
+docker-compose build
+
+# Start TomoriBot and her database
+# Make sure .env.docker is set properly (same format, but only POSTGRES_PASSWORD is needed for the database)!
+docker-compose up
+
+# Or run in background (detached mode)
+docker-compose up -d
 ```
 
 ### Basic Commands

@@ -1,3 +1,11 @@
+# Docker
+.env.local
+.env.docker
+.env.production
+
+# Docker volumes and data
+docker-data/
+
 # Other folders
 .deprecated/
 .vscode/
@@ -7,6 +15,10 @@
 .roo/
 .rooignore
 .github/copilot-instructions.md
+CLAUDE.md
+.claude
+CLAUDE
+.prompts/
 
 # Logs
 logs

@@ -25,11 +25,11 @@ import {
 // Using keys allows localizer to handle the text
 const LLM_CHOICES = [
 	{
-		codename: "gemini-2.5-flash-preview-04-17",
+		codename: "gemini-2.5-flash-preview-05-20",
 		nameKey: "commands.config.model.choice_balanced_fastest", // e.g., "Balanced/Fastest: Gemini 2.5 Flash (Default)"
 	},
 	{
-		codename: "gemini-2.5-pro-exp-03-25",
+		codename: "gemini-2.5-pro-preview-05-06",
 		nameKey: "commands.config.model.choice_smartest_fast", // e.g., "Smartest/Fast: Gemini 2.5 Pro"
 	},
 	{

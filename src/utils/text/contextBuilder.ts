@@ -49,6 +49,13 @@ type SimplifiedMessageForContext = {
 		mimeType: string | null;
 		filename: string;
 	}>;
+	videoAttachments: Array<{
+		url: string;
+		proxyUrl: string;
+		mimeType: string | null;
+		filename: string;
+		isYouTubeLink: boolean;
+	}>;
 };
 
 /**
@@ -284,7 +291,7 @@ export async function buildContext({
 		// Assuming tomoriConfig has a flag like 'google_search_enabled'
 		// You'll need to add this flag to TomoriConfigRow and manage it
 		functionUsageInstructions.push(
-			`- **Google Search ('${queryGoogleSearchFunctionDeclaration.name}')**: ${queryGoogleSearchFunctionDeclaration.description} ${botName} uses this tool whenever a user's query implies a need for current events, specific facts not in your training data, or any information that would typically be found by searching the web.`,
+			`- **Google Search ('${queryGoogleSearchFunctionDeclaration.name}')**: ${queryGoogleSearchFunctionDeclaration.description} ${botName} uses this tool whenever a user's query implies a need for current events, specific facts not in your training data, or any information that would typically be found by searching the web. Do NOT use on YouTube links or video content because you are already able to parse them on your own.`,
 		);
 	}
 
@@ -688,7 +695,6 @@ export async function buildContext({
 	for (const msg of simplifiedMessageHistory) {
 		const role = msg.authorId === client.user?.id ? "model" : "user";
 		const parts: ContextPart[] = [];
-
 		// 9.a. Add image parts if attachments exist
 		for (const attachment of msg.imageAttachments) {
 			if (attachment.mimeType) {
@@ -704,7 +710,23 @@ export async function buildContext({
 			}
 		}
 
-		// 9.b. Add text part if content exists
+		// 9.b. Add video parts if attachments exist
+		for (const attachment of msg.videoAttachments) {
+			if (attachment.mimeType) {
+				parts.push({
+					type: "video",
+					uri: attachment.isYouTubeLink ? attachment.url : attachment.proxyUrl,
+					mimeType: attachment.mimeType,
+					isYouTubeLink: attachment.isYouTubeLink,
+				});
+			} else {
+				log.warn(
+					`Skipping video attachment due to missing mimeType: ${attachment.filename} from user ${msg.authorName}`,
+				);
+			}
+		}
+
+		// 9.c. Add text part if content exists
 		if (msg.content) {
 			// Request 4: Prepend speaker name to content
 			let processedContent = `${msg.authorName}: ${msg.content}`;

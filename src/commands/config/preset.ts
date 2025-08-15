@@ -123,12 +123,17 @@ export async function execute(
 			color: ColorCode.WARN, // Warning color to emphasize data overwrite
 			flags: MessageFlags.Ephemeral,
 
-			// Handle selection
 			onSelect: async (selectedIndex) => {
 				const selectedPreset = presets[selectedIndex];
 
+				// Create attribute list with description as first element (Rule 23)
+				const attributesWithDescription = [
+					`{bot}'s Description: ${selectedPreset.tomori_preset_desc}`,
+					...selectedPreset.preset_attribute_list,
+				];
+
 				// Format arrays for PostgreSQL update (Rule 23)
-				const attributeArrayLiteral = `{${selectedPreset.preset_attribute_list
+				const attributeArrayLiteral = `{${attributesWithDescription
 					.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
 					.join(",")}}`;
 
@@ -142,14 +147,14 @@ export async function execute(
 
 				// Update Tomori in the database
 				const [updatedTomoriResult] = await sql`
-                    UPDATE tomoris
-                    SET 
-                        attribute_list = ${attributeArrayLiteral}::text[],
-                        sample_dialogues_in = ${inArrayLiteral}::text[],
-                        sample_dialogues_out = ${outArrayLiteral}::text[]
-                    WHERE tomori_id = ${tomoriState.tomori_id}
-                    RETURNING *
-                `;
+					UPDATE tomoris
+					SET 
+						attribute_list = ${attributeArrayLiteral}::text[],
+						sample_dialogues_in = ${inArrayLiteral}::text[],
+						sample_dialogues_out = ${outArrayLiteral}::text[]
+					WHERE tomori_id = ${tomoriState.tomori_id}
+					RETURNING *
+				`;
 
 				// Validate the result
 				const validationResult = tomoriSchema.safeParse(updatedTomoriResult);

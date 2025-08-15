@@ -12,7 +12,8 @@ export interface TriggerConfig {
  */
 export type ContextPart =
 	| { type: "text"; text: string }
-	| { type: "image"; uri: string; mimeType: string }; // URI could be a public URL or a data URI
+	| { type: "image"; uri: string; mimeType: string } // URI could be a public URL or a data URI
+	| { type: "video"; uri: string; mimeType: string; isYouTubeLink?: boolean }; // Video support with YouTube detection
 
 // New: Define the possible metadata tags for context items (Rule 13)
 export enum ContextItemTag {

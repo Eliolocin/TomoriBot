@@ -34,7 +34,7 @@ export const selectStickerFunctionDeclaration = {
 export const queryGoogleSearchFunctionDeclaration = {
 	name: "query_google_search", // Function name Gemini will use
 	description:
-		"Queries the Google search engine with a given search term and returns a concise summary of the findings. Use this to find real-time information, facts, or details not present in your existing knowledge. You will be informed of the search result and will then generate the final text message for the user.",
+		"Queries the Google search engine with a given search term and returns a concise summary of the findings. Use this to find real-time information, facts, or details not present in your existing knowledge. You will be informed of the search result and will then generate the final text message for the user. Do NOT use on YouTube links or video content.",
 	parameters: {
 		type: Type.OBJECT,
 		properties: {

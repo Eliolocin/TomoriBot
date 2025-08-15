@@ -220,7 +220,7 @@ export async function setupServer(
 				RETURNING *
 			`;
 
-			// 2. Create Tomori instance with preset
+			// 2. Create Tomori instance with preset including description
 			const [tomori] = await tx`
 				INSERT INTO tomoris (
 					server_id,
@@ -232,12 +232,20 @@ export async function setupServer(
 				VALUES (
 					${server.server_id},
 					${validConfig.tomoriName},
-					(SELECT preset_attribute_list FROM tomori_presets WHERE tomori_preset_id = ${validConfig.presetId}),
+					(
+						SELECT 
+							array_prepend(
+								'{bot}''s Description: ' || tomori_preset_desc,
+								preset_attribute_list
+							) 
+						FROM tomori_presets 
+						WHERE tomori_preset_id = ${validConfig.presetId}
+					),
 					(SELECT preset_sample_dialogues_in FROM tomori_presets WHERE tomori_preset_id = ${validConfig.presetId}),
 					(SELECT preset_sample_dialogues_out FROM tomori_presets WHERE tomori_preset_id = ${validConfig.presetId})
 				)
 				RETURNING *
-			`;
+				`;
 
 			// Format trigger words as PostgreSQL array
 			const triggerWordsArrayLiteral = `{${defaultTriggers.map((t) => `"${t.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;

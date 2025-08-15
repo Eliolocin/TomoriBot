@@ -1,0 +1,24 @@
+name: Test Self-Hosted Runner
+on:
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  test:
+    runs-on: self-hosted
+    steps:
+      - name: Check runner environment
+        run: |
+          echo "🎉 Runner is working!"
+          echo "Computer: $env:COMPUTERNAME"
+          echo "User: $env:USERNAME"
+          echo "Working directory: $PWD"
+          
+      - name: Check Docker
+        run: |
+          docker --version
+          docker-compose --version
+          
+      - name: Check TomoriBot project
+        run: |
+          echo "Current TomoriBot containers:"
+          docker ps --filter "name=tomoribot"

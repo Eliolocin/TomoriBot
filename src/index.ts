@@ -8,13 +8,39 @@ import { initializeLocalizer } from "./utils/text/localizer";
 
 config();
 
-// Schedule Cron Job (using parsed POSTGRES_URL)
-const postgresUrl = process.env.POSTGRES_URL;
+/**
+ * Get PostgreSQL connection URL from environment variables
+ * Supports both POSTGRES_URL and component-based configuration
+ */
+function getPostgresUrl(): string {
+	// If POSTGRES_URL is provided, use it directly (backwards compatibility)
+	if (process.env.POSTGRES_URL) {
+		return process.env.POSTGRES_URL;
+	}
 
-// biome-ignore lint/style/noNonNullAssertion: <explanation>
-const dbUrl = new URL(process.env.POSTGRES_URL!);
+	// Otherwise, build URL from components
+	const host = process.env.POSTGRES_HOST || "localhost";
+	const port = process.env.POSTGRES_PORT || "5432";
+	const user = process.env.POSTGRES_USER || "postgres";
+	const password = process.env.POSTGRES_PASSWORD;
+	const database = process.env.POSTGRES_DB || "tomodb";
+
+	if (!password) {
+		throw new Error(
+			"Database password must be provided via POSTGRES_PASSWORD or POSTGRES_URL",
+		);
+	}
+
+	return `postgresql://${user}:${password}@${host}:${port}/${database}`;
+}
+
+const postgresUrl = getPostgresUrl();
+
+const dbUrl = new URL(postgresUrl);
+
+process.env.DATABASE_URL = postgresUrl;
+
 const dbHost = dbUrl.hostname;
-// Ensure port is parsed as integer, provide default if missing
 const dbPort = Number.parseInt(dbUrl.port || "5432", 10);
 
 const client = new Client({
