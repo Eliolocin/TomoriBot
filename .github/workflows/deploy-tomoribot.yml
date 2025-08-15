@@ -73,11 +73,6 @@ jobs:
         run: |
           echo "🏗️ Building new TomoriBot image..."
           docker-compose build --no-cache
-        
-      - name: Build new image
-        run: |
-          echo "🏗️ Building new TomoriBot image..."
-          docker-compose build --no-cache
           
       - name: Start updated containers
         run: |
