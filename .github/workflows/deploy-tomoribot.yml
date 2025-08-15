@@ -1,0 +1,93 @@
+name: Deploy TomoriBot
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Create environment file
+        run: |
+          echo "🔐 Creating environment file from secrets..."
+          @"
+          # Required secrets
+          DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
+          CRYPTO_SECRET=${{ secrets.CRYPTO_SECRET }}
+          POSTGRES_HOST=postgres
+          POSTGRES_PORT=5432
+          POSTGRES_USER=tomori
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=tomodb
+          
+          # Bot configuration
+          DEFAULT_BOTNAME=Tomori
+          DEFAULT_BOTNAME_JP=ともり
+          BASE_TRIGGER_WORDS=tomori,tomo,トモリ,ともり
+          RUN_ENV=production
+          
+          # Optional API Keys (from secrets)
+          GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+          DEEPL_KEY=${{ secrets.DEEPL_KEY }}
+          
+          # Model configuration
+          DEFAULT_GEMINI_MODEL=gemini-2.5-flash-preview-05-20
+          DEFAULT_GEMINI_SUBAGENT_MODEL=gemini-2.5-flash-preview-05-20
+          STREAMING_ENABLED=true
+          PREFIX==
+          
+          # Discord IDs (public, safe to include)
+          GENCH_ID=877047848330465294
+          DEV_ID=684462114022490125
+          TESTSRV_ID=877047847214792705
+          TESTCH_ID=1135045786699309056
+          TOMORI_ID=841644102059556915
+          TOMORI_DMS=1112155828263338024
+          STRING_FOR_DEV=development
+          HAVENSRV_ID=1040174444074782802
+          "@ | Out-File -FilePath .env.docker -Encoding UTF8
+          
+      - name: Stop existing containers
+        run: |
+          echo "🛑 Stopping existing TomoriBot containers..."
+          docker-compose down
+        continue-on-error: true
+        
+      - name: Build new image
+        run: |
+          echo "🏗️ Building new TomoriBot image..."
+          docker-compose build --no-cache
+          
+      - name: Start updated containers
+        run: |
+          echo "🚀 Starting updated TomoriBot..."
+          docker-compose up -d
+          
+      - name: Verify deployment
+        run: |
+          echo "✅ Verifying TomoriBot is running..."
+          Start-Sleep 30
+          $containers = docker ps --filter "name=tomoribot" --format "table {{.Names}}\t{{.Status}}"
+          echo $containers
+          
+          # Check if both containers are running
+          if ((docker ps --filter "name=tomoribot-app" --filter "status=running" -q) -and 
+              (docker ps --filter "name=tomoribot-db" --filter "status=running" -q)) {
+            echo "🎉 TomoriBot deployment successful!"
+          } else {
+            echo "❌ TomoriBot deployment failed!"
+            exit 1
+          }
+          
+      - name: Discord notification
+        if: always()
+        run: |
+          if ($LASTEXITCODE -eq 0) {
+            echo "✅ Would send success notification to Discord"
+          } else {
+            echo "❌ Would send failure notification to Discord"
+          }
