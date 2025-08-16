@@ -62,9 +62,11 @@ jobs:
         run: Start-Sleep 10
         
       - name: Build new image
+        # Add shell: pwsh for clarity and future-proofing
+        shell: pwsh 
         run: |
           echo "🏗️ Building new TomoriBot image..."
-          docker-compose build --no-cache < NUL
+          $null | docker-compose build --no-cache
           
       - name: Start updated containers  
         run: |
