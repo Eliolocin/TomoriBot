@@ -51,19 +51,11 @@ jobs:
         run: |
           echo "📋 Environment file contents:"
           Get-Content .env
-          
-      - name: Stop ALL TomoriBot containers globally
+
+      - name: Stop and remove old containers
         run: |
-          echo "🛑 Stopping ALL TomoriBot containers..."
-          # Stop by container name (global approach)
-          docker stop tomoribot-app tomoribot-db 2>$null || echo "Containers already stopped"
-          docker rm tomoribot-app tomoribot-db 2>$null || echo "Containers already removed"
-          
-          # Remove networks
-          docker network rm tomoribot_tomori-network 2>$null || echo "Network already removed"
-          
-          # Clean up any orphaned resources
-          docker system prune -f --volumes
+          echo "🛑 Stopping and cleaning up old TomoriBot resources..."
+          docker-compose down -v --remove-orphans
         continue-on-error: true
         
       - name: Wait for Docker cleanup
@@ -72,7 +64,7 @@ jobs:
       - name: Build new image
         run: |
           echo "🏗️ Building new TomoriBot image..."
-          docker-compose build --no-cache
+          docker-compose build --no-cache < NUL
           
       - name: Start updated containers  
         run: |
