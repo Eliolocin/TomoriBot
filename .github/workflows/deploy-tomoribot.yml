@@ -61,12 +61,11 @@ jobs:
       - name: Wait for Docker cleanup
         run: Start-Sleep 10
         
-      - name: Build new image
-        # Add shell: pwsh for clarity and future-proofing
-        shell: pwsh 
+      - name: Build new image (without Buildkit)
         run: |
           echo "🏗️ Building new TomoriBot image..."
-          $null | docker-compose build --no-cache
+          $env:DOCKER_BUILDKIT=0
+          docker-compose build --no-cache
           
       - name: Start updated containers  
         run: |
