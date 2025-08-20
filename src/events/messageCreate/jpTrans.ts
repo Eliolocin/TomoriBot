@@ -18,6 +18,8 @@ import { TranslationProvider } from "../../types/discord/embed";
  * @returns Promise<void>
  */
 const handler = async (_client: Client, message: Message): Promise<void> => {
+	return;
+	// biome-ignore lint/correctness/noUnreachable: Develoment-only feature
 	try {
 		// Skip if message has translation flag or is from a bot
 		// EXPERIMENTAL FEATURE ONLY FOR TESTING
@@ -69,9 +71,7 @@ const handler = async (_client: Client, message: Message): Promise<void> => {
 			timeout: 90000,
 		});
 	} catch (error) {
-		log.error(
-			`Translation error: ${error instanceof Error ? error.message : String(error)}`,
-		);
+		log.error("Translation error");
 	}
 };
 

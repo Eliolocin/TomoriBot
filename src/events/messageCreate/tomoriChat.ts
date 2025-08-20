@@ -5,21 +5,13 @@ import {
 	MessageFlags,
 	TextChannel,
 } from "discord.js"; // Import value for instanceof check
-import {
-	getGeminiTools,
-	streamGeminiToDiscord,
-} from "../../providers/google/gemini";
+// Provider imports moved to factory pattern
 import {
 	ContextItemTag,
 	type StructuredContextItem,
 } from "../../types/misc/context";
-import {
-	HarmCategory,
-	HarmBlockThreshold,
-	type FunctionCall,
-	type Part,
-} from "@google/genai";
-import type { GeminiConfig } from "../../types/api/gemini";
+// Provider-specific types moved to individual providers
+import type { FunctionCall } from "../../providers/providerInterface";
 import {
 	isBlacklisted,
 	loadServerEmojis,
@@ -40,18 +32,16 @@ import { buildContext } from "../../utils/text/contextBuilder";
 import { decryptApiKey } from "@/utils/security/crypto";
 
 import type { TomoriState } from "@/types/db/schema";
-import {
-	queryGoogleSearchFunctionDeclaration,
-	rememberThisFactFunctionDeclaration,
-	selectStickerFunctionDeclaration,
-} from "@/providers/google/functionCalls";
+// Provider-specific function declarations moved to providers
+import { getProviderForTomori } from "../../providers/providerFactory";
+import type {
+	LLMProvider,
+	StreamResult,
+} from "../../providers/providerInterface";
 import { executeSearchSubAgent } from "@/providers/google/subAgents";
 
 // Constants
 const MESSAGE_FETCH_LIMIT = 80;
-const DEFAULT_TOP_K = 1;
-const DEFAULT_TOP_P = 0.95;
-const MAX_OUTPUT_TOKENS = 8192;
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
@@ -779,57 +769,41 @@ export default async function tomoriChat(
 				return;
 			}
 
-			// 12. Generate Response
+			// 12. Generate Response - Get provider instance
 
-			// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
-			if (tomoriState!.llm.llm_provider.toLowerCase() !== "google") {
-				log.warn(
-					`Unsupported LLM provider configured: ${tomoriState?.llm.llm_provider}`,
+			// Get the appropriate provider based on TomoriState configuration
+			let provider: LLMProvider;
+			try {
+				provider = getProviderForTomori(tomoriState);
+			} catch (error) {
+				log.error(
+					`Failed to get LLM provider: ${error instanceof Error ? error.message : String(error)}`,
+					error as Error,
 					{
 						serverId: tomoriState?.server_id,
-						errorType: "ConfigurationError",
-						metadata: { provider: tomoriState?.llm.llm_provider },
+						errorType: "ProviderError",
+						metadata: {
+							configuredProvider: tomoriState?.llm.llm_provider,
+							configuredModel: tomoriState?.llm.llm_codename,
+						},
 					},
 				);
+				await sendStandardEmbed(channel, locale, {
+					color: ColorCode.ERROR,
+					titleKey: "general.errors.provider_not_supported_title",
+					descriptionKey: "general.errors.provider_not_supported_description",
+					descriptionVars: {
+						provider: tomoriState?.llm.llm_provider || "unknown",
+					},
+				});
 				return;
 			}
 
-			const geminiConfig: GeminiConfig = {
-				// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
-				model: tomoriState!.llm.llm_codename,
-				apiKey: decryptedApiKey,
-				safetySettings: [
-					{
-						category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-						threshold: HarmBlockThreshold.BLOCK_NONE,
-					},
-					{
-						category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-						threshold: HarmBlockThreshold.BLOCK_NONE,
-					},
-					{
-						category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-						threshold: HarmBlockThreshold.BLOCK_NONE,
-					},
-					{
-						category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-						threshold: HarmBlockThreshold.BLOCK_NONE,
-					},
-				],
-				generationConfig: {
-					// biome-ignore lint/style/noNonNullAssertion: tomoriState and config are checked
-					temperature: tomoriState!.config.llm_temperature,
-					topK: DEFAULT_TOP_K,
-					topP: DEFAULT_TOP_P,
-					maxOutputTokens: MAX_OUTPUT_TOKENS,
-					stopSequences: [
-						//`\n${tomoriState!.tomori_nickname}:`,
-						//`\n${triggererName}:`,
-					],
-				},
-				// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
-				tools: getGeminiTools(tomoriState!),
-			};
+			// Create provider-specific configuration
+			const providerConfig = provider.createConfig(
+				tomoriState,
+				decryptedApiKey,
+			);
 
 			log.info(
 				"Streaming mode enabled. Attempting to stream response to Discord.",
@@ -839,10 +813,10 @@ export default async function tomoriChat(
 			let selectedStickerToSend: Sticker | null = null;
 			const functionInteractionHistory: {
 				functionCall: FunctionCall;
-				functionResponse: Part;
+				functionResponse: Record<string, unknown>;
 			}[] = [];
 			let finalStreamCompleted = false;
-			const accumulatedStreamedModelParts: Part[] = [];
+			const accumulatedStreamedModelParts: Array<Record<string, unknown>> = [];
 
 			for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
 				log.info(
@@ -850,12 +824,12 @@ export default async function tomoriChat(
 				);
 
 				try {
-					const streamGeminiPromise = await streamGeminiToDiscord(
+					const streamProviderPromise = await provider.streamToDiscord(
 						channel,
 						client,
 						// biome-ignore lint/style/noNonNullAssertion: Missing Tomoristate handled at start of TomoriChat
 						tomoriState!,
-						geminiConfig,
+						providerConfig,
 						contextSegments, // Original full prompt context
 						accumulatedStreamedModelParts, // MODIFIED: Pass the accumulator (Rule 26)
 						emojiStrings,
@@ -874,29 +848,29 @@ export default async function tomoriChat(
 								() =>
 									reject(
 										new Error(
-											"SDK_CALL_TIMEOUT: streamGeminiToDiscord call timed out.",
+											"SDK_CALL_TIMEOUT: provider streamToDiscord call timed out.",
 										),
 									),
 								STREAM_SDK_CALL_TIMEOUT_MS,
 							),
 					);
 
-					let streamResult: Awaited<ReturnType<typeof streamGeminiToDiscord>>;
+					let streamResult: StreamResult;
 					try {
 						// Promise.race will settle as soon as one of the promises settles
 						streamResult = await Promise.race([
-							streamGeminiPromise,
+							streamProviderPromise,
 							timeoutPromise,
 						]);
 					} catch (raceError) {
 						// This catch block will execute if timeoutPromise rejects first,
-						// or if streamGeminiPromise itself rejects *before* the timeout.
+						// or if streamProviderPromise itself rejects *before* the timeout.
 						if (
 							raceError instanceof Error &&
 							raceError.message.startsWith("SDK_CALL_TIMEOUT:")
 						) {
 							log.error(
-								`SDK call to streamGeminiToDiscord timed out for channel ${channel.id}.`,
+								`Provider streamToDiscord call timed out for channel ${channel.id}.`,
 								raceError, // Log the timeout error
 								{
 									serverId: tomoriState?.server_id,
@@ -964,7 +938,7 @@ export default async function tomoriChat(
 						};
 
 						// 2. Execute the function locally based on its name
-						if (funcName === selectStickerFunctionDeclaration.name) {
+						if (funcName === "select_sticker_for_response") {
 							const stickerIdArg = funcCall.args?.sticker_id;
 							if (typeof stickerIdArg === "string") {
 								const discordSticker =
@@ -1004,7 +978,7 @@ export default async function tomoriChat(
 								};
 								selectedStickerToSend = null;
 							}
-						} else if (funcName === queryGoogleSearchFunctionDeclaration.name) {
+						} else if (funcName === "query_google_search") {
 							const searchQueryArg = funcCall.args?.search_query;
 							if (typeof searchQueryArg === "string" && searchQueryArg.trim()) {
 								// 1. Send disclaimer embed BEFORE executing the search (Rule 12, 19)
@@ -1091,7 +1065,7 @@ export default async function tomoriChat(
 						}
 						// TODO: Add handling for self_teach_tomori here when implemented
 						// else if (funcName === selfTeachTomoriFunctionDeclaration.name) { ... }
-						else if (funcName === rememberThisFactFunctionDeclaration.name) {
+						else if (funcName === "remember_this_fact") {
 							// 1. Extract arguments from the function call
 							const memoryContentArg = funcCall.args?.memory_content;
 							const memoryScopeArg = funcCall.args?.memory_scope;
