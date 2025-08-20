@@ -1,0 +1,550 @@
+/**
+ * Google-specific streaming adapter for Gemini API
+ *
+ * This adapter implements the StreamProvider interface for Google's Gemini API,
+ * containing all the Google-specific logic extracted from the original
+ * streamGeminiToDiscord function.
+ *
+ * Key responsibilities:
+ * - Initialize Google AI client and configure streaming
+ * - Convert context items to Google's Part format
+ * - Handle Google-specific API responses and errors
+ * - Extract function calls from Google's response format
+ * - Convert Google chunks to normalized ProcessedChunk format
+ */
+
+import {
+	BlockedReason,
+	type Content,
+	FinishReason,
+	type GenerateContentConfig,
+	type FunctionCall as GoogleFunctionCall,
+	GoogleGenAI,
+	type Part,
+} from "@google/genai";
+import type { FunctionCall } from "../../types/provider/interfaces";
+import {
+	ContextItemTag,
+	type StructuredContextItem,
+} from "../../types/misc/context";
+import { log } from "../../utils/misc/logger";
+import type {
+	ProcessedChunk,
+	ProviderError,
+	RawStreamChunk,
+	StreamConfig,
+	StreamContext,
+	StreamProvider,
+} from "../../types/stream/interfaces";
+
+/**
+ * Google-specific stream configuration extending the base StreamConfig
+ */
+export interface GoogleStreamConfig extends StreamConfig {
+	safetySettings?: Array<Record<string, unknown>>;
+	generationConfig?: Record<string, unknown>;
+	systemInstruction?: string;
+}
+
+/**
+ * Raw chunk from Google's streaming API
+ */
+interface GoogleStreamChunk {
+	text?: string;
+	functionCalls?: GoogleFunctionCall[];
+	promptFeedback?: {
+		blockReason?: BlockedReason;
+	};
+	candidates?: Array<{
+		finishReason?: FinishReason;
+	}>;
+}
+
+/**
+ * Google Gemini streaming adapter implementation
+ */
+export class GoogleStreamAdapter implements StreamProvider {
+	private static readonly DEFAULT_MODEL =
+		process.env.DEFAULT_GEMINI_MODEL || "gemini-2.5-flash-preview-05-20";
+
+	private static readonly SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
+		ContextItemTag.KNOWLEDGE_SERVER_INFO,
+		ContextItemTag.KNOWLEDGE_SERVER_EMOJIS,
+		ContextItemTag.KNOWLEDGE_SERVER_STICKERS,
+		ContextItemTag.KNOWLEDGE_SERVER_MEMORIES,
+		ContextItemTag.KNOWLEDGE_USER_MEMORIES,
+		ContextItemTag.KNOWLEDGE_CURRENT_CONTEXT,
+	];
+
+	/**
+	 * Start streaming from Google's Gemini API
+	 */
+	async *startStream(
+		config: StreamConfig,
+		context: StreamContext,
+	): AsyncGenerator<RawStreamChunk, void, unknown> {
+		log.info("GoogleStreamAdapter: Initializing Gemini streaming");
+
+		// Initialize Google AI client
+		const genAI = new GoogleGenAI({ apiKey: config.apiKey });
+		const googleConfig = config as GoogleStreamConfig;
+
+		// Prepare the request configuration
+		const requestConfig: GenerateContentConfig = {
+			...googleConfig.generationConfig,
+			safetySettings: googleConfig.safetySettings,
+		};
+
+		// Assemble context for Google format
+		const { systemInstruction, dialogueContents } =
+			await this.assembleGoogleContext(
+				context.contextItems,
+				context.currentTurnModelParts,
+				context.functionInteractionHistory,
+			);
+
+		if (systemInstruction) {
+			requestConfig.systemInstruction = systemInstruction;
+			log.info(
+				`Assembled system instruction. Length: ${systemInstruction.length}`,
+			);
+		}
+
+		// Add tools if available
+		if (config.tools && config.tools.length > 0) {
+			requestConfig.tools = config.tools;
+		}
+
+		// Add current turn model parts if any
+		const finalContents = [...dialogueContents];
+		if (context.currentTurnModelParts.length > 0) {
+			finalContents.push({
+				role: "model",
+				parts: context.currentTurnModelParts as Part[],
+			});
+			log.info(
+				`Added ${context.currentTurnModelParts.length} accumulated model parts to API history.`,
+			);
+		}
+
+		// Add function interaction history
+		if (
+			context.functionInteractionHistory &&
+			context.functionInteractionHistory.length > 0
+		) {
+			for (const item of context.functionInteractionHistory) {
+				finalContents.push({
+					role: "model",
+					parts: [{ functionCall: item.functionCall as GoogleFunctionCall }],
+				});
+				finalContents.push({
+					role: "user",
+					parts: [item.functionResponse as Part],
+				});
+			}
+		}
+
+		log.info(
+			`Generating content with model ${config.model || GoogleStreamAdapter.DEFAULT_MODEL}`,
+		);
+
+		// Log sanitized request for debugging
+		this.logSanitizedRequest(requestConfig, finalContents);
+
+		try {
+			// Start the streaming
+			const stream = await genAI.models.generateContentStream({
+				model: config.model || GoogleStreamAdapter.DEFAULT_MODEL,
+				contents: finalContents,
+				config: requestConfig,
+			});
+
+			// Yield each chunk
+			for await (const chunkResponse of stream) {
+				yield {
+					data: chunkResponse,
+					provider: "google",
+					metadata: {
+						timestamp: Date.now(),
+						model: config.model || GoogleStreamAdapter.DEFAULT_MODEL,
+					},
+				};
+			}
+		} catch (error) {
+			// Convert Google API errors to our format
+			const providerError = this.handleProviderError(error);
+			yield {
+				data: { error: providerError },
+				provider: "google",
+				metadata: {
+					timestamp: Date.now(),
+					error: true,
+				},
+			};
+		}
+	}
+
+	/**
+	 * Process a raw Google chunk into normalized format
+	 */
+	processChunk(chunk: RawStreamChunk): ProcessedChunk {
+		const googleChunk = chunk.data as GoogleStreamChunk;
+
+		// Handle errors first
+		if ("error" in googleChunk) {
+			return {
+				type: "error",
+				error: googleChunk.error as ProviderError,
+			};
+		}
+
+		// Check for content blocks from prompt feedback
+		if (
+			googleChunk.promptFeedback?.blockReason &&
+			googleChunk.promptFeedback.blockReason !==
+				BlockedReason.BLOCKED_REASON_UNSPECIFIED
+		) {
+			const error: ProviderError = {
+				type: "content_blocked",
+				message: `Prompt blocked by API. Reason: ${googleChunk.promptFeedback.blockReason}`,
+				code: googleChunk.promptFeedback.blockReason,
+				retryable: false,
+				originalError: googleChunk.promptFeedback,
+			};
+
+			return {
+				type: "error",
+				error,
+			};
+		}
+
+		// Check for finish reason blocks
+		const candidate = googleChunk.candidates?.[0];
+		if (
+			candidate?.finishReason &&
+			this.isBlockingFinishReason(candidate.finishReason)
+		) {
+			const error: ProviderError = {
+				type: "content_blocked",
+				message: `Response stopped/blocked. Reason: ${candidate.finishReason}`,
+				code: candidate.finishReason,
+				retryable: false,
+				originalError: candidate,
+			};
+
+			return {
+				type: "error",
+				error,
+			};
+		}
+
+		// Check for function calls
+		if (googleChunk.functionCalls && googleChunk.functionCalls.length > 0) {
+			const functionCall = this.convertGoogleFunctionCall(
+				googleChunk.functionCalls[0],
+			);
+			return {
+				type: "function_call",
+				functionCall,
+			};
+		}
+
+		// Check for text content
+		if (googleChunk.text) {
+			return {
+				type: "text",
+				content: googleChunk.text,
+			};
+		}
+
+		// Handle finish reason indicating completion
+		if (candidate?.finishReason === FinishReason.STOP) {
+			return {
+				type: "done",
+			};
+		}
+
+		// Default: empty chunk (shouldn't happen but handle gracefully)
+		return {
+			type: "text",
+			content: "",
+		};
+	}
+
+	/**
+	 * Extract function call from raw Google chunk
+	 */
+	extractFunctionCall(chunk: RawStreamChunk): FunctionCall | null {
+		const googleChunk = chunk.data as GoogleStreamChunk;
+
+		if (googleChunk.functionCalls && googleChunk.functionCalls.length > 0) {
+			return this.convertGoogleFunctionCall(googleChunk.functionCalls[0]);
+		}
+
+		return null;
+	}
+
+	/**
+	 * Handle Google-specific errors
+	 */
+	handleProviderError(error: unknown): ProviderError {
+		const errorMessage = error instanceof Error ? error.message : String(error);
+
+		// Categorize Google-specific errors
+		if (errorMessage.includes("API key")) {
+			return {
+				type: "api_error",
+				message: `Google API key error: ${errorMessage}`,
+				retryable: false,
+				originalError: error,
+			};
+		}
+
+		if (errorMessage.includes("quota") || errorMessage.includes("rate")) {
+			return {
+				type: "rate_limit",
+				message: `Google API rate limit: ${errorMessage}`,
+				retryable: true,
+				originalError: error,
+			};
+		}
+
+		if (errorMessage.includes("timeout")) {
+			return {
+				type: "timeout",
+				message: `Google API timeout: ${errorMessage}`,
+				retryable: true,
+				originalError: error,
+			};
+		}
+
+		return {
+			type: "api_error",
+			message: `Google API error: ${errorMessage}`,
+			retryable: false,
+			originalError: error,
+		};
+	}
+
+	/**
+	 * Get provider information
+	 */
+	getProviderInfo() {
+		return {
+			name: "google",
+			version: "2.5",
+			supportsStreaming: true,
+			supportsFunctionCalling: true,
+		};
+	}
+
+	/**
+	 * Assemble context items into Google's expected format
+	 * Extracted from the original streamGeminiToDiscord function (lines 218-390)
+	 */
+	private async assembleGoogleContext(
+		contextItems: StructuredContextItem[],
+		_currentTurnModelParts: Array<Record<string, unknown>>,
+		_functionInteractionHistory?: Array<{
+			functionCall: FunctionCall;
+			functionResponse: Record<string, unknown>;
+		}>,
+	): Promise<{ systemInstruction?: string; dialogueContents: Content[] }> {
+		const systemInstructionParts: string[] = [];
+		const dialogueContents: Content[] = [];
+
+		for (const item of contextItems) {
+			let itemTextContent = "";
+			if (item.parts.some((p) => p.type === "text")) {
+				itemTextContent = item.parts
+					.filter((p) => p.type === "text")
+					.map((p) => (p as { type: "text"; text: string }).text)
+					.join("\n");
+			}
+
+			// Check if this should be system instruction
+			if (
+				item.role === "system" ||
+				(item.role === "user" &&
+					item.metadataTag &&
+					GoogleStreamAdapter.SYSTEM_INSTRUCTION_TAGS.includes(
+						item.metadataTag,
+					))
+			) {
+				if (itemTextContent) systemInstructionParts.push(itemTextContent);
+			} else if (
+				(item.role === "user" || item.role === "model") &&
+				item.metadataTag &&
+				(item.metadataTag === ContextItemTag.DIALOGUE_HISTORY ||
+					item.metadataTag === ContextItemTag.DIALOGUE_SAMPLE)
+			) {
+				// Convert to Google Parts format
+				const geminiParts: Part[] = [];
+				for (const part of item.parts) {
+					if (part.type === "text") {
+						geminiParts.push({ text: part.text });
+					} else if (part.type === "image" && part.uri && part.mimeType) {
+						// Handle images
+						try {
+							const imageResponse = await fetch(part.uri);
+							if (!imageResponse.ok) {
+								throw new Error(`Image fetch failed: ${imageResponse.status}`);
+							}
+							const imageArrayBuffer = await imageResponse.arrayBuffer();
+							const base64ImageData =
+								Buffer.from(imageArrayBuffer).toString("base64");
+
+							geminiParts.push({
+								inlineData: {
+									mimeType: part.mimeType,
+									data: base64ImageData,
+								},
+							});
+						} catch (imgErr) {
+							log.warn(
+								`GoogleStreamAdapter: Image processing error ${part.uri}`,
+								{
+									error:
+										imgErr instanceof Error ? imgErr.message : String(imgErr),
+								},
+							);
+						}
+					} else if (part.type === "video" && part.uri && part.mimeType) {
+						// Handle videos
+						try {
+							if ((part as { isYouTubeLink?: boolean }).isYouTubeLink) {
+								// YouTube links use fileData format
+								geminiParts.push({
+									fileData: {
+										fileUri: part.uri,
+									},
+								});
+								log.info(
+									`GoogleStreamAdapter: Added YouTube video: ${part.uri}`,
+								);
+							} else {
+								// Direct video uploads (handle size limits)
+								const videoResponse = await fetch(part.uri);
+								if (!videoResponse.ok) {
+									throw new Error(
+										`Video fetch failed: ${videoResponse.status}`,
+									);
+								}
+
+								const contentLength =
+									videoResponse.headers.get("content-length");
+								const fileSizeBytes = contentLength
+									? Number.parseInt(contentLength)
+									: 0;
+								const maxInlineSize = 20 * 1024 * 1024; // 20MB limit
+
+								if (fileSizeBytes > 0 && fileSizeBytes < maxInlineSize) {
+									const videoArrayBuffer = await videoResponse.arrayBuffer();
+									const base64VideoData =
+										Buffer.from(videoArrayBuffer).toString("base64");
+
+									geminiParts.push({
+										inlineData: {
+											mimeType: part.mimeType,
+											data: base64VideoData,
+										},
+									});
+									log.info(
+										`GoogleStreamAdapter: Added inline video: ${part.uri} (${fileSizeBytes} bytes)`,
+									);
+								} else {
+									log.warn(
+										`GoogleStreamAdapter: Video too large for inline processing: ${part.uri} (${fileSizeBytes} bytes). Consider implementing File API upload for videos >20MB.`,
+									);
+								}
+							}
+						} catch (videoErr) {
+							log.warn(
+								`GoogleStreamAdapter: Video processing error ${part.uri}`,
+								{
+									error:
+										videoErr instanceof Error
+											? videoErr.message
+											: String(videoErr),
+								},
+							);
+						}
+					}
+				}
+
+				if (geminiParts.length > 0) {
+					dialogueContents.push({ role: item.role, parts: geminiParts });
+				}
+			}
+		}
+
+		const systemInstruction =
+			systemInstructionParts.length > 0
+				? systemInstructionParts.join("\n\n---\n\n")
+				: undefined;
+
+		return { systemInstruction, dialogueContents };
+	}
+
+	/**
+	 * Convert Google function call to our generic format
+	 */
+	private convertGoogleFunctionCall(
+		googleFunctionCall: GoogleFunctionCall,
+	): FunctionCall {
+		return {
+			name: googleFunctionCall.name ?? "",
+			args: googleFunctionCall.args || {},
+		};
+	}
+
+	/**
+	 * Check if a finish reason indicates blocking/stopping
+	 */
+	private isBlockingFinishReason(finishReason: FinishReason): boolean {
+		return [
+			FinishReason.SAFETY,
+			FinishReason.OTHER,
+			FinishReason.RECITATION,
+			FinishReason.BLOCKLIST,
+			FinishReason.PROHIBITED_CONTENT,
+			FinishReason.SPII,
+			FinishReason.IMAGE_SAFETY,
+		].includes(finishReason);
+	}
+
+	/**
+	 * Log sanitized request configuration for debugging
+	 */
+	private logSanitizedRequest(
+		requestConfig: GenerateContentConfig,
+		contents: Content[],
+	): void {
+		log.section("GoogleStreamAdapter: Request Details");
+
+		const sanitizedRequestConfig = {
+			...requestConfig,
+			apiKey: undefined, // Remove API key for logging
+		};
+		log.info(
+			`Request Config: ${JSON.stringify(sanitizedRequestConfig, null, 2)}`,
+		);
+
+		const sanitizedContents = contents.map((content) => ({
+			...content,
+			parts: content.parts?.map((part) =>
+				"inlineData" in part
+					? {
+							inlineData: {
+								mimeType: part.inlineData?.mimeType,
+								data: "[BASE64_HIDDEN]",
+							},
+						}
+					: part,
+			),
+		}));
+		log.info(
+			`Contents (${contents.length} items): ${JSON.stringify(sanitizedContents, null, 2)}`,
+		);
+	}
+}

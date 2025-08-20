@@ -12,7 +12,8 @@
 		"watch": "bun build ./src/index.ts --outdir dist --target node --watch",
 		"purge-commands": "bun run scripts/purge-commands.ts",
 		"seed-db": "bun run scripts/seed-db.ts",
-		"nuke-db": "bun run scripts/nuke-db.ts"
+		"nuke-db": "bun run scripts/nuke-db.ts",
+		"lint": "bunx @biomejs/biome lint"
 	},
 	"author": "Bredrumb",
 	"license": "ISC",

@@ -23,7 +23,7 @@ import {
 	replyInfoEmbed,
 	replySummaryEmbed,
 } from "../../utils/discord/interactionHelper";
-import { validateApiKey } from "../../providers/google/gemini";
+import { GoogleProvider } from "../../providers/google/googleProvider";
 import { encryptApiKey } from "../../utils/security/crypto";
 import { setupServer } from "../../utils/db/dbWrite";
 import { loadTomoriState } from "@/utils/db/dbRead";
@@ -190,7 +190,8 @@ export async function execute(
 				content: localizer(locale, "commands.config.setup.api_key_validating"),
 			});
 
-			const isApiKeyValid = await validateApiKey(apiKey);
+			const googleProvider = new GoogleProvider();
+			const isApiKeyValid = await googleProvider.validateApiKey(apiKey);
 			if (!isApiKeyValid) {
 				await submission.editReply({
 					content: localizer(

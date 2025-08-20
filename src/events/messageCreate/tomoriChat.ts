@@ -5,32 +5,16 @@ import {
 	MessageFlags,
 	TextChannel,
 } from "discord.js"; // Import value for instanceof check
+// Provider imports moved to factory pattern
+import type { StructuredContextItem } from "../../types/misc/context";
+// Provider-specific types moved to individual providers
+import type { FunctionCall } from "../../types/tool/interfaces";
 import {
-	getGeminiTools,
-	streamGeminiToDiscord,
-} from "../../providers/google/gemini";
-import {
-	ContextItemTag,
-	type StructuredContextItem,
-} from "../../types/misc/context";
-import {
-	HarmCategory,
-	HarmBlockThreshold,
-	type FunctionCall,
-	type Part,
-} from "@google/genai";
-import type { GeminiConfig } from "../../types/api/gemini";
-import {
-	isBlacklisted,
 	loadServerEmojis,
 	loadTomoriState,
 	loadUserRow,
 } from "../../utils/db/dbRead";
-import {
-	addPersonalMemoryByTomori,
-	addServerMemoryByTomori,
-	incrementTomoriCounter,
-} from "@/utils/db/dbWrite";
+import { incrementTomoriCounter } from "@/utils/db/dbWrite";
 import {
 	createStandardEmbed,
 	sendStandardEmbed,
@@ -40,18 +24,13 @@ import { buildContext } from "../../utils/text/contextBuilder";
 import { decryptApiKey } from "@/utils/security/crypto";
 
 import type { TomoriState } from "@/types/db/schema";
-import {
-	queryGoogleSearchFunctionDeclaration,
-	rememberThisFactFunctionDeclaration,
-	selectStickerFunctionDeclaration,
-} from "@/providers/google/functionCalls";
-import { executeSearchSubAgent } from "@/providers/google/subAgents";
+// Provider-specific function declarations moved to providers
+import { getProviderForTomori } from "../../utils/provider/providerFactory";
+import type { LLMProvider, StreamResult } from "../../types/tool/interfaces";
+import { ToolRegistry } from "../../tools/toolRegistry";
 
 // Constants
 const MESSAGE_FETCH_LIMIT = 80;
-const DEFAULT_TOP_K = 1;
-const DEFAULT_TOP_P = 0.95;
-const MAX_OUTPUT_TOKENS = 8192;
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
@@ -779,57 +758,41 @@ export default async function tomoriChat(
 				return;
 			}
 
-			// 12. Generate Response
+			// 12. Generate Response - Get provider instance
 
-			// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
-			if (tomoriState!.llm.llm_provider.toLowerCase() !== "google") {
-				log.warn(
-					`Unsupported LLM provider configured: ${tomoriState?.llm.llm_provider}`,
+			// Get the appropriate provider based on TomoriState configuration
+			let provider: LLMProvider;
+			try {
+				provider = getProviderForTomori(tomoriState);
+			} catch (error) {
+				log.error(
+					`Failed to get LLM provider: ${error instanceof Error ? error.message : String(error)}`,
+					error as Error,
 					{
 						serverId: tomoriState?.server_id,
-						errorType: "ConfigurationError",
-						metadata: { provider: tomoriState?.llm.llm_provider },
+						errorType: "ProviderError",
+						metadata: {
+							configuredProvider: tomoriState?.llm.llm_provider,
+							configuredModel: tomoriState?.llm.llm_codename,
+						},
 					},
 				);
+				await sendStandardEmbed(channel, locale, {
+					color: ColorCode.ERROR,
+					titleKey: "general.errors.provider_not_supported_title",
+					descriptionKey: "general.errors.provider_not_supported_description",
+					descriptionVars: {
+						provider: tomoriState?.llm.llm_provider || "unknown",
+					},
+				});
 				return;
 			}
 
-			const geminiConfig: GeminiConfig = {
-				// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
-				model: tomoriState!.llm.llm_codename,
-				apiKey: decryptedApiKey,
-				safetySettings: [
-					{
-						category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-						threshold: HarmBlockThreshold.BLOCK_NONE,
-					},
-					{
-						category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-						threshold: HarmBlockThreshold.BLOCK_NONE,
-					},
-					{
-						category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-						threshold: HarmBlockThreshold.BLOCK_NONE,
-					},
-					{
-						category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-						threshold: HarmBlockThreshold.BLOCK_NONE,
-					},
-				],
-				generationConfig: {
-					// biome-ignore lint/style/noNonNullAssertion: tomoriState and config are checked
-					temperature: tomoriState!.config.llm_temperature,
-					topK: DEFAULT_TOP_K,
-					topP: DEFAULT_TOP_P,
-					maxOutputTokens: MAX_OUTPUT_TOKENS,
-					stopSequences: [
-						//`\n${tomoriState!.tomori_nickname}:`,
-						//`\n${triggererName}:`,
-					],
-				},
-				// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
-				tools: getGeminiTools(tomoriState!),
-			};
+			// Create provider-specific configuration
+			const providerConfig = provider.createConfig(
+				tomoriState,
+				decryptedApiKey,
+			);
 
 			log.info(
 				"Streaming mode enabled. Attempting to stream response to Discord.",
@@ -839,10 +802,10 @@ export default async function tomoriChat(
 			let selectedStickerToSend: Sticker | null = null;
 			const functionInteractionHistory: {
 				functionCall: FunctionCall;
-				functionResponse: Part;
+				functionResponse: Record<string, unknown>;
 			}[] = [];
 			let finalStreamCompleted = false;
-			const accumulatedStreamedModelParts: Part[] = [];
+			const accumulatedStreamedModelParts: Array<Record<string, unknown>> = [];
 
 			for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
 				log.info(
@@ -850,12 +813,12 @@ export default async function tomoriChat(
 				);
 
 				try {
-					const streamGeminiPromise = await streamGeminiToDiscord(
+					const streamProviderPromise = await provider.streamToDiscord(
 						channel,
 						client,
 						// biome-ignore lint/style/noNonNullAssertion: Missing Tomoristate handled at start of TomoriChat
 						tomoriState!,
-						geminiConfig,
+						providerConfig,
 						contextSegments, // Original full prompt context
 						accumulatedStreamedModelParts, // MODIFIED: Pass the accumulator (Rule 26)
 						emojiStrings,
@@ -874,29 +837,29 @@ export default async function tomoriChat(
 								() =>
 									reject(
 										new Error(
-											"SDK_CALL_TIMEOUT: streamGeminiToDiscord call timed out.",
+											"SDK_CALL_TIMEOUT: provider streamToDiscord call timed out.",
 										),
 									),
 								STREAM_SDK_CALL_TIMEOUT_MS,
 							),
 					);
 
-					let streamResult: Awaited<ReturnType<typeof streamGeminiToDiscord>>;
+					let streamResult: StreamResult;
 					try {
 						// Promise.race will settle as soon as one of the promises settles
 						streamResult = await Promise.race([
-							streamGeminiPromise,
+							streamProviderPromise,
 							timeoutPromise,
 						]);
 					} catch (raceError) {
 						// This catch block will execute if timeoutPromise rejects first,
-						// or if streamGeminiPromise itself rejects *before* the timeout.
+						// or if streamProviderPromise itself rejects *before* the timeout.
 						if (
 							raceError instanceof Error &&
 							raceError.message.startsWith("SDK_CALL_TIMEOUT:")
 						) {
 							log.error(
-								`SDK call to streamGeminiToDiscord timed out for channel ${channel.id}.`,
+								`Provider streamToDiscord call timed out for channel ${channel.id}.`,
 								raceError, // Log the timeout error
 								{
 									serverId: tomoriState?.server_id,
@@ -957,422 +920,69 @@ export default async function tomoriChat(
 							`Stream LLM wants to call function: ${funcName} with args: ${JSON.stringify(funcCall.args)}`,
 						);
 
-						// Initialize functionExecutionResult to an empty object or a default error state.
-						let functionExecutionResult: Record<string, unknown> = {
-							status: "processing_error",
-							reason: "Function execution result was not properly set.",
+						// 2. Execute function using modular tool system
+						log.info(
+							`Executing tool: ${funcName} with args: ${JSON.stringify(funcCall.args)}`,
+						);
+
+						// Build tool execution context
+						const toolContext = {
+							channel,
+							client,
+							message,
+							userId: userRow?.user_id?.toString() || userDiscId,
+							tomoriState,
+							locale,
+							provider: "google" as const,
 						};
 
-						// 2. Execute the function locally based on its name
-						if (funcName === selectStickerFunctionDeclaration.name) {
-							const stickerIdArg = funcCall.args?.sticker_id;
-							if (typeof stickerIdArg === "string") {
-								const discordSticker =
-									// biome-ignore lint/style/noNonNullAssertion: TomoriChat checks for guild
-									guild!.stickers.cache.get(stickerIdArg);
-								if (discordSticker) {
-									log.success(
-										`Sticker '${discordSticker.name}' (${stickerIdArg}) found locally for stream.`,
-									);
-									functionExecutionResult = {
-										status: "sticker_selected_successfully",
-										sticker_id: discordSticker.id,
-										sticker_name: discordSticker.name,
-										sticker_description: discordSticker.description,
-									};
-									selectedStickerToSend = discordSticker;
-								} else {
-									log.warn(
-										`Sticker with ID ${stickerIdArg} not found in server cache for stream. Informing LLM.`,
-									);
-									functionExecutionResult = {
-										status: "sticker_not_found",
-										sticker_id_attempted: stickerIdArg,
-										reason:
-											"The sticker ID provided was not found among the available server stickers. Please choose from the provided list or do not use a sticker.",
-									};
-									selectedStickerToSend = null;
-								}
-							} else {
-								log.warn(
-									"Invalid or missing sticker_id in stream function call args for select_sticker_for_response.",
-								);
-								functionExecutionResult = {
-									status: "sticker_selection_failed_invalid_args",
-									reason:
-										"The sticker_id argument was missing or not in the expected format. Please provide a valid sticker_id string.",
-								};
-								selectedStickerToSend = null;
-							}
-						} else if (funcName === queryGoogleSearchFunctionDeclaration.name) {
-							const searchQueryArg = funcCall.args?.search_query;
-							if (typeof searchQueryArg === "string" && searchQueryArg.trim()) {
-								// 1. Send disclaimer embed BEFORE executing the search (Rule 12, 19)
-								// This informs the user while the search is happening.
-								await sendStandardEmbed(channel, locale, {
-									color: ColorCode.INFO, // Or WARN if preferred for a disclaimer
-									titleKey: "genai.search.disclaimer_title", // New locale key
-									descriptionKey: "genai.search.disclaimer_description", // New locale key
-									// Not ephemeral, as it's a general notice.
-								});
-								// Send typing indicator as search might take a moment
-								await channel.sendTyping();
+						// Execute the tool through our modular system
+						const toolResult = await ToolRegistry.executeTool(
+							funcName,
+							funcCall.args || {},
+							toolContext,
+						);
 
-								// 1. Construct conversationHistory string from contextSegments
-								const dialogueHistoryStrings: string[] = [];
-								for (const item of contextSegments) {
-									if (
-										item.metadataTag === ContextItemTag.DIALOGUE_HISTORY ||
-										item.metadataTag === ContextItemTag.DIALOGUE_SAMPLE
-									) {
-										let turnText = "";
-										for (const part of item.parts) {
-											if (part.type === "text") {
-												turnText += part.text; // Text parts should already be formatted with speaker names by buildContext
-											}
-										}
-										if (turnText.trim()) {
-											dialogueHistoryStrings.push(turnText.trim());
-										}
-									}
-								}
-								const conversationHistoryString =
-									dialogueHistoryStrings.join("\n");
-								// Log the length or a snippet for debugging if needed
-								log.info(
-									`Constructed conversation history string for sub-agent. Length: ${conversationHistoryString.length}`,
-								);
+						// Convert tool result to function execution result format
+						let functionExecutionResult: Record<string, unknown>;
 
-								log.info(
-									`Executing Google Search sub-agent for query: "${searchQueryArg}"`,
-								);
+						if (toolResult.success) {
+							functionExecutionResult = (toolResult.data as Record<
+								string,
+								unknown
+							>) || { status: "completed" };
 
-								const searchResult = await executeSearchSubAgent(
-									searchQueryArg,
-									conversationHistoryString,
-									// biome-ignore lint/style/noNonNullAssertion: API key presence was validated earlier for triggered messages, tomoriState is checked
-									tomoriState!,
-									// biome-ignore lint/style/noNonNullAssertion: API key presence was validated earlier for triggered messages, tomoriState is checked
-									decryptedApiKey!,
-								);
-
-								if (searchResult.summary) {
-									log.success("Google Search sub-agent returned a summary.");
-									functionExecutionResult = {
-										status: "search_completed_successfully",
-										summary: searchResult.summary,
-										original_query: searchQueryArg,
-									};
-								} else {
-									log.warn(
-										`Google Search sub-agent failed or returned no summary. Error: ${searchResult.error}`,
-									);
-									functionExecutionResult = {
-										status: "search_failed",
-										error_message:
-											searchResult.error ||
-											"The search sub-agent did not return a summary.",
-										original_query: searchQueryArg,
-									};
-									// Optionally, inform the user if the search itself failed critically
-									// before the LLM gets a chance to respond.
-									// However, usually, we let the LLM explain based on the error_message.
-								}
-							} else {
-								log.warn(
-									"Invalid or missing search_query in stream function call args for query_google_search.",
-								);
-								functionExecutionResult = {
-									status: "search_failed_invalid_args",
-									reason:
-										"The search_query argument was missing, empty, or not in the expected string format. Please provide a valid search query.",
-								};
-							}
-						}
-						// TODO: Add handling for self_teach_tomori here when implemented
-						// else if (funcName === selfTeachTomoriFunctionDeclaration.name) { ... }
-						else if (funcName === rememberThisFactFunctionDeclaration.name) {
-							// 1. Extract arguments from the function call
-							const memoryContentArg = funcCall.args?.memory_content;
-							const memoryScopeArg = funcCall.args?.memory_scope;
-							// MODIFIED: Extract new arguments for targeted user memory
-							const targetUserDiscordIdArg =
-								funcCall.args?.target_user_discord_id;
-							const targetUserNicknameArg = funcCall.args?.target_user_nickname;
-
+							// Handle sticker selection specifically (extract sticker for later sending)
 							if (
-								!tomoriState ||
-								!userRow ||
-								!userRow.user_id ||
-								!tomoriState.server_id
+								funcName === "select_sticker_for_response" &&
+								toolResult.data
 							) {
-								// 2. Validate arguments
-								// This is a critical internal state error if these are null here.
-								log.error(
-									"Critical state missing (tomoriState, userRow, or their IDs) before handling remember_this_fact.",
-									undefined,
-									{
-										serverId: tomoriState?.server_id,
-										userId: userRow?.user_id,
-										errorType: "SelfTeachStateError",
-										metadata: {
-											hasTomoriState: !!tomoriState,
-											hasUserRow: !!userRow,
-											hasUserId: !!userRow?.user_id,
-											hasServerId: !!tomoriState?.server_id,
-										},
-									},
-								);
-								functionExecutionResult = {
-									status: "memory_save_failed_internal_error",
-									reason:
-										"Internal bot error: Critical state information is missing.",
-								};
-							} else if (
-								typeof memoryContentArg !== "string" ||
-								!memoryContentArg.trim()
-							) {
-								functionExecutionResult = {
-									status: "memory_save_failed_invalid_args",
-									reason:
-										"The 'memory_content' argument was missing, empty, or not a string.",
-								};
-							} else if (
-								typeof memoryScopeArg !== "string" ||
-								!["server_wide", "target_user"].includes(memoryScopeArg)
-							) {
-								functionExecutionResult = {
-									status: "memory_save_failed_invalid_args",
-									reason:
-										"The 'memory_scope' argument was missing or invalid. Must be 'server_wide' or 'target_user'.",
-								};
-							} else {
-								// Arguments seem valid enough to proceed
-								const memoryContent = memoryContentArg.trim();
-
-								if (memoryScopeArg === "server_wide") {
-									// 3.a. Handle server-wide memory
-									const dbResult = await addServerMemoryByTomori(
-										tomoriState.server_id, // tomoriState.server_id is non-null due to check above
-										userRow.user_id, // userRow.user_id is non-null due to check above
-										memoryContent,
+								const stickerData = toolResult.data as Record<string, unknown>;
+								if (stickerData.status === "sticker_selected_successfully") {
+									// Find the sticker in guild cache to send later
+									const discordSticker = guild?.stickers.cache.get(
+										stickerData.sticker_id as string,
 									);
-									if (dbResult) {
-										functionExecutionResult = {
-											status: "memory_saved_successfully",
-											scope: "server_wide",
-											content_saved: memoryContent,
-											memory_id: dbResult.server_memory_id,
-										};
-										log.success(
-											`Tomori self-taught a server-wide memory (ID: ${dbResult.server_memory_id}): "${memoryContent}"`,
-										);
-										// Send notification embed to the channel
-										await sendStandardEmbed(channel, locale, {
-											color: ColorCode.SUCCESS, // Or ColorCode.INFO
-											titleKey: "genai.self_teach.server_memory_learned_title",
-											descriptionKey:
-												"genai.self_teach.server_memory_learned_description",
-											descriptionVars: {
-												memory_content:
-													memoryContent.length > 200
-														? `${memoryContent.substring(0, 197)}...`
-														: memoryContent,
-											},
-											footerKey: "genai.self_teach.server_memory_footer", // Add footer
-											// Not ephemeral, so everyone sees it
-										});
-									} else {
-										functionExecutionResult = {
-											status: "memory_save_failed_db_error",
-											scope: "server_wide",
-											reason:
-												"Database operation failed to save server-wide memory.",
-										};
-										log.error(
-											"Failed to save server-wide memory via self-teach (DB error).",
-											undefined,
-											{
-												serverId: tomoriState.server_id,
-												userId: userRow.user_id,
-												errorType: "SelfTeachDBError",
-												metadata: {
-													scope: "server_wide",
-													content: memoryContent,
-												},
-											},
-										);
-									}
-								} else if (memoryScopeArg === "target_user") {
-									// 3.b. MODIFIED: Handle user-specific memory with Discord ID and Nickname
-									if (
-										typeof targetUserDiscordIdArg !== "string" ||
-										!targetUserDiscordIdArg.trim()
-									) {
-										functionExecutionResult = {
-											status: "memory_save_failed_invalid_args",
-											scope: "target_user",
-											reason:
-												"The 'target_user_discord_id' argument was missing or empty, which is required when 'memory_scope' is 'target_user'.",
-										};
-									} else if (
-										typeof targetUserNicknameArg !== "string" ||
-										!targetUserNicknameArg.trim()
-									) {
-										functionExecutionResult = {
-											status: "memory_save_failed_invalid_args",
-											scope: "target_user",
-											reason:
-												"The 'target_user_nickname' argument was missing or empty, which is required when 'memory_scope' is 'target_user'.",
-										};
-									} else {
-										// Attempt to load the target user by their Discord ID
-										const targetUserRow = await loadUserRow(
-											targetUserDiscordIdArg,
-										);
-
-										if (!targetUserRow || !targetUserRow.user_id) {
-											functionExecutionResult = {
-												status: "memory_save_failed_user_not_found",
-												scope: "target_user",
-												target_user_discord_id: targetUserDiscordIdArg,
-												reason: `The user with Discord ID '${targetUserDiscordIdArg}' was not found in Tomori's records. Tomori can only save memories for users she knows.`,
-											};
-											log.warn(
-												`Self-teach: Target user with Discord ID ${targetUserDiscordIdArg} not found.`,
-												{
-													// biome-ignore lint/style/noNonNullAssertion: tomoriState.server_id checked above
-													serverId: tomoriState!.server_id,
-													metadata: {
-														targetDiscordId: targetUserDiscordIdArg,
-														targetNicknameAttempt: targetUserNicknameArg,
-													},
-												},
-											);
-										} else {
-											// User found, now verify nickname as a "two-factor" check
-											// Get the actual nickname from DB, falling back to guild nickname or Discord ID
-											const actualNicknameInDB = targetUserRow.user_nickname;
-											// Case-insensitive comparison for nickname
-											if (
-												actualNicknameInDB.toLowerCase() !==
-													targetUserNicknameArg.toLowerCase() &&
-												actualNicknameInDB.toLowerCase() !==
-													message.guild?.members.cache
-														.get(targetUserDiscordIdArg)
-														?.displayName?.toLowerCase() // Fallback to guild nickname if available
-											) {
-												functionExecutionResult = {
-													status: "memory_save_failed_nickname_mismatch",
-													scope: "target_user",
-													target_user_discord_id: targetUserDiscordIdArg,
-													provided_nickname: targetUserNicknameArg,
-													actual_nickname: actualNicknameInDB,
-													reason: `The provided nickname '${targetUserNicknameArg}' does not match the records for user ID '${targetUserDiscordIdArg}' (Tomori knows them as '${actualNicknameInDB}'). Please ensure the Discord ID and nickname correspond to the same user.`,
-												};
-												log.warn(
-													`Self-teach: Nickname mismatch for target user ${targetUserDiscordIdArg}. LLM provided: '${targetUserNicknameArg}', DB has: '${actualNicknameInDB}'.`,
-													{
-														// biome-ignore lint/style/noNonNullAssertion: tomoriState.server_id checked above
-														serverId: tomoriState!.server_id,
-														userId: targetUserRow.user_id, // Target user's internal ID
-														errorType: "SelfTeachVerificationError",
-														metadata: {
-															targetDiscordId: targetUserDiscordIdArg,
-															providedNickname: targetUserNicknameArg,
-															dbNickname: actualNicknameInDB,
-														},
-													},
-												);
-											} else {
-												// Nickname matches, proceed to save personal memory for the targetUserRow
-												const dbResult = await addPersonalMemoryByTomori(
-													targetUserRow.user_id, // Use the target user's internal ID
-													memoryContent,
-												);
-												if (dbResult) {
-													functionExecutionResult = {
-														status: "memory_saved_successfully",
-														scope: "target_user",
-														user_discord_id: targetUserDiscordIdArg,
-														user_nickname: targetUserNicknameArg, // Use the verified nickname
-														content_saved: memoryContent,
-													};
-													log.success(
-														`Tomori self-taught a personal memory for ${targetUserNicknameArg} (Discord ID: ${targetUserDiscordIdArg}, Internal ID: ${targetUserRow.user_id}): "${memoryContent}"`,
-													);
-
-													let personalMemoryFooterKey: string | undefined;
-													const personalizationEnabled =
-														tomoriState?.config.personal_memories_enabled ??
-														true;
-													const targetUserIsBlacklisted =
-														(await isBlacklisted(serverDiscId, userDiscId)) ??
-														false;
-
-													if (!personalizationEnabled) {
-														personalMemoryFooterKey =
-															"genai.self_teach.personal_memory_footer_personalization_disabled";
-													} else if (targetUserIsBlacklisted) {
-														personalMemoryFooterKey =
-															"genai.self_teach.personal_memory_footer_user_blacklisted";
-													} else {
-														personalMemoryFooterKey =
-															"genai.self_teach.personal_memory_footer_manage";
-													}
-													await sendStandardEmbed(channel, locale, {
-														color: ColorCode.SUCCESS,
-														titleKey:
-															"genai.self_teach.personal_memory_learned_title",
-														descriptionKey:
-															"genai.self_teach.personal_memory_learned_description",
-														descriptionVars: {
-															user_nickname: targetUserNicknameArg, // Display the name Tomori used
-															memory_content:
-																memoryContent.length > 200
-																	? `${memoryContent.substring(0, 197)}...`
-																	: memoryContent,
-														},
-														footerKey: personalMemoryFooterKey,
-													});
-												} else {
-													functionExecutionResult = {
-														status: "memory_save_failed_db_error",
-														scope: "target_user",
-														reason:
-															"Database operation failed to save personal memory for the target user.",
-													};
-													await log.error(
-														`Failed to save personal memory for ${targetUserNicknameArg} (Discord ID: ${targetUserDiscordIdArg}) via self-teach (DB error).`,
-														undefined,
-														{
-															userId: targetUserRow.user_id, // Target user's internal ID
-															// biome-ignore lint/style/noNonNullAssertion: tomoriState.server_id checked above
-															serverId: tomoriState!.server_id,
-															errorType: "SelfTeachDBError",
-															metadata: {
-																scope: "target_user",
-																content: memoryContent,
-																targetDiscordId: targetUserDiscordIdArg,
-																targetNickname: targetUserNicknameArg,
-															},
-														},
-													);
-												}
-											}
-										}
-									}
+									selectedStickerToSend = discordSticker || null;
+									log.success(
+										`Sticker '${stickerData.sticker_name}' selected for sending`,
+									);
+								} else {
+									selectedStickerToSend = null;
 								}
 							}
 						} else {
-							log.warn(
-								`Stream LLM called unknown function: ${funcName}. Informing LLM.`,
-							);
+							// Tool execution failed
 							functionExecutionResult = {
-								status: "unknown_function_called",
-								function_name_called: funcName,
-								message: `The function '${funcName}' is not recognized or implemented. Please proceed without calling this function, or use one of the available functions.`,
+								status: "tool_execution_failed",
+								reason:
+									toolResult.error ||
+									"Tool execution failed without specific error",
+								tool_name: funcName,
 							};
+							log.error(
+								`Tool execution failed for ${funcName}: ${toolResult.error}`,
+							);
 						}
 
 						// 3. Add the model's function call and our function's result to the history

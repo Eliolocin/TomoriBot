@@ -135,7 +135,18 @@ if (!postgresUrl) {
 	}
 }
 
-// Initialize localization first
+// Initialize modular tool system
+log.section("Initializing Tool Registry...");
+try {
+	const { initializeTools } = await import("./tools/toolInitializer");
+	initializeTools();
+	log.success("Tool registry initialized successfully");
+} catch (error) {
+	log.error("Failed to initialize tool registry", error as Error);
+	process.exit(1);
+}
+
+// Initialize localization 
 log.section("Initializing Locales...");
 await initializeLocalizer();
 

@@ -89,7 +89,7 @@ export default {
 		search: {
 			disclaimer_title: "🔍 Performing Google Search...",
 			disclaimer_description:
-				"⚠️ **Please note:** AI-generated information, including search results, may sometimes be inaccurate or incomplete. Always verify important information.",
+				"Searching for: **{query}**\n\n⚠️ **Please note:** AI-generated information, including search results, may sometimes be inaccurate or incomplete. Always verify important information.",
 		},
 
 		// New: Stream specific error messages

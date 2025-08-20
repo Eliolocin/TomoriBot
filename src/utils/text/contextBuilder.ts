@@ -18,13 +18,35 @@ import {
 	humanizeString,
 } from "./stringHelper";
 import { HumanizerDegree, type TomoriConfigRow } from "@/types/db/schema";
-import {
-	queryGoogleSearchFunctionDeclaration,
-	rememberThisFactFunctionDeclaration,
-	selectStickerFunctionDeclaration,
-} from "@/providers/google/functionCalls";
+import { getAvailableToolsForContext, type ToolStateForContext } from "@/tools/toolRegistry";
+import { GoogleToolAdapter } from "@/providers/google/googleToolAdapter";
 // Import ServerEmojiRow if needed for emoji query result type
 // import type { ServerEmojiRow } from "../../types/db/schema";
+
+/**
+ * Get function declarations from the modular tool system
+ * @param provider - Provider name (e.g., "google")
+ * @param toolState - Minimal state for tool feature flag checking
+ * @returns Object with function declarations for different tool types
+ */
+function getFunctionDeclarations(provider: string, toolState: ToolStateForContext) {
+	const googleAdapter = GoogleToolAdapter.getInstance();
+	const availableTools = getAvailableToolsForContext(provider, toolState);
+	
+	// Find specific tools by name
+	const stickerTool = availableTools.find(tool => tool.name === "select_sticker_for_response");
+	const searchTool = availableTools.find(tool => tool.name === "query_google_search");
+	const memoryTool = availableTools.find(tool => tool.name === "remember_this_fact");
+	
+	// Convert to Google function declarations
+	const declarations = {
+		selectStickerFunctionDeclaration: stickerTool ? googleAdapter.convertTool(stickerTool) : null,
+		queryGoogleSearchFunctionDeclaration: searchTool ? googleAdapter.convertTool(searchTool) : null,
+		rememberThisFactFunctionDeclaration: memoryTool ? googleAdapter.convertTool(memoryTool) : null,
+	};
+	
+	return declarations;
+}
 
 /**
  * Maps userId -> nickname for the current mention replacement operation.
@@ -249,6 +271,18 @@ export async function buildContext({
 	const contextItems: StructuredContextItem[] = [];
 	const botName = tomoriNickname;
 
+	// Get function declarations from the modular tool system
+	const toolState: ToolStateForContext = {
+		server_id: guildId,
+		config: tomoriConfig,
+	};
+	const functionDeclarations = getFunctionDeclarations("google", toolState);
+	const { 
+		selectStickerFunctionDeclaration, 
+		queryGoogleSearchFunctionDeclaration, 
+		rememberThisFactFunctionDeclaration 
+	} = functionDeclarations;
+
 	// 1. System Instruction (Tomori's Personality and Humanizer)
 	// This will be expanded in Phase 2 to include all non-dialogue context.
 	// For now, it's just personality and humanizer rules.
@@ -279,14 +313,14 @@ export async function buildContext({
 	// This section guides the LLM on when to use its available tools.
 	const functionUsageInstructions: string[] = [];
 
-	if (tomoriConfig.sticker_usage_enabled) {
+	if (tomoriConfig.sticker_usage_enabled && selectStickerFunctionDeclaration) {
 		// 8.a. Sticker Function Guidance
 		functionUsageInstructions.push(
 			`- **Stickers ('${selectStickerFunctionDeclaration.name}')**: ${selectStickerFunctionDeclaration.description} ${botName} considers using this to add more personality or visual cues to their responses, especially when an emotion or reaction can be well-represented by an available sticker.`,
 		);
 	}
 
-	if (tomoriConfig.google_search_enabled) {
+	if (tomoriConfig.google_search_enabled && queryGoogleSearchFunctionDeclaration) {
 		// 8.b. Google Search Function Guidance
 		// Assuming tomoriConfig has a flag like 'google_search_enabled'
 		// You'll need to add this flag to TomoriConfigRow and manage it
@@ -296,7 +330,7 @@ export async function buildContext({
 	}
 
 	// 8.c. Self-Teach Function Guidance
-	if (tomoriConfig.self_teaching_enabled) {
+	if (tomoriConfig.self_teaching_enabled && rememberThisFactFunctionDeclaration) {
 		// 1. Use the actual function name and description from the declaration.
 		const selfTeachFuncName = rememberThisFactFunctionDeclaration.name;
 		// 2. Craft a more detailed instruction based on the function's parameters and purpose.

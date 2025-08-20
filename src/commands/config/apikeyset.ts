@@ -13,7 +13,7 @@ import {
 	type ErrorContext,
 	tomoriConfigSchema,
 } from "../../types/db/schema";
-import { validateApiKey } from "../../providers/google/gemini";
+import { GoogleProvider } from "../../providers/google/googleProvider";
 import { encryptApiKey } from "../../utils/security/crypto";
 import { sql } from "bun";
 
@@ -99,7 +99,8 @@ export async function execute(
 			content: localizer(locale, "commands.config.apikeyset.validating_key"),
 		});
 
-		const isApiKeyValid = await validateApiKey(apiKey);
+		const googleProvider = new GoogleProvider();
+		const isApiKeyValid = await googleProvider.validateApiKey(apiKey);
 		if (!isApiKeyValid) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.config.apikeyset.key_validation_failed_title",
