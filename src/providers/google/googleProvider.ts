@@ -27,11 +27,8 @@ import type {
 import { log } from "../../utils/misc/logger";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
-import {
-	queryGoogleSearchFunctionDeclaration,
-	rememberThisFactFunctionDeclaration,
-	selectStickerFunctionDeclaration,
-} from "./functionCalls";
+import { getAvailableTools, type ToolContext } from "../../tools/toolRegistry";
+import { getGoogleToolAdapter } from "./googleToolAdapter";
 
 // Default values for Gemini API
 const DEFAULT_MODEL =
@@ -123,52 +120,48 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 
 	/**
 	 * Get available tools/functions based on Tomori's configuration
+	 * Uses the modular tool system and Google tool adapter
 	 * @param tomoriState - The current Tomori state with configuration
 	 * @returns Array of tool configurations specific to this provider
 	 */
 	getTools(tomoriState: TomoriState): Array<Record<string, unknown>> {
-		// Initialize an array to hold all tool configurations
-		const toolsConfig: Array<Record<string, unknown>> = [];
-		// Initialize an array specifically for function declarations
-		const functionDeclarations: Array<Record<string, unknown>> = [];
+		try {
+			const modelNameLower = tomoriState.llm.llm_codename.toLowerCase();
+			
+			// Create tool context for filtering (we need a minimal context for tool discovery)
+			// Note: Some properties will be undefined at this stage, but that's okay for tool filtering
+			const toolContext: Partial<ToolContext> = {
+				tomoriState,
+				locale: "en-US", // Default locale for tool discovery
+				provider: "google",
+			};
 
-		const modelNameLower = tomoriState.llm.llm_codename.toLowerCase();
+			// Get available tools from the registry
+			const availableTools = getAvailableTools("google", toolContext as ToolContext);
 
-		// Add Sticker Function Calling if enabled in Tomori's config
-		if (tomoriState.config.sticker_usage_enabled) {
-			functionDeclarations.push(selectStickerFunctionDeclaration);
+			if (availableTools.length === 0) {
+				log.info(`No tools available for model: ${modelNameLower}`);
+				return [];
+			}
+
+			// Convert tools to Google format using the adapter
+			const googleAdapter = getGoogleToolAdapter();
+			const toolsConfig = googleAdapter.convertToolsArray(availableTools);
+
+			// Log enabled tools
+			const enabledToolNames = availableTools.map(tool => tool.name);
 			log.info(
-				`Enabled '${selectStickerFunctionDeclaration.name}' function calling for model: ${modelNameLower}`,
+				`Enabled ${availableTools.length} tools for model: ${modelNameLower} (${enabledToolNames.join(", ")})`
 			);
-		}
 
-		// Add Query Google Search Function Calling if enabled in Tomori's config
-		if (tomoriState.config.google_search_enabled) {
-			functionDeclarations.push(queryGoogleSearchFunctionDeclaration);
-			log.info(
-				`Enabled '${queryGoogleSearchFunctionDeclaration.name}' function calling for model: ${modelNameLower}`,
-			);
-		}
+			return toolsConfig;
 
-		// Add Self-Teach Function Calling if enabled
-		if (tomoriState.config.self_teaching_enabled) {
-			functionDeclarations.push(rememberThisFactFunctionDeclaration);
-			log.info(
-				`Enabled '${rememberThisFactFunctionDeclaration.name}' function calling for model: ${modelNameLower}`,
-			);
+		} catch (error) {
+			log.error(`Failed to get tools for Google provider: ${tomoriState.llm.llm_codename}`, error as Error);
+			
+			// Return empty tools on error to prevent breaking the provider
+			return [];
 		}
-
-		// If there are any function declarations, package them correctly for the tools array
-		if (functionDeclarations.length > 0) {
-			toolsConfig.push({ functionDeclarations }); // Gemini expects function declarations under this key
-		}
-
-		// Log if no tools are enabled
-		if (toolsConfig.length === 0) {
-			log.info(`No specific tools enabled for model: ${modelNameLower}`);
-		}
-
-		return toolsConfig;
 	}
 
 	/**
@@ -296,15 +289,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 				data: result.data,
 			};
 		} catch (error) {
-			log.error("GoogleProvider streamToDiscord error:", error as Error, {
-				serverId: tomoriState.server_id,
-				errorType: "ProviderStreamError",
-				metadata: {
-					provider: "google",
-					model: googleConfig.model,
-					channelId: channel.id,
-				},
-			});
+			log.error(`GoogleProvider streamToDiscord error for server ${tomoriState.server_id}, model ${googleConfig.model}, channel ${channel.id}`, error as Error);
 
 			return {
 				status: "error",
