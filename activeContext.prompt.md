@@ -8,7 +8,7 @@ This **Active Context** document tracks the immediate focus and next steps for T
 
 **🏗️ Provider Abstraction System** - Complete modular LLM provider architecture
 - Provider factory pattern with dynamic provider selection  
-- GoogleProvider implements LLMProvider interface
+- googleProvider implements LLMProvider interface
 - Ready for OpenAI, Anthropic, and future providers
 
 **⚡ Modular Tool System** - 87% code reduction in main chat handler
@@ -37,6 +37,12 @@ This **Active Context** document tracks the immediate focus and next steps for T
 ### Overview
 Implement **Model Context Protocol (MCP)** server integration to demonstrate the power of our modular tool architecture. MCP servers provide standardized access to external data sources and functionality.
 
+**Key Benefits over Current Implementation:**
+- **Replace Google search sub-agent** with provider-agnostic MCP servers
+- **Reduce API consumption** by eliminating sub-agent calls
+- **Offer user choice**: Free DuckDuckGo search vs Premium Brave search
+- **True provider agnostic** - works with Google, OpenAI, Anthropic equally
+
 ### 🏗️ Simplified Architecture (Leveraging Official SDK)
 
 **Key Insight**: Gemini SDK has **built-in MCP support** with `mcpToTool(client)` - no custom implementation needed!
@@ -60,13 +66,26 @@ CREATE TABLE mcp_api_keys (
 
 **Example Configs**:
 
-`src/tools/mcpServers/brave-search/config.json`
+`src/tools/mcpServers/duckduckgo-search/config.json` (Free Search)
+```json
+{
+  "name": "duckduckgo-search",
+  "displayName": "DuckDuckGo Search",
+  "npmPackage": "@nickclyde/duckduckgo-mcp-server",
+  "description": "Free web search via DuckDuckGo (no API key required)",
+  "requiredEnvVars": [],
+  "optionalEnvVars": [],
+  "enabled": true
+}
+```
+
+`src/tools/mcpServers/brave-search/config.json` (Premium Search)
 ```json
 {
   "name": "brave-search",
   "displayName": "Brave Search",
   "npmPackage": "brave-search-mcp",
-  "description": "Web search functionality via Brave Search API",
+  "description": "Premium web search with video/image search via Brave Search API",
   "requiredEnvVars": ["BRAVE_API_KEY"],
   "optionalEnvVars": [],
   "enabled": true
@@ -88,7 +107,7 @@ CREATE TABLE mcp_api_keys (
 
 **Example Implementation**:
 ```typescript
-// src/providers/google/GoogleProvider.ts
+// src/providers/google/googleProvider.ts
 import { mcpToTool } from '@google/genai';
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -116,10 +135,11 @@ private async getMCPClients(tomoriState: TomoriState): Promise<Client[]> {
         const client = new Client({ name: "tomoribot", version: "1.0.0" });
         const env = { ...process.env };
         
-        // Add API key if required
+        // Add API keys if required
         if (config.requiredEnvVars.includes('BRAVE_API_KEY') && apiKeys['brave-search']) {
             env.BRAVE_API_KEY = apiKeys['brave-search'];
         }
+        // DuckDuckGo requires no API key - always available
         
         const transport = new StdioClientTransport({
             command: "npx",
@@ -147,25 +167,34 @@ private async getMCPClients(tomoriState: TomoriState): Promise<Client[]> {
 **Phase 1: Database & Configuration (30 minutes)**
 - [ ] Add `mcp_api_keys` table to `src/db/schema.sql`
 - [ ] Add `mcpApiKeySchema` to `src/types/db/schema.ts`  
-- [ ] Create `src/tools/mcpServers/brave-search/config.json`
-- [ ] Create `src/tools/mcpServers/fetch/config.json`
+- [ ] Create `src/tools/mcpServers/duckduckgo-search/config.json` (free search)
+- [ ] Create `src/tools/mcpServers/brave-search/config.json` (premium search)
+- [ ] Create `src/tools/mcpServers/fetch/config.json` (URL fetching)
 
-**Phase 2: SDK Integration (1 hour)**
+**Phase 2: SDK Integration & Cleanup (1 hour)**
 - [ ] Install `@modelcontextprotocol/sdk` package
 - [ ] Add MCP config loader utility
 - [ ] Add MCP API key database helpers (encrypt/decrypt) in existing `@src\utils\security\crypto.ts` file                  
 - [ ] Integrate `mcpToTool(client)` into GoogleProvider
 - [ ] Add MCP client spawning with environment variable injection
+- [ ] **Remove legacy search system**: Delete `src/providers/google/subAgents.ts`
+- [ ] **Remove legacy search system**: Delete `src/tools/functionCalls/searchTool.ts`
+- [ ] Update `src/tools/functionCalls/index.ts` to remove SearchTool export
 
 **Phase 3: Testing (30 minutes)**
-- [ ] Test `fetch` MCP server (no API key needed)
-- [ ] Test `brave-search` MCP server with encrypted API key
-- [ ] Verify tools appear automatically in Gemini function calls
+- [ ] Test `duckduckgo-search` MCP server (free search, no API key)
+- [ ] Test `fetch` MCP server (URL fetching, no API key needed)
+- [ ] Test `brave-search` MCP server with encrypted API key (premium search)
+- [ ] Verify all MCP tools appear automatically in Gemini function calls
+- [ ] Confirm search works across different LLM providers (future-proof)
 
 ### 📊 Success Metrics (SDK Handles Most Complexity)
 
 - **MCP tools appear automatically** in Gemini's available functions (via `mcpToTool()`)
 - **Automatic tool execution** - SDK handles the entire request/response loop
+- **Dual search options**: DuckDuckGo (free) + Brave (premium) both work seamlessly
+- **Provider agnostic search** - No more Google-only sub-agent limitation
+- **Reduced API consumption** - No extra LLM calls for search functionality
 - **Encrypted API key integration** works seamlessly from database
 - **No breaking changes** to existing functionality
 - **Performance**: <2 second startup per MCP server, <100ms per tool call
@@ -236,16 +265,23 @@ npm install @modelcontextprotocol/sdk
 
 ### Implementation Steps (2 Hours Total)
 1. **Database setup** (15 min) - Add `mcp_api_keys` table and TypeScript schema
-2. **Config files** (15 min) - Create JSON configs for fetch and brave-search servers
+2. **Config files** (15 min) - Create JSON configs for DuckDuckGo, Brave, and fetch servers
 3. **SDK integration** (45 min) - Add `mcpToTool()` to GoogleProvider with config loading
-4. **API key handling** (30 min) - Implement encrypted MCP key storage/retrieval 
-5. **Testing** (15 min) - Verify fetch server works, test brave-search with API key
+4. **Legacy cleanup** (15 min) - Remove old Google search sub-agent and SearchTool
+5. **API key handling** (15 min) - Implement encrypted MCP key storage/retrieval 
+6. **Testing** (15 min) - Verify DuckDuckGo (free), fetch, and Brave (premium) all work
 
-### Key Insight
-Instead of building custom MCP protocol handling (weeks of work), leverage the official SDK:
+### Key Insights
+1. **SDK Integration**: Instead of building custom MCP protocol handling (weeks of work), leverage the official SDK:
 ```typescript
 tools: [mcpToTool(client)]  // SDK handles everything automatically!
 ```
+
+2. **Improved Search Strategy**: Replace Google sub-agent with MCP servers for better UX:
+   - **Free tier**: DuckDuckGo MCP (no API key needed)
+   - **Premium tier**: Brave Search MCP (API key for video/image search)
+   - **Provider agnostic**: Works with Google, OpenAI, Anthropic equally
+   - **Lower costs**: No extra LLM sub-agent calls
 
 ---
 
