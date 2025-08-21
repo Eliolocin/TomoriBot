@@ -14,15 +14,7 @@
  * - Typing simulation and humanization
  */
 
-import type {
-	BaseGuildTextChannel,
-	Client,
-	CommandInteraction,
-	Message,
-	MessageFlags,
-} from "discord.js";
-import type { ToolContext } from "../tools/toolInterface";
-import { ToolRegistry } from "../tools/toolRegistry";
+import { MessageFlags } from "discord.js";
 import { HumanizerDegree } from "../types/db/schema";
 import { sendStandardEmbed } from "../utils/discord/embedHelper";
 import { ColorCode, log } from "../utils/misc/logger";
@@ -32,10 +24,7 @@ import {
 	humanizeString,
 } from "../utils/text/stringHelper";
 
-import type {
-	FunctionCall,
-	StreamResult,
-} from "../providers/providerInterface";
+import type { StreamResult } from "../providers/providerInterface";
 import type {
 	StreamOrchestrator as IStreamOrchestrator,
 	ProcessedChunk,
@@ -47,10 +36,8 @@ import {
 	type ChunkProcessingResult,
 	DISCORD_STREAMING_CONSTANTS,
 	SENTENCE_BOUNDARY_REGEX,
-	StreamErrorType,
 	type StreamMetrics,
 	type StreamState,
-	StreamStatus,
 	type TextProcessingConfig,
 	type TypingSimulationConfig,
 	createDefaultStreamMetrics,
@@ -194,7 +181,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	 */
 	private async handleProcessedChunk(
 		chunk: ProcessedChunk,
-		provider: StreamProvider,
+		_provider: StreamProvider,
 		config: StreamConfig,
 		context: StreamContext,
 		textConfig: TextProcessingConfig,

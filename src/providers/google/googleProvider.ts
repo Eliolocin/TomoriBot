@@ -7,11 +7,9 @@
  */
 
 import {
-	type FunctionCall as GoogleFunctionCall,
 	GoogleGenAI,
 	type HarmBlockThreshold,
 	type HarmCategory,
-	type Part,
 } from "@google/genai";
 import type {
 	BaseGuildTextChannel,
@@ -143,7 +141,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 
 			// Create minimal state for tool filtering during provider config creation
 			const toolStateForContext: ToolStateForContext = {
-				server_id: tomoriState.server_disc_id,
+				server_id: tomoriState.server_id.toString(),
 				config: {
 					sticker_usage_enabled: tomoriState.config.sticker_usage_enabled,
 					google_search_enabled: tomoriState.config.google_search_enabled,
