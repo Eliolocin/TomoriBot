@@ -1,33 +1,46 @@
 /**
  * Google Gemini provider implementation
  * Implements the LLMProvider interface for Google's Gemini AI models
+ *
+ * Now uses the modular streaming architecture with StreamOrchestrator
+ * and GoogleStreamAdapter for better code organization and maintainability.
  */
 
 import {
-	GoogleGenAI,
 	type FunctionCall as GoogleFunctionCall,
-	type Part,
-	type HarmCategory,
+	GoogleGenAI,
 	type HarmBlockThreshold,
+	type HarmCategory,
+	type Part,
 } from "@google/genai";
-import {
-	type LLMProvider,
-	type ProviderInfo,
-	type ProviderConfig,
-	type StreamResult,
-	type FunctionCall,
-	BaseLLMProvider,
-} from "../providerInterface";
 import type {
 	BaseGuildTextChannel,
 	Client,
 	CommandInteraction,
 	Message,
 } from "discord.js";
-import { log } from "../../utils/misc/logger";
+import { StreamOrchestrator } from "../../streaming/StreamOrchestrator";
+import {
+	GoogleStreamAdapter,
+	type GoogleStreamConfig,
+} from "../../streaming/adapters/GoogleStreamAdapter";
+import type { StreamContext } from "../../streaming/interfaces";
+import { DISCORD_STREAMING_CONSTANTS } from "../../streaming/types";
+import {
+	type ToolStateForContext,
+	getAvailableToolsForContext,
+} from "../../tools/toolRegistry";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
-import { getAvailableTools, type ToolContext } from "../../tools/toolRegistry";
+import { log } from "../../utils/misc/logger";
+import {
+	BaseLLMProvider,
+	type FunctionCall,
+	type LLMProvider,
+	type ProviderConfig,
+	type ProviderInfo,
+	type StreamResult,
+} from "../providerInterface";
 import { getGoogleToolAdapter } from "./googleToolAdapter";
 
 // Default values for Gemini API
@@ -127,17 +140,22 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 	getTools(tomoriState: TomoriState): Array<Record<string, unknown>> {
 		try {
 			const modelNameLower = tomoriState.llm.llm_codename.toLowerCase();
-			
-			// Create tool context for filtering (we need a minimal context for tool discovery)
-			// Note: Some properties will be undefined at this stage, but that's okay for tool filtering
-			const toolContext: Partial<ToolContext> = {
-				tomoriState,
-				locale: "en-US", // Default locale for tool discovery
-				provider: "google",
+
+			// Create minimal state for tool filtering during provider config creation
+			const toolStateForContext: ToolStateForContext = {
+				server_id: tomoriState.server_disc_id,
+				config: {
+					sticker_usage_enabled: tomoriState.config.sticker_usage_enabled,
+					google_search_enabled: tomoriState.config.google_search_enabled,
+					self_teaching_enabled: tomoriState.config.self_teaching_enabled,
+				},
 			};
 
-			// Get available tools from the registry
-			const availableTools = getAvailableTools("google", toolContext as ToolContext);
+			// Get available tools from the registry with proper context
+			const availableTools = getAvailableToolsForContext(
+				"google",
+				toolStateForContext,
+			);
 
 			if (availableTools.length === 0) {
 				log.info(`No tools available for model: ${modelNameLower}`);
@@ -149,16 +167,18 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 			const toolsConfig = googleAdapter.convertToolsArray(availableTools);
 
 			// Log enabled tools
-			const enabledToolNames = availableTools.map(tool => tool.name);
+			const enabledToolNames = availableTools.map((tool) => tool.name);
 			log.info(
-				`Enabled ${availableTools.length} tools for model: ${modelNameLower} (${enabledToolNames.join(", ")})`
+				`Enabled ${availableTools.length} tools for model: ${modelNameLower} (${enabledToolNames.join(", ")})`,
 			);
 
 			return toolsConfig;
-
 		} catch (error) {
-			log.error(`Failed to get tools for Google provider: ${tomoriState.llm.llm_codename}`, error as Error);
-			
+			log.error(
+				`Failed to get tools for Google provider: ${tomoriState.llm.llm_codename}`,
+				error as Error,
+			);
+
 			// Return empty tools on error to prevent breaking the provider
 			return [];
 		}
@@ -215,8 +235,8 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 
 	/**
 	 * Stream LLM response directly to a Discord channel
-	 * This is a wrapper around the existing streamGeminiToDiscord function
-	 * to maintain compatibility while implementing the provider interface
+	 * Now uses the modular streaming architecture with StreamOrchestrator and GoogleStreamAdapter
+	 * This maintains the exact same interface for full backward compatibility
 	 */
 	async streamToDiscord(
 		channel: BaseGuildTextChannel,
@@ -233,63 +253,78 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 		initialInteraction?: CommandInteraction,
 		replyToMessage?: Message,
 	): Promise<StreamResult> {
-		// Convert the generic config to Google-specific config
-		const googleConfig = config as GoogleProviderConfig;
-
-		// Convert function interaction history to Google format if provided
-		let googleFunctionHistory:
-			| Array<{
-					functionCall: GoogleFunctionCall;
-					functionResponse: Part;
-			  }>
-			| undefined;
-
-		if (functionInteractionHistory) {
-			googleFunctionHistory = functionInteractionHistory.map((item) => ({
-				functionCall: item.functionCall as GoogleFunctionCall,
-				functionResponse: item.functionResponse as Part,
-			}));
-		}
-
-		// Convert currentTurnModelParts to Google Parts format
-		const googleModelParts: Part[] = currentTurnModelParts.map(
-			(part) => part as Part,
+		log.info(
+			`GoogleProvider: Starting modular streaming for server ${tomoriState.server_id}, model ${config.model}`,
 		);
 
-		// Import the existing streamGeminiToDiscord function
-		const { streamGeminiToDiscord } = require("./gemini");
-
 		try {
-			// Call the existing streaming function with Google-specific types
-			const result = await streamGeminiToDiscord(
+			// Convert the generic config to Google-specific streaming config
+			const googleConfig = config as GoogleProviderConfig;
+			const streamConfig: GoogleStreamConfig = {
+				...googleConfig,
+				// Add Discord streaming constants
+				maxMessageLength: DISCORD_STREAMING_CONSTANTS.MAX_SINGLE_MESSAGE_LENGTH,
+				flushBufferSize: DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR,
+				flushBufferSizeCodeBlock:
+					DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
+				inactivityTimeoutMs: DISCORD_STREAMING_CONSTANTS.INACTIVITY_TIMEOUT_MS,
+				baseTypeSpeedMsPerChar:
+					DISCORD_STREAMING_CONSTANTS.BASE_TYPE_SPEED_MS_PER_CHAR,
+				maxTypingTimeMs: DISCORD_STREAMING_CONSTANTS.MAX_TYPING_TIME_MS,
+				minVisibleTypingDurationMs:
+					DISCORD_STREAMING_CONSTANTS.MIN_VISIBLE_TYPING_DURATION_MS,
+				humanizerDegree: tomoriState.config.humanizer_degree,
+				emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
+				// Convert safety settings to Google format
+				safetySettings: googleConfig.safetySettings.map((setting) => ({
+					category: setting.category as HarmCategory,
+					threshold: setting.threshold as HarmBlockThreshold,
+				})),
+			};
+
+			// Create streaming context
+			const streamContext: StreamContext = {
+				// Discord context
 				channel,
 				client,
-				tomoriState,
-				{
-					model: googleConfig.model,
-					apiKey: googleConfig.apiKey,
-					generationConfig: googleConfig.generationConfig,
-					safetySettings: googleConfig.safetySettings.map((setting) => ({
-						category: setting.category as HarmCategory,
-						threshold: setting.threshold as HarmBlockThreshold,
-					})),
-					tools: googleConfig.tools,
-				},
-				contextItems,
-				googleModelParts,
-				emojiStrings,
-				googleFunctionHistory,
 				initialInteraction,
 				replyToMessage,
+
+				// Application context
+				tomoriState,
+				contextItems,
+				currentTurnModelParts,
+				emojiStrings,
+				functionInteractionHistory,
+
+				// Provider context
+				provider: "google",
+				locale: channel.guild.preferredLocale,
+			};
+
+			// Create the modular streaming components
+			const orchestrator = new StreamOrchestrator();
+			const googleAdapter = new GoogleStreamAdapter();
+
+			// Execute streaming with the modular architecture
+			log.info(
+				"GoogleProvider: Delegating to StreamOrchestrator with GoogleStreamAdapter",
+			);
+			const result = await orchestrator.streamToDiscord(
+				googleAdapter,
+				streamConfig,
+				streamContext,
 			);
 
-			// Convert the result to the provider-agnostic format
-			return {
-				status: result.status,
-				data: result.data,
-			};
+			log.info(
+				`GoogleProvider: Modular streaming completed with status: ${result.status}`,
+			);
+			return result;
 		} catch (error) {
-			log.error(`GoogleProvider streamToDiscord error for server ${tomoriState.server_id}, model ${googleConfig.model}, channel ${channel.id}`, error as Error);
+			log.error(
+				`GoogleProvider modular streaming error for server ${tomoriState.server_id}, model ${config.model}, channel ${channel.id}`,
+				error as Error,
+			);
 
 			return {
 				status: "error",
