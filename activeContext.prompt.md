@@ -37,12 +37,14 @@ This **Active Context** document tracks the immediate focus and next steps for T
 ### Overview
 Implement **Model Context Protocol (MCP)** server integration to demonstrate the power of our modular tool architecture. MCP servers provide standardized access to external data sources and functionality.
 
-### 🏗️ Proposed Architecture
+### 🏗️ Simplified Architecture (Leveraging Official SDK)
+
+**Key Insight**: Gemini SDK has **built-in MCP support** with `mcpToTool(client)` - no custom implementation needed!
 
 **Configuration Strategy:**
 - **Static config**: Non-sensitive settings in `src/tools/mcpServers/{server-name}/config.json`
 - **Encrypted API keys**: Stored in new `mcp_api_keys` database table per guild
-- **Smart server management**: Lazy loading with per-guild instances
+- **SDK Integration**: Let `@modelcontextprotocol/sdk` handle all tool conversion and execution
 
 **Database Design:**
 ```sql
@@ -56,68 +58,132 @@ CREATE TABLE mcp_api_keys (
 );
 ```
 
-### 🚧 Phase 1: Database & Configuration Infrastructure
+**Example Configs**:
+
+`src/tools/mcpServers/brave-search/config.json`
+```json
+{
+  "name": "brave-search",
+  "displayName": "Brave Search",
+  "npmPackage": "brave-search-mcp",
+  "description": "Web search functionality via Brave Search API",
+  "requiredEnvVars": ["BRAVE_API_KEY"],
+  "optionalEnvVars": [],
+  "enabled": true
+}
+```
+
+`src/tools/mcpServers/fetch/config.json`
+```json
+{
+  "name": "fetch",
+  "displayName": "URL Fetcher",
+  "npmPackage": "@modelcontextprotocol/server-fetch",
+  "description": "Fetch and analyze web content from URLs",
+  "requiredEnvVars": [],
+  "optionalEnvVars": [],
+  "enabled": true
+}
+```
+
+**Example Implementation**:
+```typescript
+// src/providers/google/GoogleProvider.ts
+import { mcpToTool } from '@google/genai';
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+async getTools(tomoriState: TomoriState): Promise<any[]> {
+    const tools = [...this.getBuiltInTools()];
+    
+    // Add MCP tools if configured
+    const mcpClients = await this.getMCPClients(tomoriState);
+    for (const client of mcpClients) {
+        tools.push(mcpToTool(client)); // SDK magic - handles everything!
+    }
+    
+    return tools;
+}
+
+private async getMCPClients(tomoriState: TomoriState): Promise<Client[]> {
+    const clients = [];
+    const mcpConfigs = await this.loadMCPConfigs(); // Load from JSON files
+    const apiKeys = await this.getDecryptedMCPKeys(tomoriState.server_id);
+    
+    for (const config of mcpConfigs) {
+        if (!config.enabled) continue;
+        
+        const client = new Client({ name: "tomoribot", version: "1.0.0" });
+        const env = { ...process.env };
+        
+        // Add API key if required
+        if (config.requiredEnvVars.includes('BRAVE_API_KEY') && apiKeys['brave-search']) {
+            env.BRAVE_API_KEY = apiKeys['brave-search'];
+        }
+        
+        const transport = new StdioClientTransport({
+            command: "npx",
+            args: ["-y", config.npmPackage],
+            env
+        });
+        
+        await client.connect(transport);
+        clients.push(client);
+    }
+    
+    return clients;
+}
+```
+
+### 🚧 Simplified Implementation (2 Hours Total)
 
 #### ✅ Prerequisites (Already Complete)
-- [x] Modular tool system with ToolRegistry
-- [x] Provider-agnostic tool execution  
-- [x] Tool interface supporting external integrations
 - [x] Encrypted API key storage system (reuse existing crypto utils)
+- [x] Database infrastructure and connection handling
+- [x] Provider system ready for tool integration
 
 #### 📋 Implementation Tasks
 
-**Step 1: Database Schema**
+**Phase 1: Database & Configuration (30 minutes)**
 - [ ] Add `mcp_api_keys` table to `src/db/schema.sql`
-- [ ] Add `mcpApiKeySchema` to `src/types/db/schema.ts`
-- [ ] Create database helper functions (encrypt/decrypt MCP keys)
+- [ ] Add `mcpApiKeySchema` to `src/types/db/schema.ts`  
+- [ ] Create `src/tools/mcpServers/brave-search/config.json`
+- [ ] Create `src/tools/mcpServers/fetch/config.json`
 
-**Step 2: Static Configuration System**
-- [ ] Create `src/tools/mcpServers/fetch/config.json` - URL fetcher config
-- [ ] Create `src/tools/mcpServers/brave-search/config.json` - Brave search config
-- [ ] Create config loader utility to scan MCP server folders
+**Phase 2: SDK Integration (1 hour)**
+- [ ] Install `@modelcontextprotocol/sdk` package
+- [ ] Add MCP config loader utility
+- [ ] Add MCP API key database helpers (encrypt/decrypt) in existing `@src\utils\security\crypto.ts` file                  
+- [ ] Integrate `mcpToTool(client)` into GoogleProvider
+- [ ] Add MCP client spawning with environment variable injection
 
-**Step 3: MCP Server Management** 
-- [ ] Create `src/tools/mcpServers/mcpServerManager.ts` - Process management
-- [ ] Create `src/tools/mcpServers/mcpClient.ts` - MCP protocol client
-- [ ] Implement lazy loading with per-guild server instances
+**Phase 3: Testing (30 minutes)**
+- [ ] Test `fetch` MCP server (no API key needed)
+- [ ] Test `brave-search` MCP server with encrypted API key
+- [ ] Verify tools appear automatically in Gemini function calls
 
-**Step 4: Tool Integration**
-- [ ] Create `src/tools/mcpServers/mcpTool.ts` - MCP tool wrapper extending BaseTool
-- [ ] Implement automatic tool discovery from spawned MCP servers
-- [ ] Update ToolRegistry to handle MCP tool lifecycle
+### 📊 Success Metrics (SDK Handles Most Complexity)
 
-### 🎯 Phase 2: Initial MCP Server Implementations
-
-#### Target Servers for Testing
-1. **fetch** - URL content extraction and summarization (https://github.com/modelcontextprotocol/servers/tree/main/src/fetch)
-2. **brave-search-mcp** - Web search functionality via Brave Search API (https://github.com/mikechao/brave-search-mcp)
-
-#### Implementation Goals
-- [ ] Configure and connect to `fetch` MCP server
-- [ ] Configure and connect to `brave-search-mcp` MCP server  
-- [ ] Test tool discovery and registration
-- [ ] Verify provider-agnostic execution (Google, future OpenAI/Anthropic)
-
-### 📊 Success Metrics
-- MCP tools appear in available tools list
-- LLM can discover and call MCP tools
-- MCP tool execution works identically across providers
-- No breaking changes to existing functionality
-- **Performance**: <100ms additional latency for MCP tool calls
-- **Resource usage**: <50MB memory per active MCP server
+- **MCP tools appear automatically** in Gemini's available functions (via `mcpToTool()`)
+- **Automatic tool execution** - SDK handles the entire request/response loop
+- **Encrypted API key integration** works seamlessly from database
+- **No breaking changes** to existing functionality
+- **Performance**: <2 second startup per MCP server, <100ms per tool call
+- **Resource usage**: ~30MB memory per active MCP server process
 
 ### ⚡ Performance Considerations
 
-**MCP servers are actual processes** (not just ports):
-- Each spawn = separate Node.js process (~20-50MB memory)
-- Startup time: 1-3 seconds per server
-- Communication via stdin/stdout or WebSocket
+**Simplified with SDK approach:**
+- **Process spawning**: 1-3 seconds per MCP server (unavoidable)
+- **Tool execution**: SDK handles efficiently via stdio communication
+- **Memory footprint**: ~30MB per server process (standard Node.js overhead)
+- **Lazy loading**: Only spawn servers when guild has API keys configured
 
-**Mitigation strategies built into design:**
-- **Lazy loading**: Only spawn when first needed by a guild
-- **Process pooling**: Reuse servers between guilds with same API key
-- **Resource limits**: Max 5 concurrent MCP servers per guild
-- **Auto-cleanup**: Kill unused servers after 30 minutes of inactivity
+**Benefits of SDK integration:**
+- **No custom protocol handling** - SDK manages all MCP communication
+- **Automatic tool discovery** - No manual registration needed
+- **Built-in error handling** - SDK handles connection failures gracefully
+- **Future-proof** - Works with OpenAI MCP integration too
 
 ## 🛣️ Future Development Roadmap
 
@@ -163,11 +229,23 @@ CREATE TABLE mcp_api_keys (
 
 ## 🎯 Immediate Next Steps for Development
 
-1. **Read MCP documentation** to understand protocol specification
-2. **Design MCP client architecture** following TomoriBot's modular patterns
-3. **Implement linkFetching server integration** as proof of concept
-4. **Test end-to-end MCP tool execution** through existing provider system
-5. **Document MCP integration patterns** for future server additions
+### Package Dependencies
+```bash
+npm install @modelcontextprotocol/sdk
+```
+
+### Implementation Steps (2 Hours Total)
+1. **Database setup** (15 min) - Add `mcp_api_keys` table and TypeScript schema
+2. **Config files** (15 min) - Create JSON configs for fetch and brave-search servers
+3. **SDK integration** (45 min) - Add `mcpToTool()` to GoogleProvider with config loading
+4. **API key handling** (30 min) - Implement encrypted MCP key storage/retrieval 
+5. **Testing** (15 min) - Verify fetch server works, test brave-search with API key
+
+### Key Insight
+Instead of building custom MCP protocol handling (weeks of work), leverage the official SDK:
+```typescript
+tools: [mcpToTool(client)]  // SDK handles everything automatically!
+```
 
 ---
 
