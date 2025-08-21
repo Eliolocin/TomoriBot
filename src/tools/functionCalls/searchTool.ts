@@ -4,14 +4,20 @@
  */
 
 import { log } from "../../utils/misc/logger";
-import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../toolInterface";
+import {
+	BaseTool,
+	type ToolContext,
+	type ToolResult,
+	type ToolParameterSchema,
+} from "../toolInterfaces";
 
 /**
  * Tool for querying Google search to find real-time information
  */
 export class SearchTool extends BaseTool {
 	name = "query_google_search";
-	description = "Queries the Google search engine with a given search term and returns a concise summary of the findings. Use this to find real-time information, facts, or details not present in your existing knowledge. You will be informed of the search result and will then generate the final text message for the user. Do NOT use on YouTube links or video content.";
+	description =
+		"Queries the Google search engine with a given search term and returns a concise summary of the findings. Use this to find real-time information, facts, or details not present in your existing knowledge. You will be informed of the search result and will then generate the final text message for the user. Do NOT use on YouTube links or video content.";
 	category = "search" as const;
 	requiresFeatureFlag = "google_search";
 
@@ -20,7 +26,8 @@ export class SearchTool extends BaseTool {
 		properties: {
 			search_query: {
 				type: "string",
-				description: "The specific search query string to use for the Google search. Be concise and clear.",
+				description:
+					"The specific search query string to use for the Google search. Be concise and clear.",
 			},
 		},
 		required: ["search_query"],
@@ -51,7 +58,10 @@ export class SearchTool extends BaseTool {
 	 * @param context - Tool execution context
 	 * @returns Promise resolving to tool result
 	 */
-	async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+	async execute(
+		args: Record<string, unknown>,
+		context: ToolContext,
+	): Promise<ToolResult> {
 		// Validate parameters
 		const validation = this.validateParameters(args);
 		if (!validation.isValid) {
@@ -82,13 +92,14 @@ export class SearchTool extends BaseTool {
 		// Check for inappropriate queries (YouTube, video content, etc.)
 		const prohibitedTerms = ["youtube", "video", "watch?v=", "youtu.be"];
 		const queryLower = searchQuery.toLowerCase();
-		
+
 		for (const term of prohibitedTerms) {
 			if (queryLower.includes(term)) {
 				return {
 					success: false,
 					error: "Video content searches are not supported",
-					message: "I cannot search for YouTube videos or video content. Please try a different search query.",
+					message:
+						"I cannot search for YouTube videos or video content. Please try a different search query.",
 				};
 			}
 		}
@@ -97,7 +108,9 @@ export class SearchTool extends BaseTool {
 			log.info(`Executing Google search: "${searchQuery}"`);
 
 			// Import the Google search sub-agent (correct function name from tomoriChat.ts:1024)
-			const { executeSearchSubAgent } = await import("../../providers/google/subAgents");
+			const { executeSearchSubAgent } = await import(
+				"../../providers/google/subAgents"
+			);
 
 			// Execute the search using the existing Google search implementation
 			// Parameters match tomoriChat.ts:1024-1031 call pattern
@@ -106,15 +119,16 @@ export class SearchTool extends BaseTool {
 				searchQuery,
 				conversationHistoryString,
 				context.tomoriState,
-				// Get decrypted API key (simplified for tool execution) 
-				context.tomoriState.config.api_key?.toString() || ""
+				// Get decrypted API key (simplified for tool execution)
+				context.tomoriState.config.api_key?.toString() || "",
 			);
 
 			if (!searchResult || typeof searchResult !== "object") {
 				return {
 					success: false,
 					error: "Search returned invalid result",
-					message: "The search query didn't return useful results. Please try a different search term.",
+					message:
+						"The search query didn't return useful results. Please try a different search term.",
 				};
 			}
 
@@ -127,7 +141,7 @@ export class SearchTool extends BaseTool {
 			} else if (searchResult && typeof searchResult === "object") {
 				// Handle structured search results
 				const result = searchResult as Record<string, unknown>;
-				
+
 				if (result.summary && typeof result.summary === "string") {
 					searchSummary = result.summary;
 				} else if (result.content && typeof result.content === "string") {
@@ -137,7 +151,7 @@ export class SearchTool extends BaseTool {
 				} else {
 					searchSummary = JSON.stringify(searchResult);
 				}
-				
+
 				searchData = result;
 			}
 
@@ -145,11 +159,14 @@ export class SearchTool extends BaseTool {
 				return {
 					success: false,
 					error: "Search returned empty results",
-					message: "The search didn't return any useful information. Please try a more specific search query.",
+					message:
+						"The search didn't return any useful information. Please try a more specific search query.",
 				};
 			}
 
-			log.success(`Google search completed successfully for: "${searchQuery}" (${searchSummary.length} chars)`);
+			log.success(
+				`Google search completed successfully for: "${searchQuery}" (${searchSummary.length} chars)`,
+			);
 
 			return {
 				success: true,
@@ -162,20 +179,25 @@ export class SearchTool extends BaseTool {
 					timestamp: new Date().toISOString(),
 				},
 			};
-
 		} catch (error) {
-			log.error(`Google search failed for query: "${searchQuery}"`, error as Error);
+			log.error(
+				`Google search failed for query: "${searchQuery}"`,
+				error as Error,
+			);
 
 			// Provide helpful error messages based on error type
 			let errorMessage = "Search failed due to an unknown error";
-			
+
 			if (error instanceof Error) {
 				if (error.message.includes("rate limit")) {
-					errorMessage = "Search temporarily unavailable due to rate limiting. Please try again later.";
+					errorMessage =
+						"Search temporarily unavailable due to rate limiting. Please try again later.";
 				} else if (error.message.includes("API")) {
-					errorMessage = "Search service is currently unavailable. Please try again later.";
+					errorMessage =
+						"Search service is currently unavailable. Please try again later.";
 				} else if (error.message.includes("network")) {
-					errorMessage = "Network error occurred during search. Please try again.";
+					errorMessage =
+						"Network error occurred during search. Please try again.";
 				} else {
 					errorMessage = error.message;
 				}
@@ -184,9 +206,9 @@ export class SearchTool extends BaseTool {
 			return {
 				success: false,
 				error: errorMessage,
-				message: "I couldn't complete the search request. Please try again with a different query or try again later.",
+				message:
+					"I couldn't complete the search request. Please try again with a different query or try again later.",
 			};
 		}
 	}
-
 }

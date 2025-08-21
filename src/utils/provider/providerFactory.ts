@@ -4,9 +4,9 @@
  * and provides a clean interface for getting the appropriate provider.
  */
 
-import { log } from "../utils/misc/logger";
-import type { LLMProvider, ProviderInfo } from "./providerInterface";
-import type { TomoriState } from "../types/db/schema";
+import { log } from "../misc/logger";
+import type { LLMProvider, ProviderInfo } from "../../types/tool/interfaces";
+import type { TomoriState } from "../../types/db/schema";
 
 // Import provider implementations
 // Note: We'll add these imports as we create the providers
@@ -51,7 +51,9 @@ export namespace ProviderFactory {
 		switch (providerType) {
 			case ProviderType.GOOGLE: {
 				// Import the Google provider
-				const { GoogleProvider } = require("./google/GoogleProvider");
+				const {
+					GoogleProvider,
+				} = require("../../providers/google/googleProvider");
 				provider = new GoogleProvider();
 				break;
 			}

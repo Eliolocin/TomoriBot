@@ -17,13 +17,13 @@ import type {
 	CommandInteraction,
 	Message,
 } from "discord.js";
-import { StreamOrchestrator } from "../../streaming/StreamOrchestrator";
+import { StreamOrchestrator } from "../../utils/text/streamOrchestrator";
 import {
 	GoogleStreamAdapter,
 	type GoogleStreamConfig,
-} from "../../streaming/adapters/GoogleStreamAdapter";
-import type { StreamContext } from "../../streaming/interfaces";
-import { DISCORD_STREAMING_CONSTANTS } from "../../streaming/types";
+} from "./googleStreamAdapter";
+import type { StreamContext } from "../../types/stream/interfaces";
+import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
 import {
 	type ToolStateForContext,
 	getAvailableToolsForContext,
@@ -38,7 +38,7 @@ import {
 	type ProviderConfig,
 	type ProviderInfo,
 	type StreamResult,
-} from "../providerInterface";
+} from "../../types/tool/interfaces";
 import { getGoogleToolAdapter } from "./googleToolAdapter";
 
 // Default values for Gemini API

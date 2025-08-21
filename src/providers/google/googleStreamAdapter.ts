@@ -22,8 +22,7 @@ import {
 	GoogleGenAI,
 	type Part,
 } from "@google/genai";
-import type { FunctionCall } from "../../providers/providerInterface";
-import type { GeminiConfig } from "../../types/api/gemini";
+import type { FunctionCall } from "../../types/tool/interfaces";
 import {
 	ContextItemTag,
 	type StructuredContextItem,
@@ -36,8 +35,7 @@ import type {
 	StreamConfig,
 	StreamContext,
 	StreamProvider,
-} from "../interfaces";
-import { StreamErrorType } from "../types";
+} from "../../types/stream/interfaces";
 
 /**
  * Google-specific stream configuration extending the base StreamConfig
@@ -346,8 +344,8 @@ export class GoogleStreamAdapter implements StreamProvider {
 	 */
 	private async assembleGoogleContext(
 		contextItems: StructuredContextItem[],
-		currentTurnModelParts: Array<Record<string, unknown>>,
-		functionInteractionHistory?: Array<{
+		_currentTurnModelParts: Array<Record<string, unknown>>,
+		_functionInteractionHistory?: Array<{
 			functionCall: FunctionCall;
 			functionResponse: Record<string, unknown>;
 		}>,
@@ -495,7 +493,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 		googleFunctionCall: GoogleFunctionCall,
 	): FunctionCall {
 		return {
-			name: googleFunctionCall.name,
+			name: googleFunctionCall.name ?? "",
 			args: googleFunctionCall.args || {},
 		};
 	}

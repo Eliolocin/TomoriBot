@@ -10,8 +10,8 @@ import type {
 	CommandInteraction,
 	Message,
 } from "discord.js";
-import type { TomoriState } from "../types/db/schema";
-import type { StructuredContextItem } from "../types/misc/context";
+import type { TomoriState } from "../db/schema";
+import type { StructuredContextItem } from "../misc/context";
 
 /**
  * Generic stream response result

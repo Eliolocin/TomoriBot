@@ -5,11 +5,7 @@
 
 import { Type } from "@google/genai";
 import { log } from "../../utils/misc/logger";
-import type { 
-	Tool, 
-	ToolAdapter, 
-	ToolResult
-} from "../../tools/toolInterface";
+import type { Tool, ToolAdapter, ToolResult } from "../../tools/toolInterfaces";
 
 /**
  * Google-specific function declaration format
@@ -19,12 +15,26 @@ interface GoogleFunctionDeclaration extends Record<string, unknown> {
 	description: string;
 	parameters: {
 		type: typeof Type.OBJECT;
-		properties: Record<string, {
-			type: typeof Type.STRING | typeof Type.NUMBER | typeof Type.BOOLEAN | typeof Type.ARRAY | typeof Type.OBJECT;
-			description: string;
-			enum?: string[];
-			items?: { type: typeof Type.STRING | typeof Type.NUMBER | typeof Type.BOOLEAN | typeof Type.OBJECT };
-		}>;
+		properties: Record<
+			string,
+			{
+				type:
+					| typeof Type.STRING
+					| typeof Type.NUMBER
+					| typeof Type.BOOLEAN
+					| typeof Type.ARRAY
+					| typeof Type.OBJECT;
+				description: string;
+				enum?: string[];
+				items?: {
+					type:
+						| typeof Type.STRING
+						| typeof Type.NUMBER
+						| typeof Type.BOOLEAN
+						| typeof Type.OBJECT;
+				};
+			}
+		>;
 		required: string[];
 	};
 }
@@ -61,16 +71,39 @@ export class GoogleToolAdapter implements ToolAdapter {
 	convertTool(tool: Tool): Record<string, unknown> {
 		try {
 			// Convert parameter schema to Google format
-			const googleProperties: Record<string, {
-				type: typeof Type.STRING | typeof Type.NUMBER | typeof Type.BOOLEAN | typeof Type.ARRAY | typeof Type.OBJECT;
-				description: string;
-				enum?: string[];
-				items?: { type: typeof Type.STRING | typeof Type.NUMBER | typeof Type.BOOLEAN | typeof Type.OBJECT };
-			}> = {};
+			const googleProperties: Record<
+				string,
+				{
+					type:
+						| typeof Type.STRING
+						| typeof Type.NUMBER
+						| typeof Type.BOOLEAN
+						| typeof Type.ARRAY
+						| typeof Type.OBJECT;
+					description: string;
+					enum?: string[];
+					items?: {
+						type:
+							| typeof Type.STRING
+							| typeof Type.NUMBER
+							| typeof Type.BOOLEAN
+							| typeof Type.OBJECT;
+					};
+				}
+			> = {};
 
-			for (const [paramName, paramSchema] of Object.entries(tool.parameters.properties)) {
+			for (const [paramName, paramSchema] of Object.entries(
+				tool.parameters.properties,
+			)) {
 				googleProperties[paramName] = {
-					type: this.convertParameterType(paramSchema.type as "string" | "number" | "boolean" | "array" | "object"),
+					type: this.convertParameterType(
+						paramSchema.type as
+							| "string"
+							| "number"
+							| "boolean"
+							| "array"
+							| "object",
+					),
 					description: paramSchema.description,
 				};
 
@@ -81,9 +114,19 @@ export class GoogleToolAdapter implements ToolAdapter {
 
 				// Add items for array type
 				if (paramSchema.type === "array" && paramSchema.items) {
-					const itemType = this.convertParameterType(paramSchema.items.type as "string" | "number" | "boolean" | "object");
+					const itemType = this.convertParameterType(
+						paramSchema.items.type as
+							| "string"
+							| "number"
+							| "boolean"
+							| "object",
+					);
 					googleProperties[paramName].items = {
-						type: itemType as typeof Type.STRING | typeof Type.NUMBER | typeof Type.BOOLEAN | typeof Type.OBJECT,
+						type: itemType as
+							| typeof Type.STRING
+							| typeof Type.NUMBER
+							| typeof Type.BOOLEAN
+							| typeof Type.OBJECT,
 					};
 				}
 			}
@@ -98,12 +141,16 @@ export class GoogleToolAdapter implements ToolAdapter {
 				},
 			};
 
-			log.info(`Converted tool '${tool.name}' (${tool.category}) to Google format with ${Object.keys(googleProperties).length} parameters`);
+			log.info(
+				`Converted tool '${tool.name}' (${tool.category}) to Google format with ${Object.keys(googleProperties).length} parameters`,
+			);
 
 			return googleFunction;
-
 		} catch (error) {
-			log.error(`Failed to convert tool '${tool.name}' (${tool.category}) to Google format`, error as Error);
+			log.error(
+				`Failed to convert tool '${tool.name}' (${tool.category}) to Google format`,
+				error as Error,
+			);
 			throw error;
 		}
 	}
@@ -120,16 +167,19 @@ export class GoogleToolAdapter implements ToolAdapter {
 			if (result.success) {
 				// Successful execution - provide meaningful result text
 				let resultText = result.message || "Tool executed successfully";
-				
+
 				if (result.data && typeof result.data === "object") {
 					const data = result.data as Record<string, unknown>;
-					
+
 					// Format the result based on the data structure
 					if (data.summary && typeof data.summary === "string") {
 						resultText = data.summary;
 					} else if (data.message && typeof data.message === "string") {
 						resultText = data.message;
-					} else if (data.selectionReason && typeof data.selectionReason === "string") {
+					} else if (
+						data.selectionReason &&
+						typeof data.selectionReason === "string"
+					) {
 						resultText = data.selectionReason;
 					} else {
 						// Include relevant data in the result text
@@ -144,16 +194,19 @@ export class GoogleToolAdapter implements ToolAdapter {
 					text: resultText,
 				};
 			}
-			
+
 			// Failed execution - provide error information
-			const errorText = result.message || result.error || "Tool execution failed";
-			
+			const errorText =
+				result.message || result.error || "Tool execution failed";
+
 			return {
 				text: `Error: ${errorText}`,
 			};
-
 		} catch (error) {
-			log.error(`Failed to convert tool result to Google format (success: ${result.success}, hasData: ${!!result.data})`, error as Error);
+			log.error(
+				`Failed to convert tool result to Google format (success: ${result.success}, hasData: ${!!result.data})`,
+				error as Error,
+			);
 
 			return {
 				text: "Error: Failed to process tool result",
@@ -173,15 +226,19 @@ export class GoogleToolAdapter implements ToolAdapter {
 
 		try {
 			// Convert each tool to Google function declaration
-			const functionDeclarations = tools.map(tool => this.convertTool(tool));
+			const functionDeclarations = tools.map((tool) => this.convertTool(tool));
 
 			// Google expects tools in this specific format
-			return [{
-				functionDeclarations: functionDeclarations,
-			}];
-
+			return [
+				{
+					functionDeclarations: functionDeclarations,
+				},
+			];
 		} catch (error) {
-			log.error(`Failed to convert tools array to Google format (${tools.length} tools: ${tools.map(t => t.name).join(", ")})`, error as Error);
+			log.error(
+				`Failed to convert tools array to Google format (${tools.length} tools: ${tools.map((t) => t.name).join(", ")})`,
+				error as Error,
+			);
 			return [];
 		}
 	}
@@ -194,8 +251,13 @@ export class GoogleToolAdapter implements ToolAdapter {
 	 * @returns Google Type enum value
 	 */
 	private convertParameterType(
-		genericType: "string" | "number" | "boolean" | "array" | "object"
-	): typeof Type.STRING | typeof Type.NUMBER | typeof Type.BOOLEAN | typeof Type.ARRAY | typeof Type.OBJECT {
+		genericType: "string" | "number" | "boolean" | "array" | "object",
+	):
+		| typeof Type.STRING
+		| typeof Type.NUMBER
+		| typeof Type.BOOLEAN
+		| typeof Type.ARRAY
+		| typeof Type.OBJECT {
 		switch (genericType) {
 			case "string":
 				return Type.STRING;
@@ -209,7 +271,9 @@ export class GoogleToolAdapter implements ToolAdapter {
 				return Type.OBJECT;
 			default:
 				// Default to string for unknown types
-				log.warn(`Unknown parameter type: ${genericType}, defaulting to STRING`);
+				log.warn(
+					`Unknown parameter type: ${genericType}, defaulting to STRING`,
+				);
 				return Type.STRING;
 		}
 	}
@@ -221,7 +285,13 @@ export class GoogleToolAdapter implements ToolAdapter {
 	 */
 	private extractRelevantData(data: Record<string, unknown>): string | null {
 		try {
-			const relevantFields = ["summary", "preview", "selectionReason", "query", "resultLength"];
+			const relevantFields = [
+				"summary",
+				"preview",
+				"selectionReason",
+				"query",
+				"resultLength",
+			];
 			const extractedData: Record<string, unknown> = {};
 
 			for (const field of relevantFields) {
@@ -240,9 +310,11 @@ export class GoogleToolAdapter implements ToolAdapter {
 				.join(", ");
 
 			return entries.length > 200 ? `${entries.substring(0, 200)}...` : entries;
-
 		} catch (error) {
-			log.warn("Failed to extract relevant data from tool result", error as Error);
+			log.warn(
+				"Failed to extract relevant data from tool result",
+				error as Error,
+			);
 			return null;
 		}
 	}
@@ -260,22 +332,33 @@ export class GoogleToolAdapter implements ToolAdapter {
 			}
 
 			// Check parameter schema structure
-			if (!tool.parameters.properties || !Array.isArray(tool.parameters.required)) {
+			if (
+				!tool.parameters.properties ||
+				!Array.isArray(tool.parameters.required)
+			) {
 				return false;
 			}
 
 			// Check parameter types are supported
 			for (const paramSchema of Object.values(tool.parameters.properties)) {
-				const supportedTypes = ["string", "number", "boolean", "array", "object"];
+				const supportedTypes = [
+					"string",
+					"number",
+					"boolean",
+					"array",
+					"object",
+				];
 				if (!supportedTypes.includes(paramSchema.type)) {
 					return false;
 				}
 			}
 
 			return true;
-
 		} catch (error) {
-			log.warn(`Tool compatibility validation failed for '${tool.name}'`, error as Error);
+			log.warn(
+				`Tool compatibility validation failed for '${tool.name}'`,
+				error as Error,
+			);
 			return false;
 		}
 	}

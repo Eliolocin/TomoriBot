@@ -15,23 +15,19 @@
  */
 
 import { MessageFlags } from "discord.js";
-import { HumanizerDegree } from "../types/db/schema";
-import { sendStandardEmbed } from "../utils/discord/embedHelper";
-import { ColorCode, log } from "../utils/misc/logger";
-import {
-	chunkMessage,
-	cleanLLMOutput,
-	humanizeString,
-} from "../utils/text/stringHelper";
+import { HumanizerDegree } from "../../types/db/schema";
+import { sendStandardEmbed } from "../discord/embedHelper";
+import { ColorCode, log } from "../misc/logger";
+import { chunkMessage, cleanLLMOutput, humanizeString } from "./stringHelper";
 
-import type { StreamResult } from "../providers/providerInterface";
+import type { StreamResult } from "../../types/tool/interfaces";
 import type {
 	StreamOrchestrator as IStreamOrchestrator,
 	ProcessedChunk,
 	StreamConfig,
 	StreamContext,
 	StreamProvider,
-} from "./interfaces";
+} from "../../types/stream/interfaces";
 import {
 	type ChunkProcessingResult,
 	DISCORD_STREAMING_CONSTANTS,
@@ -43,7 +39,7 @@ import {
 	createDefaultStreamMetrics,
 	createDefaultStreamState,
 	createTypingSimulationConfig,
-} from "./types";
+} from "../../types/stream/types";
 
 /**
  * Universal Discord streaming orchestrator implementation

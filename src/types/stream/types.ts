@@ -5,7 +5,7 @@
  * the StreamOrchestrator and all StreamProvider implementations.
  */
 
-import { HumanizerDegree } from "../types/db/schema";
+import { HumanizerDegree } from "../db/schema";
 
 /**
  * Discord streaming constants extracted from the original implementation

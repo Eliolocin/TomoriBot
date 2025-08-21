@@ -23,7 +23,7 @@ import {
 	replyInfoEmbed,
 	replySummaryEmbed,
 } from "../../utils/discord/interactionHelper";
-import { GoogleProvider } from "../../providers/google/GoogleProvider";
+import { GoogleProvider } from "../../providers/google/googleProvider";
 import { encryptApiKey } from "../../utils/security/crypto";
 import { setupServer } from "../../utils/db/dbWrite";
 import { loadTomoriState } from "@/utils/db/dbRead";

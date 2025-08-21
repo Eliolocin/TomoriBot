@@ -4,13 +4,13 @@
  */
 
 import { log } from "../utils/misc/logger";
-import type { 
-	Tool, 
-	ToolContext, 
-	ToolResult, 
+import type {
+	Tool,
+	ToolContext,
+	ToolResult,
 	ToolRegistryInterface,
-	ToolExecutionEvent 
-} from "./toolInterface";
+	ToolExecutionEvent,
+} from "./toolInterfaces";
 
 /**
  * Minimal state interface for context building operations
@@ -26,7 +26,7 @@ export interface ToolStateForContext {
 }
 
 // Re-export ToolContext for external use
-export type { ToolContext } from "./toolInterface";
+export type { ToolContext } from "./toolInterfaces";
 
 /**
  * Central registry for all tools
@@ -81,7 +81,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
 				// Check feature flag requirements
 				if (tool.requiresFeatureFlag) {
-					const isFeatureEnabled = this.checkFeatureFlag(tool.requiresFeatureFlag, context);
+					const isFeatureEnabled = this.checkFeatureFlag(
+						tool.requiresFeatureFlag,
+						context,
+					);
 					if (!isFeatureEnabled) {
 						continue;
 					}
@@ -89,7 +92,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
 				// Check permission requirements
 				if (tool.requiresPermissions && tool.requiresPermissions.length > 0) {
-					const hasPermissions = this.checkPermissions(tool.requiresPermissions, context);
+					const hasPermissions = this.checkPermissions(
+						tool.requiresPermissions,
+						context,
+					);
 					if (!hasPermissions) {
 						continue;
 					}
@@ -97,11 +103,15 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
 				availableTools.push(tool);
 			} catch (error) {
-				log.warn(`Error checking availability for tool ${tool.name}: ${(error as Error).message}`);
+				log.warn(
+					`Error checking availability for tool ${tool.name}: ${(error as Error).message}`,
+				);
 			}
 		}
 
-		log.info(`Found ${availableTools.length} available tools for provider: ${provider} (${availableTools.map(t => t.name).join(", ")})`);
+		log.info(
+			`Found ${availableTools.length} available tools for provider: ${provider} (${availableTools.map((t) => t.name).join(", ")})`,
+		);
 
 		return availableTools;
 	}
@@ -113,7 +123,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 	 * @param stateForContext - Minimal state with server_id and config for feature flag checking
 	 * @returns Array of tools available for this provider and configuration
 	 */
-	getAvailableToolsForContext(provider: string, stateForContext: ToolStateForContext): Tool[] {
+	getAvailableToolsForContext(
+		provider: string,
+		stateForContext: ToolStateForContext,
+	): Tool[] {
 		const availableTools: Tool[] = [];
 
 		for (const tool of this.tools.values()) {
@@ -125,7 +138,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
 				// Check feature flag requirements (only feature flags, no Discord permissions)
 				if (tool.requiresFeatureFlag) {
-					const isFeatureEnabled = this.checkFeatureFlagOnly(tool.requiresFeatureFlag, stateForContext);
+					const isFeatureEnabled = this.checkFeatureFlagOnly(
+						tool.requiresFeatureFlag,
+						stateForContext,
+					);
 					if (!isFeatureEnabled) {
 						continue;
 					}
@@ -136,11 +152,15 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
 				availableTools.push(tool);
 			} catch (error) {
-				log.warn(`Error checking availability for tool ${tool.name}: ${(error as Error).message}`);
+				log.warn(
+					`Error checking availability for tool ${tool.name}: ${(error as Error).message}`,
+				);
 			}
 		}
 
-		log.info(`Found ${availableTools.length} available tools for context building with provider: ${provider} (${availableTools.map(t => t.name).join(", ")})`);
+		log.info(
+			`Found ${availableTools.length} available tools for context building with provider: ${provider} (${availableTools.map((t) => t.name).join(", ")})`,
+		);
 
 		return availableTools;
 	}
@@ -163,7 +183,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 	async executeTool(
 		toolName: string,
 		args: Record<string, unknown>,
-		context: ToolContext
+		context: ToolContext,
 	): Promise<ToolResult> {
 		const startTime = Date.now();
 		const tool = this.getTool(toolName);
@@ -173,8 +193,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 				success: false,
 				error: `Tool '${toolName}' not found in registry`,
 			};
-			
-			log.error(`Tool execution failed - tool not found: ${toolName}. Available: ${Array.from(this.tools.keys()).join(", ")}`);
+
+			log.error(
+				`Tool execution failed - tool not found: ${toolName}. Available: ${Array.from(this.tools.keys()).join(", ")}`,
+			);
 
 			return errorResult;
 		}
@@ -186,13 +208,17 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 				error: `Tool '${toolName}' is not available for provider '${context.provider}'`,
 			};
 
-			log.error(`Tool execution failed - provider not supported: ${toolName} for provider ${context.provider}`);
+			log.error(
+				`Tool execution failed - provider not supported: ${toolName} for provider ${context.provider}`,
+			);
 
 			return errorResult;
 		}
 
 		try {
-			log.info(`Executing tool: ${toolName} (${tool.category}) for provider ${context.provider}`);
+			log.info(
+				`Executing tool: ${toolName} (${tool.category}) for provider ${context.provider}`,
+			);
 
 			// Execute the tool
 			const result = await tool.execute(args, context);
@@ -213,13 +239,16 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 			this.recordExecution(executionEvent);
 
 			if (result.success) {
-				log.success(`Tool executed successfully: ${toolName} (${executionTime}ms)`);
+				log.success(
+					`Tool executed successfully: ${toolName} (${executionTime}ms)`,
+				);
 			} else {
-				log.warn(`Tool execution completed with error: ${toolName} - ${result.error} (${executionTime}ms)`);
+				log.warn(
+					`Tool execution completed with error: ${toolName} - ${result.error} (${executionTime}ms)`,
+				);
 			}
 
 			return result;
-
 		} catch (error) {
 			const executionTime = Date.now() - startTime;
 			const errorResult: ToolResult = {
@@ -240,7 +269,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
 			this.recordExecution(executionEvent);
 
-			log.error(`Tool execution threw error: ${toolName} for provider ${context.provider} (${executionTime}ms)`, error as Error);
+			log.error(
+				`Tool execution threw error: ${toolName} for provider ${context.provider} (${executionTime}ms)`,
+				error as Error,
+			);
 
 			return errorResult;
 		}
@@ -252,9 +284,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 	 * @returns Array of recent tool execution events
 	 */
 	getExecutionHistory(limit = 100): ToolExecutionEvent[] {
-		return this.executionHistory
-			.slice(-limit)
-			.reverse(); // Most recent first
+		return this.executionHistory.slice(-limit).reverse(); // Most recent first
 	}
 
 	/**
@@ -277,13 +307,14 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 		totalExecutions: number;
 	} {
 		const toolsByCategory: Record<string, number> = {};
-		
+
 		for (const tool of this.tools.values()) {
-			toolsByCategory[tool.category] = (toolsByCategory[tool.category] || 0) + 1;
+			toolsByCategory[tool.category] =
+				(toolsByCategory[tool.category] || 0) + 1;
 		}
 
 		const recentExecutions = this.executionHistory.filter(
-			event => Date.now() - event.timestamp.getTime() < 24 * 60 * 60 * 1000 // Last 24 hours
+			(event) => Date.now() - event.timestamp.getTime() < 24 * 60 * 60 * 1000, // Last 24 hours
 		).length;
 
 		return {
@@ -314,7 +345,11 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 			throw new Error(`Tool '${tool.name}' must have a category`);
 		}
 
-		if (!tool.parameters || !tool.parameters.properties || !Array.isArray(tool.parameters.required)) {
+		if (
+			!tool.parameters ||
+			!tool.parameters.properties ||
+			!Array.isArray(tool.parameters.required)
+		) {
 			throw new Error(`Tool '${tool.name}' must have valid parameter schema`);
 		}
 
@@ -350,7 +385,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 	 * @param stateForContext - Minimal state with configuration
 	 * @returns True if feature is enabled
 	 */
-	private checkFeatureFlagOnly(featureFlag: string, stateForContext: ToolStateForContext): boolean {
+	private checkFeatureFlagOnly(
+		featureFlag: string,
+		stateForContext: ToolStateForContext,
+	): boolean {
 		// Map feature flags to Tomori configuration properties
 		const featureFlagMap: Record<string, boolean> = {
 			sticker_usage: stateForContext.config?.sticker_usage_enabled ?? false,
@@ -367,20 +405,29 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 	 * @param context - Tool context
 	 * @returns True if all permissions are available
 	 */
-	private checkPermissions(requiredPermissions: string[], context: ToolContext): boolean {
+	private checkPermissions(
+		requiredPermissions: string[],
+		context: ToolContext,
+	): boolean {
 		// For now, just check basic Discord permissions
 		// This could be expanded to check bot permissions, user roles, etc.
-		
+
 		if (requiredPermissions.includes("SEND_MESSAGES")) {
 			const clientUser = context.client.user;
-			if (!clientUser || !context.channel.permissionsFor(clientUser)?.has("SendMessages")) {
+			if (
+				!clientUser ||
+				!context.channel.permissionsFor(clientUser)?.has("SendMessages")
+			) {
 				return false;
 			}
 		}
 
 		if (requiredPermissions.includes("USE_EXTERNAL_STICKERS")) {
 			const clientUser = context.client.user;
-			if (!clientUser || !context.channel.permissionsFor(clientUser)?.has("UseExternalStickers")) {
+			if (
+				!clientUser ||
+				!context.channel.permissionsFor(clientUser)?.has("UseExternalStickers")
+			) {
 				return false;
 			}
 		}
@@ -397,7 +444,9 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 
 		// Keep history size manageable
 		if (this.executionHistory.length > this.maxHistorySize) {
-			this.executionHistory = this.executionHistory.slice(-this.maxHistorySize + 100);
+			this.executionHistory = this.executionHistory.slice(
+				-this.maxHistorySize + 100,
+			);
 		}
 	}
 }
@@ -414,18 +463,24 @@ export function getTool(name: string): Tool | undefined {
 	return ToolRegistry.getTool(name);
 }
 
-export function getAvailableTools(provider: string, context: ToolContext): Tool[] {
+export function getAvailableTools(
+	provider: string,
+	context: ToolContext,
+): Tool[] {
 	return ToolRegistry.getAvailableTools(provider, context);
 }
 
-export function getAvailableToolsForContext(provider: string, stateForContext: ToolStateForContext): Tool[] {
+export function getAvailableToolsForContext(
+	provider: string,
+	stateForContext: ToolStateForContext,
+): Tool[] {
 	return ToolRegistry.getAvailableToolsForContext(provider, stateForContext);
 }
 
 export async function executeTool(
 	toolName: string,
 	args: Record<string, unknown>,
-	context: ToolContext
+	context: ToolContext,
 ): Promise<ToolResult> {
 	return ToolRegistry.executeTool(toolName, args, context);
 }

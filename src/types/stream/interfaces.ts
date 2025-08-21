@@ -16,9 +16,9 @@ import type {
 	FunctionCall,
 	ProviderConfig,
 	StreamResult,
-} from "../providers/providerInterface";
-import type { TomoriState } from "../types/db/schema";
-import type { StructuredContextItem } from "../types/misc/context";
+} from "../provider/providerInterface";
+import type { TomoriState } from "../db/schema";
+import type { StructuredContextItem } from "../misc/context";
 
 /**
  * Normalized chunk format that all providers convert their raw chunks to

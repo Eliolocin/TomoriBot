@@ -8,7 +8,7 @@
 <h3 align="center">TomoriBot (WORK IN PROGRESS)</h3>
 
   <p align="center">
-    A customizable, AI Discord chatbot with memory and personality switching
+    A customizable, AI Discord assistant (or waifu) with memory, personality switching, and autonomous tool usage
     <br />
     <a href="https://github.com/Eliolocin/TomoriBot"><strong>Explore the docs »</strong></a>
     <br />
@@ -117,27 +117,25 @@ Before running TomoriBot, ensure you have the following installed:
 
 ### Configuration
 
-1. **Create environment file**
-   
-   Fill in the required variables on your `.env` file:
+**Create environment file** `.env` and then fill in the required variables, ensure that your PostgreSQL database is running:
    ```
-  # Discord Bot Configuration (Required)
-  DISCORD_TOKEN=your_discord_bot_token_here
+    # Discord Bot Configuration (Required)
+    DISCORD_TOKEN=your_discord_bot_token_here
 
-  # Security (Required)
-  CRYPTO_SECRET=your_32_character_crypto_secret_here
+    # Security (Required)
+    CRYPTO_SECRET=your_32_character_crypto_secret_here
 
-  # Database Configuration (Required)
-  POSTGRES_HOST=localhost
-  POSTGRES_PORT=5432
-  POSTGRES_USER=your_username
-  POSTGRES_PASSWORD=your_password
-  POSTGRES_DB=tomodb
+    # Database Configuration (Required)
+    POSTGRES_HOST=localhost
+    POSTGRES_PORT=5432
+    POSTGRES_USER=your_username
+    POSTGRES_PASSWORD=your_password
+    POSTGRES_DB=tomodb
 
-  # Bot Configuration (Optional)
-  DEFAULT_BOTNAME=Tomori
-  DEFAULT_BOTNAME_JP=ともり
-  BASE_TRIGGER_WORDS=tomori,tomo,トモリ,ともり
+    # Bot Configuration (Optional)
+    DEFAULT_BOTNAME=Tomori
+    DEFAULT_BOTNAME_JP=ともり
+    BASE_TRIGGER_WORDS=tomori,tomo,トモリ,ともり
    ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -171,8 +169,7 @@ docker-compose up -d
 ### Basic Commands
 
 - `/config setup` - Initial bot setup for your server
-- `/tool ping` - Check bot responsiveness
-- `/teach personalmemory` - Add personal memories for the AI
+- `/teach` - Add personal memories for TomoriBot
 - `/config preset` - Switch between different personality presets
 
 ### Chat Interaction
@@ -193,7 +190,6 @@ Simply mention the bot or use the configured trigger words to start a conversati
 - [x] Slash command structure
 - [ ] Voice channel integration
 - [ ] Image generation capabilities
-- [ ] Advanced personality training
 - [ ] Web dashboard for configuration
 
 See the [open issues](https://github.com/Eliolocin/TomoriBot/issues) for a full list of proposed features and known issues.
@@ -203,9 +199,9 @@ See the [open issues](https://github.com/Eliolocin/TomoriBot/issues) for a full 
 <!-- CONTRIBUTING -->
 ## Contributing
 
-Any contributions you make are **greatly appreciated**.
+Any contributions made  are **greatly appreciated**.
 
-If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "Enhancement".
+If you have a suggestion that would make TomoriBot better, please fork the repo and create a pull request. You can also simply open an issue with the tag "Enhancement".
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

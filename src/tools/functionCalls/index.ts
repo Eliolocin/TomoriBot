@@ -8,4 +8,4 @@ export { SearchTool } from "./searchTool";
 export { MemoryTool } from "./memoryTool";
 
 // Re-export common types for convenience
-export type { Tool, ToolContext, ToolResult } from "../toolInterface";
+export type { Tool, ToolContext, ToolResult } from "../toolInterfaces";

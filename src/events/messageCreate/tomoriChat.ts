@@ -6,19 +6,15 @@ import {
 	TextChannel,
 } from "discord.js"; // Import value for instanceof check
 // Provider imports moved to factory pattern
-import type {
-	StructuredContextItem,
-} from "../../types/misc/context";
+import type { StructuredContextItem } from "../../types/misc/context";
 // Provider-specific types moved to individual providers
-import type { FunctionCall } from "../../providers/providerInterface";
+import type { FunctionCall } from "../../types/tool/interfaces";
 import {
 	loadServerEmojis,
 	loadTomoriState,
 	loadUserRow,
 } from "../../utils/db/dbRead";
-import {
-	incrementTomoriCounter,
-} from "@/utils/db/dbWrite";
+import { incrementTomoriCounter } from "@/utils/db/dbWrite";
 import {
 	createStandardEmbed,
 	sendStandardEmbed,
@@ -29,11 +25,8 @@ import { decryptApiKey } from "@/utils/security/crypto";
 
 import type { TomoriState } from "@/types/db/schema";
 // Provider-specific function declarations moved to providers
-import { getProviderForTomori } from "../../providers/providerFactory";
-import type {
-	LLMProvider,
-	StreamResult,
-} from "../../providers/providerInterface";
+import { getProviderForTomori } from "../../utils/provider/providerFactory";
+import type { LLMProvider, StreamResult } from "../../types/tool/interfaces";
 import { ToolRegistry } from "../../tools/toolRegistry";
 
 // Constants
@@ -928,8 +921,10 @@ export default async function tomoriChat(
 						);
 
 						// 2. Execute function using modular tool system
-						log.info(`Executing tool: ${funcName} with args: ${JSON.stringify(funcCall.args)}`);
-						
+						log.info(
+							`Executing tool: ${funcName} with args: ${JSON.stringify(funcCall.args)}`,
+						);
+
 						// Build tool execution context
 						const toolContext = {
 							channel,
@@ -950,18 +945,28 @@ export default async function tomoriChat(
 
 						// Convert tool result to function execution result format
 						let functionExecutionResult: Record<string, unknown>;
-						
+
 						if (toolResult.success) {
-							functionExecutionResult = (toolResult.data as Record<string, unknown>) || { status: "completed" };
-							
+							functionExecutionResult = (toolResult.data as Record<
+								string,
+								unknown
+							>) || { status: "completed" };
+
 							// Handle sticker selection specifically (extract sticker for later sending)
-							if (funcName === "select_sticker_for_response" && toolResult.data) {
+							if (
+								funcName === "select_sticker_for_response" &&
+								toolResult.data
+							) {
 								const stickerData = toolResult.data as Record<string, unknown>;
 								if (stickerData.status === "sticker_selected_successfully") {
 									// Find the sticker in guild cache to send later
-									const discordSticker = guild?.stickers.cache.get(stickerData.sticker_id as string);
+									const discordSticker = guild?.stickers.cache.get(
+										stickerData.sticker_id as string,
+									);
 									selectedStickerToSend = discordSticker || null;
-									log.success(`Sticker '${stickerData.sticker_name}' selected for sending`);
+									log.success(
+										`Sticker '${stickerData.sticker_name}' selected for sending`,
+									);
 								} else {
 									selectedStickerToSend = null;
 								}
@@ -970,10 +975,14 @@ export default async function tomoriChat(
 							// Tool execution failed
 							functionExecutionResult = {
 								status: "tool_execution_failed",
-								reason: toolResult.error || "Tool execution failed without specific error",
+								reason:
+									toolResult.error ||
+									"Tool execution failed without specific error",
 								tool_name: funcName,
 							};
-							log.error(`Tool execution failed for ${funcName}: ${toolResult.error}`);
+							log.error(
+								`Tool execution failed for ${funcName}: ${toolResult.error}`,
+							);
 						}
 
 						// 3. Add the model's function call and our function's result to the history
