@@ -5,6 +5,12 @@
 
 import type { TomoriState } from "../db/schema";
 import type { BaseGuildTextChannel, Client, Message } from "discord.js";
+import type { 
+	MCPServerResponse, 
+	EnhancedMCPServerConfig, 
+	TypedMCPToolResult,
+	MCPExecutionContext 
+} from "./mcpTypes";
 
 /**
  * Tool parameter schema definition
@@ -22,6 +28,13 @@ export interface ToolParameterSchema {
 		}
 	>;
 	required: string[];
+}
+
+/**
+ * Streaming context for enhanced functionality during streaming
+ */
+export interface StreamingContext {
+	disableYouTubeProcessing: boolean; // Flag to temporarily disable YouTube function during enhanced context restart
 }
 
 /**
@@ -45,6 +58,7 @@ export interface ToolContext {
 	emojiStrings?: string[];
 	userId?: string;
 	guildId?: string;
+	streamContext?: StreamingContext; // Optional streaming context for enhanced functionality
 }
 
 /**
@@ -202,6 +216,165 @@ export interface ToolAdapter {
 	 * @returns Provider identifier
 	 */
 	getProviderName(): string;
+}
+
+/**
+ * Enhanced tool adapter interface that includes MCP capabilities
+ * Provides provider-agnostic access to both built-in and MCP tools
+ */
+export interface MCPCapableToolAdapter extends ToolAdapter {
+	/**
+	 * Get all available tools (built-in + MCP) in provider-specific format
+	 * @param builtInTools - Array of built-in tools
+	 * @returns Combined provider-specific tool configuration
+	 */
+	getAllToolsInProviderFormat(builtInTools: Tool[]): Promise<Array<Record<string, unknown>>>;
+
+	/**
+	 * Check if a function name belongs to an MCP tool
+	 * @param functionName - Name of the function to check
+	 * @returns Promise<boolean> - True if this is an MCP tool function
+	 */
+	isMCPFunction(functionName: string): Promise<boolean>;
+
+	/**
+	 * Execute an MCP tool function
+	 * @param functionName - Name of the MCP function to execute
+	 * @param args - Arguments for the function
+	 * @param context - Tool execution context for Discord operations
+	 * @returns Promise<TypedMCPToolResult> - Enhanced typed tool result
+	 */
+	executeMCPFunction(functionName: string, args: Record<string, unknown>, context?: ToolContext): Promise<TypedMCPToolResult>;
+}
+
+/**
+ * MCP tool execution context
+ * Additional context specific to MCP tool execution
+ */
+export interface MCPToolContext extends ToolContext {
+	// MCP-specific context
+	mcpServerName?: string;
+	mcpFunctionName: string;
+	
+	// Provider-specific MCP data
+	providerMcpData?: Record<string, unknown>;
+}
+
+/**
+ * MCP tool result with additional metadata
+ * Extends ToolResult with MCP-specific information
+ * @deprecated Use TypedMCPToolResult from mcpTypes.ts for better type safety
+ */
+export interface MCPToolResult extends ToolResult {
+	// MCP source information
+	source: "mcp";
+	functionName: string;
+	serverName?: string;
+	
+	// Raw MCP result for debugging/logging
+	rawResult?: MCPServerResponse;
+	
+	// Execution metadata
+	executionTime?: number;
+	providerFormat?: Record<string, unknown>;
+}
+
+/**
+ * MCP server configuration interface
+ * Provider-agnostic configuration for MCP servers
+ * @deprecated Use EnhancedMCPServerConfig from mcpTypes.ts for better type safety
+ */
+export interface MCPServerConfig {
+	name: string;
+	displayName: string;
+	command: string;
+	args: string[];
+	env?: Record<string, string>;
+	requiresApiKey?: boolean;
+	apiKeyEnvVar?: string;
+	timeout?: number;
+}
+
+/**
+ * MCP manager interface for provider-agnostic MCP management
+ * Defines the contract for managing MCP servers regardless of LLM provider
+ */
+export interface MCPManagerInterface {
+	/**
+	 * Initialize all available MCP servers during application startup
+	 * @returns Promise<void>
+	 */
+	initializeMCPServers(): Promise<void>;
+
+	/**
+	 * Check if MCP manager is ready (initialization completed)
+	 * @returns boolean
+	 */
+	isReady(): boolean;
+
+	/**
+	 * Get count of connected MCP servers
+	 * @returns number
+	 */
+	getConnectedServerCount(): number;
+
+	/**
+	 * Get connection status for all MCP servers
+	 * @returns Record<string, boolean>
+	 */
+	getConnectionStatus(): Record<string, boolean>;
+
+	/**
+	 * Get MCP tools available for a specific provider
+	 * @param provider - Provider name (google, openai, anthropic, etc.)
+	 * @returns Promise<unknown[]> - Provider-specific MCP tools
+	 */
+	getMCPToolsForProvider(provider: string): Promise<unknown[]>;
+
+	/**
+	 * Execute an MCP function with provider-agnostic result
+	 * @param functionName - Name of the function to execute
+	 * @param args - Function arguments
+	 * @param context - Optional execution context for Discord operations
+	 * @returns Promise<TypedMCPToolResult> - Enhanced typed result
+	 */
+	executeMCPFunction(
+		functionName: string, 
+		args: Record<string, unknown>,
+		context?: MCPExecutionContext
+	): Promise<TypedMCPToolResult>;
+
+	/**
+	 * Get available MCP function names across all connected servers
+	 * @returns Promise<string[]>
+	 */
+	getAvailableMCPFunctions(): Promise<string[]>;
+
+	/**
+	 * Get MCP server configurations
+	 * @returns Promise<EnhancedMCPServerConfig[]>
+	 */
+	getServerConfigurations(): Promise<EnhancedMCPServerConfig[]>;
+
+	/**
+	 * Check if a specific MCP function is available
+	 * @param functionName - Name of the function to check
+	 * @returns Promise<boolean>
+	 */
+	isFunctionAvailable(functionName: string): Promise<boolean>;
+
+	/**
+	 * Get the server name that provides a specific function
+	 * @param functionName - Name of the function
+	 * @returns Promise<string | null>
+	 */
+	getServerForFunction(functionName: string): Promise<string | null>;
+
+	/**
+	 * Cleanup all MCP connections (for graceful shutdown)
+	 * @returns Promise<void>
+	 */
+	cleanup(): Promise<void>;
 }
 
 /**

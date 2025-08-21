@@ -1,11 +1,14 @@
 /**
  * Function Call Tools Export
  * Centralizes all function call tool exports
+ * 
+ * MCP tools are now handled by Google's official mcpToTool() integration
+ * in GoogleProvider - no manual wrappers needed!
  */
 
 export { StickerTool } from "./stickerTool";
-export { SearchTool } from "./searchTool";
 export { MemoryTool } from "./memoryTool";
+export { YouTubeVideoTool } from "./youTubeVideoTool";
 
 // Re-export common types for convenience
 export type { Tool, ToolContext, ToolResult } from "../../types/tool/interfaces";

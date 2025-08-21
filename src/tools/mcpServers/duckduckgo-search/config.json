@@ -1,0 +1,12 @@
+{
+  "name": "duckduckgo-search",
+  "displayName": "DuckDuckGo Search", 
+  "npmPackage": "duckduckgo-mcp-server",
+  "description": "Free web search via DuckDuckGo (no API key required)",
+  "requiredEnvVars": [],
+  "optionalEnvVars": [],
+  "enabled": false,
+  "category": "search",
+  "priority": 1,
+  "transport": "stdio"
+}

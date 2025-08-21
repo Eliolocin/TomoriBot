@@ -27,7 +27,9 @@ import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
 import {
 	type ToolStateForContext,
 	getAvailableToolsForContext,
+	ToolRegistry,
 } from "../../tools/toolRegistry";
+import type { StreamingContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
@@ -129,17 +131,21 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 		}
 	}
 
+
+
 	/**
 	 * Get available tools/functions based on Tomori's configuration
-	 * Uses the modular tool system and Google tool adapter
+	 * Uses the enhanced tool adapter that handles both built-in and MCP tools
 	 * @param tomoriState - The current Tomori state with configuration
-	 * @returns Array of tool configurations specific to this provider
+	 * @param streamingContext - Optional streaming context for context-aware tool availability
+	 * @returns Promise<Array<Record<string, unknown>>> - Array of tool configurations
 	 */
-	getTools(tomoriState: TomoriState): Array<Record<string, unknown>> {
+	async getTools(
+		tomoriState: TomoriState,
+		streamingContext?: StreamingContext,
+	): Promise<Array<Record<string, unknown>>> {
 		try {
-			const modelNameLower = tomoriState.llm.llm_codename.toLowerCase();
-
-			// Create minimal state for tool filtering during provider config creation
+			// Get built-in tools from the registry
 			const toolStateForContext: ToolStateForContext = {
 				server_id: tomoriState.server_id.toString(),
 				config: {
@@ -149,35 +155,55 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 				},
 			};
 
-			// Get available tools from the registry with proper context
-			const availableTools = getAvailableToolsForContext(
-				"google",
-				toolStateForContext,
-			);
-
-			if (availableTools.length === 0) {
-				log.info(`No tools available for model: ${modelNameLower}`);
-				return [];
+			// Use context-aware tool availability when streaming context is provided
+			let availableBuiltInTools: Tool[];
+			if (streamingContext) {
+				// Create a minimal ToolContext for context-aware availability checking
+				const minimalContext = {
+					streamContext: streamingContext,
+					provider: "google" as const,
+					// Add minimal required fields to satisfy ToolContext interface - these are not used by YouTube tool's context check
+					channel: {} as BaseGuildTextChannel,
+					client: {} as Client,
+					tomoriState: tomoriState,
+					locale: "en-US", // Default locale
+				};
+				
+				// Get all tools and filter using context-aware availability
+				const allTools = ToolRegistry.getAllTools();
+				availableBuiltInTools = allTools.filter(tool => {
+					const isContextAvailable = 'isAvailableForContext' in tool && typeof tool.isAvailableForContext === 'function'
+						? tool.isAvailableForContext("google", minimalContext)
+						: tool.isAvailableFor("google");
+					
+					// Skip feature flag checking for now to simplify the logic
+					// The important part is the YouTube tool context-aware availability
+					return isContextAvailable;
+				});
+			} else {
+				// Use the standard method when no streaming context
+				availableBuiltInTools = getAvailableToolsForContext(
+					"google",
+					toolStateForContext,
+				);
 			}
 
-			// Convert tools to Google format using the adapter
+			// Use the enhanced tool adapter to get all tools (built-in + MCP)
 			const googleAdapter = getGoogleToolAdapter();
-			const toolsConfig = googleAdapter.convertToolsArray(availableTools);
-
-			// Log enabled tools
-			const enabledToolNames = availableTools.map((tool) => tool.name);
-			log.info(
-				`Enabled ${availableTools.length} tools for model: ${modelNameLower} (${enabledToolNames.join(", ")})`,
+			const allToolsConfig = await googleAdapter.getAllToolsInGoogleFormat(
+				availableBuiltInTools,
 			);
 
-			return toolsConfig;
+			log.info(
+				`Google provider tools loaded: ${availableBuiltInTools.length} built-in tools + MCP tools`,
+			);
+
+			return allToolsConfig;
 		} catch (error) {
 			log.error(
 				`Failed to get tools for Google provider: ${tomoriState.llm.llm_codename}`,
 				error as Error,
 			);
-
-			// Return empty tools on error to prevent breaking the provider
 			return [];
 		}
 	}
@@ -194,15 +220,20 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 	 * Convert provider-specific configuration from TomoriState
 	 * @param tomoriState - The current Tomori state
 	 * @param apiKey - The decrypted API key
-	 * @returns Provider-specific configuration object
+	 * @returns Promise<GoogleProviderConfig> - Provider-specific configuration object
 	 */
-	createConfig(tomoriState: TomoriState, apiKey: string): GoogleProviderConfig {
+	async createConfig(
+		tomoriState: TomoriState,
+		apiKey: string,
+	): Promise<GoogleProviderConfig> {
+		const tools = await this.getTools(tomoriState);
+
 		return {
 			model: tomoriState.llm.llm_codename,
 			apiKey: apiKey,
 			temperature: tomoriState.config.llm_temperature,
 			maxOutputTokens: 8192,
-			tools: this.getTools(tomoriState),
+			tools: tools,
 			safetySettings: [
 				{
 					category: "HARM_CATEGORY_HARASSMENT",
@@ -250,6 +281,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 		}>,
 		initialInteraction?: CommandInteraction,
 		replyToMessage?: Message,
+		streamingContext?: StreamingContext,
 	): Promise<StreamResult> {
 		log.info(
 			`GoogleProvider: Starting modular streaming for server ${tomoriState.server_id}, model ${config.model}`,
@@ -258,6 +290,21 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 		try {
 			// Convert the generic config to Google-specific streaming config
 			const googleConfig = config as GoogleProviderConfig;
+
+			// Ensure safetySettings exists, provide default if not
+			const safetySettings = googleConfig.safetySettings || [
+				{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+				{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+				{
+					category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+					threshold: "BLOCK_NONE",
+				},
+				{
+					category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+					threshold: "BLOCK_NONE",
+				},
+			];
+
 			const streamConfig: GoogleStreamConfig = {
 				...googleConfig,
 				// Add Discord streaming constants
@@ -274,11 +321,18 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 				humanizerDegree: tomoriState.config.humanizer_degree,
 				emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
 				// Convert safety settings to Google format
-				safetySettings: googleConfig.safetySettings.map((setting) => ({
+				safetySettings: safetySettings.map((setting) => ({
 					category: setting.category as HarmCategory,
 					threshold: setting.threshold as HarmBlockThreshold,
 				})),
 			};
+
+			// Override tools with context-aware tools when streaming context is provided
+			if (streamingContext) {
+				log.info("GoogleProvider: Reloading tools with streaming context for context-aware availability");
+				const contextAwareTools = await this.getTools(tomoriState, streamingContext);
+				streamConfig.tools = contextAwareTools;
+			}
 
 			// Create streaming context
 			const streamContext: StreamContext = {

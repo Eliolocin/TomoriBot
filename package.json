@@ -13,7 +13,8 @@
 		"purge-commands": "bun run scripts/purge-commands.ts",
 		"seed-db": "bun run scripts/seed-db.ts",
 		"nuke-db": "bun run scripts/nuke-db.ts",
-		"lint": "bunx @biomejs/biome lint"
+		"lint": "bunx @biomejs/biome lint",
+		"check": "bun tsc --noEmit"
 	},
 	"author": "Bredrumb",
 	"license": "ISC",
@@ -22,11 +23,12 @@
 		"@distube/ytpl": "^1.2.1",
 		"@distube/ytsr": "^2.0.4",
 		"@google-cloud/vertexai": "^1.10.0",
-		"@google/genai": "^0.12.0",
+		"@google/genai": "^1.15.0",
 		"@google/generative-ai": "^0.24.1",
 		"@haileybot/language-detector": "^1.1.1",
 		"@ibaraki-douji/novelai": "^0.0.1-alpha.7",
 		"@lordzagreus/nana-api-cf": "^1.3.1",
+		"@modelcontextprotocol/sdk": "^1.17.3",
 		"@types/bun": "^1.2.12",
 		"@types/dotenv": "^8.2.3",
 		"@types/mongoose": "^5.11.97",

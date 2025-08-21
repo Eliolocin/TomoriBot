@@ -88,6 +88,9 @@ export interface StreamContext {
 	// Provider context
 	provider: string;
 	locale: string;
+
+	// Tool availability flags
+	disableYouTubeProcessing?: boolean; // Temporarily disable YouTube function during enhanced context restart
 }
 
 /**

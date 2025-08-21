@@ -92,6 +92,13 @@ export default {
 				"Searching for: **{query}**\n\n⚠️ **Please note:** AI-generated information, including search results, may sometimes be inaccurate or incomplete. Always verify important information.",
 		},
 
+		// YouTube video processing messages
+		video: {
+			youtube_processing_title: "🎥 Watching YouTube Video...",
+			youtube_processing_description:
+				"I'm analyzing the YouTube video: **{video_url}**\n\nThis may take a moment depending on the video length. Please wait while I process the content.",
+		},
+
 		// New: Stream specific error messages
 		stream: {
 			prompt_blocked_title: "Request Blocked",

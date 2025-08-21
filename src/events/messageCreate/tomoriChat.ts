@@ -8,7 +8,7 @@ import {
 // Provider imports moved to factory pattern
 import type { StructuredContextItem } from "../../types/misc/context";
 // Provider-specific types moved to individual providers
-import type { FunctionCall } from "../../types/tool/interfaces";
+import type { FunctionCall } from "../../types/provider/interfaces";
 import {
 	loadServerEmojis,
 	loadTomoriState,
@@ -21,12 +21,19 @@ import {
 } from "../../utils/discord/embedHelper";
 import { ColorCode, log } from "../../utils/misc/logger";
 import { buildContext } from "../../utils/text/contextBuilder";
+import {
+	removeYouTubeUrls,
+	extractYouTubeVideoIds,
+} from "../../utils/text/youTubeUrlCleaner";
 import { decryptApiKey } from "@/utils/security/crypto";
 
 import type { TomoriState } from "@/types/db/schema";
 // Provider-specific function declarations moved to providers
 import { getProviderForTomori } from "../../utils/provider/providerFactory";
-import type { LLMProvider, StreamResult } from "../../types/tool/interfaces";
+import type {
+	LLMProvider,
+	StreamResult,
+} from "../../types/provider/interfaces";
 import { ToolRegistry } from "../../tools/toolRegistry";
 
 // Constants
@@ -126,6 +133,12 @@ export default async function tomoriChat(
 	// 1. Initial Checks & State Loading
 	const channel = message.channel;
 	let locale = "en-US";
+	
+	// Initialize streaming context for context-aware tool availability
+	const streamingContext = {
+		disableYouTubeProcessing: false, // Will be set to true during enhanced context restart
+	};
+
 
 	if (!(channel instanceof BaseGuildTextChannel)) {
 		// Default locale
@@ -789,7 +802,7 @@ export default async function tomoriChat(
 			}
 
 			// Create provider-specific configuration
-			const providerConfig = provider.createConfig(
+			const providerConfig = await provider.createConfig(
 				tomoriState,
 				decryptedApiKey,
 			);
@@ -827,6 +840,7 @@ export default async function tomoriChat(
 							: undefined, // Pass history if it exists
 						undefined,
 						isFromQueue ? message : undefined,
+						streamingContext, // Pass streaming context for context-aware tool availability
 					);
 					const timeoutPromise = new Promise<never>(
 						(
@@ -934,9 +948,10 @@ export default async function tomoriChat(
 							tomoriState,
 							locale,
 							provider: "google" as const,
+							streamContext: streamingContext, // Pass streaming context to tools
 						};
 
-						// Execute the tool through our modular system
+						// Execute tool using ToolRegistry (handles both built-in and MCP tools seamlessly)
 						const toolResult = await ToolRegistry.executeTool(
 							funcName,
 							funcCall.args || {},
@@ -970,6 +985,85 @@ export default async function tomoriChat(
 								} else {
 									selectedStickerToSend = null;
 								}
+							}
+
+							// Handle YouTube video restart signal (enhanced context restart)
+							if (
+								funcName === "process_youtube_video" &&
+								toolResult.data &&
+								(toolResult.data as Record<string, unknown>).type ===
+									"context_restart_with_video"
+							) {
+								const restartData = toolResult.data as Record<string, unknown>;
+								const enhancedContextItem =
+									restartData.enhanced_context_item as StructuredContextItem;
+								const videoUrl = restartData.video_url as string;
+								const videoId = restartData.video_id as string;
+
+								log.info(
+									`YouTube video restart signal detected for: ${videoUrl}. Cleaning URLs and enhancing context.`,
+								);
+
+								// Set flag to disable YouTube processing during enhanced context restart
+								// This prevents TomoriBot from making additional YouTube function calls while processing
+								streamingContext.disableYouTubeProcessing = true;
+								log.info(
+									"Temporarily disabled YouTube processing function during enhanced context restart",
+								);
+
+								// Clean YouTube URLs from all existing context text parts FIRST to prevent false duplication detection
+								for (const contextItem of contextSegments) {
+									for (const part of contextItem.parts) {
+										if (part.type === "text") {
+											const originalText = part.text;
+											part.text = removeYouTubeUrls(part.text, "");
+											if (originalText !== part.text) {
+												log.info(
+													`Cleaned YouTube URLs from context text during duplication check. Original length: ${originalText.length}, cleaned length: ${part.text.length}`,
+												);
+											}
+										}
+									}
+								}
+
+								// Check for existing video parts with same video ID to prevent duplication
+								// Only check actual video Parts, not text mentions (which are now cleaned)
+								const existingVideoIds = new Set<string>();
+								for (const contextItem of contextSegments) {
+									for (const part of contextItem.parts) {
+										// Check for enhanced context YouTube video parts specifically
+										if (
+											part.type === "video" &&
+											part.uri &&
+											"isYouTubeLink" in part &&
+											(part as { isYouTubeLink: boolean }).isYouTubeLink &&
+											"enhancedContext" in part &&
+											(part as { enhancedContext: boolean }).enhancedContext
+										) {
+											const existingIds = extractYouTubeVideoIds(part.uri);
+											for (const id of existingIds) {
+												existingVideoIds.add(id);
+											}
+										}
+									}
+								}
+
+								// Only add video part if not already present
+								if (!existingVideoIds.has(videoId)) {
+									// Add the video context item to existing context
+									contextSegments.push(enhancedContextItem);
+									log.success(
+										`Enhanced context with YouTube video Part (ID: ${videoId}). Total context items: ${contextSegments.length}`,
+									);
+								} else {
+									log.warn(
+										`YouTube video ${videoId} already exists in context. Skipping duplication.`,
+									);
+								}
+
+								// Continue to next iteration WITHOUT adding to function interaction history
+								// This will restart the streaming with enhanced context
+								continue;
 							}
 						} else {
 							// Tool execution failed
@@ -1049,6 +1143,14 @@ export default async function tomoriChat(
 					break;
 				}
 			} // End of for loop for function call iterations
+
+			// Clear YouTube processing disable flag after streaming completes
+			if (streamingContext.disableYouTubeProcessing) {
+				streamingContext.disableYouTubeProcessing = false;
+				log.info(
+					"Re-enabled YouTube processing function after enhanced context restart completion",
+				);
+			}
 
 			// 5. After the loop, if a sticker was selected and a stream completed, send the sticker.
 			// This is a simple approach; sticker will appear after the streamed text.

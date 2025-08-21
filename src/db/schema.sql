@@ -333,6 +333,25 @@ $$ LANGUAGE plpgsql;
 -- Make sure pgcrypto extension is enabled
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- MCP (Model Context Protocol) API keys table for encrypted storage of MCP server credentials per guild
+CREATE TABLE IF NOT EXISTS mcp_api_keys (
+  mcp_api_key_id SERIAL PRIMARY KEY,
+  server_id INT NOT NULL,                    -- Foreign key to servers table
+  mcp_name TEXT NOT NULL,                    -- 'fetch', 'brave-search', etc.
+  api_key BYTEA,                            -- Encrypted API key using pgcrypto
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (server_id, mcp_name),             -- One key per MCP per guild
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+
+-- Create updated_at trigger for mcp_api_keys table
+DROP TRIGGER IF EXISTS update_mcp_api_keys_timestamp ON mcp_api_keys;
+CREATE TRIGGER update_mcp_api_keys_timestamp
+BEFORE UPDATE ON mcp_api_keys
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
 -- Temporarily disable pg_cron setup until deployed to a Linux/cloud environment
 -- CREATE EXTENSION IF NOT EXISTS pg_cron; -- Ensure pg_cron is enabled before scheduling
 

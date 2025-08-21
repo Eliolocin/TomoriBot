@@ -5,7 +5,15 @@
 
 import { Type } from "@google/genai";
 import { log } from "../../utils/misc/logger";
-import type { Tool, ToolAdapter, ToolResult } from "../../types/tool/interfaces";
+import type {
+	Tool,
+	MCPCapableToolAdapter,
+	ToolContext,
+	ToolResult,
+} from "../../types/tool/interfaces";
+import type { TypedMCPToolResult } from "../../types/tool/mcpTypes";
+import { getMCPManager } from "../../utils/mcp/mcpManager";
+import { getMCPExecutor } from "../../utils/mcp/mcpExecutor";
 
 /**
  * Google-specific function declaration format
@@ -40,9 +48,9 @@ interface GoogleFunctionDeclaration extends Record<string, unknown> {
 }
 
 /**
- * Google tool adapter implementation
+ * Google tool adapter implementation with MCP capabilities
  */
-export class GoogleToolAdapter implements ToolAdapter {
+export class GoogleToolAdapter implements MCPCapableToolAdapter {
 	private static instance: GoogleToolAdapter;
 
 	/**
@@ -241,6 +249,113 @@ export class GoogleToolAdapter implements ToolAdapter {
 			);
 			return [];
 		}
+	}
+
+	/**
+	 * Get all available tools (built-in + MCP) in provider-specific format
+	 * Implementation of MCPCapableToolAdapter interface
+	 * @param builtInTools - Array of built-in tools
+	 * @returns Combined provider-specific tools configuration
+	 */
+	async getAllToolsInProviderFormat(
+		builtInTools: Tool[],
+	): Promise<Array<Record<string, unknown>>> {
+		return this.getAllToolsInGoogleFormat(builtInTools);
+	}
+
+	/**
+	 * Get all available tools (built-in + MCP) in Google tools format
+	 * This provides a unified interface for the provider to get all tools
+	 * @param builtInTools - Array of built-in tools
+	 * @returns Combined Google tools configuration with both built-in and MCP tools
+	 */
+	async getAllToolsInGoogleFormat(
+		builtInTools: Tool[],
+	): Promise<Array<Record<string, unknown>>> {
+		try {
+			// Start with built-in tools
+			const allFunctionDeclarations: Record<string, unknown>[] = [];
+
+			// Convert built-in tools
+			if (builtInTools.length > 0) {
+				const builtInDeclarations = builtInTools.map((tool) =>
+					this.convertTool(tool),
+				);
+				allFunctionDeclarations.push(...builtInDeclarations);
+				log.info(
+					`Converted ${builtInTools.length} built-in tools to Google format`,
+				);
+			}
+
+			// Add MCP tools if available
+			const mcpManager = getMCPManager();
+			if (mcpManager.isReady()) {
+				const mcpTools = mcpManager.getMCPTools();
+
+				for (const mcpTool of mcpTools) {
+					try {
+						const geminiTool = await mcpTool.tool();
+						if (geminiTool.functionDeclarations) {
+							// Cast FunctionDeclaration to Record<string, unknown> for type compatibility
+							const declarations = geminiTool.functionDeclarations as Record<string, unknown>[];
+							allFunctionDeclarations.push(...declarations);
+						}
+					} catch (error) {
+						log.warn(
+							"Failed to extract functions from MCP tool:",
+							error as Error,
+						);
+					}
+				}
+
+				if (mcpTools.length > 0) {
+					log.info(`Added ${mcpTools.length} MCP tools to Google format`);
+				}
+			}
+
+			// Return in Google's expected format
+			if (allFunctionDeclarations.length === 0) {
+				return [];
+			}
+
+			return [
+				{
+					functionDeclarations: allFunctionDeclarations,
+				},
+			];
+		} catch (error) {
+			log.error("Failed to get all tools in Google format:", error as Error);
+			// Return just built-in tools as fallback
+			return this.convertToolsArray(builtInTools);
+		}
+	}
+
+	/**
+	 * Check if a function name belongs to an MCP tool
+	 * Delegates to the provider-agnostic MCP executor
+	 * @param functionName - Name of the function to check
+	 * @returns Promise<boolean> - True if this is an MCP tool function
+	 */
+	async isMCPFunction(functionName: string): Promise<boolean> {
+		const mcpExecutor = getMCPExecutor();
+		return mcpExecutor.isMCPFunction(functionName);
+	}
+
+	/**
+	 * Execute an MCP tool function
+	 * Delegates to the provider-agnostic MCP executor for all processing
+	 * @param functionName - Name of the MCP function to execute
+	 * @param args - Arguments for the function
+	 * @param context - Tool execution context for Discord operations
+	 * @returns Promise<TypedMCPToolResult> - Enhanced typed tool result
+	 */
+	async executeMCPFunction(
+		functionName: string,
+		args: Record<string, unknown>,
+		context?: ToolContext,
+	): Promise<TypedMCPToolResult> {
+		const mcpExecutor = getMCPExecutor();
+		return mcpExecutor.executeMCPFunction(functionName, args, context);
 	}
 
 	// Private helper methods
