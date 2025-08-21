@@ -12,6 +12,19 @@ import type {
 	ToolExecutionEvent 
 } from "./toolInterface";
 
+/**
+ * Minimal state interface for context building operations
+ * Contains only what's needed for feature flag checking without full Discord context
+ */
+export interface ToolStateForContext {
+	server_id: string;
+	config: {
+		sticker_usage_enabled: boolean;
+		google_search_enabled: boolean;
+		self_teaching_enabled: boolean;
+	};
+}
+
 // Re-export ToolContext for external use
 export type { ToolContext } from "./toolInterface";
 
@@ -89,6 +102,45 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 		}
 
 		log.info(`Found ${availableTools.length} available tools for provider: ${provider} (${availableTools.map(t => t.name).join(", ")})`);
+
+		return availableTools;
+	}
+
+	/**
+	 * Get tools available for context building (only checks feature flags, no Discord permissions)
+	 * Used when building context instructions where we don't have full Discord context
+	 * @param provider - Provider name (e.g., "google", "openai")
+	 * @param stateForContext - Minimal state with server_id and config for feature flag checking
+	 * @returns Array of tools available for this provider and configuration
+	 */
+	getAvailableToolsForContext(provider: string, stateForContext: ToolStateForContext): Tool[] {
+		const availableTools: Tool[] = [];
+
+		for (const tool of this.tools.values()) {
+			try {
+				// Check if tool supports this provider
+				if (!tool.isAvailableFor(provider)) {
+					continue;
+				}
+
+				// Check feature flag requirements (only feature flags, no Discord permissions)
+				if (tool.requiresFeatureFlag) {
+					const isFeatureEnabled = this.checkFeatureFlagOnly(tool.requiresFeatureFlag, stateForContext);
+					if (!isFeatureEnabled) {
+						continue;
+					}
+				}
+
+				// Skip Discord permission checks for context building
+				// Permissions will be checked during actual tool execution
+
+				availableTools.push(tool);
+			} catch (error) {
+				log.warn(`Error checking availability for tool ${tool.name}: ${(error as Error).message}`);
+			}
+		}
+
+		log.info(`Found ${availableTools.length} available tools for context building with provider: ${provider} (${availableTools.map(t => t.name).join(", ")})`);
 
 		return availableTools;
 	}
@@ -293,6 +345,23 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 	}
 
 	/**
+	 * Check if a feature flag is enabled (for context building without full ToolContext)
+	 * @param featureFlag - Feature flag to check
+	 * @param stateForContext - Minimal state with configuration
+	 * @returns True if feature is enabled
+	 */
+	private checkFeatureFlagOnly(featureFlag: string, stateForContext: ToolStateForContext): boolean {
+		// Map feature flags to Tomori configuration properties
+		const featureFlagMap: Record<string, boolean> = {
+			sticker_usage: stateForContext.config?.sticker_usage_enabled ?? false,
+			google_search: stateForContext.config?.google_search_enabled ?? false,
+			self_teaching: stateForContext.config?.self_teaching_enabled ?? false,
+		};
+
+		return featureFlagMap[featureFlag] ?? false;
+	}
+
+	/**
 	 * Check if the context has required permissions
 	 * @param requiredPermissions - Array of required permission strings
 	 * @param context - Tool context
@@ -347,6 +416,10 @@ export function getTool(name: string): Tool | undefined {
 
 export function getAvailableTools(provider: string, context: ToolContext): Tool[] {
 	return ToolRegistry.getAvailableTools(provider, context);
+}
+
+export function getAvailableToolsForContext(provider: string, stateForContext: ToolStateForContext): Tool[] {
+	return ToolRegistry.getAvailableToolsForContext(provider, stateForContext);
 }
 
 export async function executeTool(

@@ -28,11 +28,7 @@ import {
 	cleanLLMOutput,
 	humanizeString,
 } from "@/utils/text/stringHelper";
-import {
-	queryGoogleSearchFunctionDeclaration,
-	rememberThisFactFunctionDeclaration,
-	selectStickerFunctionDeclaration,
-} from "./functionCalls";
+// Function declarations are now provided by GoogleProvider via config.tools
 import { sendStandardEmbed } from "@/utils/discord/embedHelper";
 
 // Default values for Gemini API
@@ -93,68 +89,18 @@ export type GeminiResponseOutput =
 	  };
 
 /**
- * Determines which tools to use based on the model name and Tomori's configuration.
- *
- * @param tomoriState - The Tomori state containing LLM and configuration details.
- * @returns The tools configuration array for Gemini.
+ * DEPRECATED: This function is no longer used as tools are now provided by GoogleProvider
+ * via GoogleToolAdapter. The tools are passed through config.tools parameter.
  */
+/*
 export function getGeminiTools(
 	tomoriState: TomoriState,
 ): Array<Record<string, unknown>> {
-	// 1. Initialize an array to hold all tool configurations (e.g., search, function calling)
-	const toolsConfig: Array<Record<string, unknown>> = [];
-	// 2. Initialize an array specifically for function declarations
-	const functionDeclarations: Array<Record<string, unknown>> = [];
-
-	const modelNameLower = tomoriState.llm.llm_codename.toLowerCase();
-
-	// 3. Add Google Search for capable Flash models (existing logic)
-	/*
-	if (
-		modelNameLower.includes("flash") &&
-		(modelNameLower.includes("2.5") || modelNameLower.includes("2.0"))
-	) {
-		toolsConfig.push({ googleSearch: {} }); // googleSearch is a distinct tool type
-		log.info(`Enabled Google Search tool for model: ${modelNameLower}`);
-	}*/
-
-	// 4. Add Sticker Function Calling if enabled in Tomori's config (Rule 20: Using config)
-	if (tomoriState.config.sticker_usage_enabled) {
-		functionDeclarations.push(selectStickerFunctionDeclaration);
-		log.info(
-			`Enabled '${selectStickerFunctionDeclaration.name}' function calling for model: ${modelNameLower}`, // Use the actual function name
-		);
-	}
-
-	// New: 4b. Add Query Google Search Function Calling if enabled in Tomori's config
-	if (tomoriState.config.google_search_enabled) {
-		functionDeclarations.push(queryGoogleSearchFunctionDeclaration);
-		log.info(
-			`Enabled '${queryGoogleSearchFunctionDeclaration.name}' function calling for model: ${modelNameLower}`,
-		);
-	}
-
-	// 5. Add Self-Teach Function Calling if enabled
-	if (tomoriState.config.self_teaching_enabled) {
-		// Assumes self_teach_enabled is added to TomoriConfigRow
-		functionDeclarations.push(rememberThisFactFunctionDeclaration);
-		log.info(
-			`Enabled '${rememberThisFactFunctionDeclaration.name}' function calling for model: ${modelNameLower}`,
-		);
-	}
-
-	// 5. If there are any function declarations, package them correctly for the tools array
-	if (functionDeclarations.length > 0) {
-		toolsConfig.push({ functionDeclarations }); // Gemini expects function declarations under this key
-	}
-
-	// 6. Log if no tools are enabled
-	if (toolsConfig.length === 0) {
-		log.info(`No specific tools enabled for model: ${modelNameLower}`);
-	}
-
-	return toolsConfig;
+	// This function has been replaced by the modular tool system
+	// Tools are now built by GoogleToolAdapter and passed via config.tools
+	return [];
 }
+*/
 
 // 2. Pro models with advanced retrieval
 /*
