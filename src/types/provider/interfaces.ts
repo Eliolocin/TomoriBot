@@ -76,7 +76,7 @@ export interface LLMProvider {
 	 * @param tomoriState - The current Tomori state with configuration
 	 * @returns Array of tool configurations specific to this provider
 	 */
-	getTools(tomoriState: TomoriState): Array<Record<string, unknown>>;
+	getTools(tomoriState: TomoriState): Promise<Array<Record<string, unknown>>>;
 
 	/**
 	 * Stream LLM response directly to a Discord channel
@@ -120,7 +120,7 @@ export interface LLMProvider {
 	 * @param apiKey - The decrypted API key
 	 * @returns Provider-specific configuration object
 	 */
-	createConfig(tomoriState: TomoriState, apiKey: string): ProviderConfig;
+	createConfig(tomoriState: TomoriState, apiKey: string): Promise<ProviderConfig>;
 }
 
 /**
@@ -129,7 +129,7 @@ export interface LLMProvider {
 export abstract class BaseLLMProvider implements LLMProvider {
 	abstract getInfo(): ProviderInfo;
 	abstract validateApiKey(apiKey: string): Promise<boolean>;
-	abstract getTools(tomoriState: TomoriState): Array<Record<string, unknown>>;
+	abstract getTools(tomoriState: TomoriState): Promise<Array<Record<string, unknown>>>;
 	abstract streamToDiscord(
 		channel: BaseGuildTextChannel,
 		client: Client,
@@ -149,7 +149,7 @@ export abstract class BaseLLMProvider implements LLMProvider {
 	abstract createConfig(
 		tomoriState: TomoriState,
 		apiKey: string,
-	): ProviderConfig;
+	): Promise<ProviderConfig>;
 
 	/**
 	 * Common helper method to check if a provider supports a given model

@@ -26,7 +26,7 @@ export interface ToolStateForContext {
 }
 
 // Re-export ToolContext for external use
-export type { ToolContext } from "./toolInterfaces";
+export type { ToolContext } from "../types/tool/interfaces";
 
 /**
  * Central registry for all tools

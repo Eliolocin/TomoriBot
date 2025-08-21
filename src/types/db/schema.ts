@@ -173,6 +173,16 @@ export const cooldownSchema = z.object({
 });
 export type CooldownRow = z.infer<typeof cooldownSchema>;
 
+export const mcpApiKeySchema = z.object({
+	mcp_api_key_id: z.number().optional(), // Primary key, optional as it's generated
+	server_id: z.number(), // Foreign key to servers table  
+	mcp_name: z.string(), // MCP server name identifier (e.g., 'brave-search', 'duckduckgo-search', 'fetch')
+	api_key: z.instanceof(Buffer).nullable(), // Encrypted API key using pgcrypto, nullable for free services
+	created_at: z.date().optional(), // Handled by DB default
+	updated_at: z.date().optional(), // Handled by DB default/trigger
+});
+export type McpApiKeyRow = z.infer<typeof mcpApiKeySchema>;
+
 /**
  * Tomori's combined state (base config + LLM settings + LLM info)
  */

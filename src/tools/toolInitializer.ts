@@ -5,11 +5,13 @@
 
 import { log } from "../utils/misc/logger";
 import { ToolRegistry } from "./toolRegistry";
-import { StickerTool, SearchTool, MemoryTool } from "./functionCalls";
+import { StickerTool, MemoryTool } from "./functionCalls";
 
 /**
  * Initialize all tools by registering them with the central registry
  * This should be called once during application startup
+ * 
+ * MCP tools are now handled by Google's official mcpToTool() - no manual registration needed
  */
 export function initializeTools(): void {
 	try {
@@ -18,10 +20,9 @@ export function initializeTools(): void {
 		// Clear any existing tools (useful for testing/reloading)
 		ToolRegistry.clearRegistry();
 
-		// Register function call tools
+		// Register built-in tools only (MCP handled by GoogleProvider.mcpToTool())
 		const tools = [
 			new StickerTool(),
-			new SearchTool(),
 			new MemoryTool(),
 		];
 
@@ -34,11 +35,8 @@ export function initializeTools(): void {
 			}
 		}
 
-		// Future: Register MCP server tools
-		// const mcpTools = await loadMCPTools();
-		// for (const mcpTool of mcpTools) {
-		//     ToolRegistry.registerTool(mcpTool);
-		// }
+		// MCP tools (search, fetch) are now automatically handled by Google's mcpToTool()
+		// This provides seamless DuckDuckGo search integration without manual tool wrappers
 
 		const stats = ToolRegistry.getStats();
 		log.success(`Tool registry initialized successfully with ${stats.totalTools} tools`);

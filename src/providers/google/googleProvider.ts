@@ -10,7 +10,10 @@ import {
 	GoogleGenAI,
 	type HarmBlockThreshold,
 	type HarmCategory,
+	mcpToTool,
 } from "@google/genai";
+import { Client as MCPClient } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type {
 	BaseGuildTextChannel,
 	Client,
@@ -31,6 +34,8 @@ import {
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
+import { loadMcpConfigs } from "../../utils/mcp/mcpConfigLoader";
+import { getAllMcpApiKeysForServer } from "../../utils/security/crypto";
 import {
 	BaseLLMProvider,
 	type FunctionCall,
@@ -130,16 +135,66 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 	}
 
 	/**
-	 * Get available tools/functions based on Tomori's configuration
-	 * Uses the modular tool system and Google tool adapter
+	 * Spawn MCP clients for enabled servers
 	 * @param tomoriState - The current Tomori state with configuration
-	 * @returns Array of tool configurations specific to this provider
+	 * @returns Promise<MCPClient[]> - Array of connected MCP clients
 	 */
-	getTools(tomoriState: TomoriState): Array<Record<string, unknown>> {
+	private async getMcpClients(tomoriState: TomoriState): Promise<MCPClient[]> {
+		try {
+			log.info(`Loading MCP clients for server ${tomoriState.server_id}`);
+
+			// Only enable if search is enabled
+			if (!tomoriState.config.google_search_enabled) {
+				log.info("Search disabled - no MCP clients will be spawned");
+				return [];
+			}
+
+			const clients: MCPClient[] = [];
+
+			// DuckDuckGo Search (Python-based, no API key needed)
+			try {
+				const client = new MCPClient({
+					name: "tomoribot",
+					version: "1.0.0",
+				});
+
+				const transport = new StdioClientTransport({
+					command: "uvx",
+					args: ["duckduckgo-mcp-server"],
+					env: Object.fromEntries(
+						Object.entries(process.env).filter(([, value]) => value !== undefined)
+					) as Record<string, string>,
+				});
+
+				await client.connect(transport);
+				clients.push(client);
+				log.success("Connected to DuckDuckGo MCP server");
+			} catch (error) {
+				log.warn("Failed to connect to DuckDuckGo MCP server:", error as Error);
+			}
+
+			// Add more MCP servers here (Brave, fetch, etc.)
+
+			log.info(`Successfully connected to ${clients.length} MCP servers`);
+			return clients;
+		} catch (error) {
+			log.error("Failed to spawn MCP clients", error as Error);
+			return [];
+		}
+	}
+
+	/**
+	 * Get available tools/functions based on Tomori's configuration
+	 * Uses modular tool system + Google's official mcpToTool() for MCP integration
+	 * @param tomoriState - The current Tomori state with configuration
+	 * @returns Promise<Array<Record<string, unknown>>> - Array of tool configurations
+	 */
+	async getTools(tomoriState: TomoriState): Promise<Array<Record<string, unknown>>> {
 		try {
 			const modelNameLower = tomoriState.llm.llm_codename.toLowerCase();
+			const allTools: Array<Record<string, unknown>> = [];
 
-			// Create minimal state for tool filtering during provider config creation
+			// 1. Get built-in tools from the registry
 			const toolStateForContext: ToolStateForContext = {
 				server_id: tomoriState.server_id.toString(),
 				config: {
@@ -149,35 +204,46 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 				},
 			};
 
-			// Get available tools from the registry with proper context
-			const availableTools = getAvailableToolsForContext(
+			// Get available built-in tools (excluding MCP wrappers)
+			const availableBuiltInTools = getAvailableToolsForContext(
 				"google",
 				toolStateForContext,
-			);
+			).filter(tool => !tool.name.includes("duckduckgo") && !tool.name.includes("fetch_url"));
 
-			if (availableTools.length === 0) {
-				log.info(`No tools available for model: ${modelNameLower}`);
-				return [];
+			if (availableBuiltInTools.length > 0) {
+				const googleAdapter = getGoogleToolAdapter();
+				const builtInToolsConfig = googleAdapter.convertToolsArray(availableBuiltInTools);
+				allTools.push(...builtInToolsConfig);
+
+				const enabledToolNames = availableBuiltInTools.map((tool) => tool.name);
+				log.info(`Added ${availableBuiltInTools.length} built-in tools: ${enabledToolNames.join(", ")}`);
 			}
 
-			// Convert tools to Google format using the adapter
-			const googleAdapter = getGoogleToolAdapter();
-			const toolsConfig = googleAdapter.convertToolsArray(availableTools);
+			// 2. Add MCP tools using Google's official mcpToTool()
+			try {
+				const mcpClients = await this.getMcpClients(tomoriState);
+				
+				for (const client of mcpClients) {
+					try {
+						const mcpTool = mcpToTool(client);
+						allTools.push(mcpTool as Record<string, unknown>);
+						log.info("Added MCP tools via official mcpToTool()");
+					} catch (error) {
+						log.error("Failed to convert MCP client via mcpToTool()", error as Error);
+					}
+				}
 
-			// Log enabled tools
-			const enabledToolNames = availableTools.map((tool) => tool.name);
-			log.info(
-				`Enabled ${availableTools.length} tools for model: ${modelNameLower} (${enabledToolNames.join(", ")})`,
-			);
+				if (mcpClients.length > 0) {
+					log.success(`Successfully integrated ${mcpClients.length} MCP clients using Google's mcpToTool()`);
+				}
+			} catch (error) {
+				log.error("Failed to load MCP tools, continuing with built-in tools only", error as Error);
+			}
 
-			return toolsConfig;
+			log.info(`Total tools available for Google provider: ${allTools.length}`);
+			return allTools;
 		} catch (error) {
-			log.error(
-				`Failed to get tools for Google provider: ${tomoriState.llm.llm_codename}`,
-				error as Error,
-			);
-
-			// Return empty tools on error to prevent breaking the provider
+			log.error(`Failed to get tools for Google provider: ${tomoriState.llm.llm_codename}`, error as Error);
 			return [];
 		}
 	}
@@ -194,15 +260,17 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 	 * Convert provider-specific configuration from TomoriState
 	 * @param tomoriState - The current Tomori state
 	 * @param apiKey - The decrypted API key
-	 * @returns Provider-specific configuration object
+	 * @returns Promise<GoogleProviderConfig> - Provider-specific configuration object
 	 */
-	createConfig(tomoriState: TomoriState, apiKey: string): GoogleProviderConfig {
+	async createConfig(tomoriState: TomoriState, apiKey: string): Promise<GoogleProviderConfig> {
+		const tools = await this.getTools(tomoriState);
+		
 		return {
 			model: tomoriState.llm.llm_codename,
 			apiKey: apiKey,
 			temperature: tomoriState.config.llm_temperature,
 			maxOutputTokens: 8192,
-			tools: this.getTools(tomoriState),
+			tools: tools,
 			safetySettings: [
 				{
 					category: "HARM_CATEGORY_HARASSMENT",
@@ -258,6 +326,15 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 		try {
 			// Convert the generic config to Google-specific streaming config
 			const googleConfig = config as GoogleProviderConfig;
+			
+			// Ensure safetySettings exists, provide default if not
+			const safetySettings = googleConfig.safetySettings || [
+				{ category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+				{ category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+				{ category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+				{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+			];
+			
 			const streamConfig: GoogleStreamConfig = {
 				...googleConfig,
 				// Add Discord streaming constants
@@ -274,7 +351,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 				humanizerDegree: tomoriState.config.humanizer_degree,
 				emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
 				// Convert safety settings to Google format
-				safetySettings: googleConfig.safetySettings.map((setting) => ({
+				safetySettings: safetySettings.map((setting) => ({
 					category: setting.category as HarmCategory,
 					threshold: setting.threshold as HarmBlockThreshold,
 				})),

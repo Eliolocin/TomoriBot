@@ -789,7 +789,7 @@ export default async function tomoriChat(
 			}
 
 			// Create provider-specific configuration
-			const providerConfig = provider.createConfig(
+			const providerConfig = await provider.createConfig(
 				tomoriState,
 				decryptedApiKey,
 			);
