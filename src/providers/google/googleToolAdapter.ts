@@ -5,7 +5,7 @@
 
 import { Type } from "@google/genai";
 import { log } from "../../utils/misc/logger";
-import type { Tool, ToolAdapter, ToolResult } from "../../tools/toolInterfaces";
+import type { Tool, ToolAdapter, ToolResult } from "../../types/tool/interfaces";
 
 /**
  * Google-specific function declaration format

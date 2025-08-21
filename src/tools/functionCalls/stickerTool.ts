@@ -9,7 +9,7 @@ import {
 	type ToolContext,
 	type ToolResult,
 	type ToolParameterSchema,
-} from "../toolInterfaces";
+} from "../../types/tool/interfaces";
 
 /**
  * Tool for selecting Discord stickers based on conversational context

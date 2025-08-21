@@ -10,7 +10,7 @@ import type {
 	ToolResult,
 	ToolRegistryInterface,
 	ToolExecutionEvent,
-} from "./toolInterfaces";
+} from "../types/tool/interfaces";
 
 /**
  * Minimal state interface for context building operations

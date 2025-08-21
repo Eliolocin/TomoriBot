@@ -5,7 +5,10 @@
  */
 
 import { log } from "../misc/logger";
-import type { LLMProvider, ProviderInfo } from "../../types/tool/interfaces";
+import type {
+	LLMProvider,
+	ProviderInfo,
+} from "../../types/provider/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 
 // Import provider implementations

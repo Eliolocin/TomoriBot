@@ -9,7 +9,7 @@ import {
 	type ToolContext,
 	type ToolResult,
 	type ToolParameterSchema,
-} from "../toolInterfaces";
+} from "../../types/tool/interfaces";
 
 /**
  * Tool for remembering and learning new information during conversations

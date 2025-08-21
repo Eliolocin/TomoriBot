@@ -4,12 +4,15 @@
  */
 
 import { log } from "../../utils/misc/logger";
+import { decryptApiKey } from "../../utils/security/crypto";
+import { sendStandardEmbed } from "../../utils/discord/embedHelper";
+import { ColorCode } from "../../utils/misc/logger";
 import {
 	BaseTool,
 	type ToolContext,
 	type ToolResult,
 	type ToolParameterSchema,
-} from "../toolInterfaces";
+} from "../../types/tool/interfaces";
 
 /**
  * Tool for querying Google search to find real-time information
@@ -112,15 +115,37 @@ export class SearchTool extends BaseTool {
 				"../../providers/google/subAgents"
 			);
 
-			// Execute the search using the existing Google search implementation
+			// 1. Send search disclaimer embed BEFORE executing the search
+			// This informs the user while the search is happening
+			await sendStandardEmbed(context.channel, context.locale, {
+				color: ColorCode.INFO,
+				titleKey: "genai.search.disclaimer_title",
+				descriptionKey: "genai.search.disclaimer_description",
+				descriptionVars: { query: searchQuery },
+			});
+			
+			// 2. Send typing indicator as search might take a moment
+			await context.channel.sendTyping();
+			
+			// 3. Execute the search using the existing Google search implementation
 			// Parameters match tomoriChat.ts:1024-1031 call pattern
 			const conversationHistoryString = ""; // Could be enhanced to build context
+			
+			// Decrypt the API key from the database
+			const encryptedApiKey = context.tomoriState.config.api_key;
+			if (!encryptedApiKey) {
+				return {
+					success: false,
+					error: "No API key configured for search functionality",
+				};
+			}
+			
+			const decryptedApiKey = await decryptApiKey(encryptedApiKey);
 			const searchResult = await executeSearchSubAgent(
 				searchQuery,
 				conversationHistoryString,
 				context.tomoriState,
-				// Get decrypted API key (simplified for tool execution)
-				context.tomoriState.config.api_key?.toString() || "",
+				decryptedApiKey,
 			);
 
 			if (!searchResult || typeof searchResult !== "object") {

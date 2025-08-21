@@ -87,7 +87,7 @@ export default {
 		search: {
 			disclaimer_title: "🔍 Google検索を実行中...",
 			disclaimer_description:
-				"⚠️ **ご注意:** 検索結果を含むAI生成情報は、時として不正確または不完全な場合があります。重要な情報は常に確認してください。",
+				"検索クエリ: **{query}**\n\n⚠️ **ご注意:** 検索結果を含むAI生成情報は、時として不正確または不完全な場合があります。重要な情報は常に確認してください。",
 		},
 
 		// New: Stream specific error messages

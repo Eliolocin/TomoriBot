@@ -16,7 +16,7 @@ import type {
 	FunctionCall,
 	ProviderConfig,
 	StreamResult,
-} from "../provider/providerInterface";
+} from "../provider/interfaces";
 import type { TomoriState } from "../db/schema";
 import type { StructuredContextItem } from "../misc/context";
 

@@ -4,6 +4,24 @@ Document for helping developers contribute to making TomoriBot better as well as
 
 ## Project Overview
 
+TomoriBot is a highly customizable Discord bot powered by Large Language Models (LLMs). Users can personalize her behavior, personality, memory, and language, making her adaptable for both **roleplaying** and **practical use** in community servers thanks to her autonomous tool usage as well.
+
+She is designed to be modular, developer-friendly, and easily deployable—ideal for experimenting with personality-driven AI interaction in social spaces.
+
+### Core Features
+- Slash command support
+- Server and user-based memory storage
+- Personality presets and editing
+- Language preference per user
+- Admin-only configuration (e.g., model selection, API keys)
+- Modular Tool Use and Provider Support
+- CI/CD ready and DevOps-aligned project layout
+
+### Target Users
+- Discord server owners who want an interactive, helpful, or roleplay-capable AI bot that adapts to server needs/wants
+- Users interested in customizing AI personalities for social and community interaction
+- Developers and tinkerers experimenting with LLMs, memory systems, and Chatbot UX
+
 ## File Structure & Modules
 
 ### Tech Stack
@@ -15,7 +33,7 @@ Document for helping developers contribute to making TomoriBot better as well as
 - **GitHub Actions** for CI/CD pipelines and linting
 - **AWS Cloud** for hosting and deployment (soon™)
 
-### Project Core Structure (High-Level Overview)
+### Project Core Structure (Current Modular Architecture)
 
 ```
 TomoriBot/
@@ -28,7 +46,8 @@ TomoriBot/
 └─ src/                         ← **everything that ships inside the bot**
     ├─ commands/                ← slash-command source files (grouped by category)
     │   ├─ config/              ← `/config …` sub-commands
-    │   │   └─ setup.ts
+    │   │   ├─ setup.ts
+    │   │   └─ apikeyset.ts
     │   ├─ tool/
     │   │   └─ ping.ts
     │   └─ …                    ← more categories to come
@@ -44,39 +63,64 @@ TomoriBot/
     │   │   └─ handleCommands.ts
     │   ├─ messageCreate/
     │   │   ├─ jpTrans.ts
-    │   │   └─ tomoriChat.ts
+    │   │   └─ tomoriChat.ts    ← **REFACTORED** - now uses modular providers & tools
     │   └─ ready/
     │       ├─ 01_registerCommands.ts
     │       └─ status.ts
-    ├─ functions/               ← functions that Google Gemini can use during inference (Function Calling API)
-    │   ├─ generateImage.ts
-    │   ├─ scrapeBooru.ts
-    │   └─ sendSticker.ts
     ├─ handlers/                ← central dispatcher / shared event utils
     │   └─ eventHandler.ts
     ├─ locales/                 ← i18n JSON dictionaries (`tool.ping.description` → string)
     │   ├─ en.ts
     │   └─ ja.json
-    ├─ providers/               ← wrappers for external APIs (LLMs, image gen …)
-    │   └─ google.ts
-    ├─ types/                   ← global/shared TypeScript definitions
+    ├─ providers/               ← **MODULAR PROVIDER SYSTEM** - LLM provider abstraction
+    │   └─ google/              ← Google Gemini implementation
+    │       ├─ googleProvider.ts      ← implements LLMProvider interface
+    │       ├─ googleStreamAdapter.ts ← streaming logic for Google API
+    │       ├─ googleToolAdapter.ts   ← converts tools to Google format
+    │       └─ subAgents.ts           ← Google-specific sub-agents
+    ├─ tools/                   ← **MODULAR TOOL SYSTEM** - provider-agnostic tools
+    │   ├─ toolRegistry.ts      ← central tool registry & execution
+    │   ├─ toolInitializer.ts   ← tool discovery & registration
+    │   ├─ functionCalls/       ← built-in function call tools
+    │   │   ├─ stickerTool.ts   ← Discord sticker selection
+    │   │   ├─ searchTool.ts    ← web search functionality
+    │   │   ├─ memoryTool.ts    ← learning/memory system
+    │   │   └─ index.ts         ← tool exports
+    │   └─ mcpServers/          ← **FUTURE** - MCP server integration
+    │       └─ index.ts
+    ├─ types/                   ← **ORGANIZED TYPE SYSTEM** - domain-specific types
     │   ├─ ambient/             ← `declare global { … }`
-    │   ├─ api/
-    │   ├─ db/
+    │   │   └─ booru.d.ts
+    │   ├─ api/                 ← external API types
+    │   │   └─ gemini.ts
+    │   ├─ db/                  ← database schema types
     │   │   └─ schema.ts        ← TS mirror of `schema.sql`
-    │   └─ discord/
-    │       ├─ embed.ts
-    │       ├─ global.ts
-    │       └─ modal.ts
+    │   ├─ discord/             ← Discord-specific types
+    │   │   ├─ embed.ts
+    │   │   ├─ global.ts
+    │   │   └─ modal.ts
+    │   ├─ misc/                ← utility types
+    │   │   ├─ context.ts
+    │   │   └─ translation.ts
+    │   ├─ provider/            ← provider interface types
+    │   │   └─ interfaces.ts
+    │   ├─ stream/              ← **NEW** - streaming system types
+    │   │   ├─ interfaces.ts    ← streaming interfaces
+    │   │   └─ types.ts         ← streaming types & constants
+    │   └─ tool/                ← **NEW** - tool system types
+    │       └─ interfaces.ts    ← tool interfaces
     ├─ utils/                   ← general-purpose helpers (split by domain)
     │   ├─ db/
-        │   ├─ dbRead.ts
+    │   │   ├─ dbRead.ts
     │   │   └─ dbWrite.ts
     │   ├─ discord/
     │   │   ├─ commandLoader.ts
     │   │   ├─ embedHelper.ts
     │   │   ├─ eventHelper.ts
-    │   │   └─ interactionHelper.ts
+    │   │   ├─ interactionHelper.ts
+    │   │   └─ streamOrchestrator.ts ← **NEW** - universal Discord streaming
+    │   ├─ provider/
+    │   │   └─ providerFactory.ts   ← dynamic provider selection
     │   ├─ misc/
     │   │   ├─ boolUtils.ts
     │   │   ├─ formatSource.ts
@@ -84,20 +128,39 @@ TomoriBot/
     │   │   └─ logger.ts
     │   ├─ security/            ← crypto utilities (pgcrypto wrappers, key mgmt)
     │   │   └─ crypto.ts        
-    │   └─ text/                ← LLM prompt / context builders & post-processors
-    │      ├─ contextBuilder.ts
-    │      ├─ humanizer.ts
-    │      ├─ localizer.ts
-    │      └─ stringHelper.ts              
-    └─ index.ts                 ← entry point – creates Discord client & bootstraps everything
+    │   └─ text/                ← **ENHANCED** - text processing & streaming
+    │      ├─ contextBuilder.ts ← LLM context assembly
+    │      ├─ localizer.ts      ← i18n support
+    │      └─ stringHelper.ts   ← text utilities
+    └─ index.ts                 ← entry point – creates Discord client & tool registry
 ├─ .env.example                 ← template env (copy to `.env`)
 ├─ bun.lock                     ← Bun dependency lockfile
 ├─ biome.json                   ← formatter/linter config
 └─ README.md                    ← project overview
-
 ```
 
-## Creating Commands
+### Key Architectural Changes
+
+**🏗️ Provider Abstraction System**: Complete refactor from Google-locked to modular LLM providers
+- `providerFactory` dynamically selects providers based on configuration
+- `googleProvider` implements `LLMProvider` interface
+- Ready for OpenAI, Anthropic, and future providers
+
+**⚡ Modular Tool System**: Transformed from 300+ lines of inline code to clean registry
+- Tools implement generic `Tool` interface
+- `toolRegistry` handles discovery, execution, and permission management
+- Provider adapters convert tools to provider-specific formats
+
+**🌊 Streaming Modularization**: Universal Discord text streaming logic extracted from provider-specific code
+- `streamOrchestrator` handles all Discord integration (600+ lines of reusable logic)
+- Provider `streamAdapter`s handle LLM-specific streaming (150-200 lines each)
+
+**📁 Type Organization**: Logical separation of types by domain
+- Stream types in `src/types/stream/`
+- Tool types in `src/types/tool/` 
+- Provider types in `src/types/provider/`
+
+## Creating New Commands
 
 ## Config & Setup Flow
 
@@ -105,6 +168,311 @@ TomoriBot/
 
 ## LLM & API Integration
 
+### Provider Architecture Overview
+
+TomoriBot uses a **modular provider architecture** that abstracts LLM interactions behind a common interface. This allows seamless switching between different AI providers while maintaining consistent functionality.
+
+#### Core Provider Interface
+```typescript
+interface LLMProvider {
+    // Provider identification
+    getProviderInfo(): ProviderInfo;
+    
+    // API key validation
+    validateApiKey(apiKey: string): Promise<boolean>;
+    
+    // Configuration creation
+    createConfig(tomoriState: TomoriState, apiKey: string): ProviderConfig;
+    
+    // Tool discovery
+    getTools(tomoriState: TomoriState): Tool[];
+    
+    // Main streaming method
+    streamToDiscord(
+        channel: BaseGuildTextChannel,
+        client: Client, 
+        tomoriState: TomoriState,
+        config: ProviderConfig,
+        contextItems: StructuredContextItem[],
+        interaction?: CommandInteraction
+    ): Promise<StreamResult>;
+}
+```
+
+#### Provider Factory Pattern
+The `ProviderFactory` namespace provides dynamic provider selection:
+```typescript
+// Dynamic provider selection based on configuration
+const provider = getProviderForTomori(tomoriState);
+
+// Provider-agnostic usage
+const config = provider.createConfig(tomoriState, apiKey);
+const result = await provider.streamToDiscord(channel, client, tomoriState, config, contextItems);
+```
+
+### Current Providers
+
+#### Google Gemini Provider
+- **Implementation**: `src/providers/google/googleProvider.ts`
+- **Features**: Streaming, function calling, image/video processing
+- **Models**: Gemini 2.0 Flash, configurable via environment variables
+- **Stream Adapter**: `googleStreamAdapter.ts` handles Gemini-specific streaming logic
+- **Tool Adapter**: `googleToolAdapter.ts` converts generic tools to Google format
+
+### Adding New Providers
+
+To add a new LLM provider (e.g., OpenAI, Anthropic):
+
+1. **Create provider implementation**:
+```typescript
+// src/providers/openai/OpenAIProvider.ts
+export class OpenAIProvider extends BaseLLMProvider {
+    getProviderInfo(): ProviderInfo {
+        return {
+            name: "openai",
+            version: "1.0", 
+            supportsStreaming: true,
+            supportsFunctionCalling: true
+        };
+    }
+    
+    async validateApiKey(apiKey: string): Promise<boolean> {
+        // OpenAI API key validation logic
+    }
+    
+    // ... implement other required methods
+}
+```
+
+2. **Create stream adapter**:
+```typescript
+// src/providers/openai/OpenAIStreamAdapter.ts
+export class OpenAIStreamAdapter implements StreamProvider {
+    async *startStream(config: StreamConfig): AsyncGenerator<RawStreamChunk> {
+        // OpenAI streaming implementation
+    }
+    
+    processChunk(chunk: RawStreamChunk): ProcessedChunk {
+        // Convert OpenAI chunks to normalized format
+    }
+}
+```
+
+3. **Create tool adapter**:
+```typescript
+// src/providers/openai/openaiToolAdapter.ts
+export class OpenAIToolAdapter implements ToolAdapter {
+    convertTool(tool: Tool): OpenAIFunction {
+        // Convert generic tool to OpenAI function format
+    }
+}
+```
+
+4. **Register in factory**:
+```typescript
+// src/providers/ProviderFactory.ts
+case "openai":
+    return new OpenAIProvider();
+```
+
+### Streaming Architecture
+
+TomoriBot uses a **two-layer streaming architecture**:
+
+#### Universal Discord Layer (`streamOrchestrator`)
+Handles all Discord-specific logic (600+ lines of reusable code):
+- Message creation and editing
+- Embed generation and updates 
+- Function call routing to `ToolRegistry`
+- Stream timeout management
+- Error recovery and user notifications
+- Message chunking and rate limiting
+- Typing simulation and humanization
+
+#### Provider-Specific Layer (`StreamAdapter`)
+Handles LLM-specific streaming (150-200 lines per provider):
+- API client management
+- Chunk processing and normalization
+- Provider-specific error handling
+
+### Tool System Integration
+
+All providers use the same **modular tool system**:
+
+#### Tool Registry
+```typescript
+// Tools are automatically discovered and registered at startup
+const availableTools = ToolRegistry.getAvailableTools(providerName, context);
+
+// Tools are executed uniformly regardless of provider
+const result = await ToolRegistry.executeTool(toolName, args, context);
+```
+
+#### Provider Tool Adapters
+Each provider has an adapter that converts generic tools to provider-specific formats:
+```typescript
+// Google format conversion
+const googleTools = googleToolAdapter.convertToolsArray(genericTools);
+
+// Future: OpenAI format conversion  
+const openaiTools = openaiToolAdapter.convertToolsArray(genericTools);
+```
+
+### Adding New Tools
+
+TomoriBot's modular tool system makes adding new functionality straightforward:
+
+#### Built-in Function Call Tools
+
+1. **Create tool implementation**:
+```typescript
+// src/tools/functionCalls/yourTool.ts
+export class YourTool extends BaseTool {
+    name = "your_tool_name";
+    description = "What your tool does";
+    category = "utility" as const;
+    
+    parameters: ToolParameterSchema = {
+        type: "object",
+        properties: {
+            param1: { type: "string", description: "Parameter description" }
+        },
+        required: ["param1"]
+    };
+    
+    async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+        // Your tool logic here
+        return { success: true, data: { status: "completed" } };
+    }
+}
+```
+
+2. **Export in index**:
+```typescript
+// src/tools/functionCalls/index.ts
+export { YourTool } from "./yourTool";
+```
+
+3. **Automatic integration**: The system automatically:
+   - Discovers your tool via dynamic imports
+   - Converts your schema to provider-specific formats
+   - Handles execution through the registry
+   - Manages permissions and feature flags
+
+#### MCP Server Tools (Future)
+
+For external tool integration via Model Context Protocol:
+
+1. **Configure MCP server**:
+```typescript
+interface MCPServerConfig {
+    id: string;
+    name: string;
+    transport: 'stdio' | 'http' | 'websocket';
+    command?: string[];     // For stdio servers
+    url?: string;          // For http/websocket servers
+    enabled: boolean;
+}
+```
+
+2. **Automatic tool discovery**: MCP tools are automatically registered alongside built-in tools
+
+3. **Unified execution**: MCP tools use the same `ToolRegistry.executeTool()` interface
+
+### Current Tool Implementations
+
+- **StickerTool**: Discord sticker selection and sending
+- **SearchTool**: Web search functionality via Google search sub-agent
+- **MemoryTool**: Learning and memory storage (personal and server-wide)
+
+## Message Generation/Tool Call Flow
+
+### Complete Message Processing Architecture
+
+When a user sends a message that triggers TomoriBot, the following modular flow executes:
+
+#### Phase 1: Discord Validation & Context (Provider-Agnostic)
+```
+User Message → Discord Event → tomoriChat.ts
+├── 1. Channel & Permission Validation
+├── 2. Semaphore Lock Acquisition  
+├── 3. Tomori State & User Data Loading
+├── 4. Message History Fetching
+├── 5. Context Assembly (contextBuilder.ts)
+└── 6. Trigger Word & Auto-Counter Logic
+```
+
+#### Phase 2: Provider Selection & Configuration
+```
+7. Provider Factory → Dynamic Provider Selection
+   ├── getProviderForTomori(tomoriState)
+   ├── provider.createConfig(tomoriState, apiKey)
+   ├── provider.getTools(tomoriState)
+   └── Tool Format Conversion (via ToolAdapter)
+```
+
+#### Phase 3: Streaming & Tool Execution
+```
+8. StreamOrchestrator.streamToDiscord(provider, config, context)
+   ├── Provider StreamAdapter → LLM API Streaming
+   ├── Chunk Processing → ProcessedChunk normalization
+   └── Function Call Detection
+
+9. Tool Execution Loop (if function calls detected)
+   ├── ToolRegistry.executeTool(toolName, args, context)
+   ├── Tool Implementation Execution
+   ├── Result Formatting & Discord Integration
+   └── Function Result → Back to LLM
+
+10. Response Completion
+    ├── Final Text Streaming to Discord
+    ├── Sticker Sending (if selected)
+    └── Semaphore Release
+```
+
+### Key Architectural Benefits
+
+**🔄 Single Entry Point**: All tool execution flows through `ToolRegistry.executeTool()`
+
+**🎯 Provider Agnostic**: Same message flow works with Google, OpenAI, Anthropic
+
+**⚡ Modular Tools**: Tools can be added/removed without changing core flow
+
+**🛡️ Error Resilience**: Comprehensive error handling at every layer
+
+**📊 Consistent Behavior**: Universal timeout, rate limiting, and Discord integration
+
+### Example: Memory Tool Execution
+
+User: `"Tomori, remember I like pizza 🍕"`
+
+1. **Provider Selection**: `GoogleProvider` selected based on configuration
+2. **Tool Discovery**: `MemoryTool` available and converted to Google format
+3. **LLM Decision**: Gemini decides to call `remember_this_fact` function
+4. **Tool Execution**: `ToolRegistry.executeTool("remember_this_fact", args, context)`
+5. **Memory Storage**: `MemoryTool.execute()` saves to database via `addPersonalMemoryByTomori()`
+6. **Result Integration**: Success result sent back to Gemini
+7. **Response Generation**: "Great! I've learned that you like pizza 🍕"
+
+This same flow works identically with any LLM provider - the modular architecture ensures consistent behavior across all providers.
+
 ## Deployment & CI/CD
 
 ## Contributing Guidelines
+
+### Development Workflow
+
+1. **File Naming Convention**: Use camelCase for all file names
+2. **Type Organization**: Place types and interfaces in appropriate `src/types/` subdirectories
+3. **Provider Development**: Follow the provider interface pattern
+4. **Tool Development**: Extend `BaseTool` and implement required methods
+5. **Testing**: Use `bun run build` to verify TypeScript compilation
+6. **Code Quality**: Biome handles formatting and linting automatically
+
+### Architecture Principles
+
+- **Modularity**: New features should use the modular tool/provider systems
+- **Provider Agnostic**: Avoid hardcoding specific LLM provider logic in core files
+- **Type Safety**: All interfaces should be properly typed with Zod validation
+- **Error Handling**: Comprehensive error logging with context
+- **Documentation**: JSDoc comments for all public functions

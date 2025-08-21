@@ -22,7 +22,7 @@ import {
 	GoogleGenAI,
 	type Part,
 } from "@google/genai";
-import type { FunctionCall } from "../../types/tool/interfaces";
+import type { FunctionCall } from "../../types/provider/interfaces";
 import {
 	ContextItemTag,
 	type StructuredContextItem,

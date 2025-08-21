@@ -17,7 +17,7 @@ import type {
 	CommandInteraction,
 	Message,
 } from "discord.js";
-import { StreamOrchestrator } from "../../utils/text/streamOrchestrator";
+import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
 	GoogleStreamAdapter,
 	type GoogleStreamConfig,
@@ -38,7 +38,7 @@ import {
 	type ProviderConfig,
 	type ProviderInfo,
 	type StreamResult,
-} from "../../types/tool/interfaces";
+} from "../../types/provider/interfaces";
 import { getGoogleToolAdapter } from "./googleToolAdapter";
 
 // Default values for Gemini API

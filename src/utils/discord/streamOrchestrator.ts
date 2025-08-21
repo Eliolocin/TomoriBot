@@ -16,11 +16,15 @@
 
 import { MessageFlags } from "discord.js";
 import { HumanizerDegree } from "../../types/db/schema";
-import { sendStandardEmbed } from "../discord/embedHelper";
+import { sendStandardEmbed } from "./embedHelper";
 import { ColorCode, log } from "../misc/logger";
-import { chunkMessage, cleanLLMOutput, humanizeString } from "./stringHelper";
+import {
+	chunkMessage,
+	cleanLLMOutput,
+	humanizeString,
+} from "../text/stringHelper";
 
-import type { StreamResult } from "../../types/tool/interfaces";
+import type { StreamResult } from "../../types/provider/interfaces";
 import type {
 	StreamOrchestrator as IStreamOrchestrator,
 	ProcessedChunk,
