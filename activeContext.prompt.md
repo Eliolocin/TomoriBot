@@ -37,26 +37,53 @@ This **Active Context** document tracks the immediate focus and next steps for T
 ### Overview
 Implement **Model Context Protocol (MCP)** server integration to demonstrate the power of our modular tool architecture. MCP servers provide standardized access to external data sources and functionality.
 
-For our purposes, MCP configuration and addition will be handled by the developer only through (?).
+### 🏗️ Proposed Architecture
 
-### 🚧 Phase 1: Core MCP Infrastructure
+**Configuration Strategy:**
+- **Static config**: Non-sensitive settings in `src/tools/mcpServers/{server-name}/config.json`
+- **Encrypted API keys**: Stored in new `mcp_api_keys` database table per guild
+- **Smart server management**: Lazy loading with per-guild instances
+
+**Database Design:**
+```sql
+CREATE TABLE mcp_api_keys (
+  mcp_api_key_id SERIAL PRIMARY KEY,
+  server_id INT NOT NULL,                    -- Foreign key to servers table
+  mcp_name TEXT NOT NULL,                    -- 'fetch', 'brave-search', etc.
+  api_key BYTEA,                            -- Encrypted API key
+  UNIQUE (server_id, mcp_name),             -- One key per MCP per guild
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+```
+
+### 🚧 Phase 1: Database & Configuration Infrastructure
 
 #### ✅ Prerequisites (Already Complete)
 - [x] Modular tool system with ToolRegistry
-- [x] Provider-agnostic tool execution
+- [x] Provider-agnostic tool execution  
 - [x] Tool interface supporting external integrations
+- [x] Encrypted API key storage system (reuse existing crypto utils)
 
 #### 📋 Implementation Tasks
 
-**Step 1: MCP Client Foundation**
-- [ ] Create `src/tools/mcpServers/mcpClient.ts` - Core MCP protocol client
-- [ ] Create `src/tools/mcpServers/mcpTool.ts` - MCP tool wrapper extending BaseTool
-- [ ] Create `src/types/tool/types.ts` - MCP-specific type definitions
-- [ ] Add MCP client to tool initialization process
+**Step 1: Database Schema**
+- [ ] Add `mcp_api_keys` table to `src/db/schema.sql`
+- [ ] Add `mcpApiKeySchema` to `src/types/db/schema.ts`
+- [ ] Create database helper functions (encrypt/decrypt MCP keys)
 
-**Step 2: Dynamic Tool Discovery**
-- [ ] Extend tool discovery system for MCP tools
-- [ ] Implement automatic tool registration from MCP servers
+**Step 2: Static Configuration System**
+- [ ] Create `src/tools/mcpServers/fetch/config.json` - URL fetcher config
+- [ ] Create `src/tools/mcpServers/brave-search/config.json` - Brave search config
+- [ ] Create config loader utility to scan MCP server folders
+
+**Step 3: MCP Server Management** 
+- [ ] Create `src/tools/mcpServers/mcpServerManager.ts` - Process management
+- [ ] Create `src/tools/mcpServers/mcpClient.ts` - MCP protocol client
+- [ ] Implement lazy loading with per-guild server instances
+
+**Step 4: Tool Integration**
+- [ ] Create `src/tools/mcpServers/mcpTool.ts` - MCP tool wrapper extending BaseTool
+- [ ] Implement automatic tool discovery from spawned MCP servers
 - [ ] Update ToolRegistry to handle MCP tool lifecycle
 
 ### 🎯 Phase 2: Initial MCP Server Implementations
@@ -76,6 +103,21 @@ For our purposes, MCP configuration and addition will be handled by the develope
 - LLM can discover and call MCP tools
 - MCP tool execution works identically across providers
 - No breaking changes to existing functionality
+- **Performance**: <100ms additional latency for MCP tool calls
+- **Resource usage**: <50MB memory per active MCP server
+
+### ⚡ Performance Considerations
+
+**MCP servers are actual processes** (not just ports):
+- Each spawn = separate Node.js process (~20-50MB memory)
+- Startup time: 1-3 seconds per server
+- Communication via stdin/stdout or WebSocket
+
+**Mitigation strategies built into design:**
+- **Lazy loading**: Only spawn when first needed by a guild
+- **Process pooling**: Reuse servers between guilds with same API key
+- **Resource limits**: Max 5 concurrent MCP servers per guild
+- **Auto-cleanup**: Kill unused servers after 30 minutes of inactivity
 
 ## 🛣️ Future Development Roadmap
 
