@@ -8,7 +8,7 @@ import {
 // Provider imports moved to factory pattern
 import type { StructuredContextItem } from "../../types/misc/context";
 // Provider-specific types moved to individual providers
-import type { FunctionCall } from "../../types/tool/interfaces";
+import type { FunctionCall } from "../../types/provider/interfaces";
 import {
 	loadServerEmojis,
 	loadTomoriState,
@@ -26,7 +26,10 @@ import { decryptApiKey } from "@/utils/security/crypto";
 import type { TomoriState } from "@/types/db/schema";
 // Provider-specific function declarations moved to providers
 import { getProviderForTomori } from "../../utils/provider/providerFactory";
-import type { LLMProvider, StreamResult } from "../../types/tool/interfaces";
+import type {
+	LLMProvider,
+	StreamResult,
+} from "../../types/provider/interfaces";
 import { ToolRegistry } from "../../tools/toolRegistry";
 
 // Constants
@@ -936,7 +939,7 @@ export default async function tomoriChat(
 							provider: "google" as const,
 						};
 
-						// Execute the tool through our modular system
+						// Execute tool using ToolRegistry (handles both built-in and MCP tools seamlessly)
 						const toolResult = await ToolRegistry.executeTool(
 							funcName,
 							funcCall.args || {},

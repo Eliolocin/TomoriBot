@@ -205,6 +205,138 @@ export interface ToolAdapter {
 }
 
 /**
+ * Enhanced tool adapter interface that includes MCP capabilities
+ * Provides provider-agnostic access to both built-in and MCP tools
+ */
+export interface MCPCapableToolAdapter extends ToolAdapter {
+	/**
+	 * Get all available tools (built-in + MCP) in provider-specific format
+	 * @param builtInTools - Array of built-in tools
+	 * @returns Combined provider-specific tool configuration
+	 */
+	getAllToolsInProviderFormat(builtInTools: Tool[]): Promise<Array<Record<string, unknown>>>;
+
+	/**
+	 * Check if a function name belongs to an MCP tool
+	 * @param functionName - Name of the function to check
+	 * @returns Promise<boolean> - True if this is an MCP tool function
+	 */
+	isMCPFunction(functionName: string): Promise<boolean>;
+
+	/**
+	 * Execute an MCP tool function
+	 * @param functionName - Name of the MCP function to execute
+	 * @param args - Arguments for the function
+	 * @param context - Tool execution context for Discord operations
+	 * @returns Promise<ToolResult> - Standardized tool result
+	 */
+	executeMCPFunction(functionName: string, args: Record<string, unknown>, context?: ToolContext): Promise<ToolResult>;
+}
+
+/**
+ * MCP tool execution context
+ * Additional context specific to MCP tool execution
+ */
+export interface MCPToolContext extends ToolContext {
+	// MCP-specific context
+	mcpServerName?: string;
+	mcpFunctionName: string;
+	
+	// Provider-specific MCP data
+	providerMcpData?: Record<string, unknown>;
+}
+
+/**
+ * MCP tool result with additional metadata
+ * Extends ToolResult with MCP-specific information
+ */
+export interface MCPToolResult extends ToolResult {
+	// MCP source information
+	source: "mcp";
+	functionName: string;
+	serverName?: string;
+	
+	// Raw MCP result for debugging/logging
+	rawResult?: unknown;
+	
+	// Execution metadata
+	executionTime?: number;
+	providerFormat?: Record<string, unknown>;
+}
+
+/**
+ * MCP server configuration interface
+ * Provider-agnostic configuration for MCP servers
+ */
+export interface MCPServerConfig {
+	name: string;
+	displayName: string;
+	command: string;
+	args: string[];
+	env?: Record<string, string>;
+	requiresApiKey?: boolean;
+	apiKeyEnvVar?: string;
+	timeout?: number;
+}
+
+/**
+ * MCP manager interface for provider-agnostic MCP management
+ * Defines the contract for managing MCP servers regardless of LLM provider
+ */
+export interface MCPManagerInterface {
+	/**
+	 * Initialize all available MCP servers during application startup
+	 * @returns Promise<void>
+	 */
+	initializeMCPServers(): Promise<void>;
+
+	/**
+	 * Check if MCP manager is ready (initialization completed)
+	 * @returns boolean
+	 */
+	isReady(): boolean;
+
+	/**
+	 * Get count of connected MCP servers
+	 * @returns number
+	 */
+	getConnectedServerCount(): number;
+
+	/**
+	 * Get connection status for all MCP servers
+	 * @returns Record<string, boolean>
+	 */
+	getConnectionStatus(): Record<string, boolean>;
+
+	/**
+	 * Get MCP tools available for a specific provider
+	 * @param provider - Provider name (google, openai, anthropic, etc.)
+	 * @returns Promise<unknown[]> - Provider-specific MCP tools
+	 */
+	getMCPToolsForProvider(provider: string): Promise<unknown[]>;
+
+	/**
+	 * Execute an MCP function with provider-agnostic result
+	 * @param functionName - Name of the function to execute
+	 * @param args - Function arguments
+	 * @returns Promise<MCPToolResult>
+	 */
+	executeMCPFunction(functionName: string, args: Record<string, unknown>): Promise<MCPToolResult>;
+
+	/**
+	 * Get available MCP function names across all connected servers
+	 * @returns Promise<string[]>
+	 */
+	getAvailableMCPFunctions(): Promise<string[]>;
+
+	/**
+	 * Cleanup all MCP connections (for graceful shutdown)
+	 * @returns Promise<void>
+	 */
+	cleanup(): Promise<void>;
+}
+
+/**
  * Tool execution event for monitoring and debugging
  */
 export interface ToolExecutionEvent {
