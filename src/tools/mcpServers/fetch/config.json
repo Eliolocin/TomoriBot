@@ -1,7 +1,8 @@
 {
   "name": "fetch",
   "displayName": "URL Fetcher",
-  "npmPackage": "@modelcontextprotocol/server-fetch",
+  "command": "python",
+  "args": ["-m", "mcp_server_fetch"],
   "description": "Fetch and analyze web content from URLs",
   "requiredEnvVars": [],
   "optionalEnvVars": [],

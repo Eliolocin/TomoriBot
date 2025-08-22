@@ -1,7 +1,7 @@
 {
   "name": "brave-search",
   "displayName": "Brave Search",
-  "npmPackage": "brave-search-mcp",
+  "npmPackage": "@brave/brave-search-mcp-server",
   "description": "Premium web search with video/image search via Brave Search API",
   "requiredEnvVars": ["BRAVE_API_KEY"],
   "optionalEnvVars": [],

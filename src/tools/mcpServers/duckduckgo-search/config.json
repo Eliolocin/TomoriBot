@@ -1,8 +1,7 @@
 {
   "name": "duckduckgo-search",
   "displayName": "DuckDuckGo Search", 
-  "command": "uvx",
-  "args": ["duckduckgo-mcp-server"],
+  "npmPackage": "duckduckgo-mcp-server",
   "description": "Free web search via DuckDuckGo (no API key required)",
   "requiredEnvVars": [],
   "optionalEnvVars": [],

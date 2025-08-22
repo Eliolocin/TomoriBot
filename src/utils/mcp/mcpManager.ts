@@ -9,6 +9,8 @@ import { type CallableTool, mcpToTool } from "@google/genai";
 import { Client as MCPClient } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { log } from "../misc/logger";
+import { getMCPConfigManager } from "./mcpConfig";
+import type { EnhancedMCPServerConfig } from "../../types/tool/mcpTypes";
 
 /**
  * MCP server configuration interface
@@ -75,6 +77,15 @@ export class MCPManager {
 
 		log.info("Starting MCP server initialization...");
 		const startTime = Date.now();
+		
+		// Log initialization summary
+		const configManager = getMCPConfigManager();
+		const summary = configManager.getInitializationSummary();
+		log.info(
+			`MCP Configuration Summary: ${summary.readyToInitialize}/${summary.totalServers} servers ready to initialize` +
+			(summary.missingApiKeys.length > 0 ? ` (missing API keys: ${summary.missingApiKeys.join(", ")})` : "") +
+			(summary.disabledServers.length > 0 ? ` (disabled: ${summary.disabledServers.join(", ")})` : "")
+		);
 
 		// Define available MCP server configurations
 		const serverConfigs = this.getServerConfigurations();
@@ -109,39 +120,19 @@ export class MCPManager {
 	}
 
 	/**
-	 * Get MCP server configurations based on environment
+	 * Get MCP server configurations from the configuration manager
 	 */
 	private getServerConfigurations(): MCPServerConfig[] {
-		const configs: MCPServerConfig[] = [];
-
-		// Brave Search MCP Server (conditional on API key)
-		const braveApiKey = process.env.BRAVE_API_KEY;
-		if (braveApiKey) {
-			configs.push({
-				name: "brave-search",
-				displayName: "Brave Search",
-				command: "npx",
-				args: ["-y", "@brave/brave-search-mcp-server"],
-				env: {
-					BRAVE_API_KEY: braveApiKey,
-					BRAVE_MCP_TRANSPORT: "stdio", // Force STDIO transport mode
-				},
-				requiresApiKey: true,
-				apiKeyEnvVar: "BRAVE_API_KEY",
-				timeout: 60000, // Reduced timeout since transport issue should be resolved
-			});
-		}
-
-		// Fetch MCP Server (Python-based, optional)
-		configs.push({
-			name: "fetch",
-			displayName: "Fetch Server",
-			command: "python",
-			args: ["-m", "mcp_server_fetch"],
-			timeout: 10000, // 10 seconds for Python server
-		});
-
-		return configs;
+		const configManager = getMCPConfigManager();
+		const enhancedConfigs = configManager.getConfigurationsByPriority(false); // Get all configs
+		
+		// Filter configs that should be initialized
+		const readyConfigs = enhancedConfigs.filter(config => 
+			configManager.shouldInitializeServer(config)
+		);
+		
+		// Convert enhanced configs to manager format
+		return readyConfigs.map(config => configManager.toManagerConfiguration(config));
 	}
 
 	/**
@@ -312,6 +303,23 @@ export class MCPManager {
 	 */
 	getConnectedServerCount(): number {
 		return this.mcpClients.size;
+	}
+
+	/**
+	 * Get enhanced server configurations
+	 * @returns Array of enhanced server configurations
+	 */
+	getEnhancedServerConfigurations(): EnhancedMCPServerConfig[] {
+		const configManager = getMCPConfigManager();
+		return configManager.getConfigurationsByPriority(true); // Get only enabled configs
+	}
+
+	/**
+	 * Get initialization summary for logging and monitoring
+	 */
+	getInitializationSummary() {
+		const configManager = getMCPConfigManager();
+		return configManager.getInitializationSummary();
 	}
 
 	/**

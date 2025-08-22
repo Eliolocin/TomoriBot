@@ -5,6 +5,12 @@
 
 import type { TomoriState } from "../db/schema";
 import type { BaseGuildTextChannel, Client, Message } from "discord.js";
+import type { 
+	MCPServerResponse, 
+	EnhancedMCPServerConfig, 
+	TypedMCPToolResult,
+	MCPExecutionContext 
+} from "./mcpTypes";
 
 /**
  * Tool parameter schema definition
@@ -228,9 +234,9 @@ export interface MCPCapableToolAdapter extends ToolAdapter {
 	 * @param functionName - Name of the MCP function to execute
 	 * @param args - Arguments for the function
 	 * @param context - Tool execution context for Discord operations
-	 * @returns Promise<ToolResult> - Standardized tool result
+	 * @returns Promise<TypedMCPToolResult> - Enhanced typed tool result
 	 */
-	executeMCPFunction(functionName: string, args: Record<string, unknown>, context?: ToolContext): Promise<ToolResult>;
+	executeMCPFunction(functionName: string, args: Record<string, unknown>, context?: ToolContext): Promise<TypedMCPToolResult>;
 }
 
 /**
@@ -249,6 +255,7 @@ export interface MCPToolContext extends ToolContext {
 /**
  * MCP tool result with additional metadata
  * Extends ToolResult with MCP-specific information
+ * @deprecated Use TypedMCPToolResult from mcpTypes.ts for better type safety
  */
 export interface MCPToolResult extends ToolResult {
 	// MCP source information
@@ -257,7 +264,7 @@ export interface MCPToolResult extends ToolResult {
 	serverName?: string;
 	
 	// Raw MCP result for debugging/logging
-	rawResult?: unknown;
+	rawResult?: MCPServerResponse;
 	
 	// Execution metadata
 	executionTime?: number;
@@ -267,6 +274,7 @@ export interface MCPToolResult extends ToolResult {
 /**
  * MCP server configuration interface
  * Provider-agnostic configuration for MCP servers
+ * @deprecated Use EnhancedMCPServerConfig from mcpTypes.ts for better type safety
  */
 export interface MCPServerConfig {
 	name: string;
@@ -319,15 +327,40 @@ export interface MCPManagerInterface {
 	 * Execute an MCP function with provider-agnostic result
 	 * @param functionName - Name of the function to execute
 	 * @param args - Function arguments
-	 * @returns Promise<MCPToolResult>
+	 * @param context - Optional execution context for Discord operations
+	 * @returns Promise<TypedMCPToolResult> - Enhanced typed result
 	 */
-	executeMCPFunction(functionName: string, args: Record<string, unknown>): Promise<MCPToolResult>;
+	executeMCPFunction(
+		functionName: string, 
+		args: Record<string, unknown>,
+		context?: MCPExecutionContext
+	): Promise<TypedMCPToolResult>;
 
 	/**
 	 * Get available MCP function names across all connected servers
 	 * @returns Promise<string[]>
 	 */
 	getAvailableMCPFunctions(): Promise<string[]>;
+
+	/**
+	 * Get MCP server configurations
+	 * @returns Promise<EnhancedMCPServerConfig[]>
+	 */
+	getServerConfigurations(): Promise<EnhancedMCPServerConfig[]>;
+
+	/**
+	 * Check if a specific MCP function is available
+	 * @param functionName - Name of the function to check
+	 * @returns Promise<boolean>
+	 */
+	isFunctionAvailable(functionName: string): Promise<boolean>;
+
+	/**
+	 * Get the server name that provides a specific function
+	 * @param functionName - Name of the function
+	 * @returns Promise<string | null>
+	 */
+	getServerForFunction(functionName: string): Promise<string | null>;
 
 	/**
 	 * Cleanup all MCP connections (for graceful shutdown)

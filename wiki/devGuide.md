@@ -359,31 +359,67 @@ export { YourTool } from "./yourTool";
    - Handles execution through the registry
    - Manages permissions and feature flags
 
-#### MCP Server Tools (Future)
+#### MCP Server Tools (Implemented)
 
-For external tool integration via Model Context Protocol:
+**Model Context Protocol (MCP)** integration is now fully implemented, providing standardized access to external data sources and functionality. MCP servers are automatically managed and integrated with TomoriBot's modular tool architecture.
 
-1. **Configure MCP server**:
+**Current MCP Server Implementation:**
+
+1. **MCP Manager System** (`src/utils/mcp/mcpManager.ts`):
 ```typescript
-interface MCPServerConfig {
-    id: string;
-    name: string;
-    transport: 'stdio' | 'http' | 'websocket';
-    command?: string[];     // For stdio servers
-    url?: string;          // For http/websocket servers
-    enabled: boolean;
+interface MCPManagerInterface {
+    initializeMCPServers(): Promise<void>;
+    isReady(): boolean;
+    getConnectedServerCount(): number;
+    getMCPToolsForProvider(provider: string): Promise<unknown[]>;
+    executeMCPFunction(functionName: string, args: Record<string, unknown>): Promise<MCPToolResult>;
+    cleanup(): Promise<void>;
 }
 ```
 
-2. **Automatic tool discovery**: MCP tools are automatically registered alongside built-in tools
+2. **Server Configuration** (`src/tools/mcpServers/{server-name}/config.json`):
+```json
+{
+  "name": "brave-search",
+  "displayName": "Brave Search",
+  "npmPackage": "brave-search-mcp",
+  "description": "Premium web search with video/image search via Brave Search API",
+  "requiredEnvVars": ["BRAVE_API_KEY"],
+  "optionalEnvVars": [],
+  "enabled": true
+}
+```
 
-3. **Unified execution**: MCP tools use the same `ToolRegistry.executeTool()` interface
+3. **Database Integration** - Encrypted API key storage per guild:
+```sql
+CREATE TABLE mcp_api_keys (
+  mcp_api_key_id SERIAL PRIMARY KEY,
+  server_id INT NOT NULL,
+  mcp_name TEXT NOT NULL,
+  api_key BYTEA,  -- Encrypted using pgcrypto
+  UNIQUE (server_id, mcp_name)
+);
+```
+
+4. **Provider Integration**: MCP tools are automatically discovered and converted to provider-specific formats via `MCPCapableToolAdapter` interface
+
+5. **Unified Execution**: MCP tools execute through the same `ToolRegistry.executeTool()` interface as built-in tools
+
+**Available MCP Servers:**
+- **Brave Search MCP** - Premium web search with automatic image sending to Discord
+- **Fetch MCP** - URL content retrieval and markdown conversion  
+- **Future**: DuckDuckGo Search MCP (free alternative)
 
 ### Current Tool Implementations
 
+**Built-in Function Call Tools:**
 - **StickerTool**: Discord sticker selection and sending
-- **SearchTool**: Web search functionality via Google search sub-agent
 - **MemoryTool**: Learning and memory storage (personal and server-wide)
+
+**MCP Server Tools:**
+- **Brave Search Functions**: `brave_web_search`, `brave_image_search`, `brave_video_search`, `brave_news_search`, `brave_local_search`, `brave_summarizer`
+- **Fetch Functions**: `fetch` - URL content retrieval and analysis
+- **Future MCP Tools**: DuckDuckGo search, community MCP servers
 
 ## Message Generation/Tool Call Flow
 
