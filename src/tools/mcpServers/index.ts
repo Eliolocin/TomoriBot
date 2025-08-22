@@ -3,21 +3,39 @@
  * Provider-agnostic MCP server behavior handlers and utilities
  */
 
-// Export MCP server behavior handlers
-export {
+// Import handlers for internal use
+import {
 	BraveSearchHandler,
 	getBraveSearchHandler,
 } from "./brave-search/braveSearchHandler";
 
-export {
+import {
 	FetchHandler,
 	getFetchHandler,
 } from "./fetch/fetchHandler";
 
-export {
+import {
 	DuckDuckGoHandler,
 	getDuckDuckGoHandler,
 } from "./duckduckgo-search/duckduckgoHandler";
+
+import type { MCPServerBehaviorHandler } from "../../types/tool/mcpTypes";
+
+// Re-export handlers for external use
+export {
+	BraveSearchHandler,
+	getBraveSearchHandler,
+};
+
+export {
+	FetchHandler,
+	getFetchHandler,
+};
+
+export {
+	DuckDuckGoHandler,
+	getDuckDuckGoHandler,
+};
 
 // Re-export common types for convenience
 export type { Tool, ToolContext, ToolResult } from "../../types/tool/interfaces";

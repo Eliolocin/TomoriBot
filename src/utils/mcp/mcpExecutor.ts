@@ -9,6 +9,7 @@ import { getMCPManager } from "./mcpManager";
 import type {
 	MCPExecutionContext,
 	MCPServerBehaviorHandler,
+	MCPServerResponse,
 	TypedMCPToolResult,
 } from "../../types/tool/mcpTypes";
 import {
@@ -145,7 +146,7 @@ export class MCPExecutor {
 				try {
 					const geminiTool = await mcpTool.tool();
 					const mcpFunctionNames =
-						geminiTool.functionDeclarations?.map((f: any) => f.name) || [];
+						geminiTool.functionDeclarations?.map((f) => f.name) || [];
 					if (mcpFunctionNames.includes(functionName)) {
 						return true;
 					}
@@ -194,15 +195,23 @@ export class MCPExecutor {
 			}
 
 			// Create MCP execution context
-			const mcpContext: MCPExecutionContext = {
-				...context!, // Spread the tool context
+			const mcpContext: MCPExecutionContext = context ? {
+				...context, // Spread the tool context if it exists
 				functionName,
 				originalArgs: { ...args },
 				modifiedArgs: { ...args },
 				executionStartTime,
 				overridesApplied: [],
 				serverName: handler?.serverName || "unknown",
-			};
+			} : {
+				// Create minimal context if none provided
+				functionName,
+				originalArgs: { ...args },
+				modifiedArgs: { ...args },
+				executionStartTime,
+				overridesApplied: [],
+				serverName: handler?.serverName || "unknown",
+			} as unknown as MCPExecutionContext;
 
 			// Apply parameter overrides if handler exists
 			if (handler) {
@@ -220,12 +229,12 @@ export class MCPExecutor {
 				try {
 					const geminiTool = await mcpTool.tool();
 					const mcpFunctionNames =
-						geminiTool.functionDeclarations?.map((f: any) => f.name) || [];
+						geminiTool.functionDeclarations?.map((f) => f.name) || [];
 
 					if (mcpFunctionNames.includes(functionName)) {
 						// Execute the MCP function with modified args
 						log.info(
-							`Executing MCP function: ${functionName} with ${mcpContext.overridesApplied.length > 0 ? "enforced parameters" : "original parameters"}`,
+							`Executing MCP function: ${functionName} with ${(mcpContext.overridesApplied?.length ?? 0) > 0 ? "enforced parameters" : "original parameters"}`,
 						);
 
 						const mcpResult = await mcpTool.callTool([
@@ -245,10 +254,12 @@ export class MCPExecutor {
 									mcpContext.modifiedArgs,
 								);
 
-								// Ensure execution time is set correctly
-								processedResult.data!.executionTime =
-									Date.now() - executionStartTime;
-								return processedResult;
+								// Cast to TypedMCPToolResult and ensure execution time is set correctly
+								const typedResult = processedResult as TypedMCPToolResult;
+								if (typedResult.data) {
+									typedResult.data.executionTime = Date.now() - executionStartTime;
+								}
+								return typedResult;
 							}
 
 							// Default processing if no handler
@@ -331,7 +342,7 @@ export class MCPExecutor {
 	 */
 	private processDefaultMCPResult(
 		functionName: string,
-		mcpResult: any,
+		mcpResult: MCPServerResponse,
 		context: MCPExecutionContext,
 	): TypedMCPToolResult {
 		try {
@@ -419,7 +430,7 @@ export class MCPExecutor {
 				try {
 					const geminiTool = await mcpTool.tool();
 					const toolFunctionNames =
-						geminiTool.functionDeclarations?.map((f: any) => f.name) || [];
+						geminiTool.functionDeclarations?.map((f) => f.name).filter((name): name is string => typeof name === "string") || [];
 					functionNames.push(...toolFunctionNames);
 				} catch (error) {
 					log.warn("Error getting MCP tool functions:", error as Error);

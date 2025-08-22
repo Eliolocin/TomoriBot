@@ -9,7 +9,6 @@ import { join } from "node:path";
 import { log } from "../misc/logger";
 import type {
 	EnhancedMCPServerConfig,
-	MCPParameterOverrides,
 } from "../../types/tool/mcpTypes";
 import { DEFAULT_MCP_PARAMETER_OVERRIDES } from "../../types/tool/mcpTypes";
 
@@ -120,7 +119,7 @@ export class MCPConfigManager {
 	 * @returns Enhanced and validated configuration
 	 */
 	private validateAndEnhanceConfig(
-		rawConfig: any,
+		rawConfig: Record<string, unknown>,
 		serverName: string,
 	): EnhancedMCPServerConfig {
 		// Validate required fields
@@ -141,21 +140,27 @@ export class MCPConfigManager {
 			? rawConfig.optionalEnvVars
 			: [];
 
-		// Create enhanced configuration with defaults
+		// Create enhanced configuration with defaults and proper type casting
 		const enhancedConfig: EnhancedMCPServerConfig = {
-			name: rawConfig.name,
-			displayName: rawConfig.displayName,
-			description: rawConfig.description,
+			name: typeof rawConfig.name === "string" ? rawConfig.name : serverName,
+			displayName: typeof rawConfig.displayName === "string" ? rawConfig.displayName : serverName,
+			description: typeof rawConfig.description === "string" ? rawConfig.description : "",
 			requiredEnvVars,
 			optionalEnvVars,
 			enabled: Boolean(rawConfig.enabled),
-			category: rawConfig.category || "utility",
+			category: typeof rawConfig.category === "string" && 
+				["search", "utility", "media", "ai", "data"].includes(rawConfig.category) 
+				? rawConfig.category as "search" | "utility" | "media" | "ai" | "data"
+				: "utility",
 			priority: typeof rawConfig.priority === "number" ? rawConfig.priority : 5,
-			transport: rawConfig.transport || "stdio",
+			transport: typeof rawConfig.transport === "string" &&
+				["stdio", "http", "websocket"].includes(rawConfig.transport)
+				? rawConfig.transport as "stdio" | "http" | "websocket"
+				: "stdio",
 
 			// Optional fields
-			npmPackage: rawConfig.npmPackage,
-			command: rawConfig.command,
+			npmPackage: typeof rawConfig.npmPackage === "string" ? rawConfig.npmPackage : undefined,
+			command: typeof rawConfig.command === "string" ? rawConfig.command : undefined,
 			args: Array.isArray(rawConfig.args) ? rawConfig.args : [],
 			timeout:
 				typeof rawConfig.timeout === "number" ? rawConfig.timeout : 30000,
@@ -165,9 +170,9 @@ export class MCPConfigManager {
 			parameterOverrides: this.loadParameterOverrides(serverName),
 
 			// Capabilities (will be determined at runtime)
-			supportedFunctions: rawConfig.supportedFunctions || [],
+			supportedFunctions: Array.isArray(rawConfig.supportedFunctions) ? rawConfig.supportedFunctions : [],
 			requiresAuth: requiredEnvVars.length > 0,
-			rateLimited: rawConfig.rateLimited || false,
+			rateLimited: typeof rawConfig.rateLimited === "boolean" ? rawConfig.rateLimited : false,
 		};
 
 		// Validate the configuration
@@ -257,7 +262,7 @@ export class MCPConfigManager {
 	 * @returns Array of server configurations
 	 */
 	public getAllConfigurations(
-		enabledOnly: boolean = false,
+		enabledOnly = false,
 	): EnhancedMCPServerConfig[] {
 		const configs = Array.from(this.configCache.values());
 		return enabledOnly ? configs.filter((config) => config.enabled) : configs;
@@ -278,7 +283,7 @@ export class MCPConfigManager {
 	 * @returns Array of configurations sorted by priority (1 = highest priority)
 	 */
 	public getConfigurationsByPriority(
-		enabledOnly: boolean = false,
+		enabledOnly = false,
 	): EnhancedMCPServerConfig[] {
 		const configs = this.getAllConfigurations(enabledOnly);
 		return configs.sort((a, b) => a.priority - b.priority);
@@ -330,15 +335,17 @@ export class MCPConfigManager {
 
 		// Add required environment variables if they exist in process.env
 		for (const envVar of config.requiredEnvVars) {
-			if (process.env[envVar]) {
-				env[envVar] = process.env[envVar]!;
+			const value = process.env[envVar];
+			if (value) {
+				env[envVar] = value;
 			}
 		}
 
 		// Add optional environment variables if they exist
 		for (const envVar of config.optionalEnvVars) {
-			if (process.env[envVar]) {
-				env[envVar] = process.env[envVar]!;
+			const value = process.env[envVar];
+			if (value) {
+				env[envVar] = value;
 			}
 		}
 

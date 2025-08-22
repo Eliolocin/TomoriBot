@@ -3,12 +3,13 @@
  * Converts generic tools to Google's function declaration format and back
  */
 
-import { Type, type CallableTool } from "@google/genai";
+import { Type } from "@google/genai";
 import { log } from "../../utils/misc/logger";
 import type {
 	Tool,
 	MCPCapableToolAdapter,
 	ToolContext,
+	ToolResult,
 } from "../../types/tool/interfaces";
 import type { TypedMCPToolResult } from "../../types/tool/mcpTypes";
 import { getMCPManager } from "../../utils/mcp/mcpManager";
@@ -295,7 +296,9 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 					try {
 						const geminiTool = await mcpTool.tool();
 						if (geminiTool.functionDeclarations) {
-							allFunctionDeclarations.push(...geminiTool.functionDeclarations);
+							// Cast FunctionDeclaration to Record<string, unknown> for type compatibility
+							const declarations = geminiTool.functionDeclarations as Record<string, unknown>[];
+							allFunctionDeclarations.push(...declarations);
 						}
 					} catch (error) {
 						log.warn(

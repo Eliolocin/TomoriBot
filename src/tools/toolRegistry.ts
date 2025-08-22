@@ -12,7 +12,6 @@ import type {
 	ToolExecutionEvent,
 	MCPCapableToolAdapter,
 } from "../types/tool/interfaces";
-import { getMCPManager } from "../utils/mcp/mcpManager";
 
 /**
  * Minimal state interface for context building operations
@@ -643,7 +642,7 @@ export async function executeTool(
 }
 
 export function registerMCPAdapter(adapter: MCPCapableToolAdapter): void {
-	return ToolRegistry.registerMCPAdapter(adapter);
+	ToolRegistry.registerMCPAdapter(adapter);
 }
 
 export async function isMCPFunction(functionName: string, provider: string): Promise<boolean> {

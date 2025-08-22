@@ -5,12 +5,10 @@
  */
 
 import { log } from "../../../utils/misc/logger";
-import type { ToolResult } from "../../../types/tool/interfaces";
 import type {
 	MCPServerBehaviorHandler,
 	MCPExecutionContext,
 	MCPServerResponse,
-	DuckDuckGoSearchResponse,
 	TypedMCPToolResult,
 } from "../../../types/tool/mcpTypes";
 
@@ -155,7 +153,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 	 */
 	private async processDuckDuckGoWebSearch(
 		mcpResult: MCPServerResponse,
-		args: Record<string, unknown>
+		_args: Record<string, unknown>
 	): Promise<TypedMCPToolResult> {
 		try {
 			// Extract the original search result text
@@ -175,7 +173,6 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 			const urlCount = foundUrls.length;
 
 			// Create an enhanced response that includes fetch capability reminder
-			const queryTerm = args.query || args.q || "search";
 			const fetchReminder =
 				urlCount > 0
 					? `\n\n[AGENT REMINDER] You have access to the "fetch" function call to retrieve and analyze the full content of any of these ${urlCount} web URLs from the free DuckDuckGo search. Use fetch(url="[URL]") when more detailed webpage content is needed for analysis.`
@@ -240,7 +237,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 		functionName: string,
 		mcpResult: MCPServerResponse,
 		context: MCPExecutionContext,
-		args: Record<string, unknown>
+		_args: Record<string, unknown>
 	): TypedMCPToolResult {
 		try {
 			// Extract result text from various possible locations in MCP response

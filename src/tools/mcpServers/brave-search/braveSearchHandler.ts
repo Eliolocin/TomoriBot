@@ -6,13 +6,10 @@
 
 import { AttachmentBuilder } from "discord.js";
 import { log } from "../../../utils/misc/logger";
-import type { ToolResult } from "../../../types/tool/interfaces";
 import type {
 	MCPServerBehaviorHandler,
 	MCPExecutionContext,
 	MCPServerResponse,
-	BraveImageSearchResponse,
-	BraveWebSearchResponse,
 	TypedMCPToolResult,
 } from "../../../types/tool/mcpTypes";
 import { MCPTypeGuards } from "../../../types/tool/mcpTypes";
@@ -30,17 +27,20 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 	 */
 	private readonly SUPPORTED_FUNCTIONS = [
 		"brave_web_search",
-		"brave_image_search", 
+		"brave_image_search",
 		"brave_video_search",
 		"brave_news_search",
 		"brave_local_search",
-		"brave_summarizer"
+		"brave_summarizer",
 	];
 
 	/**
 	 * Default parameter overrides for Brave Search functions
 	 */
-	private readonly PARAMETER_OVERRIDES: Record<string, Record<string, unknown>> = {
+	private readonly PARAMETER_OVERRIDES: Record<
+		string,
+		Record<string, unknown>
+	> = {
 		brave_web_search: {
 			count: 20, // Limit to 20 articles
 			summary: true,
@@ -79,7 +79,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 	 */
 	public applyParameterOverrides(
 		functionName: string,
-		originalArgs: Record<string, unknown>
+		originalArgs: Record<string, unknown>,
 	): {
 		modifiedArgs: Record<string, unknown>;
 		overridesApplied: string[];
@@ -98,14 +98,14 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 				// Log when we override a parameter
 				if (originalValue !== forcedValue) {
 					overridesApplied.push(
-						`${paramName}: ${originalValue} → ${forcedValue}`
+						`${paramName}: ${originalValue} → ${forcedValue}`,
 					);
 				}
 			}
 
 			if (overridesApplied.length > 0) {
 				log.info(
-					`Applied Brave Search parameter overrides for ${functionName}: ${overridesApplied.join(", ")}`
+					`Applied Brave Search parameter overrides for ${functionName}: ${overridesApplied.join(", ")}`,
 				);
 			}
 		}
@@ -125,7 +125,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 		functionName: string,
 		mcpResult: MCPServerResponse,
 		context: MCPExecutionContext,
-		args: Record<string, unknown>
+		args: Record<string, unknown>,
 	): Promise<TypedMCPToolResult> {
 		try {
 			// Handle Brave Image Search with automatic Discord attachment sending
@@ -139,12 +139,14 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 			}
 
 			// Handle other Brave Search functions with standard processing
-			return this.processStandardBraveResult(functionName, mcpResult, context, args);
-		} catch (error) {
-			log.error(
-				`Failed to process ${functionName} result:`,
-				error as Error
+			return this.processStandardBraveResult(
+				functionName,
+				mcpResult,
+				context,
+				args,
 			);
+		} catch (error) {
+			log.error(`Failed to process ${functionName} result:`, error as Error);
 			return {
 				success: false,
 				message: "Failed to process Brave Search result",
@@ -171,7 +173,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 	private async processBraveImageSearch(
 		mcpResult: MCPServerResponse,
 		context: MCPExecutionContext,
-		args: Record<string, unknown>
+		args: Record<string, unknown>,
 	): Promise<TypedMCPToolResult> {
 		try {
 			const imageUrls = MCPTypeGuards.extractImageUrls(mcpResult);
@@ -195,7 +197,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 						failedUrls.push(imageUrls[i]);
 						log.warn(
 							`Failed to create attachment for URL: ${imageUrls[i]}`,
-							attachmentError as Error
+							attachmentError as Error,
 						);
 					}
 				}
@@ -208,12 +210,12 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 							// content: `Found ${imageCount} image${imageCount !== 1 ? "s" : ""}:`,
 						});
 						log.success(
-							`Sent ${attachments.length} image attachments to Discord`
+							`Sent ${attachments.length} image attachments to Discord`,
 						);
 					} catch (sendError) {
 						log.error(
 							"Failed to send image attachments to Discord:",
-							sendError as Error
+							sendError as Error,
 						);
 						// Fall back message if Discord sending fails
 						const queryTerm = args.query || "images";
@@ -295,7 +297,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 	 */
 	private async processBraveWebSearch(
 		mcpResult: MCPServerResponse,
-		args: Record<string, unknown>
+		_args: Record<string, unknown>,
 	): Promise<TypedMCPToolResult> {
 		try {
 			// Extract the original search result text
@@ -315,7 +317,6 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 			const urlCount = foundUrls.length;
 
 			// Create an enhanced response that includes fetch capability reminder
-			const queryTerm = args.query || "search";
 			const fetchReminder =
 				urlCount > 0
 					? `\n\n[AGENT REMINDER] You have access to the "fetch" function call to retrieve and analyze the full content of any of these ${urlCount} web URLs. If any given information snippet is not enough, use the function to retrieve more details about a specific webpage, use fetch(url="[URL]") to get the complete page content for deeper analysis.`
@@ -325,7 +326,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 
 			// Log the enhanced message that TomoriBot will receive
 			log.info(
-				`Enhanced web search response for TomoriBot: ${enhancedMessage.substring(0, 200)}...`
+				`Enhanced web search response for TomoriBot: ${enhancedMessage.substring(0, 200)}...`,
 			);
 			log.info(`Fetch capability reminder appended - Found ${urlCount} URLs`);
 
@@ -374,7 +375,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 		functionName: string,
 		mcpResult: MCPServerResponse,
 		context: MCPExecutionContext,
-		args: Record<string, unknown>
+		_args: Record<string, unknown>,
 	): TypedMCPToolResult {
 		try {
 			// Extract result text from various possible locations in MCP response
@@ -421,7 +422,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 		} catch (error) {
 			log.error(
 				`Error processing standard Brave result for ${functionName}:`,
-				error as Error
+				error as Error,
 			);
 			return {
 				success: false,
@@ -445,7 +446,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 	 * @param mcpResult - Raw MCP result from brave_image_search
 	 * @returns Cleaned result with image data removed
 	 */
-	private cleanImageSearchResult(mcpResult: MCPServerResponse): any {
+	private cleanImageSearchResult(mcpResult: MCPServerResponse): Record<string, unknown> {
 		try {
 			// Create a deep copy to avoid mutating the original
 			const cleanedResult = JSON.parse(JSON.stringify(mcpResult));
@@ -461,7 +462,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 			for (const contentArray of contentArrays) {
 				for (let i = contentArray.length - 1; i >= 0; i--) {
 					const item = contentArray[i];
-					
+
 					// Remove text objects containing image data (JSON with image_url)
 					if (item && item.type === "text" && item.text) {
 						try {
@@ -470,14 +471,14 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 								// Replace with summary instead of removing entirely
 								contentArray[i] = {
 									type: "text",
-									text: `[Image data removed - already sent to Discord]`
+									text: "[Image data removed - already sent to Discord]",
 								};
 							}
 						} catch {
 							// Not JSON, keep as is
 						}
 					}
-					
+
 					// Remove image objects entirely
 					else if (item && item.type === "image") {
 						contentArray.splice(i, 1);
@@ -487,13 +488,13 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 
 			// Add summary of what was processed
 			if (cleanedResult.functionResponse?.response) {
-				cleanedResult.functionResponse.response.summary = 
+				cleanedResult.functionResponse.response.summary =
 					"Image search completed - images have been sent to Discord channel";
 			} else if (cleanedResult.response) {
-				cleanedResult.response.summary = 
+				cleanedResult.response.summary =
 					"Image search completed - images have been sent to Discord channel";
 			} else {
-				cleanedResult.summary = 
+				cleanedResult.summary =
 					"Image search completed - images have been sent to Discord channel";
 			}
 
@@ -502,8 +503,8 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 			log.warn("Failed to clean image search result:", error as Error);
 			// Return minimal result if cleaning fails
 			return {
-				summary: "Image search completed - images have been sent to Discord channel",
-				imageDataRemoved: true
+				// summary: "Image search completed - images have been sent to Discord channel",
+				imageDataRemoved: true,
 			};
 		}
 	}

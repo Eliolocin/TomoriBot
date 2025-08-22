@@ -90,13 +90,15 @@ export const storeMcpApiKey = async (
 	}
 
 	try {
-		log.info(`Storing encrypted MCP API key for server ${serverId}, MCP: ${mcpName}`);
-		
+		log.info(
+			`Storing encrypted MCP API key for server ${serverId}, MCP: ${mcpName}`,
+		);
+
 		// Encrypt the API key using the existing encryption function
 		const encryptedKey = await encryptApiKey(apiKey);
 
 		// Store in database with ON CONFLICT update for idempotent operation
-		const result = await sql`
+		await sql`
 			INSERT INTO mcp_api_keys (server_id, mcp_name, api_key)
 			VALUES (${serverId}, ${mcpName}, ${encryptedKey})
 			ON CONFLICT (server_id, mcp_name)
@@ -105,7 +107,9 @@ export const storeMcpApiKey = async (
 				updated_at = CURRENT_TIMESTAMP
 		`;
 
-		log.success(`MCP API key stored successfully for ${mcpName} on server ${serverId}`);
+		log.success(
+			`MCP API key stored successfully for ${mcpName} on server ${serverId}`,
+		);
 		return true;
 	} catch (error) {
 		log.error(`Failed to store MCP API key for ${mcpName}`, error as Error);
@@ -144,7 +148,7 @@ export const getMcpApiKey = async (
 
 		// Decrypt the API key using the existing decryption function
 		const decryptedKey = await decryptApiKey(result.api_key);
-		
+
 		log.success(`MCP API key retrieved successfully for ${mcpName}`);
 		return decryptedKey;
 	} catch (error) {
@@ -169,11 +173,11 @@ export const getAllMcpApiKeysForServer = async (
 	try {
 		log.info(`Retrieving all MCP API keys for server ${serverId}`);
 
-		const results = await sql`
+		const results = (await sql`
 			SELECT mcp_name, api_key 
 			FROM mcp_api_keys 
 			WHERE server_id = ${serverId}
-		` as McpApiKeyRow[];
+		`) as McpApiKeyRow[];
 
 		const apiKeys: Record<string, string> = {};
 
@@ -183,15 +187,23 @@ export const getAllMcpApiKeysForServer = async (
 					const decryptedKey = await decryptApiKey(result.api_key);
 					apiKeys[result.mcp_name] = decryptedKey;
 				} catch (error) {
-					log.warn(`Failed to decrypt API key for MCP: ${result.mcp_name}`, error as Error);
+					log.warn(
+						`Failed to decrypt API key for MCP: ${result.mcp_name}`,
+						error as Error,
+					);
 				}
 			}
 		}
 
-		log.success(`Retrieved ${Object.keys(apiKeys).length} MCP API keys for server ${serverId}`);
+		log.success(
+			`Retrieved ${Object.keys(apiKeys).length} MCP API keys for server ${serverId}`,
+		);
 		return apiKeys;
 	} catch (error) {
-		log.error(`Failed to retrieve MCP API keys for server ${serverId}`, error as Error);
+		log.error(
+			`Failed to retrieve MCP API keys for server ${serverId}`,
+			error as Error,
+		);
 		return {};
 	}
 };
@@ -214,12 +226,14 @@ export const deleteMcpApiKey = async (
 	try {
 		log.info(`Deleting MCP API key for server ${serverId}, MCP: ${mcpName}`);
 
-		const result = await sql`
+		await sql`
 			DELETE FROM mcp_api_keys 
 			WHERE server_id = ${serverId} AND mcp_name = ${mcpName}
 		`;
 
-		log.success(`MCP API key deleted successfully for ${mcpName} on server ${serverId}`);
+		log.success(
+			`MCP API key deleted successfully for ${mcpName} on server ${serverId}`,
+		);
 		return true;
 	} catch (error) {
 		log.error(`Failed to delete MCP API key for ${mcpName}`, error as Error);
@@ -250,7 +264,10 @@ export const hasMcpApiKey = async (
 
 		return !!result;
 	} catch (error) {
-		log.error(`Failed to check MCP API key existence for ${mcpName}`, error as Error);
+		log.error(
+			`Failed to check MCP API key existence for ${mcpName}`,
+			error as Error,
+		);
 		return false;
 	}
 };

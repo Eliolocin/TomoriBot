@@ -140,7 +140,6 @@ export interface BraveSummarizerResponse extends MCPServerResponse {
 export interface FetchMCPResponse extends MCPServerResponse {
 	url?: string;
 	title?: string;
-	content?: string;
 	markdown?: string;
 	status_code?: number;
 	headers?: Record<string, string>;
@@ -322,6 +321,14 @@ export interface TypedMCPToolResult extends ToolResult {
 		// Status information
 		status: "completed" | "completed_and_sent" | "failed" | "partial";
 		completionMessage?: string;
+		
+		// Handler-specific extensions
+		error?: string;          // For error scenarios
+		searchProvider?: string; // For search-specific information
+		contentLength?: number;  // For fetch-specific information
+		
+		// Allow additional properties for future extensibility
+		[key: string]: unknown;
 	};
 }
 

@@ -33,7 +33,7 @@ export class MCPManager {
 	private static instance: MCPManager;
 	private mcpClients: Map<string, MCPClient> = new Map();
 	private mcpTools: Map<string, CallableTool> = new Map();
-	private isInitialized: boolean = false;
+	private isInitialized = false;
 	private initializationPromise: Promise<void> | null = null;
 
 	/**
@@ -82,9 +82,7 @@ export class MCPManager {
 		const configManager = getMCPConfigManager();
 		const summary = configManager.getInitializationSummary();
 		log.info(
-			`MCP Configuration Summary: ${summary.readyToInitialize}/${summary.totalServers} servers ready to initialize` +
-			(summary.missingApiKeys.length > 0 ? ` (missing API keys: ${summary.missingApiKeys.join(", ")})` : "") +
-			(summary.disabledServers.length > 0 ? ` (disabled: ${summary.disabledServers.join(", ")})` : "")
+			`MCP Configuration Summary: ${summary.readyToInitialize}/${summary.totalServers} servers ready to initialize${summary.missingApiKeys.length > 0 ? ` (missing API keys: ${summary.missingApiKeys.join(", ")})` : ""}${summary.disabledServers.length > 0 ? ` (disabled: ${summary.disabledServers.join(", ")})` : ""}`
 		);
 
 		// Define available MCP server configurations
@@ -178,7 +176,6 @@ export class MCPManager {
 
 			// Convert to CallableTool using Google's mcpToTool()
 			const callableTool = mcpToTool(client);
-			await callableTool.initialize();
 
 			// Store both client and tool
 			this.mcpClients.set(name, client);
@@ -191,7 +188,7 @@ export class MCPManager {
 				const tool = await callableTool.tool();
 				if (tool.functionDeclarations) {
 					const functionNames = tool.functionDeclarations.map(
-						(f: any) => f.name,
+						(f) => f.name,
 					);
 					log.info(
 						`${displayName} provides functions: ${functionNames.join(", ")}`,
@@ -213,7 +210,7 @@ export class MCPManager {
 				);
 				if (command === "npx") {
 					log.info(
-						`Try restarting TomoriBot after npm finishes installing the package`,
+						"Try restarting TomoriBot after npm finishes installing the package",
 					);
 				}
 			} else if (
@@ -250,7 +247,7 @@ export class MCPManager {
 			try {
 				const tool = await callableTool.tool();
 				const availableFunctions =
-					tool.functionDeclarations?.map((f: any) => f.name) || [];
+					tool.functionDeclarations?.map((f) => f.name) || [];
 
 				// Check if this tool provides any of the requested functions
 				const hasMatchingFunction = functionNames.some((name) =>

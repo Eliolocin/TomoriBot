@@ -5,7 +5,6 @@
  */
 
 import { log } from "../../../utils/misc/logger";
-import type { ToolResult } from "../../../types/tool/interfaces";
 import type {
 	MCPServerBehaviorHandler,
 	MCPExecutionContext,
@@ -155,7 +154,7 @@ export class FetchHandler implements MCPServerBehaviorHandler {
 
 			if (isFetchResponse) {
 				// Handle structured fetch response
-				resultText = fetchResult.markdown || fetchResult.content || fetchResult.text || "";
+				resultText = fetchResult.markdown || fetchResult.text || "";
 				url = fetchResult.url || args.url as string || "";
 				title = fetchResult.title || "";
 				statusCode = fetchResult.status_code || 200;
@@ -219,8 +218,7 @@ export class FetchHandler implements MCPServerBehaviorHandler {
 			// Truncate if the content is extremely long (to avoid token limits)
 			const MAX_CONTENT_LENGTH = 8000; // Reasonable limit for LLM context
 			if (formattedMessage.length > MAX_CONTENT_LENGTH) {
-				formattedMessage = formattedMessage.substring(0, MAX_CONTENT_LENGTH) + 
-					"\n\n[Content truncated due to length - this represents a portion of the full page content]";
+				formattedMessage = `${formattedMessage.substring(0, MAX_CONTENT_LENGTH)}\n\n[Content truncated due to length - this represents a portion of the full page content]`;
 			}
 
 			log.info(
@@ -274,7 +272,7 @@ export class FetchHandler implements MCPServerBehaviorHandler {
 		functionName: string,
 		mcpResult: MCPServerResponse,
 		context: MCPExecutionContext,
-		args: Record<string, unknown>
+		_args: Record<string, unknown>
 	): TypedMCPToolResult {
 		try {
 			// Extract result text from various possible locations in MCP response
