@@ -503,15 +503,6 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 			let imageUrls: string[] = [];
 			let imageCount = 0;
 
-			// Debug: Save the actual MCP result structure to a temporary file
-			const debugFilePath = join(process.cwd(), "brave_image_debug.json");
-			try {
-				writeFileSync(debugFilePath, JSON.stringify(mcpResult, null, 2));
-				log.info(`Brave Image Search MCP result saved to: ${debugFilePath}`);
-			} catch (fileError) {
-				log.warn("Failed to save debug file:", fileError as Error);
-			}
-
 			// Extract image URLs from text objects in the MCP result
 			// Try multiple possible structures since MCP result format may vary
 
@@ -636,14 +627,17 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 
 				// Return simplified response to LLM - no URLs to prevent duplicate sending
 				const queryTerm = args.query || "images";
+				const completionMessage = `Found and sent ${attachments.length} ${queryTerm} images directly to Discord. The images are now displayed for the user.`;
+
 				return {
 					success: true,
-					message: `I found and sent ${attachments.length} ${queryTerm} images directly to Discord! The images are already displayed above.`,
+					message: completionMessage,
 					data: {
 						source: "mcp",
 						functionName: "brave_image_search",
 						imagesSent: attachments.length,
 						status: "completed_and_sent",
+						completionMessage: completionMessage, // Add the completion message here
 						// Deliberately not including imageUrls to prevent duplicate sending
 					},
 				};
@@ -720,6 +714,7 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 					originalResult: mcpResult,
 					urlsFound: urlCount,
 					fetchCapabilityReminder: true,
+					agentInstructions: fetchReminder.trim(), // Add the actual reminder text here
 				},
 			};
 		} catch (error) {
@@ -763,8 +758,8 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 				safesearch: "off", // Disable safe search for local results too
 			},
 			brave_image_search: {
-				count: 5, // Limit to 5 images
-				// safesearch: "off", // Disable safe search for images
+				count: 6, // Limit to 6 images
+				safesearch: "off", // Disable safe search for images
 			},
 			brave_video_search: {
 				count: 5, // Limit to 5 videos
