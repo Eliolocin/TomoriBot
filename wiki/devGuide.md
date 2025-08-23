@@ -545,7 +545,7 @@ This same flow works identically with any LLM provider - the modular architectur
 2. **Type Organization**: Place types and interfaces in appropriate `src/types/` subdirectories
 3. **Provider Development**: Follow the provider interface pattern
 4. **Tool Development**: Extend `BaseTool` and implement required methods
-5. **Testing**: Use `bun run build` to verify TypeScript compilation
+5. **Testing**: Use `bun run check` for TypeScript errors and `bun run lint` for Biome linting
 6. **Code Quality**: Biome handles formatting and linting automatically
 
 ### Architecture Principles
