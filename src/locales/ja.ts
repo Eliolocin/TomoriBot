@@ -90,6 +90,13 @@ export default {
 				"検索クエリ: **{query}**\n\n⚠️ **ご注意:** 検索結果を含むAI生成情報は、時として不正確または不完全な場合があります。重要な情報は常に確認してください。",
 		},
 
+		// YouTube video processing messages
+		video: {
+			youtube_processing_title: "🎥 YouTube動画を視聴中...",
+			youtube_processing_description:
+				"YouTube動画を分析しています: **{video_url}**\n\n動画の長さによって時間がかかる場合があります。コンテンツを処理している間、少しお待ちください。",
+		},
+
 		// New: Stream specific error messages
 		stream: {
 			prompt_blocked_title: "リクエストがブロックされました",

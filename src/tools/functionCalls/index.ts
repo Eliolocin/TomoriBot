@@ -8,6 +8,7 @@
 
 export { StickerTool } from "./stickerTool";
 export { MemoryTool } from "./memoryTool";
+export { YouTubeVideoTool } from "./youTubeVideoTool";
 
 // Re-export common types for convenience
 export type { Tool, ToolContext, ToolResult } from "../../types/tool/interfaces";

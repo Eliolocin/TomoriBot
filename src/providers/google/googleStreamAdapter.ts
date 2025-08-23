@@ -37,6 +37,7 @@ import type {
 	StreamProvider,
 } from "../../types/stream/interfaces";
 
+
 /**
  * Google-specific stream configuration extending the base StreamConfig
  */
@@ -413,15 +414,26 @@ export class GoogleStreamAdapter implements StreamProvider {
 						// Handle videos
 						try {
 							if ((part as { isYouTubeLink?: boolean }).isYouTubeLink) {
-								// YouTube links use fileData format
-								geminiParts.push({
-									fileData: {
-										fileUri: part.uri,
-									},
-								});
-								log.info(
-									`GoogleStreamAdapter: Added YouTube video: ${part.uri}`,
-								);
+								// Check if this is an enhanced context video part (should be processed)
+								const isEnhancedContext = (part as { enhancedContext?: boolean }).enhancedContext;
+								
+								if (isEnhancedContext) {
+									// Process enhanced context YouTube videos (from function call restart)
+									log.info(
+										`GoogleStreamAdapter: Processing enhanced context YouTube video: ${part.uri}`,
+									);
+									geminiParts.push({
+										fileData: {
+											fileUri: part.uri,
+										},
+									});
+								} else {
+									// Skip original YouTube processing - now handled via process_youtube_video tool
+									// This prevents timeouts from processing long YouTube videos automatically
+									log.info(
+										`GoogleStreamAdapter: Skipping original YouTube video auto-processing: ${part.uri} - Available via process_youtube_video tool`,
+									);
+								}
 							} else {
 								// Direct video uploads (handle size limits)
 								const videoResponse = await fetch(part.uri);

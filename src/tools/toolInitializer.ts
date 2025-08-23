@@ -5,7 +5,7 @@
 
 import { log } from "../utils/misc/logger";
 import { ToolRegistry } from "./toolRegistry";
-import { StickerTool, MemoryTool } from "./functionCalls";
+import { StickerTool, MemoryTool, YouTubeVideoTool } from "./functionCalls";
 
 /**
  * Initialize all tools by registering them with the central registry
@@ -24,6 +24,7 @@ export function initializeTools(): void {
 		const tools = [
 			new StickerTool(),
 			new MemoryTool(),
+			new YouTubeVideoTool(),
 		];
 
 		for (const tool of tools) {

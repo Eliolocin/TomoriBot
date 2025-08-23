@@ -31,6 +31,13 @@ export interface ToolParameterSchema {
 }
 
 /**
+ * Streaming context for enhanced functionality during streaming
+ */
+export interface StreamingContext {
+	disableYouTubeProcessing: boolean; // Flag to temporarily disable YouTube function during enhanced context restart
+}
+
+/**
  * Context passed to tool execution
  * Contains all necessary Discord and Tomori state information
  */
@@ -51,6 +58,7 @@ export interface ToolContext {
 	emojiStrings?: string[];
 	userId?: string;
 	guildId?: string;
+	streamContext?: StreamingContext; // Optional streaming context for enhanced functionality
 }
 
 /**
