@@ -78,7 +78,12 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 		for (const tool of this.tools.values()) {
 			try {
 				// Check if tool supports this provider
-				if (!tool.isAvailableFor(provider)) {
+				// Use context-aware availability check if available, otherwise fall back to basic check
+				const isToolAvailable = 'isAvailableForContext' in tool && typeof tool.isAvailableForContext === 'function'
+					? tool.isAvailableForContext(provider, context)
+					: tool.isAvailableFor(provider);
+				
+				if (!isToolAvailable) {
 					continue;
 				}
 
@@ -135,6 +140,8 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 		for (const tool of this.tools.values()) {
 			try {
 				// Check if tool supports this provider
+				// Note: This method intentionally uses basic isAvailableFor() instead of context-aware checking
+				// because ToolStateForContext lacks streamContext needed for streaming-specific availability logic
 				if (!tool.isAvailableFor(provider)) {
 					continue;
 				}
@@ -358,7 +365,12 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 		}
 
 		// Check if tool is available for this provider
-		if (!tool.isAvailableFor(context.provider)) {
+		// Use context-aware availability check if available, otherwise fall back to basic check
+		const isToolAvailable = 'isAvailableForContext' in tool && typeof tool.isAvailableForContext === 'function'
+			? tool.isAvailableForContext(context.provider, context)
+			: tool.isAvailableFor(context.provider);
+		
+		if (!isToolAvailable) {
 			const errorResult: ToolResult = {
 				success: false,
 				error: `Tool '${toolName}' is not available for provider '${context.provider}'`,

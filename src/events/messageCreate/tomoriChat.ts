@@ -133,11 +133,12 @@ export default async function tomoriChat(
 	// 1. Initial Checks & State Loading
 	const channel = message.channel;
 	let locale = "en-US";
-
-	// Create streaming context for enhanced functionality during streaming
+	
+	// Initialize streaming context for context-aware tool availability
 	const streamingContext = {
-		disableYouTubeProcessing: false, // Flag to temporarily disable YouTube function during enhanced context restart
+		disableYouTubeProcessing: false, // Will be set to true during enhanced context restart
 	};
+
 
 	if (!(channel instanceof BaseGuildTextChannel)) {
 		// Default locale
@@ -839,6 +840,7 @@ export default async function tomoriChat(
 							: undefined, // Pass history if it exists
 						undefined,
 						isFromQueue ? message : undefined,
+						streamingContext, // Pass streaming context for context-aware tool availability
 					);
 					const timeoutPromise = new Promise<never>(
 						(

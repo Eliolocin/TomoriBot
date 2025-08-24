@@ -24,7 +24,7 @@ import {
 export class YouTubeVideoTool extends BaseTool {
 	name = "process_youtube_video";
 	description =
-		"Process and analyze a specific YouTube video using Google's video understanding capabilities. ONLY use this when the user provides a new YouTube URL that you haven't seen before. If you don't see any YouTube URLs in recent messages, it likely means you're already analyzing video content and should NOT call this function again.";
+		"Process and analyze a specific YouTube video using Google's video understanding capabilities. ONLY use this when needed as it costs a lot of processing power. Use sparingly. If you don't see any YouTube URLs in recent messages, it likely means you're already analyzing video content and should NOT call this function again.";
 	category = "utility" as const;
 
 	parameters: ToolParameterSchema = {

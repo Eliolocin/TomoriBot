@@ -12,6 +12,7 @@ import type {
 } from "discord.js";
 import type { TomoriState } from "../db/schema";
 import type { StructuredContextItem } from "../misc/context";
+import type { StreamingContext } from "../tool/interfaces";
 
 /**
  * Generic stream response result
@@ -106,6 +107,7 @@ export interface LLMProvider {
 		}>,
 		initialInteraction?: CommandInteraction,
 		replyToMessage?: Message,
+		streamingContext?: StreamingContext,
 	): Promise<StreamResult>;
 
 	/**
@@ -144,6 +146,7 @@ export abstract class BaseLLMProvider implements LLMProvider {
 		}>,
 		initialInteraction?: CommandInteraction,
 		replyToMessage?: Message,
+		streamingContext?: StreamingContext,
 	): Promise<StreamResult>;
 	abstract getDefaultModel(): string;
 	abstract createConfig(

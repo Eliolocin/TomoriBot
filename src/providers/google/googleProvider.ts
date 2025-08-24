@@ -27,7 +27,9 @@ import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
 import {
 	type ToolStateForContext,
 	getAvailableToolsForContext,
+	ToolRegistry,
 } from "../../tools/toolRegistry";
+import type { StreamingContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
@@ -135,10 +137,12 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 	 * Get available tools/functions based on Tomori's configuration
 	 * Uses the enhanced tool adapter that handles both built-in and MCP tools
 	 * @param tomoriState - The current Tomori state with configuration
+	 * @param streamingContext - Optional streaming context for context-aware tool availability
 	 * @returns Promise<Array<Record<string, unknown>>> - Array of tool configurations
 	 */
 	async getTools(
 		tomoriState: TomoriState,
+		streamingContext?: StreamingContext,
 	): Promise<Array<Record<string, unknown>>> {
 		try {
 			// Get built-in tools from the registry
@@ -151,10 +155,38 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 				},
 			};
 
-			const availableBuiltInTools = getAvailableToolsForContext(
-				"google",
-				toolStateForContext,
-			);
+			// Use context-aware tool availability when streaming context is provided
+			let availableBuiltInTools: Tool[];
+			if (streamingContext) {
+				// Create a minimal ToolContext for context-aware availability checking
+				const minimalContext = {
+					streamContext: streamingContext,
+					provider: "google" as const,
+					// Add minimal required fields to satisfy ToolContext interface - these are not used by YouTube tool's context check
+					channel: {} as BaseGuildTextChannel,
+					client: {} as Client,
+					tomoriState: tomoriState,
+					locale: "en-US", // Default locale
+				};
+				
+				// Get all tools and filter using context-aware availability
+				const allTools = ToolRegistry.getAllTools();
+				availableBuiltInTools = allTools.filter(tool => {
+					const isContextAvailable = 'isAvailableForContext' in tool && typeof tool.isAvailableForContext === 'function'
+						? tool.isAvailableForContext("google", minimalContext)
+						: tool.isAvailableFor("google");
+					
+					// Skip feature flag checking for now to simplify the logic
+					// The important part is the YouTube tool context-aware availability
+					return isContextAvailable;
+				});
+			} else {
+				// Use the standard method when no streaming context
+				availableBuiltInTools = getAvailableToolsForContext(
+					"google",
+					toolStateForContext,
+				);
+			}
 
 			// Use the enhanced tool adapter to get all tools (built-in + MCP)
 			const googleAdapter = getGoogleToolAdapter();
@@ -249,6 +281,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 		}>,
 		initialInteraction?: CommandInteraction,
 		replyToMessage?: Message,
+		streamingContext?: StreamingContext,
 	): Promise<StreamResult> {
 		log.info(
 			`GoogleProvider: Starting modular streaming for server ${tomoriState.server_id}, model ${config.model}`,
@@ -293,6 +326,13 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 					threshold: setting.threshold as HarmBlockThreshold,
 				})),
 			};
+
+			// Override tools with context-aware tools when streaming context is provided
+			if (streamingContext) {
+				log.info("GoogleProvider: Reloading tools with streaming context for context-aware availability");
+				const contextAwareTools = await this.getTools(tomoriState, streamingContext);
+				streamConfig.tools = contextAwareTools;
+			}
 
 			// Create streaming context
 			const streamContext: StreamContext = {
