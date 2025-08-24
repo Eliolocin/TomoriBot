@@ -181,7 +181,7 @@ export class YouTubeVideoTool extends BaseTool {
 				parts: [
 					{
 						type: "text",
-						text: "[This message contains video content from a previous YouTube processing request you made, no need to call the YouTube video tool function again.]",
+						text: "[This message contains video content from a previous YouTube processing request you made]",
 					},
 					{
 						type: "video",
