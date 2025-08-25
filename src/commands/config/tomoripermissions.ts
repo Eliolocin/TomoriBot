@@ -23,15 +23,9 @@ export const configureSubcommand = (
 		.setDescription(
 			localizer(
 				"en-US",
-				"commands.config.tomoripermissions.command_description",
+				"commands.config.tomoripermissions.description",
 			),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer(
-				"ja",
-				"commands.config.tomoripermissions.command_description",
-			),
-		})
 		.addStringOption((option) =>
 			option
 				.setName("permission")

@@ -18,11 +18,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("triggeradd")
 		.setDescription(
-			localizer("en-US", "commands.config.triggeradd.command_description"),
+			localizer("en-US", "commands.config.triggeradd.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.triggeradd.command_description"),
-		})
 		.addStringOption((option) =>
 			option
 				.setName("word")

@@ -143,6 +143,26 @@ export async function loadCommandData(): Promise<{
 								commandModule.configureSubcommand(subcommand);
 							// Get the name that was set
 							subcommandName = configuredSubcommand.name;
+							
+							// 7. Automatically apply description localizations
+							if (subcommandName) {
+								const localizationKey = `commands.${categoryName}.${subcommandName}.description`;
+								
+								// Build localizations map for available locales
+								const subcommandLocalizationsMap: { [key: string]: string } = {};
+								
+								// Add Japanese localization if available
+								const jaDesc = localizer("ja", localizationKey);
+								if (jaDesc && jaDesc !== localizationKey) {
+									subcommandLocalizationsMap.ja = jaDesc;
+								}
+								
+								// Apply localizations if we have any
+								if (Object.keys(subcommandLocalizationsMap).length > 0) {
+									configuredSubcommand.setDescriptionLocalizations(subcommandLocalizationsMap);
+								}
+							}
+							
 							return configuredSubcommand;
 						},
 					);
@@ -152,12 +172,12 @@ export async function loadCommandData(): Promise<{
 						continue;
 					}
 
-					// 7. Store the execute function in the map
+					// 8. Store the execute function in the map
 					executionMap
 						.get(categoryName)
 						?.set(subcommandName, commandModule.execute);
 
-					// 8. Store cooldown if defined (optional feature)
+					// 9. Store cooldown if defined (optional feature)
 					if (
 						commandModule.cooldown &&
 						typeof commandModule.cooldown === "number"

@@ -41,11 +41,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("setup")
 		.setDescription(
-			localizer("en-US", "commands.config.setup.command_description"),
-		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.setup.command_description"),
-		});
+			localizer("en-US", "commands.config.setup.description"),
+		);
 
 /**
  * Execute the setup command - guides users through the initial setup of TomoriBot for their server

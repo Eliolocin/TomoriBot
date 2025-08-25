@@ -22,11 +22,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("apikeydelete")
 		.setDescription(
-			localizer("en-US", "commands.config.apikeydelete.command_description"),
-		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.apikeydelete.command_description"),
-		});
+			localizer("en-US", "commands.config.apikeydelete.description"),
+		);
 
 /**
  * Removes API key from database

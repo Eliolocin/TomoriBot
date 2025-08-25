@@ -27,11 +27,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("nickname") // Keep name simple as per refactor
 		.setDescription(
-			localizer("en-US", "commands.teach.nickname.command_description"),
+			localizer("en-US", "commands.teach.nickname.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.teach.nickname.command_description"),
-		})
 		.addStringOption((option) =>
 			option
 				.setName("name")

@@ -24,11 +24,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("apikeyset")
 		.setDescription(
-			localizer("en-US", "commands.config.apikeyset.command_description"),
+			localizer("en-US", "commands.config.apikeyset.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.apikeyset.command_description"),
-		})
 		.addStringOption((option) =>
 			option
 				.setName("key")

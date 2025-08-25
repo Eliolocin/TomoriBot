@@ -46,11 +46,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("model")
 		.setDescription(
-			localizer("en-US", "commands.config.model.command_description"),
+			localizer("en-US", "commands.config.model.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.model.command_description"),
-		})
 		.addStringOption((option) =>
 			option
 				.setName("name") // Keep internal name simple

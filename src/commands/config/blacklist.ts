@@ -19,11 +19,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("blacklist")
 		.setDescription(
-			localizer("en-US", "commands.config.blacklist.command_description"),
+			localizer("en-US", "commands.config.blacklist.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.blacklist.command_description"),
-		})
 		.addUserOption((option) =>
 			option
 				.setName("member")

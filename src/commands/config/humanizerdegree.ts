@@ -27,14 +27,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("humanizerdegree")
 		.setDescription(
-			localizer("en-US", "commands.config.humanizerdegree.command_description"),
+			localizer("en-US", "commands.config.humanizerdegree.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer(
-				"ja",
-				"commands.config.humanizerdegree.command_description",
-			),
-		})
 		.addIntegerOption((option) =>
 			option
 				.setName("value")

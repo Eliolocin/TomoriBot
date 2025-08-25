@@ -33,11 +33,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("personalmemory")
 		.setDescription(
-			localizer("en-US", "commands.teach.personalmemory.command_description"),
-		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.teach.personalmemory.command_description"),
-		});
+			localizer("en-US", "commands.teach.personalmemory.description"),
+		);
 
 /**
  * Rule 1: JSDoc comment for exported function

@@ -30,11 +30,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("attribute")
 		.setDescription(
-			localizer("en-US", "commands.unlearn.attribute.command_description"),
-		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.unlearn.attribute.command_description"),
-		});
+			localizer("en-US", "commands.unlearn.attribute.description"),
+		);
 
 /**
  * Rule 1: JSDoc comment for exported function

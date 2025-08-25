@@ -20,11 +20,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("autochchannels")
 		.setDescription(
-			localizer("en-US", "commands.config.autochchannels.command_description"),
+			localizer("en-US", "commands.config.autochchannels.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.autochchannels.command_description"),
-		})
 		.addChannelOption((option) =>
 			option
 				.setName("channel")

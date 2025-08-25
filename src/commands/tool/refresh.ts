@@ -13,10 +13,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("refresh")
-		.setDescription(localizer("en-US", "commands.tool.refresh.description"))
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.tool.refresh.description"),
-		});
+		.setDescription(localizer("en-US", "commands.tool.refresh.description"));
 
 /**
  * Executes the 'refresh' command.

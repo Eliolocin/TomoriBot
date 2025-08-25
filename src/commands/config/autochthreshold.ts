@@ -24,14 +24,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("autochthreshold")
 		.setDescription(
-			localizer("en-US", "commands.config.autochthreshold.command_description"),
+			localizer("en-US", "commands.config.autochthreshold.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer(
-				"ja",
-				"commands.config.autochthreshold.command_description",
-			),
-		})
 		.addIntegerOption((option) =>
 			option
 				.setName("threshold")

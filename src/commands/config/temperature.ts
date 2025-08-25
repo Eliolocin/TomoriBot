@@ -27,11 +27,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("temperature")
 		.setDescription(
-			localizer("en-US", "commands.config.temperature.command_description"),
+			localizer("en-US", "commands.config.temperature.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.temperature.command_description"),
-		})
 		.addNumberOption((option) =>
 			option
 				.setName("value")

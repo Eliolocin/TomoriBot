@@ -11,10 +11,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("ping")
-		.setDescription(localizer("en-US", "commands.tool.ping.description"))
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.tool.ping.description"),
-		});
+		.setDescription(localizer("en-US", "commands.tool.ping.description"));
 
 // Command logic with the UserRow parameter
 export async function execute(
