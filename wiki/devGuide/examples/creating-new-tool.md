@@ -10,6 +10,7 @@ We'll create a weather tool that:
 - Includes temperature, conditions, and forecast
 - Works across all LLM providers
 - Includes proper error handling
+- Demonstrates both **Built-in Tool** and **REST API Tool** patterns
 
 ## Step 1: Create Tool Implementation
 
@@ -213,6 +214,146 @@ Add your tool to the exports:
 // ... existing exports
 export { WeatherTool } from "./weatherTool";
 ```
+
+## Alternative: REST API Tool Pattern
+
+For external APIs requiring complex processing, consider the **REST API Tool** pattern used by Brave Search. This approach provides better separation of concerns and enhanced data flow.
+
+### REST API Tool Structure
+
+**File Structure**: `src/tools/restAPIs/weather/`
+```
+weather/
+├── types.ts              # API response interfaces
+├── weatherService.ts     # Core HTTP service functions  
+├── toolImplementations.ts # MCP-compatible function implementations
+├── tools.ts              # BaseTool extensions
+└── index.ts              # Clean exports
+```
+
+### Example REST API Implementation
+
+**File**: `src/tools/restAPIs/weather/types.ts`
+```typescript
+export interface WeatherApiResponse {
+  location: string;
+  current: {
+    temperature: number;
+    condition: string;
+    humidity: number;
+  };
+  forecast?: WeatherForecast[];
+}
+
+export interface WeatherSearchParams {
+  location: string;
+  include_forecast?: boolean;
+  units?: "celsius" | "fahrenheit";
+  [key: string]: unknown; // For Record compatibility
+}
+```
+
+**File**: `src/tools/restAPIs/weather/weatherService.ts`
+```typescript
+export async function fetchWeatherData(
+  params: WeatherSearchParams,
+  config: { serverId?: number } = {}
+): Promise<ApiResult<WeatherApiResponse>> {
+  // REST API implementation with server-specific API keys
+  const apiKey = await getOptApiKey(config.serverId, "weather-api") || process.env.WEATHER_API_KEY;
+  
+  const response = await fetch(`https://api.weather.com/data?location=${params.location}&key=${apiKey}`);
+  const data = await response.json();
+  
+  return { success: true, data };
+}
+```
+
+**File**: `src/tools/restAPIs/weather/toolImplementations.ts`
+```typescript
+export async function get_weather(
+  args: Record<string, unknown>,
+  context?: ToolContext
+): Promise<{ success: boolean; message: string; data?: unknown; error?: string }> {
+  const startTime = Date.now();
+  
+  try {
+    const result = await fetchWeatherData(params, { serverId });
+    
+    return {
+      success: true,
+      message: "Weather data retrieved successfully",
+      data: {
+        // MCP-compatible data structure for rich LLM processing
+        source: "http",
+        functionName: "get_weather", 
+        serverName: "weather-api",
+        rawResult: {
+          functionResponse: {
+            name: "get_weather",
+            response: {
+              content: [{ type: "text", text: formattedWeather }],
+              isError: false
+            }
+          }
+        },
+        executionTime: Date.now() - startTime,
+        location: result.data.location,
+        status: "completed"
+      }
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: "Failed to fetch weather data",
+      error: (error as Error).message
+    };
+  }
+}
+```
+
+**File**: `src/tools/restAPIs/weather/tools.ts`
+```typescript
+export class WeatherTool extends BaseTool {
+  name = "get_weather";
+  description = "Get current weather for any location";
+  
+  protected convertToToolResult(result: {
+    success: boolean;
+    message: string;
+    data?: unknown;  // ← Critical: Preserve rich data!
+    error?: string;
+  }): ToolResult {
+    const toolResult: ToolResult = {
+      success: result.success,
+      message: result.message,
+    };
+    
+    if (result.data) {
+      toolResult.data = result.data; // ← Ensures data flows to LLM
+    }
+    
+    if (result.error) {
+      toolResult.error = result.error;
+    }
+    
+    return toolResult;
+  }
+  
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const result = await get_weather(args, context);
+    return this.convertToToolResult(result); // ← Rich data preserved
+  }
+}
+```
+
+### Key REST API Tool Benefits
+
+✅ **Rich Data Flow**: Data structure flows from service → implementation → tool class → LLM
+✅ **MCP Compatibility**: Same response format as MCP servers
+✅ **Extensibility**: Easy to replicate for other external APIs  
+✅ **Error Handling**: Centralized API key validation and user-friendly embeds
+✅ **Type Safety**: Full TypeScript coverage throughout the pipeline
 
 ## Step 3: Test Your Tool
 

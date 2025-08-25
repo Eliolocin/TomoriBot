@@ -8,38 +8,39 @@ import { loadTomoriState } from "../../utils/db/dbRead";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import {
-	type UserRow,
-	type ErrorContext,
-	tomoriConfigSchema,
-} from "../../types/db/schema";
-import { GoogleProvider } from "../../providers/google/googleProvider";
-import { encryptApiKey } from "../../utils/security/crypto";
-import { sql } from "bun";
+import type { UserRow, ErrorContext } from "../../types/db/schema";
+import { storeOptApiKey } from "../../utils/security/crypto";
 
-// Configure the subcommand
+/**
+ * Configure the subcommand for setting Brave Search API key
+ * @param subcommand - Discord slash command subcommand builder
+ * @returns Configured subcommand builder
+ */
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("apikeyset")
+		.setName("braveapiset")
 		.setDescription(
-			localizer("en-US", "commands.config.apikeyset.description"),
+			localizer("en-US", "commands.config.braveapiset.description"),
 		)
+		.setDescriptionLocalizations({
+			ja: localizer("ja", "commands.config.braveapiset.description"),
+		})
 		.addStringOption((option) =>
 			option
 				.setName("key")
 				.setDescription(
-					localizer("en-US", "commands.config.apikeyset.key_description"),
+					localizer("en-US", "commands.config.braveapiset.key_description"),
 				)
 				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.config.apikeyset.key_description"),
+					ja: localizer("ja", "commands.config.braveapiset.key_description"),
 				})
 				.setRequired(true),
 		);
 
 /**
- * Sets the API key Tomori will use for this server
+ * Sets the Brave Search API key for the server's MCP configuration
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -67,11 +68,11 @@ export async function execute(
 		// 2. Get the API key from options
 		apiKey = interaction.options.getString("key", true);
 
-		// 3. Basic validation
+		// 3. Basic validation (no specific Brave API validation available)
 		if (!apiKey || apiKey.length < 10) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.apikeyset.invalid_key_title",
-				descriptionKey: "commands.config.apikeyset.invalid_key_description",
+				titleKey: "commands.config.braveapiset.invalid_key_title",
+				descriptionKey: "commands.config.braveapiset.invalid_key_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -80,7 +81,7 @@ export async function execute(
 		// 4. Show ephemeral processing message
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		// 5. Load the Tomori state for this server (Rule #17)
+		// 5. Load the Tomori state for this server
 		const tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
@@ -91,57 +92,27 @@ export async function execute(
 			return;
 		}
 
-		// 6. Validate the API key with Google
-		await interaction.editReply({
-			content: localizer(locale, "commands.config.apikeyset.validating_key"),
-		});
+		const isStored = await storeOptApiKey(
+			tomoriState.server_id,
+			"brave-search",
+			apiKey,
+		);
 
-		const googleProvider = new GoogleProvider();
-		const isApiKeyValid = await googleProvider.validateApiKey(apiKey);
-		if (!isApiKeyValid) {
-			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.apikeyset.key_validation_failed_title",
-				descriptionKey:
-					"commands.config.apikeyset.key_validation_failed_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		// 7. Encrypt the API key (returns Buffer)
-		const encryptedKey = await encryptApiKey(apiKey);
-
-		// 8. Update the config in the database using direct SQL (Rule #4, #15)
-		const [updatedRow] = await sql`
-            UPDATE tomori_configs
-            SET api_key = ${encryptedKey} -- Pass Buffer directly
-            WHERE tomori_id = ${tomoriState.tomori_id}
-            RETURNING *
-        `;
-
-		// 9. Validate the returned data (Rules #3, #5)
-		const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
-
-		if (!validatedConfig.success || !updatedRow) {
+		if (!isStored) {
 			const context: ErrorContext = {
 				tomoriId: tomoriState.tomori_id,
 				serverId: tomoriState.server_id,
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config apikeyset",
+					command: "config braveapiset",
 					guildId: interaction.guild.id,
-					// Do not log the API key itself, even encrypted
-					validationErrors: validatedConfig.success
-						? null
-						: validatedConfig.error.flatten(),
+					serviceName: "brave-search",
 				},
 			};
 			await log.error(
-				"Failed to update or validate config after setting API key",
-				validatedConfig.success
-					? new Error("Database update returned no rows or unexpected data")
-					: new Error("Updated config data failed validation"),
+				"Failed to store Brave Search API key in optional API keys table",
+				new Error("storeOptApiKey returned false"),
 				context,
 			);
 
@@ -153,14 +124,14 @@ export async function execute(
 			return;
 		}
 
-		// 10. Success message
+		// 7. Success message
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.apikeyset.success_title",
-			descriptionKey: "commands.config.apikeyset.success_description",
+			titleKey: "commands.config.braveapiset.success_title",
+			descriptionKey: "commands.config.braveapiset.success_description",
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {
-		// 11. Log error with context (Rule #22)
+		// 8. Log error with context
 		let serverIdForError: number | null = null;
 		let tomoriIdForError: number | null = null;
 		if (interaction.guild?.id) {
@@ -175,20 +146,21 @@ export async function execute(
 			tomoriId: tomoriIdForError,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config apikeyset",
+				command: "config braveapiset",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
-				// Do not log API key here either
+				serviceName: "brave-search",
+				// Do not log API key here
 				apiKeyLength: apiKey?.length, // Log length as a hint
 			},
 		};
 		await log.error(
-			`Error executing /config apikeyset for user ${userData.user_disc_id}`,
+			`Error executing /config braveapiset for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);
 
-		// 12. Inform user of unknown error
+		// 9. Inform user of unknown error
 		// Use followUp since deferReply was used
 		if (interaction.deferred && !interaction.replied) {
 			await interaction.followUp({

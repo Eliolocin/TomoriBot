@@ -66,7 +66,7 @@ export const tomoriConfigSchema = z.object({
 	attribute_memteaching_enabled: z.boolean().default(false),
 	sampledialogue_memteaching_enabled: z.boolean().default(false),
 	self_teaching_enabled: z.boolean().default(true),
-	google_search_enabled: z.boolean().default(true), // New: Added for Google Search permission
+	web_search_enabled: z.boolean().default(true), // New: Added for Web Search permission (Brave Search)
 	personal_memories_enabled: z.boolean().default(true),
 	humanizer_degree: z
 		.nativeEnum(HumanizerDegree)
@@ -173,15 +173,15 @@ export const cooldownSchema = z.object({
 });
 export type CooldownRow = z.infer<typeof cooldownSchema>;
 
-export const mcpApiKeySchema = z.object({
-	mcp_api_key_id: z.number().optional(), // Primary key, optional as it's generated
+export const optApiKeySchema = z.object({
+	opt_api_key_id: z.number().optional(), // Primary key, optional as it's generated
 	server_id: z.number(), // Foreign key to servers table  
-	mcp_name: z.string(), // MCP server name identifier (e.g., 'brave-search', 'duckduckgo-search', 'fetch')
+	service_name: z.string(), // Service name identifier (e.g., 'brave-search', 'duckduckgo-search', 'fetch')
 	api_key: z.instanceof(Buffer).nullable(), // Encrypted API key using pgcrypto, nullable for free services
 	created_at: z.date().optional(), // Handled by DB default
 	updated_at: z.date().optional(), // Handled by DB default/trigger
 });
-export type McpApiKeyRow = z.infer<typeof mcpApiKeySchema>;
+export type OptApiKeyRow = z.infer<typeof optApiKeySchema>;
 
 /**
  * Tomori's combined state (base config + LLM settings + LLM info)

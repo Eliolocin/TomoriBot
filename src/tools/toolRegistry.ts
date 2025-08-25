@@ -21,7 +21,7 @@ export interface ToolStateForContext {
 	server_id: string;
 	config: {
 		sticker_usage_enabled: boolean;
-		google_search_enabled: boolean;
+		web_search_enabled: boolean;
 		self_teaching_enabled: boolean;
 	};
 }
@@ -540,7 +540,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 		// Map feature flags to Tomori configuration properties
 		const featureFlagMap: Record<string, boolean> = {
 			sticker_usage: context.tomoriState.config.sticker_usage_enabled,
-			google_search: context.tomoriState.config.google_search_enabled,
+			web_search: context.tomoriState.config.web_search_enabled,
 			self_teaching: context.tomoriState.config.self_teaching_enabled,
 		};
 
@@ -560,7 +560,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 		// Map feature flags to Tomori configuration properties
 		const featureFlagMap: Record<string, boolean> = {
 			sticker_usage: stateForContext.config?.sticker_usage_enabled ?? false,
-			google_search: stateForContext.config?.google_search_enabled ?? false,
+			web_search: stateForContext.config?.web_search_enabled ?? false,
 			self_teaching: stateForContext.config?.self_teaching_enabled ?? false,
 		};
 

@@ -23,15 +23,9 @@ export const configureSubcommand = (
 		.setDescription(
 			localizer(
 				"en-US",
-				"commands.config.tomoripermissions.command_description",
+				"commands.config.tomoripermissions.description",
 			),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer(
-				"ja",
-				"commands.config.tomoripermissions.command_description",
-			),
-		})
 		.addStringOption((option) =>
 			option
 				.setName("permission")
@@ -81,9 +75,9 @@ export const configureSubcommand = (
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.tomoripermissions.googlesearch_option",
+							"commands.config.tomoripermissions.websearch_option",
 						),
-						value: "googlesearch",
+						value: "websearch",
 					},
 				),
 		)
@@ -189,12 +183,12 @@ export async function execute(
 					"commands.config.tomoripermissions.stickerusage_option";
 				currentSetting = tomoriState.config.sticker_usage_enabled;
 				break;
-			// New: Handle Google Search permission
-			case "googlesearch":
-				dbColumnName = "google_search_enabled";
+			// New: Handle Web Search permission (Brave Search)
+			case "websearch":
+				dbColumnName = "web_search_enabled";
 				permissionTypeKey =
-					"commands.config.tomoripermissions.googlesearch_option";
-				currentSetting = tomoriState.config.google_search_enabled;
+					"commands.config.tomoripermissions.websearch_option";
+				currentSetting = tomoriState.config.web_search_enabled;
 				break;
 			default:
 				// This should not happen due to Discord's option validation

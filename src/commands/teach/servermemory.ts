@@ -20,11 +20,18 @@ import {
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import type { ModalResult } from "../../types/discord/modal";
+import {
+	validateMemoryContent,
+	checkServerMemoryLimit,
+	getMemoryLimits,
+} from "../../utils/db/memoryLimits";
 
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_servermemory_add_modal";
 const MEMORY_INPUT_ID = "memory_input";
-const MEMORY_MAX_LENGTH = 512; // Set a reasonable max length for memories
+
+// Get memory limits from environment variables
+const memoryLimits = getMemoryLimits();
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (
@@ -33,11 +40,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("servermemory")
 		.setDescription(
-			localizer("en-US", "commands.teach.servermemory.command_description"),
-		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.teach.servermemory.command_description"),
-		});
+			localizer("en-US", "commands.teach.servermemory.description"),
+		);
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -115,7 +119,7 @@ export async function execute(
 					labelKey: "commands.teach.servermemory.memory_input_label",
 					style: TextInputStyle.Paragraph,
 					required: true,
-					maxLength: MEMORY_MAX_LENGTH,
+					maxLength: memoryLimits.maxMemoryLength,
 				},
 			],
 		});
@@ -137,7 +141,41 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newMemory = modalResult.values![MEMORY_INPUT_ID];
 
-		// 10. Check for duplicate memory content for this server in the server_memories table
+		// 10. Validate memory content length
+		const contentValidation = validateMemoryContent(newMemory);
+		if (!contentValidation.isValid) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.teach.servermemory.content_too_long_title",
+				descriptionKey:
+					"commands.teach.servermemory.content_too_long_description",
+				descriptionVars: { max_length: memoryLimits.maxMemoryLength },
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 11. Check server memory limit
+
+		const serverLimitCheck = await checkServerMemoryLimit(
+			// biome-ignore lint/style/noNonNullAssertion: tomoriState validation ensures server_id exists
+			tomoriState.server_id!,
+		);
+		if (!serverLimitCheck.isValid) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.teach.servermemory.limit_exceeded_title",
+				descriptionKey:
+					"commands.teach.servermemory.limit_exceeded_description",
+				descriptionVars: {
+					max_allowed:
+						serverLimitCheck.maxAllowed || memoryLimits.maxServerMemories,
+					current_count: serverLimitCheck.currentCount || 0,
+				},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 12. Check for duplicate memory content for this server in the server_memories table
 
 		const [existingMemory] = await sql`
             SELECT server_memory_id FROM server_memories

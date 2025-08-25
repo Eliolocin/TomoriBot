@@ -45,6 +45,10 @@ import {
 	createTypingSimulationConfig,
 } from "../../types/stream/types";
 
+// Retry configuration constants for empty response handling
+const MAX_EMPTY_RESPONSE_RETRIES = 2; // Maximum number of retry attempts for empty responses
+const RETRY_DELAY_MS = 1000; // Delay between retries in milliseconds (1 second)
+
 /**
  * Universal Discord streaming orchestrator implementation
  * Handles all Discord-specific logic while delegating LLM API calls to providers
@@ -53,20 +57,61 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	/**
 	 * Stream an LLM response to Discord using a provider-specific adapter
 	 * This replaces the massive streamGeminiToDiscord function with modular architecture
+	 * Now includes automatic retry mechanism for empty responses
 	 */
 	async streamToDiscord(
 		provider: StreamProvider,
 		config: StreamConfig,
 		context: StreamContext,
 	): Promise<StreamResult> {
-		// Initialize logging and metrics
 		log.section("Universal Stream Orchestrator Started");
+		
+		// Retry loop for empty responses
+		for (let retryAttempt = 0; retryAttempt <= MAX_EMPTY_RESPONSE_RETRIES; retryAttempt++) {
+			log.info(
+				`Starting stream to channel ${context.channel.id} (server: ${context.channel.guild.id}) using provider: ${provider.getProviderInfo().name}${retryAttempt > 0 ? ` (retry ${retryAttempt}/${MAX_EMPTY_RESPONSE_RETRIES})` : ''}`,
+			);
+
+			const result = await this.executeStream(provider, config, context);
+			
+			// Check if we got an empty response that should be retried
+			if (result.status === "completed" && this.wasEmptyResponse(result)) {
+				if (retryAttempt < MAX_EMPTY_RESPONSE_RETRIES) {
+					log.info(
+						`Empty response detected (attempt ${retryAttempt + 1}/${MAX_EMPTY_RESPONSE_RETRIES + 1}). Retrying in ${RETRY_DELAY_MS}ms...`,
+					);
+					await this.delay(RETRY_DELAY_MS);
+					continue; // Retry
+				} else {
+					// Max retries reached, show error embed
+					log.warn(
+						`Empty response after ${MAX_EMPTY_RESPONSE_RETRIES} retries. Showing error embed.`,
+					);
+					await this.handleEmptyResponse(context);
+					return { status: "completed" }; // Return completed since we handled it with embed
+				}
+			}
+			
+			// Return result for non-empty responses or non-completed statuses
+			return result;
+		}
+
+		// This should never be reached due to the loop structure, but TypeScript requires it
+		return { status: "error", data: new Error("Unexpected end of retry loop") };
+	}
+
+	/**
+	 * Execute a single stream attempt without retry logic
+	 * Contains the core streaming logic extracted from the original streamToDiscord method
+	 */
+	private async executeStream(
+		provider: StreamProvider,
+		config: StreamConfig,
+		context: StreamContext,
+	): Promise<StreamResult & { messageSentCount?: number }> {
+		// Initialize logging and metrics
 		const metrics = createDefaultStreamMetrics();
 		const state = createDefaultStreamState();
-
-		log.info(
-			`Starting stream to channel ${context.channel.id} (server: ${context.channel.guild.id}) using provider: ${provider.getProviderInfo().name}`,
-		);
 
 		// Create processing configurations
 		const textConfig = this.createTextProcessingConfig(config, context);
@@ -136,19 +181,13 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			// Final buffer flush
 			await this.flushFinalBuffer(state, textConfig, typingConfig, context);
 
-			// Handle empty response case
-			if (state.messageSentCount === 0) {
-				await this.handleEmptyResponse(context);
-				state.messageSentCount++;
-			}
-
-			// Complete metrics and return success
+			// Complete metrics and return success with message count for empty response detection
 			metrics.endTime = Date.now();
 			log.success(
 				`Stream to channel ${context.channel.id} completed. Messages sent: ${state.messageSentCount}, Duration: ${metrics.endTime - metrics.startTime}ms`,
 			);
 
-			return { status: "completed" };
+			return { status: "completed", messageSentCount: state.messageSentCount };
 		} catch (error) {
 			this.clearInactivityTimer(state);
 			lastError = error as Error;
@@ -900,5 +939,29 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			botName: context.tomoriState.tomori_nickname,
 			maxMessageLength: config.maxMessageLength,
 		};
+	}
+
+	/**
+	 * Check if a completed stream result represents an empty response
+	 * @param result - The stream result to check
+	 * @returns True if the result indicates no messages were sent
+	 */
+	private wasEmptyResponse(result: StreamResult & { messageSentCount?: number }): boolean {
+		// If the result has a messageSentCount property and it's 0, it's empty
+		if ('messageSentCount' in result && typeof result.messageSentCount === 'number') {
+			return result.messageSentCount === 0;
+		}
+		
+		// Fallback: assume non-empty if we can't determine
+		return false;
+	}
+
+	/**
+	 * Create a delay promise for retry logic
+	 * @param ms - Milliseconds to delay
+	 * @returns Promise that resolves after the specified delay
+	 */
+	private delay(ms: number): Promise<void> {
+		return new Promise(resolve => setTimeout(resolve, ms));
 	}
 }

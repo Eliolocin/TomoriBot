@@ -8,25 +8,28 @@ import { loadTomoriState } from "../../utils/db/dbRead";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import {
-	type UserRow,
-	type ErrorContext,
-	tomoriConfigSchema,
-} from "../../types/db/schema";
-import { sql } from "bun";
+import type { UserRow, ErrorContext } from "../../types/db/schema";
+import { deleteOptApiKey, hasOptApiKey } from "../../utils/security/crypto";
 
-// Configure the subcommand
+/**
+ * Configure the subcommand for deleting Brave Search API key
+ * @param subcommand - Discord slash command subcommand builder
+ * @returns Configured subcommand builder
+ */
 export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("apikeydelete")
+		.setName("braveapidelete")
 		.setDescription(
-			localizer("en-US", "commands.config.apikeydelete.description"),
-		);
+			localizer("en-US", "commands.config.braveapidelete.description"),
+		)
+		.setDescriptionLocalizations({
+			ja: localizer("ja", "commands.config.braveapidelete.description"),
+		});
 
 /**
- * Removes API key from database
+ * Removes the Brave Search API key from the server's MCP configuration
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -49,10 +52,10 @@ export async function execute(
 	}
 
 	try {
-		// 2. Show ephemeral processing message (Rule #21 modification)
+		// 2. Show ephemeral processing message
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		// 3. Load the Tomori state for this server (Rule #17)
+		// 3. Load the Tomori state for this server
 		const tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
@@ -63,47 +66,38 @@ export async function execute(
 			return;
 		}
 
-		// 4. Check if there's an API key to remove
-		if (!tomoriState.config.api_key) {
+		// 4. Check if there's a Brave Search API key to remove
+		const hasKey = await hasOptApiKey(tomoriState.server_id, "brave-search");
+		if (!hasKey) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.apikeydelete.no_key_title",
-				descriptionKey: "commands.config.apikeydelete.no_key_description",
+				titleKey: "commands.config.braveapidelete.no_key_title",
+				descriptionKey: "commands.config.braveapidelete.no_key_description",
 				color: ColorCode.WARN,
 			});
 			return;
 		}
 
-		// 5. Update the config in the database using direct SQL (Rule #4, #15)
-		// Set api_key to NULL
-		const [updatedRow] = await sql`
-            UPDATE tomori_configs
-            SET api_key = NULL
-            WHERE tomori_id = ${tomoriState.tomori_id}
-            RETURNING *
-        `;
+		// 5. Delete the API key from the optional API keys table
+		const isDeleted = await deleteOptApiKey(
+			tomoriState.server_id,
+			"brave-search",
+		);
 
-		// 6. Validate the returned data (Rules #3, #5)
-		const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
-
-		if (!validatedConfig.success || !updatedRow) {
+		if (!isDeleted) {
 			const context: ErrorContext = {
 				tomoriId: tomoriState.tomori_id,
 				serverId: tomoriState.server_id,
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config apikeydelete",
+					command: "config braveapidelete",
 					guildId: interaction.guild.id,
-					validationErrors: validatedConfig.success
-						? null
-						: validatedConfig.error.flatten(),
+					serviceName: "brave-search",
 				},
 			};
 			await log.error(
-				"Failed to update or validate config after removing API key",
-				validatedConfig.success
-					? new Error("Database update returned no rows or unexpected data")
-					: new Error("Updated config data failed validation"),
+				"Failed to delete Brave Search API key from optional API keys table",
+				new Error("deleteOptApiKey returned false"),
 				context,
 			);
 
@@ -115,14 +109,14 @@ export async function execute(
 			return;
 		}
 
-		// 7. Success message with embed
+		// 6. Success message
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.apikeydelete.success_title",
-			descriptionKey: "commands.config.apikeydelete.success_description",
+			titleKey: "commands.config.braveapidelete.success_title",
+			descriptionKey: "commands.config.braveapidelete.success_description",
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {
-		// 8. Log error with context (Rule #22)
+		// 7. Log error with context
 		let serverIdForError: number | null = null;
 		let tomoriIdForError: number | null = null;
 		if (interaction.guild?.id) {
@@ -137,18 +131,19 @@ export async function execute(
 			tomoriId: tomoriIdForError,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config apikeydelete",
+				command: "config braveapidelete",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
+				serviceName: "brave-search",
 			},
 		};
 		await log.error(
-			`Error executing /config apikeydelete for user ${userData.user_disc_id}`,
+			`Error executing /config braveapidelete for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);
 
-		// 9. Inform user of unknown error
+		// 8. Inform user of unknown error
 		// Use followUp since deferReply was used
 		if (interaction.deferred && !interaction.replied) {
 			await interaction.followUp({

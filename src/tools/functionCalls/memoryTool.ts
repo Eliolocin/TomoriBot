@@ -127,6 +127,13 @@ export class MemoryTool extends BaseTool {
 		);
 		const { ColorCode } = await import("../../utils/misc/logger");
 
+		// Import memory validation functions
+		const {
+			validateMemoryContent,
+			checkPersonalMemoryLimit,
+			checkServerMemoryLimit,
+		} = await import("../../utils/db/memoryLimits");
+
 		// Critical state validation (from tomoriChat.ts:1078-1104)
 		const tomoriState = context.tomoriState;
 		const userRow = await loadUserRow(
@@ -185,9 +192,46 @@ export class MemoryTool extends BaseTool {
 
 		const memoryContent = memoryContentArg.trim();
 
+		// Validate memory content length
+		const contentValidation = validateMemoryContent(memoryContent);
+		if (!contentValidation.isValid) {
+			return {
+				success: false,
+				error:
+					contentValidation.error === "CONTENT_EMPTY"
+						? "Memory content cannot be empty"
+						: `Memory content is too long. Maximum length is ${contentValidation.maxAllowed} characters.`,
+				data: {
+					status: "memory_save_failed_invalid_content",
+					reason:
+						contentValidation.error === "CONTENT_EMPTY"
+							? "Memory content cannot be empty"
+							: `Memory content exceeds maximum length of ${contentValidation.maxAllowed} characters`,
+				},
+			};
+		}
+
 		if (memoryScopeArg === "server_wide") {
 			// Server-wide memory handling (from tomoriChat.ts:1127-1179)
 			try {
+				// Check server memory limit before adding
+				const serverLimitCheck = await checkServerMemoryLimit(
+					tomoriState.server_id,
+				);
+				if (!serverLimitCheck.isValid) {
+					return {
+						success: false,
+						error: `Server memory limit reached. This server can have up to ${serverLimitCheck.maxAllowed} memories (currently: ${serverLimitCheck.currentCount}).`,
+						data: {
+							status: "memory_save_failed_limit_exceeded",
+							scope: "server_wide",
+							current_count: serverLimitCheck.currentCount,
+							max_allowed: serverLimitCheck.maxAllowed,
+							reason: `Server memory limit of ${serverLimitCheck.maxAllowed} memories has been reached`,
+						},
+					};
+				}
+
 				const dbResult = await addServerMemoryByTomori(
 					tomoriState.server_id,
 					userRow.user_id,
@@ -336,6 +380,25 @@ export class MemoryTool extends BaseTool {
 							provided_nickname: targetUserNicknameArg,
 							actual_nickname: actualNicknameInDB,
 							reason: `The provided nickname '${targetUserNicknameArg}' does not match the records for user ID '${targetUserDiscordIdArg}' (Tomori knows them as '${actualNicknameInDB}'). Please ensure the Discord ID and nickname correspond to the same user.`,
+						},
+					};
+				}
+
+				// Check personal memory limit before adding
+				const personalLimitCheck = await checkPersonalMemoryLimit(
+					targetUserRow.user_id,
+				);
+				if (!personalLimitCheck.isValid) {
+					return {
+						success: false,
+						error: `Personal memory limit reached. Users can have up to ${personalLimitCheck.maxAllowed} personal memories (currently: ${personalLimitCheck.currentCount}).`,
+						data: {
+							status: "memory_save_failed_limit_exceeded",
+							scope: "target_user",
+							target_user_discord_id: targetUserDiscordIdArg,
+							current_count: personalLimitCheck.currentCount,
+							max_allowed: personalLimitCheck.maxAllowed,
+							reason: `Personal memory limit of ${personalLimitCheck.maxAllowed} memories has been reached for this user`,
 						},
 					};
 				}

@@ -24,15 +24,9 @@ export const configureSubcommand = (
 		.setDescription(
 			localizer(
 				"en-US",
-				"commands.config.memberpermissions.command_description",
+				"commands.config.memberpermissions.description",
 			),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer(
-				"ja",
-				"commands.config.memberpermissions.command_description",
-			),
-		})
 		.addStringOption((option) =>
 			option
 				.setName("permission")

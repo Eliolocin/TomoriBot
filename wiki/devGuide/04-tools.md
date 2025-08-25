@@ -36,7 +36,13 @@ interface Tool {
 
 ## Built-in Function Call Tools
 
-Built-in tools extend the `BaseTool` class and are automatically discovered via file system scanning.
+Built-in tools extend the `BaseTool` class and are automatically discovered via file system scanning. TomoriBot supports two patterns for built-in tools:
+
+### 1. Simple Built-in Tools
+Traditional single-file tools for straightforward functionality.
+
+### 2. REST API Tools  
+Modular tools for external APIs requiring complex processing, server-specific API keys, and rich data flow.
 
 ### Creating a Built-in Tool
 
@@ -93,6 +99,126 @@ export { YourTool } from "./yourTool";
 - YouTube video processing using Google's video understanding
 - Context-aware availability to prevent hallucination
 - Enhanced context restart with video Parts injection
+
+## REST API Tool Pattern
+
+For external APIs requiring complex processing, TomoriBot provides an **REST API Tool pattern** that offers superior architecture for external integrations.
+
+### Architecture Benefits
+
+**🏗️ Modular Structure**: Clean separation of concerns across multiple files
+**🔑 Server-Specific API Keys**: Per-guild API key management with encryption  
+**📊 Rich Data Flow**: MCP-compatible data structures flow end-to-end to LLM
+**🛡️ Enhanced Error Handling**: User-friendly Discord embeds with localization
+**⚡ Easy Replication**: Template structure for any external API integration
+
+### File Structure Pattern
+
+```
+src/tools/restAPIs/[service]/
+├── types.ts              # API response interfaces
+├── [service]Service.ts   # Core HTTP service functions
+├── toolImplementations.ts # MCP-compatible function implementations  
+├── tools.ts              # BaseTool extensions for tool registry
+└── index.ts              # Clean exports
+```
+
+### Key Implementation Details
+
+**Data Flow Architecture:**
+```typescript
+// 1. Service Layer - REST API calls
+export async function serviceApiCall(params, config): Promise<ApiResult> {
+  const apiKey = await getOptApiKey(config.serverId, "service-name") || process.env.API_KEY;
+  // API implementation
+}
+
+// 2. Implementation Layer - MCP-compatible functions
+export async function service_function(args, context): Promise<{
+  success: boolean; 
+  message: string; 
+  data?: unknown;  // ← Rich data structure
+  error?: string;
+}> {
+  return {
+    success: true,
+    message: "Operation completed",
+    data: {
+      // MCP-compatible structure for LLM processing
+      source: "http",
+      functionName: "service_function",
+      rawResult: { content: [...] },
+      executionTime: 1234,
+      status: "completed"
+    }
+  };
+}
+
+// 3. Tool Class Layer - Registry integration
+export class ServiceTool extends BaseTool {
+  protected convertToToolResult(result: {
+    success: boolean;
+    message: string;
+    data?: unknown;  // ← Critical: Preserve rich data
+    error?: string;
+  }): ToolResult {
+    const toolResult: ToolResult = { success: result.success, message: result.message };
+    
+    if (result.data) {
+      toolResult.data = result.data; // ← Ensures data flows to LLM
+    }
+    
+    return toolResult;
+  }
+}
+```
+
+**Error Handling with User-Friendly Embeds:**
+```typescript
+// API key validation with Discord embed
+if (isBraveApiKeyError(result.error, result.statusCode)) {
+  await sendStandardEmbed(context.channel, context.locale, {
+    titleKey: "errors.api.missing_key.title",
+    descriptionKey: "errors.api.missing_key.description", 
+    descriptionVars: { service: "ServiceName" },
+    color: ColorCode.ERROR,
+  });
+  return createToolResult(false, "API key required", result.error);
+}
+```
+
+### Current REST API Tools
+
+**✅ Brave Search Tools** (`src/tools/restAPIs/brave/`)
+- Complete implementation of Web, Image, Video, News search
+- Server-specific API key management with environment fallback
+- Discord image attachment processing and agentic fetch reminders
+- Parameter override system and token optimization
+- **Functions**: `brave_web_search`, `brave_image_search`, `brave_video_search`, `brave_news_search`
+
+### REST API vs MCP Comparison
+
+| Feature | REST API Tools | MCP Tools |
+|---------|---------------|-----------|
+| **Implementation** | Direct HTTP calls | External server processes |
+| **API Key Management** | Per-server encrypted storage | Environment variables only |
+| **Data Processing** | Full control & customization | Limited to server capabilities |
+| **Error Handling** | Rich Discord embeds | Basic error messages |
+| **Performance** | Direct API calls | Process communication overhead |
+| **Maintenance** | Internal codebase control | External dependency updates |
+
+**When to Choose REST API Tools:**
+- Need server-specific API key management
+- Require custom data processing or parameter overrides  
+- Want rich Discord integration (embeds, attachments)
+- Need fine-grained error handling and user feedback
+- API has complex response structures requiring transformation
+
+**When to Choose MCP Tools:**
+- Standard API integration without customization
+- External server already available and maintained
+- Simple pass-through functionality
+- Rapid prototyping or temporary integrations
 
 ## MCP Server Integration
 

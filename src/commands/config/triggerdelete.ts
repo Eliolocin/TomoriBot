@@ -25,11 +25,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("triggerdelete")
 		.setDescription(
-			localizer("en-US", "commands.config.triggerdelete.command_description"),
-		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.triggerdelete.command_description"),
-		});
+			localizer("en-US", "commands.config.triggerdelete.description"),
+		);
 
 /**
  * Removes trigger word from database using a Paginated embed

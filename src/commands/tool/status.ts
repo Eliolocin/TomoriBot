@@ -27,9 +27,6 @@ export const configureSubcommand = (
 	subcommand
 		.setName("status")
 		.setDescription(localizer("en-US", "commands.tool.status.description"))
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.tool.status.description"),
-		})
 		.addStringOption((option) =>
 			option
 				.setName("type")

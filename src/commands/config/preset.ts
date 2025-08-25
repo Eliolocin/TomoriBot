@@ -25,11 +25,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("preset")
 		.setDescription(
-			localizer("en-US", "commands.config.preset.command_description"),
-		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.preset.command_description"),
-		});
+			localizer("en-US", "commands.config.preset.description"),
+		);
 
 /**
  * Applies a preset personality configuration to Tomori.

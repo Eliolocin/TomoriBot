@@ -21,6 +21,7 @@ import {
 	type FunctionCall as GoogleFunctionCall,
 	GoogleGenAI,
 	type Part,
+	type ThinkingConfig,
 } from "@google/genai";
 import type { FunctionCall } from "../../types/provider/interfaces";
 import {
@@ -45,6 +46,7 @@ export interface GoogleStreamConfig extends StreamConfig {
 	safetySettings?: Array<Record<string, unknown>>;
 	generationConfig?: Record<string, unknown>;
 	systemInstruction?: string;
+	thinkingConfig?: ThinkingConfig;
 }
 
 /**
@@ -59,10 +61,17 @@ interface GoogleStreamChunk {
 	candidates?: Array<{
 		finishReason?: FinishReason;
 	}>;
+	thoughtSignature?: Uint8Array;
+	thoughtSummary?: string;
 }
 
 /**
  * Google Gemini streaming adapter implementation
+ * 
+ * Supports thought signatures for enhanced multi-turn conversations:
+ * - Configure via GoogleStreamConfig.thinkingConfig
+ * - Thought signatures and summaries are included in ProcessedChunk.metadata
+ * - Enables the model to maintain reasoning context across function calls
  */
 export class GoogleStreamAdapter implements StreamProvider {
 	private static readonly DEFAULT_MODEL =
@@ -95,6 +104,12 @@ export class GoogleStreamAdapter implements StreamProvider {
 			...googleConfig.generationConfig,
 			safetySettings: googleConfig.safetySettings,
 		};
+
+		// Add thinking configuration if provided
+		if (googleConfig.thinkingConfig) {
+			requestConfig.thinkingConfig = googleConfig.thinkingConfig;
+			log.info("GoogleStreamAdapter: Thinking mode enabled");
+		}
 
 		// Assemble context for Google format
 		const { systemInstruction, dialogueContents } =
@@ -239,6 +254,17 @@ export class GoogleStreamAdapter implements StreamProvider {
 			};
 		}
 
+		// Check for thought signatures and thought summaries
+		const metadata: Record<string, unknown> = {};
+		if (googleChunk.thoughtSignature) {
+			metadata.thoughtSignature = googleChunk.thoughtSignature;
+			log.info("GoogleStreamAdapter: Received thought signature");
+		}
+		if (googleChunk.thoughtSummary) {
+			metadata.thoughtSummary = googleChunk.thoughtSummary;
+			log.info("GoogleStreamAdapter: Received thought summary");
+		}
+
 		// Check for function calls
 		if (googleChunk.functionCalls && googleChunk.functionCalls.length > 0) {
 			const functionCall = this.convertGoogleFunctionCall(
@@ -247,6 +273,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 			return {
 				type: "function_call",
 				functionCall,
+				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
 			};
 		}
 
@@ -255,6 +282,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 			return {
 				type: "text",
 				content: googleChunk.text,
+				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
 			};
 		}
 
@@ -262,6 +290,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 		if (candidate?.finishReason === FinishReason.STOP) {
 			return {
 				type: "done",
+				metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
 			};
 		}
 
@@ -269,6 +298,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 		return {
 			type: "text",
 			content: "",
+			metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
 		};
 	}
 

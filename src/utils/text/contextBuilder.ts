@@ -35,13 +35,13 @@ function getFunctionDeclarations(provider: string, toolState: ToolStateForContex
 	
 	// Find specific tools by name
 	const stickerTool = availableTools.find(tool => tool.name === "select_sticker_for_response");
-	const searchTool = availableTools.find(tool => tool.name === "query_google_search");
+	const searchTool = availableTools.find(tool => tool.name === "brave_web_search");
 	const memoryTool = availableTools.find(tool => tool.name === "remember_this_fact");
 	
 	// Convert to Google function declarations
 	const declarations = {
 		selectStickerFunctionDeclaration: stickerTool ? googleAdapter.convertTool(stickerTool) : null,
-		queryGoogleSearchFunctionDeclaration: searchTool ? googleAdapter.convertTool(searchTool) : null,
+		braveWebSearchFunctionDeclaration: searchTool ? googleAdapter.convertTool(searchTool) : null,
 		rememberThisFactFunctionDeclaration: memoryTool ? googleAdapter.convertTool(memoryTool) : null,
 	};
 	
@@ -279,7 +279,7 @@ export async function buildContext({
 	const functionDeclarations = getFunctionDeclarations("google", toolState);
 	const { 
 		selectStickerFunctionDeclaration, 
-		queryGoogleSearchFunctionDeclaration, 
+		braveWebSearchFunctionDeclaration, 
 		rememberThisFactFunctionDeclaration 
 	} = functionDeclarations;
 
@@ -320,12 +320,11 @@ export async function buildContext({
 		);
 	}
 
-	if (tomoriConfig.google_search_enabled && queryGoogleSearchFunctionDeclaration) {
-		// 8.b. Google Search Function Guidance
-		// Assuming tomoriConfig has a flag like 'google_search_enabled'
-		// You'll need to add this flag to TomoriConfigRow and manage it
+	if (tomoriConfig.web_search_enabled && braveWebSearchFunctionDeclaration) {
+		// 8.b. Web Search Function Guidance (Brave Search)
+		// Uses the web_search_enabled flag to control availability
 		functionUsageInstructions.push(
-			`- **Google Search ('${queryGoogleSearchFunctionDeclaration.name}')**: ${queryGoogleSearchFunctionDeclaration.description} ${botName} uses this tool whenever a user's query implies a need for current events, specific facts not in your training data, or any information that would typically be found by searching the web. Do NOT use on YouTube links or video content because you are already able to parse them on your own.`,
+			`- **Web Search ('${braveWebSearchFunctionDeclaration.name}')**: ${braveWebSearchFunctionDeclaration.description} ${botName} uses this tool whenever a user's query implies a need for current events, specific facts not in your training data, or any information that would typically be found by searching the web. Do NOT use on YouTube links or video content because you are already able to parse them on your own.`,
 		);
 	}
 

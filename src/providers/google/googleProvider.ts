@@ -29,6 +29,7 @@ import {
 	getAvailableToolsForContext,
 	ToolRegistry,
 } from "../../tools/toolRegistry";
+import type { Tool } from "../../types/tool/interfaces";
 import type { StreamingContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
@@ -150,7 +151,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 				server_id: tomoriState.server_id.toString(),
 				config: {
 					sticker_usage_enabled: tomoriState.config.sticker_usage_enabled,
-					google_search_enabled: tomoriState.config.google_search_enabled,
+					web_search_enabled: tomoriState.config.web_search_enabled,
 					self_teaching_enabled: tomoriState.config.self_teaching_enabled,
 				},
 			};

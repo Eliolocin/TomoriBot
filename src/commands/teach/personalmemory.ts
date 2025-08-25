@@ -20,11 +20,18 @@ import {
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import type { ModalResult } from "../../types/discord/modal";
+import {
+	validateMemoryContent,
+	checkPersonalMemoryLimit,
+	getMemoryLimits,
+} from "../../utils/db/memoryLimits";
 
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_personalmemory_add_modal";
 const MEMORY_INPUT_ID = "personal_memory_input";
-const MEMORY_MAX_LENGTH = 512; // Max length for personal memories
+
+// Get memory limits from environment variables
+const memoryLimits = getMemoryLimits();
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (
@@ -33,11 +40,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("personalmemory")
 		.setDescription(
-			localizer("en-US", "commands.teach.personalmemory.command_description"),
-		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.teach.personalmemory.command_description"),
-		});
+			localizer("en-US", "commands.teach.personalmemory.description"),
+		);
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -95,7 +99,7 @@ export async function execute(
 					labelKey: "commands.teach.personalmemory.memory_input_label",
 					style: TextInputStyle.Paragraph,
 					required: true,
-					maxLength: MEMORY_MAX_LENGTH,
+					maxLength: memoryLimits.maxMemoryLength,
 				},
 			],
 		});
@@ -117,10 +121,44 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newMemory = modalResult.values![MEMORY_INPUT_ID];
 
-		// 8. Prepare updated array using data from userData
+		// 8. Validate memory content length
+		const contentValidation = validateMemoryContent(newMemory);
+		if (!contentValidation.isValid) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.teach.personalmemory.content_too_long_title",
+				descriptionKey:
+					"commands.teach.personalmemory.content_too_long_description",
+				descriptionVars: { max_length: memoryLimits.maxMemoryLength },
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 9. Check personal memory limit
+
+		const personalLimitCheck = await checkPersonalMemoryLimit(
+			// biome-ignore lint/style/noNonNullAssertion: userData validation ensures user_id exists
+			userData.user_id!,
+		);
+		if (!personalLimitCheck.isValid) {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.teach.personalmemory.limit_exceeded_title",
+				descriptionKey:
+					"commands.teach.personalmemory.limit_exceeded_description",
+				descriptionVars: {
+					max_allowed:
+						personalLimitCheck.maxAllowed || memoryLimits.maxPersonalMemories,
+					current_count: personalLimitCheck.currentCount || 0,
+				},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 10. Prepare updated array using data from userData
 		const currentMemories = userData.personal_memories ?? [];
 
-		// 9. Check for duplicates within the user's memories
+		// 11. Check for duplicates within the user's memories
 		if (currentMemories.includes(newMemory)) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.teach.personalmemory.duplicate_title",

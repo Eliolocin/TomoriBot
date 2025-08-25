@@ -31,11 +31,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("sampledialogue")
 		.setDescription(
-			localizer("en-US", "commands.teach.sampledialogue.command_description"), // Rule 9
-		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.teach.sampledialogue.command_description"),
-		});
+			localizer("en-US", "commands.teach.sampledialogue.description"),
+		);
 
 /**
  * Rule 1: JSDoc comment for exported function

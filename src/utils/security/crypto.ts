@@ -1,6 +1,6 @@
 import { log } from "../misc/logger";
 import { sql } from "bun";
-import type { McpApiKeyRow } from "../../types/db/schema";
+import type { OptApiKeyRow } from "../../types/db/schema";
 
 /**
  * Secret key used for symmetric encryption/decryption of API keys
@@ -73,25 +73,25 @@ export const decryptApiKey = async (encryptedKey: Buffer): Promise<string> => {
 };
 
 /**
- * Store an encrypted MCP API key in the database
+ * Store an encrypted optional API key in the database
  * @param serverId - Server ID to associate the key with
- * @param mcpName - Name of the MCP server (e.g., 'brave-search', 'duckduckgo-search')
+ * @param serviceName - Name of the service (e.g., 'brave-search', 'duckduckgo-search')
  * @param apiKey - The raw API key to encrypt and store
  * @returns Promise<boolean> - True if stored successfully
  */
-export const storeMcpApiKey = async (
+export const storeOptApiKey = async (
 	serverId: number,
-	mcpName: string,
+	serviceName: string,
 	apiKey: string,
 ): Promise<boolean> => {
-	if (!apiKey || !mcpName || !serverId) {
-		log.warn("Missing required parameters for MCP API key storage");
+	if (!apiKey || !serviceName || !serverId) {
+		log.warn("Missing required parameters for optional API key storage");
 		return false;
 	}
 
 	try {
 		log.info(
-			`Storing encrypted MCP API key for server ${serverId}, MCP: ${mcpName}`,
+			`Storing encrypted optional API key for server ${serverId}, service: ${serviceName}`,
 		);
 
 		// Encrypt the API key using the existing encryption function
@@ -99,96 +99,96 @@ export const storeMcpApiKey = async (
 
 		// Store in database with ON CONFLICT update for idempotent operation
 		await sql`
-			INSERT INTO mcp_api_keys (server_id, mcp_name, api_key)
-			VALUES (${serverId}, ${mcpName}, ${encryptedKey})
-			ON CONFLICT (server_id, mcp_name)
+			INSERT INTO opt_api_keys (server_id, service_name, api_key)
+			VALUES (${serverId}, ${serviceName}, ${encryptedKey})
+			ON CONFLICT (server_id, service_name)
 			DO UPDATE SET 
 				api_key = EXCLUDED.api_key,
 				updated_at = CURRENT_TIMESTAMP
 		`;
 
 		log.success(
-			`MCP API key stored successfully for ${mcpName} on server ${serverId}`,
+			`Optional API key stored successfully for ${serviceName} on server ${serverId}`,
 		);
 		return true;
 	} catch (error) {
-		log.error(`Failed to store MCP API key for ${mcpName}`, error as Error);
+		log.error(`Failed to store optional API key for ${serviceName}`, error as Error);
 		return false;
 	}
 };
 
 /**
- * Retrieve and decrypt an MCP API key from the database
+ * Retrieve and decrypt an optional API key from the database
  * @param serverId - Server ID to look up
- * @param mcpName - Name of the MCP server
+ * @param serviceName - Name of the service
  * @returns Promise<string | null> - Decrypted API key or null if not found
  */
-export const getMcpApiKey = async (
+export const getOptApiKey = async (
 	serverId: number,
-	mcpName: string,
+	serviceName: string,
 ): Promise<string | null> => {
-	if (!mcpName || !serverId) {
-		log.warn("Missing required parameters for MCP API key retrieval");
+	if (!serviceName || !serverId) {
+		log.warn("Missing required parameters for optional API key retrieval");
 		return null;
 	}
 
 	try {
-		log.info(`Retrieving MCP API key for server ${serverId}, MCP: ${mcpName}`);
+		log.info(`Retrieving optional API key for server ${serverId}, service: ${serviceName}`);
 
 		const [result] = await sql`
 			SELECT api_key 
-			FROM mcp_api_keys 
-			WHERE server_id = ${serverId} AND mcp_name = ${mcpName}
+			FROM opt_api_keys 
+			WHERE server_id = ${serverId} AND service_name = ${serviceName}
 		`;
 
 		if (!result || !result.api_key) {
-			log.info(`No MCP API key found for ${mcpName} on server ${serverId}`);
+			log.info(`No optional API key found for ${serviceName} on server ${serverId}`);
 			return null;
 		}
 
 		// Decrypt the API key using the existing decryption function
 		const decryptedKey = await decryptApiKey(result.api_key);
 
-		log.success(`MCP API key retrieved successfully for ${mcpName}`);
+		log.success(`Optional API key retrieved successfully for ${serviceName}`);
 		return decryptedKey;
 	} catch (error) {
-		log.error(`Failed to retrieve MCP API key for ${mcpName}`, error as Error);
+		log.error(`Failed to retrieve optional API key for ${serviceName}`, error as Error);
 		return null;
 	}
 };
 
 /**
- * Get all MCP API keys for a server (returns a map of mcpName -> decryptedKey)
+ * Get all optional API keys for a server (returns a map of serviceName -> decryptedKey)
  * @param serverId - Server ID to look up
- * @returns Promise<Record<string, string>> - Map of MCP names to decrypted API keys
+ * @returns Promise<Record<string, string>> - Map of service names to decrypted API keys
  */
-export const getAllMcpApiKeysForServer = async (
+export const getAllOptApiKeysForServer = async (
 	serverId: number,
 ): Promise<Record<string, string>> => {
 	if (!serverId) {
-		log.warn("Missing serverId for MCP API key retrieval");
+		log.warn("Missing serverId for optional API key retrieval");
 		return {};
 	}
 
 	try {
-		log.info(`Retrieving all MCP API keys for server ${serverId}`);
+		log.info(`Retrieving all optional API keys for server ${serverId}`);
 
 		const results = (await sql`
-			SELECT mcp_name, api_key 
-			FROM mcp_api_keys 
+			SELECT service_name, api_key 
+			FROM opt_api_keys 
 			WHERE server_id = ${serverId}
-		`) as McpApiKeyRow[];
+		`) as OptApiKeyRow[];
 
 		const apiKeys: Record<string, string> = {};
 
 		for (const result of results) {
-			if (result.api_key && result.mcp_name) {
+			if (result.api_key && result.service_name) {
 				try {
 					const decryptedKey = await decryptApiKey(result.api_key);
-					apiKeys[result.mcp_name] = decryptedKey;
+					apiKeys[result.service_name] = decryptedKey;
 				} catch (error) {
 					log.warn(
-						`Failed to decrypt API key for MCP: ${result.mcp_name}`,
+						`Failed to decrypt API key for service: ${result.service_name}`,
 						error as Error,
 					);
 				}
@@ -196,12 +196,12 @@ export const getAllMcpApiKeysForServer = async (
 		}
 
 		log.success(
-			`Retrieved ${Object.keys(apiKeys).length} MCP API keys for server ${serverId}`,
+			`Retrieved ${Object.keys(apiKeys).length} optional API keys for server ${serverId}`,
 		);
 		return apiKeys;
 	} catch (error) {
 		log.error(
-			`Failed to retrieve MCP API keys for server ${serverId}`,
+			`Failed to retrieve optional API keys for server ${serverId}`,
 			error as Error,
 		);
 		return {};
@@ -209,63 +209,63 @@ export const getAllMcpApiKeysForServer = async (
 };
 
 /**
- * Delete an MCP API key from the database
+ * Delete an optional API key from the database
  * @param serverId - Server ID
- * @param mcpName - Name of the MCP server
+ * @param serviceName - Name of the service
  * @returns Promise<boolean> - True if deleted successfully
  */
-export const deleteMcpApiKey = async (
+export const deleteOptApiKey = async (
 	serverId: number,
-	mcpName: string,
+	serviceName: string,
 ): Promise<boolean> => {
-	if (!mcpName || !serverId) {
-		log.warn("Missing required parameters for MCP API key deletion");
+	if (!serviceName || !serverId) {
+		log.warn("Missing required parameters for optional API key deletion");
 		return false;
 	}
 
 	try {
-		log.info(`Deleting MCP API key for server ${serverId}, MCP: ${mcpName}`);
+		log.info(`Deleting optional API key for server ${serverId}, service: ${serviceName}`);
 
 		await sql`
-			DELETE FROM mcp_api_keys 
-			WHERE server_id = ${serverId} AND mcp_name = ${mcpName}
+			DELETE FROM opt_api_keys 
+			WHERE server_id = ${serverId} AND service_name = ${serviceName}
 		`;
 
 		log.success(
-			`MCP API key deleted successfully for ${mcpName} on server ${serverId}`,
+			`Optional API key deleted successfully for ${serviceName} on server ${serverId}`,
 		);
 		return true;
 	} catch (error) {
-		log.error(`Failed to delete MCP API key for ${mcpName}`, error as Error);
+		log.error(`Failed to delete optional API key for ${serviceName}`, error as Error);
 		return false;
 	}
 };
 
 /**
- * Check if an MCP API key exists for a server
+ * Check if an optional API key exists for a server
  * @param serverId - Server ID
- * @param mcpName - Name of the MCP server
+ * @param serviceName - Name of the service
  * @returns Promise<boolean> - True if key exists
  */
-export const hasMcpApiKey = async (
+export const hasOptApiKey = async (
 	serverId: number,
-	mcpName: string,
+	serviceName: string,
 ): Promise<boolean> => {
-	if (!mcpName || !serverId) {
+	if (!serviceName || !serverId) {
 		return false;
 	}
 
 	try {
 		const [result] = await sql`
 			SELECT 1 
-			FROM mcp_api_keys 
-			WHERE server_id = ${serverId} AND mcp_name = ${mcpName}
+			FROM opt_api_keys 
+			WHERE server_id = ${serverId} AND service_name = ${serviceName}
 		`;
 
 		return !!result;
 	} catch (error) {
 		log.error(
-			`Failed to check MCP API key existence for ${mcpName}`,
+			`Failed to check optional API key existence for ${serviceName}`,
 			error as Error,
 		);
 		return false;

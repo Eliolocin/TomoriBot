@@ -150,7 +150,24 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
 -- Add columns for emoji and sticker usage permissions (May 5, 2025)
 SELECT add_column_if_not_exists('tomori_configs', 'emoji_usage_enabled', 'BOOLEAN', 'true');
 SELECT add_column_if_not_exists('tomori_configs', 'sticker_usage_enabled', 'BOOLEAN', 'true');
-SELECT add_column_if_not_exists('tomori_configs', 'google_search_enabled', 'BOOLEAN', 'true');
+
+-- Rename google_search_enabled to web_search_enabled for Brave Search integration (January 2025)
+SELECT add_column_if_not_exists('tomori_configs', 'web_search_enabled', 'BOOLEAN', 'true');
+
+-- Migrate existing google_search_enabled values to web_search_enabled if the old column exists
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'google_search_enabled') THEN
+        -- Copy values from old column to new column
+        UPDATE tomori_configs 
+        SET web_search_enabled = google_search_enabled 
+        WHERE web_search_enabled IS NULL OR web_search_enabled != google_search_enabled;
+        
+        -- Drop the old column
+        ALTER TABLE tomori_configs DROP COLUMN IF EXISTS google_search_enabled;
+        RAISE NOTICE 'Migrated google_search_enabled to web_search_enabled and dropped old column';
+    END IF;
+END $$;
 
 -- Create updated_at trigger for tomori_configs table
 DROP TRIGGER IF EXISTS update_tomori_configs_timestamp ON tomori_configs;
@@ -333,22 +350,22 @@ $$ LANGUAGE plpgsql;
 -- Make sure pgcrypto extension is enabled
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- MCP (Model Context Protocol) API keys table for encrypted storage of MCP server credentials per guild
-CREATE TABLE IF NOT EXISTS mcp_api_keys (
-  mcp_api_key_id SERIAL PRIMARY KEY,
+-- Optional API keys table for encrypted storage of optional service credentials per guild
+CREATE TABLE IF NOT EXISTS opt_api_keys (
+  opt_api_key_id SERIAL PRIMARY KEY,
   server_id INT NOT NULL,                    -- Foreign key to servers table
-  mcp_name TEXT NOT NULL,                    -- 'fetch', 'brave-search', etc.
+  service_name TEXT NOT NULL,                -- 'brave-search', 'duckduckgo-search', etc.
   api_key BYTEA,                            -- Encrypted API key using pgcrypto
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (server_id, mcp_name),             -- One key per MCP per guild
+  UNIQUE (server_id, service_name),         -- One key per service per guild
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
 );
 
--- Create updated_at trigger for mcp_api_keys table
-DROP TRIGGER IF EXISTS update_mcp_api_keys_timestamp ON mcp_api_keys;
-CREATE TRIGGER update_mcp_api_keys_timestamp
-BEFORE UPDATE ON mcp_api_keys
+-- Create updated_at trigger for opt_api_keys table
+DROP TRIGGER IF EXISTS update_opt_api_keys_timestamp ON opt_api_keys;
+CREATE TRIGGER update_opt_api_keys_timestamp
+BEFORE UPDATE ON opt_api_keys
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 

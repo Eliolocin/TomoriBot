@@ -11,6 +11,11 @@ import {
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import type { Guild } from "discord.js";
+import {
+	validateMemoryContent,
+	checkPersonalMemoryLimit,
+	checkServerMemoryLimit,
+} from "./memoryLimits";
 import type {
 	ServerMemoryRow,
 	SetupConfig,
@@ -721,6 +726,24 @@ export async function addServerMemoryByTomori(
 		`Tomori is attempting to self-learn a server memory for server ID ${serverId} (triggered by user ID ${taughtByUserId}): "${content.substring(0, 50)}..."`,
 	);
 
+	// 2. Validate memory content before database operations
+	const contentValidation = validateMemoryContent(content);
+	if (!contentValidation.isValid) {
+		log.warn(
+			`Server memory content validation failed for server ID ${serverId}: ${contentValidation.error}`,
+		);
+		return null;
+	}
+
+	// 3. Check server memory limit
+	const serverLimitCheck = await checkServerMemoryLimit(serverId);
+	if (!serverLimitCheck.isValid) {
+		log.warn(
+			`Server memory limit exceeded for server ID ${serverId}: ${serverLimitCheck.currentCount}/${serverLimitCheck.maxAllowed}`,
+		);
+		return null;
+	}
+
 	try {
 		// 2. Insert the new memory into the server_memories table.
 		// The columns now correctly match the serverMemorySchema.
@@ -792,6 +815,24 @@ export async function addPersonalMemoryByTomori(
 	log.info(
 		`Tomori is attempting to self-learn and append a personal memory for User ID ${userId} using array_append: "${content.substring(0, 50)}..."`,
 	);
+
+	// 2. Validate memory content before database operations
+	const contentValidation = validateMemoryContent(content);
+	if (!contentValidation.isValid) {
+		log.warn(
+			`Personal memory content validation failed for user ID ${userId}: ${contentValidation.error}`,
+		);
+		return null;
+	}
+
+	// 3. Check personal memory limit
+	const personalLimitCheck = await checkPersonalMemoryLimit(userId);
+	if (!personalLimitCheck.isValid) {
+		log.warn(
+			`Personal memory limit exceeded for user ID ${userId}: ${personalLimitCheck.currentCount}/${personalLimitCheck.maxAllowed}`,
+		);
+		return null;
+	}
 
 	try {
 		// 2. Atomically update the user's personal_memories array using array_append.

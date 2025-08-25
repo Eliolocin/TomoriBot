@@ -27,11 +27,8 @@ export const configureSubcommand = (
 	subcommand
 		.setName("rename")
 		.setDescription(
-			localizer("en-US", "commands.config.rename.command_description"),
+			localizer("en-US", "commands.config.rename.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.rename.command_description"),
-		})
 		.addStringOption((option) =>
 			option
 				.setName("name")

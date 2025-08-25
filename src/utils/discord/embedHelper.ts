@@ -39,6 +39,7 @@ export function createStandardEmbed(
 ): EmbedBuilder {
 	const {
 		titleKey,
+		titleVars = {},
 		descriptionKey,
 		descriptionVars = {},
 		color = ColorCode.INFO,
@@ -49,7 +50,7 @@ export function createStandardEmbed(
 
 	const embed = new EmbedBuilder()
 		.setColor(color)
-		.setTitle(localizer(locale, titleKey))
+		.setTitle(localizer(locale, titleKey, titleVars))
 		.setDescription(localizer(locale, descriptionKey, descriptionVars));
 
 	if (footerKey) {
