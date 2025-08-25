@@ -29,6 +29,7 @@ import {
 	getAvailableToolsForContext,
 	ToolRegistry,
 } from "../../tools/toolRegistry";
+import type { Tool } from "../../types/tool/interfaces";
 import type { StreamingContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
