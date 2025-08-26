@@ -12,6 +12,8 @@ services:
     volumes:
       # Persistent storage - data survives container restarts
       - postgres_data:/var/lib/postgresql/data
+      # Initialize pg_cron if available (fallback to app-level cleanup if not)
+      - ./scripts/init-pgcron.sql:/docker-entrypoint-initdb.d/init-pgcron.sql:ro
     ports:
       # Only expose internally - not accessible from outside Docker network
       - "15432:5432"  # Expose on port 5433 to avoid conflict with your Windows PostgreSQL
@@ -23,6 +25,11 @@ services:
       retries: 5
     networks:
       - tomori-network
+    # Note: Standard PostgreSQL Alpine image doesn't include pg_cron extension
+    # For production with pg_cron support, consider:
+    # - Using postgres:15 (non-alpine) with pg_cron installed via dockerfile
+    # - Using a managed database service with pg_cron support
+    # - TomoriBot includes app-level cooldown cleanup as fallback
 
   # TomoriBot application - the main apartment
   tomoribot:

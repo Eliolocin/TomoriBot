@@ -61,30 +61,83 @@ const client = new Client({
 
 log.section("Initializing Database...");
 
-// Check database connection and then initialize PostgreSQL schema if needed
-const schemaPath = path.join(import.meta.dir, "db", "schema.sql");
+// Small delay in development to reduce hot-reload conflicts
+if (process.env.NODE_ENV !== "production") {
+	await new Promise((resolve) => setTimeout(resolve, 500));
+}
 
-await sql
-	.file(schemaPath)
-	.then(() => {
-		log.success("PostgreSQL database schema verified");
-	})
-	.catch((err) => {
-		log.error("PostgreSQL database schema verification error", err);
-		process.exit(1);
-	});
+/**
+ * Initialize database schema and seed data with retry logic for development hot-reloading
+ * @param maxRetries - Maximum number of retry attempts
+ * @param delayMs - Delay between retries in milliseconds
+ */
+async function initializeDatabase(
+	maxRetries = 3,
+	delayMs = 1000,
+): Promise<void> {
+	const schemaPath = path.join(import.meta.dir, "db", "schema.sql");
+	const seedPath = path.join(import.meta.dir, "db", "seed.sql");
 
-const seedPath = path.join(import.meta.dir, "db", "seed.sql");
-await sql
-	.file(seedPath)
-	.then(() => {
-		log.success("PostgreSQL database seed verified");
-	})
-	.catch((err) => {
-		log.error("PostgreSQL database seed verification error", err);
-		process.exit(1);
-	});
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		try {
+			// Initialize schema
+			await sql.file(schemaPath);
+			log.success("PostgreSQL database schema verified");
 
+			// Initialize seed data
+			await sql.file(seedPath);
+			log.success("PostgreSQL database seed verified");
+
+			return; // Success - exit retry loop
+		} catch (err) {
+			const errorMessage = err instanceof Error ? err.message : String(err);
+
+			// Check if this is a concurrency error that might resolve with retry
+			const isConcurrencyError =
+				errorMessage.includes("tuple concurrently updated") ||
+				errorMessage.includes("could not serialize access") ||
+				errorMessage.includes("deadlock detected");
+
+			if (isConcurrencyError && attempt < maxRetries) {
+				log.warn(
+					`Database initialization attempt ${attempt} failed due to concurrency (retrying in ${delayMs}ms): ${errorMessage}`,
+				);
+				await new Promise((resolve) => setTimeout(resolve, delayMs));
+				continue; // Retry
+			} else {
+				// Non-retryable error or max retries exceeded
+				log.error(
+					`PostgreSQL database initialization failed after ${attempt} attempts:`,
+					err,
+				);
+				process.exit(1);
+			}
+		}
+	}
+}
+
+await initializeDatabase();
+
+// Clean up expired cooldowns on startup (development alternative to pg_cron)
+log.section("Cleaning up expired cooldowns...");
+try {
+	const { cleanupExpiredCooldowns } = await import(
+		"./utils/db/cooldownsCleanup"
+	);
+	const cleanupResult = await cleanupExpiredCooldowns();
+	if (cleanupResult.success) {
+		log.success(
+			`Cooldowns cleanup completed: ${cleanupResult.deletedCount} expired entries removed`,
+		);
+	} else {
+		log.warn(`Cooldowns cleanup failed: ${cleanupResult.error}`);
+	}
+} catch (error) {
+	log.warn("Error during startup cooldowns cleanup:", error);
+	// Non-critical error - continue startup
+}
+
+// Attempt to set up pg_cron for production environments (non-critical)
 if (!postgresUrl) {
 	log.warn("POSTGRES_URL not found in .env. Skipping cron job scheduling.");
 } else {
@@ -95,43 +148,45 @@ if (!postgresUrl) {
 			);
 		}
 
-		// 1. First ensure the pg_cron extension is enabled
-		await sql`CREATE EXTENSION IF NOT EXISTS pg_cron;`;
-
-		// 2. Then schedule the cleanup function
-		// Parse the URL to extract hostname and port
-		await sql`
-			INSERT INTO cron.job (schedule, command, nodename, nodeport, database, username)
-			VALUES (
-				'0 * * * *', -- Run at the start of every hour
-				'SELECT cleanup_expired_cooldowns();',
-				${dbHost},          -- Use parsed hostname
-				${dbPort},          -- Use parsed port
-				current_database(), -- Still use SQL functions for these
-				current_user
-			)
-			ON CONFLICT (command, database, username, nodename, nodeport)
-			DO UPDATE SET schedule = EXCLUDED.schedule; -- Update schedule if job already exists
+		// 1. First check if the pg_cron extension is available
+		const [extensionCheck] = await sql`
+			SELECT EXISTS (
+				SELECT 1 FROM pg_available_extensions 
+				WHERE name = 'pg_cron'
+			) as available
 		`;
-		log.success(
-			`pg_cron job for cooldown cleanup scheduled/verified for ${dbHost}:${dbPort}`,
-		);
+
+		if (!extensionCheck?.available) {
+			log.warn(
+				"pg_cron extension not available - using startup cleanup method",
+			);
+		} else {
+			// 2. Enable pg_cron extension
+			await sql`CREATE EXTENSION IF NOT EXISTS pg_cron;`;
+
+			// 3. Schedule the cleanup function
+			await sql`
+				INSERT INTO cron.job (schedule, command, nodename, nodeport, database, username)
+				VALUES (
+					'0 * * * *', -- Run at the start of every hour
+					'SELECT cleanup_expired_cooldowns();',
+					${dbHost},          -- Use parsed hostname
+					${dbPort},          -- Use parsed port
+					current_database(), -- Still use SQL functions for these
+					current_user
+				)
+				ON CONFLICT (command, database, username, nodename, nodeport)
+				DO UPDATE SET schedule = EXCLUDED.schedule; -- Update schedule if job already exists
+			`;
+			log.success(
+				`pg_cron job for cooldown cleanup scheduled/verified for ${dbHost}:${dbPort}`,
+			);
+		}
 	} catch (err) {
-		const context = {
-			errorType: "StartupError",
-			metadata: {
-				stage: "CronJobSetup",
-				dbHost,
-				dbPort,
-			},
-		};
-		await log.error(
-			"Failed to schedule pg_cron job for cooldown cleanup",
-			err,
-			context,
+		log.info(
+			`pg_cron setup failed (non-critical): ${err instanceof Error ? err.message : err}`,
 		);
-		// Decide if this is critical enough to exit, or just log the error
-		// process.exit(1);
+		log.info("Cooldown cleanup will be handled by startup method instead");
 	}
 }
 
@@ -146,7 +201,7 @@ try {
 	process.exit(1);
 }
 
-// Initialize localization 
+// Initialize localization
 log.section("Initializing Locales...");
 await initializeLocalizer();
 

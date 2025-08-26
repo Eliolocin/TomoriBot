@@ -8,9 +8,18 @@ WORKDIR /app
 
 # Install system dependencies that might be needed
 # Alpine Linux is minimal, so we add some common tools
+# Include Python/pip and Node.js/npm for MCP server support
 RUN apk add --no-cache \
     ca-certificates \
-    tzdata
+    tzdata \
+    python3 \
+    py3-pip \
+    nodejs \
+    npm
+
+# Install MCP servers that are required by TomoriBot
+# Fetch MCP server needs to be pre-installed with pip
+RUN pip3 install mcp-server-fetch
 
 # Copy package files first for better Docker layer caching
 # This is like getting the "lease agreement" (dependencies) ready first

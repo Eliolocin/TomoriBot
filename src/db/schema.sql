@@ -345,8 +345,9 @@ DECLARE
     deleted_count INTEGER;
 BEGIN
     DELETE FROM cooldowns
-    WHERE expiry_time < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000
-    RETURNING COUNT(*) INTO deleted_count;
+    WHERE expiry_time < EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000;
+    
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
     
     RETURN deleted_count;
 END;
@@ -374,24 +375,8 @@ BEFORE UPDATE ON opt_api_keys
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
--- Temporarily disable pg_cron setup until deployed to a Linux/cloud environment
--- CREATE EXTENSION IF NOT EXISTS pg_cron; -- Ensure pg_cron is enabled before scheduling
-
--- Schedule the cleanup function to run every hour using pg_cron
--- Use ON CONFLICT to make this command idempotent (safe to run multiple times)
-/* -- Temporarily disabled block
-INSERT INTO cron.job (schedule, command, nodename, nodeport, database, username)
-VALUES (
-    '0 * * * *', -- Run at the start of every hour
-    'SELECT cleanup_expired_cooldowns();',
-    'localhost', -- Adjust if your DB host is different
-    5432,        -- Adjust if your DB port is different
-    current_database(),
-    current_user
-)
-ON CONFLICT (command, database, username, nodename, nodeport)
-DO UPDATE SET schedule = EXCLUDED.schedule; -- Update schedule if job already exists
-*/ -- End of temporarily disabled block
+-- pg_cron setup has been moved to a separate file: src/db/pgcron.sql
+-- This allows optional execution based on the environment (production vs development)
 
 -- Example usage - This shows how to add columns to existing tables
 -- You can add these calls whenever you need to introduce schema changes
