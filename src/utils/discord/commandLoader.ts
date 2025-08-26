@@ -41,7 +41,7 @@ export type CommandExecutionMap = Map<
  * Map for command cooldowns (category -> duration)
  */
 export type CommandCooldownMap = Map<string, number>;
-const GUILD_ONLY_CATEGORIES = ["config", "teach"];
+const GUILD_ONLY_CATEGORIES = ["config", "teach", "tool", "bot", "unlearn"];
 const MANAGER_ONLY_CATEGORIES = ["config"];
 
 /**

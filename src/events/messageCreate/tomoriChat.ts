@@ -1,7 +1,7 @@
 import type { Client, Message, Sticker } from "discord.js";
 import {
 	BaseGuildTextChannel,
-	DMChannel,
+	// DMChannel,
 	MessageFlags,
 	TextChannel,
 } from "discord.js"; // Import value for instanceof check
@@ -26,6 +26,7 @@ import {
 	extractYouTubeVideoIds,
 } from "../../utils/text/youTubeUrlCleaner";
 import { decryptApiKey } from "@/utils/security/crypto";
+import { localizer } from "../../utils/text/localizer";
 
 import type { TomoriState } from "@/types/db/schema";
 // Provider-specific function declarations moved to providers
@@ -44,13 +45,6 @@ const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
 	(word) => word.trim(),
 ) || ["tomori", "tomo", "トモリ", "ともり"];
 
-// Conversation reset markers
-const CONVERSATION_RESET_MARKERS = [
-	"REFRESH",
-	"refresh",
-	"リフレッシュ",
-	"会話履歴がクリア",
-];
 
 const MAX_FUNCTION_CALL_ITERATIONS = 5; // Safety break for function call loops
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
@@ -163,14 +157,16 @@ export default async function tomoriChat(
 
 		if (
 			"send" in channel &&
-			channel instanceof DMChannel &&
 			// biome-ignore lint/style/noNonNullAssertion: client.user is checked during startup
 			message.author.id !== client.user!.id
 		) {
 			try {
 				await channel.send({ embeds: [errorEmbed] });
 			} catch (sendError) {
-				log.error("Failed to send DM not supported message", sendError);
+				log.error(
+					"Failed to send non-guild channel not supported message",
+					sendError,
+				);
 			}
 		}
 		return;
@@ -369,6 +365,51 @@ export default async function tomoriChat(
 				return false;
 			}
 
+			/**
+			 * Check if an embed title matches target localizer keys that should be processed as text
+			 * @param embedTitle - The embed title to check
+			 * @returns Object with isTarget boolean and the type of target found
+			 */
+			function checkTargetEmbedTitle(embedTitle: string | null): { 
+				isTarget: boolean; 
+				type: 'memory_learning' | 'reset' | null;
+			} {
+				if (!embedTitle) return { isTarget: false, type: null };
+
+				// Target localizer keys for memory learning embeds
+				const memoryLearningTitles = [
+					localizer(locale, "genai.self_teach.server_memory_learned_title"),
+					localizer(locale, "genai.self_teach.personal_memory_learned_title"),
+				];
+
+				// Target localizer key for conversation reset
+				const resetTitle = localizer(locale, "commands.tool.refresh.title");
+
+				// EXTENSIBILITY EXAMPLE: Adding new embed types is easy!
+				// 1. Add new type to union: 'memory_learning' | 'reset' | 'new_type' | null
+				// 2. Add new localizer keys:
+				// const newTypeTitles = [
+				//     localizer(locale, "commands.some_feature.title"),
+				//     localizer(locale, "genai.some_other.title"),
+				// ];
+				// 3. Add new check:
+				// if (newTypeTitles.some(title => embedTitle === title)) {
+				//     return { isTarget: true, type: 'new_type' };
+				// }
+
+				// Check for memory learning embeds
+				if (memoryLearningTitles.some(title => embedTitle === title)) {
+					return { isTarget: true, type: 'memory_learning' };
+				}
+
+				// Check for reset embed
+				if (embedTitle === resetTitle) {
+					return { isTarget: true, type: 'reset' };
+				}
+
+				return { isTarget: false, type: null };
+			}
+
 			// 3. Enhanced direct trigger checks (base words or direct reply)
 			let isReplyToBot = false;
 			let isBaseTriggerWord = false;
@@ -519,23 +560,12 @@ export default async function tomoriChat(
 			for (let i = messagesArray.length - 1; i >= 0; i--) {
 				const msg = messagesArray[i];
 
-				// Helper function to check if text contains a reset marker (case-insensitive)
-				const containsResetMarker = (
-					text: string | null | undefined,
-				): boolean => {
-					if (!text) return false;
-					const lowerText = text.toLowerCase();
-					// Check if any marker from the list is included in the text
-					return CONVERSATION_RESET_MARKERS.some((marker) =>
-						lowerText.includes(marker.toLowerCase()),
-					);
-				};
-
-				// Check if *any* embed in the message contains the reset marker in its title or description
+				// Check if *any* embed in the message contains a reset title using localizer
 				const embedContainsReset = msg.embeds.some(
-					(embed) =>
-						containsResetMarker(embed.title) ||
-						containsResetMarker(embed.description),
+					(embed) => {
+						const embedCheck = checkTargetEmbedTitle(embed.title);
+						return embedCheck.isTarget && embedCheck.type === 'reset';
+					}
 				);
 
 				// If an embed contains the marker, this is our reset point
@@ -568,17 +598,62 @@ export default async function tomoriChat(
 					processedContent = msg.content.slice(2); // Remove "$:" prefix
 				}
 
-				// 3. Determine author name based on whether it's a debug message or regular message
-				const authorName =
-					msg.author.id === client.user?.id || isDebugMessage
-						? tomoriState?.tomori_nickname // Use Tomori's nickname for bot messages or debug messages
-						: `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
+				// 3. Determine author name and ID based on message type
+				let effectiveAuthorId = authorId;
+				let authorName: string;
+				
+				if (msg.author.id === client.user?.id || isDebugMessage) {
+					authorName = tomoriState?.tomori_nickname; // Use Tomori's nickname for bot messages or debug messages
+				} else {
+					authorName = `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
+				}
+				
 				userListSet.add(authorId);
 				const imageAttachments: SimplifiedMessageForContext["imageAttachments"] =
 					[];
 				const videoAttachments: SimplifiedMessageForContext["videoAttachments"] =
 					[];
-				const messageContentForLlm: string | null = processedContent; // Use processed content (with "$:" removed if present)				// 10.a. Process direct image attachments and stickers
+				let messageContentForLlm: string | null = processedContent; // Use processed content (with "$:" removed if present)
+				let hasProcessedEmbed = false; // Track if this message contains a processed embed
+
+				// Process embeds for target titles that should be included as text content
+				if (msg.embeds.length > 0) {
+					for (const embed of msg.embeds) {
+						const embedCheck = checkTargetEmbedTitle(embed.title);
+						if (embedCheck.isTarget && embedCheck.type === 'memory_learning' && embed.description) {
+							// Remove bot name prefix from embed description if present
+							let cleanedDescription = embed.description;
+							if (tomoriState?.tomori_nickname) {
+								// Escape special regex characters in the bot nickname
+								const escapedNickname = tomoriState.tomori_nickname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+								const botNamePattern = new RegExp(`^${escapedNickname}:\\s*`, 'i');
+								if (botNamePattern.test(cleanedDescription)) {
+									cleanedDescription = cleanedDescription.replace(botNamePattern, '').trim();
+								}
+							}
+
+							// Add embed content to message text with special marker
+							const embedContent = `[The following is a system-produced embed]\n${cleanedDescription}`;
+							messageContentForLlm = messageContentForLlm 
+								? `${messageContentForLlm}\n${embedContent}` 
+								: embedContent;
+							hasProcessedEmbed = true;
+						}
+					}
+				}
+
+				// Override author information for special message types
+				if (hasProcessedEmbed) {
+					// Processed embeds should appear as system/user messages
+					effectiveAuthorId = "system-embed"; // Use a special system ID to prevent combination
+					authorName = "System"; // Use "System" as the author name for processed embeds
+				} else if (isDebugMessage) {
+					// Debug messages ($:) should appear as coming from the bot (model role)
+					effectiveAuthorId = client.user?.id || "bot"; // Use bot's actual ID for debug messages
+					authorName = tomoriState?.tomori_nickname || "Bot"; // Keep bot nickname
+				}
+
+				// 10.a. Process direct image attachments and stickers
 				if (msg.attachments.size > 0) {
 					for (const attachment of msg.attachments.values()) {
 						if (
@@ -687,9 +762,10 @@ export default async function tomoriChat(
 
 				// 5. Only combine messages from the same "effective author"
 				// This prevents combining debug messages ($:) with regular messages from the same user
+				// and prevents combining processed embed messages with other messages
 				const isSameEffectiveAuthor =
 					prevMessage &&
-					prevMessage.authorId === authorId &&
+					prevMessage.authorId === effectiveAuthorId &&
 					prevWasDebugMessage === isDebugMessage;
 
 				// 10.d. Determine if we should combine with the previous message or create a new entry
@@ -720,7 +796,7 @@ export default async function tomoriChat(
 				) {
 					// Create a new entry if it's a different author or the previous has no content
 					simplifiedMessages.push({
-						authorId,
+						authorId: effectiveAuthorId,
 						authorName,
 						content: messageContentForLlm,
 						imageAttachments,

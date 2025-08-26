@@ -338,7 +338,7 @@ export async function buildContext({
 			`When a user provides a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important for ${botName} to remember for future interactions, ${botName} should use this tool. ` +
 			`This helps ${botName} learn and adapt. ` +
 			`Key considerations for ${botName}:\n` +
-			`  - **Memory Content**: Provide the specific piece of information to remember. It should be concise, clear, and represent new knowledge not already in ${botName}'s existing server or user memories.\n` +
+			`  - **Memory Content**: Provide the specific piece of information to remember. It should be concise, clear, and represent new knowledge not already in ${botName}'s existing server or user memories. **CRITICAL**: Always use {bot} instead of hardcoded bot names (e.g., 'Tomori', 'Elen') and {user} instead of hardcoded user names in memory content. Example: '{bot} likes {user}'s dogs!' instead of 'Tomori likes John's dogs!'. This prevents confusion when names change.\n` +
 			`  - **Memory Scope**: Specify if the information is a general 'server_wide' fact (relevant to the whole server community) or 'target_user' (specific to a user).\n` +
 			// MODIFIED: Changed to target_user_discord_id and added nickname for confirmation
 			`  - **Target User Discord ID**: If the scope is 'target_user', ${botName} MUST provide the unique Discord ID of the user this memory pertains to (e.g., '123456789012345678'). This ID can be found in the user's status block in the context (e.g., "Nickname (User ID: 123...)").\n` +
@@ -589,7 +589,19 @@ export async function buildContext({
 
 			if (serverPersonalizationEnabled && !userIsBlacklisted) {
 				if (userRow.personal_memories && userRow.personal_memories.length > 0) {
-					userSpecificContent += `## ${botName}'s Memories about ${nickname} (User ID: ${userDiscordId})\n${userRow.personal_memories.join("\n")}\n`;
+					// Process personal memories with the memory owner's name for {user} token replacement
+					const processedMemories = await Promise.all(
+						userRow.personal_memories.map(memory => 
+							convertMentions(
+								memory,
+								client,
+								guildId,
+								nickname, // Use the memory owner's name, not the triggerer's name
+								botName,
+							)
+						)
+					);
+					userSpecificContent += `## ${botName}'s Memories about ${nickname} (User ID: ${userDiscordId})\n${processedMemories.join("\n")}\n`;
 				}
 			} else {
 				if (!serverPersonalizationEnabled) {

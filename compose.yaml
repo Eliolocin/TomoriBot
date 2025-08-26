@@ -1,7 +1,9 @@
 services:
   # TomoriBot's PostgreSQL database - her private storage room
   postgres:
-    image: postgres:15-alpine
+    build:
+      context: .
+      dockerfile: docker/postgres.Dockerfile
     container_name: tomoribot-db
     env_file: .env
     environment:
@@ -9,11 +11,15 @@ services:
       POSTGRES_DB: tomodb
       POSTGRES_USER: tomori
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_default_password}
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_cron
+      -c cron.database_name=tomodb
     volumes:
       # Persistent storage - data survives container restarts
       - postgres_data:/var/lib/postgresql/data
-      # Initialize pg_cron if available (fallback to app-level cleanup if not)
-      - ./scripts/init-pgcron.sql:/docker-entrypoint-initdb.d/init-pgcron.sql:ro
+      # Initialize pg_cron extension on container startup
+      - ./docker/init-pgcron.sql:/docker-entrypoint-initdb.d/init-pgcron.sql:ro
     ports:
       # Only expose internally - not accessible from outside Docker network
       - "15432:5432"  # Expose on port 5433 to avoid conflict with your Windows PostgreSQL

@@ -30,9 +30,9 @@ export default {
 		// Common error messages
 		errors: {
 			guild_only_title: `Server Only Command`,
-			guild_only_description: `This command can only be used within a server channel.`,
+			guild_only_description: `This command can only be used within a server channel. I don't work in DMs or group chats currently!`,
 			dm_not_supported_title: `DMs Not Supported`,
-			dm_not_supported_description: `Sorry, I can only chat within server channels, not in Direct Messages.`,
+			dm_not_supported_description: `Sorry, I can only chat within server channels, not in Direct Messages. This might change in the future, but for now I only work in servers!`,
 			tomori_not_setup_title: `Tomori Not Configured`,
 			tomori_not_setup_description: `It seems I haven't been set up on this server yet. An administrator needs to use \`/config setup\` first.`,
 			api_key_missing_title: `API Key Missing`,
@@ -600,8 +600,6 @@ Discord API Latency: \`{discord_response}ms\``,
 You may also use \`/setup\` to easily choose a personality preset for the bot.`, // Natural line breaks
 			safety_error_title: `Safety Filter Triggered`,
 			safety_error_description: `🚫 Gemini's safety filters blocked the response. This usually happens when the content might violate Google's safety measures.`,
-			dm_not_supported_title: `Tomori Unavailable in DMs`,
-			dm_not_supported_description: `Tomori can only be used in servers, not in direct messages.`,
 			api_key_missing_title: `API Key Missing`,
 			api_key_missing_description: `Tomori needs an API key to work. Please ask a server admin to set one up using the \`/config apikeyset\` command.`,
 			api_key_error_title: `API Key Error`,

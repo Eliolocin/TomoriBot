@@ -28,10 +28,10 @@ import { encryptApiKey } from "../../utils/security/crypto";
 import { setupServer } from "../../utils/db/dbWrite";
 import { loadTomoriState } from "@/utils/db/dbRead";
 
+import { HumanizerDegree } from "@/types/db/schema";
+
 // Define constants at the top (Rule #20)
 const MODAL_TIMEOUT_MS = 300000; // 5 minutes
-const HUMANIZER_MIN = 0;
-const HUMANIZER_MAX = 3;
 const PRESET_PLACEHOLDER_MAX_LENGTH = 100; // Discord limit for placeholder text
 
 // Configure the subcommand
@@ -40,9 +40,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("setup")
-		.setDescription(
-			localizer("en-US", "commands.config.setup.description"),
-		);
+		.setDescription(localizer("en-US", "commands.config.setup.description"));
 
 /**
  * Execute the setup command - guides users through the initial setup of TomoriBot for their server
@@ -134,20 +132,10 @@ export async function execute(
 			.setPlaceholder(presetPlaceholder.slice(0, PRESET_PLACEHOLDER_MAX_LENGTH)) // Use constant
 			.setRequired(true);
 
-		// Humanizer toggle - make it clear it's a yes/no field
-		const humanizerInput = new TextInputBuilder()
-			.setCustomId("humanizer")
-			.setLabel(localizer(locale, "commands.config.setup.humanizer_label"))
-			.setStyle(TextInputStyle.Short)
-			.setPlaceholder("Enter a value from 0 to 3.")
-			//.setValue("yes")
-			.setRequired(true);
-
 		// Add inputs to the modal
 		modal.addComponents(
 			new ActionRowBuilder<TextInputBuilder>().addComponents(apiKeyInput),
 			new ActionRowBuilder<TextInputBuilder>().addComponents(presetInput),
-			new ActionRowBuilder<TextInputBuilder>().addComponents(humanizerInput),
 		);
 
 		// Show the modal
@@ -168,9 +156,6 @@ export async function execute(
 			// Extract values from the modal
 			const apiKey = submission.fields.getTextInputValue("api_key");
 			const presetName = submission.fields.getTextInputValue("preset_name");
-			const humanizerText = submission.fields
-				.getTextInputValue("humanizer")
-				.trim();
 
 			// Validate and transform inputs
 
@@ -224,22 +209,12 @@ export async function execute(
 				`Selected preset ID: ${selectedPresetId} (${selectedPreset.tomori_preset_name})`,
 			);
 
-			const humanizerValue = Number.parseInt(humanizerText);
-			// 3. Process humanizer setting
-			if (humanizerValue < HUMANIZER_MIN || humanizerValue > HUMANIZER_MAX) {
-				// Use constants
-				await submission.editReply({
-					content: localizer(locale, "commands.config.setup.humanizer_invalid"),
-				});
-				return;
-			}
-
 			// Create setup config
 			const setupConfig: SetupConfig = {
 				serverId: interaction.guild.id,
 				encryptedApiKey: encryptedKey,
 				presetId: selectedPresetId,
-				humanizer: humanizerValue,
+				humanizer: HumanizerDegree.HEAVY,
 				tomoriName:
 					locale === "ja"
 						? process.env.DEFAULT_BOTNAME_JP || "ともり" // Use environment variable with fallback
@@ -281,10 +256,6 @@ export async function execute(
 					{
 						nameKey: "commands.config.setup.preset_field",
 						value: selectedPreset.tomori_preset_name,
-					},
-					{
-						nameKey: "commands.config.setup.humanizer_field",
-						value: String(humanizerValue),
 					},
 					{
 						nameKey: "commands.config.setup.name_field",

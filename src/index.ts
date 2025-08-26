@@ -103,7 +103,6 @@ async function initializeDatabase(
 					`Database initialization attempt ${attempt} failed due to concurrency (retrying in ${delayMs}ms): ${errorMessage}`,
 				);
 				await new Promise((resolve) => setTimeout(resolve, delayMs));
-				continue; // Retry
 			} else {
 				// Non-retryable error or max retries exceeded
 				log.error(
