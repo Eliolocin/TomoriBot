@@ -135,20 +135,19 @@ export default async function tomoriChat(
 	message: Message,
 	isFromQueue: boolean,
 	isFromCommand?: boolean,
-	forceReason?: boolean, 
+	forceReason?: boolean,
 	llmOverrideCodename?: string,
 ): Promise<void> {
 	// 1. Initial Checks & State Loading
 	const channel = message.channel;
 	let locale = "en-US";
-	
+
 	// Initialize streaming context for context-aware tool availability
 	const streamingContext = {
 		disableYouTubeProcessing: false, // Will be set to true during enhanced context restart
 		forceReason, // Pass reasoning flag for enhanced AI responses
 		isFromCommand, // Pass command flag to indicate manual triggering
 	};
-
 
 	if (!(channel instanceof BaseGuildTextChannel)) {
 		// Default locale
@@ -249,12 +248,15 @@ export default async function tomoriChat(
 
 			// 2. Decide whether to enqueue based on the modified state.
 			// Always enqueue if it's a manual command, otherwise use shouldBotReply logic
-			if (isFromCommand || shouldBotReply(message, modifiedEarlyTomoriStateForCheck)) {
-				lockEntry.messageQueue.push({ 
+			if (
+				isFromCommand ||
+				shouldBotReply(message, modifiedEarlyTomoriStateForCheck)
+			) {
+				lockEntry.messageQueue.push({
 					message,
 					isFromCommand,
 					forceReason,
-					llmOverrideCodename
+					llmOverrideCodename,
 				});
 				log.info(
 					`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}). Enqueued message ${message.id}. Queue: ${lockEntry.messageQueue.length}. Tomori would reply (autoch_counter simulated as 0 for this check).`,
@@ -557,16 +559,26 @@ export default async function tomoriChat(
 			for (const msg of relevantMessagesArray) {
 				const authorId = msg.author.id;
 
+				// 1. Check for debug prefix "$:" at the start of the message
+				const isDebugMessage = msg.content.startsWith("$:"); // Easter egg functionality hehehe
+				let processedContent = msg.content;
+
+				// 2. If debug prefix found, trim it and treat message as coming from bot
+				if (isDebugMessage) {
+					processedContent = msg.content.slice(2); // Remove "$:" prefix
+				}
+
+				// 3. Determine author name based on whether it's a debug message or regular message
 				const authorName =
-					msg.author.id === client.user?.id
-						? tomoriState?.tomori_nickname // Use Tomori's nickname for bot messages
+					msg.author.id === client.user?.id || isDebugMessage
+						? tomoriState?.tomori_nickname // Use Tomori's nickname for bot messages or debug messages
 						: `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
 				userListSet.add(authorId);
 				const imageAttachments: SimplifiedMessageForContext["imageAttachments"] =
 					[];
 				const videoAttachments: SimplifiedMessageForContext["videoAttachments"] =
 					[];
-				const messageContentForLlm: string | null = msg.content; // Start with original content				// 10.a. Process direct image attachments and stickers
+				const messageContentForLlm: string | null = processedContent; // Use processed content (with "$:" removed if present)				// 10.a. Process direct image attachments and stickers
 				if (msg.attachments.size > 0) {
 					for (const attachment of msg.attachments.values()) {
 						if (
@@ -664,14 +676,25 @@ export default async function tomoriChat(
 				);
 			}*/
 
-				// 10.c. Check if this message is from the same author as the previous one
+				// 10.c. Check if this message is from the same effective author as the previous one
 				const prevMessage = simplifiedMessages[simplifiedMessages.length - 1];
-				const isSameAuthorAsPrevious =
-					prevMessage && prevMessage.authorId === authorId;
+
+				// 4. Check if the previous message was also a debug message
+				const prevWasDebugMessage =
+					prevMessage &&
+					prevMessage.authorName === tomoriState?.tomori_nickname &&
+					prevMessage.authorId !== client.user?.id; // Was debug message if it shows as Tomori but isn't actually from the bot
+
+				// 5. Only combine messages from the same "effective author"
+				// This prevents combining debug messages ($:) with regular messages from the same user
+				const isSameEffectiveAuthor =
+					prevMessage &&
+					prevMessage.authorId === authorId &&
+					prevWasDebugMessage === isDebugMessage;
 
 				// 10.d. Determine if we should combine with the previous message or create a new entry
 				if (
-					isSameAuthorAsPrevious &&
+					isSameEffectiveAuthor &&
 					messageContentForLlm &&
 					prevMessage.content
 				) {
@@ -824,15 +847,17 @@ export default async function tomoriChat(
 			if (llmOverrideCodename) {
 				originalModelCodename = tomoriState.llm.llm_codename;
 				tomoriState.llm.llm_codename = llmOverrideCodename;
-				log.info(`Overriding model from ${originalModelCodename} to ${llmOverrideCodename} for manual command`);
+				log.info(
+					`Overriding model from ${originalModelCodename} to ${llmOverrideCodename} for manual command`,
+				);
 			}
-			
+
 			const providerConfig = await provider.createConfig(
 				tomoriState,
 				decryptedApiKey,
 			);
 
-			// Restore original model if it was overridden  
+			// Restore original model if it was overridden
 			if (originalModelCodename) {
 				tomoriState.llm.llm_codename = originalModelCodename;
 			}
@@ -1246,12 +1271,12 @@ export default async function tomoriChat(
 					// Use a non-blocking call or setImmediate to avoid deep recursion issues if many messages are queued.
 					setImmediate(() => {
 						tomoriChat(
-							client, 
-							nextMessageData.message, 
+							client,
+							nextMessageData.message,
 							true,
 							nextMessageData.isFromCommand,
 							nextMessageData.forceReason,
-							nextMessageData.llmOverrideCodename
+							nextMessageData.llmOverrideCodename,
 						).catch((e) => {
 							log.error(
 								`Error processing queued message ${nextMessageData.message.id}:`,
