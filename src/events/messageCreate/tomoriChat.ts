@@ -114,8 +114,9 @@ interface ChannelLockEntry {
 	currentMessageId?: string; // Discord ID of the message currently being processed
 	messageQueue: Array<{
 		message: Message;
-		// We might not need explicit promise resolvers if we just process sequentially
-		// For now, just storing the message is enough.
+		isFromCommand?: boolean;
+		forceReason?: boolean;
+		llmOverrideCodename?: string;
 	}>;
 }
 const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
@@ -124,11 +125,18 @@ const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
  * Handles incoming messages to potentially generate a response using genai.
  * @param client - The Discord client instance.
  * @param message - The incoming Discord message.
+ * @param isFromQueue - Whether this message is being processed from the queue.
+ * @param isFromCommand - Whether this call is triggered by a manual command.
+ * @param forceReason - Whether to use reasoning mode for this response.
+ * @param llmOverrideCodename - Override LLM model codename to use instead of server default.
  */
 export default async function tomoriChat(
 	client: Client,
 	message: Message,
-	isFromQueue: boolean, // MODIFIED: Added isFromQueue parameter
+	isFromQueue: boolean,
+	isFromCommand?: boolean,
+	forceReason?: boolean, 
+	llmOverrideCodename?: string,
 ): Promise<void> {
 	// 1. Initial Checks & State Loading
 	const channel = message.channel;
@@ -137,6 +145,8 @@ export default async function tomoriChat(
 	// Initialize streaming context for context-aware tool availability
 	const streamingContext = {
 		disableYouTubeProcessing: false, // Will be set to true during enhanced context restart
+		forceReason, // Pass reasoning flag for enhanced AI responses
+		isFromCommand, // Pass command flag to indicate manual triggering
 	};
 
 
@@ -238,8 +248,14 @@ export default async function tomoriChat(
 			};
 
 			// 2. Decide whether to enqueue based on the modified state.
-			if (shouldBotReply(message, modifiedEarlyTomoriStateForCheck)) {
-				lockEntry.messageQueue.push({ message });
+			// Always enqueue if it's a manual command, otherwise use shouldBotReply logic
+			if (isFromCommand || shouldBotReply(message, modifiedEarlyTomoriStateForCheck)) {
+				lockEntry.messageQueue.push({ 
+					message,
+					isFromCommand,
+					forceReason,
+					llmOverrideCodename
+				});
 				log.info(
 					`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}). Enqueued message ${message.id}. Queue: ${lockEntry.messageQueue.length}. Tomori would reply (autoch_counter simulated as 0 for this check).`,
 				);
@@ -449,7 +465,8 @@ export default async function tomoriChat(
 			}
 
 			// 6. Determine if Bot Should Reply using shouldBotReply helper
-			if (!shouldBotReply(message, tomoriState)) {
+			// Skip check if this is a manual command trigger
+			if (!isFromCommand && !shouldBotReply(message, tomoriState)) {
 				return;
 			}
 
@@ -802,10 +819,23 @@ export default async function tomoriChat(
 			}
 
 			// Create provider-specific configuration
+			// If model override is specified, temporarily modify tomoriState
+			let originalModelCodename: string | undefined;
+			if (llmOverrideCodename) {
+				originalModelCodename = tomoriState.llm.llm_codename;
+				tomoriState.llm.llm_codename = llmOverrideCodename;
+				log.info(`Overriding model from ${originalModelCodename} to ${llmOverrideCodename} for manual command`);
+			}
+			
 			const providerConfig = await provider.createConfig(
 				tomoriState,
 				decryptedApiKey,
 			);
+
+			// Restore original model if it was overridden  
+			if (originalModelCodename) {
+				tomoriState.llm.llm_codename = originalModelCodename;
+			}
 
 			log.info(
 				"Streaming mode enabled. Attempting to stream response to Discord.",
@@ -1215,7 +1245,14 @@ export default async function tomoriChat(
 					// This will re-evaluate the lock status (which should now be false).
 					// Use a non-blocking call or setImmediate to avoid deep recursion issues if many messages are queued.
 					setImmediate(() => {
-						tomoriChat(client, nextMessageData.message, true).catch((e) => {
+						tomoriChat(
+							client, 
+							nextMessageData.message, 
+							true,
+							nextMessageData.isFromCommand,
+							nextMessageData.forceReason,
+							nextMessageData.llmOverrideCodename
+						).catch((e) => {
 							log.error(
 								`Error processing queued message ${nextMessageData.message.id}:`,
 								e,

@@ -46,6 +46,9 @@ export const llmSchema = z.object({
 	llm_id: z.number().optional(),
 	llm_provider: z.string(),
 	llm_codename: z.string(),
+	is_smartest: z.boolean().default(false),
+	is_default: z.boolean().default(false),
+	is_reasoning: z.boolean().default(false),
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
@@ -175,7 +178,7 @@ export type CooldownRow = z.infer<typeof cooldownSchema>;
 
 export const optApiKeySchema = z.object({
 	opt_api_key_id: z.number().optional(), // Primary key, optional as it's generated
-	server_id: z.number(), // Foreign key to servers table  
+	server_id: z.number(), // Foreign key to servers table
 	service_name: z.string(), // Service name identifier (e.g., 'brave-search', 'duckduckgo-search', 'fetch')
 	api_key: z.instanceof(Buffer).nullable(), // Encrypted API key using pgcrypto, nullable for free services
 	created_at: z.date().optional(), // Handled by DB default

@@ -62,6 +62,11 @@ export interface StreamConfig extends ProviderConfig {
 	// Humanization settings
 	humanizerDegree: number;
 	emojiUsageEnabled: boolean;
+
+	// Command-specific overrides
+	modelOverride?: string;
+	forceReason?: boolean;
+	isFromCommand?: boolean;
 }
 
 /**

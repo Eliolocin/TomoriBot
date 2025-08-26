@@ -117,6 +117,11 @@ CREATE TABLE IF NOT EXISTS llms (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+SELECT add_column_if_not_exists('llms', 'is_smartest', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('llms', 'is_default', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('llms', 'is_reasoning', 'BOOLEAN', 'false');
+
+
 -- Create updated_at trigger for llms table
 DROP TRIGGER IF EXISTS update_llms_timestamp ON llms;
 CREATE TRIGGER update_llms_timestamp

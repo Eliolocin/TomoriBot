@@ -6,7 +6,8 @@ VALUES
   ('google', 'gemini-2.0-flash'),
   ('google', 'gemini-2.0-flash-lite'),
   ('google', 'gemini-2.5-flash-preview-05-20'),
-  ('google', 'gemini-2.0-flash-exp-image-generation')
+  ('google', 'gemini-2.0-flash-exp-image-generation'),
+  ('google', 'gemini-2.5-pro')
 ON CONFLICT (llm_codename) DO NOTHING;
 
 -- Insert Tomori Presets (English)

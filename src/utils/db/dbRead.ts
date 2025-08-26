@@ -259,6 +259,51 @@ export async function loadAvailableLlms(): Promise<LlmRow[] | null> {
 }
 
 /**
+ * Loads the smartest (reasoning) model for a specific LLM provider from the database.
+ * @param providerName - The name of the LLM provider (e.g., 'google', 'openai').
+ * @returns A promise that resolves to the first smartest LlmRow found, or null if none found.
+ */
+export async function loadSmartestModel(
+	providerName: string,
+): Promise<LlmRow | null> {
+	try {
+		// 1. Query for smartest model for the specific provider
+		const smartModelRows = await sql`
+            SELECT * FROM llms
+            WHERE llm_provider = ${providerName} AND is_smartest = true
+            ORDER BY llm_id ASC
+            LIMIT 1
+        `;
+
+		// 2. Check if any row was returned
+		if (!smartModelRows || smartModelRows.length === 0) {
+			log.warn(`No smartest model found for provider: ${providerName}`);
+			return null;
+		}
+
+		// 3. Validate the single LLM row against the schema
+		const parsedModel = llmSchema.safeParse(smartModelRows[0]);
+
+		// 4. Handle validation failure
+		if (!parsedModel.success) {
+			log.error(
+				`Failed to validate smartest model data for provider ${providerName}:`,
+				parsedModel.error.flatten(),
+			);
+			return null;
+		}
+
+		// 5. Return the validated LLM row
+		log.info(`Found smartest model for ${providerName}: ${parsedModel.data.llm_codename}`);
+		return parsedModel.data;
+	} catch (error) {
+		// 6. Log any unexpected errors during the database query
+		log.error(`Error loading smartest model for provider ${providerName}:`, error);
+		return null;
+	}
+}
+
+/**
  * Loads all stickers for a given server's Discord ID from the database.
  * @param serverDiscId - The Discord ID of the server.
  * @returns A promise that resolves to an array of ServerStickerRow or null if server not found/error.

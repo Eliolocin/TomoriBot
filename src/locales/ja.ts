@@ -215,6 +215,25 @@ Discord APIレイテンシ：\`{discord_response}ms\``,
 			},
 		},
 
+		// Bot manual control commands
+		bot: {
+			respond: {
+				description: `このチャンネルの最新メッセージにTomoriが手動で応答するように指示します。`,
+				success_title: `手動応答がトリガーされました`,
+				success_description: `Tomoriはこのチャンネルの最新メッセージに応答します。`,
+			},
+			reason: {
+				description: `Tomoriの最も賢い推論モデルを使用して、オプションのクエリで応答します。`,
+				query_description: `Tomoriの推論を集中させるオプションのクエリ。`,
+				success_title: `推論モードが有効化されました`,
+				success_description: `Tomoriは高度な推論を使用して応答します{query}。`,
+				no_smart_model_title: `スマートモデルが見つかりません`,
+				no_smart_model_description: `現在のAIプロバイダーで推論モデルが見つかりません。管理者にお問い合わせして、スマートモデルを設定してください。`,
+				multiple_smart_models_title: `複数のスマートモデルが見つかりました`,
+				multiple_smart_models_description: `複数の推論モデルが見つかりました。最初の利用可能なモデルを使用します：{model}。`,
+			},
+		},
+
 		// Configuration commands (Admin only)
 		config: {
 			options: {
@@ -287,6 +306,18 @@ Discord APIレイテンシ：\`{discord_response}ms\``,
 				already_set_description: `ヒューマナイザー度は既に \`{value}\` に設定されています。`,
 				success_title: `ヒューマナイザー度が更新されました`,
 				success_description: `ヒューマナイザー度が \`{previous_value}\` から \`{value}\` に変更されました。`,
+			},
+			language: {
+				description: `TomoriBotのインターフェース言語を設定します。`,
+				value_description: `ボットメッセージとインターフェースの希望言語を選択してください。`,
+				choice_english: `英語`,
+				choice_japanese: `日本語`,
+				invalid_value_title: `無効な言語`,
+				invalid_value_description: `言語は次のいずれかである必要があります：{supported}。`,
+				already_set_title: `言語が既に設定されています`,
+				already_set_description: `あなたの言語設定は既に \`{value}\` に設定されています。`,
+				success_title: `言語が更新されました`,
+				success_description: `インターフェース言語が \`{previous_value}\` から \`{value}\` に変更されました。`,
 			},
 			memberpermissions: {
 				description: `非管理者メンバーがTomoriに教えることができることを設定します。`,

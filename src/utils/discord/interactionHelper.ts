@@ -280,7 +280,7 @@ export async function replyInfoEmbed(
 		if (interaction.deferred || interaction.replied) {
 			await interaction.editReply({ embeds: [embed], components: [] });
 		} else {
-			await interaction.reply({ embeds: [embed], components: [] });
+			await interaction.reply({ embeds: [embed], components: [], flags });
 		}
 	} catch (error) {
 		log.error("Failed to show info embed:", error);

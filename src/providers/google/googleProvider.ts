@@ -326,6 +326,9 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 					category: setting.category as HarmCategory,
 					threshold: setting.threshold as HarmBlockThreshold,
 				})),
+				// Command-specific overrides from streaming context
+				forceReason: streamingContext?.forceReason,
+				isFromCommand: streamingContext?.isFromCommand,
 			};
 
 			// Override tools with context-aware tools when streaming context is provided

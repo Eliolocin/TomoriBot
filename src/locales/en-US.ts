@@ -224,6 +224,25 @@ Discord API Latency: \`{discord_response}ms\``,
 			},
 		},
 
+		// Bot manual control commands
+		bot: {
+			respond: {
+				description: `Manually trigger Tomori to respond to the latest message in this channel.`,
+				success_title: `Manual Response Triggered`,
+				success_description: `Tomori will respond to the latest message in this channel.`,
+			},
+			reason: {
+				description: `Use Tomori's smartest reasoning model to respond with optional query.`,
+				query_description: `Optional query to focus Tomori's reasoning on.`,
+				success_title: `Reasoning Mode Activated`,
+				success_description: `Tomori will use advanced reasoning to respond{query}.`,
+				no_smart_model_title: `No Smart Model Found`,
+				no_smart_model_description: `No reasoning model found for your current AI provider. Please contact an administrator to configure a smart model.`,
+				multiple_smart_models_title: `Multiple Smart Models Found`,
+				multiple_smart_models_description: `Multiple reasoning models found. Using the first available model: {model}.`,
+			},
+		},
+
 		// Configuration commands (Admin only)
 		config: {
 			options: {
@@ -296,6 +315,18 @@ Discord API Latency: \`{discord_response}ms\``,
 				already_set_description: `The humanizer degree is already set to \`{value}\`.`,
 				success_title: `Humanizer Degree Updated`,
 				success_description: `Humanizer degree changed from \`{previous_value}\` to \`{value}\`.`,
+			},
+			language: {
+				description: `Set your preferred language for TomoriBot's interface.`,
+				value_description: `Choose your preferred language for bot messages and interfaces.`,
+				choice_english: `English`,
+				choice_japanese: `Japanese`,
+				invalid_value_title: `Invalid Language`,
+				invalid_value_description: `Language must be one of: {supported}.`,
+				already_set_title: `Language Already Set`,
+				already_set_description: `Your language preference is already set to \`{value}\`.`,
+				success_title: `Language Updated`,
+				success_description: `Your interface language changed from \`{previous_value}\` to \`{value}\`.`,
 			},
 			memberpermissions: {
 				description: `Configure what non-admin members can teach Tomori.`,
