@@ -5,7 +5,12 @@
 
 import { log } from "../utils/misc/logger";
 import { ToolRegistry } from "./toolRegistry";
-import { StickerTool, MemoryTool, YouTubeVideoTool } from "./functionCalls";
+import {
+	StickerTool,
+	MemoryTool,
+	YouTubeVideoTool,
+	PeekProfilePictureTool,
+} from "./functionCalls";
 import {
 	BraveWebSearchTool,
 	BraveImageSearchTool,
@@ -31,6 +36,7 @@ export function initializeTools(): void {
 			new StickerTool(),
 			new MemoryTool(),
 			new YouTubeVideoTool(),
+			new PeekProfilePictureTool(),
 			// HTTP-based Brave Search tools (replaces MCP implementation)
 			new BraveWebSearchTool(),
 			new BraveImageSearchTool(),

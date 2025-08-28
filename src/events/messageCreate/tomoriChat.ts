@@ -25,6 +25,7 @@ import {
 	removeYouTubeUrls,
 	extractYouTubeVideoIds,
 } from "../../utils/text/youTubeUrlCleaner";
+import { PeekProfilePictureTool } from "../../tools/functionCalls/peekProfilePictureTool";
 import { decryptApiKey } from "@/utils/security/crypto";
 import { localizer } from "../../utils/text/localizer";
 
@@ -139,6 +140,7 @@ export default async function tomoriChat(
 	// Initialize streaming context for context-aware tool availability
 	const streamingContext = {
 		disableYouTubeProcessing: false, // Will be set to true during enhanced context restart
+		disableProfilePictureProcessing: false, // Will be set to true during enhanced context restart
 		forceReason, // Pass reasoning flag for enhanced AI responses
 		isFromCommand, // Pass command flag to indicate manual triggering
 	};
@@ -1196,6 +1198,75 @@ export default async function tomoriChat(
 								// This will restart the streaming with enhanced context
 								continue;
 							}
+
+							// Handle profile picture restart signal (enhanced context restart)
+							if (
+								funcName === "peek_profile_picture" &&
+								toolResult.data &&
+								(toolResult.data as Record<string, unknown>).type ===
+									"context_restart_with_image"
+							) {
+								const restartData = toolResult.data as Record<string, unknown>;
+								const userId = restartData.user_id as string;
+								const username = restartData.username as string;
+
+								log.info(
+									`Profile picture restart signal detected for user: ${username} (${userId}). Enhancing context with avatar image.`,
+								);
+
+								// Get the enhanced context item from external storage
+								const enhancedContextItem = PeekProfilePictureTool.getPendingEnhancedContext(userId);
+								
+								if (!enhancedContextItem) {
+									log.warn(
+										`No pending enhanced context found for user ${userId}. Profile picture restart failed.`,
+									);
+									continue;
+								}
+
+								// Set flag to disable profile picture processing during enhanced context restart
+								// This prevents TomoriBot from making additional profile picture function calls while processing
+								streamingContext.disableProfilePictureProcessing = true;
+								log.info(
+									"Temporarily disabled profile picture processing function during enhanced context restart",
+								);
+
+								// Check for existing profile picture parts for this user to prevent duplication
+								let hasExistingProfilePicture = false;
+								for (const contextItem of contextSegments) {
+									for (const part of contextItem.parts) {
+										// Check for enhanced context profile picture parts specifically
+										if (
+											part.type === "image" &&
+											"isProfilePicture" in part &&
+											(part as { isProfilePicture: boolean }).isProfilePicture &&
+											"enhancedContext" in part &&
+											(part as { enhancedContext: boolean }).enhancedContext
+										) {
+											hasExistingProfilePicture = true;
+											break;
+										}
+									}
+									if (hasExistingProfilePicture) break;
+								}
+
+								// Only add profile picture part if not already present
+								if (!hasExistingProfilePicture) {
+									// Add the profile picture context item to existing context
+									contextSegments.push(enhancedContextItem);
+									log.success(
+										`Enhanced context with profile picture for user: ${username}. Total context items: ${contextSegments.length}`,
+									);
+								} else {
+									log.warn(
+										`Profile picture for user ${username} already exists in context. Skipping duplication.`,
+									);
+								}
+
+								// Continue to next iteration WITHOUT adding to function interaction history
+								// This will restart the streaming with enhanced context
+								continue;
+							}
 						} else {
 							// Tool execution failed
 							functionExecutionResult = {
@@ -1280,6 +1351,14 @@ export default async function tomoriChat(
 				streamingContext.disableYouTubeProcessing = false;
 				log.info(
 					"Re-enabled YouTube processing function after enhanced context restart completion",
+				);
+			}
+
+			// Clear profile picture processing disable flag after streaming completes
+			if (streamingContext.disableProfilePictureProcessing) {
+				streamingContext.disableProfilePictureProcessing = false;
+				log.info(
+					"Re-enabled profile picture processing function after enhanced context restart completion",
 				);
 			}
 

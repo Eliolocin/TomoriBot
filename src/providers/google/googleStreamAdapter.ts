@@ -415,7 +415,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 					if (part.type === "text") {
 						geminiParts.push({ text: part.text });
 					} else if (part.type === "image" && part.uri && part.mimeType) {
-						// Handle images
+						// Handle images with URI - fetch and convert to base64
 						try {
 							const imageResponse = await fetch(part.uri);
 							if (!imageResponse.ok) {
@@ -439,6 +439,20 @@ export class GoogleStreamAdapter implements StreamProvider {
 										imgErr instanceof Error ? imgErr.message : String(imgErr),
 								},
 							);
+						}
+					} else if (part.type === "image" && "inlineData" in part && part.inlineData) {
+						// Handle images that already have base64 data (e.g., from profile picture tool)
+						const inlineData = part.inlineData as { mimeType: string; data: string };
+						if (typeof inlineData === "object" && inlineData.mimeType && inlineData.data) {
+							geminiParts.push({
+								inlineData: {
+									mimeType: inlineData.mimeType,
+									data: inlineData.data,
+								},
+							});
+							log.info("GoogleStreamAdapter: Processed image with existing inlineData");
+						} else {
+							log.warn("GoogleStreamAdapter: Invalid inlineData structure for image part");
 						}
 					} else if (part.type === "video" && part.uri && part.mimeType) {
 						// Handle videos

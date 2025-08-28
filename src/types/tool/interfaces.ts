@@ -35,6 +35,7 @@ export interface ToolParameterSchema {
  */
 export interface StreamingContext {
 	disableYouTubeProcessing: boolean; // Flag to temporarily disable YouTube function during enhanced context restart
+	disableProfilePictureProcessing?: boolean; // Flag to temporarily disable profile picture processing during enhanced context restart
 	forceReason?: boolean; // Flag to indicate reasoning mode for enhanced AI responses
 	isFromCommand?: boolean; // Flag to indicate this stream was triggered by a manual command
 }
