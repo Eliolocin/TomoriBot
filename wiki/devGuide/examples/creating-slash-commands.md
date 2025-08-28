@@ -86,7 +86,7 @@ export async function execute(
   // Ensure command is run in a guild
   if (!interaction.guild) {
     await interaction.reply({
-      content: localizer(locale, "general.errors.guild_only"),
+      content: localizer(locale, "general.errors.guild_only_description"),
       ephemeral: true,
     });
     return;
@@ -98,7 +98,7 @@ export async function execute(
 
     if (!tomoriState) {
       await interaction.reply({
-        content: localizer(locale, "commands.config.status.not_setup"),
+        content: localizer(locale, "commands.config.status.tomori_not_setup"),
         ephemeral: true,
       });
       return;
@@ -228,7 +228,7 @@ export async function execute(
   // 1. VALIDATION: Guild-only command
   if (!interaction.guild || !interaction.channel) {
     await interaction.reply({
-      content: localizer(userData.language_pref, "general.errors.guild_only"),
+      content: localizer(userData.language_pref, "general.errors.guild_only_description"),
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -525,7 +525,7 @@ export async function execute(
 ): Promise<void> {
   if (!interaction.guild) {
     await interaction.reply({
-      content: localizer(locale, "general.errors.guild_only"),
+      content: localizer(locale, "general.errors.guild_only_description"),
       ephemeral: true,
     });
     return;
@@ -551,7 +551,7 @@ export async function execute(
     const tomoriState = await loadTomoriState(interaction.guild.id);
     if (!tomoriState) {
       await interaction.reply({
-        content: localizer(locale, "commands.config.temperature.not_setup"),
+        content: localizer(locale, "commands.config.temperature.tomori_not_setup"),
         ephemeral: true,
       });
       return;
@@ -657,10 +657,10 @@ export const enLocale = {
   "commands.config.status.humanizer_field": "Humanizer",
   "commands.config.status.stickers_field": "Stickers", 
   "commands.config.status.search_field": "Search",
-  "commands.config.status.not_setup": "TomoriBot is not set up for this server. Use `/config setup` to get started.",
+  "commands.config.status.tomori_not_setup": "TomoriBot is not set up for this server. Use `/config setup` to get started.",
   
   "commands.config.temperature.invalid_range": "Temperature must be between {min} and {max}",
-  "commands.config.temperature.not_setup": "Please run `/config setup` first",
+  "commands.config.temperature.tomori_not_setup": "Please run `/config setup` first",
   "commands.config.temperature.success_title": "Temperature Updated",
   "commands.config.temperature.success_description": "AI response creativity level has been updated",
   "commands.config.temperature.new_value_field": "New Temperature",

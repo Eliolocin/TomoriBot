@@ -14,6 +14,7 @@ import type {
 import type { TypedMCPToolResult } from "../../types/tool/mcpTypes";
 import { getMCPManager } from "../../utils/mcp/mcpManager";
 import { getMCPExecutor } from "../../utils/mcp/mcpExecutor";
+import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchService";
 
 /**
  * Google-specific function declaration format
@@ -255,50 +256,109 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 	 * Get all available tools (built-in + MCP) in provider-specific format
 	 * Implementation of MCPCapableToolAdapter interface
 	 * @param builtInTools - Array of built-in tools
+	 * @param serverId - Optional Discord server ID for server-specific tool selection
 	 * @returns Combined provider-specific tools configuration
 	 */
 	async getAllToolsInProviderFormat(
 		builtInTools: Tool[],
+		serverId?: number,
 	): Promise<Array<Record<string, unknown>>> {
-		return this.getAllToolsInGoogleFormat(builtInTools);
+		return this.getAllToolsInGoogleFormat(builtInTools, serverId);
 	}
 
 	/**
 	 * Get all available tools (built-in + MCP) in Google tools format
 	 * This provides a unified interface for the provider to get all tools
 	 * @param builtInTools - Array of built-in tools
-	 * @returns Combined Google tools configuration with both built-in and MCP tools
+	 * @param serverId - Optional Discord server ID for server-specific tool selection
+	 * @returns Combined Google tools configuration with conditional search tool filtering
 	 */
 	async getAllToolsInGoogleFormat(
 		builtInTools: Tool[],
+		serverId?: number,
 	): Promise<Array<Record<string, unknown>>> {
 		try {
 			// Start with built-in tools
 			const allFunctionDeclarations: Record<string, unknown>[] = [];
 
-			// Convert built-in tools
-			if (builtInTools.length > 0) {
-				const builtInDeclarations = builtInTools.map((tool) =>
+			// Check if Brave Search is available for conditional tool selection
+			const hasBraveApiKey = await isBraveSearchAvailable(serverId);
+			log.info(
+				`Brave Search ${hasBraveApiKey ? "available" : "not available"} for server ${serverId || "global"} - implementing conditional search tool selection`,
+			);
+
+			// Brave search tool names for filtering
+			const braveSearchToolNames = [
+				"brave_web_search",
+				"brave_image_search", 
+				"brave_video_search",
+				"brave_news_search",
+			];
+
+			// Filter built-in tools based on Brave API key availability
+			let filteredBuiltInTools = builtInTools;
+			if (!hasBraveApiKey) {
+				// No Brave API key - exclude Brave search tools
+				filteredBuiltInTools = builtInTools.filter(
+					(tool) => !braveSearchToolNames.includes(tool.name),
+				);
+				const excludedCount = builtInTools.length - filteredBuiltInTools.length;
+				if (excludedCount > 0) {
+					log.info(
+						`Excluded ${excludedCount} Brave search tools (no API key available)`,
+					);
+				}
+			}
+
+			// Convert filtered built-in tools
+			if (filteredBuiltInTools.length > 0) {
+				const builtInDeclarations = filteredBuiltInTools.map((tool) =>
 					this.convertTool(tool),
 				);
 				allFunctionDeclarations.push(...builtInDeclarations);
 				log.info(
-					`Converted ${builtInTools.length} built-in tools to Google format`,
+					`Converted ${filteredBuiltInTools.length} built-in tools to Google format`,
 				);
 			}
 
-			// Add MCP tools if available
+			// Add MCP tools if available (with conditional filtering)
 			const mcpManager = getMCPManager();
 			if (mcpManager.isReady()) {
 				const mcpTools = mcpManager.getMCPTools();
+
+				// DuckDuckGo search function names for filtering
+				const duckduckgoSearchFunctions = [
+					"web-search",
+					"felo-search",
+					"fetch-url",
+					"url-metadata",
+				];
+
+				let addedMCPToolsCount = 0;
+				let excludedDDGFunctionsCount = 0;
 
 				for (const mcpTool of mcpTools) {
 					try {
 						const geminiTool = await mcpTool.tool();
 						if (geminiTool.functionDeclarations) {
 							// Cast FunctionDeclaration to Record<string, unknown> for type compatibility
-							const declarations = geminiTool.functionDeclarations as Record<string, unknown>[];
-							allFunctionDeclarations.push(...declarations);
+							let declarations = geminiTool.functionDeclarations as Record<string, unknown>[];
+
+							// Filter out DuckDuckGo search functions if Brave API key is available
+							if (hasBraveApiKey) {
+								const originalCount = declarations.length;
+								declarations = declarations.filter((declaration: Record<string, unknown>) => {
+									const functionName = declaration.name as string;
+									return !duckduckgoSearchFunctions.includes(functionName);
+								});
+								excludedDDGFunctionsCount += originalCount - declarations.length;
+							}
+
+							// Add remaining declarations
+							if (declarations.length > 0) {
+								allFunctionDeclarations.push(...declarations);
+								addedMCPToolsCount++;
+							}
 						}
 					} catch (error) {
 						log.warn(
@@ -308,8 +368,13 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 					}
 				}
 
-				if (mcpTools.length > 0) {
-					log.info(`Added ${mcpTools.length} MCP tools to Google format`);
+				if (addedMCPToolsCount > 0) {
+					log.info(`Added ${addedMCPToolsCount} MCP tools to Google format`);
+				}
+				if (excludedDDGFunctionsCount > 0) {
+					log.info(
+						`Excluded ${excludedDDGFunctionsCount} DuckDuckGo search functions (Brave API key available)`,
+					);
 				}
 			}
 

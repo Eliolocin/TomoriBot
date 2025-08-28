@@ -304,6 +304,97 @@ export async function loadSmartestModel(
 }
 
 /**
+ * Loads unique LLM providers from the database for dynamic select menus.
+ * Case-insensitive deduplication with consistent capitalization.
+ * @returns An array of unique provider names, or null if error or none found.
+ */
+export async function loadUniqueProviders(): Promise<string[] | null> {
+	try {
+		// 1. Query for all providers (case-insensitive deduplication will be done in code)
+		const providerRows = await sql`
+			SELECT llm_provider
+			FROM llms
+			ORDER BY llm_provider ASC
+		`;
+
+		// 2. Check if any rows were returned
+		if (!providerRows || providerRows.length === 0) {
+			log.warn("No LLM providers found in the database.");
+			return null;
+		}
+
+		// 3. Extract provider names and perform case-insensitive deduplication
+		const providerMap = new Map<string, string>();
+		
+		for (const row of providerRows) {
+			const provider = row.llm_provider as string;
+			const lowerKey = provider.toLowerCase();
+			
+			// Keep the first occurrence (which will be alphabetically sorted)
+			// This ensures consistent capitalization (e.g., "Google" over "google")
+			if (!providerMap.has(lowerKey)) {
+				providerMap.set(lowerKey, provider);
+			}
+		}
+
+		// 4. Convert back to array, sorted by the normalized keys
+		const providers = Array.from(providerMap.values()).sort();
+
+		log.info(`Found ${providers.length} unique LLM providers: ${providers.join(", ")}`);
+		return providers;
+	} catch (error) {
+		// 5. Log any unexpected errors during the database query
+		log.error("Error loading unique LLM providers from database:", error);
+		return null;
+	}
+}
+
+/**
+ * Loads personality presets with truncated descriptions for dynamic select menus.
+ * @param maxDescriptionLength - Maximum length for preset descriptions (default: 100)
+ * @returns An array of preset options with truncated descriptions, or null if error or none found.
+ */
+export async function loadPresetOptions(
+	maxDescriptionLength = 100,
+): Promise<Array<{ name: string; description: string }> | null> {
+	try {
+		// 1. Query for all presets with descriptions
+		const presetRows = await sql`
+			SELECT tomori_preset_name, tomori_preset_desc
+			FROM tomori_presets
+			ORDER BY tomori_preset_name ASC
+		`;
+
+		// 2. Check if any rows were returned
+		if (!presetRows || presetRows.length === 0) {
+			log.warn("No personality presets found in the database.");
+			return null;
+		}
+
+		// 3. Process and truncate descriptions
+		const presetOptions = presetRows.map((row: Record<string, unknown>) => {
+			const description = row.tomori_preset_desc as string;
+			const truncatedDescription =
+				description.length > maxDescriptionLength
+					? `${description.substring(0, maxDescriptionLength - 3)}...`
+					: description;
+
+			return {
+				name: row.tomori_preset_name as string,
+				description: truncatedDescription,
+			};
+		});
+
+		log.info(`Found ${presetOptions.length} personality presets for selection menu.`);
+		return presetOptions;
+	} catch (error) {
+		// 4. Log any unexpected errors during the database query
+		log.error("Error loading preset options from database:", error);
+		return null;
+	}
+}
+
+/**
  * Loads all stickers for a given server's Discord ID from the database.
  * @param serverDiscId - The Discord ID of the server.
  * @returns A promise that resolves to an array of ServerStickerRow or null if server not found/error.

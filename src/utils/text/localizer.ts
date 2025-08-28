@@ -185,3 +185,19 @@ export const localizer = (
 	// 6. Return the final string
 	return result;
 };
+
+/**
+ * Get the list of currently supported/loaded locale codes.
+ * This is dynamically determined from the locale files loaded during initialization.
+ * @returns Array of supported locale codes (e.g., ['en-US', 'ja'])
+ */
+export function getSupportedLocales(): string[] {
+	// Return empty array if not initialized to avoid errors
+	if (!isInitialized) {
+		log.warn("Localization system not initialized when requesting supported locales");
+		return [];
+	}
+	
+	// Return the dynamic list of loaded locale keys
+	return Object.keys(locales);
+}

@@ -13,18 +13,32 @@ export enum ColorCode {
 }
 
 /**
+ * Determines if non-essential logs should be shown based on environment
+ */
+const isProduction = process.env.RUN_ENV === 'production';
+
+/**
  * Logging utility for formatted info, success, error, warning, and section messages.
  */
 export const log = {
-	info: (msg: string) => console.log(`\x1b[36m[INFO]\x1b[0m ${msg}`),
-	success: (msg: string) => console.log(`\x1b[32m[SUCCESS]\x1b[0m ${msg}`),
+	info: (msg: string) => {
+		if (!isProduction) {
+			console.log(`\x1b[36m[INFO]\x1b[0m ${msg}`);
+		}
+	},
+	success: (msg: string) => {
+		if (!isProduction) {
+			console.log(`\x1b[32m[SUCCESS]\x1b[0m ${msg}`);
+		}
+	},
 	warn: (msg: string, err?: unknown) => {
-		// ... (warn implementation remains the same) ...
-		console.log(`\x1b[33m[WARNING]\x1b[0m ${msg}`);
-		if (err) {
-			console.log(
-				err instanceof Error ? (err.stack ?? err.message) : String(err),
-			);
+		if (!isProduction) {
+			console.log(`\x1b[33m[WARNING]\x1b[0m ${msg}`);
+			if (err) {
+				console.log(
+					err instanceof Error ? (err.stack ?? err.message) : String(err),
+				);
+			}
 		}
 	},
 	/**

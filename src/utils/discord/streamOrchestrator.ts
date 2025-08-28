@@ -16,7 +16,7 @@
 
 import { MessageFlags } from "discord.js";
 import { HumanizerDegree } from "../../types/db/schema";
-import { sendStandardEmbed } from "./embedHelper";
+import { sendStandardEmbed, createSummaryEmbed } from "./embedHelper";
 import { ColorCode, log } from "../misc/logger";
 import {
 	chunkMessage,
@@ -312,8 +312,13 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 				);
 
 				state.buffer = processingResult.updatedBuffer;
-				state.isInsideCodeBlock = processingResult.newCodeBlockState;
 				processedSomething = true;
+			}
+			
+			// Update code block state regardless of whether we flushed or not
+			// This ensures we properly track when we enter/exit code blocks
+			if (processingResult.newCodeBlockState !== undefined) {
+				state.isInsideCodeBlock = processingResult.newCodeBlockState;
 			}
 		} while (
 			processedSomething &&
@@ -636,28 +641,51 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	}
 
 	/**
-	 * Send a single message to Discord
+	 * Send a single message to Discord with proper error handling
+	 * @param content - The message content to send
+	 * @param context - The stream context containing Discord channel and reply information
+	 * @param state - The current stream state to track message count
+	 * @throws Error if Discord API call fails
 	 */
 	private async sendSingleMessage(
 		content: string,
 		context: StreamContext,
 		state: StreamState,
 	): Promise<void> {
-		// Check if we need to reply or send normally
-		if (!state.hasRepliedToOriginalMessage && context.replyToMessage) {
-			await context.replyToMessage.reply({
-				content,
-				allowedMentions: { repliedUser: false },
-			});
-			state.hasRepliedToOriginalMessage = true;
-		} else {
-			await context.channel.send({ content });
-		}
+		try {
+			// Check if we need to reply or send normally
+			if (!state.hasRepliedToOriginalMessage && context.replyToMessage) {
+				await context.replyToMessage.reply({
+					content,
+					allowedMentions: { repliedUser: false },
+				});
+				state.hasRepliedToOriginalMessage = true;
+			} else {
+				await context.channel.send({ content });
+			}
 
-		state.messageSentCount++;
-		log.info(
-			`Stream Send: Sent message (${state.messageSentCount}): "${content.length > 100 ? `${content.substring(0, 100)}...` : content}"`,
-		);
+			state.messageSentCount++;
+			log.info(
+				`Stream Send: Sent message (${state.messageSentCount}): "${content.length > 100 ? `${content.substring(0, 100)}...` : content}"`,
+			);
+		} catch (discordError) {
+			log.error(
+				"Stream Send: Discord API error when sending message",
+				discordError,
+				{
+					serverId: context.tomoriState?.server_id,
+					errorType: "StreamOrchestrator",
+					metadata: {
+						channelId: context.channel.id,
+						contentLength: content.length,
+						contentPreview: content.substring(0, 200),
+					},
+				}
+			);
+			
+			// Re-throw to let the overall error handling deal with it
+			throw new Error(`Discord send failed: ${discordError instanceof Error ? discordError.message : String(discordError)}`);
+		}
 	}
 
 	/**
@@ -783,8 +811,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		error: unknown,
 		context: StreamContext,
 	): Promise<void> {
-		const errorMessage = `Stream response blocked/stopped. Reason: ${(error as { type?: string }).type || "unknown"}.`;
+		const providerError = error as { type?: string; code?: string };
+		const errorMessage = `Stream response blocked/stopped. Reason: ${providerError.type || "unknown"}.`;
 		log.warn(errorMessage, error);
+
+		// Check for PROHIBITED_CONTENT specific error
+		const isProhibitedContent = providerError.code === "PROHIBITED_CONTENT";
 
 		if (context.initialInteraction) {
 			if (
@@ -810,20 +842,33 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 					);
 			}
 		} else {
-			await sendStandardEmbed(
-				context.channel,
-				context.channel.guild.preferredLocale,
-				{
-					titleKey: "genai.stream.response_stopped_title",
-					descriptionKey: "genai.stream.response_stopped_description",
-					descriptionVars: {
-						reason: (error as { type?: string }).type || "unknown",
+			// Use special handling for PROHIBITED_CONTENT
+			if (isProhibitedContent) {
+				const summaryEmbed = this.createProhibitedContentEmbed(
+					context.channel.guild.preferredLocale,
+				);
+				await context.channel
+					.send({ embeds: [summaryEmbed] })
+					.catch((e) =>
+						log.warn("Stream: Failed to send prohibited content error embed to channel", e),
+					);
+			} else {
+				// Use default error handling for other error types
+				await sendStandardEmbed(
+					context.channel,
+					context.channel.guild.preferredLocale,
+					{
+						titleKey: "genai.stream.response_stopped_title",
+						descriptionKey: "genai.stream.response_stopped_description",
+						descriptionVars: {
+							reason: providerError.type || "unknown",
+						},
+						color: ColorCode.ERROR,
 					},
-					color: ColorCode.ERROR,
-				},
-			).catch((e) =>
-				log.warn("Stream: Failed to send error embed to channel", e),
-			);
+				).catch((e) =>
+					log.warn("Stream: Failed to send error embed to channel", e),
+				);
+			}
 		}
 	}
 
@@ -963,5 +1008,25 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	 */
 	private delay(ms: number): Promise<void> {
 		return new Promise(resolve => setTimeout(resolve, ms));
+	}
+
+	/**
+	 * Create a special embed for PROHIBITED_CONTENT errors with admin guidance
+	 * @param locale - The locale to use for localization
+	 * @returns EmbedBuilder instance for the prohibited content error
+	 */
+	private createProhibitedContentEmbed(locale: string) {
+		return createSummaryEmbed(locale, {
+			titleKey: "genai.stream.prohibited_content_title",
+			descriptionKey: "genai.stream.prohibited_content_description",
+			color: ColorCode.ERROR,
+			fields: [
+				{
+					nameKey: "genai.stream.prohibited_content_admin_notice_title",
+					value: "genai.stream.prohibited_content_admin_notice_description",
+					inline: false,
+				},
+			],
+		});
 	}
 }

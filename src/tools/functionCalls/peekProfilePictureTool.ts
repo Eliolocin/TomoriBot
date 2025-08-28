@@ -5,6 +5,7 @@
  */
 
 import { log } from "../../utils/misc/logger";
+import type { EnhancedImageContent } from "@/types/tool/enhancedContextTypes";
 // import { sendStandardEmbed } from "../../utils/discord/embedHelper";
 import {
 	BaseTool,
@@ -177,14 +178,15 @@ export class PeekProfilePictureTool extends BaseTool {
 					},
 					{
 						type: "image",
+						uri: `data:image/png;base64,${base64ImageData}`,
+						mimeType: "image/png",
 						inlineData: {
 							mimeType: "image/png",
 							data: base64ImageData,
 						},
 						isProfilePicture: true,
 						enhancedContext: true, // Special marker for processing
-						// biome-ignore lint/suspicious/noExplicitAny: Extended properties for enhanced context processing
-					} as any,
+					} as EnhancedImageContent,
 				],
 			};
 

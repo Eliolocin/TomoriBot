@@ -13,8 +13,9 @@
 		"purge-commands": "bun run scripts/purge-commands.ts",
 		"seed-db": "bun run scripts/seed-db.ts",
 		"nuke-db": "bun run scripts/nuke-db.ts",
-		"lint": "bunx @biomejs/biome lint",
-		"check": "bun tsc --noEmit"
+		"lint": "bunx @biomejs/biome lint --fix",
+		"check": "bun tsc --noEmit",
+		"check-locales": "bun run scripts/checkLocalizationKeys.ts"
 	},
 	"author": "Bredrumb",
 	"license": "ISC",
@@ -39,7 +40,7 @@
 		"booru": "^2.7.0",
 		"bun-types": "^1.2.12",
 		"deepl": "^1.0.13",
-		"discord.js": "^14.19.3",
+		"discord.js": "14.22.1",
 		"dotenv": "^16.5.0",
 		"eiyuu": "^1.1.1",
 		"fs": "0.0.1-security",

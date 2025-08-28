@@ -59,6 +59,37 @@ const client = new Client({
 	partials: [Partials.Channel, Partials.Message],
 });
 
+/**
+ * Handle Discord client errors to prevent crashes from malformed error objects
+ */
+client.on('error', (error) => {
+	log.error('Discord client error occurred', error);
+});
+
+client.on('shardError', (error) => {
+	log.error('Discord WebSocket shard error occurred', error);
+});
+
+/**
+ * Handle process-level uncaught errors to prevent crashes
+ */
+process.on('uncaughtException', (error) => {
+	log.error('Uncaught exception occurred', error);
+	// Don't exit process for WebSocket errors - let Discord.js reconnect
+	if (error.message?.includes('error is not an Object')) {
+		log.warn('WebSocket error caught - Discord.js will attempt to reconnect');
+		return;
+	}
+	process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+	log.error('Unhandled promise rejection', reason, {
+		errorType: 'UnhandledPromiseRejection',
+		metadata: { promise: promise.toString() }
+	});
+});
+
 log.section("Initializing Database...");
 
 // Small delay in development to reduce hot-reload conflicts

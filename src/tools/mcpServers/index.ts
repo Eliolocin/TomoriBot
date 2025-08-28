@@ -51,6 +51,10 @@ export type {
 	BraveImageSearchResponse,
 	FetchMCPResponse,
 	DuckDuckGoSearchResponse,
+	DuckDuckGoWebSearchResponse,
+	FeloAISearchResponse,
+	URLContentResponse,
+	URLMetadataResponse,
 } from "../../types/tool/mcpTypes";
 
 // Re-export MCP utilities for convenience

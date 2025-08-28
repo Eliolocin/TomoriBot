@@ -1,6 +1,8 @@
 import {
 	MessageFlags,
 	type ChatInputCommandInteraction,
+	type ButtonInteraction,
+	type ModalSubmitInteraction,
 	type Client,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
@@ -9,6 +11,7 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
 	replyPaginatedChoices,
+	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import {
@@ -19,9 +22,106 @@ import {
 } from "../../types/db/schema";
 import { sql } from "bun";
 import type { PaginatedChoiceResult } from "@/types/discord/embed";
+import type { SelectOption } from "../../types/discord/modal";
 
 // Rule 20: Constants for static values at the top
 const DISPLAY_TRUNCATE_LENGTH = 45; // Max length for each part in the display list
+const MODAL_THRESHOLD = 20; // Use modal if items ≤ this number, otherwise use pagination
+const MODAL_CUSTOM_ID = "unlearn_sampledialogue_modal";
+const DIALOGUE_SELECT_ID = "dialogue_select";
+
+/**
+ * Helper function to perform sample dialogue removal from database
+ * @param tomoriState - Current Tomori state
+ * @param selectedIndex - Index of the dialogue pair to remove
+ * @param currentIn - Current input dialogues array
+ * @param currentOut - Current output dialogues array
+ * @param userData - User data
+ * @param replyInteraction - Interaction to reply to (can be modal or pagination)
+ * @param locale - User locale
+ */
+async function performSampleDialogueRemoval(
+	tomoriState: TomoriState,
+	selectedIndex: number,
+	currentIn: string[],
+	currentOut: string[],
+	userData: UserRow,
+	replyInteraction:
+		| ChatInputCommandInteraction
+		| ButtonInteraction
+		| ModalSubmitInteraction,
+	locale: string,
+): Promise<void> {
+	// Get the item being removed
+	const itemToRemoveIn = currentIn[selectedIndex];
+	const itemToRemoveOut = currentOut[selectedIndex];
+
+	// Update both arrays in the database using array_remove for atomic operations
+	const [updatedRow] = await sql`
+		UPDATE tomoris
+		SET
+			sample_dialogues_in = array_remove(sample_dialogues_in, ${itemToRemoveIn}),
+			sample_dialogues_out = array_remove(sample_dialogues_out, ${itemToRemoveOut})
+		WHERE tomori_id = ${tomoriState.tomori_id}
+		RETURNING *
+	`;
+
+	// Validate the returned data
+	const validatedTomori = tomoriSchema.safeParse(updatedRow);
+
+	if (!validatedTomori.success || !updatedRow) {
+		// Log error specific to this update failure
+		const context: ErrorContext = {
+			tomoriId: tomoriState.tomori_id,
+			serverId: tomoriState.server_id,
+			userId: userData.user_id,
+			errorType: "DatabaseUpdateError",
+			metadata: {
+				command: "unlearn sampledialogue",
+				selectedIndex,
+				validationErrors: validatedTomori.success
+					? null
+					: validatedTomori.error.flatten(),
+			},
+		};
+
+		await log.error(
+			"Failed to update or validate sample_dialogues in tomoris table",
+			validatedTomori.success
+				? new Error("Database update returned no rows or unexpected data")
+				: new Error("Updated tomori data failed validation"),
+			context,
+		);
+
+		await replyInfoEmbed(replyInteraction, locale, {
+			titleKey: "general.errors.update_failed_title",
+			descriptionKey: "general.errors.update_failed_description",
+			color: ColorCode.ERROR,
+		});
+		return;
+	}
+
+	// Log success and show success message
+	log.success(
+		`Removed sample dialogue pair at index ${selectedIndex} for tomori ${tomoriState.tomori_id} by user ${userData.user_disc_id}`,
+	);
+
+	await replyInfoEmbed(replyInteraction, locale, {
+		titleKey: "commands.unlearn.sampledialogue.success_title",
+		descriptionKey: "commands.unlearn.sampledialogue.success_description",
+		descriptionVars: {
+			input:
+				itemToRemoveIn.length > 50
+					? `${itemToRemoveIn.slice(0, 50)}...`
+					: itemToRemoveIn,
+			output:
+				itemToRemoveOut.length > 50
+					? `${itemToRemoveOut.slice(0, 50)}...`
+					: itemToRemoveOut,
+		},
+		color: ColorCode.SUCCESS,
+	});
+}
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (
@@ -51,7 +151,7 @@ export async function execute(
 	if (!interaction.guild || !interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -70,8 +170,8 @@ export async function execute(
 		tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.not_setup_title",
-				descriptionKey: "general.errors.not_setup_description",
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -87,9 +187,9 @@ export async function execute(
 			!hasManagePermission
 		) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.unlearn.sampledialogueadd.teaching_disabled_title",
+				titleKey: "commands.teach.sampledialogue.teaching_disabled_title",
 				descriptionKey:
-					"commands.unlearn.sampledialogueadd.teaching_disabled_description",
+					"commands.teach.sampledialogue.teaching_disabled_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -114,118 +214,151 @@ export async function execute(
 			return;
 		}
 
-		// 7. Format dialogue pairs for display, truncating long ones
-		const displayItems = currentIn.map((input, index) => {
-			const output = currentOut[index]; // Get corresponding output
-			const truncatedInput =
-				input.length > DISPLAY_TRUNCATE_LENGTH
-					? `${input.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
-					: input;
-			const truncatedOutput =
-				output.length > DISPLAY_TRUNCATE_LENGTH
-					? `${output.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
-					: output;
-			// Format for display in the selection list
-			return `User: "${truncatedInput}" → Bot: "${truncatedOutput}"`;
-		});
+		// 7. Apply hybrid approach: use modal for ≤20 items, pagination for >20 items
+		if (currentIn.length <= MODAL_THRESHOLD) {
+			// Use modal for small lists
 
-		// 8. Use the replyPaginatedChoices helper
-		// FIX: Simplify onSelect and onCancel signatures to match what's expected
-		result = await replyPaginatedChoices(interaction, locale, {
-			titleKey: "commands.unlearn.sampledialogue.select_title",
-			descriptionKey: "commands.unlearn.sampledialogue.select_description",
-			itemLabelKey: "commands.unlearn.sampledialogue.dialogue_label",
-			items: displayItems,
-			color: ColorCode.INFO,
-			flags: MessageFlags.Ephemeral, // Make the pagination ephemeral
+			// Create dialogue select options for the modal
+			const dialogueSelectOptions: SelectOption[] = currentIn.map(
+				(input, index) => {
+					const output = currentOut[index];
+					const truncatedInput =
+						input.length > 50 ? `${input.slice(0, 50)}...` : input;
+					const truncatedOutput =
+						output.length > 50 ? `${output.slice(0, 50)}...` : output;
+					const fullDisplay = `User: "${truncatedInput}" → Bot: "${truncatedOutput}"`;
 
-			// FIX: Simplify to match expected signature (index: number) => Promise<void>
-			onSelect: async (selectedIndex: number) => {
-				// 9. Get the item being removed
-				const itemToRemoveIn = currentIn[selectedIndex];
-				const itemToRemoveOut = currentOut[selectedIndex];
-
-				// 10. Update both arrays in the database using array_remove for atomic operations (Rule 23)
-				const [updatedRow] = await sql`
-					UPDATE tomoris
-					SET
-						sample_dialogues_in = array_remove(sample_dialogues_in, ${itemToRemoveIn}),
-						sample_dialogues_out = array_remove(sample_dialogues_out, ${itemToRemoveOut})
-					WHERE tomori_id = ${
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
-						tomoriState!.tomori_id
-					}
-					RETURNING *
-				`;
-
-				// 12. Validate the returned data (Rule 3, 5, 6)
-				const validatedTomori = tomoriSchema.safeParse(updatedRow);
-
-				if (!validatedTomori.success || !updatedRow) {
-					// Log error specific to this update failure
-					const context: ErrorContext = {
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees these IDs exist
-						tomoriId: tomoriState!.tomori_id,
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees these IDs exist
-						serverId: tomoriState!.server_id,
-						userId: userData.user_id,
-						errorType: "DatabaseUpdateError",
-						metadata: {
-							command: "teach sampledialogue",
-							guildId: interaction.guild?.id,
-							selectedIndex,
-							validationErrors: validatedTomori.success
-								? null
-								: validatedTomori.error.flatten(),
-						},
+					return {
+						label:
+							fullDisplay.length > 100
+								? `${fullDisplay.slice(0, 100)}...`
+								: fullDisplay,
+						value: index.toString(),
+						description: `In: ${input.length > 80 ? `${input.slice(0, 80)}...` : input}`,
 					};
-					// Throw error to be caught by replyPaginatedChoices's handler
-					throw await log.error(
-						"Failed to update or validate sample_dialogues in tomoris table",
-						validatedTomori.success
-							? new Error("Database update returned no rows or unexpected data")
-							: new Error("Updated tomori data failed validation"),
-						context,
-					);
-				}
+				},
+			);
 
-				// 13. Log success (onSelect doesn't handle user feedback directly)
+			// Show the modal with dialogue selection
+			const modalResult = await promptWithRawModal(interaction, locale, {
+				modalCustomId: MODAL_CUSTOM_ID,
+				modalTitleKey: "commands.unlearn.sampledialogue.modal_title",
+				components: [
+					{
+						customId: DIALOGUE_SELECT_ID,
+						labelKey: "commands.unlearn.sampledialogue.select_label",
+						descriptionKey:
+							"commands.unlearn.sampledialogue.select_description",
+						placeholder: "commands.unlearn.sampledialogue.select_placeholder",
+						required: true,
+						options: dialogueSelectOptions,
+					},
+				],
+			});
 
-				log.success(
-					`Removed sample dialogue pair at index ${selectedIndex} for tomori ${
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
-						tomoriState!.tomori_id
-					} by user ${userData.user_disc_id}`,
-				);
-				// The replyPaginatedChoices helper will show the success message
-			},
-
-			// FIX: Simplify to match expected signature () => Promise<void>
-			onCancel: async () => {
-				// This runs if the user clicks Cancel
-
+			// Handle modal outcome
+			if (modalResult.outcome !== "submit") {
 				log.info(
-					`User ${userData.user_disc_id} cancelled removing a sample dialogue for tomori ${
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
-						tomoriState!.tomori_id
-					}`,
+					`Sample dialogue deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
 				);
-				// The replyPaginatedChoices helper will show the cancellation message
-			},
-		});
+				return;
+			}
 
-		// 14. Handle potential errors from the helper itself
-		if (!result.success && result.reason === "error") {
-			log.warn(
-				`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /teach sampledialogue`,
+			// Extract values from the modal
+			const modalSubmitInteraction = modalResult.interaction;
+			const selectedIndexStr = modalResult.values?.[DIALOGUE_SELECT_ID];
+
+			// Safety checks (should never be null after submit outcome)
+			if (!modalSubmitInteraction || !selectedIndexStr) {
+				log.error("Modal result unexpectedly missing interaction or values");
+				return;
+			}
+
+			const selectedIndex = Number.parseInt(selectedIndexStr);
+
+			// Defer the reply for the modal submission
+			await modalSubmitInteraction.deferReply({
+				flags: MessageFlags.Ephemeral,
+			});
+
+			// Perform the database update using the helper function
+			await performSampleDialogueRemoval(
+				tomoriState,
+				selectedIndex,
+				currentIn,
+				currentOut,
+				userData,
+				modalSubmitInteraction,
+				locale,
 			);
-		} else if (!result.success && result.reason === "timeout") {
-			log.warn(
-				`Sample dialogue removal timed out for user ${userData.user_disc_id} (Tomori ID: ${
-					// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
-					tomoriState!.tomori_id
-				})`,
-			);
+		} else {
+			// Use pagination for large lists (>20 items)
+
+			// Format dialogue pairs for display, truncating long ones
+			const displayItems = currentIn.map((input, index) => {
+				const output = currentOut[index];
+				const truncatedInput =
+					input.length > DISPLAY_TRUNCATE_LENGTH
+						? `${input.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
+						: input;
+				const truncatedOutput =
+					output.length > DISPLAY_TRUNCATE_LENGTH
+						? `${output.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
+						: output;
+				return `User: "${truncatedInput}" → Bot: "${truncatedOutput}"`;
+			});
+
+			result = await replyPaginatedChoices(interaction, locale, {
+				titleKey: "commands.unlearn.sampledialogue.select_title",
+				descriptionKey: "commands.unlearn.sampledialogue.select_description",
+				itemLabelKey: "commands.unlearn.sampledialogue.dialogue_label",
+				items: displayItems,
+				color: ColorCode.INFO,
+				flags: MessageFlags.Ephemeral,
+
+				onSelect: async (selectedIndex: number) => {
+					// Null check for tomoriState (should never be null at this point)
+					if (!tomoriState) {
+						log.error("TomoriState unexpectedly null in onSelect callback");
+						return;
+					}
+
+					// Use the helper function for database update
+					await performSampleDialogueRemoval(
+						tomoriState,
+						selectedIndex,
+						currentIn,
+						currentOut,
+						userData,
+						interaction,
+						locale,
+					);
+				},
+
+				// Handle cancel
+				onCancel: async () => {
+					// Null check for tomoriState (should never be null at this point)
+					if (!tomoriState) {
+						log.error("TomoriState unexpectedly null in onCancel callback");
+						return;
+					}
+					log.info(
+						`User ${userData.user_disc_id} cancelled removing a sample dialogue for tomori ${tomoriState.tomori_id}`,
+					);
+					// The replyPaginatedChoices helper will show the cancellation message
+				},
+			});
+
+			// Handle potential errors from the helper itself
+			if (!result.success && result.reason === "error") {
+				log.warn(
+					`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /unlearn sampledialogue`,
+				);
+			} else if (!result.success && result.reason === "timeout") {
+				log.warn(
+					`Sample dialogue removal timed out for user ${userData.user_disc_id} (Tomori ID: ${tomoriState.tomori_id})`,
+				);
+			}
 		}
 	} catch (error) {
 		// 15. Catch unexpected errors

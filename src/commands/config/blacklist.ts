@@ -18,9 +18,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("blacklist")
-		.setDescription(
-			localizer("en-US", "commands.config.blacklist.description"),
-		)
+		.setDescription(localizer("en-US", "commands.config.blacklist.description"))
 		.addUserOption((option) =>
 			option
 				.setName("member")
@@ -72,7 +70,7 @@ export async function execute(
 	if (!interaction.guild || !interaction.channel) {
 		await replyInfoEmbed(interaction, userData.language_pref, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 		});
 		return;
@@ -94,7 +92,7 @@ export async function execute(
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
-				descriptionKey: "general.errors.tomori_not_setup",
+				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 			});
 			return;

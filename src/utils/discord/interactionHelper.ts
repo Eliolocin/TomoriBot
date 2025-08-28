@@ -8,6 +8,7 @@ import {
 	ModalBuilder,
 	TextInputBuilder,
 	TextInputStyle,
+	InteractionResponseType,
 } from "discord.js";
 import type {
 	ButtonInteraction,
@@ -20,6 +21,88 @@ import type {
 import { localizer } from "../text/localizer";
 import { log, ColorCode } from "../misc/logger";
 import type {
+	RawDiscordComponent,
+	RawDiscordWebSocketPacket,
+	RawDiscordShard,
+	GlobalDiscordState,
+} from "@/types/discord/rawApiTypes";
+
+/**
+ * Transform Component Type 18 structure to Discord.js compatible format
+ */
+function transformComponentType18ToActionRow(component: RawDiscordComponent) {
+	if (component.type === 18 && component.component) {
+		// Transform Component Type 18 to ActionRow format that Discord.js expects
+		return {
+			type: 1, // ActionRow
+			components: [component.component],
+		};
+	}
+	return component;
+}
+
+/**
+ * Intercept and transform WebSocket messages for Component Type 18 support
+ * This patches the actual WebSocket message handler at a lower level
+ */
+
+// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+function setupWebSocketInterception(client: any) {
+	if ((globalThis as GlobalDiscordState).__webSocketPatched) return;
+
+	try {
+		// Patch the WebSocket manager's handlePacket method
+		const wsManager = client.ws;
+		if (wsManager?.handlePacket) {
+			const originalHandlePacket = wsManager.handlePacket.bind(wsManager);
+
+			wsManager.handlePacket = (
+				packet: RawDiscordWebSocketPacket,
+				shard: RawDiscordShard,
+			) => {
+				// Intercept INTERACTION_CREATE packets for modal submissions
+				if (
+					packet.t === "INTERACTION_CREATE" &&
+					packet.d?.type === 5 &&
+					packet.d?.data?.components
+				) {
+					// Check if we have Component Type 18 that needs transformation
+					const hasComponentType18 = packet.d.data.components.some(
+						(comp: RawDiscordComponent) => comp.type === 18,
+					);
+
+					if (hasComponentType18) {
+						log.info(
+							"Transforming Component Type 18 modal submission for Discord.js compatibility",
+						);
+
+						// Transform Component Type 18 to ActionRow format
+						packet.d.data.components = packet.d.data.components.map(
+							transformComponentType18ToActionRow,
+						);
+					}
+				}
+
+				// Call the original handler with (potentially) transformed packet
+				return originalHandlePacket(packet, shard);
+			};
+
+			(globalThis as GlobalDiscordState).__webSocketPatched = true;
+			log.info("Component Type 18 WebSocket transformation enabled");
+		} else {
+			log.warn(
+				"Could not find WebSocket handlePacket method for Component Type 18 support",
+			);
+		}
+	} catch (error) {
+		log.warn(
+			"Failed to set up Component Type 18 WebSocket interception:",
+			error,
+		);
+	}
+}
+
+import type {
 	ConfirmationOptions,
 	ConfirmationResult,
 	PaginatedChoiceOptions,
@@ -28,6 +111,10 @@ import type {
 	SummaryEmbedOptions,
 } from "../../types/discord/embed";
 import type { ModalOptions, ModalResult } from "../../types/discord/modal";
+import {
+	isModalInputField,
+	isModalSelectField,
+} from "../../types/discord/modal";
 import { createStandardEmbed, createSummaryEmbed } from "./embedHelper";
 
 const PROMPT_TIMEOUT = 15000;
@@ -163,9 +250,9 @@ export async function promptWithConfirmation(
 	}
 }
 
-const MODAL_TIMEOUT = 180000;
 /**
  * @description Prompts the user with a modal form and awaits their response.
+ * Discord handles modal timeouts naturally (~15 minutes), so no artificial timeout is applied.
  * @param interaction The interaction to show the modal for
  * @param locale The locale for localization
  * @param options Configuration for the modal and its input fields
@@ -176,32 +263,80 @@ export async function promptWithModal(
 	locale: string,
 	options: ModalOptions,
 ): Promise<ModalResult> {
-	const {
-		modalTitleKey,
-		modalCustomId,
-		inputs,
-		timeout = MODAL_TIMEOUT, // Default 3 minutes for modal input
-	} = options;
+	const { modalTitleKey, modalCustomId, components } = options;
 
 	// 1. Create Modal
 	const modal = new ModalBuilder()
 		.setCustomId(modalCustomId)
 		.setTitle(localizer(locale, modalTitleKey));
 
-	// 2. Create Text Inputs
-	const rows = inputs.map((input) => {
-		const textInput = new TextInputBuilder()
-			.setCustomId(input.customId)
-			.setLabel(localizer(locale, input.labelKey))
-			.setStyle(input.style || TextInputStyle.Short)
-			.setRequired(input.required !== false);
+	// 2. Create Modal Components (Text Inputs Only - String Selects Not Yet Supported)
+	const rows = components.map((component) => {
+		if (isModalInputField(component)) {
+			// Create text input component
+			const textInput = new TextInputBuilder()
+				.setCustomId(component.customId)
+				.setLabel(localizer(locale, component.labelKey))
+				.setStyle(component.style || TextInputStyle.Short)
+				.setRequired(component.required !== false);
 
-		if (input.placeholder) textInput.setPlaceholder(input.placeholder);
-		if (input.minLength) textInput.setMinLength(input.minLength);
-		if (input.maxLength) textInput.setMaxLength(input.maxLength);
-		if (input.value) textInput.setValue(input.value);
+			// Add description if provided (not yet supported by Discord.js)
+			if (component.descriptionKey) {
+				// Note: Discord.js does not support descriptions on TextInputs yet
+				// For now, we can add the description to the placeholder or label
+				const description = localizer(locale, component.descriptionKey);
+				if (!component.placeholder) {
+					textInput.setPlaceholder(description.substring(0, 100)); // Discord limit
+				}
+			}
 
-		return new ActionRowBuilder<TextInputBuilder>().addComponents(textInput);
+			if (component.placeholder) {
+				// If placeholder is provided, use it as localized placeholder
+				const placeholder =
+					typeof component.placeholder === "string" &&
+					component.placeholder.startsWith("commands.")
+						? localizer(locale, component.placeholder)
+						: component.placeholder;
+				textInput.setPlaceholder(placeholder);
+			}
+			if (component.minLength) textInput.setMinLength(component.minLength);
+			if (component.maxLength) textInput.setMaxLength(component.maxLength);
+			if (component.value) textInput.setValue(component.value);
+
+			return new ActionRowBuilder<TextInputBuilder>().addComponents(textInput);
+		} else if (isModalSelectField(component)) {
+			// String selects in modals are not yet supported by Discord.js
+			// Convert to a text input with localized placeholder
+			const fallbackInput = new TextInputBuilder()
+				.setCustomId(component.customId)
+				.setLabel(localizer(locale, component.labelKey))
+				.setStyle(TextInputStyle.Short)
+				.setRequired(component.required !== false);
+
+			// Use localized placeholder if provided, otherwise show options
+			if (component.placeholder) {
+				const placeholder =
+					typeof component.placeholder === "string" &&
+					component.placeholder.startsWith("commands.")
+						? localizer(locale, component.placeholder)
+						: component.placeholder;
+				fallbackInput.setPlaceholder(placeholder);
+			} else {
+				// Fallback to showing available options
+				const optionsText = component.options
+					.map((opt) => opt.label)
+					.join(", ");
+				fallbackInput.setPlaceholder(
+					`Options: ${optionsText.substring(0, 95)}...`,
+				);
+			}
+
+			return new ActionRowBuilder<TextInputBuilder>().addComponents(
+				fallbackInput,
+			);
+		}
+
+		throw new Error(`Unsupported modal component type: ${component}`);
 	});
 
 	modal.addComponents(...rows);
@@ -214,43 +349,37 @@ export async function promptWithModal(
 		return { outcome: "timeout" };
 	}
 
-	// 4. Wait for submission
+	// 4. Wait for submission (use Discord's natural timeout duration ~15 minutes)
 	try {
 		const submitted = await interaction.awaitModalSubmit({
-			time: timeout,
+			time: 600000, // 10 minutes - matches Discord's natural modal timeout
 			filter: (i) =>
 				i.customId === modalCustomId && i.user.id === interaction.user.id,
 		});
 
 		// 5. Collect field values
 		const values: Record<string, string> = {};
-		for (const input of inputs) {
-			values[input.customId] = submitted.fields.getTextInputValue(
-				input.customId,
-			);
+		for (const component of components) {
+			if (isModalInputField(component)) {
+				values[component.customId] = submitted.fields.getTextInputValue(
+					component.customId,
+				);
+			} else if (isModalSelectField(component)) {
+				// Get selected values from string select
+				const selectedValues = submitted.fields.getField(
+					component.customId,
+				)?.value;
+				if (selectedValues) {
+					values[component.customId] = selectedValues;
+				}
+			}
 		}
-
-		// 6. Defer update (modals always require a response)
-		// await submitted.deferUpdate();
 
 		return { outcome: "submit", values, interaction: submitted };
-	} catch (timeoutError) {
-		log.warn(`Modal timed out for user ${interaction.user.id}`);
-		try {
-			const timeoutEmbed = new EmbedBuilder()
-				.setColor(ColorCode.ERROR)
-				.setTitle(localizer(locale, "general.interaction.timeout_title"))
-				.setDescription(
-					localizer(locale, "general.interaction.timeout_description"),
-				);
-
-			await interaction.editReply({
-				embeds: [timeoutEmbed],
-				components: [],
-			});
-		} catch (error) {
-			log.error("Failed to show timeout message for modal:", error);
-		}
+	} catch (error) {
+		// This will only catch actual errors, not artificial timeouts
+		// Discord's natural timeout or user cancellation will be handled by command timeout
+		log.warn(`Modal submission failed for user ${interaction.user.id}:`, error);
 		return { outcome: "timeout" };
 	}
 }
@@ -675,5 +804,193 @@ export async function replyPaginatedChoices(
 			success: false,
 			reason: "error", // Indicate a general setup error
 		};
+	}
+}
+
+/**
+ * @description Creates a modal using raw Discord API with Component Type 18 (Label) support for descriptions and string selects
+ * @param interaction The interaction to respond to
+ * @param locale The locale for localization
+ * @param options Configuration for the modal and its components
+ * @returns Promise resolving to a ModalResult
+ */
+export async function promptWithRawModal(
+	interaction: ChatInputCommandInteraction | ButtonInteraction,
+	locale: string,
+	options: ModalOptions,
+): Promise<ModalResult> {
+	// Set up WebSocket interception FIRST, before showing the modal
+	setupWebSocketInterception(interaction.client);
+
+	const { modalTitleKey, modalCustomId, components } = options;
+
+	try {
+		// Build raw Discord API payload with Component Type 18 (Label) support
+		const rawModalPayload = {
+			type: InteractionResponseType.Modal, // Type 9
+			data: {
+				custom_id: modalCustomId,
+				title: localizer(locale, modalTitleKey),
+				components: components.map((component) => {
+					if (isModalInputField(component)) {
+						// Text Input wrapped in Label component (type 18)
+						const rawComponent: RawDiscordComponent = {
+							type: 4, // ComponentType.TextInput
+							custom_id: component.customId,
+							style: component.style || TextInputStyle.Short,
+							required: component.required !== false,
+						};
+
+						if (component.placeholder) {
+							const placeholder =
+								typeof component.placeholder === "string" &&
+								component.placeholder.startsWith("commands.")
+									? localizer(locale, component.placeholder)
+									: component.placeholder;
+							rawComponent.placeholder = placeholder;
+						}
+						if (component.minLength)
+							rawComponent.min_length = component.minLength;
+						if (component.maxLength)
+							rawComponent.max_length = component.maxLength;
+						if (component.value) rawComponent.value = component.value;
+
+						// Wrap in Label component (type 18)
+						const labelComponent: RawDiscordComponent = {
+							type: 18, // ComponentType.Label
+							label: localizer(locale, component.labelKey),
+							component: rawComponent,
+						};
+
+						// Add description if provided
+						if (component.descriptionKey) {
+							labelComponent.description = localizer(
+								locale,
+								component.descriptionKey,
+							);
+						}
+
+						return labelComponent;
+					} else if (isModalSelectField(component)) {
+						// String Select wrapped in Label component (type 18)
+						const rawComponent: RawDiscordComponent = {
+							type: 3, // ComponentType.StringSelect
+							custom_id: component.customId,
+							options: component.options.map((option) => ({
+								label: option.label,
+								value: option.value,
+								description: option.description,
+								emoji: option.emoji,
+							})),
+							required: component.required !== false,
+						};
+
+						if (component.placeholder) {
+							const placeholder =
+								typeof component.placeholder === "string" &&
+								component.placeholder.startsWith("commands.")
+									? localizer(locale, component.placeholder)
+									: component.placeholder;
+							rawComponent.placeholder = placeholder;
+						}
+
+						// Wrap in Label component (type 18)
+						const labelComponent: RawDiscordComponent = {
+							type: 18, // ComponentType.Label
+							label: localizer(locale, component.labelKey),
+							component: rawComponent,
+						};
+
+						// Add description if provided
+						if (component.descriptionKey) {
+							labelComponent.description = localizer(
+								locale,
+								component.descriptionKey,
+							);
+						}
+
+						return labelComponent;
+					}
+
+					throw new Error(`Unsupported modal component type: ${component}`);
+				}),
+			},
+		};
+
+		// Send raw API response using Discord's REST API directly
+		const restEndpoint = `https://discord.com/api/v10/interactions/${interaction.id}/${interaction.token}/callback`;
+
+		const response = await fetch(restEndpoint, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(rawModalPayload),
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			log.error(
+				`Failed to send raw modal via REST API: ${response.status} ${response.statusText} - ${errorText}`,
+			);
+			throw new Error(
+				`Discord API error: ${response.status} ${response.statusText}`,
+			);
+		}
+
+		// Now we can use the standard awaitModalSubmit with the transformed data
+		// Use Discord's natural timeout duration (~15 minutes)
+		try {
+			const submitted = await interaction.awaitModalSubmit({
+				time: 600000, // 10 minutes - matches Discord's natural modal timeout
+				filter: (i) =>
+					i.customId === modalCustomId && i.user.id === interaction.user.id,
+			});
+
+			// Extract values using Discord.js methods (should work now with the patch)
+			const values: Record<string, string> = {};
+
+			for (const component of components) {
+				if (isModalInputField(component)) {
+					try {
+						values[component.customId] = submitted.fields.getTextInputValue(
+							component.customId,
+						);
+					} catch (error) {
+						log.warn(
+							`Failed to get text input value for ${component.customId}:`,
+							error,
+						);
+					}
+				} else if (isModalSelectField(component)) {
+					try {
+						const selectedValues = submitted.fields.getField(
+							component.customId,
+						)?.value;
+						if (selectedValues) {
+							values[component.customId] = selectedValues;
+						}
+					} catch (error) {
+						log.warn(
+							`Failed to get select value for ${component.customId}:`,
+							error,
+						);
+					}
+				}
+			}
+
+			return { outcome: "submit", values, interaction: submitted };
+		} catch (error) {
+			// This will only catch actual errors, not artificial timeouts
+			// Discord's natural timeout or user cancellation will be handled by command timeout
+			log.warn(
+				`Modal submission failed for user ${interaction.user.id}:`,
+				error,
+			);
+			return { outcome: "timeout" };
+		}
+	} catch (error) {
+		log.error("Failed to show raw modal:", error);
+		return { outcome: "timeout" };
 	}
 }

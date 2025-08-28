@@ -9,14 +9,20 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	replyPaginatedChoices,
+	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import {
 	type UserRow,
 	type ErrorContext,
 	tomoriSchema,
+	type TomoriPresetRow,
 } from "../../types/db/schema";
+import type { SelectOption } from "../../types/discord/modal";
 import { sql } from "bun";
+
+// Modal configuration constants
+const MODAL_CUSTOM_ID = "config_preset_modal";
+const PRESET_SELECT_ID = "preset_select";
 
 // Configure the subcommand
 export const configureSubcommand = (
@@ -24,9 +30,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("preset")
-		.setDescription(
-			localizer("en-US", "commands.config.preset.description"),
-		);
+		.setDescription(localizer("en-US", "commands.config.preset.description"));
 
 /**
  * Applies a preset personality configuration to Tomori.
@@ -46,7 +50,7 @@ export async function execute(
 	if (!interaction.guild || !interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -54,16 +58,14 @@ export async function execute(
 	}
 
 	try {
-		// 3. Show ephemeral processing message
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 4. Load the Tomori state for this server
+		// 2. Load the Tomori state for this server
 		const tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.not_setup_title",
-				descriptionKey: "general.errors.not_setup_description",
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -105,109 +107,143 @@ export async function execute(
 			return;
 		}
 
-		// 7. Prepare display items for presets
-		const displayItems = presets.map(
-			(preset: { tomori_preset_name: string; tomori_preset_desc: string }) =>
-				`${preset.tomori_preset_name}: ${preset.tomori_preset_desc.substring(0, 80)}${preset.tomori_preset_desc.length > 80 ? "..." : ""}`,
+		// 7. Create preset options for the select menu using full descriptions
+		const presetSelectOptions: SelectOption[] = presets.map(
+			(preset: TomoriPresetRow) => ({
+				label: preset.tomori_preset_name,
+				value: preset.tomori_preset_name,
+				description:
+					preset.tomori_preset_desc.length > 100
+						? `${preset.tomori_preset_desc.substring(0, 100)}...`
+						: preset.tomori_preset_desc,
+			}),
 		);
 
-		// 8. Use replyPaginatedChoices for preset selection
-		const result = await replyPaginatedChoices(interaction, locale, {
-			titleKey: "commands.config.preset.select_title",
-			descriptionKey: "commands.config.preset.select_description", // Includes warning about overwriting
-			itemLabelKey: "commands.config.preset.preset_label",
-			items: displayItems,
-			color: ColorCode.WARN, // Warning color to emphasize data overwrite
-			flags: MessageFlags.Ephemeral,
-
-			onSelect: async (selectedIndex) => {
-				const selectedPreset = presets[selectedIndex];
-
-				// Create attribute list with description as first element (Rule 23)
-				const attributesWithDescription = [
-					`{bot}'s Description: ${selectedPreset.tomori_preset_desc}`,
-					...selectedPreset.preset_attribute_list,
-				];
-
-				// Format arrays for PostgreSQL update (Rule 23)
-				const attributeArrayLiteral = `{${attributesWithDescription
-					.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-					.join(",")}}`;
-
-				const inArrayLiteral = `{${selectedPreset.preset_sample_dialogues_in
-					.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-					.join(",")}}`;
-
-				const outArrayLiteral = `{${selectedPreset.preset_sample_dialogues_out
-					.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
-					.join(",")}}`;
-
-				// Update Tomori in the database
-				const [updatedTomoriResult] = await sql`
-					UPDATE tomoris
-					SET 
-						attribute_list = ${attributeArrayLiteral}::text[],
-						sample_dialogues_in = ${inArrayLiteral}::text[],
-						sample_dialogues_out = ${outArrayLiteral}::text[]
-					WHERE tomori_id = ${tomoriState.tomori_id}
-					RETURNING *
-				`;
-
-				// Validate the result
-				const validationResult = tomoriSchema.safeParse(updatedTomoriResult);
-
-				if (!validationResult.success || !updatedTomoriResult) {
-					const context: ErrorContext = {
-						userId: userData.user_id,
-						serverId: tomoriState.server_id,
-						tomoriId: tomoriState.tomori_id,
-						errorType: "DatabaseValidationError",
-						metadata: {
-							command: "config preset",
-							preset: selectedPreset.tomori_preset_name,
-							presetId: selectedPreset.tomori_preset_id,
-							validationErrors: validationResult.success
-								? null
-								: validationResult.error.flatten(),
-						},
-					};
-					throw await log.error(
-						"Failed to validate updated tomori data after applying preset",
-						validationResult.success
-							? new Error("Database update returned no rows or unexpected data")
-							: new Error("Updated tomori data failed validation"),
-						context,
-					);
-				}
-
-				// Log success
-				log.success(
-					`Applied preset "${selectedPreset.tomori_preset_name}" to server ${tomoriState.server_id} by user ${userData.user_disc_id}`,
-				);
-				// replyPaginatedChoices handles the success message
-			},
-
-			// Handle cancel
-			onCancel: async () => {
-				log.info(
-					`User ${userData.user_disc_id} cancelled preset selection for server ${tomoriState.server_id}`,
-				);
-				// replyPaginatedChoices handles the cancellation message
-			},
+		// 8. Show the modal with preset selection
+		const modalResult = await promptWithRawModal(interaction, locale, {
+			modalCustomId: MODAL_CUSTOM_ID,
+			modalTitleKey: "commands.config.preset.modal_title",
+			components: [
+				{
+					customId: PRESET_SELECT_ID,
+					labelKey: "commands.config.preset.select_label",
+					descriptionKey: "commands.config.preset.select_description",
+					placeholder: "commands.config.preset.select_placeholder",
+					required: true,
+					options: presetSelectOptions,
+				},
+			],
 		});
 
-		// 9. Handle potential errors from the helper
-		if (!result.success && result.reason === "error") {
-			log.warn(
-				`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /config preset`,
+		// 9. Handle modal outcome
+		if (modalResult.outcome !== "submit") {
+			log.info(
+				`Preset selection modal ${modalResult.outcome} for user ${userData.user_id}`,
 			);
-		} else if (!result.success && result.reason === "timeout") {
-			log.warn(
-				`Preset selection timed out for user ${userData.user_disc_id} (Server ID: ${tomoriState.server_id})`,
-			);
+			return;
 		}
+
+		// Extract values from the modal
+		// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
+		const modalSubmitInteraction = modalResult.interaction!;
+		// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
+		const selectedPresetName = modalResult.values![PRESET_SELECT_ID];
+
+		// Defer the reply for the modal submission
+		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		// 10. Find the selected preset
+		const selectedPreset = presets.find(
+			(preset: TomoriPresetRow) =>
+				preset.tomori_preset_name === selectedPresetName,
+		);
+
+		if (!selectedPreset) {
+			await modalSubmitInteraction.editReply({
+				content: localizer(locale, "commands.config.preset.preset_not_found"),
+			});
+			return;
+		}
+
+		// 11. Create attribute list with description as first element (Rule 23)
+		const attributesWithDescription = [
+			`{bot}'s Description: ${selectedPreset.tomori_preset_desc}`,
+			...selectedPreset.preset_attribute_list,
+		];
+
+		// 12. Format arrays for PostgreSQL update (Rule 23)
+		const attributeArrayLiteral = `{${attributesWithDescription
+			.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
+			.join(",")}}`;
+
+		const inArrayLiteral = `{${selectedPreset.preset_sample_dialogues_in
+			.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
+			.join(",")}}`;
+
+		const outArrayLiteral = `{${selectedPreset.preset_sample_dialogues_out
+			.map((item: string) => `"${item.replace(/(["\\])/g, "\\$1")}"`)
+			.join(",")}}`;
+
+		// 13. Update Tomori in the database
+		const [updatedTomoriResult] = await sql`
+			UPDATE tomoris
+			SET 
+				attribute_list = ${attributeArrayLiteral}::text[],
+				sample_dialogues_in = ${inArrayLiteral}::text[],
+				sample_dialogues_out = ${outArrayLiteral}::text[]
+			WHERE tomori_id = ${tomoriState.tomori_id}
+			RETURNING *
+		`;
+
+		// 14. Validate the result
+		const validationResult = tomoriSchema.safeParse(updatedTomoriResult);
+
+		if (!validationResult.success || !updatedTomoriResult) {
+			const context: ErrorContext = {
+				userId: userData.user_id,
+				serverId: tomoriState.server_id,
+				tomoriId: tomoriState.tomori_id,
+				errorType: "DatabaseValidationError",
+				metadata: {
+					command: "config preset",
+					preset: selectedPreset.tomori_preset_name,
+					presetId: selectedPreset.tomori_preset_id,
+					validationErrors: validationResult.success
+						? null
+						: validationResult.error.flatten(),
+				},
+			};
+			await log.error(
+				"Failed to validate updated tomori data after applying preset",
+				validationResult.success
+					? new Error("Database update returned no rows or unexpected data")
+					: new Error("Updated tomori data failed validation"),
+				context,
+			);
+
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.update_failed_title",
+				descriptionKey: "general.errors.update_failed_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 15. Log success and show success message
+		log.success(
+			`Applied preset "${selectedPreset.tomori_preset_name}" to server ${tomoriState.server_id} by user ${userData.user_disc_id}`,
+		);
+
+		await replyInfoEmbed(modalSubmitInteraction, locale, {
+			titleKey: "commands.config.preset.success_title",
+			descriptionKey: "commands.config.preset.success_description",
+			descriptionVars: {
+				preset_name: selectedPreset.tomori_preset_name,
+			},
+			color: ColorCode.SUCCESS,
+		});
 	} catch (error) {
-		// 10. Log error with context
+		// 16. Log error with context
 		let serverIdForError: number | null = null;
 		let tomoriIdForError: number | null = null;
 		if (interaction.guild?.id) {
@@ -233,27 +269,17 @@ export async function execute(
 			context,
 		);
 
-		// 11. Inform user of unknown error
-		if (interaction.deferred || interaction.replied) {
-			try {
-				await interaction.followUp({
-					content: localizer(
-						locale,
-						"general.errors.unknown_error_description",
-					),
-					flags: MessageFlags.Ephemeral,
-				});
-			} catch (followUpError) {
-				log.error(
-					"Failed to send follow-up error message in preset catch block",
-					followUpError,
-				);
-			}
+		// 17. Inform user of unknown error
+		if (!interaction.replied && !interaction.deferred) {
+			await interaction.reply({
+				content: localizer(locale, "general.errors.unknown_error_description"),
+				flags: MessageFlags.Ephemeral,
+			});
 		} else {
-			log.warn(
-				"Interaction was not replied or deferred in preset catch block",
-				context,
-			);
+			await interaction.followUp({
+				content: localizer(locale, "general.errors.unknown_error_description"),
+				flags: MessageFlags.Ephemeral,
+			});
 		}
 	}
 }

@@ -24,31 +24,20 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("language")
-		.setDescription(
-			localizer("en-US", "commands.config.language.description"),
-		)
+		.setDescription(localizer("en-US", "commands.config.language.description"))
 		.addStringOption((option) =>
 			option
 				.setName("value")
 				.setDescription(
-					localizer(
-						"en-US",
-						"commands.config.language.value_description",
-					),
+					localizer("en-US", "commands.config.language.value_description"),
 				)
 				.setDescriptionLocalizations({
-					ja: localizer(
-						"ja",
-						"commands.config.language.value_description",
-					),
+					ja: localizer("ja", "commands.config.language.value_description"),
 				})
 				.setRequired(true)
 				.addChoices(
 					{
-						name: localizer(
-							"en-US",
-							"commands.config.language.choice_english",
-						),
+						name: localizer("en-US", "commands.config.language.choice_english"),
 						value: "en-US",
 					},
 					{
@@ -80,7 +69,7 @@ export async function execute(
 	if (!interaction.guild || !interaction.channel) {
 		await replyInfoEmbed(interaction, userData.language_pref, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 		});
 		return;
@@ -94,8 +83,7 @@ export async function execute(
 		if (!(SUPPORTED_LANGUAGES as readonly string[]).includes(languageValue)) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.config.language.invalid_value_title",
-				descriptionKey:
-					"commands.config.language.invalid_value_description",
+				descriptionKey: "commands.config.language.invalid_value_description",
 				descriptionVars: {
 					supported: SUPPORTED_LANGUAGES.join(", "),
 				},
@@ -112,8 +100,7 @@ export async function execute(
 		if (languageValue === currentLanguage) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.config.language.already_set_title",
-				descriptionKey:
-					"commands.config.language.already_set_description",
+				descriptionKey: "commands.config.language.already_set_description",
 				descriptionVars: {
 					value: getLanguageLabel(locale, languageValue),
 				},

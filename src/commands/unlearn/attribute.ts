@@ -1,6 +1,8 @@
 import {
 	MessageFlags,
 	type ChatInputCommandInteraction,
+	type ButtonInteraction,
+	type ModalSubmitInteraction,
 	type Client,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
@@ -9,6 +11,7 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
 	replyPaginatedChoices,
+	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import {
@@ -17,11 +20,91 @@ import {
 	tomoriSchema,
 	type TomoriState,
 } from "../../types/db/schema";
+import type { SelectOption } from "../../types/discord/modal";
 import { sql } from "bun";
 import type { PaginatedChoiceResult } from "@/types/discord/embed";
 
 // Rule 20: Constants for static values at the top
 const DISPLAY_TRUNCATE_LENGTH = 45; // Max length for each part in the display list
+const MODAL_THRESHOLD = 20; // Use modal if items ≤ this number, otherwise use pagination
+const MODAL_CUSTOM_ID = "unlearn_attribute_modal";
+const ATTRIBUTE_SELECT_ID = "attribute_select";
+
+/**
+ * Helper function to perform attribute removal from database
+ * @param tomoriState - Current Tomori state
+ * @param attributeToRemove - Attribute to remove
+ * @param userData - User data
+ * @param replyInteraction - Interaction to reply to (can be modal or pagination)
+ * @param locale - User locale
+ */
+async function performAttributeRemoval(
+	tomoriState: TomoriState,
+	attributeToRemove: string,
+	userData: UserRow,
+	replyInteraction:
+		| ChatInputCommandInteraction
+		| ButtonInteraction
+		| ModalSubmitInteraction,
+	locale: string,
+): Promise<void> {
+	// Update the attribute_list in the database using array_remove
+	const [updatedRow] = await sql`
+		UPDATE tomoris
+		SET attribute_list = array_remove(attribute_list, ${attributeToRemove})
+		WHERE tomori_id = ${tomoriState.tomori_id}
+		RETURNING *
+	`;
+
+	// Validate the returned data
+	const validatedTomori = tomoriSchema.safeParse(updatedRow);
+
+	if (!validatedTomori.success || !updatedRow) {
+		// Log error specific to this update failure
+		const context: ErrorContext = {
+			tomoriId: tomoriState.tomori_id,
+			serverId: tomoriState.server_id,
+			userId: userData.user_id,
+			errorType: "DatabaseUpdateError",
+			metadata: {
+				command: "unlearn attribute",
+				attributeToRemove,
+				validationErrors: validatedTomori.success
+					? null
+					: validatedTomori.error.flatten(),
+			},
+		};
+
+		await log.error(
+			"Failed to update or validate attribute_list in tomoris table",
+			validatedTomori.success
+				? new Error("Database update returned no rows or unexpected data")
+				: new Error("Updated tomori data failed validation"),
+			context,
+		);
+
+		await replyInfoEmbed(replyInteraction, locale, {
+			titleKey: "general.errors.update_failed_title",
+			descriptionKey: "general.errors.update_failed_description",
+			color: ColorCode.ERROR,
+		});
+		return;
+	}
+
+	// Log success and show success message
+	log.success(
+		`Removed attribute "${attributeToRemove}" for tomori ${tomoriState.tomori_id} by user ${userData.user_disc_id}`,
+	);
+
+	await replyInfoEmbed(replyInteraction, locale, {
+		titleKey: "commands.unlearn.attribute.success_title",
+		descriptionKey: "commands.unlearn.attribute.success_description",
+		descriptionVars: {
+			attribute: attributeToRemove,
+		},
+		color: ColorCode.SUCCESS,
+	});
+}
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (
@@ -51,7 +134,7 @@ export async function execute(
 	if (!interaction.guild || !interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -70,8 +153,8 @@ export async function execute(
 		tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.not_setup_title",
-				descriptionKey: "general.errors.not_setup_description",
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -87,9 +170,9 @@ export async function execute(
 			!hasManagePermission
 		) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.unlearn.attributeadd.teaching_disabled_title",
+				titleKey: "commands.teach.attribute.teaching_disabled_title",
 				descriptionKey:
-					"commands.unlearn.attributeadd.teaching_disabled_description",
+					"commands.teach.attribute.teaching_disabled_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -115,98 +198,117 @@ export async function execute(
 				: attribute;
 		});
 
-		// 8. Use the replyPaginatedChoices helper
-		result = await replyPaginatedChoices(interaction, locale, {
-			titleKey: "commands.unlearn.attribute.select_title",
-			descriptionKey: "commands.unlearn.attribute.select_description",
-			itemLabelKey: "commands.unlearn.attribute.attribute_label",
-			items: displayItems,
-			color: ColorCode.INFO,
-			flags: MessageFlags.Ephemeral, // Make the pagination ephemeral
+		// 8. Hybrid approach: use modal for ≤20 items, pagination for >20 items
+		if (currentAttributes.length <= MODAL_THRESHOLD) {
+			// Use modal with string select for small lists
+			const attributeSelectOptions: SelectOption[] = currentAttributes.map(
+				(attribute) => ({
+					label:
+						attribute.length > 100
+							? `${attribute.slice(0, 100)}...`
+							: attribute,
+					value: attribute, // Use full attribute as value
+					description: undefined, // No description needed for attributes
+				}),
+			);
 
-			// Use simplified signature as expected by PaginatedChoiceOptions
-			onSelect: async (selectedIndex: number) => {
-				// 9. Get the attribute to remove
-				const attributeToRemove = currentAttributes[selectedIndex];
+			const modalResult = await promptWithRawModal(interaction, locale, {
+				modalCustomId: MODAL_CUSTOM_ID,
+				modalTitleKey: "commands.unlearn.attribute.modal_title",
+				components: [
+					{
+						customId: ATTRIBUTE_SELECT_ID,
+						labelKey: "commands.unlearn.attribute.select_label",
+						descriptionKey: "commands.unlearn.attribute.select_description",
+						placeholder: "commands.unlearn.attribute.select_placeholder",
+						required: true,
+						options: attributeSelectOptions,
+					},
+				],
+			});
 
-				// 10. Update the attribute_list in the database using array_remove (Rule 4, 15, 23)
-				const [updatedRow] = await sql`
-					UPDATE tomoris
-					SET attribute_list = array_remove(attribute_list, ${attributeToRemove})
-					WHERE tomori_id = ${
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
-						tomoriState!.tomori_id
-					}
-					RETURNING *
-				`;
-
-				// 12. Validate the returned data (Rule 3, 5, 6)
-				const validatedTomori = tomoriSchema.safeParse(updatedRow);
-
-				if (!validatedTomori.success || !updatedRow) {
-					// Log error specific to this update failure
-					const context: ErrorContext = {
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees these IDs exist
-						tomoriId: tomoriState!.tomori_id,
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees these IDs exist
-						serverId: tomoriState!.server_id,
-						userId: userData.user_id,
-						errorType: "DatabaseUpdateError",
-						metadata: {
-							command: "teach attribute",
-							guildId: interaction.guild?.id,
-							selectedIndex,
-							attributeToRemove,
-							validationErrors: validatedTomori.success
-								? null
-								: validatedTomori.error.flatten(),
-						},
-					};
-					// Throw error to be caught by replyPaginatedChoices's handler
-					throw await log.error(
-						"Failed to update or validate attribute_list in tomoris table",
-						validatedTomori.success
-							? new Error("Database update returned no rows or unexpected data")
-							: new Error("Updated tomori data failed validation"),
-						context,
-					);
-				}
-
-				// 13. Log success (onSelect doesn't handle user feedback directly)
-				log.success(
-					`Removed attribute "${attributeToRemove}" for tomori ${
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
-						tomoriState!.tomori_id
-					} by user ${userData.user_disc_id}`,
-				);
-				// The replyPaginatedChoices helper will show the success message
-			},
-
-			// Simplified onCancel handler as expected by PaginatedChoiceOptions
-			onCancel: async () => {
-				// This runs if the user clicks Cancel
+			// Handle modal outcome
+			if (modalResult.outcome !== "submit") {
 				log.info(
-					`User ${userData.user_disc_id} cancelled removing an attribute for tomori ${
-						// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
-						tomoriState!.tomori_id
-					}`,
+					`Attribute removal modal ${modalResult.outcome} for user ${userData.user_id}`,
 				);
-				// The replyPaginatedChoices helper will show the cancellation message
-			},
-		});
+				return;
+			}
 
-		// 14. Handle potential errors from the helper itself
-		if (!result.success && result.reason === "error") {
-			log.warn(
-				`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /teach attribute`,
+			// Extract values from the modal
+			// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
+			const modalSubmitInteraction = modalResult.interaction!;
+			// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
+			const attributeToRemove = modalResult.values![ATTRIBUTE_SELECT_ID];
+
+			// Defer the reply for the modal submission
+			await modalSubmitInteraction.deferReply({
+				flags: MessageFlags.Ephemeral,
+			});
+
+			// Perform the database update
+			await performAttributeRemoval(
+				tomoriState,
+				attributeToRemove,
+				userData,
+				modalSubmitInteraction,
+				locale,
 			);
-		} else if (!result.success && result.reason === "timeout") {
-			log.warn(
-				`Attribute removal timed out for user ${userData.user_disc_id} (Tomori ID: ${
-					// biome-ignore lint/style/noNonNullAssertion: tomoriState check above guarantees tomori_id exists
-					tomoriState!.tomori_id
-				})`,
-			);
+		} else {
+			// Use pagination for large lists (>20 items)
+			result = await replyPaginatedChoices(interaction, locale, {
+				titleKey: "commands.unlearn.attribute.select_title",
+				descriptionKey: "commands.unlearn.attribute.select_description",
+				itemLabelKey: "commands.unlearn.attribute.attribute_label",
+				items: displayItems,
+				color: ColorCode.INFO,
+				flags: MessageFlags.Ephemeral, // Make the pagination ephemeral
+
+				// Use simplified signature as expected by PaginatedChoiceOptions
+				onSelect: async (selectedIndex: number) => {
+					// Get the attribute to remove
+					const attributeToRemove = currentAttributes[selectedIndex];
+
+					// Null check for tomoriState (should never be null at this point)
+					if (!tomoriState) {
+						log.error("TomoriState unexpectedly null in onSelect callback");
+						return;
+					}
+
+					// Use the helper function for database update
+					await performAttributeRemoval(
+						tomoriState,
+						attributeToRemove,
+						userData,
+						interaction,
+						locale,
+					);
+				},
+
+				// Handle cancel
+				onCancel: async () => {
+					// Null check for tomoriState (should never be null at this point)
+					if (!tomoriState) {
+						log.error("TomoriState unexpectedly null in onCancel callback");
+						return;
+					}
+					log.info(
+						`User ${userData.user_disc_id} cancelled removing an attribute for tomori ${tomoriState.tomori_id}`,
+					);
+					// The replyPaginatedChoices helper will show the cancellation message
+				},
+			});
+
+			// Handle potential errors from the helper itself
+			if (!result.success && result.reason === "error") {
+				log.warn(
+					`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /unlearn attribute`,
+				);
+			} else if (!result.success && result.reason === "timeout") {
+				log.warn(
+					`Attribute removal timed out for user ${userData.user_disc_id} (Tomori ID: ${tomoriState.tomori_id})`,
+				);
+			}
 		}
 	} catch (error) {
 		// 15. Catch unexpected errors

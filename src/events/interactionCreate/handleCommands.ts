@@ -17,6 +17,28 @@ import {
 
 // Define constants at the top (Rule #20)
 const TIMEOUT_DURATION = 100000; // 100 Seconds
+const MODAL_COMMAND_TIMEOUT = 300000; // 300 Seconds (5 minutes) for modal commands
+
+// Commands that use modals and need longer timeout
+const MODAL_COMMANDS = new Set([
+	"teach.attribute",
+	"teach.sampledialogue", 
+	"teach.servermemory",
+	"teach.personalmemory",
+	"config.setup",
+]);
+
+/**
+ * Determines if a command uses modals and needs longer timeout
+ * @param commandName - The command category
+ * @param subcommandName - The subcommand name 
+ * @returns boolean indicating if command uses modals
+ */
+function isModalCommand(commandName: string, subcommandName: string | null): boolean {
+	if (!subcommandName) return false;
+	return MODAL_COMMANDS.has(`${commandName}.${subcommandName}`);
+}
+
 const COOLDOWN_MAP = new Map<string, number>([
 	["economy", 2000],
 	["scrape", 10000],
@@ -270,7 +292,11 @@ const handler = async (
 			}
 		};
 
-		// Race main logic against timeout
+		// Race main logic against timeout (use longer timeout for modal commands)
+		const timeoutDuration = isModalCommand(commandName, subcommandName) 
+			? MODAL_COMMAND_TIMEOUT 
+			: TIMEOUT_DURATION;
+		
 		await Promise.race([
 			mainLogicPromise(),
 			new Promise((_, reject) =>
@@ -281,7 +307,7 @@ const handler = async (
 								localizer(initialLocale, "general.errors.command_timeout"),
 							),
 						),
-					TIMEOUT_DURATION,
+					timeoutDuration,
 				),
 			),
 		]);
@@ -302,13 +328,19 @@ const handler = async (
 			context,
 		);
 
-		// Reply to user if possible
+		// Reply to user if possible (with defensive error handling)
 		if (!interaction.replied && !interaction.deferred) {
-			await replyInfoEmbed(interaction, initialLocale, {
-				titleKey: "general.errors.unknown_error_title",
-				descriptionKey: "general.errors.unknown_error_description",
-				color: ColorCode.ERROR,
-			});
+			try {
+				await replyInfoEmbed(interaction, initialLocale, {
+					titleKey: "general.errors.unknown_error_title",
+					descriptionKey: "general.errors.unknown_error_description",
+					color: ColorCode.ERROR,
+				});
+			} catch (replyError) {
+				log.error("Failed to send error reply in command handler:", replyError, context);
+			}
+		} else {
+			log.info("Skipped error reply - interaction already handled");
 		}
 	}
 };

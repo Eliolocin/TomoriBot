@@ -193,6 +193,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 			const googleAdapter = getGoogleToolAdapter();
 			const allToolsConfig = await googleAdapter.getAllToolsInGoogleFormat(
 				availableBuiltInTools,
+				tomoriState.server_id,
 			);
 
 			log.info(

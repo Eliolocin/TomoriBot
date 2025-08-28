@@ -321,6 +321,104 @@ DELETE FROM error_logs WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
 - No direct database access from Discord users
 - All operations through application layer
 - Parameterized queries prevent SQL injection
+- **Field name whitelisting** prevents SQL injection in dynamic queries
+
+### SQL Injection Prevention
+
+**Dynamic Query Security** (`src/utils/db/sqlSecurity.ts`)
+
+TomoriBot implements comprehensive SQL injection prevention for dynamic UPDATE operations through explicit field name whitelisting:
+
+```typescript
+// Field whitelists derived from Zod schemas
+const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
+    "llm_id",
+    "llm_temperature", 
+    "api_key",
+    "trigger_words",
+    // ... other whitelisted fields
+    // Excludes: tomori_config_id, tomori_id (keys), created_at, updated_at (auto-managed)
+]);
+
+// Validation functions prevent injection
+export function validateTomoriConfigFields(fields: string[]): void {
+    for (const field of fields) {
+        if (!ALLOWED_TOMORI_CONFIG_FIELDS.has(field as keyof TomoriConfigRow)) {
+            throw new Error(`Security violation: Invalid field name '${field}'`);
+        }
+    }
+}
+```
+
+**Secure Dynamic Updates** (`src/utils/db/dbWrite.ts`)
+
+All dynamic UPDATE operations validate field names before SQL construction:
+
+```typescript
+export async function updateTomoriConfig(
+    tomoriId: number,
+    configData: Partial<TomoriConfigRow>
+): Promise<TomoriConfigRow | null> {
+    // 1. Validate data with Zod schema
+    const validConfigData = tomoriConfigSchema.partial().parse(configData);
+    
+    // 2. Extract field names
+    const fields = Object.keys(validConfigData).filter(
+        (key) => key !== "tomori_id" && key !== "tomori_config_id"
+    );
+    
+    // 3. Security validation: Ensure all field names are whitelisted
+    validateTomoriConfigFields(fields);
+    
+    // 4. Build parameterized query
+    fields.forEach((field, index) => {
+        setParts.push(`${field} = $${index + 1}`);  // Field name is validated
+        values.push(validConfigData[field]);        // Value is parameterized
+    });
+    
+    // 5. Execute with sql.unsafe (safe because field names are validated)
+    const result = await sql.unsafe(`
+        UPDATE tomori_configs 
+        SET ${setClause} 
+        WHERE tomori_id = $${finalPlaceholderIndex}
+        RETURNING *
+    `, ...values);
+}
+```
+
+**Security Validation Coverage:**
+- `updateTomoriConfig()` - 22 validated fields
+- `updateTomori()` - 9 validated fields  
+- `updateUser()` - 9 validated fields
+
+### Database Schema Change Security
+
+**Automatic Accommodations:**
+- Adding new fields to Zod schemas - automatically validated
+- Changing field types - validation continues working
+- Adding constraints/indexes - no security impact
+
+**Manual Updates Required:**
+```typescript
+// When adding new updateable fields:
+export const tomoriConfigSchema = z.object({
+    // ... existing fields
+    new_feature_enabled: z.boolean().default(false), // ← New field
+});
+
+// MUST update whitelist in sqlSecurity.ts:
+const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
+    // ... existing fields
+    "new_feature_enabled", // ← ADD THIS
+]);
+```
+
+**Security Checklist for Schema Changes:**
+- ✅ Adding columns with schema updates
+- ✅ Modifying column types (with schema updates)  
+- ⚠️ Adding updateable fields → Update whitelists
+- ⚠️ Renaming fields/tables → Update whitelists + error messages
+- ⚠️ New dynamic query functions → Add validation
 
 ### Data Privacy
 - Personal memories scoped to user and server

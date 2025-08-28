@@ -1,4 +1,5 @@
 import { sql } from "bun";
+import type { SqlParameterArray } from "@/types/db/sqlOperations";
 import {
 	tomoriSchema,
 	userSchema,
@@ -10,6 +11,7 @@ import {
 	serverMemorySchema,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
+import { validateTomoriConfigFields, validateTomoriFields, validateUserFields } from "./sqlSecurity";
 import type { Guild } from "discord.js";
 import {
 	validateMemoryContent,
@@ -195,22 +197,32 @@ export async function setupServer(
 	try {
 		// Start transaction for atomicity (Rule 15)
 		const result = await sql.transaction(async (tx) => {
-			// Use Gemini 2.5 Flash as default
-			const defaultModelName =
-				process.env.DEFAULT_GEMINI_MODEL || "gemini-2.5-flash-preview-05-20";
-			const [defaultLlm] = await tx`
-                SELECT llm_id FROM llms 
-                WHERE llm_codename = ${defaultModelName}
+			// Find the default model for the selected provider using is_default flag
+			let selectedLlm = (await tx`
+                SELECT llm_id, llm_codename, llm_provider 
+                FROM llms 
+                WHERE llm_provider = ${validConfig.provider} AND is_default = true
                 LIMIT 1
-            `;
-			/*
-			// Get default LLM ID - for now we use the first available one
-			const [defaultLlm] = await tx`
-				SELECT llm_id FROM llms 
-				ORDER BY llm_id 
-				LIMIT 1
-			`;
-			*/
+            `)[0];
+
+			// Fallback: if no default is marked for this provider, get the first available model for the provider
+			if (!selectedLlm) {
+				selectedLlm = (await tx`
+					SELECT llm_id, llm_codename, llm_provider 
+					FROM llms 
+					WHERE llm_provider = ${validConfig.provider}
+					ORDER BY llm_id 
+					LIMIT 1
+				`)[0];
+				
+				if (!selectedLlm) {
+					throw new Error(`No models found for provider: ${validConfig.provider}`);
+				}
+				
+				log.warn(`No default model found for provider ${validConfig.provider}, using fallback: ${selectedLlm.llm_codename}`);
+			} else {
+				log.info(`Using default model for ${validConfig.provider}: ${selectedLlm.llm_codename}`);
+			}
 
 			const defaultTriggers = process.env.BASE_TRIGGER_WORDS?.split(",").map(
 				(word) => word.trim(),
@@ -265,7 +277,7 @@ export async function setupServer(
 				)
 				VALUES (
 					${tomori.tomori_id},
-					${defaultLlm.llm_id},
+					${selectedLlm.llm_id},
 					${validConfig.encryptedApiKey},
 					${triggerWordsArrayLiteral}::text[],
 					${validConfig.humanizer}
@@ -406,11 +418,13 @@ export async function updateTomoriConfig(
 			return null;
 		}
 
+		// Security validation: Ensure all field names are whitelisted to prevent SQL injection
+		validateTomoriConfigFields(fields);
+
 		// Dynamically build the SQL SET clause
 		// 1. Prepare arrays for placeholders and values
 		const setParts: string[] = [];
-		// biome-ignore lint/suspicious/noExplicitAny: Using any[] to ensure compatibility with sql.unsafe's spread argument signature
-		const values: any[] = [];
+		const values: SqlParameterArray = [];
 
 		// 2. Iterate through fields to build SET clause parts and collect values
 		fields.forEach((field, index) => {
@@ -519,10 +533,12 @@ export async function updateTomori(
 			return null;
 		}
 
+		// Security validation: Ensure all field names are whitelisted to prevent SQL injection
+		validateTomoriFields(fields);
+
 		// 1. Prepare arrays for placeholders and values
 		const setParts: string[] = [];
-		// biome-ignore lint/suspicious/noExplicitAny: Using any[] to ensure compatibility with sql.unsafe's spread argument signature
-		const values: any[] = [];
+		const values: SqlParameterArray = [];
 
 		// 2. Iterate through fields to build SET clause parts and collect values
 		fields.forEach((field, index) => {
@@ -628,10 +644,12 @@ export async function updateUser(
 			return null;
 		}
 
+		// Security validation: Ensure all field names are whitelisted to prevent SQL injection
+		validateUserFields(fields);
+
 		// 1. Prepare arrays for placeholders and values
 		const setParts: string[] = [];
-		// biome-ignore lint/suspicious/noExplicitAny: Using any[] to ensure compatibility with sql.unsafe's spread argument signature
-		const values: any[] = [];
+		const values: SqlParameterArray = [];
 
 		// 2. Iterate through fields to build SET clause parts and collect values
 		fields.forEach((field, index) => {

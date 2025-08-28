@@ -18,7 +18,10 @@ import {
 	humanizeString,
 } from "./stringHelper";
 import { HumanizerDegree, type TomoriConfigRow } from "@/types/db/schema";
-import { getAvailableToolsForContext, type ToolStateForContext } from "@/tools/toolRegistry";
+import {
+	getAvailableToolsForContext,
+	type ToolStateForContext,
+} from "@/tools/toolRegistry";
 import { GoogleToolAdapter } from "@/providers/google/googleToolAdapter";
 // Import ServerEmojiRow if needed for emoji query result type
 // import type { ServerEmojiRow } from "../../types/db/schema";
@@ -29,22 +32,37 @@ import { GoogleToolAdapter } from "@/providers/google/googleToolAdapter";
  * @param toolState - Minimal state for tool feature flag checking
  * @returns Object with function declarations for different tool types
  */
-function getFunctionDeclarations(provider: string, toolState: ToolStateForContext) {
+function getFunctionDeclarations(
+	provider: string,
+	toolState: ToolStateForContext,
+) {
 	const googleAdapter = GoogleToolAdapter.getInstance();
 	const availableTools = getAvailableToolsForContext(provider, toolState);
-	
+
 	// Find specific tools by name
-	const stickerTool = availableTools.find(tool => tool.name === "select_sticker_for_response");
-	const searchTool = availableTools.find(tool => tool.name === "brave_web_search");
-	const memoryTool = availableTools.find(tool => tool.name === "remember_this_fact");
-	
+	const stickerTool = availableTools.find(
+		(tool) => tool.name === "select_sticker_for_response",
+	);
+	const searchTool = availableTools.find(
+		(tool) => tool.name === "brave_web_search",
+	);
+	const memoryTool = availableTools.find(
+		(tool) => tool.name === "remember_this_fact",
+	);
+
 	// Convert to Google function declarations
 	const declarations = {
-		selectStickerFunctionDeclaration: stickerTool ? googleAdapter.convertTool(stickerTool) : null,
-		braveWebSearchFunctionDeclaration: searchTool ? googleAdapter.convertTool(searchTool) : null,
-		rememberThisFactFunctionDeclaration: memoryTool ? googleAdapter.convertTool(memoryTool) : null,
+		selectStickerFunctionDeclaration: stickerTool
+			? googleAdapter.convertTool(stickerTool)
+			: null,
+		braveWebSearchFunctionDeclaration: searchTool
+			? googleAdapter.convertTool(searchTool)
+			: null,
+		rememberThisFactFunctionDeclaration: memoryTool
+			? googleAdapter.convertTool(memoryTool)
+			: null,
 	};
-	
+
 	return declarations;
 }
 
@@ -55,7 +73,7 @@ function getFunctionDeclarations(provider: string, toolState: ToolStateForContex
 const mentionCache = new Map<string, string>();
 
 const HUMANIZE_INSTRUCTION =
-	"\n{bot} limits themselves to only 0 to 2 emojis per response (from the available server emojis) and makes sure to respond short and concisely, as {bot} is aware that no one really likes to read walls of text. {bot} only makes lengthy responses if and only if people are asking for assistance or an explanation that warrants it.";
+	"\n{bot} limits themselves to only 0 to 2 emojis per response ({bot} prefers to use available server emojis than normal emojis) and makes sure to respond short and concisely, as {bot} is aware that no one really likes to read walls of text. {bot} only makes lengthy responses if and only if people are asking for assistance or an explanation that warrants it.";
 
 /**
  * Simplified message structure received from tomoriChat.ts.
@@ -277,10 +295,10 @@ export async function buildContext({
 		config: tomoriConfig,
 	};
 	const functionDeclarations = getFunctionDeclarations("google", toolState);
-	const { 
-		selectStickerFunctionDeclaration, 
-		braveWebSearchFunctionDeclaration, 
-		rememberThisFactFunctionDeclaration 
+	const {
+		selectStickerFunctionDeclaration,
+		braveWebSearchFunctionDeclaration,
+		rememberThisFactFunctionDeclaration,
 	} = functionDeclarations;
 
 	// 1. System Instruction (Tomori's Personality and Humanizer)
@@ -329,7 +347,10 @@ export async function buildContext({
 	}
 
 	// 8.c. Self-Teach Function Guidance
-	if (tomoriConfig.self_teaching_enabled && rememberThisFactFunctionDeclaration) {
+	if (
+		tomoriConfig.self_teaching_enabled &&
+		rememberThisFactFunctionDeclaration
+	) {
 		// 1. Use the actual function name and description from the declaration.
 		const selfTeachFuncName = rememberThisFactFunctionDeclaration.name;
 		// 2. Craft a more detailed instruction based on the function's parameters and purpose.
@@ -505,45 +526,44 @@ export async function buildContext({
 				userRowsAttempt.find((u) => u?.user_disc_id === userIdToProcess) ||
 				null;
 
+			// Always try to fetch member for server nickname, regardless of registration status
+			const guild = client.guilds.cache.get(guildId);
+			let member = null;
+			if (guild) {
+				member = await guild.members
+					.fetch(userIdToProcess)
+					.catch(() => null);
+			}
+
 			if (!userRow) {
-				// If user not found in initial batch load (or failed), try to fetch from Discord and register them
+				// If user not found in initial batch load (or failed), try to register them
 				try {
 					log.info(
 						`User ${userIdToProcess} not found in initial DB load, attempting to fetch from Discord and register.`,
 					);
-					const guild = client.guilds.cache.get(guildId);
-					if (guild) {
-						const member = await guild.members
-							.fetch(userIdToProcess)
-							.catch(() => null);
-						if (member) {
-							const serverLocale = guild.preferredLocale;
-							const userLanguage = serverLocale.startsWith("ja")
-								? "ja"
-								: "en-US";
-							userRow = await registerUser(
-								// This will UPSERT
-								userIdToProcess,
-								member.user.username, // Base username for registration
-								userLanguage,
+					if (guild && member) {
+						const serverLocale = guild.preferredLocale;
+						const userLanguage = serverLocale.startsWith("ja")
+							? "ja"
+							: "en-US";
+						userRow = await registerUser(
+							// This will UPSERT
+							userIdToProcess,
+							member.user.username, // Base username for registration
+							userLanguage,
+						);
+						if (userRow) {
+							log.info(
+								`Successfully registered/loaded user ${userIdToProcess} (${member.user.username}) after fetch.`,
 							);
-							if (userRow) {
-								log.info(
-									`Successfully registered/loaded user ${userIdToProcess} (${member.user.username}) after fetch.`,
-								);
-							} else {
-								log.warn(
-									`Failed to register user ${userIdToProcess} after fetching from Discord.`,
-								);
-							}
 						} else {
 							log.warn(
-								`Could not fetch member ${userIdToProcess} from Discord for registration.`,
+								`Failed to register user ${userIdToProcess} after fetching from Discord.`,
 							);
 						}
 					} else {
 						log.warn(
-							`Guild ${guildId} not found in cache for user registration process.`,
+							`Could not fetch member ${userIdToProcess} from Discord for registration.`,
 						);
 					}
 				} catch (error) {
@@ -570,8 +590,26 @@ export async function buildContext({
 			}
 
 			// At this point, userRow is considered valid.
-			const nickname = userRow.user_nickname || `<@${userRow.user_disc_id}>`; // Fallback to mention format
 			const userDiscordId = userRow.user_disc_id;
+			
+			// Format nickname to include both custom nickname and server nickname
+			let displayName: string;
+			const customNickname = userRow.user_nickname;
+			const serverNickname = member?.nickname;
+			
+			if (customNickname) {
+				// Use custom nickname as base, add server nickname if it exists
+				displayName = serverNickname 
+					? `${customNickname} (Server Nickname: "${serverNickname}")`
+					: customNickname;
+			} else if (serverNickname) {
+				// No custom nickname but has server nickname
+				displayName = serverNickname;
+			} else {
+				// No custom or server nickname, fallback to mention format
+				displayName = `<@${userRow.user_disc_id}>`;
+			}
+			const nickname = displayName;
 
 			let userSpecificContent = "";
 
@@ -591,15 +629,15 @@ export async function buildContext({
 				if (userRow.personal_memories && userRow.personal_memories.length > 0) {
 					// Process personal memories with the memory owner's name for {user} token replacement
 					const processedMemories = await Promise.all(
-						userRow.personal_memories.map(memory => 
+						userRow.personal_memories.map((memory) =>
 							convertMentions(
 								memory,
 								client,
 								guildId,
 								nickname, // Use the memory owner's name, not the triggerer's name
 								botName,
-							)
-						)
+							),
+						),
 					);
 					userSpecificContent += `## ${botName}'s Memories about ${nickname} (User ID: ${userDiscordId})\n${processedMemories.join("\n")}\n`;
 				}

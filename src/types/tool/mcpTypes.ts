@@ -147,16 +147,99 @@ export interface FetchMCPResponse extends MCPServerResponse {
 }
 
 /**
- * DuckDuckGo Search response structure (for future implementation)
+ * DuckDuckGo & Felo AI Search response structures
+ * Comprehensive interfaces for all 4 tools in the @oevortex/ddg_search package
  */
-export interface DuckDuckGoSearchResponse extends MCPServerResponse {
+
+/**
+ * DuckDuckGo Web Search response structure (web-search tool)
+ */
+export interface DuckDuckGoWebSearchResponse extends MCPServerResponse {
 	results?: Array<{
 		title: string;
 		url: string;
 		snippet: string;
+		rank?: number;
 	}>;
 	query?: string;
+	page?: number;
+	numResults?: number;
 }
+
+/**
+ * Felo AI Search response structure (felo-search tool)
+ */
+export interface FeloAISearchResponse extends MCPServerResponse {
+	ai_response?: string;
+	query?: string;
+	stream?: boolean;
+	sources?: Array<{
+		title?: string;
+		url?: string;
+		snippet?: string;
+	}>;
+}
+
+/**
+ * URL Content Fetch response structure (fetch-url tool)
+ */
+export interface URLContentResponse extends MCPServerResponse {
+	url?: string;
+	page_content?: string;
+	title?: string;
+	extracted_text?: string;
+	main_content?: string;
+	links?: Array<{
+		text: string;
+		url: string;
+	}>;
+	images?: Array<{
+		alt: string;
+		src: string;
+	}>;
+	content_length?: number;
+	truncated?: boolean;
+	maxLength?: number;
+	extractMainContent?: boolean;
+	includeLinks?: boolean;
+	includeImages?: boolean;
+	excludeTags?: string[];
+}
+
+/**
+ * URL Metadata response structure (url-metadata tool)
+ */
+export interface URLMetadataResponse extends MCPServerResponse {
+	url?: string;
+	title?: string;
+	description?: string;
+	keywords?: string[];
+	author?: string;
+	published_date?: string;
+	og_title?: string;
+	og_description?: string;
+	og_image?: string;
+	og_url?: string;
+	twitter_title?: string;
+	twitter_description?: string;
+	twitter_image?: string;
+	canonical_url?: string;
+	favicon?: string;
+	images?: Array<{
+		url: string;
+		alt?: string;
+		width?: number;
+		height?: number;
+	}>;
+	language?: string;
+	charset?: string;
+}
+
+/**
+ * Legacy DuckDuckGo Search response (for backward compatibility)
+ * @deprecated Use DuckDuckGoWebSearchResponse instead
+ */
+export interface DuckDuckGoSearchResponse extends DuckDuckGoWebSearchResponse {}
 
 /**
  * MCP parameter override configuration

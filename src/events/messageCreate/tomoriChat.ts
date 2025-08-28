@@ -27,7 +27,7 @@ import {
 } from "../../utils/text/youTubeUrlCleaner";
 import { PeekProfilePictureTool } from "../../tools/functionCalls/peekProfilePictureTool";
 import { decryptApiKey } from "@/utils/security/crypto";
-import { localizer } from "../../utils/text/localizer";
+import { localizer, getSupportedLocales } from "../../utils/text/localizer";
 
 import type { TomoriState } from "@/types/db/schema";
 // Provider-specific function declarations moved to providers
@@ -45,7 +45,6 @@ const MESSAGE_FETCH_LIMIT = 80;
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
 	(word) => word.trim(),
 ) || ["tomori", "tomo", "トモリ", "ともり"];
-
 
 const MAX_FUNCTION_CALL_ITERATIONS = 5; // Safety break for function call loops
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
@@ -368,7 +367,8 @@ export default async function tomoriChat(
 			}
 
 			/**
-			 * Check if an embed title matches target localizer keys that should be processed as text
+			 * Check if an embed title matches target localizer keys that should be processed as text.
+			 * Checks against all supported locales to handle cross-locale embed detection.
 			 * @param embedTitle - The embed title to check
 			 * @returns Object with isTarget boolean and the type of target found
 			 */
@@ -378,36 +378,39 @@ export default async function tomoriChat(
 			} {
 				if (!embedTitle) return { isTarget: false, type: null };
 
-				// Target localizer keys for memory learning embeds
-				const memoryLearningTitles = [
-					localizer(locale, "genai.self_teach.server_memory_learned_title"),
-					localizer(locale, "genai.self_teach.personal_memory_learned_title"),
-				];
+				// Check against all supported locales to handle cross-locale scenarios
+				// (e.g., Japanese user creates reset embed, English user should still detect it)
+				for (const supportedLocale of getSupportedLocales()) {
+					// Target localizer keys for memory learning embeds
+					const memoryLearningTitles = [
+						localizer(supportedLocale, "genai.self_teach.server_memory_learned_title"),
+						localizer(supportedLocale, "genai.self_teach.personal_memory_learned_title"),
+					];
 
-				// Target localizer key for conversation reset
-				const resetTitle = localizer(locale, "commands.tool.refresh.title");
+					// Target localizer key for conversation reset
+					const resetTitle = localizer(supportedLocale, "commands.tool.refresh.title");
+
+					// Check for memory learning embeds
+					if (memoryLearningTitles.some(title => embedTitle === title)) {
+						return { isTarget: true, type: 'memory_learning' };
+					}
+
+					// Check for reset embed
+					if (embedTitle === resetTitle) {
+						return { isTarget: true, type: 'reset' };
+					}
+				}
 
 				// EXTENSIBILITY EXAMPLE: Adding new embed types is easy!
 				// 1. Add new type to union: 'memory_learning' | 'reset' | 'new_type' | null
-				// 2. Add new localizer keys:
+				// 2. Add new localizer checks inside the locale loop:
 				// const newTypeTitles = [
-				//     localizer(locale, "commands.some_feature.title"),
-				//     localizer(locale, "genai.some_other.title"),
+				//     localizer(supportedLocale, "commands.some_feature.title"),
+				//     localizer(supportedLocale, "genai.some_other.title"),
 				// ];
-				// 3. Add new check:
 				// if (newTypeTitles.some(title => embedTitle === title)) {
 				//     return { isTarget: true, type: 'new_type' };
 				// }
-
-				// Check for memory learning embeds
-				if (memoryLearningTitles.some(title => embedTitle === title)) {
-					return { isTarget: true, type: 'memory_learning' };
-				}
-
-				// Check for reset embed
-				if (embedTitle === resetTitle) {
-					return { isTarget: true, type: 'reset' };
-				}
 
 				return { isTarget: false, type: null };
 			}
@@ -422,7 +425,9 @@ export default async function tomoriChat(
 					const referenceMessage = await message.channel.messages.fetch(
 						message.reference.messageId,
 					);
-					isReplyToBot = referenceMessage?.author.id === client.user?.id;
+					if (referenceMessage) {
+						isReplyToBot = referenceMessage.author.id === client.user?.id;
+					}
 				} catch (fetchError) {
 					log.warn(
 						"Could not fetch reference message for reply check",
@@ -588,8 +593,9 @@ export default async function tomoriChat(
 			const simplifiedMessages: SimplifiedMessageForContext[] = []; // Array for structured messages
 			const userListSet = new Set<string>(); // Still useful for fetching user-specific memories/data
 
-			for (const msg of relevantMessagesArray) {
+			for (const [index, msg] of relevantMessagesArray.entries()) {
 				const authorId = msg.author.id;
+				const isLastMessage = index === relevantMessagesArray.length - 1;
 
 				// 1. Check for debug prefix "$:" at the start of the message
 				const isDebugMessage = msg.content.startsWith("$:"); // Easter egg functionality hehehe
@@ -600,7 +606,37 @@ export default async function tomoriChat(
 					processedContent = msg.content.slice(2); // Remove "$:" prefix
 				}
 
-				// 3. Determine author name and ID based on message type
+				// 3. Add reference context if this is the last message and it's replying to another message
+				if (isLastMessage && msg.reference?.messageId && processedContent) {
+					try {
+						const msgReferencedMessage = await channel.messages.fetch(
+							msg.reference.messageId,
+						);
+						if (msgReferencedMessage) {
+							// Get the author name for the referenced message
+							const referencedAuthorName = msgReferencedMessage.author.id === client.user?.id
+								? tomoriState?.tomori_nickname || "Bot"
+								: msgReferencedMessage.author.username;
+							
+							// Get the referenced message content (truncate if too long)
+							let referencedContent = msgReferencedMessage.content || "[No text content]";
+							if (referencedContent.length > 200) {
+								referencedContent = `${referencedContent.substring(0, 197)}...`;
+							}
+
+							// Add reference context to the message
+							const referenceContext = `[System: This message is referring to a previous message by ${referencedAuthorName} saying: ${referencedContent}]`;
+							processedContent = `${referenceContext}\n${processedContent}`;
+						}
+					} catch (fetchError) {
+						log.warn(
+							`Could not fetch referenced message ${msg.reference.messageId} for context`,
+							fetchError,
+						);
+					}
+				}
+
+				// 4. Determine author name and ID based on message type
 				let effectiveAuthorId = authorId;
 				let authorName: string;
 				
@@ -615,7 +651,7 @@ export default async function tomoriChat(
 					[];
 				const videoAttachments: SimplifiedMessageForContext["videoAttachments"] =
 					[];
-				let messageContentForLlm: string | null = processedContent; // Use processed content (with "$:" removed if present)
+				let messageContentForLlm: string | null = processedContent; // Use processed content (with reference context and "$:" removed if present)
 				let hasProcessedEmbed = false; // Track if this message contains a processed embed
 
 				// Process embeds for target titles that should be included as text content
@@ -655,7 +691,7 @@ export default async function tomoriChat(
 					authorName = tomoriState?.tomori_nickname || "Bot"; // Keep bot nickname
 				}
 
-				// 10.a. Process direct image attachments and stickers
+				// 5.a. Process direct image attachments and stickers
 				if (msg.attachments.size > 0) {
 					for (const attachment of msg.attachments.values()) {
 						if (
@@ -730,7 +766,7 @@ export default async function tomoriChat(
 					}
 				}
 
-				// 10.b. Check for Tenor GIF links if no direct image attachments were found
+				// 5.b. Check for Tenor GIF links if no direct image attachments were found
 				// and the message content solely consists of a Tenor link.
 				/*
 			if (
@@ -753,16 +789,16 @@ export default async function tomoriChat(
 				);
 			}*/
 
-				// 10.c. Check if this message is from the same effective author as the previous one
+				// 5.c. Check if this message is from the same effective author as the previous one
 				const prevMessage = simplifiedMessages[simplifiedMessages.length - 1];
 
-				// 4. Check if the previous message was also a debug message
+				// 6. Check if the previous message was also a debug message
 				const prevWasDebugMessage =
 					prevMessage &&
 					prevMessage.authorName === tomoriState?.tomori_nickname &&
 					prevMessage.authorId !== client.user?.id; // Was debug message if it shows as Tomori but isn't actually from the bot
 
-				// 5. Only combine messages from the same "effective author"
+				// 7. Only combine messages from the same "effective author"
 				// This prevents combining debug messages ($:) with regular messages from the same user
 				// and prevents combining processed embed messages with other messages
 				const isSameEffectiveAuthor =
@@ -770,7 +806,7 @@ export default async function tomoriChat(
 					prevMessage.authorId === effectiveAuthorId &&
 					prevWasDebugMessage === isDebugMessage;
 
-				// 10.d. Determine if we should combine with the previous message or create a new entry
+				// 5.d. Determine if we should combine with the previous message or create a new entry
 				if (
 					isSameEffectiveAuthor &&
 					messageContentForLlm &&
@@ -1333,7 +1369,7 @@ export default async function tomoriChat(
 					await sendStandardEmbed(channel, locale, {
 						color: ColorCode.ERROR,
 						titleKey: "genai.generic_error_title",
-						descriptionKey: "genai.streaming_failed_description",
+						descriptionKey: "genai.stream.streaming_failed_description",
 						descriptionVars: {
 							error_message:
 								streamingError instanceof Error

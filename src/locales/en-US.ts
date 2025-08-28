@@ -29,6 +29,7 @@ export default {
 
 		// Common error messages
 		errors: {
+			command_timeout: `Command timed out. Please try again.`,
 			guild_only_title: `Server Only Command`,
 			guild_only_description: `This command can only be used within a server channel. I don't work in DMs or group chats currently!`,
 			dm_not_supported_title: `DMs Not Supported`,
@@ -56,6 +57,15 @@ export default {
 					footer: `Get a free API key at https://brave.com/search/api/`,
 				},
 			},
+			duckduckgo_rate_limit: {
+				title: `DuckDuckGo Rate Limited`,
+				description: `DuckDuckGo search is currently rate limited. For more reliable searching, an administrator can set up Brave Search using \`/config braveapiset\`.`,
+				footer: `Get a free Brave Search API key at https://brave.com/search/api/`,
+			},
+			operation_failed_title: `Operation Failed`,
+			operation_failed_description: `The requested operation could not be completed. Please try again.`,
+			provider_not_supported_title: `Provider Not Supported`,
+			provider_not_supported_description: `The selected AI provider is not currently supported.`,
 		},
 		tomori_busy_title: "Busy Replying to Someone Else!",
 		tomori_busy_replying:
@@ -117,6 +127,12 @@ export default {
 			response_stopped_title: "Response Interrupted",
 			response_stopped_description:
 				"The response was interrupted for the following reason: {reason}. The output may be incomplete.",
+			prohibited_content_title: "Content Policy Violation",
+			prohibited_content_description:
+				"The response was blocked due to prohibited content detection.",
+			prohibited_content_admin_notice_title: "Admin Notice",
+			prohibited_content_admin_notice_description:
+				"Please review the prompts and context used to ensure they comply with content policies.",
 			// For generic stream errors, we can reuse:
 			// genai.generic_error_title
 			// genai.generic_error_description
@@ -147,6 +163,11 @@ export default {
 				"Note: This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here.",
 			personal_memory_footer_user_blacklisted:
 				"Note: This memory was saved, but the user in question is currently blacklisted from personalization features on this server.",
+		},
+
+		// Test/placeholder keys
+		some_other: {
+			title: `Test GenAI Feature`,
 		},
 	},
 
@@ -222,6 +243,18 @@ Discord API Latency: \`{discord_response}ms\``,
 				unknown_channel: `Unknown Channel ID:`,
 				not_available: `N/A`,
 			},
+		},
+
+		// Help commands
+		help: {
+			apikey: {
+				title: `API Key Help`,
+			},
+		},
+
+		// Test/placeholder commands
+		some_feature: {
+			title: `Test Feature`,
 		},
 
 		// Bot manual control commands
@@ -301,14 +334,24 @@ Discord API Latency: \`{discord_response}ms\``,
 				added_description: `Added \`{user_name}\` to the personalization blacklist. Their personal memories and nickname won't be used.`,
 				removed_title: `Member Unblacklisted`,
 				removed_description: `Removed \`{user_name}\` from the personalization blacklist. Their personal memories and nickname can now be used.`,
+				user_registration_failed_title: `User Registration Failed`,
+				user_registration_failed_description: `Failed to register user in the database. Please try again.`,
 			},
 			humanizerdegree: {
 				description: `Set how 'human-like' Tomori's responses should feel.`,
 				value_description: `The level of humanization (0=None, 1=Prompt, 2=Typing/Chunking, 3=Lowercase/No Punctuation).`,
+				modal_title: `Set Humanizer Degree`,
+				select_label: `Humanizer Level`,
+				select_description: `Choose how human-like Tomori's responses should feel`,
+				select_placeholder: `Choose a level...`,
 				choice_none: `0: None (Raw AI Output)`,
 				choice_light: `1: Light (Prompt Injection - Default)`,
 				choice_medium: `2: Medium (Typing Simulation & Chunking)`,
 				choice_heavy: `3: Heavy (Lowercase & No Punctuation)`,
+				desc_none: `No humanization. Standard AI responses with formal tone and structure.`,
+				desc_light: `Adds human-like response guidelines. Limits emojis (0-2), prefers concise responses.`,
+				desc_medium: `Light features + typing simulation and improved message chunking for natural flow.`,
+				desc_heavy: `All features + casual text processing (lowercase, reduced punctuation) for informal tone.`,
 				invalid_value_title: `Invalid Value`,
 				invalid_value_description: `Humanizer degree must be between {min} and {max}.`,
 				already_set_title: `Humanizer Already Set`,
@@ -338,16 +381,30 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_title: `Member Permissions Updated`,
 				enabled_success: `Members can now teach: \`{permission_type}\`.`,
 				disabled_success: `Members can no longer teach: \`{permission_type}\`.`,
+				already_set_title: `Permission Already Set`,
+				already_enabled_description: `Members are already allowed to teach \`{permission_type}\`.`,
+				already_disabled_description: `Members are already prevented from teaching \`{permission_type}\`.`,
 			},
 			model: {
 				description: `Change the underlying AI model Tomori uses.`,
 				name_description: `Select the desired Gemini model.`,
+				modal_title: `Select AI Model`,
+				select_label: `AI Model`,
+				select_description: `Choose the AI model for Tomori to use`,
+				select_placeholder: `Choose a model...`,
+				no_api_key_title: `No API Key Set`,
+				no_api_key_description: `An API key must be configured before changing models. Please use \`/config apikeyset\` to set an API key first.`,
 				no_models_title: `No Models Found`,
 				no_models_description: `Could not load available AI models from the database.`,
 				invalid_model_title: `Invalid Model`,
 				invalid_model_description: `The selected model name is not valid or available.`,
 				already_selected_title: `Model Already Selected`,
 				already_selected_description: `Tomori is already using the \`{model_name}\` model.`,
+				validating_api_key_compatibility: `Validating API key compatibility with new provider...`,
+				api_key_incompatible_title: `API Key Incompatible`,
+				api_key_incompatible_description: `The current API key is not compatible with the {model_name} model from {provider}. Please set a valid API key for {provider} using \`/config apikeyset\`.`,
+				validation_error_title: `Validation Error`,
+				validation_error_description: `An error occurred while validating API key compatibility. Please try again.`,
 				success_title: `Model Updated`,
 				success_description: `Tomori will now use the \`{model_name}\` model (previously \`{previous_model}\`).`,
 			},
@@ -377,15 +434,28 @@ Discord API Latency: \`{discord_response}ms\``,
 				trigger_words_label: `Trigger Words`,
 			},
 			apikeyset: {
-				description: `Set the Google Gemini API key for this server.`,
+				description: `Set the API key for your chosen AI provider.`,
 				key_description: `Your Google Gemini API key.`,
+				modal_title: `Set API Key`,
+				provider_label: `AI Provider`,
+				provider_description: `Choose the AI provider for your API key`,
+				provider_placeholder: `Select a provider...`,
+				api_key_label: `API Key`,
+				api_key_description: `Enter your API key for the selected provider`,
+				api_key_placeholder: `Paste your API key here...`,
+				no_providers_title: `No Providers Available`,
+				no_providers_description: `No AI providers are available in the database. Please contact the bot administrator.`,
 				invalid_key_title: `Invalid API Key Format`,
 				invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid key.`,
-				validating_key: `Validating API key with Google...`,
+				validating_key: `Validating API key...`,
+				unsupported_provider_title: `Unsupported Provider`,
+				unsupported_provider_description: `The provider "{provider}" is not currently supported for API key validation.`,
+				validation_error_title: `Validation Error`,
+				validation_error_description: `An error occurred while validating the API key. Please try again.`,
 				key_validation_failed_title: `API Key Validation Failed`,
-				key_validation_failed_description: `The provided API key is not valid according to Google. Please check the key and try again.`,
+				key_validation_failed_description: `The provided API key is not valid for {provider}. Please check the key and try again.`,
 				success_title: `API Key Set`,
-				success_description: `The Google Gemini API key has been successfully validated, encrypted, and saved.`,
+				success_description: `The {provider} API key has been successfully validated, encrypted, and saved.`,
 			},
 			braveapiset: {
 				description: `Set the Brave Search API key for this server.`,
@@ -403,12 +473,31 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_title: `Brave API Key Removed`,
 				success_description: `The Brave Search API key has been successfully removed.`,
 			},
+			rename: {
+				description: `Change Tomori's name and trigger words.`,
+				option_description: `The new name for Tomori (2-32 characters).`,
+				invalid_length_title: `Invalid Name Length`,
+				invalid_length: `Name must be between 2 and 32 characters.`,
+				already_set_title: `Name Already Set`,
+				already_set_description: `Tomori's name is already set to \`{name}\`.`,
+				success_title: `Name Updated`,
+				success_description: `Tomori's name changed from \`{old_name}\` to \`{new_name}\`.`,
+				success_with_trigger_description: `Tomori's name changed from \`{old_name}\` to \`{new_name}\`. Trigger words updated accordingly.`,
+				partial_success_title: `Name Updated with Issues`,
+				partial_success_description: `Tomori's name changed to \`{new_name}\`, but some trigger word updates failed.`,
+			},
 			setup: {
 				description: `Start the initial setup process for Tomori.`,
 				no_presets_found: `Error: No personality presets found for your language. Cannot proceed with setup.`,
 				modal_title: `Tomori Initial Setup`,
-				api_key_label: `Google Gemini API Key`,
-				preset_label: `Personality Preset Name`,
+				api_provider_label: `API Provider`,
+				api_provider_description: `Please choose the provider of the LLM of your choice`,
+				api_provider_placeholder: `Choose...`,
+				api_key_label: `API Key`,
+				api_key_description: `Please enter the API key of your chosen LLM provider.\n\n**Get your API key:**\n• [Google AI Studio](https://aistudio.google.com/app/apikey) - Free tier available\n• [OpenAI Platform](https://platform.openai.com/api-keys) - Pay-as-you-go\n• [Anthropic Console](https://console.anthropic.com/settings/keys) - Credit-based billing\n• [OpenRouter](https://openrouter.ai/keys) - Multiple providers`,
+				preset_label: `Personality Preset`,
+				preset_description: `Choose a personality preset for Tomori`,
+				preset_placeholder: `Choose a personality...`,
 				humanizer_label: `Humanizer Level (0-3)`,
 				api_key_invalid: `Error: The API key provided is too short or invalid.`,
 				api_key_validating: `Validating API key with Google...`,
@@ -438,17 +527,17 @@ Discord API Latency: \`{discord_response}ms\``,
 			},
 			preset: {
 				description: `Apply a preset personality configuration to Tomori`,
+				modal_title: `Apply Personality Preset`,
+				select_label: `Personality Preset`,
+				select_description: `Choose a preset to apply to Tomori. This will overwrite current attributes and dialogues.`,
+				select_placeholder: `Choose a preset...`,
 				no_presets_title: `No Presets Available`,
 				no_presets_description: `There are no personality presets available for your language. Please contact the bot administrator.`,
+				preset_not_found: `The selected preset could not be found.`,
 				select_title: `Select Personality Preset`,
-				select_description: `Choose a preset to apply to Tomori.
-
-⚠️ **Warning:** This will overwrite the current Attribute List and Sample Dialogues!
-
-{items}`, // Natural line breaks here
 				preset_label: `Preset`,
 				success_title: `Preset Applied`,
-				success_description: `Successfully applied the '{preset}' preset to Tomori.`,
+				success_description: `Successfully applied the '{preset_name}' preset to Tomori.`,
 			},
 			tomoripermissions: {
 				description: `Configure Tomori's core behavior permissions on this server.`,
@@ -476,7 +565,11 @@ Discord API Latency: \`{discord_response}ms\``,
 				teaching_disabled_description: `Members are not currently allowed to teach sample dialogues on this server. An admin can enable this using \`/config memberpermissions\`.`,
 				modal_title: `Add Sample Dialogue`,
 				user_input_label: `User's Line`,
+				user_input_description: `A sample question for the bot (eg. What's your favorite food?)`,
+				user_input_placeholder: `What's your favorite food?`,
 				bot_input_label: `Tomori's Response`,
+				bot_input_description: `How the bot should respond (eg. I-I like mangoes...)`,
+				bot_input_placeholder: `I-I like mangoes...`,
 				success_title: `Sample Dialogue Added`,
 				success_description: `Successfully added a new sample dialogue pair:
 
@@ -491,7 +584,9 @@ Discord API Latency: \`{discord_response}ms\``,
 				teaching_disabled_title: `Attribute Teaching Disabled`,
 				teaching_disabled_description: `Members are not currently allowed to teach personality attributes on this server. An admin can enable this using \`/config memberpermissions\`.`,
 				modal_title: `Add Personality Attribute`,
+				modal_description: `A personality trait that Tomori has for this server (eg. Likes mangoes)`,
 				attribute_input_label: `New Attribute`,
+				attribute_input_placeholder: `Likes mangoes`,
 				duplicate_title: `Duplicate Attribute`,
 				duplicate_description: `This attribute '{attribute}' is already in Tomori's attribute list.`,
 				success_title: `Attribute Added`,
@@ -502,7 +597,9 @@ Discord API Latency: \`{discord_response}ms\``,
 				teaching_disabled_title: `Server Memory Teaching Disabled`,
 				teaching_disabled_description: `Members are not currently allowed to add server memories on this server. An admin can enable this using \`/config memberpermissions\`.`,
 				modal_title: `Add Server Memory`,
+				modal_description: `A memory that TomoriBot remembers for this server only (eg. This server's members like mangoes)`,
 				memory_input_label: `New Server Memory`,
+				memory_input_placeholder: `This server's members like mangoes`,
 				duplicate_title: `Duplicate Memory`,
 				duplicate_description: `This memory '{memory}' is already in Tomori's server memories.`,
 				limit_exceeded_title: `Server Memory Limit Reached`,
@@ -515,7 +612,9 @@ Discord API Latency: \`{discord_response}ms\``,
 			personalmemory: {
 				description: `Add a personal memory only you can see.`,
 				modal_title: `Add Personal Memory`,
+				modal_description: `A memory of you that TomoriBot remembers no matter the server (eg. Likes mangoes)`,
 				memory_input_label: `New Personal Memory`,
+				memory_input_placeholder: `Likes mangoes`,
 				duplicate_title: `Duplicate Personal Memory`,
 				duplicate_description: `This memory '{memory}' is already in your personal memories.`,
 				limit_exceeded_title: `Personal Memory Limit Reached`,
@@ -527,6 +626,9 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_but_disabled_description: `Successfully added '{memory}' to your personal memories.
 
 **Warning:** Personalization is currently disabled on this server, so this memory won't be used here. It will still be available on other servers where personalization is enabled.`, // Natural line break
+				success_but_blacklisted_description: `Successfully added '{memory}' to your personal memories.
+
+**Warning:** You are currently blacklisted from personalization features on this server, so this memory won't be used here. It will still be available on other servers where you are not blacklisted.`, // Natural line break
 			},
 			nickname: {
 				description: `Change the name Tomori uses to refer to you.`,
@@ -545,43 +647,57 @@ Discord API Latency: \`{discord_response}ms\``,
 		unlearn: {
 			sampledialogue: {
 				description: `Remove a sample user/bot dialogue pair from Tomori's memory.`,
+				modal_title: `Remove Sample Dialogue`,
+				select_label: `Dialogue to Remove`,
+				select_description: `Choose which dialogue pair to remove`,
+				select_placeholder: `Select a dialogue...`,
 				no_dialogues_title: `No Sample Dialogues`,
 				no_dialogues: `There are no sample dialogues stored to remove. Add some with \`/teach sampledialogue\`.`,
 				select_title: `Remove Sample Dialogue`,
-				select_description: `Select the dialogue pair you want to remove:
-
-{items}`, // Natural line break
 				dialogue_label: `Dialogue Pair`,
+				success_title: `Sample Dialogue Removed`,
+				success_description: `Successfully removed the dialogue pair: User: "{input}" → Bot: "{output}"`,
 			},
 			attribute: {
 				description: `Remove a personality attribute from Tomori's memory.`,
+				modal_title: `Remove Attribute`,
+				select_label: `Attribute to Remove`,
+				select_description: `Choose which attribute to remove from Tomori's personality`,
+				select_placeholder: `Select an attribute...`,
 				no_attributes_title: `No Attributes`,
 				no_attributes: `There are no personality attributes to remove. Add some with \`/teach attribute\`.`,
 				select_title: `Remove Attribute`,
-				select_description: `Select the attribute you want to remove:
-
-{items}`, // Natural line break
 				attribute_label: `Attribute`,
+				success_title: `Attribute Removed`,
+				success_description: `Successfully removed the attribute: "{attribute}"`,
 			},
 			servermemory: {
 				description: `Remove a server memory from Tomori's knowledge.`,
+				modal_title: `Remove Server Memory`,
+				select_label: `Memory to Remove`,
+				select_description: `Choose which server memory to remove`,
+				select_placeholder: `Select a memory...`,
 				no_memories_title: `No Server Memories`,
 				no_memories: `There are no server memories stored for this server. Add some with \`/teach servermemory\`.`,
+				no_owned_memories: `You don't own any server memories that can be removed.`,
+				memory_not_found: `The selected memory could not be found.`,
 				select_title: `Remove Server Memory`,
-				select_description: `Select the server memory you want to remove:
-
-{items}`, // Natural line break
 				memory_label: `Server Memory`,
+				success_title: `Server Memory Removed`,
+				success_description: `Successfully removed the server memory: "{memory}"`,
 			},
 			personalmemory: {
 				description: `Remove a personal memory.`,
+				modal_title: `Remove Personal Memory`,
+				select_label: `Memory to Remove`,
+				select_description: `Choose which personal memory to remove`,
+				select_placeholder: `Select a memory...`,
 				no_memories_title: `No Personal Memories`,
 				no_memories: `You don't have any personal memories stored. Add some with \`/teach personalmemory\`.`,
 				select_title: `Remove Personal Memory`,
-				select_description: `Select the personal memory you want to remove:
-
-{items}`, // Natural line break
 				memory_label: `Personal Memory`,
+				success_title: `Personal Memory Removed`,
+				success_description: `Successfully removed the personal memory: "{memory}"`,
 				warning_disabled_title: `Personalization Disabled`,
 				warning_disabled_description: `The memory was successfully removed from your profile.
 

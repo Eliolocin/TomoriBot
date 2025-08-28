@@ -119,7 +119,7 @@ export function chunkMessage(
 	// 2. Find all code blocks and emojis first to treat them as atomic units
 	const blocks: Array<{
 		content: string;
-		type: "text" | "code" | "emoji";
+		type: "text" | "code" | "emoji" | "quoted" | "parenthesized" | "japanese_quoted";
 		start: number;
 		end: number;
 	}> = [];
@@ -160,14 +160,91 @@ export function chunkMessage(
 		});
 	}
 
-	// 2b. Second pass: Split text blocks to separate emojis
+	// 2b. Second pass: Split text blocks to find quotes and parentheses
+	const quotedBlocks: typeof blocks = [];
+
+	// Process each text block to find quotes and parentheses
+	for (const block of blocks) {
+		if (block.type !== "text") {
+			// Keep non-text blocks as is
+			quotedBlocks.push(block);
+			continue;
+		}
+
+		const textContent = block.content;
+		const foundQuotes: Array<{ start: number; end: number; content: string; type: "quoted" | "parenthesized" | "japanese_quoted" }> = [];
+		let searchIndex = 0;
+
+		// Find all quotes and parentheses in this text block
+		while (searchIndex < textContent.length) {
+			const quotedString = findQuotedString(textContent, searchIndex);
+			const parenthesized = findBalancedParentheses(textContent, searchIndex);
+			const japaneseQuoted = findJapaneseQuotedString(textContent, searchIndex);
+
+			// Find the earliest occurring quote/parentheses
+			const candidates = [
+				quotedString ? { ...quotedString, type: "quoted" as const } : null,
+				parenthesized ? { ...parenthesized, type: "parenthesized" as const } : null,
+				japaneseQuoted ? { ...japaneseQuoted, type: "japanese_quoted" as const } : null
+			].filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
+
+			if (candidates.length === 0) break;
+
+			// Sort by start position and take the first one
+			const earliest = candidates.sort((a, b) => a.start - b.start)[0];
+			foundQuotes.push(earliest);
+			searchIndex = earliest.end;
+		}
+
+		// Split the text block around the found quotes/parentheses
+		if (foundQuotes.length === 0) {
+			// No quotes found, keep the text block as is
+			quotedBlocks.push(block);
+		} else {
+			let currentIndex = 0;
+			
+			for (const quote of foundQuotes) {
+				// Add text before the quote if any
+				if (quote.start > currentIndex) {
+					quotedBlocks.push({
+						content: textContent.substring(currentIndex, quote.start),
+						type: "text",
+						start: block.start + currentIndex,
+						end: block.start + quote.start
+					});
+				}
+
+				// Add the quote/parentheses as its own block
+				quotedBlocks.push({
+					content: quote.content,
+					type: quote.type,
+					start: block.start + quote.start,
+					end: block.start + quote.end
+				});
+
+				currentIndex = quote.end;
+			}
+
+			// Add any remaining text after the last quote
+			if (currentIndex < textContent.length) {
+				quotedBlocks.push({
+					content: textContent.substring(currentIndex),
+					type: "text",
+					start: block.start + currentIndex,
+					end: block.start + textContent.length
+				});
+			}
+		}
+	}
+
+	// 2c. Third pass: Split remaining text blocks to separate emojis
 	const emojiPattern = /<(a?):([^:]+):([^>]+)>/g;
 	const processedBlocks: typeof blocks = [];
 
 	// Process each text block to find emojis
-	for (const block of blocks) {
+	for (const block of quotedBlocks) {
 		if (block.type !== "text") {
-			// Keep code blocks as is
+			// Keep code blocks, quotes, parentheses, and Japanese quotes as is
 			processedBlocks.push(block);
 			continue;
 		}
@@ -249,6 +326,31 @@ export function chunkMessage(
 
 				// Add emoji as its own standalone chunk
 				chunkedMessages.push(block.content);
+				break;
+
+			case "quoted":
+			case "parenthesized":
+			case "japanese_quoted":
+				// 3c. Handle Quotes/Parentheses - treated as atomic units like code blocks
+				if (currentChunk.length + block.content.length > chunkLength) {
+					// Finish current chunk if it has content
+					if (currentChunk.length > 0) {
+						chunkedMessages.push(currentChunk);
+						currentChunk = "";
+					}
+					// If quote/parentheses block itself is too large, add it as its own chunk
+					if (block.content.length > chunkLength) {
+						// For very long quotes/parentheses, we'll keep them as single chunks
+						// to preserve semantic meaning even if they exceed length limits
+						chunkedMessages.push(block.content);
+					} else {
+						// Add the whole quote/parentheses block as a new chunk
+						chunkedMessages.push(block.content);
+					}
+				} else {
+					// Quote/parentheses block fits, add it to current chunk
+					currentChunk += (currentChunk.length > 0 ? "\n" : "") + block.content;
+				}
 				break;
 
 			case "text": {
@@ -654,6 +756,91 @@ export function cleanLLMOutput(
 /** Helper to escape special RegExp characters in a string */
 function escapeRegExp(s: string): string {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Helper function to find balanced parentheses in text
+ * @param text - Text to search for parentheses
+ * @param startIndex - Index to start searching from
+ * @returns Object with start, end indices and content, or null if no balanced pair found
+ */
+function findBalancedParentheses(text: string, startIndex = 0): { start: number; end: number; content: string } | null {
+	const openIndex = text.indexOf('(', startIndex);
+	if (openIndex === -1) return null;
+
+	let depth = 0;
+	let closeIndex = -1;
+
+	// Start scanning from the opening parenthesis
+	for (let i = openIndex; i < text.length; i++) {
+		if (text[i] === '(') {
+			depth++;
+		} else if (text[i] === ')') {
+			depth--;
+			if (depth === 0) {
+				closeIndex = i;
+				break;
+			}
+		}
+	}
+
+	if (closeIndex === -1) return null; // No matching closing parenthesis
+
+	return {
+		start: openIndex,
+		end: closeIndex + 1,
+		content: text.substring(openIndex, closeIndex + 1)
+	};
+}
+
+/**
+ * Helper function to find quoted strings with escape handling
+ * @param text - Text to search for quotes
+ * @param startIndex - Index to start searching from
+ * @returns Object with start, end indices and content, or null if no complete quoted string found
+ */
+function findQuotedString(text: string, startIndex = 0): { start: number; end: number; content: string } | null {
+	const openIndex = text.indexOf('"', startIndex);
+	if (openIndex === -1) return null;
+
+	let i = openIndex + 1;
+	while (i < text.length) {
+		if (text[i] === '"') {
+			// Found closing quote
+			return {
+				start: openIndex,
+				end: i + 1,
+				content: text.substring(openIndex, i + 1)
+			};
+		} else if (text[i] === '\\') {
+			// Skip escaped character
+			i += 2;
+		} else {
+			i++;
+		}
+	}
+
+	return null; // No matching closing quote
+}
+
+/**
+ * Helper function to find Japanese quoted strings
+ * @param text - Text to search for Japanese quotes
+ * @param startIndex - Index to start searching from
+ * @returns Object with start, end indices and content, or null if no complete quoted string found
+ */
+function findJapaneseQuotedString(text: string, startIndex = 0): { start: number; end: number; content: string } | null {
+	const openIndex = text.indexOf('「', startIndex);
+	if (openIndex === -1) return null;
+
+	const closeIndex = text.indexOf('」', openIndex + 1);
+	if (closeIndex === -1) return null;
+
+	return {
+		start: openIndex,
+		end: closeIndex + 1,
+		content: text.substring(openIndex, closeIndex + 1)
+	};
 }
 
 /**

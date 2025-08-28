@@ -57,11 +57,11 @@ async function sendApiKeyErrorEmbed(
 
 	try {
 		await sendStandardEmbed(context.channel, context.locale || "en-US", {
-			titleKey: "errors.brave_api.missing_key.title",
-			descriptionKey: "errors.brave_api.missing_key.description",
+			titleKey: "general.errors.brave_api.missing_key.title",
+			descriptionKey: "general.errors.brave_api.missing_key.description",
 			descriptionVars: { searchType },
 			color: ColorCode.ERROR,
-			footerKey: "errors.brave_api.missing_key.footer",
+			footerKey: "general.errors.brave_api.missing_key.footer",
 		});
 	} catch (embedError) {
 		log.warn(`Failed to send Brave API key error embed: ${embedError}`);

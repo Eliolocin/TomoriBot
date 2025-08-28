@@ -15,7 +15,7 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithModal,
+	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import type { ModalResult } from "../../types/discord/modal";
@@ -31,9 +31,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("attribute")
-		.setDescription(
-			localizer("en-US", "commands.teach.attribute.description"),
-		);
+		.setDescription(localizer("en-US", "commands.teach.attribute.description"));
 
 /**
  * Rule 1: JSDoc comment for exported function
@@ -53,7 +51,7 @@ export async function execute(
 	if (!interaction.guild) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral, // Explicit flag needed before deferral
 		});
@@ -71,8 +69,8 @@ export async function execute(
 		// 4. Check if Tomori is set up
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.not_setup_title",
-				descriptionKey: "general.errors.not_setup_description",
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 				// No flags needed due to deferReply
 			});
@@ -100,15 +98,17 @@ export async function execute(
 			return;
 		}
 
-		// 6. Prompt user with a modal (Rule 10, 12, 19)
+		// 6. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
-		modalResult = await promptWithModal(interaction, locale, {
+		modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.attribute.modal_title", // New locale key
-			inputs: [
+			components: [
 				{
 					customId: ATTRIBUTE_INPUT_ID,
 					labelKey: "commands.teach.attribute.attribute_input_label", // New locale key (<= 45 chars)
+					descriptionKey: "commands.teach.attribute.modal_description",
+					placeholder: "commands.teach.attribute.attribute_input_placeholder",
 					style: TextInputStyle.Paragraph, // Allow longer attributes
 					required: true,
 					maxLength: ATTRIBUTE_MAX_LENGTH, // Set a max length
@@ -121,7 +121,7 @@ export async function execute(
 			log.info(
 				`Attribute add modal ${modalResult.outcome} for user ${userData.user_id}`,
 			);
-			// promptWithModal handles cancel/timeout replies
+			// promptWithRawModal handles cancel/timeout replies
 			return;
 		}
 

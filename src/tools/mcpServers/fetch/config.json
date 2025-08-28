@@ -1,13 +1,13 @@
 {
-  "name": "fetch",
-  "displayName": "URL Fetcher",
-  "command": "python",
-  "args": ["-m", "mcp_server_fetch"],
-  "description": "Fetch and analyze web content from URLs",
-  "requiredEnvVars": [],
-  "optionalEnvVars": [],
-  "enabled": true,
-  "category": "utility",
-  "priority": 3,
-  "transport": "stdio"
+	"name": "fetch",
+	"displayName": "URL Fetcher",
+	"command": "python",
+	"args": ["-m", "mcp_server_fetch"],
+	"description": "Fetch and analyze web content from URLs",
+	"requiredEnvVars": [],
+	"optionalEnvVars": [],
+	"enabled": true,
+	"category": "utility",
+	"priority": 3,
+	"transport": "stdio"
 }

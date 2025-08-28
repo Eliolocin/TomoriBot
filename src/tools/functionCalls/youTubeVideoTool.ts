@@ -5,6 +5,7 @@
  */
 
 import { log, ColorCode } from "../../utils/misc/logger";
+import type { EnhancedVideoContent } from "@/types/tool/enhancedContextTypes";
 import { sendStandardEmbed } from "../../utils/discord/embedHelper";
 import {
 	BaseTool,
@@ -189,8 +190,7 @@ export class YouTubeVideoTool extends BaseTool {
 						mimeType: "video/youtube",
 						isYouTubeLink: true,
 						enhancedContext: true, // Special marker for processing
-						// biome-ignore lint/suspicious/noExplicitAny: Extended properties for enhanced context processing
-					} as any,
+					} as EnhancedVideoContent,
 				],
 			};
 

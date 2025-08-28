@@ -49,6 +49,7 @@ export const llmSchema = z.object({
 	is_smartest: z.boolean().default(false),
 	is_default: z.boolean().default(false),
 	is_reasoning: z.boolean().default(false),
+	llm_description: z.string().nullable().optional(),
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
@@ -210,6 +211,7 @@ export const tomoriStateSchema = tomoriSchema.extend({
 export const setupConfigSchema = z.object({
 	serverId: z.string(),
 	encryptedApiKey: z.instanceof(Buffer),
+	provider: z.string(), // LLM provider name (e.g., "google", "openai")
 	presetId: z.number(),
 	humanizer: z.number().default(1),
 	tomoriName: z.string(),

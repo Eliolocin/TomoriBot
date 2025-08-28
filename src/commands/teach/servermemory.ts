@@ -16,7 +16,7 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithModal,
+	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import type { ModalResult } from "../../types/discord/modal";
@@ -61,7 +61,7 @@ export async function execute(
 	if (!interaction.guild) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -81,8 +81,8 @@ export async function execute(
 		// 3. Check if Tomori is set up
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.not_setup_title",
-				descriptionKey: "general.errors.not_setup_description",
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
@@ -109,14 +109,16 @@ export async function execute(
 			return;
 		}
 
-		// 6. Prompt user with a modal (Rule 10, 12, 19, 25)
-		modalResult = await promptWithModal(interaction, locale, {
+		// 6. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
+		modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.servermemory.modal_title",
-			inputs: [
+			components: [
 				{
 					customId: MEMORY_INPUT_ID,
 					labelKey: "commands.teach.servermemory.memory_input_label",
+					descriptionKey: "commands.teach.servermemory.modal_description",
+					placeholder: "commands.teach.servermemory.memory_input_placeholder",
 					style: TextInputStyle.Paragraph,
 					required: true,
 					maxLength: memoryLimits.maxMemoryLength,

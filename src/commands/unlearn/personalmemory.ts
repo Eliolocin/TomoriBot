@@ -1,5 +1,7 @@
 import type {
 	ChatInputCommandInteraction,
+	ButtonInteraction,
+	ModalSubmitInteraction,
 	Client,
 	SlashCommandSubcommandBuilder,
 } from "discord.js";
@@ -16,13 +18,98 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
 	replyPaginatedChoices,
+	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
-import type { PaginatedChoiceResult } from "../../types/discord/embed"; // Corrected import path
+import type { PaginatedChoiceResult } from "../../types/discord/embed";
+import type { SelectOption } from "../../types/discord/modal";
 import { createStandardEmbed } from "../../utils/discord/embedHelper";
 
 // Rule 20: Constants for static values at the top
 const DISPLAY_TRUNCATE_LENGTH = 45; // Max length for memory content in the display list
+const MODAL_THRESHOLD = 20; // Use modal if items ≤ this number, otherwise use pagination
+const MODAL_CUSTOM_ID = "unlearn_personalmemory_modal";
+const MEMORY_SELECT_ID = "memory_select";
+
+/**
+ * Helper function to perform personal memory removal from database
+ * @param memoryToRemove - Memory string to remove
+ * @param userData - User data
+ * @param replyInteraction - Interaction to reply to (can be modal or pagination)
+ * @param locale - User locale
+ */
+async function performPersonalMemoryRemoval(
+	memoryToRemove: string,
+	userData: UserRow,
+	replyInteraction:
+		| ChatInputCommandInteraction
+		| ButtonInteraction
+		| ModalSubmitInteraction,
+	locale: string,
+): Promise<void> {
+	// Update the user's row in the database using array_remove
+	const [updatedUserResult] = await sql`
+		UPDATE users
+		SET personal_memories = array_remove(personal_memories, ${memoryToRemove})
+		WHERE user_id = ${userData.user_id}
+		RETURNING *
+	`;
+
+	// Validate the returned (updated) data
+	const validationResult = userSchema.safeParse(updatedUserResult);
+
+	if (!validationResult.success || !updatedUserResult) {
+		// Log error specific to this update failure
+		const context: ErrorContext = {
+			userId: userData.user_id,
+			serverId: null,
+			tomoriId: null,
+			errorType: "DatabaseUpdateError",
+			metadata: {
+				command: "unlearn personalmemory",
+				table: "users",
+				column: "personal_memories",
+				operation: "UPDATE",
+				memoryToRemove,
+				validationErrors: validationResult.success
+					? null
+					: validationResult.error.flatten(),
+			},
+		};
+
+		await log.error(
+			"Failed to update or validate user data after deleting personal memory",
+			validationResult.success
+				? new Error("Database update returned no rows or unexpected data")
+				: new Error("Updated user data failed validation"),
+			context,
+		);
+
+		await replyInfoEmbed(replyInteraction, locale, {
+			titleKey: "general.errors.update_failed_title",
+			descriptionKey: "general.errors.update_failed_description",
+			color: ColorCode.ERROR,
+		});
+		return;
+	}
+
+	// Log success and show success message
+	log.success(
+		`Deleted personal memory "${memoryToRemove.slice(0, 30)}..." for user ${userData.user_disc_id} (ID: ${userData.user_id})`,
+	);
+
+	await replyInfoEmbed(replyInteraction, locale, {
+		titleKey: "commands.unlearn.personalmemory.success_title",
+		descriptionKey: "commands.unlearn.personalmemory.success_description",
+		descriptionVars: {
+			memory:
+				memoryToRemove.length > 50
+					? `${memoryToRemove.slice(0, 50)}...`
+					: memoryToRemove,
+		},
+		color: ColorCode.SUCCESS,
+	});
+}
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (
@@ -52,7 +139,7 @@ export async function execute(
 	if (!interaction.guild) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -72,8 +159,8 @@ export async function execute(
 		tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.not_setup_title", // Corrected key
-				descriptionKey: "general.errors.not_setup_description", // Corrected key
+				titleKey: "general.errors.tomori_not_setup_title", // Corrected key
+				descriptionKey: "general.errors.tomori_not_setup_description", // Corrected key
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -98,112 +185,149 @@ export async function execute(
 			return;
 		}
 
-		// 6. Format memories for display, truncating long ones
-		const displayItems = currentMemories.map((memory) => {
-			return memory.length > DISPLAY_TRUNCATE_LENGTH
-				? `${memory.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
-				: memory;
-		});
+		// 6. Apply hybrid approach: use modal for ≤20 items, pagination for >20 items
+		if (currentMemories.length <= MODAL_THRESHOLD) {
+			// Use modal for small lists
 
-		// 7. Use the replyPaginatedChoices helper
-		result = await replyPaginatedChoices(interaction, locale, {
-			titleKey: "commands.unlearn.personalmemory.select_title",
-			descriptionKey: "commands.unlearn.personalmemory.select_description",
-			itemLabelKey: "commands.unlearn.personalmemory.memory_label",
-			items: displayItems,
-			color: ColorCode.INFO,
-			flags: MessageFlags.Ephemeral, // Make the pagination ephemeral
-
-			// Use simplified signature as expected by PaginatedChoiceOptions
-			onSelect: async (selectedIndex: number) => {
-				// 8. Get the memory to delete
-				const memoryToRemove = currentMemories[selectedIndex];
-
-				// 9. Update the user's row in the database using array_remove (Rule 23)
-				// This performs an atomic operation at the database level
-				const [updatedUserResult] = await sql`
-					UPDATE users
-					SET personal_memories = array_remove(personal_memories, ${memoryToRemove})
-					WHERE user_id = ${userData.user_id}
-					RETURNING *
-				`;
-
-				// 12. Validate the returned (updated) data (Rule 3, 5, 6)
-				const validationResult = userSchema.safeParse(updatedUserResult);
-
-				if (!validationResult.success || !updatedUserResult) {
-					// Log error specific to this update failure
-					const context: ErrorContext = {
-						userId: userData.user_id,
-						serverId: tomoriState?.server_id, // Include server context
-						tomoriId: tomoriState?.tomori_id, // Include tomori context
-						errorType: "DatabaseUpdateError",
-						metadata: {
-							command: "teach personalmemory",
-							table: "users",
-							column: "personal_memories",
-							operation: "UPDATE",
-							userDiscordId: interaction.user.id,
-							memoryToRemove,
-							validationErrors: validationResult.success
-								? null
-								: validationResult.error.flatten(),
-						},
-					};
-					// Throw error to be caught by replyPaginatedChoices's handler
-					throw await log.error(
-						"Failed to update or validate user data after deleting personal memory",
-						validationResult.success
-							? new Error("Database update returned no rows or unexpected data")
-							: new Error("Updated user data failed validation"),
-						context,
-					);
-				}
-
-				// 13. Log success (onSelect doesn't handle user feedback directly)
-				log.success(
-					`Deleted personal memory "${memoryToRemove.slice(0, 30)}..." for user ${userData.user_disc_id} (ID: ${userData.user_id})`,
-				);
-				// The replyPaginatedChoices helper will show the success message
-				// We will add the warning follow-up outside this callback if needed
-			},
-
-			// Simplified onCancel handler as expected by PaginatedChoiceOptions
-			onCancel: async () => {
-				// This runs if the user clicks Cancel
-				log.info(
-					`User ${userData.user_disc_id} cancelled deleting a personal memory.`,
-				);
-				// The replyPaginatedChoices helper will show the cancellation message
-			},
-		});
-
-		// 14. Handle potential errors/timeouts from the helper itself
-		if (!result.success && result.reason === "error") {
-			log.warn(
-				`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /teach personalmemory`,
+			// Create memory select options for the modal
+			const memorySelectOptions: SelectOption[] = currentMemories.map(
+				(memory) => ({
+					label: memory.length > 50 ? `${memory.slice(0, 50)}...` : memory,
+					value: memory,
+					description:
+						memory.length > 100 ? `${memory.slice(0, 100)}...` : memory,
+				}),
 			);
-		} else if (!result.success && result.reason === "timeout") {
-			log.warn(
-				`Personal memory deletion timed out for user ${userData.user_disc_id}`,
-			);
-		}
 
-		// 15. If deletion was successful AND personalization is disabled, send a follow-up warning
-		if (result.success && personalizationDisabledWarning) {
-			// Use the ORIGINAL interaction for the followUp, as the helper manages its own interaction lifecycle
-			await interaction.followUp({
-				embeds: [
-					createStandardEmbed(locale, {
-						// Use the imported function
-						titleKey: "commands.unlearn.personalmemory.warning_disabled_title",
+			// Show the modal with memory selection
+			const modalResult = await promptWithRawModal(interaction, locale, {
+				modalCustomId: MODAL_CUSTOM_ID,
+				modalTitleKey: "commands.unlearn.personalmemory.modal_title",
+				components: [
+					{
+						customId: MEMORY_SELECT_ID,
+						labelKey: "commands.unlearn.personalmemory.select_label",
 						descriptionKey:
-							"commands.unlearn.personalmemory.warning_disabled_description",
-						color: ColorCode.WARN,
-					}),
+							"commands.unlearn.personalmemory.select_description",
+						placeholder: "commands.unlearn.personalmemory.select_placeholder",
+						required: true,
+						options: memorySelectOptions,
+					},
 				],
-				flags: MessageFlags.Ephemeral, // Keep it ephemeral
 			});
+
+			// Handle modal outcome
+			if (modalResult.outcome !== "submit") {
+				log.info(
+					`Personal memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
+				);
+				return;
+			}
+
+			// Extract values from the modal
+			const modalSubmitInteraction = modalResult.interaction;
+			const selectedMemory = modalResult.values?.[MEMORY_SELECT_ID];
+
+			// Safety checks (should never be null after submit outcome)
+			if (!modalSubmitInteraction || !selectedMemory) {
+				log.error("Modal result unexpectedly missing interaction or values");
+				return;
+			}
+
+			// Defer the reply for the modal submission
+			await modalSubmitInteraction.deferReply({
+				flags: MessageFlags.Ephemeral,
+			});
+
+			// Perform the database update using the helper function
+			await performPersonalMemoryRemoval(
+				selectedMemory,
+				userData,
+				modalSubmitInteraction,
+				locale,
+			);
+
+			// If personalization is disabled, send a warning follow-up
+			if (personalizationDisabledWarning) {
+				await modalSubmitInteraction.followUp({
+					embeds: [
+						createStandardEmbed(locale, {
+							titleKey:
+								"commands.unlearn.personalmemory.warning_disabled_title",
+							descriptionKey:
+								"commands.unlearn.personalmemory.warning_disabled_description",
+							color: ColorCode.WARN,
+						}),
+					],
+					flags: MessageFlags.Ephemeral,
+				});
+			}
+		} else {
+			// Use pagination for large lists (>20 items)
+
+			// Format memories for display, truncating long ones
+			const displayItems = currentMemories.map((memory) => {
+				return memory.length > DISPLAY_TRUNCATE_LENGTH
+					? `${memory.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
+					: memory;
+			});
+
+			result = await replyPaginatedChoices(interaction, locale, {
+				titleKey: "commands.unlearn.personalmemory.select_title",
+				descriptionKey: "commands.unlearn.personalmemory.select_description",
+				itemLabelKey: "commands.unlearn.personalmemory.memory_label",
+				items: displayItems,
+				color: ColorCode.INFO,
+				flags: MessageFlags.Ephemeral,
+
+				onSelect: async (selectedIndex: number) => {
+					// Get the memory to remove
+					const memoryToRemove = currentMemories[selectedIndex];
+
+					// Use the helper function for database update
+					await performPersonalMemoryRemoval(
+						memoryToRemove,
+						userData,
+						interaction,
+						locale,
+					);
+				},
+
+				// Handle cancel
+				onCancel: async () => {
+					log.info(
+						`User ${userData.user_disc_id} cancelled deleting a personal memory.`,
+					);
+					// The replyPaginatedChoices helper will show the cancellation message
+				},
+			});
+
+			// Handle potential errors/timeouts from the helper itself
+			if (!result.success && result.reason === "error") {
+				log.warn(
+					`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /unlearn personalmemory`,
+				);
+			} else if (!result.success && result.reason === "timeout") {
+				log.warn(
+					`Personal memory deletion timed out for user ${userData.user_disc_id}`,
+				);
+			}
+
+			// If deletion was successful AND personalization is disabled, send a follow-up warning
+			if (result.success && personalizationDisabledWarning) {
+				await interaction.followUp({
+					embeds: [
+						createStandardEmbed(locale, {
+							titleKey:
+								"commands.unlearn.personalmemory.warning_disabled_title",
+							descriptionKey:
+								"commands.unlearn.personalmemory.warning_disabled_description",
+							color: ColorCode.WARN,
+						}),
+					],
+					flags: MessageFlags.Ephemeral,
+				});
+			}
 		}
 	} catch (error) {
 		// 16. Catch unexpected errors

@@ -16,9 +16,9 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithModal,
+	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
-import { loadTomoriState } from "../../utils/db/dbRead";
+import { loadTomoriState, isBlacklisted } from "../../utils/db/dbRead";
 import type { ModalResult } from "../../types/discord/modal";
 import {
 	validateMemoryContent,
@@ -61,7 +61,7 @@ export async function execute(
 	if (!interaction.guild) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -81,22 +81,24 @@ export async function execute(
 		// 3. Check if Tomori is set up on the server (needed for config check)
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.not_setup_title",
-				descriptionKey: "general.errors.not_setup_description",
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 4. Prompt user with a modal (Rule 10, 12, 19, 25)
-		modalResult = await promptWithModal(interaction, locale, {
+		// 4. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
+		modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.personalmemory.modal_title",
-			inputs: [
+			components: [
 				{
 					customId: MEMORY_INPUT_ID,
 					labelKey: "commands.teach.personalmemory.memory_input_label",
+					descriptionKey: "commands.teach.personalmemory.modal_description",
+					placeholder: "commands.teach.personalmemory.memory_input_placeholder",
 					style: TextInputStyle.Paragraph,
 					required: true,
 					maxLength: memoryLimits.maxMemoryLength,
@@ -214,15 +216,24 @@ export async function execute(
 			return;
 		}
 
-		// 14. Check if personalization is disabled on this server and prepare message
+		// 14. Check personalization settings and user blacklisting status to prepare appropriate message
 		let descriptionKey = "commands.teach.personalmemory.success_description";
 		let embedColor = ColorCode.SUCCESS;
 
-		// biome-ignore lint/style/noNonNullAssertion: tomoriState checked earlier
-		if (!tomoriState!.config.personal_memories_enabled) {
+		// Check both personalization settings and user blacklisting (similar to memoryTool.ts:437-454)
+		const personalizationEnabled =
+			tomoriState?.config.personal_memories_enabled ?? true;
+		const userIsBlacklisted =
+			(await isBlacklisted(interaction.guild.id, interaction.user.id)) ?? false;
+
+		if (!personalizationEnabled) {
 			descriptionKey =
-				"commands.teach.personalmemory.success_but_disabled_description"; // Use the warning description
-			embedColor = ColorCode.WARN; // Use warning color
+				"commands.teach.personalmemory.success_but_disabled_description";
+			embedColor = ColorCode.WARN;
+		} else if (userIsBlacklisted) {
+			descriptionKey =
+				"commands.teach.personalmemory.success_but_blacklisted_description";
+			embedColor = ColorCode.WARN;
 		}
 
 		// 15. Success! Confirm addition (with potential warning) (Rule 12, 19)

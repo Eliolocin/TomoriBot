@@ -26,9 +26,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("nickname") // Keep name simple as per refactor
-		.setDescription(
-			localizer("en-US", "commands.teach.nickname.description"),
-		)
+		.setDescription(localizer("en-US", "commands.teach.nickname.description"))
 		.addStringOption((option) =>
 			option
 				.setName("name")
@@ -61,7 +59,7 @@ export async function execute(
 	if (!interaction.guild) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -101,8 +99,8 @@ export async function execute(
 		// 5. Check if Tomori is set up (needed for config check)
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.not_setup_title",
-				descriptionKey: "general.errors.not_setup_description",
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 				// No flags needed
 			});

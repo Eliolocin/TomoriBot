@@ -15,7 +15,7 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	promptWithModal,
+	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 
@@ -52,7 +52,7 @@ export async function execute(
 	if (!interaction.guild) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only",
+			descriptionKey: "general.errors.guild_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral, // User Request
 		});
@@ -68,8 +68,8 @@ export async function execute(
 		// 3. Check if Tomori is set up and if sample dialogue teaching is enabled
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "general.errors.not_setup_title",
-				descriptionKey: "general.errors.not_setup_description",
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
 				flags: MessageFlags.Ephemeral,
 			});
@@ -93,16 +93,19 @@ export async function execute(
 			return;
 		}
 
-		// 4. Prompt user with a modal (Rule 10, 12, 19)
+		// 4. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
-		const modalResult = await promptWithModal(interaction, locale, {
+		const modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.sampledialogue.modal_title",
-			inputs: [
+			components: [
 				{
 					customId: USER_INPUT_ID,
 					// Ensure this locale key's value is <= 45 chars
 					labelKey: "commands.teach.sampledialogue.user_input_label",
+					descriptionKey:
+						"commands.teach.sampledialogue.user_input_description",
+					placeholder: "commands.teach.sampledialogue.user_input_placeholder",
 					style: TextInputStyle.Paragraph,
 					required: true,
 				},
@@ -110,6 +113,8 @@ export async function execute(
 					customId: BOT_INPUT_ID,
 					// Ensure this locale key's value is <= 45 chars
 					labelKey: "commands.teach.sampledialogue.bot_input_label",
+					descriptionKey: "commands.teach.sampledialogue.bot_input_description",
+					placeholder: "commands.teach.sampledialogue.bot_input_placeholder",
 					style: TextInputStyle.Paragraph,
 					required: true,
 				},
