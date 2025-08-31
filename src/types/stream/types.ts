@@ -46,6 +46,7 @@ export const SENTENCE_BOUNDARY_REGEX =
 export interface StreamState {
 	buffer: string;
 	isInsideCodeBlock: boolean;
+	hasSemanticMarkers: boolean;
 	messageSentCount: number;
 	hasRepliedToOriginalMessage: boolean;
 	lastChunkTime: number;
@@ -117,7 +118,7 @@ export interface ChunkProcessingResult {
 	shouldFlush: boolean;
 	segmentToFlush?: string;
 	updatedBuffer: string;
-	newCodeBlockState: boolean;
+	newCodeBlockState: boolean | undefined;
 	breakType?: "newline" | "period" | "code_open" | "code_close" | "overflow";
 }
 
@@ -197,6 +198,7 @@ export function createDefaultStreamState(): StreamState {
 	return {
 		buffer: "",
 		isInsideCodeBlock: false,
+		hasSemanticMarkers: false,
 		messageSentCount: 0,
 		hasRepliedToOriginalMessage: false,
 		lastChunkTime: Date.now(),

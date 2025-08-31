@@ -19,6 +19,7 @@ import {
 	createStandardEmbed,
 	sendStandardEmbed,
 } from "../../utils/discord/embedHelper";
+import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import { ColorCode, log } from "../../utils/misc/logger";
 import { buildContext } from "../../utils/text/contextBuilder";
 import {
@@ -48,6 +49,82 @@ const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
 
 const MAX_FUNCTION_CALL_ITERATIONS = 5; // Safety break for function call loops
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
+
+/**
+ * Creates comprehensive natural stop patterns for graceful stream interruption
+ * Organized by category for easy maintenance and expansion
+ * @returns Array of RegExp patterns for stop detection
+ */
+function createNaturalStopPatterns(): RegExp[] {
+	// 1. Basic stop commands (single words with word boundaries)
+	const basicStops = [
+		"wait",
+		"stop",
+		"enough",
+		"chill",
+		"halt",
+		"pause",
+		"quit",
+	];
+
+	// 2. Polite stop phrases (with contextual words)
+	const politeStops = [
+		"okay\\s+(stop|enough)",
+		"that's\\s+(enough|good|fine)",
+		"alright\\s+stop",
+		"please\\s+stop",
+	];
+
+	// 3. Dismissive phrases
+	const dismissive = [
+		"nevermind",
+		"never\\s*mind",
+		"cut\\s+it\\s+out",
+		"tone\\s+it\\s+down",
+		"knock\\s+it\\s+off",
+	];
+
+	// 4. Japanese stop patterns (common ways to say stop/enough in Japanese)
+	const japanese = [
+		"やめて", // yamete - stop it
+		"ストップ", // sutoppu - stop (katakana)
+		"もういい", // mou ii - that's enough
+		"十分", // juubun - enough/sufficient
+		"もう十分", // mou juubun - that's enough
+		"いいよ", // ii yo - that's fine/enough
+		"もうやめて", // mou yamete - stop it already
+		"待って", // matte - wait
+		"ちょっと待って", // chotto matte - wait a moment
+	];
+
+	// 5. Create regex patterns
+	const patterns: RegExp[] = [];
+
+	// Basic stops with word boundaries
+	for (const stop of basicStops) {
+		patterns.push(new RegExp(`\\b${stop}\\b`, "i"));
+	}
+
+	// Polite stops (already have proper spacing patterns)
+	for (const polite of politeStops) {
+		patterns.push(new RegExp(polite, "i"));
+	}
+
+	// Dismissive phrases with word boundaries where appropriate
+	for (const dismiss of dismissive) {
+		patterns.push(new RegExp(`\\b${dismiss}\\b`, "i"));
+	}
+
+	// Japanese patterns (no word boundaries needed for Japanese text)
+	for (const jp of japanese) {
+		patterns.push(new RegExp(jp, "i"));
+	}
+
+	return patterns;
+}
+
+// Generate stop patterns once at module load
+const NATURAL_STOP_PATTERNS = createNaturalStopPatterns();
 
 // YouTube URL detection patterns for video analysis
 const YOUTUBE_URL_PATTERNS = [
@@ -111,9 +188,22 @@ interface ChannelLockEntry {
 		isFromCommand?: boolean;
 		forceReason?: boolean;
 		llmOverrideCodename?: string;
+		isStopResponse?: boolean; // Flag to prevent stopping stop responses
 	}>;
 }
 const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
+
+/**
+ * Checks if a message contains natural stop patterns
+ * @param content - The message content to check
+ * @returns True if the message contains stop patterns
+ */
+function isNaturalStopMessage(content: string): boolean {
+	if (!content?.trim()) return false;
+	return NATURAL_STOP_PATTERNS.some((pattern) =>
+		pattern.test(content.toLowerCase()),
+	);
+}
 
 /**
  * Handles incoming messages to potentially generate a response using genai.
@@ -123,6 +213,7 @@ const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
  * @param isFromCommand - Whether this call is triggered by a manual command.
  * @param forceReason - Whether to use reasoning mode for this response.
  * @param llmOverrideCodename - Override LLM model codename to use instead of server default.
+ * @param isStopResponse - Whether this is a stop response (cannot be stopped).
  */
 export default async function tomoriChat(
 	client: Client,
@@ -131,10 +222,18 @@ export default async function tomoriChat(
 	isFromCommand?: boolean,
 	forceReason?: boolean,
 	llmOverrideCodename?: string,
+	isStopResponse?: boolean,
 ): Promise<void> {
 	// 1. Initial Checks & State Loading
 	const channel = message.channel;
 	let locale = "en-US";
+
+	// Debug logging for stop response
+	if (isStopResponse) {
+		log.info(
+			`Processing stop response for message ${message.id} using original message as passport`,
+		);
+	}
 
 	// Initialize streaming context for context-aware tool availability
 	const streamingContext = {
@@ -233,6 +332,29 @@ export default async function tomoriChat(
 
 	// MODIFIED: Check if locked AND if Tomori would reply
 	if (lockEntry.isLocked) {
+		// Check for natural stop message first (if not already a stop response)
+		if (!isStopResponse && isNaturalStopMessage(message.content)) {
+			log.info(
+				`Stop message detected in channel ${channelLockId} while processing message ${lockEntry.currentMessageId}. Signaling graceful stop.`,
+			);
+
+			// Import at the top if not already imported
+			const { StreamOrchestrator } = await import(
+				"../../utils/discord/streamOrchestrator"
+			);
+
+			// Signal the stream to stop with context for later response generation
+			StreamOrchestrator.requestStop(channelLockId, message.author.id, {
+				originalStopMessage: message,
+				client,
+			});
+
+			log.info(
+				`Stop signal sent for channel ${channelLockId}. Stop response will be generated after stream completes.`,
+			);
+			return;
+		}
+
 		// Only enqueue and send "busy" message if Tomori is set up and would have replied.
 		if (earlyTomoriState) {
 			// 1. Create a modified version of earlyTomoriState for the shouldBotReply check.
@@ -372,9 +494,9 @@ export default async function tomoriChat(
 			 * @param embedTitle - The embed title to check
 			 * @returns Object with isTarget boolean and the type of target found
 			 */
-			function checkTargetEmbedTitle(embedTitle: string | null): { 
-				isTarget: boolean; 
-				type: 'memory_learning' | 'reset' | null;
+			function checkTargetEmbedTitle(embedTitle: string | null): {
+				isTarget: boolean;
+				type: "memory_learning" | "reset" | null;
 			} {
 				if (!embedTitle) return { isTarget: false, type: null };
 
@@ -383,21 +505,30 @@ export default async function tomoriChat(
 				for (const supportedLocale of getSupportedLocales()) {
 					// Target localizer keys for memory learning embeds
 					const memoryLearningTitles = [
-						localizer(supportedLocale, "genai.self_teach.server_memory_learned_title"),
-						localizer(supportedLocale, "genai.self_teach.personal_memory_learned_title"),
+						localizer(
+							supportedLocale,
+							"genai.self_teach.server_memory_learned_title",
+						),
+						localizer(
+							supportedLocale,
+							"genai.self_teach.personal_memory_learned_title",
+						),
 					];
 
 					// Target localizer key for conversation reset
-					const resetTitle = localizer(supportedLocale, "commands.tool.refresh.title");
+					const resetTitle = localizer(
+						supportedLocale,
+						"commands.tool.refresh.title",
+					);
 
 					// Check for memory learning embeds
-					if (memoryLearningTitles.some(title => embedTitle === title)) {
-						return { isTarget: true, type: 'memory_learning' };
+					if (memoryLearningTitles.some((title) => embedTitle === title)) {
+						return { isTarget: true, type: "memory_learning" };
 					}
 
 					// Check for reset embed
 					if (embedTitle === resetTitle) {
-						return { isTarget: true, type: 'reset' };
+						return { isTarget: true, type: "reset" };
 					}
 				}
 
@@ -568,12 +699,10 @@ export default async function tomoriChat(
 				const msg = messagesArray[i];
 
 				// Check if *any* embed in the message contains a reset title using localizer
-				const embedContainsReset = msg.embeds.some(
-					(embed) => {
-						const embedCheck = checkTargetEmbedTitle(embed.title);
-						return embedCheck.isTarget && embedCheck.type === 'reset';
-					}
-				);
+				const embedContainsReset = msg.embeds.some((embed) => {
+					const embedCheck = checkTargetEmbedTitle(embed.title);
+					return embedCheck.isTarget && embedCheck.type === "reset";
+				});
 
 				// If an embed contains the marker, this is our reset point
 				if (embedContainsReset) {
@@ -614,12 +743,14 @@ export default async function tomoriChat(
 						);
 						if (msgReferencedMessage) {
 							// Get the author name for the referenced message
-							const referencedAuthorName = msgReferencedMessage.author.id === client.user?.id
-								? tomoriState?.tomori_nickname || "Bot"
-								: msgReferencedMessage.author.username;
-							
+							const referencedAuthorName =
+								msgReferencedMessage.author.id === client.user?.id
+									? tomoriState?.tomori_nickname || "Bot"
+									: msgReferencedMessage.author.username;
+
 							// Get the referenced message content (truncate if too long)
-							let referencedContent = msgReferencedMessage.content || "[No text content]";
+							let referencedContent =
+								msgReferencedMessage.content || "[No text content]";
 							if (referencedContent.length > 200) {
 								referencedContent = `${referencedContent.substring(0, 197)}...`;
 							}
@@ -639,13 +770,13 @@ export default async function tomoriChat(
 				// 4. Determine author name and ID based on message type
 				let effectiveAuthorId = authorId;
 				let authorName: string;
-				
+
 				if (msg.author.id === client.user?.id || isDebugMessage) {
 					authorName = tomoriState?.tomori_nickname; // Use Tomori's nickname for bot messages or debug messages
 				} else {
 					authorName = `<@${authorId}>`; // Format user as <@ID>, to be converted by convertMentions later to user's registered name (if existing)
 				}
-				
+
 				userListSet.add(authorId);
 				const imageAttachments: SimplifiedMessageForContext["imageAttachments"] =
 					[];
@@ -658,22 +789,34 @@ export default async function tomoriChat(
 				if (msg.embeds.length > 0) {
 					for (const embed of msg.embeds) {
 						const embedCheck = checkTargetEmbedTitle(embed.title);
-						if (embedCheck.isTarget && embedCheck.type === 'memory_learning' && embed.description) {
+						if (
+							embedCheck.isTarget &&
+							embedCheck.type === "memory_learning" &&
+							embed.description
+						) {
 							// Remove bot name prefix from embed description if present
 							let cleanedDescription = embed.description;
 							if (tomoriState?.tomori_nickname) {
 								// Escape special regex characters in the bot nickname
-								const escapedNickname = tomoriState.tomori_nickname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-								const botNamePattern = new RegExp(`^${escapedNickname}:\\s*`, 'i');
+								const escapedNickname = tomoriState.tomori_nickname.replace(
+									/[.*+?^${}()|[\]\\]/g,
+									"\\$&",
+								);
+								const botNamePattern = new RegExp(
+									`^${escapedNickname}:\\s*`,
+									"i",
+								);
 								if (botNamePattern.test(cleanedDescription)) {
-									cleanedDescription = cleanedDescription.replace(botNamePattern, '').trim();
+									cleanedDescription = cleanedDescription
+										.replace(botNamePattern, "")
+										.trim();
 								}
 							}
 
 							// Add embed content to message text with special marker
 							const embedContent = `[The following is a system-produced embed]\n${cleanedDescription}`;
-							messageContentForLlm = messageContentForLlm 
-								? `${messageContentForLlm}\n${embedContent}` 
+							messageContentForLlm = messageContentForLlm
+								? `${messageContentForLlm}\n${embedContent}`
 								: embedContent;
 							hasProcessedEmbed = true;
 						}
@@ -892,6 +1035,58 @@ export default async function tomoriChat(
 					// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
 					tomoriConfig: tomoriState!.config,
 				});
+
+				// Inject system context for stop responses
+				if (isStopResponse) {
+					// Find the last user message in context and replace/supplement it with system context
+					let lastUserContextIndex = -1;
+					for (let i = contextSegments.length - 1; i >= 0; i--) {
+						if (contextSegments[i].role === "user") {
+							lastUserContextIndex = i;
+							break;
+						}
+					}
+
+					if (lastUserContextIndex !== -1) {
+						// Replace the last user message content with system context
+						const lastUserContext = contextSegments[lastUserContextIndex];
+						const originalContent = lastUserContext.parts
+							.filter((part) => part.type === "text")
+							.map((part) => (part as { type: "text"; text: string }).text)
+							.join(" ");
+
+						// Replace text parts with system context, preserve other parts (images, etc.)
+						const nonTextParts = lastUserContext.parts.filter(
+							(part) => part.type !== "text",
+						);
+						lastUserContext.parts = [
+							{
+								type: "text",
+								text: `[System: The user has requested you to stop your current generation. Original message: "${originalContent}"]`,
+							},
+							...nonTextParts,
+						];
+
+						log.info(
+							`Replaced last user message with system stop context. Original content: "${originalContent}"`,
+						);
+					} else {
+						// Fallback: add as new context item if no user message found
+						const systemStopContext: StructuredContextItem = {
+							role: "user",
+							parts: [
+								{
+									type: "text",
+									text: "[System: The user has requested you to stop your current generation]",
+								},
+							],
+						};
+						contextSegments.push(systemStopContext);
+						log.info(
+							"Added system stop context as new message (no user context found)",
+						);
+					}
+				}
 			} catch (error) {
 				log.error("Error building context for LLM API Call:", error, {
 					serverId: tomoriState?.server_id, // Use internal DB ID if available
@@ -1096,6 +1291,43 @@ export default async function tomoriChat(
 						break;
 					}
 
+					// Handle user-requested stop (natural stop triggers)
+					if (streamResult.status === "stopped_by_user") {
+						log.info(
+							`Streaming was stopped by user request for channel ${channel.id}.`,
+						);
+						finalStreamCompleted = true;
+
+						// Check if we have stop context to create a response
+						const { StreamOrchestrator } = await import(
+							"../../utils/discord/streamOrchestrator"
+						);
+						const stopContext = StreamOrchestrator.getAndClearStopContext(
+							channel.id,
+						);
+
+						if (stopContext) {
+							// Get the current lock entry to queue the stop response
+							const currentLockEntry = channelLocks.get(channel.id);
+							if (currentLockEntry) {
+								// Queue the original stop message as a "passport" for stop response
+								currentLockEntry.messageQueue.unshift({
+									message: stopContext.originalStopMessage,
+									isFromCommand: true, // This bypasses normal trigger logic
+									forceReason: false,
+									llmOverrideCodename,
+									isStopResponse: true, // This response cannot be stopped
+								});
+
+								log.info(
+									`Stop response queued after stream completion for channel ${channel.id}. Queue size: ${currentLockEntry.messageQueue.length}`,
+								);
+							}
+						}
+
+						break; // Exit the loop gracefully, stop response will be handled by queue
+					}
+
 					if (streamResult.status === "function_call" && streamResult.data) {
 						const funcCall = streamResult.data as FunctionCall; // Type assertion
 						const funcName = funcCall.name?.trim() ?? "";
@@ -1121,11 +1353,33 @@ export default async function tomoriChat(
 						};
 
 						// Execute tool using ToolRegistry (handles both built-in and MCP tools seamlessly)
+						// Check for stop request before executing function call
+						if (StreamOrchestrator.hasStopRequest(channel.id)) {
+							log.info(
+								`Function call execution cancelled due to stop request: ${funcName}`,
+							);
+							finalStreamCompleted = true;
+							break;
+						}
+
+						const functionCallStart = Date.now();
 						const toolResult = await ToolRegistry.executeTool(
 							funcName,
 							funcCall.args || {},
 							toolContext,
 						);
+						const functionCallDuration = Date.now() - functionCallStart;
+
+						// Log function call timing (especially long-running ones)
+						if (functionCallDuration > 5000) {
+							log.warn(
+								`Long-running function call: ${funcName} took ${functionCallDuration}ms`,
+							);
+						} else {
+							log.info(
+								`Function call completed: ${funcName} (${functionCallDuration}ms)`,
+							);
+						}
 
 						// Convert tool result to function execution result format
 						let functionExecutionResult: Record<string, unknown>;
@@ -1251,8 +1505,9 @@ export default async function tomoriChat(
 								);
 
 								// Get the enhanced context item from external storage
-								const enhancedContextItem = PeekProfilePictureTool.getPendingEnhancedContext(userId);
-								
+								const enhancedContextItem =
+									PeekProfilePictureTool.getPendingEnhancedContext(userId);
+
 								if (!enhancedContextItem) {
 									log.warn(
 										`No pending enhanced context found for user ${userId}. Profile picture restart failed.`,
@@ -1275,7 +1530,8 @@ export default async function tomoriChat(
 										if (
 											part.type === "image" &&
 											"isProfilePicture" in part &&
-											(part as { isProfilePicture: boolean }).isProfilePicture &&
+											(part as { isProfilePicture: boolean })
+												.isProfilePicture &&
 											"enhancedContext" in part &&
 											(part as { enhancedContext: boolean }).enhancedContext
 										) {
@@ -1450,6 +1706,33 @@ export default async function tomoriChat(
 				`Channel ${channelLockId} lock released for message ${message.id}.`,
 			);
 
+			// Check for stop context and create response after lock release
+			const { StreamOrchestrator } = await import(
+				"../../utils/discord/streamOrchestrator"
+			);
+			const stopContext =
+				StreamOrchestrator.getAndClearStopContext(channelLockId);
+			if (stopContext) {
+				log.info(
+					`Found stop context for channel ${channelLockId}. Triggering stop response after lock release.`,
+				);
+
+				// Trigger stop response after current execution completes and lock is fully released
+				setImmediate(async () => {
+					try {
+						await handleStopResponse(
+							stopContext.originalStopMessage,
+							stopContext.client,
+						);
+					} catch (error) {
+						log.error(
+							"Failed to generate stop response after lock release:",
+							error,
+						);
+					}
+				});
+			}
+
 			// Check if there are messages in the queue for this channel
 			if (lockEntry.messageQueue.length > 0) {
 				const nextMessageData = lockEntry.messageQueue.shift(); // Get the next message (FIFO)
@@ -1468,6 +1751,7 @@ export default async function tomoriChat(
 							nextMessageData.isFromCommand,
 							nextMessageData.forceReason,
 							nextMessageData.llmOverrideCodename,
+							nextMessageData.isStopResponse, // Pass through the stop response flag
 						).catch((e) => {
 							log.error(
 								`Error processing queued message ${nextMessageData.message.id}:`,
@@ -1566,4 +1850,34 @@ export function shouldBotReply(
 	// 6. Determine if bot should reply:
 	// Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the auto-message threshold is hit
 	return isReplyToBot || isBotMentioned || triggersActive || isAutoMsgHit;
+}
+
+/**
+ * Handles stop response generation after a stream has been interrupted
+ * @param originalStopMessage - The original message that requested the stop
+ * @param client - Discord client
+ */
+export async function handleStopResponse(
+	originalStopMessage: Message,
+	client: Client,
+): Promise<void> {
+	try {
+		log.info(
+			`Generating stop response for message ${originalStopMessage.id} in channel ${originalStopMessage.channel.id}`,
+		);
+
+		// Use original stop message as "passport" (like respond.ts command does)
+		// isFromCommand: true bypasses all normal trigger logic
+		await tomoriChat(
+			client,
+			originalStopMessage,
+			true, // isFromQueue to trigger reply to same message
+			true, // isFromCommand - this bypasses normal trigger logic and forces response
+			false, // forceReason
+			undefined, // llmOverrideCodename
+			true, // isStopResponse - This prevents the stop response from being stopped
+		);
+	} catch (error) {
+		log.error("Failed to handle stop response:", error);
+	}
 }

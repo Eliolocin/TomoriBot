@@ -60,7 +60,7 @@ async function loadAvailableKeys(): Promise<Set<string>> {
 	const localesPath = join(process.cwd(), "src", "locales");
 
 	try {
-		const glob = new Glob("*.ts");
+		const glob = new Glob("en-US.ts");
 		for await (const file of glob.scan(localesPath)) {
 			const filePath = join(localesPath, file);
 			try {
@@ -120,10 +120,18 @@ function isValidLocalizationKey(key: string): boolean {
 
 	// Should start with common locale prefixes
 	const validPrefixes = [
-		"commands", "general", "events", "genai", "functions", 
-		"errors", "tool", "config", "teach", "unlearn"
+		"commands",
+		"general",
+		"events",
+		"genai",
+		"functions",
+		"errors",
+		"tool",
+		"config",
+		"teach",
+		"unlearn",
 	];
-	
+
 	const firstSegment = segments[0];
 	if (validPrefixes.includes(firstSegment)) return true;
 
@@ -170,7 +178,7 @@ async function extractReferencedKeys(): Promise<Map<string, Set<string>>> {
 					match = pattern.exec(content);
 					while (match !== null) {
 						const key = match[1];
-						
+
 						// Filter out false positives
 						if (isValidLocalizationKey(key)) {
 							if (!referencedKeys.has(key)) {
@@ -244,10 +252,14 @@ function displayResults(results: AnalysisResult): void {
 	if (results.missingKeys.length > 0) {
 		console.log("\n❌ MISSING LOCALIZATION KEYS (Referenced but don't exist):");
 		console.log("-".repeat(60));
-		
-		for (const { key, files } of results.missingKeys.sort((a, b) => a.key.localeCompare(b.key))) {
+
+		for (const { key, files } of results.missingKeys.sort((a, b) =>
+			a.key.localeCompare(b.key),
+		)) {
 			console.log(`  ❌ ${key}`);
-			console.log(`     📁 Used in ${files.size} files: ${Array.from(files).slice(0, 3).join(", ")}${files.size > 3 ? "..." : ""}`);
+			console.log(
+				`     📁 Used in ${files.size} files: ${Array.from(files).slice(0, 3).join(", ")}${files.size > 3 ? "..." : ""}`,
+			);
 		}
 	} else {
 		console.log("\n✅ No missing localization keys found!");
@@ -257,8 +269,10 @@ function displayResults(results: AnalysisResult): void {
 	if (results.unusedKeys.length > 0) {
 		console.log("\n🗑️  UNUSED LOCALIZATION KEYS (Exist but never referenced):");
 		console.log("-".repeat(60));
-		
-		for (const { key } of results.unusedKeys.sort((a, b) => a.key.localeCompare(b.key))) {
+
+		for (const { key } of results.unusedKeys.sort((a, b) =>
+			a.key.localeCompare(b.key),
+		)) {
 			console.log(`  ⚠️  ${key}`);
 		}
 	} else {
@@ -268,15 +282,23 @@ function displayResults(results: AnalysisResult): void {
 	// Summary
 	console.log("\n📊 SUMMARY:");
 	console.log("-".repeat(60));
-	console.log(`  • ${results.availableKeys.size} total keys available in locale files`);
-	console.log(`  • ${results.referencedKeys.size} total keys referenced in source code`);
-	console.log(`  • ${results.missingKeys.length} missing keys (referenced but don't exist)`);
-	console.log(`  • ${results.unusedKeys.length} unused keys (exist but never referenced)`);
-	
+	console.log(
+		`  • ${results.availableKeys.size} total keys available in locale files`,
+	);
+	console.log(
+		`  • ${results.referencedKeys.size} total keys referenced in source code`,
+	);
+	console.log(
+		`  • ${results.missingKeys.length} missing keys (referenced but don't exist)`,
+	);
+	console.log(
+		`  • ${results.unusedKeys.length} unused keys (exist but never referenced)`,
+	);
+
 	if (results.missingKeys.length === 0 && results.unusedKeys.length === 0) {
 		console.log("\n🎉 Perfect! Your localization is fully synchronized!");
 	}
-	
+
 	console.log(`\n${"=".repeat(80)}`);
 }
 
@@ -287,7 +309,7 @@ async function main(): Promise<void> {
 	try {
 		const results = await analyzeLocalizationKeys();
 		displayResults(results);
-		
+
 		// Exit with error code if there are issues
 		if (results.missingKeys.length > 0 || results.unusedKeys.length > 0) {
 			process.exit(1);

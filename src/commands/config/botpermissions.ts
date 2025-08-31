@@ -19,9 +19,9 @@ export const configureSubcommand = (
 	subcommand: SlashCommandSubcommandBuilder,
 ) =>
 	subcommand
-		.setName("tomoripermissions")
+		.setName("botpermissions")
 		.setDescription(
-			localizer("en-US", "commands.config.tomoripermissions.description"),
+			localizer("en-US", "commands.config.botpermissions.description"),
 		)
 		.addStringOption((option) =>
 			option
@@ -29,13 +29,13 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.tomoripermissions.option_description",
+						"commands.config.botpermissions.option_description",
 					),
 				)
 				.setDescriptionLocalizations({
 					ja: localizer(
 						"ja",
-						"commands.config.tomoripermissions.option_description",
+						"commands.config.botpermissions.option_description",
 					),
 				})
 				.setRequired(true)
@@ -43,28 +43,28 @@ export const configureSubcommand = (
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.tomoripermissions.selfteaching_option",
+							"commands.config.botpermissions.selfteaching_option",
 						),
 						value: "selfteaching",
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.tomoripermissions.personalization_option",
+							"commands.config.botpermissions.personalization_option",
 						),
 						value: "personalization",
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.tomoripermissions.emojiusage_option",
+							"commands.config.botpermissions.emojiusage_option",
 						),
 						value: "emojiusage",
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.tomoripermissions.stickerusage_option",
+							"commands.config.botpermissions.stickerusage_option",
 						),
 						value: "stickerusage",
 					},
@@ -72,7 +72,7 @@ export const configureSubcommand = (
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.tomoripermissions.websearch_option",
+							"commands.config.botpermissions.websearch_option",
 						),
 						value: "websearch",
 					},
@@ -82,16 +82,10 @@ export const configureSubcommand = (
 			option
 				.setName("set")
 				.setDescription(
-					localizer(
-						"en-US",
-						"commands.config.tomoripermissions.set_description",
-					),
+					localizer("en-US", "commands.config.botpermissions.set_description"),
 				)
 				.setDescriptionLocalizations({
-					ja: localizer(
-						"ja",
-						"commands.config.tomoripermissions.set_description",
-					),
+					ja: localizer("ja", "commands.config.botpermissions.set_description"),
 				})
 				.setRequired(true)
 				.addChoices(
@@ -159,38 +153,36 @@ export async function execute(
 			case "selfteaching":
 				dbColumnName = "self_teaching_enabled";
 				permissionTypeKey =
-					"commands.config.tomoripermissions.selfteaching_option";
+					"commands.config.botpermissions.selfteaching_option";
 				currentSetting = tomoriState.config.self_teaching_enabled;
 				break;
 			case "personalization":
 				dbColumnName = "personal_memories_enabled";
 				permissionTypeKey =
-					"commands.config.tomoripermissions.personalization_option";
+					"commands.config.botpermissions.personalization_option";
 				currentSetting = tomoriState.config.personal_memories_enabled;
 				break;
 			case "emojiusage":
 				dbColumnName = "emoji_usage_enabled";
-				permissionTypeKey =
-					"commands.config.tomoripermissions.emojiusage_option";
+				permissionTypeKey = "commands.config.botpermissions.emojiusage_option";
 				currentSetting = tomoriState.config.emoji_usage_enabled;
 				break;
 			case "stickerusage":
 				dbColumnName = "sticker_usage_enabled";
 				permissionTypeKey =
-					"commands.config.tomoripermissions.stickerusage_option";
+					"commands.config.botpermissions.stickerusage_option";
 				currentSetting = tomoriState.config.sticker_usage_enabled;
 				break;
 			// New: Handle Web Search permission (Brave Search)
 			case "websearch":
 				dbColumnName = "web_search_enabled";
-				permissionTypeKey =
-					"commands.config.tomoripermissions.websearch_option";
+				permissionTypeKey = "commands.config.botpermissions.websearch_option";
 				currentSetting = tomoriState.config.web_search_enabled;
 				break;
 			default:
 				// This should not happen due to Discord's option validation
 				log.error(
-					`Invalid permissionChoice received in /config tomoripermissions: ${permissionChoice}`,
+					`Invalid permissionChoice received in /config botpermissions: ${permissionChoice}`,
 				);
 				await replyInfoEmbed(interaction, locale, {
 					titleKey: "general.errors.invalid_option_title",
@@ -203,10 +195,10 @@ export async function execute(
 		// 6. Check if the setting is already the desired value
 		if (currentSetting === isEnabled) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.tomoripermissions.already_set_title",
+				titleKey: "commands.config.botpermissions.already_set_title",
 				descriptionKey: isEnabled
-					? "commands.config.tomoripermissions.already_enabled_description"
-					: "commands.config.tomoripermissions.already_disabled_description",
+					? "commands.config.botpermissions.already_enabled_description"
+					: "commands.config.botpermissions.already_disabled_description",
 				descriptionVars: {
 					permission_type: localizer(locale, permissionTypeKey),
 				},
@@ -235,7 +227,7 @@ export async function execute(
 				userId: userData.user_id,
 				errorType: "DatabaseUpdateError",
 				metadata: {
-					command: "config tomoripermissions",
+					command: "config botpermissions",
 					guildId: interaction.guild.id,
 					permissionChoice,
 					dbColumnName,
@@ -263,10 +255,10 @@ export async function execute(
 
 		// 9. Success! Show the permission change
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.tomoripermissions.success_title",
+			titleKey: "commands.config.botpermissions.success_title",
 			descriptionKey: isEnabled
-				? "commands.config.tomoripermissions.enabled_success"
-				: "commands.config.tomoripermissions.disabled_success",
+				? "commands.config.botpermissions.enabled_success"
+				: "commands.config.botpermissions.disabled_success",
 			descriptionVars: {
 				permission_type: localizer(locale, permissionTypeKey),
 			},
@@ -288,7 +280,7 @@ export async function execute(
 			tomoriId: tomoriIdForError,
 			errorType: "CommandExecutionError",
 			metadata: {
-				command: "config tomoripermissions",
+				command: "config botpermissions",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 				permissionAttempted: interaction.options.getString("permission"),
@@ -296,7 +288,7 @@ export async function execute(
 			},
 		};
 		await log.error(
-			`Error executing /config tomoripermissions for user ${userData.user_disc_id}`,
+			`Error executing /config botpermissions for user ${userData.user_disc_id}`,
 			error as Error,
 			context,
 		);

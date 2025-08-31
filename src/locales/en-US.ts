@@ -4,15 +4,15 @@
 export default {
 	general: {
 		// Cooldown messages
-		cooldown_title: `Please wait!`,
-		cooldown: `⏳ You need to wait {seconds} seconds before using a \`/{category}\` command again.`,
+		cooldown_title: `⌛ Please wait!`,
+		cooldown: `You need to wait {seconds} seconds before using a \`/{category}\` command again.`,
 
 		// Standard interaction responses (buttons, selects)
 		interaction: {
-			cancel_title: `❌ Operation Cancelled`,
-			cancel_description: `The operation has been cancelled. You can try again anytime!`,
-			timeout_title: `⏰ Operation Timed Out`,
-			timeout_description: `You didn't respond in time. Please try again if you'd like to continue.`,
+			cancel_title: `❌ Command Cancelled`,
+			cancel_description: `The command has been cancelled.`,
+			timeout_title: `⏰ Command Timed Out`,
+			timeout_description: `You didn't respond in time. Please try again.`,
 		},
 
 		// Pagination component messages
@@ -29,37 +29,36 @@ export default {
 
 		// Common error messages
 		errors: {
-			command_timeout: `Command timed out. Please try again.`,
 			guild_only_title: `Server Only Command`,
-			guild_only_description: `This command can only be used within a server channel. I don't work in DMs or group chats currently!`,
+			guild_only_description: `This command can only be used within a server.`,
 			dm_not_supported_title: `DMs Not Supported`,
 			dm_not_supported_description: `Sorry, I can only chat within server channels, not in Direct Messages. This might change in the future, but for now I only work in servers!`,
-			tomori_not_setup_title: `Tomori Not Configured`,
-			tomori_not_setup_description: `It seems I haven't been set up on this server yet. An administrator needs to use \`/config setup\` first.`,
+			tomori_not_setup_title: `Initial Setup Required`,
+			tomori_not_setup_description: `It seems I haven't been set up on this server yet. A server member with \`Manage Server\` permissions needs to use \`/config setup\` first.`,
 			api_key_missing_title: `API Key Missing`,
-			api_key_missing_description: `I need a Google Gemini API key to function, but one hasn't been configured for this server. An administrator can set one using \`/config apikeyset\`.`,
+			api_key_missing_description: `I need an API key to function, but one hasn't been configured for this server. A server member with \`Manage Server\` permissions can set one using \`/config apikeyset\`.`,
 			api_key_error_title: `API Key Error`,
-			api_key_error_description: `There was an issue accessing or decrypting the configured API key. Please ensure it was set correctly.`,
+			api_key_error_description: `There was an issue accessing or decrypting the configured API key. Please ensure it was set correctly using \`/config apikeyset\`.`,
 			context_error_title: `Context Building Error`,
-			context_error_description: `I encountered an error while trying to understand the conversation context. Please try again.`,
+			context_error_description: `I encountered an error while trying to understand the conversation context. Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
 			critical_error_title: `Critical Error`,
-			critical_error_description: `An unexpected critical error occurred while processing your message. Please report this if it persists.`,
+			critical_error_description: `An unexpected critical error occurred. Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
 			update_failed_title: `Update Failed`,
 			update_failed_description: `Failed to update the configuration in the database. Please try again.`,
 			unknown_error_title: `Unknown Error`,
-			unknown_error_description: `An unexpected error occurred. Please try again or report this if it persists.`,
+			unknown_error_description: `An unexpected error occurred. Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
 			invalid_option_title: `Invalid Option`,
 			invalid_option_description: `The selected option is invalid. Please choose a valid option.`,
 			brave_api: {
 				missing_key: {
 					title: `Brave API Key Missing`,
-					description: `I need a Brave Search API key to perform searches, but one hasn't been configured for this server. An administrator can set one using \`/config braveapiset\` or disable it using \`/config tomoripermissions\`.`,
+					description: `I need a Brave Search API key to perform searches, but one hasn't been configured for this server. A server member with \`Manage Server\` permissions can set one using \`/config braveapiset\` or disable it using \`/config botpermissions\`.`,
 					footer: `Get a free API key at https://brave.com/search/api/`,
 				},
 			},
 			duckduckgo_rate_limit: {
 				title: `DuckDuckGo Rate Limited`,
-				description: `DuckDuckGo search is currently rate limited. For more reliable searching, an administrator can set up Brave Search using \`/config braveapiset\`.`,
+				description: `DuckDuckGo search is currently rate limited. For more reliable searching, a server member with \`Manage Server\` permissions can set up Brave Search using \`/config braveapiset\` or disable it using \`/config botpermissions\`.`,
 				footer: `Get a free Brave Search API key at https://brave.com/search/api/`,
 			},
 			operation_failed_title: `Operation Failed`,
@@ -69,38 +68,24 @@ export default {
 		},
 		tomori_busy_title: "Busy Replying to Someone Else!",
 		tomori_busy_replying:
-			"Currently responding to {message_link}. Your message has been queued.",
+			"Currently responding to this message: {message_link}. Your message has been queued.",
 	},
 
 	genai: {
 		// Errors related to LLM API generation
 		generic_error_title: `Generation Error`,
-		generic_error_description: `Sorry, I encountered an error while trying to generate a response ({error_message}). Please try again later.`,
-		safety_block_title: `Content Blocked`,
-		safety_block_description: `I couldn't process the request or generate a response because it was flagged for safety reasons ({reason}). Please modify your prompt or try something different.`,
-		api_error_title: `Gemini API Error`,
+		generic_error_description: `Sorry, I encountered an error while trying to generate a response ({error_message}). Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
 		error_stream_timeout_title: "Connection Timeout",
 		error_stream_timeout_description:
-			"I'm having trouble connecting to my brain right now. Please try your request again in a moment or use `/tools refresh` to refresh the context history. If this keeps happening, there might be a temporary issue with the service.",
-
-		// Specific Gemini API error codes
-		"400_invalid_argument_description": `**400 INVALID_ARGUMENT:** The request was malformed (e.g., typo, missing field). Check API documentation if configuring manually.`,
-		"400_failed_precondition_description": `**400 FAILED_PRECONDITION:** The Gemini API free tier might not be available in your region, or billing needs to be enabled on the associated Google Cloud project.`,
-		"403_permission_denied_description": `**403 PERMISSION_DENIED:** The provided API key is invalid, expired, or lacks the necessary permissions for the selected model.`,
-		"404_not_found_description": `**404 NOT_FOUND:** A resource required for the request (like an image or file) wasn't found, or the model name is incorrect.`,
-		"429_resource_exhausted_description": `**429 RESOURCE_EXHAUSTED:** Too many requests are being sent. Please wait a moment before trying again (Rate Limit Exceeded).`,
-		"500_internal_description": `**500 INTERNAL:** An unexpected error occurred on Google's side. This might be due to a very long prompt/context. Try reducing the input or try again later.`,
-		"503_unavailable_description": `**503 UNAVAILABLE:** The Gemini service is temporarily overloaded or unavailable. Please wait a bit and try again.`,
-		"504_deadline_exceeded_description": `**504 DEADLINE_EXCEEDED:** The request took too long to process, possibly due to a very large prompt or context. Try reducing the input.`,
-		unknown_api_error_description: `An unexpected error occurred while communicating with the Gemini API: \`{error}\``,
+			"If this keeps happening, there might be a temporary issue with the service. Please try your request again in a moment or use `/tools refresh` to refresh the context history.",
 
 		// Empty response from API
 		empty_response_title: `Empty Response`,
-		empty_response_description: `I received an empty response from the AI. This might happen sometimes. Please try rephrasing or try again.`,
+		empty_response_description: `I received an empty response from the AI. Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
 		// New: Max iterations for function calls
 		max_iterations_title: "Thinking Loop",
 		max_iterations_streaming_description:
-			"Tomori got stuck in a thinking loop and couldn't complete the request. Please try rephrasing or try again later.",
+			"I got stuck in a thinking loop and couldn't complete the request. Please run `/tool refresh` and then try again. If the issue persists, please report it through `/support report`.",
 
 		// Search related messages
 		search: {
@@ -108,31 +93,27 @@ export default {
 			image_search_title: `🔍 Searching for \`{query}\` images...`,
 			video_search_title: `🔍 Searching for \`{query}\` videos...`,
 			news_search_title: `🔍 Searching for \`{query}\` in the news...`,
-			disclaimer_description:
-				`⚠️ **Attention**: AI-Generated Responses and Search Results may be inaccurate or incomplete, please double-check important information`,
+			disclaimer_description: `AI-Generated Responses and Search Results may be inaccurate or incomplete, **please double-check important information**`,
 		},
 
 		// YouTube video processing messages
 		video: {
-			youtube_processing_title: "🎥 Watching YouTube Video...",
+			youtube_processing_title: "👁️ Watching YouTube Video...",
 			youtube_processing_description:
-				"I'm analyzing the YouTube video: **{video_url}**\n\nThis may take a moment depending on the video length. Please wait while I process the content.",
+				"I'm currently watching the YouTube video: __{video_url}__. This may take a moment depending on the video length.",
 		},
 
 		// New: Stream specific error messages
 		stream: {
-			prompt_blocked_title: "Request Blocked",
-			prompt_blocked_description:
-				"Your request couldn't be processed because it was blocked for the following reason: {reason}. Please try modifying your request.",
 			response_stopped_title: "Response Interrupted",
 			response_stopped_description:
-				"The response was interrupted for the following reason: {reason}. The output may be incomplete.",
+				"The response was interrupted for the following reason: {reason}. Make sure that content sent is not too large for the AI provider to handle. Run `/tool refresh` to clear conversation content.",
 			prohibited_content_title: "Content Policy Violation",
 			prohibited_content_description:
 				"The response was blocked due to prohibited content detection.",
 			prohibited_content_admin_notice_title: "Admin Notice",
 			prohibited_content_admin_notice_description:
-				"Please review the prompts and context used to ensure they comply with content policies.",
+				"Please make sure content sent (media, conversation messages, and memories) complies with the AI provider's content policies. Run `/tool refresh` to clear conversation content.",
 			// For generic stream errors, we can reuse:
 			// genai.generic_error_title
 			// genai.generic_error_description
@@ -140,19 +121,15 @@ export default {
 			// For now, assuming the existing generic ones are sufficient for a general stream failure.
 			// If a specific "streaming_failed_description" is needed distinct from "generic_error_description":
 			streaming_failed_description:
-				"Tomori encountered an issue while trying to stream the response. Please try again.",
-			generic_error_title: "Unknown Error", // Ensure this exists
-			generic_error_description:
-				"An unknown error occured during text generation. Please try again in a moment.", // Ensure this exists
+				"An issue while trying to stream the response. Please run `/tool refresh` and then try again. If the issue persists, please report it through `/support report`.",
 		},
 
 		self_teach: {
-			server_memory_learned_title:
-				"🧠 Tomori Learned Something New (Server-Wide!)",
+			server_memory_learned_title: "🧠 I Learned Something New! (Server-Wide)",
 			server_memory_learned_description:
 				'I\'ve just learned this about our server: "{memory_content}"',
 			personal_memory_learned_title:
-				"💡 Tomori Learned Something About A User!",
+				"💡 I Learned Something New! (User-Specific)",
 			personal_memory_learned_description:
 				'I\'ve just learned this about {user_nickname}: "{memory_content}"',
 			server_memory_footer:
@@ -160,9 +137,9 @@ export default {
 			personal_memory_footer_manage:
 				"You can manage your personal memories using `/teach` and `/unlearn` commands.",
 			personal_memory_footer_personalization_disabled:
-				"Note: This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here.",
+				"This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here.",
 			personal_memory_footer_user_blacklisted:
-				"Note: This memory was saved, but the user in question is currently blacklisted from personalization features on this server.",
+				"This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here",
 		},
 
 		// Test/placeholder keys
@@ -171,38 +148,11 @@ export default {
 		},
 	},
 
-	functions: {
-		// Locales for built-in functions (e.g., image search)
-		scrapeBooru: {
-			title: `Booru Search`,
-			description: `Quickly get up to 4 random 'SFW' HQ posts for: \`{query}\`
-Filtered Query: \`{filtered_query}\``,
-			error_not_nsfw: `Sorry, you can only use this command in NSFW channels!`,
-			error_no_results: `Sowwy, I didn't find any posts for: \`{query}\`.
-Try a different prompt or try \`/rule34\` instead!`,
-			progress_message: `Downloading posts and uploading them in random...`,
-			query_comparison_title: `Search Query Translation`,
-			query_comparison_description: `Your tags: \`{original}\`
-Searching for: \`{filtered}\``,
-			result_title: `Original: {source}`,
-			result_original: `(No source provided)`,
-			result_footer: `Score: {score} | Tags: {tags}`,
-		},
-		generateImage: {
-			description: `Quickly generate an image from a prompt using Stable Diffusion!`,
-			progress: `🎨 Generating your image for: \`{prompt}\`...`,
-			result: `✨ Here's what I generated for \`{prompt}\` (b ᵔ▽ᵔ)b`,
-			error: `🚫 Something went wrong while generating the image. Please try again later.`,
-		},
-	},
-
 	commands: {
 		// General utility commands
 		tool: {
 			ping: {
 				description: `Check the bot's latency.`,
-				title: `Pong!`,
-				description_content: `My current ping is {ping}ms.`,
 				response_fast: `Pong! 🏓
 Response Time: \`{response_time}ms\`
 Discord API Latency: \`{discord_response}ms\``,
@@ -211,19 +161,19 @@ Response Time: \`{response_time}ms\`
 Discord API Latency: \`{discord_response}ms\``,
 			},
 			refresh: {
-				description: `Clears the recent conversation history for Tomori.`,
-				title: `Conversation History Cleared`,
-				response: `🧹 Okay, I've cleared my short-term memory of our recent chat! Let's start fresh. (This message signals a refresh)`,
+				description: `Clears the recent conversation history.`,
+				title: `🧹 Conversation History Cleared`,
+				response: `Context has been refreshed. All messages above this one will now be ignored.`,
 			},
 			status: {
-				description: `Show Tomori's current configuration or personality status.`,
+				description: `Show current configuration or personality status.`,
 				type_description: `Which status aspect to display?`,
 				type_choice_config: `Configuration`,
 				type_choice_personality: `Personality`,
-				config_title: `Tomori Configuration Status`,
-				config_description: `Current operational settings for Tomori.`,
-				personality_title: `Tomori Personality Status`,
-				personality_description: `Current personality settings for Tomori.`,
+				config_title: `Configuration Status`,
+				config_description: `Current operational settings`,
+				personality_title: `Personality Status`,
+				personality_description: `Current personality settings`,
 				field_model: `AI Model`,
 				field_temperature: `Temperature`,
 				field_humanizer: `Humanizer Level`,
@@ -260,19 +210,17 @@ Discord API Latency: \`{discord_response}ms\``,
 		// Bot manual control commands
 		bot: {
 			respond: {
-				description: `Manually trigger Tomori to respond to the latest message in this channel.`,
+				description: `Manually trigger response to the latest message in this channel.`,
 				success_title: `Manual Response Triggered`,
-				success_description: `Tomori will respond to the latest message in this channel.`,
+				success_description: `Responding to the latest message in this channel...`,
 			},
 			reason: {
-				description: `Use Tomori's smartest reasoning model to respond with optional query.`,
-				query_description: `Optional query to focus Tomori's reasoning on.`,
+				description: `Use current AI provider's smartest reasoning model to respond with optional query.`,
+				query_description: `Optional query to focus reasoning on.`,
 				success_title: `Reasoning Mode Activated`,
-				success_description: `Tomori will use advanced reasoning to respond{query}.`,
-				no_smart_model_title: `No Smart Model Found`,
-				no_smart_model_description: `No reasoning model found for your current AI provider. Please contact an administrator to configure a smart model.`,
-				multiple_smart_models_title: `Multiple Smart Models Found`,
-				multiple_smart_models_description: `Multiple reasoning models found. Using the first available model: {model}.`,
+				success_description: `Using advanced reasoning to respond{query}...`,
+				no_smart_model_title: `No Reasoning Model Found`,
+				no_smart_model_description: `No reasoning model found for your current AI provider. Please switch to a provider that supports reasoning models using \`/config apikeyset\`.`,
 			},
 		},
 
@@ -286,7 +234,7 @@ Discord API Latency: \`{discord_response}ms\``,
 				disable: `Disable`,
 			},
 			triggeradd: {
-				description: `Add a word that makes Tomori respond when mentioned.`,
+				description: `Add a word that makes me respond when mentioned.`,
 				word_description: `The word to add as a trigger.`,
 				too_short_title: `Trigger Word Too Short`,
 				too_short_description: `Trigger words must be at least 2 characters long.`,
@@ -296,7 +244,7 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_description: `Successfully added \`{word}\` as a trigger word. There are now {word_count} trigger words.`,
 			},
 			autochchannels: {
-				description: `Add or remove channels where Tomori will automatically chat.`,
+				description: `Add or remove channels where I will automatically chat.`,
 				channel_description: `The text channel to add or remove.`,
 				action_description: `Whether to add or remove the channel.`,
 				invalid_channel_title: `Invalid Channel Type`,
@@ -311,12 +259,12 @@ Discord API Latency: \`{discord_response}ms\``,
 				removed_description: `Successfully removed \`{channel_name}\` from the auto-chat channels.`,
 			},
 			autochthreshold: {
-				description: `Set the message count threshold for Tomori to auto-chat (0 to disable).`,
+				description: `Set the message count threshold for me to auto-chat (0 to disable).`,
 				threshold_description_v2: `Messages needed before auto-chat (0 to disable, or 30-100).`,
 				invalid_range_title: `Invalid Threshold`,
 				invalid_range_specific_description: `The threshold must be exactly \`{min}\` (to disable) or between \`{range_start}\` and \`{max}\`.`,
 				success_title: `Auto-Chat Threshold Set`,
-				success_description: `Tomori will now automatically chat after \`{threshold}\` messages in designated channels.`,
+				success_description: `I will now automatically chat after \`{threshold}\` messages in designated channels.`,
 				success_disabled_title: `Auto-Chat Disabled`,
 				success_disabled_description: `Auto-chat feature is now disabled (threshold set to \`{threshold}\`).`,
 			},
@@ -325,7 +273,7 @@ Discord API Latency: \`{discord_response}ms\``,
 				member_description: `The member to add or remove from the blacklist.`,
 				action_description: `Whether to add or remove the member.`,
 				personalization_disabled_title: `Personalization Disabled`,
-				personalization_disabled_description: `Personalization is currently disabled server-wide. Enable it first with \`/config personalization\`.`,
+				personalization_disabled_description: `Personalization is currently disabled server-wide. Enable it first with \`/config botpermissions\`.`,
 				already_blacklisted_title: `Already Blacklisted`,
 				already_blacklisted_description: `\`{user_name}\` is already on the personalization blacklist.`,
 				not_blacklisted_title: `Not Blacklisted`,
@@ -338,21 +286,21 @@ Discord API Latency: \`{discord_response}ms\``,
 				user_registration_failed_description: `Failed to register user in the database. Please try again.`,
 			},
 			humanizerdegree: {
-				description: `Set how 'human-like' Tomori's responses should feel.`,
-				value_description: `The level of humanization (0=None, 1=Prompt, 2=Typing/Chunking, 3=Lowercase/No Punctuation).`,
+				description: `Set how 'human-like' my responses should feel.`,
+				// value_description: `The level of humanization (0=None, 1=Prompt, 2=Typing/Chunking, 3=Lowercase/No Punctuation).`,
 				modal_title: `Set Humanizer Degree`,
 				select_label: `Humanizer Level`,
-				select_description: `Choose how human-like Tomori's responses should feel`,
+				select_description: `Choose how human-like my responses should feel`,
 				select_placeholder: `Choose a level...`,
 				choice_none: `0: None (Raw AI Output)`,
-				choice_light: `1: Light (Prompt Injection - Default)`,
+				choice_light: `1: Light (Prompt Injection)`,
 				choice_medium: `2: Medium (Typing Simulation & Chunking)`,
-				choice_heavy: `3: Heavy (Lowercase & No Punctuation)`,
+				choice_heavy: `3: Heavy (Lowercase & No Punctuation - Default)`,
 				desc_none: `No humanization. Standard AI responses with formal tone and structure.`,
 				desc_light: `Adds human-like response guidelines. Limits emojis (0-2), prefers concise responses.`,
 				desc_medium: `Light features + typing simulation and improved message chunking for natural flow.`,
 				desc_heavy: `All features + casual text processing (lowercase, reduced punctuation) for informal tone.`,
-				invalid_value_title: `Invalid Value`,
+				// invalid_value_title: `Invalid Value`,
 				invalid_value_description: `Humanizer degree must be between {min} and {max}.`,
 				already_set_title: `Humanizer Already Set`,
 				already_set_description: `The humanizer degree is already set to \`{value}\`.`,
@@ -360,8 +308,8 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_description: `Humanizer degree changed from \`{previous_value}\` to \`{value}\`.`,
 			},
 			language: {
-				description: `Set your preferred language for TomoriBot's interface.`,
-				value_description: `Choose your preferred language for bot messages and interfaces.`,
+				description: `Set your preferred language for my interface.`,
+				value_description: `Choose your preferred language for interfaces.`,
 				choice_english: `English`,
 				choice_japanese: `Japanese`,
 				invalid_value_title: `Invalid Language`,
@@ -372,7 +320,7 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_description: `Your interface language changed from \`{previous_value}\` to \`{value}\`.`,
 			},
 			memberpermissions: {
-				description: `Configure what non-admin members can teach Tomori.`,
+				description: `Configure what non-admin members can teach me.`,
 				option_description: `The type of memory members can teach.`,
 				servermemories_option: `Server Memories`,
 				attributelist_option: `Attribute List`,
@@ -386,45 +334,36 @@ Discord API Latency: \`{discord_response}ms\``,
 				already_disabled_description: `Members are already prevented from teaching \`{permission_type}\`.`,
 			},
 			model: {
-				description: `Change the underlying AI model Tomori uses.`,
-				name_description: `Select the desired Gemini model.`,
+				description: `Change the underlying AI model that I use.`,
 				modal_title: `Select AI Model`,
 				select_label: `AI Model`,
-				select_description: `Choose the AI model for Tomori to use`,
+				select_description: `Choose the AI model for me to use`,
 				select_placeholder: `Choose a model...`,
 				no_api_key_title: `No API Key Set`,
 				no_api_key_description: `An API key must be configured before changing models. Please use \`/config apikeyset\` to set an API key first.`,
 				no_models_title: `No Models Found`,
 				no_models_description: `Could not load available AI models from the database.`,
-				invalid_model_title: `Invalid Model`,
+				// invalid_model_title: `Invalid Model`,
 				invalid_model_description: `The selected model name is not valid or available.`,
 				already_selected_title: `Model Already Selected`,
-				already_selected_description: `Tomori is already using the \`{model_name}\` model.`,
+				already_selected_description: `I'm is already using the \`{model_name}\` model.`,
 				validating_api_key_compatibility: `Validating API key compatibility with new provider...`,
 				api_key_incompatible_title: `API Key Incompatible`,
 				api_key_incompatible_description: `The current API key is not compatible with the {model_name} model from {provider}. Please set a valid API key for {provider} using \`/config apikeyset\`.`,
 				validation_error_title: `Validation Error`,
 				validation_error_description: `An error occurred while validating API key compatibility. Please try again.`,
 				success_title: `Model Updated`,
-				success_description: `Tomori will now use the \`{model_name}\` model (previously \`{previous_model}\`).`,
-			},
-			nickname: {
-				description: `Change the name Tomori uses for herself.`,
-				option_description: `The new nickname for Tomori (2-32 characters).`,
-				invalid_length_title: `Invalid Nickname Length`,
-				invalid_length_description: `Nickname must be between {min} and {max} characters.`,
-				success_title: `Nickname Updated`,
-				success_description: `Tomori's nickname changed from \`{old_nickname}\` to \`{new_nickname}\`.`,
+				success_description: `I will now use the \`{model_name}\` model (previously \`{previous_model}\`).`,
 			},
 			apikeydelete: {
-				description: `Remove the currently configured Gemini API key.`,
+				description: `Remove the currently configured AI provider API key.`,
 				no_key_title: `No API Key Set`,
 				no_key_description: `There is no API key currently configured to remove.`,
 				success_title: `API Key Removed`,
-				success_description: `The Gemini API key has been successfully removed. Tomori will stop responding until a new key is set.`,
+				success_description: `The AI provider API key has been successfully removed. My chat functions are disabled until a new key is set.`,
 			},
 			triggerdelete: {
-				description: `Remove a word that makes Tomori respond when mentioned.`,
+				description: `Remove a word that makes me respond when mentioned.`,
 				no_triggers_title: `No Trigger Words`,
 				no_triggers_description: `There are no custom trigger words set to remove. Add some with \`/config triggeradd\`.`,
 				select_title: `Remove Trigger Word`,
@@ -435,7 +374,6 @@ Discord API Latency: \`{discord_response}ms\``,
 			},
 			apikeyset: {
 				description: `Set the API key for your chosen AI provider.`,
-				key_description: `Your Google Gemini API key.`,
 				modal_title: `Set API Key`,
 				provider_label: `AI Provider`,
 				provider_description: `Choose the AI provider for your API key`,
@@ -462,7 +400,6 @@ Discord API Latency: \`{discord_response}ms\``,
 				key_description: `Your Brave Search API key.`,
 				invalid_key_title: `Invalid API Key Format`,
 				invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid key.`,
-				storing_key: `Storing encrypted Brave Search API key...`,
 				success_title: `Brave API Key Set`,
 				success_description: `The Brave Search API key has been successfully encrypted and saved.`,
 			},
@@ -474,49 +411,45 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_description: `The Brave Search API key has been successfully removed.`,
 			},
 			rename: {
-				description: `Change Tomori's name and trigger words.`,
-				option_description: `The new name for Tomori (2-32 characters).`,
+				description: `Change my name on this server.`,
+				option_description: `My new name (2-32 characters).`,
 				invalid_length_title: `Invalid Name Length`,
 				invalid_length: `Name must be between 2 and 32 characters.`,
 				already_set_title: `Name Already Set`,
-				already_set_description: `Tomori's name is already set to \`{name}\`.`,
+				already_set_description: `My name is already set to \`{name}\`.`,
 				success_title: `Name Updated`,
-				success_description: `Tomori's name changed from \`{old_name}\` to \`{new_name}\`.`,
-				success_with_trigger_description: `Tomori's name changed from \`{old_name}\` to \`{new_name}\`. Trigger words updated accordingly.`,
+				success_description: `My name has been changed from \`{old_name}\` to \`{new_name}\`.`,
+				success_with_trigger_description: `My name has been changed from \`{old_name}\` to \`{new_name}\`. Trigger words updated accordingly.`,
 				partial_success_title: `Name Updated with Issues`,
-				partial_success_description: `Tomori's name changed to \`{new_name}\`, but some trigger word updates failed.`,
+				partial_success_description: `My name has been changed to \`{new_name}\`, but some trigger word updates failed.`,
 			},
 			setup: {
-				description: `Start the initial setup process for Tomori.`,
+				description: `Start the initial setup process.`,
 				no_presets_found: `Error: No personality presets found for your language. Cannot proceed with setup.`,
-				modal_title: `Tomori Initial Setup`,
+				modal_title: `Initial Setup`,
 				api_provider_label: `API Provider`,
 				api_provider_description: `Please choose the provider of the LLM of your choice`,
 				api_provider_placeholder: `Choose...`,
 				api_key_label: `API Key`,
 				api_key_description: `Please enter the API key of your chosen LLM provider.\n\n**Get your API key:**\n• [Google AI Studio](https://aistudio.google.com/app/apikey) - Free tier available\n• [OpenAI Platform](https://platform.openai.com/api-keys) - Pay-as-you-go\n• [Anthropic Console](https://console.anthropic.com/settings/keys) - Credit-based billing\n• [OpenRouter](https://openrouter.ai/keys) - Multiple providers`,
 				preset_label: `Personality Preset`,
-				preset_description: `Choose a personality preset for Tomori`,
+				preset_description: `Choose a personality preset`,
 				preset_placeholder: `Choose a personality...`,
-				humanizer_label: `Humanizer Level (0-3)`,
 				api_key_invalid: `Error: The API key provided is too short or invalid.`,
-				api_key_validating: `Validating API key with Google...`,
-				api_key_invalid_api: `Error: Google rejected the API key. Please ensure it's correct and has Gemini API enabled.`,
+				api_key_validating: `Validating API key...`,
+				api_key_invalid_api: `Error: Provider rejected the API key. Please ensure it's correct.`,
 				preset_invalid: `Error: Invalid preset name. Please enter one of the available preset names exactly: {available}`,
-				humanizer_invalid: `Error: Invalid humanizer level. Please enter a number between 0 and 3.`,
 				config_invalid: `Error: Internal configuration validation failed. Please report this.`,
 				setup_failed_description: `Error: Failed to save the initial setup configuration to the database. Please try again.`,
-				success_title: `🎉 Tomori Setup Complete! 🎉`,
-				success_desc: `Tomori is now configured for this server. Here's a summary:`,
+				success_title: `🎉 Setup Complete! 🎉`,
+				success_desc: `I am now configured for this server. Here's a summary:`,
 				preset_field: `Personality Preset`,
-				humanizer_field: `Humanizer Level`,
-				name_field: `Tomori's Name`,
-				modal_timeout: `Setup timed out. Please run \`/config setup\` again.`,
-				already_setup_title: `Tomori Already Set Up`,
-				already_setup_description: `Tomori is already set up for this server. To modify Tomori's configuration, please use other commands like \`/config humanizerdegree\`, \`/config temperature\`, \`/teach attribute\`, etc.`,
+				name_field: `My Name`,
+				already_setup_title: `Already Set Up`,
+				already_setup_description: `I am already set up for this server. To modify my configuration, please use other commands like \`/config humanizerdegree\`, \`/config temperature\`, \`/teach attribute\`, etc.`,
 			},
 			temperature: {
-				description: `Set the creativity/randomness of Tomori's responses (0.1-2.0).`,
+				description: `Set the creativity/randomness of my responses (0.1-2.0).`,
 				value_description: `Value between 1.0 (predictable) and 2.0 (very random). Default: 1.5.`,
 				invalid_value_title: `Invalid Temperature`,
 				invalid_value_description: `Temperature must be between {min} and {max}.`,
@@ -526,48 +459,46 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.`,
 			},
 			preset: {
-				description: `Apply a preset personality configuration to Tomori`,
+				description: `Apply a preset personality configuration`,
 				modal_title: `Apply Personality Preset`,
 				select_label: `Personality Preset`,
-				select_description: `Choose a preset to apply to Tomori. This will overwrite current attributes and dialogues.`,
+				select_description: `Choose a preset to apply. **This will overwrite current attributes and dialogues.**`,
 				select_placeholder: `Choose a preset...`,
 				no_presets_title: `No Presets Available`,
-				no_presets_description: `There are no personality presets available for your language. Please contact the bot administrator.`,
+				no_presets_description: `There are no personality presets available for your language. Please run \`/support report\`.`,
 				preset_not_found: `The selected preset could not be found.`,
-				select_title: `Select Personality Preset`,
-				preset_label: `Preset`,
 				success_title: `Preset Applied`,
-				success_description: `Successfully applied the '{preset_name}' preset to Tomori.`,
+				success_description: `Successfully applied the '{preset_name}' preset.`,
 			},
-			tomoripermissions: {
-				description: `Configure Tomori's core behavior permissions on this server.`,
-				option_description: `The specific Tomori permission to configure.`,
+			botpermissions: {
+				description: `Configure my core behavior permissions on this server.`,
+				option_description: `The specific permission to configure.`,
 				selfteaching_option: `Self-Teaching`,
 				personalization_option: `Personalization (Memories/Nicknames)`,
 				emojiusage_option: `Emoji Usage`,
 				stickerusage_option: `Sticker Usage`,
 				websearch_option: "Web Search Permission",
-				set_description: `Enable or disable this permission for Tomori.`,
+				set_description: `Enable or disable this permission for me.`,
 				already_set_title: `Permission Already Set`,
 				already_enabled_description: `The permission \`{permission_type}\` is already **enabled**.`,
 				already_disabled_description: `The permission \`{permission_type}\` is already **disabled**.`,
-				success_title: `Tomori Permission Updated`,
-				enabled_success: `Tomori's permission for \`{permission_type}\` is now **enabled**.`,
-				disabled_success: `Tomori's permission for \`{permission_type}\` is now **disabled**.`,
+				success_title: `Permission Updated`,
+				enabled_success: `My permission for \`{permission_type}\` is now **enabled**.`,
+				disabled_success: `My permission for \`{permission_type}\` is now **disabled**.`,
 			},
 		},
 
 		// Commands for teaching Tomori
 		teach: {
 			sampledialogue: {
-				description: `Add a sample user/bot dialogue pair to Tomori's memory.`,
+				description: `Add a sample user/bot dialogue pair to as an example for how I should respond.`,
 				teaching_disabled_title: `Sample Dialogue Teaching Disabled`,
-				teaching_disabled_description: `Members are not currently allowed to teach sample dialogues on this server. An admin can enable this using \`/config memberpermissions\`.`,
+				teaching_disabled_description: `Members are not currently allowed to teach sample dialogues on this server. A server member with \`Manage Server\` permissions can enable this using \`/config memberpermissions\`.`,
 				modal_title: `Add Sample Dialogue`,
 				user_input_label: `User's Line`,
 				user_input_description: `A sample question for the bot (eg. What's your favorite food?)`,
 				user_input_placeholder: `What's your favorite food?`,
-				bot_input_label: `Tomori's Response`,
+				bot_input_label: `My Response`,
 				bot_input_description: `How the bot should respond (eg. I-I like mangoes...)`,
 				bot_input_placeholder: `I-I like mangoes...`,
 				success_title: `Sample Dialogue Added`,
@@ -576,43 +507,43 @@ Discord API Latency: \`{discord_response}ms\``,
 **User:**
 > {user_input}
 
-**Tomori:**
+**Me:**
 > {bot_input}`, // Natural line breaks here
 			},
 			attribute: {
-				description: `Add a personality attribute to Tomori's memory.`,
+				description: `Add a personality attribute describing me for this server.`,
 				teaching_disabled_title: `Attribute Teaching Disabled`,
-				teaching_disabled_description: `Members are not currently allowed to teach personality attributes on this server. An admin can enable this using \`/config memberpermissions\`.`,
+				teaching_disabled_description: `Members are not currently allowed to teach personality attributes on this server. A server member with \`Manage Server\` permissions can enable this using \`/config memberpermissions\`.`,
 				modal_title: `Add Personality Attribute`,
-				modal_description: `A personality trait that Tomori has for this server (eg. Likes mangoes)`,
+				modal_description: `A personality trait that I have for this server (eg. Likes mangoes)`,
 				attribute_input_label: `New Attribute`,
 				attribute_input_placeholder: `Likes mangoes`,
 				duplicate_title: `Duplicate Attribute`,
-				duplicate_description: `This attribute '{attribute}' is already in Tomori's attribute list.`,
+				duplicate_description: `This attribute '{attribute}' is already in my attribute list.`,
 				success_title: `Attribute Added`,
-				success_description: `Successfully added '{attribute}' to Tomori's personality attributes.`,
+				success_description: `Successfully added '{attribute}' to my personality attributes.`,
 			},
 			servermemory: {
-				description: `Add a server memory to Tomori's knowledge.`,
+				description: `Add a server memory to my knowledge base.`,
 				teaching_disabled_title: `Server Memory Teaching Disabled`,
-				teaching_disabled_description: `Members are not currently allowed to add server memories on this server. An admin can enable this using \`/config memberpermissions\`.`,
+				teaching_disabled_description: `Members are not currently allowed to add server memories on this server. A server member with \`Manage Server\` permissions can enable this using \`/config memberpermissions\`.`,
 				modal_title: `Add Server Memory`,
-				modal_description: `A memory that TomoriBot remembers for this server only (eg. This server's members like mangoes)`,
+				modal_description: `A memory that I remember for this server only (eg. This server's members like mangoes)`,
 				memory_input_label: `New Server Memory`,
 				memory_input_placeholder: `This server's members like mangoes`,
 				duplicate_title: `Duplicate Memory`,
-				duplicate_description: `This memory '{memory}' is already in Tomori's server memories.`,
+				duplicate_description: `This memory '{memory}' is already in my memories for this server.`,
 				limit_exceeded_title: `Server Memory Limit Reached`,
 				limit_exceeded_description: `This server has reached its memory limit of {max_allowed} memories (currently has {current_count}). Please remove some memories with \`/unlearn servermemory\` before adding new ones.`,
 				content_too_long_title: `Memory Content Too Long`,
 				content_too_long_description: `The memory content is too long. Maximum allowed length is {max_length} characters.`,
 				success_title: `Server Memory Added`,
-				success_description: `Successfully added '{memory}' to Tomori's server memories.`,
+				success_description: `Successfully added '{memory}' to my server memories.`,
 			},
 			personalmemory: {
-				description: `Add a personal memory only you can see.`,
+				description: `Add a personal memory of you I can remember across any server.`,
 				modal_title: `Add Personal Memory`,
-				modal_description: `A memory of you that TomoriBot remembers no matter the server (eg. Likes mangoes)`,
+				modal_description: `A memory of you that I remember no matter the server (eg. Likes mangoes)`,
 				memory_input_label: `New Personal Memory`,
 				memory_input_placeholder: `Likes mangoes`,
 				duplicate_title: `Duplicate Personal Memory`,
@@ -631,8 +562,8 @@ Discord API Latency: \`{discord_response}ms\``,
 **Warning:** You are currently blacklisted from personalization features on this server, so this memory won't be used here. It will still be available on other servers where you are not blacklisted.`, // Natural line break
 			},
 			nickname: {
-				description: `Change the name Tomori uses to refer to you.`,
-				option_description: `The nickname Tomori should use for you (2-32 characters).`,
+				description: `Change the name I use to refer to you.`,
+				option_description: `The nickname I should use for you (2-32 characters).`,
 				invalid_length_title: `Invalid Nickname Length`,
 				invalid_length: `Nickname must be between {min} and {max} characters.`,
 				success_title: `Personal Nickname Updated`,
@@ -646,7 +577,7 @@ Discord API Latency: \`{discord_response}ms\``,
 		// Commands for making Tomori unlearn things
 		unlearn: {
 			sampledialogue: {
-				description: `Remove a sample user/bot dialogue pair from Tomori's memory.`,
+				description: `Remove a sample user/bot dialogue pair from my memory.`,
 				modal_title: `Remove Sample Dialogue`,
 				select_label: `Dialogue to Remove`,
 				select_description: `Choose which dialogue pair to remove`,
@@ -659,10 +590,10 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_description: `Successfully removed the dialogue pair: User: "{input}" → Bot: "{output}"`,
 			},
 			attribute: {
-				description: `Remove a personality attribute from Tomori's memory.`,
+				description: `Remove a personality attribute from my memory.`,
 				modal_title: `Remove Attribute`,
 				select_label: `Attribute to Remove`,
-				select_description: `Choose which attribute to remove from Tomori's personality`,
+				select_description: `Choose which attribute to remove from my personality`,
 				select_placeholder: `Select an attribute...`,
 				no_attributes_title: `No Attributes`,
 				no_attributes: `There are no personality attributes to remove. Add some with \`/teach attribute\`.`,
@@ -672,7 +603,7 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_description: `Successfully removed the attribute: "{attribute}"`,
 			},
 			servermemory: {
-				description: `Remove a server memory from Tomori's knowledge.`,
+				description: `Remove a server memory from my knowledge.`,
 				modal_title: `Remove Server Memory`,
 				select_label: `Memory to Remove`,
 				select_description: `Choose which server memory to remove`,
@@ -699,41 +630,20 @@ Discord API Latency: \`{discord_response}ms\``,
 				success_title: `Personal Memory Removed`,
 				success_description: `Successfully removed the personal memory: "{memory}"`,
 				warning_disabled_title: `Personalization Disabled`,
-				warning_disabled_description: `The memory was successfully removed from your profile.
+				warning_disabled_description: `The memory was successfully removed.
 
-**Warning:** Personalization is currently disabled on this server, so this change won't affect Tomori's behavior here. It will still be reflected on other servers where personalization is enabled.`, // Natural line break
+**Warning:** Personalization is currently disabled on this server, so this change won't affect my behavior here. It will still be reflected on other servers where personalization is enabled.`, // Natural line break
 			},
 		},
 	},
 
 	events: {
-		// Messages related to the main chat event handler
-		tomoriChat: {
-			setup_required_title: `Bot Setup Required`,
-			setup_required_description: `To use the chat feature, please set up the following:
-• At least 2 conversation examples using \`/teach convo\`
-• At least 1 info entry using \`/teach info\`
-You may also use \`/setup\` to easily choose a personality preset for the bot.`, // Natural line breaks
-			safety_error_title: `Safety Filter Triggered`,
-			safety_error_description: `🚫 Gemini's safety filters blocked the response. This usually happens when the content might violate Google's safety measures.`,
-			api_key_missing_title: `API Key Missing`,
-			api_key_missing_description: `Tomori needs an API key to work. Please ask a server admin to set one up using the \`/config apikeyset\` command.`,
-			api_key_error_title: `API Key Error`,
-			api_key_error_description: `There was a problem with the API key. Please ask a server admin to check or reset it using the \`/config apikeyset\` command.`,
-			generation_error_title: `Response Generation Error`,
-			generation_error_description: `I encountered an error while generating a response. Please try again later.`,
-			context_error_title: `Context Building Error`,
-			context_error_description: `I encountered an error building context for this conversation. Please try again later.`,
-			critical_error_title: `Unexpected Error`,
-			critical_error_description: `Something went wrong. Please try again later or contact support if this persists.`,
-		},
-
 		// Messages for when the bot is added to a server
 		addBot: {
-			rejoin_title: `I'm Back!`,
-			rejoin_description: `Hey there! Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the \`/teach\` and \`/unlearn\` commands.`,
-			setup_prompt_title: `Thanks for adding TomoriBot!`,
-			setup_prompt_description: `Hello! Thanks for adding me! To get started, someone with the **Manage Server** permission needs to run my \`/setup\` command to choose my initial personality and configure my AI features.`,
+			rejoin_title: `I'm back!`,
+			rejoin_description: `Hey there! Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the \`/config\`, \`/teach\`, and \`unlearn\` commands.`,
+			setup_prompt_title: `Thanks for adding me!`,
+			setup_prompt_description: `Hello! Thanks for adding me! To get started, someone with the **Manage Server** permission needs to run my \`/config setup\` command to choose my initial personality and configure my AI features.`,
 		},
 	},
 };

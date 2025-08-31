@@ -18,7 +18,7 @@ import type { StreamingContext } from "../tool/interfaces";
  * Generic stream response result
  */
 export interface StreamResult {
-	status: "completed" | "function_call" | "error" | "timeout";
+	status: "completed" | "function_call" | "error" | "timeout" | "stopped_by_user";
 	data?: unknown | Error; // Function call data or error details
 }
 

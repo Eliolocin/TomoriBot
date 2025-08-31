@@ -14,7 +14,7 @@
  * - Typing simulation and humanization
  */
 
-import { MessageFlags } from "discord.js";
+import { MessageFlags, type Message, type Client } from "discord.js";
 import { HumanizerDegree } from "../../types/db/schema";
 import { sendStandardEmbed, createSummaryEmbed } from "./embedHelper";
 import { ColorCode, log } from "../misc/logger";
@@ -54,6 +54,90 @@ const RETRY_DELAY_MS = 1000; // Delay between retries in milliseconds (1 second)
  * Handles all Discord-specific logic while delegating LLM API calls to providers
  */
 export class StreamOrchestrator implements IStreamOrchestrator {
+	// Static stop request management system
+	private static activeStopRequests = new Map<string, {
+		channelId: string;
+		timestamp: number;
+		requesterId: string;
+		stopContext?: {
+			originalStopMessage: Message;
+			client: Client;
+		};
+	}>();
+
+	/**
+	 * Request a graceful stop of the current stream in a channel
+	 * @param channelId - The Discord channel ID where streaming should stop
+	 * @param requesterId - The ID of the user requesting the stop (optional)
+	 * @param stopContext - Context for creating the stop response (optional)
+	 * @returns True if the stop request was registered
+	 */
+	public static requestStop(
+		channelId: string, 
+		requesterId?: string,
+		stopContext?: { originalStopMessage: Message; client: Client }
+	): boolean {
+		log.info(`Stop request received for channel ${channelId} by user ${requesterId || 'system'}`);
+		
+		StreamOrchestrator.activeStopRequests.set(channelId, {
+			channelId,
+			timestamp: Date.now(),
+			requesterId: requesterId || 'system',
+			stopContext,
+		});
+		
+		return true;
+	}
+
+	/**
+	 * Check if there's an active stop request for a channel
+	 * @param channelId - The Discord channel ID to check
+	 * @returns True if there's an active stop request
+	 */
+	public static hasStopRequest(channelId: string): boolean {
+		return StreamOrchestrator.activeStopRequests.has(channelId);
+	}
+
+	/**
+	 * Clear stop request for a channel (called when stream completes or fails)
+	 * @param channelId - The Discord channel ID to clear
+	 */
+	public static clearStopRequest(channelId: string): void {
+		const removed = StreamOrchestrator.activeStopRequests.delete(channelId);
+		if (removed) {
+			log.info(`Cleared stop request for channel ${channelId}`);
+		}
+	}
+
+	/**
+	 * Get and clear stop context for a channel (when stream stops)
+	 * @param channelId - The Discord channel ID to get context for
+	 * @returns Stop context if it exists, null otherwise
+	 */
+	public static getAndClearStopContext(channelId: string): { originalStopMessage: Message; client: Client } | null {
+		const stopRequest = StreamOrchestrator.activeStopRequests.get(channelId);
+		if (stopRequest?.stopContext) {
+			const context = stopRequest.stopContext;
+			StreamOrchestrator.activeStopRequests.delete(channelId);
+			log.info(`Retrieved and cleared stop context for channel ${channelId}`);
+			return context;
+		}
+		return null;
+	}
+
+	/**
+	 * Clean up old stop requests (called periodically to prevent memory leaks)
+	 * @param maxAgeMs - Maximum age of stop requests in milliseconds (default: 5 minutes)
+	 */
+	public static cleanupOldStopRequests(maxAgeMs: number = 5 * 60 * 1000): void {
+		const now = Date.now();
+		for (const [channelId, stopRequest] of StreamOrchestrator.activeStopRequests.entries()) {
+			if (now - stopRequest.timestamp > maxAgeMs) {
+				StreamOrchestrator.activeStopRequests.delete(channelId);
+				log.info(`Cleaned up old stop request for channel ${channelId}`);
+			}
+		}
+	}
 	/**
 	 * Stream an LLM response to Discord using a provider-specific adapter
 	 * This replaces the massive streamGeminiToDiscord function with modular architecture
@@ -133,6 +217,26 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
 			// Process the stream
 			for await (const rawChunk of streamGenerator) {
+				// Check for stop request first (highest priority)
+				if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+					log.info(
+						`Stream loop breaking due to stop request for channel ${context.channel.id}.`,
+					);
+					StreamOrchestrator.clearStopRequest(context.channel.id);
+					
+					// Flush any pending buffer before stopping
+					if (state.buffer.length > 0) {
+						await this.flushPendingBuffer(
+							state,
+							this.createTextProcessingConfig(config, context),
+							createTypingSimulationConfig(config.humanizerDegree),
+							context,
+						);
+					}
+					
+					return { status: "stopped_by_user" };
+				}
+
 				// Check for timeout
 				if (this.isStreamTimedOut(state)) {
 					log.warn(
@@ -183,6 +287,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
 			// Complete metrics and return success with message count for empty response detection
 			metrics.endTime = Date.now();
+			
+			// Don't clear stop request here - let the finally block handle it after lock release
+			
 			log.success(
 				`Stream to channel ${context.channel.id} completed. Messages sent: ${state.messageSentCount}, Duration: ${metrics.endTime - metrics.startTime}ms`,
 			);
@@ -191,6 +298,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		} catch (error) {
 			this.clearInactivityTimer(state);
 			lastError = error as Error;
+
+			// Clean up stop request on error
+			StreamOrchestrator.clearStopRequest(context.channel.id);
 
 			// Log error with context
 			const errorContext = {
@@ -320,15 +430,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			if (processingResult.newCodeBlockState !== undefined) {
 				state.isInsideCodeBlock = processingResult.newCodeBlockState;
 			}
+			
 		} while (
 			processedSomething &&
 			state.buffer.length > 0 &&
-			!state.isInsideCodeBlock
+			!state.isInsideCodeBlock &&
+			!state.hasSemanticMarkers
 		);
 
-		// Handle oversized regular buffer (not in code block)
+		// Handle oversized regular buffer (not in code block and no semantic markers)
 		if (
 			!state.isInsideCodeBlock &&
+			!state.hasSemanticMarkers &&
 			state.buffer.length >=
 				DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_REGULAR
 		) {
@@ -344,6 +457,26 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			);
 			state.buffer = "";
 		}
+	}
+
+	/**
+	 * Simple helper to check if buffer contains semantic markers
+	 * Much simpler than complex boundary detection - just prevents flushing when markers are present
+	 * Now includes markdown formatting markers for natural flow
+	 */
+	private hasSemanticMarkers(buffer: string): boolean {
+		// Original semantic markers
+		const hasQuotes = buffer.includes('"') || buffer.includes('「') || buffer.includes('」');
+		const hasParens = buffer.includes('(') || buffer.includes(')');
+		
+		// Markdown formatting markers (should flow naturally with text)
+		const hasBold = buffer.includes('**') || buffer.includes('__');
+		const hasItalic = buffer.includes('*') || buffer.includes('_');
+		const hasStrike = buffer.includes('~~');
+		const hasInlineCode = buffer.includes('`') && !buffer.includes('```'); // Exclude code blocks
+		const hasLinks = buffer.includes('[') && buffer.includes('](');
+		
+		return hasQuotes || hasParens || hasBold || hasItalic || hasStrike || hasInlineCode || hasLinks;
 	}
 
 	/**
@@ -397,6 +530,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			// Not in code block - look for break points
 			const openingBackticksIndex = state.buffer.indexOf("```");
 			const newlineIndex = state.buffer.indexOf("\n");
+			
+			// Update semantic marker tracking (simple detection)
+			state.hasSemanticMarkers = this.hasSemanticMarkers(state.buffer);
 
 			// Check for period flush only if humanizer is HEAVY
 			let periodEndIndex = -1;
@@ -432,6 +568,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
 			if (earliestBreakIndex !== -1) {
 				if (breakType === "code_open") {
+					// Code blocks always flush regardless of semantic markers (higher priority)
 					if (earliestBreakIndex > 0) {
 						// Text before code block
 						return {
@@ -462,7 +599,8 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 							};
 						}
 					}
-				} else if (breakType === "newline") {
+				} else if (breakType === "newline" && !state.hasSemanticMarkers) {
+					// Only flush on newlines if no semantic markers are present
 					return {
 						shouldFlush: true,
 						segmentToFlush: state.buffer.substring(0, earliestBreakIndex + 1),
@@ -470,7 +608,8 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 						newCodeBlockState: false,
 						breakType,
 					};
-				} else if (breakType === "period") {
+				} else if (breakType === "period" && !state.hasSemanticMarkers) {
+					// Only flush on periods if no semantic markers are present  
 					return {
 						shouldFlush: true,
 						segmentToFlush: state.buffer.substring(0, periodEndIndex),
@@ -485,7 +624,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			return {
 				shouldFlush: false,
 				updatedBuffer: state.buffer,
-				newCodeBlockState: false,
+				newCodeBlockState: undefined,
 			};
 		}
 	}
@@ -586,12 +725,24 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		context: StreamContext,
 		state: StreamState,
 	): Promise<void> {
+		// Check for stop before starting
+		if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+			log.info("Stream Send: Stop request detected before sending chunks with typing");
+			return;
+		}
+
 		// Send first chunk immediately
 		const firstChunk = chunks[0];
 		await this.sendSingleMessage(firstChunk, context, state);
 
 		// Send remaining chunks with typing simulation
 		for (let i = 1; i < chunks.length; i++) {
+			// Check for stop before each message
+			if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+				log.info(`Stream Send: Stop request detected before sending chunk ${i + 1}/${chunks.length}`);
+				return;
+			}
+
 			const chunkToSend = chunks[i];
 
 			await context.channel
@@ -616,13 +767,23 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			}
 
 			log.info(`Stream Sim: Typing for ${Math.round(typingTime)}ms`);
-			await new Promise((resolve) => setTimeout(resolve, typingTime));
+			
+			// Use interruptible typing delay
+			const cancelled = await this.interruptibleDelay(typingTime, context.channel.id);
+			if (cancelled) {
+				log.info("Stream Send: Stop request detected during typing simulation");
+				return;
+			}
 
 			await this.sendSingleMessage(chunkToSend, context, state);
 
 			// Add thinking pause between chunks
 			if (i < chunks.length - 1 && typingConfig.randomPauseEnabled) {
-				await this.addThinkingPause(typingConfig, context);
+				const pauseCancelled = await this.addThinkingPauseInterruptible(typingConfig, context);
+				if (pauseCancelled) {
+					log.info("Stream Send: Stop request detected during thinking pause");
+					return;
+				}
 			}
 		}
 	}
@@ -652,6 +813,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		context: StreamContext,
 		state: StreamState,
 	): Promise<void> {
+		// Check for stop request before Discord API call
+		if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
+			log.info("Stream Send: Stop request detected before Discord API call, skipping message send");
+			return;
+		}
+
 		try {
 			// Check if we need to reply or send normally
 			if (!state.hasRepliedToOriginalMessage && context.replyToMessage) {
@@ -688,13 +855,17 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		}
 	}
 
+
 	/**
-	 * Add thinking pause with random timing
+	 * Interruptible thinking pause that can be cancelled by stop requests
+	 * @param typingConfig - Typing simulation configuration
+	 * @param context - Stream context
+	 * @returns True if cancelled by stop request, false if completed normally
 	 */
-	private async addThinkingPause(
+	private async addThinkingPauseInterruptible(
 		typingConfig: TypingSimulationConfig,
 		context: StreamContext,
-	): Promise<void> {
+	): Promise<boolean> {
 		const isThinkingPause = Math.random() < typingConfig.thinkingPauseChance;
 		let pauseTime = Math.floor(
 			DISCORD_STREAMING_CONSTANTS.MIN_RANDOM_PAUSE_MS +
@@ -717,7 +888,36 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		log.info(
 			`Stream Sim: Pausing for ${Math.round(pauseTime)}ms${isThinkingPause ? " (thinking pause)" : ""}`,
 		);
-		await new Promise((resolve) => setTimeout(resolve, pauseTime));
+
+		return await this.interruptibleDelay(pauseTime, context.channel.id);
+	}
+
+	/**
+	 * Create an interruptible delay that can be cancelled by stop requests
+	 * @param delayMs - Delay time in milliseconds
+	 * @param channelId - Channel ID to check for stop requests
+	 * @returns True if cancelled by stop request, false if completed normally
+	 */
+	private async interruptibleDelay(delayMs: number, channelId: string): Promise<boolean> {
+		const checkInterval = Math.min(250, delayMs / 4); // Check every 250ms or 1/4 of delay, whichever is smaller
+		const endTime = Date.now() + delayMs;
+
+		while (Date.now() < endTime) {
+			// Check for stop request
+			if (StreamOrchestrator.hasStopRequest(channelId)) {
+				return true; // Cancelled
+			}
+
+			// Wait for the check interval or remaining time, whichever is smaller
+			const timeLeft = endTime - Date.now();
+			const waitTime = Math.min(checkInterval, timeLeft);
+			
+			if (waitTime > 0) {
+				await new Promise((resolve) => setTimeout(resolve, waitTime));
+			}
+		}
+
+		return false; // Completed normally
 	}
 
 	/**
@@ -730,13 +930,25 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		context: StreamContext,
 	): Promise<void> {
 		if (state.buffer.length > 0) {
+			const blockStatus = state.isInsideCodeBlock 
+				? "still in code block" 
+				: state.hasSemanticMarkers 
+				? "contains semantic markers" 
+				: "regular";
+				
 			log.info(
-				`Stream Seg: Flushing final buffer content (${state.isInsideCodeBlock ? "still in code block" : "regular"}): "${state.buffer}"`,
+				`Stream Seg: Flushing final buffer content (${blockStatus}): "${state.buffer}"`,
 			);
 
 			if (state.isInsideCodeBlock) {
 				log.warn(
 					"Stream Seg: Final flush occurred while still inside a code block. The block might be incomplete.",
+				);
+			}
+			
+			if (state.hasSemanticMarkers) {
+				log.warn(
+					"Stream Seg: Final flush occurred with semantic markers present. Some semantic blocks might be incomplete.",
 				);
 			}
 
@@ -749,6 +961,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			);
 			state.buffer = "";
 			state.isInsideCodeBlock = false;
+			state.hasSemanticMarkers = false;
 		}
 	}
 
@@ -766,6 +979,13 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 				"Stream Seg: Function call received while inside a code block. Flushing incomplete block.",
 			);
 			state.isInsideCodeBlock = false;
+		}
+		
+		if (state.hasSemanticMarkers) {
+			log.warn(
+				"Stream Seg: Function call received with semantic markers present. Flushing incomplete semantic blocks.",
+			);
+			state.hasSemanticMarkers = false;
 		}
 
 		const segmentToProcess = state.buffer;

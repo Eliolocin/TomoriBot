@@ -1,6 +1,81 @@
 import { HumanizerDegree } from "@/types/db/schema";
 
 /**
+ * Creates a regex pattern for splitting sentences while preserving common abbreviations.
+ *
+ * This function generates a regex that splits on periods and Japanese periods (。) but avoids
+ * splitting on common abbreviations, numbered lists, and other period-containing patterns.
+ *
+ * @returns A RegExp that can be used to split text into sentences
+ */
+function createSentenceSplitRegex(): RegExp {
+	// 1. Common title abbreviations
+	const titles = ["mr", "mrs", "ms", "dr", "prof", "rev", "fr", "sr", "jr"];
+
+	// 2. Business and organization abbreviations
+	const business = ["inc", "ltd", "co", "corp", "llc", "vs"];
+
+	// 3. Common Latin abbreviations (with and without middle periods)
+	const latin = ["etc", "e\\.g", "eg", "i\\.e", "ie", "cf", "viz", "ibid"];
+
+	// 4. Academic degrees and titles
+	const academic = ["phd", "md", "ba", "ma", "bs", "ms", "jd", "dds"];
+
+	// 5. Geographic and governmental
+	const geographic = ["us", "uk", "usa", "ussr", "eu"];
+
+	// 6. Address and location abbreviations
+	const address = ["st", "ave", "blvd", "rd", "ln", "ct", "pl", "dr"];
+
+	// 7. Reference and document abbreviations
+	const reference = ["no", "vol", "fig", "ref", "pp", "p", "ch", "sec"];
+
+	// 8. Month abbreviations
+	const months = [
+		"jan",
+		"feb",
+		"mar",
+		"apr",
+		"may",
+		"jun",
+		"jul",
+		"aug",
+		"sep",
+		"oct",
+		"nov",
+		"dec",
+	];
+
+	// 9. Day abbreviations
+	const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+	// 10. Combine all abbreviations into one array
+	const allAbbreviations = [
+		...titles,
+		...business,
+		...latin,
+		...academic,
+		...geographic,
+		...address,
+		...reference,
+		...months,
+		...days,
+	];
+
+	// 11. Create the abbreviations pattern (word boundary + abbreviation)
+	const abbreviationsPattern = `\\b(?:${allAbbreviations.join("|")})`;
+
+	// 12. Complete negative lookbehind pattern: abbreviations OR digits
+	const negativeLookbehind = `(?<!(?:${abbreviationsPattern}|\\d))`;
+
+	// 13. Split on periods (.) or Japanese periods (。) followed by whitespace or end of string
+	const sentenceEnd = "[.。](?=\\s|$)";
+
+	// 14. Return the complete regex with case-insensitive flag
+	return new RegExp(`${negativeLookbehind}${sentenceEnd}`, "i");
+}
+
+/**
  * Replaces template variables in a text string with their corresponding values.
  *
  * This function searches for placeholders in the format `{variableName}` in the input text
@@ -119,7 +194,18 @@ export function chunkMessage(
 	// 2. Find all code blocks and emojis first to treat them as atomic units
 	const blocks: Array<{
 		content: string;
-		type: "text" | "code" | "emoji" | "quoted" | "parenthesized" | "japanese_quoted";
+		type:
+			| "text"
+			| "code"
+			| "emoji"
+			| "quoted"
+			| "parenthesized"
+			| "japanese_quoted"
+			| "markdown_bold"
+			| "markdown_italic"
+			| "markdown_strikethrough"
+			| "markdown_inline_code"
+			| "markdown_link";
 		start: number;
 		end: number;
 	}> = [];
@@ -172,66 +258,104 @@ export function chunkMessage(
 		}
 
 		const textContent = block.content;
-		const foundQuotes: Array<{ start: number; end: number; content: string; type: "quoted" | "parenthesized" | "japanese_quoted" }> = [];
+		const foundSemanticBlocks: Array<{
+			start: number;
+			end: number;
+			content: string;
+			type:
+				| "quoted"
+				| "parenthesized"
+				| "japanese_quoted"
+				| "markdown_bold"
+				| "markdown_italic"
+				| "markdown_strikethrough"
+				| "markdown_inline_code"
+				| "markdown_link";
+		}> = [];
 		let searchIndex = 0;
 
-		// Find all quotes and parentheses in this text block
+		// Find all semantic blocks (quotes, parentheses, markdown) in this text block
 		while (searchIndex < textContent.length) {
 			const quotedString = findQuotedString(textContent, searchIndex);
 			const parenthesized = findBalancedParentheses(textContent, searchIndex);
 			const japaneseQuoted = findJapaneseQuotedString(textContent, searchIndex);
 
-			// Find the earliest occurring quote/parentheses
+			// Markdown formatting
+			const markdownBold = findMarkdownBold(textContent, searchIndex);
+			const markdownItalic = findMarkdownItalic(textContent, searchIndex);
+			const markdownStrike = findMarkdownStrikethrough(
+				textContent,
+				searchIndex,
+			);
+			const markdownInlineCode = findMarkdownInlineCode(
+				textContent,
+				searchIndex,
+			);
+			const markdownLink = findMarkdownLink(textContent, searchIndex);
+
+			// Find the earliest occurring semantic block
 			const candidates = [
 				quotedString ? { ...quotedString, type: "quoted" as const } : null,
-				parenthesized ? { ...parenthesized, type: "parenthesized" as const } : null,
-				japaneseQuoted ? { ...japaneseQuoted, type: "japanese_quoted" as const } : null
-			].filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
+				parenthesized
+					? { ...parenthesized, type: "parenthesized" as const }
+					: null,
+				japaneseQuoted
+					? { ...japaneseQuoted, type: "japanese_quoted" as const }
+					: null,
+				markdownBold,
+				markdownItalic,
+				markdownStrike,
+				markdownInlineCode,
+				markdownLink,
+			].filter(
+				(candidate): candidate is NonNullable<typeof candidate> =>
+					candidate !== null,
+			);
 
 			if (candidates.length === 0) break;
 
 			// Sort by start position and take the first one
 			const earliest = candidates.sort((a, b) => a.start - b.start)[0];
-			foundQuotes.push(earliest);
+			foundSemanticBlocks.push(earliest);
 			searchIndex = earliest.end;
 		}
 
-		// Split the text block around the found quotes/parentheses
-		if (foundQuotes.length === 0) {
-			// No quotes found, keep the text block as is
+		// Split the text block around the found semantic blocks
+		if (foundSemanticBlocks.length === 0) {
+			// No semantic blocks found, keep the text block as is
 			quotedBlocks.push(block);
 		} else {
 			let currentIndex = 0;
-			
-			for (const quote of foundQuotes) {
-				// Add text before the quote if any
-				if (quote.start > currentIndex) {
+
+			for (const semanticBlock of foundSemanticBlocks) {
+				// Add text before the semantic block if any
+				if (semanticBlock.start > currentIndex) {
 					quotedBlocks.push({
-						content: textContent.substring(currentIndex, quote.start),
+						content: textContent.substring(currentIndex, semanticBlock.start),
 						type: "text",
 						start: block.start + currentIndex,
-						end: block.start + quote.start
+						end: block.start + semanticBlock.start,
 					});
 				}
 
-				// Add the quote/parentheses as its own block
+				// Add the semantic block as its own block
 				quotedBlocks.push({
-					content: quote.content,
-					type: quote.type,
-					start: block.start + quote.start,
-					end: block.start + quote.end
+					content: semanticBlock.content,
+					type: semanticBlock.type,
+					start: block.start + semanticBlock.start,
+					end: block.start + semanticBlock.end,
 				});
 
-				currentIndex = quote.end;
+				currentIndex = semanticBlock.end;
 			}
 
-			// Add any remaining text after the last quote
+			// Add any remaining text after the last semantic block
 			if (currentIndex < textContent.length) {
 				quotedBlocks.push({
 					content: textContent.substring(currentIndex),
 					type: "text",
 					start: block.start + currentIndex,
-					end: block.start + textContent.length
+					end: block.start + textContent.length,
 				});
 			}
 		}
@@ -288,10 +412,74 @@ export function chunkMessage(
 		}
 	}
 
-	// 3. Process all blocks in order
+	// 3. Merge semantic blocks with adjacent text blocks for natural flow
+	// This allows quotes/parentheses to flow with surrounding text while preserving atomicity
+	const mergedBlocks: typeof processedBlocks = [];
+	let i = 0;
+
+	while (i < processedBlocks.length) {
+		const currentBlock = processedBlocks[i];
+
+		if (
+			currentBlock.type === "quoted" ||
+			currentBlock.type === "parenthesized" ||
+			currentBlock.type === "japanese_quoted" ||
+			currentBlock.type === "markdown_bold" ||
+			currentBlock.type === "markdown_italic" ||
+			currentBlock.type === "markdown_strikethrough" ||
+			currentBlock.type === "markdown_inline_code" ||
+			currentBlock.type === "markdown_link"
+		) {
+			// Found semantic block - look for adjacent text blocks to merge
+			let mergedContent = "";
+			let hasContent = false;
+
+			// Check for preceding text block
+			if (
+				i > 0 &&
+				processedBlocks[i - 1].type === "text" &&
+				mergedBlocks.length > 0 &&
+				mergedBlocks[mergedBlocks.length - 1].type === "text"
+			) {
+				// Remove the previous text block and include its content
+				const prevBlock = mergedBlocks.pop();
+				if (prevBlock) {
+					mergedContent += prevBlock.content;
+					hasContent = true;
+				}
+			}
+			// Add the semantic block content
+			mergedContent += currentBlock.content;
+			hasContent = true;
+
+			// Check for following text block
+			if (
+				i + 1 < processedBlocks.length &&
+				processedBlocks[i + 1].type === "text"
+			) {
+				mergedContent += processedBlocks[i + 1].content;
+				i++; // Skip the next text block as we've consumed it
+			}
+
+			if (hasContent) {
+				mergedBlocks.push({
+					...currentBlock,
+					type: "text", // Convert to text type for natural flow
+					content: mergedContent,
+				});
+			}
+		} else {
+			// Non-semantic block, keep as-is
+			mergedBlocks.push(currentBlock);
+		}
+
+		i++;
+	}
+
+	// 4. Process all blocks in order
 	let currentChunk = "";
 
-	for (const block of processedBlocks) {
+	for (const block of mergedBlocks) {
 		// Handle each block type appropriately
 		switch (block.type) {
 			case "code":
@@ -328,30 +516,7 @@ export function chunkMessage(
 				chunkedMessages.push(block.content);
 				break;
 
-			case "quoted":
-			case "parenthesized":
-			case "japanese_quoted":
-				// 3c. Handle Quotes/Parentheses - treated as atomic units like code blocks
-				if (currentChunk.length + block.content.length > chunkLength) {
-					// Finish current chunk if it has content
-					if (currentChunk.length > 0) {
-						chunkedMessages.push(currentChunk);
-						currentChunk = "";
-					}
-					// If quote/parentheses block itself is too large, add it as its own chunk
-					if (block.content.length > chunkLength) {
-						// For very long quotes/parentheses, we'll keep them as single chunks
-						// to preserve semantic meaning even if they exceed length limits
-						chunkedMessages.push(block.content);
-					} else {
-						// Add the whole quote/parentheses block as a new chunk
-						chunkedMessages.push(block.content);
-					}
-				} else {
-					// Quote/parentheses block fits, add it to current chunk
-					currentChunk += (currentChunk.length > 0 ? "\n" : "") + block.content;
-				}
-				break;
+			// Semantic blocks (quoted, parenthesized, japanese_quoted) are now merged with text blocks above
 
 			case "text": {
 				// 3c. Handle Text - based on humanizer degree
@@ -383,9 +548,7 @@ export function chunkMessage(
 
 						// Split on periods at end of sentences but skip common abbreviations and numbered lists like "1.", "2.", etc.
 						// Also handles Japanese period (。) as a sentence boundary
-						const sentences = paragraph.split(
-							/(?<!(?:\b(?:vs|mr|mrs|dr|prof|inc|ltd|co|etc|e\.g|i\.e)|\d))[.。](?=\s|$)/i,
-						);
+						const sentences = paragraph.split(createSentenceSplitRegex());
 
 						// Then split by sentence endings but keep the punctuation
 						// This looks for punctuation followed by end of string
@@ -764,8 +927,11 @@ function escapeRegExp(s: string): string {
  * @param startIndex - Index to start searching from
  * @returns Object with start, end indices and content, or null if no balanced pair found
  */
-function findBalancedParentheses(text: string, startIndex = 0): { start: number; end: number; content: string } | null {
-	const openIndex = text.indexOf('(', startIndex);
+function findBalancedParentheses(
+	text: string,
+	startIndex = 0,
+): { start: number; end: number; content: string } | null {
+	const openIndex = text.indexOf("(", startIndex);
 	if (openIndex === -1) return null;
 
 	let depth = 0;
@@ -773,9 +939,9 @@ function findBalancedParentheses(text: string, startIndex = 0): { start: number;
 
 	// Start scanning from the opening parenthesis
 	for (let i = openIndex; i < text.length; i++) {
-		if (text[i] === '(') {
+		if (text[i] === "(") {
 			depth++;
-		} else if (text[i] === ')') {
+		} else if (text[i] === ")") {
 			depth--;
 			if (depth === 0) {
 				closeIndex = i;
@@ -789,7 +955,7 @@ function findBalancedParentheses(text: string, startIndex = 0): { start: number;
 	return {
 		start: openIndex,
 		end: closeIndex + 1,
-		content: text.substring(openIndex, closeIndex + 1)
+		content: text.substring(openIndex, closeIndex + 1),
 	};
 }
 
@@ -799,7 +965,10 @@ function findBalancedParentheses(text: string, startIndex = 0): { start: number;
  * @param startIndex - Index to start searching from
  * @returns Object with start, end indices and content, or null if no complete quoted string found
  */
-function findQuotedString(text: string, startIndex = 0): { start: number; end: number; content: string } | null {
+function findQuotedString(
+	text: string,
+	startIndex = 0,
+): { start: number; end: number; content: string } | null {
 	const openIndex = text.indexOf('"', startIndex);
 	if (openIndex === -1) return null;
 
@@ -810,9 +979,9 @@ function findQuotedString(text: string, startIndex = 0): { start: number; end: n
 			return {
 				start: openIndex,
 				end: i + 1,
-				content: text.substring(openIndex, i + 1)
+				content: text.substring(openIndex, i + 1),
 			};
-		} else if (text[i] === '\\') {
+		} else if (text[i] === "\\") {
 			// Skip escaped character
 			i += 2;
 		} else {
@@ -829,17 +998,245 @@ function findQuotedString(text: string, startIndex = 0): { start: number; end: n
  * @param startIndex - Index to start searching from
  * @returns Object with start, end indices and content, or null if no complete quoted string found
  */
-function findJapaneseQuotedString(text: string, startIndex = 0): { start: number; end: number; content: string } | null {
-	const openIndex = text.indexOf('「', startIndex);
+function findJapaneseQuotedString(
+	text: string,
+	startIndex = 0,
+): { start: number; end: number; content: string } | null {
+	const openIndex = text.indexOf("「", startIndex);
 	if (openIndex === -1) return null;
 
-	const closeIndex = text.indexOf('」', openIndex + 1);
+	const closeIndex = text.indexOf("」", openIndex + 1);
 	if (closeIndex === -1) return null;
 
 	return {
 		start: openIndex,
 		end: closeIndex + 1,
-		content: text.substring(openIndex, closeIndex + 1)
+		content: text.substring(openIndex, closeIndex + 1),
+	};
+}
+
+/**
+ * Helper function to find markdown bold text (**text** or __text__)
+ * Prioritizes ** over __ when both are present
+ */
+function findMarkdownBold(
+	text: string,
+	startIndex = 0,
+): {
+	start: number;
+	end: number;
+	content: string;
+	type: "markdown_bold";
+} | null {
+	// Look for **text** first (higher priority)
+	const doubleStar = text.indexOf("**", startIndex);
+	if (doubleStar !== -1) {
+		const closing = text.indexOf("**", doubleStar + 2);
+		if (closing !== -1) {
+			return {
+				start: doubleStar,
+				end: closing + 2,
+				content: text.substring(doubleStar, closing + 2),
+				type: "markdown_bold",
+			};
+		}
+	}
+
+	// Look for __text__ as fallback
+	const doubleUnderscore = text.indexOf("__", startIndex);
+	if (doubleUnderscore !== -1) {
+		const closing = text.indexOf("__", doubleUnderscore + 2);
+		if (closing !== -1) {
+			return {
+				start: doubleUnderscore,
+				end: closing + 2,
+				content: text.substring(doubleUnderscore, closing + 2),
+				type: "markdown_bold",
+			};
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Helper function to find markdown italic text (*text* or _text_)
+ * Avoids conflicts with bold markers
+ */
+function findMarkdownItalic(
+	text: string,
+	startIndex = 0,
+): {
+	start: number;
+	end: number;
+	content: string;
+	type: "markdown_italic";
+} | null {
+	// Look for *text* (avoiding ** bold markers)
+	let singleStar = text.indexOf("*", startIndex);
+	while (singleStar !== -1) {
+		// Skip if part of ** bold marker
+		if (singleStar > 0 && text[singleStar - 1] === "*") {
+			singleStar = text.indexOf("*", singleStar + 1);
+			continue;
+		}
+		if (singleStar < text.length - 1 && text[singleStar + 1] === "*") {
+			singleStar = text.indexOf("*", singleStar + 2);
+			continue;
+		}
+
+		// Find closing *
+		const closing = text.indexOf("*", singleStar + 1);
+		if (closing !== -1 && text[closing + 1] !== "*") {
+			return {
+				start: singleStar,
+				end: closing + 1,
+				content: text.substring(singleStar, closing + 1),
+				type: "markdown_italic",
+			};
+		}
+		singleStar = text.indexOf("*", singleStar + 1);
+	}
+
+	// Look for _text_ (avoiding __ bold markers)
+	let singleUnderscore = text.indexOf("_", startIndex);
+	while (singleUnderscore !== -1) {
+		// Skip if part of __ bold marker
+		if (singleUnderscore > 0 && text[singleUnderscore - 1] === "_") {
+			singleUnderscore = text.indexOf("_", singleUnderscore + 1);
+			continue;
+		}
+		if (
+			singleUnderscore < text.length - 1 &&
+			text[singleUnderscore + 1] === "_"
+		) {
+			singleUnderscore = text.indexOf("_", singleUnderscore + 2);
+			continue;
+		}
+
+		// Find closing _
+		const closing = text.indexOf("_", singleUnderscore + 1);
+		if (closing !== -1 && text[closing + 1] !== "_") {
+			return {
+				start: singleUnderscore,
+				end: closing + 1,
+				content: text.substring(singleUnderscore, closing + 1),
+				type: "markdown_italic",
+			};
+		}
+		singleUnderscore = text.indexOf("_", singleUnderscore + 1);
+	}
+
+	return null;
+}
+
+/**
+ * Helper function to find markdown strikethrough text (~~text~~)
+ */
+function findMarkdownStrikethrough(
+	text: string,
+	startIndex = 0,
+): {
+	start: number;
+	end: number;
+	content: string;
+	type: "markdown_strikethrough";
+} | null {
+	const opening = text.indexOf("~~", startIndex);
+	if (opening === -1) return null;
+
+	const closing = text.indexOf("~~", opening + 2);
+	if (closing === -1) return null;
+
+	return {
+		start: opening,
+		end: closing + 2,
+		content: text.substring(opening, closing + 2),
+		type: "markdown_strikethrough",
+	};
+}
+
+/**
+ * Helper function to find markdown inline code (`text`)
+ * Excludes code blocks (```)
+ */
+function findMarkdownInlineCode(
+	text: string,
+	startIndex = 0,
+): {
+	start: number;
+	end: number;
+	content: string;
+	type: "markdown_inline_code";
+} | null {
+	let opening = text.indexOf("`", startIndex);
+	while (opening !== -1) {
+		// Skip if part of code block
+		if (
+			(opening > 1 && text.substring(opening - 2, opening) === "``") ||
+			(opening < text.length - 2 &&
+				text.substring(opening + 1, opening + 3) === "``")
+		) {
+			opening = text.indexOf("`", opening + 1);
+			continue;
+		}
+
+		// Find closing `
+		const closing = text.indexOf("`", opening + 1);
+		if (closing !== -1) {
+			// Make sure closing isn't part of code block either
+			if (
+				(closing > 1 && text.substring(closing - 2, closing) === "``") ||
+				(closing < text.length - 2 &&
+					text.substring(closing + 1, closing + 3) === "``")
+			) {
+				opening = text.indexOf("`", opening + 1);
+				continue;
+			}
+
+			return {
+				start: opening,
+				end: closing + 1,
+				content: text.substring(opening, closing + 1),
+				type: "markdown_inline_code",
+			};
+		}
+		opening = text.indexOf("`", opening + 1);
+	}
+
+	return null;
+}
+
+/**
+ * Helper function to find markdown links ([text](url))
+ */
+function findMarkdownLink(
+	text: string,
+	startIndex = 0,
+): {
+	start: number;
+	end: number;
+	content: string;
+	type: "markdown_link";
+} | null {
+	const openBracket = text.indexOf("[", startIndex);
+	if (openBracket === -1) return null;
+
+	const closeBracket = text.indexOf("]", openBracket + 1);
+	if (closeBracket === -1) return null;
+
+	// Check for immediately following (url)
+	if (closeBracket + 1 >= text.length || text[closeBracket + 1] !== "(")
+		return null;
+
+	const closeParen = text.indexOf(")", closeBracket + 2);
+	if (closeParen === -1) return null;
+
+	return {
+		start: openBracket,
+		end: closeParen + 1,
+		content: text.substring(openBracket, closeParen + 1),
+		type: "markdown_link",
 	};
 }
 
