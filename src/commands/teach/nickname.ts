@@ -55,11 +55,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// Ensure command is run in a guild context for server settings check
-	if (!interaction.guild) {
+	// Ensure command is run in a valid channel context
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -94,7 +94,7 @@ export async function execute(
 		}
 
 		// 4. Load server's Tomori state to check personalization setting
-		tomoriState = await loadTomoriState(interaction.guild.id);
+		tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
 
 		// 5. Check if Tomori is set up (needed for config check)
 		if (!tomoriState) {

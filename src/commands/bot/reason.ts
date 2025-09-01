@@ -45,36 +45,26 @@ export async function execute(
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 	// 2. Ensure command is run in a guild text channel
-	if (
-		!interaction.guild ||
-		!interaction.channel ||
-		!("messages" in interaction.channel)
-	) {
-		await replyInfoEmbed(
-			interaction,
-			locale,
-			{
-				titleKey: "general.errors.guild_only_title",
-				descriptionKey: "general.errors.guild_only_description",
-				color: ColorCode.ERROR,
-			},
-		);
+	if (!interaction.channel || !("messages" in interaction.channel)) {
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
+			color: ColorCode.ERROR,
+		});
 		return;
 	}
 
 	try {
 		// 3. Load Tomori state to get current provider
-		const tomoriState = await loadTomoriState(interaction.guild.id);
+		const tomoriState = await loadTomoriState(
+			interaction.guild?.id ?? interaction.user.id,
+		);
 		if (!tomoriState) {
-			await replyInfoEmbed(
-				interaction,
-				locale,
-				{
-					titleKey: "general.errors.tomori_not_setup_title",
-					descriptionKey: "general.errors.tomori_not_setup_description",
-					color: ColorCode.ERROR,
-				},
-			);
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "general.errors.tomori_not_setup_title",
+				descriptionKey: "general.errors.tomori_not_setup_description",
+				color: ColorCode.ERROR,
+			});
 			return;
 		}
 
@@ -83,15 +73,11 @@ export async function execute(
 		const smartestModel = await loadSmartestModel(currentProvider);
 
 		if (!smartestModel) {
-			await replyInfoEmbed(
-				interaction,
-				locale,
-				{
-					titleKey: "commands.bot.reason.no_smart_model_title",
-					descriptionKey: "commands.bot.reason.no_smart_model_description",
-					color: ColorCode.ERROR,
-				},
-			);
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.bot.reason.no_smart_model_title",
+				descriptionKey: "commands.bot.reason.no_smart_model_description",
+				color: ColorCode.ERROR,
+			});
 			return;
 		}
 
@@ -100,16 +86,12 @@ export async function execute(
 
 		// 6. Send immediate ephemeral response to user
 		const queryText = query ? ` to your query: "${query}"` : "";
-		await replyInfoEmbed(
-			interaction,
-			locale,
-			{
-				titleKey: "commands.bot.reason.success_title",
-				descriptionKey: "commands.bot.reason.success_description",
-				descriptionVars: { query: queryText },
-				color: ColorCode.SUCCESS,
-			},
-		);
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "commands.bot.reason.success_title",
+			descriptionKey: "commands.bot.reason.success_description",
+			descriptionVars: { query: queryText },
+			color: ColorCode.SUCCESS,
+		});
 
 		// 7. Get the latest message in the channel
 		const messages = await interaction.channel.messages.fetch({ limit: 1 });
@@ -153,7 +135,7 @@ export async function execute(
 			client,
 			passportMessage as Message,
 			false, // isFromQueue
-			true, // isFromCommand - bypasses normal trigger logic
+			true, // isManuallyTriggered - bypasses normal trigger logic
 			true, // forceReason - enables reasoning mode
 			smartestModel.llm_codename, // llmOverrideCodename - use smartest model
 		);

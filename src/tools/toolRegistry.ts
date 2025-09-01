@@ -584,7 +584,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 			const clientUser = context.client.user;
 			if (
 				!clientUser ||
-				!context.channel.permissionsFor(clientUser)?.has("SendMessages")
+				!('permissionsFor' in context.channel ? context.channel.permissionsFor(clientUser)?.has("SendMessages") : true)
 			) {
 				return false;
 			}
@@ -594,7 +594,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 			const clientUser = context.client.user;
 			if (
 				!clientUser ||
-				!context.channel.permissionsFor(clientUser)?.has("UseExternalStickers")
+				!('permissionsFor' in context.channel ? context.channel.permissionsFor(clientUser)?.has("UseExternalStickers") : true)
 			) {
 				return false;
 			}

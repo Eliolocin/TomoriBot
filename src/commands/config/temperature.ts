@@ -137,7 +137,7 @@ export async function execute(
 				errorType: "DatabaseUpdateError",
 				metadata: {
 					command: "config temperature",
-					guildId: interaction.guild.id,
+					guildId: interaction.guild?.id,
 					temperatureValue,
 					validationErrors: validatedConfig.success
 						? null

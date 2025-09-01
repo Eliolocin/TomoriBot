@@ -55,11 +55,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild
-	if (!interaction.guild || !interaction.channel) {
+	// 1. Ensure command is run in a channel
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, userData.language_pref, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 		});
 		return;
@@ -90,7 +90,7 @@ export async function execute(
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		// 5. Load the Tomori state for this server (Rule #17)
-		const tomoriState = await loadTomoriState(interaction.guild.id);
+		const tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
@@ -141,7 +141,7 @@ export async function execute(
 				metadata: {
 					command: "config nickname",
 					table: "tomoris",
-					guildId: interaction.guild.id,
+					guildId: interaction.guild?.id ?? interaction.user.id,
 					newNickname,
 					validationErrors: validatedTomori.success
 						? null
@@ -210,7 +210,7 @@ export async function execute(
 						command: "config nickname",
 						table: "tomori_configs",
 						column: "trigger_words",
-						guildId: interaction.guild.id,
+						guildId: interaction.guild?.id ?? interaction.user.id,
 						newNickname,
 						updatedTriggers, // Log the array we tried to set
 						validationErrors: validatedConfig.success
@@ -276,7 +276,7 @@ export async function execute(
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "config nickname",
-				guildId: interaction.guild?.id,
+				guildId: interaction.guild?.id ?? interaction.user.id,
 				executorDiscordId: interaction.user.id,
 				nicknameAttempted: interaction.options.getString("name"),
 				// Consider adding a 'stepFailed' field here if easily trackable

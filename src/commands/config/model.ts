@@ -14,6 +14,7 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
 	promptWithRawModal,
+	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 // Import TomoriConfigRow for validation and LlmRow for type hints
 import {
@@ -49,11 +50,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild
-	if (!interaction.guild || !interaction.channel) {
+	// 1. Ensure command is run in a channel
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, userData.language_pref, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 		});
 		return;
@@ -62,7 +63,7 @@ export async function execute(
 	let selectedModel: LlmRow | null = null; // For error context and logic
 	try {
 		// 2. Load the Tomori state for this server (Rule #17)
-		const tomoriState = await loadTomoriState(interaction.guild.id);
+		const tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
@@ -98,9 +99,9 @@ export async function execute(
 
 		// 4. Create model options for the select menu using database descriptions
 		const modelSelectOptions: SelectOption[] = availableModels.map((model) => ({
-			label: model.llm_codename, // Use codename as display label
-			value: model.llm_codename, // Use codename as value
-			description: model.llm_description || `${model.llm_provider} model`, // Use description from DB or fallback
+			label: safeSelectOptionText(model.llm_codename), // Use codename as display label
+			value: safeSelectOptionText(model.llm_codename), // Use codename as value
+			description: safeSelectOptionText(model.llm_description || `${model.llm_provider} model`), // Use description from DB or fallback
 		}));
 
 		// 5. Show the modal with model selection
@@ -150,7 +151,7 @@ export async function execute(
 				errorType: "CommandExecutionError",
 				metadata: {
 					command: "config model",
-					guildId: interaction.guild.id,
+					guildId: interaction.guild?.id ?? interaction.user.id,
 					requestedModel: selectedModelCodename,
 					availableModels: availableModels.map((m) => m.llm_codename),
 				},
@@ -266,7 +267,7 @@ export async function execute(
 				errorType: "DatabaseUpdateError",
 				metadata: {
 					command: "config model",
-					guildId: interaction.guild.id,
+					guildId: interaction.guild?.id ?? interaction.user.id,
 					selectedModelCodename,
 					targetLlmId: selectedModel.llm_id,
 					validationErrors: validatedConfig.success
@@ -323,7 +324,7 @@ export async function execute(
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "config model",
-				guildId: interaction.guild?.id,
+				guildId: interaction.guild?.id ?? interaction.user.id,
 				executorDiscordId: interaction.user.id,
 				targetLlmIdAttempted: selectedModel?.llm_id,
 			},

@@ -10,6 +10,7 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
 	promptWithRawModal,
+	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import {
 	type UserRow,
@@ -46,11 +47,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild
-	if (!interaction.guild || !interaction.channel) {
+	// 1. Ensure command is run in a channel
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -59,7 +60,7 @@ export async function execute(
 
 	try {
 		// 2. Load the Tomori state for this server
-		const tomoriState = await loadTomoriState(interaction.guild.id);
+		const tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
@@ -110,12 +111,9 @@ export async function execute(
 		// 7. Create preset options for the select menu using full descriptions
 		const presetSelectOptions: SelectOption[] = presets.map(
 			(preset: TomoriPresetRow) => ({
-				label: preset.tomori_preset_name,
-				value: preset.tomori_preset_name,
-				description:
-					preset.tomori_preset_desc.length > 100
-						? `${preset.tomori_preset_desc.substring(0, 100)}...`
-						: preset.tomori_preset_desc,
+				label: safeSelectOptionText(preset.tomori_preset_name),
+				value: safeSelectOptionText(preset.tomori_preset_name),
+				description: safeSelectOptionText(preset.tomori_preset_desc),
 			}),
 		);
 
@@ -259,7 +257,7 @@ export async function execute(
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "config preset",
-				guildId: interaction.guild?.id,
+				guildId: interaction.guild?.id ?? interaction.user.id,
 				executorDiscordId: interaction.user.id,
 			},
 		};

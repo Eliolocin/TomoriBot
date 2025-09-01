@@ -150,6 +150,9 @@ const handler = async (
 		const commandName = interaction.commandName; // The top-level command (category)
 		const subcommandName = interaction.options.getSubcommand(false); // The specific subcommand (may be null)
 
+		// Guild-only subcommand restrictions are now handled at the Discord registration level
+		// Commands in guild-only categories (like "serverconfig") are automatically restricted to guilds
+
 		// 3. Find the execute function
 		const subcommandMap = executionMap.get(commandName);
 		if (!subcommandMap) {
@@ -246,11 +249,11 @@ const handler = async (
 
 			if (existingUser) {
 				userData = userSchema.parse(existingUser);
-			} else if (interaction.guild) {
-				// Get locale to use for new user
+			} else {
+				// Get locale to use for new user (works for both guilds and DMs)
 				const userLanguage = interaction.locale;
 
-				// Use the registerUser helper (Rule #17)
+				// Use the registerUser helper (Rule #17) - works for both guild and DM contexts
 				const registeredUser = await registerUser(
 					interaction.user.id,
 					interaction.user.username,

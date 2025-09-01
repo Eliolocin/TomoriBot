@@ -77,8 +77,8 @@ export async function execute(
 ): Promise<void> {
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-	// biome-ignore lint/style/noNonNullAssertion: Guild is always present in guild command interactions
-	const serverDiscId = interaction.guildId!;
+	// Handle both guild and DM contexts - use user ID as server ID for DMs
+	const serverDiscId = interaction.guildId ?? interaction.user.id;
 	const statusType = interaction.options.getString("type", true); // Required option
 
 	// 1. Load Tomori State

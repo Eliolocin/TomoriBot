@@ -17,17 +17,14 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	replyPaginatedChoices,
-	promptWithRawModal,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
-import type { PaginatedChoiceResult } from "../../types/discord/embed";
 import type { SelectOption } from "../../types/discord/modal";
 import { createStandardEmbed } from "../../utils/discord/embedHelper";
 
 // Rule 20: Constants for static values at the top
-const DISPLAY_TRUNCATE_LENGTH = 45; // Max length for memory content in the display list
-const MODAL_THRESHOLD = 20; // Use modal if items ≤ this number, otherwise use pagination
 const MODAL_CUSTOM_ID = "unlearn_personalmemory_modal";
 const MEMORY_SELECT_ID = "memory_select";
 
@@ -135,11 +132,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild context to check server settings (Rule 17)
-	if (!interaction.guild) {
+	// 1. Ensure command is run in a valid channel context (Rule 17)
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -148,20 +145,17 @@ export async function execute(
 
 	// Define state and result variables outside try for catch block context
 	let tomoriState: TomoriState | null = null;
-	let result: PaginatedChoiceResult | null = null;
 	let personalizationDisabledWarning = false; // Flag to check if warning needed
 
 	try {
-		// 2. Defer reply ephemerally (User Request)
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 3. Load server's Tomori state to check personalization setting (Rule 17)
-		tomoriState = await loadTomoriState(interaction.guild.id);
+		// 2. Load server's Tomori state to check personalization setting (Rule 17)
+		tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title", // Corrected key
 				descriptionKey: "general.errors.tomori_not_setup_description", // Corrected key
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -181,153 +175,85 @@ export async function execute(
 				titleKey: "commands.unlearn.personalmemory.no_memories_title",
 				descriptionKey: "commands.unlearn.personalmemory.no_memories",
 				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 6. Apply hybrid approach: use modal for ≤20 items, pagination for >20 items
-		if (currentMemories.length <= MODAL_THRESHOLD) {
-			// Use modal for small lists
+		// 6. Create memory select options for the modal
+		const memorySelectOptions: SelectOption[] = currentMemories.map(
+			(memory, index) => ({
+				label: safeSelectOptionText(memory, 50),
+				value: index.toString(), // Use index to avoid truncation issues
+				description: safeSelectOptionText(memory),
+			}),
+		);
 
-			// Create memory select options for the modal
-			const memorySelectOptions: SelectOption[] = currentMemories.map(
-				(memory) => ({
-					label: memory.length > 50 ? `${memory.slice(0, 50)}...` : memory,
-					value: memory,
-					description:
-						memory.length > 100 ? `${memory.slice(0, 100)}...` : memory,
-				}),
+		// 7. Show the paginated modal with memory selection
+		const modalResult = await promptWithPaginatedModal(interaction, locale, {
+			modalCustomId: MODAL_CUSTOM_ID,
+			modalTitleKey: "commands.unlearn.personalmemory.modal_title",
+			components: [
+				{
+					customId: MEMORY_SELECT_ID,
+					labelKey: "commands.unlearn.personalmemory.select_label",
+					descriptionKey:
+						"commands.unlearn.personalmemory.select_description",
+					placeholder: "commands.unlearn.personalmemory.select_placeholder",
+					required: true,
+					options: memorySelectOptions,
+				},
+			],
+		});
+
+		// 8. Handle modal outcome
+		if (modalResult.outcome !== "submit") {
+			log.info(
+				`Personal memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
 			);
+			return;
+		}
 
-			// Show the modal with memory selection
-			const modalResult = await promptWithRawModal(interaction, locale, {
-				modalCustomId: MODAL_CUSTOM_ID,
-				modalTitleKey: "commands.unlearn.personalmemory.modal_title",
-				components: [
-					{
-						customId: MEMORY_SELECT_ID,
-						labelKey: "commands.unlearn.personalmemory.select_label",
+		// 9. Extract values from the modal
+		const modalSubmitInteraction = modalResult.interaction;
+		const selectedIndex = modalResult.values?.[MEMORY_SELECT_ID];
+
+		// Safety checks (should never be null after submit outcome)
+		if (!modalSubmitInteraction || !selectedIndex) {
+			log.error("Modal result unexpectedly missing interaction or values");
+			return;
+		}
+
+		// Get the full memory content from the original array
+		const selectedMemory = currentMemories[Number.parseInt(selectedIndex, 10)];
+
+		// 10. Defer the reply for the modal submission
+		await modalSubmitInteraction.deferReply({
+			flags: MessageFlags.Ephemeral,
+		});
+
+		// 11. Perform the database update using the helper function
+		await performPersonalMemoryRemoval(
+			selectedMemory,
+			userData,
+			modalSubmitInteraction,
+			locale,
+		);
+
+		// 12. If personalization is disabled, send a warning follow-up
+		if (personalizationDisabledWarning) {
+			await modalSubmitInteraction.followUp({
+				embeds: [
+					createStandardEmbed(locale, {
+						titleKey:
+							"commands.unlearn.personalmemory.warning_disabled_title",
 						descriptionKey:
-							"commands.unlearn.personalmemory.select_description",
-						placeholder: "commands.unlearn.personalmemory.select_placeholder",
-						required: true,
-						options: memorySelectOptions,
-					},
+							"commands.unlearn.personalmemory.warning_disabled_description",
+						color: ColorCode.WARN,
+					}),
 				],
-			});
-
-			// Handle modal outcome
-			if (modalResult.outcome !== "submit") {
-				log.info(
-					`Personal memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
-				);
-				return;
-			}
-
-			// Extract values from the modal
-			const modalSubmitInteraction = modalResult.interaction;
-			const selectedMemory = modalResult.values?.[MEMORY_SELECT_ID];
-
-			// Safety checks (should never be null after submit outcome)
-			if (!modalSubmitInteraction || !selectedMemory) {
-				log.error("Modal result unexpectedly missing interaction or values");
-				return;
-			}
-
-			// Defer the reply for the modal submission
-			await modalSubmitInteraction.deferReply({
 				flags: MessageFlags.Ephemeral,
 			});
-
-			// Perform the database update using the helper function
-			await performPersonalMemoryRemoval(
-				selectedMemory,
-				userData,
-				modalSubmitInteraction,
-				locale,
-			);
-
-			// If personalization is disabled, send a warning follow-up
-			if (personalizationDisabledWarning) {
-				await modalSubmitInteraction.followUp({
-					embeds: [
-						createStandardEmbed(locale, {
-							titleKey:
-								"commands.unlearn.personalmemory.warning_disabled_title",
-							descriptionKey:
-								"commands.unlearn.personalmemory.warning_disabled_description",
-							color: ColorCode.WARN,
-						}),
-					],
-					flags: MessageFlags.Ephemeral,
-				});
-			}
-		} else {
-			// Use pagination for large lists (>20 items)
-
-			// Format memories for display, truncating long ones
-			const displayItems = currentMemories.map((memory) => {
-				return memory.length > DISPLAY_TRUNCATE_LENGTH
-					? `${memory.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
-					: memory;
-			});
-
-			result = await replyPaginatedChoices(interaction, locale, {
-				titleKey: "commands.unlearn.personalmemory.select_title",
-				descriptionKey: "commands.unlearn.personalmemory.select_description",
-				itemLabelKey: "commands.unlearn.personalmemory.memory_label",
-				items: displayItems,
-				color: ColorCode.INFO,
-				flags: MessageFlags.Ephemeral,
-
-				onSelect: async (selectedIndex: number) => {
-					// Get the memory to remove
-					const memoryToRemove = currentMemories[selectedIndex];
-
-					// Use the helper function for database update
-					await performPersonalMemoryRemoval(
-						memoryToRemove,
-						userData,
-						interaction,
-						locale,
-					);
-				},
-
-				// Handle cancel
-				onCancel: async () => {
-					log.info(
-						`User ${userData.user_disc_id} cancelled deleting a personal memory.`,
-					);
-					// The replyPaginatedChoices helper will show the cancellation message
-				},
-			});
-
-			// Handle potential errors/timeouts from the helper itself
-			if (!result.success && result.reason === "error") {
-				log.warn(
-					`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /unlearn personalmemory`,
-				);
-			} else if (!result.success && result.reason === "timeout") {
-				log.warn(
-					`Personal memory deletion timed out for user ${userData.user_disc_id}`,
-				);
-			}
-
-			// If deletion was successful AND personalization is disabled, send a follow-up warning
-			if (result.success && personalizationDisabledWarning) {
-				await interaction.followUp({
-					embeds: [
-						createStandardEmbed(locale, {
-							titleKey:
-								"commands.unlearn.personalmemory.warning_disabled_title",
-							descriptionKey:
-								"commands.unlearn.personalmemory.warning_disabled_description",
-							color: ColorCode.WARN,
-						}),
-					],
-					flags: MessageFlags.Ephemeral,
-				});
-			}
 		}
 	} catch (error) {
 		// 16. Catch unexpected errors

@@ -79,8 +79,12 @@ CREATE TABLE IF NOT EXISTS servers (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add DM channel identification column (January 2025)
+SELECT add_column_if_not_exists('servers', 'is_dm_channel', 'BOOLEAN', 'false');
+
 -- Create index for faster lookups
 CREATE INDEX IF NOT EXISTS idx_servers_disc_id ON servers(server_disc_id);
+CREATE INDEX IF NOT EXISTS idx_servers_is_dm_channel ON servers(is_dm_channel);
 
 -- Create updated_at trigger for servers table
 DROP TRIGGER IF EXISTS update_servers_timestamp ON servers;

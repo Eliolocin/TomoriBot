@@ -53,11 +53,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild
-	if (!interaction.guild || !interaction.channel) {
+	// 1. Ensure command is run in a channel context
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -65,8 +65,10 @@ export async function execute(
 	}
 
 	try {
-		// 2. Load the Tomori state for this server
-		const tomoriState = await loadTomoriState(interaction.guild.id);
+		// 2. Load the Tomori state for this server/user
+		// Use user ID for DM context, guild ID for server context
+		const serverId = interaction.guild?.id ?? interaction.user.id;
+		const tomoriState = await loadTomoriState(serverId);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
@@ -304,11 +306,10 @@ export async function execute(
 		// Error handling
 		let serverIdForError: number | null = null;
 		let tomoriIdForError: number | null = null;
-		if (interaction.guild?.id) {
-			const state = await loadTomoriState(interaction.guild.id);
-			serverIdForError = state?.server_id ?? null;
-			tomoriIdForError = state?.tomori_id ?? null;
-		}
+		const errorServerId = interaction.guild?.id ?? interaction.user.id;
+		const state = await loadTomoriState(errorServerId);
+		serverIdForError = state?.server_id ?? null;
+		tomoriIdForError = state?.tomori_id ?? null;
 
 		const context: ErrorContext = {
 			userId: userData.user_id,

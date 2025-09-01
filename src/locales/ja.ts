@@ -25,28 +25,33 @@ export default {
 			cancelled: `選択はキャンセルされました。`,
 			timeout: `時間内に選択しませんでした。もう一度お試しください。`,
 			item_selected: `選択済み: {item}`,
+			select_page_title: `ページを選択`,
+			select_page_description: `{totalItems}項目から{totalPages}ページ中の表示するページを選択してください：`,
 		},
 
 		// 一般的なエラーメッセージ
 		errors: {
 			guild_only_title: `サーバー専用コマンド`,
 			guild_only_description: `このコマンドはサーバー内でのみ使用できます。`,
+			channel_only_title: `チャンネルが必要です`,
+			channel_only_description: `このコマンドは正常に動作するためにチャンネルが必要です。`,
 			dm_not_supported_title: `DMはサポートされていません`,
 			dm_not_supported_description: `申し訳ありませんが、ダイレクトメッセージではなく、サーバーチャンネル内でのみチャットできます。これは将来変更されるかもしれませんが、今のところサーバーでのみ動作します！`,
 			tomori_not_setup_title: `初期設定が必要です`,
 			tomori_not_setup_description: `このサーバーではまだ私の設定が行われていないようです。\`サーバー管理\`権限を持つメンバーが最初に\`/config setup\`を使用する必要があります。`,
+			tomori_not_setup_dm_footer: `注：DMは「ミニサーバー」として扱われ、私はあなたのメッセージに個人的に応答します。すべてのサーバー関連コマンドは意図通りに動作し、DM内では\`サーバー管理\`権限は必要ありません。`,
 			api_key_missing_title: `APIキーがありません`,
 			api_key_missing_description: `機能するにはAPIキーが必要ですが、このサーバーには設定されていません。\`サーバー管理\`権限を持つメンバーが\`/config apikeyset\`を使用して設定できます。`,
 			api_key_error_title: `APIキーエラー`,
 			api_key_error_description: `設定されたAPIキーへのアクセスまたは復号化で問題が発生しました。\`/config apikeyset\`を使用して正しく設定されているか確認してください。`,
 			context_error_title: `コンテキスト構築エラー`,
-			context_error_description: `会話のコンテキストを理解しようとしているときにエラーが発生しました。\`/tool refresh\`を実行してからもう一度お試しください。問題が解決しない場合は、\`/support report\`で報告してください。`,
+			context_error_description: `会話のコンテキストを理解しようとしているときにエラーが発生しました。`,
 			critical_error_title: `重大なエラー`,
-			critical_error_description: `予期しない重大なエラーが発生しました。\`/tool refresh\`を実行してからもう一度お試しください。問題が解決しない場合は、\`/support report\`で報告してください。`,
+			critical_error_description: `予期しない重大なエラーが発生しました。`,
 			update_failed_title: `更新に失敗しました`,
 			update_failed_description: `データベースの設定の更新に失敗しました。もう一度お試しください。`,
 			unknown_error_title: `不明なエラー`,
-			unknown_error_description: `予期しないエラーが発生しました。\`/tool refresh\`を実行してからもう一度お試しください。問題が解決しない場合は、\`/support report\`で報告してください。`,
+			unknown_error_description: `予期しないエラーが発生しました。`,
 			invalid_option_title: `無効なオプション`,
 			invalid_option_description: `選択されたオプションは無効です。有効なオプションを選択してください。`,
 			brave_api: {
@@ -65,6 +70,8 @@ export default {
 			operation_failed_description: `要求された操作を完了できませんでした。もう一度お試しください。`,
 			provider_not_supported_title: `サポートされていないプロバイダー`,
 			provider_not_supported_description: `選択されたAIプロバイダーは現在サポートされていません。`,
+			user_blacklisted_title: `ユーザーがブラックリスト登録済み`,
+			user_blacklisted_description: `あなたは現在このサーバーのパーソナライズ機能のブラックリストに登録されており、この操作を実行できません。`,
 		},
 		tomori_busy_title: "他の人に返信中です！",
 		tomori_busy_replying:
@@ -74,18 +81,20 @@ export default {
 	genai: {
 		// LLM API生成に関するエラー
 		generic_error_title: `生成エラー`,
-		generic_error_description: `申し訳ありません、応答を生成中にエラーが発生しました ({error_message})。\`/tool refresh\`を実行してからもう一度お試しください。問題が解決しない場合は、\`/support report\`で報告してください。`,
+		generic_error_description: `申し訳ありません、応答を生成中にエラーが発生しました ({error_message})。`,
+		generic_error_footer:
+			"`/tool refresh`を実行してからもう一度お試しください。問題が解決しない場合は、`/support report`で報告してください。",
 		error_stream_timeout_title: "接続タイムアウト",
 		error_stream_timeout_description:
 			"この問題が続く場合、サービスに一時的な問題がある可能性があります。しばらくしてからリクエストを再試行するか、`/tools refresh`を使用してコンテキスト履歴をリフレッシュしてください。",
 
 		// APIからの空の応答
 		empty_response_title: `空の応答`,
-		empty_response_description: `AIから空の応答を受け取りました。\`/tool refresh\`を実行してからもう一度お試しください。問題が解決しない場合は、\`/support report\`で報告してください。`,
+		empty_response_description: `AIから空の応答を受け取りました。`,
 		// 新規: 関数呼び出しの最大反復回数
 		max_iterations_title: "思考ループ",
 		max_iterations_streaming_description:
-			"思考ループに陥り、リクエストを完了できませんでした。`/tool refresh`を実行してからもう一度お試しください。問題が解決しない場合は、`/support report`で報告してください。",
+			"思考ループに陥り、リクエストを完了できませんでした。",
 
 		// 検索関連メッセージ
 		search: {
@@ -115,7 +124,7 @@ export default {
 			prohibited_content_admin_notice_description:
 				"送信されたコンテンツ（メディア、会話メッセージ、記憶）がAIプロバイダーのコンテンツポリシーに準拠していることを確認してください。`/tool refresh`で会話コンテンツをクリアしてください。",
 			streaming_failed_description:
-				"応答をストリーミング中に問題が発生しました。`/tool refresh`を実行してからもう一度お試しください。問題が解決しない場合は、`/support report`で報告してください。",
+				"応答をストリーミング中に問題が発生しました。",
 		},
 
 		self_teach: {
@@ -361,6 +370,11 @@ Discord API 遅延: \`{discord_response}ms\``,
 
 {items}`,
 				trigger_words_label: `トリガーワード`,
+				modal_title: `トリガーワードの削除`,
+				select_label: `トリガーワード`,
+				select_placeholder: `削除するトリガーワードを選択してください`,
+				success_title: `トリガーワードが削除されました`,
+				success_description: `サーバー設定からトリガーワード「{triggerWord}」を正常に削除しました。`,
 			},
 			apikeyset: {
 				description: `選択したAIプロバイダーのAPIキーを設定します。`,
@@ -421,7 +435,7 @@ Discord API 遅延: \`{discord_response}ms\``,
 				api_provider_description: `お好みのLLMのプロバイダーを選択してください`,
 				api_provider_placeholder: `選択してください...`,
 				api_key_label: `APIキー`,
-				api_key_description: `選択したLLMプロバイダーのAPIキーを入力してください。\n\n**APIキーの取得:**\n• [Google AI Studio](https://aistudio.google.com/app/apikey) - 無料利用枠あり\n• [OpenAI Platform](https://platform.openai.com/api-keys) - 従量課金制\n• [Anthropic Console](https://console.anthropic.com/settings/keys) - クレジットベースの課金\n• [OpenRouter](https://openrouter.ai/keys) - 複数のプロバイダー`,
+				api_key_description: `選択したLLMプロバイダーのAPIキーを入力してください。`,
 				preset_label: `人格プリセット`,
 				preset_description: `人格プリセットを選択してください`,
 				preset_placeholder: `人格を選択...`,
@@ -431,10 +445,14 @@ Discord API 遅延: \`{discord_response}ms\``,
 				preset_invalid: `エラー: 無効なプリセット名です。利用可能なプリセット名を正確に入力してください: {available}`,
 				config_invalid: `エラー: 内部設定の検証に失敗しました。これを報告してください。`,
 				setup_failed_description: `エラー: 初期設定構成をデータベースに保存できませんでした。もう一度お試しください。`,
+				modal_values_missing: `エラー: 必須入力項目の一部がセットアップフォームから受信されませんでした。もう一度セットアップコマンドをお試しください。`,
 				success_title: `🎉 設定完了！ 🎉`,
 				success_desc: `このサーバー用に設定が完了しました。概要は以下の通りです:`,
+				success_desc_dm: `このダイレクトメッセージ用に設定が完了しました。概要は以下の通りです:`,
 				preset_field: `人格プリセット`,
 				name_field: `私の名前`,
+				dm_context_explanation_title: `ダイレクトメッセージについて`,
+				dm_context_explanation: `このダイレクトメッセージでも「サーバー」として参照します。つまり、すべての「サーバー」機能が同じように動作しますが、私たちだけのプライベートな空間です！このダイレクトメッセージを私との1対1サーバーと考えてください。「サーバーメモリー」はここでのみの私の記憶です。`,
 				already_setup_title: `既に設定済みです`,
 				already_setup_description: `このサーバーでは既に設定が完了しています。設定を変更するには、\`/config humanizerdegree\`、\`/config temperature\`、\`/teach attribute\`などの他のコマンドを使用してください。`,
 			},

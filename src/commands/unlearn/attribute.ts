@@ -10,8 +10,8 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	replyPaginatedChoices,
-	promptWithRawModal,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import {
@@ -22,11 +22,8 @@ import {
 } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { sql } from "bun";
-import type { PaginatedChoiceResult } from "@/types/discord/embed";
 
 // Rule 20: Constants for static values at the top
-const DISPLAY_TRUNCATE_LENGTH = 45; // Max length for each part in the display list
-const MODAL_THRESHOLD = 20; // Use modal if items ≤ this number, otherwise use pagination
 const MODAL_CUSTOM_ID = "unlearn_attribute_modal";
 const ATTRIBUTE_SELECT_ID = "attribute_select";
 
@@ -130,32 +127,29 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild context
-	if (!interaction.guild || !interaction.channel) {
+	// 1. Ensure command is run in a valid channel context
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
 
-	// Define state and result variables outside try for catch block context
+	// Define state variables outside try for catch block context
 	let tomoriState: TomoriState | null = null;
-	let result: PaginatedChoiceResult | null = null;
 
 	try {
-		// 2. Defer reply ephemerally (User Request)
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 3. Load server's Tomori state (Rule 17)
-		tomoriState = await loadTomoriState(interaction.guild.id);
+		// 2. Load server's Tomori state (Rule 17)
+		tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
 				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -174,6 +168,7 @@ export async function execute(
 				descriptionKey:
 					"commands.teach.attribute.teaching_disabled_description",
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -187,129 +182,63 @@ export async function execute(
 				titleKey: "commands.unlearn.attribute.no_attributes_title",
 				descriptionKey: "commands.unlearn.attribute.no_attributes",
 				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 7. Format attributes for display, truncating long ones
-		const displayItems = currentAttributes.map((attribute) => {
-			return attribute.length > DISPLAY_TRUNCATE_LENGTH
-				? `${attribute.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
-				: attribute;
+		// 7. Use unified paginated modal system (supports up to 25 items directly, >25 via page selection)
+		const attributeSelectOptions: SelectOption[] = currentAttributes.map(
+			(attribute, index) => ({
+				label: safeSelectOptionText(attribute),
+				value: index.toString(), // Use index to avoid truncation issues
+				description: undefined, // No description needed for attributes
+			}),
+		);
+
+		const modalResult = await promptWithPaginatedModal(interaction, locale, {
+			modalCustomId: MODAL_CUSTOM_ID,
+			modalTitleKey: "commands.unlearn.attribute.modal_title",
+			components: [
+				{
+					customId: ATTRIBUTE_SELECT_ID,
+					labelKey: "commands.unlearn.attribute.select_label",
+					descriptionKey: "commands.unlearn.attribute.select_description",
+					placeholder: "commands.unlearn.attribute.select_placeholder",
+					required: true,
+					options: attributeSelectOptions,
+				},
+			],
 		});
 
-		// 8. Hybrid approach: use modal for ≤20 items, pagination for >20 items
-		if (currentAttributes.length <= MODAL_THRESHOLD) {
-			// Use modal with string select for small lists
-			const attributeSelectOptions: SelectOption[] = currentAttributes.map(
-				(attribute) => ({
-					label:
-						attribute.length > 100
-							? `${attribute.slice(0, 100)}...`
-							: attribute,
-					value: attribute, // Use full attribute as value
-					description: undefined, // No description needed for attributes
-				}),
+		// Handle modal outcome
+		if (modalResult.outcome !== "submit") {
+			log.info(
+				`Attribute removal modal ${modalResult.outcome} for user ${userData.user_id}`,
 			);
-
-			const modalResult = await promptWithRawModal(interaction, locale, {
-				modalCustomId: MODAL_CUSTOM_ID,
-				modalTitleKey: "commands.unlearn.attribute.modal_title",
-				components: [
-					{
-						customId: ATTRIBUTE_SELECT_ID,
-						labelKey: "commands.unlearn.attribute.select_label",
-						descriptionKey: "commands.unlearn.attribute.select_description",
-						placeholder: "commands.unlearn.attribute.select_placeholder",
-						required: true,
-						options: attributeSelectOptions,
-					},
-				],
-			});
-
-			// Handle modal outcome
-			if (modalResult.outcome !== "submit") {
-				log.info(
-					`Attribute removal modal ${modalResult.outcome} for user ${userData.user_id}`,
-				);
-				return;
-			}
-
-			// Extract values from the modal
-			// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
-			const modalSubmitInteraction = modalResult.interaction!;
-			// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
-			const attributeToRemove = modalResult.values![ATTRIBUTE_SELECT_ID];
-
-			// Defer the reply for the modal submission
-			await modalSubmitInteraction.deferReply({
-				flags: MessageFlags.Ephemeral,
-			});
-
-			// Perform the database update
-			await performAttributeRemoval(
-				tomoriState,
-				attributeToRemove,
-				userData,
-				modalSubmitInteraction,
-				locale,
-			);
-		} else {
-			// Use pagination for large lists (>20 items)
-			result = await replyPaginatedChoices(interaction, locale, {
-				titleKey: "commands.unlearn.attribute.select_title",
-				descriptionKey: "commands.unlearn.attribute.select_description",
-				itemLabelKey: "commands.unlearn.attribute.attribute_label",
-				items: displayItems,
-				color: ColorCode.INFO,
-				flags: MessageFlags.Ephemeral, // Make the pagination ephemeral
-
-				// Use simplified signature as expected by PaginatedChoiceOptions
-				onSelect: async (selectedIndex: number) => {
-					// Get the attribute to remove
-					const attributeToRemove = currentAttributes[selectedIndex];
-
-					// Null check for tomoriState (should never be null at this point)
-					if (!tomoriState) {
-						log.error("TomoriState unexpectedly null in onSelect callback");
-						return;
-					}
-
-					// Use the helper function for database update
-					await performAttributeRemoval(
-						tomoriState,
-						attributeToRemove,
-						userData,
-						interaction,
-						locale,
-					);
-				},
-
-				// Handle cancel
-				onCancel: async () => {
-					// Null check for tomoriState (should never be null at this point)
-					if (!tomoriState) {
-						log.error("TomoriState unexpectedly null in onCancel callback");
-						return;
-					}
-					log.info(
-						`User ${userData.user_disc_id} cancelled removing an attribute for tomori ${tomoriState.tomori_id}`,
-					);
-					// The replyPaginatedChoices helper will show the cancellation message
-				},
-			});
-
-			// Handle potential errors from the helper itself
-			if (!result.success && result.reason === "error") {
-				log.warn(
-					`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /unlearn attribute`,
-				);
-			} else if (!result.success && result.reason === "timeout") {
-				log.warn(
-					`Attribute removal timed out for user ${userData.user_disc_id} (Tomori ID: ${tomoriState.tomori_id})`,
-				);
-			}
+			return;
 		}
+
+		// Extract values from the modal
+		// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
+		const modalSubmitInteraction = modalResult.interaction!;
+		// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
+		const selectedIndex = Number.parseInt(modalResult.values![ATTRIBUTE_SELECT_ID], 10);
+		const attributeToRemove = currentAttributes[selectedIndex];
+
+		// Defer the reply for the modal submission
+		await modalSubmitInteraction.deferReply({
+			flags: MessageFlags.Ephemeral,
+		});
+
+		// Perform the database update
+		await performAttributeRemoval(
+			tomoriState,
+			attributeToRemove,
+			userData,
+			modalSubmitInteraction,
+			locale,
+		);
 	} catch (error) {
 		// 15. Catch unexpected errors
 		const context: ErrorContext = {

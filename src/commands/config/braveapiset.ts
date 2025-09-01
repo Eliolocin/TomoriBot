@@ -53,10 +53,10 @@ export async function execute(
 	locale: string,
 ): Promise<void> {
 	// 1. Ensure command is run in a guild
-	if (!interaction.guild || !interaction.channel) {
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, userData.language_pref, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 		});
 		return;
@@ -82,7 +82,9 @@ export async function execute(
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		// 5. Load the Tomori state for this server
-		const tomoriState = await loadTomoriState(interaction.guild.id);
+		const tomoriState = await loadTomoriState(
+			interaction.guild?.id ?? interaction.user.id,
+		);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
@@ -106,7 +108,7 @@ export async function execute(
 				errorType: "DatabaseUpdateError",
 				metadata: {
 					command: "config braveapiset",
-					guildId: interaction.guild.id,
+					guildId: interaction.guild?.id ?? interaction.user.id,
 					serviceName: "brave-search",
 				},
 			};
@@ -135,7 +137,9 @@ export async function execute(
 		let serverIdForError: number | null = null;
 		let tomoriIdForError: number | null = null;
 		if (interaction.guild?.id) {
-			const state = await loadTomoriState(interaction.guild.id);
+			const state = await loadTomoriState(
+				interaction.guild?.id ?? interaction.user.id,
+			);
 			serverIdForError = state?.server_id ?? null;
 			tomoriIdForError = state?.tomori_id ?? null;
 		}

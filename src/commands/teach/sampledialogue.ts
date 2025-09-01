@@ -48,11 +48,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild context (Rule 17)
-	if (!interaction.guild) {
+	// 1. Ensure command is run in a valid channel context (Rule 17)
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral, // User Request
 		});
@@ -62,7 +62,7 @@ export async function execute(
 	try {
 		// 2. Load server's Tomori state (Rule 17)
 		const tomoriState: TomoriState | null = await loadTomoriState(
-			interaction.guild.id,
+			interaction.guild?.id ?? interaction.user.id,
 		);
 
 		// 3. Check if Tomori is set up and if sample dialogue teaching is enabled

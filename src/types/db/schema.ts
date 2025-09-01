@@ -24,6 +24,7 @@ export type UserRow = z.infer<typeof userSchema>;
 export const serverSchema = z.object({
 	server_id: z.number().optional(),
 	server_disc_id: z.string(),
+	is_dm_channel: z.boolean().default(false), // Added for DM support (January 2025)
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
@@ -227,5 +228,6 @@ export const setupResultSchema = z.object({
 	tomori: tomoriSchema,
 	config: tomoriConfigSchema,
 	emojis: z.array(serverEmojiSchema),
+	stickers: z.array(serverStickerSchema),
 });
-export type SetupResult = z.infer<typeof setupConfigSchema>;
+export type SetupResult = z.infer<typeof setupResultSchema>;

@@ -1,7 +1,7 @@
 import type { Client, Message, Sticker } from "discord.js";
 import {
 	BaseGuildTextChannel,
-	// DMChannel,
+	DMChannel,
 	MessageFlags,
 	TextChannel,
 } from "discord.js"; // Import value for instanceof check
@@ -185,7 +185,7 @@ interface ChannelLockEntry {
 	currentMessageId?: string; // Discord ID of the message currently being processed
 	messageQueue: Array<{
 		message: Message;
-		isFromCommand?: boolean;
+		isManuallyTriggered?: boolean;
 		forceReason?: boolean;
 		llmOverrideCodename?: string;
 		isStopResponse?: boolean; // Flag to prevent stopping stop responses
@@ -210,23 +210,32 @@ function isNaturalStopMessage(content: string): boolean {
  * @param client - The Discord client instance.
  * @param message - The incoming Discord message.
  * @param isFromQueue - Whether this message is being processed from the queue.
- * @param isFromCommand - Whether this call is triggered by a manual command.
+ * @param isManuallyTriggered - Whether this call is triggered by a manual command.
  * @param forceReason - Whether to use reasoning mode for this response.
  * @param llmOverrideCodename - Override LLM model codename to use instead of server default.
  * @param isStopResponse - Whether this is a stop response (cannot be stopped).
+ * @param retryCount - Number of retry attempts for empty responses (internal use).
+ * @param skipLock - Whether to skip semaphore lock acquisition (for recursive calls).
  */
 export default async function tomoriChat(
 	client: Client,
 	message: Message,
 	isFromQueue: boolean,
-	isFromCommand?: boolean,
+	isManuallyTriggered?: boolean,
 	forceReason?: boolean,
 	llmOverrideCodename?: string,
 	isStopResponse?: boolean,
+	retryCount = 0,
+	skipLock = false,
 ): Promise<void> {
 	// 1. Initial Checks & State Loading
 	const channel = message.channel;
 	let locale = "en-US";
+
+	// Early return for bot messages (including TomoriBot's own messages)
+	if (message.author.bot && !isManuallyTriggered) {
+		return;
+	}
 
 	// Debug logging for stop response
 	if (isStopResponse) {
@@ -240,20 +249,41 @@ export default async function tomoriChat(
 		disableYouTubeProcessing: false, // Will be set to true during enhanced context restart
 		disableProfilePictureProcessing: false, // Will be set to true during enhanced context restart
 		forceReason, // Pass reasoning flag for enhanced AI responses
-		isFromCommand, // Pass command flag to indicate manual triggering
+		isManuallyTriggered, // Pass command flag to indicate manual triggering
 	};
 
-	if (!(channel instanceof BaseGuildTextChannel)) {
-		// Default locale
+	// biome-ignore lint/style/noNonNullAssertion: Author is always present in non-system messages
+	const userDiscId = message.author!.id;
 
-		// Early return if not a guild-based text channel (DMs or group chats)
-		// Create and send an embed explaining that Tomori only works in servers
+	// Handle different channel types - Guild channels vs DM channels
+	let guild: typeof message.guild;
+	let serverDiscId: string;
+	let isDMChannel = false;
+
+	if (channel instanceof BaseGuildTextChannel) {
+		// Standard guild text channel
+		// biome-ignore lint/style/noNonNullAssertion: Guild is always present in guild message events
+		guild = message.guild!;
+		serverDiscId = guild.id;
+		isDMChannel = false;
+	} else if (channel instanceof DMChannel) {
+		// Direct Message channel - treat as pseudo-server
+		guild = null;
+		serverDiscId = userDiscId; // Use user ID as server ID for DMs
+		isDMChannel = true;
+		// Always treat DM messages as manually triggered (bypass trigger word checks)
+		// Note: Using local variable to avoid parameter reassignment warning
+		streamingContext.isManuallyTriggered = true;
+		// biome-ignore lint/style/noParameterAssign: We want to ensure this is always true in DMs
+		isManuallyTriggered = true; // Fix: Also update the parameter used in shouldBotReply check
+		log.info(`Processing DM from user ${userDiscId} in channel ${channel.id}`);
+	} else {
+		// Group DMs or other unsupported channel types
 		const errorEmbed = createStandardEmbed(locale, {
 			color: ColorCode.ERROR,
-			titleKey: "general.errors.dm_not_supported_title", // Updated key
-			descriptionKey: "general.errors.dm_not_supported_description", // Updated key
+			titleKey: "general.errors.channel_not_supported_title",
+			descriptionKey: "general.errors.channel_not_supported_description",
 		});
-		// Check if channel can send messages
 
 		if (
 			"send" in channel &&
@@ -263,199 +293,207 @@ export default async function tomoriChat(
 			try {
 				await channel.send({ embeds: [errorEmbed] });
 			} catch (sendError) {
-				log.error(
-					"Failed to send non-guild channel not supported message",
-					sendError,
-				);
+				log.error("Failed to send unsupported channel type message", sendError);
 			}
 		}
 		return;
 	}
-	// biome-ignore lint/style/noNonNullAssertion: client.user is checked during startup
-	if (!channel.permissionsFor(client.user!)?.has("SendMessages")) return;
+	// Skip permission check for DMs as we always have send permission
 
-	// biome-ignore lint/style/noNonNullAssertion: Guild is always present in guild message events
-	const guild = message.guild!;
-	const serverDiscId = guild.id; // Keep Discord Guild ID
-
-	// biome-ignore lint/style/noNonNullAssertion: Author is always present in non-system messages
-	const userDiscId = message.author!.id;
-
-	// --- New Semaphore Logic ---
-	const channelLockId = channel.id;
-	let lockEntry = channelLocks.get(channelLockId);
+	if (
+		!isDMChannel &&
+		"permissionsFor" in channel &&
+		// biome-ignore lint/style/noNonNullAssertion: client.user is checked during startup
+		!channel.permissionsFor(client.user!)?.has("SendMessages")
+	)
+		return;
 
 	// --- Pre-Semaphore Tomori State Loading for shouldBotReply check ---
 	// Attempt to load Tomori state early to determine if a reply would even be considered.
 	// This helps decide if a "busy" message is warranted.
 	let earlyTomoriState: TomoriState | null = null;
-	try {
-		earlyTomoriState = await loadTomoriState(serverDiscId);
-	} catch (e) {
-		// Log the error but don't stop; the main logic will try to load it again
-		// and handle errors more comprehensively.
-		await log.error(
-			// Rule 22
-			`Failed to load TomoriState early for server ${serverDiscId} in tomoriChat's lock check phase.`,
-			e,
-			{
-				// serverId will be the Discord ID here as internal might not be known
-				errorType: "EarlyStateLoadingError",
-				metadata: { serverDiscId: serverDiscId, channelId: channel.id },
-			},
-		);
+	if (!skipLock) {
+		try {
+			earlyTomoriState = await loadTomoriState(serverDiscId);
+		} catch (e) {
+			// Log the error but don't stop; the main logic will try to load it again
+			// and handle errors more comprehensively.
+			await log.error(
+				// Rule 22
+				`Failed to load TomoriState early for server ${serverDiscId} in tomoriChat's lock check phase.`,
+				e,
+				{
+					// serverId will be the Discord ID here as internal might not be known
+					errorType: "EarlyStateLoadingError",
+					metadata: { serverDiscId: serverDiscId, channelId: channel.id },
+				},
+			);
+		}
 	}
 
-	if (!lockEntry) {
-		// 2. Initialize lock entry if it doesn't exist
-		lockEntry = {
-			isLocked: false,
-			lockedAt: 0,
-			currentMessageId: undefined,
-			messageQueue: [],
-		};
-		channelLocks.set(channelLockId, lockEntry);
-	}
+	// --- Semaphore Logic (skipped for recursive retry calls) ---
+	let lockEntry: ChannelLockEntry | undefined;
+	if (!skipLock) {
+		const channelLockId = channel.id;
+		lockEntry = channelLocks.get(channelLockId);
 
-	if (
-		lockEntry.isLocked &&
-		Date.now() - lockEntry.lockedAt > CHANNEL_LOCK_TIMEOUT_MS
-	) {
-		// 3. Check for stale lock (if current message finds it locked)
-		log.warn(
-			`Channel ${channelLockId} lock is stale (locked since ${new Date(lockEntry.lockedAt).toISOString()} for message ${lockEntry.currentMessageId}). Forcibly releasing. Previous queue length: ${lockEntry.messageQueue.length}`,
-		);
-		lockEntry.isLocked = false; // Release stale lock
-		lockEntry.messageQueue = []; // Clear queue as well, as context might be very old
-		// The current message will now attempt to acquire the lock.
-	}
-
-	// MODIFIED: Check if locked AND if Tomori would reply
-	if (lockEntry.isLocked) {
-		// Check for natural stop message first (if not already a stop response)
-		if (!isStopResponse && isNaturalStopMessage(message.content)) {
-			log.info(
-				`Stop message detected in channel ${channelLockId} while processing message ${lockEntry.currentMessageId}. Signaling graceful stop.`,
-			);
-
-			// Import at the top if not already imported
-			const { StreamOrchestrator } = await import(
-				"../../utils/discord/streamOrchestrator"
-			);
-
-			// Signal the stream to stop with context for later response generation
-			StreamOrchestrator.requestStop(channelLockId, message.author.id, {
-				originalStopMessage: message,
-				client,
-			});
-
-			log.info(
-				`Stop signal sent for channel ${channelLockId}. Stop response will be generated after stream completes.`,
-			);
-			return;
+		if (!lockEntry) {
+			// 2. Initialize lock entry if it doesn't exist
+			lockEntry = {
+				isLocked: false,
+				lockedAt: 0,
+				currentMessageId: undefined,
+				messageQueue: [],
+			};
+			channelLocks.set(channelLockId, lockEntry);
 		}
 
-		// Only enqueue and send "busy" message if Tomori is set up and would have replied.
-		if (earlyTomoriState) {
-			// 1. Create a modified version of earlyTomoriState for the shouldBotReply check.
-			// This simulates the autoch_counter as 1 for the decision to queue,
-			// preventing queueing based solely on an auto-reply hit while Tomori is busy.
-			const modifiedEarlyTomoriStateForCheck: TomoriState = {
-				...earlyTomoriState,
-				autoch_counter: 1, // Simulate counter as 1 for this check
-			};
+		if (
+			lockEntry.isLocked &&
+			Date.now() - lockEntry.lockedAt > CHANNEL_LOCK_TIMEOUT_MS
+		) {
+			// 3. Check for stale lock (if current message finds it locked)
+			log.warn(
+				`Channel ${channelLockId} lock is stale (locked since ${new Date(lockEntry.lockedAt).toISOString()} for message ${lockEntry.currentMessageId}). Forcibly releasing. Previous queue length: ${lockEntry.messageQueue.length}`,
+			);
+			lockEntry.isLocked = false; // Release stale lock
+			lockEntry.messageQueue = []; // Clear queue as well, as context might be very old
+			// The current message will now attempt to acquire the lock.
+		}
 
-			// 2. Decide whether to enqueue based on the modified state.
-			// Always enqueue if it's a manual command, otherwise use shouldBotReply logic
-			if (
-				isFromCommand ||
-				shouldBotReply(message, modifiedEarlyTomoriStateForCheck)
-			) {
-				lockEntry.messageQueue.push({
-					message,
-					isFromCommand,
-					forceReason,
-					llmOverrideCodename,
-				});
+		// MODIFIED: Check if locked AND if Tomori would reply
+		if (lockEntry.isLocked) {
+			// Check for natural stop message first (if not already a stop response)
+			if (!isStopResponse && isNaturalStopMessage(message.content)) {
 				log.info(
-					`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}). Enqueued message ${message.id}. Queue: ${lockEntry.messageQueue.length}. Tomori would reply (autoch_counter simulated as 0 for this check).`,
+					`Stop message detected in channel ${channelLockId} while processing message ${lockEntry.currentMessageId}. Signaling graceful stop.`,
 				);
 
-				// 3. Send "busy" reply to the user if not the bot itself.
-				// biome-ignore lint/style/noNonNullAssertion: client.user is checked during startup
-				if (message.author.id !== client.user!.id) {
-					try {
-						const tempUserRow = await loadUserRow(userDiscId);
-						const waitingLocale =
-							tempUserRow?.language_pref ?? guild.preferredLocale ?? "en-US";
-						const currentMessageLink = lockEntry.currentMessageId
-							? `https://discord.com/channels/${guild.id}/${channel.id}/${lockEntry.currentMessageId}`
-							: "a previous message";
+				// Import at the top if not already imported
+				const { StreamOrchestrator } = await import(
+					"../../utils/discord/streamOrchestrator"
+				);
 
-						const busyEmbed = createStandardEmbed(waitingLocale, {
-							titleKey: "general.tomori_busy_title",
-							descriptionKey: "general.tomori_busy_replying",
-							descriptionVars: { message_link: currentMessageLink },
-							color: ColorCode.INFO,
-							flags: MessageFlags.Ephemeral,
-						});
-						await message.reply({ embeds: [busyEmbed] }).catch((e) => {
+				// Signal the stream to stop with context for later response generation
+				StreamOrchestrator.requestStop(channelLockId, message.author.id, {
+					originalStopMessage: message,
+					client,
+				});
+
+				log.info(
+					`Stop signal sent for channel ${channelLockId}. Stop response will be generated after stream completes.`,
+				);
+				return;
+			}
+
+			// Only enqueue and send "busy" message if Tomori is set up and would have replied.
+			if (earlyTomoriState) {
+				// 1. Create a modified version of earlyTomoriState for the shouldBotReply check.
+				// This simulates the autoch_counter as 1 for the decision to queue,
+				// preventing queueing based solely on an auto-reply hit while Tomori is busy.
+				const modifiedEarlyTomoriStateForCheck: TomoriState = {
+					...earlyTomoriState,
+					autoch_counter: 1, // Simulate counter as 1 for this check
+				};
+
+				// 2. Decide whether to enqueue based on the modified state.
+				// Always enqueue if it's a manual command, otherwise use shouldBotReply logic
+				if (
+					isManuallyTriggered ||
+					shouldBotReply(message, modifiedEarlyTomoriStateForCheck)
+				) {
+					lockEntry.messageQueue.push({
+						message,
+						isManuallyTriggered,
+						forceReason,
+						llmOverrideCodename,
+					});
+					log.info(
+						`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}). Enqueued message ${message.id}. Queue: ${lockEntry.messageQueue.length}. Tomori would reply (autoch_counter simulated as 0 for this check).`,
+					);
+
+					// 3. Send "busy" reply to the user if not the bot itself.
+					// biome-ignore lint/style/noNonNullAssertion: client.user is checked during startup
+					if (message.author.id !== client.user!.id) {
+						try {
+							const tempUserRow = await loadUserRow(userDiscId);
+							const waitingLocale =
+								tempUserRow?.language_pref ?? guild?.preferredLocale ?? "en-US";
+							const currentMessageLink = lockEntry.currentMessageId
+								? isDMChannel
+									? `https://discord.com/channels/@me/${channel.id}/${lockEntry.currentMessageId}`
+									: guild?.id
+										? `https://discord.com/channels/${guild.id}/${channel.id}/${lockEntry.currentMessageId}`
+										: "a previous message"
+								: "a previous message";
+
+							const busyEmbed = createStandardEmbed(waitingLocale, {
+								titleKey: "general.tomori_busy_title",
+								descriptionKey: "general.tomori_busy_replying",
+								descriptionVars: { message_link: currentMessageLink },
+								color: ColorCode.INFO,
+								flags: MessageFlags.Ephemeral,
+							});
+							await message.reply({ embeds: [busyEmbed] }).catch((e) => {
+								log.error(
+									// Rule 22
+									"Failed to send ephemeral 'Tomori busy' reply",
+									e,
+									{
+										userId: tempUserRow?.user_id,
+										serverId: earlyTomoriState?.server_id, // Use original earlyTomoriState for accurate ID
+										errorType: "EphemeralReplyError",
+										metadata: {
+											messageId: message.id,
+											channelId: channel.id,
+											currentMessageIdInQueue: lockEntry?.currentMessageId,
+											userDiscId,
+											guildDiscId: guild?.id || null, // null for DMs
+											isDMChannel,
+										},
+									},
+								);
+							});
+						} catch (e) {
 							log.error(
 								// Rule 22
-								"Failed to send ephemeral 'Tomori busy' reply",
+								"Failed to prepare 'Tomori busy' ephemeral reply (state/locale error)",
 								e,
 								{
-									userId: tempUserRow?.user_id,
-									serverId: earlyTomoriState?.server_id, // Use original earlyTomoriState for accurate ID
-									errorType: "EphemeralReplyError",
+									errorType: "BusyReplyPrepError",
 									metadata: {
 										messageId: message.id,
 										channelId: channel.id,
-										currentMessageIdInQueue: lockEntry.currentMessageId,
 										userDiscId,
-										guildDiscId: guild.id,
+										guildDiscId: guild?.id || null, // null for DMs
+										isDMChannel,
 									},
 								},
 							);
-						});
-					} catch (e) {
-						log.error(
-							// Rule 22
-							"Failed to prepare 'Tomori busy' ephemeral reply (state/locale error)",
-							e,
-							{
-								errorType: "BusyReplyPrepError",
-								metadata: {
-									messageId: message.id,
-									channelId: channel.id,
-									userDiscId,
-									guildDiscId: guild.id,
-								},
-							},
-						);
+						}
 					}
+				} else {
+					// If locked, but Tomori wouldn't reply anyway (e.g., not setup, or message doesn't trigger,
+					// even with simulated counter reset), then don't enqueue or send busy message.
+					log.info(
+						`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}), but message ${message.id} would not have triggered a reply from Tomori (autoch_counter simulated as 0 for this check). Ignoring for queue.`,
+					);
 				}
 			} else {
-				// If locked, but Tomori wouldn't reply anyway (e.g., not setup, or message doesn't trigger,
-				// even with simulated counter reset), then don't enqueue or send busy message.
+				// earlyTomoriState is null, meaning Tomori is not set up on this server.
+				// In this case, Tomori wouldn't reply anyway, so don't enqueue.
 				log.info(
-					`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}), but message ${message.id} would not have triggered a reply from Tomori (autoch_counter simulated as 0 for this check). Ignoring for queue.`,
+					`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}), but Tomori is not set up on this server (earlyTomoriState is null). Message ${message.id} ignored for queue.`,
 				);
 			}
-		} else {
-			// earlyTomoriState is null, meaning Tomori is not set up on this server.
-			// In this case, Tomori wouldn't reply anyway, so don't enqueue.
-			log.info(
-				`Channel ${channelLockId} is busy (msg ${lockEntry.currentMessageId}), but Tomori is not set up on this server (earlyTomoriState is null). Message ${message.id} ignored for queue.`,
-			);
+			return; // Message enqueued, or ignored because Tomori wouldn't reply anyway.
 		}
-		return; // Message enqueued, or ignored because Tomori wouldn't reply anyway.
-	}
 
-	// 5. Acquire the lock for the current message
-	lockEntry.isLocked = true;
-	lockEntry.lockedAt = Date.now();
-	lockEntry.currentMessageId = message.id;
+		// 5. Acquire the lock for the current message
+		lockEntry.isLocked = true;
+		lockEntry.lockedAt = Date.now();
+		lockEntry.currentMessageId = message.id;
+	}
 	// --- End Semaphore Logic ---
 
 	// 2. Load critical state data early to use throughout function
@@ -570,33 +608,48 @@ export default async function tomoriChat(
 			// Check for base trigger words
 			isBaseTriggerWord = checkForBaseTriggerWords(message.content);
 
-			// 4. Early validation for directly triggered messages
-			if (isBaseTriggerWord || isReplyToBot) {
-				// If user directly mentioned Tomori or replied to it, we should validate
-				// Tomori's state and API key immediately
+			// 4. Early validation for directly triggered messages or manual triggers (including DMs)
+			// For DMs, always validate regardless of content since all DM messages should trigger responses
+			if (
+				isBaseTriggerWord ||
+				isReplyToBot ||
+				isManuallyTriggered ||
+				(isDMChannel && message.author.id !== client.user?.id)
+			) {
+				// If user directly mentioned Tomori, replied to it, or manually triggered (DMs), validate state
 
 				// Validate Tomori is set up
 				if (!tomoriState) {
-					log.info(
-						`User mentioned Tomori in server ${serverDiscId} but Tomori not set up.`,
-					);
+					const contextMessage = isDMChannel
+						? `User tried to use Tomori in DM but no Tomori instance found for user ${userDiscId}.`
+						: `User mentioned Tomori in server ${serverDiscId} but Tomori not set up.`;
+					log.info(contextMessage);
+
 					await sendStandardEmbed(channel, locale, {
 						color: ColorCode.ERROR,
 						titleKey: "general.errors.tomori_not_setup_title",
-						descriptionKey: "general.errors.tomori_not_setup_description", // Use description key
+						descriptionKey: "general.errors.tomori_not_setup_description",
+						...(isDMChannel && {
+							footerKey: "general.errors.tomori_not_setup_dm_footer",
+						}),
 					});
 					return;
 				}
 
 				// Validate API key is configured
 				if (!tomoriState.config.api_key) {
-					log.info(
-						`User mentioned Tomori in server ${serverDiscId} but API key not configured.`,
-					);
+					const contextMessage = isDMChannel
+						? `User tried to use Tomori in DM but API key not configured for user ${userDiscId}.`
+						: `User mentioned Tomori in server ${serverDiscId} but API key not configured.`;
+					log.info(contextMessage);
+
 					await sendStandardEmbed(channel, locale, {
 						color: ColorCode.ERROR,
-						titleKey: "general.errors.api_key_missing_title", // Use errors namespace
-						descriptionKey: "general.errors.api_key_missing_description", // Use errors namespace
+						titleKey: "general.errors.api_key_missing_title",
+						descriptionKey: "general.errors.api_key_missing_description",
+						...(isDMChannel && {
+							footerKey: "general.errors.tomori_not_setup_dm_footer",
+						}),
 					});
 					return;
 				}
@@ -647,7 +700,7 @@ export default async function tomoriChat(
 
 			// 6. Determine if Bot Should Reply using shouldBotReply helper
 			// Skip check if this is a manual command trigger
-			if (!isFromCommand && !shouldBotReply(message, tomoriState)) {
+			if (!isManuallyTriggered && !shouldBotReply(message, tomoriState)) {
 				return;
 			}
 
@@ -726,6 +779,9 @@ export default async function tomoriChat(
 				const authorId = msg.author.id;
 				const isLastMessage = index === relevantMessagesArray.length - 1;
 
+				// Variable to store referenced message data for later attachment extraction
+				let referencedMessageData: { message: Message } | undefined;
+
 				// 1. Check for debug prefix "$:" at the start of the message
 				const isDebugMessage = msg.content.startsWith("$:"); // Easter egg functionality hehehe
 				let processedContent = msg.content;
@@ -755,8 +811,47 @@ export default async function tomoriChat(
 								referencedContent = `${referencedContent.substring(0, 197)}...`;
 							}
 
+							// Store referenced message info for later attachment extraction
+							// (attachments will be processed after imageAttachments/videoAttachments arrays are declared)
+							referencedMessageData = {
+								message: msgReferencedMessage,
+							};
+
+							// Create enhanced reference context that mentions attachments (will be updated later)
+							let attachmentInfo = "";
+							// Temporarily count attachments to show in context
+							let imageCount = 0;
+							let videoCount = 0;
+							if (msgReferencedMessage.attachments.size > 0) {
+								for (const attachment of msgReferencedMessage.attachments.values()) {
+									if (
+										attachment.contentType?.startsWith("image/png") ||
+										attachment.contentType?.startsWith("image/jpeg") ||
+										attachment.contentType?.startsWith("image/webp") ||
+										attachment.contentType?.startsWith("image/heic") ||
+										attachment.contentType?.startsWith("image/heif")
+									) {
+										imageCount++;
+									} else if (
+										attachment.contentType &&
+										SUPPORTED_VIDEO_MIME_TYPES.some((type) =>
+											attachment.contentType?.startsWith(type),
+										)
+									) {
+										videoCount++;
+									}
+								}
+							}
+
+							if (imageCount > 0) {
+								attachmentInfo += ` (with ${imageCount} image${imageCount > 1 ? "s" : ""})`;
+							}
+							if (videoCount > 0) {
+								attachmentInfo += ` (with ${videoCount} video${videoCount > 1 ? "s" : ""})`;
+							}
+
 							// Add reference context to the message
-							const referenceContext = `[System: This message is referring to a previous message by ${referencedAuthorName} saying: ${referencedContent}]`;
+							const referenceContext = `[System: This message is referring to a previous message by ${referencedAuthorName} saying: ${referencedContent}${attachmentInfo}]`;
 							processedContent = `${referenceContext}\n${processedContent}`;
 						}
 					} catch (fetchError) {
@@ -784,6 +879,55 @@ export default async function tomoriChat(
 					[];
 				let messageContentForLlm: string | null = processedContent; // Use processed content (with reference context and "$:" removed if present)
 				let hasProcessedEmbed = false; // Track if this message contains a processed embed
+
+				// Extract attachments from referenced message if it exists (after arrays are declared)
+				// Check if this is the last message and we have stored reference message data
+				if (
+					isLastMessage &&
+					typeof referencedMessageData !== "undefined" &&
+					referencedMessageData.message.attachments.size > 0
+				) {
+					for (const attachment of referencedMessageData.message.attachments.values()) {
+						if (
+							attachment.contentType?.startsWith("image/png") ||
+							attachment.contentType?.startsWith("image/jpeg") ||
+							attachment.contentType?.startsWith("image/webp") ||
+							attachment.contentType?.startsWith("image/heic") ||
+							attachment.contentType?.startsWith("image/heif")
+						) {
+							imageAttachments.push({
+								url: attachment.url,
+								proxyUrl: attachment.proxyURL,
+								mimeType: attachment.contentType,
+								filename: attachment.name,
+							});
+						} else if (
+							attachment.contentType &&
+							SUPPORTED_VIDEO_MIME_TYPES.some((type) =>
+								attachment.contentType?.startsWith(type),
+							)
+						) {
+							videoAttachments.push({
+								url: attachment.url,
+								proxyUrl: attachment.proxyURL,
+								mimeType: attachment.contentType,
+								filename: attachment.name,
+								isYouTubeLink: false,
+							});
+						}
+					}
+
+					// Log attachment extraction for debugging
+					const extractedImages = imageAttachments.length;
+					const extractedVideos = videoAttachments.filter(
+						(v) => !v.isYouTubeLink,
+					).length;
+					if (extractedImages > 0 || extractedVideos > 0) {
+						log.info(
+							`Extracted ${extractedImages} images and ${extractedVideos} videos from referenced message ${referencedMessageData.message.id}`,
+						);
+					}
+				}
 
 				// Process embeds for target titles that should be included as text content
 				if (msg.embeds.length > 0) {
@@ -987,10 +1131,20 @@ export default async function tomoriChat(
 			}
 
 			const userList = Array.from(userListSet);
-			const channelName = channel.name;
-			const channelDesc = channel.topic;
-			const serverName = guild.name;
-			const serverDescription = guild.description;
+			const channelName = isDMChannel
+				? "Direct Message"
+				: "name" in channel
+					? channel.name
+					: "Unknown Channel";
+			const channelDesc = isDMChannel
+				? null
+				: "topic" in channel
+					? channel.topic
+					: null;
+			const serverName = isDMChannel
+				? "Direct Message"
+				: guild?.name || "Unknown Server";
+			const serverDescription = isDMChannel ? null : guild?.description;
 
 			let emojiStrings: string[] = [];
 
@@ -1019,7 +1173,7 @@ export default async function tomoriChat(
 				contextSegments = await buildContext({
 					guildId: serverDiscId,
 					serverName,
-					serverDescription,
+					serverDescription: serverDescription ?? null,
 					// conversationHistory: conversationHistory, // This parameter will be removed
 					simplifiedMessageHistory: simplifiedMessages, // New parameter for structured history
 					userList,
@@ -1034,6 +1188,7 @@ export default async function tomoriChat(
 					tomoriAttributes: tomoriState!.attribute_list,
 					// biome-ignore lint/style/noNonNullAssertion: tomoriState is checked
 					tomoriConfig: tomoriState!.config,
+					isDMChannel, // Pass DM channel flag for proper context building
 				});
 
 				// Inject system context for stop responses
@@ -1093,7 +1248,7 @@ export default async function tomoriChat(
 					errorType: "ContextBuildingError",
 					metadata: {
 						guildId: serverDiscId,
-						channelName: channel.name,
+						channelName: channelName, // Use the channelName variable we already calculated
 						userCountInContext: userList.length,
 					},
 				});
@@ -1101,6 +1256,7 @@ export default async function tomoriChat(
 					color: ColorCode.ERROR,
 					titleKey: "general.errors.context_error_title",
 					descriptionKey: "general.errors.context_error_description",
+					footerKey: "genai.generic_error_footer",
 				});
 				return;
 			}
@@ -1276,6 +1432,53 @@ export default async function tomoriChat(
 						break;
 					}
 
+					// Handle empty response with fresh context retry
+					if (streamResult.status === "empty_response") {
+						const MAX_EMPTY_RESPONSE_RETRIES = 2;
+						const RETRY_DELAY_MS = 1000;
+
+						if (retryCount < MAX_EMPTY_RESPONSE_RETRIES) {
+							log.info(
+								`Empty response detected (attempt ${retryCount + 1}/${MAX_EMPTY_RESPONSE_RETRIES + 1}). Retrying with fresh context in ${RETRY_DELAY_MS}ms...`,
+							);
+
+							// Wait before retry
+							await new Promise((resolve) =>
+								setTimeout(resolve, RETRY_DELAY_MS),
+							);
+
+							// Recursive call with fresh context (skipLock=true to avoid semaphore issues)
+							return await tomoriChat(
+								client,
+								message,
+								isFromQueue,
+								true, // isManuallyTriggered - bypass trigger checks for retry
+								forceReason,
+								llmOverrideCodename,
+								isStopResponse,
+								retryCount + 1, // Increment retry count
+								true, // skipLock - parent already holds the lock
+							);
+						} else {
+							// Max retries reached, show error embed
+							log.warn(
+								`Empty response after ${MAX_EMPTY_RESPONSE_RETRIES} retries. Showing error embed.`,
+							);
+
+							await sendStandardEmbed(channel, locale, {
+								titleKey: "genai.empty_response_title",
+								descriptionKey: "genai.empty_response_description",
+								color: ColorCode.WARN,
+								footerKey: "genai.generic_error_footer",
+							}).catch((e) =>
+								log.warn("Failed to send empty response embed to channel", e),
+							);
+
+							finalStreamCompleted = true; // Mark as completed to exit
+							break;
+						}
+					}
+
 					// This is the internal stream inactivity timeout from streamGeminiToDiscord
 					if (streamResult.status === "timeout") {
 						log.warn(
@@ -1313,7 +1516,7 @@ export default async function tomoriChat(
 								// Queue the original stop message as a "passport" for stop response
 								currentLockEntry.messageQueue.unshift({
 									message: stopContext.originalStopMessage,
-									isFromCommand: true, // This bypasses normal trigger logic
+									isManuallyTriggered: true, // This bypasses normal trigger logic
 									forceReason: false,
 									llmOverrideCodename,
 									isStopResponse: true, // This response cannot be stopped
@@ -1597,6 +1800,7 @@ export default async function tomoriChat(
 								color: ColorCode.WARN,
 								titleKey: "genai.max_iterations_title", // New locale key
 								descriptionKey: "genai.max_iterations_streaming_description", // New locale key
+								footerKey: "genai.generic_error_footer",
 							});
 							finalStreamCompleted = true; // Mark as "completed" to exit loop
 							selectedStickerToSend = null; // Clear sticker
@@ -1632,6 +1836,7 @@ export default async function tomoriChat(
 									? streamingError.message
 									: "Unknown Error",
 						},
+						footerKey: "genai.generic_error_footer",
 					});
 					finalStreamCompleted = true; // Break loop on critical error
 					break;
@@ -1693,12 +1898,14 @@ export default async function tomoriChat(
 				color: ColorCode.ERROR,
 				titleKey: "general.errors.critical_error_title",
 				descriptionKey: "general.errors.critical_error_description",
+				footerKey: "genai.generic_error_footer",
 			});
 		}
 	} finally {
-		// --- New Semaphore Logic: Release lock and process queue ---
-		if (lockEntry) {
+		// --- Semaphore Logic: Release lock and process queue (only for non-recursive calls) ---
+		if (!skipLock && lockEntry) {
 			// Ensure lockEntry is defined
+			const channelLockId = channel.id;
 			lockEntry.isLocked = false;
 			lockEntry.lockedAt = 0;
 			lockEntry.currentMessageId = undefined;
@@ -1748,10 +1955,12 @@ export default async function tomoriChat(
 							client,
 							nextMessageData.message,
 							true,
-							nextMessageData.isFromCommand,
+							nextMessageData.isManuallyTriggered,
 							nextMessageData.forceReason,
 							nextMessageData.llmOverrideCodename,
 							nextMessageData.isStopResponse, // Pass through the stop response flag
+							0, // retryCount - start fresh for queued messages
+							false, // skipLock - queued messages should acquire lock normally
 						).catch((e) => {
 							log.error(
 								`Error processing queued message ${nextMessageData.message.id}:`,
@@ -1789,7 +1998,10 @@ export function shouldBotReply(
 	if (
 		message.author.bot ||
 		message.content.startsWith("!") || // Basic command prefix check
-		!(message.channel instanceof TextChannel) // Use TextChannel as value
+		!(
+			message.channel instanceof TextChannel ||
+			message.channel instanceof DMChannel
+		) // Support both TextChannel and DMChannel
 	) {
 		return false;
 	}
@@ -1867,15 +2079,17 @@ export async function handleStopResponse(
 		);
 
 		// Use original stop message as "passport" (like respond.ts command does)
-		// isFromCommand: true bypasses all normal trigger logic
+		// isManuallyTriggered: true bypasses all normal trigger logic
 		await tomoriChat(
 			client,
 			originalStopMessage,
 			true, // isFromQueue to trigger reply to same message
-			true, // isFromCommand - this bypasses normal trigger logic and forces response
+			true, // isManuallyTriggered - this bypasses normal trigger logic and forces response
 			false, // forceReason
 			undefined, // llmOverrideCodename
 			true, // isStopResponse - This prevents the stop response from being stopped
+			0, // retryCount - start fresh for stop responses
+			false, // skipLock - stop responses should acquire lock normally
 		);
 	} catch (error) {
 		log.error("Failed to handle stop response:", error);

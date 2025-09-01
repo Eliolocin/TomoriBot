@@ -57,11 +57,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild context to check server settings (Rule 17)
-	if (!interaction.guild) {
+	// 1. Ensure command is run in a channel context (Rule 17)
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -76,7 +76,9 @@ export async function execute(
 	try {
 		// 2. Load server's Tomori state to check personalization setting (Rule 17)
 		// We need this even though we're updating the users table
-		tomoriState = await loadTomoriState(interaction.guild.id);
+		// Use user ID for DM context, guild ID for server context
+		const serverId = interaction.guild?.id ?? interaction.user.id;
+		tomoriState = await loadTomoriState(serverId);
 
 		// 3. Check if Tomori is set up on the server (needed for config check)
 		if (!tomoriState) {
@@ -223,8 +225,10 @@ export async function execute(
 		// Check both personalization settings and user blacklisting (similar to memoryTool.ts:437-454)
 		const personalizationEnabled =
 			tomoriState?.config.personal_memories_enabled ?? true;
-		const userIsBlacklisted =
-			(await isBlacklisted(interaction.guild.id, interaction.user.id)) ?? false;
+		// Only check blacklisting for guild contexts (DM users can't be blacklisted)
+		const userIsBlacklisted = interaction.guild
+			? (await isBlacklisted(interaction.guild.id, interaction.user.id)) ?? false
+			: false;
 
 		if (!personalizationEnabled) {
 			descriptionKey =

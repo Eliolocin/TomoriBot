@@ -16,6 +16,7 @@ import type {
 	Client,
 	CommandInteraction,
 	Message,
+	DMChannel,
 } from "discord.js";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
@@ -132,8 +133,6 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 		}
 	}
 
-
-
 	/**
 	 * Get available tools/functions based on Tomori's configuration
 	 * Uses the enhanced tool adapter that handles both built-in and MCP tools
@@ -169,14 +168,16 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 					tomoriState: tomoriState,
 					locale: "en-US", // Default locale
 				};
-				
+
 				// Get all tools and filter using context-aware availability
 				const allTools = ToolRegistry.getAllTools();
-				availableBuiltInTools = allTools.filter(tool => {
-					const isContextAvailable = 'isAvailableForContext' in tool && typeof tool.isAvailableForContext === 'function'
-						? tool.isAvailableForContext("google", minimalContext)
-						: tool.isAvailableFor("google");
-					
+				availableBuiltInTools = allTools.filter((tool) => {
+					const isContextAvailable =
+						"isAvailableForContext" in tool &&
+						typeof tool.isAvailableForContext === "function"
+							? tool.isAvailableForContext("google", minimalContext)
+							: tool.isAvailableFor("google");
+
 					// Skip feature flag checking for now to simplify the logic
 					// The important part is the YouTube tool context-aware availability
 					return isContextAvailable;
@@ -270,7 +271,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 	 * This maintains the exact same interface for full backward compatibility
 	 */
 	async streamToDiscord(
-		channel: BaseGuildTextChannel,
+		channel: BaseGuildTextChannel | DMChannel,
 		client: Client,
 		tomoriState: TomoriState,
 		config: ProviderConfig,
@@ -329,13 +330,18 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 				})),
 				// Command-specific overrides from streaming context
 				forceReason: streamingContext?.forceReason,
-				isFromCommand: streamingContext?.isFromCommand,
+				isManuallyTriggered: streamingContext?.isManuallyTriggered,
 			};
 
 			// Override tools with context-aware tools when streaming context is provided
 			if (streamingContext) {
-				log.info("GoogleProvider: Reloading tools with streaming context for context-aware availability");
-				const contextAwareTools = await this.getTools(tomoriState, streamingContext);
+				log.info(
+					"GoogleProvider: Reloading tools with streaming context for context-aware availability",
+				);
+				const contextAwareTools = await this.getTools(
+					tomoriState,
+					streamingContext,
+				);
 				streamConfig.tools = contextAwareTools;
 			}
 
@@ -356,7 +362,7 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 
 				// Provider context
 				provider: "google",
-				locale: channel.guild.preferredLocale,
+				locale: ('guild' in channel ? channel.guild?.preferredLocale : undefined) ?? "en-US",
 			};
 
 			// Create the modular streaming components

@@ -179,20 +179,23 @@ export async function incrementTomoriCounter(
 /**
  * Sets up a new server with Tomori in a single atomic transaction.
  * Creates server record, Tomori instance, config, and registers all server emojis.
+ * Supports both guild channels and DM contexts (pseudo-servers).
  *
- * @param guild - The Discord guild to setup
+ * @param guild - The Discord guild to setup (null for DM contexts)
  * @param config - Configuration data for server setup
  * @returns All database rows created during setup
  * @throws If validation fails or any part of the setup transaction fails
  */
 export async function setupServer(
-	guild: Guild,
+	guild: Guild | null,
 	config: SetupConfig,
 ): Promise<SetupResult> {
 	// Validate input config - critical operation so we use Zod (Rule 3, Rule 5)
 	const validConfig = setupConfigSchema.parse(config);
 
-	log.section("Starting server setup transaction");
+	// Detect if this is a DM context (no guild)
+	const isDMChannel = guild === null;
+	log.section(`Starting server setup transaction (${isDMChannel ? 'DM' : 'Guild'} context)`);
 
 	try {
 		// Start transaction for atomicity (Rule 15)
@@ -228,12 +231,12 @@ export async function setupServer(
 				(word) => word.trim(),
 			) || ["tomori", "tomo", "トモリ", "ともり"];
 
-			// 1. Create or update server record with RETURNING (Rule 15)
+			// 1. Create or update server record with DM support (Rule 15)
 			const [server] = await tx`
-				INSERT INTO servers (server_disc_id)
-				VALUES (${validConfig.serverId})
+				INSERT INTO servers (server_disc_id, is_dm_channel)
+				VALUES (${validConfig.serverId}, ${isDMChannel})
 				ON CONFLICT (server_disc_id) DO UPDATE
-				SET server_disc_id = EXCLUDED.server_disc_id
+				SET is_dm_channel = EXCLUDED.is_dm_channel
 				RETURNING *
 			`;
 
@@ -273,100 +276,112 @@ export async function setupServer(
 					llm_id,
 					api_key,
 					trigger_words,
-					humanizer_degree
+					humanizer_degree,
+					attribute_memteaching_enabled,
+					sampledialogue_memteaching_enabled
 				)
 				VALUES (
 					${tomori.tomori_id},
 					${selectedLlm.llm_id},
 					${validConfig.encryptedApiKey},
 					${triggerWordsArrayLiteral}::text[],
-					${validConfig.humanizer}
+					${validConfig.humanizer},
+					${isDMChannel},
+					${isDMChannel}
 				)
 				RETURNING *
 			`;
 
-			// 4. Register guild emojis in bulk insert (Rule 16)
-			const emojiValues = Array.from(guild.emojis.cache.values()).map((e) => ({
-				emoji_disc_id: e.id,
-				emoji_name: e.name ?? "",
-				emotion_key: "unset", // Add the emotion_key field
-				is_animated: e.animated || false, // Track if emoji is animated
-			}));
-
+			// 4. Register guild emojis in bulk insert (only for guild contexts, Rule 16)
 			const emojis = [];
-			for (const {
-				emoji_disc_id,
-				emoji_name,
-				emotion_key,
-				is_animated,
-			} of emojiValues) {
-				const [row] = await tx`
-			INSERT INTO server_emojis (
-				server_id,
-				emoji_disc_id,
-				emoji_name,
-				emotion_key,
-				is_animated
-			)
-				VALUES (
-				${server.server_id},
-				${emoji_disc_id},
-				${emoji_name},
-				${emotion_key},
-				${is_animated}
+			if (!isDMChannel && guild) {
+				const emojiValues = Array.from(guild.emojis.cache.values()).map((e) => ({
+					emoji_disc_id: e.id,
+					emoji_name: e.name ?? "",
+					emotion_key: "unset", // Add the emotion_key field
+					is_animated: e.animated || false, // Track if emoji is animated
+				}));
+
+				for (const {
+					emoji_disc_id,
+					emoji_name,
+					emotion_key,
+					is_animated,
+				} of emojiValues) {
+					const [row] = await tx`
+				INSERT INTO server_emojis (
+					server_id,
+					emoji_disc_id,
+					emoji_name,
+					emotion_key,
+					is_animated
 				)
-				RETURNING *
-			`;
-				emojis.push(row);
-			}
-
-			// 5. Register guild stickers
-			log.info(`Registering stickers for server ${server.server_id}`);
-			const stickerValues = Array.from(guild.stickers.cache.values()).map(
-				(s) => ({
-					sticker_disc_id: s.id,
-					sticker_name: s.name,
-					sticker_desc: s.description ?? "",
-					emotion_key: "unset",
-					// is_animated: s.format === StickerFormatType.Lottie, // Remove this line
-					sticker_format: s.format, // Store the actual format type enum value
-				}),
-			);
-
-			const stickers = [];
-			for (const {
-				sticker_disc_id,
-				sticker_name,
-				sticker_desc,
-				emotion_key,
-				// is_animated, // Remove from destructuring
-				sticker_format, // Add to destructuring
-			} of stickerValues) {
-				const [row] = await tx`
-                    INSERT INTO server_stickers (
-                        server_id,
-                        sticker_disc_id,
-                        sticker_name,
-                        sticker_desc,
-                        emotion_key,
-                        sticker_format -- Add to INSERT
-                        -- is_global defaults to false in DB schema
-                    ) VALUES (
-                        ${server.server_id},
-                        ${sticker_disc_id},
-                        ${sticker_name},
-                        ${sticker_desc},
-                        ${emotion_key},
-                        ${sticker_format} -- Add value
-                    )
-                    ON CONFLICT (server_id, sticker_disc_id) DO NOTHING
-                    RETURNING *
-                `;
-				if (row) {
-					stickers.push(row);
+					VALUES (
+					${server.server_id},
+					${emoji_disc_id},
+					${emoji_name},
+					${emotion_key},
+					${is_animated}
+					)
+					RETURNING *
+				`;
+					emojis.push(row);
 				}
+			} else {
+				log.info("Skipping emoji registration for DM context");
 			}
-			log.info(`Finished registering ${stickers.length} stickers.`);
+
+			// 5. Register guild stickers (only for guild contexts)
+			const stickers = [];
+			if (!isDMChannel && guild) {
+				log.info(`Registering stickers for server ${server.server_id}`);
+				const stickerValues = Array.from(guild.stickers.cache.values()).map(
+					(s) => ({
+						sticker_disc_id: s.id,
+						sticker_name: s.name,
+						sticker_desc: s.description ?? "",
+						emotion_key: "unset",
+						// is_animated: s.format === StickerFormatType.Lottie, // Remove this line
+						sticker_format: s.format, // Store the actual format type enum value
+					}),
+				);
+
+				for (const {
+					sticker_disc_id,
+					sticker_name,
+					sticker_desc,
+					emotion_key,
+					// is_animated, // Remove from destructuring
+					sticker_format, // Add to destructuring
+				} of stickerValues) {
+					const [row] = await tx`
+                        INSERT INTO server_stickers (
+                            server_id,
+                            sticker_disc_id,
+                            sticker_name,
+                            sticker_desc,
+                            emotion_key,
+                            sticker_format -- Add to INSERT
+                            -- is_global defaults to false in DB schema
+                        ) VALUES (
+                            ${server.server_id},
+                            ${sticker_disc_id},
+                            ${sticker_name},
+                            ${sticker_desc},
+                            ${emotion_key},
+                            ${sticker_format} -- Add value
+                        )
+                        ON CONFLICT (server_id, sticker_disc_id) DO NOTHING
+                        RETURNING *
+                    `;
+					if (row) {
+						stickers.push(row);
+					}
+				}
+				log.info(`Finished registering ${stickers.length} stickers.`);
+			} else {
+				log.info("Skipping sticker registration for DM context");
+			}
 
 			// Return all created records
 			return {
@@ -374,6 +389,7 @@ export async function setupServer(
 				tomori,
 				config,
 				emojis,
+				stickers,
 			};
 		});
 
@@ -381,9 +397,13 @@ export async function setupServer(
 		setupResultSchema.parse(result);
 
 		log.success(
-			`Server setup completed successfully for Server ID (${validConfig.serverId})`,
+			`${isDMChannel ? 'DM pseudo-server' : 'Server'} setup completed successfully for Server ID (${validConfig.serverId})`,
 		);
-		log.info(`Registered ${result.emojis.length} emojis`);
+		if (!isDMChannel) {
+			log.info(`Registered ${result.emojis.length} emojis and ${result.stickers.length} stickers`);
+		} else {
+			log.info("DM setup completed - emoji/sticker registration skipped");
+		}
 
 		return result;
 	} catch (error) {

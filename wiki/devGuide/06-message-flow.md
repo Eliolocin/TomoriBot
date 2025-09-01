@@ -8,7 +8,7 @@ When a user sends a message that triggers TomoriBot, a sophisticated **modular f
 
 ```
 User Message → Discord Event → tomoriChat.ts
-├── 1. Channel & Permission Validation
+├── 1. Channel & Context Validation (Guild vs DM)
 ├── 2. Semaphore Lock Acquisition  
 ├── 3. Tomori State & User Data Loading
 ├── 4. Message History Fetching
@@ -17,12 +17,58 @@ User Message → Discord Event → tomoriChat.ts
 ```
 
 **Key Operations:**
-- Validate the message is from a supported channel type
+- **Channel Type Validation**: Support Guild text channels and Direct Messages
+- **Context Detection**: Use `isDMBased()` for reliable DM identification
+- **Server ID Resolution**: Guild ID for servers, User ID for DMs (secure isolation)
 - Acquire semaphore lock to prevent concurrent processing
-- Load server configuration and user preferences from PostgreSQL
+- Load server/DM configuration and user preferences from PostgreSQL
 - Fetch message history with reset marker detection
 - Build structured context items for LLM processing
 - Check trigger words and auto-response counters
+
+#### DM vs Guild Context Handling
+
+**Guild Channels:**
+```typescript
+const isDMChannel = !interaction.channel.isDMBased();
+const serverId = interaction.guild?.id;  // Standard guild ID
+// Uses guild-specific configurations, emojis, stickers
+```
+
+**Direct Messages:**  
+```typescript
+const isDMChannel = interaction.channel.isDMBased();
+const serverId = interaction.user.id;    // User ID for isolation
+// Uses user-specific configurations, limited features
+```
+
+**Security Benefits:**
+- **User Isolation**: DM contexts use User ID as serverId for complete data separation
+- **Memory Protection**: Fixed critical security vulnerabilities in memory tool processing
+- **Context Validation**: Proper null checks prevent ID mixing between contexts
+
+#### Supported Channel Types
+
+**✅ Supported:**
+- **Guild Text Channels**: Full feature set (emojis, stickers, server memories)
+- **Direct Messages**: Core functionality with user-specific configurations
+
+**❌ Unsupported:**
+- **Group DMs**: Not supported due to complexity and limited use cases
+- **Voice/Stage Channels**: Text-based bot requires text channels only
+- **Forum/Thread Channels**: May work but not officially supported
+
+**Error Handling:**
+```typescript
+// Unsupported channel types receive user-friendly error messages
+if (!isSupportedChannelType(channel)) {
+  return sendStandardEmbed(channel, locale, {
+    titleKey: "general.errors.channel_not_supported_title",
+    descriptionKey: "general.errors.channel_not_supported_description",
+    color: ColorCode.ERROR
+  });
+}
+```
 
 ### Phase 2: Provider Selection & Configuration
 
@@ -233,7 +279,7 @@ if (StreamOrchestrator.hasStopRequest(channel.id)) {
 
 // 3. Stop response generation after lock release
 const systemContext = "[System: The user has requested you to stop your current generation]";
-// Uses original stop message as "passport" with isFromCommand: true bypass
+// Uses original stop message as "passport" with isManuallyTriggered: true bypass
 ```
 
 **Integration Points:**

@@ -17,16 +17,13 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	replyPaginatedChoices,
-	promptWithRawModal,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
-import type { PaginatedChoiceResult } from "../../types/discord/embed";
 import type { SelectOption } from "../../types/discord/modal";
 
 // Rule 20: Constants for static values at the top
-const DISPLAY_TRUNCATE_LENGTH = 45; // Max length for memory content in the display list
-const MODAL_THRESHOLD = 20; // Use modal if items ≤ this number, otherwise use pagination
 const MODAL_CUSTOM_ID = "unlearn_servermemory_modal";
 const MEMORY_SELECT_ID = "memory_select";
 
@@ -133,11 +130,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild context (Rule 17)
-	if (!interaction.guild) {
+	// 1. Ensure command is run in a valid channel context (Rule 17)
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -146,19 +143,16 @@ export async function execute(
 
 	// Define state and result variables outside try for catch block context
 	let tomoriState: TomoriState | null = null;
-	let result: PaginatedChoiceResult | null = null;
 
 	try {
-		// 2. Defer reply ephemerally (User Request)
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 3. Load server's Tomori state (Rule 17) - Needed for server_id and config checks
-		tomoriState = await loadTomoriState(interaction.guild.id);
+		// 2. Load server's Tomori state (Rule 17) - Needed for server_id and config checks
+		tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
 				descriptionKey: "general.errors.tomori_not_setup_description",
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -176,6 +170,7 @@ export async function execute(
 				descriptionKey:
 					"commands.teach.servermemory.teaching_disabled_description",
 				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -211,155 +206,80 @@ export async function execute(
 				titleKey: "commands.unlearn.servermemory.no_memories_title",
 				descriptionKey: descriptionKey,
 				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 7. Apply hybrid approach: use modal for ≤20 items, pagination for >20 items
-		if (memories.length <= MODAL_THRESHOLD) {
-			// Use modal for small lists
+		// 7. Use unified paginated modal system (supports up to 25 items directly, >25 via page selection)
+		const memorySelectOptions: SelectOption[] = memories.map(
+			(memory: { content: string }, index: number) => ({
+				label: safeSelectOptionText(memory.content, 50),
+				value: index.toString(), // Use index to avoid truncation issues
+				description: safeSelectOptionText(memory.content),
+			}),
+		);
 
-			// Create memory select options for the modal
-			const memorySelectOptions: SelectOption[] = memories.map(
-				(memory: { content: string }) => ({
-					label:
-						memory.content.length > 50
-							? `${memory.content.slice(0, 50)}...`
-							: memory.content,
-					value: memory.content,
-					description:
-						memory.content.length > 100
-							? `${memory.content.slice(0, 100)}...`
-							: memory.content,
-				}),
-			);
-
-			// Show the modal with memory selection
-			const modalResult = await promptWithRawModal(interaction, locale, {
-				modalCustomId: MODAL_CUSTOM_ID,
-				modalTitleKey: "commands.unlearn.servermemory.modal_title",
-				components: [
-					{
-						customId: MEMORY_SELECT_ID,
-						labelKey: "commands.unlearn.servermemory.select_label",
-						descriptionKey: "commands.unlearn.servermemory.select_description",
-						placeholder: "commands.unlearn.servermemory.select_placeholder",
-						required: true,
-						options: memorySelectOptions,
-					},
-				],
-			});
-
-			// Handle modal outcome
-			if (modalResult.outcome !== "submit") {
-				log.info(
-					`Server memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
-				);
-				return;
-			}
-
-			// Extract values from the modal
-			const modalSubmitInteraction = modalResult.interaction;
-			const selectedMemoryContent = modalResult.values?.[MEMORY_SELECT_ID];
-
-			// Safety checks (should never be null after submit outcome)
-			if (!modalSubmitInteraction || !selectedMemoryContent) {
-				log.error("Modal result unexpectedly missing interaction or values");
-				return;
-			}
-
-			// Defer the reply for the modal submission
-			await modalSubmitInteraction.deferReply({
-				flags: MessageFlags.Ephemeral,
-			});
-
-			// Find the selected memory
-			const selectedMemory = memories.find(
-				(memory: { content: string }) =>
-					memory.content === selectedMemoryContent,
-			);
-
-			if (!selectedMemory) {
-				await modalSubmitInteraction.editReply({
-					content: localizer(
-						locale,
-						"commands.unlearn.servermemory.memory_not_found",
-					),
-				});
-				return;
-			}
-
-			// Perform the database update using the helper function
-			await performServerMemoryRemoval(
-				tomoriState,
-				selectedMemory,
-				userData,
-				modalSubmitInteraction,
-				locale,
-			);
-		} else {
-			// Use pagination for large lists (>20 items)
-
-			// Format memories for display, truncating long ones
-			const displayItems = memories.map((memory: { content: string }) => {
-				return memory.content.length > DISPLAY_TRUNCATE_LENGTH
-					? `${memory.content.slice(0, DISPLAY_TRUNCATE_LENGTH)}...`
-					: memory.content;
-			});
-
-			result = await replyPaginatedChoices(interaction, locale, {
-				titleKey: "commands.unlearn.servermemory.select_title",
-				descriptionKey: "commands.unlearn.servermemory.select_description",
-				itemLabelKey: "commands.unlearn.servermemory.memory_label",
-				items: displayItems,
-				color: ColorCode.INFO,
-				flags: MessageFlags.Ephemeral,
-
-				onSelect: async (selectedIndex: number) => {
-					// Get the memory to delete
-					const memoryToDelete = memories[selectedIndex];
-
-					// Null check for tomoriState (should never be null at this point)
-					if (!tomoriState) {
-						log.error("TomoriState unexpectedly null in onSelect callback");
-						return;
-					}
-
-					// Use the helper function for database update
-					await performServerMemoryRemoval(
-						tomoriState,
-						memoryToDelete,
-						userData,
-						interaction,
-						locale,
-					);
+		const modalResult = await promptWithPaginatedModal(interaction, locale, {
+			modalCustomId: MODAL_CUSTOM_ID,
+			modalTitleKey: "commands.unlearn.servermemory.modal_title",
+			components: [
+				{
+					customId: MEMORY_SELECT_ID,
+					labelKey: "commands.unlearn.servermemory.select_label",
+					descriptionKey: "commands.unlearn.servermemory.select_description",
+					placeholder: "commands.unlearn.servermemory.select_placeholder",
+					required: true,
+					options: memorySelectOptions,
 				},
+			],
+		});
 
-				// Handle cancel
-				onCancel: async () => {
-					// Null check for tomoriState (should never be null at this point)
-					if (!tomoriState) {
-						log.error("TomoriState unexpectedly null in onCancel callback");
-						return;
-					}
-					log.info(
-						`User ${userData.user_disc_id} cancelled deleting a server memory for server ${tomoriState.server_id}`,
-					);
-					// The replyPaginatedChoices helper will show the cancellation message
-				},
-			});
-
-			// Handle potential errors from the helper itself
-			if (!result.success && result.reason === "error") {
-				log.warn(
-					`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /unlearn servermemory`,
-				);
-			} else if (!result.success && result.reason === "timeout") {
-				log.warn(
-					`Server memory deletion timed out for user ${userData.user_disc_id} (Server ID: ${tomoriState.server_id})`,
-				);
-			}
+		// Handle modal outcome
+		if (modalResult.outcome !== "submit") {
+			log.info(
+				`Server memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
+			);
+			return;
 		}
+
+		// Extract values from the modal
+		const modalSubmitInteraction = modalResult.interaction;
+		const selectedIndex = modalResult.values?.[MEMORY_SELECT_ID];
+
+		// Safety checks (should never be null after submit outcome)
+		if (!modalSubmitInteraction || !selectedIndex) {
+			log.error("Modal result unexpectedly missing interaction or values");
+			return;
+		}
+
+		// Get the full memory from the original array
+		const selectedMemory = memories[Number.parseInt(selectedIndex, 10)];
+
+		// Defer the reply for the modal submission
+		await modalSubmitInteraction.deferReply({
+			flags: MessageFlags.Ephemeral,
+		});
+
+		// Validate the selected index
+		if (!selectedMemory) {
+			await modalSubmitInteraction.editReply({
+				content: localizer(
+					locale,
+					"commands.unlearn.servermemory.memory_not_found",
+				),
+			});
+			return;
+		}
+
+		// Perform the database update using the helper function
+		await performServerMemoryRemoval(
+			tomoriState,
+			selectedMemory,
+			userData,
+			modalSubmitInteraction,
+			locale,
+		);
 	} catch (error) {
 		// 14. Catch unexpected errors
 		const context: ErrorContext = {

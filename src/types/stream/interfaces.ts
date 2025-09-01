@@ -11,6 +11,9 @@ import type {
 	Client,
 	CommandInteraction,
 	Message,
+	DMChannel,
+	NewsChannel,
+	TextChannel,
 } from "discord.js";
 import type {
 	FunctionCall,
@@ -66,7 +69,7 @@ export interface StreamConfig extends ProviderConfig {
 	// Command-specific overrides
 	modelOverride?: string;
 	forceReason?: boolean;
-	isFromCommand?: boolean;
+	isManuallyTriggered?: boolean;
 }
 
 /**
@@ -75,7 +78,7 @@ export interface StreamConfig extends ProviderConfig {
  */
 export interface StreamContext {
 	// Discord context
-	channel: BaseGuildTextChannel;
+	channel: BaseGuildTextChannel | DMChannel | NewsChannel | TextChannel;
 	client: Client;
 	initialInteraction?: CommandInteraction;
 	replyToMessage?: Message;

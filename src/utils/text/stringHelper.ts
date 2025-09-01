@@ -68,8 +68,8 @@ function createSentenceSplitRegex(): RegExp {
 	// 12. Complete negative lookbehind pattern: abbreviations OR digits
 	const negativeLookbehind = `(?<!(?:${abbreviationsPattern}|\\d))`;
 
-	// 13. Split on periods (.) or Japanese periods (。) followed by whitespace or end of string
-	const sentenceEnd = "[.。](?=\\s|$)";
+	// 13. Split on regular periods (.) with whitespace/end OR Japanese periods (。)
+	const sentenceEnd = "(?:\\.|。(?=\\s|$)|。)";
 
 	// 14. Return the complete regex with case-insensitive flag
 	return new RegExp(`${negativeLookbehind}${sentenceEnd}`, "i");

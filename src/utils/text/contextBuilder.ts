@@ -271,6 +271,7 @@ export async function buildContext({
 	tomoriNickname,
 	tomoriAttributes,
 	tomoriConfig,
+	isDMChannel = false,
 }: {
 	guildId: string;
 	serverName: string;
@@ -285,6 +286,7 @@ export async function buildContext({
 	tomoriNickname: string;
 	tomoriAttributes: string[];
 	tomoriConfig: TomoriConfigRow;
+	isDMChannel?: boolean; // Added for DM support
 }): Promise<StructuredContextItem[]> {
 	const contextItems: StructuredContextItem[] = [];
 	const botName = tomoriNickname;
@@ -440,8 +442,8 @@ export async function buildContext({
 		});
 	}
 
-	// 4. Stickers
-	if (tomoriConfig.sticker_usage_enabled) {
+	// 4. Stickers (only available in guild channels, not DMs)
+	if (tomoriConfig.sticker_usage_enabled && !isDMChannel) {
 		const guild = client.guilds.cache.get(guildId);
 		const serverStickers = guild?.stickers.cache;
 		if (serverStickers && serverStickers.size > 0) {
@@ -655,11 +657,10 @@ export async function buildContext({
 			}
 
 			// 6.b. Add User Status (always, if userRow is valid)
-			const presenceInfo = await getUserPresenceDetails(
-				client,
-				userRow.user_disc_id,
-				guildId,
-			);
+			// For DMs, presence information is not available since there's no guild context
+			const presenceInfo = isDMChannel 
+				? "Online (Direct Message)" // Simple fallback for DMs
+				: await getUserPresenceDetails(client, userRow.user_disc_id, guildId);
 			userSpecificContent += `### ${nickname} (User ID: ${userDiscordId})'s current status\n${presenceInfo}\n\n`;
 			combinedUserContextText += userSpecificContent;
 		}

@@ -49,12 +49,27 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// Ensure command is run in a guild
-	if (!interaction.guild || !interaction.channel) {
+	// Check if channel exists (required for both guilds and DMs)
+	if (!interaction.channel) {
 		await interaction.reply({
 			content: localizer(
 				userData.language_pref,
-				"general.errors.guild_only_description",
+				"general.errors.operation_failed_description",
+			),
+			flags: MessageFlags.Ephemeral,
+		});
+		return;
+	}
+
+	// Determine if this is a DM or guild context
+	const isDMChannel = interaction.channel.isDMBased();
+	const serverId = isDMChannel ? interaction.user.id : interaction.guild?.id;
+	
+	if (!serverId) {
+		await interaction.reply({
+			content: localizer(
+				userData.language_pref,
+				"general.errors.critical_error_description",
 			),
 			flags: MessageFlags.Ephemeral,
 		});
@@ -63,7 +78,7 @@ export async function execute(
 
 	try {
 		// 2. Check if Tomori already exists for this server - NEW CHECK
-		const existingTomoriState = await loadTomoriState(interaction.guild.id);
+		const existingTomoriState = await loadTomoriState(serverId);
 
 		// 3. If Tomori already exists, inform user and exit early
 		if (existingTomoriState) {
@@ -156,18 +171,37 @@ export async function execute(
 			return;
 		}
 
-		// Extract values from the modal
-		// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
-		const modalSubmitInteraction = modalResult.interaction!;
-		// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
-		const apiProvider = modalResult.values!.api_provider;
-		// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
-		const apiKey = modalResult.values!.api_key;
-		// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
-		const presetName = modalResult.values!.preset_name;
+		// Process modal submission - wrap in try-catch to handle errors within modal context
+		try {
+			// Extract values from the modal
+			// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
+			const modalSubmitInteraction = modalResult.interaction!;
+		
+		// Extract values with validation - modal submission can have missing values due to Component Type 18 handling
+		
+		const apiProvider = modalResult.values?.api_provider;
+		const apiKey = modalResult.values?.api_key;
+		const presetName = modalResult.values?.preset_name;
 
 		// Defer the reply for the modal submission
 		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
+
+		// Validate that all required values are present
+		if (!apiProvider || !apiKey || !presetName) {
+			log.error("Missing required modal values:", {
+				apiProvider: apiProvider || "MISSING",
+				apiKey: apiKey ? "PROVIDED" : "MISSING", 
+				presetName: presetName || "MISSING",
+				allValuesKeys: modalResult.values ? Object.keys(modalResult.values) : "NO_VALUES",
+				allValuesStringified: modalResult.values ? JSON.stringify(modalResult.values, null, 2) : "NO_VALUES"
+			});
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.config.setup.modal_values_missing",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
 
 		// Validate and transform inputs
 
@@ -177,34 +211,39 @@ export async function execute(
 		);
 
 		if (!apiProvider || !normalizedProvider) {
-			await modalSubmitInteraction.editReply({
-				content: "Invalid API provider selected.",
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.config.setup.provider_invalid",
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
 
 		// 2. Validate API Key with length check and actual API test
 		if (!apiKey || apiKey.length < 10) {
-			await modalSubmitInteraction.editReply({
-				content: localizer(locale, "commands.config.setup.api_key_invalid"),
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.config.setup.api_key_invalid",
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
 
 		// Test the API key with a real API call (currently only supports Google)
 		if (normalizedProvider.toLowerCase() === "google") {
-			await modalSubmitInteraction.editReply({
-				content: localizer(locale, "commands.config.setup.api_key_validating"),
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.config.setup.api_key_validating",
+				descriptionKey: "commands.config.setup.api_key_validating",
+				color: ColorCode.INFO,
 			});
 
 			const googleProvider = new GoogleProvider();
 			const isApiKeyValid = await googleProvider.validateApiKey(apiKey);
 			if (!isApiKeyValid) {
-				await modalSubmitInteraction.editReply({
-					content: localizer(
-						locale,
-						"commands.config.setup.api_key_invalid_api",
-					),
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.operation_failed_title",
+					descriptionKey: "commands.config.setup.api_key_invalid_api",
+					color: ColorCode.ERROR,
 				});
 				return;
 			}
@@ -219,10 +258,13 @@ export async function execute(
 		);
 
 		if (!selectedPresetOption) {
-			await modalSubmitInteraction.editReply({
-				content: localizer(locale, "commands.config.setup.preset_invalid", {
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.config.setup.preset_invalid",
+				descriptionVars: {
 					available: presetOptions.map((p) => p.name).join(", "),
-				}),
+				},
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
@@ -236,8 +278,10 @@ export async function execute(
 		`;
 
 		if (!presetRows.length) {
-			await modalSubmitInteraction.editReply({
-				content: "Selected preset not found in database.",
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.config.setup.preset_not_found",
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
@@ -249,7 +293,7 @@ export async function execute(
 
 		// Create setup config
 		const setupConfig: SetupConfig = {
-			serverId: interaction.guild.id,
+			serverId: serverId,
 			encryptedApiKey: encryptedKey,
 			provider: normalizedProvider, // Use the case-normalized provider name
 			presetId: selectedPresetId,
@@ -266,8 +310,10 @@ export async function execute(
 			setupConfigSchema.parse(setupConfig);
 		} catch (error) {
 			log.error("Setup config validation failed:", error);
-			await modalSubmitInteraction.editReply({
-				content: localizer(locale, "commands.config.setup.config_invalid"),
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.config.setup.config_invalid",
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
@@ -277,46 +323,75 @@ export async function execute(
 			await setupServer(interaction.guild, setupConfig);
 		} catch (error) {
 			log.error("Server setup failed:", error);
-			await modalSubmitInteraction.editReply({
-				content: localizer(
-					locale,
-					"commands.config.setup.setup_failed_description",
-				),
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.config.setup.setup_failed_description",
+				color: ColorCode.ERROR,
 			});
 			return;
+		}
+
+		// Prepare fields for success message
+		const successFields = [
+			{
+				nameKey: "commands.config.setup.preset_field",
+				value: selectedPresetOption.name,
+			},
+			{
+				nameKey: "commands.config.setup.name_field",
+				value:
+					locale === "ja"
+						? process.env.DEFAULT_BOTNAME_JP || "ともり" // Use environment variable with fallback
+						: process.env.DEFAULT_BOTNAME || "Tomori", // Use environment variable with fallback
+			},
+		];
+
+		// Add DM explanation field if in DM context
+		if (isDMChannel) {
+			successFields.push({
+				nameKey: "commands.config.setup.dm_context_explanation_title",
+				value: localizer(locale, "commands.config.setup.dm_context_explanation"),
+			});
 		}
 
 		// Show success message
 		await replySummaryEmbed(modalSubmitInteraction, locale, {
 			titleKey: "commands.config.setup.success_title",
-			descriptionKey: "commands.config.setup.success_desc",
+			descriptionKey: isDMChannel ? "commands.config.setup.success_desc_dm" : "commands.config.setup.success_desc",
 			color: ColorCode.SUCCESS,
-			fields: [
-				{
-					nameKey: "commands.config.setup.preset_field",
-					value: selectedPresetOption.name,
-				},
-				{
-					nameKey: "commands.config.setup.name_field",
-					value:
-						locale === "ja"
-							? process.env.DEFAULT_BOTNAME_JP || "ともり" // Use environment variable with fallback
-							: process.env.DEFAULT_BOTNAME || "Tomori", // Use environment variable with fallback
-				},
-			],
+			fields: successFields,
 		});
+		} catch (modalError) {
+			// Handle errors within modal submission context
+			log.error("Error during modal submission processing:", modalError);
+			
+			// Try to respond to the modal submission interaction if we have it
+			const modalSubmitInteraction = modalResult.interaction;
+			if (modalSubmitInteraction) {
+				try {
+					await replyInfoEmbed(modalSubmitInteraction, locale, {
+						titleKey: "general.errors.unknown_error_title",
+						descriptionKey: "general.errors.unknown_error_description",
+						color: ColorCode.ERROR,
+					});
+				} catch (replyError) {
+					log.error("Failed to send modal error reply:", replyError);
+				}
+			}
+		}
 	} catch (error) {
+		// Top-level error handler for non-modal errors (before modal is shown)
 		log.error("Error during setup process:", error);
 		if (!interaction.replied && !interaction.deferred) {
-			await interaction.reply({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
-			});
-		} else {
-			await interaction.followUp({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
-			});
+			try {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.unknown_error_title",
+					descriptionKey: "general.errors.unknown_error_description",
+					color: ColorCode.ERROR,
+				});
+			} catch (replyError) {
+				log.error("Failed to send setup error reply:", replyError);
+			}
 		}
 	}
 }

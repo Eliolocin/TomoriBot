@@ -12,6 +12,16 @@ interface KeyUsage {
 }
 
 /**
+ * Interface for tracking string length violations
+ */
+interface StringLengthViolation {
+	key: string;
+	value: string;
+	length: number;
+	files: Set<string>;
+}
+
+/**
  * Interface for analysis results
  */
 interface AnalysisResult {
@@ -19,6 +29,7 @@ interface AnalysisResult {
 	unusedKeys: KeyUsage[];
 	referencedKeys: Set<string>;
 	availableKeys: Set<string>;
+	longStrings: StringLengthViolation[];
 }
 
 /**
@@ -52,15 +63,58 @@ function extractKeysFromLocaleObject(obj: unknown, prefix = ""): Set<string> {
 }
 
 /**
- * Loads all locale files and extracts available keys
- * @returns Set of all available keys across all locales
+ * Recursively extracts all string values and their lengths from a nested locale object
+ * @param obj - The locale object or nested object
+ * @param prefix - Current key path prefix
+ * @param maxLength - Maximum allowed string length (default: 99 for Discord modal limit)
+ * @returns Map of key paths to string length violations
  */
-async function loadAvailableKeys(): Promise<Set<string>> {
+function extractStringLengthViolations(
+	obj: unknown,
+	prefix = "",
+	maxLength = 99,
+): Map<string, { value: string; length: number }> {
+	const violations = new Map<string, { value: string; length: number }>();
+
+	if (typeof obj === "string") {
+		// This is a leaf node with a string value
+		if (prefix && obj.length >= maxLength) {
+			violations.set(prefix, { value: obj, length: obj.length });
+		}
+		return violations;
+	}
+
+	if (typeof obj === "object" && obj !== null) {
+		for (const [key, value] of Object.entries(obj)) {
+			const currentPath = prefix ? `${prefix}.${key}` : key;
+			const nestedViolations = extractStringLengthViolations(
+				value,
+				currentPath,
+				maxLength,
+			);
+			for (const [nestedKey, violation] of nestedViolations) {
+				violations.set(nestedKey, violation);
+			}
+		}
+	}
+
+	return violations;
+}
+
+/**
+ * Loads all locale files and extracts available keys and string length violations
+ * @returns Object containing available keys and string length violations
+ */
+async function loadAvailableKeysAndViolations(): Promise<{
+	availableKeys: Set<string>;
+	longStringViolations: StringLengthViolation[];
+}> {
 	const availableKeys = new Set<string>();
+	const longStringViolations: StringLengthViolation[] = [];
 	const localesPath = join(process.cwd(), "src", "locales");
 
 	try {
-		const glob = new Glob("en-US.ts");
+		const glob = new Glob("*.ts");
 		for await (const file of glob.scan(localesPath)) {
 			const filePath = join(localesPath, file);
 			try {
@@ -74,6 +128,17 @@ async function loadAvailableKeys(): Promise<Set<string>> {
 					availableKeys.add(key);
 				}
 
+				// Extract string length violations from this locale
+				const violations = extractStringLengthViolations(localeObject);
+				for (const [key, violation] of violations) {
+					longStringViolations.push({
+						key,
+						value: violation.value,
+						length: violation.length,
+						files: new Set([file]),
+					});
+				}
+
 				log.info(`Loaded keys from locale file: ${file}`);
 			} catch (importError) {
 				log.error(`Failed to import locale file: ${file}`, importError);
@@ -84,7 +149,7 @@ async function loadAvailableKeys(): Promise<Set<string>> {
 		throw error;
 	}
 
-	return availableKeys;
+	return { availableKeys, longStringViolations };
 }
 
 /**
@@ -207,9 +272,10 @@ async function extractReferencedKeys(): Promise<Map<string, Set<string>>> {
 async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
 	log.info("🔍 Starting localization key analysis...");
 
-	// Load available keys from locale files
-	log.info("📚 Loading available keys from locale files...");
-	const availableKeys = await loadAvailableKeys();
+	// Load available keys and string length violations from locale files
+	log.info("📚 Loading available keys and checking string lengths...");
+	const { availableKeys, longStringViolations } =
+		await loadAvailableKeysAndViolations();
 
 	// Extract referenced keys from source code
 	log.info("🔎 Scanning source code for referenced keys...");
@@ -237,6 +303,7 @@ async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
 		unusedKeys,
 		referencedKeys,
 		availableKeys,
+		longStrings: longStringViolations,
 	};
 }
 
@@ -279,6 +346,26 @@ function displayResults(results: AnalysisResult): void {
 		console.log("\n✅ No unused localization keys found!");
 	}
 
+	// String length violations section
+	if (results.longStrings.length > 0) {
+		console.log("\n📏 STRING LENGTH VIOLATIONS (>=100 characters, may cause Discord modal errors):");
+		console.log("-".repeat(60));
+
+		for (const violation of results.longStrings.sort((a, b) =>
+			a.key.localeCompare(b.key),
+		)) {
+			console.log(`  ❌ ${violation.key} (${violation.length} chars)`);
+			console.log(
+				`     📁 File: ${Array.from(violation.files).join(", ")}`,
+			);
+			// Show first 80 characters of the value as a preview
+			const preview = violation.value.substring(0, 80);
+			console.log(`     💬 Preview: "${preview}${violation.value.length > 80 ? "..." : ""}"`);
+		}
+	} else {
+		console.log("\n✅ No string length violations found!");
+	}
+
 	// Summary
 	console.log("\n📊 SUMMARY:");
 	console.log("-".repeat(60));
@@ -294,9 +381,12 @@ function displayResults(results: AnalysisResult): void {
 	console.log(
 		`  • ${results.unusedKeys.length} unused keys (exist but never referenced)`,
 	);
+	console.log(
+		`  • ${results.longStrings.length} string length violations (>=100 characters)`,
+	);
 
-	if (results.missingKeys.length === 0 && results.unusedKeys.length === 0) {
-		console.log("\n🎉 Perfect! Your localization is fully synchronized!");
+	if (results.missingKeys.length === 0 && results.unusedKeys.length === 0 && results.longStrings.length === 0) {
+		console.log("\n🎉 Perfect! Your localization is fully synchronized and compliant!");
 	}
 
 	console.log(`\n${"=".repeat(80)}`);
@@ -311,7 +401,7 @@ async function main(): Promise<void> {
 		displayResults(results);
 
 		// Exit with error code if there are issues
-		if (results.missingKeys.length > 0 || results.unusedKeys.length > 0) {
+		if (results.missingKeys.length > 0 || results.unusedKeys.length > 0 || results.longStrings.length > 0) {
 			process.exit(1);
 		}
 	} catch (error) {

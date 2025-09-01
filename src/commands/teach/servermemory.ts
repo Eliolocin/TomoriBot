@@ -19,6 +19,7 @@ import {
 	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
+import { isBlacklisted } from "../../utils/db/dbRead";
 import type { ModalResult } from "../../types/discord/modal";
 import {
 	validateMemoryContent,
@@ -57,11 +58,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild context (Rule 17)
-	if (!interaction.guild) {
+	// 1. Ensure command is run in a valid channel context (Rule 17)
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 			flags: MessageFlags.Ephemeral,
 		});
@@ -75,8 +76,22 @@ export async function execute(
 	let modalSubmitInteraction: ModalSubmitInteraction | null = null;
 
 	try {
-		// 2. Load server's Tomori state (Rule 17) - Still needed for server_id and config checks
-		tomoriState = await loadTomoriState(interaction.guild.id);
+		// 2. Check blacklisting only for guild contexts
+		if (interaction.guild) {
+			const blacklisted = (await isBlacklisted(interaction.guild.id, interaction.user.id)) ?? false;
+			if (blacklisted) {
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "general.errors.user_blacklisted_title",
+					descriptionKey: "general.errors.user_blacklisted_description",
+					color: ColorCode.ERROR,
+					flags: MessageFlags.Ephemeral,
+				});
+				return;
+			}
+		}
+
+		// 3. Load server's Tomori state (Rule 17) - Still needed for server_id and config checks
+		tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
 
 		// 3. Check if Tomori is set up
 		if (!tomoriState) {

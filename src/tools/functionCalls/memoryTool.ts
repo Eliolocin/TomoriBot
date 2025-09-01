@@ -245,10 +245,15 @@ export class MemoryTool extends BaseTool {
 					);
 
 					// Process memory content for display (convert {user} and {bot} tokens to actual names)
+					// Security: Ensure we have a valid server ID to prevent user data mixing
+					const serverId = 'guild' in context.channel ? context.channel.guild.id : context.userId;
+					if (!serverId) {
+						throw new Error('Critical security error: No valid server or user ID available for memory processing');
+					}
 					const processedMemoryContent = await convertMentions(
 						memoryContent,
 						context.client,
-						context.channel.guild.id,
+						serverId,
 						userRow.user_nickname, // Use triggerer's name for {user} replacement
 						tomoriState.tomori_nickname, // Use bot's current nickname for {bot} replacement
 					);
@@ -425,10 +430,15 @@ export class MemoryTool extends BaseTool {
 					);
 
 					// Process memory content for display (convert {user} and {bot} tokens to actual names)
+					// Security: Ensure we have a valid server ID to prevent user data mixing
+					const serverId = 'guild' in context.channel ? context.channel.guild.id : context.userId;
+					if (!serverId) {
+						throw new Error('Critical security error: No valid server or user ID available for memory processing');
+					}
 					const processedMemoryContent = await convertMentions(
 						memoryContent,
 						context.client,
-						context.channel.guild.id,
+						serverId,
 						targetUserNicknameArg, // Use target user's name for {user} replacement
 						tomoriState.tomori_nickname, // Use bot's current nickname for {bot} replacement
 					);
@@ -436,7 +446,11 @@ export class MemoryTool extends BaseTool {
 					// Determine footer key based on personalization settings
 					const personalizationEnabled =
 						tomoriState?.config.personal_memories_enabled ?? true;
-					const serverDiscId = context.channel.guild.id;
+					// Security: Ensure we have a valid server ID to prevent user data mixing
+					const serverDiscId = 'guild' in context.channel ? context.channel.guild.id : context.userId;
+					if (!serverDiscId) {
+						throw new Error('Critical security error: No valid server or user ID available for blacklist checking');
+					}
 					const targetUserIsBlacklisted =
 						(await isBlacklisted(serverDiscId, targetUserDiscordIdArg)) ??
 						false;

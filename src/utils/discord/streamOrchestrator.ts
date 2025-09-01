@@ -45,9 +45,7 @@ import {
 	createTypingSimulationConfig,
 } from "../../types/stream/types";
 
-// Retry configuration constants for empty response handling
-const MAX_EMPTY_RESPONSE_RETRIES = 2; // Maximum number of retry attempts for empty responses
-const RETRY_DELAY_MS = 1000; // Delay between retries in milliseconds (1 second)
+// Empty response handling is now done at the tomoriChat level for fresh context
 
 /**
  * Universal Discord streaming orchestrator implementation
@@ -141,7 +139,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	/**
 	 * Stream an LLM response to Discord using a provider-specific adapter
 	 * This replaces the massive streamGeminiToDiscord function with modular architecture
-	 * Now includes automatic retry mechanism for empty responses
+	 * Empty response handling is now done at the tomoriChat level for fresh context
 	 */
 	async streamToDiscord(
 		provider: StreamProvider,
@@ -150,38 +148,20 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	): Promise<StreamResult> {
 		log.section("Universal Stream Orchestrator Started");
 		
-		// Retry loop for empty responses
-		for (let retryAttempt = 0; retryAttempt <= MAX_EMPTY_RESPONSE_RETRIES; retryAttempt++) {
-			log.info(
-				`Starting stream to channel ${context.channel.id} (server: ${context.channel.guild.id}) using provider: ${provider.getProviderInfo().name}${retryAttempt > 0 ? ` (retry ${retryAttempt}/${MAX_EMPTY_RESPONSE_RETRIES})` : ''}`,
-			);
+		log.info(
+			`Starting stream to channel ${context.channel.id} (server: ${'guild' in context.channel ? context.channel.guild.id : 'DM'}) using provider: ${provider.getProviderInfo().name}`,
+		);
 
-			const result = await this.executeStream(provider, config, context);
-			
-			// Check if we got an empty response that should be retried
-			if (result.status === "completed" && this.wasEmptyResponse(result)) {
-				if (retryAttempt < MAX_EMPTY_RESPONSE_RETRIES) {
-					log.info(
-						`Empty response detected (attempt ${retryAttempt + 1}/${MAX_EMPTY_RESPONSE_RETRIES + 1}). Retrying in ${RETRY_DELAY_MS}ms...`,
-					);
-					await this.delay(RETRY_DELAY_MS);
-					continue; // Retry
-				} else {
-					// Max retries reached, show error embed
-					log.warn(
-						`Empty response after ${MAX_EMPTY_RESPONSE_RETRIES} retries. Showing error embed.`,
-					);
-					await this.handleEmptyResponse(context);
-					return { status: "completed" }; // Return completed since we handled it with embed
-				}
-			}
-			
-			// Return result for non-empty responses or non-completed statuses
-			return result;
+		const result = await this.executeStream(provider, config, context);
+		
+		// Check if we got an empty response and return special status
+		if (result.status === "completed" && this.wasEmptyResponse(result)) {
+			log.info("Empty response detected. Returning empty_response status for retry at tomoriChat level.");
+			return { status: "empty_response" };
 		}
-
-		// This should never be reached due to the loop structure, but TypeScript requires it
-		return { status: "error", data: new Error("Unexpected end of retry loop") };
+		
+		// Return result for non-empty responses or other statuses
+		return result;
 	}
 
 	/**
@@ -1003,26 +983,6 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		state.buffer = "";
 	}
 
-	/**
-	 * Handle empty response case
-	 */
-	private async handleEmptyResponse(context: StreamContext): Promise<void> {
-		log.warn("Stream completed without sending any messages.", {
-			channelId: context.channel.id,
-		});
-
-		await sendStandardEmbed(
-			context.channel,
-			context.channel.guild.preferredLocale,
-			{
-				titleKey: "genai.empty_response_title",
-				descriptionKey: "genai.empty_response_description",
-				color: ColorCode.WARN,
-			},
-		).catch((e) =>
-			log.warn("Stream: Failed to send empty response embed to channel", e),
-		);
-	}
 
 	/**
 	 * Handle provider-specific errors
@@ -1065,7 +1025,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			// Use special handling for PROHIBITED_CONTENT
 			if (isProhibitedContent) {
 				const summaryEmbed = this.createProhibitedContentEmbed(
-					context.channel.guild.preferredLocale,
+					'guild' in context.channel ? context.channel.guild.preferredLocale : 'en-US',
 				);
 				await context.channel
 					.send({ embeds: [summaryEmbed] })
@@ -1076,7 +1036,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 				// Use default error handling for other error types
 				await sendStandardEmbed(
 					context.channel,
-					context.channel.guild.preferredLocale,
+					'guild' in context.channel ? context.channel.guild.preferredLocale : 'en-US',
 					{
 						titleKey: "genai.stream.response_stopped_title",
 						descriptionKey: "genai.stream.response_stopped_description",
@@ -1127,7 +1087,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		} else {
 			await sendStandardEmbed(
 				context.channel,
-				context.channel.guild.preferredLocale,
+				'guild' in context.channel ? context.channel.guild.preferredLocale : 'en-US',
 				{
 					titleKey: "genai.generic_error_title",
 					descriptionKey: "genai.generic_error_description",
@@ -1221,14 +1181,6 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		return false;
 	}
 
-	/**
-	 * Create a delay promise for retry logic
-	 * @param ms - Milliseconds to delay
-	 * @returns Promise that resolves after the specified delay
-	 */
-	private delay(ms: number): Promise<void> {
-		return new Promise(resolve => setTimeout(resolve, ms));
-	}
 
 	/**
 	 * Create a special embed for PROHIBITED_CONTENT errors with admin guidance

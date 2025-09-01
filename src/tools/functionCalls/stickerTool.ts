@@ -83,6 +83,15 @@ export class StickerTool extends BaseTool {
 			};
 		}
 
+		// Check if this is a DM channel - stickers are not available in DMs
+		if (!('guild' in context.channel)) {
+			return {
+				success: false,
+				error: "Stickers not available in DMs",
+				message: "Stickers are not available in Direct Messages.",
+			};
+		}
+
 		const stickerId = args.sticker_id as string;
 
 		try {
@@ -179,6 +188,11 @@ export class StickerTool extends BaseTool {
 		description: string;
 	}> {
 		try {
+			// Return empty array for DM channels - no stickers available
+			if (!('guild' in context.channel)) {
+				return [];
+			}
+
 			const guild = context.channel.guild;
 			const availableStickers = guild.stickers.cache;
 

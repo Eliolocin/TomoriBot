@@ -41,8 +41,13 @@ export type CommandExecutionMap = Map<
  * Map for command cooldowns (category -> duration)
  */
 export type CommandCooldownMap = Map<string, number>;
-const GUILD_ONLY_CATEGORIES = ["config", "teach", "tool", "bot", "unlearn"];
-const MANAGER_ONLY_CATEGORIES = ["config"];
+// Categories that are completely restricted to guilds only
+const GUILD_ONLY_CATEGORIES: string[] = ["serverconfig"];
+// Categories that require manage permissions in guild context 
+const MANAGER_ONLY_CATEGORIES = ["config", "serverconfig"];
+
+// Note: Individual subcommand restrictions are no longer needed.
+// Guild-only commands are now in the "serverconfig" category which is entirely guild-restricted.
 
 /**
  * Loads all command modules, builds registration data and command maps
@@ -90,9 +95,7 @@ export async function loadCommandData(): Promise<{
 					.setName(categoryName)
 					.setDescription(categoryDescription);
 
-				// Apply specific settings for the 'config' command group (Rule 21)
-				// Category constants defined at the top for easy maintenance
-
+				// Apply specific settings for guild-only categories
 				if (GUILD_ONLY_CATEGORIES.includes(categoryName)) {
 					categoryBuilder.setContexts(InteractionContextType.Guild); // Disallow use in DMs
 					log.info(`Applied Guild Only Restriction to /${categoryName}`);
@@ -206,7 +209,7 @@ export async function loadCommandData(): Promise<{
 
 		// Convert builders to the registration data array
 		const registrationData = Array.from(builders.values()).map(
-			(builder) => builder.toJSON() as ApplicationCommandData, // Add 'as ApplicationCommandData'
+			(builder) => builder.toJSON() as ApplicationCommandData,
 		);
 
 		log.success(

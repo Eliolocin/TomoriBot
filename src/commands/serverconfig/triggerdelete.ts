@@ -8,7 +8,8 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
-	replyPaginatedChoices,
+	promptWithPaginatedModal,
+	safeSelectOptionText,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import {
@@ -16,7 +17,12 @@ import {
 	type ErrorContext,
 	tomoriConfigSchema,
 } from "../../types/db/schema";
+import type { SelectOption } from "../../types/discord/modal";
 import { sql } from "bun";
+
+// Rule 20: Constants for static values at the top
+const MODAL_CUSTOM_ID = "serverconfig_triggerdelete_modal";
+const TRIGGER_SELECT_ID = "trigger_select";
 
 // Configure the subcommand
 export const configureSubcommand = (
@@ -90,91 +96,117 @@ export async function execute(
 			return;
 		}
 
-		// 6. Use the replyPaginatedChoices helper (pass ephemeral flag)
-		const result = await replyPaginatedChoices(interaction, locale, {
-			titleKey: "commands.config.triggerdelete.select_title",
-			descriptionKey: "commands.config.triggerdelete.select_description", // Ensure this key has {{items}} in locale file
-			itemLabelKey: "commands.config.triggerdelete.trigger_words_label",
-			items: currentTriggerWords,
-			color: ColorCode.INFO,
-			flags: MessageFlags.Ephemeral, // Make the pagination ephemeral
-			onSelect: async (selectedIndex) => {
-				// This runs when a user selects an item
-				const wordToRemove = currentTriggerWords[selectedIndex];
+		// 6. Create trigger word select options for the modal
+		const triggerWordSelectOptions: SelectOption[] = currentTriggerWords.map(
+			(trigger, index) => ({
+				label: safeSelectOptionText(trigger, 50),
+				value: index.toString(), // Use index to avoid truncation issues
+				description: safeSelectOptionText(trigger),
+			}),
+		);
 
-				// 7. Create a new array without the selected word
-				const updatedTriggerWords = currentTriggerWords.filter(
-					(_, index) => index !== selectedIndex, // More robust filtering by index
-				);
-
-				// 9. Update the config in the database using direct SQL (Rule #4, #15)
-				const [updatedRow] = await sql`
-					UPDATE tomori_configs
-					SET trigger_words = array_remove(trigger_words, ${wordToRemove})
-					WHERE tomori_id = ${tomoriState.tomori_id}
-					RETURNING *
-				`;
-
-				// 10. Validate the returned data (Rules #3, #5)
-				const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
-
-				if (!validatedConfig.success || !updatedRow) {
-					// Log error specific to this update failure
-					const context: ErrorContext = {
-						tomoriId: tomoriState.tomori_id,
-						serverId: tomoriState.server_id,
-						userId: userData.user_id,
-						errorType: "DatabaseUpdateError",
-						metadata: {
-							command: "config triggerdelete",
-							guildId: interaction.guild?.id,
-							wordToRemove,
-							updatedTriggerWords, // Log the array we tried to set
-							validationErrors: validatedConfig.success
-								? null
-								: validatedConfig.error.flatten(),
-						},
-					};
-					// Throw error to be caught by replyPaginatedChoices's handler
-					throw await log.error(
-						"Failed to update or validate trigger_words in tomori_configs table",
-						validatedConfig.success
-							? new Error("Database update returned no rows or unexpected data")
-							: new Error("Updated config data failed validation"),
-						context,
-					);
-				}
-
-				// 11. Log success (onSelect doesn't handle user feedback directly)
-				log.success(
-					`Removed trigger word "${wordToRemove}" for tomori ${tomoriState.tomori_id} by user ${userData.user_disc_id}`,
-				);
-				// The replyPaginatedChoices helper will show the success message
-			},
-			onCancel: async () => {
-				// This runs if the user clicks Cancel
-				log.info(
-					`User ${userData.user_disc_id} cancelled removing a trigger word for tomori ${tomoriState.tomori_id}`,
-				);
-				// The replyPaginatedChoices helper will show the cancellation message
-			},
+		// 7. Show the paginated modal with trigger word selection
+		const modalResult = await promptWithPaginatedModal(interaction, locale, {
+			modalCustomId: MODAL_CUSTOM_ID,
+			modalTitleKey: "commands.config.triggerdelete.modal_title",
+			components: [
+				{
+					customId: TRIGGER_SELECT_ID,
+					labelKey: "commands.config.triggerdelete.select_label",
+					descriptionKey:
+						"commands.config.triggerdelete.select_description",
+					placeholder: "commands.config.triggerdelete.select_placeholder",
+					required: true,
+					options: triggerWordSelectOptions,
+				},
+			],
 		});
 
-		// 12. Handle potential errors from the helper itself (e.g., Discord API errors)
-		if (!result.success && result.reason === "error") {
-			// Error should have already been logged by the helper or the onSelect callback
-			// No need to log again here unless providing additional context
-			log.warn(
-				`replyPaginatedChoices reported an error for user ${userData.user_disc_id} in /config triggerdelete`,
+		// 8. Handle modal outcome
+		if (modalResult.outcome !== "submit") {
+			log.info(
+				`Trigger word deletion modal ${modalResult.outcome} for user ${userData.user_id}`,
 			);
-			// The helper should have already informed the user
-		} else if (!result.success && result.reason === "timeout") {
-			// Log timeout specifically if needed
-			log.warn(
-				`Trigger word removal timed out for user ${userData.user_disc_id} (Tomori ID: ${tomoriState.tomori_id})`,
-			);
-			// The helper shows the timeout message
+			return;
 		}
+
+		// 9. Extract values from the modal
+		const modalSubmitInteraction = modalResult.interaction;
+		const selectedIndex = modalResult.values?.[TRIGGER_SELECT_ID];
+
+		// Safety checks (should never be null after submit outcome)
+		if (!modalSubmitInteraction || !selectedIndex) {
+			log.error("Modal result unexpectedly missing interaction or values");
+			return;
+		}
+
+		// Get the trigger word to remove
+		const selectedIndexNum = Number.parseInt(selectedIndex, 10);
+		const wordToRemove = currentTriggerWords[selectedIndexNum];
+
+		// 10. Defer the reply for the modal submission
+		await modalSubmitInteraction.deferReply({
+			flags: MessageFlags.Ephemeral,
+		});
+
+		// 11. Update the config in the database using direct SQL
+		const [updatedRow] = await sql`
+			UPDATE tomori_configs
+			SET trigger_words = array_remove(trigger_words, ${wordToRemove})
+			WHERE tomori_id = ${tomoriState.tomori_id}
+			RETURNING *
+		`;
+
+		// 12. Validate the returned data
+		const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
+
+		if (!validatedConfig.success || !updatedRow) {
+			// Log error specific to this update failure
+			const context: ErrorContext = {
+				tomoriId: tomoriState.tomori_id,
+				serverId: tomoriState.server_id,
+				userId: userData.user_id,
+				errorType: "DatabaseUpdateError",
+				metadata: {
+					command: "config triggerdelete",
+					guildId: interaction.guild?.id,
+					wordToRemove,
+					selectedIndex: selectedIndexNum,
+					validationErrors: validatedConfig.success
+						? null
+						: validatedConfig.error.flatten(),
+				},
+			};
+
+			await log.error(
+				"Failed to update or validate trigger_words in tomori_configs table",
+				validatedConfig.success
+					? new Error("Database update returned no rows or unexpected data")
+					: new Error("Updated config data failed validation"),
+				context,
+			);
+
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.update_failed_title",
+				descriptionKey: "general.errors.update_failed_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 13. Log success and show success message
+		log.success(
+			`Removed trigger word "${wordToRemove}" for tomori ${tomoriState.tomori_id} by user ${userData.user_disc_id}`,
+		);
+
+		await replyInfoEmbed(modalSubmitInteraction, locale, {
+			titleKey: "commands.config.triggerdelete.success_title",
+			descriptionKey: "commands.config.triggerdelete.success_description",
+			descriptionVars: {
+				triggerWord: wordToRemove,
+			},
+			color: ColorCode.SUCCESS,
+		});
 	} catch (error) {
 		// 13. Catch unexpected errors during setup or helper execution
 		let serverIdForError: number | null = null;

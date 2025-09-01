@@ -4,12 +4,12 @@
  */
 
 import type { TomoriState } from "../db/schema";
-import type { BaseGuildTextChannel, Client, Message } from "discord.js";
-import type { 
-	MCPServerResponse, 
-	EnhancedMCPServerConfig, 
+import type { BaseGuildTextChannel, Client, Message, DMChannel, NewsChannel, TextChannel } from "discord.js";
+import type {
+	MCPServerResponse,
+	EnhancedMCPServerConfig,
 	TypedMCPToolResult,
-	MCPExecutionContext 
+	MCPExecutionContext,
 } from "./mcpTypes";
 
 /**
@@ -37,7 +37,7 @@ export interface StreamingContext {
 	disableYouTubeProcessing: boolean; // Flag to temporarily disable YouTube function during enhanced context restart
 	disableProfilePictureProcessing?: boolean; // Flag to temporarily disable profile picture processing during enhanced context restart
 	forceReason?: boolean; // Flag to indicate reasoning mode for enhanced AI responses
-	isFromCommand?: boolean; // Flag to indicate this stream was triggered by a manual command
+	isManuallyTriggered?: boolean; // Flag to indicate this stream was triggered by a manual command
 }
 
 /**
@@ -46,7 +46,7 @@ export interface StreamingContext {
  */
 export interface ToolContext {
 	// Discord context
-	channel: BaseGuildTextChannel;
+	channel: BaseGuildTextChannel | DMChannel | NewsChannel | TextChannel;
 	client: Client;
 	message?: Message;
 
@@ -232,7 +232,10 @@ export interface MCPCapableToolAdapter extends ToolAdapter {
 	 * @param serverId - Optional Discord server ID for server-specific tool selection
 	 * @returns Combined provider-specific tool configuration
 	 */
-	getAllToolsInProviderFormat(builtInTools: Tool[], serverId?: number): Promise<Array<Record<string, unknown>>>;
+	getAllToolsInProviderFormat(
+		builtInTools: Tool[],
+		serverId?: number,
+	): Promise<Array<Record<string, unknown>>>;
 
 	/**
 	 * Check if a function name belongs to an MCP tool
@@ -248,7 +251,11 @@ export interface MCPCapableToolAdapter extends ToolAdapter {
 	 * @param context - Tool execution context for Discord operations
 	 * @returns Promise<TypedMCPToolResult> - Enhanced typed tool result
 	 */
-	executeMCPFunction(functionName: string, args: Record<string, unknown>, context?: ToolContext): Promise<TypedMCPToolResult>;
+	executeMCPFunction(
+		functionName: string,
+		args: Record<string, unknown>,
+		context?: ToolContext,
+	): Promise<TypedMCPToolResult>;
 }
 
 /**
@@ -259,7 +266,7 @@ export interface MCPToolContext extends ToolContext {
 	// MCP-specific context
 	mcpServerName?: string;
 	mcpFunctionName: string;
-	
+
 	// Provider-specific MCP data
 	providerMcpData?: Record<string, unknown>;
 }
@@ -274,10 +281,10 @@ export interface MCPToolResult extends ToolResult {
 	source: "mcp";
 	functionName: string;
 	serverName?: string;
-	
+
 	// Raw MCP result for debugging/logging
 	rawResult?: MCPServerResponse;
-	
+
 	// Execution metadata
 	executionTime?: number;
 	providerFormat?: Record<string, unknown>;
@@ -343,9 +350,9 @@ export interface MCPManagerInterface {
 	 * @returns Promise<TypedMCPToolResult> - Enhanced typed result
 	 */
 	executeMCPFunction(
-		functionName: string, 
+		functionName: string,
 		args: Record<string, unknown>,
-		context?: MCPExecutionContext
+		context?: MCPExecutionContext,
 	): Promise<TypedMCPToolResult>;
 
 	/**

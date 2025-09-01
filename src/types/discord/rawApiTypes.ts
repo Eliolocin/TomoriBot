@@ -13,6 +13,8 @@
 export interface RawDiscordComponent {
 	/** Component type identifier */
 	type: number;
+	/** Component ID */
+	id?: number;
 	/** Custom ID for the component */
 	custom_id?: string;
 	/** Component style (varies by type) */
@@ -29,8 +31,10 @@ export interface RawDiscordComponent {
 	label?: string;
 	/** Component description text */
 	description?: string;
-	/** Component value */
+	/** Component value (for text inputs) */
 	value?: string;
+	/** Selected values (for select menus) */
+	values?: string[];
 	/** Nested component (for type 18 wrappers) */
 	component?: RawDiscordComponent;
 	/** Child components array (for containers) */
@@ -62,6 +66,8 @@ export interface RawDiscordWebSocketPacket {
 	t?: string;
 	/** Event data */
 	d?: {
+		/** Interaction ID */
+		id?: string;
 		/** Interaction data */
 		data?: {
 			/** Component interaction data */

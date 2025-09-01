@@ -36,7 +36,7 @@ export async function execute(
 	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 	// 2. Ensure command is run in a guild text channel
-	if (!interaction.guild || !interaction.channel || !("messages" in interaction.channel)) {
+	if (!interaction.channel || !("messages" in interaction.channel)) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.guild_only_title",
 			descriptionKey: "general.errors.guild_only_description",
@@ -58,34 +58,37 @@ export async function execute(
 		const latestMessage = messages.first();
 
 		if (!latestMessage) {
-			log.warn(`No messages found in channel ${interaction.channel.id} for manual respond command.`);
+			log.warn(
+				`No messages found in channel ${interaction.channel.id} for manual respond command.`,
+			);
 			return;
 		}
 
 		// 5. Create a "passport" message that will trigger tomoriChat
 		// We need to ensure this message will pass the trigger checks
 		const passportMessage = latestMessage;
-		
+
 		// 6. Manually trigger tomoriChat with command flags
-		log.info(`Manual respond command triggered by ${interaction.user.id} in channel ${interaction.channel.id} for message ${latestMessage.id}`);
-		
+		log.info(
+			`Manual respond command triggered by ${interaction.user.id} in channel ${interaction.channel.id} for message ${latestMessage.id}`,
+		);
+
 		await tomoriChat(
 			client,
 			passportMessage as Message,
 			false, // isFromQueue
-			true,  // isFromCommand - this bypasses normal trigger logic
+			true, // isManuallyTriggered - this bypasses normal trigger logic
 		);
-
 	} catch (error) {
 		log.error("Error in bot respond command:", error, {
 			errorType: "BotRespondCommandError",
 			metadata: {
 				userId: interaction.user.id,
-				guildId: interaction.guild?.id,
+				guildId: interaction.guild?.id ?? interaction.user.id,
 				channelId: interaction.channel?.id,
 			},
 		});
-		
+
 		// Try to send error feedback if possible
 		try {
 			await interaction.followUp({
@@ -93,7 +96,10 @@ export async function execute(
 				flags: MessageFlags.Ephemeral,
 			});
 		} catch (followUpError) {
-			log.error("Failed to send error followup for bot respond command:", followUpError);
+			log.error(
+				"Failed to send error followup for bot respond command:",
+				followUpError,
+			);
 		}
 	}
 }

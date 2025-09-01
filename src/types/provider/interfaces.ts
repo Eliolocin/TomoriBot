@@ -9,6 +9,7 @@ import type {
 	Client,
 	CommandInteraction,
 	Message,
+	DMChannel,
 } from "discord.js";
 import type { TomoriState } from "../db/schema";
 import type { StructuredContextItem } from "../misc/context";
@@ -18,7 +19,7 @@ import type { StreamingContext } from "../tool/interfaces";
  * Generic stream response result
  */
 export interface StreamResult {
-	status: "completed" | "function_call" | "error" | "timeout" | "stopped_by_user";
+	status: "completed" | "function_call" | "error" | "timeout" | "stopped_by_user" | "empty_response";
 	data?: unknown | Error; // Function call data or error details
 }
 
@@ -94,7 +95,7 @@ export interface LLMProvider {
 	 * @returns Promise<StreamResult> - The outcome of the streaming operation
 	 */
 	streamToDiscord(
-		channel: BaseGuildTextChannel,
+		channel: BaseGuildTextChannel | DMChannel,
 		client: Client,
 		tomoriState: TomoriState,
 		config: ProviderConfig,

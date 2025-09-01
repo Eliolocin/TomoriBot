@@ -98,11 +98,11 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Ensure command is run in a guild
-	if (!interaction.guild || !interaction.channel) {
+	// 1. Ensure command is run in a channel
+	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, userData.language_pref, {
-			titleKey: "general.errors.guild_only_title",
-			descriptionKey: "general.errors.guild_only_description",
+			titleKey: "general.errors.channel_only_title",
+			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
 		});
 		return;
@@ -110,7 +110,9 @@ export async function execute(
 
 	try {
 		// 2. Load the Tomori state for this server (Rule #17)
-		const tomoriState = await loadTomoriState(interaction.guild.id);
+		const tomoriState = await loadTomoriState(
+			interaction.guild?.id ?? interaction.user.id,
+		);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
@@ -205,7 +207,7 @@ export async function execute(
 				errorType: "DatabaseUpdateError",
 				metadata: {
 					command: "config humanizerdegree",
-					guildId: interaction.guild.id,
+					guildId: interaction.guild?.id ?? interaction.user.id,
 					humanizerValue,
 					validationErrors: validatedConfig.success
 						? null
@@ -257,7 +259,7 @@ export async function execute(
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "config humanizerdegree",
-				guildId: interaction.guild?.id,
+				guildId: interaction.guild?.id ?? interaction.user.id,
 				executorDiscordId: interaction.user.id,
 			},
 		};

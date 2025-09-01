@@ -27,18 +27,46 @@ import type {
 	GlobalDiscordState,
 } from "@/types/discord/rawApiTypes";
 
+// Clean storage for select values (Discord.js will strip them, so we preserve them)
+const modalSelectValues = new Map<string, Record<string, string>>();
+
 /**
- * Transform Component Type 18 structure to Discord.js compatible format
+ * Transform Component Type 18 modal submission to standard ActionRow format
+ * This makes Discord.js process the submission as if it were a normal modal from the start
  */
-function transformComponentType18ToActionRow(component: RawDiscordComponent) {
-	if (component.type === 18 && component.component) {
-		// Transform Component Type 18 to ActionRow format that Discord.js expects
-		return {
-			type: 1, // ActionRow
-			components: [component.component],
-		};
-	}
-	return component;
+function transformModalSubmissionPacket(packet: RawDiscordWebSocketPacket): void {
+	if (!packet.d?.data?.components) return;
+
+	// Transform each Component Type 18 to standard ActionRow format with all data preserved
+	packet.d.data.components = packet.d.data.components.map((comp) => {
+		if (comp.type === 18 && comp.component) {
+			// Extract the nested component with all its properties
+			const nestedComponent = comp.component;
+			
+			// Create a clean ActionRow that Discord.js can process normally
+			return {
+				type: 1, // ActionRow
+				components: [{
+					type: nestedComponent.type,
+					custom_id: nestedComponent.custom_id,
+					// Preserve all component data based on type
+					...(nestedComponent.type === 3 && { // STRING_SELECT
+						values: nestedComponent.values // This is the key fix!
+					}),
+					...(nestedComponent.type === 4 && { // TEXT_INPUT  
+						value: nestedComponent.value
+					}),
+					// Include any other properties
+					...Object.fromEntries(
+						Object.entries(nestedComponent).filter(([key]) => 
+							!['type', 'custom_id', 'values', 'value'].includes(key)
+						)
+					)
+				}]
+			};
+		}
+		return comp;
+	});
 }
 
 /**
@@ -76,10 +104,25 @@ function setupWebSocketInterception(client: any) {
 							"Transforming Component Type 18 modal submission for Discord.js compatibility",
 						);
 
-						// Transform Component Type 18 to ActionRow format
-						packet.d.data.components = packet.d.data.components.map(
-							transformComponentType18ToActionRow,
-						);
+						// Store select values before Discord.js strips them
+						const interactionId = packet.d.id;
+						if (interactionId) {
+							const selectValues: Record<string, string> = {};
+							
+							for (const comp of packet.d.data.components) {
+								if (comp.type === 18 && comp.component?.type === 3 && comp.component.custom_id && comp.component.values?.[0]) {
+									selectValues[comp.component.custom_id] = comp.component.values[0];
+								}
+							}
+							
+							if (Object.keys(selectValues).length > 0) {
+								modalSelectValues.set(interactionId, selectValues);
+								log.info(`Stored ${Object.keys(selectValues).length} select values for interaction`);
+							}
+						}
+
+						// Transform the entire packet to standard format
+						transformModalSubmissionPacket(packet);
 					}
 				}
 
@@ -110,7 +153,7 @@ import type {
 	StandardEmbedOptions,
 	SummaryEmbedOptions,
 } from "../../types/discord/embed";
-import type { ModalOptions, ModalResult } from "../../types/discord/modal";
+import type { ModalOptions, ModalResult, ModalSelectField } from "../../types/discord/modal";
 import {
 	isModalInputField,
 	isModalSelectField,
@@ -118,6 +161,51 @@ import {
 import { createStandardEmbed, createSummaryEmbed } from "./embedHelper";
 
 const PROMPT_TIMEOUT = 15000;
+const MODAL_DESCRIPTION_MAX_LENGTH = 99; // Discord modal description limit
+
+/**
+ * Safely localizes a string for modal usage, truncating if necessary to prevent Discord API errors
+ * @param locale The locale for localization
+ * @param key The localization key
+ * @param vars Variables for localization (optional)
+ * @param maxLength Maximum allowed length (defaults to modal description limit)
+ * @returns Localized and potentially truncated string
+ */
+function safeModalLocalizer(
+	locale: string,
+	key: string,
+	vars?: Record<string, string | number>,
+	maxLength: number = MODAL_DESCRIPTION_MAX_LENGTH,
+): string {
+	const localizedText = localizer(locale, key, vars);
+
+	if (localizedText.length > maxLength) {
+		log.warn(
+			`Modal locale string truncated - Key: '${key}', Original: ${localizedText.length} chars, Truncated to: ${maxLength} chars`,
+			{
+				originalText: localizedText,
+				truncatedText: `${localizedText.substring(0, maxLength - 3)}...`,
+			},
+		);
+		return `${localizedText.substring(0, maxLength - 3)}...`;
+	}
+
+	return localizedText;
+}
+
+/**
+ * Safely truncates text for select option labels and values with "..." suffix
+ * @param text The text to truncate
+ * @param maxLength Maximum allowed length (100 for select options)
+ * @returns Truncated text with "..." if needed
+ */
+export function safeSelectOptionText(text: string, maxLength = 100): string {
+	if (text.length > maxLength) {
+		return `${text.substring(0, maxLength - 3)}...`;
+	}
+	return text;
+}
+
 /**
  * @description Prompts the user with an embed and Continue/Cancel buttons, awaiting their response.
  * Handles interaction replies, button filtering, and timeouts.
@@ -402,8 +490,20 @@ export async function replyInfoEmbed(
 		| MessageFlags.Ephemeral
 		| MessageFlags.SuppressNotifications,
 ): Promise<void> {
-	// 1. Build the embed using the shared helper for consistency
-	const embed = createStandardEmbed(locale, options);
+	// 1. Add DM footer automatically for tomori_not_setup errors in DM context
+	const isDMContext = !interaction.guild;
+	const finalOptions = { ...options };
+
+	if (
+		isDMContext &&
+		(options.titleKey === "general.errors.tomori_not_setup_title" ||
+			options.titleKey === "general.errors.api_key_missing_title")
+	) {
+		finalOptions.footerKey = "general.errors.tomori_not_setup_dm_footer";
+	}
+
+	// 2. Build the embed using the shared helper for consistency
+	const embed = createStandardEmbed(locale, finalOptions);
 
 	try {
 		if (interaction.deferred || interaction.replied) {
@@ -864,7 +964,7 @@ export async function promptWithRawModal(
 
 						// Add description if provided
 						if (component.descriptionKey) {
-							labelComponent.description = localizer(
+							labelComponent.description = safeModalLocalizer(
 								locale,
 								component.descriptionKey,
 							);
@@ -903,7 +1003,7 @@ export async function promptWithRawModal(
 
 						// Add description if provided
 						if (component.descriptionKey) {
-							labelComponent.description = localizer(
+							labelComponent.description = safeModalLocalizer(
 								locale,
 								component.descriptionKey,
 							);
@@ -947,7 +1047,7 @@ export async function promptWithRawModal(
 					i.customId === modalCustomId && i.user.id === interaction.user.id,
 			});
 
-			// Extract values using Discord.js methods (should work now with the patch)
+			// Extract values using Discord.js methods and stored select values
 			const values: Record<string, string> = {};
 
 			for (const component of components) {
@@ -964,21 +1064,24 @@ export async function promptWithRawModal(
 					}
 				} else if (isModalSelectField(component)) {
 					try {
-						const selectedValues = submitted.fields.getField(
-							component.customId,
-						)?.value;
-						if (selectedValues) {
-							values[component.customId] = selectedValues;
+						// Get select value from storage (since Discord.js strips them)
+						const storedValues = modalSelectValues.get(submitted.id);
+						const selectValue = storedValues?.[component.customId];
+						
+						if (selectValue) {
+							values[component.customId] = selectValue;
+						} else {
+							log.warn(`Could not extract select value for ${component.customId}`);
 						}
 					} catch (error) {
-						log.warn(
-							`Failed to get select value for ${component.customId}:`,
-							error,
-						);
+						log.warn(`Failed to get select value for ${component.customId}: ${error}`);
 					}
 				}
 			}
 
+			// Clean up stored values
+			modalSelectValues.delete(submitted.id);
+			
 			return { outcome: "submit", values, interaction: submitted };
 		} catch (error) {
 			// This will only catch actual errors, not artificial timeouts
@@ -991,6 +1094,98 @@ export async function promptWithRawModal(
 		}
 	} catch (error) {
 		log.error("Failed to show raw modal:", error);
+		return { outcome: "timeout" };
+	}
+}
+
+/**
+ * Enhanced modal function that automatically handles pagination when select options exceed 25 items
+ * @param interaction - The interaction to respond to
+ * @param locale - User locale for localization
+ * @param options - Modal configuration options
+ * @returns Promise<ModalResult> - The modal interaction result
+ */
+export async function promptWithPaginatedModal(
+	interaction: ChatInputCommandInteraction | ButtonInteraction,
+	locale: string,
+	options: ModalOptions,
+): Promise<ModalResult> {
+	// Find the select component (should only be one per modal in current usage)
+	const selectComponent = options.components.find(
+		(comp): comp is ModalSelectField => 
+			'options' in comp && Array.isArray(comp.options)
+	);
+
+	// If no select component or ≤25 options, use direct modal
+	if (!selectComponent || selectComponent.options.length <= 25) {
+		return promptWithRawModal(interaction, locale, options);
+	}
+
+	// Paginated modal system for >25 options
+	const allOptions = selectComponent.options;
+	const ITEMS_PER_PAGE = 25;
+	const totalPages = Math.ceil(allOptions.length / ITEMS_PER_PAGE);
+
+	// Create page selection embed
+	const pageSelectEmbed = createStandardEmbed(locale, {
+		titleKey: "general.pagination.select_page_title",
+		descriptionKey: "general.pagination.select_page_description", 
+		descriptionVars: { totalItems: allOptions.length, totalPages },
+		color: ColorCode.INFO,
+	});
+
+	// Create numbered page buttons (1-9, limited by total pages)
+	const maxButtons = Math.min(totalPages, 9);
+	const pageButtons: ButtonBuilder[] = [];
+	
+	for (let i = 1; i <= maxButtons; i++) {
+		pageButtons.push(
+			new ButtonBuilder()
+				.setCustomId(`page_${i}`)
+				.setLabel(i.toString())
+				.setStyle(ButtonStyle.Primary)
+		);
+	}
+
+	// Add page buttons to action row
+	const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...pageButtons);
+
+	// Send page selection message
+	const pageSelectMessage = await (interaction.deferred || interaction.replied 
+		? interaction.editReply({ embeds: [pageSelectEmbed], components: [actionRow] })
+		: interaction.reply({ embeds: [pageSelectEmbed], components: [actionRow], ephemeral: true }));
+
+	try {
+		// Wait for page button interaction
+		const pageButtonInteraction = await pageSelectMessage.awaitMessageComponent({
+			filter: (i) => i.user.id === interaction.user.id && i.customId.startsWith('page_'),
+			time: 300_000, // 5 minutes timeout
+		});
+
+		// Extract page number
+		const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace('page_', ''), 10);
+		
+		// Calculate page items
+		const startIndex = (selectedPage - 1) * ITEMS_PER_PAGE;
+		const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, allOptions.length);
+		const pageOptions = allOptions.slice(startIndex, endIndex);
+
+		// Create new modal options with paginated items
+		const paginatedModalOptions: ModalOptions = {
+			...options,
+			components: options.components.map(comp => {
+				if ('options' in comp && Array.isArray(comp.options)) {
+					return { ...comp, options: pageOptions };
+				}
+				return comp;
+			}),
+		};
+
+		// Show modal with selected page items
+		return promptWithRawModal(pageButtonInteraction as ButtonInteraction, locale, paginatedModalOptions);
+
+	} catch (error) {
+		log.warn(`Page selection timed out or failed for user ${interaction.user.id}:`, error);
 		return { outcome: "timeout" };
 	}
 }

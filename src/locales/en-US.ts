@@ -25,28 +25,35 @@ export default {
 			cancelled: `Selection has been cancelled.`,
 			timeout: `You didn't make a selection in time. Please try again.`,
 			item_selected: `Selected: {item}`,
+			select_page_title: `Select Page`,
+			select_page_description: `Choose a page to view from {totalItems} items across {totalPages} pages:`,
 		},
 
 		// Common error messages
 		errors: {
 			guild_only_title: `Server Only Command`,
 			guild_only_description: `This command can only be used within a server.`,
-			dm_not_supported_title: `DMs Not Supported`,
-			dm_not_supported_description: `Sorry, I can only chat within server channels, not in Direct Messages. This might change in the future, but for now I only work in servers!`,
+			channel_only_title: `Channel Required`,
+			channel_only_description: `This command requires a channel to function properly.`,
+			guild_only_command_title: `Server Only Command`,
+			guild_only_command_description: `This command can only be used within a server, not in Direct Messages.`,
+			channel_not_supported_title: `Unsupported Channel Type`,
+			channel_not_supported_description: `Sorry, I can only work in server text channels or Direct Messages. Group DMs and other channel types are not supported.`,
 			tomori_not_setup_title: `Initial Setup Required`,
-			tomori_not_setup_description: `It seems I haven't been set up on this server yet. A server member with \`Manage Server\` permissions needs to use \`/config setup\` first.`,
+			tomori_not_setup_description: `It seems I haven't been set up on this server yet. A server member with \`Manage Server\` permissions needs to use \`/config setup\` first. You may also use the \`/help setup\` for help, and the \`/config language\` command to set your preferred language.`,
+			tomori_not_setup_dm_footer: `Note: DMs are treated as mini "servers" wherein I respond to any of your messages privately. All server related commands will still work as intended and there is no need for the \`Manage Server\` permissions within DMs.`,
 			api_key_missing_title: `API Key Missing`,
 			api_key_missing_description: `I need an API key to function, but one hasn't been configured for this server. A server member with \`Manage Server\` permissions can set one using \`/config apikeyset\`.`,
 			api_key_error_title: `API Key Error`,
 			api_key_error_description: `There was an issue accessing or decrypting the configured API key. Please ensure it was set correctly using \`/config apikeyset\`.`,
 			context_error_title: `Context Building Error`,
-			context_error_description: `I encountered an error while trying to understand the conversation context. Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
+			context_error_description: `I encountered an error while trying to understand the conversation context.`,
 			critical_error_title: `Critical Error`,
-			critical_error_description: `An unexpected critical error occurred. Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
+			critical_error_description: `An unexpected critical error occurred.`,
 			update_failed_title: `Update Failed`,
 			update_failed_description: `Failed to update the configuration in the database. Please try again.`,
 			unknown_error_title: `Unknown Error`,
-			unknown_error_description: `An unexpected error occurred. Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
+			unknown_error_description: `An unexpected error occurred. If the issue persists, please report it through \`/support report\`.`,
 			invalid_option_title: `Invalid Option`,
 			invalid_option_description: `The selected option is invalid. Please choose a valid option.`,
 			brave_api: {
@@ -65,6 +72,8 @@ export default {
 			operation_failed_description: `The requested operation could not be completed. Please try again.`,
 			provider_not_supported_title: `Provider Not Supported`,
 			provider_not_supported_description: `The selected AI provider is not currently supported.`,
+			user_blacklisted_title: `User Blacklisted`,
+			user_blacklisted_description: `You are currently blacklisted from personalization features on this server and cannot perform this action.`,
 		},
 		tomori_busy_title: "Busy Replying to Someone Else!",
 		tomori_busy_replying:
@@ -74,18 +83,19 @@ export default {
 	genai: {
 		// Errors related to LLM API generation
 		generic_error_title: `Generation Error`,
-		generic_error_description: `Sorry, I encountered an error while trying to generate a response ({error_message}). Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
+		generic_error_description: `{error_message}`,
+		generic_error_footer: `Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
 		error_stream_timeout_title: "Connection Timeout",
 		error_stream_timeout_description:
 			"If this keeps happening, there might be a temporary issue with the service. Please try your request again in a moment or use `/tools refresh` to refresh the context history.",
 
 		// Empty response from API
 		empty_response_title: `Empty Response`,
-		empty_response_description: `I received an empty response from the AI. Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
+		empty_response_description: `I received an empty response from the AI.`,
 		// New: Max iterations for function calls
 		max_iterations_title: "Thinking Loop",
 		max_iterations_streaming_description:
-			"I got stuck in a thinking loop and couldn't complete the request. Please run `/tool refresh` and then try again. If the issue persists, please report it through `/support report`.",
+			"I got stuck in a thinking loop and couldn't complete the request.",
 
 		// Search related messages
 		search: {
@@ -121,7 +131,7 @@ export default {
 			// For now, assuming the existing generic ones are sufficient for a general stream failure.
 			// If a specific "streaming_failed_description" is needed distinct from "generic_error_description":
 			streaming_failed_description:
-				"An issue while trying to stream the response. Please run `/tool refresh` and then try again. If the issue persists, please report it through `/support report`.",
+				"An issue while trying to stream the response.",
 		},
 
 		self_teach: {
@@ -371,6 +381,11 @@ Discord API Latency: \`{discord_response}ms\``,
 
 {items}`, // Natural line break here
 				trigger_words_label: `Trigger Words`,
+				modal_title: `Remove Trigger Word`,
+				select_label: `Trigger Word`,
+				select_placeholder: `Choose a trigger word to remove`,
+				success_title: `Trigger Word Removed`,
+				success_description: `Successfully removed trigger word "{triggerWord}" from the server configuration.`,
 			},
 			apikeyset: {
 				description: `Set the API key for your chosen AI provider.`,
@@ -431,7 +446,7 @@ Discord API Latency: \`{discord_response}ms\``,
 				api_provider_description: `Please choose the provider of the LLM of your choice`,
 				api_provider_placeholder: `Choose...`,
 				api_key_label: `API Key`,
-				api_key_description: `Please enter the API key of your chosen LLM provider.\n\n**Get your API key:**\n• [Google AI Studio](https://aistudio.google.com/app/apikey) - Free tier available\n• [OpenAI Platform](https://platform.openai.com/api-keys) - Pay-as-you-go\n• [Anthropic Console](https://console.anthropic.com/settings/keys) - Credit-based billing\n• [OpenRouter](https://openrouter.ai/keys) - Multiple providers`,
+				api_key_description: `Please enter the API key of your chosen LLM provider.`,
 				preset_label: `Personality Preset`,
 				preset_description: `Choose a personality preset`,
 				preset_placeholder: `Choose a personality...`,
@@ -441,10 +456,16 @@ Discord API Latency: \`{discord_response}ms\``,
 				preset_invalid: `Error: Invalid preset name. Please enter one of the available preset names exactly: {available}`,
 				config_invalid: `Error: Internal configuration validation failed. Please report this.`,
 				setup_failed_description: `Error: Failed to save the initial setup configuration to the database. Please try again.`,
+				modal_values_missing: `Error: Some required values were not received from the setup form. Please try the setup command again.`,
+				provider_invalid: `Error: Invalid API provider selected. Please choose from the available options.`,
+				preset_not_found: `Error: The selected preset was not found in the database. Please try again.`,
 				success_title: `🎉 Setup Complete! 🎉`,
-				success_desc: `I am now configured for this server. Here's a summary:`,
+				success_desc: `I am now configured for this server! Here's a summary:`,
+				success_desc_dm: `I am now configured for this Direct Message. Here's a summary:`,
 				preset_field: `Personality Preset`,
 				name_field: `My Name`,
+				dm_context_explanation_title: `About Direct Messages`,
+				dm_context_explanation: `I will still refer to this Direct Message as a "server". Meaning all "server" features work the same way, just privately here between us! Think of this Direct Message as a 1-on-1 server with me, therefore its server memories are my memories within here only.`,
 				already_setup_title: `Already Set Up`,
 				already_setup_description: `I am already set up for this server. To modify my configuration, please use other commands like \`/config humanizerdegree\`, \`/config temperature\`, \`/teach attribute\`, etc.`,
 			},
