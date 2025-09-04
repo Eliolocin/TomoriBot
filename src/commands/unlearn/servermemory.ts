@@ -146,7 +146,9 @@ export async function execute(
 
 	try {
 		// 2. Load server's Tomori state (Rule 17) - Needed for server_id and config checks
-		tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
+		tomoriState = await loadTomoriState(
+			interaction.guild?.id ?? interaction.user.id,
+		);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",

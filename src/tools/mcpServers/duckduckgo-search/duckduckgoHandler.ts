@@ -25,29 +25,32 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 	 * Supported DuckDuckGo & Felo AI Search functions
 	 */
 	private readonly SUPPORTED_FUNCTIONS = [
-		"web-search",        // DuckDuckGo web search with HTML scraping
-		"felo-search",       // Felo AI-powered search and responses
-		"fetch-url",         // URL content extraction with smart filtering
-		"url-metadata",      // URL metadata extraction (title, description, images)
+		"web-search", // DuckDuckGo web search with HTML scraping
+		"felo-search", // Felo AI-powered search and responses
+		"fetch-url", // URL content extraction with smart filtering
+		"url-metadata", // URL metadata extraction (title, description, images)
 	];
 
 	/**
 	 * Parameter overrides for DuckDuckGo & Felo AI Search functions
 	 * Optimized defaults for better performance and comprehensive results
 	 */
-	private readonly PARAMETER_OVERRIDES: Record<string, Record<string, unknown>> = {
+	private readonly PARAMETER_OVERRIDES: Record<
+		string,
+		Record<string, unknown>
+	> = {
 		"web-search": {
-			numResults: 12,          // Optimal balance of results vs performance
-			page: 1,                 // Always start from first page
+			numResults: 12, // Optimal balance of results vs performance
+			page: 1, // Always start from first page
 		},
 		"felo-search": {
-			stream: false,           // Disable streaming for Discord compatibility
+			stream: false, // Disable streaming for Discord compatibility
 		},
 		"fetch-url": {
-			maxLength: 15000,        // Increased for more comprehensive content
+			maxLength: 15000, // Increased for more comprehensive content
 			extractMainContent: true, // Extract main content by default
-			includeLinks: true,      // Include link text for context
-			includeImages: true,     // Include alt text for better understanding
+			includeLinks: true, // Include link text for context
+			includeImages: true, // Include alt text for better understanding
 		},
 		"url-metadata": {
 			// No overrides needed - URL is the only required parameter
@@ -71,7 +74,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 	 */
 	public applyParameterOverrides(
 		functionName: string,
-		originalArgs: Record<string, unknown>
+		originalArgs: Record<string, unknown>,
 	): {
 		modifiedArgs: Record<string, unknown>;
 		overridesApplied: string[];
@@ -90,14 +93,14 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 				// Log when we override a parameter
 				if (originalValue !== forcedValue) {
 					overridesApplied.push(
-						`${paramName}: ${originalValue} → ${forcedValue}`
+						`${paramName}: ${originalValue} → ${forcedValue}`,
 					);
 				}
 			}
 
 			if (overridesApplied.length > 0) {
 				log.info(
-					`Applied DuckDuckGo Search parameter overrides for ${functionName}: ${overridesApplied.join(", ")}`
+					`Applied DuckDuckGo Search parameter overrides for ${functionName}: ${overridesApplied.join(", ")}`,
 				);
 			}
 		}
@@ -117,7 +120,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 		functionName: string,
 		mcpResult: MCPServerResponse,
 		context: MCPExecutionContext,
-		args: Record<string, unknown>
+		args: Record<string, unknown>,
 	): Promise<TypedMCPToolResult> {
 		try {
 			// Handle DuckDuckGo web search with fetch capability reminder
@@ -141,12 +144,14 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 			}
 
 			// Fallback for any unhandled functions
-			return this.processStandardDuckDuckGoResult(functionName, mcpResult, context, args);
-		} catch (error) {
-			log.error(
-				`Failed to process ${functionName} result:`,
-				error as Error
+			return this.processStandardDuckDuckGoResult(
+				functionName,
+				mcpResult,
+				context,
+				args,
 			);
+		} catch (error) {
+			log.error(`Failed to process ${functionName} result:`, error as Error);
 			return {
 				success: false,
 				message: "Failed to process DuckDuckGo & Felo AI Search result",
@@ -173,7 +178,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 	private async processWebSearch(
 		mcpResult: MCPServerResponse,
 		args: Record<string, unknown>,
-		context: MCPExecutionContext
+		context: MCPExecutionContext,
 	): Promise<TypedMCPToolResult> {
 		try {
 			// Send search status embed to Discord (consistent with Brave Search UX)
@@ -192,7 +197,8 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 				});
 				return {
 					success: false,
-					message: "DuckDuckGo search failed due to rate limiting. Consider using Brave Search for more reliable results.",
+					message:
+						"DuckDuckGo search failed due to rate limiting. Consider using Brave Search for more reliable results.",
 					error: mcpResult.text || "Rate limit error",
 					data: {
 						source: "mcp",
@@ -227,14 +233,14 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 					? `\n\n[AGENT REMINDER] You have access to the "fetch-url" function to retrieve and analyze the full content of any of these ${urlCount} web URLs from the DuckDuckGo search. Use fetch-url(url="[URL]") when more detailed webpage content is needed for analysis.`
 					: `\n\n[AGENT REMINDER] You have access to the "fetch-url" function to retrieve and analyze the full content of any web URL the user needs. Use fetch-url(url="[URL]") when more detailed webpage content is needed.`;
 
-			const enhancedMessage = originalText + fetchReminder;
+			const enhancedMessage = originalText;
 
 			// Add a note that this is from the enhanced DuckDuckGo search
 			const prefixMessage = `[DuckDuckGo Web Search Results]\n\n${enhancedMessage}`;
 
 			// Log the enhanced message
 			log.info(
-				`Enhanced DuckDuckGo search response: ${prefixMessage.substring(0, 200)}...`
+				`Enhanced DuckDuckGo search response: ${prefixMessage.substring(0, 200)}...`,
 			);
 			log.info(`DuckDuckGo search - Found ${urlCount} URLs`);
 
@@ -256,11 +262,15 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 				},
 			};
 		} catch (error) {
-			log.error("Error processing DuckDuckGo web search result:", error as Error);
+			log.error(
+				"Error processing DuckDuckGo web search result:",
+				error as Error,
+			);
 			// Fall back to original behavior
 			return {
 				success: true,
-				message: mcpResult.text || "DuckDuckGo web search completed successfully",
+				message:
+					mcpResult.text || "DuckDuckGo web search completed successfully",
 				data: {
 					source: "mcp",
 					functionName: "web-search",
@@ -284,7 +294,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 	private async processFeloSearch(
 		mcpResult: MCPServerResponse,
 		args: Record<string, unknown>,
-		context: MCPExecutionContext
+		context: MCPExecutionContext,
 	): Promise<TypedMCPToolResult> {
 		try {
 			// Send search status embed to Discord (consistent with Brave Search UX)
@@ -304,7 +314,8 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 				});
 				return {
 					success: false,
-					message: "Felo AI search failed due to rate limiting. Consider using Brave Search for more reliable results.",
+					message:
+						"Felo AI search failed due to rate limiting. Consider using Brave Search for more reliable results.",
 					error: mcpResult.text || "Rate limit error",
 					data: {
 						source: "mcp",
@@ -331,7 +342,9 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 			const prefixMessage = `[Felo AI Search Results]\n\n${aiResponse}`;
 
 			// Log the AI response
-			log.info(`Felo AI search response: ${prefixMessage.substring(0, 200)}...`);
+			log.info(
+				`Felo AI search response: ${prefixMessage.substring(0, 200)}...`,
+			);
 
 			return {
 				success: true,
@@ -373,7 +386,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 	 */
 	private async processFetchUrl(
 		mcpResult: MCPServerResponse,
-		args: Record<string, unknown>
+		args: Record<string, unknown>,
 	): Promise<TypedMCPToolResult> {
 		try {
 			// Extract the fetched content
@@ -386,8 +399,8 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 				fetchedContent = JSON.stringify(mcpResult, null, 2);
 			}
 
-			const url = args.url as string || "unknown URL";
-			const maxLength = args.maxLength as number || 15000;
+			const url = (args.url as string) || "unknown URL";
+			const maxLength = (args.maxLength as number) || 15000;
 
 			// Truncate if content is too long and add note
 			let processedContent = fetchedContent;
@@ -402,7 +415,9 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 			const prefixMessage = `[URL Content Fetch Results for: ${url}]\n\n${processedContent}${metadataReminder}`;
 
 			// Log the fetch result
-			log.info(`URL fetch result for ${url}: ${processedContent.substring(0, 150)}... (truncated: ${truncated})`);
+			log.info(
+				`URL fetch result for ${url}: ${processedContent.substring(0, 150)}... (truncated: ${truncated})`,
+			);
 
 			return {
 				success: true,
@@ -449,7 +464,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 	 */
 	private async processUrlMetadata(
 		mcpResult: MCPServerResponse,
-		args: Record<string, unknown>
+		args: Record<string, unknown>,
 	): Promise<TypedMCPToolResult> {
 		try {
 			// Extract the metadata
@@ -462,14 +477,16 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 				metadataContent = JSON.stringify(mcpResult, null, 2);
 			}
 
-			const url = args.url as string || "unknown URL";
+			const url = (args.url as string) || "unknown URL";
 
 			// Add fetch content suggestion
 			const fetchReminder = `\n\n[AGENT REMINDER] You can use "fetch-url" function to retrieve the full webpage content for detailed analysis: fetch-url(url="${url}")`;
 			const prefixMessage = `[URL Metadata for: ${url}]\n\n${metadataContent}${fetchReminder}`;
 
 			// Log the metadata result
-			log.info(`URL metadata for ${url}: ${metadataContent.substring(0, 150)}...`);
+			log.info(
+				`URL metadata for ${url}: ${metadataContent.substring(0, 150)}...`,
+			);
 
 			return {
 				success: true,
@@ -490,7 +507,8 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 			log.error("Error processing URL metadata result:", error as Error);
 			return {
 				success: true,
-				message: mcpResult.text || "URL metadata extraction completed successfully",
+				message:
+					mcpResult.text || "URL metadata extraction completed successfully",
 				data: {
 					source: "mcp",
 					functionName: "url-metadata",
@@ -516,7 +534,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 		functionName: string,
 		mcpResult: MCPServerResponse,
 		context: MCPExecutionContext,
-		_args: Record<string, unknown>
+		_args: Record<string, unknown>,
 	): TypedMCPToolResult {
 		try {
 			// Extract result text from various possible locations in MCP response
@@ -566,7 +584,7 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 		} catch (error) {
 			log.error(
 				`Error processing standard DuckDuckGo result for ${functionName}:`,
-				error as Error
+				error as Error,
 			);
 			return {
 				success: false,
@@ -590,10 +608,16 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 	 * @returns True if the result indicates rate limiting
 	 */
 	private isRateLimitError(mcpResult: MCPServerResponse): boolean {
-		const errorIndicators = ["rate limit", "too many requests", "429", "throttled", "rate limited"];
+		const errorIndicators = [
+			"rate limit",
+			"too many requests",
+			"429",
+			"throttled",
+			"rate limited",
+		];
 		const resultText = mcpResult.text || JSON.stringify(mcpResult);
-		return errorIndicators.some(indicator => 
-			resultText.toLowerCase().includes(indicator)
+		return errorIndicators.some((indicator) =>
+			resultText.toLowerCase().includes(indicator),
 		);
 	}
 }

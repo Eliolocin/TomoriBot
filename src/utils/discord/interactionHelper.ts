@@ -34,7 +34,9 @@ const modalSelectValues = new Map<string, Record<string, string>>();
  * Transform Component Type 18 modal submission to standard ActionRow format
  * This makes Discord.js process the submission as if it were a normal modal from the start
  */
-function transformModalSubmissionPacket(packet: RawDiscordWebSocketPacket): void {
+function transformModalSubmissionPacket(
+	packet: RawDiscordWebSocketPacket,
+): void {
 	if (!packet.d?.data?.components) return;
 
 	// Transform each Component Type 18 to standard ActionRow format with all data preserved
@@ -42,27 +44,32 @@ function transformModalSubmissionPacket(packet: RawDiscordWebSocketPacket): void
 		if (comp.type === 18 && comp.component) {
 			// Extract the nested component with all its properties
 			const nestedComponent = comp.component;
-			
+
 			// Create a clean ActionRow that Discord.js can process normally
 			return {
 				type: 1, // ActionRow
-				components: [{
-					type: nestedComponent.type,
-					custom_id: nestedComponent.custom_id,
-					// Preserve all component data based on type
-					...(nestedComponent.type === 3 && { // STRING_SELECT
-						values: nestedComponent.values // This is the key fix!
-					}),
-					...(nestedComponent.type === 4 && { // TEXT_INPUT  
-						value: nestedComponent.value
-					}),
-					// Include any other properties
-					...Object.fromEntries(
-						Object.entries(nestedComponent).filter(([key]) => 
-							!['type', 'custom_id', 'values', 'value'].includes(key)
-						)
-					)
-				}]
+				components: [
+					{
+						type: nestedComponent.type,
+						custom_id: nestedComponent.custom_id,
+						// Preserve all component data based on type
+						...(nestedComponent.type === 3 && {
+							// STRING_SELECT
+							values: nestedComponent.values, // This is the key fix!
+						}),
+						...(nestedComponent.type === 4 && {
+							// TEXT_INPUT
+							value: nestedComponent.value,
+						}),
+						// Include any other properties
+						...Object.fromEntries(
+							Object.entries(nestedComponent).filter(
+								([key]) =>
+									!["type", "custom_id", "values", "value"].includes(key),
+							),
+						),
+					},
+				],
 			};
 		}
 		return comp;
@@ -108,16 +115,24 @@ function setupWebSocketInterception(client: any) {
 						const interactionId = packet.d.id;
 						if (interactionId) {
 							const selectValues: Record<string, string> = {};
-							
+
 							for (const comp of packet.d.data.components) {
-								if (comp.type === 18 && comp.component?.type === 3 && comp.component.custom_id && comp.component.values?.[0]) {
-									selectValues[comp.component.custom_id] = comp.component.values[0];
+								if (
+									comp.type === 18 &&
+									comp.component?.type === 3 &&
+									comp.component.custom_id &&
+									comp.component.values?.[0]
+								) {
+									selectValues[comp.component.custom_id] =
+										comp.component.values[0];
 								}
 							}
-							
+
 							if (Object.keys(selectValues).length > 0) {
 								modalSelectValues.set(interactionId, selectValues);
-								log.info(`Stored ${Object.keys(selectValues).length} select values for interaction`);
+								log.info(
+									`Stored ${Object.keys(selectValues).length} select values for interaction`,
+								);
 							}
 						}
 
@@ -153,7 +168,11 @@ import type {
 	StandardEmbedOptions,
 	SummaryEmbedOptions,
 } from "../../types/discord/embed";
-import type { ModalOptions, ModalResult, ModalSelectField } from "../../types/discord/modal";
+import type {
+	ModalOptions,
+	ModalResult,
+	ModalSelectField,
+} from "../../types/discord/modal";
 import {
 	isModalInputField,
 	isModalSelectField,
@@ -585,17 +604,13 @@ export async function replyPaginatedChoices(
 
 	if (totalItems === 0) {
 		// If there are no items, show an empty state
-		await replyInfoEmbed(
-			interaction,
-			locale,
-			{
-				titleKey: options.titleKey,
-				titleVars: options.titleVars,
-				descriptionKey: "general.pagination.no_items", // Ensure this key exists
-				color: ColorCode.INFO,
-			},
-			options.ephemeral ? MessageFlags.Ephemeral : undefined,
-		);
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: options.titleKey,
+			titleVars: options.titleVars,
+			descriptionKey: "general.pagination.no_items", // Ensure this key exists
+			color: ColorCode.INFO,
+			flags: MessageFlags.Ephemeral,
+		});
 
 		return {
 			success: false,
@@ -733,7 +748,7 @@ export async function replyPaginatedChoices(
 					: // 2. Reply initially, adding flags conditionally
 						await interaction.reply({
 							...baseReplyOptions,
-							flags: options.ephemeral ? MessageFlags.Ephemeral : undefined,
+							flags: MessageFlags.Ephemeral,
 						});
 
 			// --- Start Updated Interaction Handling Block ---
@@ -1067,21 +1082,25 @@ export async function promptWithRawModal(
 						// Get select value from storage (since Discord.js strips them)
 						const storedValues = modalSelectValues.get(submitted.id);
 						const selectValue = storedValues?.[component.customId];
-						
+
 						if (selectValue) {
 							values[component.customId] = selectValue;
 						} else {
-							log.warn(`Could not extract select value for ${component.customId}`);
+							log.warn(
+								`Could not extract select value for ${component.customId}`,
+							);
 						}
 					} catch (error) {
-						log.warn(`Failed to get select value for ${component.customId}: ${error}`);
+						log.warn(
+							`Failed to get select value for ${component.customId}: ${error}`,
+						);
 					}
 				}
 			}
 
 			// Clean up stored values
 			modalSelectValues.delete(submitted.id);
-			
+
 			return { outcome: "submit", values, interaction: submitted };
 		} catch (error) {
 			// This will only catch actual errors, not artificial timeouts
@@ -1112,8 +1131,8 @@ export async function promptWithPaginatedModal(
 ): Promise<ModalResult> {
 	// Find the select component (should only be one per modal in current usage)
 	const selectComponent = options.components.find(
-		(comp): comp is ModalSelectField => 
-			'options' in comp && Array.isArray(comp.options)
+		(comp): comp is ModalSelectField =>
+			"options" in comp && Array.isArray(comp.options),
 	);
 
 	// If no select component or ≤25 options, use direct modal
@@ -1129,7 +1148,7 @@ export async function promptWithPaginatedModal(
 	// Create page selection embed
 	const pageSelectEmbed = createStandardEmbed(locale, {
 		titleKey: "general.pagination.select_page_title",
-		descriptionKey: "general.pagination.select_page_description", 
+		descriptionKey: "general.pagination.select_page_description",
 		descriptionVars: { totalItems: allOptions.length, totalPages },
 		color: ColorCode.INFO,
 	});
@@ -1137,34 +1156,49 @@ export async function promptWithPaginatedModal(
 	// Create numbered page buttons (1-9, limited by total pages)
 	const maxButtons = Math.min(totalPages, 9);
 	const pageButtons: ButtonBuilder[] = [];
-	
+
 	for (let i = 1; i <= maxButtons; i++) {
 		pageButtons.push(
 			new ButtonBuilder()
 				.setCustomId(`page_${i}`)
 				.setLabel(i.toString())
-				.setStyle(ButtonStyle.Primary)
+				.setStyle(ButtonStyle.Primary),
 		);
 	}
 
 	// Add page buttons to action row
-	const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...pageButtons);
+	const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+		...pageButtons,
+	);
 
 	// Send page selection message
-	const pageSelectMessage = await (interaction.deferred || interaction.replied 
-		? interaction.editReply({ embeds: [pageSelectEmbed], components: [actionRow] })
-		: interaction.reply({ embeds: [pageSelectEmbed], components: [actionRow], ephemeral: true }));
+	const pageSelectMessage = await (interaction.deferred || interaction.replied
+		? interaction.editReply({
+				embeds: [pageSelectEmbed],
+				components: [actionRow],
+			})
+		: interaction.reply({
+				embeds: [pageSelectEmbed],
+				components: [actionRow],
+				flags: MessageFlags.Ephemeral,
+			}));
 
 	try {
 		// Wait for page button interaction
-		const pageButtonInteraction = await pageSelectMessage.awaitMessageComponent({
-			filter: (i) => i.user.id === interaction.user.id && i.customId.startsWith('page_'),
-			time: 300_000, // 5 minutes timeout
-		});
+		const pageButtonInteraction = await pageSelectMessage.awaitMessageComponent(
+			{
+				filter: (i) =>
+					i.user.id === interaction.user.id && i.customId.startsWith("page_"),
+				time: 300_000, // 5 minutes timeout
+			},
+		);
 
 		// Extract page number
-		const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace('page_', ''), 10);
-		
+		const selectedPage = Number.parseInt(
+			pageButtonInteraction.customId.replace("page_", ""),
+			10,
+		);
+
 		// Calculate page items
 		const startIndex = (selectedPage - 1) * ITEMS_PER_PAGE;
 		const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, allOptions.length);
@@ -1173,8 +1207,8 @@ export async function promptWithPaginatedModal(
 		// Create new modal options with paginated items
 		const paginatedModalOptions: ModalOptions = {
 			...options,
-			components: options.components.map(comp => {
-				if ('options' in comp && Array.isArray(comp.options)) {
+			components: options.components.map((comp) => {
+				if ("options" in comp && Array.isArray(comp.options)) {
 					return { ...comp, options: pageOptions };
 				}
 				return comp;
@@ -1182,10 +1216,16 @@ export async function promptWithPaginatedModal(
 		};
 
 		// Show modal with selected page items
-		return promptWithRawModal(pageButtonInteraction as ButtonInteraction, locale, paginatedModalOptions);
-
+		return promptWithRawModal(
+			pageButtonInteraction as ButtonInteraction,
+			locale,
+			paginatedModalOptions,
+		);
 	} catch (error) {
-		log.warn(`Page selection timed out or failed for user ${interaction.user.id}:`, error);
+		log.warn(
+			`Page selection timed out or failed for user ${interaction.user.id}:`,
+			error,
+		);
 		return { outcome: "timeout" };
 	}
 }

@@ -227,9 +227,7 @@ export async function execute(
 		const attributeToRemove = currentAttributes[selectedIndex];
 
 		// Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({
-			flags: MessageFlags.Ephemeral,
-		});
+		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		// Perform the database update
 		await performAttributeRemoval(

@@ -228,7 +228,7 @@ export class MemoryTool extends BaseTool {
 							scope: "server_wide",
 							current_count: serverLimitCheck.currentCount,
 							max_allowed: serverLimitCheck.maxAllowed,
-							reason: `Server memory limit of ${serverLimitCheck.maxAllowed} memories has been reached`,
+							reason: `Server memory limit of ${serverLimitCheck.maxAllowed} memories has been reached. Please inform the user that they need to use '/unlearn servermemory' to remove some memories before I can learn new ones.`,
 						},
 					};
 				}
@@ -246,9 +246,14 @@ export class MemoryTool extends BaseTool {
 
 					// Process memory content for display (convert {user} and {bot} tokens to actual names)
 					// Security: Ensure we have a valid server ID to prevent user data mixing
-					const serverId = 'guild' in context.channel ? context.channel.guild.id : context.userId;
+					const serverId =
+						"guild" in context.channel
+							? context.channel.guild.id
+							: context.userId;
 					if (!serverId) {
-						throw new Error('Critical security error: No valid server or user ID available for memory processing');
+						throw new Error(
+							"Critical security error: No valid server or user ID available for memory processing",
+						);
 					}
 					const processedMemoryContent = await convertMentions(
 						memoryContent,
@@ -413,7 +418,7 @@ export class MemoryTool extends BaseTool {
 							target_user_discord_id: targetUserDiscordIdArg,
 							current_count: personalLimitCheck.currentCount,
 							max_allowed: personalLimitCheck.maxAllowed,
-							reason: `Personal memory limit of ${personalLimitCheck.maxAllowed} memories has been reached for this user`,
+							reason: `Personal memory limit of ${personalLimitCheck.maxAllowed} memories has been reached for this user. Please inform the user that they need to use '/unlearn personalmemory' to remove some of their memories before I can learn new ones about them.`,
 						},
 					};
 				}
@@ -431,9 +436,14 @@ export class MemoryTool extends BaseTool {
 
 					// Process memory content for display (convert {user} and {bot} tokens to actual names)
 					// Security: Ensure we have a valid server ID to prevent user data mixing
-					const serverId = 'guild' in context.channel ? context.channel.guild.id : context.userId;
+					const serverId =
+						"guild" in context.channel
+							? context.channel.guild.id
+							: context.userId;
 					if (!serverId) {
-						throw new Error('Critical security error: No valid server or user ID available for memory processing');
+						throw new Error(
+							"Critical security error: No valid server or user ID available for memory processing",
+						);
 					}
 					const processedMemoryContent = await convertMentions(
 						memoryContent,
@@ -447,9 +457,14 @@ export class MemoryTool extends BaseTool {
 					const personalizationEnabled =
 						tomoriState?.config.personal_memories_enabled ?? true;
 					// Security: Ensure we have a valid server ID to prevent user data mixing
-					const serverDiscId = 'guild' in context.channel ? context.channel.guild.id : context.userId;
+					const serverDiscId =
+						"guild" in context.channel
+							? context.channel.guild.id
+							: context.userId;
 					if (!serverDiscId) {
-						throw new Error('Critical security error: No valid server or user ID available for blacklist checking');
+						throw new Error(
+							"Critical security error: No valid server or user ID available for blacklist checking",
+						);
 					}
 					const targetUserIsBlacklisted =
 						(await isBlacklisted(serverDiscId, targetUserDiscordIdArg)) ??

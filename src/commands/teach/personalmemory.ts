@@ -91,7 +91,27 @@ export async function execute(
 			return;
 		}
 
-		// 4. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
+		// 4. Check personal memory limit before showing modal (better UX)
+		const personalLimitCheck = await checkPersonalMemoryLimit(
+			// biome-ignore lint/style/noNonNullAssertion: userData validation ensures user_id exists
+			userData.user_id!,
+		);
+		if (!personalLimitCheck.isValid) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.teach.personalmemory.limit_exceeded_title",
+				descriptionKey:
+					"commands.teach.personalmemory.limit_exceeded_description",
+				descriptionVars: {
+					max_allowed:
+						personalLimitCheck.maxAllowed || memoryLimits.maxPersonalMemories,
+					current_count: personalLimitCheck.currentCount || 0,
+				},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 5. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19, 25)
 		modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
 			modalTitleKey: "commands.teach.personalmemory.modal_title",
@@ -108,7 +128,7 @@ export async function execute(
 			],
 		});
 
-		// 5. Handle modal outcome
+		// 6. Handle modal outcome
 		if (modalResult.outcome !== "submit") {
 			log.info(
 				`Personal memory add modal ${modalResult.outcome} for user ${userData.user_id}`,
@@ -116,16 +136,16 @@ export async function execute(
 			return;
 		}
 
-		// 6. Capture and immediately defer the modal submission interaction (Rule 25)
+		// 7. Capture and immediately defer the modal submission interaction (Rule 25)
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' guarantees interaction
 		modalSubmitInteraction = modalResult.interaction!;
 		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		// 7. Get input from modal
+		// 8. Get input from modal
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newMemory = modalResult.values![MEMORY_INPUT_ID];
 
-		// 8. Validate memory content length
+		// 9. Validate memory content length
 		const contentValidation = validateMemoryContent(newMemory);
 		if (!contentValidation.isValid) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -133,27 +153,6 @@ export async function execute(
 				descriptionKey:
 					"commands.teach.personalmemory.content_too_long_description",
 				descriptionVars: { max_length: memoryLimits.maxMemoryLength },
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		// 9. Check personal memory limit
-
-		const personalLimitCheck = await checkPersonalMemoryLimit(
-			// biome-ignore lint/style/noNonNullAssertion: userData validation ensures user_id exists
-			userData.user_id!,
-		);
-		if (!personalLimitCheck.isValid) {
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.teach.personalmemory.limit_exceeded_title",
-				descriptionKey:
-					"commands.teach.personalmemory.limit_exceeded_description",
-				descriptionVars: {
-					max_allowed:
-						personalLimitCheck.maxAllowed || memoryLimits.maxPersonalMemories,
-					current_count: personalLimitCheck.currentCount || 0,
-				},
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -173,7 +172,7 @@ export async function execute(
 			return;
 		}
 
-		// 10. Update the user's row in the database using array_append (Rule 4)
+		// 12. Update the user's row in the database using array_append (Rule 4)
 		// This directly appends the new memory to the existing array in the database.
 		// This is a test to see if this approach is more robust for appends than
 		// constructing the full array literal as per original Rule 23.

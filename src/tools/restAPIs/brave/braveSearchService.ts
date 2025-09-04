@@ -299,7 +299,7 @@ export function addFetchCapabilityReminder(originalResult: string): {
 				? `\n\n[AGENT REMINDER] You have access to the "fetch" function call to retrieve and analyze the full content of any of these ${urlCount} web URLs. If any given information snippet is not enough, use the function to retrieve more details about a specific webpage, use fetch(url="[URL]") to get the complete page content for deeper analysis.`
 				: `\n\n[AGENT REMINDER] You have access to the "fetch" function call to retrieve and analyze the full content of any web URL the user needs. Use fetch(url="[URL]") when more detailed webpage content is needed.`;
 
-		const enhancedMessage = originalResult + fetchReminder;
+		const enhancedMessage = originalResult;
 
 		log.info(
 			`Enhanced web search response - Found ${urlCount} URLs, added fetch capability reminder`,

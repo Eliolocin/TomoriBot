@@ -208,6 +208,8 @@ export async function brave_web_search(
 			},
 			executionTime: Date.now() - startTime,
 			urlsFound: enhancedResults.urlsFound,
+			fetchCapabilityReminder: true,
+			agentInstructions: enhancedResults.fetchReminder,
 			status: "completed",
 		});
 	} catch (error) {

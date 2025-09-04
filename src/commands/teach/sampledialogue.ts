@@ -18,6 +18,7 @@ import {
 	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
+import { checkSampleDialogueLimit } from "../../utils/db/memoryLimits";
 
 // Rule 20: Constants (Modal IDs, Input IDs)
 const MODAL_CUSTOM_ID = "teach_sampledialogue_add_modal";
@@ -81,7 +82,7 @@ export async function execute(
 		// Access config directly from tomoriState
 		if (
 			!tomoriState.config.sampledialogue_memteaching_enabled &&
-			hasManagePermission
+			!hasManagePermission
 		) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.teach.sampledialogue.teaching_disabled_title",
@@ -93,7 +94,30 @@ export async function execute(
 			return;
 		}
 
-		// 4. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
+		// 4. Check sample dialogue limit before showing modal (better UX)
+		if (!tomoriState.tomori_id) {
+			log.error("TomoriState missing tomori_id - this should never happen");
+			return;
+		}
+		const dialogueLimitCheck = await checkSampleDialogueLimit(
+			tomoriState.tomori_id,
+		);
+		if (!dialogueLimitCheck.isValid) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.teach.sampledialogue.limit_exceeded_title",
+				descriptionKey:
+					"commands.teach.sampledialogue.limit_exceeded_description",
+				descriptionVars: {
+					current_count: dialogueLimitCheck.currentCount?.toString() || "0",
+					max_allowed: (dialogueLimitCheck.maxAllowed || 10).toString(),
+				},
+				color: ColorCode.ERROR,
+				flags: MessageFlags.Ephemeral,
+			});
+			return;
+		}
+
+		// 5. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
 		const modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
@@ -108,6 +132,7 @@ export async function execute(
 					placeholder: "commands.teach.sampledialogue.user_input_placeholder",
 					style: TextInputStyle.Paragraph,
 					required: true,
+					maxLength: 1000,
 				},
 				{
 					customId: BOT_INPUT_ID,
@@ -117,6 +142,7 @@ export async function execute(
 					placeholder: "commands.teach.sampledialogue.bot_input_placeholder",
 					style: TextInputStyle.Paragraph,
 					required: true,
+					maxLength: 1000,
 				},
 			],
 		});
@@ -141,7 +167,7 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees values exist
 		const botInput = modalResult.values![BOT_INPUT_ID];
 
-		// 9. Update Tomori row in the database using Bun SQL (Rule 4, 15, 23)
+		// 8. Update Tomori row in the database using Bun SQL (Rule 4, 15, 23)
 		// Use array_append for atomic array operations
 		const [updatedTomoriResult] = await sql`
 			UPDATE tomoris
@@ -152,7 +178,7 @@ export async function execute(
 			RETURNING *
 		`;
 
-		// 10. Validate the result from the database (Rule 3, 5, 6)
+		// 9. Validate the result from the database (Rule 3, 5, 6)
 		// Note: tomoriSchema validates a TomoriRow, not the full TomoriState
 		const validationResult = tomoriSchema.safeParse(updatedTomoriResult);
 
@@ -184,7 +210,7 @@ export async function execute(
 			return;
 		}
 
-		// 11. Success! Confirm addition (Rule 12, 19)
+		// 10. Success! Confirm addition (Rule 12, 19)
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
 			titleKey: "commands.teach.sampledialogue.success_title",
 			descriptionKey: "commands.teach.sampledialogue.success_description",

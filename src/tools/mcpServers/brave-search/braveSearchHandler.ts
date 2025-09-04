@@ -322,7 +322,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 					? `\n\n[AGENT REMINDER] You have access to the "fetch" function call to retrieve and analyze the full content of any of these ${urlCount} web URLs. If any given information snippet is not enough, use the function to retrieve more details about a specific webpage, use fetch(url="[URL]") to get the complete page content for deeper analysis.`
 					: `\n\n[AGENT REMINDER] You have access to the "fetch" function call to retrieve and analyze the full content of any web URL the user needs. Use fetch(url="[URL]") when more detailed webpage content is needed.`;
 
-			const enhancedMessage = originalText + fetchReminder;
+			const enhancedMessage = originalText;
 
 			// Log the enhanced message that TomoriBot will receive
 			log.info(
@@ -446,7 +446,9 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 	 * @param mcpResult - Raw MCP result from brave_image_search
 	 * @returns Cleaned result with image data removed
 	 */
-	private cleanImageSearchResult(mcpResult: MCPServerResponse): Record<string, unknown> {
+	private cleanImageSearchResult(
+		mcpResult: MCPServerResponse,
+	): Record<string, unknown> {
 		try {
 			// Create a deep copy to avoid mutating the original
 			const cleanedResult = JSON.parse(JSON.stringify(mcpResult));

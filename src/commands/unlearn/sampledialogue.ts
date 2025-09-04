@@ -160,7 +160,9 @@ export async function execute(
 
 	try {
 		// 2. Load server's Tomori state (Rule 17)
-		tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
+		tomoriState = await loadTomoriState(
+			interaction.guild?.id ?? interaction.user.id,
+		);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
@@ -216,12 +218,12 @@ export async function execute(
 				const output = currentOut[index];
 				const truncatedInput = safeSelectOptionText(input, 50);
 				const truncatedOutput = safeSelectOptionText(output, 50);
-				const fullDisplay = `User: "${truncatedInput}" → Bot: "${truncatedOutput}"`;
+				//const fullDisplay = `User: "${truncatedInput}" → Bot: "${truncatedOutput}"`;
 
 				return {
-					label: safeSelectOptionText(fullDisplay),
+					label: safeSelectOptionText(truncatedInput),
 					value: index.toString(),
-					description: safeSelectOptionText(`In: ${input}`),
+					description: safeSelectOptionText(truncatedOutput),
 				};
 			},
 		);
@@ -234,8 +236,7 @@ export async function execute(
 				{
 					customId: DIALOGUE_SELECT_ID,
 					labelKey: "commands.unlearn.sampledialogue.select_label",
-					descriptionKey:
-						"commands.unlearn.sampledialogue.select_description",
+					descriptionKey: "commands.unlearn.sampledialogue.select_description",
 					placeholder: "commands.unlearn.sampledialogue.select_placeholder",
 					required: true,
 					options: dialogueSelectOptions,

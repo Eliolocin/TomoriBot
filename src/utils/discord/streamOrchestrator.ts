@@ -456,7 +456,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		const hasInlineCode = buffer.includes('`') && !buffer.includes('```'); // Exclude code blocks
 		const hasLinks = buffer.includes('[') && buffer.includes('](');
 		
-		return hasQuotes || hasParens || hasBold || hasItalic || hasStrike || hasInlineCode || hasLinks;
+		// URL markers - prevent flushing when URLs are present
+		const urlRegex = /(https?|ftps?):\/\/[^\s<>\[\](){}'"]+/;
+		const hasURLs = urlRegex.test(buffer);
+		
+		return hasQuotes || hasParens || hasBold || hasItalic || hasStrike || hasInlineCode || hasLinks || hasURLs;
 	}
 
 	/**

@@ -58,9 +58,7 @@ export async function execute(
 	}
 
 	try {
-		// 2. Show ephemeral processing message (Rule #21 modification)
-		// Note: replyPaginatedChoices will handle the actual reply/edit
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+		// 2. Note: Modal will be the first response, so no early defer needed
 
 		// 3. Load the Tomori state for this server (Rule #17)
 		const tomoriState = await loadTomoriState(interaction.guild.id);

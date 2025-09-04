@@ -19,6 +19,7 @@ import {
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import type { ModalResult } from "../../types/discord/modal";
+import { checkAttributeLimit } from "../../utils/db/memoryLimits";
 
 // Rule 20: Constants (Modal IDs, Input IDs)
 const MODAL_CUSTOM_ID = "teach_attribute_add_modal";
@@ -64,7 +65,9 @@ export async function execute(
 
 	try {
 		// 3. Load server's Tomori state (Rule 17)
-		tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
+		tomoriState = await loadTomoriState(
+			interaction.guild?.id ?? interaction.user.id,
+		);
 
 		// 4. Check if Tomori is set up
 		if (!tomoriState) {
@@ -93,12 +96,33 @@ export async function execute(
 				descriptionKey:
 					"commands.teach.attribute.teaching_disabled_description", // New locale key needed
 				color: ColorCode.ERROR,
-				// No flags needed
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
 
-		// 6. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
+		// 6. Check attribute limit before showing modal (better UX)
+		if (!tomoriState.tomori_id) {
+			log.error("TomoriState missing tomori_id - this should never happen");
+			return;
+		}
+		const attributeLimitCheck = await checkAttributeLimit(
+			tomoriState.tomori_id,
+		);
+		if (!attributeLimitCheck.isValid) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.teach.attribute.limit_exceeded_title",
+				descriptionKey: "commands.teach.attribute.limit_exceeded_description",
+				descriptionVars: {
+					current_count: attributeLimitCheck.currentCount?.toString() || "0",
+					max_allowed: (attributeLimitCheck.maxAllowed || 25).toString(),
+				},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 7. Prompt user with a modal with Component Type 18 support (Rule 10, 12, 19)
 		// NOTE: Ensure locale keys resolve to strings <= 45 chars for labels!
 		modalResult = await promptWithRawModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
@@ -151,7 +175,7 @@ export async function execute(
 			return;
 		}
 
-		// 11. Update Tomori row in the database using array_append (Rule 4, 15, 23)
+		// 10. Update Tomori row in the database using array_append (Rule 4, 15, 23)
 		const [updatedTomoriResult] = await sql`
 			UPDATE tomoris
 			SET attribute_list = array_append(attribute_list, ${newAttribute})
@@ -159,7 +183,7 @@ export async function execute(
 			RETURNING *
 		`;
 
-		// 12. Validate the result from the database (Rule 3, 5, 6)
+		// 11. Validate the result from the database (Rule 3, 5, 6)
 		const validationResult = tomoriSchema.safeParse(updatedTomoriResult);
 
 		if (!validationResult.success) {
@@ -192,7 +216,7 @@ export async function execute(
 			return;
 		}
 
-		// 13. Success! Confirm addition (Rule 12, 19)
+		// 12. Success! Confirm addition (Rule 12, 19)
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
 			titleKey: "commands.teach.attribute.success_title", // New locale key
 			descriptionKey: "commands.teach.attribute.success_description", // New locale key

@@ -1,12 +1,9 @@
 -- Insert LLMs
 INSERT INTO llms (llm_provider, llm_codename, is_smartest, is_default, is_reasoning, llm_description)
 VALUES
-  ('google', 'gemini-2.5-pro-preview-05-06', 'false', 'false', 'true', 'Advanced reasoning model with enhanced problem-solving capabilities'),
-  ('google', 'gemini-2.0-flash-thinking-exp-01-21', 'false', 'false', 'true', 'Experimental thinking model with step-by-step reasoning'),
   ('google', 'gemini-2.0-flash', 'false', 'false', 'false', 'Fast multimodal model for everyday tasks'),
-  ('google', 'gemini-2.0-flash-lite', 'false', 'false', 'false', 'Lightweight version optimized for speed and efficiency'),
+  ('google', 'gemini-2.5-flash-lite', 'false', 'false', 'false', 'Lightweight version optimized for speed and efficiency'),
   ('google', 'gemini-2.5-flash-preview-05-20', 'false', 'true', 'false', 'Balanced model for general-purpose applications'),
-  ('google', 'gemini-2.0-flash-exp-image-generation', 'false', 'false', 'false', 'Experimental model with image generation capabilities'),
   ('google', 'gemini-2.5-pro', 'true', 'false', 'true', 'Most capable model for complex reasoning and analysis')
 ON CONFLICT (llm_codename) DO NOTHING;
 

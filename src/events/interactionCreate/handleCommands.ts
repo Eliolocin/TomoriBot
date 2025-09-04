@@ -300,20 +300,32 @@ const handler = async (
 			? MODAL_COMMAND_TIMEOUT 
 			: TIMEOUT_DURATION;
 		
-		await Promise.race([
-			mainLogicPromise(),
-			new Promise((_, reject) =>
-				setTimeout(
-					() =>
-						reject(
-							new Error(
-								localizer(initialLocale, "general.errors.command_timeout"),
-							),
+		// Create timeout with proper cleanup
+		let timeoutId: NodeJS.Timeout | null = null;
+		
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			timeoutId = setTimeout(
+				() =>
+					reject(
+						new Error(
+							localizer(initialLocale, "general.errors.command_timeout"),
 						),
-					timeoutDuration,
-				),
-			),
-		]);
+					),
+				timeoutDuration,
+			);
+		});
+		
+		try {
+			await Promise.race([
+				mainLogicPromise(),
+				timeoutPromise,
+			]);
+		} finally {
+			// Always clear the timeout when Promise.race completes (success or failure)
+			if (timeoutId) {
+				clearTimeout(timeoutId);
+			}
+		}
 	} catch (error) {
 		// Log error with structured context (Rule #22)
 		const context: ErrorContext = {

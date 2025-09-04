@@ -8,6 +8,9 @@ export interface MemoryLimits {
 	maxPersonalMemories: number;
 	maxServerMemories: number;
 	maxMemoryLength: number;
+	maxTriggerWords: number;
+	maxSampleDialogues: number;
+	maxAttributes: number;
 }
 
 /**
@@ -27,6 +30,9 @@ export type MemoryValidationError =
 	| "CONTENT_TOO_LONG"
 	| "PERSONAL_MEMORY_LIMIT_EXCEEDED"
 	| "SERVER_MEMORY_LIMIT_EXCEEDED"
+	| "TRIGGER_WORD_LIMIT_EXCEEDED"
+	| "SAMPLE_DIALOGUE_LIMIT_EXCEEDED"
+	| "ATTRIBUTE_LIMIT_EXCEEDED"
 	| "CONTENT_EMPTY";
 
 /**
@@ -35,7 +41,7 @@ export type MemoryValidationError =
  */
 export function getMemoryLimits(): MemoryLimits {
 	const maxPersonalMemories = Number.parseInt(
-		process.env.MAX_PERSONAL_MEMORIES || "30",
+		process.env.MAX_PERSONAL_MEMORIES || "50",
 		10,
 	);
 	const maxServerMemories = Number.parseInt(
@@ -43,9 +49,18 @@ export function getMemoryLimits(): MemoryLimits {
 		10,
 	);
 	const maxMemoryLength = Number.parseInt(
-		process.env.MAX_MEMORY_LENGTH || "500",
+		process.env.MAX_MEMORY_LENGTH || "256",
 		10,
 	);
+	const maxTriggerWords = Number.parseInt(
+		process.env.MAX_TRIGGER_WORDS || "10",
+		10,
+	);
+	const maxSampleDialogues = Number.parseInt(
+		process.env.MAX_SAMPLE_DIALOGUES || "10",
+		10,
+	);
+	const maxAttributes = Number.parseInt(process.env.MAX_ATTRIBUTES || "25", 10);
 
 	// Validate that environment variables are reasonable numbers
 	if (
@@ -60,6 +75,9 @@ export function getMemoryLimits(): MemoryLimits {
 			maxPersonalMemories: 30,
 			maxServerMemories,
 			maxMemoryLength,
+			maxTriggerWords,
+			maxSampleDialogues,
+			maxAttributes,
 		};
 	}
 
@@ -75,6 +93,9 @@ export function getMemoryLimits(): MemoryLimits {
 			maxPersonalMemories,
 			maxServerMemories: 50,
 			maxMemoryLength,
+			maxTriggerWords,
+			maxSampleDialogues,
+			maxAttributes,
 		};
 	}
 
@@ -90,6 +111,63 @@ export function getMemoryLimits(): MemoryLimits {
 			maxPersonalMemories,
 			maxServerMemories,
 			maxMemoryLength: 500,
+			maxTriggerWords,
+			maxSampleDialogues,
+			maxAttributes,
+		};
+	}
+
+	if (
+		!Number.isInteger(maxTriggerWords) ||
+		maxTriggerWords <= 0 ||
+		maxTriggerWords > 100
+	) {
+		log.warn(
+			`Invalid MAX_TRIGGER_WORDS value: ${process.env.MAX_TRIGGER_WORDS}. Using default: 10`,
+		);
+		return {
+			maxPersonalMemories,
+			maxServerMemories,
+			maxMemoryLength,
+			maxTriggerWords: 10,
+			maxSampleDialogues,
+			maxAttributes,
+		};
+	}
+
+	if (
+		!Number.isInteger(maxSampleDialogues) ||
+		maxSampleDialogues <= 0 ||
+		maxSampleDialogues > 100
+	) {
+		log.warn(
+			`Invalid MAX_SAMPLE_DIALOGUES value: ${process.env.MAX_SAMPLE_DIALOGUES}. Using default: 10`,
+		);
+		return {
+			maxPersonalMemories,
+			maxServerMemories,
+			maxMemoryLength,
+			maxTriggerWords,
+			maxSampleDialogues: 10,
+			maxAttributes,
+		};
+	}
+
+	if (
+		!Number.isInteger(maxAttributes) ||
+		maxAttributes <= 0 ||
+		maxAttributes > 200
+	) {
+		log.warn(
+			`Invalid MAX_ATTRIBUTES value: ${process.env.MAX_ATTRIBUTES}. Using default: 25`,
+		);
+		return {
+			maxPersonalMemories,
+			maxServerMemories,
+			maxMemoryLength,
+			maxTriggerWords,
+			maxSampleDialogues,
+			maxAttributes: 25,
 		};
 	}
 
@@ -97,6 +175,9 @@ export function getMemoryLimits(): MemoryLimits {
 		maxPersonalMemories,
 		maxServerMemories,
 		maxMemoryLength,
+		maxTriggerWords,
+		maxSampleDialogues,
+		maxAttributes,
 	};
 }
 
@@ -224,6 +305,148 @@ export async function checkServerMemoryLimit(
 }
 
 /**
+ * Check if a server has reached its trigger word limit
+ * @param tomoriId - Internal tomori ID
+ * @returns MemoryValidationResult indicating if server can add more trigger words
+ */
+export async function checkTriggerWordLimit(
+	tomoriId: number,
+): Promise<MemoryValidationResult> {
+	const limits = getMemoryLimits();
+
+	try {
+		// Get current count of trigger words for this server
+		const [configResult] = await sql`
+			SELECT array_length(trigger_words, 1) as trigger_count
+			FROM tomori_configs
+			WHERE tomori_id = ${tomoriId}
+		`;
+
+		// Handle case where server has no trigger words yet (array_length returns null for empty arrays)
+		const currentCount = configResult?.trigger_count || 0;
+
+		if (currentCount >= limits.maxTriggerWords) {
+			return {
+				isValid: false,
+				error: "TRIGGER_WORD_LIMIT_EXCEEDED",
+				currentCount,
+				maxAllowed: limits.maxTriggerWords,
+			};
+		}
+
+		return {
+			isValid: true,
+			currentCount,
+			maxAllowed: limits.maxTriggerWords,
+		};
+	} catch (error) {
+		log.error(
+			`Error checking trigger word limit for tomori ${tomoriId}:`,
+			error,
+		);
+		// Fail safe - if we can't check the limit, assume it's exceeded
+		return {
+			isValid: false,
+			error: "TRIGGER_WORD_LIMIT_EXCEEDED",
+		};
+	}
+}
+
+/**
+ * Check if a server has reached its sample dialogue limit
+ * @param tomoriId - Internal tomori ID
+ * @returns MemoryValidationResult indicating if server can add more sample dialogues
+ */
+export async function checkSampleDialogueLimit(
+	tomoriId: number,
+): Promise<MemoryValidationResult> {
+	const limits = getMemoryLimits();
+
+	try {
+		// Get current count of sample dialogues for this server
+		const [tomoriResult] = await sql`
+			SELECT 
+				array_length(sample_dialogues_in, 1) as dialogue_count
+			FROM tomoris
+			WHERE tomori_id = ${tomoriId}
+		`;
+
+		// Handle case where server has no sample dialogues yet (array_length returns null for empty arrays)
+		const currentCount = tomoriResult?.dialogue_count || 0;
+
+		if (currentCount >= limits.maxSampleDialogues) {
+			return {
+				isValid: false,
+				error: "SAMPLE_DIALOGUE_LIMIT_EXCEEDED",
+				currentCount,
+				maxAllowed: limits.maxSampleDialogues,
+			};
+		}
+
+		return {
+			isValid: true,
+			currentCount,
+			maxAllowed: limits.maxSampleDialogues,
+		};
+	} catch (error) {
+		log.error(
+			`Error checking sample dialogue limit for tomori ${tomoriId}:`,
+			error,
+		);
+		// Fail safe - if we can't check the limit, assume it's exceeded
+		return {
+			isValid: false,
+			error: "SAMPLE_DIALOGUE_LIMIT_EXCEEDED",
+		};
+	}
+}
+
+/**
+ * Check if a server has reached its attribute limit
+ * @param tomoriId - Internal tomori ID
+ * @returns MemoryValidationResult indicating if server can add more attributes
+ */
+export async function checkAttributeLimit(
+	tomoriId: number,
+): Promise<MemoryValidationResult> {
+	const limits = getMemoryLimits();
+
+	try {
+		// Get current count of attributes for this server
+		const [tomoriResult] = await sql`
+			SELECT array_length(attribute_list, 1) as attribute_count
+			FROM tomoris
+			WHERE tomori_id = ${tomoriId}
+		`;
+
+		// Handle case where server has no attributes yet (array_length returns null for empty arrays)
+		const currentCount = tomoriResult?.attribute_count || 0;
+
+		if (currentCount >= limits.maxAttributes) {
+			return {
+				isValid: false,
+				error: "ATTRIBUTE_LIMIT_EXCEEDED",
+				currentCount,
+				maxAllowed: limits.maxAttributes,
+			};
+		}
+
+		return {
+			isValid: true,
+			currentCount,
+			maxAllowed: limits.maxAttributes,
+		};
+	} catch (error) {
+		log.error(`Error checking attribute limit for tomori ${tomoriId}:`, error);
+		// Fail safe - if we can't check the limit, assume it's exceeded
+		return {
+			isValid: false,
+			error: "ATTRIBUTE_LIMIT_EXCEEDED",
+		};
+	}
+}
+
+/**
  * Helper function to get user-friendly error message for memory validation errors
  * @param error - The memory validation error type
  * @param maxAllowed - Optional maximum allowed value for context
@@ -242,6 +465,12 @@ export function getMemoryLimitErrorMessage(
 			return `Personal memory limit reached. You can have up to ${maxAllowed} personal memories (currently: ${currentCount}).`;
 		case "SERVER_MEMORY_LIMIT_EXCEEDED":
 			return `Server memory limit reached. This server can have up to ${maxAllowed} memories (currently: ${currentCount}).`;
+		case "TRIGGER_WORD_LIMIT_EXCEEDED":
+			return `Trigger word limit reached. This server can have up to ${maxAllowed} trigger words (currently: ${currentCount}).`;
+		case "SAMPLE_DIALOGUE_LIMIT_EXCEEDED":
+			return `Sample dialogue limit reached. This server can have up to ${maxAllowed} sample dialogues (currently: ${currentCount}).`;
+		case "ATTRIBUTE_LIMIT_EXCEEDED":
+			return `Attribute limit reached. This server can have up to ${maxAllowed} attributes (currently: ${currentCount}).`;
 		case "CONTENT_EMPTY":
 			return "Memory content cannot be empty.";
 		default:

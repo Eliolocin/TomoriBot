@@ -1,5 +1,4 @@
 import { HumanizerDegree } from "@/types/db/schema";
-
 /**
  * Creates a regex pattern for splitting sentences while preserving common abbreviations.
  *
@@ -65,13 +64,16 @@ function createSentenceSplitRegex(): RegExp {
 	// 11. Create the abbreviations pattern (word boundary + abbreviation)
 	const abbreviationsPattern = `\\b(?:${allAbbreviations.join("|")})`;
 
-	// 12. Complete negative lookbehind pattern: abbreviations OR digits
-	const negativeLookbehind = `(?<!(?:${abbreviationsPattern}|\\d))`;
+	// 12. Pattern for acronyms with periods (e.g., H.I.F., A.I.M.)
+	const acronymPattern = "(?:[A-Z]\\.[A-Z]\\.(?:[A-Z]\\.)*)";
 
-	// 13. Split on regular periods (.) with whitespace/end OR Japanese periods (。)
+	// 13. Complete negative lookbehind pattern: abbreviations OR digits OR acronyms
+	const negativeLookbehind = `(?<!(?:${abbreviationsPattern}|\\d|${acronymPattern}))`;
+
+	// 14. Split on regular periods (.) with whitespace/end OR Japanese periods (。)
 	const sentenceEnd = "(?:\\.|。(?=\\s|$)|。)";
 
-	// 14. Return the complete regex with case-insensitive flag
+	// 15. Return the complete regex with case-insensitive flag
 	return new RegExp(`${negativeLookbehind}${sentenceEnd}`, "i");
 }
 
@@ -198,6 +200,7 @@ export function chunkMessage(
 			| "text"
 			| "code"
 			| "emoji"
+			| "url"
 			| "quoted"
 			| "parenthesized"
 			| "japanese_quoted"
@@ -246,11 +249,62 @@ export function chunkMessage(
 		});
 	}
 
-	// 2b. Second pass: Split text blocks to find quotes and parentheses
+	// 2a-2. Second pass: Find URLs in text blocks and treat them as atomic units
+	const urlProcessedBlocks: typeof blocks = [];
+	
+	for (const block of blocks) {
+		if (block.type !== "text") {
+			// Keep non-text blocks (code blocks) as is
+			urlProcessedBlocks.push(block);
+			continue;
+		}
+
+		const textContent = block.content;
+		const urlRegex = /(https?|ftps?):\/\/[^\s<>\[\](){}'"]+/g;
+		
+		let textLastIndex = 0;
+		let urlMatch: RegExpExecArray | null;
+		
+		// Find all URLs in this text block
+		// biome-ignore lint/suspicious/noAssignInExpressions: Separate URL match assignment from null check
+		while ((urlMatch = urlRegex.exec(textContent)) !== null) {
+			// Add text before URL if any
+			if (urlMatch.index > textLastIndex) {
+				urlProcessedBlocks.push({
+					content: textContent.substring(textLastIndex, urlMatch.index),
+					type: "text",
+					start: block.start + textLastIndex,
+					end: block.start + urlMatch.index,
+				});
+			}
+			
+			// Add the URL as an atomic unit
+			urlProcessedBlocks.push({
+				content: urlMatch[0],
+				type: "url",
+				start: block.start + urlMatch.index,
+				end: block.start + urlMatch.index + urlMatch[0].length,
+			});
+			
+			textLastIndex = urlMatch.index + urlMatch[0].length;
+		}
+		
+		// Add any remaining text after the last URL
+		if (textLastIndex < textContent.length) {
+			urlProcessedBlocks.push({
+				content: textContent.substring(textLastIndex),
+				type: "text",
+				start: block.start + textLastIndex,
+				end: block.start + textContent.length,
+			});
+		}
+	}
+
+	// 2b. Third pass: Split text blocks to find quotes and parentheses
 	const quotedBlocks: typeof blocks = [];
 
 	// Process each text block to find quotes and parentheses
-	for (const block of blocks) {
+	for (const block of urlProcessedBlocks) {
 		if (block.type !== "text") {
 			// Keep non-text blocks as is
 			quotedBlocks.push(block);
@@ -514,6 +568,22 @@ export function chunkMessage(
 
 				// Add emoji as its own standalone chunk
 				chunkedMessages.push(block.content);
+				break;
+
+			case "url":
+				// 3c. Handle URLs - treat as atomic units like code blocks
+				if (currentChunk.length + block.content.length > chunkLength) {
+					// Finish current chunk if it has content
+					if (currentChunk.length > 0) {
+						chunkedMessages.push(currentChunk);
+						currentChunk = "";
+					}
+					// URLs are atomic and shouldn't be split, add as new chunk
+					chunkedMessages.push(block.content);
+				} else {
+					// URL fits, add it to current chunk with appropriate spacing
+					currentChunk += (currentChunk.length > 0 && !currentChunk.endsWith(" ") ? " " : "") + block.content;
+				}
 				break;
 
 			// Semantic blocks (quoted, parenthesized, japanese_quoted) are now merged with text blocks above
@@ -922,6 +992,62 @@ function escapeRegExp(s: string): string {
 }
 
 /**
+ * Universal URL detection and protection function
+ * Detects all URLs regardless of surrounding context (angle brackets, markdown, raw)
+ * and replaces them with placeholders to protect from chunking and humanization
+ * @param text - Text that may contain URLs
+ * @returns Object with text containing placeholders and array of original URLs
+ */
+function detectAndProtectURLs(text: string): {
+	protectedText: string;
+	urls: string[];
+} {
+	const urls: string[] = [];
+	
+	// Universal URL regex: matches http(s), ftp(s) protocols
+	// Stops at whitespace and common delimiters: <>[](){} and quotes
+	// Handles trailing punctuation that's likely not part of the URL
+	const urlRegex = /(https?|ftps?):\/\/[^\s<>\[\](){}'"]+/g;
+	
+	const protectedText = text.replace(urlRegex, (match) => {
+		// Handle trailing punctuation that's likely not part of the URL
+		// Common sentence endings: period, comma, semicolon at the very end
+		let url = match;
+		let trailingPunct = '';
+		
+		// Check if URL ends with punctuation that should be excluded
+		const trailingPunctRegex = /[.,;]$/;
+		if (trailingPunctRegex.test(url)) {
+			trailingPunct = url.slice(-1);
+			url = url.slice(0, -1);
+		}
+		
+		urls.push(url);
+		return `__URL_${urls.length - 1}__${trailingPunct}`;
+	});
+	
+	return { protectedText, urls };
+}
+
+/**
+ * Restore URLs from placeholders back to their original form
+ * @param text - Text containing URL placeholders
+ * @param urls - Array of original URLs
+ * @returns Text with URLs restored
+ */
+function restoreURLsFromPlaceholders(text: string, urls: string[]): string {
+	let restoredText = text;
+	
+	// Restore in reverse order to avoid index issues
+	for (let i = urls.length - 1; i >= 0; i--) {
+		const placeholder = `__URL_${i}__`;
+		restoredText = restoredText.replace(new RegExp(escapeRegExp(placeholder), 'g'), urls[i]);
+	}
+	
+	return restoredText;
+}
+
+/**
  * Helper function to find balanced parentheses in text
  * @param text - Text to search for parentheses
  * @param startIndex - Index to start searching from
@@ -1315,13 +1441,16 @@ const INTERNET_EXPRESSIONS = new Set([
  * @returns Humanized text with simplified punctuation and preserved code blocks
  */
 export function humanizeString(text: string): string {
-	// 1. Store code blocks and replace with placeholders
+	// 1. First, protect all URLs from any transformations
+	const { protectedText: urlProtectedText, urls } = detectAndProtectURLs(text);
+	
+	// 2. Store code blocks and replace with placeholders
 	const codeBlocks: string[] = [];
 	const inlineCode: string[] = [];
 	const senderStrings: string[] = [];
 
-	// 2. Replace code blocks (```) with placeholders
-	let processedText = text.replace(/```[\s\S]*?```/g, (match) => {
+	// 3. Replace code blocks (```) with placeholders
+	let processedText = urlProtectedText.replace(/```[\s\S]*?```/g, (match) => {
 		codeBlocks.push(match);
 		return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
 	});
@@ -1388,7 +1517,8 @@ export function humanizeString(text: string): string {
 		processedText = processedText.replace(`__CODE_BLOCK_${i}__`, codeBlocks[i]);
 	}
 
-	return processedText;
+	// Last step: restore all protected URLs
+	return restoreURLsFromPlaceholders(processedText, urls);
 }
 
 /**

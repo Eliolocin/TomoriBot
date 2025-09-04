@@ -10,6 +10,7 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
 import { sql } from "bun";
+import { checkTriggerWordLimit } from "../../utils/db/memoryLimits";
 
 // Configure the subcommand
 export const configureSubcommand = (
@@ -98,6 +99,25 @@ export async function execute(
 					word: triggerWord,
 				},
 				color: ColorCode.WARN,
+			});
+			return;
+		}
+
+		// Check trigger word limit before adding  
+		if (!tomoriState.tomori_id) {
+			log.error("TomoriState missing tomori_id - this should never happen");
+			return;
+		}
+		const triggerLimitCheck = await checkTriggerWordLimit(tomoriState.tomori_id);
+		if (!triggerLimitCheck.isValid) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.config.triggeradd.limit_exceeded_title",
+				descriptionKey: "commands.config.triggeradd.limit_exceeded_description",
+				descriptionVars: {
+					current_count: triggerLimitCheck.currentCount?.toString() || "0",
+					max_allowed: (triggerLimitCheck.maxAllowed || 10).toString(),
+				},
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
