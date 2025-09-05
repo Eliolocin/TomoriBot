@@ -221,15 +221,22 @@ export async function loadServerEmojis(
 
 /**
  * Loads all available LLM models from the database.
+ * @param includeDeprecated - Whether to include deprecated models in the results (default: false).
  * @returns An array of validated LlmRow objects, or null if none found or error.
  */
-export async function loadAvailableLlms(): Promise<LlmRow[] | null> {
+export async function loadAvailableLlms(includeDeprecated = false): Promise<LlmRow[] | null> {
 	try {
-		// 1. Fetch all rows from the llms table
-		const llmRows = await sql`
-            SELECT * FROM llms
-            ORDER BY llm_id ASC -- Optional: Order for consistency
-        `;
+		// 1. Fetch rows from the llms table, filtering deprecated models unless explicitly included
+		const llmRows = includeDeprecated
+			? await sql`
+				SELECT * FROM llms
+				ORDER BY llm_id ASC
+			`
+			: await sql`
+				SELECT * FROM llms
+				WHERE is_deprecated = false
+				ORDER BY llm_id ASC
+			`;
 
 		// 2. Check if any rows were returned
 		if (!llmRows || llmRows.length === 0) {
@@ -259,25 +266,200 @@ export async function loadAvailableLlms(): Promise<LlmRow[] | null> {
 }
 
 /**
+ * Loads available models for a specific LLM provider with deprecation filtering.
+ * @param providerName - The name of the LLM provider (e.g., 'google', 'openai').
+ * @param includeDeprecated - Whether to include deprecated models (default: false).
+ * @returns An array of validated LlmRow objects for the provider, or null if none found.
+ */
+export async function loadAvailableModelsForProvider(
+	providerName: string,
+	includeDeprecated = false,
+): Promise<LlmRow[] | null> {
+	// Input validation
+	if (!providerName || providerName.trim().length === 0) {
+		log.error('Provider name cannot be empty');
+		return null;
+	}
+	
+	// Validate provider name format (alphanumeric, hyphens, and underscores only)
+	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+		log.error(`Invalid provider name format: ${providerName}`);
+		return null;
+	}
+
+	const normalizedProviderName = providerName.trim();
+	
+	try {
+		// 1. Query for models for the specific provider, filtering deprecated unless explicitly included
+		const modelRows = includeDeprecated
+			? await sql`
+				SELECT * FROM llms
+				WHERE llm_provider = ${normalizedProviderName}
+				ORDER BY llm_id ASC
+			`
+			: await sql`
+				SELECT * FROM llms
+				WHERE llm_provider = ${normalizedProviderName} AND is_deprecated = false
+				ORDER BY llm_id ASC
+			`;
+
+		// 2. Check if any rows were returned
+		if (!modelRows || modelRows.length === 0) {
+			log.warn(`No available models found for provider: ${normalizedProviderName}`);
+			return null;
+		}
+
+		// 3. Validate the array of LLM rows against the schema
+		const parsedModels = llmSchema.array().safeParse(modelRows);
+
+		// 4. Handle validation failure
+		if (!parsedModels.success) {
+			log.error(
+				`Failed to validate model data for provider ${normalizedProviderName}:`,
+				parsedModels.error.flatten(),
+			);
+			return null;
+		}
+
+		// 5. Return the validated array of LLM rows
+		log.info(`Found ${parsedModels.data.length} available models for ${normalizedProviderName}`);
+		return parsedModels.data;
+	} catch (error) {
+		// 6. Log any unexpected errors during the database query
+		log.error(`Error loading available models for provider ${normalizedProviderName}:`, error);
+		return null;
+	}
+}
+
+/**
+ * Loads the default model for a specific LLM provider, with fallback logic.
+ * 1. Tries to find the model marked as is_default=true
+ * 2. Falls back to the first available model for the provider
+ * 3. Always excludes deprecated models unless explicitly included
+ * @param providerName - The name of the LLM provider (e.g., 'google', 'openai').
+ * @param includeDeprecated - Whether to include deprecated models in fallback search (default: false).
+ * @returns The default or first available LlmRow for the provider, or null if none found.
+ */
+export async function loadDefaultModelForProvider(
+	providerName: string,
+	includeDeprecated = false,
+): Promise<LlmRow | null> {
+	// Input validation
+	if (!providerName || providerName.trim().length === 0) {
+		log.error('Provider name cannot be empty');
+		return null;
+	}
+	
+	// Validate provider name format (alphanumeric, hyphens, and underscores only)
+	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+		log.error(`Invalid provider name format: ${providerName}`);
+		return null;
+	}
+
+	const normalizedProviderName = providerName.trim();
+	
+	try {
+		// 1. Single optimized query: prioritize default models, then fallback to any available model
+		// Uses CASE to create a priority column: default models get priority 1, others get priority 2
+		const modelQuery = includeDeprecated
+			? sql`
+				SELECT *, 
+					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
+				FROM llms
+				WHERE llm_provider = ${normalizedProviderName}
+				ORDER BY priority ASC, llm_id ASC
+				LIMIT 1
+			`
+			: sql`
+				SELECT *, 
+					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
+				FROM llms
+				WHERE llm_provider = ${normalizedProviderName} AND is_deprecated = false
+				ORDER BY priority ASC, llm_id ASC
+				LIMIT 1
+			`;
+
+		const modelRows = await modelQuery;
+
+		// 2. Check if any model was found
+		if (!modelRows || modelRows.length === 0) {
+			log.error(`No available models found for provider: ${normalizedProviderName}`);
+			return null;
+		}
+
+		// 3. Validate the selected model
+		const selectedModel = modelRows[0];
+		const parsedModel = llmSchema.safeParse(selectedModel);
+		
+		if (!parsedModel.success) {
+			log.error(
+				`Failed to validate model data for provider ${normalizedProviderName}:`,
+				parsedModel.error.flatten(),
+			);
+			return null;
+		}
+
+		// 4. Log appropriate message based on whether we got the default or a fallback
+		const isDefaultModel = selectedModel.is_default === true;
+		if (isDefaultModel) {
+			log.info(`Found default model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`);
+		} else {
+			log.warn(`No default model found for provider ${normalizedProviderName}, using fallback: ${parsedModel.data.llm_codename}`);
+		}
+
+		return parsedModel.data;
+	} catch (error) {
+		// 5. Log any unexpected errors during the database query
+		log.error(`Error loading default model for provider ${normalizedProviderName}:`, error);
+		return null;
+	}
+}
+
+/**
  * Loads the smartest (reasoning) model for a specific LLM provider from the database.
  * @param providerName - The name of the LLM provider (e.g., 'google', 'openai').
+ * @param includeDeprecated - Whether to include deprecated models (default: false).
  * @returns A promise that resolves to the first smartest LlmRow found, or null if none found.
  */
 export async function loadSmartestModel(
 	providerName: string,
+	includeDeprecated = false,
 ): Promise<LlmRow | null> {
+	// Input validation
+	if (!providerName || providerName.trim().length === 0) {
+		log.error('Provider name cannot be empty');
+		return null;
+	}
+	
+	// Validate provider name format (alphanumeric, hyphens, and underscores only)
+	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+		log.error(`Invalid provider name format: ${providerName}`);
+		return null;
+	}
+
+	const normalizedProviderName = providerName.trim();
+	
 	try {
-		// 1. Query for smartest model for the specific provider
-		const smartModelRows = await sql`
-            SELECT * FROM llms
-            WHERE llm_provider = ${providerName} AND is_smartest = true
-            ORDER BY llm_id ASC
-            LIMIT 1
-        `;
+		// 1. Query for smartest model for the specific provider, filtering deprecated unless explicitly included
+		const smartModelQuery = includeDeprecated
+			? sql`
+				SELECT * FROM llms
+				WHERE llm_provider = ${normalizedProviderName} AND is_smartest = true
+				ORDER BY llm_id ASC
+				LIMIT 1
+			`
+			: sql`
+				SELECT * FROM llms
+				WHERE llm_provider = ${normalizedProviderName} AND is_smartest = true AND is_deprecated = false
+				ORDER BY llm_id ASC
+				LIMIT 1
+			`;
+
+		const smartModelRows = await smartModelQuery;
 
 		// 2. Check if any row was returned
 		if (!smartModelRows || smartModelRows.length === 0) {
-			log.warn(`No smartest model found for provider: ${providerName}`);
+			log.warn(`No smartest model found for provider: ${normalizedProviderName}`);
 			return null;
 		}
 
@@ -287,39 +469,50 @@ export async function loadSmartestModel(
 		// 4. Handle validation failure
 		if (!parsedModel.success) {
 			log.error(
-				`Failed to validate smartest model data for provider ${providerName}:`,
+				`Failed to validate smartest model data for provider ${normalizedProviderName}:`,
 				parsedModel.error.flatten(),
 			);
 			return null;
 		}
 
 		// 5. Return the validated LLM row
-		log.info(`Found smartest model for ${providerName}: ${parsedModel.data.llm_codename}`);
+		log.info(`Found smartest model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`);
 		return parsedModel.data;
 	} catch (error) {
 		// 6. Log any unexpected errors during the database query
-		log.error(`Error loading smartest model for provider ${providerName}:`, error);
+		log.error(`Error loading smartest model for provider ${normalizedProviderName}:`, error);
 		return null;
 	}
 }
 
 /**
  * Loads unique LLM providers from the database for dynamic select menus.
+ * Only returns providers that have at least one non-deprecated model available.
  * Case-insensitive deduplication with consistent capitalization.
+ * @param includeDeprecated - Whether to include providers that only have deprecated models (default: false).
  * @returns An array of unique provider names, or null if error or none found.
  */
-export async function loadUniqueProviders(): Promise<string[] | null> {
+export async function loadUniqueProviders(includeDeprecated = false): Promise<string[] | null> {
 	try {
-		// 1. Query for all providers (case-insensitive deduplication will be done in code)
-		const providerRows = await sql`
-			SELECT llm_provider
-			FROM llms
-			ORDER BY llm_provider ASC
-		`;
+		// 1. Query for providers that have at least one available model (filtering deprecated unless explicitly included)
+		const providerQuery = includeDeprecated
+			? sql`
+				SELECT DISTINCT llm_provider
+				FROM llms
+				ORDER BY llm_provider ASC
+			`
+			: sql`
+				SELECT DISTINCT llm_provider
+				FROM llms
+				WHERE is_deprecated = false
+				ORDER BY llm_provider ASC
+			`;
+
+		const providerRows = await providerQuery;
 
 		// 2. Check if any rows were returned
 		if (!providerRows || providerRows.length === 0) {
-			log.warn("No LLM providers found in the database.");
+			log.warn("No LLM providers with available models found in the database.");
 			return null;
 		}
 
@@ -340,7 +533,7 @@ export async function loadUniqueProviders(): Promise<string[] | null> {
 		// 4. Convert back to array, sorted by the normalized keys
 		const providers = Array.from(providerMap.values()).sort();
 
-		log.info(`Found ${providers.length} unique LLM providers: ${providers.join(", ")}`);
+		log.info(`Found ${providers.length} unique LLM providers with available models: ${providers.join(", ")}`);
 		return providers;
 	} catch (error) {
 		// 5. Log any unexpected errors during the database query

@@ -12,6 +12,12 @@ import type {
 	ToolExecutionEvent,
 	MCPCapableToolAdapter,
 } from "../types/tool/interfaces";
+import {
+	configToFeatureFlags,
+	filterToolsByFeatureFlags,
+} from "../utils/tools/featureFlagMapper";
+import { getMCPManager } from "../utils/mcp/mcpManager";
+import { isBraveSearchAvailable } from "../tools/restAPIs/brave/braveSearchService";
 
 /**
  * Minimal state interface for context building operations
@@ -173,6 +179,111 @@ class ToolRegistryImpl implements ToolRegistryInterface {
 		);
 
 		return availableTools;
+	}
+
+	/**
+	 * Get all available tools (built-in + MCP) with feature flag filtering
+	 * This is the new centralized method that replaces provider-specific filtering
+	 * @param provider - Provider name (e.g., "google", "openai")
+	 * @param stateForContext - Minimal state with server_id and config for feature flag checking
+	 * @returns Object containing filtered built-in tools and MCP function names
+	 */
+	async getAvailableToolsWithMCP(
+		provider: string,
+		stateForContext: ToolStateForContext,
+	): Promise<{
+		builtInTools: Tool[];
+		mcpFunctionNames: string[];
+		totalCount: number;
+	}> {
+		try {
+			// Get built-in tools (already filtered by feature flags)
+			const builtInTools = this.getAvailableToolsForContext(provider, stateForContext);
+
+			// Convert config to feature flags for MCP filtering
+			const featureFlags = configToFeatureFlags(stateForContext.config);
+
+			// Get MCP function names and filter by feature flags + provider preferences
+			let mcpFunctionNames: string[] = [];
+			const mcpManager = getMCPManager();
+			
+			if (mcpManager.isReady()) {
+				// Get all MCP function names
+				const allMCPFunctionNames: string[] = [];
+				const mcpTools = mcpManager.getMCPTools();
+				
+				for (const mcpTool of mcpTools) {
+					try {
+						const geminiTool = await mcpTool.tool();
+						if (geminiTool.functionDeclarations) {
+							for (const declaration of geminiTool.functionDeclarations) {
+								// Type assertion needed due to Gemini tool typing
+								const functionName = (declaration as { name: string }).name;
+								allMCPFunctionNames.push(functionName);
+							}
+						}
+					} catch (error) {
+						log.warn("Failed to extract function names from MCP tool:", error as Error);
+					}
+				}
+
+				// Filter MCP functions by feature flags using centralized logic
+				let filteredByFeatureFlags = filterToolsByFeatureFlags(allMCPFunctionNames, featureFlags);
+
+				// Apply Brave API key preference logic (prefer Brave over DuckDuckGo when Brave is available)
+				const serverIdNumber = stateForContext.server_id ? Number.parseInt(stateForContext.server_id, 10) : undefined;
+				const hasBraveApiKey = await isBraveSearchAvailable(serverIdNumber);
+				if (hasBraveApiKey) {
+					// DuckDuckGo search function names to exclude when Brave is available
+					const duckduckgoSearchFunctions = [
+						"web-search",
+						"felo-search", 
+						"fetch-url",
+						"url-metadata",
+					];
+
+					const originalCount = filteredByFeatureFlags.length;
+					filteredByFeatureFlags = filteredByFeatureFlags.filter(
+						(functionName) => !duckduckgoSearchFunctions.includes(functionName)
+					);
+					const excludedCount = originalCount - filteredByFeatureFlags.length;
+
+					if (excludedCount > 0) {
+						log.info(
+							`Excluded ${excludedCount} DuckDuckGo search functions (Brave API key available for server ${serverIdNumber || 'global'})`
+						);
+					}
+				}
+
+				mcpFunctionNames = filteredByFeatureFlags;
+
+				log.info(
+					`MCP tools: ${allMCPFunctionNames.length} total, ${mcpFunctionNames.length} after centralized filtering (feature flags + provider preferences)`,
+				);
+			}
+
+			const totalCount = builtInTools.length + mcpFunctionNames.length;
+
+			log.info(
+				`Centralized tool filtering complete: ${builtInTools.length} built-in + ${mcpFunctionNames.length} MCP = ${totalCount} total tools for provider: ${provider}`,
+			);
+
+			return {
+				builtInTools,
+				mcpFunctionNames,
+				totalCount,
+			};
+		} catch (error) {
+			log.error("Failed to get available tools with MCP:", error as Error);
+			
+			// Fallback to just built-in tools
+			const builtInTools = this.getAvailableToolsForContext(provider, stateForContext);
+			return {
+				builtInTools,
+				mcpFunctionNames: [],
+				totalCount: builtInTools.length,
+			};
+		}
 	}
 
 	/**
@@ -659,4 +770,15 @@ export function registerMCPAdapter(adapter: MCPCapableToolAdapter): void {
 
 export async function isMCPFunction(functionName: string, provider: string): Promise<boolean> {
 	return ToolRegistry.isMCPFunction(functionName, provider);
+}
+
+export async function getAvailableToolsWithMCP(
+	provider: string,
+	stateForContext: ToolStateForContext,
+): Promise<{
+	builtInTools: Tool[];
+	mcpFunctionNames: string[];
+	totalCount: number;
+}> {
+	return ToolRegistry.getAvailableToolsWithMCP(provider, stateForContext);
 }

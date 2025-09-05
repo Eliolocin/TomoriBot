@@ -18,53 +18,8 @@ import {
 	humanizeString,
 } from "./stringHelper";
 import { HumanizerDegree, type TomoriConfigRow } from "@/types/db/schema";
-import {
-	getAvailableToolsForContext,
-	type ToolStateForContext,
-} from "@/tools/toolRegistry";
-import { GoogleToolAdapter } from "@/providers/google/googleToolAdapter";
 // Import ServerEmojiRow if needed for emoji query result type
 // import type { ServerEmojiRow } from "../../types/db/schema";
-
-/**
- * Get function declarations from the modular tool system
- * @param provider - Provider name (e.g., "google")
- * @param toolState - Minimal state for tool feature flag checking
- * @returns Object with function declarations for different tool types
- */
-function getFunctionDeclarations(
-	provider: string,
-	toolState: ToolStateForContext,
-) {
-	const googleAdapter = GoogleToolAdapter.getInstance();
-	const availableTools = getAvailableToolsForContext(provider, toolState);
-
-	// Find specific tools by name
-	const stickerTool = availableTools.find(
-		(tool) => tool.name === "select_sticker_for_response",
-	);
-	const searchTool = availableTools.find(
-		(tool) => tool.name === "brave_web_search",
-	);
-	const memoryTool = availableTools.find(
-		(tool) => tool.name === "remember_this_fact",
-	);
-
-	// Convert to Google function declarations
-	const declarations = {
-		selectStickerFunctionDeclaration: stickerTool
-			? googleAdapter.convertTool(stickerTool)
-			: null,
-		braveWebSearchFunctionDeclaration: searchTool
-			? googleAdapter.convertTool(searchTool)
-			: null,
-		rememberThisFactFunctionDeclaration: memoryTool
-			? googleAdapter.convertTool(memoryTool)
-			: null,
-	};
-
-	return declarations;
-}
 
 /**
  * Maps userId -> nickname for the current mention replacement operation.
@@ -107,6 +62,7 @@ type SimplifiedMessageForContext = {
  * @param serverId - Discord server ID for context
  * @param triggererName - Name of the user who triggered the action (for {user} replacement)
  * @param tomoriNickname - The bot's current nickname for {bot} replacement.
+ * @param personalMemoriesEnabled - Whether server personalization is enabled (affects custom nickname usage)
  * @returns Text with mentions and placeholders replaced by human-readable names
  */
 export async function convertMentions(
@@ -115,6 +71,7 @@ export async function convertMentions(
 	serverId: string,
 	triggererName?: string,
 	tomoriNickname?: string, // Added tomoriNickname parameter
+	personalMemoriesEnabled?: boolean, // Added personalMemoriesEnabled parameter
 ): Promise<string> {
 	// Clear the cache before processing new text
 	mentionCache.clear();
@@ -157,8 +114,15 @@ export async function convertMentions(
 
 						const isUserBlacklisted = await isBlacklisted(serverId, id);
 						const userData = await loadUserRow(id);
+						const serverPersonalizationDisabled =
+							personalMemoriesEnabled === false;
 
-						if (isUserBlacklisted || !userData?.user_nickname) {
+						// Use Discord username if user is blacklisted OR server personalization is disabled OR no custom nickname exists
+						if (
+							isUserBlacklisted ||
+							serverPersonalizationDisabled ||
+							!userData?.user_nickname
+						) {
 							const user =
 								client.users.cache.get(id) ||
 								(await client.users.fetch(id).catch(() => null));
@@ -167,6 +131,7 @@ export async function convertMentions(
 								return `${user.username}`;
 							}
 						} else {
+							// Use custom nickname only if user is not blacklisted AND personalization is enabled
 							mentionCache.set(id, userData.user_nickname);
 							return `${userData.user_nickname}`;
 						}
@@ -291,18 +256,6 @@ export async function buildContext({
 	const contextItems: StructuredContextItem[] = [];
 	const botName = tomoriNickname;
 
-	// Get function declarations from the modular tool system
-	const toolState: ToolStateForContext = {
-		server_id: guildId,
-		config: tomoriConfig,
-	};
-	const functionDeclarations = getFunctionDeclarations("google", toolState);
-	const {
-		selectStickerFunctionDeclaration,
-		braveWebSearchFunctionDeclaration,
-		rememberThisFactFunctionDeclaration,
-	} = functionDeclarations;
-
 	// 1. System Instruction (Tomori's Personality and Humanizer)
 	// This will be expanded in Phase 2 to include all non-dialogue context.
 	// For now, it's just personality and humanizer rules.
@@ -316,6 +269,7 @@ export async function buildContext({
 		guildId,
 		triggererName,
 		botName,
+		tomoriConfig.personal_memories_enabled,
 	);
 	personalityInstructionText += `\nWhen ${botName} wants to mention and ping a specific user in their response, they MUST use the format <@USER_DISCORD_ID> (e.g., <@123456789012345678>). The USER_DISCORD_ID can be found in the user's status block in this context (e.g., "Nickname (User ID: 123...)"). This ensures the user gets a notification.`;
 
@@ -328,75 +282,6 @@ export async function buildContext({
 	// --- Preamble/Knowledge Base Segments ---
 	// These will be consolidated into the system prompt in Phase 2.
 	// For now, they are tagged individually.
-
-	// NEW SECTION: 8. Function Usage Guide
-	// This section guides the LLM on when to use its available tools.
-	const functionUsageInstructions: string[] = [];
-
-	if (tomoriConfig.sticker_usage_enabled && selectStickerFunctionDeclaration) {
-		// 8.a. Sticker Function Guidance
-		functionUsageInstructions.push(
-			`- **Stickers ('${selectStickerFunctionDeclaration.name}')**: ${selectStickerFunctionDeclaration.description} ${botName} considers using this to add more personality or visual cues to their responses, especially when an emotion or reaction can be well-represented by an available sticker.`,
-		);
-	}
-
-	if (tomoriConfig.web_search_enabled && braveWebSearchFunctionDeclaration) {
-		// 8.b. Web Search Function Guidance (Brave Search)
-		// Uses the web_search_enabled flag to control availability
-		functionUsageInstructions.push(
-			`- **Web Search ('${braveWebSearchFunctionDeclaration.name}')**: ${braveWebSearchFunctionDeclaration.description} ${botName} uses this tool whenever a user's query implies a need for current events, specific facts not in your training data, or any information that would typically be found by searching the web. Do NOT use on YouTube links or video content because you are already able to parse them on your own.`,
-		);
-	}
-
-	// 8.c. Self-Teach Function Guidance
-	if (
-		tomoriConfig.self_teaching_enabled &&
-		rememberThisFactFunctionDeclaration
-	) {
-		// 1. Use the actual function name and description from the declaration.
-		const selfTeachFuncName = rememberThisFactFunctionDeclaration.name;
-		// 2. Craft a more detailed instruction based on the function's parameters and purpose.
-		const selfTeachInstruction =
-			// biome-ignore lint/style/useTemplate: Line breaks for readability.
-			`When a user provides a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important for ${botName} to remember for future interactions, ${botName} should use this tool. ` +
-			`This helps ${botName} learn and adapt. ` +
-			`Key considerations for ${botName}:\n` +
-			`  - **Memory Content**: Provide the specific piece of information to remember. It should be concise, clear, and represent new knowledge not already in ${botName}'s existing server or user memories. **CRITICAL**: Always use {bot} instead of hardcoded bot names (e.g., 'Tomori', 'Elen') and {user} instead of hardcoded user names in memory content. Example: '{bot} likes {user}'s dogs!' instead of 'Tomori likes John's dogs!'. This prevents confusion when names change.\n` +
-			`  - **Memory Scope**: Specify if the information is a general 'server_wide' fact (relevant to the whole server community) or 'target_user' (specific to a user).\n` +
-			// MODIFIED: Changed to target_user_discord_id and added nickname for confirmation
-			`  - **Target User Discord ID**: If the scope is 'target_user', ${botName} MUST provide the unique Discord ID of the user this memory pertains to (e.g., '123456789012345678'). This ID can be found in the user's status block in the context (e.g., "Nickname (User ID: 123...)").\n` +
-			`  - **Target User Nickname for Confirmation**: If the scope is 'target_user', ${botName} MUST also provide the nickname of the user (e.g., '${triggererName}') as seen in their status block or the conversation. This is used to double-check the target user along with their Discord ID.\n` +
-			`  - **Avoid Redundancy**: ${botName} must critically evaluate if the information is genuinely new and not something already known or easily inferred. Do not save trivial or redundant facts.`;
-
-		functionUsageInstructions.push(
-			`- **Remember This Fact ('${selfTeachFuncName}')**: ${selfTeachInstruction}`,
-		);
-	}
-
-	if (functionUsageInstructions.length > 0) {
-		let functionGuidanceText = `\n# Tool Usage Guidance for ${botName}\n${botName} has access to the following tools/functions. ${botName} thinks carefully about when to use them to best assist users:\n`;
-		functionGuidanceText += functionUsageInstructions.join("\n");
-
-		contextItems.push({
-			role: "system",
-			parts: [
-				{
-					type: "text",
-					text: await convertMentions(
-						functionGuidanceText,
-						client,
-						guildId,
-						triggererName,
-						botName,
-					),
-				},
-			],
-			metadataTag: ContextItemTag.SYSTEM_FUNCTION_GUIDE,
-		});
-		log.info(
-			`Added SYSTEM_FUNCTION_GUIDE with ${functionUsageInstructions.length} instructions.`,
-		);
-	}
 
 	// 2. Server Description
 	let serverInfoContent = `# Knowledge Base\n${botName} is currently in the Discord server named "${serverName}".\n`;
@@ -414,6 +299,7 @@ export async function buildContext({
 					guildId,
 					triggererName,
 					botName,
+					tomoriConfig.personal_memories_enabled,
 				),
 			},
 		],
@@ -435,6 +321,7 @@ export async function buildContext({
 						guildId,
 						triggererName,
 						botName,
+						tomoriConfig.personal_memories_enabled,
 					),
 				},
 			],
@@ -463,6 +350,7 @@ export async function buildContext({
 							guildId,
 							triggererName,
 							botName,
+							tomoriConfig.personal_memories_enabled,
 						),
 					},
 				],
@@ -490,6 +378,7 @@ export async function buildContext({
 						guildId,
 						triggererName,
 						botName,
+						tomoriConfig.personal_memories_enabled,
 					),
 				},
 			],
@@ -532,9 +421,7 @@ export async function buildContext({
 			const guild = client.guilds.cache.get(guildId);
 			let member = null;
 			if (guild) {
-				member = await guild.members
-					.fetch(userIdToProcess)
-					.catch(() => null);
+				member = await guild.members.fetch(userIdToProcess).catch(() => null);
 			}
 
 			if (!userRow) {
@@ -545,9 +432,7 @@ export async function buildContext({
 					);
 					if (guild && member) {
 						const serverLocale = guild.preferredLocale;
-						const userLanguage = serverLocale.startsWith("ja")
-							? "ja"
-							: "en-US";
+						const userLanguage = serverLocale.startsWith("ja") ? "ja" : "en-US";
 						userRow = await registerUser(
 							// This will UPSERT
 							userIdToProcess,
@@ -593,15 +478,15 @@ export async function buildContext({
 
 			// At this point, userRow is considered valid.
 			const userDiscordId = userRow.user_disc_id;
-			
+
 			// Format nickname to include both custom nickname and server nickname
 			let displayName: string;
 			const customNickname = userRow.user_nickname;
 			const serverNickname = member?.nickname;
-			
+
 			if (customNickname) {
 				// Use custom nickname as base, add server nickname if it exists
-				displayName = serverNickname 
+				displayName = serverNickname
 					? `${customNickname} (Server Nickname: "${serverNickname}")`
 					: customNickname;
 			} else if (serverNickname) {
@@ -638,6 +523,7 @@ export async function buildContext({
 								guildId,
 								nickname, // Use the memory owner's name, not the triggerer's name
 								botName,
+								tomoriConfig.personal_memories_enabled,
 							),
 						),
 					);
@@ -658,7 +544,7 @@ export async function buildContext({
 
 			// 6.b. Add User Status (always, if userRow is valid)
 			// For DMs, presence information is not available since there's no guild context
-			const presenceInfo = isDMChannel 
+			const presenceInfo = isDMChannel
 				? "Online (Direct Message)" // Simple fallback for DMs
 				: await getUserPresenceDetails(client, userRow.user_disc_id, guildId);
 			userSpecificContent += `### ${nickname} (User ID: ${userDiscordId})'s current status\n${presenceInfo}\n\n`;
@@ -677,6 +563,7 @@ export async function buildContext({
 							guildId,
 							triggererName,
 							botName,
+							tomoriConfig.personal_memories_enabled,
 						),
 					},
 				],
@@ -708,6 +595,7 @@ export async function buildContext({
 					guildId,
 					triggererName,
 					botName,
+					tomoriConfig.personal_memories_enabled,
 				),
 			},
 		],
@@ -743,6 +631,7 @@ export async function buildContext({
 							guildId,
 							triggererName, // triggererName for {user} if it appears in sample
 							botName,
+							tomoriConfig.personal_memories_enabled,
 						),
 					},
 				],
@@ -767,6 +656,7 @@ export async function buildContext({
 							guildId,
 							triggererName,
 							botName, // botName for {bot} if it appears in sample
+							tomoriConfig.personal_memories_enabled,
 						),
 					},
 				],
@@ -829,6 +719,7 @@ export async function buildContext({
 				guildId,
 				msg.authorName, // Pass the actual author of this historical message
 				botName,
+				tomoriConfig.personal_memories_enabled,
 			);
 			parts.push({ type: "text", text: processedContent });
 		}

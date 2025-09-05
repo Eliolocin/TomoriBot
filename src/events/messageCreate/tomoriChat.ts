@@ -10,6 +10,7 @@ import type { StructuredContextItem } from "../../types/misc/context";
 // Provider-specific types moved to individual providers
 import type { FunctionCall } from "../../types/provider/interfaces";
 import {
+	isBlacklisted,
 	loadServerEmojis,
 	loadTomoriState,
 	loadUserRow,
@@ -504,7 +505,19 @@ export default async function tomoriChat(
 				earlyTomoriState ?? (await loadTomoriState(serverDiscId));
 			const userRow = await loadUserRow(userDiscId);
 			locale = userRow?.language_pref ?? "en-US"; // Set locale based on user pref
-			const triggererName = userRow?.user_nickname ?? message.author.username;
+
+			// Determine triggererName based on blacklist and personalization settings
+			const isUserBlacklisted = await isBlacklisted(serverDiscId, userDiscId);
+			const serverPersonalizationDisabled =
+				tomoriState?.config.personal_memories_enabled === false;
+
+			// Use Discord username if user is blacklisted OR server personalization is disabled OR no custom nickname exists
+			const triggererName =
+				isUserBlacklisted ||
+				serverPersonalizationDisabled ||
+				!userRow?.user_nickname
+					? message.author.username
+					: userRow.user_nickname;
 
 			// Function to check for base trigger words - stays contained within the try block
 			function checkForBaseTriggerWords(content: string): boolean {
@@ -850,8 +863,10 @@ export default async function tomoriChat(
 								attachmentInfo += ` (with ${videoCount} video${videoCount > 1 ? "s" : ""})`;
 							}
 
+							const referenceMessageId = msgReferencedMessage.id;
+
 							// Add reference context to the message
-							const referenceContext = `[System: This message is referring to a previous message by ${referencedAuthorName} saying: ${referencedContent}${attachmentInfo}]`;
+							const referenceContext = `[System: This message is referring to a previous message (ID: ${referenceMessageId}) by ${referencedAuthorName} saying: ${referencedContent}${attachmentInfo}]`;
 							processedContent = `${referenceContext}\n${processedContent}`;
 						}
 					} catch (fetchError) {

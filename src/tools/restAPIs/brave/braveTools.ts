@@ -28,6 +28,7 @@ import {
  */
 abstract class BaseBraveSearchTool extends BaseTool {
 	category = "search" as const;
+	requiresFeatureFlag = "web_search";
 
 	// All Brave Search tools are available for all providers
 	isAvailableFor(_provider: string): boolean {

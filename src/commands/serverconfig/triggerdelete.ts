@@ -86,7 +86,8 @@ export async function execute(
 				locale,
 				{
 					titleKey: "commands.config.triggerdelete.no_triggers_title",
-					descriptionKey: "commands.config.triggerdelete.no_triggers_description",
+					descriptionKey:
+						"commands.config.triggerdelete.no_triggers_description",
 					color: ColorCode.WARN,
 				},
 				MessageFlags.Ephemeral,
@@ -99,7 +100,7 @@ export async function execute(
 			(trigger, index) => ({
 				label: safeSelectOptionText(trigger, 50),
 				value: index.toString(), // Use index to avoid truncation issues
-				description: safeSelectOptionText(trigger),
+				description: undefined,
 			}),
 		);
 
@@ -111,8 +112,7 @@ export async function execute(
 				{
 					customId: TRIGGER_SELECT_ID,
 					labelKey: "commands.config.triggerdelete.select_label",
-					descriptionKey:
-						"commands.config.triggerdelete.select_description",
+					descriptionKey: "commands.config.triggerdelete.select_description",
 					placeholder: "commands.config.triggerdelete.select_placeholder",
 					required: true,
 					options: triggerWordSelectOptions,

@@ -10,6 +10,7 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
 import { storeOptApiKey } from "../../utils/security/crypto";
+import { braveWebSearch } from "../../tools/restAPIs/brave/braveSearchService";
 
 /**
  * Configure the subcommand for setting Brave Search API key
@@ -94,6 +95,50 @@ export async function execute(
 			return;
 		}
 
+		// 6. Show validation message
+		await interaction.editReply({
+			content: localizer(locale, "commands.config.braveapiset.validating_key"),
+		});
+
+		// 7. Validate the API key by performing a test search
+		let isValidApiKey = false;
+		try {
+			const validationResult = await braveWebSearch(
+				{ q: "test" },
+				{ apiKey: apiKey, timeout: 5000 }
+			);
+			
+			if (validationResult.success) {
+				isValidApiKey = true;
+			} else {
+				log.info(
+					`Brave API key validation failed for server ${tomoriState.server_id}: ${validationResult.error}`,
+				);
+			}
+		} catch (error) {
+			log.error(
+				"Error during Brave API key validation",
+				error as Error,
+			);
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.config.braveapiset.validation_error_title",
+				descriptionKey: "commands.config.braveapiset.validation_error_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 8. Handle validation failure
+		if (!isValidApiKey) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.config.braveapiset.key_validation_failed_title",
+				descriptionKey: "commands.config.braveapiset.key_validation_failed_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// 9. Store the validated API key
 		const isStored = await storeOptApiKey(
 			tomoriState.server_id,
 			"brave-search",
@@ -126,14 +171,14 @@ export async function execute(
 			return;
 		}
 
-		// 7. Success message
+		// 10. Success message
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "commands.config.braveapiset.success_title",
 			descriptionKey: "commands.config.braveapiset.success_description",
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {
-		// 8. Log error with context
+		// 11. Log error with context
 		let serverIdForError: number | null = null;
 		let tomoriIdForError: number | null = null;
 		if (interaction.guild?.id) {
@@ -164,7 +209,7 @@ export async function execute(
 			context,
 		);
 
-		// 9. Inform user of unknown error
+		// 12. Inform user of unknown error
 		// Use followUp since deferReply was used
 		if (interaction.deferred && !interaction.replied) {
 			await interaction.followUp({

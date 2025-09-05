@@ -261,6 +261,7 @@ export class MemoryTool extends BaseTool {
 						serverId,
 						userRow.user_nickname, // Use triggerer's name for {user} replacement
 						tomoriState.tomori_nickname, // Use bot's current nickname for {bot} replacement
+						tomoriState?.config.personal_memories_enabled,
 					);
 
 					// Send notification embed to the channel
@@ -451,6 +452,7 @@ export class MemoryTool extends BaseTool {
 						serverId,
 						targetUserNicknameArg, // Use target user's name for {user} replacement
 						tomoriState.tomori_nickname, // Use bot's current nickname for {bot} replacement
+						tomoriState?.config.personal_memories_enabled,
 					);
 
 					// Determine footer key based on personalization settings

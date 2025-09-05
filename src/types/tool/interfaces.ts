@@ -230,11 +230,13 @@ export interface MCPCapableToolAdapter extends ToolAdapter {
 	 * Get all available tools (built-in + MCP) in provider-specific format
 	 * @param builtInTools - Array of built-in tools
 	 * @param serverId - Optional Discord server ID for server-specific tool selection
+	 * @param allowedMCPFunctions - Optional pre-filtered list of MCP function names to include
 	 * @returns Combined provider-specific tool configuration
 	 */
 	getAllToolsInProviderFormat(
 		builtInTools: Tool[],
 		serverId?: number,
+		allowedMCPFunctions?: string[],
 	): Promise<Array<Record<string, unknown>>>;
 
 	/**

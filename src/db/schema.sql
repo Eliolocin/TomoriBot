@@ -124,6 +124,7 @@ CREATE TABLE IF NOT EXISTS llms (
 SELECT add_column_if_not_exists('llms', 'is_smartest', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'is_default', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'is_reasoning', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('llms', 'is_deprecated', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'llm_description', 'TEXT');
 
 
@@ -143,8 +144,6 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   trigger_words TEXT[] DEFAULT '{}',
   autoch_disc_ids TEXT[] DEFAULT '{}',
   autoch_threshold INT DEFAULT 0, -- set to 0 for no autoch
-  teach_cost INT DEFAULT 1000, 
-  gamba_limit INT DEFAULT 3,
 	server_memteaching_enabled BOOLEAN DEFAULT true,
 	attribute_memteaching_enabled BOOLEAN DEFAULT false,
 	sampledialogue_memteaching_enabled BOOLEAN DEFAULT false,
@@ -255,8 +254,6 @@ CREATE TABLE IF NOT EXISTS users (
   user_id SERIAL PRIMARY KEY,
   user_disc_id TEXT UNIQUE NOT NULL,
   user_nickname TEXT NOT NULL,
-  tomocoins_held INT DEFAULT 0,
-  tomocoins_deposited INT DEFAULT 0,
   language_pref TEXT DEFAULT 'en',
   personal_memories TEXT[] DEFAULT '{}',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -382,6 +379,12 @@ EXECUTE FUNCTION update_timestamp();
 
 -- pg_cron setup has been moved to a separate file: src/db/pgcron.sql
 -- This allows optional execution based on the environment (production vs development)
+
+-- Drop deprecated columns (January 2025)
+SELECT drop_column_if_exists('tomori_configs', 'teach_cost');
+SELECT drop_column_if_exists('tomori_configs', 'gamba_limit');
+SELECT drop_column_if_exists('users', 'tomocoins_held');
+SELECT drop_column_if_exists('users', 'tomocoins_deposited');
 
 -- Example usage - This shows how to add columns to existing tables
 -- You can add these calls whenever you need to introduce schema changes

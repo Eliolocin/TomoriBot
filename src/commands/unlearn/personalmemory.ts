@@ -149,7 +149,9 @@ export async function execute(
 
 	try {
 		// 2. Load server's Tomori state to check personalization setting (Rule 17)
-		tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
+		tomoriState = await loadTomoriState(
+			interaction.guild?.id ?? interaction.user.id,
+		);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title", // Corrected key
@@ -183,7 +185,7 @@ export async function execute(
 		// 6. Create memory select options for the modal
 		const memorySelectOptions: SelectOption[] = currentMemories.map(
 			(memory, index) => ({
-				label: safeSelectOptionText(memory, 50),
+				label: safeSelectOptionText(memory, 10),
 				value: index.toString(), // Use index to avoid truncation issues
 				description: safeSelectOptionText(memory),
 			}),
@@ -197,8 +199,7 @@ export async function execute(
 				{
 					customId: MEMORY_SELECT_ID,
 					labelKey: "commands.unlearn.personalmemory.select_label",
-					descriptionKey:
-						"commands.unlearn.personalmemory.select_description",
+					descriptionKey: "commands.unlearn.personalmemory.select_description",
 					placeholder: "commands.unlearn.personalmemory.select_placeholder",
 					required: true,
 					options: memorySelectOptions,
@@ -245,8 +246,7 @@ export async function execute(
 			await modalSubmitInteraction.followUp({
 				embeds: [
 					createStandardEmbed(locale, {
-						titleKey:
-							"commands.unlearn.personalmemory.warning_disabled_title",
+						titleKey: "commands.unlearn.personalmemory.warning_disabled_title",
 						descriptionKey:
 							"commands.unlearn.personalmemory.warning_disabled_description",
 						color: ColorCode.WARN,

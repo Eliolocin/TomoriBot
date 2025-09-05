@@ -121,7 +121,7 @@ export async function execute(
 			(provider) => ({
 				label: provider.charAt(0).toUpperCase() + provider.slice(1), // Capitalize first letter
 				value: provider,
-				description: `Use ${provider} LLM provider`,
+				description: undefined,
 			}),
 		);
 

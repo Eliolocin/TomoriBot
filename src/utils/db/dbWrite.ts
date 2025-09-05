@@ -200,26 +200,29 @@ export async function setupServer(
 	try {
 		// Start transaction for atomicity (Rule 15)
 		const result = await sql.transaction(async (tx) => {
-			// Find the default model for the selected provider using is_default flag
+			// Find the default model for the selected provider within the transaction to avoid race conditions
+			// First try to get the default model (is_default = true) for this provider, excluding deprecated
 			let selectedLlm = (await tx`
-                SELECT llm_id, llm_codename, llm_provider 
-                FROM llms 
-                WHERE llm_provider = ${validConfig.provider} AND is_default = true
+                SELECT * FROM llms
+                WHERE llm_provider = ${validConfig.provider} 
+                  AND is_default = true 
+                  AND is_deprecated = false
+                ORDER BY llm_id ASC
                 LIMIT 1
             `)[0];
 
-			// Fallback: if no default is marked for this provider, get the first available model for the provider
+			// Fallback: if no default model found, get the first available non-deprecated model for this provider
 			if (!selectedLlm) {
 				selectedLlm = (await tx`
-					SELECT llm_id, llm_codename, llm_provider 
-					FROM llms 
-					WHERE llm_provider = ${validConfig.provider}
-					ORDER BY llm_id 
+					SELECT * FROM llms
+					WHERE llm_provider = ${validConfig.provider} 
+					  AND is_deprecated = false
+					ORDER BY llm_id ASC
 					LIMIT 1
 				`)[0];
 				
 				if (!selectedLlm) {
-					throw new Error(`No models found for provider: ${validConfig.provider}`);
+					throw new Error(`No available models found for provider: ${validConfig.provider}`);
 				}
 				
 				log.warn(`No default model found for provider ${validConfig.provider}, using fallback: ${selectedLlm.llm_codename}`);

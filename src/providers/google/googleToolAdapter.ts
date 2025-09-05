@@ -257,13 +257,15 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 	 * Implementation of MCPCapableToolAdapter interface
 	 * @param builtInTools - Array of built-in tools
 	 * @param serverId - Optional Discord server ID for server-specific tool selection
+	 * @param allowedMCPFunctions - Optional pre-filtered list of MCP function names to include
 	 * @returns Combined provider-specific tools configuration
 	 */
 	async getAllToolsInProviderFormat(
 		builtInTools: Tool[],
 		serverId?: number,
+		allowedMCPFunctions?: string[],
 	): Promise<Array<Record<string, unknown>>> {
-		return this.getAllToolsInGoogleFormat(builtInTools, serverId);
+		return this.getAllToolsInGoogleFormat(builtInTools, serverId, allowedMCPFunctions);
 	}
 
 	/**
@@ -271,11 +273,13 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 	 * This provides a unified interface for the provider to get all tools
 	 * @param builtInTools - Array of built-in tools
 	 * @param serverId - Optional Discord server ID for server-specific tool selection
+	 * @param allowedMCPFunctions - Optional pre-filtered list of MCP function names to include
 	 * @returns Combined Google tools configuration with conditional search tool filtering
 	 */
 	async getAllToolsInGoogleFormat(
 		builtInTools: Tool[],
 		serverId?: number,
+		allowedMCPFunctions?: string[],
 	): Promise<Array<Record<string, unknown>>> {
 		try {
 			// Start with built-in tools
@@ -321,60 +325,95 @@ export class GoogleToolAdapter implements MCPCapableToolAdapter {
 				);
 			}
 
-			// Add MCP tools if available (with conditional filtering)
+			// Add MCP tools if available (using pre-filtered list or legacy filtering)
 			const mcpManager = getMCPManager();
 			if (mcpManager.isReady()) {
-				const mcpTools = mcpManager.getMCPTools();
-
-				// DuckDuckGo search function names for filtering
-				const duckduckgoSearchFunctions = [
-					"web-search",
-					"felo-search",
-					"fetch-url",
-					"url-metadata",
-				];
-
 				let addedMCPToolsCount = 0;
 				let excludedDDGFunctionsCount = 0;
 
-				for (const mcpTool of mcpTools) {
-					try {
-						const geminiTool = await mcpTool.tool();
-						if (geminiTool.functionDeclarations) {
-							// Cast FunctionDeclaration to Record<string, unknown> for type compatibility
-							let declarations = geminiTool.functionDeclarations as Record<string, unknown>[];
+				if (allowedMCPFunctions) {
+					// Use pre-filtered list from centralized filtering (preferred path)
+					const mcpTools = mcpManager.getMCPTools();
+					const allowedFunctionSet = new Set(allowedMCPFunctions);
 
-							// Filter out DuckDuckGo search functions if Brave API key is available
-							if (hasBraveApiKey) {
-								const originalCount = declarations.length;
-								declarations = declarations.filter((declaration: Record<string, unknown>) => {
-									const functionName = declaration.name as string;
-									return !duckduckgoSearchFunctions.includes(functionName);
-								});
-								excludedDDGFunctionsCount += originalCount - declarations.length;
-							}
+					for (const mcpTool of mcpTools) {
+						try {
+							const geminiTool = await mcpTool.tool();
+							if (geminiTool.functionDeclarations) {
+								// Filter declarations to only include allowed functions
+								const declarations = (geminiTool.functionDeclarations as Record<string, unknown>[])
+									.filter((declaration) => {
+										const functionName = declaration.name as string;
+										return allowedFunctionSet.has(functionName);
+									});
 
-							// Add remaining declarations
-							if (declarations.length > 0) {
-								allFunctionDeclarations.push(...declarations);
-								addedMCPToolsCount++;
+								if (declarations.length > 0) {
+									allFunctionDeclarations.push(...declarations);
+									addedMCPToolsCount++;
+								}
 							}
+						} catch (error) {
+							log.warn(
+								"Failed to extract functions from MCP tool:",
+								error as Error,
+							);
 						}
-					} catch (error) {
-						log.warn(
-							"Failed to extract functions from MCP tool:",
-							error as Error,
+					}
+
+					log.info(
+						`Added ${addedMCPToolsCount} MCP tools using centralized filtering (${allowedMCPFunctions.length} functions allowed)`,
+					);
+				} else {
+					// Legacy path with Brave API key filtering (for backward compatibility)
+					const mcpTools = mcpManager.getMCPTools();
+
+					// DuckDuckGo search function names for filtering
+					const duckduckgoSearchFunctions = [
+						"web-search",
+						"felo-search",
+						"fetch-url",
+						"url-metadata",
+					];
+
+					for (const mcpTool of mcpTools) {
+						try {
+							const geminiTool = await mcpTool.tool();
+							if (geminiTool.functionDeclarations) {
+								// Cast FunctionDeclaration to Record<string, unknown> for type compatibility
+								let declarations = geminiTool.functionDeclarations as Record<string, unknown>[];
+
+								// Filter out DuckDuckGo search functions if Brave API key is available
+								if (hasBraveApiKey) {
+									const originalCount = declarations.length;
+									declarations = declarations.filter((declaration: Record<string, unknown>) => {
+										const functionName = declaration.name as string;
+										return !duckduckgoSearchFunctions.includes(functionName);
+									});
+									excludedDDGFunctionsCount += originalCount - declarations.length;
+								}
+
+								// Add remaining declarations
+								if (declarations.length > 0) {
+									allFunctionDeclarations.push(...declarations);
+									addedMCPToolsCount++;
+								}
+							}
+						} catch (error) {
+							log.warn(
+								"Failed to extract functions from MCP tool:",
+								error as Error,
+							);
+						}
+					}
+
+					if (addedMCPToolsCount > 0) {
+						log.info(`Added ${addedMCPToolsCount} MCP tools to Google format`);
+					}
+					if (excludedDDGFunctionsCount > 0) {
+						log.info(
+							`Excluded ${excludedDDGFunctionsCount} DuckDuckGo search functions (Brave API key available)`,
 						);
 					}
-				}
-
-				if (addedMCPToolsCount > 0) {
-					log.info(`Added ${addedMCPToolsCount} MCP tools to Google format`);
-				}
-				if (excludedDDGFunctionsCount > 0) {
-					log.info(
-						`Excluded ${excludedDDGFunctionsCount} DuckDuckGo search functions (Brave API key available)`,
-					);
 				}
 			}
 

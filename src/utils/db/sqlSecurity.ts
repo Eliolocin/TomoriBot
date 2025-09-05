@@ -20,8 +20,6 @@ import { log } from "../misc/logger";
 const ALLOWED_USER_FIELDS = new Set<keyof UserRow>([
 	"user_disc_id",
 	"user_nickname",
-	"tomocoins_held",
-	"tomocoins_deposited",
 	"language_pref",
 	"personal_memories",
 	// Exclude: user_id (primary key), created_at, updated_at (auto-managed)
@@ -44,8 +42,6 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
 	"trigger_words",
 	"autoch_disc_ids",
 	"autoch_threshold",
-	"teach_cost",
-	"gamba_limit",
 	"server_memteaching_enabled",
 	"attribute_memteaching_enabled",
 	"sampledialogue_memteaching_enabled",

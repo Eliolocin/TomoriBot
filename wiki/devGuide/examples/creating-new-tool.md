@@ -204,9 +204,9 @@ export class WeatherTool extends BaseTool {
 }
 ```
 
-## Step 2: Export the Tool
+## Step 2: Register the Tool
 
-Add your tool to the exports:
+Add your tool to the initialization system:
 
 **File**: `src/tools/functionCalls/index.ts`
 
@@ -214,6 +214,40 @@ Add your tool to the exports:
 // ... existing exports
 export { WeatherTool } from "./weatherTool";
 ```
+
+**File**: `src/tools/toolInitializer.ts`
+
+```typescript
+// Import your new tool
+import {
+  StickerTool,
+  MemoryTool,
+  YouTubeVideoTool,
+  PeekProfilePictureTool,
+  WeatherTool, // ← Add your tool import
+} from "./functionCalls";
+
+// Register in the tools array
+export function initializeTools(): void {
+  const tools = [
+    new StickerTool(),
+    new MemoryTool(),
+    new YouTubeVideoTool(),
+    new PeekProfilePictureTool(),
+    new WeatherTool(), // ← Add your tool instance
+    // ... other tools
+  ];
+  
+  // Rest of initialization logic...
+}
+```
+
+**✅ Automatic Integration**: Once registered, the system automatically:
+- Discovers your tool during startup
+- Applies feature flag filtering using centralized system
+- Converts to provider-specific formats (Google, OpenAI, Anthropic)
+- Handles execution through ToolRegistry
+- Manages permissions and Discord integration
 
 ## Alternative: REST API Tool Pattern
 
@@ -452,20 +486,108 @@ isAvailableForContext(provider: string, context?: ToolContext): boolean {
 }
 ```
 
-### Add Permission Controls
+### Add Feature Flag Controls
 
-Restrict tool access based on server configuration:
+TomoriBot uses a **centralized feature flag system** for consistent tool filtering across all providers.
+
+#### Method 1: Built-in Tools - requiresFeatureFlag Property
+
+For built-in tools extending `BaseTool`, add the `requiresFeatureFlag` property:
 
 ```typescript
 export class WeatherTool extends BaseTool {
   // ... existing code
   
-  // Require specific feature flag
+  // Require specific feature flag (automatically filtered by ToolRegistry)
   requiresFeatureFlag = "weather_enabled";
   
   // Optional: Require Discord permissions
   requiresPermissions = ["EMBED_LINKS"]; // Needed for rich embeds
 }
+```
+
+#### Method 2: MCP Tools - Central Feature Flag Mapping
+
+For MCP tools or custom integrations, add your tool to the centralized feature flag mapper:
+
+**File**: `src/utils/tools/featureFlagMapper.ts`
+
+```typescript
+/**
+ * Feature flag requirements for MCP tools
+ * Add your tool's function name here
+ */
+export const MCP_TOOL_FEATURE_FLAGS: Record<string, string> = {
+  // Existing mappings
+  "web-search": "web_search",
+  "brave_web_search": "web_search",
+  
+  // Add your new tool
+  "get_weather": "weather_enabled", // ← Add your MCP function here
+  "weather_forecast": "weather_enabled",
+};
+```
+
+#### Adding New Feature Flags
+
+If you're creating a new feature flag category:
+
+1. **Add to Tomori config schema** (`src/types/db/schema.ts`):
+```typescript
+export interface TomoriConfig {
+  // ... existing flags
+  weather_enabled: boolean; // ← Add new flag
+}
+```
+
+2. **Update feature flag converter** (`src/utils/tools/featureFlagMapper.ts`):
+```typescript
+export function configToFeatureFlags(config: {
+  sticker_usage_enabled: boolean;
+  web_search_enabled: boolean;
+  self_teaching_enabled: boolean;
+  weather_enabled: boolean; // ← Add new flag
+}): Record<string, boolean> {
+  return {
+    sticker_usage: config.sticker_usage_enabled,
+    web_search: config.web_search_enabled,
+    self_teaching: config.self_teaching_enabled,
+    weather: config.weather_enabled, // ← Add mapping
+  };
+}
+```
+
+3. **Add to database schema** (`src/db/schema.sql`):
+```sql
+-- Add new column to servers table
+ALTER TABLE servers ADD COLUMN weather_enabled BOOLEAN DEFAULT true;
+```
+
+#### How Feature Flags Work
+
+The centralized system automatically:
+
+1. **✅ Filters Built-in Tools**: Tools with `requiresFeatureFlag` are filtered by `ToolRegistry.getAvailableTools()`
+2. **✅ Filters MCP Tools**: Function names in `MCP_TOOL_FEATURE_FLAGS` are filtered by `getAvailableToolsWithMCP()`
+3. **✅ Works Across All Providers**: Google, OpenAI, Anthropic providers all use the same filtering
+4. **✅ Centralized Management**: Add new tools to the feature flag mapper, no provider-specific changes needed
+
+#### Testing Feature Flags
+
+Test your feature flag integration:
+
+```bash
+# 1. Set your feature flag to false in database
+UPDATE servers SET weather_enabled = false WHERE server_discord_id = 'your_test_server_id';
+
+# 2. Test in Discord - your tool should NOT appear in function context
+@TomoriBot what tools do you have available?
+
+# 3. Enable the flag
+UPDATE servers SET weather_enabled = true WHERE server_discord_id = 'your_test_server_id';
+
+# 4. Test again - your tool should now appear
+@TomoriBot get weather for Tokyo
 ```
 
 ## Step 5: Integration with Discord Embeds

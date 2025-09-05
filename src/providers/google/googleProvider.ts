@@ -27,10 +27,8 @@ import type { StreamContext } from "../../types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
 import {
 	type ToolStateForContext,
-	getAvailableToolsForContext,
-	ToolRegistry,
+	getAvailableToolsWithMCP,
 } from "../../tools/toolRegistry";
-import type { Tool } from "../../types/tool/interfaces";
 import type { StreamingContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
@@ -156,7 +154,14 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 			};
 
 			// Use context-aware tool availability when streaming context is provided
-			let availableBuiltInTools: Tool[];
+			// Use centralized tool filtering (built-in + MCP with feature flags)
+			const { builtInTools: availableBuiltInTools, mcpFunctionNames, totalCount } = await getAvailableToolsWithMCP(
+				"google",
+				toolStateForContext,
+			);
+
+			// Apply streaming context filtering if available
+			let finalBuiltInTools = availableBuiltInTools;
 			if (streamingContext) {
 				// Create a minimal ToolContext for context-aware availability checking
 				const minimalContext = {
@@ -169,36 +174,32 @@ export class GoogleProvider extends BaseLLMProvider implements LLMProvider {
 					locale: "en-US", // Default locale
 				};
 
-				// Get all tools and filter using context-aware availability
-				const allTools = ToolRegistry.getAllTools();
-				availableBuiltInTools = allTools.filter((tool) => {
-					const isContextAvailable =
-						"isAvailableForContext" in tool &&
-						typeof tool.isAvailableForContext === "function"
-							? tool.isAvailableForContext("google", minimalContext)
-							: tool.isAvailableFor("google");
+				// Apply additional streaming-aware filtering for tools that support it
+				finalBuiltInTools = availableBuiltInTools.filter((tool) => {
+					// Use context-aware availability check if available, otherwise keep the tool
+					const isContextAvailable = 'isAvailableForContext' in tool && typeof tool.isAvailableForContext === 'function'
+						? tool.isAvailableForContext("google", minimalContext)
+						: true; // Keep tool if no context-aware check available
 
-					// Skip feature flag checking for now to simplify the logic
-					// The important part is the YouTube tool context-aware availability
 					return isContextAvailable;
 				});
-			} else {
-				// Use the standard method when no streaming context
-				availableBuiltInTools = getAvailableToolsForContext(
-					"google",
-					toolStateForContext,
+				
+				log.info(
+					`Applied streaming context filtering: ${availableBuiltInTools.length} → ${finalBuiltInTools.length} built-in tools`,
 				);
 			}
 
 			// Use the enhanced tool adapter to get all tools (built-in + MCP)
+			// Pass the pre-filtered MCP function names to ensure centralized filtering
 			const googleAdapter = getGoogleToolAdapter();
 			const allToolsConfig = await googleAdapter.getAllToolsInGoogleFormat(
-				availableBuiltInTools,
+				finalBuiltInTools,
 				tomoriState.server_id,
+				mcpFunctionNames, // Pass filtered MCP functions from centralized filtering
 			);
 
 			log.info(
-				`Google provider tools loaded: ${availableBuiltInTools.length} built-in tools + MCP tools`,
+				`Google provider tools loaded: ${finalBuiltInTools.length} built-in + ${mcpFunctionNames.length} MCP = ${totalCount} total tools (centralized filtering applied)`,
 			);
 
 			return allToolsConfig;

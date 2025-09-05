@@ -287,6 +287,71 @@ CREATE TABLE mcp_api_keys (
 
 ## Tool Registry System
 
+### Centralized Feature Flag Architecture
+
+TomoriBot implements a **centralized feature flag system** that ensures consistent tool filtering across all providers (Google, OpenAI, Anthropic) with zero code duplication.
+
+#### Core Architecture Components
+
+**1. Centralized Feature Flag Mapper** (`src/utils/tools/featureFlagMapper.ts`)
+- **Single source of truth** for all tool → feature flag mappings
+- **Built-in tools** filtered via `requiresFeatureFlag` property
+- **MCP tools** filtered via centralized function name mapping
+- **Provider-agnostic** - works identically across all LLM providers
+
+```typescript
+// Built-in tools (automatically filtered)
+export const BUILTIN_TOOL_FEATURE_FLAGS: Record<string, string> = {
+  select_sticker_for_response: "sticker_usage",
+  remember_this_fact: "self_teaching",
+  brave_web_search: "web_search",
+  // Add new tools here
+};
+
+// MCP tools (centrally managed)
+export const MCP_TOOL_FEATURE_FLAGS: Record<string, string> = {
+  "web-search": "web_search",
+  "felo-search": "web_search", 
+  "fetch-url": "web_search",
+  // Add new MCP functions here
+};
+```
+
+**2. Enhanced ToolRegistry** (`src/tools/toolRegistry.ts`)
+- **`getAvailableToolsWithMCP()`** - New centralized method that filters both built-in AND MCP tools
+- **Unified filtering logic** - Feature flags + provider preferences (Brave vs DuckDuckGo)
+- **Extensible architecture** - Future providers automatically inherit the same filtering
+
+```typescript
+// Centralized filtering for both built-in and MCP tools
+const { builtInTools, mcpFunctionNames, totalCount } = await getAvailableToolsWithMCP(
+  provider, 
+  stateForContext
+);
+// Returns only tools that pass feature flag filtering
+```
+
+#### Tool Filtering Pipeline
+
+```mermaid
+graph TD
+    A[Tool Request] --> B[ToolRegistry.getAvailableToolsWithMCP]
+    B --> C[Filter Built-in Tools by requiresFeatureFlag]
+    B --> D[Filter MCP Tools by Feature Flag Mapping]
+    B --> E[Apply Provider Preferences - Brave vs DuckDuckGo]
+    C --> F[Return Filtered Tool List]
+    D --> F
+    E --> F
+    F --> G[Provider Adapter - Format Conversion Only]
+    G --> H[LLM Context - Only Enabled Tools Visible]
+```
+
+**Key Benefits:**
+- **✅ Zero Provider Duplication**: Add one tool → works across all providers
+- **✅ Consistent Behavior**: Same filtering logic everywhere
+- **✅ Easy Extension**: Add new providers without code changes
+- **✅ Centralized Management**: Single file to manage all feature flags
+
 ### Unified Execution
 
 All tools execute through the same interface:
@@ -298,28 +363,60 @@ const result = await ToolRegistry.executeTool(toolName, args, context);
 
 ### Provider Integration
 
-Tools are automatically converted to provider-specific formats:
+**Updated Provider Architecture** - Providers now use centralized filtering:
 
 ```typescript
-// Get available tools for a provider
+// OLD: Provider-specific filtering (Google only)
 const availableTools = ToolRegistry.getAvailableTools(providerName, context);
-
-// Provider adapters handle format conversion
 const providerTools = await toolAdapter.getAllToolsInProviderFormat(availableTools);
+
+// NEW: Centralized filtering (all providers)
+const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(provider, stateForContext);
+const providerTools = await toolAdapter.getAllToolsInProviderFormat(builtInTools, serverId, mcpFunctionNames);
 ```
 
-### Permission Management
+**For New Provider Implementations:**
+```typescript
+// Any new provider (OpenAI, Anthropic) gets filtering automatically
+export class NewProviderAdapter implements MCPCapableToolAdapter {
+  async getAllToolsInProviderFormat(builtInTools, serverId, allowedMCPFunctions) {
+    // 1. Convert built-in tools to provider format (already filtered)
+    // 2. Include only MCP functions from allowedMCPFunctions (already filtered)
+    // 3. No filtering logic needed - it's all centralized!
+  }
+}
+```
 
-Tools can specify permission requirements:
+### Permission and Feature Flag Management
 
+**Built-in Tools** - Use `requiresFeatureFlag` property:
 ```typescript
 export class AdminTool extends BaseTool {
     requiresPermissions = ["ADMINISTRATOR"];
-    requiresFeatureFlag = "advanced_admin_tools";
+    requiresFeatureFlag = "advanced_admin_tools"; // ← Automatically filtered
     
-    // Tool automatically filtered based on user permissions and server configuration
+    // Tool automatically filtered by ToolRegistry before reaching LLM
 }
 ```
+
+**MCP Tools** - Add to centralized mapping:
+```typescript
+// src/utils/tools/featureFlagMapper.ts
+export const MCP_TOOL_FEATURE_FLAGS: Record<string, string> = {
+  "admin_command": "advanced_admin_tools", // ← Add MCP function here
+  // Automatically filtered by getAvailableToolsWithMCP()
+};
+```
+
+### Adding New Feature Flags
+
+When creating new feature categories:
+
+1. **Add to TomoriConfig interface** (`src/types/db/schema.ts`)
+2. **Update feature flag converter** (`src/utils/tools/featureFlagMapper.ts`)
+3. **Add database column** (`src/db/schema.sql`)
+
+The centralized system automatically handles the rest!
 
 ## Tool Execution Context
 
@@ -357,6 +454,31 @@ interface ToolContext {
 **📊 Consistent Behavior**: Universal error handling, logging, and Discord integration
 
 **🚀 MCP Integration**: External servers work identically to built-in tools
+
+**🏗️ Centralized Feature Flag System**: New TomoriBot architectural highlight
+
+- **Zero Code Duplication**: Feature flag logic centralized in one place
+- **Provider Extensibility**: New providers inherit filtering automatically  
+- **Unified Management**: Both built-in and MCP tools filtered consistently
+- **Easy Maintenance**: Add new tools/flags without touching provider code
+
+## Migration Notes for Contributors
+
+**⚠️ Important for New Provider Development**:
+
+The tool system now uses **centralized filtering**. When implementing new providers:
+
+```typescript
+// ✅ CORRECT: Use centralized filtering
+const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(provider, stateForContext);
+const tools = await adapter.getAllToolsInProviderFormat(builtInTools, serverId, mcpFunctionNames);
+
+// ❌ INCORRECT: Don't implement your own filtering
+const allTools = ToolRegistry.getAllTools(); // Missing feature flag filtering!
+const tools = await adapter.convertTools(allTools); // Will show disabled tools!
+```
+
+**For Existing Implementations**: Google provider has been updated to use the new system. Future OpenAI/Anthropic providers should follow the same pattern.
 
 ---
 

@@ -113,7 +113,7 @@ export async function execute(
 				return {
 					label: provider.charAt(0).toUpperCase() + provider.slice(1),
 					value: provider.toLowerCase(),
-					description: description,
+					description: undefined,
 				};
 			},
 		);

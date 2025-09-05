@@ -223,9 +223,7 @@ export async function execute(
 							locale,
 							"commands.tool.status.field_dialogue_count",
 						),
-						// Assuming dialogue count isn't directly on tomoriState, might need another query or adjustment
-						// For now, let's put a placeholder or 0 if not available
-						value: localizer(locale, "commands.tool.status.not_available"), // Placeholder
+						value: String(tomoriState.sample_dialogues_in.length),
 						inline: true,
 					},
 					{
