@@ -69,13 +69,11 @@ export async function execute(
 	let tomoriState: TomoriState | null = null; // Define outside for catch block
 
 	try {
-		// 1. Defer reply early (Ephemeral)
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 2. Get the new nickname from the command options
+		// 1. Get the new nickname from the command options
 		const newNickname = interaction.options.getString("name", true);
 
-		// 3. Validate nickname length (redundant check, Discord handles this, but good for safety)
+		// 2. Validate nickname length (redundant check, Discord handles this, but good for safety)
+		// Let helper functions manage interaction state
 		if (
 			newNickname.length < NICKNAME_MIN_LENGTH ||
 			newNickname.length > NICKNAME_MAX_LENGTH

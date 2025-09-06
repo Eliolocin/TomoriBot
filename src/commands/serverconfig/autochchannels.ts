@@ -1,6 +1,5 @@
 import {
 	ChannelType,
-	MessageFlags,
 	type ChatInputCommandInteraction,
 	type Client,
 	type SlashCommandSubcommandBuilder,
@@ -96,10 +95,7 @@ export async function execute(
 		const channel = interaction.options.getChannel("channel", true);
 		const action = interaction.options.getString("action", true);
 
-		// Show that we're processing (with ephemeral flag)
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// Validate channel type (should be a text channel)
+		// Validate channel type (should be a text channel) - let helper functions manage interaction state
 		if (channel.type !== ChannelType.GuildText) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.config.autochchannels.invalid_channel_title",

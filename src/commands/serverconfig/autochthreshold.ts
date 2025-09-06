@@ -1,8 +1,7 @@
-import {
-	MessageFlags,
-	type ChatInputCommandInteraction,
-	type Client,
-	type SlashCommandSubcommandBuilder,
+import type {
+	ChatInputCommandInteraction,
+	Client,
+	SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "bun";
 import { loadTomoriState } from "../../utils/db/dbRead";
@@ -93,10 +92,7 @@ Setting to '0' will disable auto-chat
 			return;
 		}
 
-		// Show that we're processing (with ephemeral flag)
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// Load the Tomori state for this server (Rule #17)
+		// Load the Tomori state for this server - let helper functions manage interaction state
 		const tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {

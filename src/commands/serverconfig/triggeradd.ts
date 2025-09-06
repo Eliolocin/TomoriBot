@@ -1,8 +1,7 @@
-import {
-	MessageFlags,
-	type ChatInputCommandInteraction,
-	type Client,
-	type SlashCommandSubcommandBuilder,
+import type {
+	ChatInputCommandInteraction,
+	Client,
+	SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import { localizer } from "../../utils/text/localizer";
@@ -73,10 +72,7 @@ export async function execute(
 			return;
 		}
 
-		// Show that we're processing
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// Load the Tomori state for this server
+		// Load the Tomori state for this server - let helper functions manage interaction state
 		const tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {

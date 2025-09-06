@@ -343,19 +343,28 @@ const handler = async (
 			context,
 		);
 
-		// Reply to user if possible (with defensive error handling)
-		if (!interaction.replied && !interaction.deferred) {
-			try {
-				await replyInfoEmbed(interaction, initialLocale, {
-					titleKey: "general.errors.unknown_error_title",
-					descriptionKey: "general.errors.unknown_error_description",
-					color: ColorCode.ERROR,
-				});
-			} catch (replyError) {
-				log.error("Failed to send error reply in command handler:", replyError, context);
-			}
-		} else {
-			log.info("Skipped error reply - interaction already handled");
+		// Reply to user with enhanced defensive error handling
+		// The improved replyInfoEmbed function can now handle various interaction states more robustly
+		try {
+			// Always attempt to use the helper function - it will handle the interaction state internally
+			await replyInfoEmbed(interaction, initialLocale, {
+				titleKey: "general.errors.unknown_error_title",
+				descriptionKey: "general.errors.unknown_error_description",
+				color: ColorCode.ERROR,
+			});
+		} catch (replyError) {
+			// If helper function completely fails, log comprehensive error information
+			log.error("Command handler error reply failed completely:", {
+				originalError: error,
+				replyError: replyError,
+				interactionState: {
+					id: interaction.id,
+					commandName: interaction.commandName,
+					deferred: interaction.deferred,
+					replied: interaction.replied,
+					user: interaction.user.id,
+				},
+			}, context);
 		}
 	}
 };

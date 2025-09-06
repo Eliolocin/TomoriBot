@@ -8,7 +8,7 @@ import { loadTomoriState } from "../../utils/db/dbRead";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import type { UserRow, ErrorContext } from "../../types/db/schema";
+import type { UserRow, ErrorContext, TomoriState } from "../../types/db/schema";
 import { storeOptApiKey } from "../../utils/security/crypto";
 import { braveWebSearch } from "../../tools/restAPIs/brave/braveSearchService";
 
@@ -59,11 +59,13 @@ export async function execute(
 			titleKey: "general.errors.channel_only_title",
 			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
 
 	let apiKey: string | null = null; // For error context
+	let tomoriState: TomoriState | null = null; // For error context
 
 	try {
 		// 2. Get the API key from options
@@ -79,11 +81,8 @@ export async function execute(
 			return;
 		}
 
-		// 4. Show ephemeral processing message
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
 		// 5. Load the Tomori state for this server
-		const tomoriState = await loadTomoriState(
+		tomoriState = await loadTomoriState(
 			interaction.guild?.id ?? interaction.user.id,
 		);
 		if (!tomoriState) {
@@ -95,44 +94,37 @@ export async function execute(
 			return;
 		}
 
-		// 6. Show validation message
-		await interaction.editReply({
-			content: localizer(locale, "commands.config.braveapiset.validating_key"),
-		});
-
-		// 7. Validate the API key by performing a test search
-		let isValidApiKey = false;
+		// 7. Validate the API key by performing a test search with consistent timing
 		try {
-			const validationResult = await braveWebSearch(
-				{ q: "test" },
-				{ apiKey: apiKey, timeout: 5000 }
-			);
-			
-			if (validationResult.success) {
-				isValidApiKey = true;
-			} else {
+			const validationResult = await Promise.race([
+				braveWebSearch({ q: "test" }, { apiKey: apiKey, timeout: 5000 }),
+				new Promise<{ success: boolean }>((resolve) =>
+					setTimeout(() => resolve({ success: false }), 5000),
+				),
+			]);
+
+			if (!validationResult.success) {
+				// Don't log specific validation failures - they could contain sensitive info
 				log.info(
-					`Brave API key validation failed for server ${tomoriState.server_id}: ${validationResult.error}`,
+					`Brave API key validation failed for server ${tomoriState.server_id}`,
 				);
+				await replyInfoEmbed(interaction, locale, {
+					titleKey: "commands.config.braveapiset.key_validation_failed_title",
+					descriptionKey:
+						"commands.config.braveapiset.key_validation_failed_description",
+					color: ColorCode.ERROR,
+				});
+				return;
 			}
 		} catch (error) {
-			log.error(
-				"Error during Brave API key validation",
-				error as Error,
+			// Same error handling regardless of error type to prevent information leakage
+			log.info(
+				`Brave API key validation error for server ${tomoriState.server_id}`,
 			);
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.braveapiset.validation_error_title",
-				descriptionKey: "commands.config.braveapiset.validation_error_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		// 8. Handle validation failure
-		if (!isValidApiKey) {
-			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.config.braveapiset.key_validation_failed_title",
-				descriptionKey: "commands.config.braveapiset.key_validation_failed_description",
+				descriptionKey:
+					"commands.config.braveapiset.key_validation_failed_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -176,31 +168,21 @@ export async function execute(
 			titleKey: "commands.config.braveapiset.success_title",
 			descriptionKey: "commands.config.braveapiset.success_description",
 			color: ColorCode.SUCCESS,
+			flags: MessageFlags.Ephemeral,
 		});
 	} catch (error) {
 		// 11. Log error with context
-		let serverIdForError: number | null = null;
-		let tomoriIdForError: number | null = null;
-		if (interaction.guild?.id) {
-			const state = await loadTomoriState(
-				interaction.guild?.id ?? interaction.user.id,
-			);
-			serverIdForError = state?.server_id ?? null;
-			tomoriIdForError = state?.tomori_id ?? null;
-		}
-
 		const context: ErrorContext = {
 			userId: userData.user_id,
-			serverId: serverIdForError,
-			tomoriId: tomoriIdForError,
+			serverId: tomoriState?.server_id ?? null,
+			tomoriId: tomoriState?.tomori_id ?? null,
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "config braveapiset",
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id,
 				serviceName: "brave-search",
-				// Do not log API key here
-				apiKeyLength: apiKey?.length, // Log length as a hint
+				// Do not log API key or any hints about its structure
 			},
 		};
 		await log.error(
@@ -210,12 +192,11 @@ export async function execute(
 		);
 
 		// 12. Inform user of unknown error
-		// Use followUp since deferReply was used
-		if (interaction.deferred && !interaction.replied) {
-			await interaction.followUp({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
-			});
-		}
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
 	}
 }

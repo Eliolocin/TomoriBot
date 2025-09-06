@@ -1,4 +1,4 @@
-import type { SlashCommandSubcommandBuilder } from "discord.js";
+import { MessageFlags, type SlashCommandSubcommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import { ColorCode } from "../../utils/misc/logger";
@@ -29,14 +29,17 @@ export async function execute(
 	_userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// Defer reply to acknowledge the command
-	await interaction.deferReply();
-
 	// Send an embed that includes the keyword "refresh" in the description
 	// This keyword is detected by the tomoriChat handler to reset context.
-	await replyInfoEmbed(interaction, locale, {
-		titleKey: "commands.tool.refresh.title",
-		descriptionKey: "commands.tool.refresh.response", // Ensure this locale key contains "refresh"
-		color: ColorCode.SECTION, // Use SECTION color for visual separation
-	});
+	// Let helper functions manage interaction state
+	await replyInfoEmbed(
+		interaction,
+		locale,
+		{
+			titleKey: "commands.tool.refresh.title",
+			descriptionKey: "commands.tool.refresh.response", // Ensure this locale key contains "refresh"
+			color: ColorCode.SECTION, // Use SECTION color for visual separation
+		},
+		MessageFlags.SuppressNotifications,
+	); // Explicitly pass undefined to override ephemeral default
 }

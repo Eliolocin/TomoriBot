@@ -84,10 +84,7 @@ export async function execute(
 		// 2. Get command options
 		const action = interaction.options.getString("action", true);
 
-		// 3. Show ephemeral processing message
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 4. Load the Tomori state for this server
+		// 3. Load the Tomori state for this server - let helper functions manage interaction state
 		const tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {

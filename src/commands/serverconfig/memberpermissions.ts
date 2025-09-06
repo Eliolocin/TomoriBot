@@ -121,10 +121,7 @@ export async function execute(
 		const setAction = interaction.options.getString("set", true);
 		const isEnabled = setAction === "enable";
 
-		// 3. Show ephemeral processing message (Rule #21 modification)
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 4. Load the Tomori state for this server (Rule #17)
+		// 3. Load the Tomori state for this server - let helper functions manage interaction state
 		const tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {

@@ -8,7 +8,7 @@ import { loadTomoriState } from "../../utils/db/dbRead";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import type { UserRow, ErrorContext } from "../../types/db/schema";
+import type { UserRow, ErrorContext, TomoriState } from "../../types/db/schema";
 import { deleteOptApiKey, hasOptApiKey } from "../../utils/security/crypto";
 
 /**
@@ -41,22 +41,23 @@ export async function execute(
 	userData: UserRow,
 	locale: string,
 ): Promise<void> {
+	let tomoriState: TomoriState | null = null; // For error context
+
 	// 1. Ensure command is run in a guild
 	if (!interaction.channel) {
 		await replyInfoEmbed(interaction, userData.language_pref, {
 			titleKey: "general.errors.channel_only_title",
 			descriptionKey: "general.errors.channel_only_description",
 			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
 		});
 		return;
 	}
 
 	try {
-		// 2. Show ephemeral processing message
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		// 3. Load the Tomori state for this server
-		const tomoriState = await loadTomoriState(
+		tomoriState = await loadTomoriState(
 			interaction.guild?.id ?? interaction.user.id,
 		);
 		if (!tomoriState) {
@@ -75,6 +76,7 @@ export async function execute(
 				titleKey: "commands.config.braveapidelete.no_key_title",
 				descriptionKey: "commands.config.braveapidelete.no_key_description",
 				color: ColorCode.WARN,
+				flags: MessageFlags.Ephemeral,
 			});
 			return;
 		}
@@ -116,23 +118,14 @@ export async function execute(
 			titleKey: "commands.config.braveapidelete.success_title",
 			descriptionKey: "commands.config.braveapidelete.success_description",
 			color: ColorCode.SUCCESS,
+			flags: MessageFlags.Ephemeral,
 		});
 	} catch (error) {
 		// 7. Log error with context
-		let serverIdForError: number | null = null;
-		let tomoriIdForError: number | null = null;
-		if (interaction.guild?.id) {
-			const state = await loadTomoriState(
-				interaction.guild?.id ?? interaction.user.id,
-			);
-			serverIdForError = state?.server_id ?? null;
-			tomoriIdForError = state?.tomori_id ?? null;
-		}
-
 		const context: ErrorContext = {
 			userId: userData.user_id,
-			serverId: serverIdForError,
-			tomoriId: tomoriIdForError,
+			serverId: tomoriState?.server_id ?? null,
+			tomoriId: tomoriState?.tomori_id ?? null,
 			errorType: "CommandExecutionError",
 			metadata: {
 				command: "config braveapidelete",
@@ -148,13 +141,11 @@ export async function execute(
 		);
 
 		// 8. Inform user of unknown error
-		// Use followUp since deferReply was used
-		if (interaction.deferred && !interaction.replied) {
-			await interaction.followUp({
-				content: localizer(locale, "general.errors.unknown_error_description"),
-				flags: MessageFlags.Ephemeral,
-			});
-		}
-		// Avoid using replyInfoEmbed here to prevent potential double-reply issues
+		await replyInfoEmbed(interaction, locale, {
+			titleKey: "general.errors.unknown_error_title",
+			descriptionKey: "general.errors.unknown_error_description",
+			color: ColorCode.ERROR,
+			flags: MessageFlags.Ephemeral,
+		});
 	}
 }

@@ -183,10 +183,7 @@ export async function execute(
 		const apiKey = modalResult.values?.api_key;
 		const presetName = modalResult.values?.preset_name;
 
-		// Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// Validate that all required values are present
+		// Validate that all required values are present - let helper functions manage interaction state
 		if (!apiProvider || !apiKey || !presetName) {
 			log.error("Missing required modal values:", {
 				apiProvider: apiProvider || "MISSING",

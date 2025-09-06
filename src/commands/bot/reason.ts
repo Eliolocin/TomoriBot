@@ -41,10 +41,7 @@ export async function execute(
 	_userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	// 1. Defer reply with ephemeral flag
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-	// 2. Ensure command is run in a guild text channel
+	// 1. Ensure command is run in a guild text channel - let helper functions manage interaction state
 	if (!interaction.channel || !("messages" in interaction.channel)) {
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "general.errors.channel_only_title",

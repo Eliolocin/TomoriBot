@@ -1,4 +1,4 @@
-import type { Client, Message, Sticker } from "discord.js";
+import type { Client, Message, Sticker, Embed } from "discord.js";
 import {
 	BaseGuildTextChannel,
 	DMChannel,
@@ -597,6 +597,173 @@ export default async function tomoriChat(
 				return { isTarget: false, type: null };
 			}
 
+			/**
+			 * Process link preview embeds to extract text and image content for AI context.
+			 * Detects automatic Discord embeds generated from links (Twitter, YouTube, articles, etc.)
+			 * @param embed - The Discord embed to process
+			 * @returns Object with extracted content and image information
+			 */
+			function processLinkEmbed(embed: Embed): {
+				isLinkPreview: boolean;
+				textContent: string | null;
+				imageInfo: {
+					url: string;
+					proxyUrl: string;
+					mimeType: string | null;
+					filename: string;
+				} | null;
+				thumbnailInfo: {
+					url: string;
+					proxyUrl: string;
+					mimeType: string | null;
+					filename: string;
+				} | null;
+			} {
+				// 1. Check if this is a link preview embed (has url and some content)
+				if (!embed.url && !embed.title && !embed.description) {
+					return {
+						isLinkPreview: false,
+						textContent: null,
+						imageInfo: null,
+						thumbnailInfo: null,
+					};
+				}
+
+				// 2. Skip system embeds that we already process elsewhere
+				const embedCheck = checkTargetEmbedTitle(embed.title);
+				if (embedCheck.isTarget) {
+					return {
+						isLinkPreview: false,
+						textContent: null,
+						imageInfo: null,
+						thumbnailInfo: null,
+					};
+				}
+
+				// 3. Extract text content (title, description) with simple "Link Content:" prefix
+				let textContent = "";
+				
+				// Build content parts
+				const contentParts: string[] = [];
+				if (embed.title) {
+					contentParts.push(embed.title);
+				}
+				if (embed.description) {
+					// Limit description length to avoid overly long content
+					const maxDescLength = 500;
+					const description =
+						embed.description.length > maxDescLength
+							? `${embed.description.substring(0, maxDescLength)}...`
+							: embed.description;
+					contentParts.push(description);
+				}
+				
+				// Format with simple "Link Content:" prefix if we have any content
+				if (contentParts.length > 0) {
+					textContent = `[Link Content: ${contentParts.join(' - ')}]`;
+				}
+
+				// 4. Process embed image if present
+				let imageInfo = null;
+				if (embed.image?.url) {
+					try {
+						// Generate filename from URL or use generic name
+						const imageUrl = new URL(embed.image.url);
+						let filename = imageUrl.pathname.split("/").pop() || "embed_image";
+
+						// Handle social media image URLs with size suffixes (e.g., :large, :medium, :small)
+						// Twitter: G0EdxONbMAAiJJG.jpg:large -> G0EdxONbMAAiJJG.jpg
+						filename = filename.replace(/:(large|medium|small|orig)$/, "");
+
+						// Determine MIME type based on file extension
+						let mimeType = "image/jpeg"; // Default to JPEG for most social media images
+						const extension = filename.split(".").pop()?.toLowerCase();
+						switch (extension) {
+							case "png":
+								mimeType = "image/png";
+								break;
+							case "gif":
+								mimeType = "image/gif";
+								break;
+							case "webp":
+								mimeType = "image/webp";
+								break;
+							default:
+								mimeType = "image/jpeg";
+								break;
+						}
+
+						// Ensure filename has extension
+						if (!filename.includes(".")) {
+							filename = `${filename}.jpg`;
+						}
+
+						imageInfo = {
+							url: embed.image.url,
+							proxyUrl: embed.image.proxyURL || embed.image.url,
+							mimeType: mimeType,
+							filename: filename,
+						};
+
+					} catch (error) {
+						// Silently handle URL parsing errors for embed images
+					}
+				}
+
+				// 5. Process embed thumbnail if present (and no main image)
+				let thumbnailInfo = null;
+				if (embed.thumbnail?.url && !imageInfo) {
+					try {
+						const thumbnailUrl = new URL(embed.thumbnail.url);
+						let filename =
+							thumbnailUrl.pathname.split("/").pop() || "embed_thumbnail";
+
+						// Handle social media thumbnail URLs with size suffixes
+						filename = filename.replace(/:(large|medium|small|orig)$/, "");
+
+						// Determine MIME type based on file extension
+						let mimeType = "image/jpeg"; // Default to JPEG
+						const extension = filename.split(".").pop()?.toLowerCase();
+						switch (extension) {
+							case "png":
+								mimeType = "image/png";
+								break;
+							case "gif":
+								mimeType = "image/gif";
+								break;
+							case "webp":
+								mimeType = "image/webp";
+								break;
+							default:
+								mimeType = "image/jpeg";
+								break;
+						}
+
+						// Ensure filename has extension
+						if (!filename.includes(".")) {
+							filename = `${filename}.jpg`;
+						}
+
+						thumbnailInfo = {
+							url: embed.thumbnail.url,
+							proxyUrl: embed.thumbnail.proxyURL || embed.thumbnail.url,
+							mimeType: mimeType,
+							filename: filename,
+						};
+
+					} catch (error) {
+						// Silently handle URL parsing errors for embed thumbnails
+					}
+				}
+
+				return {
+					isLinkPreview: true,
+					textContent: textContent.trim() || null,
+					imageInfo,
+					thumbnailInfo,
+				};
+			}
+
 			// 3. Enhanced direct trigger checks (base words or direct reply)
 			let isReplyToBot = false;
 			let isBaseTriggerWord = false;
@@ -788,9 +955,18 @@ export default async function tomoriChat(
 			const simplifiedMessages: SimplifiedMessageForContext[] = []; // Array for structured messages
 			const userListSet = new Set<string>(); // Still useful for fetching user-specific memories/data
 
+			// Find the most recent message with a reference (latest in the array)
+			let latestReferenceMessageIndex = -1;
+			for (let i = relevantMessagesArray.length - 1; i >= 0; i--) {
+				if (relevantMessagesArray[i].reference?.messageId) {
+					latestReferenceMessageIndex = i;
+					break; // Found the most recent one, stop searching
+				}
+			}
+
 			for (const [index, msg] of relevantMessagesArray.entries()) {
 				const authorId = msg.author.id;
-				const isLastMessage = index === relevantMessagesArray.length - 1;
+				//const isLastMessage = index === relevantMessagesArray.length - 1;
 
 				// Variable to store referenced message data for later attachment extraction
 				let referencedMessageData: { message: Message } | undefined;
@@ -804,8 +980,12 @@ export default async function tomoriChat(
 					processedContent = msg.content.slice(2); // Remove "$:" prefix
 				}
 
-				// 3. Add reference context if this is the last message and it's replying to another message
-				if (isLastMessage && msg.reference?.messageId && processedContent) {
+				// 3. Add reference context only for the most recent message with a reference
+				if (
+					index === latestReferenceMessageIndex &&
+					msg.reference?.messageId &&
+					processedContent
+				) {
 					try {
 						const msgReferencedMessage = await channel.messages.fetch(
 							msg.reference.messageId,
@@ -896,9 +1076,9 @@ export default async function tomoriChat(
 				let hasProcessedEmbed = false; // Track if this message contains a processed embed
 
 				// Extract attachments from referenced message if it exists (after arrays are declared)
-				// Check if this is the last message and we have stored reference message data
+				// Check if this is the message that got reference context injection and we have stored reference message data
 				if (
-					isLastMessage &&
+					index === latestReferenceMessageIndex &&
 					typeof referencedMessageData !== "undefined" &&
 					referencedMessageData.message.attachments.size > 0
 				) {
@@ -947,6 +1127,7 @@ export default async function tomoriChat(
 				// Process embeds for target titles that should be included as text content
 				if (msg.embeds.length > 0) {
 					for (const embed of msg.embeds) {
+						// 1. Process system embeds (existing logic) - scan ALL messages including bot messages
 						const embedCheck = checkTargetEmbedTitle(embed.title);
 						if (
 							embedCheck.isTarget &&
@@ -978,6 +1159,46 @@ export default async function tomoriChat(
 								? `${messageContentForLlm}\n${embedContent}`
 								: embedContent;
 							hasProcessedEmbed = true;
+						}
+
+						// 2. Process link preview embeds (new logic) - ONLY for non-bot messages
+						else if (!msg.author.bot) {
+							const linkEmbedData = processLinkEmbed(embed);
+							if (linkEmbedData.isLinkPreview) {
+
+									// Add link embed text content to message if present
+									if (linkEmbedData.textContent) {
+										messageContentForLlm = messageContentForLlm
+											? `${messageContentForLlm}\n${linkEmbedData.textContent}`
+											: linkEmbedData.textContent;
+									}
+
+									// Add embed image to imageAttachments if present
+									if (linkEmbedData.imageInfo) {
+										imageAttachments.push({
+											url: linkEmbedData.imageInfo.url,
+											proxyUrl: linkEmbedData.imageInfo.proxyUrl,
+											mimeType: linkEmbedData.imageInfo.mimeType,
+											filename: linkEmbedData.imageInfo.filename,
+										});
+										log.info(
+											`Added embed image from link preview: ${linkEmbedData.imageInfo.filename}`,
+										);
+									}
+
+									// Add embed thumbnail to imageAttachments if present (and no main image)
+									if (linkEmbedData.thumbnailInfo) {
+										imageAttachments.push({
+											url: linkEmbedData.thumbnailInfo.url,
+											proxyUrl: linkEmbedData.thumbnailInfo.proxyUrl,
+											mimeType: linkEmbedData.thumbnailInfo.mimeType,
+											filename: linkEmbedData.thumbnailInfo.filename,
+										});
+										log.info(
+											`Added embed thumbnail from link preview: ${linkEmbedData.thumbnailInfo.filename}`,
+										);
+									}
+								}
 						}
 					}
 				}

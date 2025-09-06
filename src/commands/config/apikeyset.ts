@@ -164,10 +164,7 @@ export async function execute(
 			return;
 		}
 
-		// Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 7. Basic API key validation
+		// 7. Basic API key validation - let helper functions manage interaction state
 		if (apiKey.length < 10) {
 			await replyInfoEmbed(modalSubmitInteraction, locale, {
 				titleKey: "commands.config.apikeyset.invalid_key_title",
@@ -176,11 +173,6 @@ export async function execute(
 			});
 			return;
 		}
-
-		// 8. Show validation message
-		await modalSubmitInteraction.editReply({
-			content: localizer(locale, "commands.config.apikeyset.validating_key"),
-		});
 
 		// 9. Create provider instance and validate API key
 		let isValid = false;

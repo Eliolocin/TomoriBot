@@ -226,10 +226,7 @@ export async function execute(
 		const selectedIndex = Number.parseInt(modalResult.values![ATTRIBUTE_SELECT_ID], 10);
 		const attributeToRemove = currentAttributes[selectedIndex];
 
-		// Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// Perform the database update
+		// Perform the database update - let helper functions manage interaction state
 		await performAttributeRemoval(
 			tomoriState,
 			attributeToRemove,

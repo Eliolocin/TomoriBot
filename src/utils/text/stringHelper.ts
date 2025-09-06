@@ -1,4 +1,5 @@
 import { HumanizerDegree } from "@/types/db/schema";
+import { log } from "../misc/logger";
 /**
  * Creates a regex pattern for splitting sentences while preserving common abbreviations.
  *
@@ -251,7 +252,7 @@ export function chunkMessage(
 
 	// 2a-2. Second pass: Find URLs in text blocks and treat them as atomic units
 	const urlProcessedBlocks: typeof blocks = [];
-	
+
 	for (const block of blocks) {
 		if (block.type !== "text") {
 			// Keep non-text blocks (code blocks) as is
@@ -260,11 +261,13 @@ export function chunkMessage(
 		}
 
 		const textContent = block.content;
-		const urlRegex = /(https?|ftps?):\/\/[^\s<>\[\](){}'"]+/g;
-		
+		// Modified URL regex to not match URLs that are part of markdown links
+		// Uses negative lookbehind (?<!\]\() to exclude URLs preceded by ](
+		const urlRegex = /(?<!\]\()(https?|ftps?):\/\/[^\s<>\[\](){}'"]+/g;
+
 		let textLastIndex = 0;
 		let urlMatch: RegExpExecArray | null;
-		
+
 		// Find all URLs in this text block
 		// biome-ignore lint/suspicious/noAssignInExpressions: Separate URL match assignment from null check
 		while ((urlMatch = urlRegex.exec(textContent)) !== null) {
@@ -277,7 +280,7 @@ export function chunkMessage(
 					end: block.start + urlMatch.index,
 				});
 			}
-			
+
 			// Add the URL as an atomic unit
 			urlProcessedBlocks.push({
 				content: urlMatch[0],
@@ -285,10 +288,10 @@ export function chunkMessage(
 				start: block.start + urlMatch.index,
 				end: block.start + urlMatch.index + urlMatch[0].length,
 			});
-			
+
 			textLastIndex = urlMatch.index + urlMatch[0].length;
 		}
-		
+
 		// Add any remaining text after the last URL
 		if (textLastIndex < textContent.length) {
 			urlProcessedBlocks.push({
@@ -582,7 +585,10 @@ export function chunkMessage(
 					chunkedMessages.push(block.content);
 				} else {
 					// URL fits, add it to current chunk with appropriate spacing
-					currentChunk += (currentChunk.length > 0 && !currentChunk.endsWith(" ") ? " " : "") + block.content;
+					currentChunk +=
+						(currentChunk.length > 0 && !currentChunk.endsWith(" ")
+							? " "
+							: "") + block.content;
 				}
 				break;
 
@@ -605,20 +611,29 @@ export function chunkMessage(
 					// 3c-ii. Humanizer Degree 3+: Break at newlines AND sentence endings
 					const paragraphs = textToAdd.split(/\n+/);
 
-					for (let paragraph of paragraphs) {
+					for (const paragraph of paragraphs) {
 						if (!paragraph.trim()) continue;
+
+						// Protect markdown links before sentence splitting to prevent URLs from being broken
+						const { protectedText: protectedParagraph, markdownLinks } =
+							detectAndProtectMarkdownLinks(paragraph);
 
 						//chunkedMessages.push(paragraph);
 						// Compensate for ... period deletion by adding one more period
 						// Replace exactly three periods with four periods when they aren't part of a longer sequence
-						paragraph = paragraph.replace(/\.{3}(?!\.)(?!\d)/g, "....");
+						const processedParagraph = protectedParagraph.replace(
+							/\.{3}(?!\.)(?!\d)/g,
+							"....",
+						);
 
 						// Remove all commas from the text
 						// paragraph = paragraph.replace(/,/g, ""); Already in humanizer
 
 						// Split on periods at end of sentences but skip common abbreviations and numbered lists like "1.", "2.", etc.
 						// Also handles Japanese period (。) as a sentence boundary
-						const sentences = paragraph.split(createSentenceSplitRegex());
+						const sentences = processedParagraph.split(
+							createSentenceSplitRegex(),
+						);
 
 						// Then split by sentence endings but keep the punctuation
 						// This looks for punctuation followed by end of string
@@ -652,6 +667,12 @@ export function chunkMessage(
 							}
 
 							if (!processedSentence) continue;
+
+							// Restore markdown links after sentence processing
+							processedSentence = restoreMarkdownLinksFromPlaceholders(
+								processedSentence,
+								markdownLinks,
+							);
 
 							if (currentChunk.length > 0) {
 								chunkedMessages.push(currentChunk);
@@ -1003,29 +1024,29 @@ function detectAndProtectURLs(text: string): {
 	urls: string[];
 } {
 	const urls: string[] = [];
-	
+
 	// Universal URL regex: matches http(s), ftp(s) protocols
 	// Stops at whitespace and common delimiters: <>[](){} and quotes
 	// Handles trailing punctuation that's likely not part of the URL
 	const urlRegex = /(https?|ftps?):\/\/[^\s<>\[\](){}'"]+/g;
-	
+
 	const protectedText = text.replace(urlRegex, (match) => {
 		// Handle trailing punctuation that's likely not part of the URL
 		// Common sentence endings: period, comma, semicolon at the very end
 		let url = match;
-		let trailingPunct = '';
-		
+		let trailingPunct = "";
+
 		// Check if URL ends with punctuation that should be excluded
 		const trailingPunctRegex = /[.,;]$/;
 		if (trailingPunctRegex.test(url)) {
 			trailingPunct = url.slice(-1);
 			url = url.slice(0, -1);
 		}
-		
+
 		urls.push(url);
 		return `__URL_${urls.length - 1}__${trailingPunct}`;
 	});
-	
+
 	return { protectedText, urls };
 }
 
@@ -1037,13 +1058,91 @@ function detectAndProtectURLs(text: string): {
  */
 function restoreURLsFromPlaceholders(text: string, urls: string[]): string {
 	let restoredText = text;
-	
+
 	// Restore in reverse order to avoid index issues
 	for (let i = urls.length - 1; i >= 0; i--) {
 		const placeholder = `__URL_${i}__`;
-		restoredText = restoredText.replace(new RegExp(escapeRegExp(placeholder), 'g'), urls[i]);
+		restoredText = restoredText.replace(
+			new RegExp(escapeRegExp(placeholder), "g"),
+			urls[i],
+		);
 	}
-	
+
+	return restoredText;
+}
+
+/**
+ * Universal markdown link detection and protection function
+ * Detects markdown links in the format [text](url) and replaces them with placeholders
+ * to protect from sentence splitting and other text processing operations
+ * @param text - Text that may contain markdown links
+ * @returns Object with text containing placeholders and array of original markdown links
+ */
+function detectAndProtectMarkdownLinks(text: string): {
+	protectedText: string;
+	markdownLinks: string[];
+} {
+	const markdownLinks: string[] = [];
+
+	// Comprehensive markdown link regex that handles:
+	// - Complex URLs with query parameters, fragments, etc.
+	// - Text with various characters including Japanese, special chars, spaces
+	// - Nested parentheses in URLs (common in Wikipedia links)
+	// - URLs with or without protocols
+	const markdownLinkRegex = /\[([^\]]*)\]\(([^)]+(?:\([^)]*\)[^)]*)*)\)/g;
+
+	const protectedText = text.replace(markdownLinkRegex, (match) => {
+		markdownLinks.push(match);
+		const placeholder = `__MARKDOWN_LINK_${markdownLinks.length - 1}__`;
+		log.info(
+			`Markdown Link Protection: Protected "${match}" with placeholder "${placeholder}"`,
+		);
+		return placeholder;
+	});
+
+	if (markdownLinks.length > 0) {
+		log.info(
+			`Markdown Link Protection: Protected ${markdownLinks.length} markdown link(s) in text`,
+		);
+	}
+
+	return { protectedText, markdownLinks };
+}
+
+/**
+ * Restore markdown links from placeholders back to their original form
+ * @param text - Text containing markdown link placeholders
+ * @param markdownLinks - Array of original markdown links
+ * @returns Text with markdown links restored
+ */
+function restoreMarkdownLinksFromPlaceholders(
+	text: string,
+	markdownLinks: string[],
+): string {
+	let restoredText = text;
+
+	// Restore in reverse order to avoid index issues
+	for (let i = markdownLinks.length - 1; i >= 0; i--) {
+		const placeholder = `__MARKDOWN_LINK_${i}__`;
+		const originalLink = markdownLinks[i];
+		restoredText = restoredText.replace(
+			new RegExp(escapeRegExp(placeholder), "g"),
+			originalLink,
+		);
+
+		if (restoredText.includes(originalLink)) {
+			log.info(
+				`Markdown Link Restoration: Restored placeholder "${placeholder}" to "${originalLink}"`,
+			);
+		}
+	}
+
+	if (markdownLinks.length > 0) {
+		log.info(
+			`Markdown Link Restoration: Restored ${markdownLinks.length} markdown link(s) from placeholders`,
+		);
+	}
+
 	return restoredText;
 }
 
@@ -1443,7 +1542,7 @@ const INTERNET_EXPRESSIONS = new Set([
 export function humanizeString(text: string): string {
 	// 1. First, protect all URLs from any transformations
 	const { protectedText: urlProtectedText, urls } = detectAndProtectURLs(text);
-	
+
 	// 2. Store code blocks and replace with placeholders
 	const codeBlocks: string[] = [];
 	const inlineCode: string[] = [];

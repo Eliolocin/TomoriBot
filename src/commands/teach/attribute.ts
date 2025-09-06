@@ -153,10 +153,7 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' guarantees interaction
 		const modalSubmitInteraction = modalResult.interaction!;
 
-		// ADD THIS LINE: Defer the modal submission interaction
-		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 8. Get input from modal
+		// 8. Get input from modal - let helper functions manage interaction state
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newAttribute = modalResult.values![ATTRIBUTE_INPUT_ID];
 

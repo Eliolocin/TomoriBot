@@ -2,7 +2,6 @@ import type { SlashCommandSubcommandBuilder, EmbedField } from "discord.js";
 import {
 	type ChatInputCommandInteraction,
 	type Client,
-	MessageFlags,
 	TextChannel,
 } from "discord.js";
 import {
@@ -75,9 +74,7 @@ export async function execute(
 	_userData: UserRow,
 	locale: string,
 ): Promise<void> {
-	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-	// Handle both guild and DM contexts - use user ID as server ID for DMs
+	// Handle both guild and DM contexts - use user ID as server ID for DMs - let helper functions manage interaction state
 	const serverDiscId = interaction.guildId ?? interaction.user.id;
 	const statusType = interaction.options.getString("type", true); // Required option
 

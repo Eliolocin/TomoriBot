@@ -147,10 +147,7 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
 		const selectedPresetName = modalResult.values![PRESET_SELECT_ID];
 
-		// Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 10. Find the selected preset
+		// 10. Find the selected preset - let helper functions manage interaction state
 		const selectedPreset = presets.find(
 			(preset: TomoriPresetRow) =>
 				preset.tomori_preset_name === selectedPresetName,

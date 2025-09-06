@@ -1,6 +1,6 @@
 import type { SlashCommandSubcommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
+import { EmbedBuilder } from "discord.js";
 import { ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import type { UserRow } from "../../types/db/schema";
@@ -21,22 +21,24 @@ export async function execute(
 	locale: string,
 ): Promise<void> {
 	// Use userData for locale preference
+	// Special case: defer needed for timing measurement, then use helper for response
 	await interaction.deferReply();
 
 	const reply = await interaction.fetchReply();
 	const responseTime = reply.createdTimestamp - interaction.createdTimestamp;
 	const discordPing = client.ws.ping;
 
+	// Now use editReply directly since we already deferred - avoid helper conflict
 	const isLaggy = responseTime > 250;
-	await replyInfoEmbed(interaction, locale, {
-		titleKey: "commands.tool.ping.description",
-		descriptionKey: isLaggy
+	const embed = new EmbedBuilder()
+		.setColor(isLaggy ? ColorCode.WARN : ColorCode.SUCCESS)
+		.setTitle(localizer(locale, "commands.tool.ping.description"))
+		.setDescription(localizer(locale, isLaggy
 			? "commands.tool.ping.response_slow"
-			: "commands.tool.ping.response_fast",
-		descriptionVars: {
-			response_time: responseTime,
-			discord_response: discordPing,
-		},
-		color: isLaggy ? ColorCode.ERROR : ColorCode.SUCCESS,
-	});
+			: "commands.tool.ping.response_fast", {
+				response_time: responseTime,
+				discord_response: discordPing,
+			}));
+
+	await interaction.editReply({ embeds: [embed] });
 }

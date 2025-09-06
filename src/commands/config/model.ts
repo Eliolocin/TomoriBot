@@ -134,10 +134,7 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
 		const selectedModelCodename = modalResult.values![MODEL_SELECT_ID];
 
-		// Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 7. Find the selected model details (including llm_id) by codename
+		// 7. Find the selected model details (including llm_id) by codename - let helper functions manage interaction state
 		selectedModel =
 			availableModels.find(
 				(model) => model.llm_codename === selectedModelCodename,

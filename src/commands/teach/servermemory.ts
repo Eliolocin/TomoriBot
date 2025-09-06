@@ -174,10 +174,9 @@ export async function execute(
 			return;
 		}
 
-		// 9. Capture and immediately defer the modal submission interaction (Rule 25)
+		// 9. Capture the modal submission interaction - let helper functions manage interaction state
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' guarantees interaction
 		modalSubmitInteraction = modalResult.interaction!;
-		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
 		// 10. Get input from modal
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value

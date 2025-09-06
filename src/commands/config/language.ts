@@ -92,10 +92,7 @@ export async function execute(
 			return;
 		}
 
-		// 4. Show ephemeral processing message (Rule #21 modification)
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 5. Check if this is the same as the current language preference
+		// 4. Check if this is the same as the current language preference - let helper functions manage interaction state
 		const currentLanguage = userData.language_pref ?? DEFAULT_LANGUAGE;
 		if (languageValue === currentLanguage) {
 			await replyInfoEmbed(interaction, locale, {

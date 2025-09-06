@@ -493,6 +493,7 @@ export async function promptWithModal(
 
 /**
  * @description Shows a simple info/status embed without any interactive components.
+ * Handles interaction state management defensively to prevent acknowledgment conflicts.
  * @param interaction The interaction to show the embed for
  * @param locale The locale for localization
  * @param options Configuration for the embed
@@ -504,10 +505,11 @@ export async function replyInfoEmbed(
 		| ModalSubmitInteraction,
 	locale: string,
 	options: StandardEmbedOptions,
-	flags?:
+	flags:
 		| MessageFlags.SuppressEmbeds
 		| MessageFlags.Ephemeral
-		| MessageFlags.SuppressNotifications,
+		| MessageFlags.SuppressNotifications
+		| undefined = MessageFlags.Ephemeral,
 ): Promise<void> {
 	// 1. Add DM footer automatically for tomori_not_setup errors in DM context
 	const isDMContext = !interaction.guild;
@@ -524,22 +526,70 @@ export async function replyInfoEmbed(
 	// 2. Build the embed using the shared helper for consistency
 	const embed = createStandardEmbed(locale, finalOptions);
 
+	// 3. Defensive interaction state checking
+	const interactionState = {
+		deferred: interaction.deferred,
+		replied: interaction.replied,
+		id: interaction.id,
+	};
+
+	log.info(`replyInfoEmbed interaction state: ${JSON.stringify(interactionState)}`);
+
 	try {
 		if (interaction.deferred || interaction.replied) {
+			// Interaction has already been acknowledged, use editReply
 			await interaction.editReply({ embeds: [embed], components: [] });
 		} else {
+			// Interaction hasn't been acknowledged, use reply
 			await interaction.reply({ embeds: [embed], components: [], flags });
 		}
 	} catch (error) {
-		log.error("Failed to show info embed:", error);
+		log.warn("Failed to show info embed via primary method:", error);
+		
+		// Enhanced fallback logic with more specific error handling
 		try {
-			await interaction.followUp({
-				embeds: [embed],
-				components: [],
-				flags,
+			// Only attempt followUp if the interaction was actually replied to successfully
+			// Check if the error suggests the interaction wasn't properly replied to
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			
+			if (errorMessage.includes("has already been acknowledged")) {
+				// Interaction was acknowledged but editReply failed - try followUp
+				log.info("Attempting followUp due to acknowledgment conflict");
+				await interaction.followUp({
+					embeds: [embed],
+					components: [],
+					flags: flags || MessageFlags.Ephemeral, // Default to ephemeral for followUps
+				});
+			} else if (errorMessage.includes("not been sent or deferred")) {
+				// Interaction wasn't properly acknowledged - try reply without flags first
+				log.info("Attempting basic reply due to no prior acknowledgment");
+				await interaction.reply({ 
+					embeds: [embed], 
+					components: [], 
+					flags: MessageFlags.Ephemeral // Force ephemeral for fallback
+				});
+			} else {
+				// Other error - try followUp as last resort
+				log.info("Attempting followUp as last resort fallback");
+				await interaction.followUp({
+					embeds: [embed],
+					components: [],
+					flags: flags || MessageFlags.Ephemeral,
+				});
+			}
+		} catch (fallbackError) {
+			// All methods failed - log comprehensive error details
+			log.error("All interaction methods failed for replyInfoEmbed:", {
+				originalError: error,
+				fallbackError: fallbackError,
+				interactionState: {
+					id: interaction.id,
+					type: interaction.type,
+					deferred: interaction.deferred,
+					replied: interaction.replied,
+				},
+				embedTitle: options.titleKey,
 			});
-		} catch (followUpError) {
-			log.error("Failed to follow up with info embed:", followUpError);
 		}
 	}
 }
@@ -547,6 +597,7 @@ export async function replyInfoEmbed(
 /**
  * @description Shows a summary embed with multiple fields, organized and localized.
  * Useful for displaying configuration summaries, help information, etc.
+ * Handles interaction state management defensively to prevent acknowledgment conflicts.
  * @param interaction The interaction to show the embed for
  * @param locale The locale for localization
  * @param options Configuration for the summary embed and its fields
@@ -558,25 +609,70 @@ export async function replySummaryEmbed(
 		| ModalSubmitInteraction,
 	locale: string,
 	options: SummaryEmbedOptions,
+	flags:
+		| MessageFlags.SuppressEmbeds
+		| MessageFlags.Ephemeral
+		| MessageFlags.SuppressNotifications
+		| undefined = MessageFlags.Ephemeral,
 ): Promise<void> {
 	const embed = createSummaryEmbed(locale, options);
+
+	// Defensive interaction state checking
+	const interactionState = {
+		deferred: interaction.deferred,
+		replied: interaction.replied,
+		id: interaction.id,
+	};
+
+	log.info(`replySummaryEmbed interaction state: ${JSON.stringify(interactionState)}`);
 
 	try {
 		if (interaction.deferred || interaction.replied) {
 			await interaction.editReply({ embeds: [embed], components: [] });
 		} else {
-			await interaction.reply({ embeds: [embed], components: [] });
+			await interaction.reply({ embeds: [embed], components: [], flags });
 		}
 	} catch (error) {
-		log.error("Failed to show summary embed:", error);
+		log.warn("Failed to show summary embed via primary method:", error);
+		
+		// Enhanced fallback logic matching replyInfoEmbed
 		try {
-			await interaction.followUp({
-				embeds: [embed],
-				components: [],
-				flags: MessageFlags.Ephemeral,
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			
+			if (errorMessage.includes("has already been acknowledged")) {
+				log.info("Attempting followUp due to acknowledgment conflict");
+				await interaction.followUp({
+					embeds: [embed],
+					components: [],
+					flags: flags || MessageFlags.Ephemeral,
+				});
+			} else if (errorMessage.includes("not been sent or deferred")) {
+				log.info("Attempting basic reply due to no prior acknowledgment");
+				await interaction.reply({ 
+					embeds: [embed], 
+					components: [], 
+					flags: flags || MessageFlags.Ephemeral 
+				});
+			} else {
+				log.info("Attempting followUp as last resort fallback");
+				await interaction.followUp({
+					embeds: [embed],
+					components: [],
+					flags: flags || MessageFlags.Ephemeral,
+				});
+			}
+		} catch (fallbackError) {
+			log.error("All interaction methods failed for replySummaryEmbed:", {
+				originalError: error,
+				fallbackError: fallbackError,
+				interactionState: {
+					id: interaction.id,
+					type: interaction.type,
+					deferred: interaction.deferred,
+					replied: interaction.replied,
+				},
+				embedTitle: options.titleKey,
 			});
-		} catch (followUpError) {
-			log.error("Failed to follow up with summary embed:", followUpError);
 		}
 	}
 }

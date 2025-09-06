@@ -103,14 +103,14 @@ export default {
 			image_search_title: `🔍 Searching for \`{query}\` images...`,
 			video_search_title: `🔍 Searching for \`{query}\` videos...`,
 			news_search_title: `🔍 Searching for \`{query}\` in the news...`,
-			disclaimer_description: `AI-Generated Responses and Search Results may be inaccurate or incomplete, **please double-check important information**`,
+			disclaimer_description: `AI-Generated Responses and Search Results may be inaccurate or incomplete, **please double-check important information**.`,
 		},
 
 		// YouTube video processing messages
 		video: {
 			youtube_processing_title: "👁️ Watching YouTube Video...",
 			youtube_processing_description:
-				"I'm currently watching the YouTube video: __{video_url}__. This may take a moment depending on the video length.",
+				"I'm currently watching the YouTube video: {video_url}. This may take a moment depending on the video length.",
 		},
 
 		// New: Stream specific error messages

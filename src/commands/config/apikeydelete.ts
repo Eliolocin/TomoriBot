@@ -49,10 +49,7 @@ export async function execute(
 	}
 
 	try {
-		// 2. Show ephemeral processing message (Rule #21 modification)
-		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 3. Load the Tomori state for this server (Rule #17)
+		// 2. Load the Tomori state for this server - let helper functions manage interaction state
 		const tomoriState = await loadTomoriState(
 			interaction.guild?.id ?? interaction.user.id,
 		);

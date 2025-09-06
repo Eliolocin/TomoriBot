@@ -142,12 +142,7 @@ export async function execute(
 		const selectedIndexNum = Number.parseInt(selectedIndex, 10);
 		const wordToRemove = currentTriggerWords[selectedIndexNum];
 
-		// 10. Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({
-			flags: MessageFlags.Ephemeral,
-		});
-
-		// 11. Update the config in the database using direct SQL
+		// 10. Update the config in the database using direct SQL - let helper functions manage interaction state
 		const [updatedRow] = await sql`
 			UPDATE tomori_configs
 			SET trigger_words = array_remove(trigger_words, ${wordToRemove})

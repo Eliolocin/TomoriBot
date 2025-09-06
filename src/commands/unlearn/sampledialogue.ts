@@ -264,12 +264,7 @@ export async function execute(
 
 		const selectedIndex = Number.parseInt(selectedIndexStr);
 
-		// 11. Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({
-			flags: MessageFlags.Ephemeral,
-		});
-
-		// 12. Perform the database update using the helper function
+		// 11. Perform the database update using the helper function - let helper manage interaction state
 		await performSampleDialogueRemoval(
 			tomoriState,
 			selectedIndex,

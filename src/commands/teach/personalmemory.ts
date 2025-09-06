@@ -139,9 +139,8 @@ export async function execute(
 		// 7. Capture and immediately defer the modal submission interaction (Rule 25)
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' guarantees interaction
 		modalSubmitInteraction = modalResult.interaction!;
-		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		// 8. Get input from modal
+		// 8. Get input from modal - let helper functions manage interaction state
 		// biome-ignore lint/style/noNonNullAssertion: Outcome 'submit' + required=true guarantees value
 		const newMemory = modalResult.values![MEMORY_INPUT_ID];
 

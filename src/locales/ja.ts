@@ -102,14 +102,14 @@ export default {
 			image_search_title: `🔍 \`{query}\` の画像を検索中...`,
 			video_search_title: `🔍 \`{query}\` の動画を検索中...`,
 			news_search_title: `🔍 ニュースで \`{query}\` を検索中...`,
-			disclaimer_description: `AIによる生成応答と検索結果は不正確または不完全な場合があります。**重要な情報は再確認してください**`,
+			disclaimer_description: `AIによる生成応答と検索結果は不正確または不完全な場合があります。**重要な情報は再確認してください**。`,
 		},
 
 		// YouTube動画処理メッセージ
 		video: {
 			youtube_processing_title: "👁️ YouTube動画を視聴中...",
 			youtube_processing_description:
-				"現在、YouTube動画を視聴しています: __{video_url}__。動画の長さに応じて、少し時間がかかる場合があります。",
+				"現在、YouTube動画を視聴しています: {video_url}。動画の長さに応じて、少し時間がかかる場合があります。",
 		},
 
 		// 新規: ストリーム固有のエラーメッセージ

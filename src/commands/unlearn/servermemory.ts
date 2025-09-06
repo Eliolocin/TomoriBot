@@ -258,23 +258,17 @@ export async function execute(
 		// Get the full memory from the original array
 		const selectedMemory = memories[Number.parseInt(selectedIndex, 10)];
 
-		// Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({
-			flags: MessageFlags.Ephemeral,
-		});
-
 		// Validate the selected index
 		if (!selectedMemory) {
-			await modalSubmitInteraction.editReply({
-				content: localizer(
-					locale,
-					"commands.unlearn.servermemory.memory_not_found",
-				),
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.unlearn.servermemory.memory_not_found",
+				color: ColorCode.ERROR,
 			});
 			return;
 		}
 
-		// Perform the database update using the helper function
+		// Perform the database update using the helper function - let helper manage interaction state
 		await performServerMemoryRemoval(
 			tomoriState,
 			selectedMemory,

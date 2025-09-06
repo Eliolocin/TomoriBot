@@ -54,34 +54,38 @@ export async function execute(
 	try {
 		// 1. Use replySummaryEmbed to show structured help info (Rule 19)
 		// Help commands are typically non-ephemeral so everyone can see the info.
-		await replySummaryEmbed(interaction, locale, {
-			// Use consistent key structure
-			titleKey: `commands.help.${HELP_TOPIC_NAME}.title`,
-			descriptionKey: `commands.help.${HELP_TOPIC_NAME}.description`,
-			color: ColorCode.INFO, // Rule 12: Use INFO color for help
-			fields: [
-				// TODO: Add 1-5 fields explaining the feature.
-				// Use localizer() directly for the 'value' as it might contain formatting.
-				{
-					nameKey: `commands.help.${HELP_TOPIC_NAME}.field_1_name`, // Key for field name
-					value: localizer(
-						locale,
-						`commands.help.${HELP_TOPIC_NAME}.field_1_value`,
-					), // Localized value
-					inline: false, // Usually false for help text blocks
-				},
-				{
-					nameKey: `commands.help.${HELP_TOPIC_NAME}.field_2_name`,
-					value: localizer(
-						locale,
-						`commands.help.${HELP_TOPIC_NAME}.field_2_value`,
-					),
-					inline: false,
-				},
-				// Add more fields as needed...
-			],
-			// No flags needed for non-ephemeral reply by default
-		});
+		await replySummaryEmbed(
+			interaction,
+			locale,
+			{
+				// Use consistent key structure
+				titleKey: `commands.help.${HELP_TOPIC_NAME}.title`,
+				descriptionKey: `commands.help.${HELP_TOPIC_NAME}.description`,
+				color: ColorCode.INFO, // Rule 12: Use INFO color for help
+				fields: [
+					// TODO: Add 1-5 fields explaining the feature.
+					// Use localizer() directly for the 'value' as it might contain formatting.
+					{
+						nameKey: `commands.help.${HELP_TOPIC_NAME}.field_1_name`, // Key for field name
+						value: localizer(
+							locale,
+							`commands.help.${HELP_TOPIC_NAME}.field_1_value`,
+						), // Localized value
+						inline: false, // Usually false for help text blocks
+					},
+					{
+						nameKey: `commands.help.${HELP_TOPIC_NAME}.field_2_name`,
+						value: localizer(
+							locale,
+							`commands.help.${HELP_TOPIC_NAME}.field_2_value`,
+						),
+						inline: false,
+					},
+				],
+				// Non-ephemeral by default
+			},
+			MessageFlags.SuppressNotifications,
+		); // Explicitly pass undefined to override ephemeral default
 	} catch (error) {
 		// Rule 22: Log error with context
 		const context: ErrorContext = {

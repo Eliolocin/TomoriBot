@@ -228,12 +228,7 @@ export async function execute(
 		// Get the full memory content from the original array
 		const selectedMemory = currentMemories[Number.parseInt(selectedIndex, 10)];
 
-		// 10. Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({
-			flags: MessageFlags.Ephemeral,
-		});
-
-		// 11. Perform the database update using the helper function
+		// 10. Perform the database update using the helper function - let helper manage interaction state
 		await performPersonalMemoryRemoval(
 			selectedMemory,
 			userData,

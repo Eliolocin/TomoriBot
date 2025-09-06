@@ -154,20 +154,16 @@ export async function execute(
 		const selectedValue = modalResult.values![HUMANIZER_SELECT_ID];
 		const humanizerValue = Number.parseInt(selectedValue, 10);
 
-		// Defer the reply for the modal submission
-		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 5. Validate the parsed value (additional safety check)
+		// 5. Validate the parsed value (additional safety check) - let helper functions manage interaction state
 		if (
 			Number.isNaN(humanizerValue) ||
 			humanizerValue < HUMANIZER_MIN ||
 			humanizerValue > HUMANIZER_MAX
 		) {
-			await modalSubmitInteraction.editReply({
-				content: localizer(
-					locale,
-					"commands.config.humanizerdegree.invalid_value_description",
-				),
+			await replyInfoEmbed(modalSubmitInteraction, locale, {
+				titleKey: "general.errors.operation_failed_title",
+				descriptionKey: "commands.config.humanizerdegree.invalid_value_description",
+				color: ColorCode.ERROR,
 			});
 			return;
 		}

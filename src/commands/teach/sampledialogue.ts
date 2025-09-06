@@ -158,10 +158,7 @@ export async function execute(
 		// biome-ignore lint/style/noNonNullAssertion: Modal submit guarantees interaction exists
 		const modalSubmitInteraction = modalResult.interaction!;
 
-		// ADD THIS LINE: Immediately defer the modal submission interaction (Rule 25)
-		await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-
-		// 6. Get inputs from modal
+		// 6. Get inputs from modal - let helper functions manage interaction state
 		// biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees values exist
 		const userInput = modalResult.values![USER_INPUT_ID];
 		// biome-ignore lint/style/noNonNullAssertion: Modal submit + required=true guarantees values exist

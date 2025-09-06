@@ -10,6 +10,7 @@ import {
 	MemoryTool,
 	YouTubeVideoTool,
 	PeekProfilePictureTool,
+	PinMessageTool,
 } from "./functionCalls";
 import {
 	BraveWebSearchTool,
@@ -37,6 +38,7 @@ export function initializeTools(): void {
 			new MemoryTool(),
 			new YouTubeVideoTool(),
 			new PeekProfilePictureTool(),
+			new PinMessageTool(),
 			// HTTP-based Brave Search tools (replaces MCP implementation)
 			new BraveWebSearchTool(),
 			new BraveImageSearchTool(),
