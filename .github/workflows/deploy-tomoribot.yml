@@ -240,25 +240,25 @@ jobs:
           if ($releaseNotesPath) {
             $assetFolder = $versionFolder
             $imageName = Find-ImageFile $versionFolder
-            echo "✅ Using version-specific assets from $versionFolder"
-            echo "   📝 Release notes: $(Split-Path -Leaf $releaseNotesPath)"
-            echo "   🖼️ Image: $imageName"
+            echo "Using version-specific assets from $versionFolder"
+            echo "  Release notes: $(Split-Path -Leaf $releaseNotesPath)"
+            echo "  Image: $imageName"
           } else {
             $releaseNotesPath = Find-MarkdownFile $defaultFolder
             if ($releaseNotesPath) {
               $assetFolder = $defaultFolder
               $imageName = Find-ImageFile $defaultFolder
-              echo "⚠️ Version-specific folder not found, using default assets from $defaultFolder"
-              echo "   📝 Release notes: $(Split-Path -Leaf $releaseNotesPath)"
-              echo "   🖼️ Image: $imageName"
+              echo "Version-specific folder not found, using default assets from $defaultFolder"
+              echo "  Release notes: $(Split-Path -Leaf $releaseNotesPath)"
+              echo "  Image: $imageName"
             } else {
-              echo "❌ No .md files found in either $versionFolder or $defaultFolder"
+              echo "No .md files found in either $versionFolder or $defaultFolder"
               exit 1
             }
           }
           
           if (-not $imageName) {
-            echo "⚠️ No image file found, Discord notification will be text-only"
+            echo "No image file found, Discord notification will be text-only"
             $imageName = ""
           }
           
@@ -277,7 +277,7 @@ jobs:
           echo "asset-folder=$assetFolder" >> $env:GITHUB_OUTPUT
           echo "image-name=$imageName" >> $env:GITHUB_OUTPUT
           
-          echo "📝 Release notes processed successfully!"
+          echo "Release notes processed successfully!"
 
       - name: Export Docker image
         run: |
@@ -323,12 +323,10 @@ jobs:
             echo "Preparing success notification for Discord..."
             $status = "SUCCESS"
             $color = "3066993"  # Green
-            $emoji = "🎉"
           } else {
             echo "Preparing failure notification for Discord..."
             $status = "FAILED"
             $color = "15158332"  # Red  
-            $emoji = "💥"
           }
           
           # Read and process release notes for Discord
@@ -351,14 +349,14 @@ jobs:
           
           if ($imageName) {
             $imageUrl = "https://github.com/${{ github.repository }}/raw/main/.github/release/$assetFolder/$imageName"
-            echo "🖼️ Image URL: $imageUrl"
+            echo "Image URL: $imageUrl"
           } else {
-            echo "📝 Text-only Discord notification (no image found)"
+            echo "Text-only Discord notification (no image found)"
           }
           
           # Construct Discord webhook payload  
           $embed = @{
-            title = "$emoji TomoriBot v$version - Deployment $status"
+            title = "TomoriBot v$version - Deployment $status"
             description = $releaseNotes
             color = [int]$color
             fields = @(
@@ -384,7 +382,7 @@ jobs:
               }
             )
             footer = @{
-              text = "Deployed via GitHub Actions 🤖"
+              text = "Deployed via GitHub Actions"
             }
             timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
           }

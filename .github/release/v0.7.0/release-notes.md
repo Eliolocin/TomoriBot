@@ -1,5 +1,5 @@
 ## Post-~~Lobotomy~~ Refactor Thoughtless Nui Edition
-![TomoriBot Banner](.github\release\gemini-2.5-flash-image-preview (nano-banana)_Generate_this_anime_.png)
+![Release Picture](https://github.com/{REPO_OWNER}/{REPO_NAME}/raw/main/.github/release/v0.7.0/tomonui.png)
 ###  [TomoriBot Invite Link](https://discord.com/oauth2/authorize?client_id=841644102059556915)
 Please do not store sensitive memories into TomoriBot. **All API keys are encrypted but not memories.** 
 
@@ -31,4 +31,4 @@ Recommended to self-host your own TomoriBot in case I get phished by an e-mail c
 - Slash command modals now have descriptions and string selects
 ### Refactored
 - Alot
-- Tomori-chan preset personality is no longer tsundere to remove overlap with Tomori-san
+- Tomori-chan preset personality is no longer tsundere to remove overlap with Tomori-san (Tomori-chan is supposed to be the canon)
