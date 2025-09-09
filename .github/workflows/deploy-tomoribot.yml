@@ -5,15 +5,89 @@ on:
   workflow_dispatch:  # Manual trigger
 
 jobs:
-  deploy:
+  # 🔐 SECRETS VALIDATION
+  validate-secrets:
     runs-on: self-hosted
+    steps:
+      - name: Validate required secrets
+        run: |
+          echo "Validating required secrets..."
+          $missingSecrets = @()
+          
+          # Check required secrets
+          if ("${{ secrets.DISCORD_TOKEN }}" -eq "") { $missingSecrets += "DISCORD_TOKEN" }
+          if ("${{ secrets.CRYPTO_SECRET }}" -eq "") { $missingSecrets += "CRYPTO_SECRET" }
+          if ("${{ secrets.POSTGRES_PASSWORD }}" -eq "") { $missingSecrets += "POSTGRES_PASSWORD" }
+          if ("${{ secrets.GOOGLE_API_KEY }}" -eq "") { $missingSecrets += "GOOGLE_API_KEY" }
+          if ("${{ secrets.DEEPL_KEY }}" -eq "") { $missingSecrets += "DEEPL_KEY" }
+          
+          # Check optional secrets
+          $optionalSecrets = @()
+          if ("${{ secrets.DISCORD_WEBHOOK_URL }}" -eq "") { $optionalSecrets += "DISCORD_WEBHOOK_URL" }
+          
+          if ($missingSecrets.Count -gt 0) {
+            echo "Missing required secrets: $($missingSecrets -join ', ')"
+            exit 1
+          }
+          
+          if ($optionalSecrets.Count -gt 0) {
+            echo "Optional secrets not configured: $($optionalSecrets -join ', ')"
+          }
+          
+          echo "All required secrets are configured!"
+
+  # 🧪 PARALLEL TESTING PHASE
+  test-lint:
+    runs-on: self-hosted
+    needs: validate-secrets
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Run linting and type checks
+        run: |
+          echo "Running linting and TypeScript checks..."
+          bun run lint
+          bun run check
+          echo "All linting and type checks passed!"
+
+  test-locales:
+    runs-on: self-hosted
+    needs: validate-secrets
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Check localization keys
+        run: |
+          echo "Checking localization keys..."
+          $output = bun run check-locales 2>&1
+          $exitCode = $LASTEXITCODE
+          
+          # Always show the output
+          echo $output
+          
+          # Check if there are missing keys (critical errors)
+          if ($output -match "❌ MISSING LOCALIZATION KEYS") {
+            echo "Critical error: Missing localization keys found!"
+            exit 1
+          } elseif ($exitCode -eq 0) {
+            echo "All localization checks passed!"
+          } else {
+            echo "Localization warnings found, but no critical missing keys. Continuing deployment..."
+          }
+
+  # 🚀 SEQUENTIAL DEPLOYMENT CHAIN
+  setup-environment:
+    runs-on: self-hosted
+    needs: [test-lint, test-locales]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         
       - name: Create environment file
         run: |
-          echo "🔐 Creating environment file from secrets..."
+          echo "Creating environment file from secrets..."
           $envContent = @"
           DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
           CRYPTO_SECRET=${{ secrets.CRYPTO_SECRET }}
@@ -49,32 +123,60 @@ jobs:
       
       - name: Debug environment file
         run: |
-          echo "📋 Environment file contents:"
+          echo "Environment file contents:"
           Get-Content .env
 
+  build-image:
+    runs-on: self-hosted
+    needs: setup-environment
+    steps:
+      - name: Build new image (without Buildkit)
+        run: |
+          echo "Building new TomoriBot image..."
+          $env:DOCKER_BUILDKIT=0
+          docker-compose build --no-cache
+
+  deploy-containers:
+    runs-on: self-hosted
+    needs: build-image
+    steps:
       - name: Stop and remove old containers
         run: |
-          echo "🛑 Stopping and cleaning up old TomoriBot resources..."
+          echo "Stopping and cleaning up old TomoriBot resources..."
           docker-compose down --remove-orphans
         continue-on-error: true
         
       - name: Wait for Docker cleanup
         run: Start-Sleep 10
-        
-      - name: Build new image (without Buildkit)
-        run: |
-          echo "🏗️ Building new TomoriBot image..."
-          $env:DOCKER_BUILDKIT=0
-          docker-compose build --no-cache
           
       - name: Start updated containers  
         run: |
-          echo "🚀 Starting updated TomoriBot..."
+          echo "Starting updated TomoriBot..."
           docker-compose up -d
 
-      - name: Verify deployment
+  verify-deployment:
+    runs-on: self-hosted
+    needs: deploy-containers
+    outputs:
+      deployment-status: ${{ steps.verify.outputs.status }}
+      commit-hash: ${{ steps.commit-info.outputs.hash }}
+      commit-message: ${{ steps.commit-info.outputs.message }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get commit information
+        id: commit-info
         run: |
-          echo "✅ Verifying TomoriBot is running..."
+          $hash = git rev-parse --short HEAD
+          $message = git log -1 --pretty=format:"%s"
+          echo "hash=$hash" >> $env:GITHUB_OUTPUT
+          echo "message=$message" >> $env:GITHUB_OUTPUT
+
+      - name: Verify deployment
+        id: verify
+        run: |
+          echo "Verifying TomoriBot is running..."
           Start-Sleep 90
           $containers = docker ps --filter "name=tomoribot" --format "table {{.Names}}\t{{.Status}}"
           echo $containers
@@ -82,17 +184,231 @@ jobs:
           # Check if both containers are running
           if ((docker ps --filter "name=tomoribot-app" --filter "status=running" -q) -and 
               (docker ps --filter "name=tomoribot-db" --filter "status=running" -q)) {
-            echo "🎉 TomoriBot deployment successful!"
+            echo "TomoriBot deployment successful!"
+            echo "status=success" >> $env:GITHUB_OUTPUT
           } else {
-            echo "❌ TomoriBot deployment failed!"
+            echo "TomoriBot deployment failed!"
+            echo "status=failed" >> $env:GITHUB_OUTPUT
             exit 1
           }
+
+  announce-release:
+    runs-on: self-hosted
+    needs: verify-deployment
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from package.json
+        id: version
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Prepare release notes
+        id: release-notes
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $versionFolder = ".github/release/v$version"
+          $defaultFolder = ".github/release/default"
           
-      - name: Discord notification
+          # Function to find first .md file in a folder
+          function Find-MarkdownFile($folder) {
+            if (Test-Path $folder) {
+              $mdFiles = Get-ChildItem -Path $folder -Filter "*.md" | Where-Object { $_.Name -ne "README.md" }
+              if ($mdFiles) {
+                return $mdFiles[0].FullName
+              }
+            }
+            return $null
+          }
+          
+          # Function to find first image file in a folder  
+          function Find-ImageFile($folder) {
+            if (Test-Path $folder) {
+              $imageFiles = Get-ChildItem -Path $folder -Include "*.png","*.jpg","*.jpeg","*.gif","*.webp" -Recurse
+              if ($imageFiles) {
+                return $imageFiles[0].Name
+              }
+            }
+            return $null
+          }
+          
+          # Determine which folder to use and find files
+          $releaseNotesPath = Find-MarkdownFile $versionFolder
+          if ($releaseNotesPath) {
+            $assetFolder = $versionFolder
+            $imageName = Find-ImageFile $versionFolder
+            echo "✅ Using version-specific assets from $versionFolder"
+            echo "   📝 Release notes: $(Split-Path -Leaf $releaseNotesPath)"
+            echo "   🖼️ Image: $imageName"
+          } else {
+            $releaseNotesPath = Find-MarkdownFile $defaultFolder
+            if ($releaseNotesPath) {
+              $assetFolder = $defaultFolder
+              $imageName = Find-ImageFile $defaultFolder
+              echo "⚠️ Version-specific folder not found, using default assets from $defaultFolder"
+              echo "   📝 Release notes: $(Split-Path -Leaf $releaseNotesPath)"
+              echo "   🖼️ Image: $imageName"
+            } else {
+              echo "❌ No .md files found in either $versionFolder or $defaultFolder"
+              exit 1
+            }
+          }
+          
+          if (-not $imageName) {
+            echo "⚠️ No image file found, Discord notification will be text-only"
+            $imageName = ""
+          }
+          
+          # Read the release notes template
+          $releaseNotes = Get-Content $releaseNotesPath -Raw
+          
+          # Replace all placeholders
+          $releaseNotes = $releaseNotes.Replace("{VERSION}", $version)
+          $releaseNotes = $releaseNotes.Replace("{TIMESTAMP}", (Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"))
+          $releaseNotes = $releaseNotes.Replace("{COMMIT_HASH}", "${{ needs.verify-deployment.outputs.commit-hash }}")
+          $releaseNotes = $releaseNotes.Replace("{REPO_OWNER}", "${{ github.repository_owner }}")
+          $releaseNotes = $releaseNotes.Replace("{REPO_NAME}", "${{ github.event.repository.name }}")
+          
+          # Save processed release notes and asset info
+          [System.IO.File]::WriteAllText("$PWD\processed-release-notes.md", $releaseNotes, [System.Text.Encoding]::UTF8)
+          echo "asset-folder=$assetFolder" >> $env:GITHUB_OUTPUT
+          echo "image-name=$imageName" >> $env:GITHUB_OUTPUT
+          
+          echo "📝 Release notes processed successfully!"
+
+      - name: Export Docker image
+        run: |
+          echo "Exporting Docker image as release asset..."
+          
+          # Get the image name and tag it with version
+          $imageName = "tomoribot"
+          $version = "${{ steps.version.outputs.version }}"
+          
+          # Tag the current image with version
+          docker tag "tomoribot_app:latest" "${imageName}:v${version}"
+          
+          # Export Docker image to tar file
+          docker save "${imageName}:v${version}" -o "tomoribot-v${version}-docker-image.tar"
+          
+          # Compress the tar file to reduce size
+          Compress-Archive -Path "tomoribot-v${version}-docker-image.tar" -DestinationPath "tomoribot-v${version}-docker-image.tar.gz"
+          
+          # Clean up uncompressed file
+          Remove-Item "tomoribot-v${version}-docker-image.tar"
+          
+          echo "Docker image exported and compressed!"
+
+      - name: Create GitHub Release
+        run: |
+          echo "Creating GitHub Release v${{ steps.version.outputs.version }}..."
+          
+          # Create release with Docker image as asset
+          gh release create "v${{ steps.version.outputs.version }}" `
+            --title "TomoriBot v${{ steps.version.outputs.version }}" `
+            --notes-file "processed-release-notes.md" `
+            --latest `
+            "tomoribot-v${{ steps.version.outputs.version }}-docker-image.tar.gz#Docker Image (Ready to Deploy)"
+          
+          echo "GitHub release created with Docker image asset!"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send Discord notification
         if: always()
         run: |
-          if ($LASTEXITCODE -eq 0) {
-            echo "✅ Would send success notification to Discord"
+          if ("${{ needs.verify-deployment.outputs.deployment-status }}" -eq "success") {
+            echo "Preparing success notification for Discord..."
+            $status = "SUCCESS"
+            $color = "3066993"  # Green
+            $emoji = "🎉"
           } else {
-            echo "❌ Would send failure notification to Discord"
+            echo "Preparing failure notification for Discord..."
+            $status = "FAILED"
+            $color = "15158332"  # Red  
+            $emoji = "💥"
+          }
+          
+          # Read and process release notes for Discord
+          $releaseNotes = Get-Content processed-release-notes.md -Raw
+          
+          # Strip markdown image syntax for cleaner Discord text
+          $releaseNotes = $releaseNotes -replace '!\[.*?\]\([^)]*\)', ''
+          
+          # Clean up extra whitespace and truncate for Discord limits
+          $releaseNotes = $releaseNotes -replace '\n\s*\n', "`n`n"  # Remove excessive line breaks
+          if ($releaseNotes.Length -gt 1800) {
+            $releaseNotes = $releaseNotes.Substring(0, 1800) + "..."
+          }
+          
+          # Construct image URL from detected file
+          $version = "${{ steps.version.outputs.version }}"
+          $assetFolder = "${{ steps.release-notes.outputs.asset-folder }}" -replace '\.github/release/', ''
+          $imageName = "${{ steps.release-notes.outputs.image-name }}"
+          $imageUrl = ""
+          
+          if ($imageName) {
+            $imageUrl = "https://github.com/${{ github.repository }}/raw/main/.github/release/$assetFolder/$imageName"
+            echo "🖼️ Image URL: $imageUrl"
+          } else {
+            echo "📝 Text-only Discord notification (no image found)"
+          }
+          
+          # Construct Discord webhook payload  
+          $embed = @{
+            title = "$emoji TomoriBot v$version - Deployment $status"
+            description = $releaseNotes
+            color = [int]$color
+            fields = @(
+              @{
+                name = "🏷️ Version"
+                value = "v$version"
+                inline = $true
+              },
+              @{
+                name = "📦 Commit"
+                value = "[${{ needs.verify-deployment.outputs.commit-hash }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})"
+                inline = $true
+              },
+              @{
+                name = "🔗 Release"
+                value = "[View Release](https://github.com/${{ github.repository }}/releases/tag/v$version)"
+                inline = $true
+              },
+              @{
+                name = "📁 Assets"
+                value = "Using $assetFolder"
+                inline = $true
+              }
+            )
+            footer = @{
+              text = "Deployed via GitHub Actions 🤖"
+            }
+            timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+          }
+          
+          # Add image if available
+          if ($imageUrl) {
+            $embed.image = @{ url = $imageUrl }
+          }
+          
+          $webhookData = @{
+            embeds = @($embed)
+          } | ConvertTo-Json -Depth 10
+          
+          # Send to Discord (placeholder - requires DISCORD_WEBHOOK_URL secret)
+          $discordWebhookUrl = "${{ secrets.DISCORD_WEBHOOK_URL }}"
+          if ($discordWebhookUrl -ne "") {
+            try {
+              Invoke-RestMethod -Uri $discordWebhookUrl -Method Post -Body $webhookData -ContentType "application/json"
+              echo "Discord notification sent successfully!"
+            } catch {
+              echo "Failed to send Discord notification: $($_.Exception.Message)"
+            }
+          } else {
+            echo "DISCORD_WEBHOOK_URL secret not configured - notification skipped"
+            echo "Discord payload would be:"
+            echo $webhookData
           }

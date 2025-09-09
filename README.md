@@ -8,14 +8,17 @@
 <h3 align="center">TomoriBot (WORK IN PROGRESS)</h3>
 
   <p align="center">
-    A customizable, AI Discord assistant (or waifu) with memory, personality switching, and autonomous tool usage
-    <br />
-    <a href="https://github.com/Eliolocin/TomoriBot"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
-    <a href="https://github.com/Eliolocin/TomoriBot/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
-    &middot;
-    <a href="https://github.com/Eliolocin/TomoriBot/issues/new?labels=enhancement&template=feature-request---.md">Request Feature</a>
+    A customizable AI assistant (or waifu) for Discord featuring editable memory, personality switching, smart autonomous tool usage, and much more!
+      <br />
+        <br />
+      <a href="https://github.com/Eliolocin/TomoriBot"><strong>EXPLORE THE WIKI »</strong></a>
+      <br />
+      <br />
+      <a href="https://github.com/Eliolocin/TomoriBot/releases">View Releases</a>
+      &middot;
+      <a href="https://github.com/Eliolocin/TomoriBot/issues/new?labels=bug&template=bug-report---.md">Report Bug </a>
+      &middot;
+      <a href="https://github.com/Eliolocin/TomoriBot/issues/new?labels=enhancement&template=feature-request---.md"> Request Feature</a>
   </p>
 </div>
 
@@ -50,14 +53,15 @@
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-TomoriBot is a Discord chatbot built with TypeScript and Bun, featuring AI-powered conversations using Google's Gemini models. It provides an interactive and customizable chat experience with memory retention, expressions, multi-language support, and personality switching capabilities.
+TomoriBot is a Discord chatbot built with TypeScript and Bun, featuring AI-powered conversations using various AI Providers such as Google's Gemini. 
+
+Tomori provides an interactive and customizable chat experience with memory retention, expressions, multi-language support, and personality switching capabilities.
 
 ### Key Features
-* 🤖 **AI-Powered Chat**: Advanced conversational AI using Google Gemini models
+* 🤖 **AI-Powered Chat**: Advanced conversational AI using Large Language Models
 * 🧠 **Memory System**: Persistent user and server memory for contextual conversations
-* 🗿 **Emoji/Sticker Expressions**: Uses function calls to send your custom Server Stickers and Emojis
-* 👁️ **Computer Vision**: Utilizes Gemini API to see images in Discord chats
-and Emojis
+* 🗿 **Emoji/Sticker Expressions**: Uses function calls to send your favorite Server Stickers and Emojis
+* 👁️ **Computer Vision**: Utilizes Gemini API to see images and videos in Discord chats
 * 🔍 **Search Grounding**: Searches the Internet for latest information
 * 🌐 **Multi-Language Support**: Built-in internationalization with Japanese and English support
 * 🎭 **Personality Switching**: Configurable personas and behavioral presets
@@ -65,17 +69,12 @@ and Emojis
 * 📊 **PostgreSQL Database**: Robust data persistence and user management
 * 🔧 **Slash Commands**: Modern Discord interaction system with comprehensive command structure
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
 ### Built With
 
 * [![TypeScript][TypeScript.js]][TypeScript-url]
 * [![Bun][Bun.sh]][Bun-url]
 * [![Discord.js][Discord.js]][Discord-url]
 * [![PostgreSQL][PostgreSQL.org]][PostgreSQL-url]
-* [![Google AI][Google.ai]][Google-url]
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- GETTING STARTED -->
 ## Getting Started
@@ -138,7 +137,6 @@ Before running TomoriBot, ensure you have the following installed:
     BASE_TRIGGER_WORDS=tomori,tomo,トモリ,ともり
    ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- USAGE EXAMPLES -->
 ## Usage
@@ -161,25 +159,24 @@ docker-compose build
 # Start TomoriBot and her database
 # For the database of the Docker version, local '.env' only needs POSTGRES_PASSWORD variable
 docker-compose up
-
-# Or run in background (detached mode)
-docker-compose up -d
 ```
 
 ### Basic Commands
 
 - `/config setup` - Initial bot setup for your server
-- `/teach` - Add personal memories for TomoriBot
-- `/config preset` - Switch between different personality presets
+- `/config` - Multiple ways to tweak TomoriBot
+- `/teach` - Add memories for TomoriBot
+- `/unlearn` - Remove memories from TomoriBot
+- `/serverconfig` - Add / Remove permissions from TomoriBot
 
 ### Chat Interaction
 
-Simply mention the bot or use the configured trigger words to start a conversation:
+Simply mention the bot in a server or use the configured trigger words to start a conversation:
 ```
 @TomoriBot yo wassup
 ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+Or slide into TomoriBot's DMs and say hi!
 
 <!-- ROADMAP -->
 ## Roadmap
@@ -194,7 +191,6 @@ Simply mention the bot or use the configured trigger words to start a conversati
 
 See the [open issues](https://github.com/Eliolocin/TomoriBot/issues) for a full list of proposed features and known issues.
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- CONTRIBUTING -->
 ## Contributing
@@ -203,21 +199,17 @@ Any contributions made  are **greatly appreciated**.
 
 If you have a suggestion that would make TomoriBot better, please fork the repo and create a pull request. You can also simply open an issue with the tag "Enhancement".
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- LICENSE -->
 ## License
 
 Distributed under the GPL License. See `LICENSE` for more information.
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
 <!-- CONTACT -->
 ## Contact
 
 Project Link: [https://github.com/Eliolocin/TomoriBot](https://github.com/Eliolocin/TomoriBot)
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- MARKDOWN LINKS & IMAGES -->
 [TypeScript.js]: https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white
