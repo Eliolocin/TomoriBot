@@ -19,7 +19,7 @@ RUN apk add --no-cache \
 
 # Install MCP servers that are required by TomoriBot
 # Fetch MCP server needs to be pre-installed with pip
-RUN pip3 install mcp-server-fetch
+RUN pip3 install mcp-server-fetch --break-system-packages
 
 # Copy package files first for better Docker layer caching
 # This is like getting the "lease agreement" (dependencies) ready first
