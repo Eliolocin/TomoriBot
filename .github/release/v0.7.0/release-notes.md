@@ -1,4 +1,4 @@
-## Post-~~Lobotomy~~ Refactor Thoughtless Nui Edition
+## Thoughtless Nui Edition
 ![Release Picture](https://github.com/{REPO_OWNER}/{REPO_NAME}/raw/main/.github/release/v0.7.0/tomonui.png)
 ###  [TomoriBot Invite Link](https://discord.com/oauth2/authorize?client_id=841644102059556915)
 Please do not store sensitive memories into TomoriBot. **All API keys are encrypted but not memories.** 

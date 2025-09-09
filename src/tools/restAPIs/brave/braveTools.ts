@@ -183,7 +183,7 @@ export class BraveWebSearchTool extends BaseBraveSearchTool {
 export class BraveImageSearchTool extends BaseBraveSearchTool {
 	name = "brave_image_search";
 	description =
-		'Search for images using Brave Search API. Returns relevant images with metadata and source information. No need to add keywords such as "images" or "pictures" to your query because this tool is already specifically for image searches.';
+		'Search for images using Brave Search API. Returns relevant images with metadata and source information. No need to add keywords such as "images", "pictures", or "イラスト" to your query because this tool is already specifically for image searches.';
 
 	parameters = {
 		type: "object" as const,

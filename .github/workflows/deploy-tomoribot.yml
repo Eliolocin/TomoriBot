@@ -134,7 +134,7 @@ jobs:
         run: |
           echo "Building new TomoriBot image..."
           $env:DOCKER_BUILDKIT=0
-          docker-compose build --no-cache
+          docker compose build --no-cache
 
   deploy-containers:
     runs-on: self-hosted
@@ -143,7 +143,7 @@ jobs:
       - name: Stop and remove old containers
         run: |
           echo "Stopping and cleaning up old TomoriBot resources..."
-          docker-compose down --remove-orphans
+          docker compose down --remove-orphans
         continue-on-error: true
         
       - name: Wait for Docker cleanup
@@ -152,7 +152,7 @@ jobs:
       - name: Start updated containers  
         run: |
           echo "Starting updated TomoriBot..."
-          docker-compose up -d
+          docker compose up -d
 
   verify-deployment:
     runs-on: self-hosted
@@ -195,7 +195,7 @@ jobs:
   announce-release:
     runs-on: self-hosted
     needs: verify-deployment
-    if: always()
+    if: needs.verify-deployment.outputs.deployment-status == 'success'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -287,8 +287,8 @@ jobs:
           $imageName = "tomoribot"
           $version = "${{ steps.version.outputs.version }}"
           
-          # Tag the current image with version
-          docker tag "tomoribot_app:latest" "${imageName}:v${version}"
+          # Tag the current image with version (Docker Compose creates images as project-service format)
+          docker tag "tomoribot-tomoribot:latest" "${imageName}:v${version}"
           
           # Export Docker image to tar file
           docker save "${imageName}:v${version}" -o "tomoribot-v${version}-docker-image.tar"
@@ -337,8 +337,8 @@ jobs:
           
           # Clean up extra whitespace and truncate for Discord limits
           $releaseNotes = $releaseNotes -replace '\n\s*\n', "`n`n"  # Remove excessive line breaks
-          if ($releaseNotes.Length -gt 1800) {
-            $releaseNotes = $releaseNotes.Substring(0, 1800) + "..."
+          if ($releaseNotes.Length -gt 4090) {
+            $releaseNotes = $releaseNotes.Substring(0, 4090) + "..."
           }
           
           # Construct image URL from detected file
@@ -381,9 +381,6 @@ jobs:
                 inline = $true
               }
             )
-            footer = @{
-              text = "Deployed via GitHub Actions"
-            }
             timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
           }
           

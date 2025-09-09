@@ -312,7 +312,7 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 			}
 
 			// Extract URLs from the search results to count them
-			const urlPattern = /https?:\/\/[^\s\)]+/g;
+			const urlPattern = /https?:\/\/[^\s)]+/g;
 			const foundUrls = originalText.match(urlPattern) || [];
 			const urlCount = foundUrls.length;
 

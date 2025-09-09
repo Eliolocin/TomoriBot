@@ -1,11 +1,25 @@
--- Insert LLMs
+-- Ensure all required columns exist in llms table
+SELECT add_column_if_not_exists('llms', 'is_smartest', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('llms', 'is_default', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('llms', 'is_reasoning', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('llms', 'is_deprecated', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('llms', 'llm_description', 'TEXT');
+
+-- Insert LLMs with conflict resolution that updates descriptions
 INSERT INTO llms (llm_provider, llm_codename, is_smartest, is_default, is_reasoning, is_deprecated, llm_description)
 VALUES
   ('google', 'gemini-2.0-flash', false, false, false, false, 'Fast multimodal model for everyday tasks'),
   ('google', 'gemini-2.5-flash-lite', false, false, false, false, 'Lightweight version optimized for speed and efficiency'),
   ('google', 'gemini-2.5-flash-preview-05-20', false, true, false, false, 'Balanced model for general-purpose applications'),
   ('google', 'gemini-2.5-pro', true, false, true, false, 'Most capable model for complex reasoning and analysis')
-ON CONFLICT (llm_codename) DO NOTHING;
+ON CONFLICT (llm_codename) DO UPDATE SET
+  llm_description = EXCLUDED.llm_description,
+  is_smartest = EXCLUDED.is_smartest,
+  is_default = EXCLUDED.is_default,
+  is_reasoning = EXCLUDED.is_reasoning,
+  is_deprecated = EXCLUDED.is_deprecated,
+  llm_provider = EXCLUDED.llm_provider,
+  updated_at = CURRENT_TIMESTAMP;
 
 -- Insert Tomori Presets (English)
 INSERT INTO tomori_presets (

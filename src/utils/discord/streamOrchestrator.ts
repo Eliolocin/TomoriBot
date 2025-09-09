@@ -457,7 +457,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		const hasLinks = buffer.includes('[') && buffer.includes('](');
 		
 		// URL markers - prevent flushing when URLs are present
-		const urlRegex = /(https?|ftps?):\/\/[^\s<>\[\](){}'"]+/;
+		const urlRegex = /(https?|ftps?):\/\/[^\s<>[\](){}'"]+/;
 		const hasURLs = urlRegex.test(buffer);
 		
 		return hasQuotes || hasParens || hasBold || hasItalic || hasStrike || hasInlineCode || hasLinks || hasURLs;
@@ -529,7 +529,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
 			// Determine earliest break point
 			let earliestBreakIndex = -1;
-			let breakType: ChunkProcessingResult["breakType"] = undefined;
+			let breakType: ChunkProcessingResult["breakType"] ;
 
 			if (openingBackticksIndex !== -1) {
 				earliestBreakIndex = openingBackticksIndex;

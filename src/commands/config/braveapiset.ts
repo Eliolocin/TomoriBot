@@ -116,7 +116,7 @@ export async function execute(
 				});
 				return;
 			}
-		} catch (error) {
+		} catch (_error) {
 			// Same error handling regardless of error type to prevent information leakage
 			log.info(
 				`Brave API key validation error for server ${tomoriState.server_id}`,

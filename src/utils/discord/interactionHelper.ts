@@ -81,7 +81,7 @@ function transformModalSubmissionPacket(
  * This patches the actual WebSocket message handler at a lower level
  */
 
-// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+// biome-ignore lint/suspicious/noExplicitAny: Discord.js client type requires any for WebSocket interception
 function setupWebSocketInterception(client: any) {
 	if ((globalThis as GlobalDiscordState).__webSocketPatched) return;
 
@@ -343,7 +343,7 @@ export async function promptWithConfirmation(
 
 		await interaction.editReply({ embeds: [cancelEmbed], components: [] });
 		return { outcome: "cancel" };
-	} catch (timeoutError) {
+	} catch (_timeoutError) {
 		// 9. Handle Timeout
 		log.warn(`Confirmation prompt timed out for user ${interaction.user.id}`);
 		const timeoutEmbed = new EmbedBuilder()
@@ -903,7 +903,7 @@ export async function replyPaginatedChoices(
 				}
 				if (customId.startsWith("select_")) {
 					// Handle item selection
-					const selectionIdx = Number.parseInt(customId.split("_")[1]);
+					const selectionIdx = Number.parseInt(customId.split("_")[1], 10);
 					const absoluteIndex = startIdx + selectionIdx;
 					const selectedItem = options.items[absoluteIndex];
 
@@ -962,7 +962,7 @@ export async function replyPaginatedChoices(
 					}
 					// --- End Nested Try-Catch for onSelect ---
 				}
-			} catch (error) {
+			} catch (_error) {
 				// Handle timeout (This catch block now primarily handles timeouts from awaitMessageComponent)
 				log.warn(
 					`Pagination interaction timed out for user ${interaction.user.id}`,

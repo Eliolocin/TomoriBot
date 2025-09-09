@@ -289,7 +289,7 @@ export function addFetchCapabilityReminder(originalResult: string): {
 } {
 	try {
 		// Extract URLs from the search results to count them
-		const urlPattern = /https?:\/\/[^\s\)]+/g;
+		const urlPattern = /https?:\/\/[^\s)]+/g;
 		const foundUrls = originalResult.match(urlPattern) || [];
 		const urlCount = foundUrls.length;
 

@@ -163,7 +163,7 @@ export const localizer = (
 		if (
 			typeof translation !== "object" ||
 			translation === null ||
-			!Object.prototype.hasOwnProperty.call(translation, k)
+			!Object.hasOwn(translation, k)
 		) {
 			// If path is invalid, return the key
 			return key;

@@ -275,7 +275,6 @@ export default async function tomoriChat(
 		// Always treat DM messages as manually triggered (bypass trigger word checks)
 		// Note: Using local variable to avoid parameter reassignment warning
 		streamingContext.isManuallyTriggered = true;
-		// biome-ignore lint/style/noParameterAssign: We want to ensure this is always true in DMs
 		isManuallyTriggered = true; // Fix: Also update the parameter used in shouldBotReply check
 		log.info(`Processing DM from user ${userDiscId} in channel ${channel.id}`);
 	} else {
@@ -705,7 +704,7 @@ export default async function tomoriChat(
 							filename: filename,
 						};
 
-					} catch (error) {
+					} catch (_error) {
 						// Silently handle URL parsing errors for embed images
 					}
 				}
@@ -751,7 +750,7 @@ export default async function tomoriChat(
 							filename: filename,
 						};
 
-					} catch (error) {
+					} catch (_error) {
 						// Silently handle URL parsing errors for embed thumbnails
 					}
 				}

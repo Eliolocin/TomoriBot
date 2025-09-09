@@ -32,7 +32,7 @@ export type SqlValue =
  * const query = sql.unsafe`UPDATE users SET name = $2, active = $3 WHERE id = $1`(...values);
  */
 
-// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+// biome-ignore lint/suspicious/noExplicitAny: Required for dynamic SQL parameter arrays
 export type SqlParameterArray = any[];
 
 /**

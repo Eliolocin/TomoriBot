@@ -263,7 +263,7 @@ export function chunkMessage(
 		const textContent = block.content;
 		// Modified URL regex to not match URLs that are part of markdown links
 		// Uses negative lookbehind (?<!\]\() to exclude URLs preceded by ](
-		const urlRegex = /(?<!\]\()(https?|ftps?):\/\/[^\s<>\[\](){}'"]+/g;
+		const urlRegex = /(?<!\]\()(https?|ftps?):\/\/[^\s<>[\](){}'"]+/g;
 
 		let textLastIndex = 0;
 		let urlMatch: RegExpExecArray | null;
@@ -1028,7 +1028,7 @@ function detectAndProtectURLs(text: string): {
 	// Universal URL regex: matches http(s), ftp(s) protocols
 	// Stops at whitespace and common delimiters: <>[](){} and quotes
 	// Handles trailing punctuation that's likely not part of the URL
-	const urlRegex = /(https?|ftps?):\/\/[^\s<>\[\](){}'"]+/g;
+	const urlRegex = /(https?|ftps?):\/\/[^\s<>[\](){}'"]+/g;
 
 	const protectedText = text.replace(urlRegex, (match) => {
 		// Handle trailing punctuation that's likely not part of the URL
@@ -1557,7 +1557,7 @@ export function humanizeString(text: string): string {
 	// 3. Replace inline code (`) with placeholders
 	// Look for inline code that contains alphanumeric characters or common code symbols
 	processedText = processedText.replace(
-		/`[\w\s\(\)\[\]\{\}\.,:;=+\-*/<>!?#$%^&|~\\]+`/g,
+		/`[\w\s()[\]{}.,:;=+\-*/<>!?#$%^&|~\\]+`/g,
 		(match) => {
 			inlineCode.push(match);
 			return `__INLINE_CODE_${inlineCode.length - 1}__`;

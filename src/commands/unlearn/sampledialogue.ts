@@ -262,7 +262,7 @@ export async function execute(
 			return;
 		}
 
-		const selectedIndex = Number.parseInt(selectedIndexStr);
+		const selectedIndex = Number.parseInt(selectedIndexStr, 10);
 
 		// 11. Perform the database update using the helper function - let helper manage interaction state
 		await performSampleDialogueRemoval(

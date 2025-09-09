@@ -70,7 +70,7 @@ const handler = async (_client: Client, message: Message): Promise<void> => {
 			initialProvider: TranslationProvider.GOOGLE,
 			timeout: 90000,
 		});
-	} catch (error) {
+	} catch (_error) {
 		log.error("Translation error");
 	}
 };

@@ -490,7 +490,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 								const contentLength =
 									videoResponse.headers.get("content-length");
 								const fileSizeBytes = contentLength
-									? Number.parseInt(contentLength)
+									? Number.parseInt(contentLength, 10)
 									: 0;
 								const maxInlineSize = 20 * 1024 * 1024; // 20MB limit
 
