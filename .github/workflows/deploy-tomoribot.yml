@@ -356,31 +356,9 @@ jobs:
           
           # Construct Discord webhook payload  
           $embed = @{
-            title = "TomoriBot v$version - Deployment $status"
+            title = "TomoriBot v$version Released!"
             description = $releaseNotes
             color = [int]$color
-            fields = @(
-              @{
-                name = "🏷️ Version"
-                value = "v$version"
-                inline = $true
-              },
-              @{
-                name = "📦 Commit"
-                value = "[${{ needs.verify-deployment.outputs.commit-hash }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})"
-                inline = $true
-              },
-              @{
-                name = "🔗 Release"
-                value = "[View Release](https://github.com/${{ github.repository }}/releases/tag/v$version)"
-                inline = $true
-              },
-              @{
-                name = "📁 Assets"
-                value = "Using $assetFolder"
-                inline = $true
-              }
-            )
             timestamp = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
           }
           

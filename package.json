@@ -14,7 +14,7 @@
 		"seed-db": "bun run scripts/seed-db.ts",
 		"nuke-db": "bun run scripts/nuke-db.ts",
 		"lint": "bunx @biomejs/biome lint --fix",
-		"check": "bunx tsc --noEmit",
+		"check": "bun tsc --noEmit",
 		"check-locales": "bun run scripts/checkLocalizationKeys.ts"
 	},
 	"author": "Bredrumb",
@@ -67,11 +67,11 @@
 		"sql": "^0.78.0",
 		"stable-diffusion-cjs": "^2.0.1",
 		"translate": "^3.0.1",
-		"typescript": "^5.8.3",
 		"ytdl-core": "^4.11.5",
 		"zod": "^3.24.4"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.2.3"
+		"@biomejs/biome": "^2.2.3",
+		"typescript": "^5.9.2"
 	}
 }
