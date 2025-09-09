@@ -14,7 +14,7 @@
 		"seed-db": "bun run scripts/seed-db.ts",
 		"nuke-db": "bun run scripts/nuke-db.ts",
 		"lint": "bunx @biomejs/biome lint --fix",
-		"check": "bun tsc --noEmit",
+		"check": "bunx tsc --noEmit",
 		"check-locales": "bun run scripts/checkLocalizationKeys.ts"
 	},
 	"author": "Bredrumb",

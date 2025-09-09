@@ -44,6 +44,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         
+      - name: Install dependencies
+        run: |
+          echo "Installing dependencies..."
+          bun install
+          echo "Dependencies installed!"
+        
       - name: Run linting and type checks
         run: |
           echo "Running linting and TypeScript checks..."
