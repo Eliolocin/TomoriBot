@@ -101,8 +101,9 @@ export interface SummaryEmbedOptions extends StandardEmbedOptions {
 		nameKey?: string;
 		name?: string; // Allow direct name string
 		nameVars?: Record<string, string | number | boolean>; // Variables for the name
-		value: string;
-		valueVars?: Record<string, string | number | boolean>; // Variables for the value (Added)
+		valueKey?: string; // Localization key for the value
+		value?: string; // Direct value string (used when valueKey is not provided)
+		valueVars?: Record<string, string | number | boolean>; // Variables for the value localization
 		inline?: boolean;
 	}>;
 }

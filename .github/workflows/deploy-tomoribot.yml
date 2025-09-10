@@ -320,7 +320,7 @@ jobs:
           
           echo "GitHub release created with Docker image asset!"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
 
       - name: Send Discord notification
         if: always()

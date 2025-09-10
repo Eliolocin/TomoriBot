@@ -18,8 +18,7 @@ import { TranslationProvider } from "../../types/discord/embed";
  * @returns Promise<void>
  */
 const handler = async (_client: Client, message: Message): Promise<void> => {
-	return;
-	// biome-ignore lint/correctness/noUnreachable: Develoment-only feature
+	//return;
 	try {
 		// Skip if message has translation flag or is from a bot
 		// EXPERIMENTAL FEATURE ONLY FOR TESTING

@@ -92,10 +92,10 @@ export function createSummaryEmbed(
 						? localizer(locale, field.nameKey, field.nameVars) // Use nameVars for name
 						: (field.name ?? "");
 
-					// 4. Determine the field value: Handle potential localization if 'valueVars' are present
-					const value = field.valueVars // Check for valueVars
-						? localizer(locale, field.value, field.valueVars) // Localize value using valueVars
-						: field.value; // Otherwise, use the value directly
+					// 4. Determine the field value: Use localized valueKey if present, otherwise use direct value
+					const value = field.valueKey
+						? localizer(locale, field.valueKey, field.valueVars) // Localize valueKey using valueVars
+						: (field.value ?? ""); // Otherwise, use the value directly
 
 					// 5. Return the structured APIEmbedField object
 					return {

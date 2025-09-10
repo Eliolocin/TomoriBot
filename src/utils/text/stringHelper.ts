@@ -49,7 +49,10 @@ function createSentenceSplitRegex(): RegExp {
 	// 9. Day abbreviations
 	const days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
-	// 10. Combine all abbreviations into one array
+	// 10. Common "also known as" abbreviations
+	const alsoKnownAs = ["a\\.k\\.a", "aka"];
+
+	// 11. Combine all abbreviations into one array
 	const allAbbreviations = [
 		...titles,
 		...business,
@@ -60,21 +63,22 @@ function createSentenceSplitRegex(): RegExp {
 		...reference,
 		...months,
 		...days,
+		...alsoKnownAs,
 	];
 
-	// 11. Create the abbreviations pattern (word boundary + abbreviation)
+	// 12. Create the abbreviations pattern (word boundary + abbreviation)
 	const abbreviationsPattern = `\\b(?:${allAbbreviations.join("|")})`;
 
-	// 12. Pattern for acronyms with periods (e.g., H.I.F., A.I.M.)
+	// 13. Pattern for acronyms with periods (e.g., H.I.F., A.I.M.)
 	const acronymPattern = "(?:[A-Z]\\.[A-Z]\\.(?:[A-Z]\\.)*)";
 
-	// 13. Complete negative lookbehind pattern: abbreviations OR digits OR acronyms
+	// 14. Complete negative lookbehind pattern: abbreviations OR digits OR acronyms
 	const negativeLookbehind = `(?<!(?:${abbreviationsPattern}|\\d|${acronymPattern}))`;
 
-	// 14. Split on regular periods (.) with whitespace/end OR Japanese periods (。)
+	// 15. Split on regular periods (.) with whitespace/end OR Japanese periods (。)
 	const sentenceEnd = "(?:\\.|。(?=\\s|$)|。)";
 
-	// 15. Return the complete regex with case-insensitive flag
+	// 16. Return the complete regex with case-insensitive flag
 	return new RegExp(`${negativeLookbehind}${sentenceEnd}`, "i");
 }
 

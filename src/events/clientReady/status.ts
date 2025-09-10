@@ -17,13 +17,13 @@ const handler = async (client: Client): Promise<void> => {
 
 	// Wait for MCP initialization to complete before finalizing startup
 	const mcpManager = getMCPManager();
-	
+
 	// Wait for MCP manager to be ready (with a reasonable timeout)
 	const mcpTimeout = 10000; // 10 seconds timeout
 	const startTime = Date.now();
-	
-	while (!mcpManager.isReady() && (Date.now() - startTime) < mcpTimeout) {
-		await new Promise(resolve => setTimeout(resolve, 100)); // Wait 100ms between checks
+
+	while (!mcpManager.isReady() && Date.now() - startTime < mcpTimeout) {
+		await new Promise((resolve) => setTimeout(resolve, 100)); // Wait 100ms between checks
 	}
 
 	if (mcpManager.isReady()) {
@@ -48,7 +48,7 @@ const handler = async (client: Client): Promise<void> => {
 			type: ActivityType.Listening,
 		},
 		{
-			name: "myself get refactored (again)",
+			name: `over ${client.guilds.cache.size} servers`,
 			type: ActivityType.Watching,
 		},
 	];

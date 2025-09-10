@@ -1199,7 +1199,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			fields: [
 				{
 					nameKey: "genai.stream.prohibited_content_admin_notice_title",
-					value: "genai.stream.prohibited_content_admin_notice_description",
+					valueKey: "genai.stream.prohibited_content_admin_notice_description",
 					inline: false,
 				},
 			],

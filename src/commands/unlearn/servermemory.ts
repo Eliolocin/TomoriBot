@@ -216,7 +216,7 @@ export async function execute(
 		// 7. Use unified paginated modal system (supports up to 25 items directly, >25 via page selection)
 		const memorySelectOptions: SelectOption[] = memories.map(
 			(memory: { content: string }, index: number) => ({
-				label: safeSelectOptionText(memory.content, 10),
+				label: safeSelectOptionText(memory.content, 20),
 				value: index.toString(), // Use index to avoid truncation issues
 				description: safeSelectOptionText(memory.content),
 			}),

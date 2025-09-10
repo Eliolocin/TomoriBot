@@ -10,6 +10,7 @@ docker-data/
 .deprecated/
 .vscode/
 .temp/
+characterDrafts.md
 
 # Proompting
 .roo/

@@ -185,7 +185,7 @@ export async function execute(
 		// 6. Create memory select options for the modal
 		const memorySelectOptions: SelectOption[] = currentMemories.map(
 			(memory, index) => ({
-				label: safeSelectOptionText(memory, 10),
+				label: safeSelectOptionText(memory, 20),
 				value: index.toString(), // Use index to avoid truncation issues
 				description: safeSelectOptionText(memory),
 			}),
