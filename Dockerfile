@@ -28,6 +28,9 @@ RUN chown -R tomori:tomori /app
 # Switch to non-root user
 USER tomori
 
+# Add user's local bin directory to PATH for pip installed scripts
+ENV PATH="/home/tomori/.local/bin:$PATH"
+
 # Install MCP servers that are required by TomoriBot
 # Fetch MCP server needs to be pre-installed with pip
 # Install as tomori user to avoid permission issues

@@ -137,8 +137,6 @@ export default {
 				"ストリーム応答がブロック/停止されました。理由: {reason}。",
 			retry_message:
 				"これは一時的なエラーです。リクエストを再度お試しいただけます。",
-			retry_field_title: "🔄 再試行",
-			help_field_title: "💡 対処方法",
 
 			// 汎用プロバイダーエラータイトルとヒント（genai.googleから移動）
 			api_error_title: "❌ APIエラー",
@@ -153,8 +151,11 @@ export default {
 			timeout_title: "⏱️ リクエストタイムアウト",
 			timeout_tip: "メッセージを短くするか再度お試しください",
 
+			provider_overloaded_title: "🛑 プロバイダーの過負荷",
+			provider_overloaded_tip: "プロバイダーが現在過負荷状態です、しばらく後に再度お試しください",
+
 			unknown_title: "❓ プロバイダーエラー",
-			unknown_tip: "再度お試しいただくかサポートにお問い合わせください",
+			unknown_tip: "再度お試しいただくか、この問題が続く場合は `/support report` をご利用ください",
 		},
 
 		// Google固有のエラーメッセージ（プロバイダー固有のデフォルトメッセージのみ）

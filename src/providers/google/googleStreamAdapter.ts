@@ -404,7 +404,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 				retryable = true;
 				break;
 			case 503:
-				errorType = "api_error";
+				errorType = "provider_overloaded";
 				retryable = true;
 				break;
 			case 504:
@@ -437,7 +437,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 					errorMessage.includes("overloaded") ||
 					errorMessage.includes("UNAVAILABLE")
 				) {
-					errorType = "api_error";
+					errorType = "provider_overloaded";
 					retryable = true;
 				} else if (
 					errorMessage.includes("safety") ||
@@ -491,6 +491,9 @@ export class GoogleStreamAdapter implements StreamProvider {
 					break;
 				case "timeout":
 					messageKey = "504_default_message";
+					break;
+				case "provider_overloaded":
+					messageKey = "503_default_message";
 					break;
 				case "api_error":
 					// Check for specific API error codes

@@ -15,13 +15,14 @@
  */
 
 import {
+	EmbedBuilder,
 	MessageFlags,
 	type Message,
 	type Client,
 	type ColorResolvable,
 } from "discord.js";
 import { HumanizerDegree } from "../../types/db/schema";
-import { sendStandardEmbed, createStandardEmbed } from "./embedHelper";
+import { sendStandardEmbed } from "./embedHelper";
 import { ColorCode, log } from "../misc/logger";
 import { localizer } from "../text/localizer";
 import {
@@ -1148,6 +1149,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 						tipKey = "genai.stream.timeout_tip";
 						color = ColorCode.WARN;
 						break;
+					case "provider_overloaded":
+						titleKey = "genai.stream.provider_overloaded_title";
+						tipKey = "genai.stream.provider_overloaded_tip";
+						color = ColorCode.WARN;
+						break;
 					default:
 						titleKey = "genai.stream.api_error_title";
 						tipKey = "genai.stream.api_error_tip";
@@ -1155,13 +1161,14 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 						break;
 				}
 
-				// Create provider-specific error embed
-				const embed = createStandardEmbed(locale, {
-					titleKey,
-					descriptionKey: "",
-					footerKey: tipKey,
-					color,
-				}).setDescription(providerDescription);
+				// Create provider-specific error embed manually since we have a direct description
+				const embed = new EmbedBuilder()
+					.setColor(color)
+					.setTitle(localizer(locale, titleKey))
+					.setDescription(providerDescription)
+					.setFooter({
+						text: localizer(locale, tipKey),
+					});
 
 				await context.channel.send({ embeds: [embed] }).catch((e) =>
 					log.warn("Stream: Failed to send provider error embed to channel", e),

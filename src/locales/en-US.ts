@@ -137,8 +137,6 @@ export default {
 			provider_error_interaction:
 				"Stream response blocked/stopped. Reason: {reason}.",
 			retry_message: "This error is temporary. You can try your request again.",
-			retry_field_title: "🔄 Retry",
-			help_field_title: "💡 What you can do",
 
 			// Universal provider error titles and tips (moved from genai.google)
 			api_error_title: "❌ API Error",
@@ -153,8 +151,11 @@ export default {
 			timeout_title: "⏱️ Request Timeout",
 			timeout_tip: "Try shortening your message or try again",
 
+			provider_overloaded_title: "🛑 Provider Overloaded",
+			provider_overloaded_tip: "Provider is currently experiencing unexpectedly high usage, please try again later",
+
 			unknown_title: "❓ Provider Error",
-			unknown_tip: "Please try again or contact support",
+			unknown_tip: "Please try again or use `/support report` if this keeps happening",
 		},
 
 		// Google-specific error messages (provider-specific default messages only)
