@@ -31,7 +31,8 @@ USER tomori
 # Install MCP servers that are required by TomoriBot
 # Fetch MCP server needs to be pre-installed with pip
 # Install as tomori user to avoid permission issues
-RUN pip3 install --user mcp-server-fetch
+# Use --break-system-packages for Alpine Linux PEP 668 compliance
+RUN pip3 install --user --break-system-packages mcp-server-fetch
 
 # Copy package files first for better Docker layer caching
 # This is like getting the "lease agreement" (dependencies) ready first
