@@ -20,6 +20,7 @@ export interface StandardEmbedOptions {
 	footerVars?: Record<string, string | number | boolean>;
 	thumbnailUrl?: string;
 	flags?: MessageFlags;
+	timestamp?: boolean;
 }
 
 /**

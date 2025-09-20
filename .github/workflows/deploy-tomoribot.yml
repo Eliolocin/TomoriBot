@@ -153,7 +153,23 @@ jobs:
         continue-on-error: true
         
       - name: Wait for Docker cleanup
-        run: Start-Sleep 10
+        run: |
+          echo "Waiting for containers to fully stop..."
+          $timeout = 60
+          $elapsed = 0
+          do {
+            $containers = docker ps -q --filter "name=tomoribot"
+            if (-not $containers) {
+              echo "All TomoriBot containers stopped successfully"
+              break
+            }
+            Start-Sleep 2
+            $elapsed += 2
+            if ($elapsed -ge $timeout) {
+              echo "Timeout waiting for containers to stop, proceeding anyway..."
+              break
+            }
+          } while ($true)
           
       - name: Start updated containers  
         run: |
@@ -183,25 +199,44 @@ jobs:
         id: verify
         run: |
           echo "Verifying TomoriBot is running..."
-          Start-Sleep 90
-          $containers = docker ps --filter "name=tomoribot" --format "table {{.Names}}\t{{.Status}}"
-          echo $containers
-          
-          # Check if both containers are running
-          if ((docker ps --filter "name=tomoribot-app" --filter "status=running" -q) -and 
-              (docker ps --filter "name=tomoribot-db" --filter "status=running" -q)) {
-            echo "TomoriBot deployment successful!"
-            echo "status=success" >> $env:GITHUB_OUTPUT
-          } else {
-            echo "TomoriBot deployment failed!"
-            echo "status=failed" >> $env:GITHUB_OUTPUT
-            exit 1
-          }
+          $timeout = 120
+          $elapsed = 0
+          $checkInterval = 10
 
-  announce-release:
+          do {
+            echo "Checking container status... (${elapsed}s elapsed)"
+            $containers = docker ps --filter "name=tomoribot" --format "table {{.Names}}\t{{.Status}}"
+            echo $containers
+
+            # Check if both containers are running
+            $appRunning = docker ps --filter "name=tomoribot-app" --filter "status=running" -q
+            $dbRunning = docker ps --filter "name=tomoribot-db" --filter "status=running" -q
+
+            if ($appRunning -and $dbRunning) {
+              echo "TomoriBot deployment successful!"
+              echo "status=success" >> $env:GITHUB_OUTPUT
+              exit 0
+            }
+
+            if ($elapsed -ge $timeout) {
+              echo "Timeout reached. TomoriBot deployment failed!"
+              echo "Final container status:"
+              docker ps --filter "name=tomoribot" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+              echo "status=failed" >> $env:GITHUB_OUTPUT
+              exit 1
+            }
+
+            Start-Sleep $checkInterval
+            $elapsed += $checkInterval
+          } while ($true)
+
+  check-release-assets:
     runs-on: self-hosted
     needs: verify-deployment
     if: needs.verify-deployment.outputs.deployment-status == 'success'
+    outputs:
+      has-assets: ${{ steps.check.outputs.has-assets }}
+      version: ${{ needs.check-release-assets.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -212,13 +247,35 @@ jobs:
           $version = (Get-Content package.json | ConvertFrom-Json).version
           echo "version=$version" >> $env:GITHUB_OUTPUT
 
+      - name: Check if version-specific release folder exists
+        id: check
+        run: |
+          $version = "${{ needs.check-release-assets.outputs.version }}"
+          $versionFolder = ".github/release/v$version"
+
+          if (Test-Path $versionFolder) {
+            echo "Version-specific release folder found: $versionFolder"
+            echo "has-assets=true" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "No version-specific release folder found: $versionFolder"
+            echo "This appears to be a minor update that doesn't require a release announcement"
+            echo "has-assets=false" >> $env:GITHUB_OUTPUT
+          }
+
+  announce-release:
+    runs-on: self-hosted
+    needs: [verify-deployment, check-release-assets]
+    if: needs.verify-deployment.outputs.deployment-status == 'success' && needs.check-release-assets.outputs.has-assets == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Prepare release notes
         id: release-notes
         run: |
-          $version = "${{ steps.version.outputs.version }}"
+          $version = "${{ needs.check-release-assets.outputs.version }}"
           $versionFolder = ".github/release/v$version"
-          $defaultFolder = ".github/release/default"
-          
+
           # Function to find first .md file in a folder
           function Find-MarkdownFile($folder) {
             if (Test-Path $folder) {
@@ -229,8 +286,8 @@ jobs:
             }
             return $null
           }
-          
-          # Function to find first image file in a folder  
+
+          # Function to find first image file in a folder
           function Find-ImageFile($folder) {
             if (Test-Path $folder) {
               $imageFiles = Get-ChildItem -Path $folder -Include "*.png","*.jpg","*.jpeg","*.gif","*.webp" -Recurse
@@ -240,8 +297,8 @@ jobs:
             }
             return $null
           }
-          
-          # Determine which folder to use and find files
+
+          # Use version-specific assets only
           $releaseNotesPath = Find-MarkdownFile $versionFolder
           if ($releaseNotesPath) {
             $assetFolder = $versionFolder
@@ -250,17 +307,8 @@ jobs:
             echo "  Release notes: $(Split-Path -Leaf $releaseNotesPath)"
             echo "  Image: $imageName"
           } else {
-            $releaseNotesPath = Find-MarkdownFile $defaultFolder
-            if ($releaseNotesPath) {
-              $assetFolder = $defaultFolder
-              $imageName = Find-ImageFile $defaultFolder
-              echo "Version-specific folder not found, using default assets from $defaultFolder"
-              echo "  Release notes: $(Split-Path -Leaf $releaseNotesPath)"
-              echo "  Image: $imageName"
-            } else {
-              echo "No .md files found in either $versionFolder or $defaultFolder"
-              exit 1
-            }
+            echo "No .md files found in $versionFolder"
+            exit 1
           }
           
           if (-not $imageName) {
@@ -280,7 +328,6 @@ jobs:
           
           # Save processed release notes and asset info
           [System.IO.File]::WriteAllText("$PWD\processed-release-notes.md", $releaseNotes, [System.Text.Encoding]::UTF8)
-          echo "asset-folder=$assetFolder" >> $env:GITHUB_OUTPUT
           echo "image-name=$imageName" >> $env:GITHUB_OUTPUT
           
           echo "Release notes processed successfully!"
@@ -291,7 +338,7 @@ jobs:
           
           # Get the image name and tag it with version
           $imageName = "tomoribot"
-          $version = "${{ steps.version.outputs.version }}"
+          $version = "${{ needs.check-release-assets.outputs.version }}"
           
           # Tag the current image with version (Docker Compose creates images as project-service format)
           docker tag "tomoribot-tomoribot:latest" "${imageName}:v${version}"
@@ -309,14 +356,14 @@ jobs:
 
       - name: Create GitHub Release
         run: |
-          echo "Creating GitHub Release v${{ steps.version.outputs.version }}..."
+          echo "Creating GitHub Release v${{ needs.check-release-assets.outputs.version }}..."
           
           # Create release with Docker image as asset
-          gh release create "v${{ steps.version.outputs.version }}" `
-            --title "TomoriBot v${{ steps.version.outputs.version }}" `
+          gh release create "v${{ needs.check-release-assets.outputs.version }}" `
+            --title "TomoriBot v${{ needs.check-release-assets.outputs.version }}" `
             --notes-file "processed-release-notes.md" `
             --latest `
-            "tomoribot-v${{ steps.version.outputs.version }}-docker-image.tar.gz#Docker Image (Ready to Deploy)"
+            "tomoribot-v${{ needs.check-release-assets.outputs.version }}-docker-image.tar.gz#Docker Image (Ready to Deploy)"
           
           echo "GitHub release created with Docker image asset!"
         env:
@@ -348,13 +395,12 @@ jobs:
           }
           
           # Construct image URL from detected file
-          $version = "${{ steps.version.outputs.version }}"
-          $assetFolder = "${{ steps.release-notes.outputs.asset-folder }}" -replace '\.github/release/', ''
+          $version = "${{ needs.check-release-assets.outputs.version }}"
           $imageName = "${{ steps.release-notes.outputs.image-name }}"
           $imageUrl = ""
-          
+
           if ($imageName) {
-            $imageUrl = "https://github.com/${{ github.repository }}/raw/main/.github/release/$assetFolder/$imageName"
+            $imageUrl = "https://github.com/${{ github.repository }}/raw/main/.github/release/v$version/$imageName"
             echo "Image URL: $imageUrl"
           } else {
             echo "Text-only Discord notification (no image found)"

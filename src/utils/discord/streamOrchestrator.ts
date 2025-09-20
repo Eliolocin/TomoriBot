@@ -14,20 +14,28 @@
  * - Typing simulation and humanization
  */
 
-import { MessageFlags, type Message, type Client } from "discord.js";
+import {
+	MessageFlags,
+	type Message,
+	type Client,
+	type ColorResolvable,
+} from "discord.js";
 import { HumanizerDegree } from "../../types/db/schema";
-import { sendStandardEmbed, createSummaryEmbed } from "./embedHelper";
+import { sendStandardEmbed, createStandardEmbed } from "./embedHelper";
 import { ColorCode, log } from "../misc/logger";
+import { localizer } from "../text/localizer";
 import {
 	chunkMessage,
 	cleanLLMOutput,
 	humanizeString,
+	createSentenceSplitRegex,
 } from "../text/stringHelper";
 
 import type { StreamResult } from "../../types/provider/interfaces";
 import type {
 	StreamOrchestrator as IStreamOrchestrator,
 	ProcessedChunk,
+	ProviderError,
 	StreamConfig,
 	StreamContext,
 	StreamProvider,
@@ -35,7 +43,6 @@ import type {
 import {
 	type ChunkProcessingResult,
 	DISCORD_STREAMING_CONSTANTS,
-	SENTENCE_BOUNDARY_REGEX,
 	type StreamMetrics,
 	type StreamState,
 	type TextProcessingConfig,
@@ -53,15 +60,18 @@ import {
  */
 export class StreamOrchestrator implements IStreamOrchestrator {
 	// Static stop request management system
-	private static activeStopRequests = new Map<string, {
-		channelId: string;
-		timestamp: number;
-		requesterId: string;
-		stopContext?: {
-			originalStopMessage: Message;
-			client: Client;
-		};
-	}>();
+	private static activeStopRequests = new Map<
+		string,
+		{
+			channelId: string;
+			timestamp: number;
+			requesterId: string;
+			stopContext?: {
+				originalStopMessage: Message;
+				client: Client;
+			};
+		}
+	>();
 
 	/**
 	 * Request a graceful stop of the current stream in a channel
@@ -71,19 +81,21 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	 * @returns True if the stop request was registered
 	 */
 	public static requestStop(
-		channelId: string, 
+		channelId: string,
 		requesterId?: string,
-		stopContext?: { originalStopMessage: Message; client: Client }
+		stopContext?: { originalStopMessage: Message; client: Client },
 	): boolean {
-		log.info(`Stop request received for channel ${channelId} by user ${requesterId || 'system'}`);
-		
+		log.info(
+			`Stop request received for channel ${channelId} by user ${requesterId || "system"}`,
+		);
+
 		StreamOrchestrator.activeStopRequests.set(channelId, {
 			channelId,
 			timestamp: Date.now(),
-			requesterId: requesterId || 'system',
+			requesterId: requesterId || "system",
 			stopContext,
 		});
-		
+
 		return true;
 	}
 
@@ -112,7 +124,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	 * @param channelId - The Discord channel ID to get context for
 	 * @returns Stop context if it exists, null otherwise
 	 */
-	public static getAndClearStopContext(channelId: string): { originalStopMessage: Message; client: Client } | null {
+	public static getAndClearStopContext(
+		channelId: string,
+	): { originalStopMessage: Message; client: Client } | null {
 		const stopRequest = StreamOrchestrator.activeStopRequests.get(channelId);
 		if (stopRequest?.stopContext) {
 			const context = stopRequest.stopContext;
@@ -129,7 +143,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	 */
 	public static cleanupOldStopRequests(maxAgeMs: number = 5 * 60 * 1000): void {
 		const now = Date.now();
-		for (const [channelId, stopRequest] of StreamOrchestrator.activeStopRequests.entries()) {
+		for (const [
+			channelId,
+			stopRequest,
+		] of StreamOrchestrator.activeStopRequests.entries()) {
 			if (now - stopRequest.timestamp > maxAgeMs) {
 				StreamOrchestrator.activeStopRequests.delete(channelId);
 				log.info(`Cleaned up old stop request for channel ${channelId}`);
@@ -147,19 +164,21 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		context: StreamContext,
 	): Promise<StreamResult> {
 		log.section("Universal Stream Orchestrator Started");
-		
+
 		log.info(
-			`Starting stream to channel ${context.channel.id} (server: ${'guild' in context.channel ? context.channel.guild.id : 'DM'}) using provider: ${provider.getProviderInfo().name}`,
+			`Starting stream to channel ${context.channel.id} (server: ${"guild" in context.channel ? context.channel.guild.id : "DM"}) using provider: ${provider.getProviderInfo().name}`,
 		);
 
 		const result = await this.executeStream(provider, config, context);
-		
+
 		// Check if we got an empty response and return special status
 		if (result.status === "completed" && this.wasEmptyResponse(result)) {
-			log.info("Empty response detected. Returning empty_response status for retry at tomoriChat level.");
+			log.info(
+				"Empty response detected. Returning empty_response status for retry at tomoriChat level.",
+			);
 			return { status: "empty_response" };
 		}
-		
+
 		// Return result for non-empty responses or other statuses
 		return result;
 	}
@@ -203,7 +222,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 						`Stream loop breaking due to stop request for channel ${context.channel.id}.`,
 					);
 					StreamOrchestrator.clearStopRequest(context.channel.id);
-					
+
 					// Flush any pending buffer before stopping
 					if (state.buffer.length > 0) {
 						await this.flushPendingBuffer(
@@ -213,7 +232,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 							context,
 						);
 					}
-					
+
 					return { status: "stopped_by_user" };
 				}
 
@@ -267,9 +286,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
 			// Complete metrics and return success with message count for empty response detection
 			metrics.endTime = Date.now();
-			
+
 			// Don't clear stop request here - let the finally block handle it after lock release
-			
+
 			log.success(
 				`Stream to channel ${context.channel.id} completed. Messages sent: ${state.messageSentCount}, Duration: ${metrics.endTime - metrics.startTime}ms`,
 			);
@@ -321,7 +340,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		switch (chunk.type) {
 			case "error":
 				if (chunk.error) {
-					await this.handleProviderError(chunk.error, context);
+					await this.handleProviderError(chunk.error, _provider, context);
 					return { status: "error", data: new Error(chunk.error.message) };
 				}
 				break;
@@ -404,13 +423,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 				state.buffer = processingResult.updatedBuffer;
 				processedSomething = true;
 			}
-			
+
 			// Update code block state regardless of whether we flushed or not
 			// This ensures we properly track when we enter/exit code blocks
 			if (processingResult.newCodeBlockState !== undefined) {
 				state.isInsideCodeBlock = processingResult.newCodeBlockState;
 			}
-			
 		} while (
 			processedSomething &&
 			state.buffer.length > 0 &&
@@ -440,27 +458,64 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	}
 
 	/**
-	 * Simple helper to check if buffer contains semantic markers
-	 * Much simpler than complex boundary detection - just prevents flushing when markers are present
-	 * Now includes markdown formatting markers for natural flow
+	 * Simplified semantic marker detection that checks for INCOMPLETE semantic blocks
+	 * Returns true only if there are unclosed/incomplete semantic markers that we should wait for
+	 * Focuses on the core cases that cause broken text formatting
 	 */
-	private hasSemanticMarkers(buffer: string): boolean {
-		// Original semantic markers
-		const hasQuotes = buffer.includes('"') || buffer.includes('「') || buffer.includes('」');
-		const hasParens = buffer.includes('(') || buffer.includes(')');
-		
-		// Markdown formatting markers (should flow naturally with text)
-		const hasBold = buffer.includes('**') || buffer.includes('__');
-		const hasItalic = buffer.includes('*') || buffer.includes('_');
-		const hasStrike = buffer.includes('~~');
-		const hasInlineCode = buffer.includes('`') && !buffer.includes('```'); // Exclude code blocks
-		const hasLinks = buffer.includes('[') && buffer.includes('](');
-		
-		// URL markers - prevent flushing when URLs are present
-		const urlRegex = /(https?|ftps?):\/\/[^\s<>[\](){}'"]+/;
-		const hasURLs = urlRegex.test(buffer);
-		
-		return hasQuotes || hasParens || hasBold || hasItalic || hasStrike || hasInlineCode || hasLinks || hasURLs;
+	private hasIncompleteSemanticMarkers(buffer: string): boolean {
+		// 1. Check for unbalanced parentheses (main issue from original problem)
+		let parenDepth = 0;
+		for (const char of buffer) {
+			if (char === "(") parenDepth++;
+			else if (char === ")") parenDepth--;
+		}
+		if (parenDepth !== 0) {
+			log.info(
+				`Stream: Buffer has unbalanced parentheses (depth: ${parenDepth})`,
+			);
+			return true;
+		}
+
+		// 2. Check for unbalanced quotes (regular and Japanese)
+		const regularQuoteCount = (buffer.match(/"/g) || []).length;
+		if (regularQuoteCount % 2 !== 0) {
+			log.info(`Stream: Buffer has unclosed quotes`);
+			return true;
+		}
+
+		const japOpenCount = (buffer.match(/「/g) || []).length;
+		const japCloseCount = (buffer.match(/」/g) || []).length;
+		if (japOpenCount !== japCloseCount) {
+			log.info(`Stream: Buffer has unbalanced Japanese quotes`);
+			return true;
+		}
+
+		// 3. Check for incomplete markdown links [text](url) - simplified approach
+		// This covers the broken link problem from the original issue
+		const openBrackets = (buffer.match(/\[/g) || []).length;
+		const closeBrackets = (buffer.match(/\]/g) || []).length;
+		const openParens = (buffer.match(/\(/g) || []).length;
+		const closeParens = (buffer.match(/\)/g) || []).length;
+
+		// If we have more [ than ] or more ( than ), we might be mid-link
+		if (openBrackets > closeBrackets || openParens > closeParens) {
+			// Check if it looks like a markdown link pattern
+			if (
+				buffer.includes("[") &&
+				(buffer.includes("](") || buffer.endsWith("]("))
+			) {
+				log.info(`Stream: Buffer might contain incomplete markdown link`);
+				return true;
+			}
+		}
+
+		// 4. Check for obviously incomplete URLs (only the most basic cases)
+		if (buffer.match(/https?:$|https?:\/$|https?:\/\/$/)) {
+			log.info(`Stream: Buffer ends with incomplete URL protocol`);
+			return true;
+		}
+
+		return false; // No incomplete semantic markers detected
 	}
 
 	/**
@@ -514,14 +569,17 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			// Not in code block - look for break points
 			const openingBackticksIndex = state.buffer.indexOf("```");
 			const newlineIndex = state.buffer.indexOf("\n");
-			
-			// Update semantic marker tracking (simple detection)
-			state.hasSemanticMarkers = this.hasSemanticMarkers(state.buffer);
+
+			// Update semantic marker tracking (enhanced incomplete detection)
+			state.hasSemanticMarkers = this.hasIncompleteSemanticMarkers(
+				state.buffer,
+			);
 
 			// Check for period flush only if humanizer is HEAVY
 			let periodEndIndex = -1;
 			if (config.humanizerDegree === HumanizerDegree.HEAVY) {
-				const periodMatch = SENTENCE_BOUNDARY_REGEX.exec(state.buffer);
+				const sentenceRegex = createSentenceSplitRegex();
+				const periodMatch = sentenceRegex.exec(state.buffer);
 				if (periodMatch) {
 					periodEndIndex = periodMatch.index + periodMatch[0].length;
 				}
@@ -529,7 +587,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
 			// Determine earliest break point
 			let earliestBreakIndex = -1;
-			let breakType: ChunkProcessingResult["breakType"] ;
+			let breakType: ChunkProcessingResult["breakType"];
 
 			if (openingBackticksIndex !== -1) {
 				earliestBreakIndex = openingBackticksIndex;
@@ -584,27 +642,40 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 						}
 					}
 				} else if (breakType === "newline" && !state.hasSemanticMarkers) {
-					// Only flush on newlines if no semantic markers are present
-					return {
-						shouldFlush: true,
-						segmentToFlush: state.buffer.substring(0, earliestBreakIndex + 1),
-						updatedBuffer: state.buffer.substring(earliestBreakIndex + 1),
-						newCodeBlockState: false,
-						breakType,
-					};
+					// Only flush on newlines if no incomplete semantic markers
+					// Additional safety: ensure the segment to flush doesn't contain incomplete markers
+					const segmentToFlush = state.buffer.substring(
+						0,
+						earliestBreakIndex + 1,
+					);
+
+					if (!this.hasIncompleteSemanticMarkers(segmentToFlush)) {
+						return {
+							shouldFlush: true,
+							segmentToFlush,
+							updatedBuffer: state.buffer.substring(earliestBreakIndex + 1),
+							newCodeBlockState: false,
+							breakType,
+						};
+					}
 				} else if (breakType === "period" && !state.hasSemanticMarkers) {
-					// Only flush on periods if no semantic markers are present  
-					return {
-						shouldFlush: true,
-						segmentToFlush: state.buffer.substring(0, periodEndIndex),
-						updatedBuffer: state.buffer.substring(periodEndIndex),
-						newCodeBlockState: false,
-						breakType,
-					};
+					// Only flush on periods if no incomplete semantic markers
+					// Additional safety: ensure the segment to flush doesn't contain incomplete markers
+					const segmentToFlush = state.buffer.substring(0, periodEndIndex);
+
+					if (!this.hasIncompleteSemanticMarkers(segmentToFlush)) {
+						return {
+							shouldFlush: true,
+							segmentToFlush,
+							updatedBuffer: state.buffer.substring(periodEndIndex),
+							newCodeBlockState: false,
+							breakType,
+						};
+					}
 				}
 			}
 
-			// No break points found
+			// No break points found or can't break due to incomplete semantic markers
 			return {
 				shouldFlush: false,
 				updatedBuffer: state.buffer,
@@ -711,7 +782,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	): Promise<void> {
 		// Check for stop before starting
 		if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
-			log.info("Stream Send: Stop request detected before sending chunks with typing");
+			log.info(
+				"Stream Send: Stop request detected before sending chunks with typing",
+			);
 			return;
 		}
 
@@ -723,7 +796,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		for (let i = 1; i < chunks.length; i++) {
 			// Check for stop before each message
 			if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
-				log.info(`Stream Send: Stop request detected before sending chunk ${i + 1}/${chunks.length}`);
+				log.info(
+					`Stream Send: Stop request detected before sending chunk ${i + 1}/${chunks.length}`,
+				);
 				return;
 			}
 
@@ -751,9 +826,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			}
 
 			log.info(`Stream Sim: Typing for ${Math.round(typingTime)}ms`);
-			
+
 			// Use interruptible typing delay
-			const cancelled = await this.interruptibleDelay(typingTime, context.channel.id);
+			const cancelled = await this.interruptibleDelay(
+				typingTime,
+				context.channel.id,
+			);
 			if (cancelled) {
 				log.info("Stream Send: Stop request detected during typing simulation");
 				return;
@@ -763,7 +841,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
 			// Add thinking pause between chunks
 			if (i < chunks.length - 1 && typingConfig.randomPauseEnabled) {
-				const pauseCancelled = await this.addThinkingPauseInterruptible(typingConfig, context);
+				const pauseCancelled = await this.addThinkingPauseInterruptible(
+					typingConfig,
+					context,
+				);
 				if (pauseCancelled) {
 					log.info("Stream Send: Stop request detected during thinking pause");
 					return;
@@ -799,7 +880,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	): Promise<void> {
 		// Check for stop request before Discord API call
 		if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
-			log.info("Stream Send: Stop request detected before Discord API call, skipping message send");
+			log.info(
+				"Stream Send: Stop request detected before Discord API call, skipping message send",
+			);
 			return;
 		}
 
@@ -831,14 +914,15 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 						contentLength: content.length,
 						contentPreview: content.substring(0, 200),
 					},
-				}
+				},
 			);
-			
+
 			// Re-throw to let the overall error handling deal with it
-			throw new Error(`Discord send failed: ${discordError instanceof Error ? discordError.message : String(discordError)}`);
+			throw new Error(
+				`Discord send failed: ${discordError instanceof Error ? discordError.message : String(discordError)}`,
+			);
 		}
 	}
-
 
 	/**
 	 * Interruptible thinking pause that can be cancelled by stop requests
@@ -882,7 +966,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	 * @param channelId - Channel ID to check for stop requests
 	 * @returns True if cancelled by stop request, false if completed normally
 	 */
-	private async interruptibleDelay(delayMs: number, channelId: string): Promise<boolean> {
+	private async interruptibleDelay(
+		delayMs: number,
+		channelId: string,
+	): Promise<boolean> {
 		const checkInterval = Math.min(250, delayMs / 4); // Check every 250ms or 1/4 of delay, whichever is smaller
 		const endTime = Date.now() + delayMs;
 
@@ -895,7 +982,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			// Wait for the check interval or remaining time, whichever is smaller
 			const timeLeft = endTime - Date.now();
 			const waitTime = Math.min(checkInterval, timeLeft);
-			
+
 			if (waitTime > 0) {
 				await new Promise((resolve) => setTimeout(resolve, waitTime));
 			}
@@ -914,12 +1001,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		context: StreamContext,
 	): Promise<void> {
 		if (state.buffer.length > 0) {
-			const blockStatus = state.isInsideCodeBlock 
-				? "still in code block" 
-				: state.hasSemanticMarkers 
-				? "contains semantic markers" 
-				: "regular";
-				
+			const blockStatus = state.isInsideCodeBlock
+				? "still in code block"
+				: state.hasSemanticMarkers
+					? "contains semantic markers"
+					: "regular";
+
 			log.info(
 				`Stream Seg: Flushing final buffer content (${blockStatus}): "${state.buffer}"`,
 			);
@@ -929,7 +1016,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 					"Stream Seg: Final flush occurred while still inside a code block. The block might be incomplete.",
 				);
 			}
-			
+
 			if (state.hasSemanticMarkers) {
 				log.warn(
 					"Stream Seg: Final flush occurred with semantic markers present. Some semantic blocks might be incomplete.",
@@ -964,7 +1051,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 			);
 			state.isInsideCodeBlock = false;
 		}
-		
+
 		if (state.hasSemanticMarkers) {
 			log.warn(
 				"Stream Seg: Function call received with semantic markers present. Flushing incomplete semantic blocks.",
@@ -987,20 +1074,30 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		state.buffer = "";
 	}
 
-
 	/**
 	 * Handle provider-specific errors
 	 */
 	private async handleProviderError(
 		error: unknown,
+		provider: StreamProvider,
 		context: StreamContext,
 	): Promise<void> {
-		const providerError = error as { type?: string; code?: string };
-		const errorMessage = `Stream response blocked/stopped. Reason: ${providerError.type || "unknown"}.`;
-		log.warn(errorMessage, error);
+		const providerError = error as ProviderError;
+		// Get locale for localized messages
+		const locale =
+			"guild" in context.channel
+				? context.channel.guild.preferredLocale
+				: "en-US";
 
-		// Check for PROHIBITED_CONTENT specific error
-		const isProhibitedContent = providerError.code === "PROHIBITED_CONTENT";
+		// Create localized error message for interactions
+		const errorMessage = localizer(
+			locale,
+			"genai.stream.provider_error_interaction",
+			{
+				reason: providerError.type || "unknown",
+			},
+		);
+		log.warn(errorMessage, error);
 
 		if (context.initialInteraction) {
 			if (
@@ -1026,33 +1123,63 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 					);
 			}
 		} else {
-			// Use special handling for PROHIBITED_CONTENT
-			if (isProhibitedContent) {
-				const summaryEmbed = this.createProhibitedContentEmbed(
-					'guild' in context.channel ? context.channel.guild.preferredLocale : 'en-US',
+			// Get provider-specific error description
+			const providerDescription = provider.createErrorDescription(providerError, locale);
+
+			if (providerDescription) {
+				// Determine universal title and tip based on error type
+				let titleKey: string;
+				let tipKey: string;
+				let color: ColorResolvable;
+
+				switch (providerError.type) {
+					case "rate_limit":
+						titleKey = "genai.stream.rate_limit_title";
+						tipKey = "genai.stream.rate_limit_tip";
+						color = ColorCode.WARN;
+						break;
+					case "content_blocked":
+						titleKey = "genai.stream.content_blocked_title";
+						tipKey = "genai.stream.content_blocked_tip";
+						color = ColorCode.ERROR;
+						break;
+					case "timeout":
+						titleKey = "genai.stream.timeout_title";
+						tipKey = "genai.stream.timeout_tip";
+						color = ColorCode.WARN;
+						break;
+					default:
+						titleKey = "genai.stream.api_error_title";
+						tipKey = "genai.stream.api_error_tip";
+						color = providerError.retryable ? ColorCode.WARN : ColorCode.ERROR;
+						break;
+				}
+
+				// Create provider-specific error embed
+				const embed = createStandardEmbed(locale, {
+					titleKey,
+					descriptionKey: "",
+					footerKey: tipKey,
+					color,
+				}).setDescription(providerDescription);
+
+				await context.channel.send({ embeds: [embed] }).catch((e) =>
+					log.warn("Stream: Failed to send provider error embed to channel", e),
 				);
-				await context.channel
-					.send({ embeds: [summaryEmbed] })
-					.catch((e) =>
-						log.warn("Stream: Failed to send prohibited content error embed to channel", e),
-					);
-			} else {
-				// Use default error handling for other error types
-				await sendStandardEmbed(
-					context.channel,
-					'guild' in context.channel ? context.channel.guild.preferredLocale : 'en-US',
-					{
-						titleKey: "genai.stream.response_stopped_title",
-						descriptionKey: "genai.stream.response_stopped_description",
-						descriptionVars: {
-							reason: providerError.type || "unknown",
-						},
-						color: ColorCode.ERROR,
-					},
-				).catch((e) =>
-					log.warn("Stream: Failed to send error embed to channel", e),
-				);
+				return;
 			}
+
+			// Fallback to generic error handling if provider returns null
+			await sendStandardEmbed(context.channel, locale, {
+				titleKey: "genai.stream.response_stopped_title",
+				descriptionKey: "genai.stream.response_stopped_description",
+				descriptionVars: {
+					reason: providerError.type || "unknown",
+				},
+				color: ColorCode.ERROR,
+			}).catch((e) =>
+				log.warn("Stream: Failed to send error embed to channel", e),
+			);
 		}
 	}
 
@@ -1091,7 +1218,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 		} else {
 			await sendStandardEmbed(
 				context.channel,
-				'guild' in context.channel ? context.channel.guild.preferredLocale : 'en-US',
+				"guild" in context.channel
+					? context.channel.guild.preferredLocale
+					: "en-US",
 				{
 					titleKey: "genai.generic_error_title",
 					descriptionKey: "genai.generic_error_description",
@@ -1175,34 +1304,19 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 	 * @param result - The stream result to check
 	 * @returns True if the result indicates no messages were sent
 	 */
-	private wasEmptyResponse(result: StreamResult & { messageSentCount?: number }): boolean {
+	private wasEmptyResponse(
+		result: StreamResult & { messageSentCount?: number },
+	): boolean {
 		// If the result has a messageSentCount property and it's 0, it's empty
-		if ('messageSentCount' in result && typeof result.messageSentCount === 'number') {
+		if (
+			"messageSentCount" in result &&
+			typeof result.messageSentCount === "number"
+		) {
 			return result.messageSentCount === 0;
 		}
-		
+
 		// Fallback: assume non-empty if we can't determine
 		return false;
 	}
 
-
-	/**
-	 * Create a special embed for PROHIBITED_CONTENT errors with admin guidance
-	 * @param locale - The locale to use for localization
-	 * @returns EmbedBuilder instance for the prohibited content error
-	 */
-	private createProhibitedContentEmbed(locale: string) {
-		return createSummaryEmbed(locale, {
-			titleKey: "genai.stream.prohibited_content_title",
-			descriptionKey: "genai.stream.prohibited_content_description",
-			color: ColorCode.ERROR,
-			fields: [
-				{
-					nameKey: "genai.stream.prohibited_content_admin_notice_title",
-					valueKey: "genai.stream.prohibited_content_admin_notice_description",
-					inline: false,
-				},
-			],
-		});
-	}
 }

@@ -85,6 +85,10 @@ export default {
 		generic_error_footer:
 			"`/tool refresh`を実行してからもう一度お試しください。問題が解決しない場合は、`/support report`で報告してください。",
 		error_stream_timeout_title: "接続タイムアウト",
+
+		// プロバイダーエラー形式テンプレート
+		provider_error_format:
+			"{providerName} エラーコード {errorCode}: {apiMessage}。{tip}",
 		error_stream_timeout_description:
 			"この問題が続く場合、サービスに一時的な問題がある可能性があります。しばらくしてからリクエストを再試行するか、`/tools refresh`を使用してコンテキスト履歴をリフレッシュしてください。",
 
@@ -109,7 +113,9 @@ export default {
 		video: {
 			youtube_processing_title: "👁️ YouTube動画を視聴中...",
 			youtube_processing_description:
-				"現在、YouTube動画を視聴しています: {video_url}。動画の長さに応じて、少し時間がかかる場合があります。",
+				"現在、YouTube動画を視聴しています: {video_url}",
+			youtube_processing_footer:
+				"動画の長さに応じて、少し時間がかかる場合があります",
 		},
 
 		// 新規: ストリーム固有のエラーメッセージ
@@ -125,6 +131,63 @@ export default {
 				"送信されたコンテンツ（メディア、会話メッセージ、記憶）がAIプロバイダーのコンテンツポリシーに準拠していることを確認してください。`/tool refresh`で会話コンテンツをクリアしてください。",
 			streaming_failed_description:
 				"応答をストリーミング中に問題が発生しました。",
+
+			// エラーインタラクションメッセージ
+			provider_error_interaction:
+				"ストリーム応答がブロック/停止されました。理由: {reason}。",
+			retry_message:
+				"これは一時的なエラーです。リクエストを再度お試しいただけます。",
+			retry_field_title: "🔄 再試行",
+			help_field_title: "💡 対処方法",
+
+			// 汎用プロバイダーエラータイトルとヒント（genai.googleから移動）
+			api_error_title: "❌ APIエラー",
+			api_error_tip: "APIキーを確認して再度お試しください",
+
+			rate_limit_title: "🟡 レート制限を超過",
+			rate_limit_tip: "数分お待ちいただいてから再度お試しください",
+
+			content_blocked_title: "🛡️ コンテンツがブロックされました",
+			content_blocked_tip: "コンテンツポリシーに準拠するようメッセージを言い換えてください",
+
+			timeout_title: "⏱️ リクエストタイムアウト",
+			timeout_tip: "メッセージを短くするか再度お試しください",
+
+			unknown_title: "❓ プロバイダーエラー",
+			unknown_tip: "再度お試しいただくかサポートにお問い合わせください",
+		},
+
+		// Google固有のエラーメッセージ（プロバイダー固有のデフォルトメッセージのみ）
+		google: {
+			// 400 INVALID_ARGUMENT
+			"400_default_message": "リクエスト形式にエラーがありました",
+
+			// 400 FAILED_PRECONDITION (billing)
+			"400_billing_default_message": "このサービスには課金が必要です",
+
+			// 403 PERMISSION_DENIED
+			"403_default_message": "APIキーに必要な権限がありません",
+
+			// 404 NOT_FOUND
+			"404_default_message": "参照されたリソースが見つかりませんでした",
+
+			// 429 RESOURCE_EXHAUSTED
+			"429_default_message": "短時間に多くのリクエストを送信しすぎました",
+
+			// 500 INTERNAL
+			"500_default_message": "Googleのサーバーで予期しないエラーが発生しました",
+
+			// 503 UNAVAILABLE
+			"503_default_message": "AIモデルが現在過負荷状態です",
+
+			// 504 DEADLINE_EXCEEDED
+			"504_default_message": "リクエストの処理時間が長すぎました",
+
+			// Content blocked errors
+			content_blocked_default_message: "あなたのコンテンツは安全フィルターによってブロックされました",
+
+			// Generic fallback for unknown Google errors
+			unknown_default_message: "予期しないエラーが発生しました",
 		},
 
 		self_teach: {

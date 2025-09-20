@@ -75,10 +75,14 @@ export function createSummaryEmbed(
 		descriptionKey,
 		descriptionVars = {},
 		color = ColorCode.INFO,
+		footerKey,
+		footerVars = {},
+		thumbnailUrl,
+		timestamp,
 		fields,
 	} = options;
 
-	return new EmbedBuilder()
+	const embed = new EmbedBuilder()
 		.setColor(color)
 		.setTitle(localizer(locale, titleKey))
 		.setDescription(localizer(locale, descriptionKey, descriptionVars))
@@ -106,6 +110,22 @@ export function createSummaryEmbed(
 				},
 			),
 		);
+
+	if (footerKey) {
+		embed.setFooter({
+			text: localizer(locale, footerKey, footerVars),
+		});
+	}
+
+	if (thumbnailUrl) {
+		embed.setThumbnail(thumbnailUrl);
+	}
+
+	if (timestamp) {
+		embed.setTimestamp();
+	}
+
+	return embed;
 }
 
 /**

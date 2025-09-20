@@ -6,6 +6,7 @@
  */
 
 import { HumanizerDegree } from "../db/schema";
+import { createSentenceSplitRegex } from "../../utils/text/stringHelper";
 
 /**
  * Discord streaming constants extracted from the original implementation
@@ -33,12 +34,6 @@ export const DISCORD_STREAMING_CONSTANTS = {
 	INACTIVITY_TIMEOUT_MS: 120000, // 2 minutes
 } as const;
 
-/**
- * Regular expression for detecting sentence boundaries
- * Supports both English periods and Japanese periods with proper lookahead/lookbehind
- */
-export const SENTENCE_BOUNDARY_REGEX =
-	/(?<!(?:\b(?:vs|mr|mrs|dr|prof|inc|ltd|co|etc|e\.g|i\.e)|\d))(?:(\.|\?)(?=\s|$)|(。))/i;
 
 /**
  * Stream state tracking for buffer management and code block detection
@@ -233,7 +228,7 @@ export function createBufferManagementConfig(
 			DISCORD_STREAMING_CONSTANTS.FLUSH_BUFFER_SIZE_CODE_BLOCK,
 		enablePunctuationFlush: true,
 		enableCodeBlockDetection: true,
-		sentenceBoundaryRegex: SENTENCE_BOUNDARY_REGEX,
+		sentenceBoundaryRegex: createSentenceSplitRegex(),
 		...customConfig,
 	};
 }

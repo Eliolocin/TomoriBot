@@ -29,6 +29,7 @@ import {
 	type StructuredContextItem,
 } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
+import { localizer } from "../../utils/text/localizer";
 import type {
 	ProcessedChunk,
 	ProviderError,
@@ -37,7 +38,6 @@ import type {
 	StreamContext,
 	StreamProvider,
 } from "../../types/stream/interfaces";
-
 
 /**
  * Google-specific stream configuration extending the base StreamConfig
@@ -67,7 +67,7 @@ interface GoogleStreamChunk {
 
 /**
  * Google Gemini streaming adapter implementation
- * 
+ *
  * Supports thought signatures for enhanced multi-turn conversations:
  * - Configure via GoogleStreamConfig.thinkingConfig
  * - Thought signatures and summaries are included in ProcessedChunk.metadata
@@ -316,45 +316,206 @@ export class GoogleStreamAdapter implements StreamProvider {
 	}
 
 	/**
-	 * Handle Google-specific errors
+	 * Handle Google-specific errors using official error codes and localized messages
 	 */
 	handleProviderError(error: unknown): ProviderError {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 
-		// Categorize Google-specific errors
-		if (errorMessage.includes("API key")) {
-			return {
-				type: "api_error",
-				message: `Google API key error: ${errorMessage}`,
-				retryable: false,
-				originalError: error,
-			};
+		// Try to parse Google API error structure to extract error code
+		let googleApiError: {
+			code?: number;
+			message?: string;
+			status?: string;
+		} | null = null;
+		let extractedMessage: string | undefined;
+
+		try {
+			// Google API errors sometimes have nested JSON in the message
+			if (errorMessage.includes('{"error":')) {
+				// Extract the JSON part from the error message
+				const jsonMatch = errorMessage.match(/\{.*\}/s);
+				if (jsonMatch) {
+					const parsedError = JSON.parse(jsonMatch[0]);
+					googleApiError = parsedError.error || parsedError;
+
+					// Extract the actual Google error message
+					if (
+						googleApiError?.message &&
+						typeof googleApiError.message === "string"
+					) {
+						try {
+							// Some Google errors have double-nested JSON
+							const nestedError = JSON.parse(googleApiError.message);
+							if (nestedError.error?.message) {
+								extractedMessage = nestedError.error.message;
+								// Update the error code from nested structure if available
+								if (nestedError.error?.code) {
+									googleApiError.code = nestedError.error.code;
+								}
+							}
+						} catch {
+							// If not nested JSON, use the direct message
+							extractedMessage = googleApiError.message;
+						}
+					}
+				}
+			}
+		} catch (parseError) {
+			log.warn(
+				"GoogleStreamAdapter: Failed to parse Google API error structure",
+				parseError,
+			);
 		}
 
-		if (errorMessage.includes("quota") || errorMessage.includes("rate")) {
-			return {
-				type: "rate_limit",
-				message: `Google API rate limit: ${errorMessage}`,
-				retryable: true,
-				originalError: error,
-			};
+		// Determine error type and create localized error based on Google API error codes
+		const errorCode = googleApiError?.code;
+		let errorType: ProviderError["type"];
+		let retryable: boolean;
+
+		// Map Google API error codes to our error types
+		switch (errorCode) {
+			case 400:
+				// Check if this is a billing-related 400 error
+				if (
+					errorMessage.includes("billing") ||
+					errorMessage.includes("free tier")
+				) {
+					errorType = "api_error";
+					retryable = false;
+				} else {
+					errorType = "api_error";
+					retryable = false;
+				}
+				break;
+			case 403:
+				errorType = "api_error";
+				retryable = false;
+				break;
+			case 404:
+				errorType = "api_error";
+				retryable = false;
+				break;
+			case 429:
+				errorType = "rate_limit";
+				retryable = true;
+				break;
+			case 500:
+				errorType = "api_error";
+				retryable = true;
+				break;
+			case 503:
+				errorType = "api_error";
+				retryable = true;
+				break;
+			case 504:
+				errorType = "timeout";
+				retryable = true;
+				break;
+			default:
+				// Fallback for unknown error codes or when code is not available
+				// Try to categorize based on error message content
+				if (
+					errorMessage.includes("API key") ||
+					errorMessage.includes("PERMISSION_DENIED")
+				) {
+					errorType = "api_error";
+					retryable = false;
+				} else if (
+					errorMessage.includes("rate") ||
+					errorMessage.includes("quota") ||
+					errorMessage.includes("RESOURCE_EXHAUSTED")
+				) {
+					errorType = "rate_limit";
+					retryable = true;
+				} else if (
+					errorMessage.includes("timeout") ||
+					errorMessage.includes("DEADLINE_EXCEEDED")
+				) {
+					errorType = "timeout";
+					retryable = true;
+				} else if (
+					errorMessage.includes("overloaded") ||
+					errorMessage.includes("UNAVAILABLE")
+				) {
+					errorType = "api_error";
+					retryable = true;
+				} else if (
+					errorMessage.includes("safety") ||
+					errorMessage.includes("blocked") ||
+					errorMessage.includes("prohibited")
+				) {
+					errorType = "content_blocked";
+					retryable = false;
+				} else {
+					errorType = "api_error";
+					retryable = false;
+				}
+				break;
 		}
 
-		if (errorMessage.includes("timeout")) {
-			return {
-				type: "timeout",
-				message: `Google API timeout: ${errorMessage}`,
-				retryable: true,
-				originalError: error,
-			};
-		}
-
-		return {
-			type: "api_error",
-			message: `Google API error: ${errorMessage}`,
-			retryable: false,
+		// Store the Google error code for use in createErrorEmbed
+		const providerError: ProviderError = {
+			type: errorType,
+			message: `Google API error (${errorCode || "unknown"}): ${errorMessage}`,
+			code: errorCode?.toString() || googleApiError?.status || "unknown",
+			retryable,
 			originalError: error,
+			// Store extracted message for createErrorDescription to use
+			userMessage: extractedMessage, // Original Google message if available
 		};
+
+		return providerError;
+	}
+
+	/**
+	 * Create Google-specific error description for embedding
+	 * Formats errors as "Error Code {code}: {Google message}"
+	 */
+	createErrorDescription(error: ProviderError, locale: string): string | null {
+
+		// Get Google-specific message based on error code and type
+		let googleMessage = error.userMessage;
+
+		if (!googleMessage) {
+			// Fallback to locale-based default messages
+			const errorCode = error.code;
+			let messageKey: string;
+
+			// Map error types to Google-specific locale keys
+			switch (error.type) {
+				case "content_blocked":
+					messageKey = "content_blocked_default_message";
+					break;
+				case "rate_limit":
+					messageKey = "429_default_message";
+					break;
+				case "timeout":
+					messageKey = "504_default_message";
+					break;
+				case "api_error":
+					// Check for specific API error codes
+					if (errorCode === "400" && error.message.includes("billing")) {
+						messageKey = "400_billing_default_message";
+					} else {
+						messageKey = `${errorCode}_default_message`;
+					}
+					break;
+				default:
+					messageKey = "unknown_default_message";
+					break;
+			}
+
+			try {
+				googleMessage = localizer(locale, `genai.google.${messageKey}`);
+			} catch {
+				// If locale key doesn't exist, use a generic fallback
+				googleMessage = localizer(locale, "genai.google.unknown_default_message");
+			}
+		}
+
+		// Format as "Error Code {code}: {Google message}"
+		const errorCode = error.code || "unknown";
+		return `Error Code ${errorCode}: ${googleMessage}`;
 	}
 
 	/**
@@ -368,6 +529,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 			supportsFunctionCalling: true,
 		};
 	}
+
 
 	/**
 	 * Assemble context items into Google's expected format
@@ -440,27 +602,44 @@ export class GoogleStreamAdapter implements StreamProvider {
 								},
 							);
 						}
-					} else if (part.type === "image" && "inlineData" in part && part.inlineData) {
+					} else if (
+						part.type === "image" &&
+						"inlineData" in part &&
+						part.inlineData
+					) {
 						// Handle images that already have base64 data (e.g., from profile picture tool)
-						const inlineData = part.inlineData as { mimeType: string; data: string };
-						if (typeof inlineData === "object" && inlineData.mimeType && inlineData.data) {
+						const inlineData = part.inlineData as {
+							mimeType: string;
+							data: string;
+						};
+						if (
+							typeof inlineData === "object" &&
+							inlineData.mimeType &&
+							inlineData.data
+						) {
 							geminiParts.push({
 								inlineData: {
 									mimeType: inlineData.mimeType,
 									data: inlineData.data,
 								},
 							});
-							log.info("GoogleStreamAdapter: Processed image with existing inlineData");
+							log.info(
+								"GoogleStreamAdapter: Processed image with existing inlineData",
+							);
 						} else {
-							log.warn("GoogleStreamAdapter: Invalid inlineData structure for image part");
+							log.warn(
+								"GoogleStreamAdapter: Invalid inlineData structure for image part",
+							);
 						}
 					} else if (part.type === "video" && part.uri && part.mimeType) {
 						// Handle videos
 						try {
 							if ((part as { isYouTubeLink?: boolean }).isYouTubeLink) {
 								// Check if this is an enhanced context video part (should be processed)
-								const isEnhancedContext = (part as { enhancedContext?: boolean }).enhancedContext;
-								
+								const isEnhancedContext = (
+									part as { enhancedContext?: boolean }
+								).enhancedContext;
+
 								if (isEnhancedContext) {
 									// Process enhanced context YouTube videos (from function call restart)
 									log.info(

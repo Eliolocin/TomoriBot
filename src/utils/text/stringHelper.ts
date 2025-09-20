@@ -8,7 +8,7 @@ import { log } from "../misc/logger";
  *
  * @returns A RegExp that can be used to split text into sentences
  */
-function createSentenceSplitRegex(): RegExp {
+export function createSentenceSplitRegex(): RegExp {
 	// 1. Common title abbreviations
 	const titles = ["mr", "mrs", "ms", "dr", "prof", "rev", "fr", "sr", "jr"];
 
@@ -75,8 +75,8 @@ function createSentenceSplitRegex(): RegExp {
 	// 14. Complete negative lookbehind pattern: abbreviations OR digits OR acronyms
 	const negativeLookbehind = `(?<!(?:${abbreviationsPattern}|\\d|${acronymPattern}))`;
 
-	// 15. Split on regular periods (.) with whitespace/end OR Japanese periods (。)
-	const sentenceEnd = "(?:\\.|。(?=\\s|$)|。)";
+	// 15. Split on regular periods (.) followed by whitespace/newline/end OR Japanese periods (。)
+	const sentenceEnd = "(?:\\.(?=\\s|\\n|$)|。)";
 
 	// 16. Return the complete regex with case-insensitive flag
 	return new RegExp(`${negativeLookbehind}${sentenceEnd}`, "i");

@@ -86,6 +86,10 @@ export default {
 		generic_error_description: `{error_message}`,
 		generic_error_footer: `Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support report\`.`,
 		error_stream_timeout_title: "Connection Timeout",
+
+		// Provider error format template: "{Provider name} Error Code {number}: {message from Google}. {tip from us}"
+		provider_error_format:
+			"{providerName} Error Code {errorCode}: {apiMessage}. {tip}",
 		error_stream_timeout_description:
 			"If this keeps happening, there might be a temporary issue with the service. Please try your request again in a moment or use `/tools refresh` to refresh the context history.",
 
@@ -110,7 +114,9 @@ export default {
 		video: {
 			youtube_processing_title: "👁️ Watching YouTube Video...",
 			youtube_processing_description:
-				"I'm currently watching the YouTube video: {video_url}. This may take a moment depending on the video length.",
+				"I'm currently watching the YouTube video: {video_url}",
+			youtube_processing_footer:
+				"This may take a moment depending on the video length",
 		},
 
 		// New: Stream specific error messages
@@ -124,14 +130,64 @@ export default {
 			prohibited_content_admin_notice_title: "Admin Notice",
 			prohibited_content_admin_notice_description:
 				"Please make sure content sent (media, conversation messages, and memories) complies with the AI provider's content policies. Run `/tool refresh` to clear conversation content.",
-			// For generic stream errors, we can reuse:
-			// genai.generic_error_title
-			// genai.generic_error_description
-			// or define new ones if more specificity is needed for stream-only generic errors.
-			// For now, assuming the existing generic ones are sufficient for a general stream failure.
-			// If a specific "streaming_failed_description" is needed distinct from "generic_error_description":
 			streaming_failed_description:
 				"An issue while trying to stream the response.",
+
+			// Error interaction messages
+			provider_error_interaction:
+				"Stream response blocked/stopped. Reason: {reason}.",
+			retry_message: "This error is temporary. You can try your request again.",
+			retry_field_title: "🔄 Retry",
+			help_field_title: "💡 What you can do",
+
+			// Universal provider error titles and tips (moved from genai.google)
+			api_error_title: "❌ API Error",
+			api_error_tip: "Please verify your API key and try again",
+
+			rate_limit_title: "🟡 Rate Limit Exceeded",
+			rate_limit_tip: "Please wait a few minutes before trying again",
+
+			content_blocked_title: "🛡️ Content Blocked",
+			content_blocked_tip: "Please rephrase your message to comply with content policies",
+
+			timeout_title: "⏱️ Request Timeout",
+			timeout_tip: "Try shortening your message or try again",
+
+			unknown_title: "❓ Provider Error",
+			unknown_tip: "Please try again or contact support",
+		},
+
+		// Google-specific error messages (provider-specific default messages only)
+		google: {
+			// 400 INVALID_ARGUMENT
+			"400_default_message": "There was an error in your request format",
+
+			// 400 FAILED_PRECONDITION (billing)
+			"400_billing_default_message": "Billing is required for this service",
+
+			// 403 PERMISSION_DENIED
+			"403_default_message": "Your API key doesn't have the required permissions",
+
+			// 404 NOT_FOUND
+			"404_default_message": "A referenced resource could not be found",
+
+			// 429 RESOURCE_EXHAUSTED
+			"429_default_message": "You've sent too many requests too quickly",
+
+			// 500 INTERNAL
+			"500_default_message": "An unexpected error occurred on Google's servers",
+
+			// 503 UNAVAILABLE
+			"503_default_message": "The AI model is currently overloaded",
+
+			// 504 DEADLINE_EXCEEDED
+			"504_default_message": "Your request took too long to process",
+
+			// Content blocked errors (SAFETY, PROHIBITED_CONTENT, etc.)
+			content_blocked_default_message: "Your content was blocked by safety filters",
+
+			// Generic fallback for unknown Google errors
+			unknown_default_message: "An unexpected error occurred",
 		},
 
 		self_teach: {

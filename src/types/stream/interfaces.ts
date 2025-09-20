@@ -44,6 +44,9 @@ export interface ProviderError {
 	code?: string;
 	retryable: boolean;
 	originalError?: unknown;
+
+	// Enhanced fields for provider-specific user-friendly error handling
+	userMessage?: string; // User-friendly error message from provider
 }
 
 /**
@@ -159,6 +162,14 @@ export interface StreamProvider {
 	handleProviderError(error: unknown): ProviderError;
 
 	/**
+	 * Create provider-specific error description for display in embeds
+	 * @param error - The normalized provider error
+	 * @param locale - The locale for localization
+	 * @returns Provider-specific error description string or null for fallback
+	 */
+	createErrorDescription(error: ProviderError, locale: string): string | null;
+
+	/**
 	 * Get provider-specific information for logging and debugging
 	 * @returns Provider identification and capabilities
 	 */
@@ -168,6 +179,7 @@ export interface StreamProvider {
 		supportsStreaming: boolean;
 		supportsFunctionCalling: boolean;
 	};
+
 }
 
 /**

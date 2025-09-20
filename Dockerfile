@@ -17,28 +17,6 @@ RUN apk add --no-cache \
     nodejs \
     npm
 
-# Install MCP servers that are required by TomoriBot
-# Fetch MCP server needs to be pre-installed with pip
-RUN pip3 install mcp-server-fetch --break-system-packages
-
-# Copy package files first for better Docker layer caching
-# This is like getting the "lease agreement" (dependencies) ready first
-COPY package.json ./
-COPY tsconfig.json ./
-# Copy lockfile if it exists (Bun sometimes uses different names)
-COPY bun.lock* ./
-
-# Install dependencies
-# Think of this as "furnishing the apartment" with all the tools TomoriBot needs
-RUN bun install --frozen-lockfile --production
-
-# Copy the rest of the application code
-# This is like moving TomoriBot's belongings into her new apartment
-COPY src/ ./src/
-
-# No build step needed - Bun runs TypeScript natively!
-# This matches your proven development setup
-
 # Create a non-root user for security
 # It's like giving TomoriBot her own user account instead of admin access
 RUN addgroup -g 1001 -S tomori && \
@@ -49,6 +27,29 @@ RUN chown -R tomori:tomori /app
 
 # Switch to non-root user
 USER tomori
+
+# Install MCP servers that are required by TomoriBot
+# Fetch MCP server needs to be pre-installed with pip
+# Install as tomori user to avoid permission issues
+RUN pip3 install --user mcp-server-fetch
+
+# Copy package files first for better Docker layer caching
+# This is like getting the "lease agreement" (dependencies) ready first
+COPY --chown=tomori:tomori package.json ./
+COPY --chown=tomori:tomori tsconfig.json ./
+# Copy lockfile if it exists (Bun sometimes uses different names)
+COPY --chown=tomori:tomori bun.lock* ./
+
+# Install dependencies
+# Think of this as "furnishing the apartment" with all the tools TomoriBot needs
+RUN bun install --frozen-lockfile --production
+
+# Copy the rest of the application code
+# This is like moving TomoriBot's belongings into her new apartment
+COPY --chown=tomori:tomori src/ ./src/
+
+# No build step needed - Bun runs TypeScript natively!
+# This matches your proven development setup
 
 # Environment variables that should be consistent
 ENV NODE_ENV=production

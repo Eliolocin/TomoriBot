@@ -100,6 +100,25 @@ Before running TomoriBot, ensure you have the following installed:
   # Linux (Ubuntu/Debian)
   sudo apt-get install postgresql postgresql-contrib
   ```
+  - After installing PostgreSQL, login:
+  ```sh
+  # Linux
+   sudo -u postgres psql
+   
+   # macOS (Homebrew)
+   psql postgres
+   
+   # Windows
+   # Use "SQL Shell (psql)" from Start Menu or:
+   psql -U postgres
+  ```
+  - Create the required database and user for TomoriBot. Replace `your_` variables with your own and take note of them:
+  ```sql
+  CREATE USER your_username WITH PASSWORD 'your_password';
+  CREATE DATABASE your_dbname;
+  GRANT ALL PRIVILEGES ON DATABASE your_dbname TO your_username;
+  \q
+  ```
 
 ### Installation
 
@@ -116,7 +135,7 @@ Before running TomoriBot, ensure you have the following installed:
 
 ### Configuration
 
-**Create environment file** `.env` and then fill in the required variables, ensure that your PostgreSQL database is running:
+**Create environment file** `.env` and then fill in the required variables:
    ```
     # Discord Bot Configuration (Required)
     DISCORD_TOKEN=your_discord_bot_token_here
@@ -129,7 +148,7 @@ Before running TomoriBot, ensure you have the following installed:
     POSTGRES_PORT=5432
     POSTGRES_USER=your_username
     POSTGRES_PASSWORD=your_password
-    POSTGRES_DB=tomodb
+    POSTGRES_DB=your_dbname
 
     # Bot Configuration (Optional)
     DEFAULT_BOTNAME=Tomori
@@ -154,11 +173,11 @@ bun run dev
 #### Launching with Docker Compose
 ```sh
 # Build TomoriBot's container (first time or after code changes)
-docker-compose build
+docker compose build
 
 # Start TomoriBot and her database
 # For the database of the Docker version, local '.env' only needs POSTGRES_PASSWORD variable
-docker-compose up
+docker compose up
 ```
 
 ### Basic Commands
