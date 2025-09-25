@@ -10,7 +10,6 @@ import { log } from "../misc/logger";
 import type {
 	EnhancedMCPServerConfig,
 } from "../../types/tool/mcpTypes";
-import { DEFAULT_MCP_PARAMETER_OVERRIDES } from "../../types/tool/mcpTypes";
 
 /**
  * MCP Configuration Manager
@@ -167,7 +166,6 @@ export class MCPConfigManager {
 
 			// Handler configuration
 			behaviorHandler: this.determineBehaviorHandler(serverName),
-			parameterOverrides: this.loadParameterOverrides(serverName),
 
 			// Capabilities (will be determined at runtime)
 			supportedFunctions: Array.isArray(rawConfig.supportedFunctions) ? rawConfig.supportedFunctions : [],
@@ -196,30 +194,6 @@ export class MCPConfigManager {
 		return handlerMap[serverName];
 	}
 
-	/**
-	 * Load parameter overrides for a specific server
-	 * @param serverName - Name of the server
-	 * @returns Parameter overrides configuration
-	 */
-	private loadParameterOverrides(
-		serverName: string,
-	): Record<string, Record<string, unknown>> | undefined {
-		// Check if there are default overrides for this server's functions
-		const serverFunctionPrefix = serverName.replace("-", "_");
-		const matchingOverrides: Record<string, Record<string, unknown>> = {};
-
-		for (const [functionName, overrides] of Object.entries(
-			DEFAULT_MCP_PARAMETER_OVERRIDES,
-		)) {
-			if (functionName.startsWith(serverFunctionPrefix)) {
-				matchingOverrides[functionName] = overrides as Record<string, unknown>;
-			}
-		}
-
-		return Object.keys(matchingOverrides).length > 0
-			? matchingOverrides
-			: undefined;
-	}
 
 	/**
 	 * Validate a server configuration

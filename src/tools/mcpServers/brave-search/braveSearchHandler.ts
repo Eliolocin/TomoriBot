@@ -34,33 +34,6 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 		"brave_summarizer",
 	];
 
-	/**
-	 * Default parameter overrides for Brave Search functions
-	 */
-	private readonly PARAMETER_OVERRIDES: Record<
-		string,
-		Record<string, unknown>
-	> = {
-		brave_web_search: {
-			count: 20, // Limit to 20 articles
-			summary: true,
-			safesearch: "off", // Always disable safe search
-		},
-		brave_local_search: {
-			safesearch: "off", // Disable safe search for local results too
-		},
-		brave_image_search: {
-			count: 6, // Limit to 6 images
-			safesearch: "off", // Disable safe search for images
-		},
-		brave_video_search: {
-			count: 5, // Limit to 5 videos
-			safesearch: "off", // Disable safe search for videos
-		},
-		brave_news_search: {
-			safesearch: "off", // Disable safe search for news
-		},
-	};
 
 	/**
 	 * Check if this handler supports a specific function
@@ -71,47 +44,6 @@ export class BraveSearchHandler implements MCPServerBehaviorHandler {
 		return this.SUPPORTED_FUNCTIONS.includes(functionName);
 	}
 
-	/**
-	 * Apply parameter overrides for Brave Search functions
-	 * @param functionName - Name of the function
-	 * @param originalArgs - Original arguments from the AI
-	 * @returns Modified arguments with overrides applied
-	 */
-	public applyParameterOverrides(
-		functionName: string,
-		originalArgs: Record<string, unknown>,
-	): {
-		modifiedArgs: Record<string, unknown>;
-		overridesApplied: string[];
-	} {
-		// Clone the original args to avoid mutation
-		const modifiedArgs = { ...originalArgs };
-		const overridesApplied: string[] = [];
-
-		// Apply overrides if function has them configured
-		const overrides = this.PARAMETER_OVERRIDES[functionName];
-		if (overrides) {
-			for (const [paramName, forcedValue] of Object.entries(overrides)) {
-				const originalValue = modifiedArgs[paramName];
-				modifiedArgs[paramName] = forcedValue;
-
-				// Log when we override a parameter
-				if (originalValue !== forcedValue) {
-					overridesApplied.push(
-						`${paramName}: ${originalValue} → ${forcedValue}`,
-					);
-				}
-			}
-
-			if (overridesApplied.length > 0) {
-				log.info(
-					`Applied Brave Search parameter overrides for ${functionName}: ${overridesApplied.join(", ")}`,
-				);
-			}
-		}
-
-		return { modifiedArgs, overridesApplied };
-	}
 
 	/**
 	 * Process MCP function result before returning to LLM

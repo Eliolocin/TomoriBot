@@ -130,6 +130,72 @@ export class MCPExecutor {
 	}
 
 	/**
+	 * Apply business rules for MCP function parameters
+	 * @param functionName - Name of the MCP function
+	 * @param args - Original arguments
+	 * @returns Modified arguments with business rules applied
+	 */
+	private applyBusinessRules(
+		functionName: string,
+		args: Record<string, unknown>,
+	): Record<string, unknown> {
+		const modifiedArgs = { ...args };
+
+		// Apply business rules based on function name
+		switch (functionName) {
+			case "brave_web_search":
+				modifiedArgs.count = 20; // Always 20 for optimal performance
+				modifiedArgs.summary = true; // Always enabled for better results
+				modifiedArgs.safesearch = "off"; // Always off (business requirement)
+				break;
+
+			case "brave_local_search":
+				modifiedArgs.safesearch = "off"; // Always off (business requirement)
+				break;
+
+			case "brave_image_search":
+				// Allow AI to override count, but limit to max 10 and default to 3
+				modifiedArgs.count = Math.min(Number(modifiedArgs.count) || 3, 10);
+				modifiedArgs.safesearch = "off"; // Always off (business requirement)
+				break;
+
+			case "brave_video_search":
+				// Allow AI to override count, but limit to max 10 and default to 5
+				modifiedArgs.count = Math.min(Number(modifiedArgs.count) || 5, 10);
+				modifiedArgs.safesearch = "off"; // Always off (business requirement)
+				break;
+
+			case "brave_news_search":
+				modifiedArgs.safesearch = "off"; // Always off (business requirement)
+				break;
+
+			// DuckDuckGo Search functions
+			case "web-search":
+				modifiedArgs.numResults = Math.min(Number(modifiedArgs.numResults) || 12, 20); // Default 12, max 20
+				modifiedArgs.page = 1; // Always start from first page
+				break;
+
+			case "felo-search":
+				modifiedArgs.stream = false; // Disable streaming for Discord compatibility
+				break;
+
+			case "fetch-url":
+				modifiedArgs.maxLength = Math.min(Number(modifiedArgs.maxLength) || 15000, 50000); // Default 15k, max 50k
+				modifiedArgs.extractMainContent = modifiedArgs.extractMainContent !== false; // Default true
+				modifiedArgs.includeLinks = modifiedArgs.includeLinks !== false; // Default true
+				modifiedArgs.includeImages = modifiedArgs.includeImages !== false; // Default true
+				break;
+
+			// Add more function-specific rules as needed
+			default:
+				// No modifications for other functions
+				break;
+		}
+
+		return modifiedArgs;
+	}
+
+	/**
 	 * Check if a function name belongs to an MCP tool
 	 * @param functionName - Name of the function to check
 	 * @returns Promise<boolean> - True if this is an MCP tool function
@@ -201,7 +267,6 @@ export class MCPExecutor {
 				originalArgs: { ...args },
 				modifiedArgs: { ...args },
 				executionStartTime,
-				overridesApplied: [],
 				serverName: handler?.serverName || "unknown",
 			} : {
 				// Create minimal context if none provided
@@ -209,19 +274,11 @@ export class MCPExecutor {
 				originalArgs: { ...args },
 				modifiedArgs: { ...args },
 				executionStartTime,
-				overridesApplied: [],
 				serverName: handler?.serverName || "unknown",
 			} as unknown as MCPExecutionContext;
 
-			// Apply parameter overrides if handler exists
-			if (handler) {
-				const overrideResult = handler.applyParameterOverrides(
-					functionName,
-					args,
-				);
-				mcpContext.modifiedArgs = overrideResult.modifiedArgs;
-				mcpContext.overridesApplied = overrideResult.overridesApplied;
-			}
+			// Apply business rules for parameters before sending to MCP server
+			mcpContext.modifiedArgs = this.applyBusinessRules(functionName, args);
 
 			// Find and execute the MCP function
 			const mcpTools = mcpManager.getMCPTools();
@@ -232,10 +289,8 @@ export class MCPExecutor {
 						geminiTool.functionDeclarations?.map((f) => f.name) || [];
 
 					if (mcpFunctionNames.includes(functionName)) {
-						// Execute the MCP function with modified args
-						log.info(
-							`Executing MCP function: ${functionName} with ${(mcpContext.overridesApplied?.length ?? 0) > 0 ? "enforced parameters" : "original parameters"}`,
-						);
+						// Execute the MCP function
+						log.info(`Executing MCP function: ${functionName}`);
 
 						const mcpResult = await mcpTool.callTool([
 							{ name: functionName, args: mcpContext.modifiedArgs },

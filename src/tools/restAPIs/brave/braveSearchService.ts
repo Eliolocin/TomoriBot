@@ -33,29 +33,6 @@ const USER_AGENT =
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 const REQUEST_TIMEOUT = 15000; // 15 seconds
 
-/**
- * Parameter overrides matching the MCP handler behavior
- * These values are forced to ensure consistency and optimal results
- */
-const PARAMETER_OVERRIDES: Record<string, Record<string, unknown>> = {
-	brave_web_search: {
-		count: 20, // Limit to 20 articles
-		summary: true, // Enable summary for better results
-		safesearch: "off", // Always disable safe search
-	},
-	brave_image_search: {
-		count: 6, // Limit to 6 images (optimal for Discord)
-		safesearch: "off", // Disable safe search for images
-	},
-	brave_video_search: {
-		count: 5, // Limit to 5 videos
-		safesearch: "off", // Disable safe search for videos
-	},
-	brave_news_search: {
-		safesearch: "off", // Disable safe search for news
-	},
-};
-
 // =============================================
 // Types for Internal Use
 // =============================================
@@ -71,47 +48,6 @@ interface ApiResult<T> {
 	data?: T;
 	error?: string;
 	statusCode?: number;
-}
-
-// =============================================
-// Parameter Override System
-// =============================================
-
-/**
- * Apply parameter overrides for a specific function
- * @param functionName - Name of the Brave Search function
- * @param originalParams - Original parameters from the call
- * @returns Enhanced parameters with overrides applied
- */
-function applyParameterOverrides<T extends Record<string, unknown>>(
-	functionName: string,
-	originalParams: T,
-): { enhancedParams: T; overridesApplied: string[] } {
-	const enhancedParams = { ...originalParams };
-	const overridesApplied: string[] = [];
-
-	const overrides = PARAMETER_OVERRIDES[functionName];
-	if (overrides) {
-		for (const [paramName, forcedValue] of Object.entries(overrides)) {
-			const originalValue = enhancedParams[paramName];
-			(enhancedParams as Record<string, unknown>)[paramName] = forcedValue;
-
-			// Log when we override a parameter
-			if (originalValue !== forcedValue) {
-				overridesApplied.push(
-					`${paramName}: ${originalValue} → ${forcedValue}`,
-				);
-			}
-		}
-
-		if (overridesApplied.length > 0) {
-			log.info(
-				`Applied Brave Search parameter overrides for ${functionName}: ${overridesApplied.join(", ")}`,
-			);
-		}
-	}
-
-	return { enhancedParams, overridesApplied };
 }
 
 // =============================================
@@ -477,34 +413,22 @@ export async function braveWebSearch(
 	params: WebSearchParams,
 	config: ApiRequestConfig = {},
 ): Promise<ApiResult<WebSearchApiResponse>> {
-	// Apply parameter overrides to match MCP handler behavior
-	const { enhancedParams } = applyParameterOverrides(
-		"brave_web_search",
-		params,
-	);
-
-	// Set default parameters optimized for Free plan with overrides applied
+	// Direct parameter assignment with business rules
 	const searchParams = {
-		q: enhancedParams.q,
-		country: enhancedParams.country || "US",
-		search_lang: enhancedParams.search_lang || "en",
-		ui_lang: enhancedParams.ui_lang || "en-US",
-		count: Math.min(Number(enhancedParams.count) || 10, 20), // Max 20 for free plan
-		offset: Math.min(Number(enhancedParams.offset) || 0, 9),
-		safesearch: enhancedParams.safesearch || "moderate",
-		spellcheck: enhancedParams.spellcheck !== false,
-		text_decorations: enhancedParams.text_decorations !== false,
-		// Apply forced summary parameter from overrides
-		summary: Boolean(enhancedParams.summary),
-		// Only include freshness if specified
-		...(enhancedParams.freshness
-			? { freshness: enhancedParams.freshness }
-			: {}),
-		// Free plan parameters
-		...(enhancedParams.result_filter
-			? { result_filter: enhancedParams.result_filter }
-			: {}),
-		...(enhancedParams.units ? { units: enhancedParams.units } : {}),
+		q: params.q,
+		country: params.country || "US",
+		search_lang: params.search_lang || "en",
+		ui_lang: params.ui_lang || "en-US",
+		count: 20, // Always 20 for optimal performance
+		offset: Math.min(Number(params.offset) || 0, 9),
+		safesearch: "off", // Always off (intentional requirement)
+		spellcheck: params.spellcheck !== false,
+		text_decorations: params.text_decorations !== false,
+		summary: true, // Always enabled for better results
+		// Only include optional parameters if specified
+		...(params.freshness ? { freshness: params.freshness } : {}),
+		...(params.result_filter ? { result_filter: params.result_filter } : {}),
+		...(params.units ? { units: params.units } : {}),
 	};
 
 	return makeBraveApiRequest<WebSearchApiResponse>(
@@ -524,21 +448,15 @@ export async function braveImageSearch(
 	params: ImageSearchParams,
 	config: ApiRequestConfig = {},
 ): Promise<ApiResult<ImageSearchApiResponse>> {
-	// Apply parameter overrides to match MCP handler behavior
-	const { enhancedParams } = applyParameterOverrides(
-		"brave_image_search",
-		params,
-	);
-
+	// Direct parameter assignment with business rules
 	const searchParams = {
-		q: enhancedParams.q,
-		country: enhancedParams.country || "US",
-		search_lang: enhancedParams.search_lang || "en",
-		count: Math.min(Number(enhancedParams.count) || 20, 200), // Max 200 for images
-		safesearch: enhancedParams.safesearch || "strict",
-		spellcheck: enhancedParams.spellcheck !== false,
+		q: params.q,
+		country: params.country || "US",
+		search_lang: params.search_lang || "en",
+		count: Math.min(Number(params.count) || 3, 10), // Max 10 for images, default 3
+		safesearch: "off", // Always off (intentional requirement)
+		spellcheck: params.spellcheck !== false,
 	};
-
 	return makeBraveApiRequest<ImageSearchApiResponse>(
 		"/images/search",
 		searchParams,
@@ -556,25 +474,18 @@ export async function braveVideoSearch(
 	params: VideoSearchParams,
 	config: ApiRequestConfig = {},
 ): Promise<ApiResult<VideoSearchApiResponse>> {
-	// Apply parameter overrides to match MCP handler behavior
-	const { enhancedParams } = applyParameterOverrides(
-		"brave_video_search",
-		params,
-	);
-
+	// Direct parameter assignment with business rules
 	const searchParams = {
-		q: enhancedParams.q,
-		country: enhancedParams.country || "US",
-		search_lang: enhancedParams.search_lang || "en",
-		ui_lang: enhancedParams.ui_lang || "en-US",
-		count: Math.min(Number(enhancedParams.count) || 10, 50), // Max 50 for videos
-		offset: Math.min(Number(enhancedParams.offset) || 0, 9),
-		safesearch: enhancedParams.safesearch || "moderate",
-		spellcheck: enhancedParams.spellcheck !== false,
+		q: params.q,
+		country: params.country || "US",
+		search_lang: params.search_lang || "en",
+		ui_lang: params.ui_lang || "en-US",
+		count: Math.min(Number(params.count) || 5, 10), // Max 10 for videos, default 5
+		offset: Math.min(Number(params.offset) || 0, 9),
+		safesearch: "off", // Always off (intentional requirement)
+		spellcheck: params.spellcheck !== false,
 		// Only include freshness if specified
-		...(enhancedParams.freshness
-			? { freshness: enhancedParams.freshness }
-			: {}),
+		...(params.freshness ? { freshness: params.freshness } : {}),
 	};
 
 	return makeBraveApiRequest<VideoSearchApiResponse>(
@@ -594,25 +505,18 @@ export async function braveNewsSearch(
 	params: NewsSearchParams,
 	config: ApiRequestConfig = {},
 ): Promise<ApiResult<NewsSearchApiResponse>> {
-	// Apply parameter overrides to match MCP handler behavior
-	const { enhancedParams } = applyParameterOverrides(
-		"brave_news_search",
-		params,
-	);
-
+	// Direct parameter assignment with business rules
 	const searchParams = {
-		q: enhancedParams.q,
-		country: enhancedParams.country || "US",
-		search_lang: enhancedParams.search_lang || "en",
-		ui_lang: enhancedParams.ui_lang || "en-US",
-		count: Math.min(Number(enhancedParams.count) || 10, 50), // Max 50 for news
-		offset: Math.min(Number(enhancedParams.offset) || 0, 9),
-		safesearch: enhancedParams.safesearch || "moderate",
-		spellcheck: enhancedParams.spellcheck !== false,
+		q: params.q,
+		country: params.country || "US",
+		search_lang: params.search_lang || "en",
+		ui_lang: params.ui_lang || "en-US",
+		count: Math.min(Number(params.count) || 10, 20), // Max 20 for news, default 10
+		offset: Math.min(Number(params.offset) || 0, 9),
+		safesearch: "off", // Always off (intentional requirement)
+		spellcheck: params.spellcheck !== false,
 		// Only include freshness if specified
-		...(enhancedParams.freshness
-			? { freshness: enhancedParams.freshness }
-			: {}),
+		...(params.freshness ? { freshness: params.freshness } : {}),
 	};
 
 	return makeBraveApiRequest<NewsSearchApiResponse>(

@@ -132,18 +132,26 @@ export async function brave_web_search(
 
 		const serverId = getServerIdFromContext(context);
 
-		// Build search parameters
+		// Build search parameters - let service layer handle defaults
+		// Validate parameter types to prevent runtime errors
 		const searchParams = {
-			q: args.query as string,
-			country: (args.country as string) || "US",
-			search_lang: (args.search_lang as string) || "en",
-			ui_lang: (args.ui_lang as string) || "en-US",
-			count: typeof args.count === "number" ? args.count : 10,
-			offset: typeof args.offset === "number" ? args.offset : 0,
+			q: args.query as string, // Already validated above
+			country: typeof args.country === "string" ? args.country : undefined,
+			search_lang:
+				typeof args.search_lang === "string" ? args.search_lang : undefined,
+			ui_lang: typeof args.ui_lang === "string" ? args.ui_lang : undefined,
+			count: typeof args.count === "number" ? args.count : undefined,
+			offset: typeof args.offset === "number" ? args.offset : undefined,
 			safesearch:
-				(args.safesearch as "off" | "moderate" | "strict") || "moderate",
-			freshness: args.freshness as string,
-			spellcheck: args.spellcheck !== false,
+				args.safesearch === "off" ||
+				args.safesearch === "moderate" ||
+				args.safesearch === "strict"
+					? (args.safesearch as "off" | "moderate" | "strict")
+					: undefined,
+			freshness:
+				typeof args.freshness === "string" ? args.freshness : undefined,
+			spellcheck:
+				typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
 		};
 
 		log.info(`Executing brave_web_search for query: "${searchParams.q}"`);
@@ -249,14 +257,20 @@ export async function brave_image_search(
 
 		const serverId = getServerIdFromContext(context);
 
-		// Build search parameters
+		// Build search parameters - let service layer handle defaults
+		// Validate parameter types to prevent runtime errors
 		const searchParams = {
-			q: args.query as string,
-			country: (args.country as string) || "US",
-			search_lang: (args.search_lang as string) || "en",
-			count: typeof args.count === "number" ? args.count : 20,
-			safesearch: (args.safesearch as "off" | "strict") || "strict",
-			spellcheck: args.spellcheck !== false,
+			q: args.query as string, // Already validated above
+			country: typeof args.country === "string" ? args.country : undefined,
+			search_lang:
+				typeof args.search_lang === "string" ? args.search_lang : undefined,
+			count: typeof args.count === "number" ? args.count : undefined,
+			safesearch:
+				args.safesearch === "off" || args.safesearch === "strict"
+					? (args.safesearch as "off" | "strict")
+					: undefined,
+			spellcheck:
+				typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
 		};
 
 		log.info(`Executing brave_image_search for query: "${searchParams.q}"`);
@@ -297,13 +311,170 @@ export async function brave_image_search(
 		log.info(`Total image URLs extracted: ${imageUrls.length}`);
 
 		if (imageUrls.length > 0 && context?.channel) {
-			// Create Discord attachments from image URLs
+			// Pre-validate URLs and create Discord attachments only for accessible images
 			const attachments = [];
-			const failedUrls = [];
+			const failedUrls: string[] = [];
+			const validatedUrls: string[] = [];
 
-			for (let i = 0; i < imageUrls.length; i++) {
+			/**
+			 * Fast URL validation function with aggressive timeout
+			 * @param imageUrl - URL to validate
+			 * @returns Promise resolving to validation result
+			 */
+			const validateImageUrl = async (
+				imageUrl: string,
+			): Promise<{ url: string; valid: boolean; reason?: string }> => {
 				try {
-					const imageUrl = imageUrls[i];
+					// 1. Quick pattern filtering for known problematic domains
+					const badPatterns = [
+						/xxx\./i,
+						/\.onion\//i,
+						/localhost/i,
+						/127\.0\.0\.1/i,
+						/192\.168\./i,
+						/10\./i,
+					];
+
+					if (badPatterns.some((pattern) => pattern.test(imageUrl))) {
+						return { url: imageUrl, valid: false, reason: "blocked_domain" };
+					}
+
+					// 2. Aggressive 2-second timeout for network validation
+					const controller = new AbortController();
+					const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+					const response = await fetch(imageUrl, {
+						method: "HEAD",
+						signal: controller.signal,
+						headers: {
+							"User-Agent":
+								"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+						},
+					});
+
+					clearTimeout(timeoutId);
+
+					// Check if URL is accessible and is actually an image
+					if (
+						response.ok &&
+						response.headers.get("content-type")?.startsWith("image/")
+					) {
+						return { url: imageUrl, valid: true };
+					} else {
+						return {
+							url: imageUrl,
+							valid: false,
+							reason: `status_${response.status}`,
+						};
+					}
+				} catch (error) {
+					return {
+						url: imageUrl,
+						valid: false,
+						reason: error instanceof Error ? error.name : "unknown_error",
+					};
+				}
+			};
+
+			// 1. Validate all URLs in parallel with overall timeout guarantee
+			log.info(
+				`Starting parallel validation of ${imageUrls.length} image URLs (2s total timeout)`,
+			);
+
+			// Create a shared results array to collect partial results during timeout
+			const partialResults = new Map<
+				string,
+				{ url: string; valid: boolean; reason?: string }
+			>();
+
+			// Wrap each validation promise to store results immediately when they complete
+			const wrappedPromises = imageUrls.map(async (url) => {
+				try {
+					const result = await validateImageUrl(url);
+					partialResults.set(url, result);
+					return result;
+				} catch (error) {
+					const failResult = {
+						url,
+						valid: false,
+						reason: error instanceof Error ? error.name : "unknown_error",
+					};
+					partialResults.set(url, failResult);
+					return failResult;
+				}
+			});
+
+			// Overall timeout that preserves any completed validations
+			const timeoutPromise = new Promise<
+				{ url: string; valid: boolean; reason?: string }[]
+			>((resolve) => {
+				setTimeout(() => {
+					log.warn(
+						`Overall validation timeout reached (3s), proceeding with ${partialResults.size}/${imageUrls.length} completed results`,
+					);
+
+					// Return completed results + mark incomplete ones as timed out
+					const results = imageUrls.map((url) => {
+						if (partialResults.has(url)) {
+							return partialResults.get(url)!;
+						} else {
+							return { url, valid: false, reason: "overall_timeout" };
+						}
+					});
+
+					resolve(results);
+				}, 3000);
+			});
+
+			let validationResults: { url: string; valid: boolean; reason?: string }[];
+
+			try {
+				// Use Promise.race to ensure we never wait more than 3 seconds total
+				// But preserve any partial results that completed within the timeout
+				validationResults = await Promise.race([
+					Promise.allSettled(wrappedPromises).then((settledResults) =>
+						settledResults.map((result, index) => {
+							if (result.status === "fulfilled") {
+								return result.value;
+							} else {
+								return {
+									url: imageUrls[index],
+									valid: false,
+									reason: "promise_rejected",
+								};
+							}
+						}),
+					),
+					timeoutPromise,
+				]);
+			} catch (error) {
+				log.error("Validation process failed completely:", error as Error);
+				validationResults = imageUrls.map((url) => ({
+					url,
+					valid: false,
+					reason: "validation_error",
+				}));
+			}
+
+			// 2. Process validation results
+			for (const result of validationResults) {
+				if (result.valid) {
+					validatedUrls.push(result.url);
+					log.info(`✓ Validated: ${result.url}`);
+				} else {
+					failedUrls.push(result.url);
+					log.warn(`✗ Failed: ${result.url} (${result.reason})`);
+				}
+			}
+
+			log.info(
+				`Parallel validation complete: ${validatedUrls.length} valid, ${failedUrls.length} invalid`,
+			);
+
+			// 3. Create Discord attachments only for validated URLs
+			for (let i = 0; i < validatedUrls.length; i++) {
+				try {
+					const imageUrl = validatedUrls[i];
 					const attachment = new (await import("discord.js")).AttachmentBuilder(
 						imageUrl,
 						{
@@ -311,11 +482,14 @@ export async function brave_image_search(
 						},
 					);
 					attachments.push(attachment);
-					log.info(`Prepared Discord attachment for image: ${imageUrl}`);
+					log.info(
+						`Prepared Discord attachment for validated image: ${imageUrl}`,
+					);
 				} catch (attachmentError) {
-					failedUrls.push(imageUrls[i]);
+					// This should rarely happen now since URLs are pre-validated
+					failedUrls.push(validatedUrls[i]);
 					log.warn(
-						`Failed to create attachment for URL: ${imageUrls[i]}`,
+						`Failed to create attachment for validated URL: ${validatedUrls[i]}`,
 						attachmentError as Error,
 					);
 				}
@@ -328,16 +502,23 @@ export async function brave_image_search(
 						files: attachments,
 					});
 					log.success(
-						`Sent ${attachments.length} image attachments to Discord`,
+						`Sent ${attachments.length} validated image attachments to Discord`,
 					);
 
 					// Return simplified response to LLM - no URLs or image data to prevent duplicate processing
 					const queryTerm = args.query || "images";
-					const completionMessage = `Found and sent ${attachments.length} ${queryTerm} images directly to Discord. The images are now displayed for the user.`;
+					let completionMessage = `Found and sent ${attachments.length} ${queryTerm} images directly to Discord. The images are now displayed for the user.`;
+
+					// Add information about failed URLs if any
+					if (failedUrls.length > 0) {
+						completionMessage += ` (Note: ${failedUrls.length} image URLs were inaccessible and were filtered out.)`;
+					}
 
 					return createToolResult(true, completionMessage, {
 						results: completionMessage,
 						imagesSent: attachments.length,
+						imagesValidated: validatedUrls.length,
+						imagesFiltered: failedUrls.length,
 						status: "completed_and_sent",
 					});
 				} catch (sendError) {
@@ -353,9 +534,22 @@ export async function brave_image_search(
 					);
 					return createToolResult(
 						false,
-						`Found ${imageUrls.length} images, but failed to send them to Discord due to a technical error. ${formattedResults}`,
+						`Found ${validatedUrls.length} accessible images, but failed to send them to Discord due to a technical error. ${formattedResults}`,
 					);
 				}
+			} else {
+				// No valid images after validation
+				const queryTerm = args.query || "images";
+				return createToolResult(
+					false,
+					`Found ${imageUrls.length} ${queryTerm} image URLs, but none were accessible or valid. All image links appear to be broken or inaccessible.`,
+					{
+						results: `No accessible ${queryTerm} images found`,
+						imagesFound: imageUrls.length,
+						imagesFiltered: failedUrls.length,
+						status: "all_images_inaccessible",
+					},
+				);
 			}
 		}
 
@@ -412,18 +606,26 @@ export async function brave_video_search(
 
 		const serverId = getServerIdFromContext(context);
 
-		// Build search parameters
+		// Build search parameters - let service layer handle defaults
+		// Validate parameter types to prevent runtime errors
 		const searchParams = {
-			q: args.query as string,
-			country: (args.country as string) || "US",
-			search_lang: (args.search_lang as string) || "en",
-			ui_lang: (args.ui_lang as string) || "en-US",
-			count: typeof args.count === "number" ? args.count : 10,
-			offset: typeof args.offset === "number" ? args.offset : 0,
+			q: args.query as string, // Already validated above
+			country: typeof args.country === "string" ? args.country : undefined,
+			search_lang:
+				typeof args.search_lang === "string" ? args.search_lang : undefined,
+			ui_lang: typeof args.ui_lang === "string" ? args.ui_lang : undefined,
+			count: typeof args.count === "number" ? args.count : undefined,
+			offset: typeof args.offset === "number" ? args.offset : undefined,
 			safesearch:
-				(args.safesearch as "off" | "moderate" | "strict") || "moderate",
-			freshness: args.freshness as string,
-			spellcheck: args.spellcheck !== false,
+				args.safesearch === "off" ||
+				args.safesearch === "moderate" ||
+				args.safesearch === "strict"
+					? (args.safesearch as "off" | "moderate" | "strict")
+					: undefined,
+			freshness:
+				typeof args.freshness === "string" ? args.freshness : undefined,
+			spellcheck:
+				typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
 		};
 
 		log.info(`Executing brave_video_search for query: "${searchParams.q}"`);
@@ -502,18 +704,26 @@ export async function brave_news_search(
 
 		const serverId = getServerIdFromContext(context);
 
-		// Build search parameters
+		// Build search parameters - let service layer handle defaults
+		// Validate parameter types to prevent runtime errors
 		const searchParams = {
-			q: args.query as string,
-			country: (args.country as string) || "US",
-			search_lang: (args.search_lang as string) || "en",
-			ui_lang: (args.ui_lang as string) || "en-US",
-			count: typeof args.count === "number" ? args.count : 10,
-			offset: typeof args.offset === "number" ? args.offset : 0,
+			q: args.query as string, // Already validated above
+			country: typeof args.country === "string" ? args.country : undefined,
+			search_lang:
+				typeof args.search_lang === "string" ? args.search_lang : undefined,
+			ui_lang: typeof args.ui_lang === "string" ? args.ui_lang : undefined,
+			count: typeof args.count === "number" ? args.count : undefined,
+			offset: typeof args.offset === "number" ? args.offset : undefined,
 			safesearch:
-				(args.safesearch as "off" | "moderate" | "strict") || "moderate",
-			freshness: args.freshness as string,
-			spellcheck: args.spellcheck !== false,
+				args.safesearch === "off" ||
+				args.safesearch === "moderate" ||
+				args.safesearch === "strict"
+					? (args.safesearch as "off" | "moderate" | "strict")
+					: undefined,
+			freshness:
+				typeof args.freshness === "string" ? args.freshness : undefined,
+			spellcheck:
+				typeof args.spellcheck === "boolean" ? args.spellcheck : undefined,
 		};
 
 		log.info(`Executing brave_news_search for query: "${searchParams.q}"`);

@@ -241,40 +241,7 @@ export interface URLMetadataResponse extends MCPServerResponse {
  */
 export interface DuckDuckGoSearchResponse extends DuckDuckGoWebSearchResponse {}
 
-/**
- * MCP parameter override configuration
- * Defines how to override parameters for specific MCP functions
- */
-export interface MCPParameterOverrides {
-	[functionName: string]: Record<string, unknown>;
-}
 
-/**
- * Default parameter overrides for common MCP functions
- */
-export const DEFAULT_MCP_PARAMETER_OVERRIDES: MCPParameterOverrides = {
-	// Brave Search overrides
-	brave_web_search: {
-		count: 20,
-		summary: true,
-		safesearch: "off",
-	},
-	brave_local_search: {
-		safesearch: "off",
-	},
-	brave_image_search: {
-		count: 6,
-		safesearch: "off",
-	},
-	brave_video_search: {
-		count: 5,
-		safesearch: "off",
-	},
-	brave_news_search: {
-		safesearch: "off",
-	},
-	// Add more function overrides as needed
-};
 
 /**
  * MCP function execution context
@@ -317,19 +284,6 @@ export interface MCPServerBehaviorHandler {
 		args: Record<string, unknown>
 	): Promise<ToolResult>;
 
-	/**
-	 * Apply parameter overrides for this server's functions
-	 * @param functionName - Name of the function
-	 * @param originalArgs - Original arguments from LLM
-	 * @returns Modified arguments with overrides applied
-	 */
-	applyParameterOverrides(
-		functionName: string,
-		originalArgs: Record<string, unknown>
-	): {
-		modifiedArgs: Record<string, unknown>;
-		overridesApplied: string[];
-	};
 
 	/**
 	 * Check if this handler supports a specific function
@@ -374,7 +328,6 @@ export interface EnhancedMCPServerConfig {
 	
 	// Handler configuration
 	behaviorHandler?: string; // Class name of the behavior handler
-	parameterOverrides?: Record<string, Record<string, unknown>>;
 	
 	// Capabilities
 	supportedFunctions?: string[];

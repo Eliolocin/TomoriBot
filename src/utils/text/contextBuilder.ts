@@ -26,6 +26,7 @@ import { HumanizerDegree, type TomoriConfigRow } from "@/types/db/schema";
  * @remarks This cache is cleared after each text processing run to avoid stale data.
  */
 const mentionCache = new Map<string, string>();
+const MAX_LOADED_EMOJIS = 10;
 
 const HUMANIZE_INSTRUCTION =
 	"\n{bot} limits themselves to only 0 to 2 emojis per response ({bot} prefers to use available server emojis than normal emojis) and makes sure to respond short and concisely, as {bot} is aware that no one really likes to read walls of text. {bot} only makes lengthy responses if and only if people are asking for assistance or an explanation that warrants it.";
@@ -308,7 +309,17 @@ export async function buildContext({
 
 	// 3. Emojis
 	if (emojiStrings && emojiStrings.length > 0) {
-		const emojiContent = `## ${serverName}'s Emojis\n- ${emojiStrings.join("\n- ")}.`;
+		// 1. Shuffle the emoji array to randomize selection
+		const shuffledEmojis = [...emojiStrings].sort(() => Math.random() - 0.5);
+
+		// 2. Limit emojis to prevent context bloat
+		const maxEmojis = MAX_LOADED_EMOJIS;
+		const selectedEmojis = shuffledEmojis.slice(
+			0,
+			Math.min(maxEmojis, shuffledEmojis.length),
+		);
+
+		const emojiContent = `## ${serverName}'s Emojis\n- ${selectedEmojis.join("\n- ")}.`;
 		const emojiUsage = `\nIn order to use ${serverName}'s Emojis, input the name and the code like such: <:name:numbercode>\nAnimated emojis require an 'a' flag in the beginning like such: <a:name:numbercode>\n`;
 		contextItems.push({
 			role: "system",

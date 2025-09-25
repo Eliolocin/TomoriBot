@@ -31,31 +31,6 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 		"url-metadata", // URL metadata extraction (title, description, images)
 	];
 
-	/**
-	 * Parameter overrides for DuckDuckGo & Felo AI Search functions
-	 * Optimized defaults for better performance and comprehensive results
-	 */
-	private readonly PARAMETER_OVERRIDES: Record<
-		string,
-		Record<string, unknown>
-	> = {
-		"web-search": {
-			numResults: 12, // Optimal balance of results vs performance
-			page: 1, // Always start from first page
-		},
-		"felo-search": {
-			stream: false, // Disable streaming for Discord compatibility
-		},
-		"fetch-url": {
-			maxLength: 15000, // Increased for more comprehensive content
-			extractMainContent: true, // Extract main content by default
-			includeLinks: true, // Include link text for context
-			includeImages: true, // Include alt text for better understanding
-		},
-		"url-metadata": {
-			// No overrides needed - URL is the only required parameter
-		},
-	};
 
 	/**
 	 * Check if this handler supports a specific function
@@ -66,47 +41,6 @@ export class DuckDuckGoHandler implements MCPServerBehaviorHandler {
 		return this.SUPPORTED_FUNCTIONS.includes(functionName);
 	}
 
-	/**
-	 * Apply parameter overrides for DuckDuckGo Search functions
-	 * @param functionName - Name of the function
-	 * @param originalArgs - Original arguments from the AI
-	 * @returns Modified arguments with overrides applied
-	 */
-	public applyParameterOverrides(
-		functionName: string,
-		originalArgs: Record<string, unknown>,
-	): {
-		modifiedArgs: Record<string, unknown>;
-		overridesApplied: string[];
-	} {
-		// Clone the original args to avoid mutation
-		const modifiedArgs = { ...originalArgs };
-		const overridesApplied: string[] = [];
-
-		// Apply overrides if function has them configured
-		const overrides = this.PARAMETER_OVERRIDES[functionName];
-		if (overrides) {
-			for (const [paramName, forcedValue] of Object.entries(overrides)) {
-				const originalValue = modifiedArgs[paramName];
-				modifiedArgs[paramName] = forcedValue;
-
-				// Log when we override a parameter
-				if (originalValue !== forcedValue) {
-					overridesApplied.push(
-						`${paramName}: ${originalValue} → ${forcedValue}`,
-					);
-				}
-			}
-
-			if (overridesApplied.length > 0) {
-				log.info(
-					`Applied DuckDuckGo Search parameter overrides for ${functionName}: ${overridesApplied.join(", ")}`,
-				);
-			}
-		}
-
-		return { modifiedArgs, overridesApplied };
-	}
 
 	/**
 	 * Process MCP function result before returning to LLM
