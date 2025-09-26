@@ -8,6 +8,7 @@ import { log } from "../../../utils/misc/logger";
 import type { ToolContext } from "../../../types/tool/interfaces";
 import { sendStandardEmbed } from "../../../utils/discord/embedHelper";
 import { ColorCode } from "../../../utils/misc/logger";
+import sharp from "sharp";
 import {
 	braveWebSearch,
 	braveImageSearch,
@@ -317,13 +318,79 @@ export async function brave_image_search(
 			const validatedUrls: string[] = [];
 
 			/**
+			 * Compress image if it exceeds Discord's 8MB limit
+			 * @param imageUrl - URL of the image to compress
+			 * @returns Promise resolving to compressed image buffer or null if compression failed
+			 */
+			const compressImage = async (
+				imageUrl: string,
+			): Promise<{ success: boolean; buffer?: Buffer; reason?: string }> => {
+				try {
+					// 1. Fetch the full image with timeout
+					const controller = new AbortController();
+					const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+					const response = await fetch(imageUrl, {
+						method: "GET",
+						signal: controller.signal,
+						headers: {
+							"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+						},
+					});
+
+					clearTimeout(timeoutId);
+
+					if (!response.ok) {
+						return { success: false, reason: `fetch_failed_${response.status}` };
+					}
+
+					// 2. Get image buffer
+					const imageBuffer = Buffer.from(await response.arrayBuffer());
+
+					// 3. Compress with sharp - target 7MB max to leave safety margin
+					const targetSize = 7 * 1024 * 1024; // 7MB
+					let quality = 80; // Start with 80% quality
+					let compressedBuffer: Buffer;
+
+					// 4. Iterative compression until under target size
+					do {
+						compressedBuffer = await sharp(imageBuffer)
+							.jpeg({ quality, mozjpeg: true }) // Use mozjpeg for better compression
+							.toBuffer();
+
+						if (compressedBuffer.length <= targetSize) {
+							break;
+						}
+
+						// Reduce quality for next iteration
+						quality -= 10;
+
+					} while (quality > 20 && compressedBuffer.length > targetSize);
+
+					// 5. Check final result
+					if (compressedBuffer.length > targetSize) {
+						return { success: false, reason: "compression_insufficient" };
+					}
+
+					log.info(`Compressed image from ${imageBuffer.length} bytes to ${compressedBuffer.length} bytes (quality: ${quality}%)`);
+					return { success: true, buffer: compressedBuffer };
+
+				} catch (error) {
+					return {
+						success: false,
+						reason: error instanceof Error ? error.name : "compression_error",
+					};
+				}
+			};
+
+			/**
 			 * Fast URL validation function with aggressive timeout
 			 * @param imageUrl - URL to validate
-			 * @returns Promise resolving to validation result
+			 * @returns Promise resolving to validation result with optional compressed buffer
 			 */
 			const validateImageUrl = async (
 				imageUrl: string,
-			): Promise<{ url: string; valid: boolean; reason?: string }> => {
+			): Promise<{ url: string; valid: boolean; reason?: string; compressedBuffer?: Buffer }> => {
 				try {
 					// 1. Quick pattern filtering for known problematic domains
 					const badPatterns = [
@@ -359,6 +426,32 @@ export async function brave_image_search(
 						response.ok &&
 						response.headers.get("content-type")?.startsWith("image/")
 					) {
+						// 3. Check content size - if >8MB, attempt compression
+						const contentLength = response.headers.get("content-length");
+						const discordLimit = 8 * 1024 * 1024; // 8MB Discord limit
+
+						if (contentLength && parseInt(contentLength, 10) > discordLimit) {
+							log.info(`Image ${imageUrl} is ${contentLength} bytes, attempting compression...`);
+
+							// Attempt compression
+							const compressionResult = await compressImage(imageUrl);
+
+							if (compressionResult.success && compressionResult.buffer) {
+								return {
+									url: imageUrl,
+									valid: true,
+									compressedBuffer: compressionResult.buffer
+								};
+							} else {
+								return {
+									url: imageUrl,
+									valid: false,
+									reason: `size_too_large_${compressionResult.reason}`,
+								};
+							}
+						}
+
+						// Image is valid and within size limits
 						return { url: imageUrl, valid: true };
 					} else {
 						return {
@@ -384,7 +477,7 @@ export async function brave_image_search(
 			// Create a shared results array to collect partial results during timeout
 			const partialResults = new Map<
 				string,
-				{ url: string; valid: boolean; reason?: string }
+				{ url: string; valid: boolean; reason?: string; compressedBuffer?: Buffer }
 			>();
 
 			// Wrap each validation promise to store results immediately when they complete
@@ -406,7 +499,7 @@ export async function brave_image_search(
 
 			// Overall timeout that preserves any completed validations
 			const timeoutPromise = new Promise<
-				{ url: string; valid: boolean; reason?: string }[]
+				{ url: string; valid: boolean; reason?: string; compressedBuffer?: Buffer }[]
 			>((resolve) => {
 				setTimeout(() => {
 					log.warn(
@@ -416,7 +509,7 @@ export async function brave_image_search(
 					// Return completed results + mark incomplete ones as timed out
 					const results = imageUrls.map((url) => {
 						if (partialResults.has(url)) {
-							return partialResults.get(url)!;
+							return partialResults.get(url) as { url: string; valid: boolean; reason?: string; compressedBuffer?: Buffer };
 						} else {
 							return { url, valid: false, reason: "overall_timeout" };
 						}
@@ -426,10 +519,10 @@ export async function brave_image_search(
 				}, 3000);
 			});
 
-			let validationResults: { url: string; valid: boolean; reason?: string }[];
+			let validationResults: { url: string; valid: boolean; reason?: string; compressedBuffer?: Buffer }[];
 
 			try {
-				// Use Promise.race to ensure we never wait more than 3 seconds total
+				// Use Promise.race to ensure we never wait more than 5 seconds total
 				// But preserve any partial results that completed within the timeout
 				validationResults = await Promise.race([
 					Promise.allSettled(wrappedPromises).then((settledResults) =>
@@ -456,11 +549,18 @@ export async function brave_image_search(
 				}));
 			}
 
-			// 2. Process validation results
+			// 2. Process validation results and store compressed buffers
+			const compressedImageMap = new Map<string, Buffer>();
 			for (const result of validationResults) {
 				if (result.valid) {
 					validatedUrls.push(result.url);
-					log.info(`✓ Validated: ${result.url}`);
+					// Store compressed buffer if available
+					if (result.compressedBuffer) {
+						compressedImageMap.set(result.url, result.compressedBuffer);
+						log.info(`✓ Validated (compressed): ${result.url}`);
+					} else {
+						log.info(`✓ Validated: ${result.url}`);
+					}
 				} else {
 					failedUrls.push(result.url);
 					log.warn(`✗ Failed: ${result.url} (${result.reason})`);
@@ -471,20 +571,30 @@ export async function brave_image_search(
 				`Parallel validation complete: ${validatedUrls.length} valid, ${failedUrls.length} invalid`,
 			);
 
-			// 3. Create Discord attachments only for validated URLs
+			// 3. Create Discord attachments for validated URLs (using compressed buffers when available)
 			for (let i = 0; i < validatedUrls.length; i++) {
 				try {
 					const imageUrl = validatedUrls[i];
+					const compressedBuffer = compressedImageMap.get(imageUrl);
+
+					// Use compressed buffer if available, otherwise use URL
 					const attachment = new (await import("discord.js")).AttachmentBuilder(
-						imageUrl,
+						compressedBuffer || imageUrl,
 						{
 							name: `image_${i + 1}.jpg`,
 						},
 					);
 					attachments.push(attachment);
-					log.info(
-						`Prepared Discord attachment for validated image: ${imageUrl}`,
-					);
+
+					if (compressedBuffer) {
+						log.info(
+							`Prepared Discord attachment for compressed image: ${imageUrl} (${compressedBuffer.length} bytes)`,
+						);
+					} else {
+						log.info(
+							`Prepared Discord attachment for validated image: ${imageUrl}`,
+						);
+					}
 				} catch (attachmentError) {
 					// This should rarely happen now since URLs are pre-validated
 					failedUrls.push(validatedUrls[i]);
