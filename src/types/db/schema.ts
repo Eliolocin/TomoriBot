@@ -185,6 +185,20 @@ export const optApiKeySchema = z.object({
 });
 export type OptApiKeyRow = z.infer<typeof optApiKeySchema>;
 
+export const reminderSchema = z.object({
+	reminder_id: z.number().optional(), // Primary key, optional as it's generated
+	server_id: z.number(), // Foreign key to servers table
+	channel_disc_id: z.string(), // Discord channel ID where reminder was set
+	user_discord_id: z.string(), // Target user's Discord ID
+	user_nickname: z.string(), // Target user's nickname for display
+	reminder_purpose: z.string(), // What the reminder is for
+	reminder_time: z.date(), // When to trigger the reminder (TIMESTAMP WITH TIME ZONE)
+	created_by_user_id: z.number(), // Who requested the reminder (FK to users)
+	created_at: z.date().optional(), // Handled by DB default
+	updated_at: z.date().optional(), // Handled by DB default/trigger
+});
+export type ReminderRow = z.infer<typeof reminderSchema>;
+
 /**
  * Tomori's combined state (base config + LLM settings + LLM info)
  */

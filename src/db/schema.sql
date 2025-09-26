@@ -380,6 +380,33 @@ EXECUTE FUNCTION update_timestamp();
 -- pg_cron setup has been moved to a separate file: src/db/pgcron.sql
 -- This allows optional execution based on the environment (production vs development)
 
+-- Reminders table for user reminder functionality
+CREATE TABLE IF NOT EXISTS reminders (
+  reminder_id SERIAL PRIMARY KEY,
+  server_id INT NOT NULL,
+  channel_disc_id TEXT NOT NULL,                       -- Discord channel ID where reminder was set
+  user_discord_id TEXT NOT NULL,                       -- Target user's Discord ID
+  user_nickname TEXT NOT NULL,                         -- Target user's nickname for display
+  reminder_purpose TEXT NOT NULL,                      -- What the reminder is for
+  reminder_time TIMESTAMP WITH TIME ZONE NOT NULL,     -- When to trigger the reminder
+  created_by_user_id INT NOT NULL,                     -- Who requested the reminder
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  FOREIGN KEY (created_by_user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- Create index for efficient reminder queries
+CREATE INDEX IF NOT EXISTS idx_reminders_time ON reminders(reminder_time);
+CREATE INDEX IF NOT EXISTS idx_reminders_server_id ON reminders(server_id);
+
+-- Create updated_at trigger for reminders table
+DROP TRIGGER IF EXISTS update_reminders_timestamp ON reminders;
+CREATE TRIGGER update_reminders_timestamp
+BEFORE UPDATE ON reminders
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
 -- Drop deprecated columns (January 2025)
 SELECT drop_column_if_exists('tomori_configs', 'teach_cost');
 SELECT drop_column_if_exists('tomori_configs', 'gamba_limit');

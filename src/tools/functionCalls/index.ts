@@ -11,6 +11,7 @@ export { MemoryTool } from "./memoryTool";
 export { YouTubeVideoTool } from "./youTubeVideoTool";
 export { PeekProfilePictureTool } from "./peekProfilePictureTool";
 export { PinMessageTool } from "./pinMessageTool";
+export { ReminderTool } from "./reminderTool";
 
 // Re-export common types for convenience
 export type { Tool, ToolContext, ToolResult } from "../../types/tool/interfaces";

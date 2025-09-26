@@ -10,6 +10,8 @@ import {
 	llmSchema,
 	type ServerStickerRow,
 	serverStickerSchema,
+	reminderSchema,
+	type ReminderRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 
@@ -655,5 +657,113 @@ export async function loadServerStickers(
 			error,
 		);
 		return null; // Error during DB operation
+	}
+}
+
+/**
+ * Loads all reminders that are due for execution (reminder_time <= current time)
+ * @returns Array of due ReminderRow objects, or null if error
+ */
+export async function getDueReminders(): Promise<ReminderRow[] | null> {
+	try {
+		// Query for reminders that are due (reminder_time <= now)
+		const reminderData = await sql`
+			SELECT * FROM reminders
+			WHERE reminder_time <= CURRENT_TIMESTAMP
+			ORDER BY reminder_time ASC
+		`;
+
+		if (!reminderData) {
+			log.warn("Reminders data was unexpectedly null when fetching due reminders");
+			return [];
+		}
+
+		if (reminderData.length === 0) {
+			log.info("No due reminders found");
+			return [];
+		}
+
+		// Validate each reminder row
+		const validatedReminders: ReminderRow[] = [];
+		for (const reminder of reminderData) {
+			const parsed = reminderSchema.safeParse(reminder);
+			if (parsed.success) {
+				validatedReminders.push(parsed.data);
+			} else {
+				log.warn(
+					`Invalid reminder data found in DB for reminder_id ${reminder.reminder_id}: ${JSON.stringify(reminder)}. Errors: ${parsed.error.flatten()}`
+				);
+			}
+		}
+
+		log.info(`Found ${validatedReminders.length} due reminders`);
+		return validatedReminders;
+
+	} catch (error) {
+		log.error("Error loading due reminders from database:", error);
+		return null;
+	}
+}
+
+/**
+ * Loads a specific reminder by its ID
+ * @param reminderId - The ID of the reminder to load
+ * @returns The ReminderRow object if found, null otherwise
+ */
+export async function getReminderById(reminderId: number): Promise<ReminderRow | null> {
+	try {
+		const [reminderData] = await sql`
+			SELECT * FROM reminders
+			WHERE reminder_id = ${reminderId}
+			LIMIT 1
+		`;
+
+		if (!reminderData) {
+			log.info(`Reminder not found with ID: ${reminderId}`);
+			return null;
+		}
+
+		// Validate the reminder data
+		const parsed = reminderSchema.safeParse(reminderData);
+		if (!parsed.success) {
+			log.warn(
+				`Invalid reminder data found in DB for reminder_id ${reminderId}: ${JSON.stringify(reminderData)}. Errors: ${parsed.error.flatten()}`
+			);
+			return null;
+		}
+
+		log.info(`Loaded reminder with ID: ${reminderId}`);
+		return parsed.data;
+
+	} catch (error) {
+		log.error(`Error loading reminder with ID ${reminderId}:`, error);
+		return null;
+	}
+}
+
+/**
+ * Deletes a reminder from the database by its ID
+ * @param reminderId - The ID of the reminder to delete
+ * @returns True if reminder was deleted, false otherwise
+ */
+export async function deleteReminderById(reminderId: number): Promise<boolean> {
+	try {
+		const result = await sql`
+			DELETE FROM reminders
+			WHERE reminder_id = ${reminderId}
+		`;
+
+		const deletedCount = result.affectedRows || 0;
+		if (deletedCount > 0) {
+			log.success(`Reminder deleted successfully (ID: ${reminderId})`);
+			return true;
+		} else {
+			log.warn(`No reminder found to delete with ID: ${reminderId}`);
+			return false;
+		}
+
+	} catch (error) {
+		log.error(`Error deleting reminder with ID ${reminderId}:`, error);
+		return false;
 	}
 }

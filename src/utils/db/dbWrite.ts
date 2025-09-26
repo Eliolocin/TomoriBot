@@ -9,6 +9,8 @@ import {
 	type TomoriConfigRow,
 	type ErrorContext,
 	serverMemorySchema,
+	reminderSchema,
+	type ReminderRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import { validateTomoriConfigFields, validateTomoriFields, validateUserFields } from "./sqlSecurity";
@@ -932,6 +934,104 @@ export async function addPersonalMemoryByTomori(
 		};
 		await log.error(
 			`Error appending personal memory for User ID ${userId} (self-teach using array_append)`,
+			error,
+			context,
+		);
+		return null;
+	}
+}
+
+/**
+ * Creates a new reminder in the database
+ * @param reminderData - Object containing all reminder details
+ * @returns The created ReminderRow object, or null if creation failed
+ */
+export async function addReminder(reminderData: {
+	server_id: number;
+	channel_disc_id: string;
+	user_discord_id: string;
+	user_nickname: string;
+	reminder_purpose: string;
+	reminder_time: Date;
+	created_by_user_id: number;
+}): Promise<ReminderRow | null> {
+	try {
+		log.info(
+			`Creating reminder for user ${reminderData.user_nickname} (${reminderData.user_discord_id}) ` +
+			`in server ${reminderData.server_id} at ${reminderData.reminder_time.toISOString()}`
+		);
+
+		// Insert the new reminder into the database
+		const [reminderResult] = await sql`
+			INSERT INTO reminders (
+				server_id,
+				channel_disc_id,
+				user_discord_id,
+				user_nickname,
+				reminder_purpose,
+				reminder_time,
+				created_by_user_id
+			) VALUES (
+				${reminderData.server_id},
+				${reminderData.channel_disc_id},
+				${reminderData.user_discord_id},
+				${reminderData.user_nickname},
+				${reminderData.reminder_purpose},
+				${reminderData.reminder_time},
+				${reminderData.created_by_user_id}
+			)
+			RETURNING *
+		`;
+
+		// Check if the reminder was created
+		if (!reminderResult) {
+			log.warn("Failed to create reminder: No result returned from database");
+			return null;
+		}
+
+		// Validate the returned reminder data using Zod schema
+		const validatedReminder = reminderSchema.safeParse(reminderResult);
+
+		if (!validatedReminder.success) {
+			const context: ErrorContext = {
+				serverId: reminderData.server_id,
+				userId: reminderData.created_by_user_id,
+				errorType: "SchemaValidationError",
+				metadata: {
+					operation: "addReminder",
+					reminderPurpose: reminderData.reminder_purpose.substring(0, 100),
+					targetUser: reminderData.user_discord_id,
+					validationErrors: validatedReminder.error.flatten(),
+				},
+			};
+			await log.error(
+				`Failed to validate new reminder for user ${reminderData.user_discord_id}`,
+				validatedReminder.error,
+				context,
+			);
+			return null;
+		}
+
+		// Log success and return the validated reminder
+		log.success(
+			`Reminder successfully created (ID: ${validatedReminder.data.reminder_id}) ` +
+			`for ${reminderData.user_nickname} at ${reminderData.reminder_time.toISOString()}`
+		);
+		return validatedReminder.data;
+
+	} catch (error) {
+		const context: ErrorContext = {
+			serverId: reminderData.server_id,
+			userId: reminderData.created_by_user_id,
+			errorType: "DatabaseInsertError",
+			metadata: {
+				operation: "addReminder",
+				reminderPurpose: reminderData.reminder_purpose.substring(0, 100),
+				targetUser: reminderData.user_discord_id,
+			},
+		};
+		await log.error(
+			`Error creating reminder for user ${reminderData.user_discord_id}`,
 			error,
 			context,
 		);

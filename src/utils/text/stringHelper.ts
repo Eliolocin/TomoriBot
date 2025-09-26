@@ -1632,3 +1632,122 @@ export function humanizeString(text: string): string {
 export function formatBoolean(value: boolean): string {
 	return value ? "`Enabled`" : "`Disabled`";
 }
+
+/**
+ * Formats time remaining in a human-readable format
+ * @param milliseconds - Time remaining in milliseconds
+ * @returns Formatted string like "2 days, 3 hours, 15 minutes" or "45 minutes"
+ */
+export function formatTimeRemaining(milliseconds: number): string {
+	if (milliseconds <= 0) return "now";
+
+	const seconds = Math.floor(milliseconds / 1000);
+	const minutes = Math.floor(seconds / 60);
+	const hours = Math.floor(minutes / 60);
+	const days = Math.floor(hours / 24);
+
+	const parts: string[] = [];
+
+	if (days > 0) {
+		parts.push(`${days} day${days !== 1 ? "s" : ""}`);
+	}
+	if (hours % 24 > 0) {
+		parts.push(`${hours % 24} hour${hours % 24 !== 1 ? "s" : ""}`);
+	}
+	if (minutes % 60 > 0) {
+		parts.push(`${minutes % 60} minute${minutes % 60 !== 1 ? "s" : ""}`);
+	}
+
+	// If less than a minute, show "less than a minute"
+	if (parts.length === 0) {
+		return "less than a minute";
+	}
+
+	// Join parts with commas and "and" for the last item
+	if (parts.length === 1) {
+		return parts[0];
+	} else if (parts.length === 2) {
+		return `${parts[0]} and ${parts[1]}`;
+	} else {
+		return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+	}
+}
+
+/**
+ * Parses reminder time string in YYYY-MM-DD_HH:MM format
+ * @param timeString - Time string to parse (e.g., "2025-09-05_07:14")
+ * @returns Date object if valid, null if invalid format
+ */
+export function parseReminderTime(timeString: string): Date | null {
+	// Validate format: YYYY-MM-DD_HH:MM
+	const timePattern = /^\d{4}-\d{2}-\d{2}_\d{2}:\d{2}$/;
+	if (!timePattern.test(timeString)) {
+		return null;
+	}
+
+	// Split date and time parts
+	const [datePart, timePart] = timeString.split("_");
+	const [year, month, day] = datePart.split("-").map(Number);
+	const [hour, minute] = timePart.split(":").map(Number);
+
+	// Basic validation
+	if (
+		year < 2024 ||
+		year > 2100 ||
+		month < 1 ||
+		month > 12 ||
+		day < 1 ||
+		day > 31 ||
+		hour < 0 ||
+		hour > 23 ||
+		minute < 0 ||
+		minute > 59
+	) {
+		return null;
+	}
+
+	// Create UTC date (reminder times are stored in UTC)
+	const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
+
+	// Verify the date is valid (handles invalid dates like February 30th)
+	if (
+		date.getUTCFullYear() !== year ||
+		date.getUTCMonth() !== month - 1 ||
+		date.getUTCDate() !== day ||
+		date.getUTCHours() !== hour ||
+		date.getUTCMinutes() !== minute
+	) {
+		return null;
+	}
+
+	return date;
+}
+
+/**
+ * Validates that a timestamp is in the future (compared to UTC now)
+ * @param timestamp - Date to validate
+ * @returns True if the date is in the future, false otherwise
+ */
+export function validateFutureTime(timestamp: Date): boolean {
+	const now = new Date();
+	return timestamp.getTime() > now.getTime();
+}
+
+/**
+ * Calculates how late a reminder is and formats it
+ * @param scheduledTime - When the reminder was supposed to trigger
+ * @param currentTime - Current time (defaults to now)
+ * @returns Formatted lateness string like "3 minutes late" or null if not late
+ */
+export function calculateLateness(
+	scheduledTime: Date,
+	currentTime: Date = new Date(),
+): string | null {
+	const diffMilliseconds = currentTime.getTime() - scheduledTime.getTime();
+
+	if (diffMilliseconds <= 300000) {
+		return null; // Not late if within 5 minutes
+	}
+
+	return `${formatTimeRemaining(diffMilliseconds)} late`;
+}

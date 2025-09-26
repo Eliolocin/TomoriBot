@@ -228,6 +228,11 @@ export default async function tomoriChat(
 	isStopResponse?: boolean,
 	retryCount = 0,
 	skipLock = false,
+	reminderRecipientID?: string,
+	reminderData?: {
+		reminder_purpose: string;
+		reminder_lateness?: string | null;
+	},
 ): Promise<void> {
 	// 1. Initial Checks & State Loading
 	const channel = message.channel;
@@ -546,7 +551,7 @@ export default async function tomoriChat(
 			 */
 			function checkTargetEmbedTitle(embedTitle: string | null): {
 				isTarget: boolean;
-				type: "memory_learning" | "reset" | null;
+				type: "memory_learning" | "reset" | "reminder_set" | null;
 			} {
 				if (!embedTitle) return { isTarget: false, type: null };
 
@@ -571,6 +576,12 @@ export default async function tomoriChat(
 						"commands.tool.refresh.title",
 					);
 
+					// Target localizer key for reminder set confirmation
+					const reminderSetTitle = localizer(
+						supportedLocale,
+						"reminders.reminder_set_title",
+					);
+
 					// Check for memory learning embeds
 					if (memoryLearningTitles.some((title) => embedTitle === title)) {
 						return { isTarget: true, type: "memory_learning" };
@@ -580,10 +591,15 @@ export default async function tomoriChat(
 					if (embedTitle === resetTitle) {
 						return { isTarget: true, type: "reset" };
 					}
+
+					// Check for reminder set confirmation embed
+					if (embedTitle === reminderSetTitle) {
+						return { isTarget: true, type: "reminder_set" };
+					}
 				}
 
 				// EXTENSIBILITY EXAMPLE: Adding new embed types is easy!
-				// 1. Add new type to union: 'memory_learning' | 'reset' | 'new_type' | null
+				// 1. Add new type to union: 'memory_learning' | 'reset' | 'reminder_set' | 'new_type' | null
 				// 2. Add new localizer checks inside the locale loop:
 				// const newTypeTitles = [
 				//     localizer(supportedLocale, "commands.some_feature.title"),
@@ -641,7 +657,7 @@ export default async function tomoriChat(
 
 				// 3. Extract text content (title, description) with simple "Link Content:" prefix
 				let textContent = "";
-				
+
 				// Build content parts
 				const contentParts: string[] = [];
 				if (embed.title) {
@@ -656,10 +672,10 @@ export default async function tomoriChat(
 							: embed.description;
 					contentParts.push(description);
 				}
-				
+
 				// Format with simple "Link Content:" prefix if we have any content
 				if (contentParts.length > 0) {
-					textContent = `[Link Content: ${contentParts.join(' - ')}]`;
+					textContent = `[Link Content: ${contentParts.join(" - ")}]`;
 				}
 
 				// 4. Process embed image if present
@@ -703,7 +719,6 @@ export default async function tomoriChat(
 							mimeType: mimeType,
 							filename: filename,
 						};
-
 					} catch (_error) {
 						// Silently handle URL parsing errors for embed images
 					}
@@ -749,7 +764,6 @@ export default async function tomoriChat(
 							mimeType: mimeType,
 							filename: filename,
 						};
-
 					} catch (_error) {
 						// Silently handle URL parsing errors for embed thumbnails
 					}
@@ -1130,7 +1144,8 @@ export default async function tomoriChat(
 						const embedCheck = checkTargetEmbedTitle(embed.title);
 						if (
 							embedCheck.isTarget &&
-							embedCheck.type === "memory_learning" &&
+							(embedCheck.type === "memory_learning" ||
+								embedCheck.type === "reminder_set") &&
 							embed.description
 						) {
 							// Remove bot name prefix from embed description if present
@@ -1164,40 +1179,39 @@ export default async function tomoriChat(
 						else if (!msg.author.bot) {
 							const linkEmbedData = processLinkEmbed(embed);
 							if (linkEmbedData.isLinkPreview) {
-
-									// Add link embed text content to message if present
-									if (linkEmbedData.textContent) {
-										messageContentForLlm = messageContentForLlm
-											? `${messageContentForLlm}\n${linkEmbedData.textContent}`
-											: linkEmbedData.textContent;
-									}
-
-									// Add embed image to imageAttachments if present
-									if (linkEmbedData.imageInfo) {
-										imageAttachments.push({
-											url: linkEmbedData.imageInfo.url,
-											proxyUrl: linkEmbedData.imageInfo.proxyUrl,
-											mimeType: linkEmbedData.imageInfo.mimeType,
-											filename: linkEmbedData.imageInfo.filename,
-										});
-										log.info(
-											`Added embed image from link preview: ${linkEmbedData.imageInfo.filename}`,
-										);
-									}
-
-									// Add embed thumbnail to imageAttachments if present (and no main image)
-									if (linkEmbedData.thumbnailInfo) {
-										imageAttachments.push({
-											url: linkEmbedData.thumbnailInfo.url,
-											proxyUrl: linkEmbedData.thumbnailInfo.proxyUrl,
-											mimeType: linkEmbedData.thumbnailInfo.mimeType,
-											filename: linkEmbedData.thumbnailInfo.filename,
-										});
-										log.info(
-											`Added embed thumbnail from link preview: ${linkEmbedData.thumbnailInfo.filename}`,
-										);
-									}
+								// Add link embed text content to message if present
+								if (linkEmbedData.textContent) {
+									messageContentForLlm = messageContentForLlm
+										? `${messageContentForLlm}\n${linkEmbedData.textContent}`
+										: linkEmbedData.textContent;
 								}
+
+								// Add embed image to imageAttachments if present
+								if (linkEmbedData.imageInfo) {
+									imageAttachments.push({
+										url: linkEmbedData.imageInfo.url,
+										proxyUrl: linkEmbedData.imageInfo.proxyUrl,
+										mimeType: linkEmbedData.imageInfo.mimeType,
+										filename: linkEmbedData.imageInfo.filename,
+									});
+									log.info(
+										`Added embed image from link preview: ${linkEmbedData.imageInfo.filename}`,
+									);
+								}
+
+								// Add embed thumbnail to imageAttachments if present (and no main image)
+								if (linkEmbedData.thumbnailInfo) {
+									imageAttachments.push({
+										url: linkEmbedData.thumbnailInfo.url,
+										proxyUrl: linkEmbedData.thumbnailInfo.proxyUrl,
+										mimeType: linkEmbedData.thumbnailInfo.mimeType,
+										filename: linkEmbedData.thumbnailInfo.filename,
+									});
+									log.info(
+										`Added embed thumbnail from link preview: ${linkEmbedData.thumbnailInfo.filename}`,
+									);
+								}
+							}
 						}
 					}
 				}
@@ -1396,6 +1410,31 @@ export default async function tomoriChat(
 				}
 			}
 
+			// Inject reminder into conversation history if needed
+			// This makes the reminder part of the natural conversation flow rather than system injection
+			if (reminderRecipientID && reminderData) {
+				let reminderContent = `[A reminder you have set before for <@${reminderRecipientID}> (Mention ID: ${reminderRecipientID}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}"]`;
+
+				if (reminderData.reminder_lateness) {
+					reminderContent += ` [You are also ${reminderData.reminder_lateness} to remind the user.]`;
+				}
+
+				// Create synthetic simplified message for the reminder
+				const reminderMessage: SimplifiedMessageForContext = {
+					authorId: reminderRecipientID,
+					authorName: "System", // Use bot's nickname
+					content: reminderContent,
+					imageAttachments: [],
+					videoAttachments: [],
+				};
+
+				// Add to end of conversation history so it gets processed naturally
+				simplifiedMessages.push(reminderMessage);
+				log.info(
+					`Injected reminder into conversation history for user ${reminderRecipientID} - will be processed by buildContext`,
+				);
+			}
+
 			// 11. Build Context
 			// The `buildContext` function will be refactored in a subsequent step to accept
 			// `simplifiedMessages` and produce `StructuredContextItem[]`.
@@ -1581,6 +1620,38 @@ export default async function tomoriChat(
 				);
 
 				try {
+					// Debug: Log final context right before sending to LLM
+					if (reminderRecipientID) {
+						log.info(
+							`DEBUG: Final context being sent to LLM (${contextSegments.length} segments):`,
+						);
+						for (
+							let i = Math.max(0, contextSegments.length - 3);
+							i < contextSegments.length;
+							i++
+						) {
+							const segment = contextSegments[i];
+							const textParts = segment.parts
+								.filter((p) => p.type === "text")
+								.map((p) => (p as { type: "text"; text: string }).text)
+								.join(" ");
+							log.info(
+								`  [${i}] ${segment.role}: ${textParts.substring(0, 100)}${textParts.length > 100 ? "..." : ""}`,
+							);
+						}
+						// Show the complete last segment if it's the system message
+						const lastSegment = contextSegments[contextSegments.length - 1];
+						if (lastSegment.role === "user") {
+							const fullText = lastSegment.parts
+								.filter((p) => p.type === "text")
+								.map((p) => (p as { type: "text"; text: string }).text)
+								.join(" ");
+							if (fullText.includes("[System:")) {
+								log.info(`DEBUG: Complete system message: ${fullText}`);
+							}
+						}
+					}
+
 					const streamProviderPromise = await provider.streamToDiscord(
 						channel,
 						client,

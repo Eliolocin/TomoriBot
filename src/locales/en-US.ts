@@ -146,16 +146,19 @@ export default {
 			rate_limit_tip: "Please wait a few minutes before trying again",
 
 			content_blocked_title: "🛡️ Content Blocked",
-			content_blocked_tip: "Please rephrase your message to comply with content policies",
+			content_blocked_tip:
+				"Please rephrase your message to comply with content policies",
 
 			timeout_title: "⏱️ Request Timeout",
 			timeout_tip: "Try shortening your message or try again",
 
 			provider_overloaded_title: "🛑 Provider Overloaded",
-			provider_overloaded_tip: "Provider is currently experiencing unexpectedly high usage, please try again later",
+			provider_overloaded_tip:
+				"Provider is currently experiencing unexpectedly high usage, please try again later",
 
 			unknown_title: "❓ Provider Error",
-			unknown_tip: "Please try again or use `/support report` if this keeps happening",
+			unknown_tip:
+				"Please try again or use `/support report` if this keeps happening",
 		},
 
 		// Google-specific error messages (provider-specific default messages only)
@@ -167,7 +170,8 @@ export default {
 			"400_billing_default_message": "Billing is required for this service",
 
 			// 403 PERMISSION_DENIED
-			"403_default_message": "Your API key doesn't have the required permissions",
+			"403_default_message":
+				"Your API key doesn't have the required permissions",
 
 			// 404 NOT_FOUND
 			"404_default_message": "A referenced resource could not be found",
@@ -185,7 +189,8 @@ export default {
 			"504_default_message": "Your request took too long to process",
 
 			// Content blocked errors (SAFETY, PROHIBITED_CONTENT, etc.)
-			content_blocked_default_message: "Your content was blocked by safety filters",
+			content_blocked_default_message:
+				"Your content was blocked by safety filters",
 
 			// Generic fallback for unknown Google errors
 			unknown_default_message: "An unexpected error occurred",
@@ -732,5 +737,18 @@ Discord API Latency: \`{discord_response}ms\``,
 			setup_prompt_title: `Thanks for adding me!`,
 			setup_prompt_description: `Hello! Thanks for adding me! To get started, someone with the **Manage Server** permission needs to run my \`/config setup\` command to choose my initial personality and configure my AI features.`,
 		},
+	},
+
+	// Reminder system messages
+	reminders: {
+		// Confirmation embed when reminder is set
+		reminder_set_title: `⏰ Reminder Set`,
+		reminder_set_description: `I'll remind {user_nickname} about "**{reminder_purpose}**" at \`{reminder_time}\``,
+		reminder_set_footer: `A mention will be sent after {time_remaining} from now.`,
+
+		// Error embed when reminder delivery fails (only user-facing embed during execution)
+		reminder_error_title: `Reminder Delivery Failed`,
+		reminder_error_description: `{user_mention}'s reminder for "**{reminder_purpose}**" encountered an issue: {error_reason}. {lateness}.`,
+		reminder_error_footer: `The reminder has been delivered manually instead because of a technical issue.`,
 	},
 };

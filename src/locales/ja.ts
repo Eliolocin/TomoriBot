@@ -146,16 +146,19 @@ export default {
 			rate_limit_tip: "数分お待ちいただいてから再度お試しください",
 
 			content_blocked_title: "🛡️ コンテンツがブロックされました",
-			content_blocked_tip: "コンテンツポリシーに準拠するようメッセージを言い換えてください",
+			content_blocked_tip:
+				"コンテンツポリシーに準拠するようメッセージを言い換えてください",
 
 			timeout_title: "⏱️ リクエストタイムアウト",
 			timeout_tip: "メッセージを短くするか再度お試しください",
 
 			provider_overloaded_title: "🛑 プロバイダーの過負荷",
-			provider_overloaded_tip: "プロバイダーが現在過負荷状態です、しばらく後に再度お試しください",
+			provider_overloaded_tip:
+				"プロバイダーが現在過負荷状態です、しばらく後に再度お試しください",
 
 			unknown_title: "❓ プロバイダーエラー",
-			unknown_tip: "再度お試しいただくか、この問題が続く場合は `/support report` をご利用ください",
+			unknown_tip:
+				"再度お試しいただくか、この問題が続く場合は `/support report` をご利用ください",
 		},
 
 		// Google固有のエラーメッセージ（プロバイダー固有のデフォルトメッセージのみ）
@@ -185,7 +188,8 @@ export default {
 			"504_default_message": "リクエストの処理時間が長すぎました",
 
 			// Content blocked errors
-			content_blocked_default_message: "あなたのコンテンツは安全フィルターによってブロックされました",
+			content_blocked_default_message:
+				"あなたのコンテンツは安全フィルターによってブロックされました",
 
 			// Generic fallback for unknown Google errors
 			unknown_default_message: "予期しないエラーが発生しました",
@@ -726,5 +730,18 @@ Discord API 遅延: \`{discord_response}ms\``,
 			setup_prompt_title: `追加してくれてありがとうございます！`,
 			setup_prompt_description: `こんにちは！追加してくれてありがとうございます！始めるには、**サーバー管理**権限を持つ誰かが私の\`/config setup\`コマンドを実行して、私の初期の人格を選択し、AI機能を設定する必要があります。`,
 		},
+	},
+
+	// リマインダーシステムメッセージ
+	reminders: {
+		// リマインダー設定時の確認埋め込み
+		reminder_set_title: `⏰ リマインダー設定完了`,
+		reminder_set_description: `{user_nickname}さんに「**{reminder_purpose}**」について\`{reminder_time}\`にリマインドします`,
+		reminder_set_footer: `{time_remaining}後にメンションを送信します。`,
+
+		// リマインダー配信失敗時のエラー埋め込み（実行時のユーザー向けメッセージのみ）
+		reminder_error_title: `リマインダー配信失敗`,
+		reminder_error_description: `{user_mention}さんの「**{reminder_purpose}**」のリマインダーに問題が発生しました: {error_reason}。{lateness}。`,
+		reminder_error_footer: `技術的問題により手動でリマインダーを配信しました。`,
 	},
 };

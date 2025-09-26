@@ -591,7 +591,7 @@ export async function buildContext({
 		);
 	}
 	// 7. Current Context (Time, Channel)
-	let currentContextContent = `\n# Current Context\nCurrent Time: ${getCurrentTime()}.\n${botName} is currently in text channel #${channelName}.`;
+	let currentContextContent = `\n# Current Context\nCurrent Time (UTC): ${getCurrentTime()}.\n${botName} is currently in text channel #${channelName}.`;
 	if (channelDesc) {
 		currentContextContent += ` ${channelDesc}\n`;
 	}

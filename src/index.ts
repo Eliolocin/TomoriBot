@@ -62,31 +62,31 @@ const client = new Client({
 /**
  * Handle Discord client errors to prevent crashes from malformed error objects
  */
-client.on('error', (error) => {
-	log.error('Discord client error occurred', error);
+client.on("error", (error) => {
+	log.error("Discord client error occurred", error);
 });
 
-client.on('shardError', (error) => {
-	log.error('Discord WebSocket shard error occurred', error);
+client.on("shardError", (error) => {
+	log.error("Discord WebSocket shard error occurred", error);
 });
 
 /**
  * Handle process-level uncaught errors to prevent crashes
  */
-process.on('uncaughtException', (error) => {
-	log.error('Uncaught exception occurred', error);
+process.on("uncaughtException", (error) => {
+	log.error("Uncaught exception occurred", error);
 	// Don't exit process for WebSocket errors - let Discord.js reconnect
-	if (error.message?.includes('error is not an Object')) {
-		log.warn('WebSocket error caught - Discord.js will attempt to reconnect');
+	if (error.message?.includes("error is not an Object")) {
+		log.warn("WebSocket error caught - Discord.js will attempt to reconnect");
 		return;
 	}
 	process.exit(1);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-	log.error('Unhandled promise rejection', reason, {
-		errorType: 'UnhandledPromiseRejection',
-		metadata: { promise: promise.toString() }
+process.on("unhandledRejection", (reason, promise) => {
+	log.error("Unhandled promise rejection", reason, {
+		errorType: "UnhandledPromiseRejection",
+		metadata: { promise: promise.toString() },
 	});
 });
 
@@ -238,6 +238,21 @@ await initializeLocalizer();
 // Starts the event handler, which also runs important 'ready' functions
 // such as registering or updating of commands upon startup
 eventHandler(client);
+
+// Initialize reminder timer system (fallback for when pg_cron is not available)
+log.section("Initializing Reminder System...");
+try {
+	const { initializeReminderTimer } = await import("./timers/reminderTimer");
+
+	// Start reminder timer after client is ready
+	client.once("clientReady", () => {
+		initializeReminderTimer(client);
+		log.success("Reminder system initialized with fallback polling");
+	});
+} catch (error) {
+	log.error("Failed to initialize reminder system", error as Error);
+	// Non-critical error - reminders won't work but bot can still function
+}
 
 // Login Bot using Discord Token
 client.login(process.env.DISCORD_TOKEN);

@@ -520,7 +520,6 @@ export async function brave_image_search(
 			});
 
 			let validationResults: { url: string; valid: boolean; reason?: string; compressedBuffer?: Buffer }[];
-
 			try {
 				// Use Promise.race to ensure we never wait more than 5 seconds total
 				// But preserve any partial results that completed within the timeout
