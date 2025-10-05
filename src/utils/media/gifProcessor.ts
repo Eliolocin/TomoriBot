@@ -8,6 +8,40 @@ import gifFrames from "gif-frames";
 import sharp from "sharp";
 import { log } from "../misc/logger";
 
+// ========================================
+// GIF Processing Configuration Constants
+// ========================================
+
+/**
+ * Maximum width for resized keyframe images (pixels)
+ * Images maintain aspect ratio and won't be upscaled
+ */
+const MAX_KEYFRAME_WIDTH = 800;
+
+/**
+ * JPEG compression quality (0-100)
+ * Higher = better quality but larger file size
+ */
+const JPEG_QUALITY = 80;
+
+/**
+ * Maximum number of keyframes to extract from a GIF
+ * Prevents extremely long GIFs from overwhelming the context
+ */
+const MAX_KEYFRAMES = 10;
+
+/**
+ * Extract every Nth frame as a keyframe
+ * E.g., 10 means extract frames 0, 10, 20, 30, etc. (plus first and last)
+ */
+const FRAME_INTERVAL = 10;
+
+/**
+ * Processing timeout in milliseconds
+ * Prevents hanging on corrupted or extremely large GIFs
+ */
+const PROCESSING_TIMEOUT_MS = 30000; // 30 seconds
+
 /**
  * Represents a processed GIF keyframe
  */
@@ -40,13 +74,13 @@ export interface GifProcessorConfig {
 	timeoutMs?: number;
 }
 
-// Default configuration values
+// Default configuration values (using constants defined above)
 const DEFAULT_CONFIG: Required<GifProcessorConfig> = {
-	maxWidth: 800,
-	jpegQuality: 80,
-	maxKeyframes: 10,
-	frameInterval: 10,
-	timeoutMs: 30000,
+	maxWidth: MAX_KEYFRAME_WIDTH,
+	jpegQuality: JPEG_QUALITY,
+	maxKeyframes: MAX_KEYFRAMES,
+	frameInterval: FRAME_INTERVAL,
+	timeoutMs: PROCESSING_TIMEOUT_MS,
 };
 
 /**

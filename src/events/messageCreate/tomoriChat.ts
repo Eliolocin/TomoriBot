@@ -284,17 +284,63 @@ export default async function tomoriChat(
 		log.info(`Processing DM from user ${userDiscId} in channel ${channel.id}`);
 	} else {
 		// Group DMs or other unsupported channel types
-		const errorEmbed = createStandardEmbed(locale, {
-			color: ColorCode.ERROR,
-			titleKey: "general.errors.channel_not_supported_title",
-			descriptionKey: "general.errors.channel_not_supported_description",
-		});
+		// Only show error embed if user actually tried to trigger the bot
+		let shouldShowError = false;
 
+		// Check if this was a manual trigger
+		if (isManuallyTriggered) {
+			shouldShowError = true;
+		}
+		// Check if message contains base trigger words
+		else if (message.content) {
+			for (const baseWord of BASE_TRIGGER_WORDS) {
+				// For Japanese characters, check if the content includes them directly
+				if (/[\u3040-\u30FF\u4E00-\u9FFF]/.test(baseWord)) {
+					if (message.content.includes(baseWord)) {
+						shouldShowError = true;
+						break;
+					}
+				} else {
+					// For English triggers, use word boundaries
+					const regex = new RegExp(`\\b${baseWord}\\b`, "i");
+					if (regex.test(message.content)) {
+						shouldShowError = true;
+						break;
+					}
+				}
+			}
+		}
+		// Check if bot was mentioned
+		if (!shouldShowError && client.user && message.mentions.users.has(client.user.id)) {
+			shouldShowError = true;
+		}
+		// Check if message is a reply to the bot
+		if (!shouldShowError && message.reference?.messageId) {
+			try {
+				const referenceMessage = await message.channel.messages.fetch(
+					message.reference.messageId,
+				);
+				if (referenceMessage && referenceMessage.author.id === client.user?.id) {
+					shouldShowError = true;
+				}
+			} catch (_fetchError) {
+				// Silently ignore if we can't fetch the reference message
+			}
+		}
+
+		// Only send error embed if user tried to trigger the bot
 		if (
+			shouldShowError &&
 			"send" in channel &&
 			// biome-ignore lint/style/noNonNullAssertion: client.user is checked during startup
 			message.author.id !== client.user!.id
 		) {
+			const errorEmbed = createStandardEmbed(locale, {
+				color: ColorCode.ERROR,
+				titleKey: "general.errors.channel_not_supported_title",
+				descriptionKey: "general.errors.channel_not_supported_description",
+			});
+
 			try {
 				await channel.send({ embeds: [errorEmbed] });
 			} catch (sendError) {
