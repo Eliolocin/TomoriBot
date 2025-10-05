@@ -38,6 +38,7 @@ import type {
 	StreamContext,
 	StreamProvider,
 } from "../../types/stream/interfaces";
+import { extractGifKeyframes } from "../../utils/media/gifProcessor";
 
 /**
  * Google-specific stream configuration extending the base StreamConfig
@@ -582,20 +583,53 @@ export class GoogleStreamAdapter implements StreamProvider {
 					} else if (part.type === "image" && part.uri && part.mimeType) {
 						// Handle images with URI - fetch and convert to base64
 						try {
-							const imageResponse = await fetch(part.uri);
-							if (!imageResponse.ok) {
-								throw new Error(`Image fetch failed: ${imageResponse.status}`);
-							}
-							const imageArrayBuffer = await imageResponse.arrayBuffer();
-							const base64ImageData =
-								Buffer.from(imageArrayBuffer).toString("base64");
+							// Check if this is a GIF - process as keyframes instead
+							if (part.mimeType === "image/gif") {
+								log.info(
+									`GoogleStreamAdapter: GIF detected, extracting keyframes: ${part.uri}`,
+								);
 
-							geminiParts.push({
-								inlineData: {
-									mimeType: part.mimeType,
-									data: base64ImageData,
-								},
-							});
+								// Extract keyframes from GIF
+								const keyframes = await extractGifKeyframes(part.uri);
+
+								// Add a text label before the keyframes
+								geminiParts.push({
+									text: `[Animated GIF - ${keyframes.length} keyframes extracted from ${keyframes[0].totalFrames} total frames]`,
+								});
+
+								// Add each keyframe as a separate image with a label
+								for (const frame of keyframes) {
+									geminiParts.push({
+										text: `Frame ${frame.frameNumber + 1}/${keyframes.length} (original frame ${frame.originalFrameIndex + 1}/${frame.totalFrames}):`,
+									});
+									geminiParts.push({
+										inlineData: {
+											mimeType: frame.mimeType,
+											data: frame.data,
+										},
+									});
+								}
+
+								log.success(
+									`GoogleStreamAdapter: Successfully processed GIF into ${keyframes.length} keyframes`,
+								);
+							} else {
+								// Regular image processing (non-GIF)
+								const imageResponse = await fetch(part.uri);
+								if (!imageResponse.ok) {
+									throw new Error(`Image fetch failed: ${imageResponse.status}`);
+								}
+								const imageArrayBuffer = await imageResponse.arrayBuffer();
+								const base64ImageData =
+									Buffer.from(imageArrayBuffer).toString("base64");
+
+								geminiParts.push({
+									inlineData: {
+										mimeType: part.mimeType,
+										data: base64ImageData,
+									},
+								});
+							}
 						} catch (imgErr) {
 							log.warn(
 								`GoogleStreamAdapter: Image processing error ${part.uri}`,
@@ -620,15 +654,63 @@ export class GoogleStreamAdapter implements StreamProvider {
 							inlineData.mimeType &&
 							inlineData.data
 						) {
-							geminiParts.push({
-								inlineData: {
-									mimeType: inlineData.mimeType,
-									data: inlineData.data,
-								},
-							});
-							log.info(
-								"GoogleStreamAdapter: Processed image with existing inlineData",
-							);
+							// Check if this is a GIF - process as keyframes instead
+							if (inlineData.mimeType === "image/gif") {
+								try {
+									log.info(
+										"GoogleStreamAdapter: GIF detected in inlineData, extracting keyframes",
+									);
+
+									// Convert base64 to buffer for processing
+									const gifBuffer = Buffer.from(inlineData.data, "base64");
+
+									// Extract keyframes from GIF buffer
+									const keyframes = await extractGifKeyframes(gifBuffer);
+
+									// Add a text label before the keyframes
+									geminiParts.push({
+										text: `[Animated GIF - ${keyframes.length} keyframes extracted from ${keyframes[0].totalFrames} total frames]`,
+									});
+
+									// Add each keyframe as a separate image with a label
+									for (const frame of keyframes) {
+										geminiParts.push({
+											text: `Frame ${frame.frameNumber + 1}/${keyframes.length} (original frame ${frame.originalFrameIndex + 1}/${frame.totalFrames}):`,
+										});
+										geminiParts.push({
+											inlineData: {
+												mimeType: frame.mimeType,
+												data: frame.data,
+											},
+										});
+									}
+
+									log.success(
+										`GoogleStreamAdapter: Successfully processed inline GIF into ${keyframes.length} keyframes`,
+									);
+								} catch (gifErr) {
+									log.warn(
+										"GoogleStreamAdapter: Failed to process inline GIF, skipping",
+										{
+											error:
+												gifErr instanceof Error
+													? gifErr.message
+													: String(gifErr),
+										},
+									);
+								}
+							} else {
+								// Regular image processing (non-GIF)
+								geminiParts.push({
+									inlineData: {
+										mimeType: inlineData.mimeType,
+										data: inlineData.data,
+									},
+								});
+								log.info(
+									"GoogleStreamAdapter: Processed image with existing inlineData",
+								);
+							}
 						} else {
 							log.warn(
 								"GoogleStreamAdapter: Invalid inlineData structure for image part",

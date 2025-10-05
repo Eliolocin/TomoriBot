@@ -1035,7 +1035,8 @@ export default async function tomoriChat(
 										attachment.contentType?.startsWith("image/jpeg") ||
 										attachment.contentType?.startsWith("image/webp") ||
 										attachment.contentType?.startsWith("image/heic") ||
-										attachment.contentType?.startsWith("image/heif")
+										attachment.contentType?.startsWith("image/heif") ||
+										attachment.contentType?.startsWith("image/gif")
 									) {
 										imageCount++;
 									} else if (
@@ -1101,7 +1102,8 @@ export default async function tomoriChat(
 							attachment.contentType?.startsWith("image/jpeg") ||
 							attachment.contentType?.startsWith("image/webp") ||
 							attachment.contentType?.startsWith("image/heic") ||
-							attachment.contentType?.startsWith("image/heif")
+							attachment.contentType?.startsWith("image/heif") ||
+							attachment.contentType?.startsWith("image/gif")
 						) {
 							imageAttachments.push({
 								url: attachment.url,
@@ -1235,7 +1237,8 @@ export default async function tomoriChat(
 							attachment.contentType?.startsWith("image/jpeg") ||
 							attachment.contentType?.startsWith("image/webp") ||
 							attachment.contentType?.startsWith("image/heic") ||
-							attachment.contentType?.startsWith("image/heif")
+							attachment.contentType?.startsWith("image/heif") ||
+							attachment.contentType?.startsWith("image/gif")
 						) {
 							imageAttachments.push({
 								url: attachment.url,
