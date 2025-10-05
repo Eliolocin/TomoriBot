@@ -424,6 +424,26 @@ export async function buildContext({
 
 		// Process each user, registering those not found or failed to load initially
 		for (const userIdToProcess of userList) {
+			// 6.0. Special handling for TomoriBot itself
+			// If this is the bot's own ID, add just status (no personal memories - those are server memories)
+			if (client.user && userIdToProcess === client.user.id) {
+				log.info(
+					`Adding status context for TomoriBot itself (ID: ${userIdToProcess})`,
+				);
+
+				// Add bot's status - always "Online" since if we're processing messages, the bot is online
+				const botStatus = "Online - Currently active and responding to messages";
+				const botContextText = `### ${botName} (User ID: ${userIdToProcess})'s current status\n${botStatus}\n\n`;
+
+				// Add to combined context
+				combinedUserContextText += botContextText;
+
+				log.info(
+					`Added TomoriBot status to user context section for guild ${guildId}`,
+				);
+				continue; // Skip normal user processing for the bot
+			}
+
 			let userRow =
 				userRowsAttempt.find((u) => u?.user_disc_id === userIdToProcess) ||
 				null;

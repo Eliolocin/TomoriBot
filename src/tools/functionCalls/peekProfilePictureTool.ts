@@ -165,6 +165,18 @@ export class PeekProfilePictureTool extends BaseTool {
 				`Profile picture processed for enhanced context restart: ${userId} (Username: ${avatarData.username})`,
 			);
 
+			// Build user display text with optional server nickname
+			let userDisplayText = avatarData.username;
+			if (avatarData.serverNickname) {
+				userDisplayText += ` (Nickname: ${avatarData.serverNickname})`;
+			}
+
+			// Check if this is the bot's own profile picture
+			const isBotSelf = context.client.user && userId === context.client.user.id;
+			const contextText = isBotSelf
+				? "[This message contains profile picture content from a previous avatar analysis request you made for yourself]"
+				: `[This message contains profile picture content from a previous avatar analysis request you made for user: ${userDisplayText}]`;
+
 			// Create artificial user message containing the profile picture Part
 			// This will be added to the context for the restart
 			// Special marker 'enhancedContext: true' indicates this should be processed by provider
@@ -174,7 +186,7 @@ export class PeekProfilePictureTool extends BaseTool {
 				parts: [
 					{
 						type: "text",
-						text: `[This message contains profile picture content from a previous avatar analysis request you made for user: ${avatarData.username}]`,
+						text: contextText,
 					},
 					{
 						type: "image",
@@ -274,12 +286,12 @@ export class PeekProfilePictureTool extends BaseTool {
 	 * Fetch Discord user and their avatar URL
 	 * @param userId - Discord user ID
 	 * @param context - Tool execution context containing Discord client
-	 * @returns Promise resolving to user data with avatar URL
+	 * @returns Promise resolving to user data with avatar URL and optional server nickname
 	 */
 	private async fetchUserAvatar(
 		userId: string,
 		context: ToolContext,
-	): Promise<{ username: string; avatarUrl: string }> {
+	): Promise<{ username: string; avatarUrl: string; serverNickname?: string }> {
 		try {
 			// Fetch user from Discord API
 			const user = await context.client.users.fetch(userId);
@@ -292,9 +304,27 @@ export class PeekProfilePictureTool extends BaseTool {
 				forceStatic: false, // Allow animated avatars if present
 			});
 
+			// Try to fetch server nickname if guild context is available
+			let serverNickname: string | undefined;
+			if (context.guildId) {
+				try {
+					const guild = context.client.guilds.cache.get(context.guildId);
+					if (guild) {
+						const member = await guild.members.fetch(userId).catch(() => null);
+						if (member?.nickname) {
+							serverNickname = member.nickname;
+						}
+					}
+				} catch (error) {
+					// Silently ignore nickname fetch errors - it's optional information
+					log.warn(`Could not fetch server nickname for user ${userId}: ${error instanceof Error ? error.message : "Unknown error"}`);
+				}
+			}
+
 			return {
 				username: user.username,
 				avatarUrl: avatarUrl,
+				serverNickname,
 			};
 		} catch (error) {
 			if (error instanceof Error) {

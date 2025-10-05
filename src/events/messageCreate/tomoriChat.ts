@@ -1379,6 +1379,11 @@ export default async function tomoriChat(
 				}
 			}
 
+			// Always add the bot's own ID to userList so it appears in context with its User ID
+			if (client.user?.id) {
+				userListSet.add(client.user.id);
+			}
+
 			const userList = Array.from(userListSet);
 			const channelName = isDMChannel
 				? "Direct Message"
