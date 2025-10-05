@@ -48,7 +48,7 @@ const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map(
 	(word) => word.trim(),
 ) || ["tomori", "tomo", "トモリ", "ともり"];
 
-const MAX_FUNCTION_CALL_ITERATIONS = 5; // Safety break for function call loops
+const MAX_FUNCTION_CALL_ITERATIONS = 8; // Safety break for function call loops
 const STREAM_SDK_CALL_TIMEOUT_MS = 35000; // Slightly longer than internal stream inactivity, 35 seconds
 
 /**
