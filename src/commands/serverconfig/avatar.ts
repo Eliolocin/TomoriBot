@@ -4,6 +4,7 @@ import type {
 	SlashCommandSubcommandBuilder,
 	Attachment,
 } from "discord.js";
+import { MessageFlags } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
@@ -19,9 +20,7 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("avatar")
-		.setDescription(
-			localizer("en-US", "commands.config.avatar.description"),
-		)
+		.setDescription(localizer("en-US", "commands.config.avatar.description"))
 		.addAttachmentOption((option) =>
 			option
 				.setName("image")
@@ -54,7 +53,10 @@ function validateImage(attachment: Attachment): {
 
 	// 2. Check content type
 	const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/gif"];
-	if (!attachment.contentType || !allowedTypes.includes(attachment.contentType)) {
+	if (
+		!attachment.contentType ||
+		!allowedTypes.includes(attachment.contentType)
+	) {
 		return {
 			isValid: false,
 			error: "INVALID_FORMAT",
@@ -79,7 +81,9 @@ function validateImage(attachment: Attachment): {
  * @param attachment - Discord attachment to convert
  * @returns Promise resolving to data URI string
  */
-async function attachmentToBase64DataUri(attachment: Attachment): Promise<string> {
+async function attachmentToBase64DataUri(
+	attachment: Attachment,
+): Promise<string> {
 	try {
 		// 1. Fetch the image data
 		const response = await fetch(attachment.url);
@@ -125,7 +129,7 @@ async function updateGuildAvatar(
 		const response = await fetch(endpoint, {
 			method: "PATCH",
 			headers: {
-				"Authorization": `Bot ${process.env.DISCORD_TOKEN}`,
+				Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
 				"Content-Type": "application/json",
 			},
 			body: JSON.stringify(payload),
@@ -170,7 +174,7 @@ export async function execute(
 	}
 
 	// 2. Defer the reply to prevent timeout during image processing
-	await interaction.deferReply();
+	await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
 	try {
 		// 3. Get the attachment option
@@ -243,7 +247,10 @@ export async function execute(
 		}
 
 		// 7. Update the guild avatar via Discord API
-		const success = await updateGuildAvatar(interaction.guild.id, avatarDataUri);
+		const success = await updateGuildAvatar(
+			interaction.guild.id,
+			avatarDataUri,
+		);
 
 		if (success) {
 			await replyInfoEmbed(interaction, locale, {
