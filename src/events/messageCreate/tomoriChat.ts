@@ -2,7 +2,6 @@ import type { Client, Message, Sticker, Embed } from "discord.js";
 import {
 	BaseGuildTextChannel,
 	DMChannel,
-	MessageFlags,
 	TextChannel,
 } from "discord.js"; // Import value for instanceof check
 // Provider imports moved to factory pattern
@@ -311,7 +310,11 @@ export default async function tomoriChat(
 			}
 		}
 		// Check if bot was mentioned
-		if (!shouldShowError && client.user && message.mentions.users.has(client.user.id)) {
+		if (
+			!shouldShowError &&
+			client.user &&
+			message.mentions.users.has(client.user.id)
+		) {
 			shouldShowError = true;
 		}
 		// Check if message is a reply to the bot
@@ -320,7 +323,10 @@ export default async function tomoriChat(
 				const referenceMessage = await message.channel.messages.fetch(
 					message.reference.messageId,
 				);
-				if (referenceMessage && referenceMessage.author.id === client.user?.id) {
+				if (
+					referenceMessage &&
+					referenceMessage.author.id === client.user?.id
+				) {
 					shouldShowError = true;
 				}
 			} catch (_fetchError) {
@@ -478,6 +484,12 @@ export default async function tomoriChat(
 										: "a previous message"
 								: "a previous message";
 
+							// Void unused variables (kept for potential future re-enabling of busy embed)
+							void tempUserRow;
+							void waitingLocale;
+							void currentMessageLink;
+
+							/*
 							const busyEmbed = createStandardEmbed(waitingLocale, {
 								titleKey: "general.tomori_busy_title",
 								descriptionKey: "general.tomori_busy_replying",
@@ -504,7 +516,7 @@ export default async function tomoriChat(
 										},
 									},
 								);
-							});
+							});*/
 						} catch (e) {
 							log.error(
 								// Rule 22

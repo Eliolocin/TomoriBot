@@ -296,29 +296,56 @@ export class PeekProfilePictureTool extends BaseTool {
 			// Fetch user from Discord API
 			const user = await context.client.users.fetch(userId);
 
-			// Get high-resolution avatar URL
-			// Use displayAvatarURL to get either custom avatar or default Discord avatar
-			const avatarUrl = user.displayAvatarURL({
-				size: 1024,
-				extension: "png",
-				forceStatic: false, // Allow animated avatars if present
-			});
-
-			// Try to fetch server nickname if guild context is available
+			// Try to fetch guild member for guild-specific avatar and nickname
 			let serverNickname: string | undefined;
+			let avatarUrl: string;
+
 			if (context.guildId) {
 				try {
 					const guild = context.client.guilds.cache.get(context.guildId);
 					if (guild) {
 						const member = await guild.members.fetch(userId).catch(() => null);
-						if (member?.nickname) {
-							serverNickname = member.nickname;
+						if (member) {
+							// Prioritize guild-specific avatar over global avatar
+							avatarUrl = member.displayAvatarURL({
+								size: 1024,
+								extension: "png",
+								forceStatic: false, // Allow animated avatars if present
+							});
+							serverNickname = member.nickname ?? undefined;
+							log.info(`Using guild-specific avatar for user ${userId} in guild ${context.guildId}`);
+						} else {
+							// Fallback to global avatar if member not found
+							avatarUrl = user.displayAvatarURL({
+								size: 1024,
+								extension: "png",
+								forceStatic: false,
+							});
 						}
+					} else {
+						// Fallback to global avatar if guild not found
+						avatarUrl = user.displayAvatarURL({
+							size: 1024,
+							extension: "png",
+							forceStatic: false,
+						});
 					}
 				} catch (error) {
-					// Silently ignore nickname fetch errors - it's optional information
-					log.warn(`Could not fetch server nickname for user ${userId}: ${error instanceof Error ? error.message : "Unknown error"}`);
+					// Fallback to global avatar on error
+					log.warn(`Could not fetch guild member for user ${userId}: ${error instanceof Error ? error.message : "Unknown error"}. Using global avatar.`);
+					avatarUrl = user.displayAvatarURL({
+						size: 1024,
+						extension: "png",
+						forceStatic: false,
+					});
 				}
+			} else {
+				// No guild context, use global avatar
+				avatarUrl = user.displayAvatarURL({
+					size: 1024,
+					extension: "png",
+					forceStatic: false,
+				});
 			}
 
 			return {
