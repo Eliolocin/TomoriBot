@@ -226,7 +226,9 @@ export async function loadServerEmojis(
  * @param includeDeprecated - Whether to include deprecated models in the results (default: false).
  * @returns An array of validated LlmRow objects, or null if none found or error.
  */
-export async function loadAvailableLlms(includeDeprecated = false): Promise<LlmRow[] | null> {
+export async function loadAvailableLlms(
+	includeDeprecated = false,
+): Promise<LlmRow[] | null> {
 	try {
 		// 1. Fetch rows from the llms table, filtering deprecated models unless explicitly included
 		const llmRows = includeDeprecated
@@ -279,10 +281,10 @@ export async function loadAvailableModelsForProvider(
 ): Promise<LlmRow[] | null> {
 	// Input validation
 	if (!providerName || providerName.trim().length === 0) {
-		log.error('Provider name cannot be empty');
+		log.error("Provider name cannot be empty");
 		return null;
 	}
-	
+
 	// Validate provider name format (alphanumeric, hyphens, and underscores only)
 	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
 		log.error(`Invalid provider name format: ${providerName}`);
@@ -290,7 +292,7 @@ export async function loadAvailableModelsForProvider(
 	}
 
 	const normalizedProviderName = providerName.trim();
-	
+
 	try {
 		// 1. Query for models for the specific provider, filtering deprecated unless explicitly included
 		const modelRows = includeDeprecated
@@ -307,7 +309,9 @@ export async function loadAvailableModelsForProvider(
 
 		// 2. Check if any rows were returned
 		if (!modelRows || modelRows.length === 0) {
-			log.warn(`No available models found for provider: ${normalizedProviderName}`);
+			log.warn(
+				`No available models found for provider: ${normalizedProviderName}`,
+			);
 			return null;
 		}
 
@@ -324,11 +328,16 @@ export async function loadAvailableModelsForProvider(
 		}
 
 		// 5. Return the validated array of LLM rows
-		log.info(`Found ${parsedModels.data.length} available models for ${normalizedProviderName}`);
+		log.info(
+			`Found ${parsedModels.data.length} available models for ${normalizedProviderName}`,
+		);
 		return parsedModels.data;
 	} catch (error) {
 		// 6. Log any unexpected errors during the database query
-		log.error(`Error loading available models for provider ${normalizedProviderName}:`, error);
+		log.error(
+			`Error loading available models for provider ${normalizedProviderName}:`,
+			error,
+		);
 		return null;
 	}
 }
@@ -348,10 +357,10 @@ export async function loadDefaultModelForProvider(
 ): Promise<LlmRow | null> {
 	// Input validation
 	if (!providerName || providerName.trim().length === 0) {
-		log.error('Provider name cannot be empty');
+		log.error("Provider name cannot be empty");
 		return null;
 	}
-	
+
 	// Validate provider name format (alphanumeric, hyphens, and underscores only)
 	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
 		log.error(`Invalid provider name format: ${providerName}`);
@@ -359,7 +368,7 @@ export async function loadDefaultModelForProvider(
 	}
 
 	const normalizedProviderName = providerName.trim();
-	
+
 	try {
 		// 1. Single optimized query: prioritize default models, then fallback to any available model
 		// Uses CASE to create a priority column: default models get priority 1, others get priority 2
@@ -385,14 +394,16 @@ export async function loadDefaultModelForProvider(
 
 		// 2. Check if any model was found
 		if (!modelRows || modelRows.length === 0) {
-			log.error(`No available models found for provider: ${normalizedProviderName}`);
+			log.error(
+				`No available models found for provider: ${normalizedProviderName}`,
+			);
 			return null;
 		}
 
 		// 3. Validate the selected model
 		const selectedModel = modelRows[0];
 		const parsedModel = llmSchema.safeParse(selectedModel);
-		
+
 		if (!parsedModel.success) {
 			log.error(
 				`Failed to validate model data for provider ${normalizedProviderName}:`,
@@ -404,15 +415,22 @@ export async function loadDefaultModelForProvider(
 		// 4. Log appropriate message based on whether we got the default or a fallback
 		const isDefaultModel = selectedModel.is_default === true;
 		if (isDefaultModel) {
-			log.info(`Found default model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`);
+			log.info(
+				`Found default model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`,
+			);
 		} else {
-			log.warn(`No default model found for provider ${normalizedProviderName}, using fallback: ${parsedModel.data.llm_codename}`);
+			log.warn(
+				`No default model found for provider ${normalizedProviderName}, using fallback: ${parsedModel.data.llm_codename}`,
+			);
 		}
 
 		return parsedModel.data;
 	} catch (error) {
 		// 5. Log any unexpected errors during the database query
-		log.error(`Error loading default model for provider ${normalizedProviderName}:`, error);
+		log.error(
+			`Error loading default model for provider ${normalizedProviderName}:`,
+			error,
+		);
 		return null;
 	}
 }
@@ -429,10 +447,10 @@ export async function loadSmartestModel(
 ): Promise<LlmRow | null> {
 	// Input validation
 	if (!providerName || providerName.trim().length === 0) {
-		log.error('Provider name cannot be empty');
+		log.error("Provider name cannot be empty");
 		return null;
 	}
-	
+
 	// Validate provider name format (alphanumeric, hyphens, and underscores only)
 	if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
 		log.error(`Invalid provider name format: ${providerName}`);
@@ -440,7 +458,7 @@ export async function loadSmartestModel(
 	}
 
 	const normalizedProviderName = providerName.trim();
-	
+
 	try {
 		// 1. Query for smartest model for the specific provider, filtering deprecated unless explicitly included
 		const smartModelQuery = includeDeprecated
@@ -461,7 +479,9 @@ export async function loadSmartestModel(
 
 		// 2. Check if any row was returned
 		if (!smartModelRows || smartModelRows.length === 0) {
-			log.warn(`No smartest model found for provider: ${normalizedProviderName}`);
+			log.warn(
+				`No smartest model found for provider: ${normalizedProviderName}`,
+			);
 			return null;
 		}
 
@@ -478,11 +498,16 @@ export async function loadSmartestModel(
 		}
 
 		// 5. Return the validated LLM row
-		log.info(`Found smartest model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`);
+		log.info(
+			`Found smartest model for ${normalizedProviderName}: ${parsedModel.data.llm_codename}`,
+		);
 		return parsedModel.data;
 	} catch (error) {
 		// 6. Log any unexpected errors during the database query
-		log.error(`Error loading smartest model for provider ${normalizedProviderName}:`, error);
+		log.error(
+			`Error loading smartest model for provider ${normalizedProviderName}:`,
+			error,
+		);
 		return null;
 	}
 }
@@ -494,7 +519,9 @@ export async function loadSmartestModel(
  * @param includeDeprecated - Whether to include providers that only have deprecated models (default: false).
  * @returns An array of unique provider names, or null if error or none found.
  */
-export async function loadUniqueProviders(includeDeprecated = false): Promise<string[] | null> {
+export async function loadUniqueProviders(
+	includeDeprecated = false,
+): Promise<string[] | null> {
 	try {
 		// 1. Query for providers that have at least one available model (filtering deprecated unless explicitly included)
 		const providerQuery = includeDeprecated
@@ -520,11 +547,11 @@ export async function loadUniqueProviders(includeDeprecated = false): Promise<st
 
 		// 3. Extract provider names and perform case-insensitive deduplication
 		const providerMap = new Map<string, string>();
-		
+
 		for (const row of providerRows) {
 			const provider = row.llm_provider as string;
 			const lowerKey = provider.toLowerCase();
-			
+
 			// Keep the first occurrence (which will be alphabetically sorted)
 			// This ensures consistent capitalization (e.g., "Google" over "google")
 			if (!providerMap.has(lowerKey)) {
@@ -535,7 +562,9 @@ export async function loadUniqueProviders(includeDeprecated = false): Promise<st
 		// 4. Convert back to array, sorted by the normalized keys
 		const providers = Array.from(providerMap.values()).sort();
 
-		log.info(`Found ${providers.length} unique LLM providers with available models: ${providers.join(", ")}`);
+		log.info(
+			`Found ${providers.length} unique LLM providers with available models: ${providers.join(", ")}`,
+		);
 		return providers;
 	} catch (error) {
 		// 5. Log any unexpected errors during the database query
@@ -580,7 +609,9 @@ export async function loadPresetOptions(
 			};
 		});
 
-		log.info(`Found ${presetOptions.length} personality presets for selection menu.`);
+		log.info(
+			`Found ${presetOptions.length} personality presets for selection menu.`,
+		);
 		return presetOptions;
 	} catch (error) {
 		// 4. Log any unexpected errors during the database query
@@ -674,12 +705,14 @@ export async function getDueReminders(): Promise<ReminderRow[] | null> {
 		`;
 
 		if (!reminderData) {
-			log.warn("Reminders data was unexpectedly null when fetching due reminders");
+			log.warn(
+				"Reminders data was unexpectedly null when fetching due reminders",
+			);
 			return [];
 		}
 
 		if (reminderData.length === 0) {
-			log.info("No due reminders found");
+			// log.info("No due reminders found");
 			return [];
 		}
 
@@ -691,14 +724,13 @@ export async function getDueReminders(): Promise<ReminderRow[] | null> {
 				validatedReminders.push(parsed.data);
 			} else {
 				log.warn(
-					`Invalid reminder data found in DB for reminder_id ${reminder.reminder_id}: ${JSON.stringify(reminder)}. Errors: ${parsed.error.flatten()}`
+					`Invalid reminder data found in DB for reminder_id ${reminder.reminder_id}: ${JSON.stringify(reminder)}. Errors: ${parsed.error.flatten()}`,
 				);
 			}
 		}
 
 		log.info(`Found ${validatedReminders.length} due reminders`);
 		return validatedReminders;
-
 	} catch (error) {
 		log.error("Error loading due reminders from database:", error);
 		return null;
@@ -710,7 +742,9 @@ export async function getDueReminders(): Promise<ReminderRow[] | null> {
  * @param reminderId - The ID of the reminder to load
  * @returns The ReminderRow object if found, null otherwise
  */
-export async function getReminderById(reminderId: number): Promise<ReminderRow | null> {
+export async function getReminderById(
+	reminderId: number,
+): Promise<ReminderRow | null> {
 	try {
 		const [reminderData] = await sql`
 			SELECT * FROM reminders
@@ -727,14 +761,13 @@ export async function getReminderById(reminderId: number): Promise<ReminderRow |
 		const parsed = reminderSchema.safeParse(reminderData);
 		if (!parsed.success) {
 			log.warn(
-				`Invalid reminder data found in DB for reminder_id ${reminderId}: ${JSON.stringify(reminderData)}. Errors: ${parsed.error.flatten()}`
+				`Invalid reminder data found in DB for reminder_id ${reminderId}: ${JSON.stringify(reminderData)}. Errors: ${parsed.error.flatten()}`,
 			);
 			return null;
 		}
 
 		log.info(`Loaded reminder with ID: ${reminderId}`);
 		return parsed.data;
-
 	} catch (error) {
 		log.error(`Error loading reminder with ID ${reminderId}:`, error);
 		return null;
@@ -761,7 +794,6 @@ export async function deleteReminderById(reminderId: number): Promise<boolean> {
 			log.warn(`No reminder found to delete with ID: ${reminderId}`);
 			return false;
 		}
-
 	} catch (error) {
 		log.error(`Error deleting reminder with ID ${reminderId}:`, error);
 		return false;

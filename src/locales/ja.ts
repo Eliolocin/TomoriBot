@@ -469,7 +469,7 @@ Discord API 遅延: \`{discord_response}ms\``,
 				provider_description: `APIキーに対応するAIプロバイダーを選択してください`,
 				provider_placeholder: `プロバイダーを選択...`,
 				api_key_label: `APIキー`,
-				api_key_description: `選択したプロバイダーのAPIキーを入力してください`,
+				api_key_description: `選択したプロバイダーのAPIキーを入力してください。このキーは安全に保存されます。取得方法が不明な場合は、\`/help apikey\`コマンドを使用してください。`,
 				api_key_placeholder: `ここにAPIキーを貼り付け...`,
 				no_providers_title: `利用可能なプロバイダーがありません`,
 				no_providers_description: `データベースに利用可能なAIプロバイダーがありません。ボットの管理者に連絡してください。`,
@@ -526,7 +526,7 @@ Discord API 遅延: \`{discord_response}ms\``,
 				api_provider_description: `お好みのLLMのプロバイダーを選択してください`,
 				api_provider_placeholder: `選択してください...`,
 				api_key_label: `APIキー`,
-				api_key_description: `選択したLLMプロバイダーのAPIキーを入力してください。`,
+				api_key_description: `選択したLLMプロバイダーのAPIキーを入力してください。このキーは安全に保存されます。取得方法が不明な場合は、\`/help apikey\`コマンドを使用してください。`,
 				preset_label: `人格プリセット`,
 				preset_description: `人格プリセットを選択してください`,
 				preset_placeholder: `人格を選択...`,
@@ -545,7 +545,9 @@ Discord API 遅延: \`{discord_response}ms\``,
 				dm_context_explanation_title: `ダイレクトメッセージについて`,
 				dm_context_explanation: `このダイレクトメッセージでも「サーバー」として参照します。つまり、すべての「サーバー」機能が同じように動作しますが、私たちだけのプライベートな空間です！このダイレクトメッセージを私との1対1サーバーと考えてください。「サーバーメモリー」はここでのみの私の記憶です。`,
 				already_setup_title: `既に設定済みです`,
-				already_setup_description: `このサーバーでは既に設定が完了しています。設定を変更するには、\`/config humanizerdegree\`、\`/config temperature\`、\`/teach attribute\`などの他のコマンドを使用してください。`,
+				already_setup_description: `このサーバーでは既に設定が完了しています。設定を変更するには、\`/config humanizerdegree\`、\`/config temperature\`、\`/teach attribute\`などの他のコマンドを使用してください。
+
+				プロバイダーを変更したい場合は、\`/config apikeyset\`コマンドを使用してください。`,
 			},
 			temperature: {
 				description: `私の応答の創造性/ランダム性を設定します（0.1〜2.0）。`,
@@ -761,10 +763,18 @@ Discord API 遅延: \`{discord_response}ms\``,
 	events: {
 		// ボットがサーバーに追加されたときのメッセージ
 		addBot: {
-			rejoin_title: `戻ってきました！`,
-			rejoin_description: `こんにちは！このサーバーに再追加されたようです。以前の設定と人格はそのままです！\`/config\`、\`/teach\`、\`unlearn\`コマンドで私を管理できます。`,
-			setup_prompt_title: `追加してくれてありがとうございます！`,
-			setup_prompt_description: `こんにちは！追加してくれてありがとうございます！始めるには、**サーバー管理**権限を持つ誰かが私の\`/config setup\`コマンドを実行して、私の初期の人格を選択し、AI機能を設定する必要があります。`,
+			rejoin_title: `TomoriBotが戻ってきました！`,
+			rejoin_description: `このサーバーに再追加されたようです。以前の設定と人格はそのままです！\`/config\`、\`/teach\`、\`unlearn\`コマンドで私を管理できます。
+
+			プロバイダーを変更したい場合は、\`/config apikeyset\`コマンドを使用してください。
+
+			**重要なお知らせ:** 私はDiscordメッセージを一切保存しません。記憶と関連設定のみを保存しており、これらはスラッシュコマンドで自由に削除・変更できます。ただし、私を動かすために選択したAIプロバイダーは、それぞれ異なるプライバシーポリシーを持っている場合があります。あなたまたはサーバーのメンバーが選択したプロバイダーのプライバシーポリシーに同意しない場合は、私の使用をお控えください。それ以外の場合は、個人情報を共有しないようにしてください。`,
+			setup_prompt_title: `TomoriBotの追加が完了しました`,
+			setup_prompt_description: `追加してくれてありがとうございます！始めるには、**サーバー管理**権限を持つ方が\`/config setup\`コマンドを実行して、私の初期の人格を選択し、AI機能を設定する必要があります。
+			
+			選択したAIプロバイダーのAPIキーの作成方法が不明な場合は、\`/help apikey\`コマンドを使用してください。APIキーは暗号化されて保存されますが、公開されているDiscordボットに提供することに不安がある場合（通常そうあるべきです）、[リポジトリのガイド](https://github.com/Eliolocin/TomoriBot)を使用してご自身でTomoriBotを実行することもできます。
+
+			**重要なお知らせ:** 私はDiscordメッセージを一切保存しません。記憶と関連設定のみを保存しており、これらはスラッシュコマンドで自由に削除・変更できます。ただし、私を動かすために選択したAIプロバイダーは、それぞれ異なるプライバシーポリシーを持っている場合があります。あなたまたはサーバーのメンバーが選択したプロバイダーのプライバシーポリシーに同意しない場合は、私の使用をお控えください。それ以外の場合は、個人情報を共有しないようにしてください。`,
 		},
 	},
 
