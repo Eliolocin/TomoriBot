@@ -13,9 +13,49 @@ import { localizer } from "../../utils/text/localizer";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import type { UserRow } from "../../types/db/schema";
 import { formatBoolean } from "@/utils/text/stringHelper";
+import { getMemoryLimits } from "@/utils/db/memoryLimits";
 
 // Constants
 const MAX_ITEMS_DISPLAY = 5; // Max number of items to list directly (e.g., trigger words, channels)
+const MAX_MEMORIES_DISPLAY = 10; // Max number of memories to display
+const MEMORY_TRUNCATE_LENGTH = 100; // Max length for memory snippets
+
+/**
+ * Formats an array of memories for display in an embed field.
+ * Truncates long memories and limits display to MAX_MEMORIES_DISPLAY items.
+ * @param memories - Array of memory strings to format
+ * @param locale - User's locale for localization
+ * @returns Formatted string for display, or "None" if empty
+ */
+function formatMemoriesForDisplay(memories: string[], locale: string): string {
+	// 1. Handle empty memories
+	if (memories.length === 0) {
+		return localizer(locale, "commands.tool.status.none");
+	}
+
+	// 2. Limit to first MAX_MEMORIES_DISPLAY memories
+	const memoriesToShow = memories.slice(0, MAX_MEMORIES_DISPLAY);
+	const omittedCount = memories.length - MAX_MEMORIES_DISPLAY;
+
+	// 3. Format each memory with truncation
+	const formattedMemories = memoriesToShow.map((memory, index) => {
+		// Truncate if longer than MEMORY_TRUNCATE_LENGTH
+		const truncated =
+			memory.length > MEMORY_TRUNCATE_LENGTH
+				? `${memory.substring(0, MEMORY_TRUNCATE_LENGTH)}...`
+				: memory;
+		return `${index + 1}. ${truncated}`;
+	});
+
+	// 4. Add message if there are more than MAX_MEMORIES_DISPLAY
+	if (omittedCount > 0) {
+		formattedMemories.push(
+			`\n*${localizer(locale, "commands.tool.status.memories_omitted", { count: omittedCount })}*`,
+		);
+	}
+
+	return formattedMemories.join("\n");
+}
 
 /**
  * Configures the 'status' subcommand with type options.
@@ -38,80 +78,129 @@ export const configureSubcommand = (
 				.setRequired(true)
 				.addChoices(
 					{
-						name: localizer("en-US", "commands.tool.status.type_choice_config"),
+						name: localizer("en-US", "commands.tool.status.type_choice_personal"),
 						name_localizations: {
-							ja: localizer("ja", "commands.tool.status.type_choice_config"),
+							ja: localizer("ja", "commands.tool.status.type_choice_personal"),
 						},
-						value: "config",
+						value: "personal",
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.tool.status.type_choice_personality",
+							"commands.tool.status.type_choice_server",
 						),
 						name_localizations: {
 							ja: localizer(
 								"ja",
-								"commands.tool.status.type_choice_personality",
+								"commands.tool.status.type_choice_server",
 							),
 						},
-						value: "personality",
+						value: "server",
 					},
 				),
 		);
 
 /**
  * Executes the 'status' command.
- * Displays either configuration or personality status based on user choice.
+ * Displays either personal user status or server/bot status based on user choice.
  * @param client - The Discord client instance.
  * @param interaction - The chat input command interaction.
- * @param _userData - The user data (unused in this command).
+ * @param userData - The user data for displaying personal status.
  * @param locale - The user's preferred locale.
  */
 export async function execute(
 	client: Client,
 	interaction: ChatInputCommandInteraction,
-	_userData: UserRow,
+	userData: UserRow,
 	locale: string,
 ): Promise<void> {
 	// Handle both guild and DM contexts - use user ID as server ID for DMs - let helper functions manage interaction state
 	const serverDiscId = interaction.guildId ?? interaction.user.id;
 	const statusType = interaction.options.getString("type", true); // Required option
 
-	// 1. Load Tomori State
-	const tomoriState = await loadTomoriState(serverDiscId);
+	// 1. Get memory limits for slot usage display
+	const limits = getMemoryLimits();
 
-	// 2. Handle case where Tomori is not set up
-	if (!tomoriState) {
-		await replyInfoEmbed(interaction, locale, {
-			titleKey: "general.errors.tomori_not_setup_title",
-			descriptionKey: "general.errors.tomori_not_setup_description",
-			color: ColorCode.ERROR,
-		});
-		return;
-	}
-
-	// 3. Prepare fields based on the requested status type
+	// 2. Prepare fields based on the requested status type
 	const fields: EmbedField[] = [];
 	let titleKey: string;
 	let descriptionKey: string;
+	let footerKey: string | undefined;
 
 	try {
 		switch (statusType) {
-			case "config": {
-				titleKey = "commands.tool.status.config_title";
-				descriptionKey = "commands.tool.status.config_description";
-				const config = tomoriState.config; // Already loaded
-				const llm = tomoriState.llm; // Already loaded
+			case "personal": {
+				// 1. Display personal/user status
+				titleKey = "commands.tool.status.personal_title";
+				descriptionKey = "commands.tool.status.personal_description";
 
-				// Format Auto-Chat Channels
+				// 2. Format personal memories
+				const personalMemoriesValue = formatMemoriesForDisplay(
+					userData.personal_memories,
+					locale,
+				);
+
+				// 3. Format personal memories count with slot usage
+				const personalMemoriesCount = userData.personal_memories.length;
+				const personalMemoriesFieldName = localizer(
+					locale,
+					"commands.tool.status.field_personal_memories_with_count",
+					{
+						current: personalMemoriesCount,
+						max: limits.maxPersonalMemories,
+					},
+				);
+
+				// 4. Add user-specific fields
+				fields.push(
+					{
+						name: localizer(locale, "commands.tool.status.field_user_nickname"),
+						value: userData.user_nickname,
+						inline: true,
+					},
+					{
+						name: localizer(locale, "commands.tool.status.field_language_pref"),
+						value: userData.language_pref,
+						inline: true,
+					},
+					{
+						name: personalMemoriesFieldName,
+						value: personalMemoriesValue,
+						inline: false,
+					},
+				);
+
+				// 5. Set footer for export command
+				footerKey = "commands.tool.status.export_footer";
+				break;
+			}
+			case "server": {
+				// 1. Load Tomori State for server information
+				const tomoriState = await loadTomoriState(serverDiscId);
+
+				// 2. Handle case where Tomori is not set up
+				if (!tomoriState) {
+					await replyInfoEmbed(interaction, locale, {
+						titleKey: "general.errors.tomori_not_setup_title",
+						descriptionKey: "general.errors.tomori_not_setup_description",
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+
+				titleKey = "commands.tool.status.server_title";
+				descriptionKey = "commands.tool.status.server_description";
+				const config = tomoriState.config;
+				const llm = tomoriState.llm;
+
+				// 3. Format Auto-Chat Channels
 				const autoChannelMentions = await Promise.all(
 					config.autoch_disc_ids.map(async (id) => {
 						try {
 							const channel = await client.channels.fetch(id);
-							return channel instanceof TextChannel ? channel.toString() : id; // Mention if channel found, else show ID
+							return channel instanceof TextChannel ? channel.toString() : id;
 						} catch {
-							return `*<${localizer(locale, "commands.tool.status.unknown_channel")} ${id}>*`; // Indicate unknown channel
+							return `*<${localizer(locale, "commands.tool.status.unknown_channel")} ${id}>*`;
 						}
 					}),
 				);
@@ -124,17 +213,69 @@ export async function execute(
 								})
 						: localizer(locale, "commands.tool.status.none");
 
-				// Format Trigger Words
+				// 4. Format Trigger Words with slot usage - always show all trigger words
+				const triggerWordsCount = config.trigger_words.length;
 				const triggerWordsValue =
-					config.trigger_words.length > 0
-						? config.trigger_words.length <= MAX_ITEMS_DISPLAY
-							? config.trigger_words.map((w) => `\`${w}\``).join(", ")
+					triggerWordsCount > 0
+						? config.trigger_words.map((w) => `\`${w}\``).join(", ")
+						: localizer(locale, "commands.tool.status.none");
+				const triggerWordsFieldName = localizer(
+					locale,
+					"commands.tool.status.field_trigger_words_with_count",
+					{
+						current: triggerWordsCount,
+						max: limits.maxTriggerWords,
+					},
+				);
+
+				// 5. Format Attributes with slot usage
+				const attributesCount = tomoriState.attribute_list.length;
+				const attributesValue =
+					attributesCount > 0
+						? attributesCount <= MAX_ITEMS_DISPLAY
+							? tomoriState.attribute_list.map((a) => `• ${a}`).join("\n")
 							: localizer(locale, "commands.tool.status.item_count", {
-									count: config.trigger_words.length,
+									count: attributesCount,
 								})
 						: localizer(locale, "commands.tool.status.none");
+				const attributesFieldName = localizer(
+					locale,
+					"commands.tool.status.field_attributes_with_count",
+					{
+						current: attributesCount,
+						max: limits.maxAttributes,
+					},
+				);
 
+				// 6. Format Server Memories with slot usage
+				const serverMemoriesCount = tomoriState.server_memories.length;
+				const serverMemoriesValue = formatMemoriesForDisplay(
+					tomoriState.server_memories,
+					locale,
+				);
+				const serverMemoriesFieldName = localizer(
+					locale,
+					"commands.tool.status.field_server_memories_with_count",
+					{
+						current: serverMemoriesCount,
+						max: limits.maxServerMemories,
+					},
+				);
+
+				// 7. Format Sample Dialogues count with slot usage
+				const dialogueCount = tomoriState.sample_dialogues_in.length;
+				const dialogueFieldName = localizer(
+					locale,
+					"commands.tool.status.field_dialogue_count_with_count",
+					{
+						current: dialogueCount,
+						max: limits.maxSampleDialogues,
+					},
+				);
+
+				// 7. Add all server-related fields (config + personality + memories)
 				fields.push(
+					// Configuration Section
 					{
 						name: localizer(locale, "commands.tool.status.field_model"),
 						value: `\`${llm.llm_codename}\` (${llm.llm_provider})`,
@@ -167,12 +308,12 @@ export async function execute(
 							"commands.tool.status.field_autoch_channels",
 						),
 						value: autoChannelsValue,
-						inline: false, // Full width for potentially long list/count
+						inline: false,
 					},
 					{
-						name: localizer(locale, "commands.tool.status.field_trigger_words"),
+						name: triggerWordsFieldName,
 						value: triggerWordsValue,
-						inline: false, // Full width
+						inline: false,
 					},
 					{
 						name: localizer(
@@ -189,54 +330,74 @@ export async function execute(
 					},
 					{
 						name: localizer(locale, "commands.tool.status.field_api_key_set"),
-						value: formatBoolean(!!config.api_key), // Check if api_key exists and is not null/empty
+						value: formatBoolean(!!config.api_key),
 						inline: true,
 					},
-				);
-				break;
-			}
-			case "personality": {
-				titleKey = "commands.tool.status.personality_title";
-				descriptionKey = "commands.tool.status.personality_description";
-
-				// Format Attributes
-				const attributesValue =
-					tomoriState.attribute_list.length > 0
-						? tomoriState.attribute_list.length <= MAX_ITEMS_DISPLAY
-							? tomoriState.attribute_list.map((a) => `• ${a}`).join("\n")
-							: localizer(locale, "commands.tool.status.item_count", {
-									count: tomoriState.attribute_list.length,
-								})
-						: localizer(locale, "commands.tool.status.none");
-
-				fields.push(
+					{
+						name: localizer(locale, "commands.tool.status.field_emoji_usage"),
+						value: formatBoolean(config.emoji_usage_enabled),
+						inline: true,
+					},
+					{
+						name: localizer(locale, "commands.tool.status.field_sticker_usage"),
+						value: formatBoolean(config.sticker_usage_enabled),
+						inline: true,
+					},
+					{
+						name: localizer(locale, "commands.tool.status.field_web_search"),
+						value: formatBoolean(config.web_search_enabled),
+						inline: true,
+					},
+					{
+						name: localizer(
+							locale,
+							"commands.tool.status.field_server_memteaching",
+						),
+						value: formatBoolean(config.server_memteaching_enabled),
+						inline: true,
+					},
+					{
+						name: localizer(
+							locale,
+							"commands.tool.status.field_attribute_memteaching",
+						),
+						value: formatBoolean(config.attribute_memteaching_enabled),
+						inline: true,
+					},
+					{
+						name: localizer(
+							locale,
+							"commands.tool.status.field_sampledialogue_memteaching",
+						),
+						value: formatBoolean(config.sampledialogue_memteaching_enabled),
+						inline: true,
+					},
+					// Personality Section
 					{
 						name: localizer(locale, "commands.tool.status.field_nickname"),
 						value: tomoriState.tomori_nickname,
 						inline: true,
 					},
 					{
-						name: localizer(
-							locale,
-							"commands.tool.status.field_dialogue_count",
-						),
-						value: String(tomoriState.sample_dialogues_in.length),
+						name: dialogueFieldName,
+						value: String(dialogueCount),
 						inline: true,
 					},
 					{
-						name: localizer(
-							locale,
-							"commands.tool.status.field_server_memory_count",
-						),
-						value: String(tomoriState.server_memories.length),
-						inline: true,
-					},
-					{
-						name: localizer(locale, "commands.tool.status.field_attributes"),
+						name: attributesFieldName,
 						value: attributesValue,
-						inline: false, // Full width for list
+						inline: false,
+					},
+					// Server Memories Section
+					{
+						name: serverMemoriesFieldName,
+						value: serverMemoriesValue,
+						inline: false,
 					},
 				);
+
+				// 8. Set footer for export command
+				footerKey = "commands.tool.status.export_footer_full";
 				break;
 			}
 			default:
@@ -256,10 +417,11 @@ export async function execute(
 			descriptionKey: descriptionKey,
 			color: ColorCode.INFO,
 			fields: fields,
+			footerKey: footerKey,
 		});
 	} catch (error) {
 		log.error(`Error executing status command for type ${statusType}:`, error, {
-			serverId: tomoriState?.server_id, // Use internal ID if available
+			serverId: serverDiscId,
 			errorType: "CommandExecutionError",
 			metadata: { commandName: "status", type: statusType },
 		});
