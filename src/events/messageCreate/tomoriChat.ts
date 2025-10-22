@@ -1501,6 +1501,38 @@ export default async function tomoriChat(
 				);
 			}
 
+			// Inject continuation prompt for manual triggers when Tomori is the last speaker
+			// This fixes the UX issue where manual /bot respond or /bot reason commands
+			// don't work if Tomori was the last one to speak in the conversation
+			if (isManuallyTriggered && simplifiedMessages.length > 0) {
+				const lastMessage = simplifiedMessages[simplifiedMessages.length - 1];
+
+				// 1. Check if the last message in history is from Tomori
+				// 2. If yes, inject a fake user message to prompt continuation
+				// 3. This ensures the conversation pattern remains User->Tomori->User->Tomori
+				if (lastMessage.authorId === client.user?.id) {
+					log.info(
+						`Manual trigger detected with Tomori as last speaker - injecting continuation prompt for UX`,
+					);
+
+					// Create a fake user message prompting Tomori to continue
+					// Use "0" as authorId to ensure it's not the bot's ID (will be labeled as "user" role)
+					const continuationPrompt: SimplifiedMessageForContext = {
+						authorId: "0", // Placeholder ID that's definitely not the bot's ID
+						authorName: "System",
+						content: "[Continue your last message]",
+						imageAttachments: [],
+						videoAttachments: [],
+					};
+
+					// Add the continuation prompt to the conversation history
+					simplifiedMessages.push(continuationPrompt);
+					log.info(
+						`Injected continuation prompt as System user to allow Tomori to respond`,
+					);
+				}
+			}
+
 			// 11. Build Context
 			// The `buildContext` function will be refactored in a subsequent step to accept
 			// `simplifiedMessages` and produce `StructuredContextItem[]`.
