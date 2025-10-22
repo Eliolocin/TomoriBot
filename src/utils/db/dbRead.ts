@@ -12,6 +12,7 @@ import {
 	serverStickerSchema,
 	reminderSchema,
 	type ReminderRow,
+	type TomoriPresetRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 
@@ -616,6 +617,148 @@ export async function loadPresetOptions(
 	} catch (error) {
 		// 4. Log any unexpected errors during the database query
 		log.error("Error loading preset options from database:", error);
+		return null;
+	}
+}
+
+/**
+ * Loads personality presets filtered by locale with truncated descriptions for dynamic select menus.
+ * Implements fallback logic: tries exact locale match → base language → 'en' fallback.
+ * @param locale - The locale code to filter by (e.g., 'en-US', 'ja')
+ * @param maxDescriptionLength - Maximum length for preset descriptions (default: 100)
+ * @returns An array of preset options with truncated descriptions, or null if error or none found.
+ */
+export async function loadPresetOptionsByLocale(
+	locale: string,
+	maxDescriptionLength = 100,
+): Promise<Array<{ name: string; description: string }> | null> {
+	try {
+		// 1. Try exact locale match (e.g., 'ja')
+		let presetRows = await sql`
+			SELECT tomori_preset_name, tomori_preset_desc
+			FROM tomori_presets
+			WHERE preset_language = ${locale}
+			ORDER BY tomori_preset_name ASC
+		`;
+
+		// 2. If no exact match, try base language (e.g., 'ja' from 'ja-JP')
+		if (presetRows.length === 0) {
+			const baseLanguage = locale.split("-")[0];
+			presetRows = await sql`
+				SELECT tomori_preset_name, tomori_preset_desc
+				FROM tomori_presets
+				WHERE preset_language = ${baseLanguage}
+				ORDER BY tomori_preset_name ASC
+			`;
+
+			if (presetRows.length > 0) {
+				log.info(`No presets found for locale '${locale}', using base language '${baseLanguage}' instead.`);
+			}
+		}
+
+		// 3. If still no presets, fall back to 'en'
+		if (presetRows.length === 0 && locale !== "en") {
+			presetRows = await sql`
+				SELECT tomori_preset_name, tomori_preset_desc
+				FROM tomori_presets
+				WHERE preset_language = 'en'
+				ORDER BY tomori_preset_name ASC
+			`;
+
+			if (presetRows.length > 0) {
+				log.info(`No presets found for locale '${locale}', falling back to English presets.`);
+			}
+		}
+
+		// 4. Check if any rows were returned after all fallback attempts
+		if (!presetRows || presetRows.length === 0) {
+			log.warn(`No personality presets found for locale '${locale}' or any fallback language.`);
+			return null;
+		}
+
+		// 5. Process and truncate descriptions
+		const presetOptions = presetRows.map((row: Record<string, unknown>) => {
+			const description = row.tomori_preset_desc as string;
+			const truncatedDescription =
+				description.length > maxDescriptionLength
+					? `${description.substring(0, maxDescriptionLength - 3)}...`
+					: description;
+
+			return {
+				name: row.tomori_preset_name as string,
+				description: truncatedDescription,
+			};
+		});
+
+		log.info(
+			`Found ${presetOptions.length} personality presets for locale '${locale}' (selection menu).`,
+		);
+		return presetOptions;
+	} catch (error) {
+		// 6. Log any unexpected errors during the database query
+		log.error(`Error loading preset options for locale '${locale}' from database:`, error);
+		return null;
+	}
+}
+
+/**
+ * Loads full personality preset rows filtered by locale.
+ * Implements fallback logic: tries exact locale match → base language → 'en' fallback.
+ * Returns complete TomoriPresetRow objects with all fields (attributes, sample dialogues, etc.).
+ * @param locale - The locale code to filter by (e.g., 'en-US', 'ja')
+ * @returns An array of TomoriPresetRow objects, or null if error or none found.
+ */
+export async function loadPresetRowsByLocale(
+	locale: string,
+): Promise<TomoriPresetRow[] | null> {
+	try {
+		// 1. Try exact locale match (e.g., 'ja')
+		let presets = await sql`
+			SELECT * FROM tomori_presets
+			WHERE preset_language = ${locale}
+			ORDER BY tomori_preset_name ASC
+		`;
+
+		// 2. If no exact match, try base language (e.g., 'ja' from 'ja-JP')
+		if (presets.length === 0) {
+			const baseLanguage = locale.split("-")[0];
+			presets = await sql`
+				SELECT * FROM tomori_presets
+				WHERE preset_language = ${baseLanguage}
+				ORDER BY tomori_preset_name ASC
+			`;
+
+			if (presets.length > 0) {
+				log.info(`No presets found for locale '${locale}', using base language '${baseLanguage}' instead.`);
+			}
+		}
+
+		// 3. If still no presets, fall back to 'en'
+		if (presets.length === 0 && locale !== "en") {
+			presets = await sql`
+				SELECT * FROM tomori_presets
+				WHERE preset_language = 'en'
+				ORDER BY tomori_preset_name ASC
+			`;
+
+			if (presets.length > 0) {
+				log.info(`No presets found for locale '${locale}', falling back to English presets.`);
+			}
+		}
+
+		// 4. Check if any rows were returned after all fallback attempts
+		if (!presets || presets.length === 0) {
+			log.warn(`No personality presets found for locale '${locale}' or any fallback language.`);
+			return null;
+		}
+
+		log.info(
+			`Found ${presets.length} personality preset rows for locale '${locale}'.`,
+		);
+		return presets as TomoriPresetRow[];
+	} catch (error) {
+		// 5. Log any unexpected errors during the database query
+		log.error(`Error loading preset rows for locale '${locale}' from database:`, error);
 		return null;
 	}
 }

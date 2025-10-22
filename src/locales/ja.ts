@@ -3,6 +3,12 @@
 // ロケール構造全体をデフォルトオブジェクトとしてエクスポートします
 export default {
 	general: {
+		// デフォルト設定値
+		defaults: {
+			bot_name: `ともり`,
+			base_trigger_words: ["トモリ", "ともり"],
+		},
+
 		// クールダウンメッセージ
 		cooldown_title: `⌛ お待ちください！`,
 		cooldown: `再度 \`/{category}\` コマンドを使用するまで {seconds} 秒待つ必要があります。`,

@@ -197,7 +197,96 @@ export function getSupportedLocales(): string[] {
 		log.warn("Localization system not initialized when requesting supported locales");
 		return [];
 	}
-	
+
 	// Return the dynamic list of loaded locale keys
 	return Object.keys(locales);
+}
+
+/**
+ * Get the default bot name for a specific locale.
+ * Uses the localization system to fetch the appropriate bot name based on the server's locale.
+ * Falls back to environment variables and hardcoded defaults if locale keys are not found.
+ * @param locale - The locale code (e.g., 'en-US', 'ja')
+ * @returns The default bot name for the specified locale
+ */
+export function getDefaultBotName(locale: string): string {
+	// 1. Try to get the bot name from the locale files first
+	const localizedName = localizer(locale, "general.defaults.bot_name");
+
+	// 2. If we got a valid localized name (not the key itself), return it
+	if (localizedName !== "general.defaults.bot_name") {
+		return localizedName;
+	}
+
+	// 3. Fallback to environment variables with hardcoded defaults
+	// This ensures backward compatibility with existing environment variable configuration
+	if (locale === "ja") {
+		return process.env.DEFAULT_BOTNAME_JP || "ともり";
+	}
+
+	return process.env.DEFAULT_BOTNAME || "Tomori";
+}
+
+/**
+ * Get the base trigger words for a specific locale.
+ * Uses the localization system to fetch locale-appropriate trigger words.
+ * Falls back to environment variables and hardcoded defaults if locale keys are not found.
+ * @param locale - The locale code (e.g., 'en-US', 'ja')
+ * @returns Array of base trigger words for the specified locale
+ */
+export function getBaseTriggerWords(locale: string): string[] {
+	// 1. Check if localization system is initialized
+	if (!isInitialized) {
+		log.warn("Localization system not initialized when requesting base trigger words");
+		// Fallback to environment variable or hardcoded defaults
+		return (
+			process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || [
+				"tomori",
+				"tomo",
+				"トモリ",
+				"ともり",
+			]
+		);
+	}
+
+	// 2. Determine the locale to use, falling back to 'en-US'
+	const fallbackLocale = "en-US";
+	const usedLocale = locales[locale] ? locale : fallbackLocale;
+
+	// 3. Navigate to the base_trigger_words in the locale object
+	const localeData = locales[usedLocale];
+	if (
+		localeData &&
+		typeof localeData === "object" &&
+		"general" in localeData &&
+		typeof localeData.general === "object" &&
+		localeData.general !== null &&
+		"defaults" in localeData.general &&
+		typeof localeData.general.defaults === "object" &&
+		localeData.general.defaults !== null &&
+		"base_trigger_words" in localeData.general.defaults
+	) {
+		const triggerWords = (
+			localeData.general.defaults as Record<string, unknown>
+		).base_trigger_words;
+
+		// 4. Validate it's an array of strings
+		if (
+			Array.isArray(triggerWords) &&
+			triggerWords.every((word) => typeof word === "string")
+		) {
+			return triggerWords as string[];
+		}
+	}
+
+	// 5. Fallback to environment variables with hardcoded defaults
+	// This ensures backward compatibility with existing environment variable configuration
+	return (
+		process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || [
+			"tomori",
+			"tomo",
+			"トモリ",
+			"ともり",
+		]
+	);
 }

@@ -3,6 +3,12 @@
 // Export the entire locale structure as a default object
 export default {
 	general: {
+		// Default configuration values
+		defaults: {
+			bot_name: `Tomori`,
+			base_trigger_words: ["tomori", "tomo"],
+		},
+
 		// Cooldown messages
 		cooldown_title: `⌛ Please wait!`,
 		cooldown: `You need to wait {seconds} seconds before using a \`/{category}\` command again.`,

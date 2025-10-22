@@ -8,7 +8,7 @@ import { sql } from "bun";
 import type { SetupConfig, UserRow } from "../../types/db/schema";
 import type { SelectOption } from "../../types/discord/modal";
 import { setupConfigSchema } from "../../types/db/schema";
-import { localizer } from "../../utils/text/localizer";
+import { localizer, getDefaultBotName } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
 	replyInfoEmbed,
@@ -21,7 +21,7 @@ import { setupServer } from "../../utils/db/dbWrite";
 import {
 	loadTomoriState,
 	loadUniqueProviders,
-	loadPresetOptions,
+	loadPresetOptionsByLocale,
 } from "@/utils/db/dbRead";
 
 import { HumanizerDegree } from "@/types/db/schema";
@@ -94,7 +94,7 @@ export async function execute(
 		// Load dynamic data for the modal
 		const [uniqueProviders, presetOptions] = await Promise.all([
 			loadUniqueProviders(),
-			loadPresetOptions(100),
+			loadPresetOptionsByLocale(locale, 100),
 		]);
 
 		// Check if we have the required data
@@ -295,10 +295,7 @@ export async function execute(
 			provider: normalizedProvider, // Use the case-normalized provider name
 			presetId: selectedPresetId,
 			humanizer: HumanizerDegree.HEAVY, // Always default to HEAVY as decided
-			tomoriName:
-				locale === "ja"
-					? process.env.DEFAULT_BOTNAME_JP || "ともり" // Use environment variable with fallback
-					: process.env.DEFAULT_BOTNAME || "Tomori", // Use environment variable with fallback
+			tomoriName: getDefaultBotName(locale), // Get bot name from locale files
 			locale,
 		};
 

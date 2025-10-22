@@ -4,7 +4,7 @@ import {
 	type Client,
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { loadTomoriState } from "../../utils/db/dbRead";
+import { loadTomoriState, loadPresetRowsByLocale } from "../../utils/db/dbRead";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import {
@@ -71,35 +71,11 @@ export async function execute(
 			return;
 		}
 
-		// 5. Fetch available presets for the user's locale
-		// First try exact match (e.g., 'en-US')
-		let presets = await sql`
-            SELECT * FROM tomori_presets
-            WHERE preset_language = ${locale}
-            ORDER BY tomori_preset_name ASC
-        `;
-
-		// If no exact match, try language base (e.g., 'en' from 'en-US')
-		if (presets.length === 0) {
-			const baseLanguage = locale.split("-")[0];
-			presets = await sql`
-                SELECT * FROM tomori_presets
-                WHERE preset_language = ${baseLanguage}
-                ORDER BY tomori_preset_name ASC
-            `;
-		}
-
-		// If still no presets, fall back to 'en'
-		if (presets.length === 0 && locale !== "en") {
-			presets = await sql`
-                SELECT * FROM tomori_presets
-                WHERE preset_language = 'en'
-                ORDER BY tomori_preset_name ASC
-            `;
-		}
+		// 5. Fetch available presets for the user's locale using shared helper
+		const presets = await loadPresetRowsByLocale(locale);
 
 		// 6. Check if there are any presets available
-		if (presets.length === 0) {
+		if (!presets || presets.length === 0) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.config.preset.no_presets_title",
 				descriptionKey: "commands.config.preset.no_presets_description",

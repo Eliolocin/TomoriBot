@@ -14,6 +14,7 @@ import {
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import { validateTomoriConfigFields, validateTomoriFields, validateUserFields } from "./sqlSecurity";
+import { getBaseTriggerWords } from "../text/localizer";
 import type { Guild } from "discord.js";
 import {
 	validateMemoryContent,
@@ -232,9 +233,7 @@ export async function setupServer(
 				log.info(`Using default model for ${validConfig.provider}: ${selectedLlm.llm_codename}`);
 			}
 
-			const defaultTriggers = process.env.BASE_TRIGGER_WORDS?.split(",").map(
-				(word) => word.trim(),
-			) || ["tomori", "tomo", "トモリ", "ともり"];
+			const defaultTriggers = getBaseTriggerWords(validConfig.locale);
 
 			// 1. Create or update server record with DM support (Rule 15)
 			const [server] = await tx`
