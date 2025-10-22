@@ -243,17 +243,44 @@ export async function execute(
 		}
 		// --- Transaction End (Conceptually) ---
 
-		// 13. Success! Show the nickname change (covers both nickname and trigger word update if applicable)
+		// 13. Update bot's server nickname if in a guild
+		let nicknameUpdateSuccess = false;
+		if (interaction.guild) {
+			try {
+				const botMember = await interaction.guild.members.fetchMe();
+				if (botMember) {
+					await botMember.setNickname(newNickname);
+					nicknameUpdateSuccess = true;
+					log.success(
+						`Successfully updated bot nickname to '${newNickname}' in guild ${interaction.guild.id}`,
+					);
+				}
+			} catch (nicknameError) {
+				// Log the error but don't fail the entire command
+				await log.warn(
+					`Failed to update bot's server nickname in guild ${interaction.guild.id} (permissions issue or API error): ${(nicknameError as Error).message}`,
+				);
+			}
+		}
+
+		// 14. Success! Show the nickname change (covers both nickname and trigger word update if applicable)
 		await replyInfoEmbed(interaction, locale, {
 			titleKey: "commands.config.rename.success_title",
-			descriptionKey: triggerUpdateNeeded
-				? "commands.config.rename.success_with_trigger_description" // New key needed
-				: "commands.config.rename.success_description", // Existing key
+			descriptionKey: nicknameUpdateSuccess
+				? triggerUpdateNeeded
+					? "commands.config.rename.success_with_trigger_and_discord_description"
+					: "commands.config.rename.success_with_discord_description"
+				: triggerUpdateNeeded
+					? "commands.config.rename.success_with_trigger_description"
+					: "commands.config.rename.success_description",
 			descriptionVars: {
 				old_nickname: oldNickname,
 				new_nickname: newNickname,
 			},
 			color: ColorCode.SUCCESS,
+			footerKey: !nicknameUpdateSuccess && interaction.guild
+				? "commands.config.rename.nickname_update_failed_footer"
+				: undefined,
 		});
 	} catch (error) {
 		// 14. Log error with context (Rule #22)

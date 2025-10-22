@@ -10,7 +10,7 @@ import {
 } from "../../utils/discord/interactionHelper";
 import { ColorCode, log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
-import { loadTomoriState } from "../../utils/db/dbRead";
+import { loadTomoriState, getUserReminderCount } from "../../utils/db/dbRead";
 import type { UserRow } from "../../types/db/schema";
 import { formatBoolean } from "@/utils/text/stringHelper";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
@@ -151,7 +151,10 @@ export async function execute(
 					},
 				);
 
-				// 4. Add user-specific fields
+				// 4. Get reminder count for the user
+				const reminderCount = await getUserReminderCount(interaction.user.id);
+
+				// 5. Add user-specific fields
 				fields.push(
 					{
 						name: localizer(locale, "commands.tool.status.field_user_nickname"),
@@ -164,13 +167,18 @@ export async function execute(
 						inline: true,
 					},
 					{
+						name: localizer(locale, "commands.tool.status.field_reminders_count"),
+						value: String(reminderCount),
+						inline: true,
+					},
+					{
 						name: personalMemoriesFieldName,
 						value: personalMemoriesValue,
 						inline: false,
 					},
 				);
 
-				// 5. Set footer for export command
+				// 6. Set footer for export command
 				footerKey = "commands.tool.status.export_footer";
 				break;
 			}

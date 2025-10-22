@@ -15,7 +15,8 @@
 		"nuke-db": "bun run scripts/nuke-db.ts",
 		"lint": "bunx @biomejs/biome lint --fix",
 		"check": "bunx tsc --noEmit",
-		"check-locales": "bun run scripts/checkLocalizationKeys.ts"
+		"check-locales": "bun run scripts/checkLocalizationKeys.ts",
+		"check-limits": "bun run scripts/checkDiscordLimits.ts"
 	},
 	"author": "Bredrumb",
 	"license": "ISC",

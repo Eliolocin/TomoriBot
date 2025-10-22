@@ -17,7 +17,7 @@ import {
 export class MemoryTool extends BaseTool {
 	name = "remember_this_fact";
 	description =
-		"Use this function when you identify a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important to remember for future interactions. This helps you learn and adapt. Specify if the information is a general server-wide fact or something specific about a user. Avoid saving information that is already known or redundant. IMPORTANT: Use {bot} instead of hardcoded bot names and {user} instead of hardcoded user names in your memory content to prevent confusion when names change.";
+		"Use this function when you identify a new, distinct piece of information, fact, preference, or instruction during the conversation that seems important to remember for future interactions. This helps you learn and adapt. Specify if the information is a general server-wide fact or something specific about a user. Avoid saving information that is already known or redundant. IMPORTANT: Use {bot} instead of hardcoded bot names and {user} instead of hardcoded user names in your memory content to prevent confusion when names change.\n\nCRITICAL PRIVACY AND ACCURACY RULES:\n1. NEVER save personally identifiable information (PII) such as: real names, addresses, phone numbers, email addresses, social security numbers, financial information, or exact locations.\n2. ONLY save personal memories about a user when THAT SPECIFIC USER directly shared the information themselves in the conversation. DO NOT save memories about User A if User B is the one claiming the information (e.g., if User B says 'User A likes dogs', do not save this unless User A confirmed it themselves).\n3. If someone asks you to remember something about another user who hasn't shared that information directly, politely decline and explain that you only save information that users share about themselves.\n4. Focus on preferences, interests, and context that enhance conversation quality without compromising privacy or accuracy.";
 	category = "memory" as const;
 	requiresFeatureFlag = "self_teaching";
 
@@ -27,7 +27,7 @@ export class MemoryTool extends BaseTool {
 			memory_content: {
 				type: "string",
 				description:
-					"The specific piece of information, fact, or preference to remember. Be concise, clear, and ensure it's new information not already in your knowledge base. IMPORTANT: Use {bot} instead of hardcoded bot names (e.g., 'Tomori', 'Elen') and {user} instead of hardcoded user names in your memory content. Example: '{bot} likes {user}'s dogs!' instead of 'Tomori likes John's dogs!'",
+					"The specific piece of information, fact, or preference to remember. Be concise, clear, and ensure it's new information not already in your knowledge base. IMPORTANT: Use {bot} instead of hardcoded bot names (e.g., 'Tomori', 'Elen') and {user} instead of hardcoded user names in your memory content. Example: '{bot} likes {user}'s dogs!' instead of 'Tomori likes John's dogs!'. NEVER include PII (real names, addresses, contact info, etc.). For personal memories, ONLY save information the user shared about THEMSELVES, not claims made by others.",
 			},
 			memory_scope: {
 				type: "string",
@@ -43,7 +43,7 @@ export class MemoryTool extends BaseTool {
 			target_user_nickname: {
 				type: "string",
 				description:
-					"If memory_scope is 'target_user', also provide the nickname of the user this memory pertains to, as you see them in the current conversation or their user profile information. This is used to confirm the target user alongside their Discord ID.",
+					"If memory_scope is 'target_user', also provide the nickname of the user this memory pertains to, as you see them in the current conversation or their user profile information. This is used to confirm the target user alongside their Discord ID..",
 			},
 		},
 		required: ["memory_content", "memory_scope"],
@@ -320,6 +320,24 @@ export class MemoryTool extends BaseTool {
 			}
 		} else if (memoryScopeArg === "target_user") {
 			// User-specific memory handling (from tomoriChat.ts:1180-1339)
+
+			// Prevent saving personal memories about the bot itself
+			if (
+				targetUserDiscordIdArg &&
+				targetUserDiscordIdArg === context.client.user?.id
+			) {
+				return {
+					success: false,
+					error:
+						"Cannot save personal memories about the bot. Use 'server_wide' scope for information about the bot.",
+					data: {
+						status: "memory_save_failed_invalid_target",
+						scope: "target_user",
+						reason:
+							"Personal memories cannot be saved about the bot itself. Server-wide memories should be used for bot-related information.",
+					},
+				};
+			}
 
 			// Validate required arguments for target_user scope
 			if (

@@ -284,10 +284,17 @@ export async function buildContext({
 	// These will be consolidated into the system prompt in Phase 2.
 	// For now, they are tagged individually.
 
-	// 2. Server Description
-	let serverInfoContent = `# Knowledge Base\n${botName} is currently in the Discord server named "${serverName}".\n`;
-	if (serverDescription) {
-		serverInfoContent += `## ${serverName}'s Description\n${serverDescription}`;
+	// 2. Server/DM Context
+	let serverInfoContent = "";
+	if (isDMChannel) {
+		// For DMs, indicate the bot is in a direct message with the triggerer
+		serverInfoContent = `# Knowledge Base\n${botName} is currently in a Direct Message with ${triggererName}.\n`;
+	} else {
+		// For servers, show server name and description
+		serverInfoContent = `# Knowledge Base\n${botName} is currently in the Discord server named "${serverName}".\n`;
+		if (serverDescription) {
+			serverInfoContent += `## ${serverName}'s Description\n${serverDescription}`;
+		}
 	}
 	contextItems.push({
 		role: "system",
@@ -307,8 +314,8 @@ export async function buildContext({
 		metadataTag: ContextItemTag.KNOWLEDGE_SERVER_INFO, // Tagging
 	});
 
-	// 3. Emojis
-	if (emojiStrings && emojiStrings.length > 0) {
+	// 3. Emojis (only available in guild channels, not DMs)
+	if (emojiStrings && emojiStrings.length > 0 && !isDMChannel) {
 		// 1. Shuffle the emoji array to randomize selection
 		const shuffledEmojis = [...emojiStrings].sort(() => Math.random() - 0.5);
 
@@ -370,14 +377,18 @@ export async function buildContext({
 		}
 	}
 
-	// 5. Server Memories
+	// 5. Server Memories / Conversation Memories
 	const tomoriState = await loadTomoriState(guildId);
 	if (
 		tomoriState?.server_memories &&
 		Array.isArray(tomoriState.server_memories) &&
 		tomoriState.server_memories.length > 0
 	) {
-		const serverMemoriesText = `\n## ${botName}'s Memories about ${serverName}\n${tomoriState.server_memories.join("\n")}\n`;
+		// For DMs, label as "Conversation Memories". For servers, label as "Server Memories"
+		const memoryLabel = isDMChannel
+			? `\n## ${botName}'s Memories about this conversation with ${triggererName}\n`
+			: `\n## ${botName}'s Memories about ${serverName}\n`;
+		const serverMemoriesText = `${memoryLabel}${tomoriState.server_memories.join("\n")}\n`;
 		contextItems.push({
 			role: "system",
 			parts: [
@@ -611,9 +622,16 @@ export async function buildContext({
 		);
 	}
 	// 7. Current Context (Time, Channel)
-	let currentContextContent = `\n# Current Context\nCurrent Time (UTC): ${getCurrentTime()}.\n${botName} is currently in text channel #${channelName}.`;
-	if (channelDesc) {
-		currentContextContent += ` ${channelDesc}\n`;
+	let currentContextContent = `\n# Current Context\nCurrent Time (UTC): ${getCurrentTime()}.\n`;
+	if (isDMChannel) {
+		// For DMs, indicate the bot is in a direct message (no channel name needed)
+		currentContextContent += `${botName} is currently in a Direct Message conversation with ${triggererName}.`;
+	} else {
+		// For servers, show channel name and description
+		currentContextContent += `${botName} is currently in text channel #${channelName}.`;
+		if (channelDesc) {
+			currentContextContent += ` ${channelDesc}\n`;
+		}
 	}
 	contextItems.push({
 		role: "system",

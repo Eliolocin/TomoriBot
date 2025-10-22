@@ -775,6 +775,26 @@ export async function getReminderById(
 }
 
 /**
+ * Gets the count of active reminders for a specific user
+ * @param userDiscordId - The Discord ID of the user
+ * @returns The count of active reminders for the user, or 0 if error
+ */
+export async function getUserReminderCount(userDiscordId: string): Promise<number> {
+	try {
+		const [result] = await sql`
+			SELECT COUNT(*) as reminder_count
+			FROM reminders
+			WHERE user_discord_id = ${userDiscordId}
+		`;
+
+		return Number(result?.reminder_count || 0);
+	} catch (error) {
+		log.error(`Error counting reminders for user ${userDiscordId}:`, error);
+		return 0;
+	}
+}
+
+/**
  * Deletes a reminder from the database by its ID
  * @param reminderId - The ID of the reminder to delete
  * @returns True if reminder was deleted, false otherwise

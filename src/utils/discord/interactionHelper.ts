@@ -385,7 +385,8 @@ export async function promptWithModal(
 				.setCustomId(component.customId)
 				.setLabel(localizer(locale, component.labelKey))
 				.setStyle(component.style || TextInputStyle.Short)
-				.setRequired(component.required !== false);
+				.setRequired(component.required !== false)
+				.setMaxLength(component.maxLength || 256); // Discord API limit
 
 			// Add description if provided (not yet supported by Discord.js)
 			if (component.descriptionKey) {
@@ -407,7 +408,6 @@ export async function promptWithModal(
 				textInput.setPlaceholder(placeholder);
 			}
 			if (component.minLength) textInput.setMinLength(component.minLength);
-			if (component.maxLength) textInput.setMaxLength(component.maxLength);
 			if (component.value) textInput.setValue(component.value);
 
 			return new ActionRowBuilder<TextInputBuilder>().addComponents(textInput);
@@ -418,7 +418,8 @@ export async function promptWithModal(
 				.setCustomId(component.customId)
 				.setLabel(localizer(locale, component.labelKey))
 				.setStyle(TextInputStyle.Short)
-				.setRequired(component.required !== false);
+				.setRequired(component.required !== false)
+				.setMaxLength(256); // Discord API limit
 
 			// Use localized placeholder if provided, otherwise show options
 			if (component.placeholder) {

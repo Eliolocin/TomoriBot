@@ -84,6 +84,19 @@ export async function execute(
 		// 2. Get command options
 		const action = interaction.options.getString("action", true);
 
+		// 2a. Prevent blacklisting bots (including TomoriBot herself)
+		if (targetDiscordUser.bot) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.config.blacklist.cannot_blacklist_bot_title",
+				descriptionKey: "commands.config.blacklist.cannot_blacklist_bot_description",
+				descriptionVars: {
+					user_name: targetDiscordUser.username,
+				},
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
 		// 3. Load the Tomori state for this server - let helper functions manage interaction state
 		const tomoriState = await loadTomoriState(interaction.guild.id);
 		if (!tomoriState) {

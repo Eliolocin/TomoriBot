@@ -421,7 +421,7 @@ export async function braveWebSearch(
 		ui_lang: params.ui_lang || "en-US",
 		count: 20, // Always 20 for optimal performance
 		offset: Math.min(Number(params.offset) || 0, 9),
-		safesearch: "off", // Always off (intentional requirement)
+		safesearch: params.safesearch || "off", // Default to "off" if not specified
 		spellcheck: params.spellcheck !== false,
 		text_decorations: params.text_decorations !== false,
 		summary: true, // Always enabled for better results
@@ -454,7 +454,7 @@ export async function braveImageSearch(
 		country: params.country || "US",
 		search_lang: params.search_lang || "en",
 		count: Math.min(Number(params.count) || 3, 10), // Max 10 for images, default 3
-		safesearch: "off", // Always off (intentional requirement)
+		safesearch: params.safesearch || "off", // Default to "off" if not specified
 		spellcheck: params.spellcheck !== false,
 	};
 	return makeBraveApiRequest<ImageSearchApiResponse>(
@@ -482,7 +482,7 @@ export async function braveVideoSearch(
 		ui_lang: params.ui_lang || "en-US",
 		count: Math.min(Number(params.count) || 5, 10), // Max 10 for videos, default 5
 		offset: Math.min(Number(params.offset) || 0, 9),
-		safesearch: "off", // Always off (intentional requirement)
+		safesearch: params.safesearch || "off", // Default to "off" if not specified
 		spellcheck: params.spellcheck !== false,
 		// Only include freshness if specified
 		...(params.freshness ? { freshness: params.freshness } : {}),
@@ -513,7 +513,7 @@ export async function braveNewsSearch(
 		ui_lang: params.ui_lang || "en-US",
 		count: Math.min(Number(params.count) || 10, 20), // Max 20 for news, default 10
 		offset: Math.min(Number(params.offset) || 0, 9),
-		safesearch: "off", // Always off (intentional requirement)
+		safesearch: params.safesearch || "off", // Default to "off" if not specified
 		spellcheck: params.spellcheck !== false,
 		// Only include freshness if specified
 		...(params.freshness ? { freshness: params.freshness } : {}),
