@@ -17,15 +17,19 @@ import {
 
 // Define constants at the top (Rule #20)
 const TIMEOUT_DURATION = 100000; // 100 Seconds
-const MODAL_COMMAND_TIMEOUT = 300000; // 300 Seconds (5 minutes) for modal commands
+const MODAL_COMMAND_TIMEOUT = 700000; // 700 Seconds (11.67 minutes) for modal commands - Must exceed modal submission timeout (600s)
 
 // Commands that use modals and need longer timeout
 const MODAL_COMMANDS = new Set([
 	"teach.attribute",
-	"teach.sampledialogue", 
+	"teach.sampledialogue",
 	"teach.servermemory",
 	"teach.personalmemory",
 	"config.setup",
+	"config.preset",
+	"config.humanizerdegree",
+	"config.model",
+	"config.apikeyset",
 ]);
 
 /**
@@ -296,21 +300,32 @@ const handler = async (
 		};
 
 		// Race main logic against timeout (use longer timeout for modal commands)
-		const timeoutDuration = isModalCommand(commandName, subcommandName) 
-			? MODAL_COMMAND_TIMEOUT 
-			: TIMEOUT_DURATION;
-		
+		const isModal = isModalCommand(commandName, subcommandName);
+		const timeoutDuration = isModal ? MODAL_COMMAND_TIMEOUT : TIMEOUT_DURATION;
+
 		// Create timeout with proper cleanup
 		let timeoutId: NodeJS.Timeout | null = null;
-		
+
 		const timeoutPromise = new Promise<never>((_, reject) => {
 			timeoutId = setTimeout(
-				() =>
+				() => {
+					// Log timeout context before rejecting
+					const timeoutContext = {
+						commandName,
+						subcommandName,
+						isModalCommand: isModal,
+						timeoutDuration: `${timeoutDuration / 1000}s`,
+						userId: interaction.user.id,
+						guildId: interaction.guild?.id ?? "DM",
+					};
+					log.warn(`Command execution timeout fired:`, timeoutContext);
+
 					reject(
 						new Error(
 							localizer(initialLocale, "general.errors.command_timeout"),
 						),
-					),
+					);
+				},
 				timeoutDuration,
 			);
 		});

@@ -31,6 +31,15 @@ import type {
 const modalSelectValues = new Map<string, Record<string, string>>();
 
 /**
+ * Tracks interactions that were acknowledged via raw Discord REST API
+ * Used to prevent "already acknowledged" errors when Discord.js state is out of sync
+ */
+const rawModalAcknowledged = new WeakMap<
+	ChatInputCommandInteraction | ButtonInteraction,
+	boolean
+>();
+
+/**
  * Transform Component Type 18 modal submission to standard ActionRow format
  * This makes Discord.js process the submission as if it were a normal modal from the start
  */
@@ -536,6 +545,28 @@ export async function replyInfoEmbed(
 
 	log.info(`replyInfoEmbed interaction state: ${JSON.stringify(interactionState)}`);
 
+	// 4. Check if interaction was acknowledged via raw REST API (e.g., modal shown)
+	// Discord.js state may be out of sync in this case
+	const wasRawModalSent = rawModalAcknowledged.get(
+		interaction as ChatInputCommandInteraction | ButtonInteraction,
+	);
+
+	if (wasRawModalSent && !interaction.deferred && !interaction.replied) {
+		// State desync detected: Discord thinks acknowledged, but Discord.js doesn't know
+		log.info(`Raw modal state desync detected for interaction ${interaction.id}, using followUp directly`);
+		try {
+			await interaction.followUp({
+				embeds: [embed],
+				components: [],
+				flags: flags || MessageFlags.Ephemeral,
+			});
+			return;
+		} catch (followUpError) {
+			log.error("followUp failed for raw-modal-acknowledged interaction:", followUpError);
+			// Fall through to standard error handling
+		}
+	}
+
 	try {
 		if (interaction.deferred || interaction.replied) {
 			// Interaction has already been acknowledged, use editReply
@@ -626,6 +657,27 @@ export async function replySummaryEmbed(
 	};
 
 	log.info(`replySummaryEmbed interaction state: ${JSON.stringify(interactionState)}`);
+
+	// Check if interaction was acknowledged via raw REST API (e.g., modal shown)
+	const wasRawModalSent = rawModalAcknowledged.get(
+		interaction as ChatInputCommandInteraction | ButtonInteraction,
+	);
+
+	if (wasRawModalSent && !interaction.deferred && !interaction.replied) {
+		// State desync detected: Discord thinks acknowledged, but Discord.js doesn't know
+		log.info(`Raw modal state desync detected for interaction ${interaction.id}, using followUp directly`);
+		try {
+			await interaction.followUp({
+				embeds: [embed],
+				components: [],
+				flags: flags || MessageFlags.Ephemeral,
+			});
+			return;
+		} catch (followUpError) {
+			log.error("followUp failed for raw-modal-acknowledged interaction:", followUpError);
+			// Fall through to standard error handling
+		}
+	}
 
 	try {
 		if (interaction.deferred || interaction.replied) {
@@ -1149,6 +1201,10 @@ export async function promptWithRawModal(
 				`Discord API error: ${response.status} ${response.statusText}`,
 			);
 		}
+
+		// Mark this interaction as acknowledged via raw API for state tracking
+		rawModalAcknowledged.set(interaction, true);
+		log.info(`Marked interaction ${interaction.id} as raw-modal-acknowledged`);
 
 		// Now we can use the standard awaitModalSubmit with the transformed data
 		// Use Discord's natural timeout duration (~15 minutes)
