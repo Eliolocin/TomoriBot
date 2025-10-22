@@ -1921,6 +1921,7 @@ export default async function tomoriChat(
 							client,
 							message,
 							userId: userRow?.user_id?.toString() || userDiscId,
+							guildId: message.guild?.id, // Pass guild ID for guild-specific features (e.g., server avatars)
 							tomoriState,
 							locale,
 							provider: "google" as const,
