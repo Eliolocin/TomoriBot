@@ -22,7 +22,7 @@ export const configureSubcommand = (
 	subcommand
 		.setName("memberpermissions")
 		.setDescription(
-			localizer("en-US", "commands.config.memberpermissions.description"),
+			localizer("en-US", "commands.serverconfig.memberpermissions.description"),
 		)
 		.addStringOption((option) =>
 			option
@@ -30,7 +30,7 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.memberpermissions.option_description",
+						"commands.serverconfig.memberpermissions.option_description",
 					),
 				)
 				.setRequired(true)
@@ -38,21 +38,21 @@ export const configureSubcommand = (
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.memberpermissions.servermemories_option",
+							"commands.serverconfig.memberpermissions.servermemories_option",
 						),
 						value: "servermemories",
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.memberpermissions.attributelist_option",
+							"commands.serverconfig.memberpermissions.attributelist_option",
 						),
 						value: "attributelist",
 					},
 					{
 						name: localizer(
 							"en-US",
-							"commands.config.memberpermissions.sampledialogues_option",
+							"commands.serverconfig.memberpermissions.sampledialogues_option",
 						),
 						value: "sampledialogues",
 					},
@@ -64,17 +64,17 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer(
 						"en-US",
-						"commands.config.memberpermissions.set_description",
+						"commands.serverconfig.memberpermissions.set_description",
 					),
 				)
 				.setRequired(true)
 				.addChoices(
 					{
-						name: localizer("en-US", "commands.config.options.enable"),
+						name: localizer("en-US", "commands.choices.enable"),
 						value: "enable",
 					},
 					{
-						name: localizer("en-US", "commands.config.options.disable"),
+						name: localizer("en-US", "commands.choices.disable"),
 						value: "disable",
 					},
 				),
@@ -129,19 +129,19 @@ export async function execute(
 			case "servermemories":
 				dbColumnName = "server_memteaching_enabled";
 				permissionTypeKey =
-					"commands.config.memberpermissions.servermemories_option";
+					"commands.serverconfig.memberpermissions.servermemories_option";
 				currentSetting = tomoriState.config.server_memteaching_enabled;
 				break;
 			case "attributelist":
 				dbColumnName = "attribute_memteaching_enabled";
 				permissionTypeKey =
-					"commands.config.memberpermissions.attributelist_option";
+					"commands.serverconfig.memberpermissions.attributelist_option";
 				currentSetting = tomoriState.config.attribute_memteaching_enabled;
 				break;
 			case "sampledialogues":
 				dbColumnName = "sampledialogue_memteaching_enabled";
 				permissionTypeKey =
-					"commands.config.memberpermissions.sampledialogues_option";
+					"commands.serverconfig.memberpermissions.sampledialogues_option";
 				currentSetting = tomoriState.config.sampledialogue_memteaching_enabled;
 				break;
 			default:
@@ -161,10 +161,10 @@ export async function execute(
 		// 6. Check if the setting is already the desired value
 		if (currentSetting === isEnabled) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.memberpermissions.already_set_title",
+				titleKey: "commands.serverconfig.memberpermissions.already_set_title",
 				descriptionKey: isEnabled
-					? "commands.config.memberpermissions.already_enabled_description"
-					: "commands.config.memberpermissions.already_disabled_description",
+					? "commands.serverconfig.memberpermissions.already_enabled_description"
+					: "commands.serverconfig.memberpermissions.already_disabled_description",
 				descriptionVars: {
 					permission_type: localizer(locale, permissionTypeKey),
 				},
@@ -223,10 +223,10 @@ export async function execute(
 
 		// 9. Success! Show the permission change
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.memberpermissions.success_title",
+			titleKey: "commands.serverconfig.memberpermissions.success_title",
 			descriptionKey: isEnabled
-				? "commands.config.memberpermissions.enabled_success"
-				: "commands.config.memberpermissions.disabled_success",
+				? "commands.serverconfig.memberpermissions.enabled_success"
+				: "commands.serverconfig.memberpermissions.disabled_success",
 			descriptionVars: {
 				permission_type: localizer(locale, permissionTypeKey),
 			},

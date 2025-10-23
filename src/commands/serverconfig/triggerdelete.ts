@@ -31,7 +31,7 @@ export const configureSubcommand = (
 	subcommand
 		.setName("triggerdelete")
 		.setDescription(
-			localizer("en-US", "commands.config.triggerdelete.description"),
+			localizer("en-US", "commands.serverconfig.triggerdelete.description"),
 		);
 
 /**
@@ -85,9 +85,9 @@ export async function execute(
 				interaction,
 				locale,
 				{
-					titleKey: "commands.config.triggerdelete.no_triggers_title",
+					titleKey: "commands.serverconfig.triggerdelete.no_triggers_title",
 					descriptionKey:
-						"commands.config.triggerdelete.no_triggers_description",
+						"commands.serverconfig.triggerdelete.no_triggers_description",
 					color: ColorCode.WARN,
 				},
 				MessageFlags.Ephemeral,
@@ -107,13 +107,14 @@ export async function execute(
 		// 7. Show the paginated modal with trigger word selection
 		const modalResult = await promptWithPaginatedModal(interaction, locale, {
 			modalCustomId: MODAL_CUSTOM_ID,
-			modalTitleKey: "commands.config.triggerdelete.modal_title",
+			modalTitleKey: "commands.serverconfig.triggerdelete.modal_title",
 			components: [
 				{
 					customId: TRIGGER_SELECT_ID,
-					labelKey: "commands.config.triggerdelete.select_label",
-					descriptionKey: "commands.config.triggerdelete.select_description",
-					placeholder: "commands.config.triggerdelete.select_placeholder",
+					labelKey: "commands.serverconfig.triggerdelete.select_label",
+					descriptionKey:
+						"commands.serverconfig.triggerdelete.select_description",
+					placeholder: "commands.serverconfig.triggerdelete.select_placeholder",
 					required: true,
 					options: triggerWordSelectOptions,
 				},
@@ -193,8 +194,8 @@ export async function execute(
 		);
 
 		await replyInfoEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.config.triggerdelete.success_title",
-			descriptionKey: "commands.config.triggerdelete.success_description",
+			titleKey: "commands.serverconfig.triggerdelete.success_title",
+			descriptionKey: "commands.serverconfig.triggerdelete.success_description",
 			descriptionVars: {
 				triggerWord: wordToRemove,
 			},

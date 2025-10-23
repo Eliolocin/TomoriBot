@@ -18,12 +18,17 @@ export const configureSubcommand = (
 ) =>
 	subcommand
 		.setName("blacklist")
-		.setDescription(localizer("en-US", "commands.config.blacklist.description"))
+		.setDescription(
+			localizer("en-US", "commands.serverconfig.blacklist.description"),
+		)
 		.addUserOption((option) =>
 			option
 				.setName("member")
 				.setDescription(
-					localizer("en-US", "commands.config.blacklist.member_description"),
+					localizer(
+						"en-US",
+						"commands.serverconfig.blacklist.member_description",
+					),
 				)
 				.setRequired(true),
 		)
@@ -31,16 +36,19 @@ export const configureSubcommand = (
 			option
 				.setName("action")
 				.setDescription(
-					localizer("en-US", "commands.config.blacklist.action_description"),
+					localizer(
+						"en-US",
+						"commands.serverconfig.blacklist.action_description",
+					),
 				)
 				.setRequired(true)
 				.addChoices(
 					{
-						name: localizer("en-US", "commands.config.options.add"),
+						name: localizer("en-US", "commands.choices.add"),
 						value: "add",
 					},
 					{
-						name: localizer("en-US", "commands.config.options.remove"),
+						name: localizer("en-US", "commands.choices.remove"),
 						value: "remove",
 					},
 				),
@@ -81,9 +89,9 @@ export async function execute(
 		// 2a. Prevent blacklisting bots (including TomoriBot herself)
 		if (targetDiscordUser.bot) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.blacklist.cannot_blacklist_bot_title",
+				titleKey: "commands.serverconfig.blacklist.cannot_blacklist_bot_title",
 				descriptionKey:
-					"commands.config.blacklist.cannot_blacklist_bot_description",
+					"commands.serverconfig.blacklist.cannot_blacklist_bot_description",
 				descriptionVars: {
 					user_name: targetDiscordUser.username,
 				},
@@ -106,9 +114,10 @@ export async function execute(
 		// 5. Check if personalization is enabled at all
 		if (!tomoriState.config.personal_memories_enabled) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.blacklist.personalization_disabled_title",
+				titleKey:
+					"commands.serverconfig.blacklist.personalization_disabled_title",
 				descriptionKey:
-					"commands.config.blacklist.personalization_disabled_description",
+					"commands.serverconfig.blacklist.personalization_disabled_description",
 				color: ColorCode.WARN,
 			});
 			return;
@@ -135,9 +144,10 @@ export async function execute(
 					`Failed to register target user ${targetDiscordUser.id} during blacklist command.`,
 				);
 				await replyInfoEmbed(interaction, locale, {
-					titleKey: "commands.config.blacklist.user_registration_failed_title",
+					titleKey:
+						"commands.serverconfig.blacklist.user_registration_failed_title",
 					descriptionKey:
-						"commands.config.blacklist.user_registration_failed_description",
+						"commands.serverconfig.blacklist.user_registration_failed_description",
 					descriptionVars: {
 						user_name: targetDiscordUser.username,
 					},
@@ -167,9 +177,9 @@ export async function execute(
 		// 7a. Prevent adding if already blacklisted
 		if (action === "add" && isAlreadyBlacklisted) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.blacklist.already_blacklisted_title",
+				titleKey: "commands.serverconfig.blacklist.already_blacklisted_title",
 				descriptionKey:
-					"commands.config.blacklist.already_blacklisted_description",
+					"commands.serverconfig.blacklist.already_blacklisted_description",
 				descriptionVars: {
 					user_name: targetDiscordUser.username,
 				},
@@ -181,8 +191,9 @@ export async function execute(
 		// 7b. Prevent removing if not blacklisted
 		if (action === "remove" && !isAlreadyBlacklisted) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.blacklist.not_blacklisted_title",
-				descriptionKey: "commands.config.blacklist.not_blacklisted_description",
+				titleKey: "commands.serverconfig.blacklist.not_blacklisted_title",
+				descriptionKey:
+					"commands.serverconfig.blacklist.not_blacklisted_description",
 				descriptionVars: {
 					user_name: targetDiscordUser.username,
 				},
@@ -214,8 +225,8 @@ export async function execute(
 		// 9. Send success confirmation message (Rule #12, #19)
 		if (action === "add") {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.blacklist.added_title",
-				descriptionKey: "commands.config.blacklist.added_description",
+				titleKey: "commands.serverconfig.blacklist.added_title",
+				descriptionKey: "commands.serverconfig.blacklist.added_description",
 				descriptionVars: {
 					user_name: targetDiscordUser.username,
 				},
@@ -223,8 +234,8 @@ export async function execute(
 			});
 		} else {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.blacklist.removed_title",
-				descriptionKey: "commands.config.blacklist.removed_description",
+				titleKey: "commands.serverconfig.blacklist.removed_title",
+				descriptionKey: "commands.serverconfig.blacklist.removed_description",
 				descriptionVars: {
 					user_name: targetDiscordUser.username,
 				},

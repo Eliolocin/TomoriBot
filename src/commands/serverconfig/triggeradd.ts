@@ -18,13 +18,16 @@ export const configureSubcommand = (
 	subcommand
 		.setName("triggeradd")
 		.setDescription(
-			localizer("en-US", "commands.config.triggeradd.description"),
+			localizer("en-US", "commands.serverconfig.triggeradd.description"),
 		)
 		.addStringOption((option) =>
 			option
 				.setName("word")
 				.setDescription(
-					localizer("en-US", "commands.config.triggeradd.word_description"),
+					localizer(
+						"en-US",
+						"commands.serverconfig.triggeradd.word_description",
+					),
 				)
 				.setRequired(true),
 		);
@@ -62,8 +65,9 @@ export async function execute(
 		// Basic validation for the trigger word
 		if (!triggerWord || triggerWord.length < 2) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.triggeradd.too_short_title",
-				descriptionKey: "commands.config.triggeradd.too_short_description",
+				titleKey: "commands.serverconfig.triggeradd.too_short_title",
+				descriptionKey:
+					"commands.serverconfig.triggeradd.too_short_description",
 				color: ColorCode.ERROR,
 			});
 			return;
@@ -86,8 +90,9 @@ export async function execute(
 		// Check if the word is already in the list
 		if (currentTriggerWords.includes(triggerWord)) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.triggeradd.already_exists_title",
-				descriptionKey: "commands.config.triggeradd.already_exists_description",
+				titleKey: "commands.serverconfig.triggeradd.already_exists_title",
+				descriptionKey:
+					"commands.serverconfig.triggeradd.already_exists_description",
 				descriptionVars: {
 					word: triggerWord,
 				},
@@ -106,8 +111,9 @@ export async function execute(
 		);
 		if (!triggerLimitCheck.isValid) {
 			await replyInfoEmbed(interaction, locale, {
-				titleKey: "commands.config.triggeradd.limit_exceeded_title",
-				descriptionKey: "commands.config.triggeradd.limit_exceeded_description",
+				titleKey: "commands.serverconfig.triggeradd.limit_exceeded_title",
+				descriptionKey:
+					"commands.serverconfig.triggeradd.limit_exceeded_description",
 				descriptionVars: {
 					current_count: triggerLimitCheck.currentCount?.toString() || "0",
 					max_allowed: (triggerLimitCheck.maxAllowed || 10).toString(),
@@ -161,8 +167,8 @@ export async function execute(
 
 		// Success message
 		await replyInfoEmbed(interaction, locale, {
-			titleKey: "commands.config.triggeradd.success_title",
-			descriptionKey: "commands.config.triggeradd.success_description",
+			titleKey: "commands.serverconfig.triggeradd.success_title",
+			descriptionKey: "commands.serverconfig.triggeradd.success_description",
 			descriptionVars: {
 				word: triggerWord,
 				word_count: updatedTriggerWords.length.toString(),
