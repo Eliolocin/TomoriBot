@@ -369,12 +369,15 @@ export default async function tomoriChat(
 	// Attempt to load Tomori state early to determine if a reply would even be considered.
 	// This helps decide if a "busy" message is warranted.
 	let earlyTomoriState: TomoriState | null = null;
+	let earlyLoadAttempted = false;
 	if (!skipLock) {
 		try {
 			earlyTomoriState = await loadTomoriState(serverDiscId);
+			earlyLoadAttempted = true;
 		} catch (e) {
 			// Log the error but don't stop; the main logic will try to load it again
 			// and handle errors more comprehensively.
+			earlyLoadAttempted = true;
 			await log.error(
 				// Rule 22
 				`Failed to load TomoriState early for server ${serverDiscId} in tomoriChat's lock check phase.`,
@@ -563,8 +566,10 @@ export default async function tomoriChat(
 	try {
 		try {
 			// Load Tomori configuration and user data early
-			const tomoriState =
-				earlyTomoriState ?? (await loadTomoriState(serverDiscId));
+			// Only call loadTomoriState if we didn't already attempt it during early load
+			const tomoriState = earlyLoadAttempted
+				? earlyTomoriState
+				: await loadTomoriState(serverDiscId);
 			const userRow = await loadUserRow(userDiscId);
 			locale = userRow?.language_pref ?? "en-US"; // Set locale based on user pref
 
@@ -859,15 +864,20 @@ export default async function tomoriChat(
 			// Check for base trigger words
 			isBaseTriggerWord = checkForBaseTriggerWords(message.content);
 
+			// Check if bot was mentioned
+			const isBotMentioned =
+				client.user && message.mentions.users.has(client.user.id);
+
 			// 4. Early validation for directly triggered messages or manual triggers (including DMs)
 			// For DMs, always validate regardless of content since all DM messages should trigger responses
 			if (
 				isBaseTriggerWord ||
 				isReplyToBot ||
+				isBotMentioned ||
 				isManuallyTriggered ||
 				(isDMChannel && message.author.id !== client.user?.id)
 			) {
-				// If user directly mentioned Tomori, replied to it, or manually triggered (DMs), validate state
+				// If user directly mentioned Tomori, replied to it, mentioned the bot, or manually triggered (DMs), validate state
 
 				// Validate Tomori is set up
 				if (!tomoriState) {

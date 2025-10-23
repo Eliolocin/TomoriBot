@@ -60,8 +60,8 @@ export function getCurrentTimeWithOffset(offsetHours: number): string {
 
 	// 2. Get current UTC time and apply offset
 	const now = new Date();
-	const utcTime = now.getTime() + now.getTimezoneOffset() * 60000; // Convert to UTC milliseconds
-	const offsetTime = new Date(utcTime + offsetHours * 3600000); // Apply offset in milliseconds
+	// getTime() already returns UTC milliseconds, so we just add the offset directly
+	const offsetTime = new Date(now.getTime() + offsetHours * 3600000); // Apply offset in milliseconds
 
 	// 3. Extract date components
 	const weekday = getDayOfWeek(offsetTime);
@@ -233,8 +233,8 @@ export function addHoursToDate(date: Date, hours: number): Date {
 export function getTimeOfDayPhrase(offsetHours: number): string {
 	// 1. Get current time with offset applied
 	const now = new Date();
-	const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
-	const offsetTime = new Date(utcTime + offsetHours * 3600000);
+	// getTime() already returns UTC milliseconds, so we just add the offset directly
+	const offsetTime = new Date(now.getTime() + offsetHours * 3600000);
 	const hour = offsetTime.getUTCHours();
 
 	// 2. Determine time of day based on hour ranges

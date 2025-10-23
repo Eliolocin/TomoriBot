@@ -5,6 +5,36 @@ import { config } from "dotenv";
 config();
 
 /**
+ * Get PostgreSQL connection URL from environment variables
+ * Supports both POSTGRES_URL and component-based configuration
+ */
+function getPostgresUrl(): string {
+	// If POSTGRES_URL is provided, use it directly (backwards compatibility)
+	if (process.env.POSTGRES_URL) {
+		return process.env.POSTGRES_URL;
+	}
+
+	// Otherwise, build URL from components
+	const host = process.env.POSTGRES_HOST || "localhost";
+	const port = process.env.POSTGRES_PORT || "5432";
+	const user = process.env.POSTGRES_USER || "postgres";
+	const password = process.env.POSTGRES_PASSWORD;
+	const database = process.env.POSTGRES_DB || "tomodb";
+
+	if (!password) {
+		throw new Error(
+			"Database password must be provided via POSTGRES_PASSWORD or POSTGRES_URL",
+		);
+	}
+
+	return `postgresql://${user}:${password}@${host}:${port}/${database}`;
+}
+
+// Configure database connection
+const postgresUrl = getPostgresUrl();
+process.env.DATABASE_URL = postgresUrl;
+
+/**
  * Script to delete all data for a specific Discord server (TESTSRV_ID) from the database.
  * This is useful for testing TomoriBot setup from scratch.
  *
@@ -148,12 +178,14 @@ async function deleteTestServer() {
 			WHERE server_disc_id = ${testServerId}
 		`;
 
-		if (verifyCheck[0].count === 0) {
+		const remainingCount = Number(verifyCheck[0].count);
+
+		if (remainingCount === 0) {
 			log.section("✅ Deletion Complete!");
 			log.info("Server has been completely removed from the database.");
 			log.info("You can now test setting up TomoriBot from scratch.");
 		} else {
-			log.error("Verification failed: Server still exists in database!");
+			log.error(`Verification failed: ${remainingCount} server record(s) still exist in database!`);
 		}
 	} catch (error) {
 		log.error("Error during deletion process:", error);
