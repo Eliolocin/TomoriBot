@@ -64,7 +64,7 @@ export async function execute(
 	// Determine if this is a DM or guild context
 	const isDMChannel = interaction.channel.isDMBased();
 	const serverId = isDMChannel ? interaction.user.id : interaction.guild?.id;
-	
+
 	if (!serverId) {
 		await interaction.reply({
 			content: localizer(
@@ -176,189 +176,198 @@ export async function execute(
 			// Extract values from the modal
 			// biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
 			const modalSubmitInteraction = modalResult.interaction!;
-		
-		// Extract values with validation - modal submission can have missing values due to Component Type 18 handling
-		
-		const apiProvider = modalResult.values?.api_provider;
-		const apiKey = modalResult.values?.api_key;
-		const presetName = modalResult.values?.preset_name;
 
-		// Validate that all required values are present - let helper functions manage interaction state
-		if (!apiProvider || !apiKey || !presetName) {
-			log.error("Missing required modal values:", {
-				apiProvider: apiProvider || "MISSING",
-				apiKey: apiKey ? "PROVIDED" : "MISSING", 
-				presetName: presetName || "MISSING",
-				allValuesKeys: modalResult.values ? Object.keys(modalResult.values) : "NO_VALUES",
-				allValuesStringified: modalResult.values ? JSON.stringify(modalResult.values, null, 2) : "NO_VALUES"
-			});
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "general.errors.operation_failed_title",
-				descriptionKey: "commands.config.setup.modal_values_missing",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+			// Extract values with validation - modal submission can have missing values due to Component Type 18 handling
 
-		// Validate and transform inputs
+			const apiProvider = modalResult.values?.api_provider;
+			const apiKey = modalResult.values?.api_key;
+			const presetName = modalResult.values?.preset_name;
 
-		// 1. Validate API Provider (case-insensitive)
-		const normalizedProvider = uniqueProviders.find(
-			(provider) => provider.toLowerCase() === apiProvider.toLowerCase(),
-		);
-
-		if (!apiProvider || !normalizedProvider) {
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "general.errors.operation_failed_title",
-				descriptionKey: "commands.config.setup.provider_invalid",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		// 2. Validate API Key with length check and actual API test
-		if (!apiKey || apiKey.length < 10) {
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "general.errors.operation_failed_title",
-				descriptionKey: "commands.config.setup.api_key_invalid",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		// Test the API key with a real API call (currently only supports Google)
-		if (normalizedProvider.toLowerCase() === "google") {
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "commands.config.setup.api_key_validating",
-				descriptionKey: "commands.config.setup.api_key_validating",
-				color: ColorCode.INFO,
-			});
-
-			const googleProvider = new GoogleProvider();
-			const isApiKeyValid = await googleProvider.validateApiKey(apiKey);
-			if (!isApiKeyValid) {
+			// Validate that all required values are present - let helper functions manage interaction state
+			if (!apiProvider || !apiKey || !presetName) {
+				log.error("Missing required modal values:", {
+					apiProvider: apiProvider || "MISSING",
+					apiKey: apiKey ? "PROVIDED" : "MISSING",
+					presetName: presetName || "MISSING",
+					allValuesKeys: modalResult.values
+						? Object.keys(modalResult.values)
+						: "NO_VALUES",
+					allValuesStringified: modalResult.values
+						? JSON.stringify(modalResult.values, null, 2)
+						: "NO_VALUES",
+				});
 				await replyInfoEmbed(modalSubmitInteraction, locale, {
 					titleKey: "general.errors.operation_failed_title",
-					descriptionKey: "commands.config.setup.api_key_invalid_api",
+					descriptionKey: "commands.config.setup.modal_values_missing",
 					color: ColorCode.ERROR,
 				});
 				return;
 			}
-		}
 
-		// API key is valid, proceed with encryption
-		const encryptedKey = await encryptApiKey(apiKey);
+			// Validate and transform inputs
 
-		// 4. Validate preset name against available presets
-		const selectedPresetOption = presetOptions.find(
-			(p) => p.name.toLowerCase() === presetName.trim().toLowerCase(),
-		);
+			// 1. Validate API Provider (case-insensitive)
+			const normalizedProvider = uniqueProviders.find(
+				(provider) => provider.toLowerCase() === apiProvider.toLowerCase(),
+			);
 
-		if (!selectedPresetOption) {
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "general.errors.operation_failed_title",
-				descriptionKey: "commands.config.setup.preset_invalid",
-				descriptionVars: {
-					available: presetOptions.map((p) => p.name).join(", "),
-				},
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
+			if (!apiProvider || !normalizedProvider) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.operation_failed_title",
+					descriptionKey: "commands.config.setup.provider_invalid",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
 
-		// Get the full preset data from database
-		const presetRows = await sql`
+			// 2. Validate API Key with length check and actual API test
+			if (!apiKey || apiKey.length < 10) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.operation_failed_title",
+					descriptionKey: "commands.config.setup.api_key_invalid",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			// Test the API key with a real API call (currently only supports Google)
+			if (normalizedProvider.toLowerCase() === "google") {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "commands.config.setup.api_key_validating",
+					descriptionKey: "commands.config.setup.api_key_validating",
+					color: ColorCode.INFO,
+				});
+
+				const googleProvider = new GoogleProvider();
+				const isApiKeyValid = await googleProvider.validateApiKey(apiKey);
+				if (!isApiKeyValid) {
+					await replyInfoEmbed(modalSubmitInteraction, locale, {
+						titleKey: "general.errors.operation_failed_title",
+						descriptionKey: "commands.config.setup.api_key_invalid_api",
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+			}
+
+			// API key is valid, proceed with encryption
+			const encryptedKey = await encryptApiKey(apiKey);
+
+			// 4. Validate preset name against available presets
+			const selectedPresetOption = presetOptions.find(
+				(p) => p.name.toLowerCase() === presetName.trim().toLowerCase(),
+			);
+
+			if (!selectedPresetOption) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.operation_failed_title",
+					descriptionKey: "commands.config.setup.preset_invalid",
+					descriptionVars: {
+						available: presetOptions.map((p) => p.name).join(", "),
+					},
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			// Get the full preset data from database
+			const presetRows = await sql`
 			SELECT tomori_preset_id, tomori_preset_name 
 			FROM tomori_presets 
 			WHERE tomori_preset_name = ${selectedPresetOption.name}
 			LIMIT 1
 		`;
 
-		if (!presetRows.length) {
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "general.errors.operation_failed_title",
-				descriptionKey: "commands.config.setup.preset_not_found",
-				color: ColorCode.ERROR,
+			if (!presetRows.length) {
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.operation_failed_title",
+					descriptionKey: "commands.config.setup.preset_not_found",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			const selectedPresetId = presetRows[0].tomori_preset_id;
+			log.info(
+				`Selected preset ID: ${selectedPresetId} (${selectedPresetOption.name})`,
+			);
+
+			// Create setup config
+			const setupConfig: SetupConfig = {
+				serverId: serverId,
+				encryptedApiKey: encryptedKey,
+				provider: normalizedProvider, // Use the case-normalized provider name
+				presetId: selectedPresetId,
+				humanizer: HumanizerDegree.HEAVY, // Always default to HEAVY as decided
+				tomoriName: getDefaultBotName(locale), // Get bot name from locale files
+				locale,
+			};
+
+			// Validate config using zod schema
+			try {
+				setupConfigSchema.parse(setupConfig);
+			} catch (error) {
+				log.error("Setup config validation failed:", error);
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.operation_failed_title",
+					descriptionKey: "commands.config.setup.config_invalid",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			// Setup the server
+			try {
+				await setupServer(interaction.guild, setupConfig);
+			} catch (error) {
+				log.error("Server setup failed:", error);
+				await replyInfoEmbed(modalSubmitInteraction, locale, {
+					titleKey: "general.errors.operation_failed_title",
+					descriptionKey: "commands.config.setup.setup_failed_description",
+					color: ColorCode.ERROR,
+				});
+				return;
+			}
+
+			// Prepare fields for success message
+			const successFields = [
+				{
+					nameKey: "commands.config.setup.preset_field",
+					value: selectedPresetOption.name,
+				},
+				{
+					nameKey: "commands.config.setup.name_field",
+					value:
+						locale === "ja"
+							? process.env.DEFAULT_BOTNAME_JP || "ともり" // Use environment variable with fallback
+							: process.env.DEFAULT_BOTNAME || "Tomori", // Use environment variable with fallback
+				},
+			];
+
+			// Add DM explanation field if in DM context
+			if (isDMChannel) {
+				successFields.push({
+					nameKey: "commands.config.setup.dm_context_explanation_title",
+					value: localizer(
+						locale,
+						"commands.config.setup.dm_context_explanation",
+					),
+				});
+			}
+
+			// Show success message
+			await replySummaryEmbed(modalSubmitInteraction, locale, {
+				titleKey: "commands.config.setup.success_title",
+				descriptionKey: isDMChannel
+					? "commands.config.setup.success_desc_dm"
+					: "commands.config.setup.success_desc",
+				color: ColorCode.SUCCESS,
+				fields: successFields,
 			});
-			return;
-		}
-
-		const selectedPresetId = presetRows[0].tomori_preset_id;
-		log.info(
-			`Selected preset ID: ${selectedPresetId} (${selectedPresetOption.name})`,
-		);
-
-		// Create setup config
-		const setupConfig: SetupConfig = {
-			serverId: serverId,
-			encryptedApiKey: encryptedKey,
-			provider: normalizedProvider, // Use the case-normalized provider name
-			presetId: selectedPresetId,
-			humanizer: HumanizerDegree.HEAVY, // Always default to HEAVY as decided
-			tomoriName: getDefaultBotName(locale), // Get bot name from locale files
-			locale,
-		};
-
-		// Validate config using zod schema
-		try {
-			setupConfigSchema.parse(setupConfig);
-		} catch (error) {
-			log.error("Setup config validation failed:", error);
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "general.errors.operation_failed_title",
-				descriptionKey: "commands.config.setup.config_invalid",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		// Setup the server
-		try {
-			await setupServer(interaction.guild, setupConfig);
-		} catch (error) {
-			log.error("Server setup failed:", error);
-			await replyInfoEmbed(modalSubmitInteraction, locale, {
-				titleKey: "general.errors.operation_failed_title",
-				descriptionKey: "commands.config.setup.setup_failed_description",
-				color: ColorCode.ERROR,
-			});
-			return;
-		}
-
-		// Prepare fields for success message
-		const successFields = [
-			{
-				nameKey: "commands.config.setup.preset_field",
-				value: selectedPresetOption.name,
-			},
-			{
-				nameKey: "commands.config.setup.name_field",
-				value:
-					locale === "ja"
-						? process.env.DEFAULT_BOTNAME_JP || "ともり" // Use environment variable with fallback
-						: process.env.DEFAULT_BOTNAME || "Tomori", // Use environment variable with fallback
-			},
-		];
-
-		// Add DM explanation field if in DM context
-		if (isDMChannel) {
-			successFields.push({
-				nameKey: "commands.config.setup.dm_context_explanation_title",
-				value: localizer(locale, "commands.config.setup.dm_context_explanation"),
-			});
-		}
-
-		// Show success message
-		await replySummaryEmbed(modalSubmitInteraction, locale, {
-			titleKey: "commands.config.setup.success_title",
-			descriptionKey: isDMChannel ? "commands.config.setup.success_desc_dm" : "commands.config.setup.success_desc",
-			color: ColorCode.SUCCESS,
-			fields: successFields,
-		});
 		} catch (modalError) {
 			// Handle errors within modal submission context
 			log.error("Error during modal submission processing:", modalError);
-			
+
 			// Try to respond to the modal submission interaction if we have it
 			const modalSubmitInteraction = modalResult.interaction;
 			if (modalSubmitInteraction) {

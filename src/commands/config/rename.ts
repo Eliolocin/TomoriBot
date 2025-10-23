@@ -33,9 +33,6 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer("en-US", "commands.config.rename.option_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.config.rename.option_description"),
-				})
 				.setRequired(true)
 				.setMinLength(NICKNAME_MIN_LENGTH)
 				.setMaxLength(NICKNAME_MAX_LENGTH),
@@ -87,7 +84,9 @@ export async function execute(
 		}
 
 		// 4. Load the Tomori state for this server - let helper functions manage interaction state
-		const tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
+		const tomoriState = await loadTomoriState(
+			interaction.guild?.id ?? interaction.user.id,
+		);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",
@@ -278,9 +277,10 @@ export async function execute(
 				new_nickname: newNickname,
 			},
 			color: ColorCode.SUCCESS,
-			footerKey: !nicknameUpdateSuccess && interaction.guild
-				? "commands.config.rename.nickname_update_failed_footer"
-				: undefined,
+			footerKey:
+				!nicknameUpdateSuccess && interaction.guild
+					? "commands.config.rename.nickname_update_failed_footer"
+					: undefined,
 		});
 	} catch (error) {
 		// 14. Log error with context (Rule #22)

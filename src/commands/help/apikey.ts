@@ -27,14 +27,7 @@ export const configureSubcommand = (
 				"en-US",
 				`commands.help.${HELP_TOPIC_NAME}.command_description`,
 			),
-		)
-		.setDescriptionLocalizations({
-			// Add other locales as needed
-			ja: localizer(
-				"ja",
-				`commands.help.${HELP_TOPIC_NAME}.command_description`,
-			),
-		});
+		);
 
 /**
  * Rule 1: JSDoc comment for exported function

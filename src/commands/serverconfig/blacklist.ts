@@ -25,9 +25,6 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer("en-US", "commands.config.blacklist.member_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.config.blacklist.member_description"),
-				})
 				.setRequired(true),
 		)
 		.addStringOption((option) =>
@@ -36,9 +33,6 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer("en-US", "commands.config.blacklist.action_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.config.blacklist.action_description"),
-				})
 				.setRequired(true)
 				.addChoices(
 					{
@@ -88,7 +82,8 @@ export async function execute(
 		if (targetDiscordUser.bot) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.config.blacklist.cannot_blacklist_bot_title",
-				descriptionKey: "commands.config.blacklist.cannot_blacklist_bot_description",
+				descriptionKey:
+					"commands.config.blacklist.cannot_blacklist_bot_description",
 				descriptionVars: {
 					user_name: targetDiscordUser.username,
 				},

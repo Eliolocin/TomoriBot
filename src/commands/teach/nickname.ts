@@ -33,9 +33,6 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer("en-US", "commands.teach.nickname.option_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.teach.nickname.option_description"),
-				})
 				.setRequired(true)
 				.setMinLength(NICKNAME_MIN_LENGTH)
 				.setMaxLength(NICKNAME_MAX_LENGTH),
@@ -92,7 +89,9 @@ export async function execute(
 		}
 
 		// 4. Load server's Tomori state to check personalization setting
-		tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
+		tomoriState = await loadTomoriState(
+			interaction.guild?.id ?? interaction.user.id,
+		);
 
 		// 5. Check if Tomori is set up (needed for config check)
 		if (!tomoriState) {

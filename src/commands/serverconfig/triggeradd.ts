@@ -26,9 +26,6 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer("en-US", "commands.config.triggeradd.word_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.config.triggeradd.word_description"),
-				})
 				.setRequired(true),
 		);
 
@@ -99,12 +96,14 @@ export async function execute(
 			return;
 		}
 
-		// Check trigger word limit before adding  
+		// Check trigger word limit before adding
 		if (!tomoriState.tomori_id) {
 			log.error("TomoriState missing tomori_id - this should never happen");
 			return;
 		}
-		const triggerLimitCheck = await checkTriggerWordLimit(tomoriState.tomori_id);
+		const triggerLimitCheck = await checkTriggerWordLimit(
+			tomoriState.tomori_id,
+		);
 		if (!triggerLimitCheck.isValid) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.config.triggeradd.limit_exceeded_title",

@@ -31,9 +31,6 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer("en-US", "commands.config.language.value_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.config.language.value_description"),
-				})
 				.setRequired(true)
 				.addChoices(
 					{

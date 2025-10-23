@@ -25,18 +25,12 @@ export const configureSubcommand = (
 		.setDescription(
 			localizer("en-US", "commands.config.braveapiset.description"),
 		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.braveapiset.description"),
-		})
 		.addStringOption((option) =>
 			option
 				.setName("key")
 				.setDescription(
 					localizer("en-US", "commands.config.braveapiset.key_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.config.braveapiset.key_description"),
-				})
 				.setRequired(true),
 		);
 

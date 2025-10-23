@@ -23,10 +23,7 @@ export const configureSubcommand = (
 		.setName("braveapidelete")
 		.setDescription(
 			localizer("en-US", "commands.config.braveapidelete.description"),
-		)
-		.setDescriptionLocalizations({
-			ja: localizer("ja", "commands.config.braveapidelete.description"),
-		});
+		);
 
 /**
  * Removes the Brave Search API key from the server's MCP configuration
@@ -55,7 +52,6 @@ export async function execute(
 	}
 
 	try {
-
 		// 3. Load the Tomori state for this server
 		tomoriState = await loadTomoriState(
 			interaction.guild?.id ?? interaction.user.id,

@@ -35,9 +35,6 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer("en-US", "commands.config.temperature.value_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.config.temperature.value_description"),
-				})
 				.setMinValue(TEMPERATURE_MIN)
 				.setMaxValue(TEMPERATURE_MAX)
 				.setRequired(true),

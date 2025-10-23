@@ -72,29 +72,17 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer("en-US", "commands.tool.status.type_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.tool.status.type_description"),
-				})
 				.setRequired(true)
 				.addChoices(
 					{
-						name: localizer("en-US", "commands.tool.status.type_choice_personal"),
-						name_localizations: {
-							ja: localizer("ja", "commands.tool.status.type_choice_personal"),
-						},
+						name: localizer(
+							"en-US",
+							"commands.tool.status.type_choice_personal",
+						),
 						value: "personal",
 					},
 					{
-						name: localizer(
-							"en-US",
-							"commands.tool.status.type_choice_server",
-						),
-						name_localizations: {
-							ja: localizer(
-								"ja",
-								"commands.tool.status.type_choice_server",
-							),
-						},
+						name: localizer("en-US", "commands.tool.status.type_choice_server"),
 						value: "server",
 					},
 				),
@@ -167,7 +155,10 @@ export async function execute(
 						inline: true,
 					},
 					{
-						name: localizer(locale, "commands.tool.status.field_reminders_count"),
+						name: localizer(
+							locale,
+							"commands.tool.status.field_reminders_count",
+						),
 						value: String(reminderCount),
 						inline: true,
 					},

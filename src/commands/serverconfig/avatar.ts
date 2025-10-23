@@ -27,9 +27,6 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer("en-US", "commands.config.avatar.image_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.config.avatar.image_description"),
-				})
 				.setRequired(false),
 		);
 

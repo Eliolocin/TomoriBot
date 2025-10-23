@@ -34,12 +34,6 @@ export const configureSubcommand = (
 						"commands.config.autochthreshold.threshold_description_v2",
 					),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer(
-						"ja",
-						"commands.config.autochthreshold.threshold_description_v2",
-					),
-				})
 				.setMinValue(MIN_THRESHOLD)
 				.setMaxValue(MAX_THRESHOLD)
 				.setRequired(true),

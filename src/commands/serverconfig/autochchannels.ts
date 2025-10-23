@@ -30,12 +30,6 @@ export const configureSubcommand = (
 						"commands.config.autochchannels.channel_description",
 					),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer(
-						"ja",
-						"commands.config.autochchannels.channel_description",
-					),
-				})
 				.addChannelTypes(ChannelType.GuildText)
 				.setRequired(true),
 		)
@@ -48,12 +42,6 @@ export const configureSubcommand = (
 						"commands.config.autochchannels.action_description",
 					),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer(
-						"ja",
-						"commands.config.autochchannels.action_description",
-					),
-				})
 				.setRequired(true)
 				.addChoices(
 					{

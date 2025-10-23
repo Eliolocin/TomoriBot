@@ -33,12 +33,6 @@ export const configureSubcommand = (
 						"commands.config.memberpermissions.option_description",
 					),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer(
-						"ja",
-						"commands.config.memberpermissions.option_description",
-					),
-				})
 				.setRequired(true)
 				.addChoices(
 					{
@@ -73,12 +67,6 @@ export const configureSubcommand = (
 						"commands.config.memberpermissions.set_description",
 					),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer(
-						"ja",
-						"commands.config.memberpermissions.set_description",
-					),
-				})
 				.setRequired(true)
 				.addChoices(
 					{

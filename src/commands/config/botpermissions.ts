@@ -78,9 +78,6 @@ export const configureSubcommand = (
 				.setDescription(
 					localizer("en-US", "commands.config.botpermissions.set_description"),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer("ja", "commands.config.botpermissions.set_description"),
-				})
 				.setRequired(true)
 				.addChoices(
 					{
