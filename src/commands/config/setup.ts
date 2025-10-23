@@ -160,6 +160,14 @@ export async function execute(
 					required: true,
 					options: presetSelectOptions,
 				},
+				{
+					customId: "timezone_offset",
+					labelKey: "commands.config.setup.timezone_label",
+					descriptionKey: "commands.config.setup.timezone_description",
+					style: TextInputStyle.Short,
+					placeholder: "commands.config.setup.timezone_placeholder",
+					required: false, // Optional - defaults to 0 (UTC) if not provided
+				},
 			],
 		});
 
@@ -182,6 +190,7 @@ export async function execute(
 			const apiProvider = modalResult.values?.api_provider;
 			const apiKey = modalResult.values?.api_key;
 			const presetName = modalResult.values?.preset_name;
+			const timezoneOffsetStr = modalResult.values?.timezone_offset;
 
 			// Validate that all required values are present - let helper functions manage interaction state
 			if (!apiProvider || !apiKey || !presetName) {
@@ -292,6 +301,43 @@ export async function execute(
 				`Selected preset ID: ${selectedPresetId} (${selectedPresetOption.name})`,
 			);
 
+			// 5. Validate timezone offset (optional, defaults to 0 if not provided or invalid)
+			let timezoneOffset = 0; // Default to UTC
+			if (timezoneOffsetStr?.trim()) {
+				const parsedOffset = Number.parseFloat(timezoneOffsetStr.trim());
+
+				// Check if it's a valid number and within range
+				if (Number.isNaN(parsedOffset)) {
+					await replyInfoEmbed(modalSubmitInteraction, locale, {
+						titleKey: "general.errors.operation_failed_title",
+						descriptionKey: "commands.config.setup.timezone_invalid_format",
+						descriptionVars: {
+							provided: timezoneOffsetStr,
+						},
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+
+				// Validate range (-12 to +14)
+				if (parsedOffset < -12 || parsedOffset > 14) {
+					await replyInfoEmbed(modalSubmitInteraction, locale, {
+						titleKey: "general.errors.operation_failed_title",
+						descriptionKey: "commands.config.setup.timezone_out_of_range",
+						descriptionVars: {
+							provided: parsedOffset.toString(),
+							min: "-12",
+							max: "14",
+						},
+						color: ColorCode.ERROR,
+					});
+					return;
+				}
+
+				// Round to integer (in case user provided decimal like 5.5)
+				timezoneOffset = Math.round(parsedOffset);
+			}
+
 			// Create setup config
 			const setupConfig: SetupConfig = {
 				serverId: serverId,
@@ -300,6 +346,7 @@ export async function execute(
 				presetId: selectedPresetId,
 				humanizer: HumanizerDegree.HEAVY, // Always default to HEAVY as decided
 				tomoriName: getDefaultBotName(locale), // Get bot name from locale files
+				timezoneOffset: timezoneOffset, // Add timezone offset to config
 				locale,
 			};
 

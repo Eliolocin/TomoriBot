@@ -282,7 +282,8 @@ export async function setupServer(
 					trigger_words,
 					humanizer_degree,
 					attribute_memteaching_enabled,
-					sampledialogue_memteaching_enabled
+					sampledialogue_memteaching_enabled,
+					timezone_offset
 				)
 				VALUES (
 					${tomori.tomori_id},
@@ -291,7 +292,8 @@ export async function setupServer(
 					${triggerWordsArrayLiteral}::text[],
 					${validConfig.humanizer},
 					${isDMChannel},
-					${isDMChannel}
+					${isDMChannel},
+					${validConfig.timezoneOffset}
 				)
 				RETURNING *
 			`;

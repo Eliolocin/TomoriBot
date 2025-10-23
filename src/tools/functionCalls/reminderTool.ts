@@ -11,10 +11,14 @@ import {
 	type ToolParameterSchema,
 } from "../../types/tool/interfaces";
 import {
-	parseReminderTime,
 	validateFutureTime,
 	formatTimeRemaining,
 } from "../../utils/text/stringHelper";
+import {
+	parseTimeWithOffset,
+	formatUTCOffset,
+	formatTimeWithOffset,
+} from "../../utils/text/timezoneHelper";
 
 /**
  * Tool for setting user reminders that will trigger messages at specific times
@@ -22,7 +26,7 @@ import {
 export class ReminderTool extends BaseTool {
 	name = "set_reminder_for_user";
 	description =
-		"Set a reminder for a Discord user. TomoriBot will mention the user in the channel where this reminder was set at the specified time with the reminder purpose. You can specify time in two ways: (1) Use relative time parameters like 'minutes_from_now', 'hours_from_now', 'days_from_now', 'months_from_now' - these are much easier for natural requests like 'remind me in 2 hours' or 'remind me tomorrow' (1 day from now). Multiple relative parameters add up. (2) Use absolute 'reminder_time' in YYYY-MM-DD_HH:MM UTC format for specific dates/times. If both are provided, absolute time takes priority. You must provide either absolute time OR at least one relative time parameter.";
+		"Set a reminder for a Discord user. TomoriBot will mention the user in the channel where this reminder was set at the specified time with the reminder purpose. You can specify time in two ways: (1) Use relative time parameters like 'minutes_from_now', 'hours_from_now', 'days_from_now', 'months_from_now' - these are much easier for natural requests like 'remind me in 2 hours' or 'remind me tomorrow' (1 day from now). Multiple relative parameters add up. (2) Use absolute 'reminder_time' in YYYY-MM-DD_HH:MM format using the server's configured timezone (set via /config timezone) for specific dates/times. If both are provided, absolute time takes priority. You must provide either absolute time OR at least one relative time parameter.";
 	category = "utility" as const;
 
 	parameters: ToolParameterSchema = {
@@ -46,7 +50,7 @@ export class ReminderTool extends BaseTool {
 			reminder_time: {
 				type: "string",
 				description:
-					"OPTIONAL: Absolute time to remind the user in YYYY-MM-DD_HH:MM format (e.g., '2025-09-05_07:14') in UTC timezone. Assume that a user will not have a UTC timezone, so make sure to ask them on what the timezone is so you may calculate the absolute time! Use this for specific dates/times. If provided, this takes priority over 'from now' parameters.",
+					"OPTIONAL: Absolute time to remind the user in YYYY-MM-DD_HH:MM format (e.g., '2025-09-05_15:30') using the server's configured timezone. Times are interpreted using the server's timezone setting from /config timezone. Use this for specific dates/times. If provided, this takes priority over 'from now' parameters.",
 			},
 			minutes_from_now: {
 				type: "number",
@@ -205,22 +209,29 @@ export class ReminderTool extends BaseTool {
 		let finalReminderTime: Date | null = null;
 		let timeCalculationMethod = "";
 
+		// Get the server's configured timezone offset (default to 0/UTC if not set)
+		const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
+
 		if (
 			reminderTimeArg &&
 			typeof reminderTimeArg === "string" &&
 			reminderTimeArg.trim()
 		) {
-			// Method 1: Absolute time provided - use it and ignore relative parameters
+			// Method 1: Absolute time provided - parse in server's configured timezone
 			timeCalculationMethod = "absolute";
-			finalReminderTime = parseReminderTime(reminderTimeArg.trim());
+			finalReminderTime = parseTimeWithOffset(
+				reminderTimeArg.trim(),
+				timezoneOffset,
+			);
 			if (!finalReminderTime) {
 				return {
 					success: false,
-					error: `Invalid reminder time format. Please use YYYY-MM-DD_HH:MM format (e.g., '2025-09-05_07:14'). The provided format '${reminderTimeArg}' is invalid.`,
+					error: `Invalid reminder time format. Please use YYYY-MM-DD_HH:MM format (e.g., '2025-09-05_15:30') in the server's configured timezone (${formatUTCOffset(timezoneOffset)}). The provided format '${reminderTimeArg}' is invalid.`,
 					data: {
 						status: "reminder_creation_failed_invalid_time_format",
-						reason: `Invalid reminder time format: '${reminderTimeArg}'. Expected YYYY-MM-DD_HH:MM format.`,
+						reason: `Invalid reminder time format: '${reminderTimeArg}'. Expected YYYY-MM-DD_HH:MM format in ${formatUTCOffset(timezoneOffset)}.`,
 						provided_time: reminderTimeArg,
+						server_timezone: formatUTCOffset(timezoneOffset),
 					},
 				};
 			}
@@ -365,6 +376,19 @@ export class ReminderTool extends BaseTool {
 				const timeRemainingStr = formatTimeRemaining(timeRemainingMs);
 
 				// Send confirmation embed to the channel
+				// Format the reminder time in the server's configured timezone
+				const formattedReminderTime = formatTimeWithOffset(
+					finalReminderTime,
+					timezoneOffset,
+					{
+						year: "numeric",
+						month: "long",
+						day: "numeric",
+						hour: "2-digit",
+						minute: "2-digit",
+					},
+				);
+
 				await sendStandardEmbed(context.channel, context.locale, {
 					color: ColorCode.SUCCESS,
 					titleKey: "reminders.reminder_set_title",
@@ -375,15 +399,7 @@ export class ReminderTool extends BaseTool {
 							reminderPurpose.length > 200
 								? `${reminderPurpose.substring(0, 197)}...`
 								: reminderPurpose,
-						reminder_time: finalReminderTime.toLocaleString("en-US", {
-							timeZone: "UTC",
-							year: "numeric",
-							month: "long",
-							day: "numeric",
-							hour: "2-digit",
-							minute: "2-digit",
-							timeZoneName: "short",
-						}),
+						reminder_time: `${formattedReminderTime} (${formatUTCOffset(timezoneOffset)})`,
 					},
 					footerKey: "reminders.reminder_set_footer",
 					footerVars: {

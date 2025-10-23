@@ -14,9 +14,13 @@ import { registerUser } from "../db/dbWrite";
 import { log } from "../misc/logger";
 import {
 	replaceTemplateVariables,
-	getCurrentTime,
 	humanizeString,
 } from "./stringHelper";
+import {
+	getCurrentTimeWithOffset,
+	formatUTCOffset,
+	getTimeOfDayPhrase,
+} from "./timezoneHelper";
 import { HumanizerDegree, type TomoriConfigRow } from "@/types/db/schema";
 // Import ServerEmojiRow if needed for emoji query result type
 // import type { ServerEmojiRow } from "../../types/db/schema";
@@ -622,7 +626,13 @@ export async function buildContext({
 		);
 	}
 	// 7. Current Context (Time, Channel)
-	let currentContextContent = `\n# Current Context\nCurrent Time (UTC): ${getCurrentTime()}.\n`;
+	// Get the server's configured timezone offset (default to 0/UTC if not set)
+	const timezoneOffset = tomoriConfig.timezone_offset ?? 0;
+	const currentTime = getCurrentTimeWithOffset(timezoneOffset);
+	const timezoneLabel = formatUTCOffset(timezoneOffset);
+	const timeOfDayPhrase = getTimeOfDayPhrase(timezoneOffset);
+
+	let currentContextContent = `\n# Current Context\nCurrent Time (${timezoneLabel}): ${currentTime}. ${timeOfDayPhrase}.\n`;
 	if (isDMChannel) {
 		// For DMs, indicate the bot is in a direct message (no channel name needed)
 		currentContextContent += `${botName} is currently in a Direct Message conversation with ${triggererName}.`;

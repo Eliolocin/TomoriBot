@@ -75,6 +75,7 @@ export const tomoriConfigSchema = z.object({
 		.default(HumanizerDegree.LIGHT),
 	emoji_usage_enabled: z.boolean().default(true), // Added May 5, 2025
 	sticker_usage_enabled: z.boolean().default(true), // Added May 5, 2025
+	timezone_offset: z.number().int().min(-12).max(14).default(0), // Added January 2025 - UTC offset in hours
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
@@ -227,6 +228,7 @@ export const setupConfigSchema = z.object({
 	presetId: z.number(),
 	humanizer: z.number().default(1),
 	tomoriName: z.string(),
+	timezoneOffset: z.number().int().min(-12).max(14).default(0), // Timezone offset in hours
 	locale: z.string(),
 });
 export type SetupConfig = z.infer<typeof setupConfigSchema>;

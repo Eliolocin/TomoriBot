@@ -160,6 +160,9 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
 SELECT add_column_if_not_exists('tomori_configs', 'emoji_usage_enabled', 'BOOLEAN', 'true');
 SELECT add_column_if_not_exists('tomori_configs', 'sticker_usage_enabled', 'BOOLEAN', 'true');
 
+-- Add timezone offset column for server-wide timezone configuration (January 2025)
+SELECT add_column_if_not_exists('tomori_configs', 'timezone_offset', 'INTEGER', '0');
+
 -- Rename google_search_enabled to web_search_enabled for Brave Search integration (January 2025)
 SELECT add_column_if_not_exists('tomori_configs', 'web_search_enabled', 'BOOLEAN', 'true');
 

@@ -13,6 +13,7 @@
 		"purge-commands": "bun run scripts/purge-commands.ts",
 		"seed-db": "bun run scripts/seed-db.ts",
 		"nuke-db": "bun run scripts/nuke-db.ts",
+		"delete-test-server": "bun run scripts/delete-test-server.ts",
 		"lint": "bunx @biomejs/biome lint --fix",
 		"check": "bunx tsc --noEmit",
 		"check-locales": "bun run scripts/checkLocalizationKeys.ts",
