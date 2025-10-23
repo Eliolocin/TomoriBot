@@ -10,7 +10,7 @@ export default async (): Promise<void> => {
 	try {
 		log.section("Registering application commands");
 
-		const { DISCORD_TOKEN, TOMORI_ID, TESTSRV_ID } = process.env;
+		const { DISCORD_TOKEN, TOMORI_ID } = process.env;
 		if (!DISCORD_TOKEN || !TOMORI_ID) {
 			const context: ErrorContext = {
 				errorType: "CommandRegistrationError",
@@ -39,56 +39,27 @@ export default async (): Promise<void> => {
 		// Initialize REST API for command registration
 		const rest = new REST().setToken(DISCORD_TOKEN);
 
-		// Determine if we're in development (register to dev guild only) or production (register globally)
-		const isDev = process.env.RUN_ENV === "development";
+		// Register globally for both production and development
+		// Guild-only restrictions are handled via InteractionContextType in command definitions
+		log.info("Registering commands globally");
 
-		if (isDev && TESTSRV_ID) {
-			// Register to development guild for faster testing
-			log.info(`Registering commands to development guild: ${TESTSRV_ID}`);
-
-			try {
-				await rest.put(Routes.applicationGuildCommands(TOMORI_ID, TESTSRV_ID), {
-					body: registrationData,
-				});
-				log.success(
-					`Successfully registered ${registrationData.length} commands to development guild`,
-				);
-			} catch (error) {
-				const context: ErrorContext = {
-					errorType: "CommandRegistrationError",
-					metadata: {
-						scope: "guild",
-						guildId: TESTSRV_ID,
-					},
-				};
-				await log.error(
-					"Failed to register commands to development guild:",
-					error,
-					context,
-				);
-			}
-		} else {
-			// Register globally (takes up to an hour to update)
-			log.info("Registering commands globally");
-
-			try {
-				await rest.put(Routes.applicationCommands(TOMORI_ID), {
-					body: registrationData,
-				});
-				log.success(
-					`Successfully registered ${registrationData.length} commands globally`,
-				);
-			} catch (error) {
-				const context: ErrorContext = {
-					errorType: "CommandRegistrationError",
-					metadata: { scope: "global" },
-				};
-				await log.error(
-					"Failed to register commands globally:",
-					error,
-					context,
-				);
-			}
+		try {
+			await rest.put(Routes.applicationCommands(TOMORI_ID), {
+				body: registrationData,
+			});
+			log.success(
+				`Successfully registered ${registrationData.length} commands globally`,
+			);
+		} catch (error) {
+			const context: ErrorContext = {
+				errorType: "CommandRegistrationError",
+				metadata: { scope: "global" },
+			};
+			await log.error(
+				"Failed to register commands globally:",
+				error,
+				context,
+			);
 		}
 	} catch (error) {
 		const context: ErrorContext = {

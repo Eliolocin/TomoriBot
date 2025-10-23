@@ -15,7 +15,7 @@ import {
 import type { SlashCommandSubcommandBuilder } from "discord.js";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
 import getAllFiles from "../misc/ioHelper";
-import { localizer } from "../text/localizer";
+import { localizer, getSupportedLocales } from "../text/localizer";
 
 /**
  * Type for the command execution function
@@ -66,6 +66,10 @@ export async function loadCommandData(): Promise<{
 	let commandCount = 0;
 
 	try {
+		// Get available locales for auto-localization (exclude en-US as it's the base locale)
+		const availableLocales = getSupportedLocales().filter(
+			(locale) => locale !== "en-US",
+		);
 		// 1. Get all command category directories
 		const commandsPath = path.join(process.cwd(), "src", "commands");
 		const categoryDirs = getAllFiles(commandsPath, true);
@@ -85,10 +89,12 @@ export async function loadCommandData(): Promise<{
 					`${categoryName} commands`; // Fallback if no localization exists
 
 				const categoryLocalizationsMap: { [key: string]: string } = {};
-				// Add Japanese localization if available
-				const jaDesc = localizer("ja", `commands.${categoryName}.description`);
-				if (jaDesc && jaDesc !== `commands.${categoryName}.description`) {
-					categoryLocalizationsMap.ja = jaDesc;
+				// Check all available locales for category description
+				for (const locale of availableLocales) {
+					const localizedDesc = localizer(locale, `commands.${categoryName}.description`);
+					if (localizedDesc && localizedDesc !== `commands.${categoryName}.description`) {
+						categoryLocalizationsMap[locale] = localizedDesc;
+					}
 				}
 
 				categoryBuilder = new SlashCommandBuilder()
@@ -147,25 +153,99 @@ export async function loadCommandData(): Promise<{
 							// Get the name that was set
 							subcommandName = configuredSubcommand.name;
 							
-							// 7. Automatically apply description localizations
+							// 7. Automatically apply description localizations for subcommand
 							if (subcommandName) {
 								const localizationKey = `commands.${categoryName}.${subcommandName}.description`;
-								
+
 								// Build localizations map for available locales
 								const subcommandLocalizationsMap: { [key: string]: string } = {};
-								
-								// Add Japanese localization if available
-								const jaDesc = localizer("ja", localizationKey);
-								if (jaDesc && jaDesc !== localizationKey) {
-									subcommandLocalizationsMap.ja = jaDesc;
+
+								// Check all available locales
+								for (const locale of availableLocales) {
+									const localizedDesc = localizer(locale, localizationKey);
+									if (localizedDesc && localizedDesc !== localizationKey) {
+										subcommandLocalizationsMap[locale] = localizedDesc;
+									}
 								}
-								
+
 								// Apply localizations if we have any
 								if (Object.keys(subcommandLocalizationsMap).length > 0) {
 									configuredSubcommand.setDescriptionLocalizations(subcommandLocalizationsMap);
 								}
+
+								// 8. Automatically apply description localizations for options
+								if (configuredSubcommand.options) {
+									for (const option of configuredSubcommand.options) {
+										if (option.name) {
+											// Build localization key for option description
+											const optionLocalizationKey = `commands.${categoryName}.${subcommandName}.${option.name}_description`;
+											const optionLocalizationsMap: { [key: string]: string } = {};
+
+											// Check all available locales
+											for (const locale of availableLocales) {
+												let localizedDesc = localizer(locale, optionLocalizationKey);
+												const fallbackKey = `commands.${categoryName}.${subcommandName}.option_description`;
+
+												// Fallback to generic 'option_description' for backwards compatibility
+												if (!localizedDesc || localizedDesc === optionLocalizationKey) {
+													localizedDesc = localizer(locale, fallbackKey);
+												}
+
+												// Apply if valid translation found (not the key itself)
+												if (
+													localizedDesc &&
+													localizedDesc !== optionLocalizationKey &&
+													localizedDesc !== fallbackKey
+												) {
+													optionLocalizationsMap[locale] = localizedDesc;
+												}
+											}
+
+											// Apply option description localizations if we have any
+											if (Object.keys(optionLocalizationsMap).length > 0) {
+												option.setDescriptionLocalizations(optionLocalizationsMap);
+											}
+
+											// 9. Automatically apply name localizations for choices
+											if ("choices" in option && Array.isArray(option.choices) && option.choices.length > 0) {
+												for (const choice of option.choices) {
+													if (choice.value) {
+														// Build localization key for choice name
+														const choiceLocalizationKey = `commands.${categoryName}.${subcommandName}.${option.name}_choice_${choice.value}`;
+														const choiceLocalizationsMap: { [key: string]: string } = {};
+
+														// Check all available locales
+														for (const locale of availableLocales) {
+															let localizedChoice = localizer(locale, choiceLocalizationKey);
+															const commonChoiceKey = `commands.choices.${choice.value}`;
+
+															// Fallback to common choice localization for reusable choices
+															if (!localizedChoice || localizedChoice === choiceLocalizationKey) {
+																localizedChoice = localizer(locale, commonChoiceKey);
+															}
+
+															// Apply if valid translation found (not the key itself)
+															if (
+																localizedChoice &&
+																localizedChoice !== choiceLocalizationKey &&
+																localizedChoice !== commonChoiceKey
+															) {
+																choiceLocalizationsMap[locale] = localizedChoice;
+															}
+														}
+
+														// Apply choice name localizations if we have any
+														if (Object.keys(choiceLocalizationsMap).length > 0) {
+															choice.name_localizations = choiceLocalizationsMap;
+														}
+													}
+												}
+											}
+										}
+									}
+								}
 							}
-							
+
 							return configuredSubcommand;
 						},
 					);

@@ -32,12 +32,6 @@ export const configureSubcommand = (
 						"commands.config.botpermissions.option_description",
 					),
 				)
-				.setDescriptionLocalizations({
-					ja: localizer(
-						"ja",
-						"commands.config.botpermissions.option_description",
-					),
-				})
 				.setRequired(true)
 				.addChoices(
 					{
@@ -131,7 +125,9 @@ export async function execute(
 		const isEnabled = setAction === "enable";
 
 		// 3. Load the Tomori state for this server - let helper functions manage interaction state
-		const tomoriState = await loadTomoriState(interaction.guild?.id ?? interaction.user.id);
+		const tomoriState = await loadTomoriState(
+			interaction.guild?.id ?? interaction.user.id,
+		);
 		if (!tomoriState) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "general.errors.tomori_not_setup_title",

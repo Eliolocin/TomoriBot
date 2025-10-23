@@ -22,6 +22,15 @@ interface _StringLengthViolation {
 }
 
 /**
+ * Interface for locale key parity issues
+ */
+interface LocaleParityIssue {
+	key: string;
+	missingIn: string[];
+	presentIn: string[];
+}
+
+/**
  * Interface for analysis results
  */
 interface AnalysisResult {
@@ -29,6 +38,8 @@ interface AnalysisResult {
 	unusedKeys: KeyUsage[];
 	referencedKeys: Set<string>;
 	availableKeys: Set<string>;
+	localeKeys: Map<string, Set<string>>;
+	parityIssues: LocaleParityIssue[];
 }
 
 /**
@@ -102,18 +113,22 @@ function _extractStringLengthViolations(
 
 /**
  * Loads all locale files and extracts available keys
- * @returns Object containing available keys
+ * @returns Object containing available keys and per-locale key sets
  */
 async function loadAvailableKeys(): Promise<{
 	availableKeys: Set<string>;
+	localeKeys: Map<string, Set<string>>;
 }> {
 	const availableKeys = new Set<string>();
+	const localeKeys = new Map<string, Set<string>>();
 	const localesPath = join(process.cwd(), "src", "locales");
 
 	try {
 		const glob = new Glob("*.ts");
 		for await (const file of glob.scan(localesPath)) {
 			const filePath = join(localesPath, file);
+			const localeName = file.replace(".ts", ""); // e.g., "en-US", "ja"
+
 			try {
 				// Dynamic import the locale file
 				const module = await import(filePath);
@@ -121,11 +136,14 @@ async function loadAvailableKeys(): Promise<{
 
 				// Extract all keys from this locale
 				const keys = extractKeysFromLocaleObject(localeObject);
+				localeKeys.set(localeName, keys);
+
+				// Also add to the master set
 				for (const key of keys) {
 					availableKeys.add(key);
 				}
 
-				log.info(`Loaded keys from locale file: ${file}`);
+				log.info(`Loaded ${keys.size} keys from locale file: ${localeName}`);
 			} catch (importError) {
 				log.error(`Failed to import locale file: ${file}`, importError);
 			}
@@ -135,7 +153,7 @@ async function loadAvailableKeys(): Promise<{
 		throw error;
 	}
 
-	return { availableKeys };
+	return { availableKeys, localeKeys };
 }
 
 /**
@@ -253,6 +271,48 @@ async function extractReferencedKeys(): Promise<Map<string, Set<string>>> {
 }
 
 /**
+ * Checks for key parity issues across all locales
+ * @param localeKeys - Map of locale names to their key sets
+ * @returns Array of parity issues found
+ */
+function checkLocaleParity(
+	localeKeys: Map<string, Set<string>>,
+): LocaleParityIssue[] {
+	const parityIssues: LocaleParityIssue[] = [];
+	const allLocales = Array.from(localeKeys.keys());
+
+	// Get all unique keys across all locales
+	const allKeys = new Set<string>();
+	for (const keys of localeKeys.values()) {
+		for (const key of keys) {
+			allKeys.add(key);
+		}
+	}
+
+	// Check each key to see if it exists in all locales
+	for (const key of allKeys) {
+		const missingIn: string[] = [];
+		const presentIn: string[] = [];
+
+		for (const locale of allLocales) {
+			const keys = localeKeys.get(locale);
+			if (keys?.has(key)) {
+				presentIn.push(locale);
+			} else {
+				missingIn.push(locale);
+			}
+		}
+
+		// If the key is not in all locales, it's a parity issue
+		if (missingIn.length > 0) {
+			parityIssues.push({ key, missingIn, presentIn });
+		}
+	}
+
+	return parityIssues;
+}
+
+/**
  * Main analysis function
  */
 async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
@@ -260,7 +320,11 @@ async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
 
 	// Load available keys from locale files
 	log.info("📚 Loading available keys...");
-	const { availableKeys } = await loadAvailableKeys();
+	const { availableKeys, localeKeys } = await loadAvailableKeys();
+
+	// Check for key parity across locales
+	log.info("🌐 Checking key parity across locales...");
+	const parityIssues = checkLocaleParity(localeKeys);
 
 	// Extract referenced keys from source code
 	log.info("🔎 Scanning source code for referenced keys...");
@@ -288,6 +352,8 @@ async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
 		unusedKeys,
 		referencedKeys,
 		availableKeys,
+		localeKeys,
+		parityIssues,
 	};
 }
 
@@ -298,6 +364,22 @@ function displayResults(results: AnalysisResult): void {
 	console.log(`\n${"=".repeat(80)}`);
 	console.log("🔍 LOCALIZATION KEY ANALYSIS RESULTS");
 	console.log("=".repeat(80));
+
+	// Locale parity section
+	if (results.parityIssues.length > 0) {
+		console.log("\n🌐 LOCALE PARITY ISSUES (Keys missing in some locales):");
+		console.log("-".repeat(60));
+
+		for (const { key, missingIn, presentIn } of results.parityIssues.sort(
+			(a, b) => a.key.localeCompare(b.key),
+		)) {
+			console.log(`  ⚠️  ${key}`);
+			console.log(`     ✅ Present in: ${presentIn.join(", ")}`);
+			console.log(`     ❌ Missing in: ${missingIn.join(", ")}`);
+		}
+	} else {
+		console.log("\n✅ All locales have matching keys!");
+	}
 
 	// Missing keys section
 	if (results.missingKeys.length > 0) {
@@ -334,11 +416,16 @@ function displayResults(results: AnalysisResult): void {
 	// Summary
 	console.log("\n📊 SUMMARY:");
 	console.log("-".repeat(60));
+	const localeNames = Array.from(results.localeKeys.keys());
+	console.log(`  • ${localeNames.length} locales: ${localeNames.join(", ")}`);
 	console.log(
-		`  • ${results.availableKeys.size} total keys available in locale files`,
+		`  • ${results.availableKeys.size} total keys available across all locale files`,
 	);
 	console.log(
 		`  • ${results.referencedKeys.size} total keys referenced in source code`,
+	);
+	console.log(
+		`  • ${results.parityIssues.length} parity issues (keys missing in some locales)`,
 	);
 	console.log(
 		`  • ${results.missingKeys.length} missing keys (referenced but don't exist)`,
@@ -347,7 +434,11 @@ function displayResults(results: AnalysisResult): void {
 		`  • ${results.unusedKeys.length} unused keys (exist but never referenced)`,
 	);
 
-	if (results.missingKeys.length === 0 && results.unusedKeys.length === 0) {
+	if (
+		results.missingKeys.length === 0 &&
+		results.unusedKeys.length === 0 &&
+		results.parityIssues.length === 0
+	) {
 		console.log("\n🎉 Perfect! Your localization is fully synchronized!");
 	}
 
@@ -362,8 +453,8 @@ async function main(): Promise<void> {
 		const results = await analyzeLocalizationKeys();
 		displayResults(results);
 
-		// Exit with error code only for critical issues (missing keys)
-		if (results.missingKeys.length > 0) {
+		// Exit with error code for critical issues (missing keys or parity issues)
+		if (results.missingKeys.length > 0 || results.parityIssues.length > 0) {
 			process.exit(1);
 		}
 	} catch (error) {
