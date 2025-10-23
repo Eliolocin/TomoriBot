@@ -51,6 +51,7 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
 	"humanizer_degree",
 	"emoji_usage_enabled",
 	"sticker_usage_enabled",
+	"timezone_offset",
 	// Exclude: tomori_config_id, tomori_id (keys), created_at, updated_at (auto-managed)
 ]);
 
