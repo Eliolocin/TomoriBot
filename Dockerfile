@@ -35,7 +35,9 @@ ENV PATH="/home/tomori/.local/bin:$PATH"
 # Fetch MCP server needs to be pre-installed with pip
 # Install as tomori user to avoid permission issues
 # Use --break-system-packages for Alpine Linux PEP 668 compliance
-RUN pip3 install --user --break-system-packages mcp-server-fetch
+# Install pydantic first to resolve dependencies, then pin mcp-server-fetch to latest version
+RUN pip3 install --user --break-system-packages pydantic>=2.0.0 && \
+    pip3 install --user --break-system-packages mcp-server-fetch==2025.4.7
 
 # Copy package files first for better Docker layer caching
 # This is like getting the "lease agreement" (dependencies) ready first

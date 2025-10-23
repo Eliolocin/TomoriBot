@@ -1,76 +1,160 @@
 /**
  * Tool Initialization System
- * Registers all available tools with the central registry
+ * Automatically discovers and registers all available tools with the central registry
  */
 
+import path from "node:path";
 import { log } from "../utils/misc/logger";
 import { ToolRegistry } from "./toolRegistry";
-import {
-	StickerTool,
-	MemoryTool,
-	YouTubeVideoTool,
-	PeekProfilePictureTool,
-	PinMessageTool,
-	ReminderTool,
-} from "./functionCalls";
-import {
-	BraveWebSearchTool,
-	BraveImageSearchTool,
-	BraveVideoSearchTool,
-	BraveNewsSearchTool,
-} from "./restAPIs/brave/braveTools";
+import getAllFiles from "../utils/misc/ioHelper";
+import { BaseTool } from "../types/tool/interfaces";
+import type { ErrorContext } from "../types/db/schema";
 
 /**
- * Initialize all tools by registering them with the central registry
+ * Initialize all tools by auto-discovering and registering them with the central registry
  * This should be called once during application startup
+ *
+ * Auto-discovers tools from:
+ * - src/tools/functionCalls/ - Built-in function call tools
+ * - src/tools/restAPIs/brave/ - HTTP-based Brave Search tools
  *
  * MCP tools are now handled by Google's official mcpToTool() - no manual registration needed
  */
-export function initializeTools(): void {
+export async function initializeTools(): Promise<void> {
 	try {
-		log.info("Initializing tool registry...");
+		log.info("Initializing tool registry with auto-discovery...");
 
-		// Clear any existing tools (useful for testing/reloading)
+		// 1. Clear any existing tools (useful for testing/reloading)
 		ToolRegistry.clearRegistry();
 
-		// Register built-in tools and HTTP-based search tools
-		const tools = [
-			new StickerTool(),
-			new MemoryTool(),
-			new YouTubeVideoTool(),
-			new PeekProfilePictureTool(),
-			new PinMessageTool(),
-			new ReminderTool(),
-			// HTTP-based Brave Search tools (replaces MCP implementation)
-			new BraveWebSearchTool(),
-			new BraveImageSearchTool(),
-			new BraveVideoSearchTool(),
-			new BraveNewsSearchTool(),
-		];
+		let totalDiscovered = 0;
 
-		for (const tool of tools) {
-			try {
-				ToolRegistry.registerTool(tool);
-				log.info(`Registered tool: ${tool.name} (${tool.category})`);
-			} catch (error) {
-				log.error(
-					`Failed to register tool: ${tool.name} (${tool.category})`,
-					error as Error,
-				);
-			}
+		// 2. Auto-discover built-in function call tools
+		const functionCallsPath = path.join(
+			process.cwd(),
+			"src",
+			"tools",
+			"functionCalls",
+		);
+		const functionCallFiles = getAllFiles(functionCallsPath).filter(
+			(file) => !file.endsWith("index.ts"), // Skip index.ts
+		);
+
+		log.info(
+			`Scanning ${functionCallFiles.length} files in functionCalls directory...`,
+		);
+
+		for (const toolFile of functionCallFiles) {
+			const discovered = await discoverAndRegisterTools(
+				toolFile,
+				"functionCalls",
+			);
+			totalDiscovered += discovered;
 		}
 
-		// HTTP-based Brave Search tools provide optimized search functionality with server-specific API keys
-		// Other MCP tools (fetch, etc.) are automatically handled by Google's mcpToTool()
+		// 3. Auto-discover Brave Search tools
+		const braveToolsPath = path.join(
+			process.cwd(),
+			"src",
+			"tools",
+			"restAPIs",
+			"brave",
+		);
+		const braveToolFiles = getAllFiles(braveToolsPath).filter((file) =>
+			file.endsWith("braveTools.ts"),
+		);
 
+		log.info(`Scanning ${braveToolFiles.length} files in Brave tools directory...`);
+
+		for (const braveFile of braveToolFiles) {
+			const discovered = await discoverAndRegisterTools(braveFile, "brave");
+			totalDiscovered += discovered;
+		}
+
+		// 4. Log final statistics
 		const stats = ToolRegistry.getStats();
 		log.success(
-			`Tool registry initialized successfully with ${stats.totalTools} tools`,
+			`Auto-discovery complete: Found and registered ${totalDiscovered} tools (${stats.totalTools} total in registry)`,
+		);
+		log.info(
+			`Tools by category: ${Object.entries(stats.toolsByCategory)
+				.map(([cat, count]) => `${cat}=${count}`)
+				.join(", ")}`,
 		);
 	} catch (error) {
 		log.error("Failed to initialize tool registry", error as Error);
 		throw error;
 	}
+}
+
+/**
+ * Discover and register tools from a specific file
+ * @param filePath - Absolute path to the tool file
+ * @param source - Source identifier for logging (e.g., "functionCalls", "brave")
+ * @returns Number of tools discovered and registered from this file
+ */
+async function discoverAndRegisterTools(
+	filePath: string,
+	source: string,
+): Promise<number> {
+	let discoveredCount = 0;
+
+	try {
+		// 1. Import the tool module
+		const toolModule = await import(filePath);
+
+		// 2. Find all exported classes that extend BaseTool
+		for (const [exportName, exportedItem] of Object.entries(toolModule)) {
+			try {
+				// Check if this export is a class constructor that extends BaseTool
+				if (
+					typeof exportedItem === "function" &&
+					exportedItem.prototype instanceof BaseTool
+				) {
+					// 3. Instantiate the tool class
+					const toolInstance = new (exportedItem as new () => BaseTool)();
+
+					// 4. Register with the tool registry
+					ToolRegistry.registerTool(toolInstance);
+
+					log.info(
+						`Auto-registered [${source}]: ${toolInstance.name} (${toolInstance.category}) from ${exportName}`,
+					);
+
+					discoveredCount++;
+				}
+			} catch (error) {
+				const context: ErrorContext = {
+					errorType: "ToolRegistrationError",
+					metadata: {
+						filePath,
+						exportName,
+						source,
+					},
+				};
+				await log.error(
+					`Failed to register tool export '${exportName}' from ${filePath}:`,
+					error as Error,
+					context,
+				);
+			}
+		}
+	} catch (error) {
+		const context: ErrorContext = {
+			errorType: "ToolDiscoveryError",
+			metadata: {
+				filePath,
+				source,
+			},
+		};
+		await log.error(
+			`Failed to import tool file: ${filePath}`,
+			error as Error,
+			context,
+		);
+	}
+
+	return discoveredCount;
 }
 
 /**
@@ -97,7 +181,7 @@ export function getInitializationStatus(): {
 /**
  * Reinitialize tools (useful for development/testing)
  */
-export function reinitializeTools(): void {
+export async function reinitializeTools(): Promise<void> {
 	log.info("Reinitializing tool registry...");
-	initializeTools();
+	await initializeTools();
 }

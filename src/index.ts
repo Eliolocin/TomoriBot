@@ -224,7 +224,7 @@ if (!postgresUrl) {
 log.section("Initializing Tool Registry...");
 try {
 	const { initializeTools } = await import("./tools/toolInitializer");
-	initializeTools();
+	await initializeTools();
 	log.success("Tool registry initialized successfully");
 } catch (error) {
 	log.error("Failed to initialize tool registry", error as Error);
