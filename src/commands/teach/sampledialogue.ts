@@ -18,7 +18,13 @@ import {
 	promptWithRawModal,
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
-import { checkSampleDialogueLimit } from "../../utils/db/memoryLimits";
+import {
+	checkSampleDialogueLimit,
+	getMemoryLimits,
+} from "../../utils/db/memoryLimits";
+
+// Get memory limits from environment variables
+const memoryLimits = getMemoryLimits();
 
 // Rule 20: Constants (Modal IDs, Input IDs)
 const MODAL_CUSTOM_ID = "teach_sampledialogue_add_modal";
@@ -132,7 +138,7 @@ export async function execute(
 					placeholder: "commands.teach.sampledialogue.user_input_placeholder",
 					style: TextInputStyle.Paragraph,
 					required: true,
-					maxLength: 1000,
+					maxLength: memoryLimits.maxSampleDialogueLength,
 				},
 				{
 					customId: BOT_INPUT_ID,
@@ -142,7 +148,7 @@ export async function execute(
 					placeholder: "commands.teach.sampledialogue.bot_input_placeholder",
 					style: TextInputStyle.Paragraph,
 					required: true,
-					maxLength: 1000,
+					maxLength: memoryLimits.maxSampleDialogueLength,
 				},
 			],
 		});

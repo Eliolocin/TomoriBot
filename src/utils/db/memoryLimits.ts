@@ -8,6 +8,7 @@ export interface MemoryLimits {
 	maxPersonalMemories: number;
 	maxServerMemories: number;
 	maxMemoryLength: number;
+	maxSampleDialogueLength: number; // Separate limit for sample dialogues (longer than regular memories)
 	maxTriggerWords: number;
 	maxSampleDialogues: number;
 	maxAttributes: number;
@@ -41,7 +42,7 @@ export type MemoryValidationError =
  */
 export function getMemoryLimits(): MemoryLimits {
 	const maxPersonalMemories = Number.parseInt(
-		process.env.MAX_PERSONAL_MEMORIES || "50",
+		process.env.MAX_PERSONAL_MEMORIES || "30",
 		10,
 	);
 	const maxServerMemories = Number.parseInt(
@@ -50,6 +51,10 @@ export function getMemoryLimits(): MemoryLimits {
 	);
 	const maxMemoryLength = Number.parseInt(
 		process.env.MAX_MEMORY_LENGTH || "256",
+		10,
+	);
+	const maxSampleDialogueLength = Number.parseInt(
+		process.env.MAX_SAMPLE_DIALOGUE_LENGTH || "2000",
 		10,
 	);
 	const maxTriggerWords = Number.parseInt(
@@ -75,6 +80,7 @@ export function getMemoryLimits(): MemoryLimits {
 			maxPersonalMemories: 30,
 			maxServerMemories,
 			maxMemoryLength,
+			maxSampleDialogueLength,
 			maxTriggerWords,
 			maxSampleDialogues,
 			maxAttributes,
@@ -93,6 +99,7 @@ export function getMemoryLimits(): MemoryLimits {
 			maxPersonalMemories,
 			maxServerMemories: 50,
 			maxMemoryLength,
+			maxSampleDialogueLength,
 			maxTriggerWords,
 			maxSampleDialogues,
 			maxAttributes,
@@ -111,6 +118,26 @@ export function getMemoryLimits(): MemoryLimits {
 			maxPersonalMemories,
 			maxServerMemories,
 			maxMemoryLength: 500,
+			maxSampleDialogueLength,
+			maxTriggerWords,
+			maxSampleDialogues,
+			maxAttributes,
+		};
+	}
+
+	if (
+		!Number.isInteger(maxSampleDialogueLength) ||
+		maxSampleDialogueLength <= 0 ||
+		maxSampleDialogueLength > 5000
+	) {
+		log.warn(
+			`Invalid MAX_SAMPLE_DIALOGUE_LENGTH value: ${process.env.MAX_SAMPLE_DIALOGUE_LENGTH}. Using default: 2000`,
+		);
+		return {
+			maxPersonalMemories,
+			maxServerMemories,
+			maxMemoryLength,
+			maxSampleDialogueLength: 2000,
 			maxTriggerWords,
 			maxSampleDialogues,
 			maxAttributes,
@@ -129,6 +156,7 @@ export function getMemoryLimits(): MemoryLimits {
 			maxPersonalMemories,
 			maxServerMemories,
 			maxMemoryLength,
+			maxSampleDialogueLength,
 			maxTriggerWords: 10,
 			maxSampleDialogues,
 			maxAttributes,
@@ -147,6 +175,7 @@ export function getMemoryLimits(): MemoryLimits {
 			maxPersonalMemories,
 			maxServerMemories,
 			maxMemoryLength,
+			maxSampleDialogueLength,
 			maxTriggerWords,
 			maxSampleDialogues: 10,
 			maxAttributes,
@@ -165,6 +194,7 @@ export function getMemoryLimits(): MemoryLimits {
 			maxPersonalMemories,
 			maxServerMemories,
 			maxMemoryLength,
+			maxSampleDialogueLength,
 			maxTriggerWords,
 			maxSampleDialogues,
 			maxAttributes: 25,
@@ -175,6 +205,7 @@ export function getMemoryLimits(): MemoryLimits {
 		maxPersonalMemories,
 		maxServerMemories,
 		maxMemoryLength,
+		maxSampleDialogueLength,
 		maxTriggerWords,
 		maxSampleDialogues,
 		maxAttributes,
@@ -203,6 +234,37 @@ export function validateMemoryContent(content: string): MemoryValidationResult {
 			isValid: false,
 			error: "CONTENT_TOO_LONG",
 			maxAllowed: limits.maxMemoryLength,
+		};
+	}
+
+	return { isValid: true };
+}
+
+/**
+ * Validate sample dialogue content length
+ * Sample dialogues have a separate, higher limit (default 2000) than regular memories (default 256)
+ * @param content - The sample dialogue content to validate
+ * @returns MemoryValidationResult indicating if content length is valid
+ */
+export function validateSampleDialogueContent(
+	content: string,
+): MemoryValidationResult {
+	const limits = getMemoryLimits();
+
+	// Check if content is empty or just whitespace
+	if (!content || !content.trim()) {
+		return {
+			isValid: false,
+			error: "CONTENT_EMPTY",
+		};
+	}
+
+	// Check if content exceeds maximum length for sample dialogues
+	if (content.length > limits.maxSampleDialogueLength) {
+		return {
+			isValid: false,
+			error: "CONTENT_TOO_LONG",
+			maxAllowed: limits.maxSampleDialogueLength,
 		};
 	}
 

@@ -12,6 +12,7 @@ docker-data/
 .temp/
 characterDrafts.md
 backups/
+references/
 
 # Proompting
 .roo/

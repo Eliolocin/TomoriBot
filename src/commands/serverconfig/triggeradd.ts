@@ -9,7 +9,14 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
 import { sql } from "bun";
-import { checkTriggerWordLimit } from "../../utils/db/memoryLimits";
+import {
+	checkTriggerWordLimit,
+	validateMemoryContent,
+	getMemoryLimits,
+} from "../../utils/db/memoryLimits";
+
+// Get memory limits from environment variables
+const memoryLimits = getMemoryLimits();
 
 // Configure the subcommand
 export const configureSubcommand = (
@@ -29,7 +36,9 @@ export const configureSubcommand = (
 						"commands.serverconfig.triggeradd.word_description",
 					),
 				)
-				.setRequired(true),
+				.setRequired(true)
+				.setMinLength(2)
+				.setMaxLength(memoryLimits.maxMemoryLength),
 		);
 
 /**
@@ -62,12 +71,25 @@ export async function execute(
 			.toLowerCase()
 			.trim();
 
-		// Basic validation for the trigger word
+		// Basic validation for the trigger word (redundant with Discord validation, but good for safety)
 		if (!triggerWord || triggerWord.length < 2) {
 			await replyInfoEmbed(interaction, locale, {
 				titleKey: "commands.serverconfig.triggeradd.too_short_title",
 				descriptionKey:
 					"commands.serverconfig.triggeradd.too_short_description",
+				color: ColorCode.ERROR,
+			});
+			return;
+		}
+
+		// Validate trigger word length for consistency with memory validation
+		const contentValidation = validateMemoryContent(triggerWord);
+		if (!contentValidation.isValid) {
+			await replyInfoEmbed(interaction, locale, {
+				titleKey: "commands.serverconfig.triggeradd.content_too_long_title",
+				descriptionKey:
+					"commands.serverconfig.triggeradd.content_too_long_description",
+				descriptionVars: { max_length: memoryLimits.maxMemoryLength },
 				color: ColorCode.ERROR,
 			});
 			return;

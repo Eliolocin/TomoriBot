@@ -19,12 +19,17 @@ import {
 } from "../../utils/discord/interactionHelper";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import type { ModalResult } from "../../types/discord/modal";
-import { checkAttributeLimit } from "../../utils/db/memoryLimits";
+import {
+	checkAttributeLimit,
+	getMemoryLimits,
+} from "../../utils/db/memoryLimits";
+
+// Get memory limits from environment variables
+const memoryLimits = getMemoryLimits();
 
 // Rule 20: Constants (Modal IDs, Input IDs)
 const MODAL_CUSTOM_ID = "teach_attribute_add_modal";
 const ATTRIBUTE_INPUT_ID = "attribute_input";
-const ATTRIBUTE_MAX_LENGTH = 256; // Define a max length for attributes
 
 // Rule 21: Configure the subcommand
 export const configureSubcommand = (
@@ -135,7 +140,7 @@ export async function execute(
 					placeholder: "commands.teach.attribute.attribute_input_placeholder",
 					style: TextInputStyle.Paragraph, // Allow longer attributes
 					required: true,
-					maxLength: ATTRIBUTE_MAX_LENGTH, // Set a max length
+					maxLength: memoryLimits.maxMemoryLength,
 				},
 			],
 		});
