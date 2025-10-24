@@ -11,6 +11,7 @@ docker-data/
 .vscode/
 .temp/
 characterDrafts.md
+backups/
 
 # Proompting
 .roo/

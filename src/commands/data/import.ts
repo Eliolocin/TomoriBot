@@ -18,6 +18,40 @@ import type {
 	ServerExportData,
 } from "../../types/db/dataExport";
 
+/**
+ * Helper function to localize error messages from utility functions
+ * Handles both simple locale keys and keys with pipe-separated variables
+ * @param locale - User's locale
+ * @param errorString - Error string (locale key or key|var1|var2...)
+ * @returns Localized error message
+ */
+function localizeError(locale: string, errorString: string): string {
+	const parts = errorString.split("|");
+	const key = parts[0];
+
+	if (parts.length === 1) {
+		// Simple locale key without variables
+		return localizer(locale, key);
+	}
+
+	// Handle keys with variables
+	if (key === "commands.data.import.error_invalid_memory") {
+		return localizer(locale, key, { details: parts[1] });
+	}
+	if (key === "commands.data.import.error_invalid_server_memory") {
+		return localizer(locale, key, { details: parts[1] });
+	}
+	if (key === "commands.data.import.error_incompatible_version") {
+		return localizer(locale, key, { expected: parts[1], actual: parts[2] });
+	}
+	if (key === "commands.data.import.error_unknown_type") {
+		return localizer(locale, key, { type: parts[1] });
+	}
+
+	// Fallback: just localize the key
+	return localizer(locale, key);
+}
+
 // Maximum file size for imports (1MB)
 const MAX_FILE_SIZE = 1024 * 1024;
 
@@ -148,8 +182,9 @@ export async function execute(
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.data.import.invalid_file_title"))
 						.setDescription(
-							validation.error ||
-								localizer(locale, "commands.data.import.invalid_file_description"),
+							validation.error
+								? localizeError(locale, validation.error)
+								: localizer(locale, "commands.data.import.invalid_file_description"),
 						)
 						.setColor(ColorCode.ERROR),
 				],
@@ -228,8 +263,9 @@ export async function execute(
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.data.import.failed_title"))
 						.setDescription(
-							importResult.error ||
-								localizer(locale, "commands.data.import.failed_description"),
+							importResult.error
+								? localizeError(locale, importResult.error)
+								: localizer(locale, "commands.data.import.failed_description"),
 						)
 						.setColor(ColorCode.ERROR),
 				],
@@ -241,12 +277,17 @@ export async function execute(
 		const memoriesCount = importResult.itemsImported?.memoriesCount || 0;
 		const configFieldsCount = importResult.itemsImported?.configFieldsCount || 0;
 
+		// Use different description for server imports (mentions excluded data)
+		const successDescriptionKey = validation.type === "server"
+			? "commands.data.import.success_description_server"
+			: "commands.data.import.success_description";
+
 		await interaction.editReply({
 			embeds: [
 				new EmbedBuilder()
 					.setTitle(localizer(locale, "commands.data.import.success_title"))
 					.setDescription(
-						localizer(locale, "commands.data.import.success_description", {
+						localizer(locale, successDescriptionKey, {
 							type: validation.type,
 							memories_count: memoriesCount,
 							config_count: configFieldsCount,

@@ -29,7 +29,7 @@ export async function exportPersonalData(
 		if (!rows.length) {
 			return {
 				success: false,
-				error: "No user data found. You may need to interact with the bot first.",
+				error: "commands.data.export.error_no_user_data",
 			};
 		}
 
@@ -56,7 +56,7 @@ export async function exportPersonalData(
 			);
 			return {
 				success: false,
-				error: "Failed to validate export data structure",
+				error: "commands.data.export.error_validation_failed",
 			};
 		}
 
@@ -68,7 +68,7 @@ export async function exportPersonalData(
 		log.error(`Error exporting personal data for user ${userDiscId}:`, error);
 		return {
 			success: false,
-			error: "Failed to export personal data",
+			error: "commands.data.export.error_export_failed",
 		};
 	}
 }
@@ -93,7 +93,7 @@ export async function exportServerData(
 		if (!serverRows.length) {
 			return {
 				success: false,
-				error: "Server not found in database. Please run /config setup first.",
+				error: "commands.data.export.error_no_server_data",
 			};
 		}
 
@@ -122,8 +122,7 @@ export async function exportServerData(
 		if (!configRows.length) {
 			return {
 				success: false,
-				error:
-					"Server configuration not found. Please run /config setup first.",
+				error: "commands.data.export.error_no_server_config",
 			};
 		}
 
@@ -172,7 +171,7 @@ export async function exportServerData(
 			);
 			return {
 				success: false,
-				error: "Failed to validate export data structure",
+				error: "commands.data.export.error_validation_failed",
 			};
 		}
 
@@ -184,7 +183,7 @@ export async function exportServerData(
 		log.error(`Error exporting server data for server ${serverDiscId}:`, error);
 		return {
 			success: false,
-			error: "Failed to export server data",
+			error: "commands.data.export.error_export_failed",
 		};
 	}
 }

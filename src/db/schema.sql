@@ -276,11 +276,11 @@ EXECUTE FUNCTION update_timestamp();
 CREATE TABLE IF NOT EXISTS server_memories (
   server_memory_id SERIAL PRIMARY KEY,
   server_id INT NOT NULL,
-  user_id INT NOT NULL, -- Creator of this server memory
+  user_id INT, -- Creator of this server memory (nullable - set to NULL if user deleted)
   content TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
 );
 
@@ -293,12 +293,11 @@ EXECUTE FUNCTION update_timestamp();
 
 CREATE TABLE IF NOT EXISTS personalization_blacklist (
   server_id INT NOT NULL,
-  user_id INT NOT NULL,
+  user_disc_id TEXT NOT NULL, -- Discord ID of user who opted out (persists even if user deletes account)
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (server_id, user_id), -- composite key
-  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+  PRIMARY KEY (server_id, user_disc_id), -- composite key
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
 );
 
 -- Create updated_at trigger for personalization_blacklist table
@@ -392,11 +391,11 @@ CREATE TABLE IF NOT EXISTS reminders (
   user_nickname TEXT NOT NULL,                         -- Target user's nickname for display
   reminder_purpose TEXT NOT NULL,                      -- What the reminder is for
   reminder_time TIMESTAMP WITH TIME ZONE NOT NULL,     -- When to trigger the reminder
-  created_by_user_id INT NOT NULL,                     -- Who requested the reminder
+  created_by_user_id INT,                              -- User who created this reminder (nullable - set to NULL if user deleted)
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
-  FOREIGN KEY (created_by_user_id) REFERENCES users(user_id) ON DELETE CASCADE
+  FOREIGN KEY (created_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 -- Create index for efficient reminder queries

@@ -28,7 +28,7 @@ export async function importPersonalData(
 			if (!validation.isValid) {
 				return {
 					success: false,
-					error: `Invalid memory content: ${validation.error}`,
+					error: `commands.data.import.error_invalid_memory|${validation.error}`,
 				};
 			}
 		}
@@ -62,7 +62,7 @@ export async function importPersonalData(
 		if (!updateResult.length) {
 			return {
 				success: false,
-				error: "Failed to update user data in database",
+				error: "commands.data.import.error_update_failed",
 			};
 		}
 
@@ -76,7 +76,7 @@ export async function importPersonalData(
 		log.error(`Error importing personal data for user ${userDiscId}:`, error);
 		return {
 			success: false,
-			error: "Failed to import personal data",
+			error: "commands.data.import.error_import_failed",
 		};
 	}
 }
@@ -104,7 +104,7 @@ export async function importServerData(
 		if (!serverRows.length) {
 			return {
 				success: false,
-				error: "Server not found in database. Please run /config setup first.",
+				error: "commands.data.import.error_no_server_data",
 			};
 		}
 
@@ -117,7 +117,7 @@ export async function importServerData(
 			if (!validation.isValid) {
 				return {
 					success: false,
-					error: `Invalid server memory content: ${validation.error}`,
+					error: `commands.data.import.error_invalid_server_memory|${validation.error}`,
 				};
 			}
 		}
@@ -130,7 +130,7 @@ export async function importServerData(
 			log.error("Config field validation failed during import:", error);
 			return {
 				success: false,
-				error: "Invalid configuration fields in import data",
+				error: "commands.data.import.error_invalid_config",
 			};
 		}
 
@@ -169,7 +169,7 @@ export async function importServerData(
 		);
 		return {
 			success: false,
-			error: "Failed to import server data",
+			error: "commands.data.import.error_import_failed",
 		};
 	}
 }
@@ -204,9 +204,7 @@ async function replaceServerMemories(
 	`;
 
 	if (!userRows.length) {
-		throw new Error(
-			"No users found in database. Cannot attribute server memories.",
-		);
+		throw new Error("commands.data.import.error_no_users");
 	}
 
 	const userId = userRows[0].user_id;
@@ -239,7 +237,7 @@ export function validateImportFile(jsonData: unknown): {
 	if (typeof jsonData !== "object" || jsonData === null) {
 		return {
 			valid: false,
-			error: "Import file must contain a valid JSON object",
+			error: "commands.data.import.error_not_json",
 		};
 	}
 
@@ -248,7 +246,7 @@ export function validateImportFile(jsonData: unknown): {
 	if (version !== EXPORT_VERSION) {
 		return {
 			valid: false,
-			error: `Incompatible import version. Expected ${EXPORT_VERSION}, got ${version || "unknown"}`,
+			error: `commands.data.import.error_incompatible_version|${EXPORT_VERSION}|${version || "unknown"}`,
 		};
 	}
 
@@ -261,7 +259,7 @@ export function validateImportFile(jsonData: unknown): {
 			log.error("Personal import validation failed:", validated.error);
 			return {
 				valid: false,
-				error: "Invalid personal import file format",
+				error: "commands.data.import.error_invalid_personal_format",
 			};
 		}
 		return {
@@ -277,7 +275,7 @@ export function validateImportFile(jsonData: unknown): {
 			log.error("Server import validation failed:", validated.error);
 			return {
 				valid: false,
-				error: "Invalid server import file format",
+				error: "commands.data.import.error_invalid_server_format",
 			};
 		}
 		return {
@@ -289,6 +287,6 @@ export function validateImportFile(jsonData: unknown): {
 
 	return {
 		valid: false,
-		error: `Unknown import type: ${type}. Must be "personal" or "server"`,
+		error: `commands.data.import.error_unknown_type|${type}`,
 	};
 }

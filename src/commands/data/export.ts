@@ -118,8 +118,9 @@ export async function execute(
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.data.export.failed_title"))
 						.setDescription(
-							exportResult.error ||
-								localizer(locale, "commands.data.export.failed_description"),
+							exportResult.error
+								? localizer(locale, exportResult.error)
+								: localizer(locale, "commands.data.export.failed_description"),
 						)
 						.setColor(ColorCode.ERROR),
 				],
@@ -135,12 +136,17 @@ export async function execute(
 
 		// 7. Send to user's DM
 		try {
+			// Use different description for server exports (mentions excluded data)
+			const dmDescriptionKey = exportType === "server"
+				? "commands.data.export.dm_description_server"
+				: "commands.data.export.dm_description";
+
 			await interaction.user.send({
 				embeds: [
 					new EmbedBuilder()
 						.setTitle(localizer(locale, "commands.data.export.dm_title"))
 						.setDescription(
-							localizer(locale, "commands.data.export.dm_description", {
+							localizer(locale, dmDescriptionKey, {
 								type: exportType,
 							}),
 						)

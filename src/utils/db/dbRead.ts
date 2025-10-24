@@ -160,15 +160,14 @@ export async function isBlacklisted(
 	userDiscId: string,
 ): Promise<boolean> {
 	try {
-		// Use EXISTS for efficiency (Rule 16)
+		// Use EXISTS for efficiency - now using user_disc_id directly
 		const result = await sql`
 			SELECT EXISTS (
 				SELECT 1
 				FROM personalization_blacklist pb
 				JOIN servers s ON pb.server_id = s.server_id
-				JOIN users u ON pb.user_id = u.user_id
 				WHERE s.server_disc_id = ${serverDiscId}
-				AND u.user_disc_id = ${userDiscId}
+				AND pb.user_disc_id = ${userDiscId}
 			) as "exists";
 		`;
 

@@ -5,12 +5,11 @@ import {
 	type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "bun";
-import { loadTomoriState, loadUserRow } from "../../utils/db/dbRead";
+import { loadTomoriState } from "../../utils/db/dbRead";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
-import { registerUser } from "@/utils/db/dbWrite";
 
 // Configure the subcommand
 export const configureSubcommand = (
@@ -78,8 +77,6 @@ export async function execute(
 		return;
 	}
 
-	// Define targetUserId early for use in error context
-	let targetUserId: number | null = null;
 	const targetDiscordUser = interaction.options.getUser("member", true); // Discord User object
 
 	try {
@@ -123,52 +120,11 @@ export async function execute(
 			return;
 		}
 
-		// 6. Get the internal DB user ID for the target Discord user
-		let targetUserRow = await loadUserRow(targetDiscordUser.id);
-
-		// 6a. If user doesn't exist, register them first
-		if (!targetUserRow) {
-			log.info(
-				`Target user ${targetDiscordUser.id} not found in DB, attempting registration.`,
-			);
-			targetUserRow = await registerUser(
-				targetDiscordUser.id,
-				targetDiscordUser.username,
-				// Attempt to use the interaction locale for the new user, fallback to executor's pref
-				interaction.guildLocale ?? interaction.locale ?? "en-US",
-			);
-
-			// 6b. Check if registration failed
-			if (!targetUserRow) {
-				log.error(
-					`Failed to register target user ${targetDiscordUser.id} during blacklist command.`,
-				);
-				await replyInfoEmbed(interaction, locale, {
-					titleKey:
-						"commands.serverconfig.blacklist.user_registration_failed_title",
-					descriptionKey:
-						"commands.serverconfig.blacklist.user_registration_failed_description",
-					descriptionVars: {
-						user_name: targetDiscordUser.username,
-					},
-					color: ColorCode.ERROR,
-				});
-				return; // Stop execution if registration failed
-			}
-			log.success(
-				`Successfully registered target user ${targetDiscordUser.id} (Internal ID: ${targetUserRow.user_id})`,
-			);
-		}
-
-		// 6c. Assign the internal ID (either from load or register)
-		// biome-ignore lint/style/noNonNullAssertion: Logic above ensures targetUserRow and user_id exist here
-		targetUserId = targetUserRow.user_id!;
-
-		// 7. Check if the user is already in the blacklist state matches the action (Rule #16)
-		// Use internal user_id and correct column name
+		// 6. Check if the user is already in the blacklist state matches the action
+		// Now using Discord ID directly (no need to register user or get internal ID)
 		const [existingEntry] = await sql`
-            SELECT 1 FROM personalization_blacklist 
-            WHERE server_id = ${tomoriState.server_id} AND user_id = ${targetUserId}
+            SELECT 1 FROM personalization_blacklist
+            WHERE server_id = ${tomoriState.server_id} AND user_disc_id = ${targetDiscordUser.id}
             LIMIT 1
         `;
 
@@ -202,23 +158,23 @@ export async function execute(
 			return;
 		}
 
-		// 8. Update the blacklist based on the action using direct SQL (Rule #4)
-		// Use internal user_id and correct column names
+		// 8. Update the blacklist based on the action using direct SQL
+		// Now using user_disc_id instead of user_id (persists across account deletions)
 		if (action === "add") {
 			await sql`
-                INSERT INTO personalization_blacklist (server_id, user_id)
-                VALUES (${tomoriState.server_id}, ${targetUserId})
+                INSERT INTO personalization_blacklist (server_id, user_disc_id)
+                VALUES (${tomoriState.server_id}, ${targetDiscordUser.id})
             `;
 			log.info(
-				`Added user ${targetDiscordUser.id} (Internal: ${targetUserId}) to blacklist for server ${tomoriState.server_id}`,
+				`Added user ${targetDiscordUser.id} to blacklist for server ${tomoriState.server_id}`,
 			);
 		} else {
 			await sql`
                 DELETE FROM personalization_blacklist
-                WHERE server_id = ${tomoriState.server_id} AND user_id = ${targetUserId}
+                WHERE server_id = ${tomoriState.server_id} AND user_disc_id = ${targetDiscordUser.id}
             `;
 			log.info(
-				`Removed user ${targetDiscordUser.id} (Internal: ${targetUserId}) from blacklist for server ${tomoriState.server_id}`,
+				`Removed user ${targetDiscordUser.id} from blacklist for server ${tomoriState.server_id}`,
 			);
 		}
 
@@ -263,7 +219,6 @@ export async function execute(
 				guildId: interaction.guild?.id,
 				executorDiscordId: interaction.user.id, // Executor's Discord ID
 				targetDiscordUserId: targetDiscordUser.id, // Target's Discord ID
-				targetInternalUserId: targetUserId, // Target's internal ID (if fetched/created)
 				action: interaction.options.getString("action", true),
 			},
 		};

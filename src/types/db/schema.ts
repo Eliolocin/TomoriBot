@@ -127,7 +127,7 @@ export type ServerStickerRow = z.infer<typeof serverStickerSchema>;
 export const serverMemorySchema = z.object({
 	server_memory_id: z.number().optional(),
 	server_id: z.number(),
-	user_id: z.number(),
+	user_id: z.number().nullable(), // Nullable - set to NULL if user deleted
 	content: z.string(),
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
@@ -136,7 +136,7 @@ export type ServerMemoryRow = z.infer<typeof serverMemorySchema>;
 
 export const personalizationBlacklistSchema = z.object({
 	server_id: z.number(),
-	user_id: z.number(),
+	user_disc_id: z.string(), // Discord ID - persists even if user deletes account
 	created_at: z.date().optional(),
 	updated_at: z.date().optional(),
 });
@@ -194,7 +194,7 @@ export const reminderSchema = z.object({
 	user_nickname: z.string(), // Target user's nickname for display
 	reminder_purpose: z.string(), // What the reminder is for
 	reminder_time: z.date(), // When to trigger the reminder (TIMESTAMP WITH TIME ZONE)
-	created_by_user_id: z.number(), // Who requested the reminder (FK to users)
+	created_by_user_id: z.number().nullable(), // Who requested the reminder (nullable - set to NULL if user deleted)
 	created_at: z.date().optional(), // Handled by DB default
 	updated_at: z.date().optional(), // Handled by DB default/trigger
 });
