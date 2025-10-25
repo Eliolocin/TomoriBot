@@ -17,8 +17,10 @@ import { getMemoryLimits } from "@/utils/db/memoryLimits";
 
 // Constants
 const MAX_ITEMS_DISPLAY = 5; // Max number of items to list directly (e.g., trigger words, channels)
-const MAX_MEMORIES_DISPLAY = 10; // Max number of memories to display
+const MAX_MEMORIES_DISPLAY = 8; // Max number of memories to display (reduced to fit Discord's 1024 char field limit)
 const MEMORY_TRUNCATE_LENGTH = 100; // Max length for memory snippets
+const MAX_ATTRIBUTES_DISPLAY = 3; // Max number of attributes to display (attributes can be very long)
+const ATTRIBUTE_TRUNCATE_LENGTH = 200; // Max length for attribute snippets
 
 /**
  * Formats an array of memories for display in an embed field.
@@ -231,8 +233,18 @@ export async function execute(
 				const attributesCount = tomoriState.attribute_list.length;
 				const attributesValue =
 					attributesCount > 0
-						? attributesCount <= MAX_ITEMS_DISPLAY
-							? tomoriState.attribute_list.map((a) => `• ${a}`).join("\n")
+						? attributesCount <= MAX_ATTRIBUTES_DISPLAY
+							? tomoriState.attribute_list
+									.slice(0, MAX_ATTRIBUTES_DISPLAY)
+									.map((attr) => {
+										// Truncate long attributes to prevent exceeding Discord's field limit
+										const truncated =
+											attr.length > ATTRIBUTE_TRUNCATE_LENGTH
+												? `${attr.substring(0, ATTRIBUTE_TRUNCATE_LENGTH)}...`
+												: attr;
+										return `• ${truncated}`;
+									})
+									.join("\n")
 							: localizer(locale, "commands.tool.status.item_count", {
 									count: attributesCount,
 								})

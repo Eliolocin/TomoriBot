@@ -961,3 +961,75 @@ export async function deleteReminderById(reminderId: number): Promise<boolean> {
 		return false;
 	}
 }
+
+/**
+ * Loads pending reminders for a specific user (reminders that haven't been triggered yet)
+ * @param userDiscordId - The Discord ID of the user
+ * @param serverDiscId - The Discord ID of the server (optional, to filter by server)
+ * @returns Array of pending ReminderRow objects, or null if error
+ */
+export async function getPendingRemindersForUser(
+	userDiscordId: string,
+	serverDiscId?: string,
+): Promise<ReminderRow[] | null> {
+	try {
+		// 1. Query for pending reminders (reminder_time > now) for the user
+		// If serverDiscId is provided, filter by that server as well
+		let reminderData: unknown[];
+		if (serverDiscId) {
+			// Join with servers table to filter by server_disc_id
+			reminderData = await sql`
+				SELECT r.* FROM reminders r
+				JOIN servers s ON r.server_id = s.server_id
+				WHERE r.user_discord_id = ${userDiscordId}
+				AND s.server_disc_id = ${serverDiscId}
+				AND r.reminder_time > CURRENT_TIMESTAMP
+				ORDER BY r.reminder_time ASC
+			`;
+		} else {
+			// Get all pending reminders for user across all servers
+			reminderData = await sql`
+				SELECT * FROM reminders
+				WHERE user_discord_id = ${userDiscordId}
+				AND reminder_time > CURRENT_TIMESTAMP
+				ORDER BY reminder_time ASC
+			`;
+		}
+
+		if (!reminderData) {
+			log.warn(
+				`Reminders data was unexpectedly null when fetching pending reminders for user ${userDiscordId}`,
+			);
+			return [];
+		}
+
+		if (reminderData.length === 0) {
+			log.info(`No pending reminders found for user ${userDiscordId}`);
+			return [];
+		}
+
+		// 2. Validate each reminder row
+		const validatedReminders: ReminderRow[] = [];
+		for (const reminder of reminderData) {
+			const parsed = reminderSchema.safeParse(reminder);
+			if (parsed.success) {
+				validatedReminders.push(parsed.data);
+			} else {
+				log.warn(
+					`Invalid reminder data found in DB for reminder_id ${(reminder as Record<string, unknown>).reminder_id}: ${JSON.stringify(reminder)}. Errors: ${parsed.error.flatten()}`,
+				);
+			}
+		}
+
+		log.info(
+			`Found ${validatedReminders.length} pending reminders for user ${userDiscordId}`,
+		);
+		return validatedReminders;
+	} catch (error) {
+		log.error(
+			`Error loading pending reminders for user ${userDiscordId}:`,
+			error,
+		);
+		return null;
+	}
+}

@@ -27,6 +27,25 @@ import {
 type Provider = keyof typeof TRANSLATOR_COLORS;
 
 /**
+ * Discord's maximum field value length for embeds
+ */
+const MAX_FIELD_VALUE_LENGTH = 1024;
+
+/**
+ * Truncates a field value to Discord's maximum allowed length.
+ * Adds ellipsis if truncation occurs.
+ * @param value - The field value to truncate
+ * @returns Truncated value that fits within Discord's limits
+ */
+function truncateFieldValue(value: string): string {
+	if (value.length <= MAX_FIELD_VALUE_LENGTH) {
+		return value;
+	}
+	// Reserve 3 characters for ellipsis
+	return `${value.substring(0, MAX_FIELD_VALUE_LENGTH - 3)}...`;
+}
+
+/**
  * Creates a standard info embed for non-interaction contexts.
  * This is a low-level utility - prefer using sendStandardEmbed for consistency.
  * @param locale - The locale to use for strings
@@ -97,11 +116,14 @@ export function createSummaryEmbed(
 						: (field.name ?? "");
 
 					// 4. Determine the field value: Use localized valueKey if present, otherwise use direct value
-					const value = field.valueKey
+					const rawValue = field.valueKey
 						? localizer(locale, field.valueKey, field.valueVars) // Localize valueKey using valueVars
 						: (field.value ?? ""); // Otherwise, use the value directly
 
-					// 5. Return the structured APIEmbedField object
+					// 5. Truncate value to Discord's maximum field value length (1024 chars)
+					const value = truncateFieldValue(rawValue);
+
+					// 6. Return the structured APIEmbedField object
 					return {
 						name,
 						value,

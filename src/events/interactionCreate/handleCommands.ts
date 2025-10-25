@@ -30,6 +30,7 @@ const MODAL_COMMANDS = new Set([
 	"config.humanizerdegree",
 	"config.model",
 	"config.apikeyset",
+	"preset.generate", // AI-powered preset generation with modal
 ]);
 
 /**

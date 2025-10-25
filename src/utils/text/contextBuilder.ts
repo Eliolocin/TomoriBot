@@ -4,6 +4,7 @@ import {
 	isBlacklisted, // Import blacklist checker
 	loadTomoriState,
 	loadUserRow,
+	getPendingRemindersForUser,
 } from "../db/dbRead"; // Import session helpers
 import {
 	ContextItemTag,
@@ -588,7 +589,40 @@ export async function buildContext({
 				}
 			}
 
-			// 6.b. Add User Status (always, if userRow is valid)
+			// 6.b. Add Pending Reminders (if any exist)
+			const pendingReminders = await getPendingRemindersForUser(
+				userDiscordId,
+				guildId,
+			);
+
+			if (pendingReminders && pendingReminders.length > 0) {
+				userSpecificContent += `### ${botName}'s pending reminders for ${nickname} (User ID: ${userDiscordId})\n`;
+				userSpecificContent += `${botName} has set ${pendingReminders.length} reminder${pendingReminders.length > 1 ? "s" : ""} for ${nickname}:\n`;
+
+				for (const reminder of pendingReminders) {
+					// Format the reminder time in a human-readable way
+					const reminderDate = new Date(reminder.reminder_time);
+					const formattedTime = reminderDate.toLocaleString("en-US", {
+						weekday: "short",
+						year: "numeric",
+						month: "short",
+						day: "numeric",
+						hour: "2-digit",
+						minute: "2-digit",
+						timeZoneName: "short",
+					});
+
+					userSpecificContent += `- "${reminder.reminder_purpose}" (scheduled for ${formattedTime})\n`;
+				}
+
+				userSpecificContent += "\n";
+
+				log.info(
+					`Added ${pendingReminders.length} pending reminder(s) to context for user ${userDiscordId} in guild ${guildId}`,
+				);
+			}
+
+			// 6.c. Add User Status (always, if userRow is valid)
 			// For DMs, presence information is not available since there's no guild context
 			const presenceInfo = isDMChannel
 				? "Online (Direct Message)" // Simple fallback for DMs

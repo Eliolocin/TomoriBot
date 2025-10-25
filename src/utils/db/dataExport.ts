@@ -7,6 +7,7 @@ import {
 	type PersonalExport,
 	type ServerExport,
 	type ExportResult,
+	type PersonalityExportResult,
 } from "../../types/db/dataExport";
 
 /**
@@ -181,6 +182,103 @@ export async function exportServerData(
 		};
 	} catch (error) {
 		log.error(`Error exporting server data for server ${serverDiscId}:`, error);
+		return {
+			success: false,
+			error: "commands.data.export.error_export_failed",
+		};
+	}
+}
+
+/**
+ * Exports personality data as a human-readable text file
+ * @param serverDiscId - Discord server ID to export personality for
+ * @returns PersonalityExportResult containing formatted text or error
+ */
+export async function exportPersonalityData(
+	serverDiscId: string,
+): Promise<PersonalityExportResult> {
+	try {
+		// 1. Get internal server ID and personality data
+		const rows = await sql`
+			SELECT
+				t.tomori_nickname,
+				t.attribute_list,
+				t.sample_dialogues_in,
+				t.sample_dialogues_out
+			FROM tomoris t
+			JOIN servers s ON t.server_id = s.server_id
+			WHERE s.server_disc_id = ${serverDiscId}
+			LIMIT 1
+		`;
+
+		if (!rows.length) {
+			return {
+				success: false,
+				error: "commands.data.export.error_no_personality_data",
+			};
+		}
+
+		const personalityData = rows[0];
+
+		// 2. Format personality data as human-readable text
+		let textOutput = "";
+
+		// Add header with personality name
+		textOutput += `========================================\n`;
+		textOutput += `TOMORI PERSONALITY EXPORT\n`;
+		textOutput += `========================================\n\n`;
+		textOutput += `Personality Name: ${personalityData.tomori_nickname}\n`;
+		textOutput += `Exported: ${new Date().toISOString()}\n\n`;
+
+		// Add attributes section
+		textOutput += `========================================\n`;
+		textOutput += `ATTRIBUTES\n`;
+		textOutput += `========================================\n\n`;
+
+		const attributes = personalityData.attribute_list || [];
+		if (attributes.length > 0) {
+			attributes.forEach((attr: string, index: number) => {
+				textOutput += `${index + 1}. ${attr}\n`;
+			});
+		} else {
+			textOutput += `No attributes defined.\n`;
+		}
+
+		textOutput += `\n`;
+
+		// Add sample dialogues section
+		textOutput += `========================================\n`;
+		textOutput += `SAMPLE DIALOGUES\n`;
+		textOutput += `========================================\n\n`;
+
+		const dialoguesIn = personalityData.sample_dialogues_in || [];
+		const dialoguesOut = personalityData.sample_dialogues_out || [];
+
+		if (dialoguesIn.length > 0 && dialoguesOut.length > 0) {
+			const maxLength = Math.max(dialoguesIn.length, dialoguesOut.length);
+
+			for (let i = 0; i < maxLength; i++) {
+				textOutput += `--- Dialogue ${i + 1} ---\n`;
+				textOutput += `User: ${dialoguesIn[i] || "(none)"}\n`;
+				textOutput += `Tomori: ${dialoguesOut[i] || "(none)"}\n\n`;
+			}
+		} else {
+			textOutput += `No sample dialogues defined.\n\n`;
+		}
+
+		// Add footer note
+		textOutput += `========================================\n`;
+		textOutput += `NOTE\n`;
+		textOutput += `========================================\n\n`;
+		textOutput += `This export is for informational purposes only.\n`;
+		textOutput += `To import personalities, use the /preset commands.\n`;
+
+		return {
+			success: true,
+			text: textOutput,
+		};
+	} catch (error) {
+		log.error(`Error exporting personality data for server ${serverDiscId}:`, error);
 		return {
 			success: false,
 			error: "commands.data.export.error_export_failed",

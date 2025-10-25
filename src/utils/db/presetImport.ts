@@ -14,7 +14,7 @@ import {
 } from "../../types/preset/presetExport";
 import {
 	validateMemoryContent,
-	validateSampleDialogueContent,
+	validateAttributeAndDialogue,
 } from "./memoryLimits";
 import { validateTomoriConfigFields } from "./sqlSecurity";
 
@@ -31,13 +31,13 @@ export async function importPresetData(
 	try {
 		// 1. Validate all array content for security
 		// Use appropriate validation for each content type:
-		// - Attributes: Use regular memory validation (256 char limit)
+		// - Attributes: Use sample dialogue validation (2000 char limit) for long personality descriptions
 		// - Sample dialogues: Use sample dialogue validation (2000 char limit)
 		// - Trigger words: Use regular memory validation (256 char limit)
 
-		// Check attribute_list
+		// Check attribute_list (use 2000 char limit for detailed personality descriptions)
 		for (const attribute of importData.attribute_list) {
-			const validation = validateMemoryContent(attribute);
+			const validation = validateAttributeAndDialogue(attribute);
 			if (!validation.isValid) {
 				return {
 					success: false,
@@ -48,7 +48,7 @@ export async function importPresetData(
 
 		// Check sample_dialogues_in (uses higher limit for sample dialogues)
 		for (const dialogue of importData.sample_dialogues_in) {
-			const validation = validateSampleDialogueContent(dialogue);
+			const validation = validateAttributeAndDialogue(dialogue);
 			if (!validation.isValid) {
 				return {
 					success: false,
@@ -59,7 +59,7 @@ export async function importPresetData(
 
 		// Check sample_dialogues_out (uses higher limit for sample dialogues)
 		for (const dialogue of importData.sample_dialogues_out) {
-			const validation = validateSampleDialogueContent(dialogue);
+			const validation = validateAttributeAndDialogue(dialogue);
 			if (!validation.isValid) {
 				return {
 					success: false,

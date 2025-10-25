@@ -143,7 +143,7 @@ export async function execute(
 			name: filename,
 		});
 
-		// 8. Send to channel (visible to everyone for transparency)
+		// 8. Send to channel with embedded image (visible to everyone for transparency)
 		await interaction.editReply({
 			embeds: [
 				new EmbedBuilder()
@@ -153,7 +153,8 @@ export async function execute(
 							nickname: nickname,
 						}),
 					)
-					.setColor(ColorCode.SUCCESS),
+					.setColor(ColorCode.SUCCESS)
+					.setImage(`attachment://${filename}`),
 			],
 			files: [attachment],
 		});

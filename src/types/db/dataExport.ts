@@ -88,6 +88,15 @@ export interface ExportResult {
 }
 
 /**
+ * Result of personality text export operation
+ */
+export interface PersonalityExportResult {
+	success: boolean;
+	text?: string;
+	error?: string;
+}
+
+/**
  * Result of import operation
  */
 export interface ImportResult {

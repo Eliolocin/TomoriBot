@@ -200,7 +200,46 @@ export async function execute(
 			return;
 		}
 
-		// 15. Log success and show success message
+		// 15. Reset guild avatar and server nickname to none
+		try {
+			// Reset server nickname if in a guild
+			if (interaction.guild?.members.me) {
+				await interaction.guild.members.me.setNickname(null);
+				log.info(
+					`Reset server nickname for guild ${interaction.guild.id} after applying preset`,
+				);
+			}
+
+			// Reset guild-specific avatar to none using Discord API
+			if (interaction.guild) {
+				const endpoint = `https://discord.com/api/v10/guilds/${interaction.guild.id}/members/@me`;
+				const response = await fetch(endpoint, {
+					method: "PATCH",
+					headers: {
+						Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ avatar: null }),
+				});
+
+				if (response.ok) {
+					log.info(
+						`Reset guild avatar for guild ${interaction.guild.id} after applying preset`,
+					);
+				} else {
+					log.warn(
+						`Failed to reset guild avatar: ${response.status} ${response.statusText}`,
+					);
+				}
+			}
+		} catch (avatarError) {
+			// Log avatar/nickname reset errors but don't fail the command
+			log.warn(
+				`Failed to reset avatar or nickname after applying preset: ${avatarError}`,
+			);
+		}
+
+		// 16. Log success and show success message
 		log.success(
 			`Applied preset "${selectedPreset.tomori_preset_name}" to server ${tomoriState.server_id} by user ${userData.user_disc_id}`,
 		);
@@ -214,7 +253,7 @@ export async function execute(
 			color: ColorCode.SUCCESS,
 		});
 	} catch (error) {
-		// 16. Log error with context
+		// 17. Log error with context
 		let serverIdForError: number | null = null;
 		let tomoriIdForError: number | null = null;
 		if (interaction.guild?.id) {
@@ -240,7 +279,7 @@ export async function execute(
 			context,
 		);
 
-		// 17. Inform user of unknown error
+		// 18. Inform user of unknown error
 		if (!interaction.replied && !interaction.deferred) {
 			await interaction.reply({
 				content: localizer(locale, "general.errors.unknown_error_description"),

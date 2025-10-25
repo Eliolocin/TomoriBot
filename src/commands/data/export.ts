@@ -8,7 +8,11 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
-import { exportPersonalData, exportServerData } from "../../utils/db/dataExport";
+import {
+	exportPersonalData,
+	exportServerData,
+	exportPersonalityData,
+} from "../../utils/db/dataExport";
 
 /**
  * Configure the 'export' subcommand
@@ -35,6 +39,10 @@ export const configureSubcommand = (
 						name: localizer("en-US", "commands.data.export.type_choice_server"),
 						value: "server",
 					},
+					{
+						name: localizer("en-US", "commands.data.export.type_choice_personality"),
+						value: "personality",
+					},
 				),
 		);
 
@@ -56,9 +64,9 @@ export async function execute(
 	const exportType = interaction.options.getString("type", true);
 
 	try {
-		// 2. Check permissions for server exports
-		if (exportType === "server") {
-			// Server exports require Manage Server permission
+		// 2. Check permissions for server and personality exports
+		if (exportType === "server" || exportType === "personality") {
+			// Server and personality exports require Manage Server permission
 			const hasPermission =
 				interaction.memberPermissions?.has("ManageGuild") ?? false;
 
@@ -72,7 +80,7 @@ export async function execute(
 				return;
 			}
 
-			// Server exports require a guild context
+			// Server and personality exports require a guild context
 			if (!interaction.guild) {
 				await replyInfoEmbed(interaction, locale, {
 					titleKey: "general.errors.guild_only_title",
@@ -87,8 +95,96 @@ export async function execute(
 		// 3. Defer reply while we process
 		await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-		// 4. Export data based on type
-		let exportResult: Awaited<ReturnType<typeof exportPersonalData>> | Awaited<ReturnType<typeof exportServerData>>;
+		// 4. Handle personality export separately (returns text instead of JSON)
+		if (exportType === "personality" && interaction.guild) {
+			const personalityResult = await exportPersonalityData(
+				interaction.guild.id,
+			);
+
+			if (!personalityResult.success || !personalityResult.text) {
+				await interaction.editReply({
+					embeds: [
+						new EmbedBuilder()
+							.setTitle(localizer(locale, "commands.data.export.failed_title"))
+							.setDescription(
+								personalityResult.error
+									? localizer(locale, personalityResult.error)
+									: localizer(locale, "commands.data.export.failed_description"),
+							)
+							.setColor(ColorCode.ERROR),
+					],
+				});
+				return;
+			}
+
+			// Create text file attachment
+			const filename = `tomori-personality-${interaction.guild.id}-${Date.now()}.txt`;
+			const attachment = new AttachmentBuilder(
+				Buffer.from(personalityResult.text, "utf-8"),
+				{
+					name: filename,
+				},
+			);
+
+			// Get bot's guild avatar for the thumbnail
+			const botMember = await interaction.guild.members.fetch(
+				interaction.client.user.id,
+			);
+			const botAvatarUrl = botMember.displayAvatarURL({ size: 256 });
+
+			// Send to user's DM with bot avatar thumbnail
+			try {
+				await interaction.user.send({
+					embeds: [
+						new EmbedBuilder()
+							.setTitle(localizer(locale, "commands.data.export.dm_title"))
+							.setDescription(
+								localizer(locale, "commands.data.export.dm_description_personality"),
+							)
+							.setThumbnail(botAvatarUrl)
+							.setColor(ColorCode.INFO),
+					],
+					files: [attachment],
+				});
+
+				// Confirm success in the channel
+				await interaction.editReply({
+					embeds: [
+						new EmbedBuilder()
+							.setTitle(localizer(locale, "commands.data.export.success_title"))
+							.setDescription(
+								localizer(
+									locale,
+									"commands.data.export.success_description_personality",
+								),
+							)
+							.setColor(ColorCode.SUCCESS),
+					],
+				});
+			} catch (dmError) {
+				// DM failed, likely because user has DMs disabled
+				log.warn(
+					`Failed to send personality export DM to user ${interaction.user.id}:`,
+					dmError as Error,
+				);
+				await interaction.editReply({
+					embeds: [
+						new EmbedBuilder()
+							.setTitle(localizer(locale, "commands.data.export.dm_failed_title"))
+							.setDescription(
+								localizer(locale, "commands.data.export.dm_failed_description"),
+							)
+							.setColor(ColorCode.ERROR),
+					],
+				});
+			}
+			return;
+		}
+
+		// 5. Export data based on type (personal or server)
+		let exportResult:
+			| Awaited<ReturnType<typeof exportPersonalData>>
+			| Awaited<ReturnType<typeof exportServerData>>;
 		let filename: string;
 
 		if (exportType === "personal") {
@@ -111,7 +207,7 @@ export async function execute(
 			return;
 		}
 
-		// 5. Handle export errors
+		// 6. Handle export errors
 		if (!exportResult.success || !exportResult.data) {
 			await interaction.editReply({
 				embeds: [
@@ -128,18 +224,19 @@ export async function execute(
 			return;
 		}
 
-		// 6. Create JSON file attachment
+		// 7. Create JSON file attachment
 		const jsonString = JSON.stringify(exportResult.data, null, 2);
 		const attachment = new AttachmentBuilder(Buffer.from(jsonString, "utf-8"), {
 			name: filename,
 		});
 
-		// 7. Send to user's DM
+		// 8. Send to user's DM
 		try {
 			// Use different description for server exports (mentions excluded data)
-			const dmDescriptionKey = exportType === "server"
-				? "commands.data.export.dm_description_server"
-				: "commands.data.export.dm_description";
+			const dmDescriptionKey =
+				exportType === "server"
+					? "commands.data.export.dm_description_server"
+					: "commands.data.export.dm_description";
 
 			await interaction.user.send({
 				embeds: [
@@ -155,7 +252,7 @@ export async function execute(
 				files: [attachment],
 			});
 
-			// 8. Confirm success in the channel
+			// 9. Confirm success in the channel
 			await interaction.editReply({
 				embeds: [
 					new EmbedBuilder()
