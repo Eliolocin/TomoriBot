@@ -141,31 +141,19 @@ jobs:
     runs-on: self-hosted
     needs: setup-environment
     steps:
-      - name: Test runner network connectivity
+      - name: Pre-download Python packages (workaround for Docker network issues)
         run: |
-          echo "Testing network connectivity from runner..."
+          echo "Downloading Python packages on runner (has internet access)..."
 
-          # Test if runner can reach PyPI
-          try {
-            $response = Invoke-WebRequest -Uri "https://pypi.org/simple/pydantic/" -TimeoutSec 10 -UseBasicParsing
-            echo "✓ Runner can reach PyPI directly (Status: $($response.StatusCode))"
-          } catch {
-            echo "✗ Runner cannot reach PyPI: $($_.Exception.Message)"
-          }
+          # Create directory for pip packages
+          New-Item -ItemType Directory -Force -Path "$PWD\docker-pip-cache"
 
-          # Test DNS resolution
-          try {
-            $dns = Resolve-DnsName pypi.org -ErrorAction Stop
-            echo "✓ DNS resolution works: $($dns.IPAddress -join ', ')"
-          } catch {
-            echo "✗ DNS resolution failed: $($_.Exception.Message)"
-          }
+          # Download packages using runner's pip (which has internet access)
+          pip3 download --dest "$PWD\docker-pip-cache" pydantic>=2.0.0
+          pip3 download --dest "$PWD\docker-pip-cache" mcp-server-fetch==2025.4.7
 
-          # Test Docker network
-          echo "`nTesting Docker network connectivity..."
-          docker run --rm alpine sh -c "ping -c 2 8.8.8.8 || echo 'Cannot ping 8.8.8.8'"
-          docker run --rm alpine sh -c "nslookup pypi.org || echo 'Cannot resolve pypi.org'"
-          docker run --rm alpine sh -c "wget -O- https://pypi.org/simple/ --timeout=5 || echo 'Cannot reach PyPI'"
+          echo "Packages downloaded to docker-pip-cache/"
+          Get-ChildItem "$PWD\docker-pip-cache"
 
       - name: Build new image
         run: |

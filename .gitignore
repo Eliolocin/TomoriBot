@@ -5,6 +5,7 @@
 
 # Docker volumes and data
 docker-data/
+docker-pip-cache/
 
 # Other folders
 .deprecated/

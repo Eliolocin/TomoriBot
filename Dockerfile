@@ -31,14 +31,24 @@ USER tomori
 # Add user's local bin directory to PATH for pip installed scripts
 ENV PATH="/home/tomori/.local/bin:$PATH"
 
+# Copy pre-downloaded Python packages (downloaded by GitHub Actions runner)
+# This avoids network issues during Docker build in CI/CD
+# For local builds, this directory may be empty (packages will be downloaded from PyPI)
+COPY --chown=tomori:tomori docker-pip-cache/ /tmp/pip-packages/
+
 # Install MCP servers that are required by TomoriBot
 # Fetch MCP server needs to be pre-installed with pip
 # Install as tomori user to avoid permission issues
 # Use --break-system-packages for Alpine Linux PEP 668 compliance
-# Use --network=host to access the internet through host network (fixes network unreachable errors)
-# Install pydantic first to resolve dependencies, then pin mcp-server-fetch to latest version
-RUN --network=host pip3 install --user --break-system-packages pydantic>=2.0.0 && \
-    pip3 install --user --break-system-packages mcp-server-fetch==2025.4.7
+# Try to install from local cache first (for CI/CD), fallback to PyPI (for local builds)
+RUN if [ "$(ls -A /tmp/pip-packages 2>/dev/null)" ]; then \
+        echo "Installing from pre-downloaded packages..." && \
+        pip3 install --user --break-system-packages --no-index --find-links=/tmp/pip-packages pydantic mcp-server-fetch; \
+    else \
+        echo "No pre-downloaded packages found, downloading from PyPI..." && \
+        pip3 install --user --break-system-packages pydantic>=2.0.0 mcp-server-fetch==2025.4.7; \
+    fi && \
+    rm -rf /tmp/pip-packages
 
 # Copy package files first for better Docker layer caching
 # This is like getting the "lease agreement" (dependencies) ready first
