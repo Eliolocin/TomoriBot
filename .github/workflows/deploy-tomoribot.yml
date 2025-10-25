@@ -141,19 +141,24 @@ jobs:
     runs-on: self-hosted
     needs: setup-environment
     steps:
-      - name: Pre-download Python packages with ALL dependencies
+      - name: Pre-download Python packages with platform-specific wheels
         run: |
-          echo "Downloading Python packages (source distributions for Alpine compatibility)..."
+          echo "Downloading Python packages (musllinux wheels for Alpine 3.20 Python 3.12)..."
 
           # Create directory for pip packages
           New-Item -ItemType Directory -Force -Path "$PWD\docker-pip-cache"
 
-          # Download source distributions (--no-binary :all:)
-          # This downloads .tar.gz files that can be compiled on any platform
-          # The container will compile them during installation
+          # Download platform-specific wheels for Alpine Linux (musllinux)
+          # Target Python 3.12 (used by Alpine 3.20) with musllinux_1_2 compatibility
+          # This downloads pre-compiled .whl files that match Alpine's architecture
           pip3 download `
             --dest "$PWD\docker-pip-cache" `
-            --no-binary :all: `
+            --platform musllinux_1_2_x86_64 `
+            --platform musllinux_1_1_x86_64 `
+            --python-version 3.12 `
+            --implementation cp `
+            --abi cp312 `
+            --only-binary :all: `
             mcp-server-fetch==2025.4.7
 
           echo "Packages downloaded to docker-pip-cache/"
