@@ -2,7 +2,12 @@ name: Deploy TomoriBot
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:  # Manual trigger - allows running on any branch
+    inputs:
+      branch:
+        description: 'Branch to deploy (leave empty for current branch)'
+        required: false
+        default: ''
 
 jobs:
   # 🔐 SECRETS VALIDATION
@@ -136,10 +141,10 @@ jobs:
     runs-on: self-hosted
     needs: setup-environment
     steps:
-      - name: Build new image (without Buildkit)
+      - name: Build new image
         run: |
           echo "Building new TomoriBot image..."
-          $env:DOCKER_BUILDKIT=0
+          $env:DOCKER_BUILDKIT=1
           docker compose build --no-cache
 
   deploy-containers:
