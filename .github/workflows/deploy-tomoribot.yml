@@ -143,14 +143,18 @@ jobs:
     steps:
       - name: Pre-download Python packages with ALL dependencies
         run: |
-          echo "Downloading Python packages with all dependencies on runner..."
+          echo "Downloading Python packages (source distributions for Alpine compatibility)..."
 
           # Create directory for pip packages
           New-Item -ItemType Directory -Force -Path "$PWD\docker-pip-cache"
 
-          # Download packages AND all their dependencies recursively
-          # This ensures pydantic-core and other transitive deps are included
-          pip3 download --dest "$PWD\docker-pip-cache" mcp-server-fetch==2025.4.7
+          # Download source distributions (--no-binary :all:)
+          # This downloads .tar.gz files that can be compiled on any platform
+          # The container will compile them during installation
+          pip3 download `
+            --dest "$PWD\docker-pip-cache" `
+            --no-binary :all: `
+            mcp-server-fetch==2025.4.7
 
           echo "Packages downloaded to docker-pip-cache/"
           Get-ChildItem "$PWD\docker-pip-cache"

@@ -9,13 +9,17 @@ WORKDIR /app
 # Install system dependencies that might be needed
 # Alpine Linux is minimal, so we add some common tools
 # Include Python/pip and Node.js/npm for MCP server support
+# Add build dependencies for compiling Python packages from source
 RUN apk add --no-cache \
     ca-certificates \
     tzdata \
     python3 \
     py3-pip \
     nodejs \
-    npm
+    npm \
+    gcc \
+    musl-dev \
+    python3-dev
 
 # Create a non-root user for security
 # It's like giving TomoriBot her own user account instead of admin access
