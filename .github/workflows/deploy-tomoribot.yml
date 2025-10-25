@@ -141,15 +141,15 @@ jobs:
     runs-on: self-hosted
     needs: setup-environment
     steps:
-      - name: Pre-download Python packages (workaround for Docker network issues)
+      - name: Pre-download Python packages with ALL dependencies
         run: |
-          echo "Downloading Python packages on runner (has internet access)..."
+          echo "Downloading Python packages with all dependencies on runner..."
 
           # Create directory for pip packages
           New-Item -ItemType Directory -Force -Path "$PWD\docker-pip-cache"
 
-          # Download packages using runner's pip (which has internet access)
-          pip3 download --dest "$PWD\docker-pip-cache" pydantic>=2.0.0
+          # Download packages AND all their dependencies recursively
+          # This ensures pydantic-core and other transitive deps are included
           pip3 download --dest "$PWD\docker-pip-cache" mcp-server-fetch==2025.4.7
 
           echo "Packages downloaded to docker-pip-cache/"

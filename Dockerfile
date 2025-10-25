@@ -40,13 +40,13 @@ COPY --chown=tomori:tomori docker-pip-cache/ /tmp/pip-packages/
 # Fetch MCP server needs to be pre-installed with pip
 # Install as tomori user to avoid permission issues
 # Use --break-system-packages for Alpine Linux PEP 668 compliance
-# Try to install from local cache first (for CI/CD), fallback to PyPI (for local builds)
+# Let pip handle all dependencies automatically (including pydantic if needed)
 RUN if [ "$(ls -A /tmp/pip-packages 2>/dev/null)" ]; then \
-        echo "Installing from pre-downloaded packages..." && \
-        pip3 install --user --break-system-packages --no-index --find-links=/tmp/pip-packages pydantic mcp-server-fetch; \
+        echo "Installing from pre-downloaded packages (with all dependencies)..." && \
+        pip3 install --user --break-system-packages --no-index --find-links=/tmp/pip-packages mcp-server-fetch; \
     else \
         echo "No pre-downloaded packages found, downloading from PyPI..." && \
-        pip3 install --user --break-system-packages pydantic>=2.0.0 mcp-server-fetch==2025.4.7; \
+        pip3 install --user --break-system-packages mcp-server-fetch==2025.4.7; \
     fi && \
     rm -rf /tmp/pip-packages
 
