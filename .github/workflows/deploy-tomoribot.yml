@@ -141,6 +141,32 @@ jobs:
     runs-on: self-hosted
     needs: setup-environment
     steps:
+      - name: Test runner network connectivity
+        run: |
+          echo "Testing network connectivity from runner..."
+
+          # Test if runner can reach PyPI
+          try {
+            $response = Invoke-WebRequest -Uri "https://pypi.org/simple/pydantic/" -TimeoutSec 10 -UseBasicParsing
+            echo "✓ Runner can reach PyPI directly (Status: $($response.StatusCode))"
+          } catch {
+            echo "✗ Runner cannot reach PyPI: $($_.Exception.Message)"
+          }
+
+          # Test DNS resolution
+          try {
+            $dns = Resolve-DnsName pypi.org -ErrorAction Stop
+            echo "✓ DNS resolution works: $($dns.IPAddress -join ', ')"
+          } catch {
+            echo "✗ DNS resolution failed: $($_.Exception.Message)"
+          }
+
+          # Test Docker network
+          echo "`nTesting Docker network connectivity..."
+          docker run --rm alpine sh -c "ping -c 2 8.8.8.8 || echo 'Cannot ping 8.8.8.8'"
+          docker run --rm alpine sh -c "nslookup pypi.org || echo 'Cannot resolve pypi.org'"
+          docker run --rm alpine sh -c "wget -O- https://pypi.org/simple/ --timeout=5 || echo 'Cannot reach PyPI'"
+
       - name: Build new image
         run: |
           echo "Building new TomoriBot image..."
