@@ -308,13 +308,16 @@ export async function execute(
 			return;
 		}
 
-		// 12. Try to set TomoriBot's server-specific avatar (non-fatal if fails)
+		// 12. Try to set TomoriBot's server-specific avatar and nickname (non-fatal if fails)
 		try {
 			// Convert PNG buffer to base64 data URI
 			const base64 = pngBuffer.toString("base64");
 			const avatarDataUri = `data:image/png;base64,${base64}`;
 
-			// Use Discord API to set bot's guild avatar
+			// Get the imported nickname for the bot
+			const importedNickname = importResult.itemsImported?.nickname;
+
+			// Use Discord API to set bot's guild avatar and nickname
 			const endpoint = `https://discord.com/api/v10/guilds/${interaction.guild.id}/members/@me`;
 			const response = await fetch(endpoint, {
 				method: "PATCH",
@@ -324,23 +327,24 @@ export async function execute(
 				},
 				body: JSON.stringify({
 					avatar: avatarDataUri,
+					nick: importedNickname, // Set bot's server nickname to match personality
 				}),
 			});
 
 			if (response.ok) {
 				log.success(
-					`Successfully updated TomoriBot's server avatar for ${interaction.guild.id} during preset import`,
+					`Successfully updated TomoriBot's server avatar and nickname to "${importedNickname}" for ${interaction.guild.id} during preset import`,
 				);
 			} else {
 				const errorText = await response.text();
 				log.warn(
-					`Failed to update bot's server avatar (non-fatal): ${response.status} ${response.statusText} - ${errorText}`,
+					`Failed to update bot's server avatar/nickname (non-fatal): ${response.status} ${response.statusText} - ${errorText}`,
 				);
 			}
 		} catch (avatarError) {
 			// Non-fatal error - personality was imported successfully
 			log.warn(
-				`Failed to update bot's server avatar during preset import (non-fatal): ${avatarError instanceof Error ? avatarError.message : "Unknown error"}`,
+				`Failed to update bot's server avatar/nickname during preset import (non-fatal): ${avatarError instanceof Error ? avatarError.message : "Unknown error"}`,
 			);
 		}
 
