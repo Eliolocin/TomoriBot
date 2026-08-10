@@ -9,7 +9,7 @@ head:
     content: "TomoriBot | AI Companions & Personas for Your Discord Server"
 # Hand-written search snippet; overrides the auto-derived description from
 # routeData.ts middleware.
-description: "Run multiple AI companions in one Discord server. Custom personas with their own avatars, triggers, and speaking styles. Free and open-source."
+description: "Run multiple AI companions in one Discord server. Custom personas with their own avatars, triggers, and speaking styles."
 sidebar:
   order: 2
 ---

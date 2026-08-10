@@ -7,7 +7,7 @@ head:
     content: "TomoriBot | Self-Host a Free Open-Source AI Discord Bot"
 # Hand-written search snippet; overrides the auto-derived description from
 # routeData.ts middleware.
-description: "Self-host TomoriBot via setup wizard, Docker Compose, or manual install. Add local LLMs, ComfyUI, and SearXNG for a fully private, free AI Discord bot."
+description: "Easily self-host a fully local and private AI Discord bot with KoboldCPP, ComfyUI, and more."
 aiGenerated: false
 sidebar:
   label: "Overview"
