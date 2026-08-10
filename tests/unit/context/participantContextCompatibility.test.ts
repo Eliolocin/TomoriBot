@@ -99,7 +99,7 @@ describe("participant context compatibility matrix", () => {
       privacy: PrivacyLevel.FULL,
       personalization: true,
       blacklisted: false,
-      savedNameVisible: false,
+      savedNameVisible: true,
       rolesVisible: false,
       memoriesVisible: false,
     },
@@ -140,7 +140,7 @@ describe("participant context compatibility matrix", () => {
         expect(text).toContain(
           "Alice Saved's Physical Appearance".replace(
             "Alice Saved",
-            scenario.savedNameVisible ? "Alice Saved" : "Alice Guild",
+            scenario.savedNameVisible ? "Alice Saved" : "Alice Display",
           ),
         );
         expect(text).toContain('ID:92 "Bring the atlas"');
@@ -150,7 +150,7 @@ describe("participant context compatibility matrix", () => {
     });
   }
 
-  it("recognizes a saved nickname that full privacy keeps out of rendered aliases", async () => {
+  it("keeps deterministic saved-name rendering available at full privacy", async () => {
     const fixture = createParticipantContextFixture();
     try {
       const referencedUser = fixture.users.get(PARTICIPANT_FIXTURE_IDS.referencedHuman);
@@ -201,9 +201,8 @@ describe("participant context compatibility matrix", () => {
       if (!item) throw new Error("Reference compatibility fixture unexpectedly rendered no context item");
 
       const text = getText(item);
-      expect(text).not.toContain("Bob Saved");
-      expect(text).toContain("Bob Guild");
-      expect(item.conversationUsers?.[0]?.aliases).not.toContain("Bob Saved");
+      expect(text).toContain("Bob Saved");
+      expect(item.conversationUsers?.[0]?.aliases).toContain("Bob Saved");
     } finally {
       fixture.restoreRepositories();
     }

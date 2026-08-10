@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { loadUserNaiProfileByDiscordId } from "@/tools/functionCalls/generateImageNaiTool";
 import { PrivacyLevel } from "@/types/db/schema";
 import { clearUserCache } from "@/utils/cache/userCache";
-import { exportRepository, importRepository, userRepository } from "@/utils/db/repositories";
+import { exportRepository, importRepository, userNamingRepository, userRepository } from "@/utils/db/repositories";
 import { splitSqlStatements } from "@/utils/db/sqlSplitter";
 import { FIXTURE_IDS, cleanupFixtures, insertFixtures, type FixtureRefs } from "./setup/fixtures";
 import { DB_TESTS_AVAILABLE, setupTestDb, testSql } from "./setup/testDb";
@@ -115,10 +115,10 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User personalization config cutover", () =
   it("migration 043 overwrites stale split rows with users-table drift", async () => {
     const userDiscId = "_rt_user_personalization_drift";
     const [userRow] = await testSql`
-      INSERT INTO users (user_disc_id, user_nickname, language_pref)
-      VALUES (${userDiscId}, '_rt_drift', 'en')
+      INSERT INTO users (user_disc_id, language_pref)
+      VALUES (${userDiscId}, 'en')
       ON CONFLICT (user_disc_id) DO UPDATE
-      SET user_nickname = EXCLUDED.user_nickname
+      SET language_pref = EXCLUDED.language_pref
       RETURNING user_id
     `;
     const userId: number = userRow.user_id;
@@ -196,6 +196,56 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User personalization config cutover", () =
     }
   });
 
+  it("migration 062 preserves moved settings through down and forward migration", async () => {
+    const userDiscId = "_rt_user_naming_migration";
+    const registered = await userRepository.register(userDiscId, "Sparrow", "en-US");
+    if (!registered?.user_id) throw new Error("Expected migration fixture user to have a user_id");
+    await userRepository.update(registered.user_id, {
+      user_nickname: "Lighthouse",
+      timezone_offset: 8,
+      personal_deliberate_tool_mode: "on",
+    });
+
+    const downPath = path.join(process.cwd(), "src", "db", "migrations", "062_user_info_persona_naming.down.sql");
+    const upPath = path.join(process.cwd(), "src", "db", "migrations", "062_user_info_persona_naming.sql");
+    try {
+      await executeSqlFile(downPath);
+      const [legacy] = await testSql`
+        SELECT user_nickname, timezone_offset, personal_deliberate_tool_mode
+        FROM users
+        WHERE user_id = ${registered.user_id}
+      `;
+      expect(legacy).toMatchObject({
+        user_nickname: "Lighthouse",
+        timezone_offset: 8,
+        personal_deliberate_tool_mode: "on",
+      });
+
+      await executeSqlFile(upPath);
+      const [moved] = await testSql`
+        SELECT user_nickname, timezone_offset, personal_deliberate_tool_mode
+        FROM user_personalization_configs
+        WHERE user_id = ${registered.user_id}
+      `;
+      expect(moved).toMatchObject({
+        user_nickname: "Lighthouse",
+        timezone_offset: 8,
+        personal_deliberate_tool_mode: "on",
+      });
+      const legacyColumns = await testSql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name IN ('user_nickname', 'timezone_offset', 'personal_deliberate_tool_mode')
+      `;
+      expect(legacyColumns).toHaveLength(0);
+    } finally {
+      await executeSqlFile(upPath);
+      clearUserCache();
+    }
+  });
+
   it("personal settings export-import round-trips with byte-identical JSON shape", async () => {
     const sourceUserDiscId = "_rt_user_settings_export_source";
     const targetUserDiscId = "_rt_user_settings_export_target";
@@ -212,8 +262,20 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User personalization config cutover", () =
       personal_dtm: "on",
       personal_deliberate_tool_mode: "off",
       timezone_offset: 9,
+      prefix_override: "Captain",
+      suffix_override: "Jr.",
+      gender_identity: "nonbinary",
+      pronouns: "they/them",
+      orientation: "bisexual",
+      addressing_style: "neutral",
     });
     expect(updated?.physical_appearance_tags).toEqual(["blue hair", "round glasses"]);
+    const savedPreference = await userNamingRepository.savePreference(source.user_id, refs.personaLineageId, {
+      nickname_override: "Lighthouse",
+      prefix_override: "",
+      suffix_override: "-senpai",
+    });
+    expect(savedPreference).not.toBeNull();
 
     const toggled = await userRepository.toggleCrossServerShmOptIn(sourceUserDiscId);
     expect(toggled).toBe(true);
@@ -236,6 +298,31 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User personalization config cutover", () =
     expect(JSON.stringify(normalizeExportTimestamp(afterExport.data, beforeExport.data.exported_at))).toBe(
       JSON.stringify(beforeExport.data),
     );
+  });
+
+  it("rolls back persona preferences when an atomic user-info batch cannot update its global row", async () => {
+    const userDiscId = "_rt_user_info_atomic_rollback";
+    const registered = await userRepository.register(userDiscId, "Sparrow", "en-US");
+    if (!registered?.user_id) throw new Error("Expected atomic rollback user to have a user_id");
+    await testSql`DELETE FROM user_personalization_configs WHERE user_id = ${registered.user_id}`;
+
+    await expect(
+      userNamingRepository.applyUserInfoBatch(registered.user_id, {
+        global: { pronouns: "they/them" },
+        persona: {
+          personaLineageId: refs.personaLineageId,
+          patch: { nickname_override: "Lighthouse" },
+        },
+      }),
+    ).rejects.toThrow();
+
+    const preferenceRows = await testSql`
+      SELECT 1
+      FROM user_persona_naming_preferences
+      WHERE user_id = ${registered.user_id}
+        AND persona_lineage_id = ${refs.personaLineageId}
+    `;
+    expect(preferenceRows).toHaveLength(0);
   });
 
   it("legacy full personal export-import still round-trips through sqlImportPersonalData", async () => {

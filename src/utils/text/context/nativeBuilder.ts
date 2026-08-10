@@ -5,7 +5,7 @@ import { buildUncensorInjectionText } from "@/utils/text/uncensor";
 import { createToolPromptMacroResolver, resolvePromptCapabilityValues } from "@/utils/tools/toolPromptMacros";
 import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context";
 import { appendDialogueHistoryContext } from "./dialogueHistory";
-import { convertMentions } from "./mentionNormalizer";
+import { convertMentions as convertMentionsBase } from "./mentionNormalizer";
 import { buildServerMemoryContextItem, buildShortTermMemoryContext } from "./memories";
 import { buildParticipantContextItem } from "./participants";
 import { buildPersonaUserBlocksContextItem } from "./personaUserBlocks";
@@ -13,7 +13,12 @@ import { buildPersonaSpriteContextItem } from "./personaSprites";
 import { buildServerDocumentContextItem } from "./rag";
 import { buildServerEmojiContextItem, buildServerStickerContextItem } from "./serverAssets";
 import { buildServerInfoContextItem } from "./serverInfo";
-import { buildConditioningContextItem, buildPromptContextItems, buildSampleDialogueContextItems } from "./templates";
+import {
+  buildConditioningContextItem,
+  buildPromptContextItems,
+  buildSampleDialogueContextItems,
+  type MentionConverter,
+} from "./templates";
 import { buildVerbatimToolDefinitionsContextItem } from "./toolDefinitions";
 import type { BuildContextParams } from "./types";
 import { SPACER_TEMPLATE } from "./timeAwareness";
@@ -52,6 +57,10 @@ export async function buildContextNative(params: BuildContextParams): Promise<Na
     parentChannelId,
     client,
     triggererName,
+    triggererFormattedName,
+    historyUserLabels,
+    historyPersonaMentionLabels,
+    triggererAddressTerm,
     tomoriNickname,
     tomoriAttributes,
     tomoriConfig,
@@ -76,6 +85,31 @@ export async function buildContextNative(params: BuildContextParams): Promise<Na
     suppressDefaultSystemPrompt = false,
     messageIdMap,
   } = params;
+
+  const convertMentions: MentionConverter = (
+    text,
+    mentionClient,
+    serverId,
+    userName,
+    botName,
+    personalMemoriesEnabled,
+    mentionSnapshot,
+    identityMacroMode,
+  ) =>
+    convertMentionsBase(
+      text,
+      mentionClient,
+      serverId,
+      userName,
+      botName,
+      personalMemoriesEnabled,
+      mentionSnapshot,
+      identityMacroMode,
+      {
+        userFormatted: triggererFormattedName,
+        userTerm: triggererAddressTerm,
+      },
+    );
 
   const contextItems: StructuredContextItem[] = [];
   const tailDirectives: string[] = [];
@@ -329,6 +363,7 @@ export async function buildContextNative(params: BuildContextParams): Promise<Na
     botName,
     personalMemoriesEnabled: tomoriConfig.personal_memories_enabled,
     isUserImpersonation,
+    convertMentions,
   });
   contextItems.push(
     ...(await buildSampleDialogueContextItems({
@@ -358,6 +393,10 @@ export async function buildContextNative(params: BuildContextParams): Promise<Na
     includeTimestamps,
     isUserImpersonation,
     impersonatedUserId,
+    triggererDiscordId: snapshot?.triggererUserRow?.user_disc_id,
+    triggererFormattedName,
+    historyUserLabels,
+    historyPersonaMentionLabels,
     messageIdMap,
     uncensorInputOptions,
     convertMentions,
@@ -409,6 +448,7 @@ async function appendConditioningContext(params: {
   botName: string;
   personalMemoriesEnabled: boolean;
   isUserImpersonation: boolean;
+  convertMentions: MentionConverter;
 }): Promise<void> {
   if (
     params.isUserImpersonation ||
@@ -430,7 +470,7 @@ async function appendConditioningContext(params: {
       personalMemoriesEnabled: params.personalMemoriesEnabled,
       rewardEnabled: params.tomoriState.reward_conditioning_enabled,
       punishEnabled: params.tomoriState.punish_conditioning_enabled,
-      convertMentions,
+      convertMentions: params.convertMentions,
     });
 
     if (conditioningItem) {

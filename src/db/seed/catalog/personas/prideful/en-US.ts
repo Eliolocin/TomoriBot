@@ -68,4 +68,5 @@ export const persona: PersonaInput = {
   avatarPath: "src/db/seed/catalog/personas/zaya",
   triggerWords: ["Zaya"],
   lineageId: 1337,
+  namingConfig: { prefixes: {}, suffixes: {}, addressTerms: {} },
 };

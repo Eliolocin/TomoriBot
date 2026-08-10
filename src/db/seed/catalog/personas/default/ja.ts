@@ -81,4 +81,5 @@ export const persona: PersonaInput = {
   avatarPath: "src/db/seed/catalog/personas/default",
   triggerWords: ["ともり", "ロゼ", "トモリ", "ろせ"],
   lineageId: 4,
+  namingConfig: { prefixes: {}, suffixes: {}, addressTerms: {} },
 };

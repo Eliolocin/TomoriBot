@@ -564,6 +564,23 @@ ST preset schema, typed catalog seeds, and migration marker behavior as runtime 
 
 ## Operational Notes
 
+### User naming and identity ownership
+
+`users` owns account identity, locale, and privacy. User-facing personalization belongs to
+`user_personalization_configs`, including nickname, numeric timezone offset, deliberate-tool
+mode, global prefix/suffix overrides, gender identity, pronouns, orientation, and addressing
+style. Runtime user rows assemble both tables; consumers must not write moved columns on
+`users`.
+
+`user_persona_naming_preferences` stores nullable nickname, prefix, and suffix overrides by
+`(user_id, persona_lineage_id)`. It intentionally has no lineage foreign key, allowing a valid
+preference to survive persona removal and later re-import. An all-inherit row is deleted.
+
+`persona_naming_configs` stores per-style prefix, suffix, and standalone address-term JSON
+maps for materialized personas. `persona_presets.preset_naming_config` is the corresponding
+live pointer value. `server_capabilities_configs.user_info_updates_enabled` is a default-on
+execution and exposure gate for the structured user-info tool.
+
 - `cleanup_expired_cooldowns()` is defined in schema and used by startup cleanup + optional pg_cron.
 - Quota cleanup helpers exist for old image/text/video quota rows (`cleanup_old_image_quotas()`, `cleanup_old_text_quotas()`, `cleanup_old_video_quotas()`).
 - RAG tables are intentionally separate so local development can run without pgvector unless enabled.

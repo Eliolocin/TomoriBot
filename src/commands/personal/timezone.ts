@@ -120,7 +120,11 @@ export async function execute(
           offsetAttempted: newOffset,
         },
       };
-      await log.error("Failed to update users.timezone_offset", new Error("Database update failed"), context);
+      await log.error(
+        "Failed to update user_personalization_configs.timezone_offset",
+        new Error("Database update failed"),
+        context,
+      );
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",

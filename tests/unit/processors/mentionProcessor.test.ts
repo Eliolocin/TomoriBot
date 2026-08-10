@@ -17,6 +17,9 @@ describe("sanitizeUnknownTemplatePlaceholders", () => {
     it("preserves {char}", () => {
       expect(sanitizeUnknownTemplatePlaceholders("{char}")).toBe("{char}");
     });
+    it("preserves formatted user and address term macros", () => {
+      expect(sanitizeUnknownTemplatePlaceholders("{user_formatted} {user_term}")).toBe("{user_formatted} {user_term}");
+    });
     it("is case-insensitive for allowed vars", () => {
       expect(sanitizeUnknownTemplatePlaceholders("{User}")).toBe("{User}");
       expect(sanitizeUnknownTemplatePlaceholders("{BOT}")).toBe("{BOT}");
@@ -44,6 +47,11 @@ describe("sanitizeUnknownTemplatePlaceholders", () => {
     });
     it("preserves {{char}}", () => {
       expect(sanitizeUnknownTemplatePlaceholders("{{char}}")).toBe("{{char}}");
+    });
+    it("preserves double-brace formatted user and address term macros", () => {
+      expect(sanitizeUnknownTemplatePlaceholders("{{user_formatted}} {{user_term}}")).toBe(
+        "{{user_formatted}} {{user_term}}",
+      );
     });
   });
 

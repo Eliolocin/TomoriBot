@@ -885,7 +885,7 @@ class StatRepository implements IRepository<null> {
    * independently. Each cell is collapsed to a single week-hour index
    * `wh = dow*24 + hour` (0-167), the offset (in hours) is added, taken mod 168, then
    * re-split into (dow, hour). Pass offsetHours for the personal scope (sourced from
-   * `users.timezone_offset`, the same source the histogram's peak-hour read uses);
+   * `user_personalization_configs.timezone_offset`, the same source the histogram's peak-hour read uses);
    * omit it for server/persona scope, which use server wall-clock like the rest of
    * the dashboard.
    *

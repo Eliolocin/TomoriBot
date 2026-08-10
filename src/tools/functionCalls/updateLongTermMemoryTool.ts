@@ -221,7 +221,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
               deletedServerMemory.content,
               context.client,
               serverDiscId,
-              triggererRow?.user_nickname,
+              triggererRow?.user_nickname ?? undefined,
               tomoriState.persona_nickname,
               tomoriState?.config.personal_memories_enabled,
             );
@@ -291,7 +291,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
             newContent,
             context.client,
             serverDiscId,
-            triggererRow?.user_nickname,
+            triggererRow?.user_nickname ?? undefined,
             tomoriState.persona_nickname,
             tomoriState?.config.personal_memories_enabled,
           );

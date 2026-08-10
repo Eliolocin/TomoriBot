@@ -71,6 +71,8 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
             client: params.client,
             guildId: params.guildId,
             triggererName: params.triggererName,
+            triggererFormattedName: params.triggererFormattedName,
+            triggererAddressTerm: params.triggererAddressTerm,
             botName: params.tomoriNickname,
             personalMemoriesEnabled: params.tomoriConfig.personal_memories_enabled ?? true,
             toolPromptMacroResolver: presetToolPromptMacroResolver,

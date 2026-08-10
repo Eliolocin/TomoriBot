@@ -11,7 +11,7 @@ const DISCORD_CHANNEL_LINK_REPLACE_PATTERN =
   /https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(?:@me|\d{17,19})\/(\d{17,19})(?:\/(\d{17,19}))?/gi;
 
 /**
- * Controls whether `convertMentions` expands identity macros (`{bot}` / `{char}` / `{user}`).
+ * Controls whether `convertMentions` expands identity macros.
  *
  * - `"resolve"`: expand them into names. Correct for text *we* author: system prompt sections,
  *   persona attributes, sample dialogues, stored memories, and tool/function-call output. These
@@ -28,7 +28,10 @@ function needsConversion(text: string, identityMacroMode: IdentityMacroMode): bo
   return (
     /<[@#][!&]?\d{17,19}>/.test(text) ||
     DISCORD_CHANNEL_LINK_TEST_PATTERN.test(text) ||
-    (identityMacroMode === "resolve" && /(?:\{\{(?:bot|char|user)\}\}|\{(?:bot|char|user)\})/i.test(text))
+    (identityMacroMode === "resolve" &&
+      /(?:\{\{(?:bot|char|user|user_formatted|user_term)\}\}|\{(?:bot|char|user|user_formatted|user_term)\})/i.test(
+        text,
+      ))
   );
 }
 
@@ -73,6 +76,7 @@ export async function convertMentions(
   personalMemoriesEnabled?: boolean,
   snapshot?: import("@/types/misc/context").RequestSnapshot,
   identityMacroMode: IdentityMacroMode = "resolve",
+  identityValues?: { userFormatted?: string; userTerm?: string },
 ): Promise<string> {
   const normalizedText = normalizeDiscordChannelLinks(text);
   if (!needsConversion(text, identityMacroMode)) {
@@ -216,6 +220,8 @@ export async function convertMentions(
     result = replaceTemplateVariables(result, {
       bot: currentTomoriNickname,
       user: triggererName || "User",
+      user_formatted: identityValues?.userFormatted,
+      user_term: identityValues?.userTerm,
     });
   }
 

@@ -78,4 +78,5 @@ export const persona: PersonaInput = {
   avatarPath: "src/db/seed/catalog/personas/gloomy",
   triggerWords: ["tomori", "aphel"],
   lineageId: 1770,
+  namingConfig: { prefixes: {}, suffixes: {}, addressTerms: {} },
 };

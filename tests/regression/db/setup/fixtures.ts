@@ -113,12 +113,10 @@ export async function insertFixtures(db: SQL): Promise<FixtureRefs> {
   await db`DELETE FROM persona_textgen_configs WHERE persona_id = ${personaId}`;
 
   const [userRow] = await db`
-    INSERT INTO users (user_disc_id, user_nickname)
-    VALUES (${FIXTURE_IDS.userDiscId}, '_rt_user')
+    INSERT INTO users (user_disc_id)
+    VALUES (${FIXTURE_IDS.userDiscId})
     ON CONFLICT (user_disc_id) DO UPDATE
-    SET
-      user_nickname = EXCLUDED.user_nickname,
-      privacy_level = 0
+    SET privacy_level = 0
     RETURNING user_id
   `;
   const userId: number = userRow.user_id;
@@ -126,6 +124,7 @@ export async function insertFixtures(db: SQL): Promise<FixtureRefs> {
   await db`
     INSERT INTO user_personalization_configs (
       user_id,
+      user_nickname,
       shortterm_cache_crossserver_opt_in,
       physical_appearance_tags,
       nai_char_ref_url,
@@ -133,6 +132,7 @@ export async function insertFixtures(db: SQL): Promise<FixtureRefs> {
       personal_dtm
     ) VALUES (
       ${userId},
+      '_rt_user',
       false,
       ARRAY[]::TEXT[],
       NULL,
@@ -141,6 +141,7 @@ export async function insertFixtures(db: SQL): Promise<FixtureRefs> {
     )
     ON CONFLICT (user_id) DO UPDATE
     SET
+      user_nickname = EXCLUDED.user_nickname,
       shortterm_cache_crossserver_opt_in = EXCLUDED.shortterm_cache_crossserver_opt_in,
       physical_appearance_tags = EXCLUDED.physical_appearance_tags,
       nai_char_ref_url = EXCLUDED.nai_char_ref_url,

@@ -2,7 +2,13 @@ import type { Message } from "discord.js";
 import { MessageReferenceType, MessageType } from "discord.js";
 import type { ForcedMention } from "@/types/discord/mentions";
 import { ContextItemTag } from "@/types/misc/context";
-import { PrivacyLevel, type PersonaUserBlockRow, type ServerEmojiRow, type ServerStickerRow } from "@/types/db/schema";
+import {
+  PrivacyLevel,
+  type PersonaUserBlockRow,
+  type ServerEmojiRow,
+  type ServerStickerRow,
+  type TomoriState,
+} from "@/types/db/schema";
 import { getCachedPrivacyLevel, getCachedUserRow } from "@/utils/cache/userCache";
 import { getCachedActiveBlocksForPersona } from "@/utils/cache/personaUserBlockCache";
 import { formatBlockedUserNoticeContent } from "@/tools/functionCalls/userBlockToolShared";
@@ -70,8 +76,121 @@ import {
   prepareParticipantContext,
   type ParticipantRequestScope,
 } from "@/utils/text/participants/preparation";
+import { userNamingRepository, userPersonaNamingPairKey } from "@/utils/db/repositories/UserNamingRepository";
+import { userRepository } from "@/utils/db/repositories/UserRepository";
+import { resolveEffectiveUserNaming } from "@/utils/text/userNaming";
 
 const participantRequestScopes = new WeakMap<LockedChatTurn, ParticipantRequestScope>();
+
+async function buildHistoryNamingProjection(params: {
+  messages: SimplifiedMessageForContext[];
+  receivingPersona: TomoriState;
+  allPersonas: TomoriState[];
+  guild: Message["guild"];
+  personalizationEnabled: boolean;
+  extraUserIds?: string[];
+}): Promise<{ userLabels: Map<string, string>; personaMentionLabels: Map<string, string> }> {
+  const userLabels = new Map<string, string>();
+  const personaMentionLabels = new Map<string, string>();
+
+  const liveNames = new Map<string, string>();
+  const discordNames = new Map<string, string>();
+  const targetIds = new Set<string>();
+  for (const targetId of params.extraUserIds ?? []) targetIds.add(targetId);
+  for (const message of params.messages) {
+    if (message.authorType === "user" && /^\d+$/u.test(message.authorId)) {
+      targetIds.add(message.authorId);
+      liveNames.set(message.authorId, message.authorName);
+    }
+    if (message.authorPersonaLineageId != null && message.content) {
+      for (const match of message.content.matchAll(/<@!?(\d+)>/gu)) {
+        if (match[1]) targetIds.add(match[1]);
+      }
+    }
+  }
+
+  const targetRows = new Map<string, NonNullable<Awaited<ReturnType<typeof getCachedUserRow>>>>();
+  await Promise.all(
+    [...targetIds].map(async (targetId) => {
+      const [row, member] = await Promise.all([
+        getCachedUserRow(targetId),
+        params.guild?.members.fetch(targetId).catch(() => null) ?? Promise.resolve(null),
+      ]);
+      if (row?.user_id) targetRows.set(targetId, row);
+      if (member) {
+        liveNames.set(targetId, member.displayName);
+        discordNames.set(targetId, member.displayName);
+      }
+    }),
+  );
+  const blacklistedIds = new Set(
+    params.guild ? await userRepository.getBlacklistedMemberIds(params.receivingPersona.server_id) : [],
+  );
+
+  const personaByLineage = new Map<number, TomoriState>();
+  for (const persona of params.allPersonas) {
+    if (persona.persona_lineage_id != null) personaByLineage.set(persona.persona_lineage_id, persona);
+  }
+  if (params.receivingPersona.persona_lineage_id != null) {
+    personaByLineage.set(params.receivingPersona.persona_lineage_id, params.receivingPersona);
+  }
+
+  const pairs: Array<{ userId: number; personaLineageId: number }> = [];
+  const receivingLineage = params.receivingPersona.persona_lineage_id;
+  for (const [targetId, row] of targetRows) {
+    if (!params.personalizationEnabled || blacklistedIds.has(targetId)) continue;
+    if (receivingLineage != null && row.user_id) {
+      pairs.push({ userId: row.user_id, personaLineageId: receivingLineage });
+    }
+  }
+  for (const message of params.messages) {
+    if (message.authorPersonaLineageId == null || !message.content) continue;
+    for (const match of message.content.matchAll(/<@!?(\d+)>/gu)) {
+      if (!params.personalizationEnabled || (match[1] && blacklistedIds.has(match[1]))) continue;
+      const row = match[1] ? targetRows.get(match[1]) : null;
+      if (row?.user_id) pairs.push({ userId: row.user_id, personaLineageId: message.authorPersonaLineageId });
+    }
+  }
+  const preferences = await userNamingRepository.loadPreferences(pairs);
+
+  const resolveFor = (targetId: string, lineageId: number, persona: TomoriState): string | null => {
+    const row = targetRows.get(targetId);
+    if (!row?.user_id) return null;
+    const canUsePersonalizedNaming = params.personalizationEnabled && !blacklistedIds.has(targetId);
+    return resolveEffectiveUserNaming({
+      liveDisplayName: (canUsePersonalizedNaming ? liveNames.get(targetId) : discordNames.get(targetId)) ?? targetId,
+      global: {
+        userNickname: canUsePersonalizedNaming ? row.user_nickname : null,
+        prefixOverride: canUsePersonalizedNaming ? (row.prefix_override ?? null) : null,
+        suffixOverride: canUsePersonalizedNaming ? (row.suffix_override ?? null) : null,
+        addressingStyle: canUsePersonalizedNaming ? (row.addressing_style ?? null) : null,
+      },
+      persona: canUsePersonalizedNaming ? persona.naming_config : undefined,
+      preference: canUsePersonalizedNaming
+        ? preferences.get(userPersonaNamingPairKey(row.user_id, lineageId))
+        : undefined,
+    }).formattedName;
+  };
+
+  if (receivingLineage != null) {
+    for (const targetId of targetRows.keys()) {
+      const formatted = resolveFor(targetId, receivingLineage, params.receivingPersona);
+      if (formatted) userLabels.set(targetId, formatted);
+    }
+  }
+  for (const message of params.messages) {
+    const lineageId = message.authorPersonaLineageId;
+    const persona = lineageId == null ? null : personaByLineage.get(lineageId);
+    if (lineageId == null || !persona || !message.content) continue;
+    for (const match of message.content.matchAll(/<@!?(\d+)>/gu)) {
+      const targetId = match[1];
+      if (!targetId) continue;
+      const formatted = resolveFor(targetId, lineageId, persona);
+      if (formatted) personaMentionLabels.set(`${lineageId}:${targetId}`, formatted);
+    }
+  }
+  return { userLabels, personaMentionLabels };
+}
 
 /**
  * Builds the LLM-visible context and per-turn streaming metadata for one persona turn.
@@ -283,6 +402,17 @@ export async function buildChatTurnContext(turn: ChatTurn): Promise<ChatTurnCont
     responderPersonaIds: new Set(turn.triggeredPersonaIds),
     requestScope: participantRequestScope,
   });
+  const historyNaming = await buildHistoryNamingProjection({
+    messages: history.simplifiedMessages,
+    receivingPersona: effectivePersona,
+    allPersonas: turn.allPersonas,
+    guild: message.guild,
+    personalizationEnabled: effectivePersona.config.personal_memories_enabled !== false,
+    extraUserIds: incoming.impersonatedUserId ? [incoming.impersonatedUserId] : [],
+  });
+  if (incoming.impersonatedUserId) {
+    impersonatedUserNickname = historyNaming.userLabels.get(incoming.impersonatedUserId) ?? impersonatedUserNickname;
+  }
 
   // Resolve any per-channel system prompt override (append/replace). Negative results
   // are cached, so DM channels (which can never have an override) cost one cheap lookup.
@@ -318,6 +448,10 @@ export async function buildChatTurnContext(turn: ChatTurn): Promise<ChatTurnCont
     parentChannelId: channel.isThread() ? channel.parentId : null,
     client,
     triggererName: turn.triggererName,
+    triggererFormattedName: turn.triggererFormattedName,
+    triggererAddressTerm: turn.triggererAddressTerm,
+    historyUserLabels: historyNaming.userLabels,
+    historyPersonaMentionLabels: historyNaming.personaMentionLabels,
     triggererUserId: turn.userRow.user_id,
     emojiStrings: assets.emojiStrings,
     tomoriNickname: effectivePersona.persona_nickname,
@@ -402,6 +536,8 @@ export async function buildChatTurnContext(turn: ChatTurn): Promise<ChatTurnCont
     serverName: turn.serverName,
     serverDescription: turn.serverDescription,
     triggererName: turn.triggererName,
+    triggererFormattedName: turn.triggererFormattedName,
+    triggererAddressTerm: turn.triggererAddressTerm,
     textCredentialSource: turn.textCredentialSource,
     personalRoutingUserId: turn.personalRoutingUserId,
     personalTextProvider: turn.personalTextProvider,
@@ -769,11 +905,15 @@ async function simplifyMessage(
   let authorName = `<@${msg.author.id}>`;
   let authorType: "user" | "persona" = "user";
   let personaName: string | null = null;
+  let authorPersonaId: number | null = null;
+  let authorPersonaLineageId: number | null = null;
 
   if (msg.author.id === turn.lockedTurn.admission.client.user?.id || isDebug) {
     authorName = turn.mainPersona?.persona_nickname ?? turn.persona.persona_nickname;
     authorType = "persona";
     personaName = authorName;
+    authorPersonaId = turn.mainPersona?.persona_id ?? turn.persona.persona_id ?? null;
+    authorPersonaLineageId = turn.mainPersona?.persona_lineage_id ?? turn.persona.persona_lineage_id;
   } else if (isWebhook) {
     const webhookName = stripBridgePrefix(msg.author.username);
     const renderModifierSource = resolveRenderModifierSourcePersona(webhookName, personaByName);
@@ -788,6 +928,8 @@ async function simplifyMessage(
       authorName = renderModifierSource?.displayName ?? spriteDisplayName ?? matchedPersona.persona_nickname;
       authorType = "persona";
       personaName = matchedPersona.persona_nickname;
+      authorPersonaId = matchedPersona.persona_id ?? null;
+      authorPersonaLineageId = matchedPersona.persona_lineage_id;
       syntheticUsers.set(authorId, { displayName: authorName, type: "persona" });
     } else {
       authorId = msg.webhookId ?? msg.author.id;
@@ -872,11 +1014,15 @@ async function simplifyMessage(
     authorName = "System";
     authorType = "user";
     personaName = null;
+    authorPersonaId = null;
+    authorPersonaLineageId = null;
   } else if (isJoin) {
     authorId = `system-user-join:${msg.id}`;
     authorName = "System";
     authorType = "user";
     personaName = null;
+    authorPersonaId = null;
+    authorPersonaLineageId = null;
   }
 
   if (!content && imageAttachments.length === 0 && videoAttachments.length === 0) {
@@ -890,6 +1036,8 @@ async function simplifyMessage(
       authorName,
       authorType,
       personaName,
+      authorPersonaId,
+      authorPersonaLineageId,
       content,
       createdAt: msg.createdTimestamp,
       mediaSourceMessageIds:

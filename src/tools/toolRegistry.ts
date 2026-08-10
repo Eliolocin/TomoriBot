@@ -14,6 +14,7 @@ import type {
 } from "../types/tool/interfaces";
 import { getGuildMcpManager } from "../utils/mcp/guildMcpManager";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
+import { redactToolParametersForStorage } from "@/utils/tools/toolParameterRedaction";
 import {
   getAvailableToolsForContext as getAvailableToolsForContextFromRegistry,
   getAvailableToolsForProvider,
@@ -280,7 +281,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         provider: context.provider,
         serverId: context.tomoriState.server_id?.toString() || "unknown",
         userId: context.userId,
-        parameters: args,
+        parameters: redactToolParametersForStorage(functionName, args),
         result,
         executionTime,
         timestamp: new Date(),
@@ -307,7 +308,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         provider: context.provider,
         serverId: context.tomoriState.server_id?.toString() || "unknown",
         userId: context.userId,
-        parameters: args,
+        parameters: redactToolParametersForStorage(functionName, args),
         result: errorResult,
         executionTime,
         timestamp: new Date(),
@@ -390,7 +391,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         provider: context.provider,
         serverId: context.tomoriState.server_id?.toString() || "unknown",
         userId: context.userId,
-        parameters: args,
+        parameters: redactToolParametersForStorage(toolName, args),
         result,
         executionTime,
         timestamp: new Date(),
@@ -417,7 +418,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         provider: context.provider,
         serverId: context.tomoriState.server_id?.toString() || "unknown",
         userId: context.userId,
-        parameters: args,
+        parameters: redactToolParametersForStorage(toolName, args),
         result: errorResult,
         executionTime,
         timestamp: new Date(),

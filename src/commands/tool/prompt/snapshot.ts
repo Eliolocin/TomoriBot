@@ -788,6 +788,8 @@ export async function execute(
       parentChannelId: textChannel.isThread() ? textChannel.parentId : null,
       client,
       triggererName: interaction.user.displayName || interaction.user.globalName || interaction.user.username,
+      triggererFormattedName: interaction.user.displayName || interaction.user.globalName || interaction.user.username,
+      triggererAddressTerm: "",
       // snapshot.triggererUserRow unlocks STM context (actualTriggeringUserId guard inside buildContext)
       snapshot: { triggererUserRow: userData, tomoriState: effectivePersona },
       tomoriNickname: selectedPersona.persona_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori",

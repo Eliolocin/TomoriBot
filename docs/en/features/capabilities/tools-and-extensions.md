@@ -154,3 +154,17 @@ controls how *she* is triggered — see
 [Chatting & Triggers](/features/chatting-personality/chatting-and-triggers/#deliberate-trigger-mode). Both are
 abbreviated "DTM" in Discord.
 :::
+
+## Structured User Info Updates
+
+The built-in `update_user_info` tool handles explicit requests to change a registered user's
+nickname, prefix, suffix, gender identity, pronouns, orientation, addressing style, or numeric
+UTC offset. It uses the same collision-aware name, alias, mention, and Discord-ID resolver as
+other personal tools. An omitted target means the human who triggered the turn; `all` and
+`everyone` are never wildcard targets.
+
+Every requested item is validated before one atomic write. Restrictive privacy blocks additions
+and changes but still permits clearing values. Persona scope always means the active persona's
+lineage and cannot edit persona-wide address terms. The default-on User Info Updates switch in
+`/capabilities manage` controls both tool exposure and stale-invocation defense. Manual
+`/personal identity` and `/personal nickname` remain available when it is off.

@@ -42,6 +42,8 @@ import {
 import { getLastRespondedPersonaId, getSelfReplyChainState } from "@/utils/chat/selfReplyState";
 import type { TextQuotaTriggerState } from "@/utils/chat/textQuotaState";
 import type { ChatTurn, ChatTurnPlan, LockedChatTurn } from "@/utils/chat/types";
+import { userNamingRepository, userPersonaNamingPairKey } from "@/utils/db/repositories/UserNamingRepository";
+import { resolveEffectiveUserNaming } from "@/utils/text/userNaming";
 const DEFAULT_CASCADE_LIMIT = 3;
 const MAX_CASCADE_LIMIT = 10;
 const DEFAULT_MATCH_LIMIT = 3;
@@ -347,6 +349,16 @@ export async function planChatTurns(lockedTurn: LockedChatTurn): Promise<ChatTur
     !userRow.user_nickname
       ? displayName
       : userRow.user_nickname;
+  const canUsePersonalizedNaming =
+    !requestSnapshot.isTriggererBlacklisted && tomoriState.config.personal_memories_enabled !== false;
+  const namingPreferences = userRow.user_id
+    ? await userNamingRepository.loadPreferences(
+        personasToRespond.map((persona) => ({
+          userId: userRow.user_id as number,
+          personaLineageId: persona.persona_lineage_id,
+        })),
+      )
+    : new Map();
 
   // Scene turns are a scripted persona-to-persona chain: each speaker responds to the
   // PREVIOUS speaker, so {{user}} (which resolves to triggererName) should be that prior
@@ -360,43 +372,65 @@ export async function planChatTurns(lockedTurn: LockedChatTurn): Promise<ChatTur
     }
   }
 
-  const turns: ChatTurn[] = personasToRespond.map((persona, personaIndex) => ({
-    lockedTurn,
-    persona,
-    personaIndex,
-    totalPersonas: personasToRespond.length,
-    allPersonas,
-    tomoriState: persona,
-    mainPersona,
-    userRow,
-    requestSnapshot,
-    serverDiscId,
-    guild,
-    isDMChannel,
-    isSelfMessage,
-    userDiscId,
-    cooldownUserDiscId,
-    triggererName,
-    channelName: isDMChannel
-      ? "Direct Message"
-      : "name" in channel
-        ? (channel.name ?? "Unknown Channel")
-        : "Unknown Channel",
-    channelDescription: isDMChannel ? null : "topic" in channel ? channel.topic : null,
-    serverName: isDMChannel ? "Direct Message" : (guild?.name ?? "Unknown Server"),
-    serverDescription: isDMChannel ? null : (guild?.description ?? null),
-    textCredentialSource: credentialPolicy.source,
-    personalRoutingUserId: credentialPolicy.personalRoutingUserId,
-    personalTextProvider: credentialPolicy.personalTextProvider,
-    shouldApplyTextQuota: textQuota.shouldApply,
-    textQuotaTriggerKey: textQuota.triggerKey,
-    textQuotaState: textQuota.state,
-    shouldSurfaceUserErrors,
-    forcedMentions: incoming.forcedMentions,
-    isUserImpersonation: incoming.isUserImpersonation,
-    impersonatedUserId: incoming.impersonatedUserId,
-    triggeredPersonaIds,
-  }));
+  const turns: ChatTurn[] = personasToRespond.map((persona, personaIndex) => {
+    const isPersonaSceneTarget = Boolean(incoming.sceneTurn && incoming.sceneTurn.turnIndex > 0);
+    const preference = userRow.user_id
+      ? namingPreferences.get(userPersonaNamingPairKey(userRow.user_id, persona.persona_lineage_id))
+      : undefined;
+    const effectiveNaming = resolveEffectiveUserNaming({
+      global: {
+        userNickname: canUsePersonalizedNaming ? userRow.user_nickname : null,
+        prefixOverride: canUsePersonalizedNaming ? (userRow.prefix_override ?? null) : null,
+        suffixOverride: canUsePersonalizedNaming ? (userRow.suffix_override ?? null) : null,
+        addressingStyle: canUsePersonalizedNaming ? (userRow.addressing_style ?? null) : null,
+      },
+      liveDisplayName: displayName,
+      persona: canUsePersonalizedNaming ? persona.naming_config : undefined,
+      preference: canUsePersonalizedNaming ? preference : null,
+    });
+    const perPersonaTriggererName = isPersonaSceneTarget ? triggererName : effectiveNaming.nickname;
+    const triggererFormattedName = isPersonaSceneTarget ? triggererName : effectiveNaming.formattedName;
+
+    return {
+      lockedTurn,
+      persona,
+      personaIndex,
+      totalPersonas: personasToRespond.length,
+      allPersonas,
+      tomoriState: persona,
+      mainPersona,
+      userRow,
+      requestSnapshot,
+      serverDiscId,
+      guild,
+      isDMChannel,
+      isSelfMessage,
+      userDiscId,
+      cooldownUserDiscId,
+      triggererName: perPersonaTriggererName,
+      triggererFormattedName,
+      triggererAddressTerm: effectiveNaming.addressTerm,
+      channelName: isDMChannel
+        ? "Direct Message"
+        : "name" in channel
+          ? (channel.name ?? "Unknown Channel")
+          : "Unknown Channel",
+      channelDescription: isDMChannel ? null : "topic" in channel ? channel.topic : null,
+      serverName: isDMChannel ? "Direct Message" : (guild?.name ?? "Unknown Server"),
+      serverDescription: isDMChannel ? null : (guild?.description ?? null),
+      textCredentialSource: credentialPolicy.source,
+      personalRoutingUserId: credentialPolicy.personalRoutingUserId,
+      personalTextProvider: credentialPolicy.personalTextProvider,
+      shouldApplyTextQuota: textQuota.shouldApply,
+      textQuotaTriggerKey: textQuota.triggerKey,
+      textQuotaState: textQuota.state,
+      shouldSurfaceUserErrors,
+      forcedMentions: incoming.forcedMentions,
+      isUserImpersonation: incoming.isUserImpersonation,
+      impersonatedUserId: incoming.impersonatedUserId,
+      triggeredPersonaIds,
+    };
+  });
 
   log.info(
     `${turns.length} persona(s) will respond to message ${message.id}: ${turns

@@ -153,6 +153,12 @@ const USER_UNBLOCK_INTENT_PATTERNS: RegExp[] = [
   /\b(?:remove|clear|delete)\b.{0,100}\b(?:user\s+)?(?:block|mute)\b/i,
 ];
 
+const USER_INFO_INTENT_PATTERNS: RegExp[] = [
+  /\b(?:call|address|refer\s+to)\s+(?:me|them|him|her|@[A-Za-z0-9_.-]+|<@\d+>)(?:\s+(?:as|by))?\s+[A-Za-z0-9_.-]+\b/i,
+  /\b(?:my|their|his|her)\s+(?:nickname|name|pronouns?|gender|orientation|title|honorific|prefix|suffix|timezone|utc\s*offset)\b/i,
+  /\b(?:change|set|update|clear|forget|use)\b.{0,100}\b(?:nickname|pronouns?|gender|orientation|addressing\s+style|title|honorific|prefix|suffix|timezone|utc\s*offset)\b/i,
+];
+
 const TOOL_FOLLOW_UP_PATTERNS: RegExp[] = [
   /\b(?:do|try|make|send|say|generate|run|repeat|redo)\b.{0,80}\b(?:that|it|this|one|again|same)\b/i,
   /\buse\s+(?:that|it|this|one|the\s+same)\b/i,
@@ -195,6 +201,7 @@ const MESSAGE_ACTION_TOOL_NAMES = ["interact_with_recent_message", "manage_messa
 const CAPABILITY_TOOL_NAMES = ["review_capabilities"];
 const STICKER_TOOL_NAMES = ["select_sticker_for_response"];
 const USER_BLOCKING_TOOL_NAMES = ["block_user", "unblock_user"];
+const USER_INFO_TOOL_NAMES = ["update_user_info"];
 
 export const DELIBERATE_TOOL_TRIGGER_TARGETS = [
   { value: "image", label: "Image generation", toolNames: IMAGE_GENERATION_TOOL_NAMES },
@@ -207,6 +214,7 @@ export const DELIBERATE_TOOL_TRIGGER_TARGETS = [
   { value: "media-analysis", label: "Media analysis", toolNames: MEDIA_ANALYSIS_TOOL_NAMES },
   { value: "message-action", label: "Message actions", toolNames: MESSAGE_ACTION_TOOL_NAMES },
   { value: "user-blocking", label: "Persona user blocking", toolNames: USER_BLOCKING_TOOL_NAMES },
+  { value: "user-info", label: "User info updates", toolNames: USER_INFO_TOOL_NAMES },
   { value: "sticker", label: "Sticker selection", toolNames: STICKER_TOOL_NAMES },
   { value: "thread", label: "Thread creation", toolNames: ["create_thread"] },
   { value: "capabilities", label: "Capability review", toolNames: CAPABILITY_TOOL_NAMES },
@@ -543,6 +551,10 @@ export function getDeliberateToolIntentResult(
 
   if (USER_UNBLOCK_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
     addToolMatches(allowedToolNames, matches, ["unblock_user"], "persona user unblock request", "built-in");
+  }
+
+  if (USER_INFO_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    addToolMatches(allowedToolNames, matches, USER_INFO_TOOL_NAMES, "structured user info request", "built-in");
   }
 
   if (CROSS_CHANNEL_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {

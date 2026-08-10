@@ -4,6 +4,7 @@ import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_VALUES } from "@/constants/think
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
 import { logitBiasEntrySchema } from "@/types/provider/logitBias";
 import { PrivacyLevel, deliberateToolTriggerEntrySchema } from "@/types/db/schema";
+import { addressingStyleSchema } from "@/types/personaNaming";
 
 /**
  * Version identifier for export/import format
@@ -49,7 +50,7 @@ export type MemoryItem = { content: string; tags: string[] };
 function getPersonalExportDataSchema() {
   const limits = getMemoryLimits();
   return z.object({
-    user_nickname: z.string().min(1).max(100),
+    user_nickname: z.string().min(1).max(100).nullable(),
     language_pref: z.string().min(2).max(10),
     impersonation_prompt: z.string().nullable().optional(),
     personal_memories: z.array(memoryItemSchema).max(limits.maxPersonalMemories),
@@ -63,7 +64,7 @@ export type PersonalExportData = z.infer<ReturnType<typeof getPersonalExportData
  * Includes user-specific physical appearance image tags and NovelAI reference image URL.
  */
 export const personalSettingsExportDataSchema = z.object({
-  user_nickname: z.string().min(1).max(100),
+  user_nickname: z.string().min(1).max(100).nullable(),
   language_pref: z.string().min(2).max(10),
   impersonation_prompt: z.string().nullable().optional(),
   physical_appearance_tags: z.array(z.string()).default([]),
@@ -73,6 +74,22 @@ export const personalSettingsExportDataSchema = z.object({
   personal_deliberate_tool_mode: z.enum(["off", "follow", "on"]).optional(),
   shortterm_cache_crossserver_opt_in: z.boolean().optional(),
   timezone_offset: z.number().int().min(-12).max(14).nullable().optional(),
+  prefix_override: z.string().max(100).nullable().optional(),
+  suffix_override: z.string().max(100).nullable().optional(),
+  gender_identity: z.string().max(200).nullable().optional(),
+  pronouns: z.string().max(200).nullable().optional(),
+  orientation: z.string().max(200).nullable().optional(),
+  addressing_style: addressingStyleSchema.nullable().optional(),
+  persona_naming_preferences: z
+    .array(
+      z.object({
+        persona_lineage_id: z.number().int().nonnegative(),
+        nickname_override: z.string().max(100).nullable(),
+        prefix_override: z.string().max(100).nullable(),
+        suffix_override: z.string().max(100).nullable(),
+      }),
+    )
+    .default([]),
 });
 
 export type PersonalSettingsExportData = z.infer<typeof personalSettingsExportDataSchema>;
@@ -168,6 +185,7 @@ const serverCapabilitiesConfigExportSchema = z.object({
   tool_use_enabled: z.boolean().optional(),
   short_term_memory_enabled: z.boolean().optional(),
   verbatim_tool_calling_enabled: z.boolean().optional(),
+  user_info_updates_enabled: z.boolean().default(true),
 });
 
 /** Portable server_notice_embeds_configs export fields. */

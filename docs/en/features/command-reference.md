@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **27**. Runnable slash commands: **239**.
+Top-level command groups: **27**. Runnable slash commands: **241**.
 
 ## `/bot`
 
@@ -249,6 +249,7 @@ Manage personality presets
 | `/persona generate` | AI-powered personality generation (requires a compatible provider) |
 | `/persona image-tags` | Set comma-separated image tags for a persona's physical appearance to assist image generation. |
 | `/persona import` | Import a persona from a PNG or JSON file |
+| `/persona naming-habits` | Configure how a persona formats and addresses user names. |
 | `/persona prompt remove` | Remove a persona prompt. |
 | `/persona prompt set` | Set a persona prompt. |
 | `/persona remove` | Remove an alter persona from the server |
@@ -281,11 +282,12 @@ Manage your personal settings
 | `/personal custom-endpoint remove` | Remove selected capabilities from personal custom endpoints. |
 | `/personal deliberate-tool-mode` | Set your personal deliberate tool mode preference. |
 | `/personal deliberate-trigger-mode` | Set your personal deliberate trigger mode (DTM) preference. |
+| `/personal identity` | Set your optional identity and preferred style of address. |
 | `/personal image-tags` | Set comma-separated image tags for your physical appearance to assist image generation. |
 | `/personal impersonate prompt` | Set a reusable prompt that tells me how to impersonate you. |
 | `/personal language` | Set your preferred language for my interface. |
 | `/personal model fallback` | Set fallback models for your personal text override, or clear slots with None. |
-| `/personal nickname` | Change the name I use to refer to you. |
+| `/personal nickname` | Configure the nickname, prefix, and suffix a persona uses for you. |
 | `/personal openrouter-model add` | Register an OpenRouter model codename for your personal provider list. |
 | `/personal openrouter-model remove` | Remove registered OpenRouter models from your personal provider list. |
 | `/personal parameters` | Adjust sampler settings for your personal providers, not this server's. |

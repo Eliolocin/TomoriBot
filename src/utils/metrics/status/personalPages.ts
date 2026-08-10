@@ -60,7 +60,7 @@ export async function showPersonalStatus(
     fields: [
       {
         nameKey: "commands.tool.status.field_user_nickname",
-        value: userData.user_nickname,
+        value: userData.user_nickname ?? userData.user_disc_id,
         inline: true,
       },
       {

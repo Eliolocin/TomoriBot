@@ -144,3 +144,15 @@ Migration `020_persona_preset_pointers.sql` adds the pointer columns and convert
 Migration `026_repair_legacy_persona_preset_pointers.sql` is the follow-up repair pass. It recognizes known official preset copy fingerprints from historical seed shapes, including the legacy form that stored `"{bot}'s Description: ..."` as the first attribute, and marks exact copies as pointers even when their memory lineage is custom/generated. It preserves `persona_lineage_id` so existing memories and conditioning stay in their original scope, and it does not rewrite avatars, nicknames, or copied child rows. Customized personas that do not match an official historical fingerprint stay independent copies.
 
 If a pointer references a missing official preset row, materialization fails closed by logging an error and refusing the fork. Runtime reads are more resilient: they log a warning and fall back to the persona's last copied snapshot instead of failing the whole state load.
+
+## Naming maps
+
+Every official language variant declares prefix, suffix, and standalone address-term maps for
+masculine, feminine, and neutral addressing styles. Empty maps are explicit and valid. A
+gendered address term requires a neutral fallback, and authored `{user_term}` content also
+requires a neutral term. `{user_formatted}` is used for user-vocative names in samples.
+
+Pointer personas read `preset_naming_config` live. `/persona naming-habits` materializes a
+pointer before saving a custom `persona_naming_configs` row, so other servers remain on the
+shared preset. Export emits the naming map; older imports default it to empty. Official-preset
+matching includes the map, preventing a customized persona from collapsing back into a pointer.

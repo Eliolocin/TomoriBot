@@ -27,6 +27,8 @@ export type ParticipantCapability = "mentionable";
 
 export type ParticipantAliasSource =
   | "saved_nickname"
+  | "effective_nickname"
+  | "formatted_name"
   | "guild_display_name"
   | "guild_nickname"
   | "global_name"

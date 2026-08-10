@@ -2,11 +2,12 @@ import type { SQL } from "bun";
 import { personaSections } from "./personas";
 import { str, textArray } from "./sql";
 import type { PersonaInput } from "./types";
+import { personaNamingConfigSchema, validatePersonaNamingAuthoring } from "@/types/personaNaming";
 
 const OFFICIAL_LINEAGE_IDS = new Set<number>([4, 716, 1770, 3585, 50]); // 1337 (Zaya) pending
 
 const PERSONA_COLUMNS =
-  "persona_preset_name, persona_preset_desc, preset_attribute_list, preset_sample_dialogues_in, preset_sample_dialogues_out, preset_language, preset_avatar_path, preset_trigger_words, preset_lineage_id";
+  "persona_preset_name, persona_preset_desc, preset_attribute_list, preset_sample_dialogues_in, preset_sample_dialogues_out, preset_language, preset_avatar_path, preset_trigger_words, preset_lineage_id, preset_naming_config";
 
 // Upsert identity is the stable (lineage, language) pair, NOT persona_preset_name.
 // The name is a mutable, human-facing catalog label, so keying on it would turn a
@@ -24,6 +25,7 @@ const PERSONA_ON_CONFLICT = `ON CONFLICT (preset_lineage_id, preset_language) WH
   preset_sample_dialogues_out = EXCLUDED.preset_sample_dialogues_out,
   preset_avatar_path = EXCLUDED.preset_avatar_path,
   preset_trigger_words = EXCLUDED.preset_trigger_words,
+  preset_naming_config = EXCLUDED.preset_naming_config,
   updated_at = CURRENT_TIMESTAMP`;
 
 const OFFICIAL_ATTRIBUTE_FLAGS_UPDATE = `WITH official_attribute_flags AS (
@@ -61,6 +63,7 @@ function renderPersonaTuple(preset: PersonaInput): string {
     str(preset.avatarPath),
     textArray(preset.triggerWords),
     String(preset.lineageId),
+    str(JSON.stringify(preset.namingConfig)),
   ].join(", ");
 }
 
@@ -92,6 +95,23 @@ export function validatePersonas(): string[] {
       errors.push(
         `persona_presets/${preset.name}: preset_sample_dialogues_in length ${preset.sampleDialoguesIn.length} does not match preset_sample_dialogues_out length ${preset.sampleDialoguesOut.length}`,
       );
+    }
+
+    const parsedNamingConfig = personaNamingConfigSchema.safeParse(preset.namingConfig);
+    if (!parsedNamingConfig.success) {
+      errors.push(
+        `persona_presets/${preset.name}: invalid naming config: ${parsedNamingConfig.error.issues.map((issue) => issue.message).join("; ")}`,
+      );
+    } else {
+      try {
+        validatePersonaNamingAuthoring(parsedNamingConfig.data, [
+          preset.desc,
+          ...preset.attributes,
+          ...preset.sampleDialoguesOut,
+        ]);
+      } catch (error) {
+        errors.push(`persona_presets/${preset.name}: ${(error as Error).message}`);
+      }
     }
 
     if (OFFICIAL_LINEAGE_IDS.has(preset.lineageId)) {

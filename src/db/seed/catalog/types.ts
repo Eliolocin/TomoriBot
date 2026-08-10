@@ -110,6 +110,7 @@ export interface PersonaInput {
   avatarPath: string;
   triggerWords: string[];
   lineageId: number;
+  namingConfig: import("@/types/personaNaming").PersonaNamingConfig;
   /**
    * Optional official sprite set for this preset. Seeded into `preset_sprites`
    * and resolved live by pointer personas. Omit (or leave empty) and the persona

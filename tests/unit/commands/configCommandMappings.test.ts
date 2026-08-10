@@ -26,6 +26,7 @@ const disabledCapabilitiesManageState: CapabilitiesManageConfigState = {
   voice_message_enabled: false,
   user_blocking_enabled: false,
   short_term_memory_enabled: false,
+  user_info_updates_enabled: false,
   time_awareness_enabled: false,
 };
 
@@ -42,6 +43,7 @@ const enabledCapabilitiesManageState: CapabilitiesManageConfigState = {
   voice_message_enabled: true,
   user_blocking_enabled: true,
   short_term_memory_enabled: true,
+  user_info_updates_enabled: true,
   time_awareness_enabled: true,
 };
 
@@ -100,6 +102,7 @@ describe("config command write mappings", () => {
           "imagegen",
           "videogen",
           "voicemessage",
+          "userinfo",
           "timeawareness",
         ],
         { includeElevenLabs: true },
@@ -115,6 +118,7 @@ describe("config command write mappings", () => {
         imagegen_enabled: true,
         videogen_enabled: true,
         voice_message_enabled: true,
+        user_info_updates_enabled: true,
         time_awareness_enabled: true,
       });
       expect(plan.patch.memberPermissions).toEqual({});

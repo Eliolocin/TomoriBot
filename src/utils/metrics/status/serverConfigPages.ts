@@ -336,6 +336,11 @@ export async function showServerConfigStatus(
         inline: true,
       },
       {
+        nameKey: "commands.tool.status.field_user_info_updates",
+        value: formatBooleanLocalized(config.user_info_updates_enabled ?? true, locale),
+        inline: true,
+      },
+      {
         nameKey: "commands.tool.status.field_stm_privacy_bypass",
         value: formatBooleanLocalized(config.stm_privacy_bypass ?? false, locale),
         inline: true,

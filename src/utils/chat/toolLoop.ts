@@ -24,6 +24,7 @@ import {
 } from "@/utils/chat/contextAnnotations";
 import { takeEnhancedContextItem } from "@/utils/chat/pendingEnhancedContext";
 import type { ChatTurnContext, GenerationTurnResult, ToolHistoryEntry } from "@/utils/chat/types";
+import { redactToolParametersForStorage } from "@/utils/tools/toolParameterRedaction";
 
 const MAX_FUNCTION_CALL_ITERATIONS = parseIntegerEnvFlag(process.env.BOT_MAX_FUNCTION_CALL_ITERATIONS, 100, 1);
 const SOFT_WARN_ITERATION_THRESHOLD = 20;
@@ -513,7 +514,12 @@ async function executeToolCall(
 
   // When a tool call fails, surface a hidden thought-log notice explaining why.
   if (!toolResult.success) {
-    await emitFailedToolCallThoughtLog(toolContext, functionName, functionCall.args ?? {}, toolResult);
+    await emitFailedToolCallThoughtLog(
+      toolContext,
+      functionName,
+      redactToolParametersForStorage(functionName, functionCall.args ?? {}),
+      toolResult,
+    );
   }
 
   // When deliberate-tool-mode admitted the tool via a specific trigger,

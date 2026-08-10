@@ -307,7 +307,7 @@ export class MemoryTool extends BaseTool {
             memoryContent,
             context.client,
             serverId,
-            userRow.user_nickname, // Use triggerer's name for {user} replacement
+            userRow.user_nickname ?? context.message?.author.displayName ?? userRow.user_disc_id,
             tomoriState.persona_nickname, // Use bot's current nickname for {bot} replacement
             tomoriState?.config.personal_memories_enabled,
           );
@@ -391,7 +391,8 @@ export class MemoryTool extends BaseTool {
             },
           };
         }
-        const targetUserDisplayName = resolvedTargetUserLabel || targetUserRow.user_nickname;
+        const targetUserDisplayName =
+          resolvedTargetUserLabel || targetUserRow.user_nickname || targetUserRow.user_disc_id;
 
         // Check if user has opted out of personalization (privacy setting)
         const { PrivacyLevel } = await import("../../types/db/schema");

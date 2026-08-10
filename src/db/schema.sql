@@ -692,6 +692,7 @@ CREATE TABLE IF NOT EXISTS persona_presets (
   preset_sample_dialogues_out TEXT[] DEFAULT '{}',
   preset_language TEXT NOT NULL,
   preset_trigger_words TEXT[] DEFAULT '{}',
+  preset_naming_config JSONB NOT NULL DEFAULT '{"prefixes":{},"suffixes":{},"addressTerms":{}}'::JSONB,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -816,7 +817,6 @@ DROP TRIGGER IF EXISTS update_server_stickers_timestamp ON server_stickers;
 CREATE TABLE IF NOT EXISTS users (
   user_id SERIAL PRIMARY KEY,
   user_disc_id TEXT UNIQUE NOT NULL,
-  user_nickname TEXT NOT NULL,
   language_pref TEXT DEFAULT 'en',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -835,12 +835,6 @@ SELECT add_column_if_not_exists('users', 'registration_locale', 'TEXT');
 --   user_personalization_configs.nai_char_ref_url
 --   user_personalization_configs.impersonation_prompt
 --   user_personalization_configs.personal_dtm
-
--- Personal deliberate tool mode (May 2026) - User-scoped tri-state: 'off', 'follow' (default), 'on'
-SELECT add_column_if_not_exists('users', 'personal_deliberate_tool_mode', 'TEXT', '''follow''');
-
--- Personal timezone offset (June 2026) - NULL = not set / not opted in; mirrors server timezone range (-12..+14)
-SELECT add_column_if_not_exists('users', 'timezone_offset', 'SMALLINT');
 
 -- Create updated_at trigger for users table
 DROP TRIGGER IF EXISTS update_users_timestamp ON users;
@@ -2652,6 +2646,7 @@ CREATE TABLE IF NOT EXISTS server_capabilities_configs (
   tool_use_enabled       BOOLEAN NOT NULL DEFAULT true,
   short_term_memory_enabled BOOLEAN NOT NULL DEFAULT true,
   verbatim_tool_calling_enabled BOOLEAN NOT NULL DEFAULT false,
+  user_info_updates_enabled BOOLEAN NOT NULL DEFAULT true,
   created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -2863,11 +2858,20 @@ CREATE TRIGGER update_persona_textgen_configs_timestamp
 
 CREATE TABLE IF NOT EXISTS user_personalization_configs (
   user_id                            INT     PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+  user_nickname                      TEXT,
   shortterm_cache_crossserver_opt_in BOOLEAN NOT NULL DEFAULT false,
   physical_appearance_tags                      TEXT[]  NOT NULL DEFAULT '{}',
   nai_char_ref_url                   TEXT,
   impersonation_prompt               TEXT,
   personal_dtm                       TEXT    NOT NULL DEFAULT 'follow',
+  personal_deliberate_tool_mode      TEXT    NOT NULL DEFAULT 'follow',
+  timezone_offset                    SMALLINT CHECK (timezone_offset IS NULL OR timezone_offset BETWEEN -12 AND 14),
+  prefix_override                    TEXT,
+  suffix_override                    TEXT,
+  gender_identity                    TEXT,
+  pronouns                           TEXT,
+  orientation                        TEXT,
+  addressing_style                   TEXT CHECK (addressing_style IS NULL OR addressing_style IN ('masculine', 'feminine', 'neutral')),
   created_at                         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -2876,6 +2880,41 @@ DROP TRIGGER IF EXISTS update_user_personalization_configs_timestamp ON user_per
 CREATE TRIGGER update_user_personalization_configs_timestamp
   BEFORE UPDATE ON user_personalization_configs
   FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS user_persona_naming_preferences (
+  user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+  persona_lineage_id BIGINT NOT NULL,
+  nickname_override TEXT,
+  prefix_override TEXT,
+  suffix_override TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, persona_lineage_id)
+);
+
+DROP TRIGGER IF EXISTS update_user_persona_naming_preferences_timestamp
+  ON user_persona_naming_preferences;
+CREATE TRIGGER update_user_persona_naming_preferences_timestamp
+  BEFORE UPDATE ON user_persona_naming_preferences
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS persona_naming_configs (
+  persona_id INT PRIMARY KEY REFERENCES personas(persona_id) ON DELETE CASCADE,
+  prefixes JSONB NOT NULL DEFAULT '{}'::JSONB,
+  suffixes JSONB NOT NULL DEFAULT '{}'::JSONB,
+  address_terms JSONB NOT NULL DEFAULT '{}'::JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP TRIGGER IF EXISTS update_persona_naming_configs_timestamp ON persona_naming_configs;
+CREATE TRIGGER update_persona_naming_configs_timestamp
+  BEFORE UPDATE ON persona_naming_configs
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+INSERT INTO persona_naming_configs (persona_id)
+SELECT persona_id FROM personas
+ON CONFLICT (persona_id) DO NOTHING;
 
 -- Memory tag filtering toggle (May 2026)
 -- Note: memory_tagging_enabled and channel_memory_enabled now live in server_memory_configs (per-domain split).

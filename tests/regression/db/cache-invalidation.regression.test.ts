@@ -58,8 +58,11 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Cache invalidation — regression", () => 
     // Write directly to DB via raw SQL to simulate out-of-band change,
     // bypassing dbWrite cache invalidation. Then clear cache manually and confirm read is fresh.
     await testSql`
-      UPDATE users SET user_nickname = '_rt_cache_test_name'
-      WHERE user_disc_id = ${FIXTURE_IDS.userDiscId}
+      UPDATE user_personalization_configs upc
+      SET user_nickname = '_rt_cache_test_name'
+      FROM users u
+      WHERE upc.user_id = u.user_id
+        AND u.user_disc_id = ${FIXTURE_IDS.userDiscId}
     `;
 
     // Without invalidation, getCachedUserRow might return the stale cached name.

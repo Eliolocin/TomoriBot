@@ -45,6 +45,23 @@ describe("deliberate tool mode", () => {
     expect(allowedNames).toContain("unblock_user");
   });
 
+  it("allows structured user info updates for naming, identity, and timezone requests", () => {
+    for (const prompt of [
+      "call me Sparrow",
+      "change my pronouns to they/them",
+      "set my UTC offset to 8",
+      "clear my honorific",
+    ]) {
+      expect(getDeliberateToolAllowedNames(prompt)).toContain("update_user_info");
+    }
+  });
+
+  it("exposes user info updates for its custom trigger target", () => {
+    expect(getDeliberateToolAllowedNames("profile settings", { "user-info": ["profile settings"] })).toContain(
+      "update_user_info",
+    );
+  });
+
   it("supports wildcard custom triggers without breaking regex triggers", () => {
     expect(getDeliberateToolAllowedNames("", { image: ["^"] })).toContain("generate_image");
     expect(

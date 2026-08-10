@@ -22,6 +22,21 @@ describe("convertMentions — identityMacroMode", () => {
     expect(result).toBe("Tomori waves");
   });
 
+  it("resolves formatted-name and address-term macros in both brace forms", async () => {
+    const result = await convertMentions(
+      "{user_formatted}, {{user_term}}!",
+      CLIENT,
+      "guild-1",
+      "Sparrow",
+      "Tomori",
+      true,
+      undefined,
+      "resolve",
+      { userFormatted: "Master Sparrow-san", userTerm: "fam" },
+    );
+    expect(result).toBe("Master Sparrow-san, fam!");
+  });
+
   it("leaves identity macros literal in preserve mode", async () => {
     const result = await convertMentions(
       "{bot} greets {user}",
@@ -48,6 +63,21 @@ describe("convertMentions — identityMacroMode", () => {
       "preserve",
     );
     expect(result).toBe("{{char}}: Hi!\n{{user}}: Hey.");
+  });
+
+  it("preserves new identity macros in preserve mode", async () => {
+    const result = await convertMentions(
+      "{user_formatted} / {{user_term}}",
+      CLIENT,
+      "guild-1",
+      "Sparrow",
+      "Tomori",
+      true,
+      undefined,
+      "preserve",
+      { userFormatted: "Master Sparrow", userTerm: "fam" },
+    );
+    expect(result).toBe("{user_formatted} / {{user_term}}");
   });
 
   it("still normalizes Discord channel links in preserve mode", async () => {
@@ -88,7 +118,13 @@ function makeTomoriState(): TomoriState {
 }
 
 /** Runs the real convertMentions through the dialogue-history builder for a single message. */
-async function buildHistoryText(msg: SimplifiedMessageForContext): Promise<string> {
+async function buildHistoryText(
+  msg: SimplifiedMessageForContext,
+  naming?: Pick<
+    Parameters<typeof appendDialogueHistoryContext>[0],
+    "historyUserLabels" | "historyPersonaMentionLabels"
+  >,
+): Promise<string> {
   const contextItems: Parameters<typeof appendDialogueHistoryContext>[0]["contextItems"] = [];
   await appendDialogueHistoryContext({
     contextItems,
@@ -100,6 +136,7 @@ async function buildHistoryText(msg: SimplifiedMessageForContext): Promise<strin
     tomoriState: makeTomoriState(),
     includeTimestamps: false,
     isUserImpersonation: false,
+    ...naming,
     uncensorInputOptions: { unicodeSpacesEnabled: false, sanitizeEnabled: false },
     convertMentions,
   });
@@ -153,6 +190,21 @@ describe("appendDialogueHistoryContext — identity macros in message bodies", (
   it("still prefixes the resolved author label", async () => {
     const text = await buildHistoryText(userMessage("hello"));
     expect(text.startsWith("Alice: ")).toBe(true);
+  });
+
+  it("uses the receiving persona's formatted user speaker label", async () => {
+    const text = await buildHistoryText(userMessage("hello"), {
+      historyUserLabels: new Map([["user-1", "Master Alice"]]),
+    });
+    expect(text).toBe("Master Alice: hello");
+  });
+
+  it("uses a proven author persona lineage for real historical mentions", async () => {
+    const message = { ...personaMessage("Hello <@123456789012345678>"), authorPersonaLineageId: 50 };
+    const text = await buildHistoryText(message, {
+      historyPersonaMentionLabels: new Map([["50:123456789012345678", "Master Sparrow"]]),
+    });
+    expect(text).toBe("Tomori: Hello Master Sparrow");
   });
 });
 

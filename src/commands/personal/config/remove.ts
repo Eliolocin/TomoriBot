@@ -40,14 +40,7 @@ export async function execute(
     }
 
     const userId = userData.user_id;
-    const updatedUser =
-      userId === undefined
-        ? null
-        : await userRepository.update(userId, {
-            user_nickname: interaction.user.username,
-            language_pref: "en-US",
-            impersonation_prompt: null,
-          });
+    const updatedUser = userId === undefined ? false : await userRepository.clearPortablePersonalSettings(userId);
 
     if (!updatedUser) {
       await replyInfoEmbed(interaction, locale, {

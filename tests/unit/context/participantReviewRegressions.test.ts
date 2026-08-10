@@ -125,7 +125,7 @@ describe("participant adversarial review regressions", () => {
 
       const text = participantText(await buildPreparedParticipantContext(fixture));
 
-      expect(text).toContain("Alice Saved (Mention: @{Alice Saved}");
+      expect(text).toContain("Alice Saved (Mention: @{Alice Guild}");
       expect(text).toContain("- Alice Saved (sprite)'s Physical Appearance: silver hair, violet eyes");
       expect(text).not.toContain("- Ren's Physical Appearance: silver hair, violet eyes");
     } finally {

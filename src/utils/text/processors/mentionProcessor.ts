@@ -4,17 +4,17 @@ import { normalizeParticipantAlias } from "@/utils/text/participants/aliases";
 
 /**
  * Strips curly braces from unknown template placeholders in text, leaving only the inner word.
- * Valid placeholders ({user}, {bot}, {char} and their double-brace variants) are preserved.
+ * Valid identity placeholders and their double-brace variants are preserved.
  * This prevents LLM-generated `{username}` artifacts from appearing literally in stored
  * memories or Discord messages when the model incorrectly imitates the `{user}` convention.
  * @param text - Text that may contain erroneous `{word}` placeholders
  */
 export function sanitizeUnknownTemplatePlaceholders(text: string): string {
   const result = text.replace(/\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}/g, (_match, inner: string) =>
-    /^(user|bot|char)$/i.test(inner) ? `{{${inner}}}` : inner,
+    /^(user|user_formatted|user_term|bot|char)$/i.test(inner) ? `{{${inner}}}` : inner,
   );
   return result.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (_match, inner: string) =>
-    /^(user|bot|char)$/i.test(inner) ? `{${inner}}` : inner,
+    /^(user|user_formatted|user_term|bot|char)$/i.test(inner) ? `{${inner}}` : inner,
   );
 }
 

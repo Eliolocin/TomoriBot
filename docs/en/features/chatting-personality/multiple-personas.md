@@ -121,3 +121,12 @@ especially useful for [alter personas](#alter-personas) that speak as distinct c
 Want to control which persona answers *you* in a specific channel without changing the
 server-wide setup? That's Personal Spotlight — see
 [Personalization](/features/knowledge/personalization/#personal-spotlight).
+
+## Persona-specific ways of addressing people
+
+Server managers can use `/persona naming-habits` to give each persona independent masculine,
+feminine, and neutral prefixes, suffixes, and standalone address terms. A user's own
+persona-scoped override is keyed by stable persona lineage, so two personas may call Sparrow
+different names in the same multi-persona response while both still target the same Discord
+user. Editing an official pointer first creates an independent copy; it never changes the
+shared catalog or another server's persona.

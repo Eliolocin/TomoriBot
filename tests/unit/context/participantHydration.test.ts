@@ -211,6 +211,7 @@ function createFixture(
       presenceMembers.push(preloadedMember);
       return "Online";
     },
+    loadNamingPreferences: async () => new Map(),
   };
   return {
     params,
@@ -243,7 +244,7 @@ describe("participant exposure policy", () => {
                 isImpersonatedUser,
               });
               const personalized = personalizationEnabled && !blacklisted;
-              const canUseSavedNickname = personalized && privacyLevel !== PrivacyLevel.FULL;
+              const canUseSavedNickname = personalized;
 
               expect(policy).toEqual({
                 canUseSavedNickname,
@@ -252,6 +253,7 @@ describe("participant exposure policy", () => {
                 exposeRoles: privacyLevel === PrivacyLevel.MINIMAL,
                 exposePhysicalAppearance: !isUserImpersonation,
                 exposeTimezone: !isUserImpersonation,
+                exposeIdentity: personalized && privacyLevel === PrivacyLevel.MINIMAL,
                 exposePersonalMemories:
                   (!isUserImpersonation || isImpersonatedUser) && personalized && privacyLevel === PrivacyLevel.MINIMAL,
               });
@@ -371,7 +373,7 @@ describe("participant hydration", () => {
 
     expect(result.profiles[0]).toMatchObject({
       displayName: "Alice Saved",
-      primaryAlias: "Alice Saved",
+      primaryAlias: "Alice Global",
       resolvableTargetId: USER_ID,
     });
   });
@@ -408,15 +410,49 @@ describe("participant hydration", () => {
 
     expect(human?.fields.map((candidate) => candidate.kind)).toEqual([
       "physical_appearance",
+      "identity",
       "timezone",
       "presence",
       "roles",
       "personal_memories",
       "human_reminders",
     ]);
-    expect(human?.fields.map((candidate) => candidate.order)).toEqual([10, 20, 30, 40, 50, 60]);
+    expect(human?.fields.map((candidate) => candidate.order)).toEqual([10, 15, 20, 30, 40, 50, 60]);
     expect(human?.fields.every((candidate) => candidate.owner === human.key)).toBe(true);
     expect(human?.fields.every((candidate) => typeof candidate.visibility.visible === "boolean")).toBe(true);
+  });
+
+  it("emits only configured identity fields at minimal privacy", async () => {
+    const fixture = createFixture({
+      userRow: createUserRow({
+        gender_identity: "nonbinary",
+        pronouns: "they/them",
+        orientation: null,
+      }),
+    });
+
+    const result = await hydrateParticipantProfiles(fixture.params, fixture.dependencies);
+    const identity = result.profiles[0]?.fields.find((candidate) => candidate.kind === "identity");
+
+    expect(identity).toMatchObject({ visibility: { visible: true, reason: "visible" } });
+    expect(identity?.lines).toEqual(["- Gender Identity: nonbinary", "- Pronouns: they/them"]);
+    expect(identity?.lines.join("\n")).not.toMatch(/unknown|unspecified|orientation/iu);
+  });
+
+  it("omits raw identity fields when privacy is restrictive", async () => {
+    const fixture = createFixture({
+      userRow: createUserRow({
+        privacy_level: PrivacyLevel.PARTIAL,
+        gender_identity: "nonbinary",
+        pronouns: "they/them",
+        orientation: "bisexual",
+      }),
+    });
+
+    const result = await hydrateParticipantProfiles(fixture.params, fixture.dependencies);
+    const identity = result.profiles[0]?.fields.find((candidate) => candidate.kind === "identity");
+
+    expect(identity).toMatchObject({ visibility: { visible: false, reason: "privacy" }, lines: [] });
   });
 
   it("attaches public persona fields to their stable persona owner", async () => {

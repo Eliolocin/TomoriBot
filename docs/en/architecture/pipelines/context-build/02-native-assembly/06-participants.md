@@ -308,6 +308,25 @@ After this stage runs:
 
 ## Configuration
 
+## Persona-relative naming and identity
+
+Participant identity remains the typed Discord user ID. Display headings are a projection for
+the receiving persona: persona-lineage override, global nickname, then live Discord name, with
+prefix and suffix resolved independently. Stable Discord-derived mention handles remain
+separate from display labels; exact plain and formatted names are additional collision-aware
+aliases, never reparsed to discover a target.
+
+`{user}` is the plain effective nickname, `{user_formatted}` is the deterministic formatted
+name, and `{user_term}` is a persona-authored standalone address term. Single- and
+double-brace forms are supported. Address terms are expanded in persona prompts, attributes,
+and sample dialogue, not participant fields.
+
+Dialogue user labels use the receiving persona's projection. A real mention in a historical
+persona-authored message uses that proven author persona's lineage; unproven or user-authored
+content falls back to the plain nickname. Required user-lineage preferences are batch-loaded.
+Gender identity, pronouns, and orientation are sparse independent fields visible only at
+Minimal privacy. Timezone is omitted when unset and during user impersonation.
+
 | Source | Field | Effect |
 |---|---|---|
 | `tomoriConfig` | `personal_memories_enabled` | Master switch for per-user memories + nickname usage |

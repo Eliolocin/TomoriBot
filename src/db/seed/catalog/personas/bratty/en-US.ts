@@ -44,4 +44,5 @@ export const persona: PersonaInput = {
   avatarPath: "src/db/seed/catalog/personas/bratty",
   triggerWords: ["tomori", "temari"],
   lineageId: 716,
+  namingConfig: { prefixes: {}, suffixes: {}, addressTerms: {} },
 };

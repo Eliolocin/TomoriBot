@@ -322,6 +322,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
       field_verbatim_tool_calling: `Verbatim Tool-Calling`,
       field_prompt_snapshot: `Prompt Snapshot`,
       field_short_term_memory: `Short-Term Memory`,
+      field_user_info_updates: `User Info Updates`,
       field_stm_privacy_bypass: `STM Privacy Bypass`,
       field_voice_messages: `Voice Messages`,
       field_voice_transcript_mode: `Voice Transcript Chat Mode`,

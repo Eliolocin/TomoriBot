@@ -66,10 +66,8 @@ class ImportRepository {
       const rows = await tx<Array<{ user_id: number }>>`
         INSERT INTO users (
           user_disc_id,
-          user_nickname,
           language_pref
         ) VALUES (
-          ${userDiscId},
           ${userDiscId},
           'en'
         )
@@ -81,8 +79,8 @@ class ImportRepository {
       const userId = rows[0]?.user_id;
       if (userId) {
         await tx`
-          INSERT INTO user_personalization_configs (user_id)
-          VALUES (${userId})
+          INSERT INTO user_personalization_configs (user_id, user_nickname)
+          VALUES (${userId}, ${userDiscId})
           ON CONFLICT (user_id) DO NOTHING
         `;
       }
@@ -185,26 +183,17 @@ class ImportRepository {
         const userRows = await tx<Array<{ user_id: number }>>`
           INSERT INTO users (
             user_disc_id,
-            user_nickname,
             language_pref,
-            privacy_level,
-            personal_deliberate_tool_mode,
-            timezone_offset
+            privacy_level
           ) VALUES (
             ${userDiscId},
-            ${importData.user_nickname},
             ${importData.language_pref},
-            ${importData.privacy_level ?? 0},
-            ${importData.personal_deliberate_tool_mode ?? "follow"},
-            ${importData.timezone_offset ?? null}
+            ${importData.privacy_level ?? 0}
           )
           ON CONFLICT (user_disc_id) DO UPDATE
           SET
-            user_nickname = EXCLUDED.user_nickname,
             language_pref = EXCLUDED.language_pref,
-            privacy_level = COALESCE(${importData.privacy_level ?? null}, users.privacy_level),
-            personal_deliberate_tool_mode = COALESCE(${importData.personal_deliberate_tool_mode ?? null}, users.personal_deliberate_tool_mode),
-            timezone_offset = COALESCE(${importData.timezone_offset ?? null}, users.timezone_offset)
+            privacy_level = COALESCE(${importData.privacy_level ?? null}, users.privacy_level)
           RETURNING user_id
         `;
 
@@ -216,27 +205,77 @@ class ImportRepository {
         await tx`
           INSERT INTO user_personalization_configs (
             user_id,
+            user_nickname,
             shortterm_cache_crossserver_opt_in,
             physical_appearance_tags,
             nai_char_ref_url,
             impersonation_prompt,
-            personal_dtm
+            personal_dtm,
+            personal_deliberate_tool_mode,
+            timezone_offset,
+            prefix_override,
+            suffix_override,
+            gender_identity,
+            pronouns,
+            orientation,
+            addressing_style
           ) VALUES (
             ${userId},
+            ${importData.user_nickname},
             ${importData.shortterm_cache_crossserver_opt_in ?? false},
             ${sql.array(physicalAppearanceTags, "TEXT")},
             ${naiCharRefUrl},
             ${impersonationPrompt},
-            ${importData.personal_dtm ?? "follow"}
+            ${importData.personal_dtm ?? "follow"},
+            ${importData.personal_deliberate_tool_mode ?? "follow"},
+            ${importData.timezone_offset ?? null},
+            ${importData.prefix_override ?? null},
+            ${importData.suffix_override ?? null},
+            ${importData.gender_identity ?? null},
+            ${importData.pronouns ?? null},
+            ${importData.orientation ?? null},
+            ${importData.addressing_style ?? null}
           )
           ON CONFLICT (user_id) DO UPDATE SET
+            user_nickname = EXCLUDED.user_nickname,
             shortterm_cache_crossserver_opt_in = COALESCE(${importData.shortterm_cache_crossserver_opt_in ?? null}, user_personalization_configs.shortterm_cache_crossserver_opt_in),
             physical_appearance_tags = EXCLUDED.physical_appearance_tags,
             nai_char_ref_url = EXCLUDED.nai_char_ref_url,
             impersonation_prompt = EXCLUDED.impersonation_prompt,
             personal_dtm = COALESCE(${importData.personal_dtm ?? null}, user_personalization_configs.personal_dtm),
+            personal_deliberate_tool_mode = COALESCE(${importData.personal_deliberate_tool_mode ?? null}, user_personalization_configs.personal_deliberate_tool_mode),
+            timezone_offset = CASE WHEN ${importData.timezone_offset !== undefined} THEN EXCLUDED.timezone_offset ELSE user_personalization_configs.timezone_offset END,
+            prefix_override = CASE WHEN ${importData.prefix_override !== undefined} THEN EXCLUDED.prefix_override ELSE user_personalization_configs.prefix_override END,
+            suffix_override = CASE WHEN ${importData.suffix_override !== undefined} THEN EXCLUDED.suffix_override ELSE user_personalization_configs.suffix_override END,
+            gender_identity = CASE WHEN ${importData.gender_identity !== undefined} THEN EXCLUDED.gender_identity ELSE user_personalization_configs.gender_identity END,
+            pronouns = CASE WHEN ${importData.pronouns !== undefined} THEN EXCLUDED.pronouns ELSE user_personalization_configs.pronouns END,
+            orientation = CASE WHEN ${importData.orientation !== undefined} THEN EXCLUDED.orientation ELSE user_personalization_configs.orientation END,
+            addressing_style = CASE WHEN ${importData.addressing_style !== undefined} THEN EXCLUDED.addressing_style ELSE user_personalization_configs.addressing_style END,
             updated_at = NOW()
         `;
+
+        for (const preference of importData.persona_naming_preferences ?? []) {
+          await tx`
+            INSERT INTO user_persona_naming_preferences (
+              user_id,
+              persona_lineage_id,
+              nickname_override,
+              prefix_override,
+              suffix_override
+            ) VALUES (
+              ${userId},
+              ${preference.persona_lineage_id},
+              ${preference.nickname_override},
+              ${preference.prefix_override},
+              ${preference.suffix_override}
+            )
+            ON CONFLICT (user_id, persona_lineage_id) DO UPDATE SET
+              nickname_override = EXCLUDED.nickname_override,
+              prefix_override = EXCLUDED.prefix_override,
+              suffix_override = EXCLUDED.suffix_override,
+              updated_at = NOW()
+          `;
+        }
 
         return userRows;
       });
@@ -255,6 +294,13 @@ class ImportRepository {
       if (importData.personal_deliberate_tool_mode !== undefined) fieldsCount++;
       if (importData.shortterm_cache_crossserver_opt_in !== undefined) fieldsCount++;
       if (importData.timezone_offset !== undefined) fieldsCount++;
+      if (importData.prefix_override !== undefined) fieldsCount++;
+      if (importData.suffix_override !== undefined) fieldsCount++;
+      if (importData.gender_identity !== undefined) fieldsCount++;
+      if (importData.pronouns !== undefined) fieldsCount++;
+      if (importData.orientation !== undefined) fieldsCount++;
+      if (importData.addressing_style !== undefined) fieldsCount++;
+      fieldsCount += importData.persona_naming_preferences?.length ?? 0;
 
       return { success: true, itemsImported: { configFieldsCount: fieldsCount } };
     } catch (error) {
@@ -347,6 +393,7 @@ class ImportRepository {
         ...(config.verbatim_tool_calling_enabled !== undefined && {
           verbatim_tool_calling_enabled: config.verbatim_tool_calling_enabled,
         }),
+        user_info_updates_enabled: config.user_info_updates_enabled,
       };
 
       // server_notice_embeds_configs: tool notice key suppressions
@@ -607,6 +654,7 @@ class ImportRepository {
       impersonation_prompt: importData.impersonation_prompt ?? null,
       physical_appearance_tags: [],
       nai_char_ref_url: null,
+      persona_naming_preferences: [],
     });
     if (!settingsResult.success) return settingsResult;
 

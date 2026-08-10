@@ -29,7 +29,7 @@ const EXPECTED_PARTICIPANT_GOLDEN = {
 
 If Tomori wants to ping any of these users, prepend an "@" symbol to a unique mention handle shown below (case-insensitive). If there is ambiguity with names, ask for clarification instead of guessing. Use mentions only when the notification matters.
 
-Alice Saved (Mention: @{Alice Saved}; Aliases: @{Alice Guild}, @{Alice Display Global}, @{alice_username})
+Alice Saved (Mention: @{Alice Guild}; Aliases: @{Alice Saved}, @{Alice Display Global}, @{alice_username})
 - Alice Saved's Physical Appearance: auburn hair, green eyes
 - Server Roles: Archivist
 - Memories: ID:91 [tags: #general, maps] Alice likes archival maps.
@@ -47,7 +47,7 @@ Ren
 
 Webhook Guest
 
-Bob Saved (Mention: @{Bob Saved}; Aliases: @{Bob Guild}, @{Bob Display Global}, @{bob_username})
+Bob Saved (Mention: @{Bob Guild}; Aliases: @{Bob Saved}, @{Bob Display Global}, @{bob_username})
 - Server Roles: Archivist
 
 Mika Matrix

@@ -32,6 +32,8 @@ import type { SillyTavernCardMetadata } from "@/utils/image/pngMetadata";
 import { dedupeTriggerWords, normalizeTriggerWord, stripSurroundingTriggerQuotes } from "@/utils/text/triggerWords";
 import { personaRepository } from "@/utils/db/repositories/PersonaRepository";
 import { getBaseTriggerWords } from "@/utils/text/localizer";
+import { EMPTY_PERSONA_NAMING_CONFIG } from "@/types/personaNaming";
+import { userNamingRepository } from "@/utils/db/repositories/UserNamingRepository";
 
 type JsonObject = Record<string, unknown>;
 
@@ -450,6 +452,7 @@ class PresetRepository {
     const expectedPublicFlags = data.attribute_public_flags ?? buildPrivateAttributePublicFlags(data.attribute_list);
     const expectedPrompt = normalizeNullableText(data.persona_prompt);
     const expectedTriggers = dedupeTriggerWords(data.trigger_words, { lowercase: false });
+    const expectedNamingConfig = data.naming_config ?? EMPTY_PERSONA_NAMING_CONFIG;
 
     return (
       presets.find((preset) => {
@@ -459,7 +462,8 @@ class PresetRepository {
           arraysEqual(preset.preset_sample_dialogues_in, data.sample_dialogues_in) &&
           arraysEqual(preset.preset_sample_dialogues_out, data.sample_dialogues_out) &&
           arraysEqual(resolveOfficialPresetTriggerWords(preset), expectedTriggers) &&
-          resolveOfficialPresetPrompt(preset) === expectedPrompt
+          resolveOfficialPresetPrompt(preset) === expectedPrompt &&
+          JSON.stringify(preset.preset_naming_config) === JSON.stringify(expectedNamingConfig)
         );
       }) ?? null
     );
@@ -884,6 +888,12 @@ class PresetRepository {
       const exportedPresetLineageId = pointerPreset
         ? normalizeLineageId(pointerPreset.preset_lineage_id)
         : normalizeLineageId(presetData.preset_lineage_id);
+      const namingConfigs = pointerPreset
+        ? null
+        : await userNamingRepository.loadPersonaConfigs([presetData.persona_id as number]);
+      const exportedNamingConfig = pointerPreset
+        ? pointerPreset.preset_naming_config
+        : (namingConfigs?.get(presetData.persona_id as number) ?? EMPTY_PERSONA_NAMING_CONFIG);
 
       // Build export object with metadata (includes NovelAI persona fields)
       const exportData: PresetExport = {
@@ -898,6 +908,7 @@ class PresetRepository {
           sample_dialogues_out: exportedSampleDialoguesOut,
           trigger_words: triggerWords || [],
           persona_prompt: personaPrompt,
+          naming_config: exportedNamingConfig,
           persona_lineage_id: lineageId,
           ...(exportedPresetLineageId !== null ? { preset_lineage_id: exportedPresetLineageId } : {}),
           physical_appearance_tags: presetData.physical_appearance_tags || [],
@@ -1120,6 +1131,10 @@ class PresetRepository {
           trigger_words = EXCLUDED.trigger_words,
           persona_prompt = EXCLUDED.persona_prompt
       `;
+      await userNamingRepository.savePersonaConfig(
+        mainTomoriId,
+        validatedImportData.naming_config ?? EMPTY_PERSONA_NAMING_CONFIG,
+      );
 
       log.success(`Successfully imported preset for server ${serverDiscId}: ${validatedImportData.tomori_nickname}`);
 

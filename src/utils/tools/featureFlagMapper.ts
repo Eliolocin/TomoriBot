@@ -15,6 +15,7 @@ const BUILTIN_TOOL_FEATURE_FLAGS: Record<string, string> = {
   create_long_term_memory: "self_teaching",
   remember_this_fact: "self_teaching",
   update_long_term_memory: "self_teaching",
+  update_user_info: "user_info_updates",
 
   manage_message: "manage_message",
   create_thread: "thread_creation",
@@ -107,6 +108,7 @@ export function configToFeatureFlags(config: {
   videogen_enabled: boolean;
   voice_message_enabled: boolean;
   user_blocking_enabled: boolean;
+  user_info_updates_enabled?: boolean;
   thread_creation_enabled: boolean;
 }): Record<string, boolean> {
   return {
@@ -118,6 +120,7 @@ export function configToFeatureFlags(config: {
     video_gen: config.videogen_enabled,
     voice_message: config.voice_message_enabled,
     user_blocking: config.user_blocking_enabled,
+    user_info_updates: config.user_info_updates_enabled ?? true,
     thread_creation: config.thread_creation_enabled,
   };
 }

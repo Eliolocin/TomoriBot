@@ -75,4 +75,5 @@ export const persona: PersonaInput = {
   avatarPath: "src/db/seed/catalog/personas/gloomy",
   triggerWords: ["ともり", "アフェル", "トモリ", "あふぇる"],
   lineageId: 1770,
+  namingConfig: { prefixes: {}, suffixes: {}, addressTerms: {} },
 };

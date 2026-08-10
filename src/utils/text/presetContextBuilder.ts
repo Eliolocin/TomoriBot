@@ -50,6 +50,8 @@ interface MentionParams {
   client: Client;
   guildId: string;
   triggererName: string;
+  triggererFormattedName: string;
+  triggererAddressTerm: string;
   botName: string;
   personalMemoriesEnabled: boolean;
   toolPromptMacroResolver?: ToolPromptMacroResolver;
@@ -218,6 +220,12 @@ async function appendTerminalSampleDialogueSpacerIfNeeded(
     mentionParams.triggererName,
     mentionParams.botName,
     mentionParams.personalMemoriesEnabled,
+    undefined,
+    "resolve",
+    {
+      userFormatted: mentionParams.triggererFormattedName,
+      userTerm: mentionParams.triggererAddressTerm,
+    },
   );
 
   contextItems.push({
@@ -461,6 +469,12 @@ export async function reassembleWithPreset(
         mentionParams.triggererName, // Preset custom nodes should resolve {{user}} to the actual triggerer
         mentionParams.botName,
         mentionParams.personalMemoriesEnabled,
+        undefined,
+        "resolve",
+        {
+          userFormatted: mentionParams.triggererFormattedName,
+          userTerm: mentionParams.triggererAddressTerm,
+        },
       );
 
       contextItems.push({
@@ -505,6 +519,12 @@ export async function reassembleWithPreset(
       mentionParams.triggererName,
       mentionParams.botName,
       mentionParams.personalMemoriesEnabled,
+      undefined,
+      "resolve",
+      {
+        userFormatted: mentionParams.triggererFormattedName,
+        userTerm: mentionParams.triggererAddressTerm,
+      },
     );
 
     resolvedInjections.push({

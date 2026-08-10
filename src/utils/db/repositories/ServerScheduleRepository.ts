@@ -545,10 +545,11 @@ class ServerScheduleRepository implements IRepository<ServerScheduleExportShape>
             r.created_by_user_id,
             r.user_discord_id,
             r.user_nickname,
-            u.user_nickname AS created_by_nickname,
+            upc.user_nickname AS created_by_nickname,
             t.persona_nickname AS persona_nickname
           FROM reminders r
           LEFT JOIN users u ON r.created_by_user_id = u.user_id
+          LEFT JOIN user_personalization_configs upc ON upc.user_id = u.user_id
           LEFT JOIN personas t ON r.persona_id = t.persona_id
           WHERE r.server_id = ${serverId}
             AND r.created_by_user_id = ${ownerUserId}
@@ -567,10 +568,11 @@ class ServerScheduleRepository implements IRepository<ServerScheduleExportShape>
           r.created_by_user_id,
           r.user_discord_id,
           r.user_nickname,
-          u.user_nickname AS created_by_nickname,
+          upc.user_nickname AS created_by_nickname,
           t.persona_nickname AS persona_nickname
         FROM reminders r
         LEFT JOIN users u ON r.created_by_user_id = u.user_id
+        LEFT JOIN user_personalization_configs upc ON upc.user_id = u.user_id
         LEFT JOIN personas t ON r.persona_id = t.persona_id
         WHERE r.server_id = ${serverId}
         ORDER BY r.reminder_time ASC

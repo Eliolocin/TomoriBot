@@ -3,6 +3,12 @@ import { z } from "zod";
 import { SUPPORTED_PARAM_VALUES, isSupportedParamValue, type SupportedParamValue } from "@/constants/supportedParams";
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_VALUES } from "@/constants/thinkingLevels";
 import { TOOL_NOTICE_KEYS, isToolNoticeKey, type ToolNoticeKey } from "@/constants/toolNotices";
+import {
+  addressingStyleSchema,
+  EMPTY_PERSONA_NAMING_CONFIG,
+  personaNamingConfigSchema,
+  type PersonaNamingConfig,
+} from "@/types/personaNaming";
 import { DEFAULT_IMAGE_NEGATIVE_TAGS, DEFAULT_IMAGE_POSITIVE_TAGS } from "@/utils/image/tagDefaults";
 import { logitBiasEntrySchema, normalizeLogitBiasEntries } from "@/types/provider/logitBias";
 
@@ -34,7 +40,7 @@ export type ConditioningType = z.infer<typeof conditioningTypeSchema>;
 export const userSchema = z.object({
   user_id: z.number().optional(),
   user_disc_id: z.string(),
-  user_nickname: z.string(),
+  user_nickname: z.string().nullable(),
   language_pref: z.string().default("en-US"),
   registration_locale: z.string().nullable(), // Static locale captured at registration
   privacy_level: z.nativeEnum(PrivacyLevel).default(PrivacyLevel.MINIMAL),
@@ -46,6 +52,12 @@ export const userSchema = z.object({
   personal_dtm: z.enum(["off", "follow", "on"]).default("follow"), // Added April 2026 - User-scoped DTM tri-state: 'off' (always disabled), 'follow' (server setting), 'on' (always enabled)
   personal_deliberate_tool_mode: z.enum(["off", "follow", "on"]).default("follow"), // Added May 2026 - User-scoped deliberate tool mode tri-state
   timezone_offset: z.number().int().min(-12).max(14).nullable().optional(), // Added June 2026 - Personal UTC offset; NULL = not set / opt-out
+  prefix_override: z.string().nullable().optional(),
+  suffix_override: z.string().nullable().optional(),
+  gender_identity: z.string().nullable().optional(),
+  pronouns: z.string().nullable().optional(),
+  orientation: z.string().nullable().optional(),
+  addressing_style: addressingStyleSchema.nullable().optional(),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -560,11 +572,20 @@ export type AutochatPersonaOverride = z.infer<typeof autochatPersonaOverrideSche
 
 const userPersonalizationConfigsSchema = z.object({
   user_id: z.number().int(),
+  user_nickname: z.string().nullable(),
   shortterm_cache_crossserver_opt_in: z.boolean().default(false),
   physical_appearance_tags: z.array(z.string()).default([]),
   nai_char_ref_url: z.string().nullable().optional(),
   impersonation_prompt: z.string().nullable().optional(),
   personal_dtm: z.enum(["off", "follow", "on"]).default("follow"),
+  personal_deliberate_tool_mode: z.enum(["off", "follow", "on"]).default("follow"),
+  timezone_offset: z.number().int().min(-12).max(14).nullable().optional(),
+  prefix_override: z.string().nullable().optional(),
+  suffix_override: z.string().nullable().optional(),
+  gender_identity: z.string().nullable().optional(),
+  pronouns: z.string().nullable().optional(),
+  orientation: z.string().nullable().optional(),
+  addressing_style: addressingStyleSchema.nullable().optional(),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -663,6 +684,7 @@ const serverCapabilitiesConfigSchema = z.object({
   // Default true keeps existing servers unchanged; see migration 054.
   short_term_memory_enabled: z.boolean().default(true),
   verbatim_tool_calling_enabled: z.boolean().default(false),
+  user_info_updates_enabled: z.boolean().default(true),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -958,6 +980,14 @@ const tomoriPresetSchema = z.object({
   preset_avatar_shared_url: z.string().nullable().optional(),
   preset_avatar_hash: z.string().nullable().optional(),
   preset_trigger_words: z.array(z.string()).default([]),
+  preset_naming_config: z.preprocess((value) => {
+    if (typeof value !== "string") return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }, personaNamingConfigSchema.default(EMPTY_PERSONA_NAMING_CONFIG)),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -1382,6 +1412,7 @@ export type TomoriState = TomoriRow &
     llm: LlmRow; // Added LLM information
     trigger_words: string[]; // Persona-scoped trigger words from persona_configs
     persona_prompt: string | null; // Optional persona-specific prompt appended after system prompt
+    naming_config: PersonaNamingConfig;
     persona_attributes: PersonaAttributeRow[]; // Ordered persona attributes with public/private visibility
     reward_conditioning_enabled: boolean; // Persona-scoped reward conditioning injection toggle
     punish_conditioning_enabled: boolean; // Persona-scoped punish conditioning injection toggle
@@ -1406,6 +1437,7 @@ export const tomoriStateSchema = tomoriSchema.merge(personaScopedConfigStateSche
   llm: llmSchema, // Added LLM schema validation
   trigger_words: z.array(z.string()).default([]),
   persona_prompt: z.string().nullable().default(null),
+  naming_config: personaNamingConfigSchema.default(EMPTY_PERSONA_NAMING_CONFIG),
   persona_attributes: z.array(personaAttributeSchema).default([]),
   reward_conditioning_enabled: z.boolean().default(true),
   punish_conditioning_enabled: z.boolean().default(true),

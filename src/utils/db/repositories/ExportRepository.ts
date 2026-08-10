@@ -67,7 +67,7 @@ class ExportRepository {
       const rows = await sql`
         SELECT
           u.user_id,
-          u.user_nickname,
+          upc.user_nickname,
           u.language_pref,
           upc.impersonation_prompt,
           COALESCE(upc.physical_appearance_tags, ARRAY[]::TEXT[]) AS physical_appearance_tags,
@@ -228,6 +228,7 @@ class ExportRepository {
           COALESCE(scac.tool_use_enabled, true)                     AS tool_use_enabled,
           COALESCE(scac.short_term_memory_enabled, true)            AS short_term_memory_enabled,
           COALESCE(scac.verbatim_tool_calling_enabled, false)       AS verbatim_tool_calling_enabled,
+          COALESCE(scac.user_info_updates_enabled, true)            AS user_info_updates_enabled,
           COALESCE(smpc.prompt_snapshot_enabled, false)             AS prompt_snapshot_enabled,
           COALESCE(smemoc.memory_tagging_enabled, false)            AS memory_tagging_enabled,
           COALESCE(smemoc.channel_memory_enabled, false)            AS channel_memory_enabled,
@@ -406,6 +407,7 @@ class ExportRepository {
             tool_use_enabled: configData.tool_use_enabled,
             short_term_memory_enabled: configData.short_term_memory_enabled,
             verbatim_tool_calling_enabled: configData.verbatim_tool_calling_enabled,
+            user_info_updates_enabled: configData.user_info_updates_enabled,
             prompt_snapshot_enabled: configData.prompt_snapshot_enabled,
             memory_tagging_enabled: configData.memory_tagging_enabled,
             channel_memory_enabled: configData.channel_memory_enabled,
@@ -492,16 +494,22 @@ class ExportRepository {
     try {
       const rows = await sql`
         SELECT
-          u.user_nickname,
+          upc.user_nickname,
           u.language_pref,
           upc.impersonation_prompt,
           COALESCE(upc.physical_appearance_tags, ARRAY[]::TEXT[]) AS physical_appearance_tags,
           upc.nai_char_ref_url,
           u.privacy_level,
           COALESCE(upc.personal_dtm, 'follow') AS personal_dtm,
-          u.personal_deliberate_tool_mode,
+          COALESCE(upc.personal_deliberate_tool_mode, 'follow') AS personal_deliberate_tool_mode,
           COALESCE(upc.shortterm_cache_crossserver_opt_in, false) AS shortterm_cache_crossserver_opt_in,
-          u.timezone_offset
+          upc.timezone_offset,
+          upc.prefix_override,
+          upc.suffix_override,
+          upc.gender_identity,
+          upc.pronouns,
+          upc.orientation,
+          upc.addressing_style
         FROM users u
         LEFT JOIN user_personalization_configs upc ON upc.user_id = u.user_id
         WHERE u.user_disc_id = ${userDiscId}
@@ -513,6 +521,24 @@ class ExportRepository {
       }
 
       const userData = rows[0];
+      const personaNamingPreferences = await sql<
+        Array<{
+          persona_lineage_id: number;
+          nickname_override: string | null;
+          prefix_override: string | null;
+          suffix_override: string | null;
+        }>
+      >`
+        SELECT
+          upnp.persona_lineage_id,
+          upnp.nickname_override,
+          upnp.prefix_override,
+          upnp.suffix_override
+        FROM user_persona_naming_preferences upnp
+        JOIN users u ON u.user_id = upnp.user_id
+        WHERE u.user_disc_id = ${userDiscId}
+        ORDER BY upnp.persona_lineage_id
+      `;
 
       const exportData: PersonalSettingsExport = {
         version: EXPORT_VERSION,
@@ -529,6 +555,16 @@ class ExportRepository {
           personal_deliberate_tool_mode: userData.personal_deliberate_tool_mode ?? undefined,
           shortterm_cache_crossserver_opt_in: userData.shortterm_cache_crossserver_opt_in ?? undefined,
           timezone_offset: userData.timezone_offset ?? undefined,
+          prefix_override: userData.prefix_override ?? null,
+          suffix_override: userData.suffix_override ?? null,
+          gender_identity: userData.gender_identity ?? null,
+          pronouns: userData.pronouns ?? null,
+          orientation: userData.orientation ?? null,
+          addressing_style: userData.addressing_style ?? null,
+          persona_naming_preferences: personaNamingPreferences.map((preference) => ({
+            ...preference,
+            persona_lineage_id: Number(preference.persona_lineage_id),
+          })),
         },
       };
 

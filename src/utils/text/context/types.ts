@@ -15,6 +15,8 @@ export type SimplifiedMessageForContext = {
   authorName: string;
   authorType: "user" | "persona";
   personaName?: string | null;
+  authorPersonaId?: number | null;
+  authorPersonaLineageId?: number | null;
   content: string | null;
   createdAt?: number;
   mediaSourceMessageIds?: string[];
@@ -66,6 +68,10 @@ export interface BuildContextParams {
   parentChannelId?: string | null;
   client: Client;
   triggererName: string;
+  triggererFormattedName: string;
+  triggererAddressTerm: string;
+  historyUserLabels?: Map<string, string>;
+  historyPersonaMentionLabels?: Map<string, string>;
   triggererUserId?: number;
   emojiStrings?: string[];
   tomoriNickname: string;

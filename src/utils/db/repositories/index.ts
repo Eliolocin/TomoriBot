@@ -20,6 +20,7 @@ import { serverScheduleRepository } from "./ServerScheduleRepository";
 import { statRepository } from "./StatRepository";
 import { toolRepository } from "./ToolRepository";
 import { userRepository } from "./UserRepository";
+import { userNamingRepository } from "./UserNamingRepository";
 import { whitelistRepository } from "./WhitelistRepository";
 
 export {
@@ -45,6 +46,7 @@ export {
   statRepository,
   toolRepository,
   userRepository,
+  userNamingRepository,
   whitelistRepository,
 };
 

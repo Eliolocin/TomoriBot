@@ -30,6 +30,7 @@ import {
   type TomoriState,
 } from "@/types/db/schema";
 import type { PersonaAutochRuntimeStateRow } from "@/types/db/schema";
+import { EMPTY_PERSONA_NAMING_CONFIG, type PersonaNamingConfig } from "@/types/personaNaming";
 import type { SqlParameterArray } from "@/types/db/sqlOperations";
 import { DatabaseUnavailableError } from "@/types/errors";
 import { getCachedLLM } from "@/utils/cache/llmCache";
@@ -38,6 +39,7 @@ import { sql, withTransientDbRetry } from "@/utils/db/client";
 import { validateTomoriFields } from "@/utils/db/sqlSecurity";
 import { llmModelRepo } from "@/utils/db/repositories/LlmModelRepository";
 import { llmProviderRepo } from "@/utils/db/repositories/LlmProviderRepository";
+import { userNamingRepository } from "@/utils/db/repositories/UserNamingRepository";
 import { type MemoryValidationResult, getMemoryLimits } from "@/utils/misc/memoryLimits";
 import { getUnconfiguredLlm } from "@/utils/provider/unconfiguredLlm";
 import { log } from "@/utils/misc/logger";
@@ -1936,7 +1938,7 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
         scaps.videogen_enabled, scaps.voice_message_enabled, scaps.user_blocking_enabled,
         scaps.time_awareness_enabled,
         scaps.tool_use_enabled, scaps.verbatim_tool_calling_enabled,
-        scaps.short_term_memory_enabled,
+        scaps.short_term_memory_enabled, scaps.user_info_updates_enabled,
         -- 5. server_notice_embeds_configs
         snec.tool_notice_hidden_keys,
         -- 6. server_nsfw_configs
@@ -2041,7 +2043,7 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
         scaps.videogen_enabled, scaps.voice_message_enabled, scaps.user_blocking_enabled,
         scaps.time_awareness_enabled,
         scaps.tool_use_enabled, scaps.verbatim_tool_calling_enabled,
-        scaps.short_term_memory_enabled,
+        scaps.short_term_memory_enabled, scaps.user_info_updates_enabled,
         -- 5. server_notice_embeds_configs
         snec.tool_notice_hidden_keys,
         -- 6. server_nsfw_configs
@@ -2121,6 +2123,20 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
     }
   }
 
+  async updateNamingConfig(personaId: number, config: PersonaNamingConfig): Promise<boolean> {
+    try {
+      return await sql.transaction(async (tx) => {
+        const materialized = await this.materializeIfPointerWithClient(personaId, tx);
+        if (!materialized) return false;
+        await userNamingRepository.savePersonaConfig(personaId, config, tx);
+        return true;
+      });
+    } catch (error) {
+      log.error(`Error updating naming config for persona ${personaId}:`, error);
+      return false;
+    }
+  }
+
   private async materializeIfPointerWithClient(personaId: number, client: SQL): Promise<boolean> {
     const [personaRow] = await client<
       Array<{
@@ -2176,6 +2192,7 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
       resolvePresetTriggerWords(preset),
       resolvePresetPersonaPrompt(preset),
     );
+    await userNamingRepository.savePersonaConfig(personaId, preset.preset_naming_config, client);
     // Copy the shared preset sprites into this persona's own rows, reusing the
     // shared image URL (no byte duplication). The persona stops resolving sprites
     // live once materialized, so this freezes its current default sprite set.
@@ -2454,6 +2471,7 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
       const serverId = tomoriData.server_id;
       const pointerPresetsByPersonaId = await this.loadPointerPresetsForRows([tomoriData]);
       const pointerPreset = pointerPresetsByPersonaId.get(personaId);
+      const personaNamingConfigs = await userNamingRepository.loadPersonaConfigs([personaId]);
       let configData = await this.sqlLoadTomoriConfigByServerId(serverId);
 
       // Backward compatibility: fall back to persona_id if server_id config missing
@@ -2660,6 +2678,9 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
       const personaPrompt = pointerPreset
         ? resolvePresetPersonaPrompt(pointerPreset)
         : (personaConfig?.persona_prompt ?? null);
+      const namingConfig = pointerPreset
+        ? pointerPreset.preset_naming_config
+        : (personaNamingConfigs.get(personaId) ?? EMPTY_PERSONA_NAMING_CONFIG);
 
       // Per-persona humanizer override: overlay onto a copy of the server config at
       // load time so every runtime consumer of config.humanizer_degree (providers,
@@ -2679,6 +2700,7 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
         llm: llmData,
         trigger_words: triggerWords,
         persona_prompt: personaPrompt,
+        naming_config: namingConfig,
         reward_conditioning_enabled: personaConfig?.reward_conditioning_enabled ?? true,
         punish_conditioning_enabled: personaConfig?.punish_conditioning_enabled ?? true,
         humanizer_degree_override: humanizerOverride,
@@ -2745,6 +2767,9 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
         );
         const serverId = typedTomoriRows[0].server_id;
         const pointerPresetsByPersonaId = await this.loadPointerPresetsForRows(typedTomoriRows);
+        const personaNamingConfigs = await userNamingRepository.loadPersonaConfigs(
+          typedTomoriRows.flatMap((row) => (typeof row.persona_id === "number" ? [row.persona_id] : [])),
+        );
 
         // Load server-scoped config once (fallback to main persona config)
         let configData = await this.sqlLoadTomoriConfigByServerId(serverId);
@@ -3025,6 +3050,9 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
           const personaPrompt = pointerPreset
             ? resolvePresetPersonaPrompt(pointerPreset)
             : (personaConfig?.persona_prompt ?? null);
+          const namingConfig = pointerPreset
+            ? pointerPreset.preset_naming_config
+            : (personaNamingConfigs.get(personaId) ?? EMPTY_PERSONA_NAMING_CONFIG);
 
           // Per-persona humanizer override: overlay onto a copy of the shared server
           // config so only this persona's state sees the overridden degree. Each
@@ -3043,6 +3071,7 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
             llm: llmData,
             trigger_words: triggerWords,
             persona_prompt: personaPrompt,
+            naming_config: namingConfig,
             reward_conditioning_enabled: personaConfig?.reward_conditioning_enabled ?? true,
             punish_conditioning_enabled: personaConfig?.punish_conditioning_enabled ?? true,
             humanizer_degree_override: humanizerOverride,

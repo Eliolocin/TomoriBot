@@ -217,7 +217,7 @@ async function performReminderEdit(
 
   const targetUserId = isReminderForInvoker ? userData.user_disc_id : (botUserId as string);
   const targetUserNickname = isReminderForInvoker
-    ? userData.user_nickname
+    ? (userData.user_nickname ?? replyInteraction.user.displayName)
     : (tomoriState.persona_nickname ?? client.user?.username ?? "Tomori");
 
   const updatedReminder = await serverScheduleRepository.updateReminder({
@@ -557,7 +557,7 @@ export async function execute(
         ? localizer(locale, "commands.scheduled-task.edit.type_reminder")
         : localizer(locale, "commands.scheduled-task.edit.type_task"),
       target_user: editedReminderForInvoker
-        ? userData.user_nickname
+        ? (userData.user_nickname ?? interaction.user.displayName)
         : localizer(locale, "commands.scheduled-task.edit.target_none"),
       target_channel: getChannelDisplay(interaction, selectedReminder.channel_disc_id),
     };

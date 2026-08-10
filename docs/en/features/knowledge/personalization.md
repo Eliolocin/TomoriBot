@@ -13,6 +13,29 @@ configuration.
 Facts she remembers about you follow you between servers. Managing them (add, remove, export)
 is covered on the [Memory](/features/knowledge/memory/#personal-vs-server-memories) page.
 
+## Identity and Persona-Aware Names
+
+`/personal identity` stores four independent, optional preferences: gender identity,
+pronouns, orientation, and addressing style. TomoriBot never infers one from another. The
+addressing style selects a persona's masculine, feminine, or neutral naming variant; leaving
+it unspecified uses the neutral variant. Blank identity fields are cleared and omitted from
+prompt context. Raw identity fields are exposed only at Minimal privacy.
+
+`/personal nickname` opens a naming modal for either global or persona scope. A persona-scoped
+preference follows that persona's stable lineage across servers. Nicknames inherit from the
+persona preference to the global preference and then the live Discord display name. Prefixes
+and suffixes independently support Inherit, None, and Custom, so `Master Sparrow-san` can
+combine values from different levels without changing the underlying Discord mention target.
+
+Server managers can configure persona defaults with `/persona naming-habits`. A standalone
+address term such as `fam` is separate from the formatted name and is available only to
+persona-authored prompt text. The default-on User Info Updates capability allows a persona to
+apply explicit structured changes requested in conversation. Disabling it stops automatic
+tool updates but does not disable the two `/personal` commands.
+
+`/personal timezone` stores only a numeric UTC offset from -12 through +14. It does not store
+or infer a geographic location or IANA timezone.
+
 ## Your Own Providers
 
 Personal providers let *your own requests* use *your own* API keys and models instead of the
@@ -107,7 +130,6 @@ target whichever persona you explicitly call. Press Finish to skip.
 
 Review or remove entries with `/personal spotlight manage` (uncheck to remove; timed
 spotlights expire on their own). Run `/help spotlight` for the Discord summary.
-
 
 
 

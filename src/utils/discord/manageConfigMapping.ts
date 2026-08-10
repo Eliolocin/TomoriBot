@@ -23,6 +23,7 @@ type CapabilitiesManageCapabilityColumn = Extract<
   | "voice_message_enabled"
   | "user_blocking_enabled"
   | "short_term_memory_enabled"
+  | "user_info_updates_enabled"
   | "time_awareness_enabled"
 >;
 
@@ -102,6 +103,14 @@ const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesManagePer
     labelKey: "commands.capabilities.manage.personalization_option",
     descKey: "commands.capabilities.manage.personalization_desc",
     getState: (c) => c.personal_memories_enabled,
+  },
+  {
+    value: "userinfo",
+    table: "capabilities",
+    dbColumn: "user_info_updates_enabled",
+    labelKey: "commands.capabilities.manage.userinfo_option",
+    descKey: "commands.capabilities.manage.userinfo_desc",
+    getState: (c) => c.user_info_updates_enabled ?? true,
   },
   {
     value: "emojiusage",

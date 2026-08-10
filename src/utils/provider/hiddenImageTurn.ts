@@ -246,6 +246,8 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
       channelId: channel.id,
       client,
       triggererName,
+      triggererFormattedName: triggererName,
+      triggererAddressTerm: "",
       tomoriNickname: persona.tomoriNickname,
       tomoriAttributes: persona.tomoriAttributes,
       tomoriConfig: tomoriState.config,
