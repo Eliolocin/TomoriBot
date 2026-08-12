@@ -13,6 +13,15 @@ describe("formatUserName", () => {
   ])("formats %s with prefix %s and suffix %s", (nickname, prefix, suffix, expected) => {
     expect(formatUserName(nickname, prefix, suffix)).toBe(expected);
   });
+
+  test.each([
+    ["Misuzu", "dad", "", "Dad Misuzu"],
+    ["misuzu", "", "", "Misuzu"],
+    ["Sparrow", "xXxSlayerxXx", "", "xXxSlayerxXx Sparrow"],
+    ["Sparrow", "eSports", "", "eSports Sparrow"],
+  ])("capitalizes an all-lowercase leading token but leaves stylized casing alone (%s, %s)", (nickname, prefix, suffix, expected) => {
+    expect(formatUserName(nickname, prefix, suffix)).toBe(expected);
+  });
 });
 
 describe("resolveEffectiveUserNaming", () => {

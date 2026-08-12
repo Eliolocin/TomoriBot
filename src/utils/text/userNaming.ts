@@ -69,9 +69,21 @@ function formatSuffix(name: string, suffix: string): string {
   return `${name} ${trimmed}`;
 }
 
+function capitalizeLeadingChar(name: string): string {
+  return name ? name.charAt(0).toUpperCase() + name.slice(1) : name;
+}
+
 export function formatUserName(nickname: string, prefix = "", suffix = ""): string {
   const normalizedNickname = nickname.trim();
-  return formatSuffix(formatPrefix(prefix, normalizedNickname), suffix);
+  const assembled = formatSuffix(formatPrefix(prefix, normalizedNickname), suffix);
+
+  // The leading token (prefix if present, else the nickname) always supplies
+  // the assembled name's first character. Only capitalize it when that token
+  // is entirely lowercase, so a casually-typed prefix like "dad" reads as
+  // "Dad Sparrow" while deliberate styling ("@sparrow", "マスター", "xXx...")
+  // is left untouched.
+  const leadingToken = prefix.trim() || normalizedNickname;
+  return leadingToken === leadingToken.toLowerCase() ? capitalizeLeadingChar(assembled) : assembled;
 }
 
 export function resolveEffectiveUserNaming(input: ResolveEffectiveUserNamingInput): EffectiveUserNaming {

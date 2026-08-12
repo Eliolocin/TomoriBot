@@ -709,6 +709,7 @@ SELECT add_column_if_not_exists('persona_presets', 'preset_attribute_public_flag
 -- avatar and a content-hash version token, populated by the avatar seed step.
 SELECT add_column_if_not_exists('persona_presets', 'preset_avatar_shared_url', 'TEXT');
 SELECT add_column_if_not_exists('persona_presets', 'preset_avatar_hash', 'TEXT');
+SELECT add_column_if_not_exists('persona_presets', 'preset_naming_config', 'JSONB', '''{"prefixes":{},"suffixes":{},"addressTerms":{}}''::JSONB', 'NOT NULL');
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_persona_presets_lineage_language_unique
   ON persona_presets(preset_lineage_id, preset_language)
