@@ -14,7 +14,7 @@ export interface UserPersonaNamingPair {
   personaLineageId: number;
 }
 
-type UserPersonaNamingPreferencePatch = Partial<
+export type UserPersonaNamingPreferencePatch = Partial<
   Pick<UserPersonaNamingPreference, "nickname_override" | "prefix_override" | "suffix_override">
 >;
 

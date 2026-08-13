@@ -163,20 +163,34 @@ It uses the same collision-aware name, alias, mention, and Discord-ID resolver a
 personal tools. An omitted target means the human who triggered the turn; `all` and `everyone`
 are never wildcard targets.
 
+Each field is its own optional parameter, so a change is expressed by passing the field. Removal
+is a `clear` list of field names, which keeps one rule for the text, enum, and numeric fields
+alike; a blank string is folded into a removal rather than rejected. There is no scope or action
+parameter, because scope follows the field:
+
+| Fields | Stored | Effect |
+|---|---|---|
+| nickname, prefix, suffix | per persona lineage | only the persona that made the change addresses them differently |
+| gender identity, pronouns, addressing style, timezone | once per user | every persona reads the same value |
+
+That split follows storage rather than preference: the identity fields have a single slot per
+user and no per-persona equivalent. The success notice labels persona-scoped rows with the
+persona's name, so the difference is visible rather than implied. An unlabelled row is global,
+which needs no explanation of its own because global is the unsurprising case.
+
 Participant context names each user's prefix and suffix separately from their nickname, so a
-request to drop a title resolves to an affix change instead of a nickname rewrite. Setting an
-affix to `none` suppresses it whatever supplied it: when a persona-scoped override would outrank
-a global `none`, that override is cleared in the same transaction, so an explicit suppression is
-never silently ignored. An `inherit` request is left alone, because falling back to a lower layer
-is what it means.
+request to drop a title resolves to an affix change instead of a nickname rewrite. A cleared
+affix is stored as an explicit suppression, so the removal cannot be undone by a lower
+precedence layer still supplying a value.
 
 When a nickname is submitted with an affix that is already resolved, the redundant affix is
 stripped by comparing against the resolved value; the nickname is never split on whitespace to
-guess a boundary. Each successful update reports the resulting form of address, so an
-addressing-style switch is visible in the same turn.
+guess a boundary. An update reports the resulting form of address whenever that name actually
+moved, so an addressing-style switch is visible in the same turn even though no naming field
+appeared in it, while a pronoun or timezone edit does not restate a name nothing touched.
 
-Every requested item is validated before one atomic write. Restrictive privacy blocks additions
-and changes but still permits clearing values. Persona scope always means the active persona's
-lineage and cannot edit persona-wide address terms. The default-on User Info Updates switch in
-`/capabilities manage` controls both tool exposure and stale-invocation defense. Manual
-`/personal profile about` and `/personal profile nickname` remain available when it is off.
+Every field is validated before one atomic write. Restrictive privacy blocks additions and
+changes but still permits clearing values. The tool cannot edit persona-wide address terms. The
+default-on User Info Updates switch in `/capabilities manage` controls both tool exposure and
+stale-invocation defense. Manual `/personal profile about` and `/personal profile nickname`
+remain available when it is off.

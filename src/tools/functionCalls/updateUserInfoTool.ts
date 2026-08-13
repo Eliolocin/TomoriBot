@@ -10,38 +10,44 @@ import { invalidateUserCache } from "@/utils/cache/userCache";
 import { resolveUserTarget } from "@/utils/discord/targetResolver";
 import { sendNoticeContainerMessage } from "@/utils/discord/expandableEmbedNotice";
 import { userNamingRepository, userRepository } from "@/utils/db/repositories";
-import { type UserInfoWriteBatch, userPersonaNamingPairKey } from "@/utils/db/repositories/UserNamingRepository";
+import {
+  type UserInfoWriteBatch,
+  type UserPersonaNamingPreferencePatch,
+  userPersonaNamingPairKey,
+} from "@/utils/db/repositories/UserNamingRepository";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { type EffectiveUserNaming, resolveEffectiveUserNaming } from "@/utils/text/userNaming";
 
-const updateUserInfoChangeSchema = z
-  .object({
-    field: z.enum([
-      "nickname",
-      "prefix",
-      "suffix",
-      "gender_identity",
-      "pronouns",
-      "addressing_style",
-      "timezone_offset",
-    ]),
-    scope: z.enum(["global", "persona"]),
-    action: z.enum(["set", "clear", "inherit", "none"]),
-    text_value: z.string().max(USER_IDENTITY_FIELD_MAX_LENGTH).optional(),
-    number_value: z.number().optional(),
-  })
-  .strict();
+/** Fields stored per persona lineage, so each persona can address the same human differently. */
+const NAMING_FIELDS = ["nickname", "prefix", "suffix"] as const;
+/** Fields with only one storage slot per user; every persona reads the same value. */
+const GLOBAL_FIELDS = ["gender_identity", "pronouns", "addressing_style", "timezone_offset"] as const;
+const ALL_FIELDS = [...NAMING_FIELDS, ...GLOBAL_FIELDS] as const;
+
+type UserInfoField = (typeof ALL_FIELDS)[number];
 
 const updateUserInfoInputSchema = z
   .object({
     target_user: z.string().min(1).optional(),
-    changes: z.array(updateUserInfoChangeSchema).min(1).max(8),
+    nickname: z.string().max(USER_NICKNAME_MAX_LENGTH).optional(),
+    prefix: z.string().max(PERSONA_NAMING_VALUE_MAX_LENGTH).optional(),
+    suffix: z.string().max(PERSONA_NAMING_VALUE_MAX_LENGTH).optional(),
+    gender_identity: z.string().max(USER_IDENTITY_FIELD_MAX_LENGTH).optional(),
+    pronouns: z.string().max(USER_IDENTITY_FIELD_MAX_LENGTH).optional(),
+    addressing_style: z.enum(["masculine", "feminine", "neutral"]).optional(),
+    timezone_offset: z.number().int().min(-12).max(14).optional(),
+    clear: z.array(z.enum(ALL_FIELDS)).max(ALL_FIELDS.length).optional(),
   })
   .strict();
 
-type UpdateUserInfoChange = z.infer<typeof updateUserInfoChangeSchema>;
+type UpdateUserInfoInput = z.infer<typeof updateUserInfoInputSchema>;
+
+/** What a single field is being changed to. Absent from the plan means it is not being touched. */
+type FieldPlan =
+  | { field: UserInfoField; cleared: true }
+  | { field: UserInfoField; cleared: false; value: string | number };
 
 function failure(
   context: ToolContext,
@@ -50,157 +56,69 @@ function failure(
   data: Record<string, unknown> = {},
 ): ToolResult {
   const reason = localizer(context.locale, messageKey);
-  return {
-    success: false,
-    error: reason,
-    message: reason,
-    data: { status, ...data },
-  };
+  return { success: false, error: reason, message: reason, data: { status, ...data } };
 }
 
-function validateChange(change: UpdateUserInfoChange): string | null {
-  const text = change.text_value?.trim();
-  const globalOnly = ["gender_identity", "pronouns", "addressing_style", "timezone_offset"];
-  if (globalOnly.includes(change.field) && change.scope !== "global") {
-    return `${change.field} only supports global scope`;
-  }
-  if (["prefix", "suffix"].includes(change.field)) {
-    if (change.number_value !== undefined) return `${change.field} does not accept number_value`;
-    if (!["set", "inherit", "none"].includes(change.action)) return `${change.field} has an invalid action`;
-    if (change.action === "set" && !text) return `${change.field} set requires text_value`;
-    if (text && text.length > PERSONA_NAMING_VALUE_MAX_LENGTH) return `${change.field} is too long`;
-    return null;
-  }
-  if (change.field === "nickname") {
-    if (change.number_value !== undefined) return "nickname does not accept number_value";
-    if (!["set", "clear"].includes(change.action)) return "nickname has an invalid action";
-    if (change.action === "set" && !text) return "nickname set requires text_value";
-    if (text && text.length > USER_NICKNAME_MAX_LENGTH) return "nickname is too long";
-    return null;
-  }
-  if (["gender_identity", "pronouns"].includes(change.field)) {
-    if (change.number_value !== undefined) return `${change.field} does not accept number_value`;
-    if (!["set", "clear"].includes(change.action)) return `${change.field} has an invalid action`;
-    if (change.action === "set" && !text) return `${change.field} set requires text_value`;
-    return null;
-  }
-  if (change.field === "addressing_style") {
-    if (change.number_value !== undefined) return "addressing_style does not accept number_value";
-    if (!["set", "clear"].includes(change.action)) return "addressing_style has an invalid action";
-    if (change.action === "set" && !["masculine", "feminine", "neutral"].includes(text ?? "")) {
-      return "addressing_style must be masculine, feminine, or neutral";
+/**
+ * Turns the flat input into one entry per touched field.
+ *
+ * A blank or whitespace-only string is folded into a clear rather than rejected:
+ * no field has a meaningful empty value, and treating it as a removal is what the
+ * caller obviously meant.
+ */
+function buildFieldPlans(input: UpdateUserInfoInput): { plans: FieldPlan[]; conflict: boolean } {
+  const cleared = new Set<UserInfoField>(input.clear ?? []);
+  const plans: FieldPlan[] = [];
+  let conflict = false;
+
+  for (const field of ALL_FIELDS) {
+    const raw = input[field];
+    const trimmed = typeof raw === "string" ? raw.trim() : raw;
+    const hasValue = trimmed !== undefined && trimmed !== "";
+
+    if (hasValue && cleared.has(field)) {
+      conflict = true;
+      continue;
     }
-    return null;
+    if (hasValue) {
+      plans.push({ field, cleared: false, value: trimmed as string | number });
+      continue;
+    }
+    if (cleared.has(field) || (typeof raw === "string" && trimmed === "")) {
+      plans.push({ field, cleared: true });
+    }
   }
-  if (change.text_value !== undefined) return "timezone_offset does not accept text_value";
-  if (!["set", "clear"].includes(change.action)) return "timezone_offset has an invalid action";
-  if (
-    change.action === "set" &&
-    (!Number.isInteger(change.number_value) || (change.number_value ?? 0) < -12 || (change.number_value ?? 0) > 14)
-  ) {
-    return "timezone_offset must be an integer from -12 through 14";
-  }
-  return null;
-}
 
-function addChangeToBatch(batch: UserInfoWriteBatch, change: UpdateUserInfoChange): void {
-  const text = change.text_value?.trim();
-  const personaPatch = batch.persona?.patch;
-  if (change.field === "nickname") {
-    const value = change.action === "clear" ? null : (text ?? null);
-    if (change.scope === "persona" && personaPatch) personaPatch.nickname_override = value;
-    else batch.global.user_nickname = value;
-  } else if (change.field === "prefix" || change.field === "suffix") {
-    const value = change.action === "inherit" ? null : change.action === "none" ? "" : (text ?? "");
-    const key = `${change.field}_override` as "prefix_override" | "suffix_override";
-    if (change.scope === "persona" && personaPatch) personaPatch[key] = value;
-    else batch.global[key] = value;
-  } else if (change.field === "timezone_offset") {
-    batch.global.timezone_offset = change.action === "clear" ? null : (change.number_value ?? null);
-  } else if (change.field === "addressing_style") {
-    batch.global.addressing_style = change.action === "clear" ? null : (text as "masculine" | "feminine" | "neutral");
-  } else {
-    batch.global[change.field] = change.action === "clear" ? null : (text ?? null);
-  }
-}
-
-/** Whether a global `none` on this affix would be outranked by the user's persona-lineage override. */
-function isOutrankedGlobalSuppression(change: UpdateUserInfoChange, naming: EffectiveUserNaming): boolean {
-  if (change.scope !== "global" || change.action !== "none") return false;
-  if (change.field !== "prefix" && change.field !== "suffix") return false;
-  const source = change.field === "prefix" ? naming.prefixSource : naming.suffixSource;
-  return source === "persona_preference";
+  return { plans, conflict };
 }
 
 /**
- * Makes an explicit `none` actually suppress the affix.
+ * Strips an affix the caller re-typed into the nickname.
  *
- * A persona-lineage override outranks the global layer, so a global `none` would
- * otherwise commit successfully while the affix kept rendering, which reads to the
- * user as the request being ignored. Only `none` is widened this way: `inherit`
- * genuinely means "fall back", so a lower layer supplying a value again is its
- * correct outcome, not a bug. An explicit persona-scope change in the same batch
- * wins, since that is the model stating the lineage value deliberately.
+ * A model that only ever sees the joined formatted name will sometimes submit
+ * "Master Sparrow" as the nickname while "Master" is already the resolved prefix,
+ * which would otherwise render "Master Master Sparrow". Matching is against the
+ * resolved affix values only: the nickname is never split on whitespace or
+ * punctuation to invent an affix boundary.
  */
-export function suppressOutrankingOverrides(
-  changes: UpdateUserInfoChange[],
-  naming: EffectiveUserNaming,
-  batch: UserInfoWriteBatch,
-): void {
-  const patch = batch.persona?.patch;
-  if (!patch) return;
-  for (const change of changes) {
-    if (!isOutrankedGlobalSuppression(change, naming)) continue;
-    const key = `${change.field}_override` as "prefix_override" | "suffix_override";
-    if (Object.hasOwn(patch, key)) continue;
-    patch[key] = null;
-  }
-}
-
-/**
- * Resolves the affix the batch will leave in place, so the nickname can be
- * de-duplicated against it rather than against a value the batch is replacing.
- * An `inherit` request keeps the currently resolved affix because the layer it
- * falls back to may still supply one.
- */
-function pendingAffix(changes: UpdateUserInfoChange[], field: "prefix" | "suffix", current: string): string {
-  const change = changes.find((candidate) => candidate.field === field);
-  if (!change) return current;
-  if (change.action === "set") return change.text_value?.trim() ?? "";
-  if (change.action === "none") return "";
-  return current;
-}
-
-/**
- * Strips an affix the model re-typed into the nickname.
- *
- * A model that only ever sees the joined `formattedName` will sometimes submit
- * "Master Sparrow" as the nickname while "Master" is already the resolved
- * prefix, which would otherwise render "Master Master Sparrow". Matching is
- * against the resolved affix values only: the nickname is never split on
- * whitespace or punctuation to invent an affix boundary.
- */
-export function stripRedundantAffixes(changes: UpdateUserInfoChange[], naming: EffectiveUserNaming): void {
-  const nicknameChange = changes.find((change) => change.field === "nickname" && change.action === "set");
-  const submitted = nicknameChange?.text_value?.trim();
-  if (!nicknameChange || !submitted) return;
-
-  let value = submitted;
-  const prefix = pendingAffix(changes, "prefix", naming.prefix);
+export function stripRedundantAffixes(nickname: string, prefix: string, suffix: string): string {
+  let value = nickname.trim();
   if (prefix && value.toLowerCase().startsWith(prefix.toLowerCase())) {
     const remainder = value.slice(prefix.length).trimStart();
     if (remainder) value = remainder;
   }
-  const suffix = pendingAffix(changes, "suffix", naming.suffix);
   if (suffix && value.toLowerCase().endsWith(suffix.toLowerCase())) {
     const remainder = value.slice(0, value.length - suffix.length).trimEnd();
     if (remainder) value = remainder;
   }
+  return value;
+}
 
-  if (value !== submitted) {
-    log.info(`update_user_info stripped a redundant affix from the submitted nickname for ${naming.formattedName}`);
-    nicknameChange.text_value = value;
-  }
+/** The affix that will be in effect once this batch commits, used to de-duplicate the nickname. */
+function pendingAffix(plans: FieldPlan[], field: "prefix" | "suffix", current: string): string {
+  const plan = plans.find((candidate) => candidate.field === field);
+  if (!plan) return current;
+  return plan.cleared ? "" : String(plan.value);
 }
 
 async function resolveLiveDisplayName(context: ToolContext, targetDiscordId: string): Promise<string> {
@@ -241,35 +159,72 @@ async function resolveNaming(
   });
 }
 
-function styleLabel(locale: string, style: string | null | undefined): string | null {
-  if (!style) return null;
-  return localizer(locale, `commands.personal.profile.about.style_${style}`);
+/**
+ * Routes each field to its own storage. Naming fields are per-lineage so personas can
+ * address the same human differently; identity fields have a single slot per user.
+ * A cleared affix is stored as an explicit suppression rather than an inherit, so the
+ * removal cannot be undone by a lower layer still supplying a value.
+ */
+function buildBatch(plans: FieldPlan[], lineageId: number | null): UserInfoWriteBatch {
+  const namingPatch: UserPersonaNamingPreferencePatch = {};
+  const batch: UserInfoWriteBatch = { global: {} };
+
+  for (const plan of plans) {
+    switch (plan.field) {
+      case "nickname": {
+        const value = plan.cleared ? null : String(plan.value);
+        if (lineageId != null) namingPatch.nickname_override = value;
+        else batch.global.user_nickname = value;
+        break;
+      }
+      case "prefix":
+      case "suffix": {
+        const key = `${plan.field}_override` as const;
+        const value = plan.cleared ? "" : String(plan.value);
+        if (lineageId != null) namingPatch[key] = value;
+        else batch.global[key] = value;
+        break;
+      }
+      case "timezone_offset":
+        batch.global.timezone_offset = plan.cleared ? null : Number(plan.value);
+        break;
+      case "addressing_style":
+        batch.global.addressing_style = plan.cleared
+          ? null
+          : (String(plan.value) as "masculine" | "feminine" | "neutral");
+        break;
+      default:
+        batch.global[plan.field] = plan.cleared ? null : String(plan.value);
+        break;
+    }
+  }
+
+  if (Object.keys(namingPatch).length > 0 && lineageId != null) {
+    batch.persona = { personaLineageId: lineageId, patch: namingPatch };
+  }
+  return batch;
 }
 
-/** Renders a stored affix override, where null means inherit and "" means an explicit suppression. */
-function affixOverrideLabel(locale: string, value: string | null | undefined): string {
-  if (value === null || value === undefined) return localizer(locale, "tools.user_info_update.value_inherit");
-  return value || localizer(locale, "tools.user_info_update.value_none");
+function styleLabel(locale: string, style: string | null | undefined): string | null {
+  return style ? localizer(locale, `commands.personal.profile.about.style_${style}`) : null;
 }
 
 function previousValueLabel(
   locale: string,
-  change: UpdateUserInfoChange,
+  field: UserInfoField,
   before: UserRow,
-  personaScoped: boolean,
+  naming: EffectiveUserNaming,
 ): string {
   const none = localizer(locale, "tools.user_info_update.value_none");
-  switch (change.field) {
+  switch (field) {
+    // Naming fields report the value the target actually experienced, not the raw
+    // override slot, so the notice reads the way the change felt.
     case "nickname":
-      return personaScoped ? localizer(locale, "tools.user_info_update.value_inherit") : before.user_nickname || none;
+      return naming.nickname || none;
     case "prefix":
-      return personaScoped
-        ? localizer(locale, "tools.user_info_update.value_inherit")
-        : affixOverrideLabel(locale, before.prefix_override);
+      return naming.prefix || none;
     case "suffix":
-      return personaScoped
-        ? localizer(locale, "tools.user_info_update.value_inherit")
-        : affixOverrideLabel(locale, before.suffix_override);
+      return naming.suffix || none;
     case "gender_identity":
       return before.gender_identity || none;
     case "pronouns":
@@ -283,53 +238,60 @@ function previousValueLabel(
   }
 }
 
-function nextValueLabel(locale: string, change: UpdateUserInfoChange): string {
-  const text = change.text_value?.trim();
-  if (change.action === "clear") return localizer(locale, "tools.user_info_update.value_cleared");
-  if (change.action === "inherit") return localizer(locale, "tools.user_info_update.value_inherit");
-  if (change.action === "none") return localizer(locale, "tools.user_info_update.value_none");
-  if (change.field === "timezone_offset") return formatUTCOffset(change.number_value ?? 0);
-  if (change.field === "addressing_style") return styleLabel(locale, text) ?? text ?? "";
-  return text ?? "";
+function nextValueLabel(locale: string, plan: FieldPlan): string {
+  if (plan.cleared) return localizer(locale, "tools.user_info_update.value_cleared");
+  if (plan.field === "timezone_offset") return formatUTCOffset(Number(plan.value));
+  if (plan.field === "addressing_style") return styleLabel(locale, String(plan.value)) ?? String(plan.value);
+  return String(plan.value);
 }
 
 /**
- * Builds the notice/return body: a numbered list of what changed followed by the
- * resulting form of address. The resulting name is always included, including
- * for identity-only edits, because an addressing-style switch moves the affix
- * without any naming field appearing in the list.
+ * Builds the notice/return body: a numbered list of what changed, followed by the
+ * resulting form of address only when that name actually moved. Persona-scoped rows
+ * carry the persona's name; an unlabelled row is global, which needs no explanation
+ * because global is the unsurprising case.
  */
 function buildSuccessBody(
   context: ToolContext,
-  changes: UpdateUserInfoChange[],
+  plans: FieldPlan[],
   before: UserRow,
-  after: EffectiveUserNaming,
+  namingBefore: EffectiveUserNaming,
+  namingAfter: EffectiveUserNaming,
   targetLabel: string,
+  personaScoped: boolean,
 ): string {
   const locale = context.locale;
   const personaName = context.personaUsername ?? context.tomoriState.persona_nickname;
-  const lines = changes.map((change, index) => {
-    const personaScoped = change.scope === "persona";
-    const fieldLabel = localizer(locale, `tools.user_info_update.field_${change.field}`);
-    const scopedLabel = personaScoped
-      ? localizer(locale, "tools.user_info_update.field_persona_scoped", {
-          field: fieldLabel,
-          persona_name: personaName,
-        })
-      : fieldLabel;
+  const lines = plans.map((plan, index) => {
+    const isNaming = personaScoped && (NAMING_FIELDS as readonly string[]).includes(plan.field);
+    const fieldLabel = localizer(locale, `tools.user_info_update.field_${plan.field}`);
     return localizer(locale, "tools.user_info_update.change_line", {
       index: index + 1,
-      field: scopedLabel,
-      previous: previousValueLabel(locale, change, before, personaScoped),
-      next: nextValueLabel(locale, change),
+      field: isNaming
+        ? localizer(locale, "tools.user_info_update.field_persona_scoped", {
+            field: fieldLabel,
+            persona_name: personaName,
+          })
+        : fieldLabel,
+      previous: previousValueLabel(locale, plan.field, before, namingBefore),
+      next: nextValueLabel(locale, plan),
     });
   });
-  const summary = localizer(locale, "tools.user_info_update.success_summary", {
-    persona_name: personaName,
-    target_user: targetLabel,
-    formatted_name: after.formattedName,
-  });
-  return `${localizer(locale, "tools.user_info_update.success_intro")}\n${lines.join("\n")}\n\n${summary}`;
+
+  // Keyed on the rendered name rather than on which fields changed: an
+  // addressing-style switch moves the affix with no naming field present, while a
+  // pronoun edit leaves the name alone. Reporting it either way would restate the
+  // unchanged name as if it were news.
+  const nameChanged = namingBefore.formattedName !== namingAfter.formattedName;
+  const summary = nameChanged
+    ? `\n\n${localizer(locale, "tools.user_info_update.success_summary", {
+        persona_name: personaName,
+        target_user: targetLabel,
+        formatted_name: namingAfter.formattedName,
+      })}`
+    : "";
+
+  return `${localizer(locale, "tools.user_info_update.success_intro")}\n${lines.join("\n")}${summary}`;
 }
 
 async function sendSuccessNotice(context: ToolContext, targetLabel: string, body: string): Promise<void> {
@@ -360,7 +322,7 @@ async function sendSuccessNotice(context: ToolContext, targetLabel: string, body
 export class UpdateUserInfoTool extends BaseTool {
   name = "update_user_info";
   description =
-    "Update a registered Discord user's structured profile: nickname, separate prefix/suffix, identity, preferred addressing style, or numeric UTC offset. Use this instead of memory tools for requests such as 'call me X' or pronoun changes. The participant list names each user's prefix and suffix separately from their nickname; to stop using a title, set that prefix or suffix to action 'none' rather than rewriting the nickname without it. Conventional titles belong in prefix or suffix, not inside nickname. Persona scope applies only to the active persona lineage.";
+    "Update a registered Discord user's stored profile. Use this instead of memory tools for requests such as 'call me X' or a pronoun change. Nickname, prefix, and suffix are yours alone, so they change only how you address them; the remaining fields are shared by every persona. A title or honorific belongs in prefix or suffix, never inside nickname. To stop using a title, list 'prefix' or 'suffix' in clear rather than resending the nickname without it. Pass only the fields you are changing.";
   category = "utility" as const;
   requiresFeatureFlag = "user_info_updates";
 
@@ -370,39 +332,46 @@ export class UpdateUserInfoTool extends BaseTool {
       target_user: {
         type: "string",
         description:
-          "Optional user name, alias, mention, or Discord ID. Omit only to update the human who triggered this turn. Never use all or everyone.",
+          "OPTIONAL: User name, alias, mention, or Discord ID. Omit to update the human who triggered this turn. Never use all or everyone.",
       },
-      changes: {
+      nickname: {
+        type: "string",
+        description: "OPTIONAL: What you call them, with no title or honorific attached. Applies to you only.",
+      },
+      prefix: {
+        type: "string",
+        description:
+          "OPTIONAL: Title or honorific placed before the nickname, such as Master or Dad. Applies to you only.",
+      },
+      suffix: {
+        type: "string",
+        description: "OPTIONAL: Title or honorific placed after the nickname, such as -san or Jr. Applies to you only.",
+      },
+      gender_identity: {
+        type: "string",
+        description: "OPTIONAL: How they describe their own gender, in their words. Shared by every persona.",
+      },
+      pronouns: {
+        type: "string",
+        description: "OPTIONAL: Pronouns to use for them, such as she/her, they/them, or any. Shared by every persona.",
+      },
+      addressing_style: {
+        type: "string",
+        enum: ["masculine", "feminine", "neutral"],
+        description:
+          "OPTIONAL: Which naming variant to use for them. Never infer it from their gender or pronouns. Shared by every persona.",
+      },
+      timezone_offset: {
+        type: "number",
+        description: "OPTIONAL: Their UTC offset in whole hours, from -12 through 14. Shared by every persona.",
+      },
+      clear: {
         type: "array",
-        description: "Atomic list of explicit changes. One invalid item rejects the entire list.",
-        items: {
-          type: "object",
-          properties: {
-            field: {
-              type: "string",
-              enum: [
-                "nickname",
-                "prefix",
-                "suffix",
-                "gender_identity",
-                "pronouns",
-                "addressing_style",
-                "timezone_offset",
-              ],
-            },
-            scope: { type: "string", enum: ["global", "persona"] },
-            action: { type: "string", enum: ["set", "clear", "inherit", "none"] },
-            text_value: {
-              type: "string",
-              description: "Value for text fields. For addressing_style use masculine, feminine, or neutral.",
-            },
-            number_value: { type: "number", description: "Integer UTC offset from -12 through 14." },
-          },
-          required: ["field", "scope", "action"],
-        },
+        items: { type: "string", enum: [...ALL_FIELDS] },
+        description: "OPTIONAL: Names of fields to remove. Do not also pass a value for a field listed here.",
       },
     },
-    required: ["changes"],
+    required: [],
   };
 
   isAvailableFor(): boolean {
@@ -422,16 +391,11 @@ export class UpdateUserInfoTool extends BaseTool {
       return failure(context, "user_info_update_invalid_target", "tools.user_info_update.error_specific_target");
     }
 
-    const seen = new Set<string>();
-    for (const change of parsed.data.changes) {
-      const error = validateChange(change);
-      if (error)
-        return failure(context, "user_info_update_invalid_change", "tools.user_info_update.error_invalid_changes");
-      const key = `${change.scope}:${change.field}`;
-      if (seen.has(key))
-        return failure(context, "user_info_update_duplicate_change", "tools.user_info_update.error_duplicate_change");
-      seen.add(key);
-    }
+    const { plans, conflict } = buildFieldPlans(parsed.data);
+    if (conflict)
+      return failure(context, "user_info_update_duplicate_change", "tools.user_info_update.error_duplicate_change");
+    if (plans.length === 0)
+      return failure(context, "user_info_update_invalid_change", "tools.user_info_update.error_invalid_changes");
 
     let targetDiscordId = context.userId;
     let targetLabel = "the triggering user";
@@ -459,32 +423,26 @@ export class UpdateUserInfoTool extends BaseTool {
       return failure(context, "user_info_update_unregistered_target", "tools.user_info_update.error_unregistered");
     }
 
-    const hasRestrictedSet = parsed.data.changes.some((change) => !["clear", "inherit"].includes(change.action));
+    const hasRestrictedSet = plans.some((plan) => !plan.cleared);
     if (targetUser.privacy_level !== PrivacyLevel.MINIMAL && hasRestrictedSet) {
       return failure(context, "user_info_update_privacy_restricted", "tools.user_info_update.error_privacy_restricted");
-    }
-
-    const hasPersonaChanges = parsed.data.changes.some((change) => change.scope === "persona");
-    const lineageId = context.tomoriState.persona_lineage_id;
-    if (hasPersonaChanges && lineageId == null) {
-      return failure(context, "user_info_update_missing_persona", "tools.user_info_update.error_missing_persona");
     }
 
     const liveDisplayName = await resolveLiveDisplayName(context, targetDiscordId);
     const namingBefore = await resolveNaming(context, targetUser, liveDisplayName);
     if (!requestedTarget) targetLabel = namingBefore.nickname;
-    stripRedundantAffixes(parsed.data.changes, namingBefore);
 
-    const needsSuppression =
-      lineageId != null && parsed.data.changes.some((change) => isOutrankedGlobalSuppression(change, namingBefore));
-    const batch: UserInfoWriteBatch = {
-      global: {},
-      ...(hasPersonaChanges || needsSuppression
-        ? { persona: { personaLineageId: lineageId as number, patch: {} } }
-        : {}),
-    };
-    for (const change of parsed.data.changes) addChangeToBatch(batch, change);
-    suppressOutrankingOverrides(parsed.data.changes, namingBefore, batch);
+    const nicknamePlan = plans.find((plan) => plan.field === "nickname" && !plan.cleared);
+    if (nicknamePlan && !nicknamePlan.cleared) {
+      nicknamePlan.value = stripRedundantAffixes(
+        String(nicknamePlan.value),
+        pendingAffix(plans, "prefix", namingBefore.prefix),
+        pendingAffix(plans, "suffix", namingBefore.suffix),
+      );
+    }
+
+    const lineageId = context.tomoriState.persona_lineage_id ?? null;
+    const batch = buildBatch(plans, lineageId);
 
     try {
       await userNamingRepository.applyUserInfoBatch(targetUser.user_id, batch);
@@ -495,7 +453,15 @@ export class UpdateUserInfoTool extends BaseTool {
 
     const refreshed = (await userRepository.loadByDiscordId(targetDiscordId).catch(() => null)) ?? targetUser;
     const namingAfter = await resolveNaming(context, refreshed, liveDisplayName);
-    const body = buildSuccessBody(context, parsed.data.changes, targetUser, namingAfter, targetLabel);
+    const body = buildSuccessBody(
+      context,
+      plans,
+      targetUser,
+      namingBefore,
+      namingAfter,
+      targetLabel,
+      lineageId != null,
+    );
 
     await sendSuccessNotice(context, targetLabel, body);
     return {
@@ -505,7 +471,7 @@ export class UpdateUserInfoTool extends BaseTool {
         status: "user_info_updated",
         target_user: targetLabel,
         formatted_name: namingAfter.formattedName,
-        changed_categories: [...new Set(parsed.data.changes.map((change) => change.field))],
+        changed_fields: plans.map((plan) => plan.field),
       },
     };
   }
