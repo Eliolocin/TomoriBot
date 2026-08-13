@@ -1,5 +1,7 @@
 import type { DiffusionModelRow, EmbeddingModelRow, LlmRow, VideoGenerationModelRow } from "@/types/db/schema";
 import { getOrFetchOpenRouterCapabilities } from "@/utils/cache/openrouterCapabilityCache";
+import { getOrFetchOpenRouterEmbeddingModel } from "@/utils/cache/openrouterEmbeddingModelCache";
+import { getOrFetchOpenRouterImageModel } from "@/utils/cache/openrouterImageModelCache";
 import { getOrFetchOpenRouterVideoModelCapabilities } from "@/utils/cache/openrouterVideoModelCache";
 import { llmModelRepo, llmProviderRepo } from "@/utils/db/repositories";
 import { isOpenRouterGeminiModelCodename } from "@/utils/provider/openrouterModelCapabilities";
@@ -109,8 +111,26 @@ function buildRegisteredEntryFromVideoModel(model: VideoGenerationModelRow): Reg
   };
 }
 
-async function modelExistsInOpenRouterCatalog(modelCodename: string): Promise<boolean> {
-  return Boolean(await getOrFetchOpenRouterCapabilities(modelCodename));
+/**
+ * OpenRouter publishes one catalog per modality and lists a model in exactly the catalogs
+ * that serve it: embedding models are absent from `/models` entirely, and image generation
+ * has a far larger catalog than the handful of chat models with image output. Each
+ * capability therefore has to be checked against its own endpoint.
+ */
+async function modelExistsInOpenRouterCatalog(
+  capability: OpenRouterModelCapability,
+  modelCodename: string,
+): Promise<boolean> {
+  switch (capability) {
+    case "text":
+      return Boolean(await getOrFetchOpenRouterCapabilities(modelCodename));
+    case "embedding":
+      return Boolean(await getOrFetchOpenRouterEmbeddingModel(modelCodename));
+    case "image":
+      return Boolean(await getOrFetchOpenRouterImageModel(modelCodename));
+    case "video":
+      return Boolean(await getOrFetchOpenRouterVideoModelCapabilities(modelCodename));
+  }
 }
 
 async function upsertScopedOpenRouterLlm(modelCodename: string): Promise<LlmRow | null> {
@@ -247,13 +267,14 @@ export async function registerOpenRouterModelForScope(
     };
   }
 
+  // Validating before any upsert keeps a typo from creating a scoped row that no request
+  // can ever route to and that only shows up later as a provider-side model error.
+  if (!(await modelExistsInOpenRouterCatalog(capability, normalizedModelName))) {
+    return { status: "invalid_model" };
+  }
+
   switch (capability) {
     case "text": {
-      // Only text models appear in OpenRouter's LLM catalog, so validate before upserting
-      if (!(await modelExistsInOpenRouterCatalog(normalizedModelName))) {
-        return { status: "invalid_model" };
-      }
-
       const llm = await upsertScopedOpenRouterLlm(normalizedModelName);
       const entry = llm ? buildRegisteredEntryFromLlm(llm) : null;
       if (!entry) {
@@ -335,10 +356,6 @@ export async function registerOpenRouterModelForScope(
       };
     }
     case "video": {
-      if (!(await getOrFetchOpenRouterVideoModelCapabilities(normalizedModelName))) {
-        return { status: "invalid_model" };
-      }
-
       const model = await upsertScopedOpenRouterVideoModel(normalizedModelName);
       const entry = model ? buildRegisteredEntryFromVideoModel(model) : null;
       if (!entry) {

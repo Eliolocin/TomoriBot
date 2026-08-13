@@ -43,7 +43,7 @@ export function buildReunionNote(args: BuildReunionNoteArgs): string | null {
   const offsetHours = resolvePersonalTimezoneOffset(args.personalOffset, args.serverOffset);
 
   if (args.lastPreviousDayAt === null) {
-    return `${args.displayName} is talking to you for the very first time! Welcome them naturally and ask something friendly to get to know them.`;
+    return `${args.displayName} is talking to you directly for the very first time! Welcome them naturally and ask something friendly to get to know them.`;
   }
 
   const nowMs = args.nowMs ?? Date.now();
@@ -53,7 +53,7 @@ export function buildReunionNote(args: BuildReunionNoteArgs): string | null {
   if (dayGap < reunionDays) return null;
 
   const lastDate = formatDateWithOffset(args.lastPreviousDayAt.getTime(), offsetHours);
-  return `${args.displayName} is talking to you again for the first time since ${lastDate}. It's been ${dayGap} days! Acknowledge their return naturally and ask what they've been up to.`;
+  return `${args.displayName} hasn't interacted with you specifically since ${lastDate} (${dayGap} days ago), though they may have been around the server. Acknowledge them interacting with you again.`;
 }
 
 /**

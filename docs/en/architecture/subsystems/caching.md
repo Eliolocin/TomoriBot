@@ -130,14 +130,47 @@ fallback before rendering `@UnknownUser`. Sweeping a `User` still referenced by 
 - No runtime TTL/invalidation
 - APIs: `initializeLLMCache`, `getCachedLLM`, `getCachedLLMsByProvider`, `getCachedDefaultLLM`
 
-### 7) OpenRouter capability cache (`openrouterCapabilityCache.ts`)
+### 7) OpenRouter model catalogs (`openrouterCatalog.ts` and friends)
 
-- Key: `llm_codename`
-- Warmed at startup from OpenRouter models API
-- Stores tools/vision/structured-output capability + token limits
+OpenRouter publishes one catalog per modality, and a model appears only in the catalogs that
+serve it. Embedding models are absent from `/api/v1/models` entirely, and image generation has
+a much larger catalog than the handful of chat models that can emit images, so each capability
+must be validated against its own endpoint:
+
+| Capability | Endpoint | Module |
+|---|---|---|
+| Text | `/api/v1/models` | `openrouterCapabilityCache.ts` |
+| Embedding | `/api/v1/embeddings/models` | `openrouterEmbeddingModelCache.ts` |
+| Image | `/api/v1/images/models` | `openrouterImageModelCache.ts` |
+| Video | `/api/v1/videos/models` | `openrouterVideoModelCache.ts` |
+
+All four share the refresh machinery in `openrouterCatalog.ts`:
+
+- Key: model codename, normalized to lowercase on both write and lookup
+- Warmed at startup, then refreshed on a cache miss and on a TTL
+- A refresh builds a replacement map and swaps it only on success, so a failed refresh leaves
+  the previous catalog serving rather than emptying it
+- Concurrent refreshes are collapsed into one request, and attempts are rate-limited by
+  `OPENROUTER_CATALOG_REFRESH_MIN_INTERVAL_MS` (default 60s) so an unrecognized codename cannot
+  amplify into a fetch per lookup
+- `OPENROUTER_CATALOG_TTL_MS` (default 6h) drives the background refresher in
+  `timers/openrouterCatalogRefresher.ts`, which exists for the synchronous readers: pricing,
+  context limits, tokenizer, and `supported_parameters` are consulted per turn and never
+  refresh on their own
+
+The text catalog additionally stores tools/vision/structured-output capability, token limits,
+tokenizer, and pricing:
+
 - Tool capability is derived primarily from the reported `tools` parameter, with a fallback for models whose OpenRouter description explicitly advertises native function/tool calling even when the metadata is incomplete.
 - `tool_choice` is tracked separately through cached `supported_parameters` and only sent when supported.
-- No runtime TTL/invalidation
+
+Because a miss reaches the network, a startup fetch that fails is recoverable without a
+restart. `isOpenRouterCapabilityCacheReady()` reports whether a usable snapshot exists at all;
+it says nothing about any individual model, so a lookup can still miss on a ready catalog.
+
+The catalogs are deliberately excluded from `emergencyCacheClearer.ts`: they are provider
+metadata rather than per-guild growth, and dropping one would gate chat on database flags until
+the next refresh window to reclaim a few hundred KB.
 
 ### 8) Gemini token-limit map (`geminiCapabilityCache.ts`)
 

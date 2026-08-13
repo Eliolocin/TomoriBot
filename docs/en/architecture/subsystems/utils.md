@@ -100,7 +100,8 @@ embed shown alongside an error/info embed (e.g. by `stream/errorUi.ts` and `ui/i
 - `channelWhitelistCache.ts`
 - `shortTermMemoryCache.ts`
 - `llmCache.ts`
-- `openrouterCapabilityCache.ts`
+- `openrouterCatalog.ts`: shared refresh machinery for the OpenRouter model catalogs
+- `openrouterCapabilityCache.ts`, `openrouterEmbeddingModelCache.ts`, `openrouterImageModelCache.ts`, `openrouterVideoModelCache.ts`
 - `geminiCapabilityCache.ts`
 - `novelaiCapabilityCache.ts`
 - `emergencyCacheClearer.ts`: critical-memory cleanup for recoverable caches

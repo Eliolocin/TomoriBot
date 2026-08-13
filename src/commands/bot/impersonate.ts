@@ -14,7 +14,17 @@ import { promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/
 import { personaRepository } from "@/utils/db/repositories";
 import { getOrCreateWebhook } from "@/utils/discord/webhook/lifecycle";
 import { resolvePersonaWebhookIdentity } from "@/utils/discord/webhook/identity";
+import type { ResolvedWebhookIdentity } from "@/utils/discord/webhook/identity";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhook/personaDispatch";
+import {
+  formatRenderModifierWebhookName,
+  parseLeadingImpersonationSpriteModifier,
+} from "@/utils/discord/renderModifierParser";
+import { resolveSpriteIdentity } from "@/utils/discord/renderModifierResolver";
+import { getCachedPersonaSprites } from "@/utils/cache/personaSpriteCache";
+import { recordPersonaSpriteMessage } from "@/utils/cache/personaSpriteMessageCache";
+import { normalizePersonaSpriteKey } from "@/utils/persona/sprites";
+import type { SpriteMessageRecordInfo } from "@/types/stream/types";
 import {
   isGuildMessageCommandChannel,
   resolveGuildWebhookTargetChannel,
@@ -260,6 +270,45 @@ async function handlePersonaImpersonation(
   }
 
   try {
+    // Sprite modifiers are opt-in on an actual match: "(shocked): WTF" or
+    // "Tomori (shocked): WTF" only take effect when the modifier resolves to a
+    // real persona_sprites row. Otherwise the text is sent exactly as typed,
+    // parentheses and all, so ordinary prose is never mangled.
+    const spriteModifierMatch = parseLeadingImpersonationSpriteModifier(
+      messageContent,
+      selectedPersona.persona_nickname,
+    );
+    let spriteRenderTarget: {
+      identity: ResolvedWebhookIdentity;
+      body: string;
+      record: SpriteMessageRecordInfo;
+    } | null = null;
+
+    if (spriteModifierMatch?.body.trim()) {
+      const sprites = await getCachedPersonaSprites(selectedPersona.persona_id);
+      const spriteKey = normalizePersonaSpriteKey(spriteModifierMatch.modifier);
+      const sprite = sprites.find((candidate) => candidate.sprite_key === spriteKey);
+      if (sprite) {
+        const webhookUsername = sprite.is_identity
+          ? formatRenderModifierWebhookName(sprite.sprite_name, selectedPersona.persona_nickname)
+          : selectedPersona.persona_nickname;
+        const identity = await resolveSpriteIdentity(sprite, webhookUsername);
+        if (identity) {
+          spriteRenderTarget = {
+            identity,
+            body: spriteModifierMatch.body,
+            record: {
+              personaId: selectedPersona.persona_id,
+              spriteName: sprite.sprite_name,
+              isIdentity: sprite.is_identity,
+            },
+          };
+        }
+      }
+    }
+
+    const effectiveMessageContent = spriteRenderTarget?.body ?? messageContent;
+
     const shouldShowNotice = tomoriState?.config
       ? isNoticeEmbedVisible(tomoriState.config, "impersonation_notice")
       : true;
@@ -291,9 +340,11 @@ async function handlePersonaImpersonation(
     }
 
     let sentMessage: import("discord.js").Message | null = null;
-    if (!selectedPersona.is_alter) {
+    // A sprite match forces the webhook path even for the main (non-alter) persona,
+    // since only a webhook send can carry a per-message avatar/username override.
+    if (!selectedPersona.is_alter && !spriteRenderTarget) {
       sentMessage = await channel.send({
-        content: messageContent,
+        content: effectiveMessageContent,
         embeds,
       });
     } else {
@@ -319,16 +370,31 @@ async function handlePersonaImpersonation(
         return;
       }
 
-      const identity = await resolvePersonaWebhookIdentity(selectedPersona, interaction.guild);
+      const identity =
+        spriteRenderTarget?.identity ?? (await resolvePersonaWebhookIdentity(selectedPersona, interaction.guild));
       sentMessage = await sendWebhookMessageWithIdentity(
         webhook,
         {
-          content: messageContent,
+          content: effectiveMessageContent,
           embeds,
           ...(webhookThreadId ? { threadId: webhookThreadId } : {}),
         },
         identity,
       );
+
+      // Persist the message -> sprite mapping fire-and-forget, mirroring the stream
+      // delivery path, so context rebuilding can recover the decorated "Name (sprite):"
+      // label for the model later. A lost row just degrades to the plain persona name.
+      if (spriteRenderTarget && sentMessage?.webhookId) {
+        void recordPersonaSpriteMessage({
+          messageDiscId: sentMessage.id,
+          personaId: spriteRenderTarget.record.personaId,
+          spriteName: spriteRenderTarget.record.spriteName,
+          channelDiscId: sentMessage.channelId,
+        }).catch((recordError) => {
+          log.warn("Failed to record sprite message mapping for /bot impersonate persona", recordError as Error);
+        });
+      }
     }
 
     // If the sent message contains a trigger word, let the normal cascade fire.

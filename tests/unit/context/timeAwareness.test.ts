@@ -66,7 +66,7 @@ describe("buildReunionNote", () => {
         reunionDays: 3,
       }),
     ).toBe(
-      "Alice is talking to you for the very first time! Welcome them naturally and ask something friendly to get to know them.",
+      "Alice is talking to you directly for the very first time! Welcome them naturally and ask something friendly to get to know them.",
     );
 
     expect(
@@ -88,7 +88,7 @@ describe("buildReunionNote", () => {
         reunionDays: 3,
       }),
     ).toBe(
-      "Alice is talking to you again for the first time since July 12, 2026. It's been 3 days! Acknowledge their return naturally and ask what they've been up to.",
+      "Alice hasn't interacted with you specifically since July 12, 2026 (3 days ago), though they may have been around the server. Acknowledge them interacting with you again.",
     );
 
     expect(
@@ -169,7 +169,7 @@ describe("appendDialogueHistoryContext — time-awareness injections", () => {
       botName: "Tomori",
       tomoriConfig: makeConfig(),
       tomoriState: null,
-      reunionNote: "Alice is talking to you for the very first time!",
+      reunionNote: "Alice is talking to you directly for the very first time!",
       includeTimestamps: false,
       isUserImpersonation: false,
       uncensorInputOptions: { unicodeSpacesEnabled: false, sanitizeEnabled: false },
@@ -183,7 +183,7 @@ describe("appendDialogueHistoryContext — time-awareness injections", () => {
     expect(noteIndex).toBe(depthTargetIndex - 1);
 
     const noteText = itemText(contextItems[noteIndex]);
-    expect(noteText).toBe("[System: Alice is talking to you for the very first time!]");
+    expect(noteText).toBe("[System: Alice is talking to you directly for the very first time!]");
     expect(contextItems.filter((item) => itemText(item).startsWith("[System: Alice"))).toHaveLength(1);
   });
 
