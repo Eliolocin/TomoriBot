@@ -436,7 +436,9 @@ describe("participant hydration", () => {
     const naming = result.profiles[0]?.fields.find((candidate) => candidate.kind === "naming");
 
     expect(naming?.visibility).toMatchObject({ visible: true });
-    expect(naming?.lines[0]).toBe('- I call Alice Saved "Master Alice Saved-san" (prefix "Master", suffix "-san")');
+    expect(naming?.lines[0]).toBe(
+      '- Tomori calls Alice Saved "Master Alice Saved-san" (prefix "Master", suffix "-san")',
+    );
   });
 
   it("omits the naming line entirely when no affix resolves", async () => {

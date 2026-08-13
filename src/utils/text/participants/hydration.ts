@@ -460,14 +460,14 @@ function applyPersonaRelativeNaming(
  * parenthetical uses the tool's own field words so the mapping to a change is
  * direct.
  */
-function enrichNamingField(base: HydratedDiscordUserBase): ParticipantProfileField {
+function enrichNamingField(base: HydratedDiscordUserBase, params: ParticipantHydrationParams): ParticipantProfileField {
   const naming = base.naming;
   const lines: string[] = [];
   if (naming && (naming.prefix || naming.suffix)) {
     const affixes: string[] = [];
     if (naming.prefix) affixes.push(`prefix "${naming.prefix}"`);
     if (naming.suffix) affixes.push(`suffix "${naming.suffix}"`);
-    lines.push(`- I call ${naming.nickname} "${naming.formattedName}" (${affixes.join(", ")})`);
+    lines.push(`- ${params.botName} calls ${naming.nickname} "${naming.formattedName}" (${affixes.join(", ")})`);
   }
   return field(base.profile.key, "naming", 12, lines);
 }
@@ -612,7 +612,7 @@ async function hydrateDiscordUser(
 ): Promise<HydratedParticipantProfile> {
   const fields: ParticipantProfileField[] = [
     enrichPhysicalAppearanceField(base, params),
-    enrichNamingField(base),
+    enrichNamingField(base, params),
     enrichIdentityField(base),
     enrichTimezoneField(base, params),
     await enrichPresenceField(base, params, dependencies),

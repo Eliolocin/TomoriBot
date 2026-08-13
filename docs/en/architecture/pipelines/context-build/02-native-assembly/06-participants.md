@@ -331,7 +331,7 @@ The `naming` field names each resolved affix separately from the nickname, using
 field words, and is emitted only when a prefix or suffix actually resolves:
 
 ```text
-- I call Sparrow "Master Sparrow-san" (prefix "Master", suffix "-san")
+- Nerine calls Sparrow "Master Sparrow-san" (prefix "Master", suffix "-san")
 ```
 
 A joined display name gives a model no way to tell an affix from the nickname, so a request to
