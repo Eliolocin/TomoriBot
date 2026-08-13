@@ -1,5 +1,4 @@
-import { log } from "@/utils/misc/logger";
-import { buildOpenRouterAttributionHeaders } from "@/utils/provider/openrouterAttribution";
+import { createOpenRouterCatalog, normalizeOpenRouterCodename } from "@/utils/cache/openrouterCatalog";
 
 const OPENROUTER_VIDEO_MODELS_URL = "https://openrouter.ai/api/v1/videos/models";
 
@@ -14,10 +13,6 @@ export interface OpenRouterVideoModelCapabilities {
   generateAudio: boolean | null;
   allowedPassthroughParameters: string[];
 }
-
-const videoModelCache = new Map<string, OpenRouterVideoModelCapabilities>();
-let cacheReady = false;
-let refreshPromise: Promise<boolean> | null = null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -51,7 +46,7 @@ export function parseOpenRouterVideoModelList(payload: unknown): OpenRouterVideo
     }
 
     models.push({
-      id: entry.id.trim().toLowerCase(),
+      id: normalizeOpenRouterCodename(entry.id),
       supportedResolutions: readStringArray(entry.supported_resolutions),
       supportedAspectRatios: readStringArray(entry.supported_aspect_ratios),
       supportedDurations: readNumberArray(entry.supported_durations),
@@ -64,63 +59,35 @@ export function parseOpenRouterVideoModelList(payload: unknown): OpenRouterVideo
   return models;
 }
 
-async function refreshOpenRouterVideoModelCache(): Promise<boolean> {
-  if (refreshPromise) {
-    return refreshPromise;
-  }
-
-  refreshPromise = (async () => {
-    try {
-      const response = await fetch(OPENROUTER_VIDEO_MODELS_URL, {
-        headers: {
-          Accept: "application/json",
-          ...buildOpenRouterAttributionHeaders(),
-        },
-      });
-      if (!response.ok) {
-        throw new Error(`OpenRouter video models API returned ${response.status}: ${response.statusText}`);
-      }
-
-      const models = parseOpenRouterVideoModelList(await response.json());
-      const nextCache = new Map(models.map((model) => [model.id, model]));
-      if (nextCache.size === 0) {
-        throw new Error("OpenRouter video models API returned no usable models");
-      }
-
-      videoModelCache.clear();
-      for (const [id, model] of nextCache) {
-        videoModelCache.set(id, model);
-      }
-      cacheReady = true;
-      log.success(`OpenRouter video model cache initialized: ${videoModelCache.size} models`);
-      return true;
-    } catch (error) {
-      log.warn("Failed to refresh OpenRouter video model cache", error as Error);
-      return false;
-    } finally {
-      refreshPromise = null;
-    }
-  })();
-
-  return refreshPromise;
-}
+const videoCatalog = createOpenRouterCatalog<OpenRouterVideoModelCapabilities>({
+  label: "video",
+  url: OPENROUTER_VIDEO_MODELS_URL,
+  parse: parseOpenRouterVideoModelList,
+  keyOf: (entry) => entry.id,
+});
 
 export async function initializeOpenRouterVideoModelCache(): Promise<void> {
-  await refreshOpenRouterVideoModelCache();
+  await videoCatalog.initialize();
 }
 
-export async function getOrFetchOpenRouterVideoModelCapabilities(
+export function getOrFetchOpenRouterVideoModelCapabilities(
   modelCodename: string,
 ): Promise<OpenRouterVideoModelCapabilities | undefined> {
-  const normalizedCodename = modelCodename.trim().toLowerCase();
-  const cached = videoModelCache.get(normalizedCodename);
-  if (cached) {
-    return cached;
-  }
+  return videoCatalog.getOrFetch(modelCodename);
+}
 
-  if (!cacheReady || !videoModelCache.has(normalizedCodename)) {
-    await refreshOpenRouterVideoModelCache();
-  }
+export function refreshOpenRouterVideoModelCacheIfStale(): Promise<boolean> {
+  return videoCatalog.refreshIfStale();
+}
 
-  return videoModelCache.get(normalizedCodename);
+export function getOpenRouterVideoModelCacheSize(): number {
+  return videoCatalog.size();
+}
+
+export function isOpenRouterVideoModelCacheReady(): boolean {
+  return videoCatalog.isReady();
+}
+
+export function resetOpenRouterVideoModelCache(): void {
+  videoCatalog.reset();
 }

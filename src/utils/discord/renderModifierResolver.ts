@@ -101,7 +101,7 @@ function isValidHttpUrl(value: string): boolean {
   }
 }
 
-async function resolveSpriteIdentity(
+export async function resolveSpriteIdentity(
   sprite: PersonaSpriteRow,
   webhookUsername: string,
 ): Promise<ResolvedWebhookIdentity | null> {

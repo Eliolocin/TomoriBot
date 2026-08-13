@@ -89,7 +89,7 @@ describe("ReunionClaimRegistry", () => {
     const first = await resolveReunionNote(makeResolveArgs(30), presenceStore);
     const concurrent = await resolveReunionNote(makeResolveArgs(30), presenceStore);
 
-    expect(first.note).toContain("Alice is talking to you again");
+    expect(first.note).toContain("Alice hasn't interacted with you specifically since");
     expect(first.presence?.mode).toBe("claimed");
     expect(concurrent.note).toBeNull();
     expect(concurrent.presence?.mode).toBe("deferred");
@@ -144,7 +144,7 @@ describe("ReunionClaimRegistry", () => {
     expect(write).not.toHaveBeenCalled();
 
     const retry = await resolveReunionNote(makeResolveArgs(31), presenceStore);
-    expect(retry.note).toContain("Alice is talking to you again");
+    expect(retry.note).toContain("Alice hasn't interacted with you specifically since");
     expect(retry.presence?.mode).toBe("claimed");
     await recordReunionPresence(retry.presence, emptyResult, presenceStore);
   });

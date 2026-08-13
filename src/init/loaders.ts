@@ -47,12 +47,24 @@ export async function initLoaders(client: Client): Promise<void> {
     );
   }
 
-  log.section("Initializing OpenRouter Video Model Cache...");
+  log.section("Initializing OpenRouter Modality Catalogs...");
   try {
-    const { initializeOpenRouterVideoModelCache } = await import("@/utils/cache/openrouterVideoModelCache");
-    await initializeOpenRouterVideoModelCache();
+    const [
+      { initializeOpenRouterVideoModelCache },
+      { initializeOpenRouterImageModelCache },
+      { initializeOpenRouterEmbeddingModelCache },
+    ] = await Promise.all([
+      import("@/utils/cache/openrouterVideoModelCache"),
+      import("@/utils/cache/openrouterImageModelCache"),
+      import("@/utils/cache/openrouterEmbeddingModelCache"),
+    ]);
+    await Promise.all([
+      initializeOpenRouterVideoModelCache(),
+      initializeOpenRouterImageModelCache(),
+      initializeOpenRouterEmbeddingModelCache(),
+    ]);
   } catch (error) {
-    log.warn("Failed to initialize OpenRouter video model cache (non-critical)", error);
+    log.warn("Failed to initialize OpenRouter modality catalogs (non-critical)", error);
   }
 
   log.section("Initializing Preset Avatar Cache...");

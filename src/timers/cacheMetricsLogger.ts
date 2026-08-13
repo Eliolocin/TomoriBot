@@ -21,10 +21,10 @@ import { getEmojiStickerCacheStats } from "@/utils/cache/emojiStickerCache";
 import { getGuildMcpConfigCacheStats } from "@/utils/cache/guildMcpConfigCache";
 import { getLLMCacheSize } from "@/utils/cache/llmCache";
 import { getNovelaiSubscriptionCacheSize } from "@/utils/cache/novelaiSubscriptionCache";
-import {
-  getOpenRouterCapabilityCacheSize,
-  getOpenRouterOnDemandCapabilityCacheSize,
-} from "@/utils/cache/openrouterCapabilityCache";
+import { getOpenRouterCapabilityCacheSize } from "@/utils/cache/openrouterCapabilityCache";
+import { getOpenRouterEmbeddingModelCacheSize } from "@/utils/cache/openrouterEmbeddingModelCache";
+import { getOpenRouterImageModelCacheSize } from "@/utils/cache/openrouterImageModelCache";
+import { getOpenRouterVideoModelCacheSize } from "@/utils/cache/openrouterVideoModelCache";
 import { getPersonalSpotlightCacheStats } from "@/utils/cache/personalSpotlightCache";
 import { getShortTermMemoryCacheStats } from "@/utils/cache/shortTermMemoryCache";
 import { getStPresetCacheStats } from "@/utils/cache/stPresetCache";
@@ -135,7 +135,9 @@ export function collectCacheMetricsSnapshot(client: Client): Record<string, numb
     personaSpriteMessage: getPersonaSpriteMessageCacheSize(),
     llmCache: getLLMCacheSize(),
     openrouterCapability: getOpenRouterCapabilityCacheSize(),
-    openrouterOnDemandCapability: getOpenRouterOnDemandCapabilityCacheSize(),
+    openrouterEmbeddingCatalog: getOpenRouterEmbeddingModelCacheSize(),
+    openrouterImageCatalog: getOpenRouterImageModelCacheSize(),
+    openrouterVideoCatalog: getOpenRouterVideoModelCacheSize(),
     novelaiSubscription: getNovelaiSubscriptionCacheSize(),
 
     // Webhook manager (no TTL, watch for unbounded growth)

@@ -96,10 +96,8 @@ scopedMock.module("@/utils/cache/novelaiSubscriptionCache", () => ({
 
 scopedMock.module("@/utils/cache/openrouterCapabilityCache", () => ({
   ...realOpenrouterCapabilityCache,
-  clearOpenRouterOnDemandCapabilityCache: () => undefined,
   getOpenRouterCapabilities: () => undefined,
   getOpenRouterCapabilityCacheSize: () => 0,
-  getOpenRouterOnDemandCapabilityCacheSize: () => 0,
   getOpenRouterPricing: () => undefined,
   getOpenRouterSupportedParameters: () => undefined,
   getOpenRouterTokenizer: () => undefined,

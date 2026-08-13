@@ -114,6 +114,20 @@ export function initTimers(client: Client): void {
     log.error("Failed to initialize RAG availability monitor", error as Error);
   }
 
+  log.section("Initializing OpenRouter Catalog Refresher...");
+  try {
+    import("@/timers/openrouterCatalogRefresher")
+      .then(({ initializeOpenRouterCatalogRefresher }) => {
+        initializeOpenRouterCatalogRefresher();
+        log.success("OpenRouter catalog refresher initialized");
+      })
+      .catch((error: Error) => {
+        log.error("Failed to initialize OpenRouter catalog refresher", error);
+      });
+  } catch (error) {
+    log.error("Failed to initialize OpenRouter catalog refresher", error as Error);
+  }
+
   log.section("Initializing STM Janitor...");
   try {
     import("@/timers/stmJanitor")

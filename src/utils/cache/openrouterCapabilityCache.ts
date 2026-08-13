@@ -1,18 +1,16 @@
 /**
  * OpenRouter Capability Cache
  *
- * Provides in-memory caching for OpenRouter model capabilities by fetching directly
- * from the OpenRouter API. This ensures model capabilities (tools, images, etc.) are
- * accurate and prevents routing errors caused by stale database flags.
+ * Caches per-model metadata from OpenRouter's text catalog so routing decisions use the
+ * provider's own view of a model rather than database flags, which drift as OpenRouter
+ * changes what a model supports.
  *
- * Key features:
- * - Fetches model metadata from https://openrouter.ai/api/v1/models at startup
- * - Caches capabilities to avoid per-request API calls
- * - Overrides database flags with actual OpenRouter API data
- * - Handles account-setting model with conservative defaults
- * - Graceful fallback to database flags on API failures
+ * The catalog refreshes on a miss and on a TTL, so a model published after boot becomes
+ * usable without a restart and long-lived deployments do not serve a frozen snapshot of
+ * pricing and context limits.
  */
 
+import { createOpenRouterCatalog } from "@/utils/cache/openrouterCatalog";
 import { log } from "../misc/logger";
 import { buildOpenRouterAttributionHeaders } from "@/utils/provider/openrouterAttribution";
 
@@ -69,34 +67,17 @@ export interface ModelPricing {
   completionPricePerMillion: number;
 }
 
-/**
- * In-memory cache for OpenRouter model capabilities
- * Key: llm_codename (e.g., "anthropic/claude-3.5-sonnet")
- * Value: ModelCapabilities object
- */
-const capabilityCache = new Map<string, ModelCapabilities>();
-const supportedParametersCache = new Map<string, Set<string>>();
-const tokenizerCache = new Map<string, string>();
+/** Everything the catalog knows about one text model, swapped as a unit on refresh. */
+export interface OpenRouterModelMetadata {
+  id: string;
+  capabilities: ModelCapabilities;
+  supportedParameters: ReadonlySet<string>;
+  tokenizer: string | undefined;
+  tokenLimits: ModelTokenLimits;
+  pricing: ModelPricing | undefined;
+}
 
-/**
- * In-memory cache for OpenRouter model token limits
- * Key: llm_codename (e.g., "anthropic/claude-3.5-sonnet")
- * Value: ModelTokenLimits object
- */
-const tokenLimitsCache = new Map<string, ModelTokenLimits>();
-const pricingCache = new Map<string, ModelPricing>();
-
-/**
- * On-demand fetch cache for models not in the startup cache
- * Used for account-setting and other dynamically-specified models
- * Separate from startup cache to avoid unbounded memory growth
- */
-const onDemandCapabilityCache = new Map<string, ModelCapabilities>();
-
-/**
- * Cache initialization state
- */
-let cacheReady = false;
+const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 
 /**
  * Determines if a model supports function calling
@@ -113,9 +94,6 @@ let cacheReady = false;
  * - Some models also advertise native function calling in the description while
  *   omitting `tools` from supported_parameters, so we need a fallback to avoid
  *   incorrectly disabling working tools.
- *
- * @param model - OpenRouter model object from API
- * @returns True if model supports function calling
  */
 function detectToolSupport(model: OpenRouterModel): boolean {
   if (model.supported_parameters && Array.isArray(model.supported_parameters)) {
@@ -127,48 +105,21 @@ function detectToolSupport(model: OpenRouterModel): boolean {
   // OpenRouter metadata is occasionally contradictory: the model description can
   // advertise native function/tool calling even when supported_parameters omits `tools`.
   const normalizedDescription = model.description?.toLowerCase() ?? "";
-  const descriptionAdvertisesToolUse =
-    normalizedDescription.includes("function calling") || normalizedDescription.includes("tool calling");
-
-  if (descriptionAdvertisesToolUse) {
-    log.info(
-      `[OpenRouter capability cache] ${model.id} advertises tool use in its description but does not list tools in supported_parameters; treating it as tool-capable.`,
-    );
-    return true;
-  }
-
-  return false;
+  return normalizedDescription.includes("function calling") || normalizedDescription.includes("tool calling");
 }
 
 /**
  * Determines if a model supports image inputs (vision)
  *
- * Detection logic:
- * - Checks architecture.modality for image capability indicators
- * - OpenRouter uses arrow notation: "text+image->text" (NOT "vision"/"multimodal")
- * - Also accepts "vision" and "multimodal" as fallback keywords for forward compatibility
- *
- * @param model - OpenRouter model object from API
- * @returns True if model supports image inputs
+ * OpenRouter uses arrow notation ("text+image->text"), not "vision"/"multimodal";
+ * the other keywords are accepted only as forward compatibility with format changes.
  */
 function detectImageSupport(model: OpenRouterModel): boolean {
   const modality = model.architecture?.modality?.toLowerCase();
 
-  // OpenRouter uses "text+image->text" notation, so check for "image" as the primary signal,
-  // plus "vision" and "multimodal" for forward compatibility with any future API format changes
   return modality?.includes("image") || modality?.includes("vision") || modality?.includes("multimodal") || false;
 }
 
-/**
- * Determines if a model supports video inputs
- *
- * Detection logic:
- * - Checks architecture.modality for "video"
- * - Checks supported_parameters for "video" parameter
- *
- * @param model - OpenRouter model object from API
- * @returns True if model supports video inputs
- */
 function detectVideoSupport(model: OpenRouterModel): boolean {
   const modality = model.architecture?.modality?.toLowerCase();
   const hasVideoModality = modality?.includes("video") || false;
@@ -178,16 +129,6 @@ function detectVideoSupport(model: OpenRouterModel): boolean {
   return hasVideoModality || hasVideoParam;
 }
 
-/**
- * Determines if a model supports structured output (JSON mode)
- *
- * Requirements:
- * - Must have "response_format" in supported_parameters
- * - Indicates support for JSON schema / structured output
- *
- * @param model - OpenRouter model object from API
- * @returns True if model supports structured output
- */
 function detectStructuredOutputSupport(model: OpenRouterModel): boolean {
   return (
     model.supported_parameters?.includes("response_format") ||
@@ -205,209 +146,117 @@ function parseUsdPerMillion(value: string | number | undefined): number | undefi
   return parsed * 1_000_000;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function buildModelMetadata(model: OpenRouterModel): OpenRouterModelMetadata {
+  const promptPricePerMillion = parseUsdPerMillion(model.pricing?.prompt);
+  const completionPricePerMillion = parseUsdPerMillion(model.pricing?.completion);
+  const tokenizer = model.architecture?.tokenizer?.trim();
+
+  return {
+    id: model.id,
+    capabilities: {
+      hasTools: detectToolSupport(model),
+      seesImages: detectImageSupport(model),
+      seesVideos: detectVideoSupport(model),
+      supportsStructuredOutput: detectStructuredOutputSupport(model),
+    },
+    supportedParameters: new Set(model.supported_parameters ?? []),
+    tokenizer: tokenizer && tokenizer.length > 0 ? tokenizer : undefined,
+    tokenLimits: {
+      contextLength: model.context_length ?? 0,
+      maxCompletionTokens: model.top_provider?.max_completion_tokens,
+    },
+    pricing:
+      promptPricePerMillion !== undefined && completionPricePerMillion !== undefined
+        ? { promptPricePerMillion, completionPricePerMillion }
+        : undefined,
+  };
+}
+
+export function parseOpenRouterModelList(payload: unknown): OpenRouterModelMetadata[] {
+  if (!isRecord(payload) || !Array.isArray(payload.data)) {
+    throw new Error("Unexpected API response format - missing data array");
+  }
+
+  const models: OpenRouterModelMetadata[] = [];
+  for (const entry of payload.data) {
+    if (!isRecord(entry) || typeof entry.id !== "string" || entry.id.trim().length === 0) {
+      continue;
+    }
+    models.push(buildModelMetadata(entry as unknown as OpenRouterModel));
+  }
+
+  return models;
+}
+
+const textCatalog = createOpenRouterCatalog<OpenRouterModelMetadata>({
+  label: "text",
+  url: OPENROUTER_MODELS_URL,
+  parse: parseOpenRouterModelList,
+  keyOf: (entry) => entry.id,
+});
+
 /**
- * Initializes the OpenRouter capability cache by fetching models from the API
+ * Fetches the text catalog once at startup.
  *
- * This function:
- * 1. Fetches all models from https://openrouter.ai/api/v1/models (public endpoint)
- * 2. Extracts capability information from each model
- * 3. Caches capabilities in memory for fast lookup
- * 4. Handles errors gracefully (non-fatal, falls back to database flags)
- *
- * Should be called once at bot startup after LLM cache initialization.
- *
- * Error handling: Non-fatal - logs warning and continues with empty cache
- * on API failure, allowing fallback to database flags.
+ * Failure here is non-fatal and no longer permanent: callers refresh on a cache miss and
+ * the background refresher retries on the TTL, so a boot-time network blip degrades to
+ * database flags for one refresh window instead of the process lifetime.
  */
 export async function initializeOpenRouterCapabilityCache(): Promise<void> {
-  try {
-    log.info("Initializing OpenRouter capability cache...");
+  await textCatalog.initialize();
+}
 
-    capabilityCache.clear();
-    supportedParametersCache.clear();
-    tokenizerCache.clear();
-    tokenLimitsCache.clear();
-    pricingCache.clear();
-    cacheReady = false;
-
-    // Fetch models from OpenRouter API (no auth required - public endpoint)
-    const response = await fetch("https://openrouter.ai/api/v1/models", {
-      headers: {
-        "Content-Type": "application/json",
-        ...buildOpenRouterAttributionHeaders(),
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenRouter API returned ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-
-    if (!data.data || !Array.isArray(data.data)) {
-      throw new Error("Unexpected API response format - missing data array");
-    }
-
-    const models: OpenRouterModel[] = data.data;
-    log.info(`Fetched ${models.length} models from OpenRouter API`);
-
-    for (const model of models) {
-      const capabilities: ModelCapabilities = {
-        hasTools: detectToolSupport(model),
-        seesImages: detectImageSupport(model),
-        seesVideos: detectVideoSupport(model),
-        supportsStructuredOutput: detectStructuredOutputSupport(model),
-      };
-
-      const tokenLimits: ModelTokenLimits = {
-        contextLength: model.context_length ?? 0,
-        maxCompletionTokens: model.top_provider?.max_completion_tokens,
-      };
-      const promptPricePerMillion = parseUsdPerMillion(model.pricing?.prompt);
-      const completionPricePerMillion = parseUsdPerMillion(model.pricing?.completion);
-
-      capabilityCache.set(model.id, capabilities);
-      supportedParametersCache.set(model.id, new Set(model.supported_parameters ?? []));
-      if (typeof model.architecture?.tokenizer === "string") {
-        const tokenizer = model.architecture.tokenizer.trim();
-        if (tokenizer.length > 0) {
-          tokenizerCache.set(model.id, tokenizer);
-        }
-      }
-      tokenLimitsCache.set(model.id, tokenLimits);
-      if (promptPricePerMillion !== undefined && completionPricePerMillion !== undefined) {
-        pricingCache.set(model.id, {
-          promptPricePerMillion,
-          completionPricePerMillion,
-        });
-      }
-    }
-
-    cacheReady = true;
-
-    const toolModels = Array.from(capabilityCache.values()).filter((c) => c.hasTools).length;
-    const visionModels = Array.from(capabilityCache.values()).filter((c) => c.seesImages).length;
-    const videoModels = Array.from(capabilityCache.values()).filter((c) => c.seesVideos).length;
-    const pricedModels = pricingCache.size;
-
-    log.success(
-      `OpenRouter capability cache initialized: ${capabilityCache.size} models ` +
-        `(${toolModels} with tools, ${visionModels} with vision, ${videoModels} with video, ${pricedModels} with pricing)`,
-    );
-  } catch (error) {
-    log.warn(
-      "Failed to initialize OpenRouter capability cache (non-critical) - " + "will fall back to database flags",
-      error as Error,
-    );
-
-    // Ensure caches are in a clean state even on error
-    capabilityCache.clear();
-    supportedParametersCache.clear();
-    tokenizerCache.clear();
-    tokenLimitsCache.clear();
-    pricingCache.clear();
-    cacheReady = false;
-  }
+export function refreshOpenRouterCapabilityCacheIfStale(): Promise<boolean> {
+  return textCatalog.refreshIfStale();
 }
 
 /**
- * Gets cached capabilities for a specific OpenRouter model
+ * Gets cached capabilities for a specific OpenRouter model.
  *
- * @param modelCodename - Model codename (e.g., "anthropic/claude-3.5-sonnet")
- * @returns ModelCapabilities if found in cache, undefined if not found or cache not ready
- *
- * @example
- * const capabilities = getOpenRouterCapabilities("anthropic/claude-3.5-sonnet");
- * if (capabilities && capabilities.hasTools) {
- *   // Model supports function calling
- * }
+ * @returns undefined when the model is not cached; use {@link getOrFetchOpenRouterCapabilities}
+ * when a miss should be allowed to reach the network.
  */
 export function getOpenRouterCapabilities(modelCodename: string): ModelCapabilities | undefined {
-  if (!cacheReady) {
-    return undefined;
-  }
-
-  return capabilityCache.get(modelCodename);
+  return textCatalog.get(modelCodename)?.capabilities;
 }
 
-/**
- * Gets the supported parameter names for a specific OpenRouter model.
- *
- * @param modelCodename - Model codename (e.g., "anthropic/claude-3.5-sonnet")
- * @returns Set of supported parameter names, or undefined if cache/model not ready
- */
 export function getOpenRouterSupportedParameters(modelCodename: string): ReadonlySet<string> | undefined {
-  if (!cacheReady) {
-    return undefined;
-  }
-
-  return supportedParametersCache.get(modelCodename);
+  return textCatalog.get(modelCodename)?.supportedParameters;
 }
 
-/**
- * Gets the tokenizer metadata reported by OpenRouter for a specific model.
- *
- * @param modelCodename - Model codename (e.g., "openai/gpt-4o-mini")
- * @returns Raw tokenizer label from OpenRouter, or undefined if not cached
- */
+/** Raw tokenizer label reported by OpenRouter, used to pick a logit-bias encoder. */
 export function getOpenRouterTokenizer(modelCodename: string): string | undefined {
-  if (!cacheReady) {
-    return undefined;
-  }
-
-  return tokenizerCache.get(modelCodename);
+  return textCatalog.get(modelCodename)?.tokenizer;
 }
 
 /**
- * Checks if the OpenRouter capability cache is ready
+ * Reports whether the catalog holds a usable snapshot.
  *
- * @returns True if cache is initialized (may be empty if API failed), false otherwise
- *
- * Note: A ready cache may be empty if the API fetch failed.
- * Use getOpenRouterCapabilities() and check for undefined to handle cache misses.
+ * Consumers gate on this to decide between OpenRouter metadata and database flags; it says
+ * nothing about any individual model, so a lookup can still miss.
  */
 export function isOpenRouterCapabilityCacheReady(): boolean {
-  return cacheReady;
+  return textCatalog.isReady();
 }
 
-/**
- * Gets the number of models cached
- *
- *
- * Useful for monitoring and debugging cache state.
- */
 export function getOpenRouterCapabilityCacheSize(): number {
-  return capabilityCache.size;
+  return textCatalog.size();
 }
 
-export function getOpenRouterOnDemandCapabilityCacheSize(): number {
-  return onDemandCapabilityCache.size;
-}
-
-export function clearOpenRouterOnDemandCapabilityCache(): void {
-  onDemandCapabilityCache.clear();
-}
-
-/**
- * Gets the cached token limits for a specific OpenRouter model
- *
- * @param modelCodename - Model codename (e.g., "google/gemini-2.0-flash-exp")
- * @returns ModelTokenLimits if found, undefined if not cached or cache not ready
- */
 export function getOpenRouterTokenLimits(modelCodename: string): ModelTokenLimits | undefined {
-  if (!cacheReady) return undefined;
-  return tokenLimitsCache.get(modelCodename);
+  return textCatalog.get(modelCodename)?.tokenLimits;
 }
 
-/**
- * Gets cached pricing for a specific OpenRouter model.
- *
- * @param modelCodename - Model codename (e.g., "google/gemini-2.0-flash-exp")
- * @returns ModelPricing if found, undefined if cache/model not ready
- */
 export function getOpenRouterPricing(modelCodename: string): ModelPricing | undefined {
-  if (!cacheReady) return undefined;
-  return pricingCache.get(modelCodename);
+  return textCatalog.get(modelCodename)?.pricing;
+}
+
+export function resetOpenRouterCapabilityCache(): void {
+  textCatalog.reset();
 }
 
 /**
@@ -419,13 +268,6 @@ export function getOpenRouterPricing(modelCodename: string): ModelPricing | unde
  *
  * @param apiKey - OpenRouter API key for the user
  * @returns Object with { actualModel, capabilities } or { error } if test fails
- *
- * @example
- * const result = await testAccountSettingModel(apiKey);
- * if ("actualModel" in result) {
- *   console.log("User's default:", result.actualModel); // e.g., "xai/grok-2"
- *   console.log("Supports images:", result.capabilities.seesImages);
- * }
  */
 export async function testAccountSettingModel(apiKey: string): Promise<
   | {
@@ -437,8 +279,8 @@ export async function testAccountSettingModel(apiKey: string): Promise<
   try {
     log.info("Testing account-setting model to detect actual OpenRouter default...");
 
-    // Make a minimal streaming request to account-setting to see which model OpenRouter picks
-    // Using streaming because some models/configurations prefer it
+    // Streaming is used because the first chunk names the resolved model, which a
+    // non-streaming call would only reveal after paying for the whole completion.
     const testPayload = {
       model: "account-setting",
       messages: [{ role: "user", content: "hi" }],
@@ -483,7 +325,7 @@ export async function testAccountSettingModel(apiKey: string): Promise<
       for (const line of lines) {
         if (line.startsWith("data: ")) {
           try {
-            const jsonStr = line.substring(6); // Remove "data: "
+            const jsonStr = line.substring(6);
             const parsed = JSON.parse(jsonStr);
             if (parsed.model) {
               actualModel = parsed.model;
@@ -521,89 +363,12 @@ export async function testAccountSettingModel(apiKey: string): Promise<
 }
 
 /**
- * Gets or fetches capabilities for an OpenRouter model
+ * Gets capabilities for an OpenRouter model, refreshing the catalog on a miss.
  *
- * This function provides a fallback mechanism for account-setting and other
- * dynamically-specified models that may not be in the startup cache:
- * 1. Checks the startup cache first (fastest)
- * 2. Checks the on-demand cache (previously fetched models)
- * 3. Fetches from OpenRouter API if not cached (for account-setting models)
- * 4. Caches the result to avoid repeated API calls
- *
- * @param modelCodename - Model codename (e.g., "anthropic/claude-3.5-sonnet" or "account-setting" user's model)
- * @returns ModelCapabilities if found or fetched, undefined on error or if cache not ready
- *
- * @example
- * // For registered models (in startup cache)
- * const capabilities = await getOrFetchOpenRouterCapabilities("anthropic/claude-3.5-sonnet");
- *
- * // For account-setting models (fetches on-demand if not cached)
- * const accountSettingCaps = await getOrFetchOpenRouterCapabilities("openai/gpt-4-turbo");
- * if (accountSettingCaps?.seesImages) {
- *   // User's account-setting model supports images
- * }
+ * Use this wherever the codename can be newer than the cached catalog (scoped model
+ * registration, account-setting resolution). The refresh is cooldown-gated, so repeated
+ * lookups of a codename OpenRouter does not publish cost one fetch per window.
  */
 export async function getOrFetchOpenRouterCapabilities(modelCodename: string): Promise<ModelCapabilities | undefined> {
-  if (!cacheReady) {
-    log.warn(`Cannot fetch capabilities for ${modelCodename}: cache not ready`);
-    return undefined;
-  }
-
-  const cachedCapabilities = capabilityCache.get(modelCodename);
-  if (cachedCapabilities) {
-    return cachedCapabilities;
-  }
-
-  const onDemandCached = onDemandCapabilityCache.get(modelCodename);
-  if (onDemandCached) {
-    return onDemandCached;
-  }
-
-  // Model not in either cache - fetch from OpenRouter API
-  try {
-    log.info(`Fetching capabilities on-demand for model: ${modelCodename}`);
-
-    const response = await fetch(`https://openrouter.ai/api/v1/models/${encodeURIComponent(modelCodename)}`, {
-      headers: {
-        "Content-Type": "application/json",
-        ...buildOpenRouterAttributionHeaders(),
-      },
-    });
-
-    if (!response.ok) {
-      log.warn(`Failed to fetch capabilities for ${modelCodename}: ${response.status} ${response.statusText}`);
-      return undefined;
-    }
-
-    const data = await response.json();
-
-    const model: OpenRouterModel | undefined = data.data;
-
-    if (!model) {
-      log.warn(`OpenRouter API returned no model data for ${modelCodename}`);
-      return undefined;
-    }
-
-    const capabilities: ModelCapabilities = {
-      hasTools: detectToolSupport(model),
-      seesImages: detectImageSupport(model),
-      seesVideos: detectVideoSupport(model),
-      supportsStructuredOutput: detectStructuredOutputSupport(model),
-    };
-
-    onDemandCapabilityCache.set(modelCodename, capabilities);
-
-    log.info(
-      `Fetched capabilities for ${modelCodename}: ` +
-        `tools=${capabilities.hasTools}, images=${capabilities.seesImages}, ` +
-        `videos=${capabilities.seesVideos}, structOutput=${capabilities.supportsStructuredOutput}`,
-    );
-
-    return capabilities;
-  } catch (error) {
-    log.warn(
-      `Error fetching capabilities for ${modelCodename}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return undefined;
-  }
+  return (await textCatalog.getOrFetch(modelCodename))?.capabilities;
 }

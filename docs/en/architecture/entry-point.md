@@ -44,7 +44,9 @@ sidebar:
 10. Initialize localization (`initializeLocalizer`).
 11. Initialize model caches:
     - LLM cache (`initializeLLMCache`)
-    - OpenRouter capability cache (`initializeOpenRouterCapabilityCache`)
+    - OpenRouter text catalog (`initializeOpenRouterCapabilityCache`)
+    - OpenRouter modality catalogs, in parallel (`initializeOpenRouterVideoModelCache`, `initializeOpenRouterImageModelCache`, `initializeOpenRouterEmbeddingModelCache`)
+    - A failed catalog fetch here is non-fatal and non-permanent: lookups refresh on a miss and the background refresher retries on the TTL, so the bot recovers without a restart.
 12. Preload preset avatar cache from DB presets.
 13. Initialize Matrix bridge (optional; non-fatal on failure).
 14. Attach all event listeners (`eventHandler(client)`).
@@ -53,6 +55,7 @@ sidebar:
     - scheduled work coordinator init (reminders + random triggers)
     - memory monitor init
     - cache metrics logger init
+    - OpenRouter catalog refresher init
 16. Initialize upload quota cleanup scheduler.
 17. `await client.login(DISCORD_TOKEN)` inside a try/catch — a `DisallowedIntents` rejection (privileged intent requested without approval) is logged as an actionable misconfiguration and exits, rather than leaving the process alive but disconnected.
 
