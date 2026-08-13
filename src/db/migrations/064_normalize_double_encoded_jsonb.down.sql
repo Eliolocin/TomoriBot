@@ -1,0 +1,10 @@
+-- 064_normalize_double_encoded_jsonb (down)
+--
+-- The up-migration normalizes a storage representation: JSONB scalar strings holding
+-- JSON object text become real JSONB objects. Re-encoding every object back to a string
+-- would corrupt the rows that were already correct, and nothing records which rows the
+-- up-migration touched, so the two cases are indistinguishable afterwards.
+--
+-- As such, this down migration is an explicit no-op. Reverting the code that wrote the
+-- double-encoded values is sufficient to roll back; the normalized rows remain valid
+-- input for both the old and new readers, since the Zod layer accepts either shape.

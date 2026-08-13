@@ -17,6 +17,7 @@ import {
   type ParticipantHydrationParams,
 } from "@/utils/text/participants/hydration";
 import { createBotKey, createDiscordUserKey, type ParticipantSeed } from "@/utils/text/participants/identity";
+import type { PersonaNamingConfig } from "@/types/personaNaming";
 
 const GUILD_ID = "100000000000000001";
 const CHANNEL_ID = "200000000000000001";
@@ -125,6 +126,7 @@ function createFixture(
     fallbackUser?: User | null;
     participantSeeds?: ParticipantSeed[];
     snapshot?: RequestSnapshot;
+    namingConfig?: PersonaNamingConfig;
   } = {},
 ): HydrationFixture {
   const userRow = options.userRow === undefined ? createUserRow() : options.userRow;
@@ -169,6 +171,7 @@ function createFixture(
       persona_lineage_id: activePersonaScope.lineageId,
       is_alter: !activePersonaScope.isMainPersona,
       physical_appearance_tags: ["black hair"],
+      naming_config: options.namingConfig,
     } as unknown as TomoriState,
     tomoriConfig: config,
     isDMChannel: false,
@@ -410,6 +413,7 @@ describe("participant hydration", () => {
 
     expect(human?.fields.map((candidate) => candidate.kind)).toEqual([
       "physical_appearance",
+      "naming",
       "identity",
       "timezone",
       "presence",
@@ -417,9 +421,32 @@ describe("participant hydration", () => {
       "personal_memories",
       "human_reminders",
     ]);
-    expect(human?.fields.map((candidate) => candidate.order)).toEqual([10, 15, 20, 30, 40, 50, 60]);
+    expect(human?.fields.map((candidate) => candidate.order)).toEqual([10, 12, 15, 20, 30, 40, 50, 60]);
     expect(human?.fields.every((candidate) => candidate.owner === human.key)).toBe(true);
     expect(human?.fields.every((candidate) => typeof candidate.visibility.visible === "boolean")).toBe(true);
+  });
+
+  it("names each affix separately from the nickname when an affix resolves", async () => {
+    const fixture = createFixture({
+      userRow: createUserRow({ suffix_override: "-san" }),
+      namingConfig: { prefixes: { neutral: "Master" }, suffixes: {}, addressTerms: {} },
+    });
+
+    const result = await hydrateParticipantProfiles(fixture.params, fixture.dependencies);
+    const naming = result.profiles[0]?.fields.find((candidate) => candidate.kind === "naming");
+
+    expect(naming?.visibility).toMatchObject({ visible: true });
+    expect(naming?.lines[0]).toBe('- I call Alice Saved "Master Alice Saved-san" (prefix "Master", suffix "-san")');
+  });
+
+  it("omits the naming line entirely when no affix resolves", async () => {
+    const fixture = createFixture();
+
+    const result = await hydrateParticipantProfiles(fixture.params, fixture.dependencies);
+    const naming = result.profiles[0]?.fields.find((candidate) => candidate.kind === "naming");
+
+    expect(naming?.visibility.visible).toBe(false);
+    expect(naming?.lines).toEqual([]);
   });
 
   it("emits only configured identity fields at minimal privacy", async () => {
@@ -427,7 +454,6 @@ describe("participant hydration", () => {
       userRow: createUserRow({
         gender_identity: "nonbinary",
         pronouns: "they/them",
-        orientation: null,
       }),
     });
 
@@ -445,7 +471,6 @@ describe("participant hydration", () => {
         privacy_level: PrivacyLevel.PARTIAL,
         gender_identity: "nonbinary",
         pronouns: "they/them",
-        orientation: "bisexual",
       }),
     });
 

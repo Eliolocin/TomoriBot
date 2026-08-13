@@ -67,6 +67,7 @@ const STATIC_TOOL_PROMPT_MACROS: Record<string, string> = {
   "{voice_message_tool}": "generate_voice_message",
   "{block_user_tool}": "block_user",
   "{unblock_user_tool}": "unblock_user",
+  "{user_info_tool}": "update_user_info",
 };
 
 const DYNAMIC_TOOL_PROMPT_MACROS = {

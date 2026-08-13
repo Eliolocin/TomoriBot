@@ -118,12 +118,21 @@ function parseConditionalNodes(text: string, warn: (message: string) => void): P
   return root;
 }
 
+const ENDS_WITH_BLANK_LINE = /\n[^\S\n]*\n[^\S\n]*$/;
+const LEADING_BLANK_LINE = /^[^\S\n]*\n[^\S\n]*\n/;
+
 async function renderNodes(nodes: PromptConditionalNode[], options: PromptConditionalRenderOptions): Promise<string> {
-  const rendered: string[] = [];
+  let output = "";
+  // A block authored as its own paragraph is wrapped in blank-line separators on
+  // both sides. When it renders to nothing those separators meet and stack into
+  // an empty paragraph, so one of them is dropped. Only the separator adjacent to
+  // an emptied block is touched; text inside a selected branch stays verbatim.
+  let dropLeadingBlankLine = false;
 
   for (const node of nodes) {
     if (node.type === "text") {
-      rendered.push(node.text);
+      output += dropLeadingBlankLine ? node.text.replace(LEADING_BLANK_LINE, "") : node.text;
+      dropLeadingBlankLine = false;
       continue;
     }
 
@@ -132,14 +141,19 @@ async function renderNodes(nodes: PromptConditionalNode[], options: PromptCondit
       options.warn(`Unknown prompt condition: ${node.rawCondition}`);
     }
     const matches = evaluated === undefined ? false : node.predicate.inverted ? !evaluated : evaluated;
-    rendered.push(await renderNodes(matches ? node.truthy : node.falsy, options));
+    const branch = await renderNodes(matches ? node.truthy : node.falsy, options);
+    output += branch;
+    dropLeadingBlankLine = branch === "" && ENDS_WITH_BLANK_LINE.test(output);
   }
 
-  return rendered.join("");
+  return output;
 }
 
 /**
- * Renders TomoriBot's scoped prompt conditionals while preserving selected branch text verbatim.
+ * Renders TomoriBot's scoped prompt conditionals while preserving selected branch
+ * text verbatim. The one exception is the blank-line separator immediately after a
+ * block that rendered to nothing, which is dropped so a disabled paragraph does not
+ * leave an empty one behind.
  */
 export async function renderPromptConditionals(text: string, options: PromptConditionalRenderOptions): Promise<string> {
   if (!text || /\{\{\s*#if\b/i.test(text) || !/\{\{\s*(?:\/?if\b|else\b)/i.test(text)) {

@@ -121,6 +121,41 @@ describe("prompt conditionals", () => {
     expect(unclosed.warnings).toHaveLength(1);
   });
 
+  it("does not leave an empty paragraph where a block rendered to nothing", async () => {
+    const input = "intro.\n\n{{if tool:absent}}skipped{{/if}}\n\noutro.";
+    const result = await render(input, {});
+
+    expect(result.text).toBe("intro.\n\noutro.");
+  });
+
+  it("collapses only one separator when consecutive blocks all render to nothing", async () => {
+    const input = "intro.\n\n{{if tool:absent}}a{{/if}}{{if tool:absent}}b{{/if}}\n\noutro.";
+    const result = await render(input, {});
+
+    expect(result.text).toBe("intro.\n\noutro.");
+  });
+
+  it("keeps the separator when the block renders content", async () => {
+    const input = "intro.\n\n{{if tool:present}}kept{{/if}}\n\noutro.";
+    const result = await render(input, { "tool:present": true });
+
+    expect(result.text).toBe("intro.\n\nkept\n\noutro.");
+  });
+
+  it("preserves authored blank lines inside a selected branch", async () => {
+    const input = "{{if tool:present}}one\n\n\n\ntwo{{/if}}";
+    const result = await render(input, { "tool:present": true });
+
+    expect(result.text).toBe("one\n\n\n\ntwo");
+  });
+
+  it("leaves an inline removal alone when no blank-line separator surrounds it", async () => {
+    const input = "before {{if tool:absent}}gone{{/if}} after";
+    const result = await render(input, {});
+
+    expect(result.text).toBe("before  after");
+  });
+
   it("leaves legacy handlebars conditionals untouched", async () => {
     const input = "{{#if self_teaching}}legacy{{/if}}";
     const result = await render(input, {});

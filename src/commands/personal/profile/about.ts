@@ -9,14 +9,13 @@ import { userNamingRepository } from "@/utils/db/repositories";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-const MODAL_ID = "personal_identity_modal";
+const MODAL_ID = "personal_profile_about_modal";
 const GENDER_ID = "gender_identity";
 const PRONOUNS_ID = "pronouns";
-const ORIENTATION_ID = "orientation";
 const STYLE_ID = "addressing_style";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("identity").setDescription(localizer("en-US", "commands.personal.identity.description"));
+  subcommand.setName("about").setDescription(localizer("en-US", "commands.personal.profile.about.description"));
 
 export async function execute(
   _client: Client,
@@ -30,12 +29,12 @@ export async function execute(
     locale,
     {
       modalCustomId: MODAL_ID,
-      modalTitleKey: "commands.personal.identity.modal_title",
+      modalTitleKey: "commands.personal.profile.about.modal_title",
       components: [
         {
           customId: GENDER_ID,
-          labelKey: "commands.personal.identity.gender_label",
-          descriptionKey: "commands.personal.identity.gender_description",
+          labelKey: "commands.personal.profile.about.gender_label",
+          descriptionKey: "commands.personal.profile.about.gender_description",
           style: TextInputStyle.Short,
           required: false,
           maxLength: USER_IDENTITY_FIELD_MAX_LENGTH,
@@ -43,46 +42,37 @@ export async function execute(
         },
         {
           customId: PRONOUNS_ID,
-          labelKey: "commands.personal.identity.pronouns_label",
-          descriptionKey: "commands.personal.identity.pronouns_description",
+          labelKey: "commands.personal.profile.about.pronouns_label",
+          descriptionKey: "commands.personal.profile.about.pronouns_description",
           style: TextInputStyle.Short,
           required: false,
           maxLength: USER_IDENTITY_FIELD_MAX_LENGTH,
           value: userData.pronouns ?? "",
         },
         {
-          customId: ORIENTATION_ID,
-          labelKey: "commands.personal.identity.orientation_label",
-          descriptionKey: "commands.personal.identity.orientation_description",
-          style: TextInputStyle.Short,
-          required: false,
-          maxLength: USER_IDENTITY_FIELD_MAX_LENGTH,
-          value: userData.orientation ?? "",
-        },
-        {
           kind: "radioGroup",
           customId: STYLE_ID,
-          labelKey: "commands.personal.identity.style_label",
-          descriptionKey: "commands.personal.identity.style_description",
+          labelKey: "commands.personal.profile.about.style_label",
+          descriptionKey: "commands.personal.profile.about.style_description",
           required: true,
           options: [
             {
-              label: localizer(locale, "commands.personal.identity.style_unspecified"),
+              label: localizer(locale, "commands.personal.profile.about.style_unspecified"),
               value: "unspecified",
               default: !userData.addressing_style,
             },
             {
-              label: localizer(locale, "commands.personal.identity.style_masculine"),
+              label: localizer(locale, "commands.personal.profile.about.style_masculine"),
               value: "masculine",
               default: userData.addressing_style === "masculine",
             },
             {
-              label: localizer(locale, "commands.personal.identity.style_feminine"),
+              label: localizer(locale, "commands.personal.profile.about.style_feminine"),
               value: "feminine",
               default: userData.addressing_style === "feminine",
             },
             {
-              label: localizer(locale, "commands.personal.identity.style_neutral"),
+              label: localizer(locale, "commands.personal.profile.about.style_neutral"),
               value: "neutral",
               default: userData.addressing_style === "neutral",
             },
@@ -93,7 +83,7 @@ export async function execute(
     MessageFlags.Ephemeral,
   );
   if (result.outcome !== "submit" || !result.interaction) {
-    log.info(`Personal identity modal ${result.outcome} for user ${interaction.user.id}`);
+    log.info(`Personal profile about modal ${result.outcome} for user ${interaction.user.id}`);
     return;
   }
 
@@ -113,18 +103,17 @@ export async function execute(
       global: {
         gender_identity: clean(result.values?.[GENDER_ID]),
         pronouns: clean(result.values?.[PRONOUNS_ID]),
-        orientation: clean(result.values?.[ORIENTATION_ID]),
         addressing_style: style === "unspecified" ? null : (style as "masculine" | "feminine" | "neutral"),
       },
     });
     invalidateUserCache(interaction.user.id);
     await replyInfoEmbed(result.interaction, locale, {
-      titleKey: "commands.personal.identity.success_title",
-      descriptionKey: "commands.personal.identity.success_description",
+      titleKey: "commands.personal.profile.about.success_title",
+      descriptionKey: "commands.personal.profile.about.success_description",
       color: ColorCode.SUCCESS,
     });
   } catch (error) {
-    log.error("Failed to update personal identity settings", error);
+    log.error("Failed to update personal profile settings", error);
     await replyInfoEmbed(result.interaction, locale, {
       titleKey: "general.errors.update_failed_title",
       descriptionKey: "general.errors.update_failed_description",

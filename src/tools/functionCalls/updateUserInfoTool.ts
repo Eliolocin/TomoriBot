@@ -5,14 +5,16 @@ import {
   USER_IDENTITY_FIELD_MAX_LENGTH,
   USER_NICKNAME_MAX_LENGTH,
 } from "@/types/personaNaming";
-import { PrivacyLevel } from "@/types/db/schema";
+import { PrivacyLevel, type UserRow } from "@/types/db/schema";
 import { invalidateUserCache } from "@/utils/cache/userCache";
 import { resolveUserTarget } from "@/utils/discord/targetResolver";
-import { sendStandardEmbed } from "@/utils/discord/embedHelper";
+import { sendNoticeContainerMessage } from "@/utils/discord/expandableEmbedNotice";
 import { userNamingRepository, userRepository } from "@/utils/db/repositories";
-import type { UserInfoWriteBatch } from "@/utils/db/repositories/UserNamingRepository";
+import { type UserInfoWriteBatch, userPersonaNamingPairKey } from "@/utils/db/repositories/UserNamingRepository";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
+import { formatUTCOffset } from "@/utils/text/timezoneHelper";
+import { type EffectiveUserNaming, resolveEffectiveUserNaming } from "@/utils/text/userNaming";
 
 const updateUserInfoChangeSchema = z
   .object({
@@ -22,7 +24,6 @@ const updateUserInfoChangeSchema = z
       "suffix",
       "gender_identity",
       "pronouns",
-      "orientation",
       "addressing_style",
       "timezone_offset",
     ]),
@@ -57,36 +58,9 @@ function failure(
   };
 }
 
-function localizedCategories(locale: string, fields: string[]): string {
-  return fields.map((field) => localizer(locale, `tools.user_info_update.field_${field}`)).join(", ");
-}
-
-async function sendSuccessNotice(context: ToolContext, targetLabel: string, categories: string): Promise<void> {
-  if (context.suppressProgressNotices) return;
-  try {
-    await sendStandardEmbed(
-      context.channel,
-      context.locale,
-      {
-        titleKey: "tools.user_info_update.success_title",
-        descriptionKey: "tools.user_info_update.success_description",
-        descriptionVars: { target_user: targetLabel, categories },
-        color: ColorCode.SUCCESS,
-      },
-      {
-        webhook: context.webhook,
-        personaUsername: context.personaUsername,
-        personaAvatarUrl: context.personaAvatarUrl,
-      },
-    );
-  } catch (error) {
-    log.warn("Failed to send the user info update notice", error as Error);
-  }
-}
-
 function validateChange(change: UpdateUserInfoChange): string | null {
   const text = change.text_value?.trim();
-  const globalOnly = ["gender_identity", "pronouns", "orientation", "addressing_style", "timezone_offset"];
+  const globalOnly = ["gender_identity", "pronouns", "addressing_style", "timezone_offset"];
   if (globalOnly.includes(change.field) && change.scope !== "global") {
     return `${change.field} only supports global scope`;
   }
@@ -104,7 +78,7 @@ function validateChange(change: UpdateUserInfoChange): string | null {
     if (text && text.length > USER_NICKNAME_MAX_LENGTH) return "nickname is too long";
     return null;
   }
-  if (["gender_identity", "pronouns", "orientation"].includes(change.field)) {
+  if (["gender_identity", "pronouns"].includes(change.field)) {
     if (change.number_value !== undefined) return `${change.field} does not accept number_value`;
     if (!["set", "clear"].includes(change.action)) return `${change.field} has an invalid action`;
     if (change.action === "set" && !text) return `${change.field} set requires text_value`;
@@ -150,10 +124,243 @@ function addChangeToBatch(batch: UserInfoWriteBatch, change: UpdateUserInfoChang
   }
 }
 
+/** Whether a global `none` on this affix would be outranked by the user's persona-lineage override. */
+function isOutrankedGlobalSuppression(change: UpdateUserInfoChange, naming: EffectiveUserNaming): boolean {
+  if (change.scope !== "global" || change.action !== "none") return false;
+  if (change.field !== "prefix" && change.field !== "suffix") return false;
+  const source = change.field === "prefix" ? naming.prefixSource : naming.suffixSource;
+  return source === "persona_preference";
+}
+
+/**
+ * Makes an explicit `none` actually suppress the affix.
+ *
+ * A persona-lineage override outranks the global layer, so a global `none` would
+ * otherwise commit successfully while the affix kept rendering, which reads to the
+ * user as the request being ignored. Only `none` is widened this way: `inherit`
+ * genuinely means "fall back", so a lower layer supplying a value again is its
+ * correct outcome, not a bug. An explicit persona-scope change in the same batch
+ * wins, since that is the model stating the lineage value deliberately.
+ */
+export function suppressOutrankingOverrides(
+  changes: UpdateUserInfoChange[],
+  naming: EffectiveUserNaming,
+  batch: UserInfoWriteBatch,
+): void {
+  const patch = batch.persona?.patch;
+  if (!patch) return;
+  for (const change of changes) {
+    if (!isOutrankedGlobalSuppression(change, naming)) continue;
+    const key = `${change.field}_override` as "prefix_override" | "suffix_override";
+    if (Object.hasOwn(patch, key)) continue;
+    patch[key] = null;
+  }
+}
+
+/**
+ * Resolves the affix the batch will leave in place, so the nickname can be
+ * de-duplicated against it rather than against a value the batch is replacing.
+ * An `inherit` request keeps the currently resolved affix because the layer it
+ * falls back to may still supply one.
+ */
+function pendingAffix(changes: UpdateUserInfoChange[], field: "prefix" | "suffix", current: string): string {
+  const change = changes.find((candidate) => candidate.field === field);
+  if (!change) return current;
+  if (change.action === "set") return change.text_value?.trim() ?? "";
+  if (change.action === "none") return "";
+  return current;
+}
+
+/**
+ * Strips an affix the model re-typed into the nickname.
+ *
+ * A model that only ever sees the joined `formattedName` will sometimes submit
+ * "Master Sparrow" as the nickname while "Master" is already the resolved
+ * prefix, which would otherwise render "Master Master Sparrow". Matching is
+ * against the resolved affix values only: the nickname is never split on
+ * whitespace or punctuation to invent an affix boundary.
+ */
+export function stripRedundantAffixes(changes: UpdateUserInfoChange[], naming: EffectiveUserNaming): void {
+  const nicknameChange = changes.find((change) => change.field === "nickname" && change.action === "set");
+  const submitted = nicknameChange?.text_value?.trim();
+  if (!nicknameChange || !submitted) return;
+
+  let value = submitted;
+  const prefix = pendingAffix(changes, "prefix", naming.prefix);
+  if (prefix && value.toLowerCase().startsWith(prefix.toLowerCase())) {
+    const remainder = value.slice(prefix.length).trimStart();
+    if (remainder) value = remainder;
+  }
+  const suffix = pendingAffix(changes, "suffix", naming.suffix);
+  if (suffix && value.toLowerCase().endsWith(suffix.toLowerCase())) {
+    const remainder = value.slice(0, value.length - suffix.length).trimEnd();
+    if (remainder) value = remainder;
+  }
+
+  if (value !== submitted) {
+    log.info(`update_user_info stripped a redundant affix from the submitted nickname for ${naming.formattedName}`);
+    nicknameChange.text_value = value;
+  }
+}
+
+async function resolveLiveDisplayName(context: ToolContext, targetDiscordId: string): Promise<string> {
+  if (context.guildId) {
+    const guild = context.client?.guilds.cache.get(context.guildId);
+    const member =
+      guild?.members.cache.get(targetDiscordId) ?? (await guild?.members.fetch(targetDiscordId).catch(() => null));
+    if (member) return member.displayName;
+  }
+  const user = context.client?.users.cache.get(targetDiscordId);
+  return user?.globalName ?? user?.username ?? targetDiscordId;
+}
+
+async function resolveNaming(
+  context: ToolContext,
+  userRow: UserRow,
+  liveDisplayName: string,
+): Promise<EffectiveUserNaming> {
+  const lineageId = context.tomoriState.persona_lineage_id;
+  const preference =
+    lineageId != null && userRow.user_id
+      ? (
+          await userNamingRepository
+            .loadPreferences([{ userId: userRow.user_id, personaLineageId: lineageId }])
+            .catch(() => null)
+        )?.get(userPersonaNamingPairKey(userRow.user_id, lineageId))
+      : undefined;
+  return resolveEffectiveUserNaming({
+    global: {
+      userNickname: userRow.user_nickname ?? null,
+      prefixOverride: userRow.prefix_override ?? null,
+      suffixOverride: userRow.suffix_override ?? null,
+      addressingStyle: userRow.addressing_style ?? null,
+    },
+    liveDisplayName,
+    persona: context.tomoriState.naming_config,
+    preference,
+  });
+}
+
+function styleLabel(locale: string, style: string | null | undefined): string | null {
+  if (!style) return null;
+  return localizer(locale, `commands.personal.profile.about.style_${style}`);
+}
+
+/** Renders a stored affix override, where null means inherit and "" means an explicit suppression. */
+function affixOverrideLabel(locale: string, value: string | null | undefined): string {
+  if (value === null || value === undefined) return localizer(locale, "tools.user_info_update.value_inherit");
+  return value || localizer(locale, "tools.user_info_update.value_none");
+}
+
+function previousValueLabel(
+  locale: string,
+  change: UpdateUserInfoChange,
+  before: UserRow,
+  personaScoped: boolean,
+): string {
+  const none = localizer(locale, "tools.user_info_update.value_none");
+  switch (change.field) {
+    case "nickname":
+      return personaScoped ? localizer(locale, "tools.user_info_update.value_inherit") : before.user_nickname || none;
+    case "prefix":
+      return personaScoped
+        ? localizer(locale, "tools.user_info_update.value_inherit")
+        : affixOverrideLabel(locale, before.prefix_override);
+    case "suffix":
+      return personaScoped
+        ? localizer(locale, "tools.user_info_update.value_inherit")
+        : affixOverrideLabel(locale, before.suffix_override);
+    case "gender_identity":
+      return before.gender_identity || none;
+    case "pronouns":
+      return before.pronouns || none;
+    case "addressing_style":
+      return (
+        styleLabel(locale, before.addressing_style) ?? localizer(locale, "tools.user_info_update.value_unspecified")
+      );
+    default:
+      return before.timezone_offset != null ? formatUTCOffset(before.timezone_offset) : none;
+  }
+}
+
+function nextValueLabel(locale: string, change: UpdateUserInfoChange): string {
+  const text = change.text_value?.trim();
+  if (change.action === "clear") return localizer(locale, "tools.user_info_update.value_cleared");
+  if (change.action === "inherit") return localizer(locale, "tools.user_info_update.value_inherit");
+  if (change.action === "none") return localizer(locale, "tools.user_info_update.value_none");
+  if (change.field === "timezone_offset") return formatUTCOffset(change.number_value ?? 0);
+  if (change.field === "addressing_style") return styleLabel(locale, text) ?? text ?? "";
+  return text ?? "";
+}
+
+/**
+ * Builds the notice/return body: a numbered list of what changed followed by the
+ * resulting form of address. The resulting name is always included, including
+ * for identity-only edits, because an addressing-style switch moves the affix
+ * without any naming field appearing in the list.
+ */
+function buildSuccessBody(
+  context: ToolContext,
+  changes: UpdateUserInfoChange[],
+  before: UserRow,
+  after: EffectiveUserNaming,
+  targetLabel: string,
+): string {
+  const locale = context.locale;
+  const personaName = context.personaUsername ?? context.tomoriState.persona_nickname;
+  const lines = changes.map((change, index) => {
+    const personaScoped = change.scope === "persona";
+    const fieldLabel = localizer(locale, `tools.user_info_update.field_${change.field}`);
+    const scopedLabel = personaScoped
+      ? localizer(locale, "tools.user_info_update.field_persona_scoped", {
+          field: fieldLabel,
+          persona_name: personaName,
+        })
+      : fieldLabel;
+    return localizer(locale, "tools.user_info_update.change_line", {
+      index: index + 1,
+      field: scopedLabel,
+      previous: previousValueLabel(locale, change, before, personaScoped),
+      next: nextValueLabel(locale, change),
+    });
+  });
+  const summary = localizer(locale, "tools.user_info_update.success_summary", {
+    persona_name: personaName,
+    target_user: targetLabel,
+    formatted_name: after.formattedName,
+  });
+  return `${localizer(locale, "tools.user_info_update.success_intro")}\n${lines.join("\n")}\n\n${summary}`;
+}
+
+async function sendSuccessNotice(context: ToolContext, targetLabel: string, body: string): Promise<void> {
+  if (context.suppressProgressNotices || !context.channel) return;
+  try {
+    await sendNoticeContainerMessage(
+      context.channel,
+      context.locale,
+      {
+        titleKey: "tools.user_info_update.success_title",
+        titleVars: { target_user: targetLabel },
+        description: body,
+        footerKey: "tools.user_info_update.success_footer",
+        footerVars: { target_user: targetLabel },
+        color: ColorCode.SUCCESS,
+      },
+      {
+        webhook: context.webhook,
+        personaUsername: context.personaUsername,
+        personaAvatarUrl: context.personaAvatarUrl,
+      },
+    );
+  } catch (error) {
+    log.warn("Failed to send the user info update notice", error as Error);
+  }
+}
+
 export class UpdateUserInfoTool extends BaseTool {
   name = "update_user_info";
   description =
-    "Update a registered Discord user's structured profile: nickname, separate prefix/suffix, identity, preferred addressing style, or numeric UTC offset. Use this instead of memory tools for requests such as 'call me X' or pronoun changes. Conventional titles belong in prefix or suffix, not inside nickname. Persona scope applies only to the active persona lineage.";
+    "Update a registered Discord user's structured profile: nickname, separate prefix/suffix, identity, preferred addressing style, or numeric UTC offset. Use this instead of memory tools for requests such as 'call me X' or pronoun changes. The participant list names each user's prefix and suffix separately from their nickname; to stop using a title, set that prefix or suffix to action 'none' rather than rewriting the nickname without it. Conventional titles belong in prefix or suffix, not inside nickname. Persona scope applies only to the active persona lineage.";
   category = "utility" as const;
   requiresFeatureFlag = "user_info_updates";
 
@@ -179,7 +386,6 @@ export class UpdateUserInfoTool extends BaseTool {
                 "suffix",
                 "gender_identity",
                 "pronouns",
-                "orientation",
                 "addressing_style",
                 "timezone_offset",
               ],
@@ -263,11 +469,22 @@ export class UpdateUserInfoTool extends BaseTool {
     if (hasPersonaChanges && lineageId == null) {
       return failure(context, "user_info_update_missing_persona", "tools.user_info_update.error_missing_persona");
     }
+
+    const liveDisplayName = await resolveLiveDisplayName(context, targetDiscordId);
+    const namingBefore = await resolveNaming(context, targetUser, liveDisplayName);
+    if (!requestedTarget) targetLabel = namingBefore.nickname;
+    stripRedundantAffixes(parsed.data.changes, namingBefore);
+
+    const needsSuppression =
+      lineageId != null && parsed.data.changes.some((change) => isOutrankedGlobalSuppression(change, namingBefore));
     const batch: UserInfoWriteBatch = {
       global: {},
-      ...(hasPersonaChanges ? { persona: { personaLineageId: lineageId as number, patch: {} } } : {}),
+      ...(hasPersonaChanges || needsSuppression
+        ? { persona: { personaLineageId: lineageId as number, patch: {} } }
+        : {}),
     };
     for (const change of parsed.data.changes) addChangeToBatch(batch, change);
+    suppressOutrankingOverrides(parsed.data.changes, namingBefore, batch);
 
     try {
       await userNamingRepository.applyUserInfoBatch(targetUser.user_id, batch);
@@ -276,17 +493,20 @@ export class UpdateUserInfoTool extends BaseTool {
     }
     invalidateUserCache(targetDiscordId);
 
-    const categories = [...new Set(parsed.data.changes.map((change) => change.field))];
-    const categoryLabels = localizedCategories(context.locale, categories);
-    await sendSuccessNotice(context, targetLabel, categoryLabels);
-    const successMessage = localizer(context.locale, "tools.user_info_update.success_description", {
-      target_user: targetLabel,
-      categories: categoryLabels,
-    });
+    const refreshed = (await userRepository.loadByDiscordId(targetDiscordId).catch(() => null)) ?? targetUser;
+    const namingAfter = await resolveNaming(context, refreshed, liveDisplayName);
+    const body = buildSuccessBody(context, parsed.data.changes, targetUser, namingAfter, targetLabel);
+
+    await sendSuccessNotice(context, targetLabel, body);
     return {
       success: true,
-      message: successMessage,
-      data: { status: "user_info_updated", target_user: targetLabel, changed_categories: categories },
+      message: body,
+      data: {
+        status: "user_info_updated",
+        target_user: targetLabel,
+        formatted_name: namingAfter.formattedName,
+        changed_categories: [...new Set(parsed.data.changes.map((change) => change.field))],
+      },
     };
   }
 }

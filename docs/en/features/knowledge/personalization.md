@@ -13,15 +13,16 @@ configuration.
 Facts she remembers about you follow you between servers. Managing them (add, remove, export)
 is covered on the [Memory](/features/knowledge/memory/#personal-vs-server-memories) page.
 
-## Identity and Persona-Aware Names
+## Profile and Persona-Aware Names
 
-`/personal identity` stores four independent, optional preferences: gender identity,
-pronouns, orientation, and addressing style. TomoriBot never infers one from another. The
-addressing style selects a persona's masculine, feminine, or neutral naming variant; leaving
-it unspecified uses the neutral variant. Blank identity fields are cleared and omitted from
-prompt context. Raw identity fields are exposed only at Minimal privacy.
+`/personal profile about` stores three independent, optional preferences: gender identity,
+pronouns, and addressing style. TomoriBot never infers one from another. The addressing style
+selects a persona's masculine, feminine, or neutral naming variant; leaving it unset uses the
+neutral variant, which is why the selector labels that choice "Not set (uses neutral)". Blank
+fields are cleared and omitted from prompt context. Raw profile fields are exposed only at
+Minimal privacy.
 
-`/personal nickname` opens a naming modal for either global or persona scope. A persona-scoped
+`/personal profile nickname` opens a naming modal for either global or persona scope. A persona-scoped
 preference follows that persona's stable lineage across servers. Nicknames inherit from the
 persona preference to the global preference and then the live Discord display name. Prefixes
 and suffixes independently support Inherit, None, and Custom, so `Master Sparrow-san` can
@@ -91,7 +92,7 @@ providers apply across every server you use her in.
 
 ## Other Personal Settings
 
-- `/personal nickname` — change what she calls you.
+- `/personal profile nickname` — change what she calls you.
 - `/personal image-tags` — your own appearance tags (booru-style), used when an
   [image generation](/features/capabilities/media-generation/image-generation/#tag-customization)
   references you. Submit an empty box to clear them.

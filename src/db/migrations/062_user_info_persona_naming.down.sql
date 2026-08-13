@@ -30,7 +30,6 @@ DROP TABLE IF EXISTS user_persona_naming_preferences;
 
 ALTER TABLE user_personalization_configs
   DROP COLUMN IF EXISTS addressing_style,
-  DROP COLUMN IF EXISTS orientation,
   DROP COLUMN IF EXISTS pronouns,
   DROP COLUMN IF EXISTS gender_identity,
   DROP COLUMN IF EXISTS suffix_override,

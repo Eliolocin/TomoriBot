@@ -240,7 +240,7 @@ Transcription supports ~100 languages (auto-detected).`,
       memory_description: `- I can remember personal facts about you and server-wide information, persisting across conversations
 - Personal memories persist across servers (try talking to me in another server!)
 - I also keep [STM (short-term memory)](https://docs.tomoribot.app/en/features/knowledge/memory/#short-term-memory-stm) of recent conversations for channel and server awareness (opt into cross-server sharing with \`/personal stm\`)
-- Change what I call you using \`/personal nickname\`
+- Change what I call you using \`/personal profile nickname\`
 - Use \`/memory\` and \`/persona\` commands to manually add or remove memories and persona data
 - I can use server emojis and stickers more accurately after registration with \`/server expressions initialize\`
 - Full invisibility is available via \`/personal privacy\` if you want to be completely unseen by me

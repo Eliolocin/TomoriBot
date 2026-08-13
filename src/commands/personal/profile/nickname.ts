@@ -38,28 +38,28 @@ function namingModalComponents(locale: string, current: NamingValues) {
   const modeOptions = (selected: AffixMode) => [
     {
       value: "inherit",
-      label: localizer(locale, "commands.personal.nickname.inherit_option"),
-      description: localizer(locale, "commands.personal.nickname.inherit_description"),
+      label: localizer(locale, "commands.personal.profile.nickname.inherit_option"),
+      description: localizer(locale, "commands.personal.profile.nickname.inherit_description"),
       default: selected === "inherit",
     },
     {
       value: "none",
-      label: localizer(locale, "commands.personal.nickname.none_option"),
-      description: localizer(locale, "commands.personal.nickname.none_description"),
+      label: localizer(locale, "commands.personal.profile.nickname.none_option"),
+      description: localizer(locale, "commands.personal.profile.nickname.none_description"),
       default: selected === "none",
     },
     {
       value: "custom",
-      label: localizer(locale, "commands.personal.nickname.custom_option"),
-      description: localizer(locale, "commands.personal.nickname.custom_description"),
+      label: localizer(locale, "commands.personal.profile.nickname.custom_option"),
+      description: localizer(locale, "commands.personal.profile.nickname.custom_description"),
       default: selected === "custom",
     },
   ];
   return [
     {
       customId: NICKNAME_ID,
-      labelKey: "commands.personal.nickname.nickname_label",
-      descriptionKey: "commands.personal.nickname.nickname_description",
+      labelKey: "commands.personal.profile.nickname.nickname_label",
+      descriptionKey: "commands.personal.profile.nickname.nickname_description",
       style: TextInputStyle.Short,
       required: false,
       maxLength: USER_NICKNAME_MAX_LENGTH,
@@ -68,14 +68,14 @@ function namingModalComponents(locale: string, current: NamingValues) {
     {
       kind: "radioGroup" as const,
       customId: PREFIX_MODE_ID,
-      labelKey: "commands.personal.nickname.prefix_mode_label",
+      labelKey: "commands.personal.profile.nickname.prefix_mode_label",
       options: modeOptions(affixMode(current.prefix)),
       required: true,
     },
     {
       customId: PREFIX_ID,
-      labelKey: "commands.personal.nickname.prefix_label",
-      descriptionKey: "commands.personal.nickname.affix_text_description",
+      labelKey: "commands.personal.profile.nickname.prefix_label",
+      descriptionKey: "commands.personal.profile.nickname.affix_text_description",
       style: TextInputStyle.Short,
       required: false,
       maxLength: PERSONA_NAMING_VALUE_MAX_LENGTH,
@@ -84,14 +84,14 @@ function namingModalComponents(locale: string, current: NamingValues) {
     {
       kind: "radioGroup" as const,
       customId: SUFFIX_MODE_ID,
-      labelKey: "commands.personal.nickname.suffix_mode_label",
+      labelKey: "commands.personal.profile.nickname.suffix_mode_label",
       options: modeOptions(affixMode(current.suffix)),
       required: true,
     },
     {
       customId: SUFFIX_ID,
-      labelKey: "commands.personal.nickname.suffix_label",
-      descriptionKey: "commands.personal.nickname.affix_text_description",
+      labelKey: "commands.personal.profile.nickname.suffix_label",
+      descriptionKey: "commands.personal.profile.nickname.affix_text_description",
       style: TextInputStyle.Short,
       required: false,
       maxLength: PERSONA_NAMING_VALUE_MAX_LENGTH,
@@ -121,11 +121,11 @@ function parseNamingValues(values: Record<string, string>): NamingValues | null 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("nickname")
-    .setDescription(localizer("en-US", "commands.personal.nickname.description"))
+    .setDescription(localizer("en-US", "commands.personal.profile.nickname.description"))
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(localizer("en-US", "commands.personal.nickname.scope_description"))
+        .setDescription(localizer("en-US", "commands.personal.profile.nickname.scope_description"))
         .setRequired(true)
         .addChoices({ name: "Global", value: "global" }, { name: "Persona", value: "persona" }),
     );
@@ -144,7 +144,7 @@ export async function execute(
       locale,
       {
         modalCustomId: MODAL_ID,
-        modalTitleKey: "commands.personal.nickname.modal_title_global",
+        modalTitleKey: "commands.personal.profile.nickname.modal_title_global",
         components: namingModalComponents(locale, {
           nickname: userData.user_nickname,
           prefix: userData.prefix_override ?? null,
@@ -157,8 +157,8 @@ export async function execute(
     const next = parseNamingValues(result.values);
     if (!next) {
       await replyInfoEmbed(result.interaction, locale, {
-        titleKey: "commands.personal.nickname.invalid_affix_title",
-        descriptionKey: "commands.personal.nickname.invalid_affix_description",
+        titleKey: "commands.personal.profile.nickname.invalid_affix_title",
+        descriptionKey: "commands.personal.profile.nickname.invalid_affix_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -173,9 +173,9 @@ export async function execute(
       });
       invalidateUserCache(interaction.user.id);
       await replyInfoEmbed(result.interaction, locale, {
-        titleKey: "commands.personal.nickname.success_title",
-        descriptionKey: "commands.personal.nickname.success_description_scoped",
-        descriptionVars: { scope: localizer(locale, "commands.personal.nickname.global_option") },
+        titleKey: "commands.personal.profile.nickname.success_title",
+        descriptionKey: "commands.personal.profile.nickname.success_description_scoped",
+        descriptionVars: { scope: localizer(locale, "commands.personal.profile.nickname.global_option") },
         color: ColorCode.SUCCESS,
       });
     } catch (error) {
@@ -203,7 +203,7 @@ export async function execute(
       const current = preferences.get(`${userData.user_id}:${lineageId}`);
       const result = await selection.openModal({
         modalCustomId: MODAL_ID,
-        modalTitleKey: "commands.personal.nickname.modal_title_persona",
+        modalTitleKey: "commands.personal.profile.nickname.modal_title_persona",
         components: namingModalComponents(locale, {
           nickname: current?.nickname_override ?? null,
           prefix: current?.prefix_override ?? null,
@@ -219,8 +219,8 @@ export async function execute(
         await work.message.replace(
           buildPersonaWorkflowNotice({
             locale,
-            titleKey: "commands.personal.nickname.invalid_affix_title",
-            descriptionKey: "commands.personal.nickname.invalid_affix_description",
+            titleKey: "commands.personal.profile.nickname.invalid_affix_title",
+            descriptionKey: "commands.personal.profile.nickname.invalid_affix_description",
             footerKey: "general.pagination.reloading_persona_picker",
             color: ColorCode.ERROR,
           }),
@@ -242,8 +242,8 @@ export async function execute(
       await work.message.replace(
         buildPersonaWorkflowNotice({
           locale,
-          titleKey: "commands.personal.nickname.success_title",
-          descriptionKey: "commands.personal.nickname.success_description_scoped",
+          titleKey: "commands.personal.profile.nickname.success_title",
+          descriptionKey: "commands.personal.profile.nickname.success_description_scoped",
           descriptionVars: { scope: selection.persona.persona_nickname },
           color: ColorCode.SUCCESS,
         }),

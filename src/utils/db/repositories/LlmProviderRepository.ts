@@ -1263,7 +1263,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
                 display_name = ${displayName},
                 num_ctx = ${numCtx},
                 requires_auth = ${requiresAuth},
-                extra_config = ${JSON.stringify(extraConfig)}::jsonb,
+                extra_config = ${extraConfig},
                 has_tools = ${hasTools},
                 sees_images = ${seesImages},
                 sees_videos = ${seesVideos},
@@ -1285,7 +1285,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
               ) VALUES (
                 ${serverId}, NULL, ${label}, ${capability}, ${apiStyle},
                 ${endpointUrl}, ${modelName}, ${modelRefId}, ${displayName}, ${numCtx}, ${requiresAuth},
-                ${JSON.stringify(extraConfig)}::jsonb, ${hasTools}, ${seesImages}, ${seesVideos},
+                ${extraConfig}, ${hasTools}, ${seesImages}, ${seesVideos},
                 ${supportsStructOutput}, ${strictRoleAlternation}, ${supportsPrefixCompletion}, ${isDefault}
               )
               ON CONFLICT (server_id, label, capability, COALESCE(model_name, '')) WHERE user_id IS NULL
@@ -1318,7 +1318,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
                 ) VALUES (
                   NULL, ${userId}, ${label}, ${capability}, ${apiStyle},
                   ${endpointUrl}, ${modelName}, ${modelRefId}, ${displayName}, ${numCtx}, ${requiresAuth},
-                  ${JSON.stringify(extraConfig)}::jsonb, ${hasTools}, ${seesImages}, ${seesVideos},
+                  ${extraConfig}, ${hasTools}, ${seesImages}, ${seesVideos},
                   ${supportsStructOutput}, ${strictRoleAlternation}, ${supportsPrefixCompletion}, ${isDefault}
                 )
                 ON CONFLICT (user_id, label, capability, COALESCE(model_name, '')) WHERE server_id IS NULL

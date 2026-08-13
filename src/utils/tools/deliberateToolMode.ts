@@ -155,8 +155,8 @@ const USER_UNBLOCK_INTENT_PATTERNS: RegExp[] = [
 
 const USER_INFO_INTENT_PATTERNS: RegExp[] = [
   /\b(?:call|address|refer\s+to)\s+(?:me|them|him|her|@[A-Za-z0-9_.-]+|<@\d+>)(?:\s+(?:as|by))?\s+[A-Za-z0-9_.-]+\b/i,
-  /\b(?:my|their|his|her)\s+(?:nickname|name|pronouns?|gender|orientation|title|honorific|prefix|suffix|timezone|utc\s*offset)\b/i,
-  /\b(?:change|set|update|clear|forget|use)\b.{0,100}\b(?:nickname|pronouns?|gender|orientation|addressing\s+style|title|honorific|prefix|suffix|timezone|utc\s*offset)\b/i,
+  /\b(?:my|their|his|her)\s+(?:nickname|name|pronouns?|gender|title|honorific|prefix|suffix|timezone|utc\s*offset)\b/i,
+  /\b(?:change|set|update|clear|forget|use)\b.{0,100}\b(?:nickname|pronouns?|gender|addressing\s+style|title|honorific|prefix|suffix|timezone|utc\s*offset)\b/i,
 ];
 
 const TOOL_FOLLOW_UP_PATTERNS: RegExp[] = [

@@ -1,22 +1,40 @@
-import { describe, expect, it, spyOn } from "bun:test";
+import { beforeAll, describe, expect, it, spyOn } from "bun:test";
 import type { ToolContext } from "@/types/tool/interfaces";
-import { UpdateUserInfoTool } from "@/tools/functionCalls/updateUserInfoTool";
+import {
+  stripRedundantAffixes,
+  suppressOutrankingOverrides,
+  UpdateUserInfoTool,
+} from "@/tools/functionCalls/updateUserInfoTool";
+import type { UserInfoWriteBatch } from "@/utils/db/repositories/UserNamingRepository";
+import { resolveEffectiveUserNaming } from "@/utils/text/userNaming";
 import { PrivacyLevel } from "@/types/db/schema";
+import { EMPTY_PERSONA_NAMING_CONFIG, type PersonaNamingConfig } from "@/types/personaNaming";
+import { initializeLocalizer } from "@/utils/text/localizer";
 import { userNamingRepository, userRepository } from "@/utils/db/repositories";
 import { configToFeatureFlags, filterToolsByFeatureFlags } from "@/utils/tools/featureFlagMapper";
 import { redactToolParametersForStorage } from "@/utils/tools/toolParameterRedaction";
 
-function makeContext(enabled: boolean): ToolContext {
+function makeContext(enabled: boolean, namingConfig?: PersonaNamingConfig): ToolContext {
   return {
     userId: "123456789012345678",
     guildId: "987654321098765432",
     locale: "en-US",
     suppressProgressNotices: true,
-    tomoriState: { persona_lineage_id: 77, config: { user_info_updates_enabled: enabled } },
+    personaUsername: "Sparrow",
+    tomoriState: {
+      persona_lineage_id: 77,
+      persona_nickname: "Sparrow",
+      naming_config: namingConfig ?? EMPTY_PERSONA_NAMING_CONFIG,
+      config: { user_info_updates_enabled: enabled },
+    },
   } as ToolContext;
 }
 
 describe("UpdateUserInfoTool", () => {
+  beforeAll(async () => {
+    await initializeLocalizer();
+  });
+
   it("defends execution when the capability is disabled", async () => {
     const result = await new UpdateUserInfoTool().execute(
       {
@@ -146,6 +164,108 @@ describe("UpdateUserInfoTool", () => {
       loadSpy.mockRestore();
       writeSpy.mockRestore();
     }
+  });
+});
+
+describe("update_user_info affix de-duplication", () => {
+  function naming(prefix: string, suffix: string) {
+    return resolveEffectiveUserNaming({
+      global: {
+        userNickname: "Bred",
+        prefixOverride: prefix || null,
+        suffixOverride: suffix || null,
+        addressingStyle: null,
+      },
+      liveDisplayName: "Bredrumb",
+    });
+  }
+
+  it("removes a prefix the model re-typed into the nickname", () => {
+    const changes = [{ field: "nickname", scope: "global", action: "set", text_value: "Master Bred" }] as never;
+    stripRedundantAffixes(changes, naming("Master", ""));
+    expect(changes).toEqual([{ field: "nickname", scope: "global", action: "set", text_value: "Bred" }] as never);
+  });
+
+  it("removes a suffix the model re-typed into the nickname", () => {
+    const changes = [{ field: "nickname", scope: "global", action: "set", text_value: "Bred-san" }] as never;
+    stripRedundantAffixes(changes, naming("", "-san"));
+    expect(changes).toEqual([{ field: "nickname", scope: "global", action: "set", text_value: "Bred" }] as never);
+  });
+
+  it("matches the affix the same batch is setting rather than the one it replaces", () => {
+    const changes = [
+      { field: "prefix", scope: "global", action: "set", text_value: "Sir" },
+      { field: "nickname", scope: "global", action: "set", text_value: "Sir Bred" },
+    ] as never;
+    stripRedundantAffixes(changes, naming("Master", ""));
+    expect((changes as unknown as Array<{ text_value: string }>)[1].text_value).toBe("Bred");
+  });
+
+  it("leaves a nickname alone when the batch suppresses the affix", () => {
+    const changes = [
+      { field: "prefix", scope: "global", action: "none" },
+      { field: "nickname", scope: "global", action: "set", text_value: "Master Bred" },
+    ] as never;
+    stripRedundantAffixes(changes, naming("Master", ""));
+    expect((changes as unknown as Array<{ text_value: string }>)[1].text_value).toBe("Master Bred");
+  });
+
+  it("never splits a nickname that does not contain the resolved affix", () => {
+    const changes = [{ field: "nickname", scope: "global", action: "set", text_value: "Big Bred" }] as never;
+    stripRedundantAffixes(changes, naming("Master", ""));
+    expect((changes as unknown as Array<{ text_value: string }>)[0].text_value).toBe("Big Bred");
+  });
+
+  it("also clears a persona-lineage override that would outrank a global none", () => {
+    const changes = [{ field: "prefix", scope: "global", action: "none" }] as never;
+    const batch: UserInfoWriteBatch = { global: {}, persona: { personaLineageId: 77, patch: {} } };
+    const outranked = resolveEffectiveUserNaming({
+      global: { userNickname: "Bred", prefixOverride: null, suffixOverride: null, addressingStyle: null },
+      liveDisplayName: "Bredrumb",
+      preference: { nickname_override: null, prefix_override: "Captain", suffix_override: null },
+    });
+    expect(outranked.prefixSource).toBe("persona_preference");
+
+    suppressOutrankingOverrides(changes, outranked, batch);
+    expect(batch.persona?.patch).toEqual({ prefix_override: null });
+  });
+
+  it("leaves a lineage override alone when the same batch sets it deliberately", () => {
+    const changes = [
+      { field: "prefix", scope: "persona", action: "set", text_value: "Captain" },
+      { field: "prefix", scope: "global", action: "none" },
+    ] as never;
+    const batch: UserInfoWriteBatch = {
+      global: {},
+      persona: { personaLineageId: 77, patch: { prefix_override: "Captain" } },
+    };
+    const outranked = resolveEffectiveUserNaming({
+      global: { userNickname: "Bred", prefixOverride: null, suffixOverride: null, addressingStyle: null },
+      liveDisplayName: "Bredrumb",
+      preference: { nickname_override: null, prefix_override: "Captain", suffix_override: null },
+    });
+
+    suppressOutrankingOverrides(changes, outranked, batch);
+    expect(batch.persona?.patch).toEqual({ prefix_override: "Captain" });
+  });
+
+  it("does not widen inherit, whose fall-back semantics are intentional", () => {
+    const changes = [{ field: "prefix", scope: "global", action: "inherit" }] as never;
+    const batch: UserInfoWriteBatch = { global: {}, persona: { personaLineageId: 77, patch: {} } };
+    const outranked = resolveEffectiveUserNaming({
+      global: { userNickname: "Bred", prefixOverride: null, suffixOverride: null, addressingStyle: null },
+      liveDisplayName: "Bredrumb",
+      preference: { nickname_override: null, prefix_override: "Captain", suffix_override: null },
+    });
+
+    suppressOutrankingOverrides(changes, outranked, batch);
+    expect(batch.persona?.patch).toEqual({});
+  });
+
+  it("keeps a nickname that is exactly the affix rather than emptying it", () => {
+    const changes = [{ field: "nickname", scope: "global", action: "set", text_value: "Master" }] as never;
+    stripRedundantAffixes(changes, naming("Master", ""));
+    expect((changes as unknown as Array<{ text_value: string }>)[0].text_value).toBe("Master");
   });
 });
 

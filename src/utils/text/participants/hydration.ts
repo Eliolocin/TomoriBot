@@ -40,7 +40,7 @@ import {
   type UserPersonaNamingPair,
 } from "@/utils/db/repositories/UserNamingRepository";
 import type { UserPersonaNamingPreference } from "@/types/personaNaming";
-import { resolveEffectiveUserNaming } from "@/utils/text/userNaming";
+import { type EffectiveUserNaming, resolveEffectiveUserNaming } from "@/utils/text/userNaming";
 import { createParticipantAlias } from "@/utils/text/participants/aliases";
 
 export interface ActivePersonaScope {
@@ -54,6 +54,7 @@ export interface ActivePersonaScope {
 export type ParticipantProfileFieldKind =
   | "status"
   | "physical_appearance"
+  | "naming"
   | "timezone"
   | "identity"
   | "presence"
@@ -308,6 +309,7 @@ interface HydratedDiscordUserBase {
   blacklisted: boolean;
   personalizationEnabled: boolean;
   isTriggerer: boolean;
+  naming?: EffectiveUserNaming;
 }
 
 async function hydrateDiscordUserBase(
@@ -438,6 +440,7 @@ function applyPersonaRelativeNaming(
 
   return {
     ...base,
+    naming,
     profile: {
       ...base.profile,
       displayName: naming.formattedName,
@@ -448,6 +451,25 @@ function applyPersonaRelativeNaming(
       ],
     },
   };
+}
+
+/**
+ * Names the affixes separately from the nickname, so an affix stays removable.
+ * Without it the model only ever sees the joined name and reads "stop calling me
+ * Master Sparrow" as a nickname rewrite that re-composes to the same string. The
+ * parenthetical uses the tool's own field words so the mapping to a change is
+ * direct.
+ */
+function enrichNamingField(base: HydratedDiscordUserBase): ParticipantProfileField {
+  const naming = base.naming;
+  const lines: string[] = [];
+  if (naming && (naming.prefix || naming.suffix)) {
+    const affixes: string[] = [];
+    if (naming.prefix) affixes.push(`prefix "${naming.prefix}"`);
+    if (naming.suffix) affixes.push(`suffix "${naming.suffix}"`);
+    lines.push(`- I call ${naming.nickname} "${naming.formattedName}" (${affixes.join(", ")})`);
+  }
+  return field(base.profile.key, "naming", 12, lines);
 }
 
 async function enrichPresenceField(
@@ -527,10 +549,8 @@ function enrichIdentityField(base: HydratedDiscordUserBase): ParticipantProfileF
   if (base.policy.exposeIdentity) {
     const genderIdentity = base.userRow.gender_identity?.trim();
     const pronouns = base.userRow.pronouns?.trim();
-    const orientation = base.userRow.orientation?.trim();
     if (genderIdentity) lines.push(`- Gender Identity: ${genderIdentity}`);
     if (pronouns) lines.push(`- Pronouns: ${pronouns}`);
-    if (orientation) lines.push(`- Orientation: ${orientation}`);
   }
   return field(base.profile.key, "identity", 15, lines, base.policy.exposeIdentity ? "missing_data" : "privacy");
 }
@@ -592,6 +612,7 @@ async function hydrateDiscordUser(
 ): Promise<HydratedParticipantProfile> {
   const fields: ParticipantProfileField[] = [
     enrichPhysicalAppearanceField(base, params),
+    enrichNamingField(base),
     enrichIdentityField(base),
     enrichTimezoneField(base, params),
     await enrichPresenceField(base, params, dependencies),

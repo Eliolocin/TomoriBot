@@ -179,6 +179,14 @@ the reader strips both prefixes so the reconstructed title matches
 **If you convert a notice to Components V2, verify it still classifies.** The
 formatting helpers take a transport-agnostic `{title, description}` pair
 specifically so both paths emit byte-identical `[System: ...]` context. Current
-CV2 senders: `expandableEmbedNotice.ts` (memory + task). All other notice types
-are still embed-based.
+CV2 senders: `expandableEmbedNotice.ts` (memory + task via `sendEmbedWithExpand`,
+`update_user_info` via `sendNoticeContainerMessage`). All other notice types are
+still embed-based.
+
+**A notice title absent from `checkTargetEmbedTitle` is dropped silently**,
+whichever transport it uses, so a persona asked "did you already do that?" has no
+history to answer from. Registered action-record titles now also cover
+`tools.user_info_update.success_title` (`user_info_update`) and the block/mute
+titles (`user_moderation`); both render title-first inside `[System: ...]` because
+their titles carry the target and the action.
 - Voice transcripts: → no dedicated doc yet

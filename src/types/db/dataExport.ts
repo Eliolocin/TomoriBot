@@ -78,7 +78,6 @@ export const personalSettingsExportDataSchema = z.object({
   suffix_override: z.string().max(100).nullable().optional(),
   gender_identity: z.string().max(200).nullable().optional(),
   pronouns: z.string().max(200).nullable().optional(),
-  orientation: z.string().max(200).nullable().optional(),
   addressing_style: addressingStyleSchema.nullable().optional(),
   persona_naming_preferences: z
     .array(

@@ -88,7 +88,8 @@ function coreFieldEnricher(
 const CORE_FIELD_ENRICHERS: readonly ParticipantProfileEnricher[] = [
   coreFieldEnricher("core.status", "status", 100),
   coreFieldEnricher("core.physical-appearance", "physical_appearance", 110, "core.status"),
-  coreFieldEnricher("core.identity", "identity", 115, "core.physical-appearance"),
+  coreFieldEnricher("core.naming", "naming", 112, "core.physical-appearance"),
+  coreFieldEnricher("core.identity", "identity", 115, "core.naming"),
   coreFieldEnricher("core.timezone", "timezone", 120, "core.identity"),
   coreFieldEnricher("core.presence", "presence", 130, "core.timezone"),
   coreFieldEnricher("core.roles", "roles", 140, "core.presence"),

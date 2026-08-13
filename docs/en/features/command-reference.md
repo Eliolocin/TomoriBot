@@ -282,16 +282,16 @@ Manage your personal settings
 | `/personal custom-endpoint remove` | Remove selected capabilities from personal custom endpoints. |
 | `/personal deliberate-tool-mode` | Set your personal deliberate tool mode preference. |
 | `/personal deliberate-trigger-mode` | Set your personal deliberate trigger mode (DTM) preference. |
-| `/personal identity` | Set your optional identity and preferred style of address. |
 | `/personal image-tags` | Set comma-separated image tags for your physical appearance to assist image generation. |
 | `/personal impersonate prompt` | Set a reusable prompt that tells me how to impersonate you. |
 | `/personal language` | Set your preferred language for my interface. |
 | `/personal model fallback` | Set fallback models for your personal text override, or clear slots with None. |
-| `/personal nickname` | Configure the nickname, prefix, and suffix a persona uses for you. |
 | `/personal openrouter-model add` | Register an OpenRouter model codename for your personal provider list. |
 | `/personal openrouter-model remove` | Remove registered OpenRouter models from your personal provider list. |
 | `/personal parameters` | Adjust sampler settings for your personal providers, not this server's. |
 | `/personal privacy` | Control personal memory storage and privacy settings |
+| `/personal profile about` | Set your optional profile details and preferred style of address. |
+| `/personal profile nickname` | Configure the nickname, prefix, and suffix a persona uses for you. |
 | `/personal provider add` | Save your API key and enable its default personal text model everywhere. |
 | `/personal provider model-embedding` | Select and enable your personal embedding model, used in every server. |
 | `/personal provider model-image` | Select and enable your personal image model, used in every server. |

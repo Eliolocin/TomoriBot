@@ -163,6 +163,82 @@ function buildNoticeComponents(
  * @param config - Notice-specific locale keys, button custom ID, threshold, and collector timeout.
  * @param webhookContext - Optional persona webhook identity, identical to `sendStandardEmbed`.
  */
+async function deliverNoticeComponents(
+  channel: SupportedChannel,
+  components: TopLevelComponentData[],
+  webhookContext: WebhookEmbedContext | undefined,
+): Promise<{ message: Message | null; sentViaWebhook: boolean; threadId: string | undefined }> {
+  // Persona webhooks live on the parent channel and need `threadId` to post
+  // into a thread.
+  const threadId =
+    "isThread" in channel && typeof channel.isThread === "function" && channel.isThread() ? channel.id : undefined;
+
+  // Try webhook-persona delivery first so the notice appears under the same
+  // identity as the AI response, then fall back to a plain bot message.
+  const webhook = webhookContext?.webhook;
+  const useWebhook = Boolean(webhook && webhookContext?.personaUsername && canUseWebhookForChannel(channel, webhook));
+
+  if (useWebhook && webhook && webhookContext) {
+    try {
+      const message = await sendWebhookMessageWithIdentity(
+        webhook,
+        {
+          components,
+          flags: MessageFlags.IsComponentsV2,
+          withComponents: true,
+          ...(threadId ? { threadId } : {}),
+        },
+        {
+          username: webhookContext.personaUsername,
+          avatarUrl: webhookContext.personaAvatarUrl,
+          avatarDataUri: webhookContext.personaAvatarUrl?.startsWith("data:image/")
+            ? webhookContext.personaAvatarUrl
+            : undefined,
+        },
+      );
+      return { message, sentViaWebhook: true, threadId };
+    } catch (error) {
+      log.warn("CV2 notice: webhook send failed, falling back to plain bot message", error as Error);
+    }
+  }
+
+  try {
+    const message = await channel.send({ components, flags: MessageFlags.IsComponentsV2 });
+    return { message, sentViaWebhook: false, threadId };
+  } catch (error) {
+    log.warn("CV2 notice: channel send failed", error as Error);
+    return { message: null, sentViaWebhook: false, threadId };
+  }
+}
+
+/**
+ * Sends a plain Components V2 notice card with no expand button.
+ *
+ * Tool notices use this rather than `sendStandardEmbed` because a legacy embed
+ * description has no divider primitive, so a footer cannot be separated from the
+ * body by anything but blank lines. The CV2 container emits a real `Separator`
+ * before `footerKey`.
+ */
+export async function sendNoticeContainerMessage(
+  channel: SupportedChannel,
+  locale: string,
+  embedOptions: StandardEmbedOptions,
+  webhookContext?: WebhookEmbedContext,
+): Promise<void> {
+  const components = buildNoticeContainer({
+    locale,
+    color: embedOptions.color ?? ColorCode.INFO,
+    titleKey: embedOptions.titleKey,
+    titleVars: embedOptions.titleVars,
+    descriptionKey: embedOptions.descriptionKey,
+    description: embedOptions.description,
+    descriptionVars: embedOptions.descriptionVars,
+    footerKey: embedOptions.footerKey,
+    footerVars: embedOptions.footerVars,
+  });
+  await deliverNoticeComponents(channel, components, webhookContext);
+}
+
 async function sendEmbedWithExpand(
   channel: SupportedChannel,
   locale: string,
@@ -183,57 +259,15 @@ async function sendEmbedWithExpand(
     ? buildNoticeComponents(locale, embedOptions, config, true, true)
     : activeComponents;
 
-  // Resolve thread ID: persona webhooks live on the parent channel and need
-  //    `threadId` to post into a thread.
-  const threadId =
-    "isThread" in channel && typeof channel.isThread === "function" && channel.isThread() ? channel.id : undefined;
-
-  // Try webhook-persona delivery first so the notice appears under the same
-  //    identity as the AI response, then fall back to a plain bot message.
+  const {
+    message: noticeMessage,
+    sentViaWebhook,
+    threadId,
+  } = await deliverNoticeComponents(channel, activeComponents, webhookContext);
   const webhook = webhookContext?.webhook;
-  const useWebhook = Boolean(webhook && webhookContext?.personaUsername && canUseWebhookForChannel(channel, webhook));
-
-  let noticeMessage: Message | null = null;
-  let sentViaWebhook = false;
-
-  if (useWebhook && webhook && webhookContext) {
-    try {
-      noticeMessage = await sendWebhookMessageWithIdentity(
-        webhook,
-        {
-          components: activeComponents,
-          flags: MessageFlags.IsComponentsV2,
-          withComponents: true,
-          ...(threadId ? { threadId } : {}),
-        },
-        {
-          username: webhookContext.personaUsername,
-          avatarUrl: webhookContext.personaAvatarUrl,
-          avatarDataUri: webhookContext.personaAvatarUrl?.startsWith("data:image/")
-            ? webhookContext.personaAvatarUrl
-            : undefined,
-        },
-      );
-      sentViaWebhook = true;
-    } catch (error) {
-      log.warn("Expand notice: webhook send failed, falling back to plain bot message", error as Error);
-    }
-  }
-
-  if (!noticeMessage) {
-    try {
-      noticeMessage = await channel.send({
-        components: activeComponents,
-        flags: MessageFlags.IsComponentsV2,
-      });
-    } catch (error) {
-      log.warn("Expand notice: channel send failed", error as Error);
-      return;
-    }
-  }
 
   // Short content was not truncated, so there is no collector to wire.
-  if (!shouldAttachExpandButton) {
+  if (!noticeMessage || !shouldAttachExpandButton) {
     return;
   }
 

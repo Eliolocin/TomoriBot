@@ -129,10 +129,13 @@ function formatTargetEmbedForContext(
     }
   }
 
-  const includeTitleInEmbedContent = embedType === "memory_learning" || embedType === "reminder_set";
-  const titleLine = includeTitleInEmbedContent && source.title ? `${source.title}\n` : "";
+  // Titles of action-record notices carry the target and the action itself, so
+  // the body alone would not say who was changed.
+  const titledTypes = ["memory_learning", "reminder_set", "user_info_update", "user_moderation"];
+  const titleLine = titledTypes.includes(embedType ?? "") && source.title ? `${source.title}\n` : "";
   const embedBody = `${titleLine}${cleanedDescription}`;
-  return embedType === "memory_learning" || embedType === "reward" || embedType === "punish"
+  const inlineSystemTypes = ["memory_learning", "reward", "punish", "user_info_update", "user_moderation"];
+  return inlineSystemTypes.includes(embedType ?? "")
     ? `[System: ${embedBody}]`
     : formatSystemProducedEmbedHint(embedBody);
 }

@@ -158,13 +158,25 @@ abbreviated "DTM" in Discord.
 ## Structured User Info Updates
 
 The built-in `update_user_info` tool handles explicit requests to change a registered user's
-nickname, prefix, suffix, gender identity, pronouns, orientation, addressing style, or numeric
-UTC offset. It uses the same collision-aware name, alias, mention, and Discord-ID resolver as
-other personal tools. An omitted target means the human who triggered the turn; `all` and
-`everyone` are never wildcard targets.
+nickname, prefix, suffix, gender identity, pronouns, addressing style, or numeric UTC offset.
+It uses the same collision-aware name, alias, mention, and Discord-ID resolver as other
+personal tools. An omitted target means the human who triggered the turn; `all` and `everyone`
+are never wildcard targets.
+
+Participant context names each user's prefix and suffix separately from their nickname, so a
+request to drop a title resolves to an affix change instead of a nickname rewrite. Setting an
+affix to `none` suppresses it whatever supplied it: when a persona-scoped override would outrank
+a global `none`, that override is cleared in the same transaction, so an explicit suppression is
+never silently ignored. An `inherit` request is left alone, because falling back to a lower layer
+is what it means.
+
+When a nickname is submitted with an affix that is already resolved, the redundant affix is
+stripped by comparing against the resolved value; the nickname is never split on whitespace to
+guess a boundary. Each successful update reports the resulting form of address, so an
+addressing-style switch is visible in the same turn.
 
 Every requested item is validated before one atomic write. Restrictive privacy blocks additions
 and changes but still permits clearing values. Persona scope always means the active persona's
 lineage and cannot edit persona-wide address terms. The default-on User Info Updates switch in
 `/capabilities manage` controls both tool exposure and stale-invocation defense. Manual
-`/personal identity` and `/personal nickname` remain available when it is off.
+`/personal profile about` and `/personal profile nickname` remain available when it is off.

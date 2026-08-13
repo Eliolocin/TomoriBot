@@ -32,7 +32,6 @@ const USER_PERSONALIZATION_FIELD_NAMES = [
   "suffix_override",
   "gender_identity",
   "pronouns",
-  "orientation",
   "addressing_style",
 ] as const;
 
@@ -118,7 +117,6 @@ class UserRepository implements IRepository<UserExportShape> {
             upc.suffix_override,
             upc.gender_identity,
             upc.pronouns,
-            upc.orientation,
             upc.addressing_style,
             u.created_at,
             u.updated_at,
@@ -173,7 +171,6 @@ class UserRepository implements IRepository<UserExportShape> {
               upc.suffix_override,
               upc.gender_identity,
               upc.pronouns,
-              upc.orientation,
               upc.addressing_style,
               u.created_at,
               u.updated_at,
@@ -230,7 +227,6 @@ class UserRepository implements IRepository<UserExportShape> {
                 upc.suffix_override,
                 upc.gender_identity,
                 upc.pronouns,
-                upc.orientation,
                 upc.addressing_style,
                 u.created_at,
                 u.updated_at,
@@ -557,7 +553,6 @@ class UserRepository implements IRepository<UserExportShape> {
             suffix_override = NULL,
             gender_identity = NULL,
             pronouns = NULL,
-            orientation = NULL,
             addressing_style = NULL,
             updated_at = NOW()
           WHERE user_id = ${userId}
@@ -1003,7 +998,6 @@ class UserRepository implements IRepository<UserExportShape> {
       suffix_override: user.suffix_override ?? null,
       gender_identity: user.gender_identity ?? null,
       pronouns: user.pronouns ?? null,
-      orientation: user.orientation ?? null,
       addressing_style: user.addressing_style ?? null,
       persona_naming_preferences: personaNamingPreferences.map((preference) => ({
         ...preference,
@@ -1053,7 +1047,6 @@ class UserRepository implements IRepository<UserExportShape> {
           suffix_override: parsed.suffix_override,
           gender_identity: parsed.gender_identity,
           pronouns: parsed.pronouns,
-          orientation: parsed.orientation,
           addressing_style: parsed.addressing_style,
         }),
       ]);
@@ -1097,7 +1090,6 @@ class UserRepository implements IRepository<UserExportShape> {
       suffix_override: string | null | undefined;
       gender_identity: string | null | undefined;
       pronouns: string | null | undefined;
-      orientation: string | null | undefined;
       addressing_style: "masculine" | "feminine" | "neutral" | null | undefined;
     },
     client: SQL = sql,
@@ -1106,14 +1098,14 @@ class UserRepository implements IRepository<UserExportShape> {
       INSERT INTO user_personalization_configs (
         user_id, user_nickname, shortterm_cache_crossserver_opt_in, physical_appearance_tags,
         nai_char_ref_url, impersonation_prompt, personal_dtm, personal_deliberate_tool_mode,
-        timezone_offset, prefix_override, suffix_override, gender_identity, pronouns, orientation,
+        timezone_offset, prefix_override, suffix_override, gender_identity, pronouns,
         addressing_style
       ) VALUES (
         ${userId}, ${data.user_nickname}, ${data.shortterm_cache_crossserver_opt_in}, ${sql.array(data.physical_appearance_tags, "TEXT")},
         ${data.nai_char_ref_url ?? null}, ${data.impersonation_prompt ?? null},
         ${data.personal_dtm ?? "follow"}, ${data.personal_deliberate_tool_mode ?? "follow"},
         ${data.timezone_offset ?? null}, ${data.prefix_override ?? null}, ${data.suffix_override ?? null},
-        ${data.gender_identity ?? null}, ${data.pronouns ?? null}, ${data.orientation ?? null},
+        ${data.gender_identity ?? null}, ${data.pronouns ?? null},
         ${data.addressing_style ?? null}
       )
       ON CONFLICT (user_id) DO UPDATE SET
@@ -1129,7 +1121,6 @@ class UserRepository implements IRepository<UserExportShape> {
         suffix_override                    = EXCLUDED.suffix_override,
         gender_identity                    = EXCLUDED.gender_identity,
         pronouns                           = EXCLUDED.pronouns,
-        orientation                        = EXCLUDED.orientation,
         addressing_style                   = EXCLUDED.addressing_style,
         updated_at                         = NOW()
     `;
@@ -1410,9 +1401,6 @@ class UserRepository implements IRepository<UserExportShape> {
         break;
       case "pronouns":
         patch.pronouns = rawValue as string | null;
-        break;
-      case "orientation":
-        patch.orientation = rawValue as string | null;
         break;
       case "addressing_style":
         patch.addressing_style = rawValue as "masculine" | "feminine" | "neutral" | null;

@@ -2871,7 +2871,6 @@ CREATE TABLE IF NOT EXISTS user_personalization_configs (
   suffix_override                    TEXT,
   gender_identity                    TEXT,
   pronouns                           TEXT,
-  orientation                        TEXT,
   addressing_style                   TEXT CHECK (addressing_style IS NULL OR addressing_style IN ('masculine', 'feminine', 'neutral')),
   created_at                         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                         TIMESTAMPTZ NOT NULL DEFAULT NOW()

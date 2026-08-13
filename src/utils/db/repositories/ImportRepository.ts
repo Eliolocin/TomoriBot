@@ -217,7 +217,6 @@ class ImportRepository {
             suffix_override,
             gender_identity,
             pronouns,
-            orientation,
             addressing_style
           ) VALUES (
             ${userId},
@@ -233,7 +232,6 @@ class ImportRepository {
             ${importData.suffix_override ?? null},
             ${importData.gender_identity ?? null},
             ${importData.pronouns ?? null},
-            ${importData.orientation ?? null},
             ${importData.addressing_style ?? null}
           )
           ON CONFLICT (user_id) DO UPDATE SET
@@ -249,7 +247,6 @@ class ImportRepository {
             suffix_override = CASE WHEN ${importData.suffix_override !== undefined} THEN EXCLUDED.suffix_override ELSE user_personalization_configs.suffix_override END,
             gender_identity = CASE WHEN ${importData.gender_identity !== undefined} THEN EXCLUDED.gender_identity ELSE user_personalization_configs.gender_identity END,
             pronouns = CASE WHEN ${importData.pronouns !== undefined} THEN EXCLUDED.pronouns ELSE user_personalization_configs.pronouns END,
-            orientation = CASE WHEN ${importData.orientation !== undefined} THEN EXCLUDED.orientation ELSE user_personalization_configs.orientation END,
             addressing_style = CASE WHEN ${importData.addressing_style !== undefined} THEN EXCLUDED.addressing_style ELSE user_personalization_configs.addressing_style END,
             updated_at = NOW()
         `;
@@ -298,7 +295,6 @@ class ImportRepository {
       if (importData.suffix_override !== undefined) fieldsCount++;
       if (importData.gender_identity !== undefined) fieldsCount++;
       if (importData.pronouns !== undefined) fieldsCount++;
-      if (importData.orientation !== undefined) fieldsCount++;
       if (importData.addressing_style !== undefined) fieldsCount++;
       fieldsCount += importData.persona_naming_preferences?.length ?? 0;
 

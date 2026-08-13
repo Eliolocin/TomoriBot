@@ -280,7 +280,7 @@ OpenRouter固有のモデルと設定を管理します。
 | `/personal impersonate prompt` | トモリがどのようにあなたになりすますべきかを指示する、再利用可能なプロンプトを設定します。 |
 | `/personal language` | トモリのインターフェースの優先言語を設定します。 |
 | `/personal model fallback` | 個人テキスト上書きのフォールバックモデルを設定し、なしで各スロットをクリアできます。 |
-| `/personal nickname` | トモリがあなたを呼ぶときの名前を変更します。 |
+| `/personal profile nickname` | トモリがあなたを呼ぶときの名前を変更します。 |
 | `/personal openrouter-model add` | 個人プロバイダーリストにOpenRouterモデルのコードネームを登録します。 |
 | `/personal openrouter-model remove` | 個人プロバイダーリストから登録されたOpenRouterモデルを削除します。 |
 | `/personal parameters` | このサーバーではなく、個人プロバイダーのサンプラー設定を調整します。 |

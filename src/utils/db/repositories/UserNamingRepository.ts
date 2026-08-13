@@ -25,7 +25,6 @@ export interface UserInfoWriteBatch {
     suffix_override: string | null;
     gender_identity: string | null;
     pronouns: string | null;
-    orientation: string | null;
     addressing_style: "masculine" | "feminine" | "neutral" | null;
     timezone_offset: number | null;
   }>;
@@ -53,7 +52,6 @@ class UserNamingRepository {
             suffix_override = CASE WHEN ${has("suffix_override")} THEN ${batch.global.suffix_override ?? null} ELSE suffix_override END,
             gender_identity = CASE WHEN ${has("gender_identity")} THEN ${batch.global.gender_identity ?? null} ELSE gender_identity END,
             pronouns = CASE WHEN ${has("pronouns")} THEN ${batch.global.pronouns ?? null} ELSE pronouns END,
-            orientation = CASE WHEN ${has("orientation")} THEN ${batch.global.orientation ?? null} ELSE orientation END,
             addressing_style = CASE WHEN ${has("addressing_style")} THEN ${batch.global.addressing_style ?? null} ELSE addressing_style END,
             timezone_offset = CASE WHEN ${has("timezone_offset")} THEN ${batch.global.timezone_offset ?? null} ELSE timezone_offset END,
             updated_at = NOW()
@@ -204,8 +202,7 @@ class UserNamingRepository {
     await client`
       INSERT INTO persona_naming_configs (persona_id, prefixes, suffixes, address_terms)
       VALUES (
-        ${personaId}, ${JSON.stringify(config.prefixes)}::JSONB, ${JSON.stringify(config.suffixes)}::JSONB,
-        ${JSON.stringify(config.addressTerms)}::JSONB
+        ${personaId}, ${config.prefixes}, ${config.suffixes}, ${config.addressTerms}
       )
       ON CONFLICT (persona_id) DO UPDATE SET
         prefixes = EXCLUDED.prefixes,

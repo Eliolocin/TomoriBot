@@ -45,6 +45,8 @@ describe("resolveEffectiveUserNaming", () => {
       nickname: "Sparrow",
       prefix: "Master",
       suffix: "-san",
+      prefixSource: "persona_default",
+      suffixSource: "global_override",
       formattedName: "Master Sparrow-san",
       addressTerm: "bro",
     });

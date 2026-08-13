@@ -24,7 +24,9 @@ type TargetEmbedType =
   | "compact_summary"
   | "compact_refresh"
   | "reward"
-  | "punish";
+  | "punish"
+  | "user_info_update"
+  | "user_moderation";
 
 export type TargetEmbedCheck = { isTarget: true; type: TargetEmbedType } | { isTarget: false; type: null };
 
@@ -44,8 +46,9 @@ function matchesLocalizedTitleTemplate(template: string, actualTitle: string): b
 /**
  * Classifies an embed title against the set of bot-produced titles (memory
  * learning, reset, reminder-set, system injection, compact summary/refresh,
- * reward, punish). Scans across ALL supported locales so cross-locale servers
- * still detect bot-produced embeds correctly.
+ * reward, punish, user info update, user moderation). Scans across ALL
+ * supported locales so cross-locale servers still detect bot-produced embeds
+ * correctly.
  *
  * @returns An object with isTarget and the matched type
  */
@@ -69,8 +72,26 @@ export function checkTargetEmbedTitle(embedTitle: string | null | undefined): Ta
       localizer(supportedLocale, "reminders.task_set_title"),
     ];
 
+    // Tool notices that record an action already taken. Without these the
+    // persona cannot see her own past notice on a later turn and re-runs the
+    // tool when asked whether she already did it.
+    const userModerationTitles = [
+      localizer(supportedLocale, "tools.user_block.block_mute_title"),
+      localizer(supportedLocale, "tools.user_block.block_block_title"),
+      localizer(supportedLocale, "tools.user_block.unmute_success_title"),
+      localizer(supportedLocale, "tools.user_block.unblock_success_title"),
+    ];
+
     if (memoryLearningTitles.some((t) => matchesLocalizedTitleTemplate(t, embedTitle))) {
       return { isTarget: true, type: "memory_learning" };
+    }
+
+    if (matchesLocalizedTitleTemplate(localizer(supportedLocale, "tools.user_info_update.success_title"), embedTitle)) {
+      return { isTarget: true, type: "user_info_update" };
+    }
+
+    if (userModerationTitles.some((t) => matchesLocalizedTitleTemplate(t, embedTitle))) {
+      return { isTarget: true, type: "user_moderation" };
     }
 
     // Reset and system-injection titles

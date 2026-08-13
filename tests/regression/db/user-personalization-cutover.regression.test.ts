@@ -266,7 +266,6 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User personalization config cutover", () =
       suffix_override: "Jr.",
       gender_identity: "nonbinary",
       pronouns: "they/them",
-      orientation: "bisexual",
       addressing_style: "neutral",
     });
     expect(updated?.physical_appearance_tags).toEqual(["blue hair", "round glasses"]);

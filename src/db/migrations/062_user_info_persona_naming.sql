@@ -9,7 +9,6 @@ ALTER TABLE user_personalization_configs
   ADD COLUMN IF NOT EXISTS suffix_override TEXT,
   ADD COLUMN IF NOT EXISTS gender_identity TEXT,
   ADD COLUMN IF NOT EXISTS pronouns TEXT,
-  ADD COLUMN IF NOT EXISTS orientation TEXT,
   ADD COLUMN IF NOT EXISTS addressing_style TEXT;
 
 DO $$

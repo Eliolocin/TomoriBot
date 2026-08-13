@@ -324,8 +324,24 @@ and sample dialogue, not participant fields.
 Dialogue user labels use the receiving persona's projection. A real mention in a historical
 persona-authored message uses that proven author persona's lineage; unproven or user-authored
 content falls back to the plain nickname. Required user-lineage preferences are batch-loaded.
-Gender identity, pronouns, and orientation are sparse independent fields visible only at
-Minimal privacy. Timezone is omitted when unset and during user impersonation.
+Gender identity and pronouns are sparse independent fields visible only at Minimal privacy.
+Timezone is omitted when unset and during user impersonation.
+
+The `naming` field names each resolved affix separately from the nickname, using the tool's own
+field words, and is emitted only when a prefix or suffix actually resolves:
+
+```text
+- I call Sparrow "Master Sparrow-san" (prefix "Master", suffix "-san")
+```
+
+A joined display name gives a model no way to tell an affix from the nickname, so a request to
+drop a title degrades into a nickname rewrite that re-composes the same string. The line does
+not state which precedence layer supplied an affix: `none` suppresses at any layer, and
+`update_user_info` closes the one case where a global `none` would be outranked, so the origin
+never has to reach the prompt.
+
+Adding a core field kind requires an entry in both `hydrateDiscordUser` and
+`CORE_FIELD_ENRICHERS`; a kind present in only one is dropped silently.
 
 | Source | Field | Effect |
 |---|---|---|

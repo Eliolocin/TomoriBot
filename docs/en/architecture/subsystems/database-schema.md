@@ -568,9 +568,12 @@ ST preset schema, typed catalog seeds, and migration marker behavior as runtime 
 
 `users` owns account identity, locale, and privacy. User-facing personalization belongs to
 `user_personalization_configs`, including nickname, numeric timezone offset, deliberate-tool
-mode, global prefix/suffix overrides, gender identity, pronouns, orientation, and addressing
-style. Runtime user rows assemble both tables; consumers must not write moved columns on
-`users`.
+mode, global prefix/suffix overrides, gender identity, pronouns, and addressing style. Runtime
+user rows assemble both tables; consumers must not write moved columns on `users`.
+
+`addressing_style` stays nullable. A null value resolves to the neutral variant at read time,
+so seeding it with `'neutral'` would make "never chose" indistinguishable from an explicit
+neutral choice without changing any rendered name.
 
 `user_persona_naming_preferences` stores nullable nickname, prefix, and suffix overrides by
 `(user_id, persona_lineage_id)`. It intentionally has no lineage foreign key, allowing a valid

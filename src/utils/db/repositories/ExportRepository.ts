@@ -508,7 +508,6 @@ class ExportRepository {
           upc.suffix_override,
           upc.gender_identity,
           upc.pronouns,
-          upc.orientation,
           upc.addressing_style
         FROM users u
         LEFT JOIN user_personalization_configs upc ON upc.user_id = u.user_id
@@ -559,7 +558,6 @@ class ExportRepository {
           suffix_override: userData.suffix_override ?? null,
           gender_identity: userData.gender_identity ?? null,
           pronouns: userData.pronouns ?? null,
-          orientation: userData.orientation ?? null,
           addressing_style: userData.addressing_style ?? null,
           persona_naming_preferences: personaNamingPreferences.map((preference) => ({
             ...preference,
