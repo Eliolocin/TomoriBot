@@ -12,19 +12,10 @@ interface GlobalUserNaming {
   addressingStyle: AddressingStyle | null;
 }
 
-/**
- * Which layer of the precedence chain supplied an affix. `update_user_info` needs
- * it because a global suppression is outranked by a persona-lineage override, so
- * the write would succeed while the affix kept rendering.
- */
-type UserAffixSource = "persona_preference" | "global_override" | "persona_default" | "unset";
-
 export interface EffectiveUserNaming {
   nickname: string;
   prefix: string;
   suffix: string;
-  prefixSource: UserAffixSource;
-  suffixSource: UserAffixSource;
   formattedName: string;
   addressTerm: string;
 }
@@ -40,20 +31,20 @@ function resolvePersonaVariant(values: Partial<Record<AddressingStyle, string>>,
   return values[style] ?? values.neutral ?? "";
 }
 
+/**
+ * Presence, not truthiness, stops the chain: an empty string is a deliberate
+ * suppression written by `update_user_info`, so it must outrank the layers below
+ * it rather than falling through to the persona's own affix.
+ */
 function resolveAffix(
   personaOverride: string | null | undefined,
   globalOverride: string | null,
   personaValues: Partial<Record<AddressingStyle, string>>,
   style: AddressingStyle,
-): { value: string; source: UserAffixSource } {
-  if (personaOverride !== null && personaOverride !== undefined) {
-    return { value: personaOverride, source: personaOverride ? "persona_preference" : "unset" };
-  }
-  if (globalOverride !== null) {
-    return { value: globalOverride, source: globalOverride ? "global_override" : "unset" };
-  }
-  const value = resolvePersonaVariant(personaValues, style);
-  return { value, source: value ? "persona_default" : "unset" };
+): string {
+  if (personaOverride !== null && personaOverride !== undefined) return personaOverride;
+  if (globalOverride !== null) return globalOverride;
+  return resolvePersonaVariant(personaValues, style);
 }
 
 const CJK_KANA_HANGUL_END =
@@ -63,10 +54,17 @@ const CJK_KANA_HANGUL_START =
 const PUNCTUATION_OR_SYMBOL_END = /[\p{P}\p{S}]$/u;
 const PUNCTUATION_OR_SYMBOL_START = /^[\p{P}\p{S}]/u;
 
+// Punctuation that closes the prefix into its own word instead of binding it to what
+// follows, so an abbreviation or interjection keeps its space: "Ms. Sparrow", "Yo! Sparrow".
+// Everything else punctuation-ended still joins directly, which is what "@sparrow",
+// "O'Sparrow", and "super-Sparrow" need.
+const PREFIX_TERMINAL_PUNCTUATION_END = /[.,;:!?]$/u;
+
 function formatPrefix(prefix: string, nickname: string): string {
   const trimmed = prefix.trim();
   if (!trimmed) return nickname;
   if (/\s$/u.test(prefix)) return `${trimmed} ${nickname}`;
+  if (PREFIX_TERMINAL_PUNCTUATION_END.test(trimmed)) return `${trimmed} ${nickname}`;
   if (PUNCTUATION_OR_SYMBOL_END.test(trimmed) || CJK_KANA_HANGUL_END.test(trimmed)) {
     return `${trimmed}${nickname}`;
   }
@@ -110,11 +108,9 @@ export function resolveEffectiveUserNaming(input: ResolveEffectiveUserNamingInpu
 
   return {
     nickname,
-    prefix: prefix.value,
-    suffix: suffix.value,
-    prefixSource: prefix.source,
-    suffixSource: suffix.source,
-    formattedName: formatUserName(nickname, prefix.value, suffix.value),
+    prefix,
+    suffix,
+    formattedName: formatUserName(nickname, prefix, suffix),
     addressTerm: resolvePersonaVariant(persona.addressTerms, style),
   };
 }

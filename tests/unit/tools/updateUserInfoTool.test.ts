@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it, spyOn } from "bun:test";
-import type { ToolContext } from "@/types/tool/interfaces";
+import type { ToolContext, ToolStateForContext } from "@/types/tool/interfaces";
 import { stripRedundantAffixes, UpdateUserInfoTool } from "@/tools/functionCalls/updateUserInfoTool";
+import { getAvailableToolsForContext } from "@/tools/availability";
 import { PrivacyLevel } from "@/types/db/schema";
 import { EMPTY_PERSONA_NAMING_CONFIG, type PersonaNamingConfig } from "@/types/personaNaming";
 import { initializeLocalizer } from "@/utils/text/localizer";
@@ -247,14 +248,49 @@ describe("user info capability mapping", () => {
     videogen_enabled: true,
     voice_message_enabled: true,
     user_blocking_enabled: true,
+    user_info_updates_enabled: true,
     thread_creation_enabled: true,
   };
 
-  it("defaults enabled for older assembled state and filters when explicitly disabled", () => {
+  it("maps the capability column straight through without a defaulting step", () => {
     expect(configToFeatureFlags(baseConfig).user_info_updates).toBe(true);
+    expect(configToFeatureFlags({ ...baseConfig, user_info_updates_enabled: false }).user_info_updates).toBe(false);
+  });
+
+  it("filters the tool by name when the capability is disabled", () => {
     const disabled = configToFeatureFlags({ ...baseConfig, user_info_updates_enabled: false });
     expect(filterToolsByFeatureFlags(["update_user_info", "review_capabilities"], disabled)).toEqual([
       "review_capabilities",
     ]);
+  });
+
+  // Guards the gap that shipped: every provider assembles this config by hand, so a
+  // correct column, mapper, and registry entry still advertised the tool because the
+  // assembled state dropped the field on the way through.
+  it("withholds the tool from the assembled context state when the capability is disabled", () => {
+    const stateFor = (enabled: boolean): ToolStateForContext => ({
+      server_id: "1",
+      activePersonaHasElevenlabsVoice: false,
+      activePersonaVoiceDesignPrompt: null,
+      activePersonaVoiceName: null,
+      diffusion_model_id: null,
+      nai_diffusion_model_id: null,
+      video_model_id: null,
+      llm: {
+        llm_codename: "test-model",
+        has_tools: true,
+        sees_images: true,
+        sees_videos: false,
+        sees_youtube: false,
+        supports_structoutput: true,
+      },
+      config: { ...baseConfig, user_info_updates_enabled: enabled },
+    });
+
+    const names = (enabled: boolean) =>
+      getAvailableToolsForContext([new UpdateUserInfoTool()], "google", stateFor(enabled)).map((tool) => tool.name);
+
+    expect(names(true)).toContain("update_user_info");
+    expect(names(false)).not.toContain("update_user_info");
   });
 });

@@ -242,6 +242,7 @@ export class CustomProvider
           videogen_enabled: tomoriState.config.videogen_enabled,
           voice_message_enabled: tomoriState.config.voice_message_enabled,
           user_blocking_enabled: tomoriState.config.user_blocking_enabled,
+          user_info_updates_enabled: tomoriState.config.user_info_updates_enabled,
           thread_creation_enabled: tomoriState.config.thread_creation_enabled,
         },
       };
@@ -366,6 +367,7 @@ export class CustomProvider
         videogen_enabled: false,
         voice_message_enabled: false,
         user_blocking_enabled: false,
+        user_info_updates_enabled: false,
         thread_creation_enabled: false,
       },
     };

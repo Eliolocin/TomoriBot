@@ -17,11 +17,8 @@ import { localizer } from "@/utils/text/localizer";
 
 const MODAL_ID = "personal_naming_modal";
 const NICKNAME_ID = "nickname";
-const PREFIX_MODE_ID = "prefix_mode";
 const PREFIX_ID = "prefix";
-const SUFFIX_MODE_ID = "suffix_mode";
 const SUFFIX_ID = "suffix";
-type AffixMode = "inherit" | "none" | "custom";
 
 interface NamingValues {
   nickname: string | null;
@@ -29,69 +26,33 @@ interface NamingValues {
   suffix: string | null;
 }
 
-function affixMode(value: string | null | undefined): AffixMode {
-  if (value === null || value === undefined) return "inherit";
-  return value === "" ? "none" : "custom";
-}
-
-function namingModalComponents(locale: string, current: NamingValues) {
-  const modeOptions = (selected: AffixMode) => [
-    {
-      value: "inherit",
-      label: localizer(locale, "commands.personal.profile.nickname.inherit_option"),
-      description: localizer(locale, "commands.personal.profile.nickname.inherit_description"),
-      default: selected === "inherit",
-    },
-    {
-      value: "none",
-      label: localizer(locale, "commands.personal.profile.nickname.none_option"),
-      description: localizer(locale, "commands.personal.profile.nickname.none_description"),
-      default: selected === "none",
-    },
-    {
-      value: "custom",
-      label: localizer(locale, "commands.personal.profile.nickname.custom_option"),
-      description: localizer(locale, "commands.personal.profile.nickname.custom_description"),
-      default: selected === "custom",
-    },
-  ];
+function namingModalComponents(current: NamingValues) {
   return [
     {
       customId: NICKNAME_ID,
       labelKey: "commands.personal.profile.nickname.nickname_label",
       descriptionKey: "commands.personal.profile.nickname.nickname_description",
+      placeholder: "commands.personal.profile.nickname.nickname_placeholder",
       style: TextInputStyle.Short,
       required: false,
       maxLength: USER_NICKNAME_MAX_LENGTH,
       value: current.nickname ?? "",
     },
     {
-      kind: "radioGroup" as const,
-      customId: PREFIX_MODE_ID,
-      labelKey: "commands.personal.profile.nickname.prefix_mode_label",
-      options: modeOptions(affixMode(current.prefix)),
-      required: true,
-    },
-    {
       customId: PREFIX_ID,
       labelKey: "commands.personal.profile.nickname.prefix_label",
-      descriptionKey: "commands.personal.profile.nickname.affix_text_description",
+      descriptionKey: "commands.personal.profile.nickname.prefix_description",
+      placeholder: "commands.personal.profile.nickname.prefix_placeholder",
       style: TextInputStyle.Short,
       required: false,
       maxLength: PERSONA_NAMING_VALUE_MAX_LENGTH,
       value: current.prefix || "",
     },
     {
-      kind: "radioGroup" as const,
-      customId: SUFFIX_MODE_ID,
-      labelKey: "commands.personal.profile.nickname.suffix_mode_label",
-      options: modeOptions(affixMode(current.suffix)),
-      required: true,
-    },
-    {
       customId: SUFFIX_ID,
       labelKey: "commands.personal.profile.nickname.suffix_label",
-      descriptionKey: "commands.personal.profile.nickname.affix_text_description",
+      descriptionKey: "commands.personal.profile.nickname.suffix_description",
+      placeholder: "commands.personal.profile.nickname.suffix_placeholder",
       style: TextInputStyle.Short,
       required: false,
       maxLength: PERSONA_NAMING_VALUE_MAX_LENGTH,
@@ -100,21 +61,17 @@ function namingModalComponents(locale: string, current: NamingValues) {
   ];
 }
 
-function parseNamingValues(values: Record<string, string>): NamingValues | null {
-  const parseAffix = (modeValue: string | undefined, textValue: string | undefined): string | null | undefined => {
-    const text = textValue?.trim() ?? "";
-    if (modeValue === "inherit") return null;
-    if (modeValue === "none") return "";
-    if (modeValue === "custom" && text) return text;
-    return undefined;
-  };
-  const prefix = parseAffix(values[PREFIX_MODE_ID], values[PREFIX_ID]);
-  const suffix = parseAffix(values[SUFFIX_MODE_ID], values[SUFFIX_ID]);
-  if (prefix === undefined || suffix === undefined) return null;
+/**
+ * The affix columns hold three states: null inherits, "" suppresses, and text is an
+ * override. Only `update_user_info` writes the suppression, so an empty box here means
+ * inherit. That converts a bot-written suppression back to inherit on submit, which is
+ * the deliberate trade: the alternative leaves a user unable to undo one from any command.
+ */
+function parseNamingValues(values: Record<string, string>): NamingValues {
   return {
     nickname: values[NICKNAME_ID]?.trim() || null,
-    prefix: prefix as string | null,
-    suffix: suffix as string | null,
+    prefix: values[PREFIX_ID]?.trim() || null,
+    suffix: values[SUFFIX_ID]?.trim() || null,
   };
 }
 
@@ -145,7 +102,7 @@ export async function execute(
       {
         modalCustomId: MODAL_ID,
         modalTitleKey: "commands.personal.profile.nickname.modal_title_global",
-        components: namingModalComponents(locale, {
+        components: namingModalComponents({
           nickname: userData.user_nickname,
           prefix: userData.prefix_override ?? null,
           suffix: userData.suffix_override ?? null,
@@ -155,14 +112,6 @@ export async function execute(
     );
     if (result.outcome !== "submit" || !result.interaction || !result.values) return;
     const next = parseNamingValues(result.values);
-    if (!next) {
-      await replyInfoEmbed(result.interaction, locale, {
-        titleKey: "commands.personal.profile.nickname.invalid_affix_title",
-        descriptionKey: "commands.personal.profile.nickname.invalid_affix_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
     try {
       await userNamingRepository.applyUserInfoBatch(userData.user_id, {
         global: {
@@ -204,7 +153,7 @@ export async function execute(
       const result = await selection.openModal({
         modalCustomId: MODAL_ID,
         modalTitleKey: "commands.personal.profile.nickname.modal_title_persona",
-        components: namingModalComponents(locale, {
+        components: namingModalComponents({
           nickname: current?.nickname_override ?? null,
           prefix: current?.prefix_override ?? null,
           suffix: current?.suffix_override ?? null,
@@ -215,18 +164,6 @@ export async function execute(
       }
       const work = await result.phase.beginInPlaceWork();
       const next = parseNamingValues(result.phase.values);
-      if (!next) {
-        await work.message.replace(
-          buildPersonaWorkflowNotice({
-            locale,
-            titleKey: "commands.personal.profile.nickname.invalid_affix_title",
-            descriptionKey: "commands.personal.profile.nickname.invalid_affix_description",
-            footerKey: "general.pagination.reloading_persona_picker",
-            color: ColorCode.ERROR,
-          }),
-        );
-        return retryPersonaWorkflow();
-      }
       await userNamingRepository.applyUserInfoBatch(userData.user_id as number, {
         global: {},
         persona: {

@@ -246,10 +246,11 @@ function nextValueLabel(locale: string, plan: FieldPlan): string {
 }
 
 /**
- * Builds the notice/return body: a numbered list of what changed, followed by the
- * resulting form of address only when that name actually moved. Persona-scoped rows
- * carry the persona's name; an unlabelled row is global, which needs no explanation
- * because global is the unsurprising case.
+ * Builds the numbered list of what changed, followed by the resulting form of address
+ * only when that name actually moved. Persona-scoped rows carry the persona's name; an
+ * unlabelled row is global, which needs no explanation because global is the unsurprising
+ * case. The channel notice quotes the list for contrast while the model-facing copy stays
+ * plain, so Discord presentation syntax never reaches a functionResponse.
  */
 function buildSuccessBody(
   context: ToolContext,
@@ -259,7 +260,7 @@ function buildSuccessBody(
   namingAfter: EffectiveUserNaming,
   targetLabel: string,
   personaScoped: boolean,
-): string {
+): { notice: string; message: string } {
   const locale = context.locale;
   const personaName = context.personaUsername ?? context.tomoriState.persona_nickname;
   const lines = plans.map((plan, index) => {
@@ -284,14 +285,22 @@ function buildSuccessBody(
   // unchanged name as if it were news.
   const nameChanged = namingBefore.formattedName !== namingAfter.formattedName;
   const summary = nameChanged
-    ? `\n\n${localizer(locale, "tools.user_info_update.success_summary", {
+    ? `\n${localizer(locale, "tools.user_info_update.success_summary", {
         persona_name: personaName,
         target_user: targetLabel,
         formatted_name: namingAfter.formattedName,
       })}`
     : "";
 
-  return `${localizer(locale, "tools.user_info_update.success_intro")}\n${lines.join("\n")}${summary}`;
+  const intro = localizer(locale, "tools.user_info_update.success_intro");
+  // Quoting each line rather than opening a `>>>` block, which would run to the end of
+  // the message and pull the summary in with it. The summary reads as the conclusion
+  // only from outside the quote.
+  const quoted = lines.map((line) => `> ${line}`).join("\n");
+  return {
+    notice: `${intro}\n${quoted}${summary}`,
+    message: `${intro}\n${lines.join("\n")}${summary}`,
+  };
 }
 
 async function sendSuccessNotice(context: ToolContext, targetLabel: string, body: string): Promise<void> {
@@ -332,43 +341,42 @@ export class UpdateUserInfoTool extends BaseTool {
       target_user: {
         type: "string",
         description:
-          "OPTIONAL: User name, alias, mention, or Discord ID. Omit to update the human who triggered this turn. Never use all or everyone.",
+          "The user to update, as shown in the current conversation or server. A name, alias, mention, or Discord ID all work. Omit it to update whoever triggered this turn.",
       },
       nickname: {
         type: "string",
-        description: "OPTIONAL: What you call them, with no title or honorific attached. Applies to you only.",
+        description: "What you call them, with no title or honorific attached.",
       },
       prefix: {
         type: "string",
-        description:
-          "OPTIONAL: Title or honorific placed before the nickname, such as Master or Dad. Applies to you only.",
+        description: "Title or honorific placed before the nickname, such as Master or Dad.",
       },
       suffix: {
         type: "string",
-        description: "OPTIONAL: Title or honorific placed after the nickname, such as -san or Jr. Applies to you only.",
+        description: "Title or honorific placed after the nickname, such as -san or Jr.",
       },
       gender_identity: {
         type: "string",
-        description: "OPTIONAL: How they describe their own gender, in their words. Shared by every persona.",
+        description: "How they describe their own gender, in their words.",
       },
       pronouns: {
         type: "string",
-        description: "OPTIONAL: Pronouns to use for them, such as she/her, they/them, or any. Shared by every persona.",
+        description: "Pronouns to use for them, such as she/her, they/them, or any.",
       },
       addressing_style: {
         type: "string",
         enum: ["masculine", "feminine", "neutral"],
         description:
-          "OPTIONAL: Which naming variant to use for them. Never infer it from their gender or pronouns. Shared by every persona.",
+          "Which gendered form of your titles to use for them, such as Master versus Mistress. Set it only when they say so; never infer it from their gender or pronouns.",
       },
       timezone_offset: {
         type: "number",
-        description: "OPTIONAL: Their UTC offset in whole hours, from -12 through 14. Shared by every persona.",
+        description: "Their UTC offset in whole hours, from -12 through +14.",
       },
       clear: {
         type: "array",
         items: { type: "string", enum: [...ALL_FIELDS] },
-        description: "OPTIONAL: Names of fields to remove. Do not also pass a value for a field listed here.",
+        description: "Fields to remove. A field listed here must not also be given a value.",
       },
     },
     required: [],
@@ -463,10 +471,10 @@ export class UpdateUserInfoTool extends BaseTool {
       lineageId != null,
     );
 
-    await sendSuccessNotice(context, targetLabel, body);
+    await sendSuccessNotice(context, targetLabel, body.notice);
     return {
       success: true,
-      message: body,
+      message: body.message,
       data: {
         status: "user_info_updated",
         target_user: targetLabel,

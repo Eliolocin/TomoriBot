@@ -108,7 +108,7 @@ export function configToFeatureFlags(config: {
   videogen_enabled: boolean;
   voice_message_enabled: boolean;
   user_blocking_enabled: boolean;
-  user_info_updates_enabled?: boolean;
+  user_info_updates_enabled: boolean;
   thread_creation_enabled: boolean;
 }): Record<string, boolean> {
   return {
@@ -120,7 +120,7 @@ export function configToFeatureFlags(config: {
     video_gen: config.videogen_enabled,
     voice_message: config.voice_message_enabled,
     user_blocking: config.user_blocking_enabled,
-    user_info_updates: config.user_info_updates_enabled ?? true,
+    user_info_updates: config.user_info_updates_enabled,
     thread_creation: config.thread_creation_enabled,
   };
 }

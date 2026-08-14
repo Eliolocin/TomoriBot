@@ -316,6 +316,7 @@ function estimateToolSchemaTokens(): number {
         videogen_enabled: true,
         voice_message_enabled: true,
         user_blocking_enabled: true,
+        user_info_updates_enabled: true,
         thread_creation_enabled: true,
       },
     };

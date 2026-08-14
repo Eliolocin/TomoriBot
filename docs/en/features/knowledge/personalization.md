@@ -17,16 +17,17 @@ is covered on the [Memory](/features/knowledge/memory/#personal-vs-server-memori
 
 `/personal profile about` stores three independent, optional preferences: gender identity,
 pronouns, and addressing style. TomoriBot never infers one from another. The addressing style
-selects a persona's masculine, feminine, or neutral naming variant; leaving it unset uses the
-neutral variant, which is why the selector labels that choice "Not set (uses neutral)". Blank
-fields are cleared and omitted from prompt context. Raw profile fields are exposed only at
-Minimal privacy.
+selects a persona's masculine, feminine, or neutral naming variant, and Neutral is the
+preselected default. Blank fields are cleared and omitted from prompt context. Raw profile
+fields are exposed only at Minimal privacy.
 
 `/personal profile nickname` opens a naming modal for either global or persona scope. A persona-scoped
 preference follows that persona's stable lineage across servers. Nicknames inherit from the
-persona preference to the global preference and then the live Discord display name. Prefixes
-and suffixes independently support Inherit, None, and Custom, so `Master Sparrow-san` can
-combine values from different levels without changing the underlying Discord mention target.
+persona preference to the global preference and then the live Discord display name. A blank
+prefix or suffix inherits the same way, and typed text overrides it, so `Master Sparrow-san`
+can combine values from different levels without changing the underlying Discord mention
+target. To drop a title a persona supplies on its own, ask the persona directly ("stop calling
+me Master"); that suppresses it for that persona while leaving your other personas alone.
 
 Server managers can configure persona defaults with `/persona naming-habits`. A standalone
 address term such as `fam` is separate from the formatted name and is available only to

@@ -153,6 +153,7 @@ export async function buildContextNative(params: BuildContextParams): Promise<Na
               videogen_enabled: tomoriConfig.videogen_enabled,
               voice_message_enabled: tomoriConfig.voice_message_enabled,
               user_blocking_enabled: tomoriConfig.user_blocking_enabled,
+              user_info_updates_enabled: tomoriConfig.user_info_updates_enabled,
               thread_creation_enabled: tomoriConfig.thread_creation_enabled,
             },
           }

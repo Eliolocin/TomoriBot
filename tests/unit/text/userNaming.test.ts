@@ -15,6 +15,18 @@ describe("formatUserName", () => {
   });
 
   test.each([
+    ["Misu", "Ms.", "", "Ms. Misu"],
+    ["Sparrow", "Dr.", "", "Dr. Sparrow"],
+    ["Sparrow", "Yo!", "", "Yo! Sparrow"],
+    ["美鈴", "Ms.", "", "Ms. 美鈴"],
+    ["Sparrow", "O'", "", "O'Sparrow"],
+    ["Sparrow", "super-", "", "Super-Sparrow"],
+    ["スズメ", "マスター", "", "マスタースズメ"],
+  ])("spaces a prefix that closes on terminal punctuation but joins one that binds rightward (%s, %s)", (nickname, prefix, suffix, expected) => {
+    expect(formatUserName(nickname, prefix, suffix)).toBe(expected);
+  });
+
+  test.each([
     ["Misuzu", "dad", "", "Dad Misuzu"],
     ["misuzu", "", "", "Misuzu"],
     ["Sparrow", "xXxSlayerxXx", "", "xXxSlayerxXx Sparrow"],
@@ -45,8 +57,6 @@ describe("resolveEffectiveUserNaming", () => {
       nickname: "Sparrow",
       prefix: "Master",
       suffix: "-san",
-      prefixSource: "persona_default",
-      suffixSource: "global_override",
       formattedName: "Master Sparrow-san",
       addressTerm: "bro",
     });

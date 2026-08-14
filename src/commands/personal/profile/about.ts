@@ -57,9 +57,9 @@ export async function execute(
           required: true,
           options: [
             {
-              label: localizer(locale, "commands.personal.profile.about.style_unspecified"),
-              value: "unspecified",
-              default: !userData.addressing_style,
+              label: localizer(locale, "commands.personal.profile.about.style_neutral"),
+              value: "neutral",
+              default: !userData.addressing_style || userData.addressing_style === "neutral",
             },
             {
               label: localizer(locale, "commands.personal.profile.about.style_masculine"),
@@ -70,11 +70,6 @@ export async function execute(
               label: localizer(locale, "commands.personal.profile.about.style_feminine"),
               value: "feminine",
               default: userData.addressing_style === "feminine",
-            },
-            {
-              label: localizer(locale, "commands.personal.profile.about.style_neutral"),
-              value: "neutral",
-              default: userData.addressing_style === "neutral",
             },
           ],
         },
@@ -89,7 +84,7 @@ export async function execute(
 
   const clean = (value: string | undefined): string | null => value?.trim() || null;
   const style = result.values?.[STYLE_ID];
-  if (!style || !["unspecified", "masculine", "feminine", "neutral"].includes(style)) {
+  if (!style || !["masculine", "feminine", "neutral"].includes(style)) {
     await replyInfoEmbed(result.interaction, locale, {
       titleKey: "general.errors.invalid_option_title",
       descriptionKey: "general.errors.invalid_option_description",
@@ -98,12 +93,23 @@ export async function execute(
     return;
   }
 
+  // The picker offers no separate "unset" choice because null and an explicit
+  // 'neutral' render identically, so picking Neutral stores null and leaves the
+  // read-time fallback free to change later. update_user_info can still write an
+  // explicit 'neutral', which this must preserve rather than silently collapse.
+  const resolvedStyle =
+    style === "neutral"
+      ? userData.addressing_style === "neutral"
+        ? "neutral"
+        : null
+      : (style as "masculine" | "feminine");
+
   try {
     await userNamingRepository.applyUserInfoBatch(userData.user_id, {
       global: {
         gender_identity: clean(result.values?.[GENDER_ID]),
         pronouns: clean(result.values?.[PRONOUNS_ID]),
-        addressing_style: style === "unspecified" ? null : (style as "masculine" | "feminine" | "neutral"),
+        addressing_style: resolvedStyle,
       },
     });
     invalidateUserCache(interaction.user.id);

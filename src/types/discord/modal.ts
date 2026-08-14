@@ -41,7 +41,7 @@ export interface ModalSelectField {
 
 /**
  * A single option within a Radio Group (type 21)
- * Note: Radio Group options do not support emojis or descriptions in the current API
+ * Note: Radio Group options do not support emojis in the current API
  */
 export interface RadioGroupOption {
   /** Developer-defined value submitted on selection; max 100 chars */
