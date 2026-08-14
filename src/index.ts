@@ -1,6 +1,7 @@
 import { config } from "dotenv";
 import { resolveEnvironment } from "@/types/config";
 import { startHealthServer } from "@/init/healthServer";
+import { registerHeapSnapshotHandler } from "@/init/heapSnapshot";
 import { loadSecrets } from "@/init/secrets";
 import { initStartupBackup } from "@/init/backup";
 import { createDiscordClient, resolvePresenceIntentEnabled } from "@/init/discord";
@@ -42,6 +43,8 @@ if (environment === "production") {
 }
 
 await loadSecrets(environment);
+
+registerHeapSnapshotHandler();
 
 initMediaProcessing();
 

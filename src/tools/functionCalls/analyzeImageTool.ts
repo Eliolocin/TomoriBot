@@ -52,6 +52,27 @@ const VISION_ANALYSIS_TIMEOUT_MS =
     : 60_000;
 
 /**
+ * Resolves the model identifier the vision backend will accept.
+ *
+ * A custom endpoint's `llm_codename` is a locally synthesized label
+ * (`custom-s2-gemini-text-google-gemini-3-5-flash-lite`); the id the backend accepts lives on
+ * the endpoint row, so sending the codename is rejected as an unknown model. This mirrors the
+ * text path's resolution in `customProvider`, which falls back to the codename for backends
+ * that ignore the field entirely (KoboldCpp and similar).
+ */
+export function resolveVisionApiModelName(
+  provider: string,
+  llmCodename: string,
+  customEndpointModelName?: string | null,
+): string {
+  if (provider === "zai" || provider === "zaicoding") {
+    return toZaiApiModelName(llmCodename);
+  }
+
+  return customEndpointModelName?.trim() || llmCodename;
+}
+
+/**
  * Built-in tool that analyzes images using a dedicated vision model.
  * Allows non-vision chat models (e.g., Z.ai glm-5) to understand images
  * by routing the analysis through a vision-capable model (e.g., Z.ai glm-4.6v).
@@ -155,6 +176,13 @@ export class AnalyzeImageTool extends BaseTool {
         };
       }
 
+      const provider = visionLlm.llm_provider.toLowerCase();
+      const apiModelName = resolveVisionApiModelName(
+        provider,
+        visionLlm.llm_codename,
+        creds.customEndpoint?.model_name,
+      );
+
       await sendToolProgressNotice(
         context,
         "image_analysis",
@@ -162,7 +190,7 @@ export class AnalyzeImageTool extends BaseTool {
           titleKey: "tools.vision.analyzing_title",
           descriptionKey: "tools.vision.analyzing_description",
           descriptionVars: {
-            model: escapeMarkdown(visionLlm.llm_codename),
+            model: escapeMarkdown(apiModelName),
           },
           footerKey: "tools.vision.analyzing_footer",
           color: ColorCode.INFO,
@@ -174,12 +202,6 @@ export class AnalyzeImageTool extends BaseTool {
       const images = await this.extractImagesFromMessage(messageId, context, analysisSignal);
 
       const apiKey = creds.apiKey;
-
-      const provider = visionLlm.llm_provider.toLowerCase();
-      const apiModelName =
-        provider === "zai" || provider === "zaicoding"
-          ? toZaiApiModelName(visionLlm.llm_codename)
-          : visionLlm.llm_codename;
 
       let analysisResult: string;
 

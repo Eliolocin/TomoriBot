@@ -482,6 +482,44 @@ happens. And `vm.swappiness` must stay high: with zram measuring near 4:1, pages
 compressed swap expand at that ratio, so lowering it to "preserve swap headroom" costs more RAM than
 it frees.
 
+### Recycling on a timer when the working set grows with uptime
+
+A long-lived bot process on a memory-constrained host can accumulate anonymous memory that never
+plateaus. Resident memory stays flat because the cgroup limit holds it there, so the growth is
+invisible to `docker stats` and to RSS: it goes to swap instead. The failure that eventually produces
+is indirect and easy to misattribute, because **the database is usually blamed for it**. Deep swap
+means handlers stall on major faults, a stalled handler's query sends no bytes, and Bun's SQL pool
+counts an in-flight query as idle and retires it at `idleTimeout`. Past a certain depth every
+database-touching handler fails at once while the database itself sits idle.
+
+Diagnose it by pairing swap depth with container uptime, never by reading either alone:
+
+```sh
+docker inspect -f '{{.State.StartedAt}}' <container>
+C=$(docker inspect -f '{{.Id}}' <container>)
+cat /sys/fs/cgroup/system.slice/docker-$C.scope/memory.swap.current
+```
+
+If that value climbs monotonically across days while resident memory stays flat, and the *daily
+minimum* climbs too, the growth is accumulation rather than load. A scheduled restart bounds it.
+`cloud-init.yaml` installs `tomoribot-restart.timer` for that, and three details matter more than the
+schedule itself:
+
+- **Resolve the container by its compose label, not its generated name,** so renaming the compose
+  project cannot silently turn the timer into a no-op.
+- **Skip a container that is already young.** A deploy recreates it and resets the same depth, so
+  restarting one that started recently spends an outage for nothing.
+- **Use `Persistent=false`.** Catching up a missed run at boot would restart a container that booting
+  had just created.
+
+Pick the hour from your own traffic histogram rather than copying one. Note also that `docker
+restart` does not increment `RestartCount`, so adopting a restart schedule does not blunt the
+"something is killing it" signal that a rising `RestartCount` gives during triage.
+
+**This is symptom management.** It bounds the depth without addressing the accumulation, and it is
+worth adopting only alongside the hunt for what is growing. Its one genuine diagnostic benefit is
+that a sawtooth measures a growth rate that a permanently saturated flat line hides.
+
 ## Release proof and rollback
 
 A production hardening rollout is proven only after the protected `validate` check passes, the PR

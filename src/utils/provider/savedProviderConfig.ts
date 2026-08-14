@@ -106,14 +106,12 @@ export async function loadProviderDefaultSelectionIds(provider: string): Promise
     };
   }
 
-  const [defaultTextModel, defaultEmbeddingModel, defaultDiffusionModel, defaultVideoModel, defaultVisionModel] =
-    await Promise.all([
-      llmModelRepo.loadDefaultModel(normalizedProvider),
-      llmModelRepo.loadDefaultEmbeddingModel(normalizedProvider),
-      llmModelRepo.loadDefaultDiffusionModel(normalizedProvider),
-      llmModelRepo.loadDefaultVideoGenerationModel(normalizedProvider),
-      llmModelRepo.loadDefaultVisionModel(normalizedProvider),
-    ]);
+  const [defaultTextModel, defaultEmbeddingModel, defaultDiffusionModel, defaultVideoModel] = await Promise.all([
+    llmModelRepo.loadDefaultModel(normalizedProvider),
+    llmModelRepo.loadDefaultEmbeddingModel(normalizedProvider),
+    llmModelRepo.loadDefaultDiffusionModel(normalizedProvider),
+    llmModelRepo.loadDefaultVideoGenerationModel(normalizedProvider),
+  ]);
 
   const imageGenerationStyle = getStaticProviderInfo(normalizedProvider)?.featureSupport.imageGeneration ?? "none";
 
@@ -125,7 +123,9 @@ export async function loadProviderDefaultSelectionIds(provider: string): Promise
     nai_diffusion_model_id:
       imageGenerationStyle === "nai-pipeline" ? (defaultDiffusionModel?.diffusion_model_id ?? null) : null,
     video_model_id: defaultVideoModel?.video_model_id ?? null,
-    vision_llm_id: defaultVisionModel?.llm_id ?? null,
+    // Vision is an opt-in fallback slot, never seeded: a provider whose default text model happens
+    // to see images would otherwise silently fill it with the model already answering chat.
+    vision_llm_id: null,
   };
 }
 
@@ -197,7 +197,7 @@ export async function buildSavedProviderConfigFromExistingOrDefaults(params: {
       ? (defaults?.nai_diffusion_model_id ?? null)
       : (existingConfig?.nai_diffusion_model_id ?? null),
     video_model_id: existingConfig?.video_model_id ?? defaults?.video_model_id ?? null,
-    vision_llm_id: existingConfig?.vision_llm_id ?? defaults?.vision_llm_id ?? null,
+    vision_llm_id: existingConfig?.vision_llm_id ?? null,
     nai_preset_name: existingConfig?.nai_preset_name ?? null,
     llm_temperature: existingConfig?.llm_temperature ?? params.baseConfig.llm_temperature,
     llm_top_p: existingConfig?.llm_top_p ?? params.baseConfig.llm_top_p,
@@ -251,7 +251,7 @@ export async function buildUserSavedProviderConfigFromExistingOrDefaults(params:
       ? (defaults?.nai_diffusion_model_id ?? null)
       : (existingConfig?.nai_diffusion_model_id ?? null),
     video_model_id: existingConfig?.video_model_id ?? defaults?.video_model_id ?? null,
-    vision_llm_id: existingConfig?.vision_llm_id ?? defaults?.vision_llm_id ?? null,
+    vision_llm_id: existingConfig?.vision_llm_id ?? null,
     nai_preset_name: existingConfig?.nai_preset_name ?? null,
     llm_temperature: existingConfig?.llm_temperature ?? params.baseConfig.llm_temperature,
     llm_top_p: existingConfig?.llm_top_p ?? params.baseConfig.llm_top_p,
@@ -295,8 +295,24 @@ async function hasRegisteredCustomEndpointCapability(
   const parsed = parseCustomProvider(provider);
   const endpointCapability = mapSavedCapabilityToCustomEndpointCapability(capability);
 
-  if (!parsed || !endpointCapability) {
+  if (!parsed || parsed.ownerId === null || !endpointCapability) {
     return false;
+  }
+
+  const ownerId = parsed.ownerId;
+
+  // A label can host several models per capability, and loadCustomEndpoint returns only the most
+  // recently updated one. Vision therefore scans the whole label: a blank text model registered
+  // after an image-capable one must not hide the label from the vision picker.
+  if (capability === "vision") {
+    const endpoints =
+      parsed.scope === "server"
+        ? await llmProviderRepo.loadCustomEndpointsForServer(ownerId)
+        : await llmProviderRepo.loadCustomEndpointsForUser(ownerId);
+
+    return endpoints.some(
+      (row) => row.label === parsed.label && row.capability === endpointCapability && row.sees_images,
+    );
   }
 
   const endpoint =
@@ -312,11 +328,7 @@ async function hasRegisteredCustomEndpointCapability(
           capability: endpointCapability,
         });
 
-  if (!endpoint) {
-    return false;
-  }
-
-  return capability === "vision" ? endpoint.sees_images : true;
+  return endpoint !== null;
 }
 
 export async function hasRegisteredCustomProvider(provider: string): Promise<boolean> {
@@ -363,8 +375,11 @@ export async function loadSavedProvidersForCapability(
           return config.diffusion_model_id !== null || config.nai_diffusion_model_id !== null;
         case "video":
           return config.video_model_id !== null;
+        // Unlike the other slots, vision has no saved selection to require: registering an
+        // image-capable text endpoint is what makes the label eligible, and the picker chooses
+        // among that label's image-capable models.
         case "vision":
-          return config.vision_llm_id !== null;
+          return true;
         default:
           return false;
       }
@@ -417,8 +432,11 @@ export async function loadUserSavedProvidersForCapability(
           return config.diffusion_model_id !== null || config.nai_diffusion_model_id !== null;
         case "video":
           return config.video_model_id !== null;
+        // Unlike the other slots, vision has no saved selection to require: registering an
+        // image-capable text endpoint is what makes the label eligible, and the picker chooses
+        // among that label's image-capable models.
         case "vision":
-          return config.vision_llm_id !== null;
+          return true;
         default:
           return false;
       }

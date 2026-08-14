@@ -122,58 +122,7 @@ export async function execute(
     if (!opener) return;
     const selectedProvider = opener.provider;
 
-    // Custom provider: no modal, so activate the saved vision model directly.
-    if (isCustomProvider(selectedProvider)) {
-      const selectedSavedConfig = savedProviders.find((row) => row.provider.toLowerCase() === selectedProvider) ?? null;
-      const work = await phase.useButton(opener.button).beginInPlaceWork();
-      if (!selectedSavedConfig?.vision_llm_id) {
-        await work.message.replace(
-          buildPersonaWorkflowNotice({
-            locale,
-            titleKey: "commands.model.vision.no_models_title",
-            descriptionKey: "commands.model.vision.no_models_description",
-            descriptionVars: { provider: getProviderDisplayName(selectedProvider) },
-            color: ColorCode.ERROR,
-          }),
-        );
-        return;
-      }
-
-      const updated = await configRepository.updateModelConfig(tomoriState.server_id, {
-        vision_llm_id: selectedSavedConfig.vision_llm_id,
-      });
-      if (!updated) {
-        await work.message.replace(
-          buildPersonaWorkflowNotice({
-            locale,
-            titleKey: "general.errors.update_failed_title",
-            descriptionKey: "general.errors.update_failed_description",
-            color: ColorCode.ERROR,
-          }),
-        );
-        return;
-      }
-
-      invalidateTomoriStateCache(serverId);
-      await work.message.replace(
-        buildPersonaWorkflowNotice({
-          locale,
-          titleKey: "commands.model.vision.success_title",
-          descriptionKey: tomoriState.llm.has_tools
-            ? "commands.model.vision.success_description"
-            : "commands.model.vision.success_no_tools_description",
-          descriptionVars: {
-            model_name: getProviderDisplayName(selectedProvider),
-            chat_model: tomoriState.llm.llm_codename,
-            provider: getProviderDisplayName(selectedProvider),
-          },
-          color: ColorCode.SUCCESS,
-        }),
-      );
-      return;
-    }
-
-    // Regular provider: vision-capable model picker with a "clear" option.
+    // Every provider, custom labels included, picks from its own image-capable models.
     const allModels = await llmModelRepo.loadAvailableModelsForProvider(selectedProvider, false, {
       kind: "server",
       ownerId: tomoriState.server_id,
@@ -329,19 +278,24 @@ export async function execute(
     }
 
     invalidateTomoriStateCache(serverId);
+    // The vision model is only consulted when the chat model cannot see images (analyze_image is
+    // withheld otherwise), so saving one behind a vision-capable chat model changes nothing yet.
+    const chatModelSeesImages = tomoriState.llm.sees_images;
     await work.message.replace(
       buildPersonaWorkflowNotice({
         locale,
         titleKey: "commands.model.vision.success_title",
-        descriptionKey: tomoriState.llm.has_tools
-          ? "commands.model.vision.success_description"
-          : "commands.model.vision.success_no_tools_description",
+        descriptionKey: chatModelSeesImages
+          ? "commands.model.vision.success_inert_description"
+          : tomoriState.llm.has_tools
+            ? "commands.model.vision.success_description"
+            : "commands.model.vision.success_no_tools_description",
         descriptionVars: {
           model_name: selectedModel.llm_codename,
           chat_model: tomoriState.llm.llm_codename,
           provider: getProviderDisplayName(selectedProvider),
         },
-        color: ColorCode.SUCCESS,
+        color: chatModelSeesImages ? ColorCode.WARN : ColorCode.SUCCESS,
       }),
     );
   } catch (error) {

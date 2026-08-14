@@ -104,6 +104,12 @@ usual cause is a `localhost`/Docker mismatch or a missing/extra `/v1` (see
 Registering it makes it the active `text` model automatically — start chatting to try it. If
 it isn't active for some reason, run `/model text` and select your newly registered model.
 
+Registering never changes any model other than `text`. If you ticked **Image Understanding**
+so this endpoint can act as the vision helper for an image-blind chat model, select it
+explicitly with `/model vision`; every text endpoint you registered with that toggle on shows
+up there. Note the vision model is only consulted when the chat model cannot see images, so
+setting one behind a vision-capable chat model has no effect until you switch.
+
 ## 3. (Optional) Local embeddings for RAG
 
 Repeat step 2 with `capability: embedding` and an embedding model (e.g.

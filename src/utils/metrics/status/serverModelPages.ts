@@ -11,6 +11,7 @@ import {
   resolveActiveTranscriptionEndpoint,
 } from "@/utils/provider/speechEndpointResolver";
 import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
+import { resolveCustomEndpointForProvider } from "@/utils/provider/customEndpointService";
 import { replyPaginatedStatusPages } from "@/utils/discord/ui/statusComponents";
 import { ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
@@ -45,6 +46,7 @@ export async function showServerModelStatus(
     naiDiffusionModel,
     speechModel,
     transcriptionModel,
+    visionEndpoint,
   ] = await Promise.all([
     personaRepository.loadAllForServer(serverDiscId),
     llmOverrideRepo.getAllChannelLlmOverridesForServer(tomoriState.server_id),
@@ -57,6 +59,13 @@ export async function showServerModelStatus(
     config.nai_diffusion_model_id ? getDiffusionModelById(config.nai_diffusion_model_id) : Promise.resolve(null),
     resolveActiveSpeechEndpoint(tomoriState.server_id),
     resolveActiveTranscriptionEndpoint(tomoriState.server_id),
+    tomoriState.vision_llm
+      ? resolveCustomEndpointForProvider(
+          tomoriState.vision_llm.llm_provider.toLowerCase(),
+          "text",
+          config.vision_llm_id,
+        )
+      : Promise.resolve(null),
   ]);
 
   const modelValue = config.llm_id
@@ -64,8 +73,11 @@ export async function showServerModelStatus(
     : config.user_byok_mode
       ? localizer(locale, "commands.choices.none_user_byok")
       : localizer(locale, "commands.choices.none");
+  // custom_model_name and other_model_codename describe the *text* model, so passing them here
+  // renders the chat model's name in the vision field whenever the vision model is a custom
+  // endpoint. The vision model's own upstream name lives on its endpoint row.
   const visionModelValue = tomoriState.vision_llm
-    ? formatLlmDisplayLabel(tomoriState.vision_llm, config.custom_model_name, config.other_model_codename)
+    ? formatLlmDisplayLabel(tomoriState.vision_llm, visionEndpoint?.model_name, null)
     : localizer(locale, "commands.choices.none");
   const fallbackModelsValue = formatFallbackChain(
     tomoriState.fallback_chain,

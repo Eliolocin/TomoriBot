@@ -95,6 +95,97 @@ write_files:
         "live-restore": true,
         "no-new-privileges": true
       }
+  - path: /usr/local/sbin/tomoribot-scheduled-restart.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      # The bot's anonymous working set grows steadily without plateauing, so it sinks
+      # progressively into swap while resident memory stays flat. Once swap depth is large
+      # enough, major-fault stalls hold handlers long enough that Bun's SQL pool retires
+      # their queries on its idle timeout, and every database-touching handler starts
+      # failing together. The gateway heartbeat is independent of handlers, so the bot goes
+      # on reporting healthy while this happens and nothing restarts it. Recycling on a
+      # timer bounds the swap depth. This treats the symptom, not the accumulation.
+
+      # Resolve through the compose label instead of the generated container name, which
+      # would silently stop matching if the compose project were ever renamed.
+      CID="$(docker ps -q --filter 'label=com.docker.compose.service=tomoribot' | head -1)"
+      if [ -z "$CID" ]; then
+        echo "no running tomoribot container; nothing to do"
+        exit 0
+      fi
+      CID="$(docker inspect -f '{{.Id}}' "$CID")"
+
+      swap_mb() {
+        local f="/sys/fs/cgroup/system.slice/docker-$1.scope/memory.swap.current"
+        if [ -r "$f" ]; then echo $(( $(cat "$f") / 1048576 )); else echo "?"; fi
+      }
+
+      # A deploy recreates the container, which already resets the swap depth this exists to
+      # bound. Restarting a young container spends an outage and buys nothing.
+      STARTED="$(docker inspect -f '{{.State.StartedAt}}' "$CID")"
+      AGE=$(( $(date +%s) - $(date -d "$STARTED" +%s) ))
+      if [ "$AGE" -lt 21600 ]; then
+        echo "container is ${AGE}s old (under 6h); skipping"
+        exit 0
+      fi
+
+      T0=$(date +%s)
+      echo "restarting: age=${AGE}s cg_swap=$(swap_mb "$CID")MB"
+
+      # Docker's 10s default stop grace is short enough to SIGKILL the bot partway through
+      # its own shutdown.
+      docker restart -t 30 "$CID"
+
+      for _ in $(seq 1 30); do
+        if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:8081/healthz || true)" = "200" ]; then
+          echo "healthy after $(( $(date +%s) - T0 ))s, cg_swap=$(swap_mb "$CID")MB"
+          exit 0
+        fi
+        sleep 3
+      done
+
+      # Exiting non-zero leaves the unit visibly failed, since an unattended restart that
+      # never came back must not look identical to a successful one.
+      echo "ERROR: not healthy within 90s of restart"
+      exit 1
+  - path: /etc/systemd/system/tomoribot-restart.service
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=TomoriBot scheduled container restart
+      Requires=docker.service
+      After=docker.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/tomoribot-scheduled-restart.sh
+      # Must exceed the 30s stop grace plus the 90s health wait.
+      TimeoutStartSec=300
+  - path: /etc/systemd/system/tomoribot-restart.timer
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Recycle TomoriBot daily at its lowest-traffic hour
+
+      [Timer]
+      # Set to the lowest-traffic hour in this deployment's activity histogram, so the
+      # brief outage lands where it interrupts the fewest turns. Derive it from your own
+      # traffic before reusing this value. The explicit UTC suffix keeps the schedule
+      # correct if the host timezone is ever changed away from Etc/UTC.
+      OnCalendar=*-*-* 00:00:00 UTC
+      AccuracySec=1min
+      # A missed run must not fire at boot: booting already produced a fresh container,
+      # so catching up would restart a process that has nothing accumulated yet.
+      Persistent=false
+
+      [Install]
+      WantedBy=timers.target
 
 runcmd:
   - mkdir -p /etc/tomoribot
@@ -112,3 +203,5 @@ runcmd:
   # After apt is primed, since this one needs packages unlike the swapfile script above.
   - /usr/local/sbin/tomoribot-setup-zram.sh
   - sysctl --system
+  - systemctl daemon-reload
+  - systemctl enable --now tomoribot-restart.timer

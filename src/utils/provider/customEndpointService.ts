@@ -365,21 +365,7 @@ async function activatePersonalCustomEndpointForCapability(params: {
     }
   });
 
-  if (!updated) {
-    return false;
-  }
-
-  if (params.capability !== "text" || !params.seesImages) {
-    return true;
-  }
-
-  // Vision is a fallback slot for non-vision chat models, not the capability being registered.
-  // Only auto-fill it when empty so a deliberately configured vision model is never overwritten by
-  // registering an image-capable text model.
-  return await assignPersonalCapabilityToProvider(params.userId, params.provider, "vision", (row) => ({
-    ...row,
-    vision_llm_id: row.vision_llm_id ?? params.modelId,
-  }));
+  return updated;
 }
 
 async function clearServerScopedLiveReferences(
@@ -592,17 +578,14 @@ export async function registerCustomEndpoint(
   // active slot unless the provider did not have one yet.
   const currentActive = existingConfig ? getCapabilityModelId(existingConfig, input.capability) : null;
   const activeId = shouldActivateNewRegistration ? modelId : (currentActive ?? modelId);
-  const currentVision = existingConfig?.vision_llm_id ?? null;
-  // Vision is a fallback slot for non-vision chat models, not the capability being registered. Unlike
-  // the active text slot (which always swaps to the new model on add), only auto-fill vision when it
-  // is currently empty so a deliberately configured vision model is never overwritten.
-  const visionId = input.capability === "text" && input.seesImages ? (currentVision ?? modelId) : currentVision;
 
   const savedConfig = await buildSavedConfigForCustomEndpoint(input.scope, provider, existingConfig, input, modelId);
+  // Registering an image-capable text model never claims the vision slot: that write also moved the
+  // live text model, so one submit silently changed two models. Vision is chosen via /model vision.
   const nextSavedConfig = {
     ...savedConfig,
     llm_id: input.capability === "text" ? activeId : savedConfig.llm_id,
-    vision_llm_id: input.capability === "text" && input.seesImages ? visionId : savedConfig.vision_llm_id,
+    vision_llm_id: existingConfig?.vision_llm_id ?? null,
     embedding_model_id: input.capability === "embedding" ? activeId : savedConfig.embedding_model_id,
     diffusion_model_id: input.capability === "image" ? activeId : savedConfig.diffusion_model_id,
     video_model_id: input.capability === "video" ? activeId : savedConfig.video_model_id,

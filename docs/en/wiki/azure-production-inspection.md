@@ -119,7 +119,103 @@ host provisioned before that change stays broken until repaired by hand.
 
 ## Triaging a frozen bot (unresponsive, or fully offline)
 
-The same livelock has presented two ways, so do not let the symptom narrow the diagnosis:
+### Separate the two causes first
+
+**Two unrelated failures both present as "green in Discord, ignoring everything", and they need
+different fixes.** Available memory separates them in a single reading, so take it before anything
+else:
+
+| Signal | Swap-depth freeze | Reclaim livelock |
+|---|---|---|
+| Available memory | **oscillating** across a wide band | **pinned flat** in a narrow band |
+| Disk queue depth | single digits | sustained in the hundreds |
+| Run Command / guest agent | responsive | hangs, agent `Not Ready` |
+| Dominant log line | `Idle timeout reached after 30s` | nothing at all |
+| Fix | `docker restart -t 30` | `az vm restart` |
+
+The **swap-depth freeze** is the common one. The working set sinks into swap as uptime grows until
+major-fault stalls hold handlers long enough for Bun's SQL pool to retire their queries on its idle
+timeout; every database-touching handler then fails at once. Two readings look like exonerating
+evidence and are not:
+
+- **`/healthz` returns 200 throughout.** `healthTracker` only asserts that the Discord client is
+  ready, so a healthy 200 and a completely unresponsive bot are compatible states. It is on host port
+  **8081**, not 3000 or 8080; a `code=000` returned in under a millisecond is connection-refused, not
+  a hang.
+- **The gateway stays green,** because its heartbeat is independent of handlers. Expect
+  `connected: true` with a normal ping during the freeze.
+
+Confirm it with the error mix rather than the symptom:
+
+```sh
+grep -c "Idle timeout reached" /var/log/tomoribot/tomoribot.jsonl
+```
+
+A large count arriving inside one or two minutes is a pool-wide retirement, which means host
+pressure. Check the database itself before suspecting it: during one of these the server sat at
+single-digit connections and near-zero IOPS, so the fault is entirely client-side.
+
+Then check swap depth against uptime, which is what actually predicts this failure:
+
+```sh
+docker inspect -f '{{.State.StartedAt}}' tomoribot-azure-tomoribot-1
+C=$(docker inspect -f "{{.Id}}" tomoribot-azure-tomoribot-1)
+echo $(( $(cat /sys/fs/cgroup/system.slice/docker-$C.scope/memory.swap.current) / 1048576 ))MB
+```
+
+**A working-set number is meaningless without the uptime beside it.** The same host reads roughly
+half as much swap immediately after a restart as it does days later.
+
+### Capturing a heap snapshot
+
+`cache_sizes` counts cache *entries*, so it can name a cache that grows without telling you how many
+bytes it holds, and it does not decompose `external`/`array_buffers` at all. A heap snapshot is the
+only way to attribute those. `HEAP_SNAPSHOT_DIR` is set in the Azure compose file, so the handler is
+already armed; nothing is written until you signal it.
+
+**Taking one is not free.** The snapshot serializes to roughly a fifth to a half of the live heap as
+a single string, which on this host is a real allocation spike. Take one at moderate uptime rather
+than at maximum depth, prefer the quiet hour, and restart the container afterwards.
+
+Signal the bot process directly from the host. The container's PID 1 is `docker-init`, so signalling
+the container would rely on forwarding; the host sees the real process:
+
+```sh
+for p in /proc/[0-9]*; do [ "$(cat $p/comm 2>/dev/null)" = "bun" ] && kill -USR2 "${p#/proc/}"; done
+ls -la /var/log/tomoribot/*.heapsnapshot
+```
+
+Completion is recorded as a `heap_snapshot` metric carrying the byte count and duration, so it lands
+in `TomoriBotLogs_CL` as well as the host JSONL.
+
+**Analyse it off-host.** The file is far too large for Run Command's output cap, and parsing it in
+place would reproduce the exact memory pressure under investigation. Push it to blob storage with a
+SAS URL and open it locally in Chrome DevTools, which has a Comparison view built for diffing two
+snapshots:
+
+```sh
+curl -X PUT -H "x-ms-blob-type: BlockBlob" \
+  --data-binary @/var/log/tomoribot/<file>.heapsnapshot "<sas-url>"
+rm /var/log/tomoribot/<file>.heapsnapshot
+```
+
+Two snapshots taken hours apart and diffed by retained size are what identify the growing retainer;
+a single snapshot shows what is large, which is not the same question as what is growing.
+
+### Scheduled restarts are routine
+
+`tomoribot-restart.timer` recycles the container daily to bound that growth, so **a container whose
+uptime resets on a daily boundary is the timer working, not an incident**. Check what it did with
+`journalctl -u tomoribot-restart.service`; it logs swap depth before and after each run, and it skips
+containers younger than six hours.
+
+This does **not** blunt the kill-loop discriminator in step 1: `docker restart` does not increment
+`RestartCount`, since only restart-*policy* restarts do. `RestartCount` climbing therefore still
+means something is killing the process. Use `.State.StartedAt` to spot scheduled restarts.
+
+### If it is the livelock
+
+That failure has presented two ways, so do not let the symptom narrow the diagnosis:
 
 | Presentation | Meaning |
 |---|---|

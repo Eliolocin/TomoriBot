@@ -188,6 +188,7 @@ Click the button below and enter your OpenRouter model codename (e.g., \`xai/gro
       success_title: `Vision Model Updated`,
       success_description: `Non-vision chat models will now use \`{model_name}\` to analyze images via the \`analyze_image\` tool.`,
       success_no_tools_description: `Vision model set to \`{model_name}\`, but your current chat model (\`{chat_model}\`) does not support **tool calling**. The vision model requires the \`analyze_image\` tool to work — switch to a chat model with tool support, or it won't be able to use it.`,
+      success_inert_description: `Vision model set to \`{model_name}\`, but it won't be used yet: your current chat model (\`{chat_model}\`) can already see images, so images go straight to it. This vision model activates automatically if you switch to a chat model without image support.`,
       cleared_title: `Vision Model Cleared`,
       cleared_description: `Vision model has been removed. Non-vision chat models will no longer be able to analyze images.`,
       clear_option: `None (disable vision tool)`,

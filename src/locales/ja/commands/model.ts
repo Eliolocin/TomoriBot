@@ -188,6 +188,7 @@ export default {
       success_title: `ビジョンモデルが更新されました`,
       success_description: `ビジョン非対応のチャットモデルは \`{model_name}\` を使用して \`analyze_image\` ツールで画像を分析します。`,
       success_no_tools_description: `ビジョンモデルを \`{model_name}\` に設定しましたが、現在のチャットモデル（\`{chat_model}\`）は**ツール呼び出し**に対応していません。ビジョンモデルは \`analyze_image\` ツールが必要です — ツール対応のチャットモデルに切り替えてください。`,
+      success_inert_description: `ビジョンモデルを \`{model_name}\` に設定しましたが、まだ使用されません。現在のチャットモデル（\`{chat_model}\`）は画像を直接認識できるため、画像はそのまま送信されます。画像に対応していないチャットモデルに切り替えると、このビジョンモデルが自動的に有効になります。`,
       cleared_title: `ビジョンモデルを削除しました`,
       cleared_description: `ビジョンモデルが削除されました。ビジョン非対応のチャットモデルは画像を分析できなくなります。`,
       clear_option: `なし（ビジョンツールを無効化）`,
