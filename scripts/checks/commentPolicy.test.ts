@@ -15,6 +15,36 @@ describe("comment policy", () => {
     expect(findings.map((finding) => finding.rule)).toEqual(["prose-dash"]);
   });
 
+  it("finds prose dashes in locale strings, which ship to users as prose", () => {
+    const source = ['export const ja = {', '  note: `ご注意 — TXTファイル`,', "};", ""].join("\n");
+
+    const findings = inspectCommentPolicySource(source, "src/locales/ja/commands/tool.ts");
+
+    expect(findings.map((finding) => finding.rule)).toEqual(["prose-dash"]);
+  });
+
+  it("reports the offending line inside a multi-line locale template", () => {
+    const source = [
+      "export const en = {",
+      "  help: `First line",
+      "Second line",
+      "tiny — 0.5 GB`,",
+      "};",
+      "",
+    ].join("\n");
+
+    const findings = inspectCommentPolicySource(source, "src/locales/en-US/commands/help.ts");
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.line).toBe(4);
+  });
+
+  it("leaves non-locale string literals alone", () => {
+    const source = ['const label = "Keep — string";', ""].join("\n");
+
+    expect(inspectCommentPolicySource(source, "src/utils/misc/labels.ts")).toEqual([]);
+  });
+
   it("parses TSX without treating rendered text as a comment", () => {
     const source = [
       "const View = () => (",

@@ -50,7 +50,8 @@ The `{sticker_tool}` macros expand to the provider-correct function name
 ## Side effects
 
 - **Discord cache read** — `client.guilds.cache.get(guildId).stickers.cache`
-  for the live sticker list.
+  for the live sticker list, filtered through `isStickerSendable()`
+  (`utils/discord/stickerAvailability.ts`).
 - **DB read (conditional)** — falls back to
   `serverRepository.loadStickersByInternalId(server_id)` when
   `preloadedStickers` is empty.
@@ -68,6 +69,14 @@ After this stage runs:
 - Returns `null` if: `sticker_usage_enabled === false`, DM channel,
   impersonation, `tomoriState === null`, or the guild sticker cache is
   empty.
+- Only sendable stickers are listed. A guild sticker stays in the Discord cache
+  after it stops being usable (the guild dropped below the boost tier that
+  unlocked the slot, so `Sticker.available` is `false`, or the sticker was
+  deleted and the cache has not caught up), and sending one returns
+  `50081 Cannot use this sticker`. `isStickerSendable()` also excludes IDs
+  retired at send time, so a rejected sticker stops being offered rather than
+  being reselected every turn. `available` is `null` on a partial sticker and
+  is treated as sendable: only an explicit `false` is a lock.
 - Stickers are referenced by *name* in the function call (case-insensitive),
   not by Discord sticker ID — the LLM never needs the ID.
 - Skipped on impersonation (stickers are persona-flavored output, not

@@ -13,7 +13,7 @@
         title: `Estimated API Costs`,
         embed_description: `Here are **VERY ROUGH** estimated costs per trigger in a Discord channel when using paid AI providers. Costs are estimated using example **{provider}** costs (Input: {inputPrice}/M tokens, Output: {outputPrice}/M tokens)`,
         current_context_description: `Estimated cost for your **current context only**. Input tokens are measured by the provider API using your current setup and recent channel history on **{provider}** model **{model}**. Output tokens remain estimated. Pricing used: Input {inputPrice}/M, Output {outputPrice}/M.`,
-        current_context_estimated_description: `Estimated cost for your **current context only**. **{provider}** (model **{model}**) has no live token-counting API, so input tokens are **approximated from character counts** (~4 characters per token) over your current setup and recent channel history — accuracy varies by language, and denser scripts like Japanese tokenize higher than this estimate. Output tokens are also estimated. Pricing used: Input {inputPrice}/M, Output {outputPrice}/M.`,
+        current_context_estimated_description: `Estimated cost for your **current context only**. **{provider}** (model **{model}**) has no live token-counting API, so input tokens are **approximated from character counts** (~4 characters per token) over your current setup and recent channel history. Accuracy varies by language, and denser scripts like Japanese tokenize higher than this estimate. Output tokens are also estimated. Pricing used: Input {inputPrice}/M, Output {outputPrice}/M.`,
         current_input_title: `Measured Input Tokens (Current Context)`,
         current_input_estimated_title: `Estimated Input Tokens (Current Context)`,
         current_input_value: `**Input:** {inputTokens} tokens
@@ -26,7 +26,7 @@
         average_total_cost_value: `**Total estimate:** {totalTokens} tokens
 ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
         current_footer: `Input token counts are provider-measured only for providers with live counting support. Output token counts are estimated. The "Persona Average" band combines the persona's sample dialogue replies and recent persona turns in this channel. Falls back to a typical estimate when neither source is available.`,
-        current_estimated_footer: `This provider has no live counting API, so input tokens are approximated from character counts — treat them as a rough figure, especially for Japanese or JSON-heavy contexts. Output token counts are also estimated. The "Persona Average" band combines the persona's sample dialogue replies and recent persona turns in this channel. Falls back to a typical estimate when neither source is available.`,
+        current_estimated_footer: `This provider has no live counting API, so input tokens are approximated from character counts. Treat them as a rough figure, especially for Japanese or JSON-heavy contexts. Output token counts are also estimated. The "Persona Average" band combines the persona's sample dialogue replies and recent persona turns in this channel. Falls back to a typical estimate when neither source is available.`,
         no_cost_provider_description: `Current provider does not have costs`,
         unavailable_description: `Live cost estimation is not available for the current provider (**{provider}**).`,
         fallback_notice_title: `Live Counting Unavailable`,

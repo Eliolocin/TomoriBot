@@ -4,9 +4,10 @@
  * Discord throttles guild member avatar (and nickname) changes more aggressively
  * than its documented buckets: beyond a plain HTTP 429 it can return a 200-level
  * error envelope whose `errors.avatar`/`errors.nick` carry an `AVATAR_RATE_LIMIT`
- * code, or a message mentioning a rate limit. Both `/persona import` (immediate,
- * best-effort apply) and the preset-avatar fan-out reconciler must treat any of
- * these as "back off and retry later", so the detection lives here in one place.
+ * code, or a message mentioning a rate limit. Every avatar PATCH site (`/persona avatar`,
+ * `/persona import`, `/persona swap`, and the preset-avatar fan-out reconciler) must treat any
+ * of these as "back off and retry later" rather than as a fault, so the detection lives here in
+ * one place.
  */
 
 type DiscordApiErrorPayload = {

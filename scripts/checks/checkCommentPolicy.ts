@@ -6,6 +6,8 @@ const DEFAULT_PATHS = ["src", "scripts", "tests", "apps"];
 const DEFAULT_EXCEPTIONS_PATH = "scripts/checks/comment-policy-exceptions.json";
 const POLICY_DOC_PATH = "docs/en/contributing/comment-policy.md";
 const DASH_PATTERN = /—|–| -- /;
+const DASH_SCAN_PATTERN = /—|–| -- /g;
+const LOCALE_PATH_PATTERN = /(?:^|\/)src\/locales\//;
 const NUMBERED_PREFIX_PATTERNS = [
   String.raw`\d+[a-z]?(?:\.\d+[a-z]?)*(?:-\d+[a-z]?)*\.`,
   String.raw`\d+\.\d+[a-z]?`,
@@ -190,6 +192,7 @@ export async function checkCommentPolicy(
       ...collectCommentLines(source, file).flatMap((line) => inspectCommentLine(line, options)),
       ...collectStructuralCommentFindings(source, file),
       ...collectJsDocFindings(source, file, options),
+      ...collectLocaleStringFindings(source, file),
     ];
 
     for (const finding of fileFindings) {
@@ -244,6 +247,7 @@ export function inspectCommentPolicySource(
 ): CommentPolicyFinding[] {
   assertParseable(source, file);
   return [
+    ...collectLocaleStringFindings(source, file),
     ...collectCommentLines(source, file).flatMap((line) => inspectCommentLine(line, options)),
     ...collectStructuralCommentFindings(source, file),
     ...collectJsDocFindings(source, file, options),
@@ -341,6 +345,49 @@ function collectStructuralCommentFindings(source: string, file: string): Comment
   }
 
   return findings;
+}
+
+/**
+ * Applies the dash rule to locale string literals, which ship to users as prose and so carry the
+ * same restriction as comments. Scanning raw source text rather than the cooked literal value
+ * keeps the reported line accurate inside the multi-line templates the help locales are built
+ * from, where one literal can span a hundred lines.
+ */
+function collectLocaleStringFindings(source: string, file: string): CommentPolicyFinding[] {
+  if (!LOCALE_PATH_PATTERN.test(file)) {
+    return [];
+  }
+
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const sourceLines = source.split(/\r?\n/);
+  const flaggedLines = new Map<number, string>();
+
+  const record = (node: ts.Node): void => {
+    const raw = node.getText(sourceFile);
+    const start = node.getStart(sourceFile);
+    for (const match of raw.matchAll(DASH_SCAN_PATTERN)) {
+      if (match.index === undefined) continue;
+      const { line } = sourceFile.getLineAndCharacterOfPosition(start + match.index);
+      flaggedLines.set(line + 1, (sourceLines[line] ?? "").trim());
+    }
+  };
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateExpression(node)) {
+      record(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+
+  return Array.from(flaggedLines, ([line, text]) => ({
+    file,
+    line,
+    message: "Replace prose dashes in locale text with punctuation that states the relationship.",
+    rule: "prose-dash" as const,
+    severity: "error" as const,
+    text,
+  }));
 }
 
 function inspectCommentLine(

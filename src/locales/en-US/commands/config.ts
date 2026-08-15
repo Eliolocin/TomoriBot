@@ -756,7 +756,7 @@ Preview:
       description: `Manage a reminder injected into the conversation to keep me on track`,
       set: {
         description: `Set a short reminder injected at a specific depth in conversation history`,
-        scope_description: `Where to store the reminder — persona, channel, or server-wide`,
+        scope_description: `Where to store the reminder: persona, channel, or server-wide`,
         persona_option: `Persona (bind to a specific persona)`,
         channel_option: `Channel (bind to a specific channel)`,
         channel_description: `The channel to configure the reminder for`,
@@ -789,7 +789,7 @@ Preview:
         channel_description: `The channel where spontaneous messages will be sent.`,
         timer_hours_description: `How often to roll the dice (in hours, minimum 1).`,
         random_offset_range_description: `Optional +/- random offset range in hours for each timer reset (minimum 0).`,
-        chance_description: `Probability of firing each roll (1–100%).`,
+        chance_description: `Probability of firing each roll (1-100%).`,
         silence_threshold_description: `Skip if channel had activity within this many hours (optional).`,
         failure_threshold_description: `Force-fire after this many consecutive dice misses, resetting the counter (optional).`,
         modal_title: `Configure Random Trigger`,

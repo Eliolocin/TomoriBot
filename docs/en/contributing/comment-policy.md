@@ -38,13 +38,48 @@ Also avoid:
 
 - procedural labels such as `// 1. Parse the value` or `// 5c-2. Build the menu`;
 - prompt-style scaffolding such as `// Rule 3: Validate input`;
-- decorative section banners;
-- commented-out code; and
-- prose em dashes, en dashes, or spaced double hyphens. Use punctuation that makes the
-  relationship explicit.
+- decorative section banners; and
+- commented-out code.
 
 Numbered JSDoc lists remain valid when they describe a genuinely ordered public contract.
 Ordinary line comments should not carry step numbers.
+
+## Dashes
+
+Em dashes, en dashes, and spaced double hyphens are not allowed in authored prose. A dash hides
+the relationship between the two halves of a sentence: replacing it forces you to name that
+relationship, which is what the reader needed.
+
+Pick the substitute by what the sentence is actually doing:
+
+| Relationship | Use | Example |
+|---|---|---|
+| Second half explains the first | Colon | `Retirement is process-local: a restart refetches every guild's stickers.` |
+| Causal | `, so` or `because` | `Discord rejects a second acknowledgement, so modal branches return early.` |
+| Aside or gloss | Parentheses | `The probe caches its own failure (until the next restart).` |
+| Two independent clauses | Period or semicolon | `The webhook send failed. The bot path is the fallback.` |
+| Term and its definition | Colon | `` `large-v3`: ~4-5 GB VRAM `` |
+| Numeric range | Plain hyphen | `1-5 minutes`, `50-100 messages` |
+
+If none of these fit, the sentence is usually doing two things at once. Split it.
+
+### Scope
+
+This rule covers every string a human wrote, not only comments:
+
+- code comments and JSDoc;
+- documentation pages under `docs/`; and
+- user-facing locale strings in `src/locales/`.
+
+Locale strings are included because they are prose that ships to users, and a dash reads no more
+clearly in an embed than in a comment. Japanese locale text takes the same rule with Japanese
+punctuation: prefer `：` for a definition or explanation, `。` between independent clauses, and
+`（）` for an aside. An em dash in a `ja` string is usually an artifact of translating the English
+punctuation rather than the English meaning.
+
+The restriction is on prose. A dash that is part of data the code must reproduce exactly stays:
+a CLI flag (`--no-build-isolation`), Discord's subtext marker (`-# `), a URL, or quoted output
+from another system. Record those in the exception file only if the checker actually flags them.
 
 ## No meta commentary
 
@@ -165,7 +200,9 @@ bun run audit-comments
 ```
 
 `audit-comments` reports subjective narration candidates across the existing tree without
-failing. It runs as a non-blocking warning under the Documentation section of `bun run vl`,
+failing. The deterministic rules, `prose-dash` included, fail regardless of audit mode; under
+`src/locales/` `prose-dash` reads string literals rather than comments, since the prose there is
+the shipped text. It runs as a non-blocking warning under the Documentation section of `bun run vl`,
 so contributors can see policy drift without needing to resolve heuristic findings as part
 of unrelated work. It remains separate from the normal test runner.
 

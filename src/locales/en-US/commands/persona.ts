@@ -81,7 +81,7 @@ export default {
         select_placeholder: `Select a sprite...`,
         confirm_title: `Edit Sprite?`,
         confirm_description: `You selected this sprite:
-> **{sprite_name}** — {identity_status}
+> **{sprite_name}**: {identity_status}
 > {instructions}
 
 Click **Confirm** to edit it.`,
@@ -290,7 +290,7 @@ Click **Confirm** to edit it.`,
       success_description: `Current persona **{nickname}** has been exported! Share this PNG file with others to spread this personality configuration.`,
       success_description_json: `Current persona **{nickname}** has been exported as a JSON file.
 
-**Note:** This JSON can be re-imported with \`/persona import\`. It does not include the avatar image — use the PNG export to share the avatar too.`,
+**Note:** This JSON can be re-imported with \`/persona import\`. It does not include the avatar image. Use the PNG export to share the avatar too.`,
       json_importable_note: `This JSON export can be imported with /persona import. It does not include the avatar image; use the PNG export to share the avatar too.`,
       failed_title: `🔴 Export Failed`,
       avatar_failed_title: `🔴 Avatar Download Failed`,
@@ -632,6 +632,8 @@ Or press the Import button`,
       api_error_title: `API Error`,
       api_error_description: `Failed to update the avatar through Discord's API. This is often caused by changing avatars too quickly (rate limits). Please wait and try again.
 -# {details}`,
+      rate_limited_title: `🟡 Rate Limited`,
+      rate_limited_description: `Discord is limiting how often this server's avatar can change. The persona was saved, but the server avatar was not updated. Please wait a while and try again, or change it manually in Server Settings.`,
       error_download_timeout: `Avatar download timed out after 15 seconds. Please try again.`,
       error_api_timeout: `Discord API call timed out after 15 seconds. Please try again.`,
     },

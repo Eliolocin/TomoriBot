@@ -6,6 +6,7 @@ import { statRepository } from "@/utils/db/repositories";
 import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
 import { sendStandardEmbed } from "@/utils/discord/embedHelper";
 import { routeHiddenToolNotice } from "@/utils/discord/toolProgressNotice";
+import { isStickerSendable } from "@/utils/discord/stickerAvailability";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { providerUsesApiFamily } from "@/utils/provider/providerInfoRegistry";
 import {
@@ -554,8 +555,13 @@ async function executeToolCall(
   if (functionName === "select_sticker_for_response") {
     const stickerData = toolResult.data as { status?: string; sticker_id?: string; sticker_name?: string } | undefined;
     if (stickerData?.status === "sticker_selected_successfully") {
-      stickerSelection = params.context.guild?.stickers.cache.get(stickerData.sticker_id ?? "") ?? null;
-      log.success(`Sticker '${stickerData.sticker_name}' selected for sending`);
+      const resolved = params.context.guild?.stickers.cache.get(stickerData.sticker_id ?? "") ?? null;
+      stickerSelection = resolved && isStickerSendable(resolved) ? resolved : null;
+      if (stickerSelection) {
+        log.success(`Sticker '${stickerData.sticker_name}' selected for sending`);
+      } else {
+        log.warn(`Sticker '${stickerData.sticker_name}' is no longer sendable, dropping selection`);
+      }
     } else {
       stickerSelection = null;
     }

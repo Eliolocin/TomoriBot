@@ -19,44 +19,7 @@ import {
   loadStoredPersonaAvatarBuffer,
   uploadPersonaAvatarToStorage,
 } from "../../utils/storage/avatarStorage";
-
-type DiscordApiErrorPayload = {
-  message?: string;
-  code?: number | string;
-  errors?: {
-    avatar?: { _errors?: Array<{ code?: string; message?: string }> };
-    nick?: { _errors?: Array<{ code?: string; message?: string }> };
-  };
-};
-
-function isAvatarUpdateRateLimited(status: number, errorText: string): boolean {
-  if (status === 429) {
-    return true;
-  }
-
-  if (!errorText) {
-    return false;
-  }
-
-  try {
-    const parsed = JSON.parse(errorText) as DiscordApiErrorPayload;
-    const avatarErrors = parsed.errors?.avatar?._errors ?? [];
-    const nickErrors = parsed.errors?.nick?._errors ?? [];
-    const hasRateLimitCode = [...avatarErrors, ...nickErrors].some((error) =>
-      (error.code ?? "").toString().toUpperCase().includes("RATE_LIMIT"),
-    );
-
-    if (hasRateLimitCode) {
-      return true;
-    }
-
-    if (parsed.message?.toLowerCase().includes("rate limit")) {
-      return true;
-    }
-  } catch {}
-
-  return /AVATAR_RATE_LIMIT/i.test(errorText) || /RATE_LIMIT/i.test(errorText) || /too fast/i.test(errorText);
-}
+import { isAvatarUpdateRateLimited } from "../../utils/discord/avatarRateLimit";
 
 async function resolveCurrentBotAvatarUrl(
   client: Client,

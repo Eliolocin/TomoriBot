@@ -116,7 +116,7 @@ ElevenLabs: {elevenlabs} を実行し、追加ペルソナは後で {voice_assig
 2. ダウンロードした \`qwen3tts\` フォルダに移動し、Python \`.venv\` を作成して有効化します。
 3. \`requirements.txt\` をインストールします。
 4. *(GPU)* PyTorch を再インストール: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
-5. *(任意)* 高速化のため flash-attn をインストール — 手順 4 の後 \`pip install wheel\`、次に \`pip install flash-attn --no-build-isolation\` (Winは20-40分)。初回はスキップ。
+5. *(任意)* 高速化のため flash-attn をインストール：手順 4 の後 \`pip install wheel\`、次に \`pip install flash-attn --no-build-isolation\` (Winは20-40分)。初回はスキップ。
 6. 音声クローンには \`server.py\`、Qwen3-TTS VoiceDesign のみには \`server.py --mode voice-design\`、1つのURLでリクエストごとにクローン/VoiceDesignを判定するには \`server.py --mode auto\` を起動します。
 7. {custom_endpoint_add} で登録: Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Plain\` を選択。VoiceDesign では音声ソースモードに \`VoiceDesign\` を選ぶと、TomoriBot が自動的に instruct 対応として扱います。auto モードでは、同じサーバーURLを指すクローン用と VoiceDesign 用のエンドポイントを登録できます。
 8. {model_speech} で選択します。クローンモードでは {voice_add} と {voice_assign}、VoiceDesign では各ペルソナに {voice_design_set} を実行します。`,
@@ -184,12 +184,12 @@ Linux/macOS: \`bash install-irodori.sh\`
         models_description: `サーバー起動前に \`WHISPERX_MODEL\` を指定し、登録時も同じ名前を使います。
 GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM < GPU VRAM）
 
-\`tiny\` — VRAM 約0.5 GB / RAM 約200 MB
-\`base\` — VRAM 約0.5 GB / RAM 約300 MB
-\`small\` — VRAM 約1 GB / RAM 約600 MB
-\`medium\` — VRAM 約2 GB / RAM 約1.5 GB
-\`large-v3\` — VRAM 約4–5 GB / RAM 約2.5 GB *(デフォルト、最高精度)*
-\`large-v3-turbo\` — VRAM 約2–3 GB / RAM 約1.5 GB *(VRAM が少ない場合に推奨)*
+\`tiny\`：VRAM 約0.5 GB / RAM 約200 MB
+\`base\`：VRAM 約0.5 GB / RAM 約300 MB
+\`small\`：VRAM 約1 GB / RAM 約600 MB
+\`medium\`：VRAM 約2 GB / RAM 約1.5 GB
+\`large-v3\`：VRAM 約4-5 GB / RAM 約2.5 GB *(デフォルト、最高精度)*
+\`large-v3-turbo\`：VRAM 約2-3 GB / RAM 約1.5 GB *(VRAM が少ない場合に推奨)*
 
 文字起こしは約100言語に対応（自動検出）。`,
       },
@@ -294,10 +294,10 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
       step1_title: `ステップ1：APIキーを取得`,
       step1_description: `TomoriBotは複数のAIプロバイダーに対応しています。いずれかのAPIキーが必要です。
 - {helpApikey}で取得方法を確認
-  - **Google Gemini**（*推奨*）— 汎用、無料で利用可能、すべての機能を実行可能
-  - **DeepSeek**（*推奨*）— 非常に安価で無検閲な代替手段
-  - **OpenRouter** — 有料で信頼性の高い、多数のAIモデルへの一箇所からのアクセス
-  - **NovelAI** — 無検閲なロールプレイ、ストーリーテリング、画像生成
+  - **Google Gemini**（*推奨*）：汎用、無料で利用可能、すべての機能を実行可能
+  - **DeepSeek**（*推奨*）：非常に安価で無検閲な代替手段
+  - **OpenRouter**：有料で信頼性の高い、多数のAIモデルへの一箇所からのアクセス
+  - **NovelAI**：無検閲なロールプレイ、ストーリーテリング、画像生成
 - このAPIキーを**他人と共有しないでください**
 - Customエンドポイントはセットアップ後に{configApiKeySet}でBearer認証トークンを追加可能`,
       step2_title: `ステップ2：セットアップコマンドを実行`,
@@ -529,7 +529,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       zai_important_title: `重要な注意事項：`,
       zai_important_description: `- 通常のチャット、推論、画像生成には汎用エンドポイントを使ってください
 - 専用のCodingエンドポイントは別扱いで、コーディング特化ワークフロー向けです
-- ⚠️ Z.aiの利用規約がコーディング/エージェントのシナリオのみに制限されました — 一般チャットでの使用は自己責任です`,
+- ⚠️ Z.aiの利用規約がコーディング/エージェントのシナリオのみに制限されました。一般チャットでの使用は自己責任です`,
       zai_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
       novelai_title: `NovelAI APIキーの設定`,
       novelai_description: `NovelAIはクリエイティブなストーリーテリングとロールプレイに焦点を当てたサブスクリプションベースのサービスです。
@@ -945,8 +945,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       security_description: `**信頼できるMCPサーバーのみ追加してください。**
 
 悪意のあるMCPサーバーは以下のことが可能です：
-- **プロンプトインジェクション** — Tomoriへ隠し指示を送り、動作を操作する
-- **データ漏洩** — ツールに渡されたデータ（メッセージやファイル内容など）を外部へ送信する
+- **プロンプトインジェクション**：Tomoriへ隠し指示を送り、動作を操作する
+- **データ漏洩**：ツールに渡されたデータ（メッセージやファイル内容など）を外部へ送信する
 - **有害または虚偽の結果** を返し、Tomoriがそれをサーバーに中継する
 
 MCPサーバーはブラウザ拡張機能やサードパーティアプリと同様の注意を持って扱ってください。不安な場合は追加しないでください。`,

@@ -4,6 +4,7 @@ import { sendStandardEmbed } from "@/utils/discord/embedHelper";
 import { hasThoughtLogContent, sendAttributionOnlyEmbed, sendThoughtLogEmbed } from "@/utils/discord/thoughtLog";
 import { resolveManagedChannelWebhook, sendWebhookMessageWithIdentity } from "@/utils/discord/webhook/webhookCore";
 import { getChannelDeliveredWebhookIdentity } from "@/utils/discord/stream/channelDeliveryContinuity";
+import { isStickerUnusableError, markStickerRejected } from "@/utils/discord/stickerAvailability";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { incrementTextQuota } from "@/utils/quota/textQuotaManager";
@@ -105,6 +106,14 @@ async function sendSelectedSticker(context: ChatTurnContext, result: GenerationT
     log.info(`Sent selected sticker '${sticker.name}' after stream.`);
     recordStickerDelivery(context, sticker.name);
   } catch (error) {
+    // Discord refusing the sticker outright is permanent for that ID (lost boost tier, deleted
+    // but still cached), so retiring it here is what stops the model reselecting it every turn.
+    if (isStickerUnusableError(error)) {
+      markStickerRejected(sticker.id);
+      log.warn(`Discord rejected sticker '${sticker.name}' (${sticker.id}) as unusable; retiring it for this process.`);
+      return;
+    }
+
     log.error("Failed to send selected sticker after stream:", error, {
       serverId: context.tomoriState.server_id,
       errorType: "StickerSendError",

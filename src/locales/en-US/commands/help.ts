@@ -116,14 +116,14 @@ ElevenLabs: run {elevenlabs}, then use {voice_assign} later for more personas.
 2. Navigate to the downloaded \`qwen3tts\` folder, create and activate a Python \`.venv\`.
 3. Install \`requirements.txt\`.
 4. *(GPU)* Reinstall PyTorch: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
-5. *(Optional)* Install flash-attn for speed — requires step 4, \`pip install wheel\`, then \`pip install flash-attn --no-build-isolation\` (takes 20-40m on Win). Skip initially.
+5. *(Optional)* Install flash-attn for speed: requires step 4, \`pip install wheel\`, then \`pip install flash-attn --no-build-isolation\` (takes 20-40m on Win). Skip initially.
 6. Start \`server.py\` for voice cloning, \`server.py --mode voice-design\` for Qwen3-TTS VoiceDesign only, or \`server.py --mode auto\` to detect clone vs VoiceDesign from each request on one URL.
 7. Register with {custom_endpoint_add}: select \`Speech\` capability, \`TTS-Clone\` API Style, and \`Plain\` Script Markup. For VoiceDesign, choose \`VoiceDesign\` as the voice source mode; TomoriBot treats it as instruct-capable automatically. In auto mode, you can register clone and VoiceDesign endpoints that point to the same server URL.
 8. Select with {model_speech}. For clone mode, run {voice_add} and {voice_assign}; for VoiceDesign, run {voice_design_set} for each persona.`,
       },
       irodoritts: {
         title: `IrodoriTTS Speech`,
-        description: `IrodoriTTS is a Japanese-specialized voice clone server. It reads emoji characters embedded in the speech text as emotion cues (e.g. 😊 for happy, 😢 for sad). Register it with **Script Markup** set to **Emoji Markers** — TomoriBot strips bracket tags before sending, leaving only the emoji markers the model expects.`,
+        description: `IrodoriTTS is a Japanese-specialized voice clone server. It reads emoji characters embedded in the speech text as emotion cues (e.g. 😊 for happy, 😢 for sad). Register it with **Script Markup** set to **Emoji Markers**: TomoriBot strips bracket tags before sending, leaving only the emoji markers the model expects.`,
         steps_title: `Setup Steps`,
         steps_description: `**Prerequisites**: Python 3.10+, CUDA 12.x + drivers (optional, for GPU)
 
@@ -184,12 +184,12 @@ Linux/macOS: \`bash install-irodori.sh\`
         models_description: `Set \`WHISPERX_MODEL\` before starting, use the same name when registering.
 GPU runs **float16** · CPU runs **int8** (half the bytes, so CPU RAM < GPU VRAM)
 
-\`tiny\` — ~0.5 GB VRAM / ~200 MB RAM
-\`base\` — ~0.5 GB VRAM / ~300 MB RAM
-\`small\` — ~1 GB VRAM / ~600 MB RAM
-\`medium\` — ~2 GB VRAM / ~1.5 GB RAM
-\`large-v3\` — ~4–5 GB VRAM / ~2.5 GB RAM *(default, highest accuracy)*
-\`large-v3-turbo\` — ~2–3 GB VRAM / ~1.5 GB RAM *(recommended for limited VRAM)*
+\`tiny\`: ~0.5 GB VRAM / ~200 MB RAM
+\`base\`: ~0.5 GB VRAM / ~300 MB RAM
+\`small\`: ~1 GB VRAM / ~600 MB RAM
+\`medium\`: ~2 GB VRAM / ~1.5 GB RAM
+\`large-v3\`: ~4-5 GB VRAM / ~2.5 GB RAM *(default, highest accuracy)*
+\`large-v3-turbo\`: ~2-3 GB VRAM / ~1.5 GB RAM *(recommended for limited VRAM)*
 
 Transcription supports ~100 languages (auto-detected).`,
       },
@@ -917,7 +917,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 **3.** Run {configMcpAdd}. Paste the connection URL into the **URL** field. In the **Auth Token** field, paste your Smithery API key.
 
 **Using other sources:**
-If an MCP server requires no authentication, leave the **Auth Token** field blank. Some servers may use a different auth format — check the server's documentation for details.
+If an MCP server requires no authentication, leave the **Auth Token** field blank. Some servers may use a different auth format. Check the server's documentation for details.
 
 Your auth token is encrypted at rest and never shown in plain text after saving.`,
       online_summary_description: `Use {configMcpAdd} to register a publicly reachable HTTPS MCP server. Auth tokens are encrypted after saving; check the docs for provider-specific connection URL notes.`,

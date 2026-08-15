@@ -18,6 +18,7 @@ import { personaRepository } from "@/utils/db/repositories";
 import { convertToPNG } from "../../utils/image/imageProcessor";
 import { deletePersonaAvatarFromStorage, uploadPersonaAvatarToStorage } from "../../utils/storage/avatarStorage";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
+import { isAvatarUpdateRateLimited } from "../../utils/discord/avatarRateLimit";
 
 const PERSONA_SELECT_MODAL_ID = "persona_avatar_persona_modal";
 const PERSONA_SELECT_ID = "persona_select";
@@ -129,7 +130,7 @@ async function updateGuildAvatar(
   avatarDataUri: string | null,
 ): Promise<{
   success: boolean;
-  error?: "timeout" | "api_error";
+  error?: "timeout" | "rate_limited" | "api_error";
   details?: string;
 }> {
   // Setup timeout controller (15s)
@@ -157,6 +158,15 @@ async function updateGuildAvatar(
 
     if (!response.ok) {
       const errorText = await response.text();
+
+      // Discord throttles guild avatar changes far below its documented buckets, so this is an
+      // expected outcome rather than a fault: keep it off the error sink the way every other
+      // avatar PATCH site does, and tell the user to wait instead of showing them raw API JSON.
+      if (isAvatarUpdateRateLimited(response.status, errorText)) {
+        log.warn(`Guild avatar update rate limited for guild ${guildId}: ${response.status}`);
+        return { success: false, error: "rate_limited" };
+      }
+
       const context: ErrorContext = {
         errorType: "DiscordApiError",
         metadata: { guildId, httpStatus: response.status, body: errorText },
@@ -365,6 +375,12 @@ export async function execute(
             descriptionKey: "commands.persona.avatar.error_api_timeout",
             color: ColorCode.ERROR,
           });
+        } else if (result.error === "rate_limited") {
+          await replyInfoEmbed(responseInteraction, locale, {
+            titleKey: "commands.persona.avatar.rate_limited_title",
+            descriptionKey: "commands.persona.avatar.rate_limited_description",
+            color: ColorCode.WARN,
+          });
         } else {
           const baseMsg = localizer(locale, "commands.persona.avatar.api_error_description");
           await replyInfoEmbed(responseInteraction, locale, {
@@ -473,6 +489,12 @@ export async function execute(
           titleKey: "commands.persona.avatar.error_api_timeout",
           descriptionKey: "commands.persona.avatar.error_api_timeout",
           color: ColorCode.ERROR,
+        });
+      } else if (updateResult.error === "rate_limited") {
+        await replyInfoEmbed(responseInteraction, locale, {
+          titleKey: "commands.persona.avatar.rate_limited_title",
+          descriptionKey: "commands.persona.avatar.rate_limited_description",
+          color: ColorCode.WARN,
         });
       } else {
         const baseMsg = localizer(locale, "commands.persona.avatar.api_error_description");

@@ -48,8 +48,15 @@ If a completed `GenerationTurnResult` carries `selectedSticker`:
   sticker follows: a queued turn replies to the trigger message with the native
   sticker; a non-queued turn sends it directly to the channel. The same path is
   the fallback if the webhook send fails.
-- Final delivery failures are logged with the server and sticker IDs and do
-  not propagate.
+- A `50081 Cannot use this sticker` rejection is permanent for that ID rather
+  than transient, so the sticker is retired via `markStickerRejected()`
+  (`utils/discord/stickerAvailability.ts`) and logged at `warn`. Without that
+  retirement the sticker stays in the Discord cache, stays in the candidate list
+  the model is shown, and gets reselected on the next turn. Retirement is
+  process-local: a restart refetches every guild's stickers, which is also when
+  a restored boost tier should get a clean slate.
+- Other final delivery failures are logged at `error` with the server and
+  sticker IDs and do not propagate.
 
 ### 2. `maybeScheduleEmptyResponseRetry`
 

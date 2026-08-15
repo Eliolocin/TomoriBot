@@ -4,6 +4,7 @@ import type { ServerEmojiRow, ServerStickerRow, AssembledServerConfig, TomoriSta
 import type { ToolPromptMacroResolver } from "@/utils/tools/toolPromptMacros";
 import type { MentionConverter } from "./templates";
 import { serverRepository } from "@/utils/db/repositories/ServerRepository";
+import { isStickerSendable } from "@/utils/discord/stickerAvailability";
 
 type EmojiMetadata =
   | ServerEmojiRow
@@ -178,9 +179,9 @@ export async function buildServerStickerContextItem(params: {
     }
   }
 
-  const sortedStickers = Array.from(guildStickersCache.values()).sort(
-    (a, b) => (a.createdTimestamp || 0) - (b.createdTimestamp || 0),
-  );
+  const sortedStickers = Array.from(guildStickersCache.values())
+    .filter((sticker) => isStickerSendable(sticker))
+    .sort((a, b) => (a.createdTimestamp || 0) - (b.createdTimestamp || 0));
   const latestStickerByName = new Map<string, (typeof sortedStickers)[number]>();
   for (const sticker of sortedStickers) {
     if (sticker.name) latestStickerByName.set(sticker.name.toLowerCase(), sticker);

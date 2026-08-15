@@ -588,7 +588,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         validation_error_title: `無効なAI応答`,
         validation_error_description: `AIが無効な応答形式を返しました。これはモデルの問題である可能性があります。`,
         progress_analyzing: `{total}枚の画像を分析中...`,
-        progress_analyzing_batch: `バッチ{batch_number}を分析中：{batch_size}個の絵文字/スタンプ — {grand_total}個中{processed}個完了、残り{remaining}個...`,
+        progress_analyzing_batch: `バッチ{batch_number}を分析中：{batch_size}個の絵文字/スタンプ。{grand_total}個中{processed}個完了、残り{remaining}個...`,
       },
       edit: {
         description: `単一の絵文字またはスタンプの感情と使用方法を編集します`,
@@ -641,7 +641,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
     alwaysreply: {
       description: `メインペルソナの常時応答モードを切り替えます。`,
       enabled_title: `常時応答が有効になりました`,
-      enabled_description: `**{persona_name}** はトリガーワードなしでもこのサーバーのすべてのメッセージに返信します。オルタペルソナは引き続きトリガーワードが必要です — オルタがトリガーされた場合、**{persona_name}** は二重応答を避けるために応答しません。`,
+      enabled_description: `**{persona_name}** はトリガーワードなしでもこのサーバーのすべてのメッセージに返信します。オルタペルソナは引き続きトリガーワードが必要です。オルタがトリガーされた場合、**{persona_name}** は二重応答を避けるために応答しません。`,
       disabled_title: `常時応答が無効になりました`,
       disabled_description: `**{persona_name}** はトリガーワード、メンション、またはリプライでのみ応答します。`,
     },

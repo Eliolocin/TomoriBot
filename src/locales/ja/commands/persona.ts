@@ -81,7 +81,7 @@ export default {
         select_placeholder: `スプライトを選択...`,
         confirm_title: `スプライトを編集しますか？`,
         confirm_description: `次のスプライトを選択しました:
-> **{sprite_name}** — {identity_status}
+> **{sprite_name}**：{identity_status}
 > {instructions}
 
 **確認** を押すと編集モーダルを開きます。`,
@@ -634,6 +634,8 @@ export default {
       api_error_title: `APIエラー`,
       api_error_description: `Discord APIを通じてアバターの更新に失敗しました。アバターを短時間で変更しすぎたことによるレート制限が原因であることが多いです。しばらく待ってから再度お試しください。
 -# {details}`,
+      rate_limited_title: `🟡 レート制限中`,
+      rate_limited_description: `Discordがこのサーバーのアバター変更頻度を制限しています。ペルソナは保存されましたが、サーバーアバターは更新されませんでした。しばらく待ってから再度お試しいただくか、サーバー設定から手動で変更してください。`,
       error_download_timeout: `アバターのダウンロードが15秒後にタイムアウトしました。もう一度お試しください。`,
       error_api_timeout: `Discord API呼び出しが15秒後にタイムアウトしました。もう一度お試しください。`,
     },

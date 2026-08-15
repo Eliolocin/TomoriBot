@@ -4,6 +4,7 @@
  */
 
 import { log } from "../../utils/misc/logger";
+import { isStickerSendable } from "../../utils/discord/stickerAvailability";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 
 /**
@@ -173,6 +174,7 @@ export class StickerTool extends BaseTool {
     if (!hasStickerName && !hasStickerId) {
       const guild = context.channel.guild;
       const availableStickerData = guild.stickers.cache
+        .filter((sticker) => isStickerSendable(sticker))
         .map((sticker) => ({
           name: sticker.name,
           description: sticker.description || "No description available",
@@ -228,7 +230,9 @@ export class StickerTool extends BaseTool {
         fuzzySuggestions = [];
 
         if (normalizedStickerName) {
-          const stickers = guild.stickers.cache.filter((sticker) => sticker.name?.trim()).map((sticker) => sticker);
+          const stickers = guild.stickers.cache
+            .filter((sticker) => isStickerSendable(sticker) && !!sticker.name?.trim())
+            .map((sticker) => sticker);
 
           const exactMatches = stickers.filter(
             (sticker) => StickerTool.normalizeStickerNameForExact(sticker.name) === normalizedStickerName,
@@ -297,7 +301,8 @@ export class StickerTool extends BaseTool {
           return best.sticker;
         } else {
           // Legacy path: select by sticker ID
-          return guild.stickers.cache.get(stickerId) ?? null;
+          const byId = guild.stickers.cache.get(stickerId) ?? null;
+          return byId && isStickerSendable(byId) ? byId : null;
         }
       };
 
@@ -350,6 +355,7 @@ export class StickerTool extends BaseTool {
       // can retry with an exact name on its next generation pass.
       const availableStickers = guild.stickers.cache;
       const availableStickerData = availableStickers
+        .filter((sticker) => isStickerSendable(sticker))
         .map((sticker) => ({
           name: sticker.name,
           description: sticker.description || "No description available",
@@ -431,6 +437,7 @@ export class StickerTool extends BaseTool {
       const availableStickers = guild.stickers.cache;
 
       return availableStickers
+        .filter((sticker) => isStickerSendable(sticker))
         .map((sticker) => ({
           id: sticker.id,
           name: sticker.name,
