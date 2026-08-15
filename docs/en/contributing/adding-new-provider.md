@@ -317,12 +317,12 @@ When adding a provider, update the user-facing setup/help copy in the same chang
 
 Minimum reminders:
 
-- update `/help api-key` provider choices in `src/commands/help/api-key.ts`
-- add localized `/help api-key` copy in both locale trees (`src/locales/en-US/` and `src/locales/ja/`)
+- update the `/help` API Keys provider catalog in `src/utils/discord/helpProviderGuides.ts`
+- add localized API Keys copy in both locale trees (`src/locales/en-US/` and `src/locales/ja/`)
 - review the `/config params` success embed strings in both locale trees
 - keep those `/config params` provider lists accurate per parameter; do not add a provider unless that exact saved setting is wired through the provider runtime
-- if the provider changes onboarding guidance, also review `/help setup`
-- if the provider changes pricing guidance or model-tag expectations, review `/help cost` and any related help text
+- if the provider changes onboarding guidance, also review the First-Time Setup page in `src/utils/discord/helpCatalog.ts`
+- if the provider changes pricing guidance or model-tag expectations, review `/tool estimate cost` and any related help text
 
 ## 9. Keep New Logic Inside the Provider Layer
 
@@ -590,7 +590,7 @@ The high-value shared pieces are:
 
 Keep these provider-owned: `providerInfo.ts`, base URL, auth header shape, API key validation strategy, provider display name/aliases, provider-specific locale namespace, request parameter policy, feature flags in `ProviderInfo.featureSupport`, optional runtime capability implementations, and provider-specific structured-output/image-generation/embedding/cost helpers that make vendor-specific HTTP requests.
 
-User-facing reminder: when adding a new provider in this family, also update `/help api-key` choices and localized provider instructions.
+User-facing reminder: when adding a new provider in this family, also update the `/help` API Keys choices and localized provider instructions.
 
 ### File Layout
 

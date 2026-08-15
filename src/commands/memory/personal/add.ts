@@ -154,7 +154,7 @@ export async function execute(
     modalComponents.push({
       customId: MEMORY_TAGS_INPUT_ID,
       labelKey: "Memory Tags",
-      descriptionKey: "Up to 5 comma-separated case-sensitive keyword or #channel tags, see '/help memory tagging set'",
+      descriptionKey: "Up to 5 comma-separated case-sensitive keyword or #channel tags; see Memory Tagging in /help",
       placeholder: "mango,drinks,snacks",
       style: TextInputStyle.Short,
       required: false,

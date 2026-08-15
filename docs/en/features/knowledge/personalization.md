@@ -131,7 +131,6 @@ target whichever persona you explicitly call. Press Finish to skip.
   off to Bob for your message chain.
 
 Review or remove entries with `/personal spotlight manage` (uncheck to remove; timed
-spotlights expire on their own). Run `/help spotlight` for the Discord summary.
-
+spotlights expire on their own). In `/help`, choose **Behavior**, then **Personal Spotlight**, for the Discord summary.
 
 

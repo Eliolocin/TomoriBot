@@ -168,7 +168,7 @@ memories activate and where. Turn it on with `/memory tagging set`.
 - If you use the document knowledge base (RAG), channel tags also apply to documents and
   extracted histories.
 
-Run `/help memory-tagging` for the same summary in Discord.
+In `/help`, choose **Memory**, then **Memory Tagging**, for the same summary in Discord.
 
 ## Short-Term Memory (STM)
 

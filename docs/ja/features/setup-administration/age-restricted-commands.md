@@ -19,4 +19,4 @@ TomoriBotは、成人向け機能（無修正の出力や特定のメディア�
 - **無修正の出力**：`/nsfw jailbreaks`は、厳しすぎる*プロバイダー側*のコンテンツフィルターに対する回避策を切り替えます（TomoriBot自体には独自の安全装置はありません）。詳細は[動作の微調整](/ja/features/chatting-personality/behavior-tweaking/#uncensored-output)をご覧ください。
 - **特定のメディア生成**：一部の画像および動画生成オプション。詳細は[メディア生成](/ja/features/capabilities/media-generation/)をご覧ください。
 
-年齢制限のあるコンテンツは成人ユーザー専用です。責任を持って利用し、Discordの[コミュニティガイドライン](https://discord.com/guidelines)に従ってください。Discord内で同じガイドを見るには、`/help nsfw`を実行してください。
+年齢制限のあるコンテンツは成人ユーザー専用です。責任を持って利用し、Discordの[コミュニティガイドライン](https://discord.com/guidelines)に従ってください。Discord内で同じガイドを見るには、`/help`の **動作** から **年齢制限コマンド** を開いてください。

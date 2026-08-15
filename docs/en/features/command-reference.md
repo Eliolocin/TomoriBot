@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **27**. Runnable slash commands: **241**.
+Top-level command groups: **27**. Runnable slash commands: **223**.
 
 ## `/bot`
 
@@ -104,29 +104,11 @@ Generate commands.
 
 ## `/help`
 
-Help commands.
+Browse setup, providers, memory, behavior, tools, media, integrations, and privacy guides.
 
 | Command | Summary |
 |---|---|
-| `/help api-key` | Learn how to set up API keys for AI providers |
-| `/help custom-endpoint` | Learn how custom endpoints work. |
-| `/help customization` | Learn how to customize TomoriBot's personality and behavior |
-| `/help data` | Learn about data management and privacy |
-| `/help deliberate-tool-mode` | Learn how deliberate tool mode changes tool availability |
-| `/help deliberate-trigger-mode` | Learn how deliberate trigger mode changes message triggering |
-| `/help features` | Shows what TomoriBot can do |
-| `/help matrix` | Learn how to set up and use the Matrix bridge |
-| `/help mcp` | Learn how to add and manage MCP tool servers |
-| `/help memory` | Learn about TomoriBot's memory system |
-| `/help memory-tagging` | Learn how memory keyword and channel tagging works |
-| `/help nsfw` | Learn how to enable age-restricted (NSFW) commands |
-| `/help personal-provider` | Learn how personal providers work. |
-| `/help setup` | Learn how to set up TomoriBot for the first time |
-| `/help speech` | Learn how speech generation works. |
-| `/help spotlight` | Learn what personal spotlight does and how to use it |
-| `/help st-preset` | Learn how SillyTavern presets behave here |
-| `/help stm` | Learn how to customize my short-term memory (server admins) |
-| `/help transcription` | Learn how audio transcription works. |
+| `/help` | Browse setup, providers, memory, behavior, tools, media, integrations, and privacy guides. |
 
 ## `/legal`
 
@@ -144,7 +126,7 @@ Manage remote MCP (Model Context Protocol) tool servers
 
 | Command | Summary |
 |---|---|
-| `/mcp add` | Register a new remote MCP server for this guild. Use /help mcp for a setup guide. |
+| `/mcp add` | Register a remote MCP server. See Integrations, then MCP, in /help. |
 | `/mcp list` | List all registered MCP servers for this guild. |
 | `/mcp remove` | Remove a registered MCP server from this guild. |
 | `/mcp toggle` | Enable or disable a registered MCP server. |
@@ -300,8 +282,8 @@ Manage your personal settings
 | `/personal provider model-vision` | Select and enable your personal vision model, used in every server. |
 | `/personal provider remove` | Remove one of your cross-server personal provider configurations. |
 | `/personal provider toggle-models` | Choose which capabilities use your personal provider instead of the server's. |
-| `/personal spotlight manage` | Remove your active personal spotlights. Use /help spotlight to learn more. |
-| `/personal spotlight set` | Set a personal persona spotlight for one channel. Use /help spotlight to learn more. |
+| `/personal spotlight manage` | Remove your active personal spotlights. See Personal Spotlight in /help. |
+| `/personal spotlight set` | Set a personal persona spotlight for one channel. See Personal Spotlight in /help. |
 | `/personal stm` | Configure STM (short-term memory) settings |
 | `/personal timezone` | Set your personal timezone offset from UTC. |
 
@@ -392,11 +374,11 @@ Manage speech voices and samples.
 
 ## `/st-preset`
 
-Manage SillyTavern presets. Use /help st-preset.
+Manage SillyTavern presets. See SillyTavern Presets in /help.
 
 | Command | Summary |
 |---|---|
-| `/st-preset import` | Import a SillyTavern preset JSON file. Use /help st-preset. |
+| `/st-preset import` | Import a SillyTavern preset JSON file. See SillyTavern Presets in /help. |
 | `/st-preset node toggle` | Toggle preset prompt nodes on or off |
 | `/st-preset remove` | Remove imported SillyTavern presets |
 | `/st-preset switch` | Switch the active SillyTavern preset |

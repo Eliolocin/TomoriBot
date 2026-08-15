@@ -2,7 +2,7 @@ export default {
   mcp: {
     description: `Manage remote MCP (Model Context Protocol) tool servers`,
     add: {
-      description: `Register a new remote MCP server for this guild. Use /help mcp for a setup guide.`,
+      description: `Register a remote MCP server. See Integrations, then MCP, in /help.`,
       modal_title: `Add MCP Server`,
       name_label: `Server Name`,
       name_placeholder: `my-mcp-server`,

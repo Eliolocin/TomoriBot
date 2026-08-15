@@ -26,5 +26,5 @@ If a command is restricted and the channel isn't marked NSFW, it simply won't ap
   [Media Generation](/features/capabilities/media-generation/).
 
 Age-restricted content is for adult users only — use responsibly and follow Discord's
-[Community Guidelines](https://discord.com/guidelines). Run `/help nsfw` for the same
+[Community Guidelines](https://discord.com/guidelines). In `/help`, choose **Behavior**, then **Age-Restricted Commands**, for the same
 walkthrough in Discord.

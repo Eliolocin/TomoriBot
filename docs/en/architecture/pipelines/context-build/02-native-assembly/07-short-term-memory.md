@@ -316,7 +316,7 @@ After this stage runs:
 | `/persona stm edit` | Hand-edit live STM for a persona in the current channel (Manage Server) |
 | `/persona stm view` | Read-only inspect the live STM for a persona in the current channel (open to all members) |
 | `/capabilities manage` | "Short-Term Memory" toggle — turns OFF the bot's automatic STM management (write tool + cadence nudge) while leaving STM content visible |
-| `/help stm` | In-Discord guide to the STM customization surface |
+| `/help`, then Memory and Short-Term Memory | In-Discord guide to the STM customization surface |
 
 > **Disabling STM:** the `short_term_memory_enabled` capability flag
 > (`server_capabilities_configs`, migration 054, default `true`) controls the bot's

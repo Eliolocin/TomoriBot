@@ -34,7 +34,7 @@ This is distinct from [SillyTavern Card Import](/architecture/integrations/silly
 
 ## Commands
 
-For a user-facing explanation of behavior, surprises, and limitations in SillyTavern terms, use `/help st-preset`.
+For a user-facing explanation of behavior, surprises, and limitations in SillyTavern terms, open `/help`, choose **Integrations**, then **SillyTavern Presets**.
 
 ### `/st-preset import`
 

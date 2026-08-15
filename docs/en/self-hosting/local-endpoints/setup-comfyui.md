@@ -12,7 +12,7 @@ ComfyUI's `/history` endpoint until the output is ready.
 
 This guide covers installing/running ComfyUI and registering it. For **authoring or editing**
 a TomoriBot-compatible workflow (the `{TOMORI_*}` placeholders), use the in-Discord deep
-dive: `/help custom-endpoint endpoint:comfyui` (4 pages), plus the
+dive, open `/help`, choose **Providers**, then **Custom Endpoints**, and use the
 [workflow README](https://github.com/Bredrumb/TomoriBot/tree/main/assets/comfyui-workflows)
 on GitHub.
 
@@ -81,7 +81,7 @@ Download a ready-to-use **API-format** workflow. Examples can be found in the re
 These are **API format** (the JSON ComfyUI exports via *Save (API Format)*), not the regular
 UI-save format. If you author your own, it must contain the `{TOMORI_*}` placeholders
 TomoriBot substitutes (prompt, width/height, seed, reference images, etc.). See the workflow
-README and `/help custom-endpoint endpoint:comfyui`.
+README and the **Custom Endpoints** page under **Providers** in `/help`.
 
 ## 3. Register it in Discord
 

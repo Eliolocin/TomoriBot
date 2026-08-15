@@ -11,6 +11,7 @@ import {
   type CommandCooldownMap,
 } from "../../utils/discord/commandLoader";
 import { resolvePreferredDiscordDisplayName } from "../../utils/discord/displayName";
+import { dispatchGlobalInteraction, isGlobalRoutableInteraction } from "@/utils/discord/interactions/router";
 
 // Define constants at the top (Rule #20)
 const DEFAULT_COOLDOWN = Number.parseInt(process.env.DEFAULT_COMMAND_COOLDOWN || "1600", 10); // Default cooldown for all commands in milliseconds
@@ -48,18 +49,32 @@ async function setCooldown(userId: string, category: string, duration: number): 
 }
 
 const handler = async (client: Client, interaction: Interaction): Promise<void> => {
-  if (!interaction.isChatInputCommand()) return;
+  if (interaction.isChatInputCommand()) {
+    await runWithErrorContext(
+      {
+        source: "command",
+        sourceDetail: interaction.commandName,
+        userDiscId: interaction.user.id,
+        serverDiscId: interaction.guildId,
+        channelDiscId: interaction.channelId,
+      },
+      () => runChatInputCommand(client, interaction),
+    );
+    return;
+  }
 
-  await runWithErrorContext(
-    {
-      source: "command",
-      sourceDetail: interaction.commandName,
-      userDiscId: interaction.user.id,
-      serverDiscId: interaction.guildId,
-      channelDiscId: interaction.channelId,
-    },
-    () => runChatInputCommand(client, interaction),
-  );
+  if (isGlobalRoutableInteraction(interaction)) {
+    await runWithErrorContext(
+      {
+        source: "interaction",
+        sourceDetail: interaction.customId,
+        userDiscId: interaction.user.id,
+        serverDiscId: interaction.guildId,
+        channelDiscId: interaction.channelId,
+      },
+      () => dispatchGlobalInteraction(client, interaction),
+    );
+  }
 };
 
 const runChatInputCommand = async (client: Client, interaction: ChatInputCommandInteraction): Promise<void> => {

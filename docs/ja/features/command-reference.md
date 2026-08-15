@@ -11,7 +11,7 @@ sidebar:
 
 TomoriBotによって現在登録されているすべてのスラッシュコマンドです。Discordの登録に使用されるものと同じコマンドビルダーと英語ロケールの説明から生成されています。
 
-最上位のコマンドグループ：**27**。実行可能なスラッシュコマンド：**231**。
+最上位のコマンドグループ：**27**。実行可能なスラッシュコマンド：**223**。
 
 ## `/bot`
 
@@ -104,28 +104,11 @@ Botコマンドです。
 
 ## `/help`
 
-ヘルプコマンドです。
+セットアップ、プロバイダー、メモリ、動作、ツール、メディア、連携、プライバシーのガイドを表示します。
 
 | コマンド | 概要 |
 |---|---|
-| `/help api-key` | AIプロバイダーのAPIキーの設定方法について学びます。 |
-| `/help custom-endpoint` | カスタムエンドポイントの仕組みについて学びます。 |
-| `/help customization` | TomoriBotの性格と行動をカスタマイズする方法について学びます。 |
-| `/help data` | データ管理とプライバシーについて学びます。 |
-| `/help deliberate-tool-mode` | 意図的なツールモードがツールの可用性をどのように変更するかについて学びます。 |
-| `/help deliberate-trigger-mode` | 意図的なトリガーモードがメッセージのトリガーをどのように変更するかについて学びます。 |
-| `/help features` | TomoriBotができることを表示します。 |
-| `/help matrix` | Matrixブリッジのセットアップと使用方法について学びます。 |
-| `/help mcp` | MCPツールサーバーの追加と管理方法について学びます。 |
-| `/help memory` | TomoriBotのメモリーシステムについて学びます。 |
-| `/help memory-tagging` | メモリーのキーワードおよびチャンネルタグ付けの仕組みについて学びます。 |
-| `/help nsfw` | 年齢制限（NSFW）コマンドを有効にする方法について学びます。 |
-| `/help personal-provider` | 個人プロバイダーの仕組みについて学びます。 |
-| `/help setup` | TomoriBotの初回セットアップ方法について学びます。 |
-| `/help speech` | 音声生成の仕組みについて学びます。 |
-| `/help spotlight` | 個人スポットライトの機能と使用方法について学びます。 |
-| `/help st-preset` | SillyTavernのプリセットがここでどのように機能するかについて学びます。 |
-| `/help transcription` | 音声の文字起こしの仕組みについて学びます。 |
+| `/help` | セットアップ、プロバイダー、メモリ、動作、ツール、メディア、連携、プライバシーのガイドを表示します。 |
 
 ## `/legal`
 
@@ -143,7 +126,7 @@ Botコマンドです。
 
 | コマンド | 概要 |
 |---|---|
-| `/mcp add` | このサーバー用の新しいリモートMCPサーバーを登録します。セットアップガイドについては`/help mcp`を使用してください。 |
+| `/mcp add` | リモートMCPサーバーを登録します。`/help`の連携からMCPを開いてください。 |
 | `/mcp list` | このサーバーに登録されているすべてのMCPサーバーを一覧表示します。 |
 | `/mcp remove` | 登録されたMCPサーバーをこのサーバーから削除します。 |
 | `/mcp toggle` | 登録されたMCPサーバーを有効または無効にします。 |
@@ -293,8 +276,8 @@ OpenRouter固有のモデルと設定を管理します。
 | `/personal provider model-vision` | 全サーバーで使う個人ビジョンモデルを選択して有効化します。 |
 | `/personal provider remove` | 全サーバー共通の個人プロバイダー設定を削除します。 |
 | `/personal provider toggle-models` | どの機能でサーバー既定ではなく個人プロバイダーを使うか選択します。 |
-| `/personal spotlight manage` | アクティブな個人スポットライトを削除します。詳細については`/help spotlight`を使用してください。 |
-| `/personal spotlight set` | 1つのチャンネルに個人のペルソナスポットライトを設定します。詳細については`/help spotlight`を使用してください。 |
+| `/personal spotlight manage` | アクティブな個人スポットライトを削除します。詳細は`/help`の個人スポットライトを確認してください。 |
+| `/personal spotlight set` | 1つのチャンネルに個人のペルソナスポットライトを設定します。詳細は`/help`の個人スポットライトを確認してください。 |
 | `/personal stm` | STM（短期記憶）設定を構成します。 |
 | `/personal timezone` | 個人のUTCからのタイムゾーンオフセットを設定します。 |
 
@@ -382,11 +365,11 @@ OpenRouter固有のモデルと設定を管理します。
 
 ## `/st-preset`
 
-SillyTavernのプリセットを管理します。`/help st-preset`を使用してください。
+SillyTavernのプリセットを管理します。詳細は`/help`の連携からSillyTavernプリセットを開いてください。
 
 | コマンド | 概要 |
 |---|---|
-| `/st-preset import` | SillyTavernのプリセットJSONファイルをインポートします。`/help st-preset`を使用してください。 |
+| `/st-preset import` | SillyTavernのプリセットJSONファイルをインポートします。詳細は`/help`のSillyTavernプリセットを確認してください。 |
 | `/st-preset node toggle` | プリセットのプロンプトノードのオン/オフを切り替えます。 |
 | `/st-preset remove` | インポートされたSillyTavernのプリセットを削除します。 |
 | `/st-preset switch` | アクティブなSillyTavernプリセットを切り替えます。 |

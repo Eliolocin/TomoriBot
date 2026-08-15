@@ -123,7 +123,7 @@ Here are past things Tomori did that got punished for. Avoid doing them again:
 - チャンネルタグはキーワードタグと組み合わせることができます。
 - ドキュメント知識ベース（RAG）を使用している場合、チャンネルタグはドキュメントや抽出された履歴にも適用されます。
 
-Discordで `/help memory-tagging` を実行すると、同じ概要を確認できます。
+Discordでは `/help` の **メモリ** から **メモリタグ** を開くと、同じ概要を確認できます。
 
 <a id="short-term-memory-stm"></a>
 

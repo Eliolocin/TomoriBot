@@ -1,5 +1,57 @@
 ﻿export default {
   help: {
+    description: `Browse setup, providers, memory, behavior, tools, media, integrations, and privacy guides.`,
+    dashboard: {
+      categories: {
+        setup: `Setup`,
+        providers: `Providers`,
+        memory: `Memory`,
+        behavior: `Behavior`,
+        integrations: `Integrations`,
+      },
+      pages: {
+        first_time_setup: `First-Time Setup`,
+        features: `Features`,
+        data_privacy: `Data and Privacy`,
+        api_keys: `API Keys`,
+        personal_providers: `Personal Providers`,
+        custom_endpoints: `Custom Endpoints`,
+        speech: `Speech`,
+        transcription: `Transcription`,
+        persistent_memory: `Persistent Memory`,
+        short_term_memory: `Short-Term Memory`,
+        memory_tagging: `Memory Tagging`,
+        customization: `Customization`,
+        personal_spotlight: `Personal Spotlight`,
+        deliberate_trigger_mode: `Deliberate Trigger Mode`,
+        deliberate_tool_mode: `Deliberate Tool Mode`,
+        age_restricted_commands: `Age-Restricted Commands`,
+        matrix: `Matrix`,
+        mcp: `MCP`,
+        sillytavern_presets: `SillyTavern Presets`,
+      },
+      page_reference: `the **{page}** page in \`/help\``,
+      page_select_placeholder: `Choose a page`,
+      guide_select_placeholder: `Choose a guide`,
+      provider_select_placeholder: `Choose a provider to view API key instructions`,
+      previous_button: `Previous`,
+      next_button: `Next`,
+      docs_link_label: `Read the full documentation`,
+      support_link_label: `Visit the Discord support server for further questions`,
+      variants: {
+        overview: `Overview`,
+        chatterbox: `Chatterbox-Turbo`,
+        qwen3tts: `Qwen3-TTS`,
+        irodoritts: `IrodoriTTS`,
+        elevenlabs: `ElevenLabs`,
+        whisperx: `WhisperX`,
+        koboldcpp: `KoboldCPP`,
+      },
+      api_keys: {
+        title: `Provider API Keys`,
+        description: `Choose a provider below to open its API key guide. Closing the guide returns you to this help panel.`,
+      },
+    },
     "personal-provider": {
       description: `Learn how personal providers work.`,
       title: `Personal Providers`,
@@ -83,11 +135,7 @@
 
 ElevenLabs: run {elevenlabs}, then use {voice_assign} later for more personas.
 
-**Per-engine setup guides:**
-• Chatterbox-Turbo → \`/help speech engine:Chatterbox-Turbo\`
-• Qwen3-TTS → \`/help speech engine:Qwen3-TTS\`
-• IrodoriTTS → \`/help speech engine:IrodoriTTS\`
-• ElevenLabs → \`/help speech engine:ElevenLabs\``,
+**Per-engine setup guides:** See the full TTS documentation linked at the bottom of the Speech page.`,
       },
       chatterbox: {
         title: `Chatterbox-Turbo Speech`,
@@ -158,10 +206,7 @@ Linux/macOS: \`bash install-irodori.sh\`
         steps_title: `Recommended Path`,
         steps_description: `Start with WhisperX: follow the local STT setup guide, register it with {custom_endpoint_add}, then select it with {model_transcription}. ElevenLabs users can run {elevenlabs}.
 
-**Per-engine setup guides:**
-• WhisperX → \`/help transcription engine:WhisperX\`
-• KoboldCPP → \`/help transcription engine:KoboldCPP\`
-• ElevenLabs → \`/help transcription engine:ElevenLabs\``,
+**Per-engine setup guides:** See the full STT documentation linked at the bottom of the Transcription page.`,
       },
       whisperx: {
         title: `WhisperX Transcription`,
@@ -235,7 +280,7 @@ Transcription supports ~100 languages (auto-detected).`,
 - Multiple characters can coexist as alter personas, each with their own triggers and webhook avatar
 - My behavior and tone can be tweaked with \`/persona attribute add\`, \`/persona sample-dialogue add\`, and \`/persona prompt set\`
 - A custom system prompt can be set with \`/config system-prompt\` to further shape my behavior
-- Learn more with \`/help customization\``,
+- Learn more on the **Customization** page in \`/help\``,
       memory_title: `Memory & Personalization`,
       memory_description: `- I can remember personal facts about you and server-wide information, persisting across conversations
 - Personal memories persist across servers (try talking to me in another server!)
@@ -244,7 +289,7 @@ Transcription supports ~100 languages (auto-detected).`,
 - Use \`/memory\` and \`/persona\` commands to manually add or remove memories and persona data
 - I can use server emojis and stickers more accurately after registration with \`/server expressions initialize\`
 - Full invisibility is available via \`/personal privacy\` if you want to be completely unseen by me
-- Learn more with \`/help memory\``,
+- Learn more on the **Persistent Memory** page in \`/help\``,
       time_title: `Time Awareness`,
       time_description: `- I know what time it currently is in the server (via \`/server timezone\`)
 - I can set up reminders for you (try asking me to remind you about something!)
@@ -418,7 +463,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
       embed1_system_prompt_description: `- While a preset is active, the built-in fallback system prompt is removed
 - If you set your own system prompt with {configSystemPromptSet}, it is still sent
 - In ST terms, the preset owns the layout, not every source of prompt text`,
-      embed1_footer: `Use /help st-preset again anytime after importing a preset`,
+      embed1_footer: `Return to the SillyTavern Presets page in /help anytime after importing a preset`,
       embed2_title: `Limits And Compatibility (Page 1)`,
       embed2_description: `These are the main reasons a preset author thinks something was ignored or moved.
 - Imported does not always mean sent: nodes disabled in \`prompt_order\` stay off until you enable them with {stPresetToggle}
@@ -475,7 +520,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
       brave_important_description: `- This is separate from your main AI provider
 - Without Brave API key, I can still function and use built-in web search
 - Brave includes $5 in free monthly credits, but usage above that can be billed. If you only want the free tier, set a $5 usage limit in the [Brave usage limits dashboard](https://api-dashboard.search.brave.com/app/subscriptions/usage-limits)`,
-      brave_footer: `For setting up your main AI provider, use the other \`/help api-key\` options`,
+      brave_footer: `For your main AI provider, choose another provider from the API Keys page in \`/help\``,
       google_title: `Setting Up Google Gemini API Key`,
       google_description: `Google Gemini offers free and paid tiers with powerful AI models.
 - Free tier available

@@ -2,7 +2,7 @@ export default {
   mcp: {
     description: `リモートMCP（Model Context Protocol）ツールサーバーを管理`,
     add: {
-      description: `このギルドに新しいリモートMCPサーバーを登録します。/help mcp でセットアップガイドを確認できます。`,
+      description: `このギルドにリモートMCPサーバーを登録します。/help の連携からMCPを開いてください。`,
       modal_title: `MCPサーバーを追加`,
       name_label: `サーバー名`,
       name_placeholder: `my-mcp-server`,

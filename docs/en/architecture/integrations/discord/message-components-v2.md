@@ -741,6 +741,17 @@ Implementation notes:
 - Image delivery should fall back to the legacy `files`-only payload if the Components V2 send fails.
 - Re-fetching a generated image by message/media ID (for image-to-image, inpaint, or vision analysis) must scan `message.components` for `MediaGallery`/`Thumbnail`/`File` media, not just top-level attachments/embeds — the generated file is referenced only inside the component. This discovery is centralized in `collectImageUrlsFromMessage` (`src/utils/image/imageExtractor.ts`), which reuses `appendComponentMediaFromMessage` from `src/utils/chat/contextMedia.ts`. `generate_image`, `generate_image_nai`, and `analyze_image` all go through it, so a Components V2 image found in context can also be reloaded by any tool that accepts a media reference.
 
+### Persistent panels and bounded workflows
+
+Components V2 does not determine interaction lifetime. TomoriBot supports two ownership models:
+
+- Bounded anchor workflows use collectors and deliberately reach a timeout or terminal state.
+- Persistent panels use the versioned global interaction router, so each click or select is handled as a new `interactionCreate` event without an invocation-owned collector.
+
+The `/help` panel is the first persistent panel. Its five category buttons, page select, navigation buttons, and provider modal IDs use the `help:v1:*` namespace and carry the panel locale as harmless render state. The original message stays Components V2 for every repaint. The API Keys provider select acknowledges its interaction only with `showModal()`, never with a preceding defer. Submitting the text-only modal receives a silent `deferUpdate()`; dismissing it emits no event and requires no cleanup.
+
+Persistent routing does not make Discord messages permanent. Message deletion, access changes, and client presentation remain outside the router's control. It only removes TomoriBot's in-memory collector timeout as the control-lifetime boundary.
+
 ### Anchor message workflow: one message
 
 A same-visibility anchor workflow is one ephemeral Components V2 message for its complete

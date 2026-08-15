@@ -87,5 +87,5 @@ Common surprises when a preset seems ignored:
   are not supported. Legacy text-completion presets import through a best-effort path that
   drops ST-only blocks (scenario, anchors, stop strings, …).
 
-Run `/help st-preset` for the full in-Discord reference. For the import engine internals, see
+In `/help`, choose **Integrations**, then **SillyTavern Presets**, for the in-Discord reference. For the import engine internals, see
 the [preset-system architecture](/architecture/integrations/sillytavern/preset-system/).

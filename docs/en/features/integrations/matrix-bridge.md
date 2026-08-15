@@ -48,4 +48,4 @@ In most Matrix clients: **Room Settings → Advanced → Internal Room ID**. It 
 - If a limitation isn't listed above, assume it should work and report bugs in the support
   server (`/support discord`).
 
-Run `/help matrix` for the same guide in Discord.
+In `/help`, choose **Integrations**, then **Matrix**, for the same guide in Discord.

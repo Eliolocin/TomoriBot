@@ -63,7 +63,7 @@ Updated dependent selections:
         provider_description: `Choose the AI provider for your API key`,
         provider_placeholder: `Select a provider...`,
         api_key_label: `API Key or Endpoint URL`,
-        api_key_description: `This key will be securely stored. Use the '/help api-key' command for instructions in getting one.`,
+        api_key_description: `This key will be securely stored. Open /help to Providers, then API Keys, for instructions.`,
         api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
         api_key_placeholder: `Do NOT share this key with anyone`,
         bearer_token_label: `Bearer Token (Optional)`,

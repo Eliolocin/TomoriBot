@@ -421,7 +421,7 @@ You can change this anytime using \`/personal privacy\`.`,
     spotlight: {
       description: `Manage your personal persona spotlight settings.`,
       set: {
-        description: `Set a personal persona spotlight for one channel. Use /help spotlight to learn more.`,
+        description: `Set a personal persona spotlight for one channel. See Personal Spotlight in /help.`,
         hours_description: `How long the spotlight should last. Use 0 to keep it until removed.`,
         channel_description: `The channel where this personal spotlight should apply.`,
         modal_title: `Set Personal Spotlight`,
@@ -457,7 +457,7 @@ You can change this anytime using \`/personal privacy\`.`,
         more_personas: `and {count} more`,
       },
       manage: {
-        description: `Remove your active personal spotlights. Use /help spotlight to learn more.`,
+        description: `Remove your active personal spotlights. See Personal Spotlight in /help.`,
         none_title: `No Personal Spotlights`,
         none_description: `You don't have any active personal spotlights in this server.`,
         too_many_title: `Too Many Personal Spotlights`,

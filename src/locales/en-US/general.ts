@@ -99,7 +99,7 @@
       channel_not_supported_title: `Unsupported Channel Type`,
       channel_not_supported_description: `Sorry, I can only work in server text channels or Direct Messages. Group DMs and other channel types are not supported.`,
       tomori_not_setup_title: `Initial Setup Required`,
-      tomori_not_setup_description: `This server still needs initial setup. A member with **Manage Server** permission should run \`/config setup\` first. Use \`/help setup\` or https://docs.tomoribot.app/en/introduction/quickstart/ for the short guide.`,
+      tomori_not_setup_description: `This server still needs initial setup. A member with **Manage Server** permission should run \`/config setup\` first. Open \`/help\` to **Setup**, then **First-Time Setup**, or read https://docs.tomoribot.app/en/introduction/quickstart/ for the short guide.`,
       tomori_updating_title: `Currently Updating...`,
       tomori_updating_description: `I'm currently being updated and will be back shortly. Please try again in a few moments!`,
       tomori_not_setup_dm_footer: `DMs use a private setup, so most server-style settings still apply.`,
@@ -108,7 +108,7 @@
       api_key_error_title: `API Key Error`,
       api_key_error_description: `There was an issue accessing or decrypting the configured provider credentials. Please reconfigure them using \`/provider add\`.`,
       personal_provider_required_title: `Personal Provider Required`,
-      personal_provider_required_description: `This server is using member-provided AI access for user-triggered messages. Run \`/help personal-provider\` and then \`/personal provider add\` to set up your own provider.`,
+      personal_provider_required_description: `This server is using member-provided AI access for user-triggered messages. Open \`/help\` to **Providers**, then **Personal Providers**, and run \`/personal provider add\` to set up your own provider.`,
       personal_provider_credentials_error_title: `Personal Provider Error`,
       personal_provider_credentials_error_description: `Your enabled personal provider could not be used. Update it with \`/personal provider add\` or disable it with \`/personal provider toggle-models\`.`,
       context_error_title: `Context Building Error`,
@@ -133,13 +133,13 @@
         missing_key: {
           title: `Brave API Key Missing`,
           description: `I need a Brave Search API key to perform searches, but one hasn't been configured for this server. A server member with \`Manage Server\` permissions can set one using \`/optional-key brave set\`.`,
-          footer: `Learn how using /help api-key`,
+          footer: `Open /help to Providers, then API Keys`,
         },
       },
       duckduckgo_rate_limit: {
         title: `DuckDuckGo Rate Limited`,
         description: `DuckDuckGo search is currently rate limited. For more reliable searching, a server member with \`Manage Server\` permissions can set up Brave Search using \`/optional-key brave set\`.`,
-        footer: `Learn how using /help api-key`,
+        footer: `Open /help to Providers, then API Keys`,
       },
       searxng_unreachable: {
         title: `SearXNG Unreachable`,
@@ -195,9 +195,9 @@
       rejoin_title: `I'm Back!`,
       rejoin_description: `Looks like I was re-added to this server. Existing settings and personas are still intact. Use \`/config\`, \`/persona\`, \`/memory\`, \`/server\`, and \`/provider add\` to review or change them.{legalNotice}`,
       setup_prompt_title: `Successfully Added`,
-      setup_prompt_description: `Thanks for adding me. To start, someone with **Manage Server** permission should run \`/config setup\` to choose the initial persona and provider. Use \`/help setup\` or read the official [short guide](https://docs.tomoribot.app/en/introduction/quickstart/).
+      setup_prompt_description: `Thanks for adding me. To start, someone with **Manage Server** permission should run \`/config setup\` to choose the initial persona and provider. Open \`/help\` to **Setup**, then **First-Time Setup**, or read the official [short guide](https://docs.tomoribot.app/en/introduction/quickstart/).
 
-Use \`/help api-key\` if you need provider key instructions.{legalNotice}`,
+For provider key instructions, open \`/help\` to **Providers**, then **API Keys**.{legalNotice}`,
     },
   },
   reminders: {

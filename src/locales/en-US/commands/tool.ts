@@ -59,7 +59,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Keep memories concise
 - Use free AI providers (Google Gemini free tier)
 - Limit auto-trigger channels`,
-        footer: `Free providers like Google Gemini (free tier) and some OpenRouter models have no cost! NovelAI offers unlimited usage with a subscription. Use \`/help api-key\` to learn more.`,
+        footer: `Free providers like Google Gemini (free tier) and some OpenRouter models have no cost! NovelAI offers unlimited usage with a subscription. Open \`/help\` to Providers, then API Keys, to learn more.`,
       },
     },
     compact: {

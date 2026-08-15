@@ -83,7 +83,7 @@ export async function sendMatrixInviteSetupNotice(roomId: string): Promise<void>
     roomId,
     localizer("en-US", "matrix.notices.invited", {
       link_command: "/server matrix link",
-      help_command: "/help matrix",
+      help_command: "/help",
       room_id_path: "Room Settings -> Advanced -> Internal Room ID",
       kill_command: "/kill",
       refresh_command: "/refresh",
@@ -96,7 +96,7 @@ export async function sendMatrixLinkedSetupNotice(roomId: string, locale: string
     roomId,
     localizer(locale, "matrix.notices.linked", {
       channel_name: `#${channelName}`,
-      help_command: "/help matrix",
+      help_command: "/help",
       kill_command: "/kill",
       refresh_command: "/refresh",
     }),

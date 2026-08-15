@@ -94,7 +94,7 @@ This forces deliberate invocation instead of accidental activation.
   - **follow** — use the server setting
   - **on** — always require deliberate invocation
 
-Run `/help deliberate-trigger-mode` for the same summary in Discord.
+In `/help`, choose **Behavior**, then **Deliberate Trigger Mode**, for the same summary in Discord.
 
 :::note
 Don't confuse **Deliberate Trigger Mode** (this page — controls *how she's triggered*) with
@@ -102,4 +102,3 @@ Don't confuse **Deliberate Trigger Mode** (this page — controls *how she's tri
 turn. They share the "DTM" abbreviation but are unrelated. See
 [Tools & Extensions](/features/capabilities/tools-and-extensions/#deliberate-tool-mode).
 :::
-

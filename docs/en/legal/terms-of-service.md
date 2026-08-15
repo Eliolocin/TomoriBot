@@ -42,7 +42,7 @@ For clarity, these terms are used throughout this document:
   - Keys shared in violation of the provider's terms of service
 - You assume all legal responsibility for the legitimacy of API keys you provide.
 - We will only use your API keys to process your explicit interactions with TomoriBot. We do not pool API keys, use your keys to process other users' requests, or use them for testing, development, analytics, or any purpose other than fulfilling you and your server members' direct requests to TomoriBot.
-- You are responsible for all provider-side costs and account usage caused by each TomoriBot Trigger associated with your API key. Monitor your API key dashboards for usage and billing. The `/help cost` command provides a rough estimate of per-trigger costs.
+- You are responsible for all provider-side costs and account usage caused by each TomoriBot Trigger associated with your API key. Monitor your API key dashboards for usage and billing. The `/tool estimate cost` command provides a rough estimate of per-trigger costs.
 - We recommend using API keys with minimal required permissions and considering using provider-specific rate limits and spending caps where available.
 
 ## 6) Data Handling

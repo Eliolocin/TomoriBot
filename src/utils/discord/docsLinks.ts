@@ -3,6 +3,8 @@ import { localizer } from "@/utils/text/localizer";
 
 const DOCS_BASE_URL = "https://docs.tomoribot.app";
 
+export const SUPPORT_SERVER_URL = "https://discord.gg/bjCfHm9QsB";
+
 export const DOCS_PATHS = {
   QUICKSTART: "/introduction/quickstart/",
   FEATURES: "/features/",
@@ -11,6 +13,7 @@ export const DOCS_PATHS = {
   MULTIPLE_PERSONAS: "/features/chatting-personality/multiple-personas/",
   BEHAVIOR_TWEAKING: "/features/chatting-personality/behavior-tweaking/",
   MEMORY: "/features/knowledge/memory/",
+  SHORT_TERM_MEMORY: "/features/knowledge/memory/#short-term-memory-stm",
   MEMORY_TAGGING: "/features/knowledge/memory/#tagging",
   DATA_HANDLING: "/features/knowledge/data-handling/",
   PERSONALIZATION: "/features/knowledge/personalization/",
@@ -43,7 +46,7 @@ export const DOCS_PATHS = {
 
 export type DocsPath = (typeof DOCS_PATHS)[keyof typeof DOCS_PATHS] | string;
 
-function buildDocsUrl(path: DocsPath): string {
+export function buildDocsUrl(path: DocsPath): string {
   if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }

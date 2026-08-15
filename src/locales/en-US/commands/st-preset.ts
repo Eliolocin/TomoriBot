@@ -1,8 +1,8 @@
 export default {
   "st-preset": {
-    description: `Manage SillyTavern presets. Use /help st-preset.`,
+    description: `Manage SillyTavern presets. See SillyTavern Presets in /help.`,
     import: {
-      description: `Import a SillyTavern preset JSON file. Use /help st-preset.`,
+      description: `Import a SillyTavern preset JSON file. See SillyTavern Presets in /help.`,
       file_description: `The SillyTavern preset .json file to import`,
       invalid_file_title: `Invalid File`,
       file_too_large_title: `File Too Large`,

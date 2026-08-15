@@ -13,9 +13,10 @@ Flow:
 
 1. `loadCommandData()` scans command folders and top-level command files.
 2. Command metadata is built into `SlashCommandBuilder` trees.
-3. `handleCommands.ts` resolves a root command, or category + group + subcommand.
-4. Category cooldown is checked/set in `cooldowns` table (`COMMAND_CATEGORY`).
-5. Target `execute()` is called with `(client, interaction, userData, locale)`.
+3. `handleCommands.ts` classifies chat-input commands and globally routed component or modal interactions.
+4. For a chat-input command, it resolves a root command, or category + group + subcommand.
+5. Category cooldown is checked/set in `cooldowns` table (`COMMAND_CATEGORY`).
+6. Target `execute()` is called with `(client, interaction, userData, locale)`.
 
 `commandLoader.ts` is an ESM-only loader. It uses async directory reads while building slash-command registration data and dynamically imports command modules so command files can use top-level await. Do not add `require`, `module.exports`, or synchronous directory traversal to command discovery.
 
@@ -45,11 +46,31 @@ Command files import Discord UI helpers from responsibility-owned modules:
 - `src/utils/discord/ui/statusComponents.ts` - Components V2 status replies and status-page pagination
 - `src/utils/discord/ui/pagination.ts` - generic choice pagination
 - `src/utils/discord/ui/personaWorkflow.ts` - command-facing persona picker lifecycle, acknowledgment phases, and anchor-message controller
+- `src/utils/discord/ui/helpDashboard.ts` - the persistent Components V2 `/help` dashboard and provider information modals
 
 The low-level persona renderer remains private to `interactionCore.ts` and
 `personaWorkflow.ts`; it has no command-facing barrel or compatibility export.
 
 `src/utils/discord/interactionHelper.ts` remains only as the subsystem compatibility barrel. New command code should import from the owned module that matches the helper it uses.
+
+### Globally routed persistent interactions
+
+Collector-owned workflows and globally routed panels solve different lifecycle problems:
+
+- A collector-owned workflow is a bounded command session. Its command invocation owns the collector, timeout, and terminal repaint.
+- A globally routed panel handles every matching button, select, or modal submission as a fresh `interactionCreate` event. It does not depend on the original command process or an in-memory collector remaining alive.
+
+The reusable global path is intentionally small:
+
+- `src/utils/discord/interactions/routeRegistry.ts` parses versioned custom IDs and dispatches an exact namespace/version route.
+- `src/utils/discord/interactions/router.ts` owns the registered route list and defensive error response.
+- Feature routes, such as `src/utils/discord/interactions/helpRoutes.ts`, validate their own action and state segments.
+
+Only IDs registered in this path are consumed. Unmatched component interactions return to the existing collector-owned behavior unchanged. Custom IDs must include a namespace and version, such as `help:v1:page:en-US:memory`, so incompatible future state can use a new version without silently changing old messages. Persistent help IDs also carry the panel locale so later interactions preserve the language selected by the slash-command dispatcher without another database read before `showModal()`.
+
+`/help` is the pilot. `src/commands/help.ts` sends one ephemeral Components V2 panel, while `src/utils/discord/helpCatalog.ts` owns its five categories and 19 pages. Category buttons, the page select, and Previous/Next controls repaint that message through fresh interactions. The API Keys page opens a text-only provider modal. Discord emits no interaction when a modal is dismissed, so dismissal leaves the underlying help message unchanged and its globally routed controls available for a later click. The exact way a Discord client returns focus to that message is client behavior and is not guaranteed by the bot.
+
+Do not move existing collectors to the global path merely because the registry exists. Use global routing only when the message is intended to outlive a bounded command session and every interaction can reconstruct its state from the custom ID plus durable data. Continue to use the anchor workflow for multi-step writes, validation, permissions, and cache invalidation that belong to one command session.
 
 ## Webhook Helper Layout
 

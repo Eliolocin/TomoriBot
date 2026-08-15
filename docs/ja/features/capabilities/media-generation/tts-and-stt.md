@@ -30,7 +30,7 @@ TomoriBotは、**話す**（テキスト読み上げ、TTS）ことと、**聞�
 - 音声メッセージの生成や読み上げ時には文字数がカウントされます。無料プランには月ごとの制限がありますので、ElevenLabsのダッシュボードを確認してください。
 - 音声での返信は`voice_message_enabled`によって制限されており、アクティブなペルソナに音声が割り当てられている必要があります。
 
-Discord上で同じ手順を確認するには、`/help speech`を実行してください。
+Discord上で同じ手順を確認するには、`/help`の **プロバイダー** から **音声生成** を開いてください。
 
 ### ローカルの音声クローンエンジン（セルフホスト）
 
@@ -59,4 +59,4 @@ Discord上で同じ手順を確認するには、`/help speech`を実行して�
 - [KoboldCPP](/ja/self-hosting/local-endpoints/speech-to-text/koboldcpp/)：ご使用のビルドがOpenAI互換の文字起こしエンドポイントを公開している場合に機能します。
 - [whisper.cpp](/ja/self-hosting/local-endpoints/speech-to-text/whispercpp/)。
 
-一覧については、[音声認識（STT）](/ja/self-hosting/local-endpoints/speech-to-text/)ハブをご覧ください。Discordでの概要を確認するには、`/help transcription`を実行してください。
+一覧については、[音声認識（STT）](/ja/self-hosting/local-endpoints/speech-to-text/)ハブをご覧ください。Discordでの概要を確認するには、`/help`の **プロバイダー** から **文字起こし** を開いてください。

@@ -1,8 +1,8 @@
 export default {
   "st-preset": {
-    description: `SillyTavernプリセットを管理。詳しくは /help st-preset`,
+    description: `SillyTavernプリセットを管理。詳しくは /help の連携からSillyTavernプリセットを開いてください。`,
     import: {
-      description: `SillyTavernプリセットJSONをインポート。詳しくは /help st-preset`,
+      description: `SillyTavernプリセットJSONをインポート。詳しくは /help の連携からSillyTavernプリセットを開いてください。`,
       file_description: `インポートするSillyTavernプリセットの.jsonファイル`,
       invalid_file_title: `無効なファイル`,
       file_too_large_title: `ファイルが大きすぎます`,

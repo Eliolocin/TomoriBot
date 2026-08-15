@@ -14,7 +14,7 @@ Add a provider key during first-time setup with `/config setup`, or later with
 `/config api-key set`. Keys are **encrypted at rest** — no one, including server admins, can
 read them back.
 
-Each provider has its own key-generation steps. Run **`/help api-key`** and pick your
+Each provider has its own key-generation steps. Run **`/help`**, choose **Providers**, then **API Keys**, and pick your
 provider for the exact walkthrough, or use these starting points:
 
 | Provider | Notes | Get a key |
@@ -39,7 +39,7 @@ Never share your API key with anyone else. Custom endpoints can add a Bearer aut
 For local hosting, ADC can come from `gcloud`; hosted deployments should use a workload identity
 or service account. An AI Studio API key alone does not authenticate full Vertex AI. The selected
 project must have billing and the Vertex AI API enabled, and the host identity needs Vertex access.
-The full setup guide lives in `/help api-key provider:Google Vertex AI`.
+The setup guide is available from **Google Vertex AI** on the **API Keys** page in `/help`.
 
 Google-backed provider setup validates credentials through the authenticated model-listing
 endpoint. It does not generate text or depend on whichever chat model is currently marked as

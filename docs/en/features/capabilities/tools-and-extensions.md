@@ -146,7 +146,7 @@ prompt size and helps smaller/local models answer faster.
   tool calls are logged there along with the trigger that exposed the tool.
 
 Deliberate Tool Mode only decides which tools are *shown* to the model — the model still has
-to choose to call one. Run `/help deliberate-tool-mode` for the Discord summary.
+to choose to call one. In `/help`, choose **Behavior**, then **Deliberate Tool Mode**, for the Discord summary.
 
 :::note
 **Deliberate Tool Mode** (this section) is unrelated to **Deliberate Trigger Mode**, which

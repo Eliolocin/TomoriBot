@@ -73,7 +73,7 @@ DTMがオンの場合：
   - **follow**：サーバーの設定に従います
   - **on**：常に意図的な呼び出しを要求します
 
-Discordで`/help deliberate-trigger-mode`を実行すると、同じ概要を確認できます。
+Discordでは`/help`の **動作** から **慎重トリガーモード** を開くと、同じ概要を確認できます。
 
 :::note
 **意図的トリガーモード**（このページ、*トリガー方法*を制御）と、特定のターンで*モデルに公開するツール*を制御する**Deliberate Tool Mode**を混同しないでください。どちらも「DTM」と略されますが、関係はありません。[ツールと拡張機能](/ja/features/capabilities/tools-and-extensions/#deliberate-tool-mode)を参照してください。

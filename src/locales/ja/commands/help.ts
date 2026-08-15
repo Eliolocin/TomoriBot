@@ -1,5 +1,57 @@
 ﻿export default {
   help: {
+    description: `セットアップ、プロバイダー、メモリ、動作、ツール、メディア、連携、プライバシーのガイドを表示します。`,
+    dashboard: {
+      categories: {
+        setup: `セットアップ`,
+        providers: `プロバイダー`,
+        memory: `メモリ`,
+        behavior: `動作`,
+        integrations: `連携`,
+      },
+      pages: {
+        first_time_setup: `初期セットアップ`,
+        features: `機能`,
+        data_privacy: `データとプライバシー`,
+        api_keys: `APIキー`,
+        personal_providers: `個人プロバイダー`,
+        custom_endpoints: `カスタムエンドポイント`,
+        speech: `音声生成`,
+        transcription: `文字起こし`,
+        persistent_memory: `永続メモリ`,
+        short_term_memory: `短期メモリ`,
+        memory_tagging: `メモリタグ`,
+        customization: `カスタマイズ`,
+        personal_spotlight: `個人スポットライト`,
+        deliberate_trigger_mode: `慎重トリガーモード`,
+        deliberate_tool_mode: `慎重ツールモード`,
+        age_restricted_commands: `年齢制限コマンド`,
+        matrix: `Matrix`,
+        mcp: `MCP`,
+        sillytavern_presets: `SillyTavernプリセット`,
+      },
+      page_reference: `\`/help\`内の **{page}** ページ`,
+      page_select_placeholder: `ページを選択`,
+      guide_select_placeholder: `ガイドを選択`,
+      provider_select_placeholder: `APIキーの案内を表示するプロバイダーを選択`,
+      previous_button: `前へ`,
+      next_button: `次へ`,
+      docs_link_label: `完全なドキュメントを読む`,
+      support_link_label: `さらに質問がある場合はDiscordサポートサーバーへ`,
+      variants: {
+        overview: `概要`,
+        chatterbox: `Chatterbox-Turbo`,
+        qwen3tts: `Qwen3-TTS`,
+        irodoritts: `IrodoriTTS`,
+        elevenlabs: `ElevenLabs`,
+        whisperx: `WhisperX`,
+        koboldcpp: `KoboldCPP`,
+      },
+      api_keys: {
+        title: `プロバイダーAPIキー`,
+        description: `下からプロバイダーを選ぶとAPIキーの案内が開きます。案内を閉じても、このヘルプ画面は引き続き利用できます。`,
+      },
+    },
     "personal-provider": {
       description: `個人プロバイダーの仕組みを確認します。`,
       title: `個人プロバイダー`,
@@ -83,11 +135,7 @@
 
 ElevenLabs: {elevenlabs} を実行し、追加ペルソナは後で {voice_assign} を使います。
 
-**エンジン別設定ガイド:**
-• Chatterbox-Turbo → \`/help speech engine:Chatterbox-Turbo\`
-• Qwen3-TTS → \`/help speech engine:Qwen3-TTS\`
-• IrodoriTTS → \`/help speech engine:IrodoriTTS\`
-• ElevenLabs → \`/help speech engine:ElevenLabs\``,
+**エンジン別設定ガイド:** 音声生成ページ下部の完全なTTSドキュメントをご覧ください。`,
       },
       chatterbox: {
         title: `Chatterbox-Turbo 音声`,
@@ -158,10 +206,7 @@ Linux/macOS: \`bash install-irodori.sh\`
         steps_title: `推奨経路`,
         steps_description: `まず WhisperX を推奨します。ローカルSTT設定ガイドに従い、{custom_endpoint_add} で登録してから {model_transcription} で選択します。ElevenLabs ユーザーは {elevenlabs} を実行します。
 
-**エンジン別設定ガイド:**
-• WhisperX → \`/help transcription engine:WhisperX\`
-• KoboldCPP → \`/help transcription engine:KoboldCPP\`
-• ElevenLabs → \`/help transcription engine:ElevenLabs\``,
+**エンジン別設定ガイド:** 文字起こしページ下部の完全なSTTドキュメントをご覧ください。`,
       },
       whisperx: {
         title: `WhisperX 文字起こし`,
@@ -235,7 +280,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - アルターペルソナとして複数のキャラクターが同一サーバーで共存し、それぞれ独自のトリガーとウェブフックアバターを持てます
 - \`/persona attribute add\`、\`/persona sample-dialogue add\`、\`/persona prompt set\`で行動やトーンを調整できます
 - \`/config system-prompt\`でカスタムシステムプロンプトを設定し、行動をさらに形張ることができます
-- 詳しくは\`/help customization\`をご覧ください`,
+- 詳しくは\`/help\`内の **カスタマイズ** ページをご覧ください`,
       memory_title: `記憶＆パーソナライゼーション`,
       memory_description: `- ユーザーやサーバーに関する事実を記憶し、会話を跨いで保持します
 - 個人的な記憶は全サーバーで保持されます（他のサーバーでも私に話しかけてみて！）
@@ -244,7 +289,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - \`/memory\` と \`/persona\` コマンドで手動で記憶やペルソナ情報を追加・削除できます
 - \`/server expressions initialize\`で絵文字やステッカーを登録すると、より適切な場面で使えるようになります
 - \`/personal privacy\`で完全に見えなくなるオプションが利用可能です
-- 詳しくは\`/help memory\`をご覧ください`,
+- 詳しくは\`/help\`内の **永続メモリ** ページをご覧ください`,
       time_title: `時間認識`,
       time_description: `- サーバーの現在時刻を認識しています（\`/server timezone\`経由）
 - リマインダーを設定できます（何かを思い出させるように頼んでみて！）
@@ -418,7 +463,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       embed1_system_prompt_description: `- プリセットが有効な間は、組み込みのフォールバック用システムプロンプトは外れます
 - {configSystemPromptSet} で自分のシステムプロンプトを設定していれば、それは送信されます
 - STの感覚では、プリセットが制御するのはレイアウトであって、すべてのプロンプト供給元ではありません`,
-      embed1_footer: `プリセットを読み込んだ後でも /help st-preset でいつでも確認できます`,
+      embed1_footer: `プリセット読み込み後も /help のSillyTavernプリセットページからいつでも確認できます`,
       embed2_title: `よくある意外な挙動`,
       embed2_description: `「無視された」「位置がおかしい」と感じやすい主な理由です。
 
@@ -472,7 +517,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       brave_important_description: `- これはメインAIプロバイダーとは別です
 - Brave APIキーがなくても、組み込みウェブ検索で機能します
 - Braveでは毎月5ドル分の無料クレジットが含まれますが、それを超えると課金される場合があります。無料枠だけ使いたい場合は、[Braveの使用量上限ダッシュボード](https://api-dashboard.search.brave.com/app/subscriptions/usage-limits)で使用量上限を5ドルに設定してください`,
-      brave_footer: `メインAIプロバイダーの設定については、他の\`/help api-key\`オプションを確認してください`,
+      brave_footer: `メインAIプロバイダーについては、\`/help\`のAPIキーページで別のプロバイダーを選んでください`,
       google_title: `Google Gemini APIキーの設定`,
       google_description: `Google Geminiは強力なAIモデルを備えた無料および有料プランを提供します。
 - 無料プランで十分な制限あり

@@ -68,4 +68,4 @@ SillyTavernのプロンプトマネージャーのプリセットは、プロン
 - 履歴の後（post-history）や深さ指定の挿入（depth-injection）は、独立したメッセージになるのではなく、既存のチャット履歴のエントリーに統合されます。同じ深さの複数のノードはバッチ処理されます。
 - 正規表現による後処理、プリセット側のtemperature、top-p、モデルのオーバーライド、および階層化されたプリセットはサポートされていません。古いテキスト補完のプリセットは、ST専用のブロック（scenario、anchors、stop stringsなど）を破棄するベストエフォートなパスでインポートされます。
 
-Discord内での完全なリファレンスについては、`/help st-preset`を実行してください。インポートエンジンの内部については、[プリセットシステムのアーキテクチャ](/ja/architecture/integrations/sillytavern/preset-system/)をご覧ください。
+Discord内のリファレンスについては、`/help`の **連携** から **SillyTavernプリセット** を開いてください。インポートエンジンの内部については、[プリセットシステムのアーキテクチャ](/ja/architecture/integrations/sillytavern/preset-system/)をご覧ください。
