@@ -63,7 +63,7 @@ export default {
         provider_description: `APIキーに対応するAIプロバイダーを選択してください`,
         provider_placeholder: `プロバイダーを選択...`,
         api_key_label: `APIキーまたはエンドポイントURL`,
-        api_key_description: `このキーは安全に保存されます。取得方法は /help のプロバイダーからAPIキーを開いて確認してください。`,
+        api_key_description: `このキーは安全に保存されます。取得方法は /help のセットアップから「ステップ1：APIキーを取得」を開いて確認してください。`,
         api_key_description_with_custom: `APIキー、またはCustomの場合はOpenAIエンドポイントURL（例：http://localhost:11434/v1）`,
         api_key_placeholder: `このキーは誰とも共有しないでください`,
         bearer_token_label: `Bearerトークン（任意）`,

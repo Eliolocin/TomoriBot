@@ -37,7 +37,7 @@ Notes:
 - Voice replies are gated by `voice_message_enabled` and require the active persona to have a
   voice assigned.
 
-In `/help`, choose **Providers**, then **Speech**, for the same walkthrough in Discord.
+In `/help`, choose **Features**, then **Speech**, for the same walkthrough in Discord.
 
 ### Local voice-cloning engines (self-hosted)
 
@@ -78,4 +78,4 @@ speech. Use `/model transcription` to pick between transcription endpoints.
 - [whisper.cpp](/self-hosting/local-endpoints/speech-to-text/whispercpp/).
 
 See the [Speech-to-Text](/self-hosting/local-endpoints/speech-to-text/) hub for the full list. For the
-Discord summary, run `/help`, then choose **Providers** and **Transcription**.
+Discord summary, run `/help`, then choose **Features** and **Transcription**.

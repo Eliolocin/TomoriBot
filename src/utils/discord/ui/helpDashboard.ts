@@ -31,12 +31,12 @@ import {
 import { SUPPORT_SERVER_URL, buildDocsUrl } from "@/utils/discord/docsLinks";
 import { localizer } from "@/utils/text/localizer";
 
-const HELP_ACCENT_COLOR = 0x5865f2;
+const TOMORI_TURQUOISE = 0x65c6c5;
 const MODAL_TEXT_DISPLAY_LIMIT = 4_000;
 const MODAL_COMPONENT_LIMIT = 5;
 
 export const HELP_ROUTE_NAMESPACE = "help";
-export const HELP_ROUTE_VERSION = "v1";
+export const HELP_ROUTE_VERSION = "v2";
 
 export interface HelpSelection {
   category: HelpCategoryDefinition;
@@ -142,6 +142,7 @@ function buildProviderSelectRow(locale: string): ActionRowData<StringSelectMenuC
         maxValues: 1,
         options: PROVIDER_GUIDES.map((provider) => ({
           label: localizer(locale, provider.labelKey),
+          description: localizer(locale, provider.pickerDescriptionKey),
           value: provider.id,
         })),
       },
@@ -178,11 +179,27 @@ function buildVariantSelectRow(
   };
 }
 
-function buildPersistentFooter(locale: string, docsPath: HelpPageDefinition["docsPath"]): string {
-  return [
-    `-# [${localizer(locale, "commands.help.dashboard.docs_link_label")}](<${buildDocsUrl(docsPath)}>)`,
-    `-# [${localizer(locale, "commands.help.dashboard.support_link_label")}](<${SUPPORT_SERVER_URL}>)`,
-  ].join("\n");
+function buildPersistentFooterRow(
+  locale: string,
+  docsPath: HelpPageDefinition["docsPath"],
+): ActionRowData<ButtonComponentData> {
+  return {
+    type: ComponentType.ActionRow,
+    components: [
+      {
+        type: ComponentType.Button,
+        style: ButtonStyle.Link,
+        label: localizer(locale, "commands.help.dashboard.docs_link_label"),
+        url: buildDocsUrl(docsPath),
+      },
+      {
+        type: ComponentType.Button,
+        style: ButtonStyle.Link,
+        label: localizer(locale, "commands.help.dashboard.support_link_label"),
+        url: SUPPORT_SERVER_URL,
+      },
+    ],
+  };
 }
 
 export function buildHelpDashboardPayload(
@@ -197,17 +214,25 @@ export function buildHelpDashboardPayload(
   const content: ComponentInContainerData[] = [
     buildCategoryRow(locale, category.id),
     { type: ComponentType.Separator, divider: true, spacing: 1 },
-    {
-      type: ComponentType.TextDisplay,
-      content: `## ${localizer(locale, activeContent.titleKey, variables)}\n${localizer(locale, activeContent.descriptionKey, variables)}`,
-    },
   ];
+
+  if (activeContent.introTitleKey && activeContent.introDescriptionKey) {
+    content.push({
+      type: ComponentType.TextDisplay,
+      content: `## ${localizer(locale, activeContent.introTitleKey, variables)}\n${localizer(locale, activeContent.introDescriptionKey, variables)}`,
+    });
+  }
+
+  content.push({
+    type: ComponentType.TextDisplay,
+    content: `${"#".repeat(activeContent.titleHeadingLevel ?? 2)} ${localizer(locale, activeContent.titleKey, variables)}\n${localizer(locale, activeContent.descriptionKey, variables)}`,
+  });
 
   for (const section of activeContent.sections) {
     const sectionVariables = { ...variables, ...section.variables?.(locale) };
     content.push({
       type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, section.titleKey, sectionVariables)}**\n${localizer(locale, section.bodyKey, sectionVariables)}`,
+      content: `### ${localizer(locale, section.titleKey, sectionVariables)}\n${localizer(locale, section.bodyKey, sectionVariables)}`,
     });
   }
 
@@ -220,6 +245,12 @@ export function buildHelpDashboardPayload(
 
   if (page.showProviderPicker) {
     content.push(buildProviderSelectRow(locale));
+    if (page.providerPickerFooterKey) {
+      content.push({
+        type: ComponentType.TextDisplay,
+        content: localizer(locale, page.providerPickerFooterKey, variables),
+      });
+    }
   }
 
   const variantSelect = buildVariantSelectRow(locale, category, page, variant?.id);
@@ -231,17 +262,15 @@ export function buildHelpDashboardPayload(
     { type: ComponentType.Separator, divider: true, spacing: 1 },
     buildPageSelectRow(locale, category, page.id),
     buildNavigationRow(locale, category, pageIndex),
-    { type: ComponentType.Separator, divider: true, spacing: 1 },
-    { type: ComponentType.TextDisplay, content: buildPersistentFooter(locale, activeContent.docsPath) },
   );
 
   const container: ContainerComponentData<ComponentInContainerData> = {
     type: ComponentType.Container,
-    accentColor: HELP_ACCENT_COLOR,
+    accentColor: TOMORI_TURQUOISE,
     components: content,
   };
   return {
-    components: [container],
+    components: [container, buildPersistentFooterRow(locale, activeContent.docsPath)],
     flags: MessageFlags.IsComponentsV2,
   };
 }

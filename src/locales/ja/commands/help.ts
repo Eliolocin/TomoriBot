@@ -1,19 +1,22 @@
 ﻿export default {
   help: {
-    description: `セットアップ、プロバイダー、メモリ、動作、ツール、メディア、連携、プライバシーのガイドを表示します。`,
+    description: `セットアップ、機能、プロバイダー、メモリ、動作、ツール、メディア、連携のガイドを表示します。`,
     dashboard: {
+      header_title: `TomoriBotを始める`,
+      header_description: `カスタマイズ可能なAIアシスタント兼ロールプレイシステム、TomoriBotの設定方法を紹介します。`,
       categories: {
         setup: `セットアップ`,
-        providers: `プロバイダー`,
+        features: `機能`,
         memory: `メモリ`,
         behavior: `動作`,
         integrations: `連携`,
       },
       pages: {
-        first_time_setup: `初期セットアップ`,
+        setup_step_1: `ステップ1：APIキーを取得`,
+        setup_step_2: `ステップ2：セットアップを実行`,
+        setup_step_3: `ステップ3：チャットを開始`,
+        setup_step_4: `ステップ4：TomoriBotをカスタマイズ（任意）`,
         features: `機能`,
-        data_privacy: `データとプライバシー`,
-        api_keys: `APIキー`,
         personal_providers: `個人プロバイダー`,
         custom_endpoints: `カスタムエンドポイント`,
         speech: `音声生成`,
@@ -33,11 +36,11 @@
       page_reference: `\`/help\`内の **{page}** ページ`,
       page_select_placeholder: `ページを選択`,
       guide_select_placeholder: `ガイドを選択`,
-      provider_select_placeholder: `APIキーの案内を表示するプロバイダーを選択`,
-      previous_button: `前へ`,
-      next_button: `次へ`,
-      docs_link_label: `完全なドキュメントを読む`,
-      support_link_label: `さらに質問がある場合はDiscordサポートサーバーへ`,
+      provider_select_placeholder: `プロバイダーを選択`,
+      previous_button: `< 前へ`,
+      next_button: `次へ >`,
+      docs_link_label: `ウェブ版を読む`,
+      support_link_label: `技術サポートを受ける`,
       variants: {
         overview: `概要`,
         chatterbox: `Chatterbox-Turbo`,
@@ -337,25 +340,21 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
       title: `TomoriBotを始める`,
       embed_description: `サーバー（またはDM）でTomoriBotを設定する方法：`,
       step1_title: `ステップ1：APIキーを取得`,
-      step1_description: `TomoriBotは複数のAIプロバイダーに対応しています。いずれかのAPIキーが必要です。
-- {helpApikey}で取得方法を確認
-  - **Google Gemini**（*推奨*）：汎用、無料で利用可能、すべての機能を実行可能
-  - **DeepSeek**（*推奨*）：非常に安価で無検閲な代替手段
-  - **OpenRouter**：有料で信頼性の高い、多数のAIモデルへの一箇所からのアクセス
-  - **NovelAI**：無検閲なロールプレイ、ストーリーテリング、画像生成
-- このAPIキーを**他人と共有しないでください**
-- Customエンドポイントはセットアップ後に{configApiKeySet}でBearer認証トークンを追加可能`,
+      step1_description: `TomoriBotは複数のAIプロバイダーに対応しています。TomoriBotが動作を始めるには、いずれかのAPIキーが必要です。APIキーとは、選択したプロバイダーのAIモデルをTomoriBotが利用するための秘密のパスキーです。
+
+初めて設定する場合は、無料枠が充実したGoogle Geminiがおすすめですが、TomoriBotに似たシステムの利用経験がある場合は、使い慣れたプロバイダーを選んでも構いません。下からプロバイダーを選択して、APIキーの取得方法を確認してください。`,
+      provider_picker_footer: `APIキーを安全にコピーしたら、次のステップへ進んでください。**APIキーは誰とも共有しないでください。**`,
       step2_title: `ステップ2：セットアップコマンドを実行`,
       step2_description: `- {configSetup}を使用してAPIキーを安全に追加し、TomoriBotを初期化
 - （推奨）{serverInitializeExpressions}を実行して、サーバーの絵文字/スタンプ表現を適切に使えるようにする
 	- APIキーは暗号化されて安全に保存されます
 	- 各サーバーには独自の設定があります`,
-      step3_title: `ステップ3：チャットを始める！`,
+      step3_title: `ステップ3：チャットを開始`,
       step3_description: `- メンションするか、私のメッセージに返信するだけでチャットできます
 - {serverTrigger}でトリガー方法を変更できます
 - 記憶システムで会話を記憶します（{configPermissions}で無効化できます！）
 - {serverAutotrigger}で自動トリガーを設定し、メンションなしでチャットできます`,
-      step4_title: `オプション：カスタマイズする`,
+      step4_title: `ステップ4：TomoriBotをカスタマイズ（任意）`,
       step4_description: `- {persona}コマンドで私のパーソナリティを完全に変更（アルターペルソナも含む！）
 - {server}、{personal}、{memory}、{config}コマンドで設定を調整
 - {memory}で記憶やドキュメント、{persona}で振る舞いを調整できます
@@ -496,12 +495,23 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       description: `AIプロバイダーのAPIキー設定方法を学ぶ`,
       provider_description: `AIプロバイダーを選択`,
       provider_choice_brave: `Brave Search`,
-      provider_choice_google: `Google Gemini`,
+      provider_choice_google: `Google Gemini（おすすめ）`,
       provider_choice_deepseek: `DeepSeek`,
       provider_choice_custom: `カスタムエンドポイント`,
       provider_choice_nvidia: `NVIDIA NIM`,
       provider_choice_novelai: `NovelAI`,
-      provider_choice_openrouter: `OpenRouter`,
+      provider_choice_openrouter: `OpenRouter（おすすめ）`,
+      provider_description_google: `汎用性が高く、無料利用枠も充実`,
+      provider_description_openrouter: `有料ながら安定性と柔軟性が高く、画像・動画・音声も生成可能`,
+      provider_description_deepseek: `比較的検閲が少ない、より安価な有料の選択肢`,
+      provider_description_novelai: `無検閲のロールプレイ、物語、画像生成向け`,
+      provider_description_nvidia: `ホスト型のテキスト、埋め込み、画像モデル`,
+      provider_description_zai: `GLMのテキスト・画像モデル。コーディング用途の規約制限あり`,
+      provider_description_vertexexpress: `APIキー認証でGoogle CloudのGeminiを利用`,
+      provider_description_vertex: `Google Cloud認証情報で企業向けGeminiを利用`,
+      provider_description_custom: `セルフホストやプロキシ用。認証は任意の場合あり`,
+      provider_description_brave: `任意のウェブ、画像、動画、ニュース検索`,
+      provider_description_elevenlabs: `音声生成・文字起こし用。テキストモデルではありません`,
       brave_title: `Brave Search APIキーの設定`,
       brave_description: `Brave Searchはオプションで、検索機能を強化するだけです。これは私のAIを動かすものではありません（それはメインプロバイダーが担当します）。
 - 画像、動画、ニュース検索を有効化
@@ -579,7 +589,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       novelai_title: `NovelAI APIキーの設定`,
       novelai_description: `NovelAIはクリエイティブなストーリーテリングとロールプレイに焦点を当てたサブスクリプションベースのサービスです。
 - 無制限の無検閲メッセージ
-- 現在、テキスト生成のみをサポートしています（ビジョンやアシスタント機能はありません）。
+- 無検閲のテキスト生成と、別途設定するNovelAI画像生成に対応
+- NovelAIのテキストモデルは画像入力に未対応
 - [NovelAI利用規約](https://novelai.net/terms)`,
       novelai_getting_key_title: `APIキーの取得：`,
       novelai_getting_key_description: `1. [NovelAI](https://novelai.net/stories)にアクセス

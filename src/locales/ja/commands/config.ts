@@ -530,7 +530,7 @@ export default {
       api_provider_user_byok_label: `なし（ユーザーBYOK）`,
       api_provider_user_byok_description: `サーバー側のテキストプロバイダーなしで初期化します。メンバーは個人プロバイダーを使う必要があります。`,
       api_key_label: `APIキー`,
-      api_key_description: `安全に保存されます。User BYOK または Custom Endpoint の場合は空欄可。詳細は /help のプロバイダーからAPIキーを開いてください。`,
+      api_key_description: `安全に保存されます。User BYOK または Custom Endpoint の場合は空欄可。詳細は /help のセットアップからステップ1を開いてください。`,
       api_key_description_with_custom: `APIキーまたはCustomエンドポイントURL。Bearerトークンはセットアップ後に追加可能。`,
       api_key_placeholder: `このキーは誰とも共有しないでください`,
       preset_label: `人格プリセット`,

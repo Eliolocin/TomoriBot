@@ -3,16 +3,16 @@ import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { DOCS_PATHS, type DocsPath } from "@/utils/discord/docsLinks";
 
 export const HELP_PROVIDER_IDS = [
-  "brave",
   "google",
-  "deepseek",
-  "custom",
-  "nvidia",
-  "novelai",
   "openrouter",
+  "deepseek",
+  "novelai",
+  "nvidia",
   "zai",
-  "vertex",
   "vertexexpress",
+  "vertex",
+  "custom",
+  "brave",
   "elevenlabs",
 ] as const;
 export type HelpProviderId = (typeof HELP_PROVIDER_IDS)[number];
@@ -22,6 +22,7 @@ type HelpVariables = Record<string, string | number | boolean>;
 export interface ProviderGuideDefinition {
   id: HelpProviderId;
   labelKey: string;
+  pickerDescriptionKey: string;
   titleKey: string;
   descriptionKey: string;
   sections: ReadonlyArray<{ titleKey: string; bodyKey: string }>;
@@ -38,6 +39,7 @@ function providerGuide(
   return {
     id,
     labelKey: `commands.help.api-key.provider_choice_${id}`,
+    pickerDescriptionKey: `commands.help.api-key.provider_description_${id}`,
     titleKey: `${prefix}_title`,
     descriptionKey: `${prefix}_description`,
     sections: sectionStems.map((stem) => ({
@@ -50,19 +52,20 @@ function providerGuide(
 }
 
 export const PROVIDER_GUIDES: readonly ProviderGuideDefinition[] = [
-  providerGuide("brave", ["getting_key", "important"]),
   providerGuide("google", ["getting_key"]),
-  providerGuide("deepseek", ["getting_key"]),
-  providerGuide("custom", [], false),
-  providerGuide("nvidia", ["getting_key", "important"]),
-  providerGuide("novelai", ["getting_key"]),
   providerGuide("openrouter", ["getting_key", "important"]),
+  providerGuide("deepseek", ["getting_key"]),
+  providerGuide("novelai", ["getting_key"]),
+  providerGuide("nvidia", ["getting_key", "important"]),
   providerGuide("zai", ["getting_key", "important"]),
-  providerGuide("vertex", ["getting_key", "important"]),
   providerGuide("vertexexpress", ["getting_key", "important"]),
+  providerGuide("vertex", ["getting_key", "important"]),
+  providerGuide("custom", [], false),
+  providerGuide("brave", ["getting_key", "important"]),
   {
     id: "elevenlabs",
     labelKey: "commands.help.api-key.provider_choice_elevenlabs",
+    pickerDescriptionKey: "commands.help.api-key.provider_description_elevenlabs",
     titleKey: "commands.help.elevenlabs.title",
     descriptionKey: "commands.help.elevenlabs.description",
     sections: [

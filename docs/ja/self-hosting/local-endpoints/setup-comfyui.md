@@ -6,7 +6,7 @@ sidebar:
 
 TomoriBotは、自身の[ComfyUI](https://github.com/comfyanonymous/ComfyUI)インスタンスを通じて画像や動画を生成できます。プロンプトやサイズを置換した**APIフォーマットのワークフロー**を送信することでComfyUIを操作し、出力の準備ができるまでComfyUIの`/history`エンドポイントをポーリングします。
 
-このガイドでは、ComfyUIのインストール、実行、および登録について説明します。TomoriBot互換のワークフロー（`{TOMORI_*}`プレースホルダー）の**作成または編集**については、`/help`の **プロバイダー** から **カスタムエンドポイント** を開き、GitHubの[ワークフローのREADME](https://github.com/Bredrumb/TomoriBot/tree/main/assets/comfyui-workflows)も使用してください。
+このガイドでは、ComfyUIのインストール、実行、および登録について説明します。TomoriBot互換のワークフロー（`{TOMORI_*}`プレースホルダー）の**作成または編集**については、`/help`の **機能** から **カスタムエンドポイント** を開き、GitHubの[ワークフローのREADME](https://github.com/Bredrumb/TomoriBot/tree/main/assets/comfyui-workflows)も使用してください。
 
 :::note[環境変数は不要です]
 ComfyUIはDiscordのスラッシュコマンドを通じて登録され、データベースに暗号化されて保存されます。
@@ -54,7 +54,7 @@ curl http://127.0.0.1:8188/system_stats
 | Anima v1 (画像) : `tomoribot-anima-v1-comfyui.json` | `txt2img`, `img2img`, `inpaint` |
 | WAN i2v loop (動画) : `tomoribot-wan-i2v-loop-video.json` | image-to-video |
 
-これらは**APIフォーマット**（ComfyUIが*Save (API Format)*でエクスポートするJSON）であり、通常のUI保存フォーマットではありません。独自に作成する場合は、TomoriBotが置換する`{TOMORI_*}`プレースホルダー（プロンプト、幅/高さ、シード、参照画像など）を含める必要があります。ワークフローのREADMEと、`/help`の **プロバイダー** にある **カスタムエンドポイント** を参照してください。
+これらは**APIフォーマット**（ComfyUIが*Save (API Format)*でエクスポートするJSON）であり、通常のUI保存フォーマットではありません。独自に作成する場合は、TomoriBotが置換する`{TOMORI_*}`プレースホルダー（プロンプト、幅/高さ、シード、参照画像など）を含める必要があります。ワークフローのREADMEと、`/help`の **機能** にある **カスタムエンドポイント** を参照してください。
 
 ## 3. Discordに登録する
 

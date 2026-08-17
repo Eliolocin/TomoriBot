@@ -321,7 +321,7 @@ Minimum reminders:
 - add localized API Keys copy in both locale trees (`src/locales/en-US/` and `src/locales/ja/`)
 - review the `/config params` success embed strings in both locale trees
 - keep those `/config params` provider lists accurate per parameter; do not add a provider unless that exact saved setting is wired through the provider runtime
-- if the provider changes onboarding guidance, also review the First-Time Setup page in `src/utils/discord/helpCatalog.ts`
+- if the provider changes onboarding guidance, also review Setup Step 1 in `src/utils/discord/helpCatalog.ts`
 - if the provider changes pricing guidance or model-tag expectations, review `/tool estimate cost` and any related help text
 
 ## 9. Keep New Logic Inside the Provider Layer

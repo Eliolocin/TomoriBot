@@ -1,19 +1,22 @@
 ﻿export default {
   help: {
-    description: `Browse setup, providers, memory, behavior, tools, media, integrations, and privacy guides.`,
+    description: `Browse setup, features, providers, memory, behavior, tools, media, and integration guides.`,
     dashboard: {
+      header_title: `Getting Started with TomoriBot`,
+      header_description: `Learn how to set up TomoriBot, a customizable AI assistant and role-play system.`,
       categories: {
         setup: `Setup`,
-        providers: `Providers`,
+        features: `Features`,
         memory: `Memory`,
         behavior: `Behavior`,
         integrations: `Integrations`,
       },
       pages: {
-        first_time_setup: `First-Time Setup`,
+        setup_step_1: `Step 1: Get an API Key`,
+        setup_step_2: `Step 2: Run the Setup Command`,
+        setup_step_3: `Step 3: Start Chatting`,
+        setup_step_4: `Step 4: Customize TomoriBot (Optional)`,
         features: `Features`,
-        data_privacy: `Data and Privacy`,
-        api_keys: `API Keys`,
         personal_providers: `Personal Providers`,
         custom_endpoints: `Custom Endpoints`,
         speech: `Speech`,
@@ -33,11 +36,11 @@
       page_reference: `the **{page}** page in \`/help\``,
       page_select_placeholder: `Choose a page`,
       guide_select_placeholder: `Choose a guide`,
-      provider_select_placeholder: `Choose a provider to view API key instructions`,
-      previous_button: `Previous`,
-      next_button: `Next`,
-      docs_link_label: `Read the full documentation`,
-      support_link_label: `Visit the Discord support server for further questions`,
+      provider_select_placeholder: `Choose Provider`,
+      previous_button: `< Previous`,
+      next_button: `Next >`,
+      docs_link_label: `Read the Web Version`,
+      support_link_label: `Get Technical Support`,
       variants: {
         overview: `Overview`,
         chatterbox: `Chatterbox-Turbo`,
@@ -337,25 +340,21 @@ Transcription supports ~100 languages (auto-detected).`,
       title: `Getting Started with TomoriBot`,
       embed_description: `Here's how to set up TomoriBot in your server (or DMs!):`,
       step1_title: `Step 1: Get an API Key`,
-      step1_description: `TomoriBot supports multiple AI providers. You'll need an API key from one of them.
-- Use {helpApikey} to learn how to get one
-  - **Google Gemini** *(recommended)*: general-purpose, free usage, runs all features
-  - **DeepSeek** *(recommended)*: a very cheap and uncensored alternative
-  - **OpenRouter**: paid, reliable access to many AI models in one place
-  - **NovelAI**: uncensored role-playing, storytelling, and image generation
-- Do **NOT** share this API key with anyone else
-- Custom endpoints can add a Bearer auth token after setup via {configApiKeySet}`,
+      step1_description: `TomoriBot supports multiple AI providers. You need an API key from one of them before she can start working. An API Key is a private passkey that lets TomoriBot use the AI models of your chosen provider.
+
+For first-time setup, *Google Gemini* is recommended because it has a generous free tier, but if you already have experience with systems similar to TomoriBot, feel free to use any provider you already use. Choose a provider below to see how to get its API key.`,
+      provider_picker_footer: `After safely copying your API key, proceed to the next step. **Do not share your API key with anyone else.**`,
       step2_title: `Step 2: Run the Setup Command`,
       step2_description: `- Use {configSetup} to securely add your API key and initialize TomoriBot
 - (Recommended) Run {serverInitializeExpressions} so I can properly use your server's emojis/stickers
 	- Your API key is encrypted and stored safely
 	- Each server has its own configuration`,
-      step3_title: `Step 3: Start Chatting!`,
+      step3_title: `Step 3: Start Chatting`,
       step3_description: `- Just mention me or reply to my messages to chat
 - Change how I get triggered using {serverTrigger}
 - I'll remember our conversations with my memory system (which you can disable using {configPermissions}!)
 - Set up auto-trigger with {serverAutotrigger} to chat without mentioning me`,
-      step4_title: `Optional: Customize Me`,
+      step4_title: `Step 4: Customize TomoriBot (Optional)`,
       step4_description: `- Use {persona} commands to completely change my personality (including alter personas!)
 - Configure my settings with {server}, {personal}, {memory}, and {config} commands
 - Use {memory} for memories/documents and {persona} for behavior shaping
@@ -495,12 +494,23 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
       description: `Learn how to set up API keys for AI providers`,
       provider_description: `Choose your AI provider`,
       provider_choice_brave: `Brave Search`,
-      provider_choice_google: `Google Gemini`,
+      provider_choice_google: `Google Gemini (Recommended)`,
       provider_choice_deepseek: `DeepSeek`,
       provider_choice_custom: `Custom Endpoint`,
       provider_choice_nvidia: `NVIDIA NIM`,
       provider_choice_novelai: `NovelAI`,
-      provider_choice_openrouter: `OpenRouter`,
+      provider_choice_openrouter: `OpenRouter (Recommended)`,
+      provider_description_google: `General-purpose and has generous free usage`,
+      provider_description_openrouter: `Paid but reliable and flexible; can generate images, videos, and voice`,
+      provider_description_deepseek: `Cheaper paid alternative that is fairly uncensored`,
+      provider_description_novelai: `For uncensored role-playing, storytelling, and image generation`,
+      provider_description_nvidia: `Hosted text, embedding, and image models`,
+      provider_description_zai: `GLM text and image models with coding-use policy limits`,
+      provider_description_vertexexpress: `Gemini through Google Cloud with API key authentication`,
+      provider_description_vertex: `Enterprise Gemini through Google Cloud credentials`,
+      provider_description_custom: `Self-hosted or proxy endpoint; authentication may be optional`,
+      provider_description_brave: `Optional web, image, video, and news search`,
+      provider_description_elevenlabs: `Speech and transcription API, not a text model`,
       provider_choice_zai: `Z.ai`,
       provider_choice_vertex: `Google Vertex AI`,
       provider_choice_vertexexpress: `Google Vertex AI Express`,
@@ -576,8 +586,9 @@ Use {helpCustomModels} for the full command guide, supported endpoint types, and
       zai_footer: `After setting up this provider, you may change its default model with {configModel}`,
       novelai_title: `Setting Up NovelAI API Key`,
       novelai_description: `NovelAI is a subscription-based service focused on creative storytelling and roleplay.
- - Unlimited uncensored messages
- - Currently only supports text generation (no vision or assistant features)
+- Unlimited uncensored messages
+- Supports uncensored text generation and NovelAI image generation, which is configured separately
+- NovelAI text models do not support vision input
 - [NovelAI Terms of Service](https://novelai.net/terms)`,
       novelai_getting_key_title: `Getting Your API Key:`,
       novelai_getting_key_description: `1. Visit [NovelAI](https://novelai.net/stories)

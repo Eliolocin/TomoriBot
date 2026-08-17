@@ -4,14 +4,15 @@ import { DOCS_PATHS, type DocsPath } from "@/utils/discord/docsLinks";
 import { legalNoticeSuffix } from "@/utils/misc/legalNotice";
 import { localizer } from "@/utils/text/localizer";
 
-export const HELP_CATEGORY_IDS = ["setup", "providers", "memory", "behavior", "integrations"] as const;
+export const HELP_CATEGORY_IDS = ["setup", "features", "memory", "behavior", "integrations"] as const;
 export type HelpCategoryId = (typeof HELP_CATEGORY_IDS)[number];
 
 export const HELP_PAGE_IDS = [
-  "first-time-setup",
+  "setup-step-1",
+  "setup-step-2",
+  "setup-step-3",
+  "setup-step-4",
   "features",
-  "data-privacy",
-  "api-keys",
   "personal-providers",
   "custom-endpoints",
   "speech",
@@ -44,7 +45,11 @@ interface HelpContentDefinition {
   docsPath: DocsPath;
   sections: readonly HelpSectionDefinition[];
   footerKey?: string;
+  introTitleKey?: string;
+  introDescriptionKey?: string;
+  titleHeadingLevel?: 2 | 3;
   showProviderPicker?: boolean;
+  providerPickerFooterKey?: string;
   variables?: (locale: string) => HelpVariables;
 }
 
@@ -77,26 +82,56 @@ function mention(command: string, subcommandOrGroup?: string, subcommand?: strin
 
 const setupPages: readonly HelpPageDefinition[] = [
   {
-    id: "first-time-setup",
-    labelKey: "commands.help.dashboard.pages.first_time_setup",
-    titleKey: "commands.help.setup.title",
-    descriptionKey: "commands.help.setup.embed_description",
+    id: "setup-step-1",
+    labelKey: "commands.help.dashboard.pages.setup_step_1",
+    titleKey: "commands.help.setup.step1_title",
+    descriptionKey: "commands.help.setup.step1_description",
+    docsPath: DOCS_PATHS.API_KEYS,
+    sections: [],
+    introTitleKey: "commands.help.dashboard.header_title",
+    introDescriptionKey: "commands.help.dashboard.header_description",
+    titleHeadingLevel: 3,
+    showProviderPicker: true,
+    providerPickerFooterKey: "commands.help.setup.provider_picker_footer",
+  },
+  {
+    id: "setup-step-2",
+    labelKey: "commands.help.dashboard.pages.setup_step_2",
+    titleKey: "commands.help.setup.step2_title",
+    descriptionKey: "commands.help.setup.step2_description",
     docsPath: DOCS_PATHS.QUICKSTART,
-    sections: [
-      { titleKey: "commands.help.setup.step1_title", bodyKey: "commands.help.setup.step1_description" },
-      { titleKey: "commands.help.setup.step2_title", bodyKey: "commands.help.setup.step2_description" },
-      { titleKey: "commands.help.setup.step3_title", bodyKey: "commands.help.setup.step3_description" },
-      { titleKey: "commands.help.setup.step4_title", bodyKey: "commands.help.setup.step4_description" },
-      { titleKey: "commands.help.setup.need_help_title", bodyKey: "commands.help.setup.need_help_description" },
-    ],
-    variables: (locale) => ({
-      helpApikey: buildHelpPageReference(locale, "commands.help.dashboard.pages.api_keys"),
-      configApiKeySet: mention("provider", "add"),
+    sections: [],
+    titleHeadingLevel: 3,
+    variables: () => ({
       configSetup: mention("config", "setup"),
       serverInitializeExpressions: mention("server", "initialize", "expressions"),
+    }),
+  },
+  {
+    id: "setup-step-3",
+    labelKey: "commands.help.dashboard.pages.setup_step_3",
+    titleKey: "commands.help.setup.step3_title",
+    descriptionKey: "commands.help.setup.step3_description",
+    docsPath: DOCS_PATHS.QUICKSTART,
+    sections: [],
+    titleHeadingLevel: 3,
+    variables: () => ({
       serverTrigger: mention("server", "trigger", "add"),
       configPermissions: mention("config", "tools", "manage"),
       serverAutotrigger: mention("server", "auto-trigger", "channels"),
+    }),
+  },
+  {
+    id: "setup-step-4",
+    labelKey: "commands.help.dashboard.pages.setup_step_4",
+    titleKey: "commands.help.setup.step4_title",
+    descriptionKey: "commands.help.setup.step4_description",
+    docsPath: DOCS_PATHS.QUICKSTART,
+    sections: [
+      { titleKey: "commands.help.setup.need_help_title", bodyKey: "commands.help.setup.need_help_description" },
+    ],
+    titleHeadingLevel: 3,
+    variables: (locale) => ({
       persona: mention("persona"),
       server: mention("server"),
       personal: mention("personal"),
@@ -109,66 +144,35 @@ const setupPages: readonly HelpPageDefinition[] = [
       legalNotice: legalNoticeSuffix(locale, "general.legal.setup_agreement"),
     }),
   },
-  {
-    id: "features",
-    labelKey: "commands.help.dashboard.pages.features",
-    titleKey: "commands.help.features.title",
-    descriptionKey: "commands.help.features.embed_description",
-    docsPath: DOCS_PATHS.FEATURES,
-    sections: [
-      {
-        titleKey: "commands.help.features.summary_chat_title",
-        bodyKey: "commands.help.features.summary_chat_description",
-      },
-      {
-        titleKey: "commands.help.features.summary_knowledge_title",
-        bodyKey: "commands.help.features.summary_knowledge_description",
-      },
-      {
-        titleKey: "commands.help.features.summary_capabilities_title",
-        bodyKey: "commands.help.features.summary_capabilities_description",
-      },
-      {
-        titleKey: "commands.help.features.summary_reference_title",
-        bodyKey: "commands.help.features.summary_reference_description",
-      },
-    ],
-    footerKey: "commands.help.features.footer",
-    variables: () => ({ version: packageVersion }),
-  },
-  {
-    id: "data-privacy",
-    labelKey: "commands.help.dashboard.pages.data_privacy",
-    titleKey: "commands.help.data.title",
-    descriptionKey: "commands.help.data.embed_description",
-    docsPath: DOCS_PATHS.DATA_HANDLING,
-    sections: [
-      { titleKey: "commands.help.data.export_title", bodyKey: "commands.help.data.export_description" },
-      { titleKey: "commands.help.data.import_title", bodyKey: "commands.help.data.import_description" },
-      { titleKey: "commands.help.data.delete_title", bodyKey: "commands.help.data.delete_description" },
-      { titleKey: "commands.help.data.privacy_title", bodyKey: "commands.help.data.privacy_description" },
-    ],
-    footerKey: "commands.help.data.footer",
-    variables: (locale) => ({
-      memoryPersonalExport: mention("memory", "personal", "export"),
-      memoryServerExport: mention("memory", "server", "export"),
-      personalConfigExport: mention("personal", "config", "export"),
-      serverConfigExport: mention("server", "config", "export"),
-      personaExport: mention("persona", "export"),
-      memoryPersonalImport: mention("memory", "personal", "import"),
-      memoryServerImport: mention("memory", "server", "import"),
-      personalConfigImport: mention("personal", "config", "import"),
-      serverConfigImport: mention("server", "config", "import"),
-      memoryPersonalRemove: mention("memory", "personal", "remove"),
-      memoryServerRemove: mention("memory", "server", "remove"),
-      personalConfigRemove: mention("personal", "config", "remove"),
-      serverConfigRemove: mention("server", "config", "remove"),
-      personalPrivacy: mention("personal", "privacy"),
-      configPermissions: mention("config", "tools", "manage"),
-      legalNotice: legalNoticeSuffix(locale, "general.legal.provider_policy_reference", " "),
-    }),
-  },
 ] as const;
+
+const featureOverviewPage: HelpPageDefinition = {
+  id: "features",
+  labelKey: "commands.help.dashboard.pages.features",
+  titleKey: "commands.help.features.title",
+  descriptionKey: "commands.help.features.embed_description",
+  docsPath: DOCS_PATHS.FEATURES,
+  sections: [
+    {
+      titleKey: "commands.help.features.summary_chat_title",
+      bodyKey: "commands.help.features.summary_chat_description",
+    },
+    {
+      titleKey: "commands.help.features.summary_knowledge_title",
+      bodyKey: "commands.help.features.summary_knowledge_description",
+    },
+    {
+      titleKey: "commands.help.features.summary_capabilities_title",
+      bodyKey: "commands.help.features.summary_capabilities_description",
+    },
+    {
+      titleKey: "commands.help.features.summary_reference_title",
+      bodyKey: "commands.help.features.summary_reference_description",
+    },
+  ],
+  footerKey: "commands.help.features.footer",
+  variables: () => ({ version: packageVersion }),
+};
 
 function customEndpointVariables(): HelpVariables {
   return {
@@ -233,16 +237,8 @@ function transcriptionVariant(id: string, labelKey: string): HelpVariantDefiniti
   };
 }
 
-const providerPages: readonly HelpPageDefinition[] = [
-  {
-    id: "api-keys",
-    labelKey: "commands.help.dashboard.pages.api_keys",
-    titleKey: "commands.help.dashboard.api_keys.title",
-    descriptionKey: "commands.help.dashboard.api_keys.description",
-    docsPath: DOCS_PATHS.API_KEYS,
-    sections: [],
-    showProviderPicker: true,
-  },
+const featurePages: readonly HelpPageDefinition[] = [
+  featureOverviewPage,
   {
     id: "personal-providers",
     labelKey: "commands.help.dashboard.pages.personal_providers",
@@ -644,7 +640,7 @@ const integrationPages: readonly HelpPageDefinition[] = [
 
 export const HELP_CATEGORIES: readonly HelpCategoryDefinition[] = [
   { id: "setup", labelKey: "commands.help.dashboard.categories.setup", pages: setupPages },
-  { id: "providers", labelKey: "commands.help.dashboard.categories.providers", pages: providerPages },
+  { id: "features", labelKey: "commands.help.dashboard.categories.features", pages: featurePages },
   { id: "memory", labelKey: "commands.help.dashboard.categories.memory", pages: memoryPages },
   { id: "behavior", labelKey: "commands.help.dashboard.categories.behavior", pages: behaviorPages },
   { id: "integrations", labelKey: "commands.help.dashboard.categories.integrations", pages: integrationPages },

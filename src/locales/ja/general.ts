@@ -99,7 +99,7 @@
       channel_not_supported_title: `サポートされていないチャンネルタイプ`,
       channel_not_supported_description: `申し訳ありませんが、サーバーのテキストチャンネルまたはダイレクトメッセージでのみ動作します。グループDMやその他のチャンネルタイプはサポートされていません。`,
       tomori_not_setup_title: `初期設定が必要です`,
-      tomori_not_setup_description: `このサーバーではまだ初期設定が必要です。**サーバー管理**権限を持つメンバーがまず \`/config setup\` を実行してください。短い案内は \`/help\` の **セットアップ** から **初期セットアップ** を開くか、https://docs.tomoribot.app/ja/introduction/quickstart/ で確認できます。`,
+      tomori_not_setup_description: `このサーバーではまだ初期設定が必要です。**サーバー管理**権限を持つメンバーがまず \`/config setup\` を実行してください。短い案内は \`/help\` の **セットアップ** から **ステップ1：APIキーを取得** を開くか、https://docs.tomoribot.app/ja/introduction/quickstart/ で確認できます。`,
       tomori_updating_title: `現在アップデート中...`,
       tomori_updating_description: `現在アップデート中のため、まもなく復旧します。しばらくしてからもう一度お試しください！`,
       tomori_not_setup_dm_footer: `DMでは個人用の設定として扱われ、ほとんどのサーバー形式の設定が利用できます。`,
@@ -108,7 +108,7 @@
       api_key_error_title: `APIキーエラー`,
       api_key_error_description: `設定されたプロバイダー認証情報へのアクセスまたは復号化で問題が発生しました。\`/provider add\`で再設定してください。`,
       personal_provider_required_title: `個人プロバイダーが必要です`,
-      personal_provider_required_description: `このサーバーでは、ユーザーが発言したメッセージに対してメンバー自身のAIプロバイダー設定を使用しています。\`/help\` の **プロバイダー** から **個人プロバイダー** を確認し、\`/personal provider add\` で設定してください。`,
+      personal_provider_required_description: `このサーバーでは、ユーザーが発言したメッセージに対してメンバー自身のAIプロバイダー設定を使用しています。\`/help\` の **機能** から **個人プロバイダー** を確認し、\`/personal provider add\` で設定してください。`,
       personal_provider_credentials_error_title: `個人プロバイダーエラー`,
       personal_provider_credentials_error_description: `有効になっている個人プロバイダーを使用できませんでした。\`/personal provider add\` で更新するか、\`/personal provider toggle-models\` で無効化してください。`,
       context_error_title: `コンテキスト構築エラー`,
@@ -133,13 +133,13 @@
         missing_key: {
           title: `Brave APIキーがありません`,
           description: `検索を実行するにはBrave Search APIキーが必要ですが、このサーバーには設定されていません。\`サーバー管理\`権限を持つメンバーが\`/optional-key brave set\`を使用して設定できます。`,
-          footer: `/help のプロバイダーからAPIキーを開いてください`,
+          footer: `/help のセットアップから「ステップ1：APIキーを取得」を開いてください`,
         },
       },
       duckduckgo_rate_limit: {
         title: `DuckDuckGoがレート制限されています`,
         description: `DuckDuckGo検索は現在レート制限されています。より信頼性の高い検索のために、\`サーバー管理\`権限を持つメンバーが\`/optional-key brave set\`を使用してBrave Searchを設定できます。`,
-        footer: `/help のプロバイダーからAPIキーを開いてください`,
+        footer: `/help のセットアップから「ステップ1：APIキーを取得」を開いてください`,
       },
       searxng_unreachable: {
         title: `SearXNGに接続できません`,
@@ -195,9 +195,9 @@
       rejoin_title: `TomoriBotが戻ってきました！`,
       rejoin_description: `このサーバーに再追加されたようです。既存の設定とペルソナはそのまま残っています。\`/config\`、\`/persona\`、\`/memory\`、\`/server\`、\`/provider add\` で確認や変更ができます。{legalNotice}`,
       setup_prompt_title: `TomoriBotの追加が完了しました`,
-      setup_prompt_description: `追加してくれてありがとうございます。始めるには、**サーバー管理**権限を持つメンバーが \`/config setup\` を実行して、初期ペルソナとプロバイダーを選択してください。短い案内は \`/help\` の **セットアップ** から **初期セットアップ** を開くか、https://docs.tomoribot.app/ja/introduction/quickstart/ で確認できます。
+      setup_prompt_description: `追加してくれてありがとうございます。始めるには、**サーバー管理**権限を持つメンバーが \`/config setup\` を実行して、初期ペルソナとプロバイダーを選択してください。短い案内は \`/help\` の **セットアップ** から **ステップ1：APIキーを取得** を開くか、https://docs.tomoribot.app/ja/introduction/quickstart/ で確認できます。
 
-プロバイダーのAPIキーが必要な場合は、\`/help\` の **プロバイダー** から **APIキー** を開いてください。{legalNotice}`,
+プロバイダーのAPIキー取得手順は **ステップ1：APIキーを取得** に含まれています。{legalNotice}`,
     },
   },
   reminders: {

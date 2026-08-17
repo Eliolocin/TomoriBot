@@ -14,7 +14,7 @@ Add a provider key during first-time setup with `/config setup`, or later with
 `/config api-key set`. Keys are **encrypted at rest** — no one, including server admins, can
 read them back.
 
-Each provider has its own key-generation steps. Run **`/help`**, choose **Providers**, then **API Keys**, and pick your
+Each provider has its own key-generation steps. Run **`/help`**, choose **Setup**, then **Step 1: Get an API Key**, and pick your
 provider for the exact walkthrough, or use these starting points:
 
 | Provider | Notes | Get a key |

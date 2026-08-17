@@ -23,12 +23,12 @@ describe("help global interaction route", () => {
 
     await helpInteractionRoute.execute({} as Client, interaction, {
       namespace: "help",
-      version: "v1",
+      version: "v2",
       segments: ["category", "ja", "memory"],
     });
 
     expect(payload).toContain("永続メモリ");
-    expect(payload).toContain("help:v1:page:ja:memory");
+    expect(payload).toContain("help:v2:page:ja:memory");
   });
 
   it("opens a provider modal as the select interaction's only acknowledgement", async () => {
@@ -53,7 +53,7 @@ describe("help global interaction route", () => {
 
     await helpInteractionRoute.execute({} as Client, interaction, {
       namespace: "help",
-      version: "v1",
+      version: "v2",
       segments: ["provider", "en-US"],
     });
 
@@ -78,7 +78,7 @@ describe("help global interaction route", () => {
 
     await helpInteractionRoute.execute({} as Client, interaction, {
       namespace: "help",
-      version: "v1",
+      version: "v2",
       segments: ["provider-modal", "en-US", "openrouter"],
     });
 
