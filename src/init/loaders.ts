@@ -13,6 +13,9 @@ import eventHandler from "@/handlers/eventHandler";
  *
  */
 export async function initLoaders(client: Client): Promise<void> {
+  const { initializeRawModalInterception } = await import("@/utils/discord/ui/modals");
+  initializeRawModalInterception(client);
+
   log.section("Initializing Tool Registry...");
   try {
     const { initializeTools } = await import("@/tools/toolInitializer");

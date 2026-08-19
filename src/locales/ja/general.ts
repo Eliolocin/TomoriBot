@@ -92,6 +92,7 @@
       },
     },
     errors: {
+      outdated_panel: `このパネルは古くなっています。{command} をもう一度実行してください。`,
       guild_only_title: `サーバー専用コマンド`,
       guild_only_description: `このコマンドはサーバー内でのみ使用できます。`,
       channel_only_title: `チャンネルが必要です`,

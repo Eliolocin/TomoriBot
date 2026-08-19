@@ -12,9 +12,8 @@ import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { promptWithRawModal } from "@/utils/discord/ui/modals";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 import type { RadioGroupOption } from "@/types/discord/modal";
-import { toolRepository } from "@/utils/db/repositories/ToolRepository";
-import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
-import { type RemoteUrlValidationResult, validateRemoteUrl } from "@/utils/security/remoteUrlSecurity";
+import { mcpConfigOperations } from "@/utils/mcp/mcpConfigOperations";
+import type { RemoteUrlValidationResult } from "@/utils/security/remoteUrlSecurity";
 
 const MODAL_CUSTOM_ID = "config_mcp_add_modal";
 const NAME_INPUT_ID = "mcp_server_name";
@@ -22,21 +21,15 @@ const URL_INPUT_ID = "mcp_server_url";
 const AUTH_TOKEN_INPUT_ID = "mcp_auth_token";
 const SERVER_TYPE_SELECT_ID = "mcp_server_type";
 
-/** Max guild MCP servers per guild (configurable via env) */
-const MAX_SERVERS_PER_GUILD = Number(process.env.MAX_MCP_SERVERS_PER_GUILD) || 5;
-
-/** Name format: alphanumeric + hyphens, 1-32 chars */
-const NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,31}$/;
-
 /**
- * Configure the /config mcp add subcommand.
+ * Configure the /mcp add subcommand.
  * Shows a modal for name, URL, optional auth token, and optional server type.
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("add").setDescription(localizer("en-US", "commands.mcp.add.description"));
 
 /**
- * Execute /config mcp add.
+ * Execute /mcp add.
  * Opens a modal, validates inputs, tests the MCP connection, then persists.
  *
  */
@@ -137,12 +130,10 @@ export async function execute(
       return;
     }
 
-    const name = modalResult.values?.[NAME_INPUT_ID]?.trim().replace(/\s+/g, "-");
-    const url = modalResult.values?.[URL_INPUT_ID]?.trim();
+    const name = modalResult.values?.[NAME_INPUT_ID] ?? "";
+    const url = modalResult.values?.[URL_INPUT_ID] ?? "";
     const authToken = modalResult.values?.[AUTH_TOKEN_INPUT_ID]?.trim() || undefined;
     const serverTypeRaw = modalResult.values?.[SERVER_TYPE_SELECT_ID]?.trim();
-    // "none" or empty means no type: store as null
-    const serverType = serverTypeRaw && serverTypeRaw !== "none" ? serverTypeRaw : null;
 
     if (!modalResult.interaction) {
       log.error("[MCP Add] Modal submit interaction is undefined");
@@ -150,7 +141,16 @@ export async function execute(
     }
     const replyInteraction = modalResult.interaction;
 
-    if (!name || !url) {
+    const result = await mcpConfigOperations.add({
+      serverId: tomoriState.server_id,
+      serverDiscId: serverId,
+      name,
+      url,
+      authToken,
+      serverType: serverTypeRaw,
+    });
+
+    if (result.status === "invalid-input") {
       await replyInfoEmbed(replyInteraction, locale, {
         titleKey: "commands.mcp.add.invalid_input_title",
         descriptionKey: "commands.mcp.add.invalid_input_description",
@@ -159,7 +159,7 @@ export async function execute(
       return;
     }
 
-    if (!NAME_REGEX.test(name)) {
+    if (result.status === "invalid-name" || result.status === "invalid-type") {
       await replyInfoEmbed(replyInteraction, locale, {
         titleKey: "commands.mcp.add.invalid_name_title",
         descriptionKey: "commands.mcp.add.invalid_name_description",
@@ -168,9 +168,8 @@ export async function execute(
       return;
     }
 
-    const urlValidation = await validateRemoteUrl(url);
-    if (!urlValidation.valid) {
-      const validationMessage = getUrlValidationMessage(locale, urlValidation);
+    if (result.status === "invalid-url") {
+      const validationMessage = getUrlValidationMessage(locale, result.validation);
       await replyInfoEmbed(replyInteraction, locale, {
         titleKey: "commands.mcp.add.invalid_url_title",
         descriptionKey: validationMessage.descriptionKey,
@@ -180,75 +179,69 @@ export async function execute(
       return;
     }
 
-    const currentCount = await toolRepository.countMcpServers(tomoriState.server_id);
-    if (currentCount >= MAX_SERVERS_PER_GUILD) {
+    if (result.status === "limit-reached") {
       await replyInfoEmbed(replyInteraction, locale, {
         titleKey: "commands.mcp.add.limit_reached_title",
         descriptionKey: "commands.mcp.add.limit_reached_description",
-        descriptionVars: { max: String(MAX_SERVERS_PER_GUILD) },
+        descriptionVars: { max: String(result.max) },
         color: ColorCode.ERROR,
       });
       return;
     }
 
-    // Test connection before persisting
-    const guildMcpManager = getGuildMcpManager();
-    const testResult = await guildMcpManager.testConnection(url, authToken);
-
-    if (!testResult.success) {
+    if (result.status === "connection-failed") {
       await replyInfoEmbed(replyInteraction, locale, {
         titleKey: "commands.mcp.add.connection_failed_title",
         descriptionKey: "commands.mcp.add.connection_failed_description",
-        descriptionVars: { error: testResult.error || "Unknown error" },
+        descriptionVars: { error: result.error },
         color: ColorCode.ERROR,
       });
       return;
     }
 
-    // Persist to database (token is encrypted inline, server_type for tool deduplication)
-    const insertedRow = await toolRepository.insertMcpServer(
-      tomoriState.server_id,
-      name,
-      url,
-      authToken,
-      serverType,
-      serverId,
-    );
-
-    if (!insertedRow) {
+    if (result.status === "duplicate-or-write-failed") {
       await replyInfoEmbed(replyInteraction, locale, {
         titleKey: "commands.mcp.add.duplicate_name_title",
         descriptionKey: "commands.mcp.add.duplicate_name_description",
-        descriptionVars: { name },
+        descriptionVars: { name: result.name },
         color: ColorCode.ERROR,
       });
       return;
     }
 
-    // Mask the URL for display (show domain only)
+    if (result.status === "unavailable") {
+      await replyInfoEmbed(replyInteraction, locale, {
+        titleKey: "general.errors.update_failed_title",
+        descriptionKey: "general.errors.update_failed_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const insertedName = result.row.name;
     let maskedUrl: string;
     try {
-      const parsed = new URL(url);
+      const parsed = new URL(result.row.url);
       maskedUrl = `${parsed.protocol}//${parsed.hostname}`;
     } catch {
-      maskedUrl = `${url.substring(0, 30)}...`;
+      maskedUrl = "unknown";
     }
 
     await replyInfoEmbed(replyInteraction, locale, {
       titleKey: "commands.mcp.add.success_title",
       descriptionKey: "commands.mcp.add.success_description",
       descriptionVars: {
-        name,
+        name: insertedName,
         url: maskedUrl,
-        tool_count: String(testResult.toolCount),
-        tool_names: testResult.functionNames.join(", ") || "none",
+        tool_count: String(result.test.toolCount),
+        tool_names: result.test.functionNames.join(", ") || "none",
       },
       color: ColorCode.SUCCESS,
     });
 
     log.success(
-      `[MCP Add] Server "${name}" registered for guild ${serverId} ` +
-        `(${testResult.toolCount} tools: ${testResult.functionNames.join(", ")})`,
+      `[MCP Add] Server "${insertedName}" registered for workspace ${serverId} ` +
+        `(${result.test.toolCount} tools: ${result.test.functionNames.join(", ")})`,
     );
   } catch (error) {
     const context: ErrorContext = {
@@ -256,9 +249,9 @@ export async function execute(
       serverId: tomoriState?.server_id ?? null,
       personaId: tomoriState?.persona_id ?? null,
       errorType: "CommandExecutionError",
-      metadata: { command: "config mcp add" },
+      metadata: { command: "mcp add" },
     };
-    await log.error("Error executing /config mcp add", error as Error, context);
+    await log.error("Error executing /mcp add", error as Error, context);
 
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({

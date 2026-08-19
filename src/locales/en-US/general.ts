@@ -92,6 +92,7 @@
       },
     },
     errors: {
+      outdated_panel: `This panel is outdated. Run {command} again.`,
       guild_only_title: `Server Only Command`,
       guild_only_description: `This command can only be used within a server.`,
       channel_only_title: `Channel Required`,

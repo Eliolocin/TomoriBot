@@ -1035,6 +1035,19 @@ To upload a file with your message, you'll need to send your payload as `multipa
 
 ## Legacy Message Component Behavior
 
+TomoriBot's `/mcps` collection panel is a persistent-routing example. Its `mcps:v1` custom IDs carry
+only locale, navigation state, stable row IDs, and bounded enum values. Each interaction reloads the
+current workspace and durable registration state when it needs panel state; the Add opener performs
+only its permission check before showing the form, and the globally routed submit performs the full
+reload. Names, endpoints, credentials, and permission bits are never trusted from the route. The panel
+renders the complete supported collection in deterministic order, with stable-ID Enable/Disable and
+Remove actions on each row. Already-issued version-one selector and range routes remain accepted as
+read-only compatibility repaints but are not emitted by current panels. Receipts use their own top-level
+Container beside the authoritative collection Container, keeping status color separate from the panel.
+Healthy views omit a routine refresh button because transactions reload and repaint automatically. Only stale or
+unavailable reads expose **Retry**, which performs a configuration read without testing or connecting
+to the remote MCP endpoint.
+
 Before the introduction of the `IS_COMPONENTS_V2` flag, message components were sent in conjunction with message content. This means that you could send a message using a subset of the available components without setting the `IS_COMPONENTS_V2` flag, and the components would be included in the message content along with `content` and `embeds`.
 
 Additionally, components of messages preceding components V2 will contain an `id` of `0`.

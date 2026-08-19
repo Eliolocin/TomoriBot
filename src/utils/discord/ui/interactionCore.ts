@@ -267,6 +267,10 @@ function setupWebSocketInterception(client: unknown) {
   }
 }
 
+export function initializeRawModalInterception(client: unknown): void {
+  setupWebSocketInterception(client);
+}
+
 import type {
   ConfirmationOptions,
   ConfirmationResult,
@@ -350,6 +354,32 @@ function createRawModalRestError(response: Response, responseBody: string): Erro
   error.rawError = rawError;
   error.status = response.status;
   return error;
+}
+
+export async function showRoutedRawModal(
+  interaction: ChatInputCommandInteraction | ButtonInteraction,
+  data: { custom_id: string; title: string; components: RawDiscordComponent[] },
+): Promise<void> {
+  setupWebSocketInterception(interaction.client);
+  const restEndpoint = `https://discord.com/api/v10/interactions/${interaction.id}/${interaction.token}/callback`;
+  const response = await fetch(restEndpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: InteractionResponseType.Modal, data }),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    log.error(`Failed to send raw modal via REST API: ${response.status} ${response.statusText} - ${errorText}`);
+    throw createRawModalRestError(response, errorText);
+  }
+  rawModalAcknowledged.set(interaction, true);
+  log.info(`Marked interaction ${interaction.id} as raw-modal-acknowledged`);
+}
+
+export function takeRawModalSelectValue(interactionId: string, customId: string): string | undefined {
+  const storedValues = modalSelectValues.get(interactionId);
+  modalSelectValues.delete(interactionId);
+  return storedValues?.[customId];
 }
 
 /**
@@ -2863,25 +2893,7 @@ export async function promptWithRawModal(
       },
     };
 
-    const restEndpoint = `https://discord.com/api/v10/interactions/${interaction.id}/${interaction.token}/callback`;
-
-    const response = await fetch(restEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(rawModalPayload),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      log.error(`Failed to send raw modal via REST API: ${response.status} ${response.statusText} - ${errorText}`);
-      throw createRawModalRestError(response, errorText);
-    }
-
-    // Mark this interaction as acknowledged via raw API for state tracking
-    rawModalAcknowledged.set(interaction, true);
-    log.info(`Marked interaction ${interaction.id} as raw-modal-acknowledged`);
+    await showRoutedRawModal(interaction, rawModalPayload.data);
 
     // Now we can use the standard awaitModalSubmit with the transformed data
     // Use Discord's natural timeout duration (~15 minutes)

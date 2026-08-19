@@ -47,6 +47,35 @@ Successful `safe_http` results place the formatted URL and Markdown in `ToolResu
 
 ## Guild MCP Replacements
 
+Remote registrations are managed through the ephemeral Components V2 `/mcps` collection panel.
+The panel reloads durable configuration on every global interaction, addresses writes by
+`guild_mcp_id` within the current workspace, and reports configured Enabled/Disabled state rather
+than live health. Add still validates the URL and tests a temporary connection before the encrypted
+registration is saved. Disable and Remove retain database write, post-success cache invalidation,
+then pooled-connection disconnect ordering. The legacy `/mcp add|list|remove|toggle` paths remain
+registered during the coexistence pilot and call the same canonical operations.
+The panel renders the complete supported collection in deterministic order. Each row is a compact
+name-and-safe-endpoint bullet followed by a localized configured-state/type blockquote, then its
+Enable/Disable and Remove actions; authentication presence is not displayed. It opens Add directly as one raw modal with Name,
+URL, optional Auth Token, and required General Purpose/Web Search/URL Fetcher type selection; General
+Purpose is selected by default and persists as `null`. Healthy views have no refresh control; stale or
+unavailable configuration reads expose read-only Retry, which reloads stored rows without connecting to
+an endpoint. Mutation receipts occupy a separate Components V2 container beside the authoritative
+repainted collection; Add receipts may include a bounded list of sanitized discovered tool names, with
+each name formatted separately as inline code.
+
+Each registration persists `last_discovered_tool_names` as a bounded display-only snapshot. `NULL`
+means discovery is unknown, including legacy rows; an empty array records a successful zero-tool
+discovery. The Add connection test writes its normalized result in the same registration INSERT. After a
+later lazy connection completes `listTools()`, `GuildMcpManager` best-effort refreshes the snapshot by
+stable `(server_id, guild_mcp_id)` identity in a detached task, so connection availability never waits for
+display metadata persistence. An unchanged snapshot performs no write, a successful update invalidates
+only the guild MCP configuration cache, and a failed update leaves the live connection and prior snapshot
+intact. Live `listTools()` output remains authoritative for routing and invocation; the panel never
+connects remotely to render this metadata. Snapshot retention defaults to 100 names and 128 Unicode
+characters per name, configurable with `MCP_TOOL_SNAPSHOT_MAX_NAMES` and
+`MCP_TOOL_SNAPSHOT_NAME_MAX_CHARS`.
+
 Guild MCP tools are appended after built-in and global MCP filtering, then collision-checked. If a guild enables a `url_fetcher` MCP server with at least one function, TomoriBot hides bundled `fetch_url` for that guild so the LLM receives one URL-fetch surface. Prompt macro resolution follows the same rule: `{url_fetch_tool}` prefers guild `url_fetcher` functions, then falls back to `fetch_url`.
 
 The `tool_family:url_fetch` prompt predicate follows the same family resolution. Under

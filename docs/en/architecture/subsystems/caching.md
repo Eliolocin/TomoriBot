@@ -326,6 +326,7 @@ Common examples:
 - channel system prompt changes -> `invalidateChannelPromptCache(serverId, channelDiscId)` (handled inside `ChannelPromptRepository`)
 - persona sprite changes -> `invalidatePersonaSpriteCache(personaId)` (handled inside `PersonaSpriteRepository`)
 - personal spotlight create/remove -> `invalidatePersonalSpotlightCache(serverId, userId?, channelDiscId?)` (also drops the per-server gate)
+- successful MCP tool-name snapshot changes -> `invalidateGuildMcpConfigCache(serverId)` only; unchanged or failed metadata writes do not invalidate it, and display metadata does not invalidate Tomori state
 
 ## Emergency Memory Cleanup
 

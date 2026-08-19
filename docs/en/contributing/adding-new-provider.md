@@ -206,7 +206,7 @@ The failure only surfaces when the LLM calls an MCP-backed tool.
 ### Guild MCP Tools
 
 In addition to global MCP tools, each guild can register its own remote MCP servers
-via `/config mcp add`. Your tool adapter's `getAllToolsIn*Format()` method **must**
+via the `/mcps` panel. Your tool adapter's `getAllToolsIn*Format()` method **must**
 also inject guild MCP tools by calling `getGuildMcpManager().getGuildMCPTools(serverId)`.
 
 The pattern (used by Google, OpenRouter, and OpenAI-compatible adapters):

@@ -45,6 +45,19 @@ describe("global interaction route registry", () => {
     expect(seen).toEqual(["category:memory"]);
   });
 
+  it("distinguishes a known namespace with an unsupported version", async () => {
+    const route: GlobalInteractionRoute = {
+      namespace: "help",
+      version: "v2",
+      execute: async () => {},
+    };
+    const registry = new InteractionRouteRegistry([route]);
+    await expect(registry.dispatchDetailed({} as Client, makeButton("help:v1:category:setup"))).resolves.toBe(
+      "stale-version",
+    );
+    await expect(registry.dispatchDetailed({} as Client, makeButton("persona:v1:next"))).resolves.toBe("unmatched");
+  });
+
   it("rejects duplicate namespace and version registrations", () => {
     const route: GlobalInteractionRoute = {
       namespace: "help",

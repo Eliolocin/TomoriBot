@@ -2105,6 +2105,8 @@ CREATE INDEX IF NOT EXISTS idx_guild_mcp_servers_server ON guild_mcp_servers(ser
 -- Optional server_type column for deduplicating default MCP tools.
 -- Values: NULL (general), 'web_search', 'url_fetcher'
 SELECT add_column_if_not_exists('guild_mcp_servers', 'server_type', 'TEXT');
+-- NULL = unknown/legacy, empty = last discovery returned no tools.
+SELECT add_column_if_not_exists('guild_mcp_servers', 'last_discovered_tool_names', 'TEXT[]');
 
 -- Trigger for updated_at auto-update
 DROP TRIGGER IF EXISTS update_guild_mcp_servers_timestamp ON guild_mcp_servers;

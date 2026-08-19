@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **27**. Runnable slash commands: **223**.
+Top-level command groups: **28**. Runnable slash commands: **224**.
 
 ## `/bot`
 
@@ -104,11 +104,11 @@ Generate commands.
 
 ## `/help`
 
-Browse setup, providers, memory, behavior, tools, media, integrations, and privacy guides.
+Browse setup, features, providers, memory, behavior, tools, media, and integration guides.
 
 | Command | Summary |
 |---|---|
-| `/help` | Browse setup, providers, memory, behavior, tools, media, integrations, and privacy guides. |
+| `/help` | Browse setup, features, providers, memory, behavior, tools, media, and integration guides. |
 
 ## `/legal`
 
@@ -127,9 +127,17 @@ Manage remote MCP (Model Context Protocol) tool servers
 | Command | Summary |
 |---|---|
 | `/mcp add` | Register a remote MCP server. See Integrations, then MCP, in /help. |
-| `/mcp list` | List all registered MCP servers for this guild. |
-| `/mcp remove` | Remove a registered MCP server from this guild. |
+| `/mcp list` | List all registered MCP servers for this workspace. |
+| `/mcp remove` | Remove a registered MCP server from this workspace. |
 | `/mcp toggle` | Enable or disable a registered MCP server. |
+
+## `/mcps`
+
+Add, list, enable, disable, and remove remote MCP tool servers.
+
+| Command | Summary |
+|---|---|
+| `/mcps` | Add, list, enable, disable, and remove remote MCP tool servers. |
 
 ## `/memory`
 

@@ -967,6 +967,24 @@ Rules:
 
 ## Representative Command Groups
 
+`/mcps` is a bare, manager-only, DM-capable root backed by globally routed `mcps:v1` Components V2
+IDs. Its navigation is reconstructable and performs no writes. Routed navigation and mutation
+submissions derive guild or DM-workspace scope again and recheck Manage Server in guilds. The Add
+opener rechecks permission before showing the form; its submit repeats the full scope and permission
+checks. Entity mutations resolve stable MCP row IDs inside that scope before a write. Known unsupported
+route versions receive a localized stale-panel response; unrelated component IDs remain available to
+collector workflows.
+Healthy empty and collection views repaint automatically after transactions and do not expose a routine
+refresh control. Stale or unavailable reads expose a read-only **Retry** action; Retry reloads saved
+configuration and never connects to an MCP endpoint. The collection renders every supported registration
+in deterministic order with its own Enable/Disable and Remove actions, then a **+ Add MCP** action.
+Receipts render in a separate top-level container beside the authoritative collection repaint.
+**+ Add MCP** opens one raw modal containing Name, URL, optional Auth Token, and the required
+General Purpose/Web Search/URL Fetcher Radio Group, with General Purpose selected by default. Its modal
+and field IDs carry bounded random nonces, and submission returns through the global router rather
+than an invocation-scoped modal collector, so a supported open modal can survive a process restart.
+The `/mcp add|list|remove|toggle` category coexists temporarily and shares canonical operations.
+
 - `bot`: respond, generate(image/scene), kill, impersonate
 - `config`: setup, model(text/image/embedding/video/vision/speech/transcription), api-key(rotation), provider(add/remove), custom-endpoint(add/edit/remove), image-tags(default-positive/default-negative), system-prompt(set/remove/preset), context-note(set), params(*), timezone, message-fetch-limit, self-debug, model-randomizer, workarounds, bot-permissions -> tool-use(toggle/manage), notice-embeds(visibility)
 - `speech`: elevenlabs, voice-add, voice-remove, voice-assign, transcripts, chatterbox(parameters)

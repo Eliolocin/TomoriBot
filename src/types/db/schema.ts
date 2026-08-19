@@ -1501,7 +1501,8 @@ export type SetupResult = z.infer<typeof setupResultSchema>;
 
 /**
  * Guild MCP Server : per-guild remote MCP server registration.
- * Stored in guild_mcp_servers table; auth_token is PGP-encrypted BYTEA.
+ * Stored in guild_mcp_servers table; auth_token is PGP-encrypted BYTEA and
+ * last_discovered_tool_names is display-only metadata, never an invocation source.
  */
 const guildMcpServerSchema = z.object({
   guild_mcp_id: z.number().optional(),
@@ -1512,6 +1513,7 @@ const guildMcpServerSchema = z.object({
   key_version: z.number().int().default(1),
   is_enabled: z.boolean().default(true),
   server_type: z.string().nullable().optional(),
+  last_discovered_tool_names: z.array(z.string()).nullable().optional(),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });

@@ -8,7 +8,7 @@ Discord introduced new interactive input components for modals beyond the origin
 
 | Type | Name                              | Description                                           | Container |
 | ---- | --------------------------------- | ----------------------------------------------------- | --------- |
-| 4    | [Text Input](#text-input)         | Free-form text entry (original modal input)           | Action Row |
+| 4    | [Text Input](#text-input)         | Free-form text entry (original modal input)           | Action Row or Label |
 | 18   | [Label](#label)                   | Wrapper component for new modal inputs                | —         |
 | 21   | [Radio Group](#radio-group)       | Select exactly one option from a list                 | Label     |
 | 22   | [Checkbox Group](#checkbox-group) | Select one or many options from a list                | Label     |
@@ -16,7 +16,7 @@ Discord introduced new interactive input components for modals beyond the origin
 
 ### Key Differences from Message Components
 
-- **Label wrapper required**: Radio Group, Checkbox Group, and Checkbox must be placed inside a Label component (type 18), _not_ an Action Row. This is unlike Text Inputs which use Action Rows.
+- **Label wrapper required for structured inputs**: Radio Group, Checkbox Group, and Checkbox must be placed inside a Label component (type 18), _not_ an Action Row. Text Inputs can use the older Action Row layout; TomoriBot's raw modal path wraps them in Labels so the same form can carry descriptions and structured inputs.
 - **Modal-only**: These components are only available in modals — they cannot be used in message payloads.
 - **Submit data structure**: The interaction response nests the input component inside the Label's `component` field, not in an `ActionRow.components` array.
 
@@ -429,7 +429,8 @@ Implemented examples:
 - `/server crosschannel-blocklist` manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.
 - `/config notice-embeds visibility` manages visible notice embed types in one modal.
 - `/config remove modeloverride` manages channel and persona overrides together in one modal.
-- `/config mcp remove` manages registered MCP servers in one modal.
+- The temporary `/mcp remove` bridge manages registered MCP servers in one modal. The preferred
+  `/mcps` panel uses explicitly confirmed per-entity removal instead of unchecked selection.
 - `/model fallback` manages the fallback chain in one modal, and each slot can be cleared directly with the built-in `None` option.
 - `/config random-trigger remove` manages random triggers in one modal when the set fits, with paginated fallback beyond modal limits.
 - `/server trigger remove` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
@@ -450,7 +451,7 @@ These modals use a String Select with a small, fixed, mutually exclusive option 
 | `/config setup`           | `config/setup.ts`            | `humanizer_degree`     | String Select | 4 (none/light/default/heavy)              | Same fixed humanizer degree set as above            |
 | `/personal privacy`       | `personal/privacy.ts`        | `privacy_select`       | String Select | 3 (minimal/partial/full)                  | Fixed set of 3 mutually exclusive levels            |
 | `/generate image`         | `generate/image.ts`          | `aspect_ratio_select`  | String Select | 10 (1:1, 2:3, 3:2, 3:4, 4:3, etc.)      | Fixed set of 10 aspect ratios — at the limit        |
-| `/config mcp add`         | `config/mcp/add.ts`          | `mcp_server_type`      | String Select | 3 (none/web_search/url_fetcher)           | Fixed set of 3 server types; optional field         |
+| `/mcp add` (temporary bridge) | `mcp/add.ts`              | `mcp_server_type`      | Radio Group | 3 (General Purpose/Web Search/URL Fetcher) | `/mcps` reuses the choices and descriptions in a required routed field with General Purpose selected by default |
 | `/tool compact`           | `tool/compact.ts`            | `summary_type`         | String Select | 2 (conversation/roleplay)                 | Fixed binary mode selection                         |
 
 ### Strong Candidates — Checkbox / Checkbox Group (Boolean Selects)
@@ -459,7 +460,7 @@ These modals currently use a 2-option String Select (yes/no, true/false, enable/
 
 | Command                    | File                            | Custom ID              | Current Options          | Required | Migration Target                               |
 | -------------------------- | ------------------------------- | ---------------------- | ------------------------ | -------- | ---------------------------------------------- |
-| `/config mcp toggle`       | `config/mcp/toggle.ts`         | `mcp_enabled_select`   | Enable / Disable         | Yes      | **Checkbox Group** (1 option, required)        |
+| `/mcp toggle` (temporary bridge) | `mcp/toggle.ts`         | `mcp_enabled_select`   | Enable / Disable         | Yes      | `/mcps` uses explicit Enable/Disable buttons        |
 | `/config random-trigger add`| `config/randomtrigger/add.ts`  | `respond_to_self`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/tool compact`            | `tool/compact.ts`              | `refresh_context`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/tool compact`            | `tool/compact.ts`              | `analyze_images`       | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
@@ -548,4 +549,10 @@ Use `promptWithUnacknowledgedConfirmation()` instead so the confirm button inter
 
 ## discord.js Support Status
 
-As of discord.js v14.x, these components may not yet have dedicated builder classes. TomoriBot already uses `promptWithRawModal()` in `interactionHelper.ts` which sends raw component payloads via the Discord REST API — this approach will work for the new component types without waiting for discord.js builder support. The raw modal system already handles Label (type 18) wrapping for string selects and file uploads, so extending it to support Radio Group (type 21), Checkbox Group (type 22), and Checkbox (type 23) should be straightforward.
+The current discord.js builder/data surface does not model every one of these inputs. TomoriBot sends
+Label-wrapped raw modal payloads through Discord REST and intercepts the gateway submission before
+discord.js parsing, preserving Radio Group, Checkbox Group, Checkbox, select, and file-upload values.
+Most command-local flows use `promptWithRawModal()` and its bounded collector. The persistent `/mcps`
+Add form reuses the raw send and value interception without that collector: nonce-bounded `mcps:v1`
+modal submissions go through the global interaction router, and interception is installed during
+startup so an already-open supported modal remains routable after a process restart.

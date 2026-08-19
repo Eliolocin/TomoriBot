@@ -13,6 +13,10 @@ import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
 import type { IRepository } from "./IRepository";
 
+export type McpConfigRepositoryReadResult =
+  | { status: "fresh"; configs: GuildMcpServerRow[] }
+  | { status: "unavailable"; configs: [] };
+
 class McpRepository implements IRepository<null> {
   /**
    * Load all MCP server configs registered for a guild (enabled and disabled).
@@ -22,18 +26,27 @@ class McpRepository implements IRepository<null> {
    * @returns Array of GuildMcpServerRow ordered by creation date; empty on error
    */
   async loadGuildMcpConfigs(serverId: number): Promise<GuildMcpServerRow[]> {
+    const result = await this.loadGuildMcpConfigsResult(serverId);
+    return result.configs;
+  }
+
+  /**
+   * Loads MCP registrations without collapsing a database failure into an
+   * authoritative empty collection.
+   */
+  async loadGuildMcpConfigsResult(serverId: number): Promise<McpConfigRepositoryReadResult> {
     try {
       const rows = await sql`
         SELECT guild_mcp_id, server_id, name, url, auth_token, key_version,
-               is_enabled, server_type, created_at, updated_at
+               is_enabled, server_type, last_discovered_tool_names, created_at, updated_at
         FROM guild_mcp_servers
         WHERE server_id = ${serverId}
         ORDER BY created_at ASC
       `;
-      return rows as GuildMcpServerRow[];
+      return { status: "fresh", configs: rows as GuildMcpServerRow[] };
     } catch (error) {
       log.error(`McpRepository.loadGuildMcpConfigs: failed for server ${serverId}`, error);
-      return [];
+      return { status: "unavailable", configs: [] };
     }
   }
 

@@ -1,6 +1,6 @@
 import type { GuildMcpServerRow } from "@/types/db/schema";
 import { log } from "@/utils/misc/logger";
-import { mcpRepository } from "@/utils/db/repositories/McpRepository";
+import { mcpRepository, type McpConfigRepositoryReadResult } from "@/utils/db/repositories/McpRepository";
 
 /**
  * Cache entry for a guild's MCP server configurations.
@@ -9,13 +9,15 @@ import { mcpRepository } from "@/utils/db/repositories/McpRepository";
 interface GuildMcpConfigCacheEntry {
   configs: GuildMcpServerRow[];
   cachedAt: number;
+  // A failed refresh keeps rows usable for display but must not silently
+  // re-enable writes on the next ordinary cache hit.
+  stale: boolean;
 }
 
-/**
- * In-memory cache: serverId (int) -> cache entry.
- * Keyed by internal server_id (not Discord snowflake) for direct DB FK alignment.
- */
-const cache = new Map<number, GuildMcpConfigCacheEntry>();
+export type GuildMcpConfigReadResult =
+  | { status: "fresh"; configs: GuildMcpServerRow[] }
+  | { status: "stale"; configs: GuildMcpServerRow[] }
+  | { status: "unavailable"; configs: [] };
 
 /**
  * Cache TTL in milliseconds. Default: 5 minutes.
@@ -23,9 +25,74 @@ const cache = new Map<number, GuildMcpConfigCacheEntry>();
  */
 const CACHE_TTL_MS = (Number(process.env.GUILD_MCP_CONFIG_CACHE_TTL_MINUTES) || 5) * 60 * 1000;
 
-/** Cache statistics for monitoring */
-let cacheHits = 0;
-let cacheMisses = 0;
+export interface GuildMcpConfigCacheStats {
+  hits: number;
+  misses: number;
+  hitRate: string;
+  cacheSize: number;
+}
+
+export type GuildMcpConfigLoader = (serverId: number) => Promise<McpConfigRepositoryReadResult>;
+
+export class GuildMcpConfigCache {
+  private readonly cache = new Map<number, GuildMcpConfigCacheEntry>();
+  private cacheHits = 0;
+  private cacheMisses = 0;
+
+  public constructor(
+    private readonly load: GuildMcpConfigLoader,
+    private readonly ttlMs = CACHE_TTL_MS,
+  ) {}
+
+  public async read(serverId: number, options: { forceRefresh?: boolean } = {}): Promise<GuildMcpConfigReadResult> {
+    const now = Date.now();
+    const entry = this.cache.get(serverId);
+
+    if (entry && !options.forceRefresh) {
+      const age = now - entry.cachedAt;
+      if (age < this.ttlMs) {
+        this.cacheHits++;
+        return { status: entry.stale ? "stale" : "fresh", configs: entry.configs };
+      }
+    }
+
+    this.cacheMisses++;
+    const result = await this.load(serverId);
+    if (result.status === "fresh") {
+      this.cache.set(serverId, { configs: result.configs, cachedAt: now, stale: false });
+      return { status: "fresh", configs: result.configs };
+    }
+
+    if (entry) {
+      entry.stale = true;
+      log.warn(`[GuildMcpConfigCache] Returning stale cache for server ${serverId} due to error`);
+      return { status: "stale", configs: entry.configs };
+    }
+    return { status: "unavailable", configs: [] };
+  }
+
+  public invalidate(serverId: number): void {
+    this.cache.delete(serverId);
+  }
+
+  public clear(): void {
+    this.cache.clear();
+    this.cacheHits = 0;
+    this.cacheMisses = 0;
+  }
+
+  public getStats(): GuildMcpConfigCacheStats {
+    const total = this.cacheHits + this.cacheMisses;
+    return {
+      hits: this.cacheHits,
+      misses: this.cacheMisses,
+      hitRate: total > 0 ? `${((this.cacheHits / total) * 100).toFixed(2)}%` : "N/A",
+      cacheSize: this.cache.size,
+    };
+  }
+}
+
+const guildMcpConfigCache = new GuildMcpConfigCache((serverId) => mcpRepository.loadGuildMcpConfigsResult(serverId));
 
 /**
  * Get cached guild MCP server configurations for a server.
@@ -33,47 +100,24 @@ let cacheMisses = 0;
  *
  * Cache flow:
  * - Check in-memory cache
- *    - HIT & FRESH → return immediately (0 DB queries)
- *    - MISS or STALE → load from DB, cache, and return
+ *    - HIT within TTL → return immediately with fresh/stale provenance (0 DB queries)
+ *    - MISS or expired entry → load from DB, cache, and return
  *
  * @returns Array of GuildMcpServerRow (may be empty if none registered)
  */
 export async function getCachedGuildMcpConfigs(serverId: number): Promise<GuildMcpServerRow[]> {
-  const now = Date.now();
-  const entry = cache.get(serverId);
+  return (await getGuildMcpConfigReadResult(serverId)).configs;
+}
 
-  if (entry) {
-    const age = now - entry.cachedAt;
-    if (age < CACHE_TTL_MS) {
-      cacheHits++;
-      return entry.configs;
-    }
-  }
-
-  // Cache miss or stale : load from DB via repository
-  cacheMisses++;
-
-  try {
-    const configs = await mcpRepository.loadGuildMcpConfigs(serverId);
-
-    // Cache the result (even if empty - avoids repeated DB queries for guilds with no MCP servers)
-    cache.set(serverId, {
-      configs,
-      cachedAt: now,
-    });
-
-    return configs;
-  } catch (error) {
-    log.error(`[GuildMcpConfigCache] Failed to load configs for server ${serverId}`, error);
-
-    // Return stale cache if available (graceful degradation)
-    if (entry) {
-      log.warn(`[GuildMcpConfigCache] Returning stale cache for server ${serverId} due to error`);
-      return entry.configs;
-    }
-
-    return [];
-  }
+/**
+ * Returns current MCP registrations with enough provenance for writable panels
+ * to avoid presenting a failed read as an empty collection.
+ */
+export async function getGuildMcpConfigReadResult(
+  serverId: number,
+  options: { forceRefresh?: boolean } = {},
+): Promise<GuildMcpConfigReadResult> {
+  return guildMcpConfigCache.read(serverId, options);
 }
 
 /**
@@ -92,35 +136,20 @@ export async function getCachedEnabledGuildMcpConfigs(serverId: number): Promise
  *
  */
 export function invalidateGuildMcpConfigCache(serverId: number): void {
-  cache.delete(serverId);
+  guildMcpConfigCache.invalidate(serverId);
 }
 
 /**
  * Useful for testing or manual refresh.
  */
 export function clearGuildMcpConfigCache(): void {
-  cache.clear();
-  cacheHits = 0;
-  cacheMisses = 0;
+  guildMcpConfigCache.clear();
 }
 
 /**
  * Get cache statistics for monitoring and debugging.
  *
  */
-export function getGuildMcpConfigCacheStats(): {
-  hits: number;
-  misses: number;
-  hitRate: string;
-  cacheSize: number;
-} {
-  const total = cacheHits + cacheMisses;
-  const hitRate = total > 0 ? `${((cacheHits / total) * 100).toFixed(2)}%` : "N/A";
-
-  return {
-    hits: cacheHits,
-    misses: cacheMisses,
-    hitRate,
-    cacheSize: cache.size,
-  };
+export function getGuildMcpConfigCacheStats(): GuildMcpConfigCacheStats {
+  return guildMcpConfigCache.getStats();
 }

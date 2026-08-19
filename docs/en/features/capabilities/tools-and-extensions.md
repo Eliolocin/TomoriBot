@@ -103,12 +103,17 @@ Any publicly hosted MCP server with an HTTPS endpoint works. Using
 
 1. Create an account and generate an API key from your profile.
 2. Open an MCP in the catalog and copy its **connection URL** (e.g. `https://youtube.run.tools`).
-3. Run `/mcp add`, paste the connection URL into **URL**, and paste your Smithery key into
-   **Auth Token**.
+3. Run `/mcps`, choose **+ Add MCP**, paste the connection URL into **URL**, paste your
+   Smithery key into **Auth Token**, and choose the required **Server Type**. **General
+   Purpose** is selected by default.
 
 If a server needs no auth, leave **Auth Token** blank. Your auth token is encrypted at rest
-and never shown again. Remove a server anytime with `/mcp remove`, which disconnects it
-immediately and frees a slot.
+and never shown again. Open `/mcps` to inspect configured state, enable or disable a server,
+or remove one with explicit confirmation. Removal disconnects it immediately and frees a slot.
+Each saved row also shows the bounded tool names from its last successful discovery. **None
+discovered** is a known zero-tool result; **Discovery unknown** identifies a legacy row or a server
+that has no successful snapshot yet. Opening `/mcps` only reads saved metadata and does not contact the
+remote server.
 
 ### Local MCP Servers
 

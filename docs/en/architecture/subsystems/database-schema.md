@@ -155,6 +155,13 @@ than externalising SQL. Size is the signal; the split must follow a coherent dom
 - `openrouter_embedding_model_registrations`
 - `openrouter_image_model_registrations`
 - `openrouter_video_model_registrations`
+- `guild_mcp_servers`
+
+`guild_mcp_servers.last_discovered_tool_names` is a nullable `TEXT[]` display snapshot from the last
+successful remote tool discovery. `NULL` means an older registration or unknown discovery state, an
+empty array means a successful discovery returned zero tools, and a non-empty array contains bounded,
+normalized names. Add persists the initial snapshot in the registration INSERT. Later lazy connections
+refresh it by `(server_id, guild_mcp_id)` without using it for invocation or exporting the registration.
 
 The `reminders` table keeps the canonical next occurrence in `reminder_time`.
 `next_attempt_at` is a nullable delivery-retry lease and

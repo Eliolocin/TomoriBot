@@ -12,8 +12,7 @@ import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { promptWithRawModal } from "@/utils/discord/ui/modals";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/discord/modal";
-import { toolRepository } from "@/utils/db/repositories/ToolRepository";
-import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
+import { mcpConfigOperations } from "@/utils/mcp/mcpConfigOperations";
 
 const MODAL_CUSTOM_ID = "config_mcp_remove_modal";
 const SERVER_CHECKBOX_ID_PREFIX = "mcp_server_checkbox_group";
@@ -22,14 +21,14 @@ const MAX_GROUPS_PER_MODAL = 5;
 const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
 
 /**
- * Configure the /config mcp remove subcommand.
+ * Configure the /mcp remove subcommand.
  * No options needed: server selection happens via modal string select.
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("remove").setDescription(localizer("en-US", "commands.mcp.remove.description"));
 
 /**
- * Execute /config mcp remove.
+ * Execute /mcp remove.
  * Shows checkbox groups of registered guild MCP servers. Checked entries stay;
  * unchecked entries are removed, disconnected, and purged from cache.
  *
@@ -138,18 +137,22 @@ export async function execute(
     const deletionResults = await Promise.all(
       configsToRemove.map(async (config) => ({
         config,
-        deleted: await toolRepository.deleteMcpServer(tomoriState.server_id, config.name, serverId),
+        result:
+          typeof config.guild_mcp_id === "number"
+            ? await mcpConfigOperations.remove({
+                serverId: tomoriState.server_id,
+                serverDiscId: serverId,
+                guildMcpId: config.guild_mcp_id,
+              })
+            : { status: "not-found" as const },
       })),
     );
-    const removedConfigs = deletionResults.filter((result) => result.deleted).map((result) => result.config);
-    const failedConfigs = deletionResults.filter((result) => !result.deleted).map((result) => result.config);
-
-    // Invalidate cache and disconnect only after successful DB writes
-    if (removedConfigs.length > 0) {
-      await Promise.all(
-        removedConfigs.map((config) => getGuildMcpManager().disconnectGuildServer(tomoriState.server_id, config.name)),
-      );
-    }
+    const removedConfigs = deletionResults
+      .filter(({ result }) => result.status === "success")
+      .map(({ config }) => config);
+    const failedConfigs = deletionResults
+      .filter(({ result }) => result.status !== "success")
+      .map(({ config }) => config);
 
     if (failedConfigs.length > 0) {
       const context: ErrorContext = {
@@ -158,7 +161,7 @@ export async function execute(
         personaId: null,
         errorType: "DatabaseDeleteError",
         metadata: {
-          command: "config mcp remove",
+          command: "mcp remove",
           failedNames: failedConfigs.map((config) => config.name),
         },
       };
@@ -193,9 +196,9 @@ export async function execute(
       serverId: null,
       personaId: null,
       errorType: "CommandExecutionError",
-      metadata: { command: "config mcp remove" },
+      metadata: { command: "mcp remove" },
     };
-    await log.error("Error executing /config mcp remove", error as Error, context);
+    await log.error("Error executing /mcp remove", error as Error, context);
 
     await interaction.followUp({
       content: localizer(locale, "general.errors.unknown_error_description"),

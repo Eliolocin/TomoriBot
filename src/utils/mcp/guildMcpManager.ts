@@ -335,7 +335,7 @@ class GuildMcpManager {
 
   /**
    * Test a remote MCP server connection without persisting anything.
-   * Used by `/config mcp add` to validate before saving.
+   * Used by MCP registration surfaces to validate before saving.
    *
    * @param authToken - Optional bearer token
    * @returns Test result with tool count and names
@@ -512,6 +512,32 @@ class GuildMcpManager {
 
       this.pool.set(key, conn);
       this.connectFailures.delete(key); // clear any prior quarantine on success
+      const guildMcpId = config.guild_mcp_id;
+      if (typeof guildMcpId === "number" && Number.isSafeInteger(guildMcpId) && guildMcpId > 0) {
+        try {
+          void toolRepository
+            .updateMcpToolNameSnapshot(config.server_id, guildMcpId, functionNames)
+            .then((snapshotResult) => {
+              if (snapshotResult === "failed") {
+                log.warn(
+                  `[GuildMcpManager] Tool-name snapshot refresh failed for MCP server ID ${guildMcpId} ` +
+                    `on server ${config.server_id}; keeping the live connection`,
+                );
+              }
+            })
+            .catch(() => {
+              log.warn(
+                `[GuildMcpManager] Tool-name snapshot refresh threw for MCP server ID ${guildMcpId} ` +
+                  `on server ${config.server_id}; keeping the live connection`,
+              );
+            });
+        } catch {
+          log.warn(
+            `[GuildMcpManager] Tool-name snapshot refresh threw for MCP server ID ${guildMcpId} ` +
+              `on server ${config.server_id}; keeping the live connection`,
+          );
+        }
+      }
       log.success(
         `[GuildMcpManager] Connected to guild MCP server "${config.name}" ` +
           `(server: ${config.server_id}, tools: ${functionNames.length}: ${functionNames.join(", ")})`,

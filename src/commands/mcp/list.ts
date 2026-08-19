@@ -18,13 +18,13 @@ const SERVER_TYPE_LABEL_KEYS: Record<string, string> = {
 };
 
 /**
- * Configure the /config mcp list subcommand.
+ * Configure the /mcp list subcommand.
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("list").setDescription(localizer("en-US", "commands.mcp.list.description"));
 
 /**
- * Execute /config mcp list.
+ * Execute /mcp list.
  * Shows all registered guild MCP servers with status info.
  *
  */
@@ -103,9 +103,9 @@ export async function execute(
       serverId: null,
       personaId: null,
       errorType: "CommandExecutionError",
-      metadata: { command: "config mcp list" },
+      metadata: { command: "mcp list" },
     };
-    await log.error("Error executing /config mcp list", error as Error, context);
+    await log.error("Error executing /mcp list", error as Error, context);
 
     await interaction.followUp({
       content: localizer(locale, "general.errors.unknown_error_description"),

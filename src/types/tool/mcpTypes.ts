@@ -303,7 +303,7 @@ export interface GuildMCPConnection {
 }
 
 /**
- * Result from GuildMcpManager.testConnection() : used by /config mcp add
+ * Result from GuildMcpManager.testConnection() : used by MCP registration surfaces
  * to validate a remote MCP server before persisting the registration.
  */
 export interface GuildMCPTestResult {

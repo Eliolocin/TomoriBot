@@ -12,22 +12,21 @@ import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { promptWithRawModal, safeSelectOptionText } from "@/utils/discord/ui/modals";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
-import { toolRepository } from "@/utils/db/repositories/ToolRepository";
-import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
+import { mcpConfigOperations } from "@/utils/mcp/mcpConfigOperations";
 
 const MODAL_CUSTOM_ID = "config_mcp_toggle_modal";
 const SERVER_SELECT_ID = "mcp_server_select";
 const STATE_SELECT_ID = "mcp_enabled_select";
 
 /**
- * Configure the /config mcp toggle subcommand.
+ * Configure the /mcp toggle subcommand.
  * No options needed: server and state selection happen via modal string selects.
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("toggle").setDescription(localizer("en-US", "commands.mcp.toggle.description"));
 
 /**
- * Execute /config mcp toggle.
+ * Execute /mcp toggle.
  * Shows a modal with a string select for the server name and an enable/disable select,
  * then updates the database and manages the connection pool accordingly.
  *
@@ -144,8 +143,17 @@ export async function execute(
     // Checkbox Group: "enable" in multiValues = enabled, absent = disabled
     const enabled = (modalResult.multiValues?.[STATE_SELECT_ID] ?? []).includes("enable");
 
-    const updated = await toolRepository.updateMcpServerEnabled(tomoriState.server_id, name, enabled, serverId);
-    if (!updated) {
+    const selected = configs.find((config) => config.name === name);
+    const result =
+      typeof selected?.guild_mcp_id === "number"
+        ? await mcpConfigOperations.setEnabled({
+            serverId: tomoriState.server_id,
+            serverDiscId: serverId,
+            guildMcpId: selected.guild_mcp_id,
+            enabled,
+          })
+        : { status: "not-found" as const };
+    if (result.status !== "success" && result.status !== "unchanged") {
       await replyInfoEmbed(replyInteraction, locale, {
         titleKey: "commands.mcp.toggle.not_found_title",
         descriptionKey: "commands.mcp.toggle.not_found_description",
@@ -153,11 +161,6 @@ export async function execute(
         color: ColorCode.WARN,
       });
       return;
-    }
-
-    // If disabling, disconnect from pool (cache invalidated by repository)
-    if (!enabled) {
-      await getGuildMcpManager().disconnectGuildServer(tomoriState.server_id, name);
     }
 
     const titleKey = enabled
@@ -181,9 +184,9 @@ export async function execute(
       serverId: null,
       personaId: null,
       errorType: "CommandExecutionError",
-      metadata: { command: "config mcp toggle" },
+      metadata: { command: "mcp toggle" },
     };
-    await log.error("Error executing /config mcp toggle", error as Error, context);
+    await log.error("Error executing /mcp toggle", error as Error, context);
 
     await interaction.followUp({
       content: localizer(locale, "general.errors.unknown_error_description"),
