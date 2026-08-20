@@ -429,8 +429,9 @@ Implemented examples:
 - `/server crosschannel-blocklist` manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.
 - `/config notice-embeds visibility` manages visible notice embed types in one modal.
 - `/config remove modeloverride` manages channel and persona overrides together in one modal.
-- The temporary `/mcp remove` bridge manages registered MCP servers in one modal. The preferred
-  `/mcps` panel uses explicitly confirmed per-entity removal instead of unchecked selection.
+- MCP registrations are deliberately excluded from this pattern: the `/mcps` panel removes one
+  registration at a time behind an explicit confirmation, so selection never becomes destructive
+  consent.
 - `/model fallback` manages the fallback chain in one modal, and each slot can be cleared directly with the built-in `None` option.
 - `/config random-trigger remove` manages random triggers in one modal when the set fits, with paginated fallback beyond modal limits.
 - `/server trigger remove` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
@@ -451,7 +452,7 @@ These modals use a String Select with a small, fixed, mutually exclusive option 
 | `/config setup`           | `config/setup.ts`            | `humanizer_degree`     | String Select | 4 (none/light/default/heavy)              | Same fixed humanizer degree set as above            |
 | `/personal privacy`       | `personal/privacy.ts`        | `privacy_select`       | String Select | 3 (minimal/partial/full)                  | Fixed set of 3 mutually exclusive levels            |
 | `/generate image`         | `generate/image.ts`          | `aspect_ratio_select`  | String Select | 10 (1:1, 2:3, 3:2, 3:4, 4:3, etc.)      | Fixed set of 10 aspect ratios — at the limit        |
-| `/mcp add` (temporary bridge) | `mcp/add.ts`              | `mcp_server_type`      | Radio Group | 3 (General Purpose/Web Search/URL Fetcher) | `/mcps` reuses the choices and descriptions in a required routed field with General Purpose selected by default |
+| `/mcps` Add form          | `discord/ui/mcpsPanel.ts`    | `server-type_{nonce}`  | Radio Group   | 3 (General Purpose/Web Search/URL Fetcher) | Already migrated: required routed field with General Purpose selected by default |
 | `/tool compact`           | `tool/compact.ts`            | `summary_type`         | String Select | 2 (conversation/roleplay)                 | Fixed binary mode selection                         |
 
 ### Strong Candidates — Checkbox / Checkbox Group (Boolean Selects)
@@ -460,7 +461,6 @@ These modals currently use a 2-option String Select (yes/no, true/false, enable/
 
 | Command                    | File                            | Custom ID              | Current Options          | Required | Migration Target                               |
 | -------------------------- | ------------------------------- | ---------------------- | ------------------------ | -------- | ---------------------------------------------- |
-| `/mcp toggle` (temporary bridge) | `mcp/toggle.ts`         | `mcp_enabled_select`   | Enable / Disable         | Yes      | `/mcps` uses explicit Enable/Disable buttons        |
 | `/config random-trigger add`| `config/randomtrigger/add.ts`  | `respond_to_self`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/tool compact`            | `tool/compact.ts`              | `refresh_context`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/tool compact`            | `tool/compact.ts`              | `analyze_images`       | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |

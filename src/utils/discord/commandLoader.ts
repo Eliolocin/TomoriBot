@@ -107,7 +107,6 @@ const MANAGER_ONLY_CATEGORIES = [
   "config",
   "model",
   "provider",
-  "mcp",
   "capabilities",
   "nsfw",
   "openrouter",

@@ -14,6 +14,7 @@
  */
 import { SQL } from "bun";
 import { initializeDatabase } from "@/utils/db/initializeDatabase";
+import { keyManager } from "@/utils/security/keyManager";
 
 const effectiveHost = process.env.TEST_POSTGRES_HOST ?? process.env.POSTGRES_HOST ?? "localhost";
 const effectivePort = process.env.TEST_POSTGRES_PORT ?? process.env.POSTGRES_PORT ?? "5432";
@@ -67,6 +68,19 @@ let bootstrapPromise: Promise<void> | null = null;
  * is argument-invariant, so no cache key is needed.
  */
 export async function setupTestDb(): Promise<void> {
-  bootstrapPromise ??= initializeDatabase({ client: testSql, includeRag: false });
+  bootstrapPromise ??= bootstrap();
   await bootstrapPromise;
+}
+
+/**
+ * Repository writes that encrypt a credential read the key manager singleton, which the bot
+ * populates during secret loading rather than lazily. Without this the harness leaves it at
+ * version 0 and every such insert fails inside its own catch, surfacing as a null row instead
+ * of an error. The fallback keeps the suite runnable on a machine that has Postgres but no
+ * CRYPTO_SECRET; it is a disposable test value and never reaches a real database.
+ */
+async function bootstrap(): Promise<void> {
+  process.env.CRYPTO_SECRET ??= "tomoribot_regression_harness_crypto_secret";
+  keyManager.initialize();
+  await initializeDatabase({ client: testSql, includeRag: false });
 }

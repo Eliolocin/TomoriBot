@@ -607,7 +607,7 @@ const integrationPages: readonly HelpPageDefinition[] = [
       { titleKey: "commands.help.mcp.security_title", bodyKey: "commands.help.mcp.security_description" },
     ],
     footerKey: "commands.help.mcp.footer",
-    variables: () => ({ configMcpAdd: mention("mcps") }),
+    variables: () => ({ mcpsCommand: mention("mcps") }),
   },
   {
     id: "sillytavern-presets",

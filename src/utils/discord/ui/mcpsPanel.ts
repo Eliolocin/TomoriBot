@@ -330,7 +330,7 @@ export function buildAddMcpModal(
       {
         type: 18,
         label: safeSelectOptionText(localizer(locale, "commands.mcps.server_type_label"), 45),
-        description: safeSelectOptionText(localizer(locale, "commands.mcp.add.server_type_description"), 99),
+        description: safeSelectOptionText(localizer(locale, "commands.mcps.server_type_description"), 99),
         component: {
           type: 21,
           custom_id: buildMcpsAddModalFieldId("server-type", nonce),
@@ -338,19 +338,19 @@ export function buildAddMcpModal(
           options: [
             {
               value: "none",
-              label: localizer(locale, "commands.mcp.add.none_option"),
-              description: localizer(locale, "commands.mcp.add.none_option_description"),
+              label: localizer(locale, "commands.mcps.type_general"),
+              description: localizer(locale, "commands.mcps.type_general_description"),
               default: true,
             },
             {
               value: "web_search",
-              label: localizer(locale, "commands.mcp.add.web_search_option"),
-              description: localizer(locale, "commands.mcp.add.web_search_option_description"),
+              label: localizer(locale, "commands.mcps.type_web_search"),
+              description: localizer(locale, "commands.mcps.type_web_search_description"),
             },
             {
               value: "url_fetcher",
-              label: localizer(locale, "commands.mcp.add.url_fetcher_option"),
-              description: localizer(locale, "commands.mcp.add.url_fetcher_option_description"),
+              label: localizer(locale, "commands.mcps.type_url_fetcher"),
+              description: localizer(locale, "commands.mcps.type_url_fetcher_description"),
             },
           ],
         },

@@ -155,7 +155,7 @@ handler.
 - `generate`
 - `help`
 - `legal`
-- `mcp`
+- `mcps`
 - `memory`
 - `model`
 - `novelai`
@@ -983,7 +983,7 @@ Receipts render in a separate top-level container beside the authoritative colle
 General Purpose/Web Search/URL Fetcher Radio Group, with General Purpose selected by default. Its modal
 and field IDs carry bounded random nonces, and submission returns through the global router rather
 than an invocation-scoped modal collector, so a supported open modal can survive a process restart.
-The `/mcp add|list|remove|toggle` category coexists temporarily and shares canonical operations.
+Bare `/mcps` is the only registered MCP path; there is no `/mcp` subcommand tree.
 
 - `bot`: respond, generate(image/scene), kill, impersonate
 - `config`: setup, model(text/image/embedding/video/vision/speech/transcription), api-key(rotation), provider(add/remove), custom-endpoint(add/edit/remove), image-tags(default-positive/default-negative), system-prompt(set/remove/preset), context-note(set), params(*), timezone, message-fetch-limit, self-debug, model-randomizer, workarounds, bot-permissions -> tool-use(toggle/manage), notice-embeds(visibility)

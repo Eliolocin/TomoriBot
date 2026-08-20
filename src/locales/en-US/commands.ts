@@ -29,7 +29,7 @@ import teach from "./commands/teach";
 import forget from "./commands/forget";
 import generate from "./commands/generate";
 import model from "./commands/model";
-import mcp from "./commands/mcp";
+import mcps from "./commands/mcps";
 import capabilities from "./commands/capabilities";
 import provider from "./commands/provider";
 import update from "./commands/update";
@@ -65,7 +65,7 @@ export default {
     ...forget,
     ...generate,
     ...model,
-    ...mcp,
+    ...mcps,
     ...capabilities,
     ...provider,
     ...update,

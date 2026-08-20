@@ -52,8 +52,9 @@ The panel reloads durable configuration on every global interaction, addresses w
 `guild_mcp_id` within the current workspace, and reports configured Enabled/Disabled state rather
 than live health. Add still validates the URL and tests a temporary connection before the encrypted
 registration is saved. Disable and Remove retain database write, post-success cache invalidation,
-then pooled-connection disconnect ordering. The legacy `/mcp add|list|remove|toggle` paths remain
-registered during the coexistence pilot and call the same canonical operations.
+then pooled-connection disconnect ordering. Bare `/mcps` is the only registered MCP management
+path, and every mutation runs through the canonical operations in
+`src/utils/mcp/mcpConfigOperations.ts`.
 The panel renders the complete supported collection in deterministic order. Each row is a compact
 name-and-safe-endpoint bullet followed by a localized configured-state/type blockquote, then its
 Enable/Disable and Remove actions; authentication presence is not displayed. It opens Add directly as one raw modal with Name,
