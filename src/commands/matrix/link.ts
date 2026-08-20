@@ -1,5 +1,5 @@
 /**
- * /server matrix link
+ * /matrix link
  * Links a Discord channel to a Matrix room for bidirectional message relay.
  * Uses upsert semantics so re-linking replaces any existing mapping.
  *
@@ -31,28 +31,28 @@ import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 
 /**
- * Configure the /server matrix link subcommand builder.
+ * Configure the /matrix link subcommand builder.
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("link")
-    .setDescription(localizer("en-US", "commands.server.matrix.link.description"))
+    .setDescription(localizer("en-US", "commands.matrix.link.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(localizer("en-US", "commands.server.matrix.link.channel_description"))
+        .setDescription(localizer("en-US", "commands.matrix.link.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("room")
-        .setDescription(localizer("en-US", "commands.server.matrix.link.room_description"))
+        .setDescription(localizer("en-US", "commands.matrix.link.room_description"))
         .setRequired(true),
     );
 
 /**
- * Execute the /server matrix link command.
+ * Execute the /matrix link command.
  * Links the chosen Discord channel to the given Matrix room ID.
  *
  */
@@ -93,8 +93,8 @@ export async function execute(
     if (!isMatrixConfigured()) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
-        titleKey: "commands.server.matrix.link.matrix_not_configured_title",
-        descriptionKey: "commands.server.matrix.link.matrix_not_configured_description",
+        titleKey: "commands.matrix.link.matrix_not_configured_title",
+        descriptionKey: "commands.matrix.link.matrix_not_configured_description",
       });
       return;
     }
@@ -119,8 +119,8 @@ export async function execute(
     if (!roomId.startsWith("!") || !roomId.includes(":")) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
-        titleKey: "commands.server.matrix.link.invalid_room_title",
-        descriptionKey: "commands.server.matrix.link.invalid_room_description",
+        titleKey: "commands.matrix.link.invalid_room_title",
+        descriptionKey: "commands.matrix.link.invalid_room_description",
       });
       return;
     }
@@ -130,8 +130,8 @@ export async function execute(
     if (await isRoomEncrypted(roomId)) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.ERROR,
-        titleKey: "commands.server.matrix.link.encrypted_room_title",
-        descriptionKey: "commands.server.matrix.link.encrypted_room_description",
+        titleKey: "commands.matrix.link.encrypted_room_title",
+        descriptionKey: "commands.matrix.link.encrypted_room_description",
         descriptionVars: {
           room_id: roomId,
           bot_user_id: process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account",
@@ -159,13 +159,13 @@ export async function execute(
     }
 
     const botUserId = process.env.MATRIX_BOT_USER_ID ?? "the Matrix bot account";
-    const helpMatrixMention = commandRegistry.getCommandMention("help", "matrix");
+    const helpMatrixMention = commandRegistry.getCommandMention("help");
 
     if (joinFailed) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.WARN,
-        titleKey: "commands.server.matrix.link.success_title",
-        descriptionKey: "commands.server.matrix.link.join_failed_description",
+        titleKey: "commands.matrix.link.success_title",
+        descriptionKey: "commands.matrix.link.join_failed_description",
         descriptionVars: {
           channel_id: channel.id,
           room_id: roomId,
@@ -176,8 +176,8 @@ export async function execute(
     } else {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.SUCCESS,
-        titleKey: "commands.server.matrix.link.success_title",
-        descriptionKey: "commands.server.matrix.link.success_description",
+        titleKey: "commands.matrix.link.success_title",
+        descriptionKey: "commands.matrix.link.success_description",
         descriptionVars: {
           channel_id: channel.id,
           room_id: roomId,
@@ -198,7 +198,7 @@ export async function execute(
       `Matrix bridge: linked channel ${channel.id} (${channel.name}) to room ${roomId} in guild ${interaction.guildId}`,
     );
   } catch (error) {
-    log.error("Error executing /server matrix link", error, errorContext);
+    log.error("Error executing /matrix link", error, errorContext);
     await replyInfoEmbed(interaction, locale, {
       color: ColorCode.ERROR,
       titleKey: "general.errors.unknown_error_title",

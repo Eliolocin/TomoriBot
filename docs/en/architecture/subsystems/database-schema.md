@@ -289,7 +289,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 
 ### Conditioning history
 
-- `conditioning_history` stores behavioral reinforcement events from `/conditioning reward` and `/conditioning punish`.
+- `conditioning_history` stores behavioral reinforcement events from `/reward` and `/punish`.
 - Rows are grouped logically by `server_id + persona_lineage_id + conditioning_type + action_key + reason_normalized`.
 - The physical uniqueness constraint is further scoped by `user_id`, so repeated actions by the same user increment `count` while different users still aggregate at read time.
 - Empty `reason_text` values are allowed and stored, but those rows are intentionally excluded from prompt injection.

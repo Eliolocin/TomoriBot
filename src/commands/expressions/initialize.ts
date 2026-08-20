@@ -1,5 +1,5 @@
 /**
- * /server expressions initialize command
+ * /expressions initialize command
  *
  * Uses LLM vision with structured output to automatically analyze and classify
  * all custom emojis and stickers in a Discord server, generating emotion keys
@@ -9,7 +9,7 @@
  */
 
 import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
-import { MessageFlags } from "discord.js";
+import { MessageFlags, PermissionFlagsBits } from "discord.js";
 import { personaRepository, serverRepository } from "@/utils/db/repositories";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
@@ -33,11 +33,11 @@ import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("initialize")
-    .setDescription(localizer("en-US", "commands.server.expressions.initialize.description"))
+    .setDescription(localizer("en-US", "commands.expressions.initialize.description"))
     .addBooleanOption((option) =>
       option
         .setName("overwrite")
-        .setDescription(localizer("en-US", "commands.server.expressions.initialize.overwrite_description"))
+        .setDescription(localizer("en-US", "commands.expressions.initialize.overwrite_description"))
         .setRequired(false),
     );
 
@@ -100,7 +100,7 @@ Return results in the specified JSON format.`;
 }
 
 /**
- * Execute the /server expressions initialize command
+ * Execute the /expressions initialize command
  *
  */
 export async function execute(
@@ -113,6 +113,16 @@ export async function execute(
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.guild_only_title",
       descriptionKey: "general.errors.guild_only_description",
+      color: hexToNumber(ColorCode.ERROR),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.permission_denied_title",
+      descriptionKey: "general.errors.permission_denied_description",
       color: hexToNumber(ColorCode.ERROR),
       flags: MessageFlags.Ephemeral,
     });
@@ -174,15 +184,11 @@ export async function execute(
           await interaction.editReply({
             embeds: [
               {
-                title: localizer(locale, "commands.server.expressions.initialize.model_incompatible_title"),
-                description: localizer(
-                  locale,
-                  "commands.server.expressions.initialize.model_incompatible_description",
-                  {
-                    model_name: effectiveModelName,
-                    missing_capability: missingCapability,
-                  },
-                ),
+                title: localizer(locale, "commands.expressions.initialize.model_incompatible_title"),
+                description: localizer(locale, "commands.expressions.initialize.model_incompatible_description", {
+                  model_name: effectiveModelName,
+                  missing_capability: missingCapability,
+                }),
                 color: hexToNumber(ColorCode.ERROR),
               },
             ],
@@ -191,8 +197,8 @@ export async function execute(
           await interaction.editReply({
             embeds: [
               {
-                title: localizer(locale, "commands.server.expressions.initialize.vision_fallback_title"),
-                description: localizer(locale, "commands.server.expressions.initialize.vision_fallback_description", {
+                title: localizer(locale, "commands.expressions.initialize.vision_fallback_title"),
+                description: localizer(locale, "commands.expressions.initialize.vision_fallback_description", {
                   chat_model: effectiveModelName,
                   vision_model: visionLlm.llm_codename,
                 }),
@@ -263,8 +269,8 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(locale, "commands.server.expressions.initialize.already_initialized_title"),
-            description: localizer(locale, "commands.server.expressions.initialize.already_initialized_description"),
+            title: localizer(locale, "commands.expressions.initialize.already_initialized_title"),
+            description: localizer(locale, "commands.expressions.initialize.already_initialized_description"),
             color: hexToNumber(ColorCode.INFO),
           },
         ],
@@ -355,7 +361,7 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            description: localizer(locale, "commands.server.expressions.initialize.progress_analyzing_batch", {
+            description: localizer(locale, "commands.expressions.initialize.progress_analyzing_batch", {
               batch_number: batchNumber,
               batch_size: images.length,
               remaining,
@@ -443,8 +449,8 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(locale, "commands.server.expressions.initialize.no_matches_title"),
-            description: localizer(locale, "commands.server.expressions.initialize.no_matches_description"),
+            title: localizer(locale, "commands.expressions.initialize.no_matches_title"),
+            description: localizer(locale, "commands.expressions.initialize.no_matches_description"),
             color: hexToNumber(ColorCode.WARN),
           },
         ],
@@ -454,8 +460,8 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(locale, "commands.server.expressions.initialize.partial_success_title"),
-            description: localizer(locale, "commands.server.expressions.initialize.partial_success_description", {
+            title: localizer(locale, "commands.expressions.initialize.partial_success_title"),
+            description: localizer(locale, "commands.expressions.initialize.partial_success_description", {
               successful: totalProcessed,
               total: grandTotalUninitialized,
               failed,
@@ -468,8 +474,8 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(locale, "commands.server.expressions.initialize.success_title"),
-            description: localizer(locale, "commands.server.expressions.initialize.success_description", {
+            title: localizer(locale, "commands.expressions.initialize.success_title"),
+            description: localizer(locale, "commands.expressions.initialize.success_description", {
               emoji_count: totalEmojiProcessed,
               sticker_count: totalStickerProcessed,
               total: totalProcessed,
@@ -491,7 +497,7 @@ export async function execute(
       },
     };
 
-    await log.error("Error executing /server expressions initialize command", error as Error, context);
+    await log.error("Error executing /expressions initialize command", error as Error, context);
 
     await interaction.editReply({
       embeds: [

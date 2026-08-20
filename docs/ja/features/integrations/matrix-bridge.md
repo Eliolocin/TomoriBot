@@ -11,9 +11,9 @@ TomoriBotは、**Matrixの部屋**とDiscordのチャンネルをブリッジで
 
 1. 設定済みのMatrixのbotアカウントを、**暗号化されていない**Matrixの部屋に招待します。
 2. その部屋の**Internal Room ID**をコピーします。
-3. ブリッジしたいDiscordのチャンネルで`/server matrix link`を実行し、部屋のIDを貼り付けます。
+3. ブリッジしたいDiscordのチャンネルで`/matrix link`を実行し、部屋のIDを貼り付けます。
 
-botが招待を受け入れると、Matrixの部屋に短いリマインダーが投稿されます。リンクの完了は、引き続きDiscordから`/server matrix link`で行います。
+botが招待を受け入れると、Matrixの部屋に短いリマインダーが投稿されます。リンクの完了は、引き続きDiscordから`/matrix link`で行います。
 
 ### 部屋のIDを見つける
 
@@ -36,7 +36,7 @@ botが招待を受け入れると、Matrixの部屋に短いリマインダー�
 
 ## 注意事項
 
-- botが自動的に参加しない場合は、手動でMatrixのbotアカウントを招待し、再度`/server matrix link`を実行してください。
+- botが自動的に参加しない場合は、手動でMatrixのbotアカウントを招待し、再度`/matrix link`を実行してください。
 - **Matrixの暗号化は後から無効にできません**。暗号化された部屋は、新しく暗号化されていない部屋に置き換える必要があります。
 - 上記に記載されていない制限事項がある場合は、動作するはずだと想定し、サポートサーバー（`/support discord`）でバグを報告してください。
 

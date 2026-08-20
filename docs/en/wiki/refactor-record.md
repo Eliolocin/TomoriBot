@@ -327,5 +327,5 @@ Records where cache invalidation lives after the repository migration. All inval
 | Personal spotlight | `src/commands/personal/spotlight/set.ts`, `manage.ts` | Dedicated personal-spotlight DB module; ownership stays here unless it later moves under a repository |
 | ST preset cache | `src/utils/db/stPresetDb.ts` (now `PresetRepository`) | Write-after-success placement preserved during fold |
 | Emoji/sticker cache | `src/events/guildEmojisUpdate/refreshEmojis.ts`, `guildStickersUpdate/refreshStickers.ts` | Event-driven cache; invalidation follows Discord events, not DB writes |
-| Matrix link cache | `src/commands/server/matrix/link.ts`, `unlink.ts` | Matrix bridge module — not part of the repository layer |
+| Matrix link cache | `src/commands/matrix/link.ts`, `unlink.ts` | Matrix bridge module - not part of the repository layer |
 | Webhook cache | `src/utils/discord/webhook/` internal helpers | Cache keys are Discord webhook lifecycle state, not repository reads |

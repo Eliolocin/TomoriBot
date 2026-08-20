@@ -12,12 +12,11 @@ import { llmModelRepo, personaRepository } from "@/utils/db/repositories";
 import { getCachedWhitelistStatus } from "../../utils/cache/channelWhitelistCache";
 import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
-import { findLastActivePersona } from "@/utils/discord/personaTurnDetection";
+import { resolveFallbackPersona } from "@/utils/discord/personaTurnDetectionResolver";
 import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/persona/personaAccess";
 import { CooldownType } from "../../types/db/schema";
 import { cooldownRepository } from "@/utils/db/repositories/CooldownRepository";
 import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
-import type { TomoriState } from "@/types/db/schema";
 
 /**
  * Configure the respond subcommand
@@ -32,35 +31,6 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
         .setDescription(localizer("en-US", "commands.bot.respond.extra_options_description"))
         .setRequired(false),
     );
-
-function getChannelAutoTriggerPersona(
-  personas: TomoriState[],
-  effectiveChannelId: string,
-  tomoriState: TomoriState,
-  personalAutoTriggerPersonaId?: number | null,
-): TomoriState | null {
-  const resolveById = (personaId: number | null | undefined): TomoriState | null => {
-    if (personaId === null || personaId === undefined) return null;
-    return personas.find((persona) => persona.persona_id === personaId) ?? null;
-  };
-
-  const personalAutoTriggerPersona = resolveById(personalAutoTriggerPersonaId);
-  if (personalAutoTriggerPersona) {
-    return personalAutoTriggerPersona;
-  }
-
-  if (!tomoriState.config.autoch_disc_ids.includes(effectiveChannelId)) {
-    return null;
-  }
-
-  const serverAutoTriggerPersonaId =
-    tomoriState.config.autoch_persona_overrides.find((entry) => entry.channel_disc_id === effectiveChannelId)
-      ?.persona_id ?? null;
-
-  return serverAutoTriggerPersonaId === null
-    ? (personas.find((persona) => !persona.is_alter) ?? null)
-    : resolveById(serverAutoTriggerPersonaId);
-}
 
 /**
  * Execute the respond command - manually trigger Tomori to respond to the latest message
@@ -212,22 +182,15 @@ export async function execute(
     return;
   }
 
-  const availablePersonaIds = new Set(availablePersonas.map((persona) => persona.persona_id));
-  const lastActivePersona = findLastActivePersona({
-    messages,
-    allPersonas,
-    clientUserId: client.user?.id,
-  });
-  const allowedLastActivePersona =
-    lastActivePersona && availablePersonaIds.has(lastActivePersona.persona_id) ? lastActivePersona : null;
-  const autoTriggerPersona = getChannelAutoTriggerPersona(
+  const fallbackPersona = await resolveFallbackPersona({
     availablePersonas,
-    parentChannelId ?? interaction.channel.id,
+    allPersonas,
     tomoriState,
-    personalSpotlightStatus?.autoTriggerPersonaId ?? null,
-  );
-  const defaultPersona = availablePersonas.find((persona) => !persona.is_alter) ?? availablePersonas[0];
-  const fallbackPersona = allowedLastActivePersona ?? autoTriggerPersona ?? defaultPersona;
+    effectiveChannelId: parentChannelId ?? interaction.channel.id,
+    personalAutoTriggerPersonaId: personalSpotlightStatus?.autoTriggerPersonaId ?? null,
+    clientUserId: client.user?.id,
+    fetchRecentMessages: async () => messages,
+  });
 
   if (!fallbackPersona) {
     await replyInfoEmbed(interaction, locale, {

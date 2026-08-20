@@ -65,7 +65,7 @@ finish. Instance operators can tune this grace period with `WELCOME_DELAY_MS`. U
 
 ## Expressions
 
-`/server expressions initialize` registers your server's custom emojis and stickers so she
+`/expressions initialize` registers your server's custom emojis and stickers so she
 uses them accurately — recommended right after setup. For what she does with them (natural
 `:emoji:` use, stickers, reactions), see
 [Expressions & Reactions](/features/chatting-personality/chatting-and-triggers/#expressions--reactions).

@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **30**. Runnable slash commands: **220**.
+Top-level command groups: **34**. Runnable slash commands: **220**.
 
 ## `/bot`
 
@@ -48,16 +48,6 @@ Manage persistent reward and punishment conditioning memories.
 | Command | Summary |
 |---|---|
 | `/conditioning manage` | Manage injected conditioning history across all personas in this server. |
-| `/conditioning punish bite` | Give me a playful bite! |
-| `/conditioning punish bonk` | Give me a bonk on the head! |
-| `/conditioning punish pinch` | Give me a pinch! |
-| `/conditioning punish spank` | Give me a playful spank! |
-| `/conditioning punish squeeze` | Give me a squeeze! |
-| `/conditioning reward feed` | Feed me a delicious snack! |
-| `/conditioning reward headpat` | Give me a headpat! |
-| `/conditioning reward hug` | Give me a hug! |
-| `/conditioning reward kiss` | Give me a kiss! |
-| `/conditioning reward tickle` | Tickle me! |
 
 ## `/config`
 
@@ -100,6 +90,15 @@ Support TomoriBot's development and hosting costs.
 |---|---|
 | `/donate kofi` | Support TomoriBot development through Ko-fi donations. |
 
+## `/expressions`
+
+Teach TomoriBot when to use this server's custom emojis and stickers.
+
+| Command | Summary |
+|---|---|
+| `/expressions edit` | Edit the emotion and usage instructions of a single emoji or sticker |
+| `/expressions initialize` | Analyze and classify all custom emojis and stickers using AI vision |
+
 ## `/generate`
 
 Generate AI images and videos.
@@ -134,6 +133,15 @@ View TomoriBot's terms of service, privacy policy, and license.
 | `/legal license` | View TomoriBot's open-source license |
 | `/legal privacy` | View TomoriBot's Privacy Policy |
 | `/legal terms` | View TomoriBot's Terms of Service |
+
+## `/matrix`
+
+Link Discord channels to Matrix rooms for bidirectional relay.
+
+| Command | Summary |
+|---|---|
+| `/matrix link` | Link a Discord channel to a Matrix room for bidirectional relay |
+| `/matrix unlink` | Remove the Matrix bridge link from a Discord channel |
 
 ## `/mcps`
 
@@ -320,6 +328,30 @@ Manage this server's shared AI providers.
 | `/provider custom-endpoint remove` | Remove selected capabilities from labeled custom endpoints. |
 | `/provider remove` | Remove a saved provider configuration from this server. |
 
+## `/punish`
+
+Punish me with playful interactions.
+
+| Command | Summary |
+|---|---|
+| `/punish bite` | Give me a playful bite! |
+| `/punish bonk` | Give me a bonk on the head! |
+| `/punish pinch` | Give me a pinch! |
+| `/punish spank` | Give me a playful spank! |
+| `/punish squeeze` | Give me a squeeze! |
+
+## `/reward`
+
+Reward me with fun interactions.
+
+| Command | Summary |
+|---|---|
+| `/reward feed` | Feed me a delicious snack! |
+| `/reward headpat` | Give me a headpat! |
+| `/reward hug` | Give me a hug! |
+| `/reward kiss` | Give me a kiss! |
+| `/reward tickle` | Tickle me! |
+
 ## `/scheduled-task`
 
 Manage scheduled tasks and reminders.
@@ -348,10 +380,6 @@ Manage server-wide settings, channels, permissions, and integrations.
 | `/server deliberate-tool-mode` | Toggle deliberate tool mode for this server. |
 | `/server deliberate-tool-trigger` | Manage custom trigger phrases for deliberate tool mode. |
 | `/server deliberate-trigger-mode` | Toggle deliberate trigger mode (DTM) for this server. |
-| `/server expressions edit` | Edit the emotion and usage instructions of a single emoji or sticker |
-| `/server expressions initialize` | Analyze and classify all custom emojis and stickers using AI vision |
-| `/server matrix link` | Link a Discord channel to a Matrix room for bidirectional relay |
-| `/server matrix unlink` | Remove the Matrix bridge link from a Discord channel |
 | `/server member-permissions` | Configure what non-admin members can teach me. |
 | `/server nuke` | Completely wipe all server data. Requires re-running /config setup afterwards. |
 | `/server private-channels` | Manage private channels where STMs are isolated and thought logs are suppressed |

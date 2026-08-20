@@ -1,12 +1,6 @@
 export default {
   conditioning: {
     description: `Manage persistent reward and punishment conditioning memories.`,
-    reward: {
-      description: `Reward me with fun interactions.`,
-    },
-    punish: {
-      description: `Punish me with disciplinary interactions.`,
-    },
     shared: {
       select_persona_title: `Select a persona to manage`,
       reason_line: `Reason: \`\`{reason}\`\``,

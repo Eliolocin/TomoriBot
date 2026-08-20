@@ -33,7 +33,7 @@ messages:
 
 - Custom emojis are used naturally in conversation with case-insensitive `:name:` syntax.
 - Stickers can accompany replies; she can also add emoji reactions.
-- Run `/server expressions initialize` to register your server's emojis and stickers so she
+- Run `/expressions initialize` to register your server's emojis and stickers so she
   uses them accurately.
 
 ## Situational Awareness

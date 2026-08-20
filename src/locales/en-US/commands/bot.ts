@@ -98,7 +98,6 @@ export default {
       missing_permissions_description: `I don't have permission to read message history in this channel. Please ensure I have the **View Channel** and **Read Message History** permissions.`,
       extra_options_description: `Show extra options before responding (persona picker, reasoning, prompt, prefill).`,
       extra_options_title: `Response Options`,
-      select_persona_title: `Select Persona`,
       select_persona_label: `Choose Persona`,
       select_persona_description: `Select who should respond.`,
       select_persona_placeholder: `Select who should respond...`,

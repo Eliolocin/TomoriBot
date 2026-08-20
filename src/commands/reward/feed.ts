@@ -3,7 +3,7 @@ import { createConditioningInteractionCommand } from "@/utils/conditioning/condi
 import { localizer } from "@/utils/text/localizer";
 import { CONDITIONING_REASON_MAX_LENGTH } from "@/utils/conditioning/conditioning";
 
-const { execute } = createConditioningInteractionCommand("reward", "feed", {
+const { execute, autocomplete } = createConditioningInteractionCommand("reward", "feed", {
   getExtraContext: (interaction) => {
     const food = interaction.options.getString("food")?.trim();
     return {
@@ -26,6 +26,13 @@ export function configureSubcommand(subcommand: SlashCommandSubcommandBuilder) {
     )
     .addStringOption((option) =>
       option
+        .setName("persona")
+        .setDescription(localizer("en-US", "commands.reward.feed.persona_description"))
+        .setAutocomplete(true)
+        .setRequired(false),
+    )
+    .addStringOption((option) =>
+      option
         .setName("reason")
         .setDescription(localizer("en-US", "commands.reward.feed.reason_description"))
         .setMaxLength(CONDITIONING_REASON_MAX_LENGTH)
@@ -33,4 +40,4 @@ export function configureSubcommand(subcommand: SlashCommandSubcommandBuilder) {
     );
 }
 
-export { execute };
+export { execute, autocomplete };

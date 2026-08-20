@@ -10,9 +10,8 @@ const UNRESOLVED_LOCALE_KEY_PATTERN = /^commands\.[a-zA-Z0-9_.-]+$/;
 /**
  * Known unresolved descriptions scheduled for dissolution in the current wave.
  * - "bot": The /bot root is being dissolved across Wave 1; delete this entry when /bot is removed.
- * - "server matrix": /server matrix becomes the /matrix root in Wave 1 slice 2; delete this entry when moved.
  */
-const DISSOLUTION_ALLOWLIST = new Set<string>(["bot", "server matrix"]);
+const DISSOLUTION_ALLOWLIST = new Set<string>(["bot"]);
 
 type OffendingDescription = {
   path: string;
@@ -87,6 +86,5 @@ describe("Command description resolution gate", () => {
 
     const offendingPaths = offendingWithoutAllowlist.map((item) => item.path);
     expect(offendingPaths).toContain("bot");
-    expect(offendingPaths).toContain("server matrix");
   });
 });

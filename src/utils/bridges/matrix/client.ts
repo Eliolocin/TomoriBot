@@ -82,7 +82,7 @@ export async function sendMatrixInviteSetupNotice(roomId: string): Promise<void>
   await sendMatrixNotice(
     roomId,
     localizer("en-US", "matrix.notices.invited", {
-      link_command: "/server matrix link",
+      link_command: "/matrix link",
       help_command: "/help",
       room_id_path: "Room Settings -> Advanced -> Internal Room ID",
       kill_command: "/kill",

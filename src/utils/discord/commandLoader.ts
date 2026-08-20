@@ -15,7 +15,7 @@ import {
   type SlashCommandSubcommandGroupBuilder,
   type SlashCommandOptionsOnlyBuilder,
 } from "discord.js";
-import type { SlashCommandSubcommandBuilder } from "discord.js";
+import type { AutocompleteInteraction, SlashCommandSubcommandBuilder } from "discord.js";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
 import { localizer, getSupportedLocales } from "../text/localizer";
 
@@ -41,6 +41,8 @@ export type CommandExecuteFunction = (
  *   - For grouped subcommands: 'group.subcommand' (e.g., 'apikey.set')
  */
 export type CommandExecutionMap = Map<string, Map<string, CommandExecuteFunction>>;
+export type CommandAutocompleteFunction = (client: Client, interaction: AutocompleteInteraction) => Promise<void>;
+export type CommandAutocompleteMap = Map<string, Map<string, CommandAutocompleteFunction>>;
 
 /**
  * One row of the command catalog (the full universe of registered commands).
@@ -67,6 +69,7 @@ export type CommandCooldownMap = Map<string, number>;
 export type LoadCommandDataResult = {
   registrationData: ApplicationCommandData[];
   executionMap: CommandExecutionMap;
+  autocompleteMap: CommandAutocompleteMap;
   cooldownMap: CommandCooldownMap;
 };
 
@@ -75,6 +78,7 @@ export type LoadedCommandModule = {
   configureCommand?: (command: SlashCommandBuilder) => RootCommandBuilder;
   isCommandEnabled?: (context: CommandAvailabilityContext) => boolean | Promise<boolean>;
   execute?: CommandExecuteFunction;
+  autocomplete?: CommandAutocompleteFunction;
   cooldown?: number;
   guildOnly?: boolean;
   managerOnly?: boolean;
@@ -101,7 +105,15 @@ type DirectoryItem = {
 };
 
 // Categories that are completely restricted to guilds only
-const GUILD_ONLY_CATEGORIES: string[] = ["server", "conditioning", "stats"];
+const GUILD_ONLY_CATEGORIES: string[] = [
+  "server",
+  "conditioning",
+  "stats",
+  "expressions",
+  "matrix",
+  "punish",
+  "reward",
+];
 // Categories that require manage permissions in guild context
 const MANAGER_ONLY_CATEGORIES = [
   "config",
@@ -112,12 +124,12 @@ const MANAGER_ONLY_CATEGORIES = [
   "openrouter",
   "optional-key",
   "server",
+  "expressions",
+  "matrix",
 ];
 
 const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
   "commands.memory.description": "commands.teach.memory.description",
-  "commands.conditioning.reward.description": "commands.reward.description",
-  "commands.conditioning.punish.description": "commands.punish.description",
   "commands.persona.attribute.description": "commands.teach.attribute.description",
   "commands.persona.sample-dialogue.description": "commands.teach.sampledialogue.description",
   "commands.persona.prompt.description": "commands.teach.personaprompt.description",
@@ -176,14 +188,6 @@ function getCommandLocalizationAliases(key: string): string[] {
   const configAlias = configDescriptionAliases[key];
   if (configAlias) {
     aliases.push(configAlias);
-  }
-
-  const conditioningMatch = key.match(
-    /^commands\.conditioning\.(reward|punish)\.([a-z0-9-]+)\.([a-z][a-z0-9]*(?:_[a-z0-9]+)*_description|description)$/,
-  );
-  if (conditioningMatch) {
-    const [, type, actionKey, suffix] = conditioningMatch;
-    aliases.push(`commands.${type}.${actionKey}.${suffix}`);
   }
 
   return aliases;
@@ -476,6 +480,7 @@ export function getCommandCatalogEntries(executionMap: CommandExecutionMap): Com
 
 async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
   const executionMap: CommandExecutionMap = new Map();
+  const autocompleteMap: CommandAutocompleteMap = new Map();
   const cooldownMap: CommandCooldownMap = new Map();
   // This will store our category builders (one per directory)
   const builders = new Map<string, RootCommandBuilder>();
@@ -526,6 +531,7 @@ async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
 
         builders.set(categoryName, categoryBuilder);
         executionMap.set(categoryName, new Map()); // Initialize subcommand map
+        autocompleteMap.set(categoryName, new Map()); // Initialize autocomplete map
       }
 
       // Get all items (files and directories) in this category
@@ -630,6 +636,10 @@ async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
                   const executionKey = `${groupName}.${subcommandName}`;
                   executionMap.get(categoryName)?.set(executionKey, execute);
 
+                  if (commandModule.autocomplete) {
+                    autocompleteMap.get(categoryName)?.set(executionKey, commandModule.autocomplete);
+                  }
+
                   // Store cooldown if defined
                   if (commandModule.cooldown && typeof commandModule.cooldown === "number") {
                     cooldownMap.set(categoryName, commandModule.cooldown);
@@ -709,6 +719,9 @@ async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
 
             // Store the execute function in the map
             executionMap.get(categoryName)?.set(subcommandName, execute);
+            if (commandModule.autocomplete) {
+              autocompleteMap.get(categoryName)?.set(subcommandName, commandModule.autocomplete);
+            }
 
             // Store cooldown if defined (optional feature)
             if (commandModule.cooldown && typeof commandModule.cooldown === "number") {
@@ -776,6 +789,10 @@ async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
 
         builders.set(commandName, commandBuilder);
         executionMap.set(commandName, new Map([[ROOT_COMMAND_EXECUTION_KEY, commandModule.execute]]));
+        autocompleteMap.set(commandName, new Map());
+        if (commandModule.autocomplete) {
+          autocompleteMap.get(commandName)?.set(ROOT_COMMAND_EXECUTION_KEY, commandModule.autocomplete);
+        }
 
         if (commandModule.cooldown && typeof commandModule.cooldown === "number") {
           cooldownMap.set(commandName, commandModule.cooldown);
@@ -798,7 +815,12 @@ async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
     const registrationData = Array.from(builders.values()).map((builder) => builder.toJSON() as ApplicationCommandData);
 
     log.success(`Successfully loaded ${commandCount} commands in ${builders.size} top-level command definitions`);
-    return { registrationData, executionMap, cooldownMap };
+    return {
+      registrationData,
+      executionMap,
+      autocompleteMap,
+      cooldownMap,
+    };
   } catch (error) {
     const context: ErrorContext = {
       errorType: "CommandLoaderError",
@@ -809,6 +831,7 @@ async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
     return {
       registrationData: [],
       executionMap: new Map(),
+      autocompleteMap: new Map(),
       cooldownMap: new Map(),
     };
   }

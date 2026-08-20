@@ -133,7 +133,7 @@ History imports are stored as documents, so `/memory document view` and
 time. A lighter-weight nudge than a full attribute or system prompt. Use it to reinforce
 how a specific character should act in a specific server.
 
-Every `/conditioning reward` or `/conditioning punish` is tallied regardless, but it only
+Every `/reward` or `/punish` is tallied regardless, but it only
 becomes a memory she actually acts on when you give it a `reason`, which appears like this in her prompt:
 
 ```text

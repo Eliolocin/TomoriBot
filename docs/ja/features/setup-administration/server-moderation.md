@@ -49,4 +49,4 @@ TomoriBotは、`/server`コマンドを通じて、サーバー内でのトモ�
 
 ## 表現（Expressions）
 
-`/server expressions initialize`は、サーバーのカスタム絵文字やスタンプを登録し、トモリがそれらを正確に使用できるようにします。セットアップ直後の実行をおすすめします。それらを使った動作（自然な`:emoji:`の使用、スタンプ、リアクション）については、[表現とリアクション](/ja/features/chatting-personality/chatting-and-triggers/#expressions--reactions)をご覧ください。
+`/expressions initialize`は、サーバーのカスタム絵文字やスタンプを登録し、トモリがそれらを正確に使用できるようにします。セットアップ直後の実行をおすすめします。それらを使った動作（自然な`:emoji:`の使用、スタンプ、リアクション）については、[表現とリアクション](/ja/features/chatting-personality/chatting-and-triggers/#expressions--reactions)をご覧ください。

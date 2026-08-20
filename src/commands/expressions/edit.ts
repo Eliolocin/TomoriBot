@@ -1,5 +1,5 @@
 /**
- * /server expressions edit command
+ * /expressions edit command
  *
  * Lets a server manager manually correct a single emoji or sticker's expression
  * data. The user provides the raw expression name (e.g. `:happycat:` for an emoji
@@ -72,16 +72,16 @@ function parseEmojiMention(input: string): { name: string; id: string } | null {
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("edit")
-    .setDescription(localizer("en-US", "commands.server.expressions.edit.description"))
+    .setDescription(localizer("en-US", "commands.expressions.edit.description"))
     .addStringOption((option) =>
       option
         .setName("expression")
-        .setDescription(localizer("en-US", "commands.server.expressions.edit.expression_description"))
+        .setDescription(localizer("en-US", "commands.expressions.edit.expression_description"))
         .setRequired(true),
     );
 
 /**
- * Execute the /server expressions edit command.
+ * Execute the /expressions edit command.
  *
  * @param locale - Resolved locale for all user-facing text
  */
@@ -108,8 +108,8 @@ export async function execute(
     const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
     if (!hasManagePermission) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.server.expressions.edit.no_permission_title",
-        descriptionKey: "commands.server.expressions.edit.no_permission_description",
+        titleKey: "commands.expressions.edit.no_permission_title",
+        descriptionKey: "commands.expressions.edit.no_permission_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -175,8 +175,8 @@ export async function execute(
 
     if (!match) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.server.expressions.edit.not_found_title",
-        descriptionKey: "commands.server.expressions.edit.not_found_description",
+        titleKey: "commands.expressions.edit.not_found_title",
+        descriptionKey: "commands.expressions.edit.not_found_description",
         // Prefer the friendly emoji name over Discord's raw `<:name:id>` blob.
         descriptionVars: { expression: mention ? `:${mention.name}:` : rawInput },
         color: ColorCode.WARN,
@@ -194,7 +194,7 @@ export async function execute(
     //    classification (the select can't pre-highlight a value, and the current key
     //    may be one of the 3 omitted from the 25-option list). Pre-localizing here means
     //    the string is used verbatim by the modal builder.
-    const emotionPlaceholder = localizer(locale, "commands.server.expressions.edit.emotion_input_placeholder", {
+    const emotionPlaceholder = localizer(locale, "commands.expressions.edit.emotion_input_placeholder", {
       current: isValidEmotionKey(currentEmotion) ? currentEmotion : "unset",
     });
 
@@ -203,21 +203,21 @@ export async function execute(
     //     which lets instructions-only edits preserve even the 3 omitted emotions.
     const modalResult = await promptWithRawModal(interaction, locale, {
       modalCustomId: EDIT_MODAL_CUSTOM_ID,
-      modalTitleKey: "commands.server.expressions.edit.modal_title",
+      modalTitleKey: "commands.expressions.edit.modal_title",
       components: [
         {
           customId: EMOTION_INPUT_ID,
-          labelKey: "commands.server.expressions.edit.emotion_input_label",
-          descriptionKey: "commands.server.expressions.edit.emotion_input_description",
+          labelKey: "commands.expressions.edit.emotion_input_label",
+          descriptionKey: "commands.expressions.edit.emotion_input_description",
           placeholder: emotionPlaceholder,
           required: false,
           options: EMOTION_SELECT_OPTIONS,
         },
         {
           customId: INSTRUCTIONS_INPUT_ID,
-          labelKey: "commands.server.expressions.edit.instructions_input_label",
-          descriptionKey: "commands.server.expressions.edit.instructions_input_description",
-          placeholder: "commands.server.expressions.edit.instructions_input_placeholder",
+          labelKey: "commands.expressions.edit.instructions_input_label",
+          descriptionKey: "commands.expressions.edit.instructions_input_description",
+          placeholder: "commands.expressions.edit.instructions_input_placeholder",
           style: TextInputStyle.Paragraph,
           required: true,
           maxLength: INSTRUCTIONS_MAX_LENGTH,
@@ -241,8 +241,8 @@ export async function execute(
     //     In that case require an explicit choice.
     if (!isValidEmotionKey(emotionKey)) {
       await replyInfoEmbed(submitted, locale, {
-        titleKey: "commands.server.expressions.edit.emotion_required_title",
-        descriptionKey: "commands.server.expressions.edit.emotion_required_description",
+        titleKey: "commands.expressions.edit.emotion_required_title",
+        descriptionKey: "commands.expressions.edit.emotion_required_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -252,8 +252,8 @@ export async function execute(
     //     allows whitespace, which we treat as empty).
     if (!instructions) {
       await replyInfoEmbed(submitted, locale, {
-        titleKey: "commands.server.expressions.edit.empty_instructions_title",
-        descriptionKey: "commands.server.expressions.edit.empty_instructions_description",
+        titleKey: "commands.expressions.edit.empty_instructions_title",
+        descriptionKey: "commands.expressions.edit.empty_instructions_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -292,8 +292,8 @@ export async function execute(
     );
 
     await replyInfoEmbed(submitted, locale, {
-      titleKey: "commands.server.expressions.edit.success_title",
-      descriptionKey: "commands.server.expressions.edit.success_description",
+      titleKey: "commands.expressions.edit.success_title",
+      descriptionKey: "commands.expressions.edit.success_description",
       descriptionVars: {
         expression: displayName,
         emotion: emotionKey,
@@ -313,7 +313,7 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error("Error executing /server expressions edit command", error as Error, context);
+    await log.error("Error executing /expressions edit command", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

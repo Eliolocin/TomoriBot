@@ -98,7 +98,6 @@ export default {
       missing_permissions_description: `このチャンネルのメッセージ履歴を読み取る権限がありません。**チャンネルを見る**および**メッセージ履歴を読む**権限があることを確認してください。`,
       extra_options_description: `応答前に追加オプションを表示（ペルソナ選択、推論、プロンプト、プリフィル）。`,
       extra_options_title: `応答オプション`,
-      select_persona_title: `ペルソナを選択`,
       select_persona_label: `ペルソナを選択`,
       select_persona_description: `応答するペルソナを選択してください。`,
       select_persona_placeholder: `応答するペルソナを選択...`,

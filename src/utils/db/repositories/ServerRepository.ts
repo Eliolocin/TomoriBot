@@ -1667,7 +1667,7 @@ class ServerRepository implements IRepository<ServerExportShape> {
 
   /**
    * Manually overwrite a single emoji's emotion classification and usage description.
-   * Used by `/server expressions edit`. Unlike {@link initializeExpressions}, this
+   * Used by `/expressions edit`. Unlike {@link initializeExpressions}, this
    * writes unconditionally (no "still uninitialized" guard) because the invoking user
    * is deliberately correcting an existing classification.
    *

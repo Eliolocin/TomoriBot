@@ -128,7 +128,7 @@ function modelCostList(locale: string, entries: ModelCostEntry[]): string {
     .join("\n");
 }
 
-/** Title-cases a raw emotion key for display (matches the /server expressions UI). */
+/** Title-cases a raw emotion key for display (matches the /expressions UI). */
 function titleCaseEmotion(key: string): string {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }

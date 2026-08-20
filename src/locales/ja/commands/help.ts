@@ -290,7 +290,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - 最近の会話は[STM（短期記憶）](https://docs.tomoribot.app/ja/features/knowledge/memory/#short-term-memory-stm)として保持し、チャンネルやサーバーをまたいで文脈を把握します（クロスサーバー共有は\`/personal stm\`でオプトインできます）
 - \`/personal profile nickname\`であなたを呼ぶ名前を変更できます
 - \`/memory\` と \`/persona\` コマンドで手動で記憶やペルソナ情報を追加・削除できます
-- \`/server expressions initialize\`で絵文字やステッカーを登録すると、より適切な場面で使えるようになります
+- \`/expressions initialize\`で絵文字やステッカーを登録すると、より適切な場面で使えるようになります
 - \`/personal privacy\`で完全に見えなくなるオプションが利用可能です
 - 詳しくは\`/help\`内の **永続メモリ** ページをご覧ください`,
       time_title: `時間認識`,
@@ -308,7 +308,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
       expressions_description: `- サーバーのカスタム絵文字を会話で自然に使えます（大文字小文字不問の \`:名前:\` 形式）
 - 返信の一部としてスタンプを送れます
 - 関連する絵文字でメッセージにリアクションできます
-- \`/server expressions initialize\`で絵文字とスタンプを登録すると精度が向上します`,
+- \`/expressions initialize\`で絵文字とスタンプを登録すると精度が向上します`,
       documents_title: `ドキュメント知識庫`,
       documents_description: `- \`/memory document add\`でテキスト、PDF、Markdownファイルをサーバー知識としてアップロードできます
 - \`/memory history import\`でチャンネル履歴を検索可能な知識として抽出できます

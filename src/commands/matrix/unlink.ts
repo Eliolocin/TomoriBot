@@ -1,5 +1,5 @@
 /**
- * /server matrix unlink
+ * /matrix unlink
  * Removes the Matrix bridge link from a Discord channel.
  *
  * Interaction pattern: Pattern 2 (defer before async work)
@@ -23,22 +23,22 @@ import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
 
 /**
- * Configure the /server matrix unlink subcommand builder.
+ * Configure the /matrix unlink subcommand builder.
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("unlink")
-    .setDescription(localizer("en-US", "commands.server.matrix.unlink.description"))
+    .setDescription(localizer("en-US", "commands.matrix.unlink.description"))
     .addChannelOption((option) =>
       option
         .setName("channel")
-        .setDescription(localizer("en-US", "commands.server.matrix.unlink.channel_description"))
+        .setDescription(localizer("en-US", "commands.matrix.unlink.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(true),
     );
 
 /**
- * Execute the /server matrix unlink command.
+ * Execute the /matrix unlink command.
  * Removes the Matrix bridge link for the given channel.
  *
  */
@@ -97,8 +97,8 @@ export async function execute(
     if (!existingRoomId) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.WARN,
-        titleKey: "commands.server.matrix.unlink.not_linked_title",
-        descriptionKey: "commands.server.matrix.unlink.not_linked_description",
+        titleKey: "commands.matrix.unlink.not_linked_title",
+        descriptionKey: "commands.matrix.unlink.not_linked_description",
         descriptionVars: { channel_id: channel.id },
       });
       return;
@@ -113,8 +113,8 @@ export async function execute(
 
     await replyInfoEmbed(interaction, locale, {
       color: ColorCode.SUCCESS,
-      titleKey: "commands.server.matrix.unlink.success_title",
-      descriptionKey: "commands.server.matrix.unlink.success_description",
+      titleKey: "commands.matrix.unlink.success_title",
+      descriptionKey: "commands.matrix.unlink.success_description",
       descriptionVars: { channel_id: channel.id },
     });
 
@@ -122,7 +122,7 @@ export async function execute(
       `Matrix bridge: unlinked channel ${channel.id} (${channel.name}) from room ${roomId} in guild ${interaction.guildId}`,
     );
   } catch (error) {
-    log.error("Error executing /server matrix unlink", error, errorContext);
+    log.error("Error executing /matrix unlink", error, errorContext);
     await replyInfoEmbed(interaction, locale, {
       color: ColorCode.ERROR,
       titleKey: "general.errors.unknown_error_title",

@@ -88,7 +88,7 @@ Remaining degraded features are listed in the table above. Current parity work f
 Setting up the bridge requires **two steps**:
 1. Invite `@tomoribot:yourdomain.com` to a Matrix room.
    - TomoriBot auto-accepts the invite and posts a short setup hint in the Matrix room telling users to finish the link from Discord, where to find the Internal Room ID, and that the room must stay unencrypted.
-2. Run `/server matrix link` in the Discord channel to link them.
+2. Run `/matrix link` in the Discord channel to link them.
    - On a successful link, TomoriBot posts a second Matrix-side onboarding note summarizing the usable Matrix commands (`/kill`, `/refresh`) and the main Matrix-specific limitations.
 
 That's it. The homeserver infrastructure is invisible to server admins — the same way Discord server admins don't think about Discord's servers when they add a bot.
@@ -143,9 +143,9 @@ src/utils/bridges/matrix/
 src/events/messageCreate/
   matrixRelay.ts        ← Watches for TomoriBot's own Discord messages and relays them to Matrix
 
-src/commands/server/matrix/
-  link.ts               ← /server matrix link command
-  unlink.ts             ← /server matrix unlink command
+src/commands/matrix/
+  link.ts               ← /matrix link command
+  unlink.ts             ← /matrix unlink command
 ```
 
 The split under `utils/bridges/` is intentional:
@@ -429,7 +429,7 @@ To support rooms hosted on `matrix.org` or other custom homeservers:
 
 ### Encryption limitation (unchanged)
 
-Bridged rooms must remain non-encrypted. `/server matrix link` intentionally blocks rooms with `m.room.encryption` enabled because E2EE cannot be disabled once turned on in Matrix rooms.
+Bridged rooms must remain non-encrypted. `/matrix link` intentionally blocks rooms with `m.room.encryption` enabled because E2EE cannot be disabled once turned on in Matrix rooms.
 
 ---
 

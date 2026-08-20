@@ -3,6 +3,7 @@ export default {
     description: `Reward me with fun interactions.`,
     headpat: {
       description: `Give me a headpat!`,
+      persona_description: `Select the persona to target.`,
       reason_description: `Why are you rewarding me?`,
       embed_title: `🫳 Headpat Time!`,
       embed_description: `{user} is currently headpatting {bot}.`,
@@ -10,6 +11,7 @@ export default {
     },
     hug: {
       description: `Give me a hug!`,
+      persona_description: `Select the persona to target.`,
       reason_description: `Why are you rewarding me?`,
       embed_title: `🤗 Hug Time!`,
       embed_description: `{user} is giving {bot} a warm hug.`,
@@ -17,6 +19,7 @@ export default {
     },
     kiss: {
       description: `Give me a kiss!`,
+      persona_description: `Select the persona to target.`,
       reason_description: `Why are you rewarding me?`,
       embed_title: `💋 Kiss Time!`,
       embed_description: `{user} just kissed {bot}.`,
@@ -24,6 +27,7 @@ export default {
     },
     tickle: {
       description: `Tickle me!`,
+      persona_description: `Select the persona to target.`,
       reason_description: `Why are you rewarding me?`,
       embed_title: `🤭 Tickle Time!`,
       embed_description: `{user} is tickling {bot}.`,
@@ -31,6 +35,7 @@ export default {
     },
     feed: {
       description: `Feed me a delicious snack!`,
+      persona_description: `Select the persona to target.`,
       reason_description: `Why are you rewarding me?`,
       food_description: `What are you feeding me?`,
       embed_title: `🍴 Snack Time!`,

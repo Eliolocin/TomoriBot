@@ -1,12 +1,6 @@
 export default {
   conditioning: {
     description: `ご褒美・おしおきの条件付け記憶を管理します。`,
-    reward: {
-      description: `ご褒美のふれあいで私を褒めます。`,
-    },
-    punish: {
-      description: `しつけのふれあいで私を叱ります。`,
-    },
     shared: {
       select_persona_title: `管理するペルソナを選択`,
       reason_line: `理由: \`\`{reason}\`\``,

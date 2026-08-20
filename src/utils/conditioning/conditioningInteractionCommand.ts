@@ -1,17 +1,9 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  Message,
-  ModalSubmitInteraction,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, Message, SlashCommandSubcommandBuilder } from "discord.js";
 import { EmbedBuilder, MessageFlags, PermissionFlagsBits } from "discord.js";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
-import { promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
-import type { ConditioningType, UserRow } from "@/types/db/schema";
-import type { SelectOption } from "@/types/discord/modal";
+import type { ConditioningType, TomoriState, UserRow } from "@/types/db/schema";
 import { personaRepository } from "@/utils/db/repositories";
 import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
 import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
@@ -23,13 +15,14 @@ import {
 } from "@/utils/conditioning/conditioning";
 import { conditioningMemoryRepository } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/persona/personaAccess";
+import { handlePersonaAutocomplete } from "@/utils/discord/autocomplete/personaAutocomplete";
+import { resolveFallbackPersona } from "@/utils/discord/personaTurnDetectionResolver";
+import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 
 const EMBED_COLOR_BY_TYPE: Record<ConditioningType, ColorCode> = {
   reward: ColorCode.AFFECTION,
   punish: ColorCode.ERROR,
 };
-
-type ReplyInteraction = ChatInputCommandInteraction | ModalSubmitInteraction;
 
 interface ConditioningCommandOptions {
   /** Returns extra interpolation context for the embed description localizer. */
@@ -47,6 +40,13 @@ export function createConditioningInteractionCommand(
     subcommand
       .setName(actionKey)
       .setDescription(localizer("en-US", `${commandKey}.description`))
+      .addStringOption((option) =>
+        option
+          .setName("persona")
+          .setDescription(localizer("en-US", `${commandKey}.persona_description`))
+          .setAutocomplete(true)
+          .setRequired(false),
+      )
       .addStringOption((option) =>
         option
           .setName("reason")
@@ -80,6 +80,7 @@ export function createConditioningInteractionCommand(
       return;
     }
 
+    const commandChannel = interaction.channel;
     const guildChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
     if (!("permissionsFor" in guildChannel)) {
       await replyInfoEmbed(interaction, locale, {
@@ -143,10 +144,8 @@ export function createConditioningInteractionCommand(
         )
       : null;
     const availablePersonas = filterPersonasForTrigger(allPersonas, whitelistStatus, personalSpotlightStatus);
-    const alterPersonas = availablePersonas.filter((persona) => persona.is_alter);
-    const mainPersona = availablePersonas.find((persona) => !persona.is_alter) ?? availablePersonas[0];
 
-    if (!mainPersona) {
+    if (availablePersonas.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.conditioning.shared.persona_access_blocked_title",
         descriptionKey: "commands.conditioning.shared.persona_access_blocked_description",
@@ -155,61 +154,59 @@ export function createConditioningInteractionCommand(
       return;
     }
 
-    let selectedPersona = mainPersona;
-    let replyInteraction: ReplyInteraction = interaction;
+    let selectedPersona: TomoriState;
 
-    if (alterPersonas.length > 0) {
-      const personaOptions: SelectOption[] = [
-        {
-          label: safeSelectOptionText(mainPersona.persona_nickname),
-          value: "0",
-          description: localizer(locale, "commands.bot.respond.main_persona_description"),
-        },
-        ...alterPersonas.map((persona, index) => ({
-          label: safeSelectOptionText(persona.persona_nickname),
-          value: (index + 1).toString(),
-          description: localizer(locale, "commands.bot.respond.alter_persona_description"),
-        })),
-      ];
-
-      const modalResult = await promptWithPaginatedModal(interaction, locale, {
-        modalCustomId: `${type}_${actionKey}_persona_select`,
-        modalTitleKey: "commands.bot.respond.select_persona_title",
-        components: [
-          {
-            customId: "persona_choice",
-            labelKey: "commands.bot.respond.select_persona_label",
-            placeholder: "commands.bot.respond.select_persona_placeholder",
-            required: true,
-            options: personaOptions,
-          },
-        ],
-      });
-
-      if (modalResult.outcome !== "submit") {
-        log.info(`${type} ${actionKey} persona selection ${modalResult.outcome} for user ${interaction.user.id}`);
+    const personaOptionValue = interaction.options.getString("persona");
+    if (personaOptionValue !== null) {
+      const personaId = Number.parseInt(personaOptionValue, 10);
+      if (Number.isNaN(personaId)) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.invalid_option_title",
+          descriptionKey: "general.errors.invalid_option_description",
+          color: ColorCode.ERROR,
+        });
         return;
       }
 
-      if (modalResult.interaction) {
-        replyInteraction = modalResult.interaction;
+      const foundPersona = availablePersonas.find((p) => p.persona_id === personaId);
+      if (!foundPersona) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.invalid_option_title",
+          descriptionKey: "general.errors.invalid_option_description",
+          color: ColorCode.ERROR,
+        });
+        return;
       }
-
-      const selectedIndex = Number.parseInt(modalResult.values?.persona_choice ?? "0", 10);
-      selectedPersona = selectedIndex === 0 ? mainPersona : (alterPersonas[selectedIndex - 1] ?? mainPersona);
-    }
-
-    if (!selectedPersona.persona_id) {
-      await replyInfoEmbed(replyInteraction, locale, {
-        titleKey: "general.errors.invalid_option_title",
-        descriptionKey: "general.errors.invalid_option_description",
-        color: ColorCode.ERROR,
+      selectedPersona = foundPersona;
+    } else {
+      const fallbackPersona = await resolveFallbackPersona({
+        availablePersonas,
+        allPersonas,
+        tomoriState,
+        effectiveChannelId: parentChannelId ?? interaction.channel.id,
+        personalAutoTriggerPersonaId: personalSpotlightStatus?.autoTriggerPersonaId ?? null,
+        clientUserId: client.user?.id,
+        fetchRecentMessages: async () => {
+          const fetched = await commandChannel.messages.fetch({
+            limit: normalizeMessageFetchLimit(tomoriState.config.message_fetch_limit),
+          });
+          return [...fetched.values()].reverse();
+        },
       });
-      return;
+
+      if (!fallbackPersona) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.conditioning.shared.persona_access_blocked_title",
+          descriptionKey: "commands.conditioning.shared.persona_access_blocked_description",
+          color: ColorCode.WARN,
+        });
+        return;
+      }
+      selectedPersona = fallbackPersona;
     }
 
     if (!userData.user_id) {
-      await replyInfoEmbed(replyInteraction, locale, {
+      await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.operation_failed_title",
         descriptionKey: "general.errors.operation_failed_description",
         color: ColorCode.ERROR,
@@ -258,7 +255,7 @@ export function createConditioningInteractionCommand(
 
       interactionEmbed.setDescription(embedDescription);
 
-      await replyInteraction.reply({
+      await interaction.reply({
         embeds: [interactionEmbed],
         flags: MessageFlags.SuppressNotifications,
       });
@@ -316,7 +313,7 @@ export function createConditioningInteractionCommand(
       });
 
       try {
-        await replyInteraction.followUp({
+        await interaction.followUp({
           content: localizer(locale, "general.errors.unknown_error_description"),
           flags: MessageFlags.Ephemeral,
         });
@@ -332,5 +329,5 @@ export function createConditioningInteractionCommand(
     }
   }
 
-  return { configureSubcommand, execute };
+  return { configureSubcommand, execute, autocomplete: handlePersonaAutocomplete };
 }
