@@ -4,7 +4,7 @@ import { checkTargetEmbedTitle } from "@/utils/discord/embedClassifier";
 
 const REWARD_TITLE_KEY = "commands.reward.headpat.embed_title";
 const PUNISH_TITLE_KEY = "commands.punish.bonk.embed_title";
-const RESET_TITLE_KEY = "commands.tool.refresh.title";
+const RESET_TITLE_KEY = "commands.refresh.title";
 const HUG_TITLE_KEY = "commands.reward.hug.embed_title";
 
 // Captured before any spy so a mocked implementation can still delegate to the real lookup.

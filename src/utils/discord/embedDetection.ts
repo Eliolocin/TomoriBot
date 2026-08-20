@@ -12,7 +12,7 @@ import { localizer, getSupportedLocales } from "@/utils/text/localizer";
  * a conversation reset or compact-refresh boundary.
  *
  * Matches the following localizer keys across all supported locales:
- * - `commands.tool.refresh.title` (conversation reset)
+ * - `commands.refresh.title` (conversation reset)
  * - `commands.tool.compact.summary_title_refreshed` (compact summary refresh)
  * - `commands.tool.compact.roleplay_scene_title_refreshed` (compact scene refresh)
  *
@@ -23,7 +23,7 @@ export function isRefreshMarkerEmbed(embed: Embed): boolean {
   if (!title) return false;
 
   for (const supportedLocale of getSupportedLocales()) {
-    const resetTitle = localizer(supportedLocale, "commands.tool.refresh.title");
+    const resetTitle = localizer(supportedLocale, "commands.refresh.title");
     if (title === resetTitle) return true;
 
     const compactSummaryRefreshed = localizer(supportedLocale, "commands.tool.compact.summary_title_refreshed");
@@ -54,7 +54,7 @@ function classifyRefreshMarkerEmbed(embed: Embed): "reset" | "compact_refresh" |
 
   for (const supportedLocale of getSupportedLocales()) {
     // Plain reset from /refresh
-    if (title === localizer(supportedLocale, "commands.tool.refresh.title")) {
+    if (title === localizer(supportedLocale, "commands.refresh.title")) {
       return "reset";
     }
     // Compact refresh markers: summary, scene, or manual refresh

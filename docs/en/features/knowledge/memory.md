@@ -15,9 +15,9 @@ From most permanent to most fleeting
 
 | Tier | What it is | How long it lasts |
 |---|---|---|
-| **Long-term memory (LTM)** | Saved facts about a user or a server, uploaded documents, and conditioning | Forever, until someone removes it. Survives `/tool refresh`, restarts, everything |
+| **Long-term memory (LTM)** | Saved facts about a user or a server, uploaded documents, and conditioning | Forever, until someone removes it. Survives `/refresh`, restarts, everything |
 | **Short-term memory (STM)** | A summary she writes for a channel, plus a few recent messages | 24 hours. Can reach across channels |
-| **Chat history** | The recent messages in the channel she's replying in | Only this channel, only until they scroll out of `/config message-fetch-limit` range (defaults to latest 80 messages). `/tool refresh` cuts it off immediately |
+| **Chat history** | The recent messages in the channel she's replying in | Only this channel, only until they scroll out of `/config message-fetch-limit` range (defaults to latest 80 messages). `/refresh` cuts it off immediately |
 
 Almost everything she appears to "know" in a conversation is just recent chat history, which is why
 she seems to forget a message once the conversation becomes too long. **Only long-term memory is
@@ -30,7 +30,7 @@ To see exactly what she is handed on any given turn, see
 ## Long-Term Memory
 
 Long-term memories are the only thing she keeps permanently. They are not affected by
-`/tool refresh`, by restarts, or by moving to another channel.
+`/refresh`, by restarts, or by moving to another channel.
 
 ### Personal vs. Server Memories
 
@@ -203,7 +203,7 @@ and refreshes as the conversation moves along. It fades on its own after a few q
 | `/persona stm view` | See the summary she's keeping for this channel |
 | `/persona stm edit` | Correct it or write it yourself |
 | `/personal stm` | Opt into cross-server recall, or wipe your own |
-| `/tool refresh` | Make her forget this channel right now |
+| `/refresh` | Make her forget this channel right now |
 | `/server stm parameters` | How often she updates it, and how much detail she keeps |
 | `/server stm categories-edit` | Swap the summary for up to 5 labeled fields (*Current scene*, *Mood*, …) |
 | `/server stm prompt-edit` | Reword how she's asked to keep it |

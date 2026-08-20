@@ -374,7 +374,7 @@ Please edit the import file to use a different name, or remove the existing pers
       error_invalid_format: `Invalid persona file format`,
       error_invalid_type: `Invalid persona type: {type}. Expected "preset"`,
       avatar_update_skipped_dm: `Persona was imported successfully, except avatar and nickname updates which are not available in Direct Messages`,
-      refresh_reminder: `Run \`/tool refresh\` to apply persona update in this chat`,
+      refresh_reminder: `Run \`/refresh\` to apply persona update in this chat`,
     },
     remove: {
       description: `Remove an alter persona from the server`,
@@ -524,7 +524,7 @@ Please try again with different inputs or check your API key.`,
 Or press the Import button`,
       success_next_steps_description_dm: `1. Download the attached PNG file
 2. Use \`/persona import\` with the PNG
-3. Run \`/tool refresh\` to apply my new personality`,
+3. Run \`/refresh\` to apply my new personality`,
       success_next_steps_footer: `You may edit me more with \`/persona\` commands after.`,
       avatar_update_skipped_dm: `Please note that avatar and nickname updates are not available to import in Direct Messages.`,
     },

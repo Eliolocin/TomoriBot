@@ -194,8 +194,8 @@ async function handleMatrixRefresh(channel: BaseGuildTextChannel, channelDiscId:
   await channel.send({
     embeds: [
       new EmbedBuilder()
-        .setTitle(localizer("en-US", "commands.tool.refresh.title"))
-        .setDescription(localizer("en-US", "commands.tool.refresh.response"))
+        .setTitle(localizer("en-US", "commands.refresh.title"))
+        .setDescription(localizer("en-US", "commands.refresh.response"))
         .setColor(ColorCode.SECTION),
     ],
     flags: MessageFlags.SuppressNotifications,

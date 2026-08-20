@@ -1,16 +1,16 @@
-import { MessageFlags, type SlashCommandSubcommandBuilder } from "discord.js";
+import { MessageFlags, type SlashCommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import { ColorCode, log } from "../../utils/misc/logger";
-import { localizer } from "../../utils/text/localizer";
-import type { UserRow } from "../../types/db/schema";
-import { clearShortTermMemoryForChannel } from "../../utils/cache/shortTermMemoryCache";
+import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
+import { ColorCode, log } from "@/utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
+import type { UserRow } from "@/types/db/schema";
+import { clearShortTermMemoryForChannel } from "@/utils/cache/shortTermMemoryCache";
 
 /**
- * Configures the 'refresh' subcommand.
+ * Configures the 'refresh' command.
  */
-export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("refresh").setDescription(localizer("en-US", "commands.tool.refresh.description"));
+export const configureCommand = (command: SlashCommandBuilder) =>
+  command.setName("refresh").setDescription(localizer("en-US", "commands.refresh.description"));
 
 /**
  * Executes the 'refresh' command.
@@ -33,9 +33,9 @@ export async function execute(
     interaction,
     locale,
     {
-      titleKey: "commands.tool.refresh.title",
-      descriptionKey: "commands.tool.refresh.response", // Ensure this locale key contains "refresh"
-      footerKey: "commands.tool.refresh.footer",
+      titleKey: "commands.refresh.title",
+      descriptionKey: "commands.refresh.response",
+      footerKey: "commands.refresh.footer",
       color: ColorCode.SECTION, // Use SECTION color for visual separation
     },
     MessageFlags.SuppressNotifications,

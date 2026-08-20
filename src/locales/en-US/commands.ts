@@ -37,6 +37,7 @@ import stats from "./commands/stats";
 import ping from "./commands/ping";
 import comment from "./commands/comment";
 import kill from "./commands/kill";
+import refresh from "./commands/refresh";
 import expressions from "./commands/expressions";
 import matrix from "./commands/matrix";
 
@@ -78,6 +79,7 @@ export default {
     ...ping,
     ...comment,
     ...kill,
+    ...refresh,
     ...expressions,
     ...matrix,
   },

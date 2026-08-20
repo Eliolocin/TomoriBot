@@ -139,12 +139,6 @@
       add_to_docs_error_title: `保存に失敗しました`,
       add_to_docs_error_description: `要約をドキュメントメモリに保存できませんでした。`,
     },
-    refresh: {
-      description: `最近の会話履歴をクリアします。`,
-      title: `🧹 会話履歴がクリアされました`,
-      response: `これより上のすべてのメッセージは無視されます。\n このチャンネルの[STM](https://docs.tomoribot.app/ja/features/knowledge/memory/#short-term-memory-stm)もクリアされました。`,
-      footer: `この埋め込みを削除すると、以前のメッセージがもう一度含まれるようになります。`,
-    },
     status: {
       description: `現在の個人、サーバー、またはペルソナのステータスを表示します。`,
       scope_description: `どのスコープのステータスを表示しますか？`,

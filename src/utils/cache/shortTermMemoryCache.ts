@@ -1065,7 +1065,7 @@ export function clearShortTermMemorySummary(
 }
 
 /**
- * Clear all short-term memories for a specific channel (used by /tool refresh)
+ * Clear all short-term memories for a specific channel (used by /refresh)
  *
  * @param channelId - Discord channel ID
  */

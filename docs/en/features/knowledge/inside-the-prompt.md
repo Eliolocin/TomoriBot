@@ -63,7 +63,7 @@ This ordering explains almost every "why doesn't she remember?" question:
 |---|---|
 | She forgot something from earlier today | It scrolled past the message limit. It was only ever in **Recent messages**, if Tomori does not save it as a long-term memory, then it will be forgotten once it reaches outside the message window. |
 | She forgot something in another channel | **Recent messages** is per-channel. Only **Server memories**, **Conversation Participants**, and **Short-term memory** cross channels. Short-term memory remedies this by loading in recent messages from different channels, but it does not dump everything. |
-| `/tool refresh` made her forget | Refresh cuts off **Recent messages** and clears this channel's **Short-term memory**, but shouldn't remove long-term memory. Delete the refresh embed to remove the cut-off. |
+| `/refresh` made her forget | Refresh cuts off **Recent messages** and clears this channel's **Short-term memory**, but shouldn't remove long-term memory. Delete the refresh embed to remove the cut-off. |
 | She forgot something after a restart | **Recent messages** never survives restarts |
 
 If you want something to survive all of the above, it has to become a **long-term memory**. See [Memory](/features/knowledge/memory/#long-term-memory).

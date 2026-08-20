@@ -374,7 +374,7 @@ export default {
       error_invalid_format: `無効なペルソナファイル形式`,
       error_invalid_type: `無効なペルソナタイプ: {type}。"preset"が期待されます`,
       avatar_update_skipped_dm: `ペルソナは正常にインポートされましたが、アバターとニックネームの更新はダイレクトメッセージでは利用できません。`,
-      refresh_reminder: `この会話で人格の更新を適用するには\`/tool refresh\`を実行してください`,
+      refresh_reminder: `この会話で人格の更新を適用するには\`/refresh\`を実行してください`,
     },
     remove: {
       description: `サーバーからオルタペルソナを削除する`,
@@ -521,11 +521,11 @@ export default {
       success_next_steps_title: `次のステップ`,
       success_next_steps_description: `1. 右側の添付PNGファイルをダウンロード
 2. PNGファイルと共に\`/persona import\`を使用
-3. \`/tool refresh\`を実行して新しい人格を適用
+3. \`/refresh\`を実行して新しい人格を適用
 または「今すぐインポート」ボタンを押す`,
       success_next_steps_description_dm: `1. 添付されたPNGファイルをダウンロード
 2. PNGファイルと共に\`/persona import\`を使用
-3. \`/tool refresh\`を実行して新しい人格を適用`,
+3. \`/refresh\`を実行して新しい人格を適用`,
       success_next_steps_footer: `あとで\`/persona\`でさらに編集できます。`,
       avatar_update_skipped_dm: `アバターとニックネームの更新はダイレクトメッセージでインポートできませんのでご注意ください。`,
     },
@@ -576,7 +576,7 @@ export default {
       success_next_steps_title: `次のステップ`,
       success_next_steps_description: `1. 右側の添付PNGファイルをダウンロード
 2. PNGファイルと共に\`/persona import\`を使用
-3. \`/tool refresh\`を実行して新しい人格を適用
+3. \`/refresh\`を実行して新しい人格を適用
 または「今すぐインポート」ボタンを押す`,
       success_next_steps_footer: `あとで\`/persona\`でさらに編集できます。`,
       avatar_update_skipped_dm: `アバターとニックネームの更新はダイレクトメッセージでは利用できませんのでご注意ください。`,

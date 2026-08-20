@@ -110,7 +110,7 @@ export function checkTargetEmbedTitle(embedTitle: string | null | undefined): Ta
     }
 
     // Reset and system-injection titles
-    if (embedTitle === localizer(supportedLocale, "commands.tool.refresh.title")) {
+    if (embedTitle === localizer(supportedLocale, "commands.refresh.title")) {
       return { isTarget: true, type: "reset" };
     }
     if (embedTitle === localizer(supportedLocale, "commands.bot.impersonate.system_title")) {

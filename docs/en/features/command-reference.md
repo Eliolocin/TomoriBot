@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **34**. Runnable slash commands: **220**.
+Top-level command groups: **35**. Runnable slash commands: **220**.
 
 ## `/bot`
 
@@ -340,6 +340,14 @@ Punish me with playful interactions.
 | `/punish spank` | Give me a playful spank! |
 | `/punish squeeze` | Give me a squeeze! |
 
+## `/refresh`
+
+Clear conversation history (this channel only).
+
+| Command | Summary |
+|---|---|
+| `/refresh` | Clear conversation history (this channel only). |
+
 ## `/reward`
 
 Reward me with fun interactions.
@@ -460,7 +468,6 @@ Utility actions for conversation context, prompts, and diagnostics.
 | `/tool delete turn` | Delete the last persona's turn from the channel. |
 | `/tool estimate cost` | Estimate API costs for paid AI providers |
 | `/tool prompt snapshot` | Dump the exact LLM prompt for a persona to a file for debugging. |
-| `/tool refresh` | Clear conversation history (this channel only). |
 | `/tool status` | Show current personal, server, or persona status. |
 
 ## `/update`

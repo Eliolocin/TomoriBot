@@ -156,7 +156,7 @@ a card you must update the published body (`gh release edit`) — the command pr
 
 ## Troubleshooting
 
-- Command registration issues: run `/tool refresh`
+- Command registration issues: run `/refresh`
 - Type errors: `bun run check`
 - Formatting/lint: `bun run lint`
 - Locales mismatch: `bun run check-locales`

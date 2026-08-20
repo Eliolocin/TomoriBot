@@ -176,7 +176,7 @@ function classifyEmbedTitle(embedTitle: string | null): {
     const isMemoryLearning = memoryLearningTitles.some((title) => matchesLocalizedTitleTemplate(title, embedTitle));
     const isReminderSet = reminderSetTitles.some((title) => matchesLocalizedTitleTemplate(title, embedTitle));
     const isReset =
-      embedTitle === localizer(supportedLocale, "commands.tool.refresh.title") ||
+      embedTitle === localizer(supportedLocale, "commands.refresh.title") ||
       embedTitle === localizer(supportedLocale, "commands.tool.compact.summary_title_refreshed") ||
       embedTitle === localizer(supportedLocale, "commands.tool.compact.roleplay_scene_title_refreshed") ||
       embedTitle === localizer(supportedLocale, "commands.tool.compact.manual_entry_title_refreshed");
