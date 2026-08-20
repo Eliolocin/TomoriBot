@@ -1,5 +1,6 @@
 export default {
   support: {
+    description: `Get help, report bugs, and join the TomoriBot community.`,
     discord: {
       description: `Get the official Discord server link for bug reports, feedback, and community chat.`,
       title: `Join the TomoriBot Discord Server!`,

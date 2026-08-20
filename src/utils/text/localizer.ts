@@ -116,12 +116,42 @@ function processLocaleStrings(obj: unknown): LocaleValue {
   return String(obj);
 }
 
+const FALLBACK_LOCALE = "en-US";
+
+/** One `locale:key` per process, so a hot path cannot turn a single gap into a log flood. */
+const warnedFallbackKeys = new Set<string>();
+
+/**
+ * Walks the loaded tree for `locale` only. Returns `undefined` for an absent path or for a
+ * path that lands on a namespace rather than a leaf string, which lets callers tell a real
+ * miss apart from a legitimately empty string.
+ */
+function lookupLocaleString(locale: string, key: string): string | undefined {
+  const localeTree = locales[locale];
+  if (!localeTree) return undefined;
+
+  let value: unknown = localeTree;
+  for (const segment of key.split(".")) {
+    if (typeof value !== "object" || value === null || !Object.hasOwn(value, segment)) {
+      return undefined;
+    }
+    value = (value as Record<string, unknown>)[segment];
+  }
+
+  return typeof value === "string" ? value : undefined;
+}
+
 /**
  * Get a localized string for a specific key.
+ *
+ * Resolution order is the requested locale, then `en-US`, then the key itself. The per-key
+ * `en-US` retry is what lets an incomplete locale degrade to English instead of showing users
+ * a raw dot-notation path; a key absent from both locales still echoes back, which several
+ * callers rely on to detect an unknown key.
+ *
  * @param locale - The locale code (e.g., 'en-US', 'ja').
  * @param key - The key path from the locale object (e.g., 'commands.help.features.title').
  * @param variables - Key-value pairs to replace placeholders in the localized string.
- * @returns The localized string, or the key itself if not found.
  */
 export const localizer = (locale: string, key: string, variables: LocalizerVariables = {}): string => {
   if (!isInitialized) {
@@ -129,31 +159,32 @@ export const localizer = (locale: string, key: string, variables: LocalizerVaria
     return key;
   }
 
-  const fallbackLocale = "en-US";
-  // Check if the specific locale exists, otherwise use the fallback
-  const usedLocale = locales[locale] ? locale : fallbackLocale;
+  const usedLocale = locales[locale] ? locale : FALLBACK_LOCALE;
 
-  // If even the fallback locale isn't loaded, return the key immediately
   if (!locales[usedLocale]) {
     log.warn(`Locale '${usedLocale}' not loaded. Returning key: ${key}`);
     return key;
   }
 
-  const keys: string[] = key.split(".");
-  let translation: unknown = locales[usedLocale];
+  let translation = lookupLocaleString(usedLocale, key);
 
-  for (const k of keys) {
-    if (typeof translation !== "object" || translation === null || !Object.hasOwn(translation, k)) {
-      return key;
+  if (translation === undefined && usedLocale !== FALLBACK_LOCALE) {
+    translation = lookupLocaleString(FALLBACK_LOCALE, key);
+
+    if (translation !== undefined) {
+      const warnedKey = `${usedLocale}:${key}`;
+      if (!warnedFallbackKeys.has(warnedKey)) {
+        warnedFallbackKeys.add(warnedKey);
+        log.warn(`Locale '${usedLocale}' is missing key '${key}'. Falling back to '${FALLBACK_LOCALE}'.`);
+      }
     }
-    translation = (translation as Record<string, unknown>)[k];
   }
 
-  if (typeof translation !== "string") {
+  if (translation === undefined) {
     return key;
   }
 
-  let result: string = translation as string;
+  let result: string = translation;
   for (const [placeholder, value] of Object.entries(variables)) {
     result = result.replace(new RegExp(`{${placeholder}}`, "g"), String(value));
   }
@@ -199,6 +230,22 @@ export function getLocaleSubKeys(locale: string, path: string): string[] {
   return Object.entries(obj as Record<string, unknown>)
     .filter(([, v]) => typeof v === "object" && v !== null)
     .map(([k]) => k);
+}
+
+/**
+ * True when `locale` itself defines `key` as a leaf string, with no `en-US` fallback.
+ *
+ * Callers that build keys dynamically need this because `localizer()`'s return value can no
+ * longer answer the question: a miss now yields English rather than the key path, so inspecting
+ * the returned string cannot distinguish "this locale defines it" from "English was substituted".
+ *
+ * @param locale - The locale code (e.g., 'en-US')
+ * @param key - Dot-notation path to a leaf string (e.g., 'commands.reward.hug.embed_title')
+ */
+export function hasLocaleKey(locale: string, key: string): boolean {
+  if (!isInitialized) return false;
+
+  return lookupLocaleString(locale, key) !== undefined;
 }
 
 /**

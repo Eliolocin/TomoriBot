@@ -525,7 +525,7 @@ Behavior:
 - If the persona still exists, that persona responds.
 - If the persona is missing, **fallback to main**.
 - Mention verification includes webhook messages, and sends a fallback ping if the response did not mention the target.
-- Reminder rows are deleted/rescheduled only after the generated delivery turn completes. If `/bot kill` stops the active turn or clears a queued reminder, delivery is not consumed; `next_attempt_at` schedules a retry after `REMINDER_DELIVERY_RETRY_DELAY_MS` without changing the canonical `reminder_time`.
+- Reminder rows are deleted/rescheduled only after the generated delivery turn completes. If `/kill` stops the active turn or clears a queued reminder, delivery is not consumed; `next_attempt_at` schedules a retry after `REMINDER_DELIVERY_RETRY_DELAY_MS` without changing the canonical `reminder_time`.
 - Automated retry errors stay silent. After `REMINDER_DELIVERY_MAX_RETRIES`, the raw scheduled content is shown once. One-time rows are removed, while recurring rows advance from the original cadence and remain available through `/scheduled-task edit` and `/scheduled-task remove`.
 
 ## Commands and Workflows

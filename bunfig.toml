@@ -1,4 +1,4 @@
-﻿[test]
+[test]
 # Scopes bare `bun test` to the same tree `bun run test` scans. Without this, Bun
 # walks the whole repo and picks up two files that must not run by default: the
 # archived comment-sweep test under gitignored `plans/`, whose subject script was

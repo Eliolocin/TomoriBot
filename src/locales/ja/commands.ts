@@ -34,6 +34,9 @@ import capabilities from "./commands/capabilities";
 import provider from "./commands/provider";
 import update from "./commands/update";
 import stats from "./commands/stats";
+import ping from "./commands/ping";
+import comment from "./commands/comment";
+import kill from "./commands/kill";
 
 export default {
   commands: {
@@ -70,5 +73,8 @@ export default {
     ...provider,
     ...update,
     ...stats,
+    ...ping,
+    ...comment,
+    ...kill,
   },
 };

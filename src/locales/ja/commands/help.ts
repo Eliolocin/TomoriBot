@@ -278,7 +278,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - 画像、動画、ニュース検索も可能です（\`/optional-key brave set\`経由）
 - URLからコンテンツを取得して読むことができます`,
       personality_title: `パーソナリティ＆カスタマイズ`,
-      personality_description: `- \`/config rename\`と\`/persona avatar\`で名前とアバターを変更できます
+      personality_description: `- \`/persona rename\`と\`/persona avatar\`で名前とアバターを変更できます
 - \`/persona\`で異なるペルソナに切り替えられます（\`/persona export\`でペルソナを共有・保存もできます！）
 - アルターペルソナとして複数のキャラクターが同一サーバーで共存し、それぞれ独自のトリガーとウェブフックアバターを持てます
 - \`/persona attribute add\`、\`/persona sample-dialogue add\`、\`/persona prompt set\`で行動やトーンを調整できます
@@ -319,7 +319,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
       impersonation_title: `なりきり＆ツール`,
       impersonation_description: `- \`/bot impersonate\`で自分自身、ペルソナ、またはシステムメッセージとしてメッセージを送信できます
 - \`/personal impersonate prompt\`でユーザーなりきり用の再利用プロンプトを設定できます
-- \`/tools compact\`で会話履歴を要約したりロールプレイで圧縮できます
+- \`/tool compact\`で会話履歴を要約したりロールプレイで圧縮できます
 - \`/bot respond\`でボットから定型文や案内付きメッセージを送信できます`,
       imagegen_title: `画像生成`,
       imagegen_description: `- テキストプロンプトから画像を生成し、参照画像を編集することもできます

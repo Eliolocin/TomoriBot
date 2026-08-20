@@ -11,7 +11,7 @@
  */
 
 import type { Embed } from "discord.js";
-import { localizer, getSupportedLocales, getLocaleSubKeys } from "@/utils/text/localizer";
+import { localizer, getSupportedLocales, getLocaleSubKeys, hasLocaleKey } from "@/utils/text/localizer";
 import { escapeRegExp } from "@/utils/text/processors/regexUtils";
 
 /** Target embed classifications recognized by the chat pipeline. */
@@ -41,6 +41,21 @@ function matchesLocalizedTitleTemplate(template: string, actualTitle: string): b
   }
   const pattern = new RegExp(`^${escapeRegExp(template).replace(/\\\{[^}]+\\\}/g, ".+?")}$`);
   return pattern.test(actualTitle);
+}
+
+/**
+ * Collects the `embed_title` of every sub-namespace under `namespace`, skipping the ones the
+ * locale does not actually define.
+ *
+ * The existence check has to come from `hasLocaleKey` rather than from the returned string:
+ * a sub-namespace without an `embed_title` resolves to the English title through `localizer`'s
+ * per-key fallback, so nothing about the string marks it as absent from this locale.
+ */
+function collectSubKeyTitles(locale: string, namespace: string): string[] {
+  return getLocaleSubKeys(locale, namespace)
+    .map((name) => `${namespace}.${name}.embed_title`)
+    .filter((key) => hasLocaleKey(locale, key))
+    .map((key) => localizer(locale, key));
 }
 
 /**
@@ -110,18 +125,12 @@ export function checkTargetEmbedTitle(embedTitle: string | null | undefined): Ta
 
     // Reward/punish titles: dynamically discovered from locale sub-keys
     //    so new reward/punish commands are automatically recognized
-    const rewardNames = getLocaleSubKeys(supportedLocale, "commands.reward");
-    const rewardTitles = rewardNames
-      .map((name) => localizer(supportedLocale, `commands.reward.${name}.embed_title`))
-      .filter((t) => !t.includes("."));
+    const rewardTitles = collectSubKeyTitles(supportedLocale, "commands.reward");
     if (rewardTitles.some((t) => embedTitle === t)) {
       return { isTarget: true, type: "reward" };
     }
 
-    const punishNames = getLocaleSubKeys(supportedLocale, "commands.punish");
-    const punishTitles = punishNames
-      .map((name) => localizer(supportedLocale, `commands.punish.${name}.embed_title`))
-      .filter((t) => !t.includes("."));
+    const punishTitles = collectSubKeyTitles(supportedLocale, "commands.punish");
     if (punishTitles.some((t) => embedTitle === t)) {
       return { isTarget: true, type: "punish" };
     }

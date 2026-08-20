@@ -1,21 +1,21 @@
-import { MessageFlags, type SlashCommandSubcommandBuilder } from "discord.js";
+import { MessageFlags, type SlashCommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
 import {
   clearChannelProcessingQueue,
   forceKillChannelStream,
   isChannelProcessingLocked,
 } from "@/utils/chat/channelQueue";
-import type { UserRow } from "../../types/db/schema";
-import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
-import { ColorCode, log } from "../../utils/misc/logger";
-import { localizer } from "../../utils/text/localizer";
+import type { UserRow } from "@/types/db/schema";
+import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
+import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
+import { ColorCode, log } from "@/utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
 
 /**
- * Configure the kill subcommand
+ * Configure the /kill command
  */
-export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("kill").setDescription(localizer("en-US", "commands.bot.kill.description"));
+export const configureCommand = (command: SlashCommandBuilder) =>
+  command.setName("kill").setDescription(localizer("en-US", "commands.kill.description"));
 
 /**
  * Execute the kill command for this channel.
@@ -50,8 +50,8 @@ export async function execute(
       interaction,
       locale,
       {
-        titleKey: "commands.bot.kill.nothing_to_stop_title",
-        descriptionKey: "commands.bot.kill.nothing_to_stop_description",
+        titleKey: "commands.kill.nothing_to_stop_title",
+        descriptionKey: "commands.kill.nothing_to_stop_description",
         color: ColorCode.WARN,
       },
       MessageFlags.SuppressNotifications,
@@ -66,15 +66,15 @@ export async function execute(
   }
 
   log.info(
-    `Stop/clear requested via /bot kill by user ${interaction.user.id} in channel ${channelId}. Active stream: ${hasActiveStream}. Cleared ${clearedQueueCount} queued message(s).`,
+    `Stop/clear requested via /kill by user ${interaction.user.id} in channel ${channelId}. Active stream: ${hasActiveStream}. Cleared ${clearedQueueCount} queued message(s).`,
   );
 
   await replyInfoEmbed(
     interaction,
     locale,
     {
-      titleKey: "commands.bot.kill.success_title",
-      descriptionKey: "commands.bot.kill.success_description",
+      titleKey: "commands.kill.success_title",
+      descriptionKey: "commands.kill.success_description",
       color: ColorCode.SUCCESS,
     },
     MessageFlags.SuppressNotifications,

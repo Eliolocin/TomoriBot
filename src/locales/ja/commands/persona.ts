@@ -464,7 +464,7 @@ export default {
       wrong_provider_title: `🔴 互換性のないプロバイダー`,
       wrong_provider_description: `ペルソナ生成には対応プロバイダーが必要です。現在のプロバイダーは **{current_provider}** です。\`/model text\`で対応プロバイダーに切り替えてください。`,
       no_api_key_title: `🔴 APIキーがありません`,
-      no_api_key_description: `有効なプロバイダーが設定されていません。\`/setup\`（初回）または\`/provider add\`で登録してください。`,
+      no_api_key_description: `有効なプロバイダーが設定されていません。\`/config setup\`（初回）または\`/provider add\`で登録してください。`,
       model_incompatible_title: `互換性のないモデル`,
       model_incompatible_description: `現在のモデル（**{model_name}**）は、ペルソナ生成に必要な**構造化出力**をサポートしていません。
 

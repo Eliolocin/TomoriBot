@@ -1,12 +1,12 @@
-import type { SlashCommandSubcommandBuilder } from "discord.js";
+import type { SlashCommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
 import { EmbedBuilder } from "discord.js";
-import { ColorCode } from "../../utils/misc/logger";
-import { localizer } from "../../utils/text/localizer";
-import type { UserRow } from "../../types/db/schema";
+import { ColorCode } from "@/utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
+import type { UserRow } from "@/types/db/schema";
 
-export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("ping").setDescription(localizer("en-US", "commands.tool.ping.description"));
+export const configureCommand = (command: SlashCommandBuilder) =>
+  command.setName("ping").setDescription(localizer("en-US", "commands.ping.description"));
 
 export async function execute(
   _client: Client,
@@ -24,9 +24,9 @@ export async function execute(
 
   const embed = new EmbedBuilder()
     .setColor(isLaggy ? ColorCode.WARN : ColorCode.SUCCESS)
-    .setTitle(localizer(locale, "commands.tool.ping.title"))
+    .setTitle(localizer(locale, "commands.ping.title"))
     .setDescription(
-      localizer(locale, isLaggy ? "commands.tool.ping.response_slow" : "commands.tool.ping.response_fast", {
+      localizer(locale, isLaggy ? "commands.ping.response_slow" : "commands.ping.response_fast", {
         response_time: responseTime,
       }),
     );

@@ -115,13 +115,6 @@ export default {
       channel_not_whitelisted: `このサーバーではホワイトリスト制限が有効です。\`/bot respond\` はホワイトリスト登録チャンネル内で、かつホワイトリスト登録ロールを持つメンバーのみ使用でき、このチャンネルで許可されたペルソナだけを使えます。`,
       persona_access_blocked: `現在のホワイトリスト権限と個人スポットライト設定では、このチャンネルで \`/bot respond\` に使えるペルソナがありません。`,
     },
-    kill: {
-      description: `このチャンネルで現在のストリーム応答を停止し、キュー済み応答をすべてクリアします。`,
-      success_title: `ストリームを停止しました`,
-      success_description: `進行中の応答ストリーム（ある場合）を停止し、このチャンネルのキュー済み応答をクリアしました。`,
-      nothing_to_stop_title: `停止・クリア対象がありません`,
-      nothing_to_stop_description: `このチャンネルには停止できる進行中の応答ストリームも、クリアできるキュー済み応答もありません。`,
-    },
     impersonate: {
       description: `ペルソナ、ユーザー、またはシステムプロンプトになりすます。`,
       target_description: `なりすます対象を選択してください。`,

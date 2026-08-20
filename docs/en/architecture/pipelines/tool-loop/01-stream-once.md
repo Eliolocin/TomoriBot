@@ -53,7 +53,7 @@ long but active stream is not killed — only a truly stalled one is. Returns a
   `setChannelStreamKill(channelId, killStream)`. `killStream` is a unified
   callback that both calls `abortController.abort()` *and* rejects the
   `Promise.race` — ensuring the HTTP request is cancelled and the race unblocks
-  simultaneously. This is what `/bot kill` triggers via `forceKillChannelStream`.
+  simultaneously. This is what `/kill` triggers via `forceKillChannelStream`.
 - **Clears the timeout and the kill registration** (`clearTimeout`,
   `setChannelStreamKill(channelId, null)`) in the `finally` block regardless of
   success or error.

@@ -150,7 +150,7 @@ a card you must update the published body (`gh release edit`) — the command pr
 
 ## Quick Health Checks
 
-- `/tool ping`
+- `/ping`
 - `/tool status`
 - Mention the bot or use trigger words in chat
 

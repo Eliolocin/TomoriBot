@@ -177,12 +177,12 @@ export interface ToolContext {
   isUserImpersonation?: boolean; // True when the active turn is a user impersonation session
   impersonatedUserId?: string; // Discord user ID currently being impersonated, if any
   suppressProgressNotices?: boolean; // Skip public "working..." embeds for fire-and-forget flows
-  showKillHint?: boolean; // When true, tool notice footers include the /bot kill hint (set after SOFT_WARN_ITERATION_THRESHOLD)
+  showKillHint?: boolean; // When true, tool notice footers include the /kill hint (set after SOFT_WARN_ITERATION_THRESHOLD)
   contextItems?: StructuredContextItem[]; // Current LLM context for tools that need hidden resolution metadata
 
   messageIdMap?: MessageIdMap;
 
-  /** Turn-level AbortSignal. Tools should forward this to their fetch/HTTP calls for true cancellation on /bot kill. */
+  /** Turn-level AbortSignal. Tools should forward this to their fetch/HTTP calls for true cancellation on /kill. */
   abortSignal?: AbortSignal;
 }
 

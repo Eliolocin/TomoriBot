@@ -9,7 +9,7 @@ export default {
     max_iterations_title: `思考ループ`,
     max_iterations_streaming_description: `思考ループに陥り、リクエストを完了できませんでした。この問題が解決しない場合は、\`/tool refresh\`を使用してください。`,
     still_working_title: `まだ作業中...`,
-    still_working_description: `このタスクは通常より多くのステップが必要です。もし止まっていると思ったら、\`/bot kill\` を使用してください。`,
+    still_working_description: `このタスクは通常より多くのステップが必要です。もし止まっていると思ったら、\`/kill\` を使用してください。`,
     nai_tool_retry_exhausted_title: `ツールエラー`,
     nai_tool_retry_exhausted_description: `ツールが複数回失敗し、リクエストを完了できませんでした。もう一度お試しいただくか、問題が解決しない場合は \`/tool refresh\` を使用してください。`,
     tool_error_loop_title: `ツールエラーループ`,

@@ -28,6 +28,7 @@
     "check-locale-lengths": "bun run scripts/checks/checkLocalizationKeys.ts --strict-lengths",
     "generate-command-reference": "bun run scripts/devtools/generateCommandReference.ts",
     "check-command-reference": "bun run scripts/checks/checkCommandReference.ts",
+    "check-command-mentions": "bun run scripts/checks/checkCommandMentions.ts",
     "check-schema": "bun run scripts/checks/checkSchemaDrift.ts",
     "list-unused-locales": "bun run scripts/checks/checkLocalizationKeys.ts --list-unused",
     "prune-locales": "bun run scripts/devtools/pruneLocaleKeys.ts",

@@ -525,7 +525,7 @@ These modals collect free-form text and have no structured option set:
 | `/persona generate`        | `persona/generate.ts`         | Free-form name + file upload                            |
 | `/server trigger add`      | `server/trigger/add.ts`       | Free-form text fields (word, response, cooldown)        |
 | `/server avatar`           | `server/avatar.ts`            | Persona select + optional file upload                   |
-| `/tool comment`            | `tool/comment.ts`             | Free-form paragraph text                                |
+| `/comment`                 | `comment.ts`                  | Free-form paragraph text                                |
 | `/memory personal import`  | `memory/personal/import.ts`   | File upload only                                        |
 
 ### Button-To-Modal Confirmation Pattern

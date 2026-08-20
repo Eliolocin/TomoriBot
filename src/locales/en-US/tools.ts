@@ -55,7 +55,7 @@ export default {
     },
     tool_notice: {
       hide_footer: `Hide this using \`/config notice-embeds visibility\``,
-      hide_footer_with_kill: `Hide this using \`/config notice-embeds visibility\` · Use \`/bot kill\` if you think I'm stuck`,
+      hide_footer_with_kill: `Hide this using \`/config notice-embeds visibility\` · Use \`/kill\` if you think I'm stuck`,
     },
     user_block: {
       type_mute: `mute`,

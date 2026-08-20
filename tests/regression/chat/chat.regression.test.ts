@@ -585,7 +585,7 @@ describe("chat regression harness", () => {
     expect(lockEntry.messageQueue).toHaveLength(0);
   });
 
-  it("treats /bot kill stream aborts as stopped_by_user and clears the stop request", async () => {
+  it("treats /kill stream aborts as stopped_by_user and clears the stop request", async () => {
     const client = makeClient();
     const fixture = conversations[0];
     const message = makeMessage(fixture, client);

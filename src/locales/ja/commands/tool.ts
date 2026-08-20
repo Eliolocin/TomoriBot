@@ -1,11 +1,5 @@
 ﻿export default {
   tool: {
-    ping: {
-      description: `ボットの遅延を確認します`,
-      title: `ポン！ 🏓`,
-      response_fast: `応答時間: \`{response_time}ms\``,
-      response_slow: `応答時間: \`{response_time}ms\``,
-    },
     estimate: {
       description: `利用量と費用の見積もり`,
       cost: {
@@ -374,15 +368,6 @@
       field_personal_deliberate_tool_mode: `個人ツールモード`,
       field_deliberate_tool_mode: `明示的ツールモード`,
       field_deliberate_tool_context_turns: `ツールコンテキストターン`,
-    },
-    comment: {
-      description: `チャットに表示されるが、コンテキストには表示されないコメントを送信します。`,
-      content_description: `コメントのテキスト内容。`,
-      invalid_channel_title: `無効なチャンネル`,
-      invalid_channel_description: `このコマンドはサーバーのテキストチャンネルまたはスレッドでのみ使用できます。`,
-      footer: `{user}によるコメント、コンテキストには非表示`,
-      success_title: `コメント投稿済み`,
-      success_description: `コメントがこのチャンネルに投稿されました。`,
     },
     delete: {
       description: `ターンやチャンネルのコンテンツを削除します。`,

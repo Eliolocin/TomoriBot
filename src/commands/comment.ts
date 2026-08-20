@@ -1,5 +1,5 @@
 import type { Client, ChatInputCommandInteraction } from "discord.js";
-import { MessageFlags, type SlashCommandSubcommandBuilder, EmbedBuilder } from "discord.js";
+import { MessageFlags, type SlashCommandBuilder, EmbedBuilder } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
@@ -7,23 +7,23 @@ import { isGuildMessageCommandChannel } from "@/utils/discord/guildMessageChanne
 import type { UserRow } from "@/types/db/schema";
 
 /**
- * Configures the /tool comment subcommand
+ * Configures the /comment command
  */
-export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) => {
-  return subcommand
+export const configureCommand = (command: SlashCommandBuilder) => {
+  return command
     .setName("comment")
-    .setDescription(localizer("en-US", "commands.tool.comment.description"))
+    .setDescription(localizer("en-US", "commands.comment.description"))
     .addStringOption((option) =>
       option
         .setName("content")
-        .setDescription(localizer("en-US", "commands.tool.comment.content_description"))
+        .setDescription(localizer("en-US", "commands.comment.content_description"))
         .setRequired(true)
         .setMaxLength(4000),
     );
 };
 
 /**
- * Executes the /tool comment command
+ * Executes the /comment command
  * Sends an embed with user input text and a footer showing who created the comment
  */
 export async function execute(
@@ -44,8 +44,8 @@ export async function execute(
 
   if (!isGuildMessageCommandChannel(interaction.channel)) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.tool.comment.invalid_channel_title",
-      descriptionKey: "commands.tool.comment.invalid_channel_description",
+      titleKey: "commands.comment.invalid_channel_title",
+      descriptionKey: "commands.comment.invalid_channel_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -74,7 +74,7 @@ export async function execute(
       });
 
   embed.setFooter({
-    text: localizer(locale, "commands.tool.comment.footer", {
+    text: localizer(locale, "commands.comment.footer", {
       user: interaction.user.username,
     }),
     iconURL: memberAvatarUrl,
@@ -85,8 +85,8 @@ export async function execute(
   });
 
   await replyInfoEmbed(interaction, locale, {
-    titleKey: "commands.tool.comment.success_title",
-    descriptionKey: "commands.tool.comment.success_description",
+    titleKey: "commands.comment.success_title",
+    descriptionKey: "commands.comment.success_description",
     color: ColorCode.SUCCESS,
   });
 }

@@ -21,7 +21,7 @@ const activeStopRequests = new Map<string, StreamStopRequest>();
 /**
  * Requester ids raised by the delivery layer itself rather than by a user or another turn.
  *
- * These are scoped to the stream that raised them: unlike a `/bot kill`, they carry no
+ * These are scoped to the stream that raised them: unlike a `/kill`, they carry no
  * stopContext and have no meaning once that stream ends, so any exit path that does not
  * surface them as a stop must clear them before the next turn reads the registry.
  */

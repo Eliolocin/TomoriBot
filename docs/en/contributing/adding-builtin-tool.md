@@ -27,7 +27,7 @@ This guide walks through adding a new built-in tool that the LLM can call during
    - Pass `externalSignal: context.abortSignal` to `safeDownload` calls.
    - Pass it through any helper option that accepts an `AbortSignal`.
 
-   This gives `/bot kill` true HTTP-level cancellation. Without it, the underlying request keeps running even after the turn is stopped.
+   This gives `/kill` true HTTP-level cancellation. Without it, the underlying request keeps running even after the turn is stopped.
 
 6. The tool is auto-discovered by `toolInitializer.ts` at startup — no manual registration is needed.
 

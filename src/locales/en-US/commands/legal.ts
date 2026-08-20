@@ -1,5 +1,6 @@
 export default {
   legal: {
+    description: `View TomoriBot's terms of service, privacy policy, and license.`,
     privacy: {
       description: `View TomoriBot's Privacy Policy`,
       title: `Privacy Policy`,

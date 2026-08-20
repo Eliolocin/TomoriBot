@@ -1,11 +1,5 @@
 ﻿export default {
   tool: {
-    ping: {
-      description: `Check the bot's latency.`,
-      title: `Pong! 🏓`,
-      response_fast: `Response Time: \`{response_time}ms\``,
-      response_slow: `Response Time: \`{response_time}ms\``,
-    },
     estimate: {
       description: `Estimate usage and costs`,
       cost: {
@@ -374,15 +368,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
       field_personal_deliberate_tool_mode: `Personal Tool Mode`,
       field_deliberate_tool_mode: `Deliberate Tool Mode`,
       field_deliberate_tool_context_turns: `Tool Context Turns`,
-    },
-    comment: {
-      description: `Send a comment embed visible in chat but invisible in context.`,
-      content_description: `The text content of your comment.`,
-      invalid_channel_title: `Invalid Channel`,
-      invalid_channel_description: `This command can only be used in server text channels or threads.`,
-      footer: `Comment by {user}, invisible in context`,
-      success_title: `Comment Posted`,
-      success_description: `Your comment has been posted in this channel.`,
     },
     delete: {
       description: `Delete turns or other channel content.`,

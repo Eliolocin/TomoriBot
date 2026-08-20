@@ -1,0 +1,33 @@
+{
+  "_notes": "Slash paths that appear in locale prose but are not registered Discord commands. Keep this list small; each entry must document why prose names a path Discord does not expose. Three legitimate classes exist: external HTTP API routes, a command path followed by one of its option names, and a deliberately truncated path prefix naming a family.",
+  "exceptions": [
+    {
+      "path": "prompt",
+      "reason": "ComfyUI HTTP API route in the self-hosting help page, not a Discord command."
+    },
+    {
+      "path": "view",
+      "reason": "ComfyUI HTTP API route in the self-hosting help page, not a Discord command."
+    },
+    {
+      "path": "model image clear",
+      "reason": "Names the `clear` option of /model image (model/image.ts:101), not a subcommand."
+    },
+    {
+      "path": "personal provider model-",
+      "reason": "Deliberately truncated prefix naming the /personal provider model-* family rather than one path."
+    },
+    {
+      "path": "bot impersonate me",
+      "reason": "Names a choice value of the /bot impersonate target option, not a subcommand. Becomes a real subcommand when /impersonate is redesigned; drop this entry then."
+    },
+    {
+      "path": "bot impersonate user",
+      "reason": "Names a choice value of the /bot impersonate target option, not a subcommand. Becomes a real subcommand when /impersonate is redesigned; drop this entry then."
+    },
+    {
+      "path": "bot impersonate persona",
+      "reason": "Names a choice value of the /bot impersonate target option, not a subcommand. Becomes a real subcommand when /impersonate is redesigned; drop this entry then."
+    }
+  ]
+}

@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **27**. Runnable slash commands: **220**.
+Top-level command groups: **30**. Runnable slash commands: **220**.
 
 ## `/bot`
 
@@ -22,7 +22,6 @@ Bot commands.
 | `/bot generate image` | Generate a quick scene image from the ongoing channel context. |
 | `/bot generate scene` | Generate a short scripted text scene between selected personas. |
 | `/bot impersonate` | Impersonate personas, users, or inject system prompts. |
-| `/bot kill` | Immediately stop the current stream and clear queued responses in this channel. |
 | `/bot respond` | Manually trigger response to the latest message in this channel. |
 
 ## `/capabilities`
@@ -33,6 +32,14 @@ Manage tool use and specific features.
 |---|---|
 | `/capabilities manage` | Configure which specific tools I can use on this server. |
 | `/capabilities toggle` | Toggle whether I can use tools and function calls. |
+
+## `/comment`
+
+Send a comment embed visible in chat but invisible in context.
+
+| Command | Summary |
+|---|---|
+| `/comment` | Send a comment embed visible in chat but invisible in context. |
 
 ## `/conditioning`
 
@@ -109,6 +116,14 @@ Browse setup, features, providers, memory, behavior, tools, media, and integrati
 | Command | Summary |
 |---|---|
 | `/help` | Browse setup, features, providers, memory, behavior, tools, media, and integration guides. |
+
+## `/kill`
+
+Immediately stop the current stream and clear queued responses in this channel.
+
+| Command | Summary |
+|---|---|
+| `/kill` | Immediately stop the current stream and clear queued responses in this channel. |
 
 ## `/legal`
 
@@ -284,6 +299,14 @@ Manage your personal settings
 | `/personal stm` | Configure STM (short-term memory) settings |
 | `/personal timezone` | Set your personal timezone offset from UTC. |
 
+## `/ping`
+
+Check the bot's latency.
+
+| Command | Summary |
+|---|---|
+| `/ping` | Check the bot's latency. |
+
 ## `/provider`
 
 Manage this server's shared AI providers.
@@ -330,13 +353,13 @@ Server commands.
 | `/server matrix link` | Link a Discord channel to a Matrix room for bidirectional relay |
 | `/server matrix unlink` | Remove the Matrix bridge link from a Discord channel |
 | `/server member-permissions` | Configure what non-admin members can teach me. |
-| `/server nuke` | Completely wipe all server data. Requires re-running /setup afterwards. |
+| `/server nuke` | Completely wipe all server data. Requires re-running /config setup afterwards. |
 | `/server private-channels` | Manage private channels where STMs are isolated and thought logs are suppressed |
 | `/server quota image-generation` | Configure daily image generation quotas for this server. |
 | `/server quota reset` | Reset a quota pool for image, text, or video generation. |
 | `/server quota text-generation` | Configure text generation trigger quotas for this server. |
 | `/server quota video-generation` | Configure video generation quotas for this server. |
-| `/server rp-channels` | Manage channels where emojis and stickers are always suppressed and `/delete turn` is available |
+| `/server rp-channels` | Manage channels where emojis and stickers are always suppressed and `/tool delete turn` is available |
 | `/server stm categories-edit` | Define up to 5 labeled STM categories the bot fills via tool calls. |
 | `/server stm manage` | Review and clear active server-shared STMs across personas. |
 | `/server stm parameters` | Tune the STM refresh cadence, render mode, crude-message count, nudge depth, and content depth. |
@@ -405,11 +428,9 @@ Tool commands.
 
 | Command | Summary |
 |---|---|
-| `/tool comment` | Send a comment embed visible in chat but invisible in context. |
 | `/tool compact` | Summarize the recent conversation into a compact system memory. |
 | `/tool delete turn` | Delete the last persona's turn from the channel. |
 | `/tool estimate cost` | Estimate API costs for paid AI providers |
-| `/tool ping` | Check the bot's latency. |
 | `/tool prompt snapshot` | Dump the exact LLM prompt for a persona to a file for debugging. |
 | `/tool refresh` | Clear conversation history (this channel only). |
 | `/tool status` | Show current personal, server, or persona status. |

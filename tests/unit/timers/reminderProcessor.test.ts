@@ -186,7 +186,7 @@ describe("ReminderProcessor delivery acknowledgement", () => {
     tomoriChatMock.mockClear();
   });
 
-  it("reschedules instead of deleting when /bot kill stops reminder generation", async () => {
+  it("reschedules instead of deleting when /kill stops reminder generation", async () => {
     const reminder = makeReminder();
     getDueRemindersMock.mockImplementation(async () => [reminder]);
     tomoriChatMock.mockImplementation(async (input) => {

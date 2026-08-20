@@ -1,5 +1,6 @@
 export default {
   generate: {
+    description: `Generate AI images and videos.`,
     image: {
       description: `Generate an AI image using Google Gemini or OpenRouter`,
       modal: {

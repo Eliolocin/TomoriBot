@@ -484,7 +484,8 @@ const CATEGORIES = {
     (r.name.includes("Schema Drift") || r.name.includes("Lifecycle") || r.name.includes("Migration Files")),
   LOCALES: (r: ResultItem) => isNamedCheck(r) && r.name.includes("Localization"),
   DOCUMENTATION: (r: ResultItem) =>
-    isNamedCheck(r) && (r.name.includes("Command Reference") || r.name.includes("Comment Audit")),
+    isNamedCheck(r) &&
+    (r.name.includes("Command Reference") || r.name.includes("Command Mentions") || r.name.includes("Comment Audit")),
 };
 
 async function main() {
@@ -559,6 +560,13 @@ async function main() {
     true,
   );
 
+  // Also loads the complete command graph, so it stays serialized alongside the check above.
+  const commandMentionsResult = await runCheck(
+    "Command Mentions (bun run check-command-mentions)",
+    ["bun", "run", "check-command-mentions"],
+    true,
+  );
+
   const results: ResultItem[] = [
     typeCheckResult,
     lintResult,
@@ -576,6 +584,7 @@ async function main() {
     localesResult,
     localeLengthsResult,
     commandReferenceResult,
+    commandMentionsResult,
   ];
 
   console.log("\n====================================");
@@ -596,6 +605,8 @@ async function main() {
     Knip: "Run `bun run knip` and remove unused files, dependencies, or exports, or update scripts/knip.json for intentional entry points.",
     "Comment Audit":
       "Run `bun run audit-comments` and review each finding against docs/en/contributing/comment-policy.md before editing.",
+    "Command Mentions":
+      "A locale string names a slash path that is not registered. Update the prose to the new path, or add a documented entry to scripts/checks/command-mention-exceptions.json.",
     "Dependency Audit":
       "Update the parent dependency or run `bun update <package-name>` specifically. Only use a global override when the replacement stays within every dependent package's declared version range.",
     "SQL Audit":

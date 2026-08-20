@@ -241,7 +241,7 @@ async function streamOnce(
   let timeoutId: NodeJS.Timeout | null = null;
 
   // Unified kill: aborts the HTTP request AND rejects the Promise.race.
-  // Stored on the lock entry so /bot kill and stale-lock release can trigger it externally.
+  // Stored on the lock entry so /kill and stale-lock release can trigger it externally.
   let killStream: ((reason: Error) => void) | null = null;
 
   const refreshTimeout = () => {
@@ -295,7 +295,7 @@ async function streamOnce(
     ]);
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("SDK_CALL_TIMEOUT:")) {
-      // A pending stop request (e.g. /bot kill) makes this a terminal stop; no fallback runs, so
+      // A pending stop request (e.g. /kill) makes this a terminal stop; no fallback runs, so
       // no superseded-message cleanup will consume in-flight sends. Return immediately; settling
       // here would just make the kill wait out the abandoned stream for no benefit.
       if (StreamOrchestrator.hasStopRequest(channelId)) {
@@ -470,7 +470,7 @@ async function executeToolCall(
         ...(killPromise ? [killPromise] : []),
       ]);
 
-  // If /bot kill fired, exit the turn immediately; don't feed the failed result back to the model.
+  // If /kill fired, exit the turn immediately; don't feed the failed result back to the model.
   if (shouldAbortToolCallForStopRequest(params.context.channel.id)) {
     return { kind: "abort", status: "stopped_by_user" };
   }

@@ -464,7 +464,7 @@ Trigger Words ({trigger_word_count}): {triggers}`,
       wrong_provider_title: `🔴 Incompatible Provider`,
       wrong_provider_description: `Preset generation requires a compatible provider. Your current provider is **{current_provider}**. Use \`/model text\` to switch to a supported provider.`,
       no_api_key_title: `🔴 No API Key`,
-      no_api_key_description: `No active provider is configured. Use \`/setup\` (first time) or \`/provider add\` to register one.`,
+      no_api_key_description: `No active provider is configured. Use \`/config setup\` (first time) or \`/provider add\` to register one.`,
       model_incompatible_title: `Incompatible Model`,
       model_incompatible_description: `Your current model (**{model_name}**) does not support **STRUCTURED OUTPUT**, which is required for persona generation.
 

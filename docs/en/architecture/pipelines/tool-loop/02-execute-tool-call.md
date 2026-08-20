@@ -76,7 +76,7 @@ Steps in execution order:
    - `showKillHint` — true once `iteration >= SOFT_WARN_ITERATION_THRESHOLD`
    - `abortSignal` — the turn-level `AbortSignal` from `getChannelTurnAbortSignal`.
      Tools that forward this to their `fetch` calls get true HTTP-level
-     cancellation when `/bot kill` fires.
+     cancellation when `/kill` fires.
 
 4. **Deliberate-tool-mode allowlist gate** — if
    `context.deliberateToolModeActive` is true and `deliberateToolAllowedNames`
@@ -105,7 +105,7 @@ Steps in execution order:
      5 min) with a synthetic `{ success: false, error: "timed out" }` result.
      The timer is fresh per tool call, so a chain of fast tools is unaffected.
    - **Kill promise** — resolves immediately if the turn-level `AbortSignal`
-     fires (i.e., `/bot kill` was used while the tool was running).
+     fires (i.e., `/kill` was used while the tool was running).
 
    After the race, if `StreamOrchestrator.hasStopRequest` is true (kill was
    requested), the stage returns `{kind: "abort", status: "stopped_by_user"}`
@@ -177,10 +177,10 @@ After this stage runs:
   response with enriched context.
 - `consecutiveToolErrors` in the outer loop is reset to `0` on `success ===
   true` or `kind === "restart"`.
-- If `/bot kill` fired during tool execution, `kind === "abort"` is returned
+- If `/kill` fired during tool execution, `kind === "abort"` is returned
   immediately — no history entry is added and the model never sees the failed
   tool result.
-- A tool timeout (no `/bot kill`) returns `kind === "history"` with
+- A tool timeout (no `/kill`) returns `kind === "history"` with
   `success: false` — the model is informed and can decide how to proceed.
 - A queued follow-up never converts an in-progress tool chain into
   `stopped_by_user`; only a genuine stop does.
@@ -195,7 +195,7 @@ After this stage runs:
 |---|---|
 | `ToolRegistry.executeTool` | The tool registration contract is the seam — A plugin adding a new tool registers it with the `ToolRegistry`. → plugin plan candidate |
 | Deliberate-tool-mode allowlist (`deliberateToolAllowedNames`) | Internal — controlled by `turnPlanner`; tool plugins declare their trigger patterns, not the gating logic |
-| `ToolContext.abortSignal` | Tools that forward this to their `fetch` calls gain free cancellation on `/bot kill`. New tools should always thread it through. |
+| `ToolContext.abortSignal` | Tools that forward this to their `fetch` calls gain free cancellation on `/kill`. New tools should always thread it through. |
 | `ToolContext` shape | The context contract — tools depend on its fields; adding a field here widens the contract for all tools |
 | `retainSuccessfulToolAffordance` | Internal — deliberate-tool-mode retention window; operational parameter, not plugin-relevant |
 | `handleEnhancedContextRestart` | See [stage 03](03-enhanced-context-restart.md) — the `context_restart_*` namespace is the seam |

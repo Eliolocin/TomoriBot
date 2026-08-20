@@ -115,13 +115,6 @@ export default {
       channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot respond\` can only be used in whitelisted channels by members with whitelisted roles, and only with personas allowed in this channel.`,
       persona_access_blocked: `Your current whitelist permissions and personal spotlight settings do not leave any personas available for \`/bot respond\` in this channel.`,
     },
-    kill: {
-      description: `Immediately stop the current stream and clear queued responses in this channel.`,
-      success_title: `Stream Stopped`,
-      success_description: `Stopped the active response stream (if any) and cleared queued responses in this channel.`,
-      nothing_to_stop_title: `Nothing to Stop`,
-      nothing_to_stop_description: `There is no active response stream or queued response to clear in this channel.`,
-    },
     impersonate: {
       description: `Impersonate personas, users, or inject system prompts.`,
       target_description: `Choose who or what to impersonate.`,

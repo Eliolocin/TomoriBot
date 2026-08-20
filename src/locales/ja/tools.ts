@@ -55,7 +55,7 @@ export default {
     },
     tool_notice: {
       hide_footer: `\`/config notice-embeds visibility\` で非表示にできます`,
-      hide_footer_with_kill: `\`/config notice-embeds visibility\` で非表示にできます · 止まっていると思ったら \`/bot kill\` を使用してください`,
+      hide_footer_with_kill: `\`/config notice-embeds visibility\` で非表示にできます · 止まっていると思ったら \`/kill\` を使用してください`,
     },
     user_block: {
       type_mute: `ミュート`,

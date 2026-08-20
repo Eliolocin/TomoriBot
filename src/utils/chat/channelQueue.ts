@@ -89,7 +89,7 @@ export interface ChannelLockEntry {
   messageQueue: QueuedMessage[];
   /** Callback that aborts the active HTTP request and rejects the stream Promise.race. Set by toolLoop, cleared on release. */
   activeStreamKill?: ((reason: Error) => void) | null;
-  /** AbortController for the entire turn (streaming + tools). Aborted by /bot kill; signal forwarded to tools via ToolContext. */
+  /** AbortController for the entire turn (streaming + tools). Aborted by /kill; signal forwarded to tools via ToolContext. */
   activeTurnAbortController: AbortController | null;
 }
 
@@ -667,7 +667,7 @@ export function getChannelTurnAbortSignal(channelId: string): AbortSignal | unde
 }
 
 /**
- * Force-kills the active turn for a channel (used by /bot kill).
+ * Force-kills the active turn for a channel (used by /kill).
  * Aborts the turn-level controller (cancels tool execution) and the stream kill (cancels HTTP + unblocks Promise.race).
  * @param channelId - Target channel
  * @returns true if anything was killed
@@ -681,7 +681,7 @@ export function forceKillChannelStream(channelId: string): boolean {
     killed = true;
   }
   if (lockEntry.activeStreamKill) {
-    lockEntry.activeStreamKill(new Error("SDK_CALL_TIMEOUT: killed by /bot kill"));
+    lockEntry.activeStreamKill(new Error("SDK_CALL_TIMEOUT: killed by /kill"));
     killed = true;
   }
   return killed;

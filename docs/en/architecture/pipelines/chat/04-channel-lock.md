@@ -57,7 +57,7 @@ The callback receives `LockedChatTurn`:
   persona-job/persona-id/command-triggered flags.
 - Creates a **fresh `AbortController`** (`activeTurnAbortController`) for this
   turn. Its signal is passed to tools via `ToolContext.abortSignal` so HTTP-level
-  cancellation propagates on `/bot kill`.
+  cancellation propagates on `/kill`.
 
 **During the callback:**
 
@@ -107,7 +107,7 @@ After this stage's `finally` block runs:
 - A pending stop-response (if any) was scheduled *before* the queue replay, so
   the stop response runs first.
 
-## `/bot kill` mechanics
+## `/kill` mechanics
 
 `forceKillChannelStream(channelId)` is the single entry point for hard-killing
 an active turn. It does both:
@@ -122,7 +122,7 @@ an active turn. It does both:
    requests return `{status: "stopped_by_user"}`; SDK/stale-lock timeouts still
    return `{status: "timeout"}`.
 
-`/bot kill` in `src/commands/bot/kill.ts` additionally calls
+`/kill` in `src/commands/kill.ts` additionally calls
 `StreamOrchestrator.requestStop` before `forceKillChannelStream`, and
 `clearChannelProcessingQueue` to drain the message queue — so neither the
 current turn nor any queued messages continue processing.
@@ -130,7 +130,7 @@ current turn nor any queued messages continue processing.
 While that stop request is pending, locked-channel admission ignores new
 same-user follow-up candidates with `locked_stop_requested` instead of queuing
 them. This prevents a message that arrives during the short kill-unwind window
-from re-populating the queue after `/bot kill` already cleared it.
+from re-populating the queue after `/kill` already cleared it.
 
 When the kill path aborts the provider SDK race, `toolLoop.ts/streamOnce`
 classifies the result as `stopped_by_user` rather than a generic SDK timeout,

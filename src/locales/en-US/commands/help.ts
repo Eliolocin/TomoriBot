@@ -278,7 +278,7 @@ Transcription supports ~100 languages (auto-detected).`,
 - I can also do image, video, and news search (via \`/optional-key brave set\`)
 - I can fetch and read content from URLs`,
       personality_title: `Personality & Customization`,
-      personality_description: `- I can change my name and avatar using \`/config rename\` and \`/persona avatar\`
+      personality_description: `- I can change my name and avatar using \`/persona rename\` and \`/persona avatar\`
 - I can switch between different personas using \`/persona\` (you can also share and save personas using \`/persona export\`!)
 - Multiple characters can coexist as alter personas, each with their own triggers and webhook avatar
 - My behavior and tone can be tweaked with \`/persona attribute add\`, \`/persona sample-dialogue add\`, and \`/persona prompt set\`
@@ -319,7 +319,7 @@ Transcription supports ~100 languages (auto-detected).`,
       impersonation_title: `Impersonation & Tools`,
       impersonation_description: `- Use \`/bot impersonate\` to send messages as yourself, a persona, or inject system messages
 - Set a reusable user-impersonation prompt with \`/personal impersonate prompt\`
-- \`/tools compact\` can summarize or roleplay-compress conversation history
+- \`/tool compact\` can summarize or roleplay-compress conversation history
 - \`/bot respond\` to trigger prefilled or guided messages from the bot`,
       imagegen_title: `Image Generation`,
       imagegen_description: `- I can generate images from text prompts or by editing reference images
