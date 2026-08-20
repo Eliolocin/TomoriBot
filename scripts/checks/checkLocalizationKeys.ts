@@ -1642,13 +1642,14 @@ async function main(): Promise<void> {
 
     if (
       results.missingKeys.length > 0 ||
-      results.parityIssues.length > 0 ||
       results.modalTitleViolations.length > 0 ||
       results.modalDescriptionViolations.length > 0 ||
       results.commandDescriptionViolations.length > 0 ||
       results.modalUsageViolations.length > 0
     ) {
       process.exit(1);
+    } else if (results.parityIssues.length > 0) {
+      process.exit(2);
     }
   } catch (error) {
     log.error("Fatal error during localization key analysis", error);

@@ -1,5 +1,6 @@
 export default {
   donate: {
+    description: `Support TomoriBot's development and hosting costs.`,
     kofi: {
       description: `Support TomoriBot development through Ko-fi donations.`,
       title: `Support TomoriBot Development!`,

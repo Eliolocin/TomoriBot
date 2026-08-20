@@ -1,5 +1,6 @@
 export default {
   contribute: {
+    description: `Find the source code and ways to help build TomoriBot.`,
     github: {
       description: `Get the GitHub repository link and learn how to contribute to TomoriBot.`,
       title: `Contribute to TomoriBot!`,

@@ -15,7 +15,7 @@ Top-level command groups: **30**. Runnable slash commands: **220**.
 
 ## `/bot`
 
-Bot commands.
+commands.bot.description
 
 | Command | Summary |
 |---|---|
@@ -61,7 +61,7 @@ Manage persistent reward and punishment conditioning memories.
 
 ## `/config`
 
-Config commands.
+Configure TomoriBot's models, behavior, and server settings.
 
 | Command | Summary |
 |---|---|
@@ -86,7 +86,7 @@ Config commands.
 
 ## `/contribute`
 
-Contribute commands.
+Find the source code and ways to help build TomoriBot.
 
 | Command | Summary |
 |---|---|
@@ -94,7 +94,7 @@ Contribute commands.
 
 ## `/donate`
 
-Donate commands.
+Support TomoriBot's development and hosting costs.
 
 | Command | Summary |
 |---|---|
@@ -102,7 +102,7 @@ Donate commands.
 
 ## `/generate`
 
-Generate commands.
+Generate AI images and videos.
 
 | Command | Summary |
 |---|---|
@@ -127,7 +127,7 @@ Immediately stop the current stream and clear queued responses in this channel.
 
 ## `/legal`
 
-Legal commands.
+View TomoriBot's terms of service, privacy policy, and license.
 
 | Command | Summary |
 |---|---|
@@ -191,7 +191,7 @@ Manage this server's default AI models.
 
 ## `/novelai`
 
-Novelai commands.
+Configure NovelAI text and image generation for this server.
 
 | Command | Summary |
 |---|---|
@@ -331,7 +331,7 @@ Manage scheduled tasks and reminders.
 
 ## `/server`
 
-Server commands.
+Manage server-wide settings, channels, permissions, and integrations.
 
 | Command | Summary |
 |---|---|
@@ -416,7 +416,7 @@ View usage statistics
 
 ## `/support`
 
-Support commands.
+Get help, report bugs, and join the TomoriBot community.
 
 | Command | Summary |
 |---|---|
@@ -424,7 +424,7 @@ Support commands.
 
 ## `/tool`
 
-Tool commands.
+Utility actions for conversation context, prompts, and diagnostics.
 
 | Command | Summary |
 |---|---|

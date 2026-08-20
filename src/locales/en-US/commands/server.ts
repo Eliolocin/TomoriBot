@@ -1,5 +1,6 @@
 export default {
   server: {
+    description: `Manage server-wide settings, channels, permissions, and integrations.`,
     timezone: {
       description: `Set your server's timezone offset from UTC (default: 0 / UTC).`,
       value_description: `UTC offset hours (default: 0). Examples: 8, -5, 0, 9.`,

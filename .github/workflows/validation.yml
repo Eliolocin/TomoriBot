@@ -110,7 +110,7 @@ jobs:
           output=$(bun run check-locales 2>&1)
           exitCode=$?
           echo "$output"
-          if echo "$output" | grep -q "MISSING LOCALIZATION KEYS"; then
+          if [ $exitCode -eq 1 ]; then
             echo "Critical error: Missing localization keys found!"
             exit 1
           elif [ $exitCode -ne 0 ]; then

@@ -1,5 +1,6 @@
-﻿export default {
+export default {
   tool: {
+    description: `Utility actions for conversation context, prompts, and diagnostics.`,
     estimate: {
       description: `Estimate usage and costs`,
       cost: {
@@ -395,6 +396,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
       },
     },
     prompt: {
+      description: `Inspect the prompts TomoriBot sends to the model.`,
       snapshot: {
         description: `Dump the exact LLM prompt for a persona to a file for debugging.`,
         format_description: `Output format for the snapshot file.`,

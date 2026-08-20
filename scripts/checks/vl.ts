@@ -52,6 +52,29 @@ async function runWarningCheck(
   return { name, exitCode, fatal: false, isWarning, summary };
 }
 
+async function runLocalesCheck(
+  name: string,
+  command: string[],
+): Promise<ResultItem> {
+  console.log(`> Running ${name}...`);
+  const proc = spawn(command, { stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+  const exitCode = await proc.exited;
+  const output = stdout + stderr;
+  
+  if (exitCode !== 0) {
+    console.log(output);
+  }
+  
+  // Exit code 2 means only ja-parity issues were found. These are advisory.
+  // Exit code 1 means missing keys or other critical issues. These block.
+  return { 
+    name, 
+    exitCode, 
+    fatal: exitCode === 1 || (exitCode !== 0 && exitCode !== 2)
+  };
+}
+
 const WORD_DISPLAY_OVERRIDES: Record<string, string> = {
   ai: "AI",
   api: "API",
@@ -540,7 +563,7 @@ async function main() {
     dbConfigured
       ? runCheck("DB Lifecycle Validation (bun run db:lifecycle)", ["bun", "run", "db:lifecycle"], true)
       : Promise.resolve<ResultItem>({ name: "DB Lifecycle Validation", exitCode: null, fatal: true, skippedReason: "No local DB configured" }),
-    runCheck("Localization Keys (bun run check-locales)", ["bun", "run", "check-locales"], false),
+    runLocalesCheck("Localization Keys (bun run check-locales)", ["bun", "run", "check-locales"]),
     // Discord length limits are a hard blocker: modal placeholders/descriptions and command
     // descriptions get silently truncated by Discord beyond their max length, so any
     // violation here must block the PR gate (fatal: true); unlike the broader locale
@@ -620,7 +643,7 @@ async function main() {
       "Every `NNN_*.sql` up-migration needs a paired `NNN_*.down.sql`, and no two may share an `NNN` prefix. If another PR already merged your number, rename yours to the next free number.",
     "DB Lifecycle Validation": "Check the detailed logs above. Your migration might be invalid or nuke-db failed.",
     "Localization Keys":
-      "Missing Japanese equivalents are fine to push — run `bun run prune-locales` to clean up orphaned keys, or add the missing `ja` entries to get a clean run.",
+      "Missing keys (red/blocking) mean a source file references a key that exists in no locale; this must be fixed. Missing Japanese equivalents (orange/advisory) are safe to push — run `bun run prune-locales` to clean up orphaned keys, or add the missing `ja` entries.",
     "Localization Discord Limits":
       "Discord truncates modal placeholders/descriptions and select-option labels/descriptions (>100 chars), modal titles/labels (>45), and command descriptions (>100). Shorten the listed locale strings — both `en-US` and `ja` sides must fit.",
     "Command Reference":

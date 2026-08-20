@@ -1,5 +1,6 @@
-﻿export default {
+export default {
   config: {
+    description: `Configure TomoriBot's models, behavior, and server settings.`,
     options: {
       enable: `Enable`,
       disable: `Disable`,
@@ -784,6 +785,7 @@ Preview:
       },
     },
     "random-trigger": {
+      description: `Manage probabilistic timer-based auto-triggers.`,
       add: {
         description: `Add a probabilistic timer-based auto-trigger for a channel.`,
         channel_description: `The channel where spontaneous messages will be sent.`,

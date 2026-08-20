@@ -37,10 +37,6 @@ function escapeTableCell(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\r?\n/g, "<br />").trim();
 }
 
-function isUnresolvedLocaleKey(value: string): boolean {
-  return /^commands\.[a-zA-Z0-9_.-]+$/.test(value);
-}
-
 function humanizeCommandName(value: string): string {
   return value
     .split(/[-_\s]+/)
@@ -50,7 +46,7 @@ function humanizeCommandName(value: string): string {
 }
 
 function formatGroupDescription(group: CommandGroup): string {
-  if (group.description && !isUnresolvedLocaleKey(group.description)) {
+  if (group.description) {
     return group.description;
   }
 
