@@ -346,12 +346,12 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
       provider_picker_footer: `APIキーを安全にコピーしたら、次のステップへ進んでください。**APIキーは誰とも共有しないでください。**`,
       step2_title: `ステップ2：セットアップコマンドを実行`,
       step2_description: `- {configSetup}を使用してAPIキーを安全に追加し、TomoriBotを初期化
-- （推奨）{serverInitializeExpressions}を実行して、サーバーの絵文字/スタンプ表現を適切に使えるようにする
+- （推奨）{expressionsInitialize}を実行して、サーバーの絵文字/スタンプ表現を適切に使えるようにする
 	- APIキーは暗号化されて安全に保存されます
 	- 各サーバーには独自の設定があります`,
       step3_title: `ステップ3：チャットを開始`,
       step3_description: `- メンションするか、私のメッセージに返信するだけでチャットできます
-- {serverTrigger}でトリガー方法を変更できます
+- {personaTrigger}でトリガー方法を変更できます
 - 記憶システムで会話を記憶します（{configPermissions}で無効化できます！）
 - {serverAutotrigger}で自動トリガーを設定し、メンションなしでチャットできます`,
       step4_title: `ステップ4：TomoriBotをカスタマイズ（任意）`,
@@ -373,12 +373,12 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
       setup_title: `セットアップ`,
       setup_description: `1. 暗号化されていないMatrixルームに {botUserId} を招待します。
 2. そのルームの Internal Room ID を確認します。
-3. ブリッジしたいDiscordチャンネルで {serverMatrixLink} を実行し、そのルームIDを貼り付けます。`,
+3. ブリッジしたいDiscordチャンネルで {matrixLink} を実行し、そのルームIDを貼り付けます。`,
       room_id_title: `ルームIDの確認方法`,
       room_id_description: `多くのMatrixクライアントでは Room Settings -> Advanced -> Internal Room ID から確認できます。
 IDの形式は \`!abc:matrix.org\` のようになります。
 
-ボットが招待を受け入れると、Matrixルームにも短い案内を送りますが、リンク完了には引き続きDiscord側で {serverMatrixLink} を実行する必要があります。`,
+ボットが招待を受け入れると、Matrixルームにも短い案内を送りますが、リンク完了には引き続きDiscord側で {matrixLink} を実行する必要があります。`,
       usage_title: `Matrixからの使い方`,
       usage_description: `- ルームをリンクした後は、Matrixで普通に話しかければ使えます
 - Matrixのメッセージはリンク先のDiscordチャンネルにWebhookとして転送されます
@@ -393,7 +393,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - Embedはプレーンテキストとして転送されます
 - Matrixユーザーの個人メモリは属性付きのサーバーメモリにフォールバックします`,
       troubleshooting_title: `注意事項`,
-      troubleshooting_description: `- ボットが自動参加しない場合は {botUserId} を手動で招待し、必要なら {serverMatrixLink} を再実行してください
+      troubleshooting_description: `- ボットが自動参加しない場合は {botUserId} を手動で招待し、必要なら {matrixLink} を再実行してください
 - Matrixの暗号化は後から無効化できないため、暗号化済みルームは使えず、新しい非暗号化ルームが必要です
 - 上に書かれていない制限は基本的に動作する想定なので、動かない場合は {supportServer} で報告してください`,
     },
@@ -957,7 +957,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - {configPermissions} - 機能のオン/オフを切り替え（画像生成を含む）
 - {configUncensors} - 検閲なし出力オプションを設定
 - {personalPrivacy} - 私への視認性を制御（完全に見えなくなるオプション利用可能）
-- {serverInitializeExpressions} - サーバーの絵文字とステッカーの見た目を登録し、適切な場面で使えるようにする
+- {expressionsInitialize} - サーバーの絵文字とステッカーの見た目を登録し、適切な場面で使えるようにする
 
 **ドキュメント知識庫：**
 - {configModelEmbedding} - ドキュメントアップロードとRAG用の埋め込みモデルを設定`,

@@ -346,12 +346,12 @@ For first-time setup, *Google Gemini* is recommended because it has a generous f
       provider_picker_footer: `After safely copying your API key, proceed to the next step. **Do not share your API key with anyone else.**`,
       step2_title: `Step 2: Run the Setup Command`,
       step2_description: `- Use {configSetup} to securely add your API key and initialize TomoriBot
-- (Recommended) Run {serverInitializeExpressions} so I can properly use your server's emojis/stickers
+- (Recommended) Run {expressionsInitialize} so I can properly use your server's emojis/stickers
 	- Your API key is encrypted and stored safely
 	- Each server has its own configuration`,
       step3_title: `Step 3: Start Chatting`,
       step3_description: `- Just mention me or reply to my messages to chat
-- Change how I get triggered using {serverTrigger}
+- Change how I get triggered using {personaTrigger}
 - I'll remember our conversations with my memory system (which you can disable using {configPermissions}!)
 - Set up auto-trigger with {serverAutotrigger} to chat without mentioning me`,
       step4_title: `Step 4: Customize TomoriBot (Optional)`,
@@ -373,12 +373,12 @@ For first-time setup, *Google Gemini* is recommended because it has a generous f
       setup_title: `Setup`,
       setup_description: `1. Invite {botUserId} to an unencrypted Matrix room.
 2. Copy that room's Internal Room ID.
-3. Run {serverMatrixLink} in the Discord channel you want to bridge and paste the room ID there.`,
+3. Run {matrixLink} in the Discord channel you want to bridge and paste the room ID there.`,
       room_id_title: `Finding the Room ID`,
       room_id_description: `In most Matrix clients, open Room Settings -> Advanced -> Internal Room ID.
 The ID looks like \`!abc:matrix.org\`.
 
-After the bot accepts an invite, it now posts a short reminder in the Matrix room, but you still need to finish the link from Discord with {serverMatrixLink}.`,
+After the bot accepts an invite, it now posts a short reminder in the Matrix room, but you still need to finish the link from Discord with {matrixLink}.`,
       usage_title: `Using It From Matrix`,
       usage_description: `- Talk in Matrix normally after the room is linked
 - Matrix messages relay into the linked Discord channel as webhook messages
@@ -393,7 +393,7 @@ After the bot accepts an invite, it now posts a short reminder in the Matrix roo
 - Embeds relay as plain text
 - Personal memories for Matrix users fall back to attributed server memories`,
       troubleshooting_title: `Important Notes`,
-      troubleshooting_description: `- If the bot does not auto-join, invite {botUserId} manually and rerun {serverMatrixLink} if needed
+      troubleshooting_description: `- If the bot does not auto-join, invite {botUserId} manually and rerun {matrixLink} if needed
 - Matrix encryption cannot be disabled later, so encrypted rooms must be replaced with a fresh unencrypted room
 - If a limitation is not listed above, assume it should work and report bugs in {supportServer}`,
     },
@@ -944,7 +944,7 @@ Personalization:
 - {configPermissions} - Toggle my features on/off (including image generation)
 - {configUncensors} - Configure uncensored output options
 - {personalPrivacy} - Control your visibility to me (full invisibility option available)
-- {serverInitializeExpressions} - Register server emoji and sticker appearances so I use them correctly
+- {expressionsInitialize} - Register server emoji and sticker appearances so I use them correctly
 
 Document Knowledge Base:
 - {configModelEmbedding} - Configure an embedding model for document uploads and RAG`,

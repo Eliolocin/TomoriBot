@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { collectValidCommandPaths } from "../lib/commandReference";
 
 const LOCALE_ROOT = join(process.cwd(), "src", "locales");
+const SRC_ROOT = join(process.cwd(), "src");
 const EXCEPTIONS_PATH = join(process.cwd(), "scripts", "checks", "command-mention-exceptions.json");
 
 /**
@@ -21,12 +22,22 @@ const EXCEPTIONS_PATH = join(process.cwd(), "scripts", "checks", "command-mentio
  */
 const MENTION_PATTERN = /(?:\\)?`\/([a-z][a-z0-9_-]*(?: [a-z][a-z0-9_-]*)*)(?:\\)?`/g;
 
+/**
+ * Local wrappers shadow getCommandMention to inject a shared prefix. Matching a bare
+ * mention() identifier everywhere introduces false positives where an argument like
+ * action: "add" | "remove" is parsed as a root command. This list restricts bare
+ * mention() scanning to files known to implement that pattern safely.
+ */
+const WRAPPER_ALLOWLIST = [
+  "src/utils/discord/helpCatalog.ts",
+];
+
 type Exception = {
   path: string;
   reason: string;
 };
 
-type Finding = {
+export type Finding = {
   file: string;
   line: number;
   mention: string;
@@ -52,6 +63,33 @@ function findMentions(source: string, relativePath: string): Finding[] {
   return findings;
 }
 
+export function findRuntimeMentions(source: string, relativePath: string): Finding[] {
+  const findings: Finding[] = [];
+  const normalizedPath = relativePath.replace(/\\/g, "/");
+
+  if (normalizedPath === "src/utils/discord/commandRegistry.ts") return findings;
+
+  const allowMentionWrapper = WRAPPER_ALLOWLIST.includes(normalizedPath);
+  const regex = /\b(getCommandMention|mention)\s*\(([^)]+)\)/g;
+
+  for (const match of source.matchAll(regex)) {
+    const funcName = match[1];
+    if (funcName === "mention" && !allowMentionWrapper) continue;
+
+    const argsStr = match[2];
+    const argMatches = [...argsStr.matchAll(/["']([a-z0-9_-]+)["']/g)];
+
+    const isAllLiterals = /^(\s*["'][a-z0-9_-]+["']\s*,?\s*)+$/.test(argsStr);
+    if (isAllLiterals && argMatches.length > 0) {
+      const mentionPath = argMatches.map(m => m[1]).join(" ");
+      const line = (source.slice(0, match.index).match(/\n/g) || []).length + 1;
+      findings.push({ file: relativePath, line, mention: mentionPath });
+    }
+  }
+
+  return findings;
+}
+
 /** Longest registered path sharing a prefix with the stale mention, used as a repair hint. */
 function suggestClosest(mention: string, validPaths: Set<string>): string | null {
   const segments = mention.split(" ");
@@ -71,13 +109,20 @@ async function main(): Promise<void> {
 
   const [validPaths, allowed] = await Promise.all([collectValidCommandPaths(), loadExceptions()]);
 
-  const glob = new Bun.Glob("**/*.ts");
+  const localeGlob = new Bun.Glob("**/*.ts");
   const findings: Finding[] = [];
 
-  for await (const file of glob.scan(LOCALE_ROOT)) {
+  for await (const file of localeGlob.scan(LOCALE_ROOT)) {
     const absolute = join(LOCALE_ROOT, file);
     const source = await Bun.file(absolute).text();
     findings.push(...findMentions(source, join("src", "locales", file).replace(/\\/g, "/")));
+  }
+
+  const srcGlob = new Bun.Glob("**/*.ts");
+  for await (const file of srcGlob.scan(SRC_ROOT)) {
+    const absolute = join(SRC_ROOT, file);
+    const source = await Bun.file(absolute).text();
+    findings.push(...findRuntimeMentions(source, join("src", file).replace(/\\/g, "/")));
   }
 
   const stale = findings.filter((finding) => !validPaths.has(finding.mention) && !allowed.has(finding.mention));
@@ -87,7 +132,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.error("\nSTALE COMMAND MENTIONS (named in locale prose but not registered):");
+  console.error("\nSTALE COMMAND MENTIONS (named in locale prose or source but not registered):");
   console.error("-".repeat(70));
 
   const byMention = new Map<string, Finding[]>();

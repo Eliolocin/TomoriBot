@@ -20,7 +20,7 @@ export default {
 • **{toggleable}** toggleable nodes (**{enabled}** enabled)
 {notes}
 Use {stPresetToggle} to adjust which nodes are active.
-Use {helpStPreset} to learn how imported presets behave here.
+Use {helpStPreset} (Integrations > SillyTavern Presets) to learn how imported presets behave here.
 Use {stPresetRemove} to revert to default behavior.`,
       note_comment_only: `> **{count}** comment-only node(s) are visible in \`/st-preset node toggle\` but are never injected into the prompt.`,
       note_disabled_by_preset: `> **{count}** node(s) are disabled by default in this preset. Use \`/st-preset node toggle\` to enable them.`,

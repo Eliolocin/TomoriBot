@@ -104,7 +104,7 @@ const setupPages: readonly HelpPageDefinition[] = [
     titleHeadingLevel: 3,
     variables: () => ({
       configSetup: mention("config", "setup"),
-      serverInitializeExpressions: mention("server", "initialize", "expressions"),
+      expressionsInitialize: mention("expressions", "initialize"),
     }),
   },
   {
@@ -116,8 +116,8 @@ const setupPages: readonly HelpPageDefinition[] = [
     sections: [],
     titleHeadingLevel: 3,
     variables: () => ({
-      serverTrigger: mention("server", "trigger", "add"),
-      configPermissions: mention("config", "tools", "manage"),
+      personaTrigger: mention("persona", "trigger"),
+      configPermissions: mention("capabilities", "manage"),
       serverAutotrigger: mention("server", "auto-trigger", "channels"),
     }),
   },
@@ -591,7 +591,7 @@ const integrationPages: readonly HelpPageDefinition[] = [
     ],
     variables: (locale) => ({
       botUserId: process.env.MATRIX_BOT_USER_ID ?? localizer(locale, "commands.help.matrix.bot_user_fallback"),
-      serverMatrixLink: mention("server", "matrix", "link"),
+      matrixLink: mention("matrix", "link"),
       supportServer: mention("support", "discord"),
     }),
   },

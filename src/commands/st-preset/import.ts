@@ -730,7 +730,7 @@ export async function execute(
 
     const stPresetToggleMention = commandRegistry.getCommandMention("st-preset", "node", "toggle");
     const stPresetRemoveMention = commandRegistry.getCommandMention("st-preset", "remove");
-    const helpStPresetMention = commandRegistry.getCommandMention("help", "st-preset");
+    const helpStPresetMention = commandRegistry.getCommandMention("help");
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.st-preset.import.success_title",

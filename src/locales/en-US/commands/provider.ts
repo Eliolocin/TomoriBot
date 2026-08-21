@@ -8,7 +8,7 @@ export default {
       success: `Saved credentials for **{provider}** and set this server's text model to \`{model_name}\`. This is the shared server default for everyone here. Use \`/model embedding|image|video|vision\` if you want to configure other capabilities.`,
       updated_existing: `Updated the saved credentials for **{provider}** and set this server's text model to \`{model_name}\`. This is the shared server default for everyone here.`,
       custom_moved_title: `Custom Endpoint Moved`,
-      custom_moved_description: `The legacy Custom Endpoint provider flow is deprecated. Register the endpoint with {custom_models_add_command}, then activate it with {model_text_command}. Use {help_custom_models_command} for the updated help page.`,
+      custom_moved_description: `The legacy Custom Endpoint provider flow is deprecated. Register the endpoint with {custom_models_add_command}, then activate it with {model_text_command}. Open {help_custom_models_command}, then Features > Custom Endpoints, for the updated help page.`,
       provider_label: `Target Provider`,
       provider_description: `Choose the provider to add or rotate credentials for on this server.`,
       provider_placeholder: `Select a provider...`,

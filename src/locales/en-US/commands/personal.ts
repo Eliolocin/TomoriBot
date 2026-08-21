@@ -165,7 +165,7 @@ Continue?`,
         already_existing_suffix: `saved`,
         custom_deprecated_description: `Moved to /personal custom-endpoint add.`,
         custom_moved_title: `Custom Endpoint Moved`,
-        custom_moved_description: `The legacy Custom Endpoint provider flow is deprecated. Register the endpoint with {custom_models_add_command}, then activate it with {model_text_command}. Use {help_custom_models_command} for the updated help page.`,
+        custom_moved_description: `The legacy Custom Endpoint provider flow is deprecated. Register the endpoint with {custom_models_add_command}, then activate it with {model_text_command}. Open {help_custom_models_command}, then Features > Custom Endpoints, for the updated help page.`,
         success_title: `Personal Provider Saved`,
         success_description: `{provider} was added to your personal provider vault, and your personal **Text** override is now enabled with \`{model_name}\`.
 

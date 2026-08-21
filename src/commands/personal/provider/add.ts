@@ -143,7 +143,7 @@ export async function execute(
         descriptionVars: {
           custom_models_add_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "add"),
           model_text_command: commandRegistry.getCommandMention("personal", "provider", "model-text"),
-          help_custom_models_command: commandRegistry.getCommandMention("help", "custom-endpoint"),
+          help_custom_models_command: commandRegistry.getCommandMention("help"),
         },
         color: ColorCode.WARN,
       });

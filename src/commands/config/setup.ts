@@ -85,7 +85,7 @@ export async function execute(
           const providerAddMention = commandRegistry.getCommandMention("provider", "add");
           const modelTextMention = commandRegistry.getCommandMention("model", "text");
           const userByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
-          const helpPersonalProviderMention = commandRegistry.getCommandMention("help", "personal-provider");
+          const helpPersonalProviderMention = commandRegistry.getCommandMention("help");
           const currentModelValue =
             existingTomoriState.config.llm_id && existingTomoriState.llm
               ? formatLlmDisplayLabel(
@@ -637,7 +637,7 @@ export async function execute(
         }
       }
 
-      const helpFeaturesMention = commandRegistry.getCommandMention("help", "features");
+      const helpFeaturesMention = commandRegistry.getCommandMention("help");
       const successFields: Array<{ nameKey: string; value: string }> = [];
 
       if (isDMChannel) {
@@ -683,7 +683,7 @@ export async function execute(
 
       if (isUserByokSetup) {
         const userByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
-        const helpPersonalProviderMention = commandRegistry.getCommandMention("help", "personal-provider");
+        const helpPersonalProviderMention = commandRegistry.getCommandMention("help");
         headsUpNotes.push({
           label: localizer(locale, "commands.config.setup.byok_bootstrap_field"),
           detail: localizer(locale, "commands.config.setup.byok_bootstrap_value", {
@@ -696,9 +696,9 @@ export async function execute(
       if (isCustomEndpointSetup) {
         const customModelsAddMention = commandRegistry.getCommandMention("provider", "custom-endpoint", "add");
         const modelTextMention = commandRegistry.getCommandMention("model", "text");
-        const helpCustomModelsMention = commandRegistry.getCommandMention("help", "custom-endpoint");
-        const helpSpeechMention = commandRegistry.getCommandMention("help", "speech");
-        const helpTranscriptionMention = commandRegistry.getCommandMention("help", "transcription");
+        const helpCustomModelsMention = commandRegistry.getCommandMention("help");
+        const helpSpeechMention = commandRegistry.getCommandMention("help");
+        const helpTranscriptionMention = commandRegistry.getCommandMention("help");
         headsUpNotes.push({
           label: localizer(locale, "commands.config.setup.custom_endpoint_bootstrap_field"),
           detail: localizer(locale, "commands.config.setup.custom_endpoint_bootstrap_value", {
