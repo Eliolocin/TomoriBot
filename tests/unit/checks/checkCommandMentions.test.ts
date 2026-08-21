@@ -95,16 +95,18 @@ describe("check-command-mentions CLI", () => {
     expect(stderr).toContain("STALE BASELINE ENTRIES");
     expect(stderr).toContain("/fake non existent command");
     expect(stderr).toContain("no longer occurs anywhere");
-  });
+    // Bun's 5s default is not enough: this spawns a subprocess that loads the entire command
+    // graph, which alone takes ~6s uncontended and longer when vl runs its lanes in parallel.
+  }, 60000);
 
   it("fails when a baselined entry has become a registered command", async () => {
-    // The other way an entry stops being owed a fix. /impersonate and /natres are baselined today
-    // and both are planned to register, so this branch fires for real rather than hypothetically.
+    // The other way an entry stops being owed a fix. It fired for real when /impersonate
+    // registered and its baseline entry had to go in the same change.
     const { exitCode, stderr } = await runWithBaseline({ path: "setup", reason: "test" });
 
     expect(exitCode).not.toBe(0);
     expect(stderr).toContain("STALE BASELINE ENTRIES");
     expect(stderr).toContain("/setup");
     expect(stderr).toContain("now a registered command");
-  });
+  }, 60000);
 });

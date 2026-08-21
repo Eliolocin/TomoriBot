@@ -178,7 +178,7 @@ function classifyEmbedTitle(embedTitle: string | null): {
       embedTitle === localizer(supportedLocale, "commands.compact.roleplay_scene_title_refreshed") ||
       embedTitle === localizer(supportedLocale, "commands.compact.manual_entry_title_refreshed");
     const isSystemInjection =
-      embedTitle === localizer(supportedLocale, "commands.bot.impersonate.system_title") ||
+      embedTitle === localizer(supportedLocale, "commands.impersonate.system_title") ||
       embedTitle === localizer(supportedLocale, "commands.compact.summary_title") ||
       embedTitle === localizer(supportedLocale, "commands.compact.summary_title_refreshed") ||
       embedTitle === localizer(supportedLocale, "commands.compact.roleplay_scene_title") ||

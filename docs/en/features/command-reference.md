@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **39**. Runnable slash commands: **220**.
+Top-level command groups: **40**. Runnable slash commands: **223**.
 
 ## `/bot`
 
@@ -121,6 +121,16 @@ Browse setup, features, providers, memory, behavior, tools, media, and integrati
 | Command | Summary |
 |---|---|
 | `/help` | Browse setup, features, providers, memory, behavior, tools, media, and integration guides. |
+
+## `/impersonate`
+
+Impersonate personas, users, or inject system prompts.
+
+| Command | Summary |
+|---|---|
+| `/impersonate persona` | Send a message as one of this server's personas. |
+| `/impersonate system` | Inject a system message into the conversation context. |
+| `/impersonate user` | Have the bot write and send a message as if it were that member. |
 
 ## `/kill`
 

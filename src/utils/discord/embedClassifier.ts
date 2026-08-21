@@ -113,7 +113,7 @@ export function checkTargetEmbedTitle(embedTitle: string | null | undefined): Ta
     if (embedTitle === localizer(supportedLocale, "commands.refresh.title")) {
       return { isTarget: true, type: "reset" };
     }
-    if (embedTitle === localizer(supportedLocale, "commands.bot.impersonate.system_title")) {
+    if (embedTitle === localizer(supportedLocale, "commands.impersonate.system_title")) {
       return { isTarget: true, type: "system_injection" };
     }
 

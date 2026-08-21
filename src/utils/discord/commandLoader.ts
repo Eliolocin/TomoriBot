@@ -113,6 +113,7 @@ const GUILD_ONLY_CATEGORIES: string[] = [
   "matrix",
   "punish",
   "reward",
+  "impersonate",
 ];
 // Categories that require manage permissions in guild context
 const MANAGER_ONLY_CATEGORIES = [
@@ -129,6 +130,11 @@ const MANAGER_ONLY_CATEGORIES = [
 ];
 
 const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
+  // Bridge-scoped: /bot impersonate survives one deployment while its strings live at
+  // commands.impersonate.*, so the loader-derived key needs an alias or the bridge silently
+  // loses its ja localization. Remove both copies when the bridge is dissolved.
+  "commands.bot.impersonate.description": "commands.impersonate.description",
+  "commands.bot.impersonate.target_description": "commands.impersonate.target_description",
   "commands.memory.description": "commands.teach.memory.description",
   "commands.persona.attribute.description": "commands.teach.attribute.description",
   "commands.persona.sample-dialogue.description": "commands.teach.sampledialogue.description",
