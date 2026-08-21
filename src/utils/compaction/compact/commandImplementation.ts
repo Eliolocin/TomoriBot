@@ -126,8 +126,8 @@ export async function executeCompactCommand(
   await modalSelection.submitInteraction.editReply({
     embeds: [
       new EmbedBuilder()
-        .setTitle(localizer(locale, "commands.tool.compact.processing_title"))
-        .setDescription(localizer(locale, "commands.tool.compact.processing_description"))
+        .setTitle(localizer(locale, "commands.compact.processing_title"))
+        .setDescription(localizer(locale, "commands.compact.processing_description"))
         .setColor(ColorCode.INFO),
     ],
   });
@@ -151,11 +151,9 @@ export async function executeCompactCommand(
     targetThreadId,
   );
   if (!outputChannel) {
-    const titleKey = targetThreadId
-      ? "commands.tool.compact.thread_invalid_title"
-      : "general.errors.channel_only_title";
+    const titleKey = targetThreadId ? "commands.compact.thread_invalid_title" : "general.errors.channel_only_title";
     const descriptionKey = targetThreadId
-      ? "commands.tool.compact.thread_invalid_description"
+      ? "commands.compact.thread_invalid_description"
       : "general.errors.channel_only_description";
     await editError(modalSelection.submitInteraction, locale, titleKey, descriptionKey);
     return;
@@ -213,10 +211,10 @@ export async function executeCompactCommand(
       const currentText = liveMessage.embeds[0]?.description ?? "";
       const editModal = new ModalBuilder()
         .setCustomId("compact_edit_modal")
-        .setTitle(localizer(locale, "commands.tool.compact.edit_modal_title"));
+        .setTitle(localizer(locale, "commands.compact.edit_modal_title"));
       const textInput = new TextInputBuilder()
         .setCustomId("compact_edit_text")
-        .setLabel(localizer(locale, "commands.tool.compact.edit_field_label"))
+        .setLabel(localizer(locale, "commands.compact.edit_field_label"))
         .setStyle(TextInputStyle.Paragraph)
         .setMaxLength(4000)
         .setRequired(true)
@@ -239,7 +237,7 @@ export async function executeCompactCommand(
       const liveMessage = await summaryMessage.fetch().catch(() => null);
       if (!liveMessage) return;
       const currentText = liveMessage.embeds[0]?.description ?? "";
-      const addToDocsFooter = localizer(locale, "commands.tool.compact.add_to_docs_footer");
+      const addToDocsFooter = localizer(locale, "commands.compact.add_to_docs_footer");
       const updatedEmbed = buildEmbed(currentText).setFooter({ text: addToDocsFooter });
       await summaryMessage
         .edit({ embeds: [updatedEmbed], components: [buildAddToDocsButtonRow(locale)] })
@@ -265,8 +263,8 @@ async function validateDestinationOptions(
 ): Promise<boolean> {
   if (targetChannelId && targetThreadId) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.tool.compact.destination_conflict_title",
-      descriptionKey: "commands.tool.compact.destination_conflict_description",
+      titleKey: "commands.compact.destination_conflict_title",
+      descriptionKey: "commands.compact.destination_conflict_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -275,8 +273,8 @@ async function validateDestinationOptions(
 
   if (targetThreadId && !DISCORD_SNOWFLAKE_PATTERN.test(targetThreadId)) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.tool.compact.thread_invalid_title",
-      descriptionKey: "commands.tool.compact.thread_invalid_description",
+      titleKey: "commands.compact.thread_invalid_title",
+      descriptionKey: "commands.compact.thread_invalid_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -302,8 +300,8 @@ async function validateProviderReadiness(params: {
     await editError(
       params.interaction,
       params.locale,
-      "commands.tool.compact.provider_unsupported_title",
-      "commands.tool.compact.provider_unsupported_description",
+      "commands.compact.provider_unsupported_title",
+      "commands.compact.provider_unsupported_description",
       {
         provider: params.providerLabel,
       },
@@ -314,8 +312,8 @@ async function validateProviderReadiness(params: {
     await editError(
       params.interaction,
       params.locale,
-      "commands.tool.compact.model_incompatible_title",
-      "commands.tool.compact.model_incompatible_description",
+      "commands.compact.model_incompatible_title",
+      "commands.compact.model_incompatible_description",
       {
         model_name: params.modelName,
       },
@@ -326,8 +324,8 @@ async function validateProviderReadiness(params: {
     await editError(
       params.interaction,
       params.locale,
-      "commands.tool.compact.image_vision_required_title",
-      "commands.tool.compact.image_vision_required_description",
+      "commands.compact.image_vision_required_title",
+      "commands.compact.image_vision_required_description",
       {
         model_name: params.modelName,
       },
@@ -393,15 +391,9 @@ async function editFailure(
   locale: string,
   error: string,
 ): Promise<void> {
-  await editError(
-    interaction,
-    locale,
-    "commands.tool.compact.failed_title",
-    "commands.tool.compact.failed_description",
-    {
-      error,
-    },
-  );
+  await editError(interaction, locale, "commands.compact.failed_title", "commands.compact.failed_description", {
+    error,
+  });
 }
 
 async function executeManualCompact(
@@ -433,11 +425,9 @@ async function executeManualCompact(
     targetThreadId,
   );
   if (!outputChannel) {
-    const titleKey = targetThreadId
-      ? "commands.tool.compact.thread_invalid_title"
-      : "general.errors.channel_only_title";
+    const titleKey = targetThreadId ? "commands.compact.thread_invalid_title" : "general.errors.channel_only_title";
     const descriptionKey = targetThreadId
-      ? "commands.tool.compact.thread_invalid_description"
+      ? "commands.compact.thread_invalid_description"
       : "general.errors.channel_only_description";
     await editError(manualSelection.submitInteraction, locale, titleKey, descriptionKey);
     return;
@@ -467,10 +457,10 @@ async function executeManualCompact(
       const currentText = liveMessage.embeds[0]?.description ?? "";
       const editModal = new ModalBuilder()
         .setCustomId("compact_edit_modal")
-        .setTitle(localizer(locale, "commands.tool.compact.edit_modal_title"));
+        .setTitle(localizer(locale, "commands.compact.edit_modal_title"));
       const textInput = new TextInputBuilder()
         .setCustomId("compact_edit_text")
-        .setLabel(localizer(locale, "commands.tool.compact.edit_field_label"))
+        .setLabel(localizer(locale, "commands.compact.edit_field_label"))
         .setStyle(TextInputStyle.Paragraph)
         .setMaxLength(4000)
         .setRequired(true)
@@ -493,7 +483,7 @@ async function executeManualCompact(
       const liveMessage = await summaryMessage.fetch().catch(() => null);
       if (!liveMessage) return;
       const currentText = liveMessage.embeds[0]?.description ?? "";
-      const addToDocsFooter = localizer(locale, "commands.tool.compact.add_to_docs_footer");
+      const addToDocsFooter = localizer(locale, "commands.compact.add_to_docs_footer");
       const updatedEmbed = buildEmbed(currentText).setFooter({ text: addToDocsFooter });
       await summaryMessage
         .edit({ embeds: [updatedEmbed], components: [buildAddToDocsButtonRow(locale)] })
@@ -535,7 +525,7 @@ function setupAddToDocsCollector(params: {
     const allPersonas = await personaRepository.loadAllForServer(serverDiscId);
 
     const today = new Date().toISOString().slice(0, 10);
-    const autoName = localizer(locale, "commands.tool.compact.add_to_docs_doc_name", { date: today });
+    const autoName = localizer(locale, "commands.compact.add_to_docs_doc_name", { date: today });
 
     const personaOptions = allPersonas
       .filter((p) => p.persona_id !== undefined)
@@ -550,12 +540,12 @@ function setupAddToDocsCollector(params: {
 
     const modalResult = await promptWithRawModal(buttonInteraction, locale, {
       modalCustomId: "compact_save_as_doc_modal",
-      modalTitleKey: "commands.tool.compact.save_as_doc_modal_title",
+      modalTitleKey: "commands.compact.save_as_doc_modal_title",
       components: [
         {
           customId: NAME_FIELD_ID,
-          labelKey: "commands.tool.compact.save_as_doc_name_label",
-          descriptionKey: "commands.tool.compact.save_as_doc_name_description",
+          labelKey: "commands.compact.save_as_doc_name_label",
+          descriptionKey: "commands.compact.save_as_doc_name_description",
           value: autoName,
           maxLength: 64,
           required: true,
@@ -563,16 +553,16 @@ function setupAddToDocsCollector(params: {
         {
           kind: "radioGroup",
           customId: SCOPE_FIELD_ID,
-          labelKey: "commands.tool.compact.save_as_doc_scope_label",
+          labelKey: "commands.compact.save_as_doc_scope_label",
           options: [
             {
               value: "serverwide",
-              label: localizer(locale, "commands.tool.compact.save_as_doc_scope_serverwide"),
+              label: localizer(locale, "commands.compact.save_as_doc_scope_serverwide"),
               default: true,
             },
             {
               value: "persona",
-              label: localizer(locale, "commands.tool.compact.save_as_doc_scope_persona"),
+              label: localizer(locale, "commands.compact.save_as_doc_scope_persona"),
             },
           ],
           required: true,
@@ -581,9 +571,9 @@ function setupAddToDocsCollector(params: {
           ? [
               {
                 customId: PERSONA_FIELD_ID,
-                labelKey: "commands.tool.compact.save_as_doc_persona_label",
-                descriptionKey: "commands.tool.compact.save_as_doc_persona_description",
-                placeholder: "commands.tool.compact.save_as_doc_persona_placeholder",
+                labelKey: "commands.compact.save_as_doc_persona_label",
+                descriptionKey: "commands.compact.save_as_doc_persona_description",
+                placeholder: "commands.compact.save_as_doc_persona_placeholder",
                 options: personaOptions,
                 required: false,
               } as ModalSelectField,
@@ -591,8 +581,8 @@ function setupAddToDocsCollector(params: {
           : []),
         {
           customId: CHANNELS_FIELD_ID,
-          labelKey: "commands.tool.compact.save_as_doc_channels_label",
-          descriptionKey: "commands.tool.compact.save_as_doc_channels_description",
+          labelKey: "commands.compact.save_as_doc_channels_label",
+          descriptionKey: "commands.compact.save_as_doc_channels_description",
           required: false,
         } as ModalInputField,
       ],
@@ -629,8 +619,8 @@ function setupAddToDocsCollector(params: {
       const selectedPersona = allPersonas.find((p) => p.persona_id?.toString() === selectedPersonaIdStr);
       if (!selectedPersona?.persona_id) {
         await replyInfoEmbed(submitInteraction, locale, {
-          titleKey: "commands.tool.compact.add_to_docs_no_persona_title",
-          descriptionKey: "commands.tool.compact.add_to_docs_no_persona_description",
+          titleKey: "commands.compact.add_to_docs_no_persona_title",
+          descriptionKey: "commands.compact.add_to_docs_no_persona_description",
           color: ColorCode.ERROR,
         });
         return;
@@ -640,8 +630,8 @@ function setupAddToDocsCollector(params: {
 
     if (!isRagAvailable()) {
       await replyInfoEmbed(submitInteraction, locale, {
-        titleKey: "commands.tool.compact.add_to_docs_rag_unavailable_title",
-        descriptionKey: "commands.tool.compact.add_to_docs_rag_unavailable_description",
+        titleKey: "commands.compact.add_to_docs_rag_unavailable_title",
+        descriptionKey: "commands.compact.add_to_docs_rag_unavailable_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -660,8 +650,8 @@ function setupAddToDocsCollector(params: {
     const hasManagePermission = buttonInteraction.memberPermissions?.has("ManageGuild") ?? false;
     if (!tomoriState.config.server_memteaching_enabled && !hasManagePermission) {
       await replyInfoEmbed(submitInteraction, locale, {
-        titleKey: "commands.tool.compact.add_to_docs_no_permission_title",
-        descriptionKey: "commands.tool.compact.add_to_docs_no_permission_description",
+        titleKey: "commands.compact.add_to_docs_no_permission_title",
+        descriptionKey: "commands.compact.add_to_docs_no_permission_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -672,8 +662,8 @@ function setupAddToDocsCollector(params: {
     }).catch(() => null);
     if (!embeddingCreds) {
       await replyInfoEmbed(submitInteraction, locale, {
-        titleKey: "commands.tool.compact.add_to_docs_no_embedding_title",
-        descriptionKey: "commands.tool.compact.add_to_docs_no_embedding_description",
+        titleKey: "commands.compact.add_to_docs_no_embedding_title",
+        descriptionKey: "commands.compact.add_to_docs_no_embedding_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -684,8 +674,8 @@ function setupAddToDocsCollector(params: {
     const embeddingModel = embeddingModelId ? await llmModelRepo.loadEmbeddingModelById(embeddingModelId) : null;
     if (!embeddingModel?.embedding_model_id) {
       await replyInfoEmbed(submitInteraction, locale, {
-        titleKey: "commands.tool.compact.add_to_docs_no_embedding_title",
-        descriptionKey: "commands.tool.compact.add_to_docs_no_embedding_description",
+        titleKey: "commands.compact.add_to_docs_no_embedding_title",
+        descriptionKey: "commands.compact.add_to_docs_no_embedding_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -695,8 +685,8 @@ function setupAddToDocsCollector(params: {
     const summaryText = liveMessage?.embeds[0]?.description ?? "";
     if (!summaryText) {
       await replyInfoEmbed(submitInteraction, locale, {
-        titleKey: "commands.tool.compact.add_to_docs_error_title",
-        descriptionKey: "commands.tool.compact.add_to_docs_error_description",
+        titleKey: "commands.compact.add_to_docs_error_title",
+        descriptionKey: "commands.compact.add_to_docs_error_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -709,8 +699,8 @@ function setupAddToDocsCollector(params: {
 
       if (chunks.length === 0) {
         await replyInfoEmbed(submitInteraction, locale, {
-          titleKey: "commands.tool.compact.add_to_docs_error_title",
-          descriptionKey: "commands.tool.compact.add_to_docs_error_description",
+          titleKey: "commands.compact.add_to_docs_error_title",
+          descriptionKey: "commands.compact.add_to_docs_error_description",
           color: ColorCode.ERROR,
         });
         return;
@@ -745,21 +735,21 @@ function setupAddToDocsCollector(params: {
 
       invalidateTomoriStateCache(serverDiscId);
 
-      const storedFooter = localizer(locale, "commands.tool.compact.add_to_docs_stored_footer");
+      const storedFooter = localizer(locale, "commands.compact.add_to_docs_stored_footer");
       const finalEmbed = buildEmbed(summaryText).setFooter({ text: storedFooter });
       await summaryMessage.edit({ embeds: [finalEmbed], components: [] }).catch(() => {});
 
       await replyInfoEmbed(submitInteraction, locale, {
-        titleKey: "commands.tool.compact.add_to_docs_success_title",
-        descriptionKey: "commands.tool.compact.add_to_docs_success_description",
+        titleKey: "commands.compact.add_to_docs_success_title",
+        descriptionKey: "commands.compact.add_to_docs_success_description",
         descriptionVars: { name: docName },
         color: ColorCode.SUCCESS,
       });
     } catch (error) {
       log.error("Failed to save compact summary to document store", error);
       await replyInfoEmbed(submitInteraction, locale, {
-        titleKey: "commands.tool.compact.add_to_docs_error_title",
-        descriptionKey: "commands.tool.compact.add_to_docs_error_description",
+        titleKey: "commands.compact.add_to_docs_error_title",
+        descriptionKey: "commands.compact.add_to_docs_error_description",
         color: ColorCode.ERROR,
       });
     }
@@ -781,13 +771,13 @@ async function editSuccess(
   targetDestinationId?: string,
 ): Promise<void> {
   const successDescription = targetDestinationId
-    ? localizer(locale, "commands.tool.compact.success_description_redirect", { channel: `<#${targetDestinationId}>` })
-    : localizer(locale, "commands.tool.compact.success_description");
+    ? localizer(locale, "commands.compact.success_description_redirect", { channel: `<#${targetDestinationId}>` })
+    : localizer(locale, "commands.compact.success_description");
 
   await interaction.editReply({
     embeds: [
       new EmbedBuilder()
-        .setTitle(localizer(locale, "commands.tool.compact.success_title"))
+        .setTitle(localizer(locale, "commands.compact.success_title"))
         .setDescription(successDescription)
         .setColor(ColorCode.SUCCESS),
     ],

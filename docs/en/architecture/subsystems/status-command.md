@@ -15,7 +15,7 @@ It exists so users can inspect current configuration without reopening every man
   - `personaPages.ts` handles persona selection and persona detail pages.
   - `serverModelPages.ts`, `serverConfigPages.ts`, and `serverChannelPages.ts` build the server status scopes.
   - `channelFormatters.ts`, `providerConfigFormatters.ts`, and `sharedFormatters.ts` own reusable redaction and display formatting.
-- `/tool compact` routing lives in `src/commands/tool/compact.ts`; the public coordinator lives in `src/utils/compaction/compactOrchestrator.ts`, with implementation under `src/utils/compaction/compact/`.
+- `/compact` routing lives in `src/commands/compact.ts`; the public coordinator lives in `src/utils/compaction/compactOrchestrator.ts`, with implementation under `src/utils/compaction/compact/`.
 
 ## Scope Coverage
 

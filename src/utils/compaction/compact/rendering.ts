@@ -10,8 +10,8 @@ export function buildConversationEmbed(
   editDeadline?: string,
 ): EmbedBuilder {
   const title = refresh
-    ? localizer(locale, "commands.tool.compact.summary_title_refreshed")
-    : localizer(locale, "commands.tool.compact.summary_title");
+    ? localizer(locale, "commands.compact.summary_title_refreshed")
+    : localizer(locale, "commands.compact.summary_title");
 
   const embed = new EmbedBuilder()
     .setTitle(title)
@@ -31,8 +31,8 @@ export function buildRoleplayEmbeds(
   editDeadline?: string,
 ): EmbedBuilder[] {
   const title = refresh
-    ? localizer(locale, "commands.tool.compact.roleplay_scene_title_refreshed")
-    : localizer(locale, "commands.tool.compact.roleplay_scene_title");
+    ? localizer(locale, "commands.compact.roleplay_scene_title_refreshed")
+    : localizer(locale, "commands.compact.roleplay_scene_title");
 
   const embed = new EmbedBuilder()
     .setTitle(title)
@@ -47,8 +47,8 @@ export function buildRoleplayEmbeds(
 
 function buildFooterText(locale: string, refresh: boolean, editDeadline?: string): string {
   const parts: string[] = [];
-  if (refresh) parts.push(localizer(locale, "commands.tool.compact.refresh_footer"));
-  if (editDeadline) parts.push(localizer(locale, "commands.tool.compact.edit_footer", { deadline: editDeadline }));
+  if (refresh) parts.push(localizer(locale, "commands.compact.refresh_footer"));
+  if (editDeadline) parts.push(localizer(locale, "commands.compact.edit_footer", { deadline: editDeadline }));
   return parts.join(" · ");
 }
 
@@ -71,8 +71,8 @@ export function buildManualEmbed(
   editDeadline?: string,
 ): EmbedBuilder {
   const title = refresh
-    ? localizer(locale, "commands.tool.compact.manual_entry_title_refreshed")
-    : localizer(locale, "commands.tool.compact.manual_entry_title");
+    ? localizer(locale, "commands.compact.manual_entry_title_refreshed")
+    : localizer(locale, "commands.compact.manual_entry_title");
 
   const embed = new EmbedBuilder()
     .setTitle(title)
@@ -91,7 +91,7 @@ export const COMPACT_ADD_TO_DOCS_BUTTON_ID = "compact_add_to_docs";
 export function buildEditSummaryButtonRow(locale: string): ActionRowBuilder<ButtonBuilder> {
   const button = new ButtonBuilder()
     .setCustomId(COMPACT_EDIT_BUTTON_ID)
-    .setLabel(localizer(locale, "commands.tool.compact.edit_button_label"))
+    .setLabel(localizer(locale, "commands.compact.edit_button_label"))
     .setStyle(ButtonStyle.Secondary);
   return new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 }
@@ -99,7 +99,7 @@ export function buildEditSummaryButtonRow(locale: string): ActionRowBuilder<Butt
 export function buildAddToDocsButtonRow(locale: string): ActionRowBuilder<ButtonBuilder> {
   const button = new ButtonBuilder()
     .setCustomId(COMPACT_ADD_TO_DOCS_BUTTON_ID)
-    .setLabel(localizer(locale, "commands.tool.compact.add_to_docs_button_label"))
+    .setLabel(localizer(locale, "commands.compact.add_to_docs_button_label"))
     .setStyle(ButtonStyle.Secondary);
   return new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 }

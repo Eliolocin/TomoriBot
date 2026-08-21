@@ -169,25 +169,22 @@ function classifyEmbedTitle(embedTitle: string | null): {
       localizer(supportedLocale, "reminders.recurring_task_set_title"),
       localizer(supportedLocale, "reminders.task_set_title"),
     ];
-    const compactCharacterTitlePrefix = localizer(
-      supportedLocale,
-      "commands.tool.compact.roleplay_character_title_prefix",
-    );
+    const compactCharacterTitlePrefix = localizer(supportedLocale, "commands.compact.roleplay_character_title_prefix");
     const isMemoryLearning = memoryLearningTitles.some((title) => matchesLocalizedTitleTemplate(title, embedTitle));
     const isReminderSet = reminderSetTitles.some((title) => matchesLocalizedTitleTemplate(title, embedTitle));
     const isReset =
       embedTitle === localizer(supportedLocale, "commands.refresh.title") ||
-      embedTitle === localizer(supportedLocale, "commands.tool.compact.summary_title_refreshed") ||
-      embedTitle === localizer(supportedLocale, "commands.tool.compact.roleplay_scene_title_refreshed") ||
-      embedTitle === localizer(supportedLocale, "commands.tool.compact.manual_entry_title_refreshed");
+      embedTitle === localizer(supportedLocale, "commands.compact.summary_title_refreshed") ||
+      embedTitle === localizer(supportedLocale, "commands.compact.roleplay_scene_title_refreshed") ||
+      embedTitle === localizer(supportedLocale, "commands.compact.manual_entry_title_refreshed");
     const isSystemInjection =
       embedTitle === localizer(supportedLocale, "commands.bot.impersonate.system_title") ||
-      embedTitle === localizer(supportedLocale, "commands.tool.compact.summary_title") ||
-      embedTitle === localizer(supportedLocale, "commands.tool.compact.summary_title_refreshed") ||
-      embedTitle === localizer(supportedLocale, "commands.tool.compact.roleplay_scene_title") ||
-      embedTitle === localizer(supportedLocale, "commands.tool.compact.roleplay_scene_title_refreshed") ||
-      embedTitle === localizer(supportedLocale, "commands.tool.compact.manual_entry_title") ||
-      embedTitle === localizer(supportedLocale, "commands.tool.compact.manual_entry_title_refreshed") ||
+      embedTitle === localizer(supportedLocale, "commands.compact.summary_title") ||
+      embedTitle === localizer(supportedLocale, "commands.compact.summary_title_refreshed") ||
+      embedTitle === localizer(supportedLocale, "commands.compact.roleplay_scene_title") ||
+      embedTitle === localizer(supportedLocale, "commands.compact.roleplay_scene_title_refreshed") ||
+      embedTitle === localizer(supportedLocale, "commands.compact.manual_entry_title") ||
+      embedTitle === localizer(supportedLocale, "commands.compact.manual_entry_title_refreshed") ||
       Boolean(compactCharacterTitlePrefix && embedTitle.startsWith(compactCharacterTitlePrefix));
 
     if (isMemoryLearning || isReminderSet || isReset || isSystemInjection) {

@@ -319,7 +319,7 @@ Transcription supports ~100 languages (auto-detected).`,
       impersonation_title: `Impersonation & Tools`,
       impersonation_description: `- Use \`/bot impersonate\` to send messages as yourself, a persona, or inject system messages
 - Set a reusable user-impersonation prompt with \`/personal impersonate prompt\`
-- \`/tool compact\` can summarize or roleplay-compress conversation history
+- \`/compact\` can summarize or roleplay-compress conversation history
 - \`/respond\` to trigger prefilled or guided messages from the bot`,
       imagegen_title: `Image Generation`,
       imagegen_description: `- I can generate images from text prompts or by editing reference images

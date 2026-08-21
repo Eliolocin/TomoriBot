@@ -453,7 +453,7 @@ These modals use a String Select with a small, fixed, mutually exclusive option 
 | `/personal privacy`       | `personal/privacy.ts`        | `privacy_select`       | String Select | 3 (minimal/partial/full)                  | Fixed set of 3 mutually exclusive levels            |
 | `/generate image`         | `generate/image.ts`          | `aspect_ratio_select`  | String Select | 10 (1:1, 2:3, 3:2, 3:4, 4:3, etc.)      | Fixed set of 10 aspect ratios — at the limit        |
 | `/mcps` Add form          | `discord/ui/mcpsPanel.ts`    | `server-type_{nonce}`  | Radio Group   | 3 (General Purpose/Web Search/URL Fetcher) | Already migrated: required routed field with General Purpose selected by default |
-| `/tool compact`           | `tool/compact.ts`            | `summary_type`         | String Select | 2 (conversation/roleplay)                 | Fixed binary mode selection                         |
+| `/compact`           | `compact.ts`                 | `summary_type`         | String Select | 2 (conversation/roleplay)                 | Fixed binary mode selection                         |
 
 ### Strong Candidates — Checkbox / Checkbox Group (Boolean Selects)
 
@@ -462,15 +462,15 @@ These modals currently use a 2-option String Select (yes/no, true/false, enable/
 | Command                    | File                            | Custom ID              | Current Options          | Required | Migration Target                               |
 | -------------------------- | ------------------------------- | ---------------------- | ------------------------ | -------- | ---------------------------------------------- |
 | `/config random-trigger add`| `config/randomtrigger/add.ts`  | `respond_to_self`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
-| `/tool compact`            | `tool/compact.ts`              | `refresh_context`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
-| `/tool compact`            | `tool/compact.ts`              | `analyze_images`       | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
+| `/compact`            | `compact.ts`                   | `refresh_context`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
+| `/compact`            | `compact.ts`                   | `analyze_images`       | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/config provider switch`  | `config/provider/switch.ts`    | `save_current_select`  | Yes / No (default: Yes)  | No       | **Checkbox** (default: true, rarely unchecked) |
 | `/respond`                 | `respond.ts`                   | `use_reasoning`        | Yes / No                 | No       | **Checkbox** (optional toggle)                 |
 | `/persona export`          | `persona/export.ts`            | `export_json_select`   | False / True             | No       | **Checkbox** (optional toggle)                 |
 
 > **Note on `/config provider switch`:** This modal has _two_ migration candidates — the save-current-config toggle becomes a **Checkbox** (default checked, since users almost always want to save). The provider select itself is dynamic (loaded from DB via `loadUniqueProviders()`), so it stays as a String Select.
 
-> **Note on `/tool compact`:** This modal has _three_ migration candidates — `summary_type` becomes a Radio Group, while `refresh_context` and `analyze_images` both become required Checkbox Groups.
+> **Note on `/compact`:** This modal has _three_ migration candidates — `summary_type` becomes a Radio Group, while `refresh_context` and `analyze_images` both become required Checkbox Groups.
 
 ### Strong Candidates — Checkbox Group Bulk Management
 

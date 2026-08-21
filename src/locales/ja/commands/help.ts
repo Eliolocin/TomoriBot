@@ -319,7 +319,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
       impersonation_title: `なりきり＆ツール`,
       impersonation_description: `- \`/bot impersonate\`で自分自身、ペルソナ、またはシステムメッセージとしてメッセージを送信できます
 - \`/personal impersonate prompt\`でユーザーなりきり用の再利用プロンプトを設定できます
-- \`/tool compact\`で会話履歴を要約したりロールプレイで圧縮できます
+- \`/compact\`で会話履歴を要約したりロールプレイで圧縮できます
 - \`/respond\`でボットから定型文や案内付きメッセージを送信できます`,
       imagegen_title: `画像生成`,
       imagegen_description: `- テキストプロンプトから画像を生成し、参照画像を編集することもできます

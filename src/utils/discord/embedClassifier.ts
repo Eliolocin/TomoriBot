@@ -136,13 +136,13 @@ export function checkTargetEmbedTitle(embedTitle: string | null | undefined): Ta
     }
 
     // Compact summary (conversation + scene + manual) and compact refresh variants
-    const compactSummaryTitle = localizer(supportedLocale, "commands.tool.compact.summary_title");
-    const compactSummaryRefreshed = localizer(supportedLocale, "commands.tool.compact.summary_title_refreshed");
-    const compactSceneTitle = localizer(supportedLocale, "commands.tool.compact.roleplay_scene_title");
-    const compactSceneRefreshed = localizer(supportedLocale, "commands.tool.compact.roleplay_scene_title_refreshed");
-    const compactManualTitle = localizer(supportedLocale, "commands.tool.compact.manual_entry_title");
-    const compactManualRefreshed = localizer(supportedLocale, "commands.tool.compact.manual_entry_title_refreshed");
-    const compactCharacterPrefix = localizer(supportedLocale, "commands.tool.compact.roleplay_character_title_prefix");
+    const compactSummaryTitle = localizer(supportedLocale, "commands.compact.summary_title");
+    const compactSummaryRefreshed = localizer(supportedLocale, "commands.compact.summary_title_refreshed");
+    const compactSceneTitle = localizer(supportedLocale, "commands.compact.roleplay_scene_title");
+    const compactSceneRefreshed = localizer(supportedLocale, "commands.compact.roleplay_scene_title_refreshed");
+    const compactManualTitle = localizer(supportedLocale, "commands.compact.manual_entry_title");
+    const compactManualRefreshed = localizer(supportedLocale, "commands.compact.manual_entry_title_refreshed");
+    const compactCharacterPrefix = localizer(supportedLocale, "commands.compact.roleplay_character_title_prefix");
 
     if (embedTitle === compactSummaryTitle || embedTitle === compactSceneTitle || embedTitle === compactManualTitle) {
       return { isTarget: true, type: "compact_summary" };

@@ -44,6 +44,7 @@ import respond from "./commands/respond";
 import shared from "./commands/shared";
 import nuke from "./commands/nuke";
 import setup from "./commands/setup";
+import compact from "./commands/compact";
 
 export default {
   commands: {
@@ -90,5 +91,6 @@ export default {
     ...shared,
     ...nuke,
     ...setup,
+    ...compact,
   },
 };
