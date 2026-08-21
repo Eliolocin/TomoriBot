@@ -43,6 +43,7 @@ import matrix from "./commands/matrix";
 import respond from "./commands/respond";
 import shared from "./commands/shared";
 import nuke from "./commands/nuke";
+import setup from "./commands/setup";
 
 export default {
   commands: {
@@ -88,5 +89,6 @@ export default {
     ...respond,
     ...shared,
     ...nuke,
+    ...setup,
   },
 };

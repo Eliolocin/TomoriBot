@@ -39,7 +39,7 @@ docker compose build   # 初回、またはコード/依存関係の変更後
 docker compose up      # ボットとデータベース
 ```
 
-以降の起動では、コードや依存関係を変更していない限り、`docker compose up` だけで十分です。ボットがオンラインになったら、Discordで `/config setup` を実行してAIプロバイダーのキーを追加します。Discord側の操作については[クイックスタート](/ja/introduction/quickstart/)を参照してください。
+以降の起動では、コードや依存関係を変更していない限り、`docker compose up` だけで十分です。ボットがオンラインになったら、Discordで `/setup` を実行してAIプロバイダーのキーを追加します。Discord側の操作については[クイックスタート](/ja/introduction/quickstart/)を参照してください。
 
 ## 3. オプションのサイドカー（Composeプロファイル）
 

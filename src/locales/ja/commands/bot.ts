@@ -126,7 +126,7 @@ export default {
       webhook_error_title: `Webhookエラー`,
       webhook_error_description: `なりすまし用のWebhookの作成に失敗しました。エラー：{error}`,
       no_personas_title: `ペルソナが見つかりません`,
-      no_personas_description: `このサーバーにはペルソナが設定されていません。まず\`/config setup\`を使用してください。`,
+      no_personas_description: `このサーバーにはペルソナが設定されていません。まず\`/setup\`を使用してください。`,
     },
   },
 };

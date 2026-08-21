@@ -1,11 +1,4 @@
-import {
-  type ChatInputCommandInteraction,
-  type Client,
-  MessageFlags,
-  type SlashCommandBooleanOption,
-  type SlashCommandBuilder,
-  type SlashCommandStringOption,
-} from "discord.js";
+import { type ChatInputCommandInteraction, type Client, MessageFlags, type SlashCommandBuilder } from "discord.js";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
 import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { serverRepository } from "@/utils/db/repositories";
@@ -15,32 +8,6 @@ import { localizer } from "@/utils/text/localizer";
 
 export const guildOnly = true;
 export const managerOnly = true;
-
-/**
- * Declared per option rather than per builder because `SlashCommandBuilder` and
- * `SlashCommandSubcommandBuilder` do not share an addOption signature that survives a union.
- */
-const buildConfirmationOption = (option: SlashCommandStringOption): SlashCommandStringOption =>
-  option
-    .setName("confirmation")
-    .setDescription(localizer("en-US", "commands.nuke.confirmation_description"))
-    .setRequired(true)
-    .addChoices(
-      {
-        name: localizer("en-US", "commands.nuke.confirmation_choice_yes"),
-        value: "yes",
-      },
-      {
-        name: localizer("en-US", "commands.nuke.confirmation_choice_no"),
-        value: "no",
-      },
-    );
-
-const buildPreservePersonasOption = (option: SlashCommandBooleanOption): SlashCommandBooleanOption =>
-  option
-    .setName("preserve_personas")
-    .setDescription(localizer("en-US", "commands.nuke.preserve_personas_description"))
-    .setRequired(false);
 
 /**
  * Configures the `/nuke` command.
@@ -54,8 +21,28 @@ export const configureCommand = (command: SlashCommandBuilder) =>
   command
     .setName("nuke")
     .setDescription(localizer("en-US", "commands.nuke.description"))
-    .addStringOption(buildConfirmationOption)
-    .addBooleanOption(buildPreservePersonasOption);
+    .addStringOption((option) =>
+      option
+        .setName("confirmation")
+        .setDescription(localizer("en-US", "commands.nuke.confirmation_description"))
+        .setRequired(true)
+        .addChoices(
+          {
+            name: localizer("en-US", "commands.nuke.confirmation_choice_yes"),
+            value: "yes",
+          },
+          {
+            name: localizer("en-US", "commands.nuke.confirmation_choice_no"),
+            value: "no",
+          },
+        ),
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName("preserve_personas")
+        .setDescription(localizer("en-US", "commands.nuke.preserve_personas_description"))
+        .setRequired(false),
+    );
 
 /**
  * Executes the destructive nuke flow.
@@ -66,7 +53,7 @@ export const configureCommand = (command: SlashCommandBuilder) =>
  * 4. Fetch + best-effort delete managed Discord webhooks on Discord's side
  * 5. Call serverRepository.nukeServer() with the chosen mode
  * 6. Invalidate tomoriStateCache for the guild
- * 7. Reply with success embed prompting `/config setup` (or noting personas were kept)
+ * 7. Reply with success embed prompting `/setup` (or noting personas were kept)
  */
 export async function execute(
   client: Client,

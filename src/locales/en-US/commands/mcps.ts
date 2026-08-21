@@ -7,7 +7,7 @@ export default {
     empty_dm: `This DM workspace has no MCPs yet.`,
     outdated_panel: `This MCP panel is outdated. Run /mcps again.`,
     permission_denied: `You need Manage Server permission to use this MCP panel.`,
-    not_setup: `TomoriBot is not set up in this workspace yet. Run /config setup first.`,
+    not_setup: `TomoriBot is not set up in this workspace yet. Run /setup first.`,
     unavailable: `MCP registrations could not be loaded. Retry to try again.`,
     stale_warning: `Saved data may be out of date because the read failed. Write actions are unavailable until a fresh read succeeds.`,
     read_unavailable: `Current MCP registrations could not be loaded safely.`,

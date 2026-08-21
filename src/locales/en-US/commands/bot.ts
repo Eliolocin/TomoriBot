@@ -126,7 +126,7 @@ export default {
       webhook_error_title: `Webhook Error`,
       webhook_error_description: `Failed to create webhook for impersonation. Error: {error}`,
       no_personas_title: `No Personas Found`,
-      no_personas_description: `No personas are configured for this server. Use \`/config setup\` first.`,
+      no_personas_description: `No personas are configured for this server. Use \`/setup\` first.`,
     },
   },
 };

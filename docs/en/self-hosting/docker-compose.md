@@ -52,7 +52,7 @@ docker compose up      # bot + database
 ```
 
 For later starts, `docker compose up` alone is enough unless you changed code or
-dependencies. When the bot is online, run `/config setup` in Discord to add your AI
+dependencies. When the bot is online, run `/setup` in Discord to add your AI
 provider key — see the [Quickstart](/introduction/quickstart/) for the in-Discord side.
 
 ## 3. Optional sidecars (Compose profiles)

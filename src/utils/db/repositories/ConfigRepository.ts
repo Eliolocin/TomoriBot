@@ -883,7 +883,7 @@ export class ConfigRepository implements IRepository<ConfigExportShape> {
 
   /**
    * Delete every config-table row owned by this server across the 13 split tables.
-   * Used by `/config setup` to recover from the orphaned-alters state.
+   * Used by `/setup` to recover from the orphaned-alters state.
    * Wiping all configs frees the constraint without touching `personas` rows, so
    * alters survive the reset.
    *

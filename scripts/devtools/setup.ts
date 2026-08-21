@@ -530,7 +530,7 @@ function printSetupComplete(title: string): void {
   log.section(title);
   log.info("Next steps:");
   log.info("  1. Start TomoriBot with `bun run dev` or `bun run launch`.");
-  log.info("  2. When Discord shows the bot online, run `/config setup` in your server.");
+  log.info("  2. When Discord shows the bot online, run `/setup` in your server.");
 }
 
 async function runBaseInstall(scan: PrereqScan, options: BaseInstallOptions = {}): Promise<void> {

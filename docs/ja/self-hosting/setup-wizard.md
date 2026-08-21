@@ -57,7 +57,7 @@ bun run dev                          # ボットのみ
 bun run launch --searxng --crawl4ai  # ボットとサイドカー（bun run launch --help を参照）
 ```
 
-ボットがオンラインになったら、Discordで `/config setup` を実行してAIプロバイダーのキーを追加します。
+ボットがオンラインになったら、Discordで `/setup` を実行してAIプロバイダーのキーを追加します。
 
 ## 更新
 

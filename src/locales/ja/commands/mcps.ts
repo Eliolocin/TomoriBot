@@ -7,7 +7,7 @@ export default {
     empty_dm: `このDMワークスペースにはまだMCPが登録されていません。`,
     outdated_panel: `このMCPパネルは古くなっています。/mcps をもう一度実行してください。`,
     permission_denied: `このMCPパネルを使うには「サーバー管理」権限が必要です。`,
-    not_setup: `このワークスペースではTomoriBotがまだ設定されていません。先に /config setup を実行してください。`,
+    not_setup: `このワークスペースではTomoriBotがまだ設定されていません。先に /setup を実行してください。`,
     unavailable: `MCP登録を読み込めませんでした。「再試行」で読み込み直してください。`,
     stale_warning: `読み込みに失敗したため、表示中のデータは古い可能性があります。最新データを取得できるまで書き込み操作は利用できません。`,
     read_unavailable: `現在のMCP登録を安全に読み込めませんでした。`,

@@ -61,7 +61,7 @@ TomoriBotは長期メモリー、マルチペルソナ動作、WebおよびMCP�
 
 [公開版TomoriBotを招待](https://discord.com/oauth2/authorize?client_id=841644102059556915)してDiscordサーバーに追加するか、プライバシーとAPIキーを完全にコントロールしたい場合は[自分でホスト](#セルフホスティング)することもできます。TomoriBotはデータを安全に保つためにセキュリティのベストプラクティスと暗号化を用いていますが、セルフホスティングならすべてのデータが完全にあなたのデバイス上にとどまります。
 
-上記いずれかの方法でサーバーに追加した後、`/config setup`コマンドを実行して手順を確認してください。その後は、彼女の名前を呼ぶ（または@メンションする）だけで応答が得られます。
+上記いずれかの方法でサーバーに追加した後、`/setup`コマンドを実行して手順を確認してください。その後は、彼女の名前を呼ぶ（または@メンションする）だけで応答が得られます。
 
 ## 機能紹介
 
@@ -168,7 +168,7 @@ TomoriBotの予定されている機能や既知の問題の最新情報を確�
     bun run dev
     ```
 
-`TomoriBot up and running!`と表示されたら、Discordで`/config setup`を実行してください。
+`TomoriBot up and running!`と表示されたら、Discordで`/setup`を実行してください。
 
 ### B. Docker Composeセットアップ
 
@@ -260,7 +260,7 @@ bun run update
 
 #### 基本コマンド
 
-- `/config setup` - サーバーの初期ボットセットアップ
+- `/setup` - サーバーの初期ボットセットアップ
 - `/config` - TomoriBotを調整するための複数の方法
 - `/memory personal add` / `/memory personal remove` - 個人メモリーの追加/削除
 - `/memory server add` / `/memory server remove` - サーバー全体のメモリーの追加/削除

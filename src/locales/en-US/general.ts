@@ -100,12 +100,12 @@
       channel_not_supported_title: `Unsupported Channel Type`,
       channel_not_supported_description: `Sorry, I can only work in server text channels or Direct Messages. Group DMs and other channel types are not supported.`,
       tomori_not_setup_title: `Initial Setup Required`,
-      tomori_not_setup_description: `This server still needs initial setup. A member with **Manage Server** permission should run \`/config setup\` first. Open \`/help\` to **Setup**, then **Step 1: Get an API Key**, or read https://docs.tomoribot.app/en/introduction/quickstart/ for the short guide.`,
+      tomori_not_setup_description: `This server still needs initial setup. A member with **Manage Server** permission should run \`/setup\` first. Open \`/help\` to **Setup**, then **Step 1: Get an API Key**, or read https://docs.tomoribot.app/en/introduction/quickstart/ for the short guide.`,
       tomori_updating_title: `Currently Updating...`,
       tomori_updating_description: `I'm currently being updated and will be back shortly. Please try again in a few moments!`,
       tomori_not_setup_dm_footer: `DMs use a private setup, so most server-style settings still apply.`,
       api_key_missing_title: `API Key Missing`,
-      api_key_missing_description: `I need an active provider to respond. A member with **Manage Server** permission can run \`/config setup\` for first setup or \`/provider add\` to save a provider.`,
+      api_key_missing_description: `I need an active provider to respond. A member with **Manage Server** permission can run \`/setup\` for first setup or \`/provider add\` to save a provider.`,
       api_key_error_title: `API Key Error`,
       api_key_error_description: `There was an issue accessing or decrypting the configured provider credentials. Please reconfigure them using \`/provider add\`.`,
       personal_provider_required_title: `Personal Provider Required`,
@@ -198,7 +198,7 @@
       rejoin_title: `I'm Back!`,
       rejoin_description: `Looks like I was re-added to this server. Existing settings and personas are still intact. Use \`/config\`, \`/persona\`, \`/memory\`, \`/server\`, and \`/provider add\` to review or change them.{legalNotice}`,
       setup_prompt_title: `Successfully Added`,
-      setup_prompt_description: `Thanks for adding me. To start, someone with **Manage Server** permission should run \`/config setup\` to choose the initial persona and provider. Open \`/help\` to **Setup**, then **Step 1: Get an API Key**, or read the official [short guide](https://docs.tomoribot.app/en/introduction/quickstart/).
+      setup_prompt_description: `Thanks for adding me. To start, someone with **Manage Server** permission should run \`/setup\` to choose the initial persona and provider. Open \`/help\` to **Setup**, then **Step 1: Get an API Key**, or read the official [short guide](https://docs.tomoribot.app/en/introduction/quickstart/).
 
 Provider key instructions are built into **Step 1: Get an API Key**.{legalNotice}`,
     },

@@ -76,14 +76,14 @@ Expected startup stages include:
 Run in your test server:
 
 ```text
-/config setup
+/setup
 ```
 
-`/config setup` normally captures your initial provider credentials.
+`/setup` normally captures your initial provider credentials.
 
-If you are testing a server that should start in member-funded mode, `/config setup` also exposes a `None (User BYOK)` option. That bootstraps the server with no server-side text provider and immediately enables member BYOK, so users must configure their own personal providers.
+If you are testing a server that should start in member-funded mode, `/setup` also exposes a `None (User BYOK)` option. That bootstraps the server with no server-side text provider and immediately enables member BYOK, so users must configure their own personal providers.
 
-If you want to use only a self-hosted or proxy-backed custom endpoint, `/config setup` now also exposes `Custom Endpoint (finish after setup)`. That bootstraps the server without enabling BYOK, then you finish the provider setup with:
+If you want to use only a self-hosted or proxy-backed custom endpoint, `/setup` now also exposes `Custom Endpoint (finish after setup)`. That bootstraps the server without enabling BYOK, then you finish the provider setup with:
 
 ```text
 /provider custom-endpoint add

@@ -78,7 +78,7 @@ The flags are still derived at seed time, not authored in each catalog row. `see
 
 Applying an official preset creates a **copy-on-write pointer** when the preset has a `preset_lineage_id`. The persona follows the live `persona_presets` row until the first local content edit materializes it into an independent copy.
 
-### `/config setup`
+### `/setup`
 
 Setup creates the main persona as a pointer to the selected official preset, stamps `persona_lineage_id` from the preset lineage, and applies the preset avatar to the bot's Discord guild avatar when running in a guild.
 
@@ -90,7 +90,7 @@ For the main/default target, re-pointing also **resets the avatar**: `applyPrese
 
 For `type=alter`, `/persona default` creates an alter pointer from the preset and leaves `personas.webhook_avatar_url` NULL — **no per-server upload**. The alter live-resolves the shared preset avatar (`preset_avatar_shared_url`) at load time, so N servers share one image and catalog avatar edits fan out on the next reseed.
 
-Preset-application avatar writes for the main persona are one-time operational Discord updates and do not materialize a pointer: `/config setup`, `/persona default`, and `/persona import` can establish or preserve the pointer while patching the guild avatar. Direct `/server avatar` edits are different; setting or resetting a persona avatar is deliberate customization and materializes a pointer before the avatar write.
+Preset-application avatar writes for the main persona are one-time operational Discord updates and do not materialize a pointer: `/setup`, `/persona default`, and `/persona import` can establish or preserve the pointer while patching the guild avatar. Direct `/server avatar` edits are different; setting or resetting a persona avatar is deliberate customization and materializes a pointer before the avatar write.
 
 All main-persona avatar uploads are re-encoded to PNG before the guild-member PATCH, same as alter avatars. Discord returns 200 OK for structurally corrupt image files but stores an unservable asset (the CDN returns 415 and clients silently keep the old avatar), so raw user bytes are never sent as-is.
 

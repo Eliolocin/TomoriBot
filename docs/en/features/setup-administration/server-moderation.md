@@ -30,7 +30,7 @@ spend entirely to members. Members set theirs up under
 [Personalization → Your Own Providers](/features/knowledge/personalization/#your-own-providers).
 
 You can also bootstrap a server with **no** server-side text provider at all by choosing
-"User BYOK" during `/config setup`.
+"User BYOK" during `/setup`.
 
 ## Access Control: Whitelists
 

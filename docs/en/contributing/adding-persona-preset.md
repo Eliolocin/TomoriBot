@@ -41,7 +41,7 @@ This guide covers how to add a new official persona preset to TomoriBot's seed d
    uniqueness, paired sample-dialogue arrays, required official attributes, sprite name/file
    validity, non-empty system prompt text, and NovelAI default uniqueness.
 
-6. Validate via `/config setup`, `/persona default`, `/persona export`, and `/persona import`.
+6. Validate via `/setup`, `/persona default`, `/persona export`, and `/persona import`.
    Pointer personas should resolve the seeded values, reflect later seed edits after cache
    invalidation, and materialize on the first local content edit.
 

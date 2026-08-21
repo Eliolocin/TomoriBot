@@ -100,12 +100,12 @@
       channel_not_supported_title: `サポートされていないチャンネルタイプ`,
       channel_not_supported_description: `申し訳ありませんが、サーバーのテキストチャンネルまたはダイレクトメッセージでのみ動作します。グループDMやその他のチャンネルタイプはサポートされていません。`,
       tomori_not_setup_title: `初期設定が必要です`,
-      tomori_not_setup_description: `このサーバーではまだ初期設定が必要です。**サーバー管理**権限を持つメンバーがまず \`/config setup\` を実行してください。短い案内は \`/help\` の **セットアップ** から **ステップ1：APIキーを取得** を開くか、https://docs.tomoribot.app/ja/introduction/quickstart/ で確認できます。`,
+      tomori_not_setup_description: `このサーバーではまだ初期設定が必要です。**サーバー管理**権限を持つメンバーがまず \`/setup\` を実行してください。短い案内は \`/help\` の **セットアップ** から **ステップ1：APIキーを取得** を開くか、https://docs.tomoribot.app/ja/introduction/quickstart/ で確認できます。`,
       tomori_updating_title: `現在アップデート中...`,
       tomori_updating_description: `現在アップデート中のため、まもなく復旧します。しばらくしてからもう一度お試しください！`,
       tomori_not_setup_dm_footer: `DMでは個人用の設定として扱われ、ほとんどのサーバー形式の設定が利用できます。`,
       api_key_missing_title: `APIキーがありません`,
-      api_key_missing_description: `応答するには有効なプロバイダー設定が必要です。**サーバー管理**権限を持つメンバーが、初回は \`/config setup\`、追加や更新は \`/provider add\` で設定できます。`,
+      api_key_missing_description: `応答するには有効なプロバイダー設定が必要です。**サーバー管理**権限を持つメンバーが、初回は \`/setup\`、追加や更新は \`/provider add\` で設定できます。`,
       api_key_error_title: `APIキーエラー`,
       api_key_error_description: `設定されたプロバイダー認証情報へのアクセスまたは復号化で問題が発生しました。\`/provider add\`で再設定してください。`,
       personal_provider_required_title: `個人プロバイダーが必要です`,
@@ -198,7 +198,7 @@
       rejoin_title: `TomoriBotが戻ってきました！`,
       rejoin_description: `このサーバーに再追加されたようです。既存の設定とペルソナはそのまま残っています。\`/config\`、\`/persona\`、\`/memory\`、\`/server\`、\`/provider add\` で確認や変更ができます。{legalNotice}`,
       setup_prompt_title: `TomoriBotの追加が完了しました`,
-      setup_prompt_description: `追加してくれてありがとうございます。始めるには、**サーバー管理**権限を持つメンバーが \`/config setup\` を実行して、初期ペルソナとプロバイダーを選択してください。短い案内は \`/help\` の **セットアップ** から **ステップ1：APIキーを取得** を開くか、https://docs.tomoribot.app/ja/introduction/quickstart/ で確認できます。
+      setup_prompt_description: `追加してくれてありがとうございます。始めるには、**サーバー管理**権限を持つメンバーが \`/setup\` を実行して、初期ペルソナとプロバイダーを選択してください。短い案内は \`/help\` の **セットアップ** から **ステップ1：APIキーを取得** を開くか、https://docs.tomoribot.app/ja/introduction/quickstart/ で確認できます。
 
 プロバイダーのAPIキー取得手順は **ステップ1：APIキーを取得** に含まれています。{legalNotice}`,
     },

@@ -3,7 +3,7 @@ import { log } from "@/utils/misc/logger";
 
 /**
  * Registry for caching Discord command IDs and generating command references.
- * Provides plain text command references (e.g., `/config setup`) that work reliably
+ * Provides plain text command references (e.g., `/setup`) that work reliably
  * in all contexts, including embed footers where Discord mentions often fail.
  */
 class CommandRegistry {
@@ -69,7 +69,7 @@ class CommandRegistry {
 
   /**
    * Get a plain text command reference that works reliably in all contexts.
-   * Returns the command formatted as inline code (e.g., `/config setup`).
+   * Returns the command formatted as inline code (e.g., `/setup`).
    * This approach is more reliable than Discord mentions, which:
    * - Don't render properly in embed footers
    * - Break when commands are re-registered
@@ -77,10 +77,10 @@ class CommandRegistry {
    * @param commandName - The base command name (e.g., "help")
    * @param subcommandOrGroup - Optional subcommand or subcommand group name (e.g., "setup" or "memory")
    * @param subcommand - Optional subcommand when using a group (e.g., "personal" for "/teach memory personal")
-   * @returns A plain text command reference like "`/config setup`"
+   * @returns A plain text command reference like "`/setup`"
    * @example
-   * // Returns: "`/config setup`"
-   * getCommandMention("config", "setup");
+   * // Returns: "`/setup`"
+   * getCommandMention("setup");
    *
    * // Returns: "`/teach memory personal`"
    * getCommandMention("teach", "memory", "personal");

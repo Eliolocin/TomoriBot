@@ -1192,7 +1192,7 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
   /**
    * Records that a server's main persona guild avatar is now in sync with its
    * preset; call this immediately after a SUCCESSFUL guild-avatar PATCH at an
-   * apply site (`/config setup`, `/persona default`). It stamps
+   * apply site (`/setup`, `/persona default`). It stamps
    * `applied_avatar_hash = preset_avatar_hash` so the background fan-out
    * reconciler skips this persona until the catalog art actually changes again
    * (preventing a redundant re-PATCH on the next boot).

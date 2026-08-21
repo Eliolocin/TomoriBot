@@ -479,7 +479,7 @@ Minimum test checklist:
 - provider is auto-discovered at startup
 - aliases resolve correctly
 - `/config provider add` and `/config provider switch` validation work
-- `/config setup` and provider-specific error formatting work
+- `/setup` and provider-specific error formatting work
 - `/model text` shows the provider's seeded models
 - normal chat streaming works
 - tool calling works if supported

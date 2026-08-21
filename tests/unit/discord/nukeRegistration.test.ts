@@ -28,7 +28,7 @@ describe("/nuke registration", () => {
     expect(nukeCommand).toBeDefined();
     if (!nukeCommand) return;
 
-    expect(nukeCommand.contexts).toContain(0); // InteractionContextType.Guild
+    expect(nukeCommand.contexts).toEqual([0]); // InteractionContextType.Guild only, never a DM context
     expect(nukeCommand.default_member_permissions).toBe(String(PermissionsBitField.Flags.ManageGuild));
     expect(executionMap.get("nuke")?.has(ROOT_COMMAND_EXECUTION_KEY)).toBe(true);
   });
@@ -66,8 +66,13 @@ describe("/nuke registration", () => {
   });
 
   it("applies the correct cooldown to the new bare root", () => {
-    const nukeCooldown = resolveCommandCooldown("nuke");
-    const serverCooldown = resolveCommandCooldown("server");
-    expect(nukeCooldown).toBe(serverCooldown);
+    const serverCooldown = Number.parseInt(process.env.COOLDOWN_SERVER || "3000", 10);
+    const defaultCooldown = Number.parseInt(process.env.DEFAULT_COMMAND_COOLDOWN || "1600", 10);
+
+    expect(resolveCommandCooldown("nuke")).toBe(serverCooldown);
+    expect(resolveCommandCooldown("server")).toBe(serverCooldown);
+
+    // Anchors the two assertions above: without it they still pass when both entries fall through.
+    expect(resolveCommandCooldown("unknown-command")).toBe(defaultCooldown);
   });
 });

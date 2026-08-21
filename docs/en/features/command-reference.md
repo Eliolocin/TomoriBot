@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **37**. Runnable slash commands: **220**.
+Top-level command groups: **38**. Runnable slash commands: **221**.
 
 ## `/bot`
 
@@ -218,11 +218,11 @@ Age-restricted commands and settings.
 
 ## `/nuke`
 
-Completely wipe all server data. Requires re-running /config setup afterwards.
+Completely wipe all server data. Requires re-running /setup afterwards.
 
 | Command | Summary |
 |---|---|
-| `/nuke` | Completely wipe all server data. Requires re-running /config setup afterwards. |
+| `/nuke` | Completely wipe all server data. Requires re-running /setup afterwards. |
 
 ## `/openrouter`
 
@@ -426,6 +426,14 @@ Manage server-wide settings, channels, permissions, and integrations.
 | `/server whitelist persona` | Restrict which channels a persona can trigger in |
 | `/server whitelist remove` | Remove personas, channels, or roles from whitelist |
 | `/server whitelist role` | Add or remove whitelisted roles that can trigger the bot |
+
+## `/setup`
+
+Start the initial setup process. Configure AI provider and personality.
+
+| Command | Summary |
+|---|---|
+| `/setup` | Start the initial setup process. Configure AI provider and personality. |
 
 ## `/speech`
 

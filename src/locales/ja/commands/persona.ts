@@ -297,8 +297,8 @@ export default {
       avatar_failed_description: `ペルソナアバターのダウンロードに失敗しました。後でもう一度お試しください。`,
       embed_failed_title: `🔴 PNG処理に失敗しました`,
       embed_failed_description: `PNGファイルへのメタデータの埋め込みに失敗しました。もう一度お試しください。`,
-      error_no_server_data: `データベースにサーバーが見つかりません。まず \`/config setup\` を実行してください。`,
-      error_no_preset_data: `ペルソナデータが見つかりません。まず /config setup を実行してください。`,
+      error_no_server_data: `データベースにサーバーが見つかりません。まず \`/setup\` を実行してください。`,
+      error_no_preset_data: `ペルソナデータが見つかりません。まず /setup を実行してください。`,
       error_validation_failed: `エクスポートデータ構造の検証に失敗しました`,
       error_export_failed: `ペルソナデータのエクスポートに失敗しました`,
     },
@@ -366,7 +366,7 @@ export default {
       error_invalid_trigger_word: `無効なトリガーワード: {details}`,
       error_dialogue_mismatch: `サンプル対話配列の長さが一致しません`,
       error_invalid_config: `ペルソナデータに無効な設定フィールドがあります`,
-      error_no_server_data: `データベースにサーバーが見つかりません。まず \`/config setup\` を実行してください。`,
+      error_no_server_data: `データベースにサーバーが見つかりません。まず \`/setup\` を実行してください。`,
       error_name_conflict: `**{name}** という名前のペルソナは既にこのサーバーに存在します。別の名前を使用してください。`,
       error_import_failed: `ペルソナデータのインポートに失敗しました`,
       error_not_json: `インポートしたファイルには有効なJSONデータが含まれている必要があります`,
@@ -464,7 +464,7 @@ export default {
       wrong_provider_title: `🔴 互換性のないプロバイダー`,
       wrong_provider_description: `ペルソナ生成には対応プロバイダーが必要です。現在のプロバイダーは **{current_provider}** です。\`/model text\`で対応プロバイダーに切り替えてください。`,
       no_api_key_title: `🔴 APIキーがありません`,
-      no_api_key_description: `有効なプロバイダーが設定されていません。\`/config setup\`（初回）または\`/provider add\`で登録してください。`,
+      no_api_key_description: `有効なプロバイダーが設定されていません。\`/setup\`（初回）または\`/provider add\`で登録してください。`,
       model_incompatible_title: `互換性のないモデル`,
       model_incompatible_description: `現在のモデル（**{model_name}**）は、ペルソナ生成に必要な**構造化出力**をサポートしていません。
 

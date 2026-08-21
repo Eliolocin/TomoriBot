@@ -349,6 +349,8 @@ function getLocalizationAliases(key: string): string[] {
   const aliases: string[] = [];
 
   const staticAliases: Record<string, string> = {
+    // Bridge-scoped: delete with the /config setup bridge, in step with the loader's copy.
+    "commands.config.setup.description": "commands.setup.description",
     "commands.memory.description": "commands.teach.memory.description",
     "commands.conditioning.reward.description": "commands.reward.description",
     "commands.conditioning.punish.description": "commands.punish.description",

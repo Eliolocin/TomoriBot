@@ -60,7 +60,7 @@ docker run -d --name tomori-db \
 bun run dev
 ```
 
-`TomoriBot up and running!` と表示されたら、Discordに移動してサーバーで `/config setup` を実行し、AIプロバイダーのキーを追加してボットを初期化します。Discord側の操作については[クイックスタート](/ja/introduction/quickstart/)を参照してください。
+`TomoriBot up and running!` と表示されたら、Discordに移動してサーバーで `/setup` を実行し、AIプロバイダーのキーを追加してボットを初期化します。Discord側の操作については[クイックスタート](/ja/introduction/quickstart/)を参照してください。
 
 オプションのサイドカー（SearXNG、Crawl4AI、ローカルTTS/STT）をボットと一緒に起動したい場合は、`bun run dev` の代わりに `bun run launch` を使用します。
 

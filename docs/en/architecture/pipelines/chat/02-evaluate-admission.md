@@ -81,7 +81,7 @@ trigger. Reminders (`reminderProcessor`) and boomerang follow-ups
 (`postTurnEffects`) pass the channel's most recent message, which in an active
 DM is frequently one of Tomori's own. Keying off the message author there would
 resolve the DM to the bot's ID, find no server row, and report a configured DM
-as needing `/config setup`. Guilds are immune because `guild.id` never depends
+as needing `/setup`. Guilds are immune because `guild.id` never depends
 on authorship.
 
 `userDiscId` follows the same rule: in a DM, a trigger message authored by the

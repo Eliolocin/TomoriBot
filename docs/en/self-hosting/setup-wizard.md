@@ -71,7 +71,7 @@ bun run dev                          # bot only
 bun run launch --searxng --crawl4ai  # bot + sidecars (see bun run launch --help)
 ```
 
-When the bot is online, run `/config setup` in Discord to add your AI provider key.
+When the bot is online, run `/setup` in Discord to add your AI provider key.
 
 ## Updating
 

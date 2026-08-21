@@ -61,7 +61,7 @@ TomoriBot supports long-term memory, multi-persona behavior, web and MCP tools, 
 
 You can [invite the public TomoriBot](https://discord.com/oauth2/authorize?client_id=841644102059556915) to your Discord server, or [self-host your own instance](#self-hosting) if you prefer full control over your privacy and API keys. TomoriBot uses best security practices and encryption that keeps data safe, but self-hosting ensures that all data remain entirely on your device. 
 
-After adding her to your server through either method above, run the `/config setup` command for instructions. Then you can simply say her name (or @ mention her) in order to get a response. 
+After adding her to your server through either method above, run the `/setup` command for instructions. Then you can simply say her name (or @ mention her) in order to get a response. 
 
 ## Feature Showcase
 
@@ -169,7 +169,7 @@ The recommended path for most self-hosters is the local Bun setup wizard. Its de
     bun run dev
     ```
 
-Once you see `TomoriBot up and running!`, run `/config setup` in Discord.
+Once you see `TomoriBot up and running!`, run `/setup` in Discord.
 
 ### B. Docker Compose Setup
 
@@ -261,7 +261,7 @@ See the full **[Maintenance Documentation](https://docs.tomoribot.app/en/feature
 
 #### Basic Commands
 
-- `/config setup` - Initial bot setup for your server
+- `/setup` - Initial bot setup for your server
 - `/config` - Multiple ways to tweak TomoriBot
 - `/memory personal add` / `/memory personal remove` - Add / remove your personal memories
 - `/memory server add` / `/memory server remove` - Add / remove server-wide memories

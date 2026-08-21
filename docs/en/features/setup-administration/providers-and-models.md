@@ -10,7 +10,7 @@ specific model on that provider. You need at least one provider to use her at al
 
 ## API Keys
 
-Add a provider key during first-time setup with `/config setup`, or later with
+Add a provider key during first-time setup with `/setup`, or later with
 `/config api-key set`. Keys are **encrypted at rest** — no one, including server admins, can
 read them back.
 

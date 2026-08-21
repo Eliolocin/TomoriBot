@@ -72,7 +72,7 @@ customize (limits, timeouts, feature toggles, sidecar URLs, etc.).
 bun run dev
 ```
 
-When you see `TomoriBot up and running!`, go to Discord and run `/config setup` in your
+When you see `TomoriBot up and running!`, go to Discord and run `/setup` in your
 server to add your AI provider key and initialize the bot. See the
 [Quickstart](/introduction/quickstart/) for the in-Discord side.
 
