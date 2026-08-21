@@ -13,7 +13,7 @@ It owns the `for await` loop over the stage 02 generator and makes the per-chunk
 determine the shape of the final `StreamResult`. Three concerns are woven through the loop:
 
 1. **Stop / interrupt resolution** — the stop registry is checked both before processing each
-   chunk and again immediately after it is written out. A user stop (`/stop`) flushes the pending
+   chunk and again immediately after it is written out. A user stop (`/kill`) flushes the pending
    buffer and returns `{ status: "stopped_by_user" }`. A follow-up interrupt discards the buffer
    and returns `{ status: "follow_up_interrupt" }` so the chat pipeline can restart for the new
    message. The post-write check exists because delivery-side stops (the send and flush limits in
@@ -64,7 +64,7 @@ interface StreamResult {
     | "function_call"    // provider requested a tool; tool-loop handles it
     | "error"            // provider or Discord error
     | "timeout"          // inactivity timer expired
-    | "stopped_by_user"  // user /stop command
+    | "stopped_by_user"  // user /kill command
     | "empty_response"   // completed but no text or function call
     | "follow_up_interrupt"; // new user message arrived during generation
   data?: unknown | Error;

@@ -33,6 +33,7 @@
     "list-unused-locales": "bun run scripts/checks/checkLocalizationKeys.ts --list-unused",
     "prune-locales": "bun run scripts/devtools/pruneLocaleKeys.ts",
     "find-stale-translations": "bun run scripts/devtools/findStaleTranslations.ts",
+    "rename-command-path": "bun run scripts/devtools/renameCommandPath.ts",
     "check-limits": "bun run scripts/checks/checkDiscordLimits.ts",
     "check-media-size": "bun run scripts/checks/checkMediaSize.ts",
     "check-runtime-imports": "bun run scripts/checks/checkRuntimeImports.ts",

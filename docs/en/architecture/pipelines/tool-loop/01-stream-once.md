@@ -36,7 +36,7 @@ long but active stream is not killed — only a truly stalled one is. Returns a
 | `"error"` | Provider threw a non-timeout error |
 | `"timeout"` | SDK call exceeded `STREAM_SDK_CALL_TIMEOUT_MS` with no heartbeat |
 | `"empty_response"` | Provider returned with no text and no tool call |
-| `"stopped_by_user"` | User triggered `/stop` while streaming |
+| `"stopped_by_user"` | User triggered `/kill` while streaming |
 | `"follow_up_interrupt"` | A follow-up message arrived; caller should yield |
 | `"function_call"` | Provider requested a tool call; `data` carries the call payload |
 

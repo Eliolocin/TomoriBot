@@ -32,6 +32,11 @@ const WRAPPER_ALLOWLIST = [
   "src/utils/discord/helpCatalog.ts",
 ];
 
+// Overridable so a test can point at a temporary baseline instead of mutating the tracked file.
+// vl runs checks in parallel, so an in-place edit races the real check-command-mentions run.
+const BASELINE_PATH =
+  process.env.COMMAND_MENTION_BASELINE_PATH ?? join(process.cwd(), "scripts", "checks", "docs-mention-baseline.json");
+
 type Exception = {
   path: string;
   reason: string;
@@ -43,14 +48,14 @@ export type Finding = {
   mention: string;
 };
 
-async function loadExceptions(): Promise<Set<string>> {
-  const file = Bun.file(EXCEPTIONS_PATH);
+async function loadExceptions(path: string): Promise<Set<string>> {
+  const file = Bun.file(path);
   if (!(await file.exists())) return new Set();
   const parsed = (await file.json()) as { exceptions?: Exception[] };
   return new Set((parsed.exceptions ?? []).map((entry) => entry.path));
 }
 
-function findMentions(source: string, relativePath: string): Finding[] {
+export function findMentions(source: string, relativePath: string): Finding[] {
   const findings: Finding[] = [];
 
   source.split(/\r?\n/).forEach((text, index) => {
@@ -107,7 +112,11 @@ function suggestClosest(mention: string, validPaths: Set<string>): string | null
 async function main(): Promise<void> {
   process.env.RUN_ENV = "production";
 
-  const [validPaths, allowed] = await Promise.all([collectValidCommandPaths(), loadExceptions()]);
+  const [validPaths, allowed, baseline] = await Promise.all([
+    collectValidCommandPaths(),
+    loadExceptions(EXCEPTIONS_PATH),
+    loadExceptions(BASELINE_PATH)
+  ]);
 
   const localeGlob = new Bun.Glob("**/*.ts");
   const findings: Finding[] = [];
@@ -125,33 +134,78 @@ async function main(): Promise<void> {
     findings.push(...findRuntimeMentions(source, join("src", file).replace(/\\/g, "/")));
   }
 
-  const stale = findings.filter((finding) => !validPaths.has(finding.mention) && !allowed.has(finding.mention));
+  // Scan documentation files
+  const docGlobs = [
+    { pattern: "**/*.{md,mdx}", root: join(process.cwd(), "docs"), prefix: "docs" },
+    { pattern: "**/*.md", root: join(process.cwd(), ".github"), prefix: ".github" },
+    { pattern: "README.md", root: process.cwd(), prefix: "" },
+  ];
 
-  if (stale.length === 0) {
+  for (const { pattern, root, prefix } of docGlobs) {
+    const glob = new Bun.Glob(pattern);
+    for await (const file of glob.scan(root)) {
+      const absolute = join(root, file);
+      const source = await Bun.file(absolute).text();
+      const displayPath = prefix ? join(prefix, file).replace(/\\/g, "/") : file;
+
+      if (
+        displayPath.includes(".deprecated/") ||
+        displayPath.includes("src/db/migrations/") ||
+        displayPath.includes(".github/release/")
+      ) {
+        continue;
+      }
+
+      findings.push(...findMentions(source, displayPath));
+    }
+  }
+
+  const stale = findings.filter((finding) => !validPaths.has(finding.mention) && !allowed.has(finding.mention) && !baseline.has(finding.mention));
+
+  // Self-cleaning: a baseline entry earns removal two different ways, and catching only the
+  // first leaves an entry claiming a path is broken after it has been fixed. /impersonate and
+  // /natres are baselined today and both are planned to register in a later wave.
+  const allMentionPaths = new Set(findings.map((f) => f.mention));
+  const goneBaseline = [...baseline].filter((path) => !allMentionPaths.has(path));
+  const registeredBaseline = [...baseline].filter((path) => validPaths.has(path));
+  const unusedBaseline = [...new Set([...goneBaseline, ...registeredBaseline])];
+
+  if (stale.length === 0 && unusedBaseline.length === 0) {
     console.log(`Command mentions OK (${findings.length} checked against ${validPaths.size} registered paths)`);
     return;
   }
 
-  console.error("\nSTALE COMMAND MENTIONS (named in locale prose or source but not registered):");
-  console.error("-".repeat(70));
-
-  const byMention = new Map<string, Finding[]>();
-  for (const finding of stale) {
-    const bucket = byMention.get(finding.mention) ?? [];
-    bucket.push(finding);
-    byMention.set(finding.mention, bucket);
+  if (unusedBaseline.length > 0) {
+    console.error("\nSTALE BASELINE ENTRIES (no longer owed a fix, please remove them):");
+    console.error("-".repeat(70));
+    for (const path of unusedBaseline) {
+      const why = validPaths.has(path) ? "now a registered command" : "no longer occurs anywhere";
+      console.error(`  /${path}   (${why})`);
+    }
   }
 
-  for (const [mention, occurrences] of [...byMention].sort((a, b) => a[0].localeCompare(b[0]))) {
-    const closest = suggestClosest(mention, validPaths);
-    console.error(`  /${mention}${closest ? `   (did you mean /${closest}?)` : ""}`);
-    for (const occurrence of occurrences) {
-      console.error(`     ${occurrence.file}:${occurrence.line}`);
+  if (stale.length > 0) {
+    console.error("\nSTALE COMMAND MENTIONS (named in locale prose, source, or docs but not registered):");
+    console.error("-".repeat(70));
+
+    const byMention = new Map<string, Finding[]>();
+    for (const finding of stale) {
+      const bucket = byMention.get(finding.mention) ?? [];
+      bucket.push(finding);
+      byMention.set(finding.mention, bucket);
+    }
+
+    for (const [mention, occurrences] of [...byMention].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const closest = suggestClosest(mention, validPaths);
+      console.error(`  /${mention}${closest ? `   (did you mean /${closest}?)` : ""}`);
+      for (const occurrence of occurrences) {
+        console.error(`     ${occurrence.file}:${occurrence.line}`);
+      }
     }
   }
 
   console.error(
-    "\nUpdate the prose to the new path, or add a documented entry to scripts/checks/command-mention-exceptions.json.",
+    "\nUpdate the prose to the new path, or add a documented entry to scripts/checks/command-mention-exceptions.json or scripts/checks/docs-mention-baseline.json.",
   );
   process.exit(1);
 }

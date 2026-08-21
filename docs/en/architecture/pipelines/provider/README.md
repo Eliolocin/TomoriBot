@@ -111,7 +111,7 @@ adapter handles its own API format); stages 4–7 are orchestrator-owned and pro
 
 The stop registry (`src/utils/discord/stream/stopRequests.ts`) is a per-channel map checked at
 every iteration of the stage 4 orchestrator loop. Two stop modes exist:
-- **User stop** (`status: "stopped_by_user"`) — `/stop` command; pending buffer is flushed before returning.
+- **User stop** (`status: "stopped_by_user"`) — `/kill` command; pending buffer is flushed before returning.
 - **Follow-up interrupt** (`status: "follow_up_interrupt"`) — a new user message arrived; buffer is
   discarded and the pipeline exits immediately to allow the chat pipeline to re-run.
 

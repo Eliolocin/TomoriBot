@@ -983,7 +983,7 @@ Receipts render in a separate top-level container beside the authoritative colle
 General Purpose/Web Search/URL Fetcher Radio Group, with General Purpose selected by default. Its modal
 and field IDs carry bounded random nonces, and submission returns through the global router rather
 than an invocation-scoped modal collector, so a supported open modal can survive a process restart.
-Bare `/mcps` is the only registered MCP path; there is no `/mcp` subcommand tree.
+Bare `/mcps` is the only registered MCP path; the legacy `mcp` subcommand tree no longer exists.
 
 - `bot`: respond, generate(image/scene), kill, impersonate
 - `config`: setup, model(text/image/embedding/video/vision/speech/transcription), api-key(rotation), provider(add/remove), custom-endpoint(add/edit/remove), image-tags(default-positive/default-negative), system-prompt(set/remove/preset), context-note(set), params(*), timezone, message-fetch-limit, self-debug, model-randomizer, workarounds, bot-permissions -> tool-use(toggle/manage), notice-embeds(visibility)
@@ -1021,7 +1021,7 @@ Bare `/mcps` is the only registered MCP path; there is no `/mcp` subcommand tree
 
 ### Personal-provider (BYOK) routing in commands
 
-Any command that performs AI work the invoking user triggers must overlay that user's personal (BYOK) provider onto the loaded server state via `applyPersonalProviderSelectionsToTomoriState(tomoriState, userData.user_id)` before reading `config.api_key`, deriving the provider/model name, or validating capabilities. The overlay returns the server state unchanged when the user has no enabled personal provider, so it is always safe to call. Commands that currently apply it: `/persona generate`, `/novelai image generate`, `/generate image`, `/generate video`, `/bot generate image`, `/memory document add`, `/memory history import`, `/server initialize expressions`, and `/tool estimate cost` (so its live estimate stays in parity with what would actually run for the user).
+Any command that performs AI work the invoking user triggers must overlay that user's personal (BYOK) provider onto the loaded server state via `applyPersonalProviderSelectionsToTomoriState(tomoriState, userData.user_id)` before reading `config.api_key`, deriving the provider/model name, or validating capabilities. The overlay returns the server state unchanged when the user has no enabled personal provider, so it is always safe to call. Commands that currently apply it: `/persona generate`, `/novelai image generate`, `/generate image`, `/generate video`, `/bot generate image`, `/memory document add`, `/memory history import`, `/expressions initialize`, and `/tool estimate cost` (so its live estimate stays in parity with what would actually run for the user).
 
 The one deliberate exception is `/model embedding`, which re-embeds **server-wide** documents under server credentials (`resolveCapabilityCredentials(serverId, "embedding")` with no `userId`). This is bulk maintenance of a pre-existing server resource rather than a fresh user action, so it intentionally stays on server credentials.
 

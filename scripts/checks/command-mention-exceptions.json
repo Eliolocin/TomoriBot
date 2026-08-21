@@ -2,23 +2,11 @@
   "_notes": "Slash paths that appear in locale prose but are not registered Discord commands. Keep this list small; each entry must document why prose names a path Discord does not expose. Three legitimate classes exist: external HTTP API routes, a command path followed by one of its option names, and a deliberately truncated path prefix naming a family.",
   "exceptions": [
     {
-      "path": "prompt",
-      "reason": "ComfyUI HTTP API route in the self-hosting help page, not a Discord command."
-    },
-    {
-      "path": "view",
-      "reason": "ComfyUI HTTP API route in the self-hosting help page, not a Discord command."
-    },
-    {
-      "path": "model image clear",
-      "reason": "Names the `clear` option of /model image (model/image.ts:101), not a subcommand."
-    },
-    {
-      "path": "personal provider model-",
-      "reason": "Deliberately truncated prefix naming the /personal provider model-* family rather than one path."
-    },
-    {
       "path": "bot impersonate me",
+      "reason": "Names a choice value of the /bot impersonate target option, not a subcommand. Becomes a real subcommand when /impersonate is redesigned; drop this entry then."
+    },
+    {
+      "path": "bot impersonate persona",
       "reason": "Names a choice value of the /bot impersonate target option, not a subcommand. Becomes a real subcommand when /impersonate is redesigned; drop this entry then."
     },
     {
@@ -26,8 +14,84 @@
       "reason": "Names a choice value of the /bot impersonate target option, not a subcommand. Becomes a real subcommand when /impersonate is redesigned; drop this entry then."
     },
     {
-      "path": "bot impersonate persona",
-      "reason": "Names a choice value of the /bot impersonate target option, not a subcommand. Becomes a real subcommand when /impersonate is redesigned; drop this entry then."
+      "path": "category group subcommand",
+      "reason": "Placeholder in architecture guide for command group"
+    },
+    {
+      "path": "category subcommand",
+      "reason": "Placeholder in architecture guide for subcommand"
+    },
+    {
+      "path": "compact_refresh",
+      "reason": "Internal context-marker name in the prompt-snapshot table, not a Discord command."
+    },
+    {
+      "path": "crawl",
+      "reason": "HTTP route for local setup guide, not a Discord command"
+    },
+    {
+      "path": "document",
+      "reason": "Deliberately truncated prefix naming the /memory document family rather than one path."
+    },
+    {
+      "path": "health",
+      "reason": "HTTP route in utils guide, not a Discord command"
+    },
+    {
+      "path": "healthz",
+      "reason": "HTTP route for Azure production setup, not a Discord command"
+    },
+    {
+      "path": "history",
+      "reason": "HTTP route for local ComfyUI/LLM setups, not a Discord command"
+    },
+    {
+      "path": "md",
+      "reason": "HTTP route for local setup guide, not a Discord command"
+    },
+    {
+      "path": "model image clear",
+      "reason": "Names the `clear` option of /model image (model/image.ts:101), not a subcommand."
+    },
+    {
+      "path": "nothink",
+      "reason": "NovelAI thinking-control prompt token, not a Discord command."
+    },
+    {
+      "path": "peek profile_picture",
+      "reason": "Built-in LLM tool name cited in the privacy policy, not a Discord command."
+    },
+    {
+      "path": "personal provider model-",
+      "reason": "Deliberately truncated prefix naming the /personal provider model-* family rather than one path."
+    },
+    {
+      "path": "prompt",
+      "reason": "ComfyUI HTTP API route in the self-hosting help page, not a Discord command."
+    },
+    {
+      "path": "subscribe",
+      "reason": "Illustrative file-to-path example in the command-system guide (src/commands/subscribe.ts), not a real command."
+    },
+    {
+      "path": "swapfile",
+      "reason": "File path in Azure inspection guide, not a Discord command"
+    },
+    {
+      "path": "synthesize",
+      "reason": "HTTP route for Qwen3-TTS, not a Discord command"
+    },
+    {
+      "path": "tmp",
+      "reason": "Directory path in Azure inspection guide, not a Discord command"
+    },
+    {
+      "path": "v1",
+      "reason": "HTTP route for local server setups, not a Discord command"
+    },
+    {
+      "path": "view",
+      "reason": "ComfyUI HTTP API route in the self-hosting help page, not a Discord command."
     }
   ]
 }

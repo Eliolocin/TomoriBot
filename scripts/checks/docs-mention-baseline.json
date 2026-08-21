@@ -1,0 +1,193 @@
+{
+  "_notes": "Stale command mentions in documentation that are owed a fix. If a baselined path no longer occurs anywhere, the gate fails and demands its removal.",
+  "exceptions": [
+    {
+      "path": "capabilities manage emojiusage",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "capabilities manage personalization",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "capabilities manage shorttermmemory",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "capabilities manage stickerusage",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "capabilities manage userblocking",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "config api-key set",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "config cooldown",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "config logit-bias",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "config logit-bias add",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "config logit-bias remove",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "config logit-bias upload",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "config params",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "config provider add",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "config provider switch",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "config remove modeloverride",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "context-note",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "data delete",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "data delete personal",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "data delete server",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "data export",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "emoji",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "impersonate",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "natres",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "novelai image params",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "novelai image-tags",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "personal dtm",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "personal stm clear",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server autotrigger channels",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server autotrigger threshold",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server avatar",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server blacklist",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server dtm",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server memberpermissions",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server quota imagegen",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server quota textgen",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server quota videogen",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server thought-logs",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server trigger add",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "server trigger remove",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "st-preset activate",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "st-preset deactivate",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "st-preset delete",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "st-preset list",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "st-preset toggle",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "sysprompt",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "teach",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    },
+    {
+      "path": "teach document",
+      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
+    }
+  ]
+}
