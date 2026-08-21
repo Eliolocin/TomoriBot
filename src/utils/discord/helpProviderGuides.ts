@@ -106,7 +106,7 @@ export function getProviderGuide(providerId: HelpProviderId): ProviderGuideDefin
 export function getProviderGuideVariables(locale: string): HelpVariables {
   return {
     configBraveapiSet: commandRegistry.getCommandMention("optional-key", "brave", "set"),
-    configSetup: commandRegistry.getCommandMention("config", "setup"),
+    configSetup: commandRegistry.getCommandMention("setup"),
     configApikeySet: commandRegistry.getCommandMention("provider", "add"),
     configModel: commandRegistry.getCommandMention("model", "text"),
     configModelEmbedding: commandRegistry.getCommandMention("model", "embedding"),

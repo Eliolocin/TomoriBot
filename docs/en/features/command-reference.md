@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **38**. Runnable slash commands: **221**.
+Top-level command groups: **38**. Runnable slash commands: **220**.
 
 ## `/bot`
 
@@ -65,7 +65,6 @@ Configure TomoriBot's models, behavior, and server settings.
 | `/config random-trigger remove` | Remove an existing random trigger from this server. |
 | `/config self-debug` | Toggle whether I load my own diagnostic embeds into context. |
 | `/config send-limit` | Limit the number of messages I send per response (default: 0 = unlimited). |
-| `/config setup` | Start the initial setup process. Configure AI provider and personality. |
 | `/config system-prompt preset` | Apply a preset system prompt |
 | `/config system-prompt remove` | Remove the custom system prompt and use the default prompt |
 | `/config system-prompt set` | Set a custom system prompt to guide my behavior |

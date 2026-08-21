@@ -103,7 +103,7 @@ const setupPages: readonly HelpPageDefinition[] = [
     sections: [],
     titleHeadingLevel: 3,
     variables: () => ({
-      configSetup: mention("config", "setup"),
+      configSetup: mention("setup"),
       expressionsInitialize: mention("expressions", "initialize"),
     }),
   },

@@ -14,7 +14,7 @@ type RegistrationPayload = {
   description?: string;
   contexts?: number[];
   default_member_permissions?: string;
-  options?: unknown[];
+  options?: Array<{ name: string }>;
 };
 
 describe("/setup registration", () => {
@@ -33,7 +33,7 @@ describe("/setup registration", () => {
     expect(executionMap.get("setup")?.has(ROOT_COMMAND_EXECUTION_KEY)).toBe(true);
   });
 
-  it("leaves /config setup as a bridge", async () => {
+  it("does not register /config setup as a subcommand", async () => {
     const { registrationData, executionMap } = await loadCommandData();
 
     const configCommand = registrationData.find((cmd) => cmd.name === "config") as unknown as
@@ -44,8 +44,8 @@ describe("/setup registration", () => {
     if (!configCommand) return;
 
     const hasSetupOption = configCommand.options?.some((opt) => opt.name === "setup");
-    expect(hasSetupOption).toBe(true);
-    expect(executionMap.get("config")?.has("setup")).toBe(true);
+    expect(hasSetupOption).toBe(false);
+    expect(executionMap.get("config")?.has("setup")).toBe(false);
     expect(configCommand.contexts).toBeUndefined();
     expect(configCommand.default_member_permissions).toBe("32");
   });

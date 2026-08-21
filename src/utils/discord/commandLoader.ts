@@ -129,9 +129,6 @@ const MANAGER_ONLY_CATEGORIES = [
 ];
 
 const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
-  // Bridge-scoped: delete with the /config setup bridge. Without it the bridged path loses its
-  // ja description, because the loader derives that key from the tree position the strings left.
-  "commands.config.setup.description": "commands.setup.description",
   "commands.memory.description": "commands.teach.memory.description",
   "commands.persona.attribute.description": "commands.teach.attribute.description",
   "commands.persona.sample-dialogue.description": "commands.teach.sampledialogue.description",
