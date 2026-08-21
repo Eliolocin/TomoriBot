@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **36**. Runnable slash commands: **220**.
+Top-level command groups: **37**. Runnable slash commands: **220**.
 
 ## `/bot`
 
@@ -216,6 +216,14 @@ Age-restricted commands and settings.
 |---|---|
 | `/nsfw jailbreaks` | Manage optional jailbreak behaviors for my prompts on this server. |
 
+## `/nuke`
+
+Completely wipe all server data. Requires re-running /config setup afterwards.
+
+| Command | Summary |
+|---|---|
+| `/nuke` | Completely wipe all server data. Requires re-running /config setup afterwards. |
+
 ## `/openrouter`
 
 Manage OpenRouter-specific models and settings.
@@ -396,7 +404,6 @@ Manage server-wide settings, channels, permissions, and integrations.
 | `/server deliberate-tool-trigger` | Manage custom trigger phrases for deliberate tool mode. |
 | `/server deliberate-trigger-mode` | Toggle deliberate trigger mode (DTM) for this server. |
 | `/server member-permissions` | Configure what non-admin members can teach me. |
-| `/server nuke` | Completely wipe all server data. Requires re-running /config setup afterwards. |
 | `/server private-channels` | Manage private channels where STMs are isolated and thought logs are suppressed |
 | `/server quota image-generation` | Configure daily image generation quotas for this server. |
 | `/server quota reset` | Reset a quota pool for image, text, or video generation. |

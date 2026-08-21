@@ -39,6 +39,7 @@ const COOLDOWN_MAP = new Map<string, number>([
   ["conditioning", Number.parseInt(process.env.COOLDOWN_CONDITIONING || process.env.COOLDOWN_SERVER || "3000", 10)],
   ["punish", Number.parseInt(process.env.COOLDOWN_CONDITIONING || process.env.COOLDOWN_SERVER || "3000", 10)],
   ["reward", Number.parseInt(process.env.COOLDOWN_CONDITIONING || process.env.COOLDOWN_SERVER || "3000", 10)],
+  ["nuke", Number.parseInt(process.env.COOLDOWN_SERVER || "3000", 10)],
 ]);
 
 type LoadedCommandMaps = {

@@ -2,7 +2,9 @@ import {
   type ChatInputCommandInteraction,
   type Client,
   MessageFlags,
-  type SlashCommandSubcommandBuilder,
+  type SlashCommandBooleanOption,
+  type SlashCommandBuilder,
+  type SlashCommandStringOption,
 } from "discord.js";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
 import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
@@ -11,40 +13,49 @@ import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
+export const guildOnly = true;
+export const managerOnly = true;
+
 /**
- * Configures the `/server nuke` subcommand.
+ * Declared per option rather than per builder because `SlashCommandBuilder` and
+ * `SlashCommandSubcommandBuilder` do not share an addOption signature that survives a union.
+ */
+const buildConfirmationOption = (option: SlashCommandStringOption): SlashCommandStringOption =>
+  option
+    .setName("confirmation")
+    .setDescription(localizer("en-US", "commands.nuke.confirmation_description"))
+    .setRequired(true)
+    .addChoices(
+      {
+        name: localizer("en-US", "commands.nuke.confirmation_choice_yes"),
+        value: "yes",
+      },
+      {
+        name: localizer("en-US", "commands.nuke.confirmation_choice_no"),
+        value: "no",
+      },
+    );
+
+const buildPreservePersonasOption = (option: SlashCommandBooleanOption): SlashCommandBooleanOption =>
+  option
+    .setName("preserve_personas")
+    .setDescription(localizer("en-US", "commands.nuke.preserve_personas_description"))
+    .setRequired(false);
+
+/**
+ * Configures the `/nuke` command.
  * Completely wipes a server's settings and data, optionally preserving personas.
  *
  * Options:
  *  - `confirmation` (required, yes/no): mirrors the `/server config import` safety gate.
  *  - `preserve_personas` (optional, default false): keep personas + their subtree.
  */
-export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
+export const configureCommand = (command: SlashCommandBuilder) =>
+  command
     .setName("nuke")
-    .setDescription(localizer("en-US", "commands.server.nuke.description"))
-    .addStringOption((option) =>
-      option
-        .setName("confirmation")
-        .setDescription(localizer("en-US", "commands.server.nuke.confirmation_description"))
-        .setRequired(true)
-        .addChoices(
-          {
-            name: localizer("en-US", "commands.server.nuke.confirmation_choice_yes"),
-            value: "yes",
-          },
-          {
-            name: localizer("en-US", "commands.server.nuke.confirmation_choice_no"),
-            value: "no",
-          },
-        ),
-    )
-    .addBooleanOption((option) =>
-      option
-        .setName("preserve_personas")
-        .setDescription(localizer("en-US", "commands.server.nuke.preserve_personas_description"))
-        .setRequired(false),
-    );
+    .setDescription(localizer("en-US", "commands.nuke.description"))
+    .addStringOption(buildConfirmationOption)
+    .addBooleanOption(buildPreservePersonasOption);
 
 /**
  * Executes the destructive nuke flow.
@@ -55,7 +66,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
  * 4. Fetch + best-effort delete managed Discord webhooks on Discord's side
  * 5. Call serverRepository.nukeServer() with the chosen mode
  * 6. Invalidate tomoriStateCache for the guild
- * 7. Reply with success embed prompting `/setup` (or noting personas were kept)
+ * 7. Reply with success embed prompting `/config setup` (or noting personas were kept)
  */
 export async function execute(
   client: Client,
@@ -83,8 +94,8 @@ export async function execute(
     const confirmation = interaction.options.getString("confirmation", true);
     if (confirmation !== "yes") {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.server.nuke.cancelled_title",
-        descriptionKey: "commands.server.nuke.cancelled_description",
+        titleKey: "commands.nuke.cancelled_title",
+        descriptionKey: "commands.nuke.cancelled_description",
         color: ColorCode.INFO,
         flags: MessageFlags.Ephemeral,
       });
@@ -116,7 +127,7 @@ export async function execute(
     for (const { webhookDiscId, token } of managedWebhooks) {
       try {
         const webhook = await client.fetchWebhook(webhookDiscId, token);
-        await webhook.delete("TomoriBot /server nuke");
+        await webhook.delete("TomoriBot /nuke");
         webhooksDeleted++;
       } catch (error) {
         // Don't fail nuke if Discord cleanup fails, so log and move on
@@ -144,12 +155,10 @@ export async function execute(
     invalidateTomoriStateCache(guildDiscId);
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: preservePersonas
-        ? "commands.server.nuke.success_preserved_title"
-        : "commands.server.nuke.success_full_title",
+      titleKey: preservePersonas ? "commands.nuke.success_preserved_title" : "commands.nuke.success_full_title",
       descriptionKey: preservePersonas
-        ? "commands.server.nuke.success_preserved_description"
-        : "commands.server.nuke.success_full_description",
+        ? "commands.nuke.success_preserved_description"
+        : "commands.nuke.success_full_description",
       descriptionVars: {
         webhooks_deleted: webhooksDeleted,
         webhooks_failed: webhooksFailed,
@@ -162,12 +171,12 @@ export async function execute(
       userId: userData.user_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "server nuke",
+        command: "nuke",
         guildDiscId,
         options: interaction.options?.data,
       },
     };
-    await log.error("Error in /server nuke command", error as Error, context);
+    await log.error("Error in /nuke command", error as Error, context);
 
     // Error reply: use editReply if we already deferred, else replyInfoEmbed
     if (interaction.deferred || interaction.replied) {
