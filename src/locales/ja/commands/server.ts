@@ -577,7 +577,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
     deliberatetriggermode: {
       description: `このサーバーの明示的トリガーモード（DTM）を切り替えます。`,
       enabled_title: `明示的トリガーモードが有効になりました`,
-      enabled_description: `**{persona_name}** は直接的な呼びかけにのみ応答します：\`@{trigger}\`プレフィックス、リプライ、Discordメンション、または\`/bot respond\`。通常のトリガーワードだけでは起動しません。`,
+      enabled_description: `**{persona_name}** は直接的な呼びかけにのみ応答します：\`@{trigger}\`プレフィックス、リプライ、Discordメンション、または\`/respond\`。通常のトリガーワードだけでは起動しません。`,
       disabled_title: `明示的トリガーモードが無効になりました`,
       disabled_description: `**{persona_name}** は再びトリガーワードで応答します。`,
     },

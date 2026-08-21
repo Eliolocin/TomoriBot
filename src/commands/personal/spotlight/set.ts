@@ -402,8 +402,8 @@ function buildPersonaCheckboxGroups(
           localizer(
             locale,
             persona.is_alter
-              ? "commands.bot.respond.alter_persona_description"
-              : "commands.bot.respond.main_persona_description",
+              ? "commands.shared.persona_select.alter_persona_description"
+              : "commands.shared.persona_select.main_persona_description",
           ),
         ),
         default: selectedPersonaIds.has(persona.persona_id),
@@ -453,8 +453,8 @@ function buildAutoTriggerSelectOptions(personas: PersonaWithId[], locale: string
     description: localizer(
       locale,
       persona.is_alter
-        ? "commands.bot.respond.alter_persona_description"
-        : "commands.bot.respond.main_persona_description",
+        ? "commands.shared.persona_select.alter_persona_description"
+        : "commands.shared.persona_select.main_persona_description",
     ),
   }));
 }

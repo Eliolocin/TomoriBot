@@ -13,7 +13,7 @@ import type { UserRow, ErrorContext } from "../../types/db/schema";
 
 /**
  * Configures the `/server deliberate-trigger-mode` subcommand.
- * Toggles whether the bot requires explicit invocations (@trigger, reply, mention, /bot respond)
+ * Toggles whether the bot requires explicit invocations (@trigger, reply, mention, /respond)
  * instead of firing on plain trigger words.
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
@@ -24,7 +24,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
 /**
  * Toggles deliberate trigger mode for the server.
  * When enabled, plain trigger words no longer fire the bot, so only direct invocations work:
- * `@{trigger}` prefix, Discord @mention, replies to the persona, or `/bot respond`.
+ * `@{trigger}` prefix, Discord @mention, replies to the persona, or `/respond`.
  */
 export async function execute(
   _client: Client,

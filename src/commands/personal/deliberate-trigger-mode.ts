@@ -50,7 +50,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
  * - `follow`: (default) DTM mirrors the server's setting.
  * - `on`: DTM is always enabled for this user, even if the server has it disabled.
  *              Only direct invocations work: `@{trigger}` prefix, Discord @mention, replies,
- *              or `/bot respond`.
+ *              or `/respond`.
  */
 export async function execute(
   _client: Client,

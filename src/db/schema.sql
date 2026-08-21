@@ -615,7 +615,7 @@ SELECT add_column_if_not_exists('persona_configs', 'humanizer_degree', 'INT', NU
 -- Alter personas still require explicit trigger words; main persona defers if an alter is triggered
 
 -- Deliberate trigger mode (April 2026)
--- When enabled, plain {trigger} words are blocked; only @{trigger}, replies, mentions, and /bot respond work
+-- When enabled, plain {trigger} words are blocked; only @{trigger}, replies, mentions, and /respond work
 
 -- Auto-chat shared range state (March 2026): autoch_next_target was here;
 -- moved to persona_autoch_runtime_state by migration 015 (Phase 6 Step #16B).

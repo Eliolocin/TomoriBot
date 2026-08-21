@@ -40,6 +40,8 @@ import kill from "./commands/kill";
 import refresh from "./commands/refresh";
 import expressions from "./commands/expressions";
 import matrix from "./commands/matrix";
+import respond from "./commands/respond";
+import shared from "./commands/shared";
 
 export default {
   commands: {
@@ -82,5 +84,7 @@ export default {
     ...refresh,
     ...expressions,
     ...matrix,
+    ...respond,
+    ...shared,
   },
 };

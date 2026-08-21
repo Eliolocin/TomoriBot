@@ -97,8 +97,8 @@ export function createConditioningInteractionCommand(
       !permissions?.has(PermissionFlagsBits.ReadMessageHistory)
     ) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.bot.respond.missing_permissions_title",
-        descriptionKey: "commands.bot.respond.missing_permissions_description",
+        titleKey: "general.errors.channel_missing_permissions_title",
+        descriptionKey: "general.errors.channel_missing_permissions_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });

@@ -161,6 +161,8 @@
       persona_response_failed_description: `ペルソナ **{personaName}** からの応答の生成に失敗しました。
 
 > {errorMessage}`,
+      channel_missing_permissions_title: `権限がありません`,
+      channel_missing_permissions_description: `このチャンネルのメッセージ履歴を読み取る権限がありません。**チャンネルを見る**および**メッセージ履歴を読む**権限があることを確認してください。`,
       webhook_missing_permissions_title: `Webhook 権限がありません`,
       webhook_missing_permissions_description: `このチャンネルでWebhookを作成できないため、オルタペルソナは通常メッセージで返信します。**Webhookの管理**権限を付与すると、オルタのアバターを表示できます。`,
       webhook_limit_title: `Webhookの上限に達しました`,

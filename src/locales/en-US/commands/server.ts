@@ -579,7 +579,7 @@ Leave everything unchecked to keep this persona unrestricted in all channels.`,
     deliberatetriggermode: {
       description: `Toggle deliberate trigger mode (DTM) for this server.`,
       enabled_title: `Deliberate Trigger Mode Enabled`,
-      enabled_description: `**{persona_name}** will now only respond to direct invocations: \`@{trigger}\` prefix, replies, Discord mentions, or \`/bot respond\`. Plain trigger words are no longer enough.`,
+      enabled_description: `**{persona_name}** will now only respond to direct invocations: \`@{trigger}\` prefix, replies, Discord mentions, or \`/respond\`. Plain trigger words are no longer enough.`,
       disabled_title: `Deliberate Trigger Mode Disabled`,
       disabled_description: `**{persona_name}** will respond to plain trigger words again.`,
     },

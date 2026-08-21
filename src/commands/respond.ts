@@ -1,34 +1,34 @@
-import type { SlashCommandSubcommandBuilder } from "discord.js";
+import type { SlashCommandBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Client, Message } from "discord.js";
 import { EmbedBuilder, MessageFlags, PermissionFlagsBits } from "discord.js";
-import { promptWithPaginatedModal, replyInfoEmbed, safeSelectOptionText } from "../../utils/discord/interactionHelper";
-import { sendCooldownDM } from "../../utils/discord/cooldownDM";
-import { ColorCode, log } from "../../utils/misc/logger";
-import { localizer } from "../../utils/text/localizer";
-import type { UserRow } from "../../types/db/schema";
-import type { ModalComponent, SelectOption } from "../../types/discord/modal";
-import { tomoriChat } from "../../events/messageCreate/tomoriChat";
+import { promptWithPaginatedModal, replyInfoEmbed, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import { sendCooldownDM } from "@/utils/discord/cooldownDM";
+import { ColorCode, log } from "@/utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
+import type { UserRow } from "@/types/db/schema";
+import type { ModalComponent, SelectOption } from "@/types/discord/modal";
+import { tomoriChat } from "@/events/messageCreate/tomoriChat";
 import { llmModelRepo, personaRepository } from "@/utils/db/repositories";
-import { getCachedWhitelistStatus } from "../../utils/cache/channelWhitelistCache";
+import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
 import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { resolveFallbackPersona } from "@/utils/discord/personaTurnDetectionResolver";
 import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/persona/personaAccess";
-import { CooldownType } from "../../types/db/schema";
+import { CooldownType } from "@/types/db/schema";
 import { cooldownRepository } from "@/utils/db/repositories/CooldownRepository";
 import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
 
 /**
- * Configure the respond subcommand
+ * Configure the respond command
  */
-export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
+export const configureCommand = (command: SlashCommandBuilder) =>
+  command
     .setName("respond")
-    .setDescription(localizer("en-US", "commands.bot.respond.description"))
+    .setDescription(localizer("en-US", "commands.respond.description"))
     .addBooleanOption((option) =>
       option
         .setName("extra_options")
-        .setDescription(localizer("en-US", "commands.bot.respond.extra_options_description"))
+        .setDescription(localizer("en-US", "commands.respond.extra_options_description"))
         .setRequired(false),
     );
 
@@ -76,8 +76,8 @@ export async function execute(
   const permissions = guildChannel.permissionsFor(botMember);
   if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions?.has(PermissionFlagsBits.ReadMessageHistory)) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.bot.respond.missing_permissions_title",
-      descriptionKey: "commands.bot.respond.missing_permissions_description",
+      titleKey: "general.errors.channel_missing_permissions_title",
+      descriptionKey: "general.errors.channel_missing_permissions_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -114,7 +114,7 @@ export async function execute(
     if (cooldownResult.blockedByWhitelist) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.message_cooldown_title",
-        descriptionKey: "commands.bot.respond.channel_not_whitelisted",
+        descriptionKey: "commands.respond.channel_not_whitelisted",
         color: ColorCode.WARN,
       });
       return;
@@ -125,7 +125,7 @@ export async function execute(
       interaction.user,
       locale,
       "general.message_cooldown_title",
-      "commands.bot.respond.cooldown_active",
+      "commands.respond.cooldown_active",
       {
         seconds: cooldownResult.remainingSeconds.toString(),
         botName: tomoriState.persona_nickname,
@@ -158,7 +158,7 @@ export async function execute(
   if (availablePersonas.length === 0) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.message_cooldown_title",
-      descriptionKey: "commands.bot.respond.persona_access_blocked",
+      descriptionKey: "commands.respond.persona_access_blocked",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -174,8 +174,8 @@ export async function execute(
   if (!latestMessage) {
     log.warn(`No messages found in channel ${interaction.channel.id} for manual respond command.`);
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.bot.respond.no_messages_title",
-      descriptionKey: "commands.bot.respond.no_messages_description",
+      titleKey: "commands.respond.no_messages_title",
+      descriptionKey: "commands.respond.no_messages_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -224,15 +224,15 @@ export async function execute(
         description: localizer(
           locale,
           persona.is_alter
-            ? "commands.bot.respond.alter_persona_description"
-            : "commands.bot.respond.main_persona_description",
+            ? "commands.shared.persona_select.alter_persona_description"
+            : "commands.shared.persona_select.main_persona_description",
         ),
       }));
       modalComponents.push({
         customId: "persona_choice",
-        labelKey: "commands.bot.respond.select_persona_label",
-        descriptionKey: "commands.bot.respond.select_persona_description",
-        placeholder: "commands.bot.respond.select_persona_placeholder",
+        labelKey: "commands.respond.select_persona_label",
+        descriptionKey: "commands.respond.select_persona_description",
+        placeholder: "commands.respond.select_persona_placeholder",
         required: true,
         options: personaOptions,
       });
@@ -242,16 +242,16 @@ export async function execute(
     modalComponents.push({
       kind: "checkbox" as const,
       customId: "use_reasoning",
-      labelKey: "commands.bot.respond.use_reasoning_label",
-      descriptionKey: "commands.bot.respond.use_reasoning_description",
+      labelKey: "commands.respond.use_reasoning_label",
+      descriptionKey: "commands.respond.use_reasoning_description",
       default: false,
     });
 
     modalComponents.push({
       customId: "prompt",
-      labelKey: "commands.bot.respond.prompt_label",
-      descriptionKey: "commands.bot.respond.prompt_description",
-      placeholder: localizer(locale, "commands.bot.respond.prompt_placeholder"),
+      labelKey: "commands.respond.prompt_label",
+      descriptionKey: "commands.respond.prompt_description",
+      placeholder: localizer(locale, "commands.respond.prompt_placeholder"),
       required: false,
       maxLength: 2000,
       style: 2, // TextInputStyle.Paragraph
@@ -259,9 +259,9 @@ export async function execute(
 
     modalComponents.push({
       customId: "prefill",
-      labelKey: "commands.bot.respond.prefill_label",
-      descriptionKey: "commands.bot.respond.prefill_description",
-      placeholder: localizer(locale, "commands.bot.respond.prefill_placeholder"),
+      labelKey: "commands.respond.prefill_label",
+      descriptionKey: "commands.respond.prefill_description",
+      placeholder: localizer(locale, "commands.respond.prefill_placeholder"),
       required: false,
       maxLength: 2000,
       style: 2, // TextInputStyle.Paragraph
@@ -269,7 +269,7 @@ export async function execute(
 
     const modalResult = await promptWithPaginatedModal(interaction, locale, {
       modalCustomId: "respond_persona_select",
-      modalTitleKey: "commands.bot.respond.extra_options_title",
+      modalTitleKey: "commands.respond.extra_options_title",
       components: modalComponents,
     });
 
@@ -298,7 +298,7 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.message_cooldown_title"))
-            .setDescription(localizer(locale, "commands.bot.respond.persona_access_blocked"))
+            .setDescription(localizer(locale, "commands.respond.persona_access_blocked"))
             .setColor(ColorCode.WARN),
         ],
       });
@@ -319,8 +319,8 @@ export async function execute(
         await replyInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(localizer(locale, "commands.bot.respond.no_smart_model_title"))
-              .setDescription(localizer(locale, "commands.bot.respond.no_smart_model_description"))
+              .setTitle(localizer(locale, "commands.respond.no_smart_model_title"))
+              .setDescription(localizer(locale, "commands.respond.no_smart_model_description"))
               .setColor(ColorCode.ERROR),
           ],
         });
@@ -338,7 +338,7 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "general.message_cooldown_title"))
-            .setDescription(localizer(locale, "commands.bot.respond.persona_access_blocked"))
+            .setDescription(localizer(locale, "commands.respond.persona_access_blocked"))
             .setColor(ColorCode.WARN),
         ],
       });
@@ -348,13 +348,13 @@ export async function execute(
 
   try {
     const successEmbed = new EmbedBuilder()
-      .setTitle(localizer(locale, "commands.bot.respond.success_title"))
-      .setDescription(localizer(locale, "commands.bot.respond.success_description"))
+      .setTitle(localizer(locale, "commands.respond.success_title"))
+      .setDescription(localizer(locale, "commands.respond.success_description"))
       .setColor(ColorCode.SUCCESS);
 
     if (!hideEmbed) {
       successEmbed.setFooter({
-        text: localizer(locale, "commands.bot.respond.embed_hide_notice"),
+        text: localizer(locale, "commands.respond.embed_hide_notice"),
       });
     }
 
@@ -406,8 +406,8 @@ export async function execute(
       invokingMember,
     );
   } catch (error) {
-    log.error("Error in bot respond command:", error, {
-      errorType: "BotRespondCommandError",
+    log.error("Error in respond command:", error, {
+      errorType: "RespondCommandError",
       metadata: {
         userId: interaction.user.id,
         guildId: interaction.guild?.id ?? interaction.user.id,
@@ -421,7 +421,7 @@ export async function execute(
         flags: MessageFlags.Ephemeral,
       });
     } catch (followUpError) {
-      log.error("Failed to send error followup for bot respond command:", followUpError);
+      log.error("Failed to send error followup for respond command:", followUpError);
     }
   }
 }

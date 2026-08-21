@@ -37,7 +37,7 @@ export default {
       timeawareness_desc: `Notice reunions and calendar-day gaps in recent messages`,
       imagegen_desc: `Generate images on request`,
       videogen_desc: `Generate short videos on request`,
-      hiderespondembed_desc: `Hide /bot respond success embed`,
+      hiderespondembed_desc: `Hide /respond success embed`,
       hideimpersonationembeds_desc: `Hide persona impersonation notices`,
       voicemessage_desc: `Send ElevenLabs TTS voice messages`,
       shorttermmemory_desc: `Bot's auto-memory + nudges. When off, manual /persona stm edit & crude msgs still show`,

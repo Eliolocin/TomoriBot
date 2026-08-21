@@ -71,7 +71,7 @@ export default {
       credit_limit_title: `🔴 Not Enough Provider Credits`,
       balance_exhausted_title: `🔴 Provider Account Out of Credit`,
       flush_limit_title: `🟡️ Response Length Limit Reached`,
-      flush_limit_description: `This response has reached the maximum message length limit and has been stopped. You can use \`/bot respond\` to manually continue the response if needed.`,
+      flush_limit_description: `This response has reached the maximum message length limit and has been stopped. You can use \`/respond\` to manually continue the response if needed.`,
       inactivity_timeout_title: `🟡️ Response Timed Out`,
       inactivity_timeout_description: `The AI provider stopped responding and the connection timed out. This can happen when the provider is overloaded or experiencing issues. Please try again.`,
     },

@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **35**. Runnable slash commands: **220**.
+Top-level command groups: **36**. Runnable slash commands: **220**.
 
 ## `/bot`
 
@@ -22,7 +22,6 @@ commands.bot.description
 | `/bot generate image` | Generate a quick scene image from the ongoing channel context. |
 | `/bot generate scene` | Generate a short scripted text scene between selected personas. |
 | `/bot impersonate` | Impersonate personas, users, or inject system prompts. |
-| `/bot respond` | Manually trigger response to the latest message in this channel. |
 
 ## `/capabilities`
 
@@ -347,6 +346,14 @@ Clear conversation history (this channel only).
 | Command | Summary |
 |---|---|
 | `/refresh` | Clear conversation history (this channel only). |
+
+## `/respond`
+
+Manually trigger response to the latest message in this channel.
+
+| Command | Summary |
+|---|---|
+| `/respond` | Manually trigger response to the latest message in this channel. |
 
 ## `/reward`
 

@@ -161,6 +161,8 @@
       persona_response_failed_description: `Failed to generate a response from persona **{personaName}**.
 
 > {errorMessage}`,
+      channel_missing_permissions_title: `Missing Permissions`,
+      channel_missing_permissions_description: `I don't have permission to read message history in this channel. Please ensure I have the **View Channel** and **Read Message History** permissions.`,
       webhook_missing_permissions_title: `Missing Webhook Permissions`,
       webhook_missing_permissions_description: `I can't create webhooks in this channel, so alter personas will use regular bot messages. Please grant me the **Manage Webhooks** permission in this channel to enable custom alter avatars.`,
       webhook_limit_title: `Webhook Limit Reached`,

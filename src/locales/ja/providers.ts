@@ -71,7 +71,7 @@ export default {
       credit_limit_title: `🔴 プロバイダーのクレジットが不足しています`,
       balance_exhausted_title: `🔴 プロバイダーアカウントの残高がありません`,
       flush_limit_title: `🟡️ 応答の長さ制限に達しました`,
-      flush_limit_description: `この応答はメッセージの最大長制限に達したため停止されました。必要に応じて \`/bot respond\` を使用して手動で応答を続けることができます。`,
+      flush_limit_description: `この応答はメッセージの最大長制限に達したため停止されました。必要に応じて \`/respond\` を使用して手動で応答を続けることができます。`,
       inactivity_timeout_title: `🟡️ 応答がタイムアウトしました`,
       inactivity_timeout_description: `AIプロバイダーからの応答が停止し、接続がタイムアウトしました。プロバイダーが過負荷状態にあるか、問題が発生している可能性があります。もう一度お試しください。`,
     },

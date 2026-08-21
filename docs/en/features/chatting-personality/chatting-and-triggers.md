@@ -15,7 +15,7 @@ By default, she replies when you:
 - **Mention her** — `@TomoriBot`
 - **Reply** to one of her messages (including a persona's webhook message)
 - **Use a trigger word** — any plain word you've registered, said anywhere in a message
-- **Use `/bot respond`** — manually prompt a reply
+- **Use `/respond`** — manually prompt a reply
 
 Trigger words are the most convenient path: once a word is registered, simply naming it
 activates her. In a DM, just say hi — no trigger needed.
@@ -81,7 +81,7 @@ When DTM is on:
 - `@{trigger}` (the trigger word prefixed like a mention) still works
 - Discord mentions still work
 - Replies still work
-- `/bot respond` still works
+- `/respond` still works
 - **Plain trigger words no longer trigger her**
 
 This forces deliberate invocation instead of accidental activation.

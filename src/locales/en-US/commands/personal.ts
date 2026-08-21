@@ -489,7 +489,7 @@ You can change this anytime using \`/personal privacy\`.`,
       follow_title: `Personal Deliberate Trigger Mode: Follow Server`,
       follow_description: `Your DTM behavior now **follows the server setting**.`,
       on_title: `Personal Deliberate Trigger Mode: On`,
-      on_description: `DTM is **always enabled** for you regardless of the server setting. Use \`@trigger\`, mention, reply, or \`/bot respond\` to invoke the bot.`,
+      on_description: `DTM is **always enabled** for you regardless of the server setting. Use \`@trigger\`, mention, reply, or \`/respond\` to invoke the bot.`,
     },
     deliberatetoolmode: {
       description: `Set your personal deliberate tool mode preference.`,

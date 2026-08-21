@@ -490,7 +490,7 @@ async function handleUserImpersonation(
       return;
     }
 
-    // Check cooldown (shares cooldown pool with message triggers and /bot respond)
+    // Check cooldown (shares cooldown pool with message triggers and /respond)
     // Uses whitelist-aware version to respect per-channel cooldown overrides
     const cooldownType = tomoriState.config.cooldown_type ?? CooldownType.OFF;
     const cooldownLength = tomoriState.config.cooldown_length ?? 5;
@@ -564,7 +564,7 @@ async function handleUserImpersonation(
       return;
     }
 
-    // Same pattern as /bot respond - no placeholder message needed
+    // Same pattern as /respond - no placeholder message needed
     const messages = await channel.messages.fetch({ limit: 1 });
     const latestMessage = messages.first();
 
@@ -640,7 +640,7 @@ async function handleUserImpersonation(
       },
     });
 
-    // Set cooldown after successful response (shares cooldown pool with message triggers and /bot respond)
+    // Set cooldown after successful response (shares cooldown pool with message triggers and /respond)
     // Uses whitelist-aware version to respect per-channel cooldown overrides
     log.info(
       `[/bot impersonate ${commandTarget}] Setting cooldown - globalType: ${cooldownType}, globalLength: ${cooldownLength}s`,

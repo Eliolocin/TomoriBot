@@ -129,7 +129,7 @@ This ensures that explicitly addressing Persona A mid-stream never causes Person
 
 Manual triggers can specify `selectedPersonaId`. In that case, **only that persona responds** (fallbacks apply if missing).
 
-`/bot respond` resolves its implicit persona from recent channel history before falling back:
+`/respond` resolves its implicit persona from recent channel history before falling back:
 1. the last known Tomori persona that spoke in the channel;
 2. the user's personal spotlight auto-trigger persona, if configured and allowed;
 3. the channel's `/server auto-trigger channels` persona assignment, if configured;

@@ -347,7 +347,7 @@ export class NovelaiStreamAdapter extends BaseStreamAdapter {
         messageIdMap: context.messageIdMap,
       });
       // Append bot name to signal it should generate the bot's response, unless
-      // /bot respond already injected a final assistant prefill turn as the tail.
+      // /respond already injected a final assistant prefill turn as the tail.
       // In that case, adding another "{botName}:" creates an extra empty turn and
       // breaks true continuation for Kayra/Erato.
       const outputPrefillTail = context.outputPrefill?.trim() ?? "";

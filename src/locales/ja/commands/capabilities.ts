@@ -37,7 +37,7 @@ export default {
       timeawareness_desc: `再会や最近のメッセージの日付の区切りを認識する`,
       imagegen_desc: `リクエストに応じて画像生成`,
       videogen_desc: `リクエストに応じて短い動画を生成`,
-      hiderespondembed_desc: `/bot respond の成功埋め込みを非表示`,
+      hiderespondembed_desc: `/respond の成功埋め込みを非表示`,
       hideimpersonationembeds_desc: `なりすまし通知を非表示`,
       voicemessage_desc: `ElevenLabs TTSボイスメッセージを送信`,
       shorttermmemory_desc: `ボットの自動記憶＆促し。オフでも手動編集(/persona stm edit)と生メッセージは表示`,

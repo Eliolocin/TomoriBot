@@ -320,7 +320,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
       impersonation_description: `- \`/bot impersonate\`で自分自身、ペルソナ、またはシステムメッセージとしてメッセージを送信できます
 - \`/personal impersonate prompt\`でユーザーなりきり用の再利用プロンプトを設定できます
 - \`/tool compact\`で会話履歴を要約したりロールプレイで圧縮できます
-- \`/bot respond\`でボットから定型文や案内付きメッセージを送信できます`,
+- \`/respond\`でボットから定型文や案内付きメッセージを送信できます`,
       imagegen_title: `画像生成`,
       imagegen_description: `- テキストプロンプトから画像を生成し、参照画像を編集することもできます
 - Text2ImageとImage2Imageをカスタマイズタブルなアスペクト比で対応
@@ -813,7 +813,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - メッセージ中の通常のトリガーワード
 - Discordメンション
 - そのペルソナへのリプライ
-- 手動返信用の {botRespond}
+- 手動返信用の {respondCommand}
 
 いちばん大きい違いは、通常のトリガーワードだけでもペルソナを直接起動できることです。`,
       enabled_title: `DTMオンで変わること`,
@@ -821,7 +821,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - \`@{trigger}\` は引き続き有効
 - Discordメンションは有効
 - リプライは有効
-- {botRespond} は有効
+- {respondCommand} は有効
 
 つまり、普段の会話で偶然ペルソナ名が出ただけでは起動せず、より意図的な呼びかけが必要になります。`,
       personal_title: `サーバー設定と個人設定`,

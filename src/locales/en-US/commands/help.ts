@@ -320,7 +320,7 @@ Transcription supports ~100 languages (auto-detected).`,
       impersonation_description: `- Use \`/bot impersonate\` to send messages as yourself, a persona, or inject system messages
 - Set a reusable user-impersonation prompt with \`/personal impersonate prompt\`
 - \`/tool compact\` can summarize or roleplay-compress conversation history
-- \`/bot respond\` to trigger prefilled or guided messages from the bot`,
+- \`/respond\` to trigger prefilled or guided messages from the bot`,
       imagegen_title: `Image Generation`,
       imagegen_description: `- I can generate images from text prompts or by editing reference images
 - Supports Text2Image and Image2Image with customizable aspect ratios
@@ -809,7 +809,7 @@ If you set **hours = 0**, the spotlight stays until you remove it manually.`,
 - Plain trigger words in a message
 - Discord mentions
 - Replies to the persona
-- {botRespond} for manual replies
+- {respondCommand} for manual replies
 
 In practice, plain trigger words are the biggest difference because they can directly activate a persona just by naming its trigger.`,
       enabled_title: `What Changes When DTM Is On`,
@@ -817,7 +817,7 @@ In practice, plain trigger words are the biggest difference because they can dir
 - \`@{trigger}\` still works
 - Discord mentions still work
 - Replies still work
-- {botRespond} still works
+- {respondCommand} still works
 
 This means users must invoke personas more deliberately instead of accidentally triggering them with ordinary text.`,
       personal_title: `Server And Personal Control`,

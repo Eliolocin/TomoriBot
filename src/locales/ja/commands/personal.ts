@@ -489,7 +489,7 @@ export default {
       follow_title: `個人明示的トリガーモード：サーバーに従う`,
       follow_description: `DTMの動作が**サーバー設定に従う**ようになりました。`,
       on_title: `個人明示的トリガーモード：オン`,
-      on_description: `サーバー設定に関わらず、DTMが**常に有効**です。\`@trigger\`、メンション、リプライ、または\`/bot respond\`でBotを呼び出してください。`,
+      on_description: `サーバー設定に関わらず、DTMが**常に有効**です。\`@trigger\`、メンション、リプライ、または\`/respond\`でBotを呼び出してください。`,
     },
     deliberatetoolmode: {
       description: `個人の明示的ツールモード設定を変更します。`,

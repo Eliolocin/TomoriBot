@@ -465,7 +465,7 @@ These modals currently use a 2-option String Select (yes/no, true/false, enable/
 | `/tool compact`            | `tool/compact.ts`              | `refresh_context`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/tool compact`            | `tool/compact.ts`              | `analyze_images`       | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/config provider switch`  | `config/provider/switch.ts`    | `save_current_select`  | Yes / No (default: Yes)  | No       | **Checkbox** (default: true, rarely unchecked) |
-| `/bot respond`             | `bot/respond.ts`               | `use_reasoning`        | Yes / No                 | No       | **Checkbox** (optional toggle)                 |
+| `/respond`                 | `respond.ts`                   | `use_reasoning`        | Yes / No                 | No       | **Checkbox** (optional toggle)                 |
 | `/persona export`          | `persona/export.ts`            | `export_json_select`   | False / True             | No       | **Checkbox** (optional toggle)                 |
 
 > **Note on `/config provider switch`:** This modal has _two_ migration candidates — the save-current-config toggle becomes a **Checkbox** (default checked, since users almost always want to save). The provider select itself is dynamic (loaded from DB via `loadUniqueProviders()`), so it stays as a String Select.

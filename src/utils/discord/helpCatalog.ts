@@ -522,7 +522,7 @@ const behaviorPages: readonly HelpPageDefinition[] = [
     variables: () => ({
       serverDtm: mention("server", "deliberate-trigger-mode"),
       personalDtm: mention("personal", "deliberate-trigger-mode"),
-      botRespond: mention("bot", "respond"),
+      respondCommand: mention("respond"),
     }),
   },
   {

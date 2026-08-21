@@ -344,7 +344,7 @@ export default {
         notice_mcp_tool_call_label: `MCPツール呼び出し`,
         notice_mcp_tool_call_description: `汎用MCPツール呼び出し通知を表示します。`,
         notice_respond_embed_label: `応答成功`,
-        notice_respond_embed_description: `/bot respond の成功埋め込みを表示します。`,
+        notice_respond_embed_description: `/respond の成功埋め込みを表示します。`,
         notice_impersonation_notice_label: `なりすまし通知`,
         notice_impersonation_notice_description: `ペルソナ/ユーザーなりすまし通知埋め込みを表示します。`,
         notice_fallback_model_usage_label: `フォールバックモデル使用`,
