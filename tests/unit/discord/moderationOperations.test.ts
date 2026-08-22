@@ -17,10 +17,12 @@ import {
   removeWhitelistRole,
   replacePersonaChannelWhitelist,
   updateMemberPermissions,
+  updateQuotaSettings,
   upsertWhitelistChannel,
   type ModerationDataDependencies,
   type ModerationMemberAccessDataDependencies,
   type ModerationUserBlacklistAddDataDependencies,
+  type QuotaOperationsDependencies,
 } from "@/utils/moderation/moderationOperations";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
@@ -94,6 +96,9 @@ describe("moderationOperations loader", () => {
       getWhitelistChannels: async () => ({ status: "fresh", channels: [] }),
       getWhitelistPersonas: async () => ({ status: "fresh", personas: [] }),
       getWhitelistRoles: async () => ({ status: "fresh", roles: [] }),
+      getTextQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getImageQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getVideoQuotaConfig: async () => ({ status: "fresh", config: null }),
     };
 
     const result = await loadModerationScopeData("1001", false, deps);
@@ -110,6 +115,9 @@ describe("moderationOperations loader", () => {
       getWhitelistChannels: async () => ({ status: "fresh", channels: [] }),
       getWhitelistPersonas: async () => ({ status: "fresh", personas: [] }),
       getWhitelistRoles: async () => ({ status: "fresh", roles: [] }),
+      getTextQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getImageQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getVideoQuotaConfig: async () => ({ status: "fresh", config: null }),
     };
 
     const result = await loadModerationScopeData("1001", false, deps);
@@ -128,6 +136,9 @@ describe("moderationOperations loader", () => {
       getWhitelistChannels: async () => ({ status: "fresh", channels: [] }),
       getWhitelistPersonas: async () => ({ status: "fresh", personas: [] }),
       getWhitelistRoles: async () => ({ status: "fresh", roles: [] }),
+      getTextQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getImageQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getVideoQuotaConfig: async () => ({ status: "fresh", config: null }),
     };
 
     const data = await loadModerationScopeData("1001", false, deps);
@@ -148,13 +159,16 @@ describe("moderationOperations loader", () => {
       getWhitelistChannels: async () => ({ status: "fresh", channels: [] }),
       getWhitelistPersonas: async () => ({ status: "fresh", personas: [] }),
       getWhitelistRoles: async () => ({ status: "fresh", roles: [] }),
+      getTextQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getImageQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getVideoQuotaConfig: async () => ({ status: "fresh", config: null }),
     };
 
     const data = await loadModerationScopeData("1001", false, deps);
     expect(data?.readStatus).toBe("fresh");
   });
 
-  it("loads fresh moderation scope data correctly", async () => {
+  it("loads fresh moderation scope data correctly including quotas", async () => {
     const channelRow: ChannelWhitelistRow = {
       server_id: 10,
       channel_disc_id: "chan-1",
@@ -199,6 +213,34 @@ describe("moderationOperations loader", () => {
       getWhitelistChannels: async () => ({ status: "fresh", channels: [channelRow] }),
       getWhitelistPersonas: async () => ({ status: "fresh", personas: [personaChannelRow] }),
       getWhitelistRoles: async () => ({ status: "fresh", roles: [roleRow] }),
+      getImageQuotaConfig: async () => ({
+        status: "fresh",
+        config: {
+          server_id: 10,
+          daily_user_quota: 5,
+          serverwide_quota: 50,
+          serverwide_quota_resets_in: 30,
+          enabled: true,
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
+      getTextQuotaConfig: async () => ({
+        status: "fresh",
+        config: null,
+      }),
+      getVideoQuotaConfig: async () => ({
+        status: "fresh",
+        config: {
+          server_id: 10,
+          daily_user_quota: 0,
+          serverwide_quota: 0,
+          serverwide_quota_resets_in: 365,
+          enabled: false,
+          created_at: new Date(),
+          updated_at: new Date(),
+        },
+      }),
     };
 
     const data = await loadModerationScopeData("1001", false, deps);
@@ -222,6 +264,32 @@ describe("moderationOperations loader", () => {
     expect(data.whitelist.personaChannels).toEqual([personaChannelRow]);
     expect(data.whitelist.roles).toEqual([roleRow]);
     expect(data.whitelist.personaNames.get(1)).toBe("Tomori");
+
+    expect(data.quotas.image).toEqual({ daily_user_quota: 5, serverwide_quota: 50, serverwide_quota_resets_in: 30 });
+    expect(data.quotas.text).toEqual({ daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 });
+    expect(data.quotas.video).toEqual({ daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 });
+  });
+
+  it("marks readStatus as unavailable when any quota repository read fails", async () => {
+    const deps: ModerationDataDependencies = {
+      getState: async () => mockTomoriState(),
+      getAllPersonas: async () => [mockTomoriState()],
+      getLastDbError: () => null,
+      getBlacklist: async () => ({ status: "fresh", memberIds: [] }),
+      getPersonaBlocks: async () => ({ status: "fresh", blocks: [] }),
+      getWhitelistChannels: async () => ({ status: "fresh", channels: [] }),
+      getWhitelistPersonas: async () => ({ status: "fresh", personas: [] }),
+      getWhitelistRoles: async () => ({ status: "fresh", roles: [] }),
+      getTextQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getImageQuotaConfig: async () => ({ status: "unavailable", config: null }),
+      getVideoQuotaConfig: async () => ({ status: "fresh", config: null }),
+    };
+
+    const data = await loadModerationScopeData("1001", false, deps);
+    expect(data).not.toBeNull();
+    if (!data) return;
+
+    expect(data.readStatus).toBe("unavailable");
   });
 
   it("marks readStatus as unavailable when any repository read fails", async () => {
@@ -234,6 +302,9 @@ describe("moderationOperations loader", () => {
       getWhitelistChannels: async () => ({ status: "fresh", channels: [] }),
       getWhitelistPersonas: async () => ({ status: "fresh", personas: [] }),
       getWhitelistRoles: async () => ({ status: "fresh", roles: [] }),
+      getTextQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getImageQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getVideoQuotaConfig: async () => ({ status: "fresh", config: null }),
     };
 
     const data = await loadModerationScopeData("1001", false, deps);
@@ -264,6 +335,9 @@ describe("moderationOperations loader", () => {
       getWhitelistChannels: async () => ({ status: "fresh", channels: [] }),
       getWhitelistPersonas: async () => ({ status: "fresh", personas: [] }),
       getWhitelistRoles: async () => ({ status: "fresh", roles: [] }),
+      getTextQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getImageQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getVideoQuotaConfig: async () => ({ status: "fresh", config: null }),
     };
 
     const result = await loadModerationScopeData("1001", true, deps);
@@ -289,6 +363,9 @@ describe("moderationOperations loader", () => {
       getWhitelistChannels: async () => ({ status: "fresh", channels: [] }),
       getWhitelistPersonas: async () => ({ status: "fresh", personas: [] }),
       getWhitelistRoles: async () => ({ status: "fresh", roles: [] }),
+      getTextQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getImageQuotaConfig: async () => ({ status: "fresh", config: null }),
+      getVideoQuotaConfig: async () => ({ status: "fresh", config: null }),
     };
 
     const data = await loadModerationScopeData("1001", false, deps);
@@ -1475,5 +1552,286 @@ describe("persona channel whitelist operations", () => {
 
     expect(result).toEqual({ status: "failure" });
     expect(events).toEqual(["write"]);
+  });
+});
+
+describe("quota operations (updateQuotaSettings)", () => {
+  it("executes image quota writes in exact per-field order and re-reads config before step 2 and step 3", async () => {
+    const callLog: string[] = [];
+    let readCount = 0;
+
+    const deps: QuotaOperationsDependencies = {
+      getImageConfig: async (serverId) => {
+        readCount++;
+        callLog.push(`read:image:${serverId}:${readCount}`);
+        return {
+          server_id: serverId,
+          daily_user_quota: 5,
+          serverwide_quota: readCount >= 3 ? 500 : 0,
+          serverwide_quota_resets_in: 30,
+          enabled: true,
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+      },
+      updateImageDailyUserQuota: async (serverId, limit) => {
+        callLog.push(`write:daily:${serverId}:${limit}`);
+      },
+      updateImageServerwideQuota: async (serverId, limit, currentResetDays, previousLimit) => {
+        callLog.push(`write:serverwide:${serverId}:${limit}:${currentResetDays}:${previousLimit}`);
+      },
+      updateImageServerwideResetDays: async (serverId, days, serverwideActive) => {
+        callLog.push(`write:resets:${serverId}:${days}:${serverwideActive}`);
+      },
+      getTextConfig: async () => {
+        throw new Error("unexpected text read");
+      },
+      updateTextDailyUserQuota: async () => {},
+      updateTextServerwideQuota: async () => {},
+      updateTextServerwideResetDays: async () => {},
+      getVideoConfig: async () => {
+        throw new Error("unexpected video read");
+      },
+      updateVideoDailyUserQuota: async () => {},
+      updateVideoServerwideQuota: async () => {},
+      updateVideoServerwideResetDays: async () => {},
+    };
+
+    const result = await updateQuotaSettings(
+      {
+        serverId: 42,
+        quotaType: "image",
+        dailyUserQuota: 10,
+        serverwideQuota: 500,
+        serverwideQuotaResetsIn: 14,
+      },
+      deps,
+    );
+
+    expect(result).toEqual({
+      status: "success",
+      quotaType: "image",
+      appliedFields: ["daily_user_quota", "serverwide_quota", "serverwide_quota_resets_in"],
+    });
+
+    expect(callLog).toEqual([
+      "read:image:42:1",
+      "write:daily:42:10",
+      "read:image:42:2",
+      "write:serverwide:42:500:30:0",
+      "read:image:42:3",
+      "write:resets:42:14:true",
+    ]);
+  });
+
+  it("executes text and video quota writes with their respective repository methods", async () => {
+    const textLog: string[] = [];
+    const textDeps: QuotaOperationsDependencies = {
+      getImageConfig: async () => {
+        throw new Error("unexpected");
+      },
+      updateImageDailyUserQuota: async () => {},
+      updateImageServerwideQuota: async () => {},
+      updateImageServerwideResetDays: async () => {},
+      getTextConfig: async (serverId) => {
+        textLog.push(`read:text:${serverId}`);
+        return {
+          server_id: serverId,
+          daily_user_quota: 0,
+          serverwide_quota: 0,
+          serverwide_quota_resets_in: 365,
+          enabled: false,
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+      },
+      updateTextDailyUserQuota: async (serverId, limit) => {
+        textLog.push(`write:daily:${serverId}:${limit}`);
+      },
+      updateTextServerwideQuota: async (serverId, limit) => {
+        textLog.push(`write:serverwide:${serverId}:${limit}`);
+      },
+      updateTextServerwideResetDays: async (serverId, days) => {
+        textLog.push(`write:resets:${serverId}:${days}`);
+      },
+      getVideoConfig: async () => {
+        throw new Error("unexpected");
+      },
+      updateVideoDailyUserQuota: async () => {},
+      updateVideoServerwideQuota: async () => {},
+      updateVideoServerwideResetDays: async () => {},
+    };
+
+    const textResult = await updateQuotaSettings(
+      {
+        serverId: 10,
+        quotaType: "text",
+        dailyUserQuota: 20,
+        serverwideQuota: null,
+        serverwideQuotaResetsIn: null,
+      },
+      textDeps,
+    );
+
+    expect(textResult).toEqual({
+      status: "success",
+      quotaType: "text",
+      appliedFields: ["daily_user_quota"],
+    });
+    expect(textLog).toEqual(["read:text:10", "write:daily:10:20"]);
+
+    const videoLog: string[] = [];
+    const videoDeps: QuotaOperationsDependencies = {
+      ...textDeps,
+      getVideoConfig: async (serverId) => {
+        videoLog.push(`read:video:${serverId}`);
+        return {
+          server_id: serverId,
+          daily_user_quota: 0,
+          serverwide_quota: 100,
+          serverwide_quota_resets_in: 30,
+          enabled: true,
+          created_at: new Date(),
+          updated_at: new Date(),
+        };
+      },
+      updateVideoDailyUserQuota: async (serverId, limit) => {
+        videoLog.push(`write:video:daily:${serverId}:${limit}`);
+      },
+      updateVideoServerwideQuota: async (serverId, limit) => {
+        videoLog.push(`write:video:serverwide:${serverId}:${limit}`);
+      },
+      updateVideoServerwideResetDays: async (serverId, days) => {
+        videoLog.push(`write:video:resets:${serverId}:${days}`);
+      },
+    };
+
+    const videoResult = await updateQuotaSettings(
+      {
+        serverId: 10,
+        quotaType: "video",
+        dailyUserQuota: 5,
+        serverwideQuota: 200,
+        serverwideQuotaResetsIn: 15,
+      },
+      videoDeps,
+    );
+
+    expect(videoResult.status).toBe("success");
+    expect(videoLog).toHaveLength(6);
+  });
+
+  it("validates bounds and refuses to write on out-of-range or non-integer values", async () => {
+    let writes = 0;
+    const deps: QuotaOperationsDependencies = {
+      getImageConfig: async () => {
+        throw new Error("should not be called");
+      },
+      updateImageDailyUserQuota: async () => {
+        writes++;
+      },
+      updateImageServerwideQuota: async () => {
+        writes++;
+      },
+      updateImageServerwideResetDays: async () => {
+        writes++;
+      },
+      getTextConfig: async () => {
+        throw new Error("should not be called");
+      },
+      updateTextDailyUserQuota: async () => {
+        writes++;
+      },
+      updateTextServerwideQuota: async () => {
+        writes++;
+      },
+      updateTextServerwideResetDays: async () => {
+        writes++;
+      },
+      getVideoConfig: async () => {
+        throw new Error("should not be called");
+      },
+      updateVideoDailyUserQuota: async () => {
+        writes++;
+      },
+      updateVideoServerwideQuota: async () => {
+        writes++;
+      },
+      updateVideoServerwideResetDays: async () => {
+        writes++;
+      },
+    };
+
+    const invalidInputs = [
+      { dailyUserQuota: -1 },
+      { dailyUserQuota: 101 },
+      { dailyUserQuota: 5.5 },
+      { dailyUserQuota: Number.NaN },
+      { serverwideQuota: -1 },
+      { serverwideQuota: 100000 },
+      { serverwideQuota: 10.2 },
+      { serverwideQuotaResetsIn: 0 },
+      { serverwideQuotaResetsIn: 366 },
+      { serverwideQuotaResetsIn: 30.5 },
+    ];
+
+    for (const invalid of invalidInputs) {
+      const result = await updateQuotaSettings(
+        {
+          serverId: 1,
+          quotaType: "image",
+          ...invalid,
+        },
+        deps,
+      );
+
+      expect(result.status).toBe("invalid");
+      expect(writes).toBe(0);
+    }
+  });
+
+  it("propagates failure when a repository write throws and reports failed status", async () => {
+    const deps: QuotaOperationsDependencies = {
+      getImageConfig: async (serverId) => ({
+        server_id: serverId,
+        daily_user_quota: 0,
+        serverwide_quota: 0,
+        serverwide_quota_resets_in: 30,
+        enabled: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      }),
+      updateImageDailyUserQuota: async () => {
+        throw new Error("DB write error on daily quota");
+      },
+      updateImageServerwideQuota: async () => {},
+      updateImageServerwideResetDays: async () => {},
+      getTextConfig: async () => {
+        throw new Error("unexpected");
+      },
+      updateTextDailyUserQuota: async () => {},
+      updateTextServerwideQuota: async () => {},
+      updateTextServerwideResetDays: async () => {},
+      getVideoConfig: async () => {
+        throw new Error("unexpected");
+      },
+      updateVideoDailyUserQuota: async () => {},
+      updateVideoServerwideQuota: async () => {},
+      updateVideoServerwideResetDays: async () => {},
+    };
+
+    const result = await updateQuotaSettings(
+      {
+        serverId: 1,
+        quotaType: "image",
+        dailyUserQuota: 10,
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("failed");
+    if (result.status === "failed") {
+      expect((result.error as Error).message).toBe("DB write error on daily quota");
+    }
   });
 });

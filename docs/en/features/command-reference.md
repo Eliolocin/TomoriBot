@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **41**. Runnable slash commands: **216**.
+Top-level command groups: **41**. Runnable slash commands: **213**.
 
 ## `/capabilities`
 
@@ -213,11 +213,11 @@ Manage this server's default AI models.
 
 ## `/moderation`
 
-Manage member permissions, blacklist, and channel and role whitelist.
+Manage member permissions, blacklist, channel and role whitelist, and quota settings.
 
 | Command | Summary |
 |---|---|
-| `/moderation` | Manage member permissions, blacklist, and channel and role whitelist. |
+| `/moderation` | Manage member permissions, blacklist, channel and role whitelist, and quota settings. |
 
 ## `/novelai`
 
@@ -427,10 +427,7 @@ Manage server-wide settings, channels, permissions, and integrations.
 | `/server deliberate-tool-trigger` | Manage custom trigger phrases for deliberate tool mode. |
 | `/server deliberate-trigger-mode` | Toggle deliberate trigger mode (DTM) for this server. |
 | `/server private-channels` | Manage private channels where STMs are isolated and thought logs are suppressed |
-| `/server quota image-generation` | Configure daily image generation quotas for this server. |
 | `/server quota reset` | Reset a quota pool for image, text, or video generation. |
-| `/server quota text-generation` | Configure text generation trigger quotas for this server. |
-| `/server quota video-generation` | Configure video generation quotas for this server. |
 | `/server rp-channels` | Manage channels where emojis and stickers are always suppressed and `/tool delete turn` is available |
 | `/server stm categories-edit` | Define up to 5 labeled STM categories the bot fills via tool calls. |
 | `/server stm manage` | Review and clear active server-shared STMs across personas. |

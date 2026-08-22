@@ -4,11 +4,14 @@ import { getSupportedLocales } from "@/utils/text/localizer";
 export const MODERATION_ROUTE_NAMESPACE = "moderation";
 export const MODERATION_ROUTE_VERSION = "v1";
 
-const MODERATION_CATEGORIES = ["member-access", "user-blacklist", "whitelist"] as const;
+const MODERATION_CATEGORIES = ["member-access", "user-blacklist", "whitelist", "quotas"] as const;
 export type ModerationCategory = (typeof MODERATION_CATEGORIES)[number];
 
 const WHITELIST_PAGES = ["channels", "persona-channels", "roles"] as const;
 export type WhitelistPage = (typeof WHITELIST_PAGES)[number];
+
+const QUOTA_TYPES = ["image", "text", "video"] as const;
+export type QuotaType = (typeof QUOTA_TYPES)[number];
 
 export type UserBlacklistRemovalTarget =
   | { source: "personalization"; userId: string }
@@ -57,7 +60,20 @@ export type ModerationPanelRoute =
   | { action: "persona-channel-add-open"; locale: string }
   | { action: "persona-channel-add-submit"; locale: string; nonce: string }
   | { action: "persona-channel-remove-open"; locale: string }
-  | { action: "persona-channel-remove-submit"; locale: string; nonce: string };
+  | { action: "persona-channel-remove-submit"; locale: string; nonce: string }
+  | { action: "quota-edit-open"; locale: string; quotaType: QuotaType }
+  | { action: "quota-edit-submit"; locale: string; quotaType: QuotaType; nonce: string };
+
+export function buildQuotaModalFieldId(
+  nonce: string,
+  field: "daily_user_quota" | "serverwide_quota" | "serverwide_quota_resets_in",
+): string {
+  return `quota_edit_${field}_${nonce}`;
+}
+
+function parseQuotaType(value: string | undefined): QuotaType | null {
+  return QUOTA_TYPES.find((candidate) => candidate === value) ?? null;
+}
 
 export function buildMemberAccessModalFieldId(nonce: string): string {
   return `memberaccess_checkbox_${nonce}`;
@@ -256,6 +272,18 @@ export function parseModerationPanelRoute(route: ParsedInteractionRoute): Modera
       return { action, locale, target: { source: "persona-block", personaId, userId } };
     }
     return null;
+  }
+
+  if (action === "quota-edit-open" && route.segments.length === 3) {
+    const quotaType = parseQuotaType(first);
+    return quotaType ? { action, locale, quotaType } : null;
+  }
+
+  if (action === "quota-edit-submit" && route.segments.length === 4) {
+    const quotaType = parseQuotaType(first);
+    const nonce = second;
+    if (!quotaType || !nonce || !/^[a-zA-Z0-9_-]+$/.test(nonce)) return null;
+    return { action, locale, quotaType, nonce };
   }
 
   return null;

@@ -130,18 +130,6 @@
       "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
     },
     {
-      "path": "server quota imagegen",
-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
-    },
-    {
-      "path": "server quota textgen",
-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
-    },
-    {
-      "path": "server quota videogen",
-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
-    },
-    {
       "path": "server thought-logs",
       "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
     },

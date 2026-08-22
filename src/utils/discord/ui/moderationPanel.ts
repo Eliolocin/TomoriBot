@@ -19,10 +19,12 @@ import {
   buildModerationRemoveModalFieldId,
   buildModerationCustomId,
   buildPersonaChannelAddModalFieldId,
+  buildQuotaModalFieldId,
   buildUserBlacklistAddModalFieldId,
   buildWhitelistChannelAddModalFieldId,
   buildWhitelistRoleAddModalFieldId,
   type ModerationCategory,
+  type QuotaType,
   type UserBlacklistRemovalTarget,
   type WhitelistPage,
 } from "@/utils/discord/moderationPanelCatalog";
@@ -32,7 +34,11 @@ import {
 } from "@/utils/discord/memberPermissionsConfigMapping";
 import { safeModalLocalizer, safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { buildCategoryButtonRow, buildPanelContainer, buildPanelReceiptContainer } from "@/utils/discord/ui/panel";
-import type { ModerationMemberAccessData, ModerationScopeData } from "@/utils/moderation/moderationOperations";
+import type {
+  ModerationMemberAccessData,
+  ModerationScopeData,
+  QuotaConfigState,
+} from "@/utils/moderation/moderationOperations";
 import { localizer } from "@/utils/text/localizer";
 
 export interface ModerationPanelRenderInput {
@@ -163,6 +169,11 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
         id: "whitelist",
         label: localizer(locale, "commands.moderation.category_whitelist"),
         customId: buildModerationCustomId("category", locale, "whitelist"),
+      },
+      {
+        id: "quotas",
+        label: localizer(locale, "commands.moderation.category_quotas"),
+        customId: buildModerationCustomId("category", locale, "quotas"),
       },
     ],
     category,
@@ -722,6 +733,63 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
         });
       }
     }
+  } else if (category === "quotas") {
+    const formatLimit = (limit: number) =>
+      limit === 0 ? localizer(locale, "commands.moderation.quota_unlimited") : `\`${limit}\``;
+
+    const quotaSections: ReadonlyArray<{ type: QuotaType; labelKey: string; buttonKey: string }> = [
+      {
+        type: "text",
+        labelKey: "commands.moderation.quotas_text_generation",
+        buttonKey: "commands.moderation.edit_text_quotas",
+      },
+      {
+        type: "image",
+        labelKey: "commands.moderation.quotas_image_generation",
+        buttonKey: "commands.moderation.edit_image_quotas",
+      },
+      {
+        type: "video",
+        labelKey: "commands.moderation.quotas_video_generation",
+        buttonKey: "commands.moderation.edit_video_quotas",
+      },
+    ];
+
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.moderation.quotas_title")}\n${localizer(locale, "commands.moderation.quotas_description")}`,
+    });
+
+    for (const section of quotaSections) {
+      const config = data.quotas[section.type];
+      components.push(
+        {
+          type: ComponentType.TextDisplay,
+          content: `**${localizer(locale, section.labelKey)}**`,
+        },
+        {
+          type: ComponentType.TextDisplay,
+          content: [
+            `> ${localizer(locale, "commands.moderation.quota_daily_user_limit", { limit: formatLimit(config.daily_user_quota) })}`,
+            `> ${localizer(locale, "commands.moderation.quota_serverwide_limit", { limit: formatLimit(config.serverwide_quota) })}`,
+            `> ${localizer(locale, "commands.moderation.quota_reset_period", { days: `\`${config.serverwide_quota_resets_in}\`` })}`,
+          ].join("\n"),
+        },
+      );
+    }
+
+    components.push({
+      type: ComponentType.ActionRow,
+      components: quotaSections.map(
+        (section): ButtonComponentData => ({
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildModerationCustomId("quota-edit-open", locale, section.type),
+          label: localizer(locale, section.buttonKey),
+          disabled: data.readStatus !== "fresh",
+        }),
+      ),
+    });
   }
   if (data.readStatus === "stale") {
     components.push(
@@ -1016,6 +1084,66 @@ export function buildPersonaChannelAddModal(
           channel_types: [ChannelType.GuildText],
           min_values: 1,
           max_values: 1,
+          required: true,
+        },
+      },
+    ],
+  };
+}
+
+export function buildQuotaEditModal(
+  locale: string,
+  quotaType: QuotaType,
+  currentConfig: QuotaConfigState,
+  nonce: string,
+): {
+  custom_id: string;
+  title: string;
+  components: RawDiscordComponent[];
+} {
+  const titleKeys = {
+    image: "commands.moderation.quota_modal_image_title",
+    text: "commands.moderation.quota_modal_text_title",
+    video: "commands.moderation.quota_modal_video_title",
+  } as const;
+
+  return {
+    custom_id: buildModerationCustomId("quota-edit-submit", locale, quotaType, nonce),
+    title: safeSelectOptionText(localizer(locale, titleKeys[quotaType]), 45),
+    components: [
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.moderation.quota_daily_user_limit_label"), 45),
+        description: safeModalLocalizer(locale, "commands.moderation.quota_daily_user_limit_description"),
+        component: {
+          type: 4,
+          custom_id: buildQuotaModalFieldId(nonce, "daily_user_quota"),
+          style: TextInputStyle.Short,
+          value: String(currentConfig.daily_user_quota),
+          required: true,
+        },
+      },
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.moderation.quota_serverwide_limit_label"), 45),
+        description: safeModalLocalizer(locale, "commands.moderation.quota_serverwide_limit_description"),
+        component: {
+          type: 4,
+          custom_id: buildQuotaModalFieldId(nonce, "serverwide_quota"),
+          style: TextInputStyle.Short,
+          value: String(currentConfig.serverwide_quota),
+          required: true,
+        },
+      },
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.moderation.quota_reset_days_label"), 45),
+        description: safeModalLocalizer(locale, "commands.moderation.quota_reset_days_description"),
+        component: {
+          type: 4,
+          custom_id: buildQuotaModalFieldId(nonce, "serverwide_quota_resets_in"),
+          style: TextInputStyle.Short,
+          value: String(currentConfig.serverwide_quota_resets_in),
           required: true,
         },
       },

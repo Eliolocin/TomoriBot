@@ -16,6 +16,7 @@ import {
   buildMemberAccessModalFieldId,
   buildModerationRemoveModalFieldId,
   buildPersonaChannelAddModalFieldId,
+  buildQuotaModalFieldId,
   buildUserBlacklistAddModalFieldId,
   buildWhitelistChannelAddModalFieldId,
   buildWhitelistRoleAddModalFieldId,
@@ -24,6 +25,7 @@ import {
   parseModerationPanelRoute,
   parseWhitelistPage,
   type ModerationCategory,
+  type QuotaType,
   type UserBlacklistRemovalTarget,
   type WhitelistPage,
 } from "@/utils/discord/moderationPanelCatalog";
@@ -33,6 +35,7 @@ import {
   buildModerationRemovalModal,
   buildModerationPanelPayload,
   buildPersonaChannelAddModal,
+  buildQuotaEditModal,
   buildUserBlacklistAddModal,
   buildWhitelistChannelAddModal,
   buildWhitelistRoleAddModal,
@@ -58,6 +61,7 @@ import {
   type ModerationScopeData,
   type ModerationUserBlacklistAddScopeData,
   type ModerationWhitelistChannelAddScopeData,
+  type QuotaConfigState,
 } from "@/utils/moderation/moderationOperations";
 import { localizer } from "@/utils/text/localizer";
 
@@ -90,6 +94,7 @@ export interface ModerationRouteDependencies {
     | "addWhitelistRole"
     | "removeWhitelistRole"
     | "replacePersonaChannelWhitelist"
+    | "updateQuotaSettings"
   >;
   createNonce(): string;
   showMemberAccessModal(
@@ -101,6 +106,13 @@ export interface ModerationRouteDependencies {
   showUserBlacklistAddModal(interaction: ButtonInteraction, locale: string, nonce: string): Promise<void>;
   showWhitelistChannelAddModal(interaction: ButtonInteraction, locale: string, nonce: string): Promise<void>;
   showWhitelistRoleAddModal(interaction: ButtonInteraction, locale: string, nonce: string): Promise<void>;
+  showQuotaEditModal(
+    interaction: ButtonInteraction,
+    locale: string,
+    quotaType: QuotaType,
+    currentConfig: QuotaConfigState,
+    nonce: string,
+  ): Promise<void>;
   showRemovalModal(
     interaction: ButtonInteraction,
     locale: string,
@@ -337,6 +349,8 @@ export function createModerationInteractionRoute(
       showRoutedRawModal(interaction, buildWhitelistChannelAddModal(locale, nonce)),
     showWhitelistRoleAddModal: (interaction, locale, nonce) =>
       showRoutedRawModal(interaction, buildWhitelistRoleAddModal(locale, nonce)),
+    showQuotaEditModal: (interaction, locale, quotaType, currentConfig, nonce) =>
+      showRoutedRawModal(interaction, buildQuotaEditModal(locale, quotaType, currentConfig, nonce)),
     showRemovalModal: (interaction, locale, nonce, action, options) =>
       showRoutedRawModal(interaction, buildModerationRemovalModal(locale, nonce, action, options)),
     showPersonaChannelAddModal: (interaction, locale, nonce, personas) =>
@@ -384,7 +398,8 @@ export function createModerationInteractionRoute(
         route.action === "whitelist-role-add-submit" ||
         route.action === "whitelist-role-remove-submit" ||
         route.action === "persona-channel-add-submit" ||
-        route.action === "persona-channel-remove-submit";
+        route.action === "persona-channel-remove-submit" ||
+        route.action === "quota-edit-submit";
       if (expectsSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Moderation ${route.action} route requires a String Select interaction`);
       }
@@ -2002,6 +2017,192 @@ export function createModerationInteractionRoute(
               };
         scope = (await dependencies.resolveScope(interaction, false)) ?? { ...scope, readStatus: "unavailable" };
         await repaint(interaction, route.locale, "whitelist", "persona-channels", 0, scope, receipt);
+        return;
+      }
+
+      if (route.action === "quota-edit-open") {
+        if (!isAuthorized(interaction)) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.moderation.permission_denied"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const scope = await dependencies.resolveScope(interaction, false);
+        if (!scope) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.moderation.not_setup"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        if (scope.readStatus !== "fresh") {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.moderation.unavailable"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+
+        const nonce = dependencies.createNonce();
+        const currentConfig = scope.quotas[route.quotaType];
+        await dependencies.showQuotaEditModal(
+          interaction as ButtonInteraction,
+          route.locale,
+          route.quotaType,
+          currentConfig,
+          nonce,
+        );
+        return;
+      }
+
+      if (route.action === "quota-edit-submit") {
+        const modal = interaction as ModalSubmitInteraction;
+        await interaction.deferUpdate();
+
+        let rawDailyUserQuota: string | undefined;
+        let rawServerwideQuota: string | undefined;
+        let rawResetDays: string | undefined;
+
+        try {
+          rawDailyUserQuota = modal.fields.getTextInputValue(buildQuotaModalFieldId(route.nonce, "daily_user_quota"));
+        } catch {
+          rawDailyUserQuota = undefined;
+        }
+
+        try {
+          rawServerwideQuota = modal.fields.getTextInputValue(buildQuotaModalFieldId(route.nonce, "serverwide_quota"));
+        } catch {
+          rawServerwideQuota = undefined;
+        }
+
+        try {
+          rawResetDays = modal.fields.getTextInputValue(
+            buildQuotaModalFieldId(route.nonce, "serverwide_quota_resets_in"),
+          );
+        } catch {
+          rawResetDays = undefined;
+        }
+
+        if (!isAuthorized(interaction)) {
+          await interaction.editReply(terminalPayload(route.locale, "commands.moderation.permission_denied"));
+          return;
+        }
+
+        let scope = await dependencies.resolveScope(interaction, false);
+        if (!scope) {
+          await interaction.editReply(terminalPayload(route.locale, "commands.moderation.not_setup"));
+          return;
+        }
+
+        if (scope.readStatus !== "fresh") {
+          await repaint(interaction, route.locale, "quotas", "channels", 0, scope, {
+            tone: "error",
+            heading: localizer(route.locale, "commands.moderation.quota_edit_failed"),
+            detail: localizer(route.locale, "commands.moderation.stale_warning"),
+          });
+          return;
+        }
+
+        if (
+          rawDailyUserQuota === undefined ||
+          rawServerwideQuota === undefined ||
+          rawResetDays === undefined ||
+          !/^\d+$/.test(rawDailyUserQuota.trim()) ||
+          !/^\d+$/.test(rawServerwideQuota.trim()) ||
+          !/^\d+$/.test(rawResetDays.trim())
+        ) {
+          await repaint(interaction, route.locale, "quotas", "channels", 0, scope, {
+            tone: "error",
+            heading: localizer(route.locale, "commands.moderation.quota_edit_failed"),
+            detail: localizer(route.locale, "commands.moderation.quota_edit_invalid_input"),
+          });
+          return;
+        }
+
+        const dailyUserQuota = Number(rawDailyUserQuota.trim());
+        const serverwideQuota = Number(rawServerwideQuota.trim());
+        const serverwideQuotaResetsIn = Number(rawResetDays.trim());
+
+        if (
+          dailyUserQuota < 0 ||
+          dailyUserQuota > 100 ||
+          serverwideQuota < 0 ||
+          serverwideQuota > 99999 ||
+          serverwideQuotaResetsIn < 1 ||
+          serverwideQuotaResetsIn > 365
+        ) {
+          await repaint(interaction, route.locale, "quotas", "channels", 0, scope, {
+            tone: "error",
+            heading: localizer(route.locale, "commands.moderation.quota_edit_failed"),
+            detail: localizer(route.locale, "commands.moderation.quota_edit_invalid_input"),
+          });
+          return;
+        }
+
+        const currentConfig = scope.quotas[route.quotaType];
+        if (
+          currentConfig.daily_user_quota === dailyUserQuota &&
+          currentConfig.serverwide_quota === serverwideQuota &&
+          currentConfig.serverwide_quota_resets_in === serverwideQuotaResetsIn
+        ) {
+          const typeNameKey = {
+            image: "commands.moderation.quota_type_image",
+            text: "commands.moderation.quota_type_text",
+            video: "commands.moderation.quota_type_video",
+          }[route.quotaType];
+          const typeName = localizer(route.locale, typeNameKey);
+
+          await repaint(interaction, route.locale, "quotas", "channels", 0, scope, {
+            tone: "info",
+            heading: localizer(route.locale, "commands.moderation.quota_edit_unchanged", { type: typeName }),
+            detail: localizer(route.locale, "commands.moderation.quota_edit_unchanged_detail", {
+              type: typeName,
+              type_lower: typeName.toLowerCase(),
+            }),
+          });
+          return;
+        }
+
+        const result = await dependencies.operations.updateQuotaSettings({
+          serverId: scope.serverId,
+          quotaType: route.quotaType,
+          dailyUserQuota,
+          serverwideQuota,
+          serverwideQuotaResetsIn,
+        });
+
+        const typeNameKey = {
+          image: "commands.moderation.quota_type_image",
+          text: "commands.moderation.quota_type_text",
+          video: "commands.moderation.quota_type_video",
+        }[route.quotaType];
+        const typeName = localizer(route.locale, typeNameKey);
+
+        let panelReceipt: PanelReceipt;
+        if (result.status === "success") {
+          panelReceipt = {
+            tone: "success",
+            heading: localizer(route.locale, "commands.moderation.quota_edit_success", { type: typeName }),
+            detail: localizer(route.locale, "commands.moderation.quota_edit_success_detail", {
+              type: typeName,
+              type_lower: typeName.toLowerCase(),
+            }),
+          };
+        } else {
+          panelReceipt = {
+            tone: "error",
+            heading: localizer(route.locale, "commands.moderation.quota_edit_failed"),
+            detail: localizer(route.locale, "commands.moderation.quota_edit_failed_detail"),
+          };
+        }
+
+        const reloadedScope = await dependencies.resolveScope(interaction, false);
+        scope = reloadedScope ?? { ...scope, readStatus: "unavailable" };
+
+        await repaint(interaction, route.locale, "quotas", "channels", 0, scope, panelReceipt);
         return;
       }
 

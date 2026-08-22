@@ -45,7 +45,7 @@ export default {
       serverwide_quota_exceeded_description: `このサーバーはこの期間の画像生成クォータに達しました。{reset_info}`,
       quota_resets_in_hours: `クォータは {hours} 時間後にリセットされます。`,
       quota_resets_in_days: `クォータは {days} 日後にリセットされます。`,
-      quota_exceeded_footer: `このクォータは、このサーバーの管理者が \`/server quota\` で設定しています。`,
+      quota_exceeded_footer: `このクォータは、このサーバーの管理者が \`/moderation\` で設定しています。`,
     },
     video: {
       description: `Google Veo、OpenRouter、またはZ.aiを使用してAI動画を生成します`,
@@ -102,7 +102,7 @@ export default {
       serverwide_quota_exceeded_description: `このサーバーはこの期間の動画生成クォータに達しました。{reset_info}`,
       quota_resets_in_hours: `クォータは {hours} 時間後にリセットされます。`,
       quota_resets_in_days: `クォータは {days} 日後にリセットされます。`,
-      quota_exceeded_footer: `このクォータは、このサーバーの管理者が \`/server quota\` で設定しています。`,
+      quota_exceeded_footer: `このクォータは、このサーバーの管理者が \`/moderation\` で設定しています。`,
     },
 
     scene: {

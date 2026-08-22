@@ -39,6 +39,75 @@ import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
 import type {} from "./IRepository";
 
+export type TextQuotaConfigReadResult =
+  | { status: "fresh"; config: TextQuotaConfigRow | null }
+  | { status: "unavailable"; config: null };
+
+export type ImageQuotaConfigReadResult =
+  | { status: "fresh"; config: ImageQuotaConfigRow | null }
+  | { status: "unavailable"; config: null };
+
+export type VideoQuotaConfigReadResult =
+  | { status: "fresh"; config: VideoQuotaConfigRow | null }
+  | { status: "unavailable"; config: null };
+
+/**
+ * Read-only text quota config query with read provenance.
+ * Does not insert default rows and does not fallback to synthetic rows on error.
+ */
+export async function getTextConfigResult(serverId: number): Promise<TextQuotaConfigReadResult> {
+  try {
+    const [existing] = await sql<TextQuotaConfigRow[]>`
+      SELECT * FROM text_quota_configs WHERE server_id = ${serverId}
+    `;
+    return {
+      status: "fresh",
+      config: existing ? textQuotaConfigSchema.parse(existing) : null,
+    };
+  } catch (error) {
+    log.error(`QuotaRepository.getTextConfigResult: failed for server ${serverId}`, error);
+    return { status: "unavailable", config: null };
+  }
+}
+
+/**
+ * Read-only image quota config query with read provenance.
+ * Does not insert default rows and does not fallback to synthetic rows on error.
+ */
+export async function getImageConfigResult(serverId: number): Promise<ImageQuotaConfigReadResult> {
+  try {
+    const [existing] = await sql<ImageQuotaConfigRow[]>`
+      SELECT * FROM image_quota_configs WHERE server_id = ${serverId}
+    `;
+    return {
+      status: "fresh",
+      config: existing ? imageQuotaConfigSchema.parse(existing) : null,
+    };
+  } catch (error) {
+    log.error(`QuotaRepository.getImageConfigResult: failed for server ${serverId}`, error);
+    return { status: "unavailable", config: null };
+  }
+}
+
+/**
+ * Read-only video quota config query with read provenance.
+ * Does not insert default rows and does not fallback to synthetic rows on error.
+ */
+export async function getVideoConfigResult(serverId: number): Promise<VideoQuotaConfigReadResult> {
+  try {
+    const [existing] = await sql<VideoQuotaConfigRow[]>`
+      SELECT * FROM video_quota_configs WHERE server_id = ${serverId}
+    `;
+    return {
+      status: "fresh",
+      config: existing ? videoQuotaConfigSchema.parse(existing) : null,
+    };
+  } catch (error) {
+    log.error(`QuotaRepository.getVideoConfigResult: failed for server ${serverId}`, error);
+    return { status: "unavailable", config: null };
+  }
+}
+
 /**
  * Fetch or create the text quota config for a server.
  * Creates a default (disabled, unlimited) row if none exists.

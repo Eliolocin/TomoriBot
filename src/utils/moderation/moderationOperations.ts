@@ -2,10 +2,13 @@ import {
   CooldownType,
   type ChannelPersonaWhitelistRow,
   type ChannelWhitelistRow,
+  type ImageQuotaConfigRow,
   type PersonaUserBlockRow,
   type RoleWhitelistRow,
   type ServerMemberPermissionsConfigRow,
+  type TextQuotaConfigRow,
   type TomoriState,
+  type VideoQuotaConfigRow,
 } from "@/types/db/schema";
 import type { PanelReadStatus } from "@/types/discord/panel";
 import { invalidateWhitelistCache } from "@/utils/cache/channelWhitelistCache";
@@ -25,10 +28,31 @@ import {
   whitelistRepository,
 } from "@/utils/db/repositories";
 import {
+  getImageConfigResult,
+  getOrCreateImageConfig,
+  getOrCreateTextConfig,
+  getOrCreateVideoConfig,
+  getTextConfigResult,
+  getVideoConfigResult,
+  updateImageDailyUserQuota,
+  updateImageServerwideQuota,
+  updateImageServerwideResetDays,
+  updateTextDailyUserQuota,
+  updateTextServerwideQuota,
+  updateTextServerwideResetDays,
+  updateVideoDailyUserQuota,
+  updateVideoServerwideQuota,
+  updateVideoServerwideResetDays,
+  type ImageQuotaConfigReadResult,
+  type TextQuotaConfigReadResult,
+  type VideoQuotaConfigReadResult,
+} from "@/utils/db/repositories/QuotaRepository";
+import {
   buildServerMemberPermissionsConfigWritePlan,
   type ServerMemberPermissionsCommandConfigState,
   type ServerMemberPermissionsConfigWritePlan,
 } from "@/utils/discord/memberPermissionsConfigMapping";
+import type { QuotaType } from "@/utils/discord/moderationPanelCatalog";
 import type { BlacklistReadResult } from "@/utils/db/repositories/ServerRepository";
 import type {
   PersonaUserBlockKey,
@@ -40,6 +64,18 @@ import type {
   WhitelistPersonasReadResult,
   WhitelistRolesReadResult,
 } from "@/utils/db/repositories/WhitelistRepository";
+
+export interface QuotaConfigState {
+  daily_user_quota: number;
+  serverwide_quota: number;
+  serverwide_quota_resets_in: number;
+}
+
+interface ModerationQuotasData {
+  image: QuotaConfigState;
+  text: QuotaConfigState;
+  video: QuotaConfigState;
+}
 
 export interface ModerationMemberAccessData {
   serverMemteachingEnabled: boolean;
@@ -68,6 +104,7 @@ export interface ModerationScopeData {
   memberAccess: ModerationMemberAccessData;
   userBlacklist: ModerationUserBlacklistData;
   whitelist: ModerationWhitelistData;
+  quotas: ModerationQuotasData;
 }
 
 export interface ModerationMemberAccessScopeData {
@@ -241,6 +278,9 @@ export interface ModerationDataDependencies {
   getWhitelistChannels(serverId: number): Promise<WhitelistChannelsReadResult>;
   getWhitelistPersonas(serverId: number): Promise<WhitelistPersonasReadResult>;
   getWhitelistRoles(serverId: number): Promise<WhitelistRolesReadResult>;
+  getTextQuotaConfig(serverId: number): Promise<TextQuotaConfigReadResult>;
+  getImageQuotaConfig(serverId: number): Promise<ImageQuotaConfigReadResult>;
+  getVideoQuotaConfig(serverId: number): Promise<VideoQuotaConfigReadResult>;
 }
 
 const defaultDependencies: ModerationDataDependencies = {
@@ -254,6 +294,9 @@ const defaultDependencies: ModerationDataDependencies = {
   getWhitelistChannels: (serverId) => whitelistRepository.getAllWhitelistChannelsResult(serverId),
   getWhitelistPersonas: (serverId) => whitelistRepository.getAllWhitelistPersonasResult(serverId),
   getWhitelistRoles: (serverId) => whitelistRepository.getAllWhitelistRolesResult(serverId),
+  getTextQuotaConfig: (serverId) => getTextConfigResult(serverId),
+  getImageQuotaConfig: (serverId) => getImageConfigResult(serverId),
+  getVideoQuotaConfig: (serverId) => getVideoConfigResult(serverId),
 };
 
 export async function loadModerationScopeData(
@@ -291,6 +334,11 @@ export async function loadModerationScopeData(
           roles: [],
           personaNames: new Map(),
         },
+        quotas: {
+          image: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+          text: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+          video: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+        },
       };
     }
     return null;
@@ -298,15 +346,27 @@ export async function loadModerationScopeData(
 
   const serverId = tomoriState.server_id;
 
-  const [allPersonas, blacklistResult, personaBlocksResult, channelsResult, personaChannelsResult, rolesResult] =
-    await Promise.all([
-      deps.getAllPersonas(guildId),
-      deps.getBlacklist(serverId),
-      deps.getPersonaBlocks(serverId),
-      deps.getWhitelistChannels(serverId),
-      deps.getWhitelistPersonas(serverId),
-      deps.getWhitelistRoles(serverId),
-    ]);
+  const [
+    allPersonas,
+    blacklistResult,
+    personaBlocksResult,
+    channelsResult,
+    personaChannelsResult,
+    rolesResult,
+    textQuotaResult,
+    imageQuotaResult,
+    videoQuotaResult,
+  ] = await Promise.all([
+    deps.getAllPersonas(guildId),
+    deps.getBlacklist(serverId),
+    deps.getPersonaBlocks(serverId),
+    deps.getWhitelistChannels(serverId),
+    deps.getWhitelistPersonas(serverId),
+    deps.getWhitelistRoles(serverId),
+    deps.getTextQuotaConfig(serverId),
+    deps.getImageQuotaConfig(serverId),
+    deps.getVideoQuotaConfig(serverId),
+  ]);
 
   const dbError = (deps.getRecordedDbError ?? deps.getLastDbError)(guildId);
 
@@ -315,7 +375,10 @@ export async function loadModerationScopeData(
     personaBlocksResult.status === "unavailable" ||
     channelsResult.status === "unavailable" ||
     personaChannelsResult.status === "unavailable" ||
-    rolesResult.status === "unavailable";
+    rolesResult.status === "unavailable" ||
+    textQuotaResult.status === "unavailable" ||
+    imageQuotaResult.status === "unavailable" ||
+    videoQuotaResult.status === "unavailable";
 
   let readStatus: PanelReadStatus = "fresh";
   if (hasUnavailableRead) {
@@ -330,6 +393,30 @@ export async function loadModerationScopeData(
       personaNames.set(persona.persona_id, persona.persona_nickname);
     }
   }
+
+  const imageQuota: QuotaConfigState = imageQuotaResult.config
+    ? {
+        daily_user_quota: imageQuotaResult.config.daily_user_quota,
+        serverwide_quota: imageQuotaResult.config.serverwide_quota,
+        serverwide_quota_resets_in: imageQuotaResult.config.serverwide_quota_resets_in,
+      }
+    : { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 };
+
+  const textQuota: QuotaConfigState = textQuotaResult.config
+    ? {
+        daily_user_quota: textQuotaResult.config.daily_user_quota,
+        serverwide_quota: textQuotaResult.config.serverwide_quota,
+        serverwide_quota_resets_in: textQuotaResult.config.serverwide_quota_resets_in,
+      }
+    : { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 };
+
+  const videoQuota: QuotaConfigState = videoQuotaResult.config
+    ? {
+        daily_user_quota: videoQuotaResult.config.daily_user_quota,
+        serverwide_quota: videoQuotaResult.config.serverwide_quota,
+        serverwide_quota_resets_in: videoQuotaResult.config.serverwide_quota_resets_in,
+      }
+    : { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 };
 
   return {
     guildId,
@@ -351,6 +438,11 @@ export async function loadModerationScopeData(
       personaChannels: personaChannelsResult.personas,
       roles: rolesResult.roles,
       personaNames,
+    },
+    quotas: {
+      image: imageQuota,
+      text: textQuota,
+      video: videoQuota,
     },
   };
 }
@@ -971,6 +1063,219 @@ export async function replacePersonaChannelWhitelist(
   }
 }
 
+export interface UpdateQuotaSettingsInput {
+  serverId: number;
+  quotaType: QuotaType;
+  dailyUserQuota?: number | null;
+  serverwideQuota?: number | null;
+  serverwideQuotaResetsIn?: number | null;
+}
+
+export type UpdateQuotaSettingsResult =
+  | {
+      status: "success";
+      quotaType: QuotaType;
+      appliedFields: Array<"daily_user_quota" | "serverwide_quota" | "serverwide_quota_resets_in">;
+    }
+  | {
+      status: "invalid";
+      quotaType: QuotaType;
+      reason: string;
+    }
+  | {
+      status: "failed";
+      quotaType: QuotaType;
+      error?: unknown;
+    };
+
+export interface QuotaOperationsDependencies {
+  getImageConfig(serverId: number): Promise<ImageQuotaConfigRow>;
+  updateImageDailyUserQuota(serverId: number, limit: number): Promise<void>;
+  updateImageServerwideQuota(
+    serverId: number,
+    limit: number,
+    currentResetDays: number,
+    previousLimit: number,
+  ): Promise<void>;
+  updateImageServerwideResetDays(serverId: number, days: number, serverwideActive: boolean): Promise<void>;
+
+  getTextConfig(serverId: number): Promise<TextQuotaConfigRow>;
+  updateTextDailyUserQuota(serverId: number, limit: number): Promise<void>;
+  updateTextServerwideQuota(
+    serverId: number,
+    limit: number,
+    currentResetDays: number,
+    previousLimit: number,
+  ): Promise<void>;
+  updateTextServerwideResetDays(serverId: number, days: number, serverwideActive: boolean): Promise<void>;
+
+  getVideoConfig(serverId: number): Promise<VideoQuotaConfigRow>;
+  updateVideoDailyUserQuota(serverId: number, limit: number): Promise<void>;
+  updateVideoServerwideQuota(
+    serverId: number,
+    limit: number,
+    currentResetDays: number,
+    previousLimit: number,
+  ): Promise<void>;
+  updateVideoServerwideResetDays(serverId: number, days: number, serverwideActive: boolean): Promise<void>;
+}
+
+const defaultQuotaOperationsDependencies: QuotaOperationsDependencies = {
+  getImageConfig: (serverId) => getOrCreateImageConfig(serverId),
+  updateImageDailyUserQuota: (serverId, limit) => updateImageDailyUserQuota(serverId, limit),
+  updateImageServerwideQuota: (serverId, limit, currentResetDays, previousLimit) =>
+    updateImageServerwideQuota(serverId, limit, currentResetDays, previousLimit),
+  updateImageServerwideResetDays: (serverId, days, serverwideActive) =>
+    updateImageServerwideResetDays(serverId, days, serverwideActive),
+
+  getTextConfig: (serverId) => getOrCreateTextConfig(serverId),
+  updateTextDailyUserQuota: (serverId, limit) => updateTextDailyUserQuota(serverId, limit),
+  updateTextServerwideQuota: (serverId, limit, currentResetDays, previousLimit) =>
+    updateTextServerwideQuota(serverId, limit, currentResetDays, previousLimit),
+  updateTextServerwideResetDays: (serverId, days, serverwideActive) =>
+    updateTextServerwideResetDays(serverId, days, serverwideActive),
+
+  getVideoConfig: (serverId) => getOrCreateVideoConfig(serverId),
+  updateVideoDailyUserQuota: (serverId, limit) => updateVideoDailyUserQuota(serverId, limit),
+  updateVideoServerwideQuota: (serverId, limit, currentResetDays, previousLimit) =>
+    updateVideoServerwideQuota(serverId, limit, currentResetDays, previousLimit),
+  updateVideoServerwideResetDays: (serverId, days, serverwideActive) =>
+    updateVideoServerwideResetDays(serverId, days, serverwideActive),
+};
+
+export async function updateQuotaSettings(
+  input: UpdateQuotaSettingsInput,
+  deps: QuotaOperationsDependencies = defaultQuotaOperationsDependencies,
+): Promise<UpdateQuotaSettingsResult> {
+  const { serverId, quotaType, dailyUserQuota, serverwideQuota, serverwideQuotaResetsIn } = input;
+
+  if (dailyUserQuota !== undefined && dailyUserQuota !== null) {
+    if (
+      typeof dailyUserQuota !== "number" ||
+      !Number.isInteger(dailyUserQuota) ||
+      dailyUserQuota < 0 ||
+      dailyUserQuota > 100
+    ) {
+      return { status: "invalid", quotaType, reason: "daily_user_quota must be an integer between 0 and 100" };
+    }
+  }
+
+  if (serverwideQuota !== undefined && serverwideQuota !== null) {
+    if (
+      typeof serverwideQuota !== "number" ||
+      !Number.isInteger(serverwideQuota) ||
+      serverwideQuota < 0 ||
+      serverwideQuota > 99999
+    ) {
+      return { status: "invalid", quotaType, reason: "serverwide_quota must be an integer between 0 and 99999" };
+    }
+  }
+
+  if (serverwideQuotaResetsIn !== undefined && serverwideQuotaResetsIn !== null) {
+    if (
+      typeof serverwideQuotaResetsIn !== "number" ||
+      !Number.isInteger(serverwideQuotaResetsIn) ||
+      serverwideQuotaResetsIn < 1 ||
+      serverwideQuotaResetsIn > 365
+    ) {
+      return {
+        status: "invalid",
+        quotaType,
+        reason: "serverwide_quota_resets_in must be an integer between 1 and 365",
+      };
+    }
+  }
+
+  const appliedFields: Array<"daily_user_quota" | "serverwide_quota" | "serverwide_quota_resets_in"> = [];
+
+  try {
+    if (quotaType === "image") {
+      if (dailyUserQuota !== undefined && dailyUserQuota !== null) {
+        await deps.getImageConfig(serverId);
+        await deps.updateImageDailyUserQuota(serverId, dailyUserQuota);
+        appliedFields.push("daily_user_quota");
+      }
+      if (serverwideQuota !== undefined && serverwideQuota !== null) {
+        const currentConfig = await deps.getImageConfig(serverId);
+        await deps.updateImageServerwideQuota(
+          serverId,
+          serverwideQuota,
+          currentConfig.serverwide_quota_resets_in,
+          currentConfig.serverwide_quota,
+        );
+        appliedFields.push("serverwide_quota");
+      }
+      if (serverwideQuotaResetsIn !== undefined && serverwideQuotaResetsIn !== null) {
+        const currentConfig = await deps.getImageConfig(serverId);
+        await deps.updateImageServerwideResetDays(
+          serverId,
+          serverwideQuotaResetsIn,
+          currentConfig.serverwide_quota > 0,
+        );
+        appliedFields.push("serverwide_quota_resets_in");
+      }
+    } else if (quotaType === "text") {
+      if (dailyUserQuota !== undefined && dailyUserQuota !== null) {
+        await deps.getTextConfig(serverId);
+        await deps.updateTextDailyUserQuota(serverId, dailyUserQuota);
+        appliedFields.push("daily_user_quota");
+      }
+      if (serverwideQuota !== undefined && serverwideQuota !== null) {
+        const currentConfig = await deps.getTextConfig(serverId);
+        await deps.updateTextServerwideQuota(
+          serverId,
+          serverwideQuota,
+          currentConfig.serverwide_quota_resets_in,
+          currentConfig.serverwide_quota,
+        );
+        appliedFields.push("serverwide_quota");
+      }
+      if (serverwideQuotaResetsIn !== undefined && serverwideQuotaResetsIn !== null) {
+        const currentConfig = await deps.getTextConfig(serverId);
+        await deps.updateTextServerwideResetDays(serverId, serverwideQuotaResetsIn, currentConfig.serverwide_quota > 0);
+        appliedFields.push("serverwide_quota_resets_in");
+      }
+    } else if (quotaType === "video") {
+      if (dailyUserQuota !== undefined && dailyUserQuota !== null) {
+        await deps.getVideoConfig(serverId);
+        await deps.updateVideoDailyUserQuota(serverId, dailyUserQuota);
+        appliedFields.push("daily_user_quota");
+      }
+      if (serverwideQuota !== undefined && serverwideQuota !== null) {
+        const currentConfig = await deps.getVideoConfig(serverId);
+        await deps.updateVideoServerwideQuota(
+          serverId,
+          serverwideQuota,
+          currentConfig.serverwide_quota_resets_in,
+          currentConfig.serverwide_quota,
+        );
+        appliedFields.push("serverwide_quota");
+      }
+      if (serverwideQuotaResetsIn !== undefined && serverwideQuotaResetsIn !== null) {
+        const currentConfig = await deps.getVideoConfig(serverId);
+        await deps.updateVideoServerwideResetDays(
+          serverId,
+          serverwideQuotaResetsIn,
+          currentConfig.serverwide_quota > 0,
+        );
+        appliedFields.push("serverwide_quota_resets_in");
+      }
+    }
+
+    return {
+      status: "success",
+      quotaType,
+      appliedFields,
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      quotaType,
+      error,
+    };
+  }
+}
+
 export interface ModerationOperations {
   updateMemberPermissions(
     input: UpdateMemberPermissionsInput,
@@ -1012,6 +1317,10 @@ export interface ModerationOperations {
     input: ReplacePersonaChannelWhitelistInput,
     deps?: ReplacePersonaChannelWhitelistDependencies,
   ): Promise<ReplacePersonaChannelWhitelistResult>;
+  updateQuotaSettings(
+    input: UpdateQuotaSettingsInput,
+    deps?: QuotaOperationsDependencies,
+  ): Promise<UpdateQuotaSettingsResult>;
 }
 
 export const moderationOperations: ModerationOperations = {
@@ -1025,4 +1334,5 @@ export const moderationOperations: ModerationOperations = {
   addWhitelistRole,
   removeWhitelistRole,
   replacePersonaChannelWhitelist,
+  updateQuotaSettings,
 };

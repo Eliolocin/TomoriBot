@@ -51,7 +51,7 @@ export default {
     text_serverwide_quota_exceeded_description: `This server has reached its text generation quota for this period. {reset_info}`,
     text_quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
     text_quota_resets_in_days: `Quota resets in {days} day(s).`,
-    text_quota_exceeded_footer: `This quota is configured by this server's managers via \`/server quota\`.`,
+    text_quota_exceeded_footer: `This quota is configured by this server's managers via \`/moderation\`.`,
     stream: {
       response_stopped_title: `Response Interrupted`,
       response_stopped_description: `The response was interrupted for the following reason: {reason}. Make sure that content sent is not too large for the AI provider to handle. Run \`/refresh\` to clear conversation content.`,

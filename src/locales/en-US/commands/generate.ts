@@ -46,7 +46,7 @@ export default {
       serverwide_quota_exceeded_description: `This server has reached its image generation quota for this period. {reset_info}`,
       quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
       quota_resets_in_days: `Quota resets in {days} day(s).`,
-      quota_exceeded_footer: `This quota is configured by this server's managers via \`/server quota\`.`,
+      quota_exceeded_footer: `This quota is configured by this server's managers via \`/moderation\`.`,
     },
     video: {
       description: `Generate an AI video using Google Veo, OpenRouter, or Z.ai`,
@@ -103,7 +103,7 @@ export default {
       serverwide_quota_exceeded_description: `This server has reached its video generation quota for this period. {reset_info}`,
       quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
       quota_resets_in_days: `Quota resets in {days} day(s).`,
-      quota_exceeded_footer: `This quota is configured by this server's managers via \`/server quota\`.`,
+      quota_exceeded_footer: `This quota is configured by this server's managers via \`/moderation\`.`,
     },
 
     scene: {

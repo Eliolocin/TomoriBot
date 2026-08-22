@@ -9,7 +9,7 @@ This document summarizes the current video generation stack.
 - User-facing generation entrypoint: `src/commands/generate/video.ts`
 - Admin model selection: `src/commands/model/video.ts`
 - Admin quota controls:
-  - `src/commands/server/quota/video-generation.ts`
+  - `src/commands/moderation.ts`
   - `src/commands/server/quota/reset.ts`
 - Capability/help exposure:
   - `src/commands/help/features.ts`
@@ -137,7 +137,7 @@ Defaults:
 
 Management commands:
 
-- `/server quota video-generation`
+- `/moderation` (Quotas page)
 - `/server quota reset`
 
 Reset behavior supports both:

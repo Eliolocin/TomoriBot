@@ -4,6 +4,7 @@ import { CooldownType } from "@/types/db/schema";
 import {
   buildMemberAccessModalFieldId,
   buildModerationCustomId,
+  buildQuotaModalFieldId,
   buildUserBlacklistAddModalFieldId,
   buildWhitelistChannelAddModalFieldId,
   buildWhitelistRoleAddModalFieldId,
@@ -14,6 +15,7 @@ import {
   buildModerationRemovalModal,
   buildModerationPanelPayload,
   buildPersonaChannelAddModal,
+  buildQuotaEditModal,
   buildUserBlacklistAddModal,
   buildWhitelistChannelAddModal,
   buildWhitelistRoleAddModal,
@@ -44,6 +46,11 @@ function createScopeData(overrides: Partial<ModerationScopeData> = {}): Moderati
       personaChannels: [],
       roles: [],
       personaNames: new Map([[1, "Tomori"]]),
+    },
+    quotas: {
+      image: { daily_user_quota: 5, serverwide_quota: 50, serverwide_quota_resets_in: 30 },
+      text: { daily_user_quota: 10, serverwide_quota: 100, serverwide_quota_resets_in: 7 },
+      video: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
     },
     ...overrides,
   };
@@ -1875,5 +1882,207 @@ describe("moderation bulk and persona modals", () => {
     expect(serialized).toContain('"value":"7"');
     expect(serialized).toContain('"type":8');
     expect(serialized).toContain(`"channel_types":[${ChannelType.GuildText}]`);
+  });
+});
+
+describe("moderationPanel Quotas surface and modals", () => {
+  it("encodes and decodes quota-edit-open and quota-edit-submit routes", () => {
+    const openCustomId = buildModerationCustomId("quota-edit-open", "en-US", "image");
+    expect(openCustomId).toBe("moderation:v1:quota-edit-open:en-US:image");
+    const openParsed = parseModerationPanelRoute({
+      namespace: "moderation",
+      version: "v1",
+      segments: ["quota-edit-open", "en-US", "image"],
+    });
+    expect(openParsed).toEqual({ action: "quota-edit-open", locale: "en-US", quotaType: "image" });
+
+    const submitCustomId = buildModerationCustomId("quota-edit-submit", "en-US", "text", "nonce_abc");
+    expect(submitCustomId).toBe("moderation:v1:quota-edit-submit:en-US:text:nonce_abc");
+    const submitParsed = parseModerationPanelRoute({
+      namespace: "moderation",
+      version: "v1",
+      segments: ["quota-edit-submit", "en-US", "text", "nonce_abc"],
+    });
+    expect(submitParsed).toEqual({
+      action: "quota-edit-submit",
+      locale: "en-US",
+      quotaType: "text",
+      nonce: "nonce_abc",
+    });
+  });
+
+  it("rejects unknown quota types and malformed nonces", () => {
+    expect(
+      parseModerationPanelRoute({
+        namespace: "moderation",
+        version: "v1",
+        segments: ["quota-edit-open", "en-US", "audio"],
+      }),
+    ).toBeNull();
+
+    expect(
+      parseModerationPanelRoute({
+        namespace: "moderation",
+        version: "v1",
+        segments: ["quota-edit-submit", "en-US", "text", "bad!nonce@"],
+      }),
+    ).toBeNull();
+  });
+
+  it("accepts quotas category with page none in category, range, and retry routes", () => {
+    const catParsed = parseModerationPanelRoute({
+      namespace: "moderation",
+      version: "v1",
+      segments: ["category", "en-US", "quotas"],
+    });
+    expect(catParsed).toEqual({ action: "category", locale: "en-US", category: "quotas" });
+
+    const rangeParsed = parseModerationPanelRoute({
+      namespace: "moderation",
+      version: "v1",
+      segments: ["range", "en-US", "quotas", "none", "0"],
+    });
+    expect(rangeParsed).toEqual({
+      action: "range",
+      locale: "en-US",
+      category: "quotas",
+      page: "none",
+      rangeIndex: 0,
+    });
+
+    const retryParsed = parseModerationPanelRoute({
+      namespace: "moderation",
+      version: "v1",
+      segments: ["retry", "en-US", "quotas", "none"],
+    });
+    expect(retryParsed).toEqual({
+      action: "retry",
+      locale: "en-US",
+      category: "quotas",
+      page: "none",
+    });
+  });
+
+  it("renders Quotas category with four top buttons and all three subsections with code spans", () => {
+    const scope = createScopeData({
+      quotas: {
+        image: { daily_user_quota: 5, serverwide_quota: 50, serverwide_quota_resets_in: 30 },
+        text: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+        video: { daily_user_quota: 2, serverwide_quota: 20, serverwide_quota_resets_in: 14 },
+      },
+    });
+
+    const payload = buildModerationPanelPayload({
+      locale: "en-US",
+      category: "quotas",
+      whitelistPage: "channels",
+      rangeIndex: 0,
+      data: scope,
+    });
+
+    const serialized = JSON.stringify(payload);
+    expect(serialized).toContain('"label":"Member Access"');
+    expect(serialized).toContain('"label":"User Blacklist"');
+    expect(serialized).toContain('"label":"Whitelist"');
+    expect(serialized).toContain('"label":"Quotas"');
+
+    expect(serialized).toContain("### Generation Quotas");
+    expect(serialized).toContain("**Image Generation**");
+    expect(serialized).toContain("> Daily per-user limit: `5`");
+    expect(serialized).toContain("> Server-wide limit: `50`");
+    expect(serialized).toContain("> Reset period: `30` days");
+
+    expect(serialized).toContain("**Text Generation**");
+    expect(serialized).toContain("> Daily per-user limit: Unlimited");
+    expect(serialized).toContain("> Server-wide limit: Unlimited");
+    expect(serialized).toContain("> Reset period: `365` days");
+
+    expect(serialized).toContain("**Video Generation**");
+    expect(serialized).toContain("> Daily per-user limit: `2`");
+    expect(serialized).toContain("> Server-wide limit: `20`");
+    expect(serialized).toContain("> Reset period: `14` days");
+
+    expect(serialized).toContain('"label":"Edit Text Quota"');
+    expect(serialized).toContain('"label":"Edit Image Quota"');
+    expect(serialized).toContain('"label":"Edit Video Quota"');
+
+    expect(serialized.indexOf("**Text Generation**")).toBeLessThan(serialized.indexOf("**Image Generation**"));
+    expect(serialized.indexOf("**Image Generation**")).toBeLessThan(serialized.indexOf("**Video Generation**"));
+    expect(serialized.indexOf('"label":"Edit Text Quota"')).toBeLessThan(
+      serialized.indexOf('"label":"Edit Image Quota"'),
+    );
+    expect(serialized.indexOf('"label":"Edit Image Quota"')).toBeLessThan(
+      serialized.indexOf('"label":"Edit Video Quota"'),
+    );
+  });
+
+  it("renders no-row defaults (0, 0, 365) as Unlimited and 365 days", () => {
+    const scope = createScopeData({
+      quotas: {
+        image: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+        text: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+        video: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+      },
+    });
+
+    const payload = buildModerationPanelPayload({
+      locale: "en-US",
+      category: "quotas",
+      whitelistPage: "channels",
+      rangeIndex: 0,
+      data: scope,
+    });
+
+    const serialized = JSON.stringify(payload);
+    expect(serialized).toContain("> Daily per-user limit: Unlimited");
+    expect(serialized).toContain("> Server-wide limit: Unlimited");
+    expect(serialized).toContain("> Reset period: `365` days");
+    expect(serialized).not.toContain("Daily per-user limit: `0`");
+    expect(serialized).not.toContain("Server-wide limit: `0`");
+  });
+
+  it("disables Edit buttons and displays stale warning when readStatus is stale", () => {
+    const scope = createScopeData({
+      readStatus: "stale",
+    });
+
+    const payload = buildModerationPanelPayload({
+      locale: "en-US",
+      category: "quotas",
+      whitelistPage: "channels",
+      rangeIndex: 0,
+      data: scope,
+    });
+
+    const serialized = JSON.stringify(payload);
+    expect(serialized).toContain("Saved data may be out of date because the read failed");
+    expect(serialized).toContain('"customId":"moderation:v1:retry:en-US:quotas:none"');
+    expect(serialized).toContain('"disabled":true');
+  });
+
+  it("builds quota edit modal with three Short Text Inputs prefilled with raw values", () => {
+    const modal = buildQuotaEditModal(
+      "en-US",
+      "image",
+      { daily_user_quota: 10, serverwide_quota: 500, serverwide_quota_resets_in: 30 },
+      "nonce_edit",
+    );
+
+    expect(modal.custom_id).toBe("moderation:v1:quota-edit-submit:en-US:image:nonce_edit");
+    expect(modal.title).toBe("Edit Image Quotas");
+    expect(modal.components).toHaveLength(3);
+
+    const serialized = JSON.stringify(modal);
+    expect(serialized).toContain('"type":4');
+    expect(serialized).toContain(`"custom_id":"${buildQuotaModalFieldId("nonce_edit", "daily_user_quota")}"`);
+    expect(serialized).toContain('"value":"10"');
+    expect(serialized).toContain(`"custom_id":"${buildQuotaModalFieldId("nonce_edit", "serverwide_quota")}"`);
+    expect(serialized).toContain('"value":"500"');
+    expect(serialized).toContain(`"custom_id":"${buildQuotaModalFieldId("nonce_edit", "serverwide_quota_resets_in")}"`);
+    expect(serialized).toContain('"value":"30"');
+
+    expect(serialized).toContain("0-100, 0 = unlimited");
+    expect(serialized).toContain("0-99999, 0 = unlimited");
+    expect(serialized).toContain("1-365");
   });
 });

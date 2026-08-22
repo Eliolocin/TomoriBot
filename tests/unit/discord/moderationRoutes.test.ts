@@ -14,6 +14,7 @@ import {
   executeModerationCommand,
   type ModerationRouteDependencies,
 } from "@/utils/discord/interactions/moderationRoutes";
+import { buildQuotaModalFieldId } from "@/utils/discord/moderationPanelCatalog";
 import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
 import { moderationOperations, type ModerationScopeData } from "@/utils/moderation/moderationOperations";
 import { initializeLocalizer } from "@/utils/text/localizer";
@@ -41,6 +42,11 @@ function createScopeData(overrides: Partial<ModerationScopeData> = {}): Moderati
       personaChannels: [],
       roles: [],
       personaNames: new Map(),
+    },
+    quotas: {
+      image: { daily_user_quota: 5, serverwide_quota: 50, serverwide_quota_resets_in: 30 },
+      text: { daily_user_quota: 10, serverwide_quota: 100, serverwide_quota_resets_in: 7 },
+      video: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
     },
     ...overrides,
   };
@@ -3328,5 +3334,338 @@ describe("moderation whitelist role routes", () => {
     expect(fetches).toBe(1);
     expect(writes).toBe(0);
     expect(JSON.stringify(edits.at(-1))).toContain("selected role is invalid");
+  });
+
+  describe("quota interaction routes", () => {
+    it("quota-edit-open denies permission when member lacks ManageGuild", async () => {
+      let modalOpened = false;
+      const replies: unknown[] = [];
+      const interaction = {
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        guildId: "guild-1",
+        memberPermissions: { has: () => false },
+        reply: async (payload: unknown) => {
+          replies.push(payload);
+        },
+      } as unknown as ButtonInteraction;
+
+      const route = createModerationInteractionRoute({
+        showQuotaEditModal: async () => {
+          modalOpened = true;
+        },
+      });
+
+      await route.execute({} as Client, interaction, {
+        namespace: "moderation",
+        version: "v1",
+        segments: ["quota-edit-open", "en-US", "image"],
+      });
+
+      expect(modalOpened).toBe(false);
+      expect(JSON.stringify(replies[0])).toContain("You need `Manage Server` permission");
+    });
+
+    it("quota-edit-open refuses non-fresh read status", async () => {
+      let modalOpened = false;
+      const replies: unknown[] = [];
+      const interaction = {
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        guildId: "guild-1",
+        memberPermissions: { has: () => true },
+        reply: async (payload: unknown) => {
+          replies.push(payload);
+        },
+      } as unknown as ButtonInteraction;
+
+      const route = createModerationInteractionRoute({
+        resolveScope: async () => createScopeData({ readStatus: "stale" }),
+        showQuotaEditModal: async () => {
+          modalOpened = true;
+        },
+      });
+
+      await route.execute({} as Client, interaction, {
+        namespace: "moderation",
+        version: "v1",
+        segments: ["quota-edit-open", "en-US", "image"],
+      });
+
+      expect(modalOpened).toBe(false);
+      expect(JSON.stringify(replies[0])).toContain("Moderation settings could not be loaded");
+    });
+
+    it("quota-edit-open opens modal with prefilled current quota values", async () => {
+      let capturedLocale = "";
+      let capturedQuotaType = "";
+      let capturedConfig: unknown = null;
+      let capturedNonce = "";
+
+      const interaction = {
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        guildId: "guild-1",
+        memberPermissions: { has: () => true },
+      } as unknown as ButtonInteraction;
+
+      const route = createModerationInteractionRoute({
+        resolveScope: async () =>
+          createScopeData({
+            quotas: {
+              image: { daily_user_quota: 15, serverwide_quota: 300, serverwide_quota_resets_in: 60 },
+              text: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+              video: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+            },
+          }),
+        createNonce: () => "nonce_quota_open",
+        showQuotaEditModal: async (_interaction, locale, quotaType, currentConfig, nonce) => {
+          capturedLocale = locale;
+          capturedQuotaType = quotaType;
+          capturedConfig = currentConfig;
+          capturedNonce = nonce;
+        },
+      });
+
+      await route.execute({} as Client, interaction, {
+        namespace: "moderation",
+        version: "v1",
+        segments: ["quota-edit-open", "en-US", "image"],
+      });
+
+      expect(capturedLocale).toBe("en-US");
+      expect(capturedQuotaType).toBe("image");
+      expect(capturedConfig).toEqual({ daily_user_quota: 15, serverwide_quota: 300, serverwide_quota_resets_in: 60 });
+      expect(capturedNonce).toBe("nonce_quota_open");
+    });
+
+    it("quota-edit-submit denies and does not write when permission is lost", async () => {
+      let writes = 0;
+      const edits: unknown[] = [];
+      const interaction = {
+        id: "modal-1",
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => true,
+        guildId: "guild-1",
+        memberPermissions: { has: () => false },
+        deferUpdate: async () => undefined,
+        editReply: async (payload: unknown) => {
+          edits.push(payload);
+        },
+        fields: {
+          getTextInputValue: (fieldId: string) => {
+            if (fieldId === buildQuotaModalFieldId("nonce_submit", "daily_user_quota")) return "10";
+            if (fieldId === buildQuotaModalFieldId("nonce_submit", "serverwide_quota")) return "100";
+            if (fieldId === buildQuotaModalFieldId("nonce_submit", "serverwide_quota_resets_in")) return "30";
+            return "";
+          },
+        },
+      } as unknown as ModalSubmitInteraction;
+
+      const route = createModerationInteractionRoute({
+        resolveScope: async () => createScopeData(),
+        operations: {
+          ...moderationOperations,
+          updateQuotaSettings: async () => {
+            writes++;
+            return { status: "success", quotaType: "image", appliedFields: ["daily_user_quota"] };
+          },
+        },
+      });
+
+      await route.execute({} as Client, interaction, {
+        namespace: "moderation",
+        version: "v1",
+        segments: ["quota-edit-submit", "en-US", "image", "nonce_submit"],
+      });
+
+      expect(writes).toBe(0);
+      expect(JSON.stringify(edits[0])).toContain("You need `Manage Server` permission");
+    });
+
+    it("quota-edit-submit validates bounds and refuses write on invalid values", async () => {
+      const testCases = [
+        { daily: "-1", serverwide: "100", resets: "30" },
+        { daily: "101", serverwide: "100", resets: "30" },
+        { daily: "10.5", serverwide: "100", resets: "30" },
+        { daily: "abc", serverwide: "100", resets: "30" },
+        { daily: "10", serverwide: "-5", resets: "30" },
+        { daily: "10", serverwide: "100000", resets: "30" },
+        { daily: "10", serverwide: "100", resets: "0" },
+        { daily: "10", serverwide: "100", resets: "366" },
+      ];
+
+      for (const testCase of testCases) {
+        let writes = 0;
+        const edits: unknown[] = [];
+        const interaction = {
+          id: "modal-val",
+          isButton: () => false,
+          isStringSelectMenu: () => false,
+          isModalSubmit: () => true,
+          guildId: "guild-1",
+          memberPermissions: { has: () => true },
+          deferUpdate: async () => undefined,
+          editReply: async (payload: unknown) => {
+            edits.push(payload);
+          },
+          fields: {
+            getTextInputValue: (fieldId: string) => {
+              if (fieldId === buildQuotaModalFieldId("nonce_val", "daily_user_quota")) return testCase.daily;
+              if (fieldId === buildQuotaModalFieldId("nonce_val", "serverwide_quota")) return testCase.serverwide;
+              if (fieldId === buildQuotaModalFieldId("nonce_val", "serverwide_quota_resets_in")) return testCase.resets;
+              return "";
+            },
+          },
+        } as unknown as ModalSubmitInteraction;
+
+        const route = createModerationInteractionRoute({
+          resolveScope: async () => createScopeData(),
+          operations: {
+            ...moderationOperations,
+            updateQuotaSettings: async () => {
+              writes++;
+              return { status: "success", quotaType: "image", appliedFields: [] };
+            },
+          },
+        });
+
+        await route.execute({} as Client, interaction, {
+          namespace: "moderation",
+          version: "v1",
+          segments: ["quota-edit-submit", "en-US", "image", "nonce_val"],
+        });
+
+        expect(writes).toBe(0);
+        expect(JSON.stringify(edits.at(-1))).toContain("submitted quota values are invalid");
+      }
+    });
+
+    it("quota-edit-submit performs no write and repaints unchanged receipt when submitted values match stored values", async () => {
+      let writes = 0;
+      const edits: unknown[] = [];
+      const interaction = {
+        id: "modal-unchanged",
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => true,
+        guildId: "guild-1",
+        memberPermissions: { has: () => true },
+        deferUpdate: async () => undefined,
+        editReply: async (payload: unknown) => {
+          edits.push(payload);
+        },
+        fields: {
+          getTextInputValue: (fieldId: string) => {
+            if (fieldId === buildQuotaModalFieldId("nonce_unchanged", "daily_user_quota")) return "5";
+            if (fieldId === buildQuotaModalFieldId("nonce_unchanged", "serverwide_quota")) return "50";
+            if (fieldId === buildQuotaModalFieldId("nonce_unchanged", "serverwide_quota_resets_in")) return "30";
+            return "";
+          },
+        },
+      } as unknown as ModalSubmitInteraction;
+
+      const route = createModerationInteractionRoute({
+        resolveScope: async () =>
+          createScopeData({
+            quotas: {
+              image: { daily_user_quota: 5, serverwide_quota: 50, serverwide_quota_resets_in: 30 },
+              text: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+              video: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+            },
+          }),
+        operations: {
+          ...moderationOperations,
+          updateQuotaSettings: async () => {
+            writes++;
+            return { status: "success", quotaType: "image", appliedFields: [] };
+          },
+        },
+      });
+
+      await route.execute({} as Client, interaction, {
+        namespace: "moderation",
+        version: "v1",
+        segments: ["quota-edit-submit", "en-US", "image", "nonce_unchanged"],
+      });
+
+      expect(writes).toBe(0);
+      expect(JSON.stringify(edits.at(-1))).toContain("quotas already current");
+      expect(JSON.stringify(edits.at(-1))).toContain("No write was needed");
+    });
+
+    it("quota-edit-submit calls updateQuotaSettings with parsed numbers and repaints success receipt", async () => {
+      let capturedInput: unknown = null;
+      let writes = 0;
+      let resolves = 0;
+      const edits: unknown[] = [];
+      const interaction = {
+        id: "modal-success",
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => true,
+        guildId: "guild-1",
+        memberPermissions: { has: () => true },
+        deferUpdate: async () => undefined,
+        editReply: async (payload: unknown) => {
+          edits.push(payload);
+        },
+        fields: {
+          getTextInputValue: (fieldId: string) => {
+            if (fieldId === buildQuotaModalFieldId("nonce_success", "daily_user_quota")) return "20";
+            if (fieldId === buildQuotaModalFieldId("nonce_success", "serverwide_quota")) return "500";
+            if (fieldId === buildQuotaModalFieldId("nonce_success", "serverwide_quota_resets_in")) return "14";
+            return "";
+          },
+        },
+      } as unknown as ModalSubmitInteraction;
+
+      const route = createModerationInteractionRoute({
+        resolveScope: async () => {
+          resolves++;
+          return createScopeData({
+            serverId: 42,
+            quotas: {
+              image: { daily_user_quota: 5, serverwide_quota: 50, serverwide_quota_resets_in: 30 },
+              text: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+              video: { daily_user_quota: 0, serverwide_quota: 0, serverwide_quota_resets_in: 365 },
+            },
+          });
+        },
+        operations: {
+          ...moderationOperations,
+          updateQuotaSettings: async (input) => {
+            writes++;
+            capturedInput = input;
+            return {
+              status: "success",
+              quotaType: input.quotaType,
+              appliedFields: ["daily_user_quota", "serverwide_quota", "serverwide_quota_resets_in"],
+            };
+          },
+        },
+      });
+
+      await route.execute({} as Client, interaction, {
+        namespace: "moderation",
+        version: "v1",
+        segments: ["quota-edit-submit", "en-US", "image", "nonce_success"],
+      });
+
+      expect(writes).toBe(1);
+      expect(resolves).toBe(2);
+      expect(capturedInput).toEqual({
+        serverId: 42,
+        quotaType: "image",
+        dailyUserQuota: 20,
+        serverwideQuota: 500,
+        serverwideQuotaResetsIn: 14,
+      });
+      expect(JSON.stringify(edits.at(-1))).toContain("Image Generation quotas updated");
+    });
   });
 });
