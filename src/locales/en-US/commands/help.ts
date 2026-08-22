@@ -311,7 +311,7 @@ Transcription supports ~100 languages (auto-detected).`,
 - Register emojis and stickers with \`/expressions initialize\` for higher accuracy`,
       documents_title: `Document Knowledge Base`,
       documents_description: `- Upload text, PDF, or Markdown files as server knowledge using \`/memory document add\`
-- Extract channel history into searchable knowledge with \`/memory history import\`
+- Extract channel history into searchable knowledge with \`/learn history\`
 - I retrieve and reference relevant document content when answering questions
 - I can also read file attachments shared directly in chat (PDF, source code, markdown, JSON, YAML, and more): just ask me to read it!
 - Requires an embedding model (configure with \`/model embedding\`)
@@ -712,7 +712,7 @@ Enter \`{project_id}::{location}\` using {configSetup} or {configApikeySet}
       documents_title: `Document Knowledge Base`,
       documents_description: `Server administrators can upload documents for me to reference:
 - Use \`/memory document add\` to upload text, PDF, or Markdown files
-- Use \`/memory history import\` to extract channel history into document memories
+- Use \`/learn history\` to extract channel history into document memories
 - Documents are chunked and stored as searchable embeddings
 - I automatically retrieve relevant content based on the conversation
 - Use \`/memory document remove\` or \`/memory history remove\` to remove stored documents
@@ -765,7 +765,7 @@ Unknown placeholders are stripped automatically.`,
       channels_title: `Channel Tags`,
       channels_description: `- Memories with \`#channel\` tags will activate only in that channel
 - Channel tags can be combined with keyword tags
-- If using RAG, channel tags can also be applied to documents (\`/memory document add\`) and extracted histories (\`/memory history import\`)`,
+- If using RAG, channel tags can also be applied to documents (\`/memory document add\`) and extracted histories (\`/learn history\`)`,
     },
     spotlight: {
       description: `Learn what personal spotlight does and how to use it`,

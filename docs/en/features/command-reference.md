@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **39**. Runnable slash commands: **222**.
+Top-level command groups: **40**. Runnable slash commands: **222**.
 
 ## `/capabilities`
 
@@ -131,6 +131,14 @@ Immediately stop the current stream and clear queued responses in this channel.
 |---|---|
 | `/kill` | Immediately stop the current stream and clear queued responses in this channel. |
 
+## `/learn`
+
+Learn, extract, and ingest conversation history into memory.
+
+| Command | Summary |
+|---|---|
+| `/learn history` | Extract knowledge from this channel's message history using AI. |
+
 ## `/legal`
 
 View TomoriBot's terms of service, privacy policy, and license.
@@ -167,7 +175,6 @@ Manage stored memories and documents.
 | `/memory document add` | Add a document to memory. |
 | `/memory document remove` | Remove a document from memory. |
 | `/memory document view` | Browse a stored document chunk by chunk, allowing you to edit or delete each chunk as well. |
-| `/memory history import` | Extract knowledge from this channel's message history using AI. |
 | `/memory history remove` | Remove a history-extracted document from memory. |
 | `/memory personal add` | Add a personal memory. |
 | `/memory personal edit` | Edit a personal memory. |

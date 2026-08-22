@@ -150,9 +150,9 @@ function buildFooter(params: {
   const { firstMessage, lastMessage, reachedEnd, guildId, channelId, locale } = params;
   const jumpLink = `https://discord.com/channels/${guildId ?? "@me"}/${channelId}/${lastMessage.id}`;
   const endStatusKey = reachedEnd
-    ? "commands.memory.history.import.end_status_reached_end"
-    : "commands.memory.history.import.end_status_more_available";
-  return localizer(locale, "commands.memory.history.import.success_footer", {
+    ? "commands.learn.history.end_status_reached_end"
+    : "commands.learn.history.end_status_more_available";
+  return localizer(locale, "commands.learn.history.success_footer", {
     first_unix: Math.floor(firstMessage.createdTimestamp / 1000).toString(),
     last_unix: Math.floor(lastMessage.createdTimestamp / 1000).toString(),
     last_message_id: lastMessage.id,
@@ -251,8 +251,8 @@ async function showNoFactsExtractedEmbed(
   footer: string,
 ): Promise<void> {
   await replaceHistoryImportStatus(statusTarget, locale, {
-    titleKey: "commands.memory.history.import.no_facts_extracted_title",
-    description: `${localizer(locale, "commands.memory.history.import.no_facts_extracted_description")}\n\n${footer}`,
+    titleKey: "commands.learn.history.no_facts_extracted_title",
+    description: `${localizer(locale, "commands.learn.history.no_facts_extracted_description")}\n\n${footer}`,
     color: ColorCode.WARN,
   });
 }
@@ -269,7 +269,7 @@ async function showExtractionFailedEmbed(
   footer: string,
   failure: { error: string; failedWindows: number; totalWindows: number },
 ): Promise<void> {
-  const headline = localizer(locale, "commands.memory.history.import.extraction_failed_description", {
+  const headline = localizer(locale, "commands.learn.history.extraction_failed_description", {
     failed_windows: failure.failedWindows.toString(),
     total_windows: failure.totalWindows.toString(),
   });
@@ -279,7 +279,7 @@ async function showExtractionFailedEmbed(
   const fenceOverhead = "\n\n```\n\n```".length;
   const detail = truncateForEmbedDescription(failure.error, headline.length + suffix.length + fenceOverhead);
   await replaceHistoryImportStatus(statusTarget, locale, {
-    titleKey: "commands.memory.history.import.extraction_failed_title",
+    titleKey: "commands.learn.history.extraction_failed_title",
     description: `${headline}\n\n\`\`\`\n${detail}\n\`\`\`${suffix}`,
     color: ColorCode.ERROR,
   });
@@ -307,30 +307,30 @@ async function showExtractionFailureTerminal(
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
-    .setName("import")
-    .setDescription(localizer("en-US", "commands.memory.history.import.description"))
+    .setName("history")
+    .setDescription(localizer("en-US", "commands.learn.history.description"))
     .addStringOption((option) =>
       option
         .setName("name")
-        .setDescription(localizer("en-US", "commands.memory.history.import.name_description"))
+        .setDescription(localizer("en-US", "commands.learn.history.name_description"))
         .setRequired(true)
         .setMaxLength(MAX_DOCUMENT_NAME_LENGTH),
     )
     .addStringOption((option) =>
       option
         .setName("scope")
-        .setDescription(localizer("en-US", "commands.memory.history.import.scope_description"))
+        .setDescription(localizer("en-US", "commands.learn.history.scope_description"))
         .addChoices(
           {
-            name: localizer("en-US", "commands.memory.history.import.scope_choice_persona"),
+            name: localizer("en-US", "commands.learn.history.scope_choice_persona"),
             value: "persona",
           },
           {
-            name: localizer("en-US", "commands.memory.history.import.scope_choice_automatic"),
+            name: localizer("en-US", "commands.learn.history.scope_choice_automatic"),
             value: "automatic",
           },
           {
-            name: localizer("en-US", "commands.memory.history.import.scope_choice_global"),
+            name: localizer("en-US", "commands.learn.history.scope_choice_global"),
             value: "global",
           },
         )
@@ -339,7 +339,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .addStringOption((option) =>
       option
         .setName("start_message_id")
-        .setDescription(localizer("en-US", "commands.memory.history.import.start_message_id_description"))
+        .setDescription(localizer("en-US", "commands.learn.history.start_message_id_description"))
         .setRequired(true)
         .setMinLength(15)
         .setMaxLength(25),
@@ -347,7 +347,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .addStringOption((option) =>
       option
         .setName("end_message_id")
-        .setDescription(localizer("en-US", "commands.memory.history.import.end_message_id_description"))
+        .setDescription(localizer("en-US", "commands.learn.history.end_message_id_description"))
         .setRequired(false)
         .setMinLength(15)
         .setMaxLength(25),
@@ -355,26 +355,26 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .addStringOption((option) =>
       option
         .setName("channels")
-        .setDescription(localizer("en-US", "commands.memory.history.import.channels_description"))
+        .setDescription(localizer("en-US", "commands.learn.history.channels_description"))
         .setRequired(false)
         .setMaxLength(200),
     )
     .addStringOption((option) =>
       option
         .setName("prompt")
-        .setDescription(localizer("en-US", "commands.memory.history.import.prompt_description"))
+        .setDescription(localizer("en-US", "commands.learn.history.prompt_description"))
         .setRequired(false)
         .addChoices(
           {
-            name: localizer("en-US", "commands.memory.history.import.prompt_choice_conversation"),
+            name: localizer("en-US", "commands.learn.history.prompt_choice_conversation"),
             value: "conversation",
           },
           {
-            name: localizer("en-US", "commands.memory.history.import.prompt_choice_roleplay"),
+            name: localizer("en-US", "commands.learn.history.prompt_choice_roleplay"),
             value: "roleplay",
           },
           {
-            name: localizer("en-US", "commands.memory.history.import.prompt_choice_in_character"),
+            name: localizer("en-US", "commands.learn.history.prompt_choice_in_character"),
             value: "in_character",
           },
         ),
@@ -382,7 +382,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .addIntegerOption((option) =>
       option
         .setName("limit")
-        .setDescription(localizer("en-US", "commands.memory.history.import.limit_description"))
+        .setDescription(localizer("en-US", "commands.learn.history.limit_description"))
         .setRequired(false)
         .setMinValue(50)
         .setMaxValue(100),
@@ -418,13 +418,13 @@ async function promptForExtractionSystem(
 
   const modalResult = await promptWithRawModal(host, locale, {
     modalCustomId: EXTRACTION_PROMPT_MODAL_ID,
-    modalTitleKey: "commands.memory.history.import.prompt_modal_title",
+    modalTitleKey: "commands.learn.history.prompt_modal_title",
     components: [
       {
         customId: EXTRACTION_PROMPT_FIELD_ID,
         style: TextInputStyle.Paragraph,
-        labelKey: "commands.memory.history.import.prompt_modal_label",
-        placeholder: "commands.memory.history.import.prompt_modal_placeholder",
+        labelKey: "commands.learn.history.prompt_modal_label",
+        placeholder: "commands.learn.history.prompt_modal_placeholder",
         required: false,
         maxLength: 4000,
         value: defaultPrompt,
@@ -499,7 +499,7 @@ async function fetchAndFormatMessages(params: {
   const { channel, startMessageId, endMessageId, limit, allPersonas, replyInteraction, locale } = params;
 
   await replaceHistoryImportStatus(replyInteraction, locale, {
-    descriptionKey: "commands.memory.history.import.progress_fetching",
+    descriptionKey: "commands.learn.history.progress_fetching",
     color: ColorCode.INFO,
   });
 
@@ -509,8 +509,8 @@ async function fetchAndFormatMessages(params: {
   const fetchResult = await fetchHistoryAfter(channel, startMessageId, effectiveLimit);
   if (fetchResult.messages.length === 0) {
     await replaceHistoryImportStatus(replyInteraction, locale, {
-      titleKey: "commands.memory.history.import.no_messages_title",
-      descriptionKey: "commands.memory.history.import.no_messages_description",
+      titleKey: "commands.learn.history.no_messages_title",
+      descriptionKey: "commands.learn.history.no_messages_description",
       color: ColorCode.WARN,
     });
     return null;
@@ -523,8 +523,8 @@ async function fetchAndFormatMessages(params: {
     const endIdx = messages.findIndex((m) => m.id === endMessageId);
     if (endIdx === -1) {
       await replaceHistoryImportStatus(replyInteraction, locale, {
-        titleKey: "commands.memory.history.import.end_too_far_title",
-        descriptionKey: "commands.memory.history.import.end_too_far_description",
+        titleKey: "commands.learn.history.end_too_far_title",
+        descriptionKey: "commands.learn.history.end_too_far_description",
         descriptionVars: { end_message_id: endMessageId },
         color: ColorCode.ERROR,
       });
@@ -590,8 +590,8 @@ async function createDocumentForImport(params: {
 
   if (await serverMemoryRepository.documentExistsByName(serverId, personaId, documentName)) {
     await replaceHistoryImportStatus(replyInteraction, locale, {
-      titleKey: "commands.memory.history.import.duplicate_title",
-      descriptionKey: "commands.memory.history.import.duplicate_description",
+      titleKey: "commands.learn.history.duplicate_title",
+      descriptionKey: "commands.learn.history.duplicate_description",
       descriptionVars: { name: documentName },
       color: ColorCode.ERROR,
     });
@@ -601,8 +601,8 @@ async function createDocumentForImport(params: {
   const docCount = await serverMemoryRepository.countDocumentsScoped(serverId, personaId);
   if (docCount >= memoryLimits.maxDocumentsPerServer) {
     await replaceHistoryImportStatus(replyInteraction, locale, {
-      titleKey: "commands.memory.history.import.limit_exceeded_title",
-      descriptionKey: "commands.memory.history.import.limit_exceeded_description",
+      titleKey: "commands.learn.history.limit_exceeded_title",
+      descriptionKey: "commands.learn.history.limit_exceeded_description",
       descriptionVars: {
         current_count: docCount.toString(),
         max_allowed: memoryLimits.maxDocumentsPerServer.toString(),
@@ -616,8 +616,8 @@ async function createDocumentForImport(params: {
   const currentChunkCount = await serverMemoryRepository.countChunksScoped(serverId, personaId);
   if (currentChunkCount >= memoryLimits.maxDocumentChunksPerServer) {
     await replaceHistoryImportStatus(replyInteraction, locale, {
-      titleKey: "commands.memory.history.import.server_chunk_limit_title",
-      descriptionKey: "commands.memory.history.import.server_chunk_limit_description",
+      titleKey: "commands.learn.history.server_chunk_limit_title",
+      descriptionKey: "commands.learn.history.server_chunk_limit_description",
       descriptionVars: {
         scope: scopeLabel,
         max_chunks: memoryLimits.maxDocumentChunksPerServer.toString(),
@@ -712,7 +712,7 @@ async function runIncrementalExtraction(params: {
 
   for (let i = 0; i < windows.length; i++) {
     await replaceHistoryImportStatus(replyInteraction, locale, {
-      descriptionKey: "commands.memory.history.import.progress_extracting",
+      descriptionKey: "commands.learn.history.progress_extracting",
       descriptionVars: {
         message_count: formattedResult.messageCount.toString(),
         current: (i + 1).toString(),
@@ -886,8 +886,8 @@ async function resolveHistoryImportRuntime(
     return {
       ok: false,
       notice: {
-        titleKey: "commands.memory.history.import.no_embedding_model_title",
-        descriptionKey: "commands.memory.history.import.no_embedding_model_description",
+        titleKey: "commands.learn.history.no_embedding_model_title",
+        descriptionKey: "commands.learn.history.no_embedding_model_description",
       },
     };
   }
@@ -896,8 +896,8 @@ async function resolveHistoryImportRuntime(
     return {
       ok: false,
       notice: {
-        titleKey: "commands.memory.history.import.no_embedding_model_title",
-        descriptionKey: "commands.memory.history.import.no_embedding_model_description",
+        titleKey: "commands.learn.history.no_embedding_model_title",
+        descriptionKey: "commands.learn.history.no_embedding_model_description",
       },
     };
   }
@@ -931,8 +931,8 @@ async function validateHistoryMessageRange(
     await channel.messages.fetch(startMessageId);
   } catch {
     return {
-      titleKey: "commands.memory.history.import.invalid_start_id_title",
-      descriptionKey: "commands.memory.history.import.invalid_start_id_description",
+      titleKey: "commands.learn.history.invalid_start_id_title",
+      descriptionKey: "commands.learn.history.invalid_start_id_description",
       descriptionVars: { start_message_id: startMessageId },
     };
   }
@@ -942,8 +942,8 @@ async function validateHistoryMessageRange(
     await channel.messages.fetch(endMessageId);
   } catch {
     return {
-      titleKey: "commands.memory.history.import.invalid_end_id_title",
-      descriptionKey: "commands.memory.history.import.invalid_end_id_description",
+      titleKey: "commands.learn.history.invalid_end_id_title",
+      descriptionKey: "commands.learn.history.invalid_end_id_description",
       descriptionVars: { end_message_id: endMessageId },
     };
   }
@@ -951,14 +951,14 @@ async function validateHistoryMessageRange(
   try {
     if (BigInt(endMessageId) <= BigInt(startMessageId)) {
       return {
-        titleKey: "commands.memory.history.import.end_not_after_start_title",
-        descriptionKey: "commands.memory.history.import.end_not_after_start_description",
+        titleKey: "commands.learn.history.end_not_after_start_title",
+        descriptionKey: "commands.learn.history.end_not_after_start_description",
       };
     }
   } catch {
     return {
-      titleKey: "commands.memory.history.import.invalid_end_id_title",
-      descriptionKey: "commands.memory.history.import.invalid_end_id_description",
+      titleKey: "commands.learn.history.invalid_end_id_title",
+      descriptionKey: "commands.learn.history.invalid_end_id_description",
       descriptionVars: { end_message_id: endMessageId },
     };
   }
@@ -996,8 +996,8 @@ export async function execute(
   try {
     if (!isRagAvailable()) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.memory.history.import.rag_disabled_title",
-        descriptionKey: "commands.memory.history.import.rag_disabled_description",
+        titleKey: "commands.shared.rag.disabled_title",
+        descriptionKey: "commands.shared.rag.disabled_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -1018,11 +1018,12 @@ export async function execute(
       return;
     }
 
-    const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
+    const isDMChannel = !interaction.guildId;
+    const hasManagePermission = isDMChannel || (interaction.memberPermissions?.has("ManageGuild") ?? false);
     if (!hasManagePermission) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.memory.history.import.no_permission_title",
-        descriptionKey: "commands.memory.history.import.no_permission_description",
+        titleKey: "commands.learn.history.no_permission_title",
+        descriptionKey: "commands.learn.history.no_permission_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -1049,8 +1050,8 @@ export async function execute(
 
     if (!tomoriState.llm.supports_structoutput) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.memory.history.import.model_incompatible_title",
-        descriptionKey: "commands.memory.history.import.model_incompatible_description",
+        titleKey: "commands.learn.history.model_incompatible_title",
+        descriptionKey: "commands.learn.history.model_incompatible_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -1084,8 +1085,8 @@ export async function execute(
     // reject global/automatic combinations rather than silently degrading.
     if (promptMode === "in_character" && scope !== "persona") {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.memory.history.import.in_character_scope_invalid_title",
-        descriptionKey: "commands.memory.history.import.in_character_scope_invalid_description",
+        titleKey: "commands.learn.history.in_character_scope_invalid_title",
+        descriptionKey: "commands.learn.history.in_character_scope_invalid_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -1152,13 +1153,13 @@ export async function execute(
                 : EXTRACTION_CONVERSATION_SYSTEM_PROMPT;
           const promptModalResult = await selection.openModal({
             modalCustomId: EXTRACTION_PROMPT_MODAL_ID,
-            modalTitleKey: "commands.memory.history.import.prompt_modal_title",
+            modalTitleKey: "commands.learn.history.prompt_modal_title",
             components: [
               {
                 customId: EXTRACTION_PROMPT_FIELD_ID,
                 style: TextInputStyle.Paragraph,
-                labelKey: "commands.memory.history.import.prompt_modal_label",
-                placeholder: "commands.memory.history.import.prompt_modal_placeholder",
+                labelKey: "commands.learn.history.prompt_modal_label",
+                placeholder: "commands.learn.history.prompt_modal_placeholder",
                 required: false,
                 maxLength: 4000,
                 value: defaultPrompt,
@@ -1199,7 +1200,7 @@ export async function execute(
             runtimeResult.runtime;
           const personaSystemPrompt =
             promptModalResult.phase.values[EXTRACTION_PROMPT_FIELD_ID]?.trim() || defaultPrompt;
-          const scopeLabel = localizer(locale, "commands.memory.history.import.scope_label_persona", {
+          const scopeLabel = localizer(locale, "commands.learn.history.scope_label_persona", {
             persona_name: selectedPersona.persona_nickname,
           });
           const fetchResult = await fetchAndFormatMessages({
@@ -1261,8 +1262,8 @@ export async function execute(
 
           if (fetchResult.formattedResult.messageCount === 0) {
             await replaceHistoryImportStatus(work.message, locale, {
-              titleKey: "commands.memory.history.import.no_extractable_content_title",
-              description: `${localizer(locale, "commands.memory.history.import.no_extractable_content_description")}\n\n${footer}`,
+              titleKey: "commands.learn.history.no_extractable_content_title",
+              description: `${localizer(locale, "commands.learn.history.no_extractable_content_description")}\n\n${footer}`,
               color: ColorCode.WARN,
             });
             return completePersonaWorkflow();
@@ -1304,8 +1305,8 @@ export async function execute(
           await finalizeDocumentContent(documentId, extractResult.allChunkText);
           invalidateTomoriStateCache(guildId);
           await replaceHistoryImportStatus(work.message, locale, {
-            titleKey: "commands.memory.history.import.success_title",
-            description: `${localizer(locale, "commands.memory.history.import.success_description", {
+            titleKey: "commands.learn.history.success_title",
+            description: `${localizer(locale, "commands.learn.history.success_description", {
               fact_count: extractResult.totalFactCount.toString(),
               message_count: fetchResult.formattedResult.messageCount.toString(),
               name: nameInput,
@@ -1332,7 +1333,7 @@ export async function execute(
     }
 
     if (scope === "global") {
-      const scopeLabel = localizer(locale, "commands.memory.history.import.scope_label_global");
+      const scopeLabel = localizer(locale, "commands.learn.history.scope_label_global");
 
       const promptModalResult = await promptForExtractionSystem(interaction, locale, promptMode);
       if (!promptModalResult) return;
@@ -1385,9 +1386,9 @@ export async function execute(
         await modalSubmitInteraction.editReply({
           embeds: [
             new EmbedBuilder()
-              .setTitle(localizer(locale, "commands.memory.history.import.no_extractable_content_title"))
+              .setTitle(localizer(locale, "commands.learn.history.no_extractable_content_title"))
               .setDescription(
-                `${localizer(locale, "commands.memory.history.import.no_extractable_content_description")}\n\n${footer}`,
+                `${localizer(locale, "commands.learn.history.no_extractable_content_description")}\n\n${footer}`,
               )
               .setColor(ColorCode.WARN),
           ],
@@ -1434,9 +1435,9 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(localizer(locale, "commands.memory.history.import.success_title"))
+            .setTitle(localizer(locale, "commands.learn.history.success_title"))
             .setDescription(
-              `${localizer(locale, "commands.memory.history.import.success_description", {
+              `${localizer(locale, "commands.learn.history.success_description", {
                 fact_count: extractResult.totalFactCount.toString(),
                 message_count: fetchResult.formattedResult.messageCount.toString(),
                 name: nameInput,
@@ -1506,9 +1507,9 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(localizer(locale, "commands.memory.history.import.no_extractable_content_title"))
+            .setTitle(localizer(locale, "commands.learn.history.no_extractable_content_title"))
             .setDescription(
-              `${localizer(locale, "commands.memory.history.import.no_extractable_content_description")}\n\n${footer}`,
+              `${localizer(locale, "commands.learn.history.no_extractable_content_description")}\n\n${footer}`,
             )
             .setColor(ColorCode.WARN),
         ],
@@ -1517,7 +1518,7 @@ export async function execute(
     }
 
     if (detectedTomoriIds.length === 0) {
-      const scopeLabel = localizer(locale, "commands.memory.history.import.scope_label_global");
+      const scopeLabel = localizer(locale, "commands.learn.history.scope_label_global");
 
       if (!(await reserveDocumentQuotaForImport(interaction.user.id, modalSubmitInteraction, locale))) return;
 
@@ -1558,9 +1559,9 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(localizer(locale, "commands.memory.history.import.success_title"))
+            .setTitle(localizer(locale, "commands.learn.history.success_title"))
             .setDescription(
-              `${localizer(locale, "commands.memory.history.import.success_automatic_global_fallback", {
+              `${localizer(locale, "commands.learn.history.success_automatic_global_fallback", {
                 name: nameInput,
               })}\n\n${footer}`,
             )
@@ -1619,10 +1620,8 @@ export async function execute(
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(localizer(locale, "commands.memory.history.import.duplicate_title"))
-            .setDescription(
-              localizer(locale, "commands.memory.history.import.duplicate_description", { name: nameInput }),
-            )
+            .setTitle(localizer(locale, "commands.learn.history.duplicate_title"))
+            .setDescription(localizer(locale, "commands.learn.history.duplicate_description", { name: nameInput }))
             .setColor(ColorCode.ERROR),
         ],
       });
@@ -1658,7 +1657,7 @@ export async function execute(
     invalidateTomoriStateCache(guildId);
 
     const personaResultLines = personaTargets.map(({ personaNickname, docName }) =>
-      localizer(locale, "commands.memory.history.import.success_automatic_persona_line", {
+      localizer(locale, "commands.learn.history.success_automatic_persona_line", {
         persona_name: personaNickname,
         doc_name: docName,
         chunk_count: extractResult.totalFactCount.toString(),
@@ -1668,9 +1667,9 @@ export async function execute(
     await modalSubmitInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(localizer(locale, "commands.memory.history.import.success_title"))
+          .setTitle(localizer(locale, "commands.learn.history.success_title"))
           .setDescription(
-            `${localizer(locale, "commands.memory.history.import.success_automatic_description", {
+            `${localizer(locale, "commands.learn.history.success_automatic_description", {
               fact_count: extractResult.totalFactCount.toString(),
               message_count: formattedResult.messageCount.toString(),
               persona_list: personaResultLines.join("\n"),

@@ -311,7 +311,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - \`/expressions initialize\`で絵文字とスタンプを登録すると精度が向上します`,
       documents_title: `ドキュメント知識庫`,
       documents_description: `- \`/memory document add\`でテキスト、PDF、Markdownファイルをサーバー知識としてアップロードできます
-- \`/memory history import\`でチャンネル履歴を検索可能な知識として抽出できます
+- \`/learn history\`でチャンネル履歴を検索可能な知識として抽出できます
 - 質問に答える際に、私は関連するドキュメント内容を取得して参照します
 - チャットで共有されたファイル添付（PDF、ソースコード、Markdown、JSON、YAMLなど）も直接読み取れます、読んでと頼むだけ！
 - 埋め込みモデルが必要です（\`/model embedding\`で設定）
@@ -716,7 +716,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       documents_title: `ドキュメント知識庫`,
       documents_description: `サーバー管理者は参照用のドキュメントをアップロードできます：
 - \`/memory document add\`でテキスト、PDF、Markdownファイルをアップロード
-- \`/memory history import\`でチャンネル履歴をドキュメント記憶として抽出
+- \`/learn history\`でチャンネル履歴をドキュメント記憶として抽出
 - ドキュメントは検索可能な埋め込みとして分割して保存されます
 - 会話に基づいて私は自動的に関連する内容を取得します
 - \`/memory document remove\`または\`/memory history remove\`で保存済みドキュメントを削除
@@ -769,7 +769,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       channels_title: `チャンネルタグ`,
       channels_description: `- \`#チャンネル\`タグが付いた記憶は、そのチャンネルでのみ有効になります
 - チャンネルタグはキーワードタグと組み合わせて使用できます
-- RAGを使用している場合、チャンネルタグはドキュメント（\`/memory document add\`）や履歴インポート（\`/memory history import\`）にも適用できます`,
+- RAGを使用している場合、チャンネルタグはドキュメント（\`/memory document add\`）や履歴インポート（\`/learn history\`）にも適用できます`,
     },
     spotlight: {
       description: `パーソナルスポットライトの仕組みと使い方を学ぶ`,

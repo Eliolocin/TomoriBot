@@ -51,40 +51,48 @@ export async function execute(
     return;
   }
 
-  const botMember = interaction.guild?.members.me;
-  if (!botMember || !interaction.guild) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "general.errors.unknown_error_title",
-      descriptionKey: "general.errors.unknown_error_description",
-      color: ColorCode.ERROR,
-    });
-    return;
+  const isDMChannel = !interaction.guildId;
+  const serverDiscId = interaction.guildId ?? interaction.user.id;
+
+  if (!isDMChannel) {
+    const botMember = interaction.guild?.members.me;
+    if (!botMember || !interaction.guild) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    // Get the guild channel (we know it exists from check above, but need type narrowing)
+    const guildChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
+
+    if (!("permissionsFor" in guildChannel)) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const permissions = guildChannel.permissionsFor(botMember);
+    if (
+      !permissions?.has(PermissionFlagsBits.ViewChannel) ||
+      !permissions?.has(PermissionFlagsBits.ReadMessageHistory)
+    ) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.channel_missing_permissions_title",
+        descriptionKey: "general.errors.channel_missing_permissions_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
   }
 
-  // Get the guild channel (we know it exists from check above, but need type narrowing)
-  const guildChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
-
-  if (!("permissionsFor" in guildChannel)) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "general.errors.unknown_error_title",
-      descriptionKey: "general.errors.unknown_error_description",
-      color: ColorCode.ERROR,
-    });
-    return;
-  }
-
-  const permissions = guildChannel.permissionsFor(botMember);
-  if (!permissions?.has(PermissionFlagsBits.ViewChannel) || !permissions?.has(PermissionFlagsBits.ReadMessageHistory)) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "general.errors.channel_missing_permissions_title",
-      descriptionKey: "general.errors.channel_missing_permissions_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const tomoriState = await personaRepository.loadState(interaction.guild.id);
+  const tomoriState = await personaRepository.loadState(serverDiscId);
   if (!tomoriState) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
@@ -103,7 +111,7 @@ export async function execute(
 
   // Uses whitelist-aware version to respect per-channel cooldown overrides
   const cooldownResult = await cooldownRepository.checkMessageTriggerCooldownWithWhitelist(
-    interaction.guild.id,
+    serverDiscId,
     interaction.user.id,
     interaction.channel.id,
     cooldownType,
@@ -137,11 +145,10 @@ export async function execute(
     return;
   }
 
-  const allPersonas = await personaRepository.loadAllForServer(interaction.guild.id);
-  const isThread = "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread();
-  const parentChannelId = isThread && "parent" in guildChannel ? guildChannel.parent?.id : undefined;
+  const allPersonas = await personaRepository.loadAllForServer(serverDiscId);
+  const parentChannelId = interaction.channel.isThread() ? interaction.channel.parent?.id : undefined;
   const whitelistStatus = await getCachedWhitelistStatus(
-    interaction.guild.id,
+    serverDiscId,
     interaction.channel.id,
     invokingMember?.roles.cache.map((role) => role.id),
     parentChannelId,
@@ -398,7 +405,7 @@ export async function execute(
     // Set cooldown after successful response (shares cooldown pool with message triggers)
     // Uses whitelist-aware version to respect per-channel cooldown overrides
     await cooldownRepository.setMessageTriggerCooldownWithWhitelist(
-      interaction.guild.id,
+      serverDiscId,
       interaction.user.id,
       interaction.channel.id,
       cooldownType,

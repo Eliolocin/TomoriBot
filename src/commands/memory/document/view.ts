@@ -917,8 +917,8 @@ export async function execute(
   try {
     if (!isRagAvailable()) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.memory.history.import.rag_disabled_title",
-        descriptionKey: "commands.memory.history.import.rag_disabled_description",
+        titleKey: "commands.shared.rag.disabled_title",
+        descriptionKey: "commands.shared.rag.disabled_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });

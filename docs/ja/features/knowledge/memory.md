@@ -71,13 +71,13 @@ TomoriBotは永続的なメモリーシステムを備えているため、会�
 **埋め込みモデルが必要です**。`/model embedding` で設定します。[プロバイダーとモデル](/ja/features/setup-administration/providers-and-models/)を参照してください：
 
 - `/memory document add`：テキスト、PDF、またはMarkdownファイルをサーバーの知識としてアップロードします。`scope` オプションで、このペルソナだけに紐づけるか（デフォルト）、すべてのペルソナが参照できる `serverwide` にするかを選べます。上記の個人/サーバーの記憶と同じペルソナ分離の仕組みです。
-- `/memory history import`：チャンネルの履歴を検索可能な知識として抽出します。
+- `/learn history`：チャンネルの履歴を検索可能な知識として抽出します。
 - `/memory document view`：保存されたドキュメントをチャンクごとに閲覧します。サーバー管理者はドキュメント全体を削除することなく、個々のチャンクの編集、ドキュメントのチャンネルタグの更新、単一チャンクの削除を行えます。
-- 保存されたドキュメントは `/memory document remove` で削除できます。`/memory history remove` は `/memory history import` で作成されたドキュメントのみを一覧表示するフィルター付きショートカットです。
+- 保存されたドキュメントは `/memory document remove` で削除できます。`/memory history remove` は `/learn history` で作成されたドキュメントのみを一覧表示するフィルター付きショートカットです。
 
 #### 履歴インポートのプロンプト
 
-チャンネル履歴を `/memory history import` でインポートする際、`prompt` オプションによってTomoriBotの記憶抽出方法が変化します：
+チャンネル履歴を `/learn history` でインポートする際、`prompt` オプションによってTomoriBotの記憶抽出方法が変化します：
 
 - **Conversation**：通常のチャットから独立した事実を抽出します。代名詞を解決し、日付や時間が明示的または推測可能な場合は絶対タイムスタンプを使用します。
 - **Roleplay**：細かな動きをすべて残そうとするのではなく、シーン、ロア（伝承・設定）、人間関係、印象的な出来事を検索します。

@@ -232,14 +232,7 @@ export async function execute(
   }
 
   const allPersonas = await personaRepository.loadAllForServer(serverDiscId);
-  const parentChannelId =
-    !isDMChannel &&
-    "isThread" in interaction.channel &&
-    typeof (interaction.channel as unknown as { isThread: () => boolean; parent?: { id: string } }).isThread ===
-      "function" &&
-    (interaction.channel as unknown as { isThread: () => boolean; parent?: { id: string } }).isThread()
-      ? (interaction.channel as unknown as { isThread: () => boolean; parent?: { id: string } }).parent?.id
-      : undefined;
+  const parentChannelId = interaction.channel.isThread() ? interaction.channel.parent?.id : undefined;
   const whitelistStatus = await getCachedWhitelistStatus(
     serverDiscId,
     interaction.channel.id,

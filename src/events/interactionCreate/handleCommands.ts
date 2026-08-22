@@ -33,6 +33,13 @@ const COOLDOWN_MAP = new Map<string, number>([
       10,
     ),
   ],
+  [
+    "learn",
+    Number.parseInt(
+      process.env.COOLDOWN_MEMORY || process.env.COOLDOWN_TEACH || process.env.COOLDOWN_FORGET || "3000",
+      10,
+    ),
+  ],
   ["server", Number.parseInt(process.env.COOLDOWN_SERVER || "3000", 10)],
   ["personal", Number.parseInt(process.env.COOLDOWN_PERSONAL || "3000", 10)],
   ["scheduled-task", Number.parseInt(process.env.COOLDOWN_PERSONAL || "3000", 10)],

@@ -106,16 +106,16 @@ Server admins can give her documents to reference using RAG. Documents are chunk
   `scope` option picks whether it's tied to just this persona (the default) or `serverwide`
   for every persona to reference, the same persona-isolation split as personal/server memories
   above.
-- `/memory history import`: extract channel history into searchable knowledge.
+- `/learn history`: extract channel history into searchable knowledge.
 - `/memory document view`: browse stored documents chunk by chunk. Server admins can
   edit individual chunks, update document channel tags, or delete a single chunk without
   removing the whole document.
 - Remove any stored document with `/memory document remove`. `/memory history remove` is
-  a filtered shortcut that only lists documents created by `/memory history import`.
+  a filtered shortcut that only lists documents created by `/learn history`.
 
 #### History Import Prompts
 
-When importing channel history with `/memory history import`, the `prompt` option changes how TomoriBot extracts
+When importing channel history with `/learn history`, the `prompt` option changes how TomoriBot extracts
 memories:
 
 - **Conversation** extracts standalone facts from normal chat. It resolves pronouns and uses absolute timestamps when dates or times are mentioned or can be inferred.

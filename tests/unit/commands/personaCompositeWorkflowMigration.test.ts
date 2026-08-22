@@ -18,7 +18,7 @@ function selectedCallback(source: string): string {
 
 describe("composite persona workflow migrations", () => {
   it("keeps history-import persona progress and results on the anchor controller", () => {
-    const source = readSource("src/commands/memory/history/import.ts");
+    const source = readSource("src/commands/learn/history.ts");
     const personaMarker = source.indexOf("// SCOPE: PERSONA");
     const personaStart = source.indexOf('if (scope === "persona")', personaMarker);
     const globalStart = source.indexOf('if (scope === "global")', personaStart);
@@ -66,7 +66,7 @@ describe("composite persona workflow migrations", () => {
 
   it("contains none of the retired low-level picker boilerplate", () => {
     for (const relativePath of [
-      "src/commands/memory/history/import.ts",
+      "src/commands/learn/history.ts",
       "src/commands/memory/server/vectorize.ts",
       "src/commands/persona/sprites/remove.ts",
     ]) {

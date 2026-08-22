@@ -1,6 +1,7 @@
 // locales/ja/commands.ts
 // Assembler: edit the individual files in commands/ instead.
 
+import learn from "./commands/learn";
 import speech from "./commands/speech";
 import choices from "./commands/choices";
 import stPreset from "./commands/st-preset";
@@ -48,6 +49,7 @@ import compact from "./commands/compact";
 
 export default {
   commands: {
+    ...learn,
     ...speech,
     ...choices,
     ...stPreset,
