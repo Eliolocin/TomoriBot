@@ -408,7 +408,7 @@ export async function execute(
   }
 
   // Footer shows who triggered the scene, mirroring the executor identity pattern
-  //    in /bot impersonate (guild member avatar, falling back to the global user avatar).
+  //    in /impersonate user (guild member avatar, falling back to the global user avatar).
   const executorAvatarUrl = invokingMember
     ? invokingMember.displayAvatarURL({ size: 64, extension: "png", forceStatic: true })
     : interaction.user.displayAvatarURL({ size: 64, extension: "png", forceStatic: true });

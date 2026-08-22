@@ -317,7 +317,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - 埋め込みモデルが必要です（\`/model embedding\`で設定）
 - \`/memory document remove\`と\`/memory history remove\`で保存済みドキュメントを削除できます`,
       impersonation_title: `なりきり＆ツール`,
-      impersonation_description: `- \`/bot impersonate\`で自分自身、ペルソナ、またはシステムメッセージとしてメッセージを送信できます
+      impersonation_description: `- \`/impersonate\`で自分自身、ペルソナ、またはシステムメッセージとしてメッセージを送信できます
 - \`/personal impersonate prompt\`でユーザーなりきり用の再利用プロンプトを設定できます
 - \`/compact\`で会話履歴を要約したりロールプレイで圧縮できます
 - \`/respond\`でボットから定型文や案内付きメッセージを送信できます`,

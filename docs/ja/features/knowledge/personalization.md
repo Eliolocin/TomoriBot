@@ -56,7 +56,7 @@ TomoriBotは、`/personal`コマンドを使用して**あなた専用**に設�
 - `/personal privacy`：トモリに対する可視性を制御します。**完全な不可視**（メモリー機能を完全にオプトアウト）まで設定可能です。
 - `/personal dtm`：[意図的トリガーモード](/ja/features/chatting-personality/chatting-and-triggers/#意図的トリガーモード)の個人用の上書き設定です。
 - `/personal stm`：サーバー間の短期記憶の共有をオプトインします。`/personal stm clear`でSTMを消去します。
-- `/personal impersonate prompt`：トモリが`/bot impersonate`であなたを模倣する際の再利用可能なプロンプトを設定します。
+- `/personal impersonate prompt`：トモリが`/impersonate user`であなたを模倣する際の再利用可能なプロンプトを設定します。
   
 ## パーソナルスポットライト
 

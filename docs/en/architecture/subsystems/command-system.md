@@ -985,7 +985,7 @@ and field IDs carry bounded random nonces, and submission returns through the gl
 than an invocation-scoped modal collector, so a supported open modal can survive a process restart.
 Bare `/mcps` is the only registered MCP path; the legacy `mcp` subcommand tree no longer exists.
 
-- `bot`: respond, generate(image/scene), kill, impersonate
+- `bot`: respond, generate(image/scene), kill
 - `config`: setup, model(text/image/embedding/video/vision/speech/transcription), api-key(rotation), provider(add/remove), custom-endpoint(add/edit/remove), image-tags(default-positive/default-negative), system-prompt(set/remove/preset), context-note(set), params(*), timezone, message-fetch-limit, self-debug, model-randomizer, workarounds, bot-permissions -> tool-use(toggle/manage), notice-embeds(visibility)
 - `speech`: elevenlabs, voice-add, voice-remove, voice-assign, transcripts, chatterbox(parameters)
 - `nsfw`: jailbreaks

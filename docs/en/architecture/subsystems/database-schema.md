@@ -269,7 +269,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 
 ### User personalization
 
-- `user_personalization_configs.impersonation_prompt` stores the global user-owned prompt used during `/bot impersonate` user impersonation replies.
+- `user_personalization_configs.impersonation_prompt` stores the global user-owned prompt used during `/impersonate user` user impersonation replies.
 - `user_personalization_configs.personal_dtm` stores the user-scoped deliberate trigger tri-state.
 - `user_personalization_configs.shortterm_cache_crossserver_opt_in` stores the cross-server short-term memory sharing opt-in.
 

@@ -114,14 +114,12 @@ export function parseLeadingRenderModifier(
 }
 
 /**
- * Parses a leading sprite modifier for `/bot impersonate persona`, where the persona is already
- * fixed by the command's modal selection: unlike {@link parseLeadingRenderModifier}, the source
+ * Parses a leading sprite modifier for `/impersonate persona`, where the persona is already
+ * fixed by the command's autocomplete option: unlike {@link parseLeadingRenderModifier}, the source
  * name is optional. Accepts both "PersonaName (modifier): body" (delegated to the named parser)
  * and the bare "(modifier): body" shape, since repeating the already-selected persona's name is
  * redundant in this context. Callers still gate on an actual sprite match before treating the
  * text as decorated; text that fails that lookup falls through to plain, unmodified content.
- *
- * @param personaName - Nickname of the persona already selected in the impersonation modal
  */
 export function parseLeadingImpersonationSpriteModifier(
   text: string,

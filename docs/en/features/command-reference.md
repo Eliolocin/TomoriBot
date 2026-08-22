@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **40**. Runnable slash commands: **223**.
+Top-level command groups: **40**. Runnable slash commands: **222**.
 
 ## `/bot`
 
@@ -21,7 +21,6 @@ commands.bot.description
 |---|---|
 | `/bot generate image` | Generate a quick scene image from the ongoing channel context. |
 | `/bot generate scene` | Generate a short scripted text scene between selected personas. |
-| `/bot impersonate` | Impersonate personas, users, or inject system prompts. |
 
 ## `/capabilities`
 

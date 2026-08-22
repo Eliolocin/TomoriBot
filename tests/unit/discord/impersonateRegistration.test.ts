@@ -65,7 +65,7 @@ describe("/impersonate root registration", () => {
     expect((systemPromptOption as any)?.max_length).toBe(2000);
   }, 30000);
 
-  it("preserves the /bot impersonate bridge", async () => {
+  it("ensures /bot no longer contains the impersonate bridge", async () => {
     const { registrationData } = await loadCommandData();
     const bot = registrationData.find((c) => c.name === "bot");
 
@@ -73,6 +73,6 @@ describe("/impersonate root registration", () => {
     const bridge = bot?.options?.find(
       (o: import("discord.js").APIApplicationCommandOption) => o.name === "impersonate",
     );
-    expect(bridge).toBeDefined();
+    expect(bridge).toBeUndefined();
   }, 30000);
 });

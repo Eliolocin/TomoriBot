@@ -104,7 +104,7 @@ providers apply across every server you use her in.
 - `/personal stm` — opt into cross-server short-term memory sharing;
   `/personal stm clear` wipes your STM.
 - `/personal impersonate prompt` — set a reusable prompt for when she impersonates you via
-  `/bot impersonate`.
+  `/impersonate user`.
   
 ## Personal Spotlight
 

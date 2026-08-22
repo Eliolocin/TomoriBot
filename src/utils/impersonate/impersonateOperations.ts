@@ -1,4 +1,4 @@
-import type { ChatInputCommandInteraction, Client, ModalSubmitInteraction } from "discord.js";
+import type { ChatInputCommandInteraction, Client } from "discord.js";
 import { MessageFlags, EmbedBuilder } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { ColorCode, log } from "@/utils/misc/logger";
@@ -33,13 +33,7 @@ import { getCachedUserRow } from "@/utils/cache/userCache";
 import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
 import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/persona/personaAccess";
 
-/**
- * The `/bot impersonate` bridge submits a modal, so these operations receive a
- * ModalSubmitInteraction there and a ChatInputCommandInteraction from `/impersonate *`.
- * They touch only members both types share, which is what makes the union safe; adding a
- * chat-input-only call such as `options.getString` would break the bridge path at runtime.
- */
-type ImpersonationInteraction = ChatInputCommandInteraction | ModalSubmitInteraction;
+type ImpersonationInteraction = ChatInputCommandInteraction;
 
 export async function executePersonaImpersonation(
   client: Client,

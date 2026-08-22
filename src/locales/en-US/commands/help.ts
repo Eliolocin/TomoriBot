@@ -317,7 +317,7 @@ Transcription supports ~100 languages (auto-detected).`,
 - Requires an embedding model (configure with \`/model embedding\`)
 - Remove uploaded or history-extracted documents with \`/memory document remove\` and \`/memory history remove\``,
       impersonation_title: `Impersonation & Tools`,
-      impersonation_description: `- Use \`/bot impersonate\` to send messages as yourself, a persona, or inject system messages
+      impersonation_description: `- Use \`/impersonate\` to send messages as yourself, a persona, or inject system messages
 - Set a reusable user-impersonation prompt with \`/personal impersonate prompt\`
 - \`/compact\` can summarize or roleplay-compress conversation history
 - \`/respond\` to trigger prefilled or guided messages from the bot`,

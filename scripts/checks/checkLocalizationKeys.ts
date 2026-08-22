@@ -349,9 +349,6 @@ function getLocalizationAliases(key: string): string[] {
   const aliases: string[] = [];
 
   const staticAliases: Record<string, string> = {
-    // Bridge-scoped mirror of COMMAND_LOCALIZATION_ALIASES; remove with the bridge.
-    "commands.bot.impersonate.description": "commands.impersonate.description",
-    "commands.bot.impersonate.target_description": "commands.impersonate.target_description",
     "commands.memory.description": "commands.teach.memory.description",
     "commands.conditioning.reward.description": "commands.reward.description",
     "commands.conditioning.punish.description": "commands.punish.description",

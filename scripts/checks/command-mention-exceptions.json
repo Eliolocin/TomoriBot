@@ -2,18 +2,6 @@
   "_notes": "Slash paths that appear in locale prose but are not registered Discord commands. Keep this list small; each entry must document why prose names a path Discord does not expose. Three legitimate classes exist: external HTTP API routes, a command path followed by one of its option names, and a deliberately truncated path prefix naming a family.",
   "exceptions": [
     {
-      "path": "bot impersonate me",
-      "reason": "Names a choice value of the /bot impersonate target option, not a subcommand. Becomes a real subcommand when /impersonate is redesigned; drop this entry then."
-    },
-    {
-      "path": "bot impersonate persona",
-      "reason": "Names a choice value of the /bot impersonate target option, not a subcommand. Becomes a real subcommand when /impersonate is redesigned; drop this entry then."
-    },
-    {
-      "path": "bot impersonate user",
-      "reason": "Names a choice value of the /bot impersonate target option, not a subcommand. Becomes a real subcommand when /impersonate is redesigned; drop this entry then."
-    },
-    {
       "path": "category group subcommand",
       "reason": "Placeholder in architecture guide for command group"
     },
