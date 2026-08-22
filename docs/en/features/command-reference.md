@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **41**. Runnable slash commands: **213**.
+Top-level command groups: **42**. Runnable slash commands: **214**.
 
 ## `/capabilities`
 
@@ -370,6 +370,15 @@ Punish me with playful interactions.
 | `/punish spank` | Give me a playful spank! |
 | `/punish squeeze` | Give me a squeeze! |
 
+## `/quota`
+
+Manage generation quota resets.
+
+| Command | Summary |
+|---|---|
+| `/quota reset global` | Reset the server-wide generation quota pool. |
+| `/quota reset user` | Reset daily quota usage for a user. |
+
 ## `/refresh`
 
 Clear conversation history (this channel only).
@@ -427,7 +436,6 @@ Manage server-wide settings, channels, permissions, and integrations.
 | `/server deliberate-tool-trigger` | Manage custom trigger phrases for deliberate tool mode. |
 | `/server deliberate-trigger-mode` | Toggle deliberate trigger mode (DTM) for this server. |
 | `/server private-channels` | Manage private channels where STMs are isolated and thought logs are suppressed |
-| `/server quota reset` | Reset a quota pool for image, text, or video generation. |
 | `/server rp-channels` | Manage channels where emojis and stickers are always suppressed and `/tool delete turn` is available |
 | `/server stm categories-edit` | Define up to 5 labeled STM categories the bot fills via tool calls. |
 | `/server stm manage` | Review and clear active server-shared STMs across personas. |

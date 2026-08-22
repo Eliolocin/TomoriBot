@@ -10,7 +10,8 @@ This document summarizes the current video generation stack.
 - Admin model selection: `src/commands/model/video.ts`
 - Admin quota controls:
   - `src/commands/moderation.ts`
-  - `src/commands/server/quota/reset.ts`
+  - `src/commands/quota/reset/global.ts`
+  - `src/commands/quota/reset/user.ts`
 - Capability/help exposure:
   - `src/commands/help/features.ts`
   - `src/tools/functionCalls/reviewCapabilities.ts`
@@ -138,7 +139,7 @@ Defaults:
 Management commands:
 
 - `/moderation` (Quotas page)
-- `/server quota reset`
+- `/quota reset`
 
 Reset behavior supports both:
 

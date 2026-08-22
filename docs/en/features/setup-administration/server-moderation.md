@@ -14,7 +14,7 @@ Server** permission. This page covers the highlights; every command is in the
 Generation costs money (yours or your members'). Quotas cap usage per user and server-wide:
 
 - `/moderation` → **Quotas**: configure daily per-user limits and resetting server-wide pools for text, image, and video generation.
-- `/server quota reset`: manually reset a user or server pool.
+- `/quota reset`: manually reset a user or server pool.
 
 Set a per-user limit to `0` for unlimited. Server-wide pools reset on a configurable day
 interval.

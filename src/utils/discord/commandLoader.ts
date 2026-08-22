@@ -114,6 +114,7 @@ const GUILD_ONLY_CATEGORIES: string[] = [
   "punish",
   "reward",
   "impersonate",
+  "quota",
 ];
 // Categories that require manage permissions in guild context
 const MANAGER_ONLY_CATEGORIES = [
@@ -127,6 +128,7 @@ const MANAGER_ONLY_CATEGORIES = [
   "server",
   "expressions",
   "matrix",
+  "quota",
 ];
 
 const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {

@@ -33,7 +33,8 @@ describe("Wave 3 moderation registration restrictions", () => {
 
     expect(moderation.contexts).toEqual([0]);
     expect(moderation.default_member_permissions).toBe(String(PermissionsBitField.Flags.ManageGuild));
-    expect(executionMap.get("moderation")?.has(ROOT_COMMAND_EXECUTION_KEY)).toBe(true);
+    // Quotas moved into this panel as a page, not as a subcommand, so the root stays bare.
+    expect([...(executionMap.get("moderation")?.keys() ?? [])]).toEqual([ROOT_COMMAND_EXECUTION_KEY]);
   });
 
   it("keeps surviving /server commands guild-only and manager-only", async () => {
