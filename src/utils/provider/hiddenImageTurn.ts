@@ -68,10 +68,10 @@ export interface HiddenImageTurnParams {
   /** Discord text channel to read history from and post the image to. */
   channel: ToolContext["channel"];
   client: Client;
-  guild: Guild;
+  guild: Guild | null;
   tomoriState: TomoriState;
   locale: string;
-  /** Discord ID of the user who invoked the /bot generate image command. */
+  /** Discord ID of the user who invoked the /tool visualize command. */
   interactingUserId: string;
   /** Internal database user ID of the invoking user, if known. */
   internalUserId?: number | null;
@@ -118,6 +118,7 @@ export interface HiddenImageTurnParams {
  *          `{ success: false, error: "…" }` with a human-readable reason.
  */
 export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise<{ success: boolean; error?: string }> {
+  const serverDiscId = params.guild?.id ?? params.interactingUserId;
   const {
     channel,
     client,
@@ -207,7 +208,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
   const channelName = "name" in channel ? channel.name : "Unknown Channel";
   const channelDesc = "topic" in channel ? (channel as unknown as { topic: string | null }).topic : null;
 
-  const interactingMember = guild.members.cache.get(interactingUserId);
+  const interactingMember = guild?.members.cache.get(interactingUserId);
   const triggererName = stripBridgePrefix(interactingMember?.displayName ?? interactingUserId);
 
   let contextItems: StructuredContextItem[];
@@ -223,10 +224,10 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
     const channelPromptOverride = tomoriState.server_id
       ? await getCachedChannelPrompt(tomoriState.server_id, channel.id)
       : null;
-    const personas = await getCachedAllPersonas(guild.id).catch(() => [tomoriState]);
+    const personas = await getCachedAllPersonas(serverDiscId).catch(() => [tomoriState]);
     const preparedParticipantContext = await prepareParticipantContext({
       client,
-      guildId: guild.id,
+      guildId: serverDiscId,
       simplifiedMessageHistory: simplifiedMessages,
       personas,
       activePersona: tomoriState,
@@ -236,9 +237,9 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
     });
 
     const contextBuild = await buildContext({
-      guildId: guild.id,
-      serverName: guild.name,
-      serverDescription: guild.description ?? null,
+      guildId: serverDiscId,
+      serverName: guild?.name ?? "Direct Message",
+      serverDescription: guild?.description ?? null,
       simplifiedMessageHistory: simplifiedMessages,
       preparedParticipantContext,
       channelDesc,
@@ -262,7 +263,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
   } catch (error) {
     log.error("Hidden image agent: buildContext failed", error as Error, {
       errorType: "HiddenImageAgentContextError",
-      metadata: { guildId: guild.id, channelId: channel.id },
+      metadata: { guildId: serverDiscId, channelId: channel.id },
     });
     return {
       success: false,
@@ -361,13 +362,13 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
     client,
     userId: interactingUserId,
     internalUserId: internalUserId ?? undefined,
-    guildId: guild.id,
+    guildId: serverDiscId,
     tomoriState,
     locale,
     provider: provider.getInfo().name,
     streamContext: streamingContext,
     suppressProgressNotices: true, // Keep the hidden turn quiet
-    // Persona identity for webhook-based image posting (set by /bot generate image).
+    // Persona identity for webhook-based image posting (set by /tool visualize).
     // When absent, the image tool falls back to a direct bot message.
     webhook,
     personaUsername,

@@ -58,7 +58,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     );
 
 /**
- * Configure cooldown type and length for message triggers and /bot commands.
+ * Configure cooldown type and length for message triggers and manual commands.
  */
 export async function execute(
   _client: Client,

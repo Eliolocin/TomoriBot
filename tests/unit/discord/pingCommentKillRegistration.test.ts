@@ -53,14 +53,11 @@ describe("/ping, /comment, /kill registration", () => {
     expect((toolSubcommands?.size ?? 0) > 0).toBe(true);
   });
 
-  it("removes the old /bot kill leaf while /bot keeps its other members", async () => {
+  it("ensures /bot no longer exists", async () => {
     const { executionMap, registrationData } = await loadCommandData();
     const names = registrationData.map((command) => command.name);
-    expect(names).toContain("bot");
-
+    expect(names).not.toContain("bot");
     const botSubcommands = executionMap.get("bot");
-    expect(botSubcommands).toBeDefined();
-    expect(botSubcommands?.has("kill")).toBe(false);
-    expect((botSubcommands?.size ?? 0) > 0).toBe(true);
+    expect(botSubcommands).toBeUndefined();
   });
 });

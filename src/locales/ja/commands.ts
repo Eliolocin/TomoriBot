@@ -10,7 +10,6 @@ import persona from "./commands/persona";
 import help from "./commands/help";
 import legal from "./commands/legal";
 import novelai from "./commands/novelai";
-import bot from "./commands/bot";
 import impersonate from "./commands/impersonate";
 import conditioning from "./commands/conditioning";
 import reward from "./commands/reward";
@@ -58,7 +57,6 @@ export default {
     ...help,
     ...legal,
     ...novelai,
-    ...bot,
     ...impersonate,
     ...conditioning,
     ...reward,

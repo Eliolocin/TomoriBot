@@ -963,9 +963,9 @@ export async function updatePersonaWebhooksAvatar(
 
 export async function resolvePersonaWebhookIdentity(
   persona: TomoriState,
-  guild: Guild,
+  guild: Guild | null,
 ): Promise<ResolvedWebhookIdentity> {
-  const identity = await resolvePersonaAvatarIdentity(persona, guild);
+  const identity = await resolvePersonaAvatarIdentity(persona, guild ?? undefined);
 
   if (!persona.is_alter && !identity.avatarUrl && !identity.avatarDataUri) {
     const fallbackAvatarUrl = resolvePersonaAvatarURL(persona, guild);
@@ -1129,7 +1129,7 @@ export async function sendUserTranscriptViaWebhook(
  *
  * @returns Avatar URL string, or undefined to use webhook default
  */
-export function resolvePersonaAvatarURL(persona: TomoriState, guild: Guild): string | undefined {
+export function resolvePersonaAvatarURL(persona: TomoriState, guild: Guild | null | undefined): string | undefined {
   const validateAvatarURL = (avatarReference: string): string | undefined => {
     const resolvedUrl = resolvePersonaAvatarPublicUrl(avatarReference);
     if (!resolvedUrl) {
@@ -1148,7 +1148,7 @@ export function resolvePersonaAvatarURL(persona: TomoriState, guild: Guild): str
   }
 
   if (!persona.is_alter) {
-    const memberAvatar = guild.members.me?.displayAvatarURL({
+    const memberAvatar = guild?.members.me?.displayAvatarURL({
       extension: "png",
       size: 256,
       forceStatic: true,

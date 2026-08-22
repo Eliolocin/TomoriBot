@@ -26,16 +26,16 @@ import { localizer } from "@/utils/text/localizer";
 import { buildSceneTextQuotaTriggerKey, buildSceneTurnDirective } from "@/utils/chat/sceneTurn";
 import type { SceneTurnMetadata, SceneTurnSpeaker } from "@/utils/chat/types";
 
-const MODAL_CUSTOM_ID = "bot_generate_scene_modal";
-const CHARACTER_1_INPUT_ID = "bot_generate_scene_character_1";
-const CHARACTER_2_INPUT_ID = "bot_generate_scene_character_2";
-const CHARACTER_3_INPUT_ID = "bot_generate_scene_character_3";
-const CYCLES_INPUT_ID = "bot_generate_scene_cycles";
-const INSTRUCTIONS_INPUT_ID = "bot_generate_scene_instructions";
+const MODAL_CUSTOM_ID = "generate_scene_modal";
+const CHARACTER_1_INPUT_ID = "generate_scene_character_1";
+const CHARACTER_2_INPUT_ID = "generate_scene_character_2";
+const CHARACTER_3_INPUT_ID = "generate_scene_character_3";
+const CYCLES_INPUT_ID = "generate_scene_cycles";
+const INSTRUCTIONS_INPUT_ID = "generate_scene_instructions";
 const MAX_PERSONA_SELECT_OPTIONS = 25;
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("scene").setDescription(localizer("en-US", "commands.bot.generate.scene.description"));
+  subcommand.setName("scene").setDescription(localizer("en-US", "commands.generate.scene.description"));
 
 function parsePositiveIntegerEnv(value: string | undefined, defaultValue: number, minimum: number): number {
   if (!value) return defaultValue;
@@ -44,7 +44,14 @@ function parsePositiveIntegerEnv(value: string | undefined, defaultValue: number
 }
 
 function getMaxCycles(): number {
-  return parsePositiveIntegerEnv(process.env.BOT_GENERATE_SCENE_MAX_CYCLES, 10, 1);
+  // BOT_GENERATE_SCENE_MAX_CYCLES is the name operators already have set from when this
+  // command lived at /bot generate scene, so it stays readable: dropping it would silently
+  // return a tuned deployment to the default of 10.
+  return parsePositiveIntegerEnv(
+    process.env.GENERATE_SCENE_MAX_CYCLES ?? process.env.BOT_GENERATE_SCENE_MAX_CYCLES,
+    10,
+    1,
+  );
 }
 
 function getPersonaOptions(personas: TomoriState[], locale: string) {
@@ -56,8 +63,8 @@ function getPersonaOptions(personas: TomoriState[], locale: string) {
       description: localizer(
         locale,
         persona.is_alter
-          ? "commands.bot.generate.scene.modal.alter_persona_description"
-          : "commands.bot.generate.scene.modal.main_persona_description",
+          ? "commands.generate.scene.modal.alter_persona_description"
+          : "commands.generate.scene.modal.main_persona_description",
       ),
     }));
 }
@@ -118,18 +125,7 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  if (!interaction.guild || !interaction.channel || !("messages" in interaction.channel)) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "general.errors.guild_only_title",
-      descriptionKey: "general.errors.guild_only_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const botMember = interaction.guild.members.me;
-  if (!botMember) {
+  if (!interaction.channel || !("messages" in interaction.channel)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",
@@ -139,38 +135,55 @@ export async function execute(
     return;
   }
 
-  const guildChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
-  if (!("permissionsFor" in guildChannel)) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "general.errors.unknown_error_title",
-      descriptionKey: "general.errors.unknown_error_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
+  const isDMChannel = !interaction.guildId;
+  const serverDiscId = interaction.guildId ?? interaction.user.id;
+
+  if (!isDMChannel) {
+    const botMember = interaction.guild?.members.me;
+    if (!botMember) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const guildChannel = interaction.guild?.channels.cache.get(interaction.channel.id) ?? interaction.channel;
+    if (!("permissionsFor" in guildChannel)) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const permissions = guildChannel.permissionsFor(botMember);
+    const isThread =
+      "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread();
+    const canSendMessages = isThread
+      ? permissions?.has(PermissionFlagsBits.SendMessagesInThreads)
+      : permissions?.has(PermissionFlagsBits.SendMessages);
+
+    if (
+      !permissions?.has(PermissionFlagsBits.ViewChannel) ||
+      !permissions?.has(PermissionFlagsBits.ReadMessageHistory) ||
+      !canSendMessages
+    ) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.generate.scene.missing_permissions_title",
+        descriptionKey: "commands.generate.scene.missing_permissions_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
   }
 
-  const permissions = guildChannel.permissionsFor(botMember);
-  const isThread = "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread();
-  const canSendMessages = isThread
-    ? permissions?.has(PermissionFlagsBits.SendMessagesInThreads)
-    : permissions?.has(PermissionFlagsBits.SendMessages);
-
-  if (
-    !permissions?.has(PermissionFlagsBits.ViewChannel) ||
-    !permissions?.has(PermissionFlagsBits.ReadMessageHistory) ||
-    !canSendMessages
-  ) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.bot.generate.scene.missing_permissions_title",
-      descriptionKey: "commands.bot.generate.scene.missing_permissions_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const tomoriState = await personaRepository.loadState(interaction.guild.id);
+  const tomoriState = await personaRepository.loadState(serverDiscId);
   if (!tomoriState) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
@@ -184,7 +197,7 @@ export async function execute(
   const invokingMember = interaction.member as GuildMember | null;
   const cooldownType = tomoriState.config.cooldown_type ?? CooldownType.OFF;
   const cooldownResult = await cooldownRepository.checkMessageTriggerCooldownWithWhitelist(
-    interaction.guild.id,
+    serverDiscId,
     interaction.user.id,
     interaction.channel.id,
     cooldownType,
@@ -195,7 +208,7 @@ export async function execute(
     if (cooldownResult.blockedByWhitelist) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.message_cooldown_title",
-        descriptionKey: "commands.bot.generate.scene.channel_not_whitelisted",
+        descriptionKey: "commands.generate.scene.channel_not_whitelisted",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -206,7 +219,7 @@ export async function execute(
       interaction.user,
       locale,
       "general.message_cooldown_title",
-      "commands.bot.generate.scene.cooldown_active",
+      "commands.generate.scene.cooldown_active",
       {
         seconds: cooldownResult.remainingSeconds.toString(),
         botName: tomoriState.persona_nickname,
@@ -218,10 +231,17 @@ export async function execute(
     return;
   }
 
-  const allPersonas = await personaRepository.loadAllForServer(interaction.guild.id);
-  const parentChannelId = isThread && "parent" in guildChannel ? guildChannel.parent?.id : undefined;
+  const allPersonas = await personaRepository.loadAllForServer(serverDiscId);
+  const parentChannelId =
+    !isDMChannel &&
+    "isThread" in interaction.channel &&
+    typeof (interaction.channel as unknown as { isThread: () => boolean; parent?: { id: string } }).isThread ===
+      "function" &&
+    (interaction.channel as unknown as { isThread: () => boolean; parent?: { id: string } }).isThread()
+      ? (interaction.channel as unknown as { isThread: () => boolean; parent?: { id: string } }).parent?.id
+      : undefined;
   const whitelistStatus = await getCachedWhitelistStatus(
-    interaction.guild.id,
+    serverDiscId,
     interaction.channel.id,
     invokingMember?.roles.cache.map((role) => role.id),
     parentChannelId,
@@ -239,8 +259,8 @@ export async function execute(
 
   if (availablePersonas.length < 2) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.bot.generate.scene.not_enough_personas_title",
-      descriptionKey: "commands.bot.generate.scene.not_enough_personas_description",
+      titleKey: "commands.generate.scene.not_enough_personas_title",
+      descriptionKey: "commands.generate.scene.not_enough_personas_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -249,8 +269,8 @@ export async function execute(
 
   if (availablePersonas.length > MAX_PERSONA_SELECT_OPTIONS) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.bot.generate.scene.too_many_personas_title",
-      descriptionKey: "commands.bot.generate.scene.too_many_personas_description",
+      titleKey: "commands.generate.scene.too_many_personas_title",
+      descriptionKey: "commands.generate.scene.too_many_personas_description",
       descriptionVars: {
         count: String(availablePersonas.length),
         max: String(MAX_PERSONA_SELECT_OPTIONS),
@@ -267,8 +287,8 @@ export async function execute(
   const latestMessage = fetchedMessages.first();
   if (!latestMessage) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.bot.generate.scene.no_messages_title",
-      descriptionKey: "commands.bot.generate.scene.no_messages_description",
+      titleKey: "commands.generate.scene.no_messages_title",
+      descriptionKey: "commands.generate.scene.no_messages_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -282,37 +302,37 @@ export async function execute(
     locale,
     {
       modalCustomId: MODAL_CUSTOM_ID,
-      modalTitleKey: "commands.bot.generate.scene.modal.title",
+      modalTitleKey: "commands.generate.scene.modal.title",
       components: [
         {
           customId: CHARACTER_1_INPUT_ID,
-          labelKey: "commands.bot.generate.scene.modal.character_1_label",
-          descriptionKey: "commands.bot.generate.scene.modal.character_description",
-          placeholder: localizer(locale, "commands.bot.generate.scene.modal.character_placeholder"),
+          labelKey: "commands.generate.scene.modal.character_1_label",
+          descriptionKey: "commands.generate.scene.modal.character_description",
+          placeholder: localizer(locale, "commands.generate.scene.modal.character_placeholder"),
           required: true,
           options: personaOptions,
         },
         {
           customId: CHARACTER_2_INPUT_ID,
-          labelKey: "commands.bot.generate.scene.modal.character_2_label",
-          descriptionKey: "commands.bot.generate.scene.modal.character_description",
-          placeholder: localizer(locale, "commands.bot.generate.scene.modal.character_placeholder"),
+          labelKey: "commands.generate.scene.modal.character_2_label",
+          descriptionKey: "commands.generate.scene.modal.character_description",
+          placeholder: localizer(locale, "commands.generate.scene.modal.character_placeholder"),
           required: true,
           options: personaOptions,
         },
         {
           customId: CHARACTER_3_INPUT_ID,
-          labelKey: "commands.bot.generate.scene.modal.character_3_label",
-          descriptionKey: "commands.bot.generate.scene.modal.character_3_description",
-          placeholder: localizer(locale, "commands.bot.generate.scene.modal.character_3_placeholder"),
+          labelKey: "commands.generate.scene.modal.character_3_label",
+          descriptionKey: "commands.generate.scene.modal.character_3_description",
+          placeholder: localizer(locale, "commands.generate.scene.modal.character_3_placeholder"),
           required: false,
           options: personaOptions,
         },
         {
           customId: CYCLES_INPUT_ID,
-          labelKey: "commands.bot.generate.scene.modal.cycles_label",
-          descriptionKey: "commands.bot.generate.scene.modal.cycles_description",
-          placeholder: localizer(locale, "commands.bot.generate.scene.modal.cycles_placeholder", {
+          labelKey: "commands.generate.scene.modal.cycles_label",
+          descriptionKey: "commands.generate.scene.modal.cycles_description",
+          placeholder: localizer(locale, "commands.generate.scene.modal.cycles_placeholder", {
             max: String(maxCycles),
           }),
           required: true,
@@ -322,9 +342,9 @@ export async function execute(
         },
         {
           customId: INSTRUCTIONS_INPUT_ID,
-          labelKey: "commands.bot.generate.scene.modal.instructions_label",
-          descriptionKey: "commands.bot.generate.scene.modal.instructions_description",
-          placeholder: localizer(locale, "commands.bot.generate.scene.modal.instructions_placeholder"),
+          labelKey: "commands.generate.scene.modal.instructions_label",
+          descriptionKey: "commands.generate.scene.modal.instructions_description",
+          placeholder: localizer(locale, "commands.generate.scene.modal.instructions_placeholder"),
           required: false,
           maxLength: 1000,
           style: TextInputStyle.Paragraph,
@@ -349,8 +369,8 @@ export async function execute(
 
   if (!speakers) {
     await replyInfoEmbed(modalInteraction, locale, {
-      titleKey: "commands.bot.generate.scene.invalid_personas_title",
-      descriptionKey: "commands.bot.generate.scene.invalid_personas_description",
+      titleKey: "commands.generate.scene.invalid_personas_title",
+      descriptionKey: "commands.generate.scene.invalid_personas_description",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -360,8 +380,8 @@ export async function execute(
   const cycles = parseCycleCount(modalResult.values?.[CYCLES_INPUT_ID]);
   if (!cycles || cycles < 1 || cycles > maxCycles) {
     await replyInfoEmbed(modalInteraction, locale, {
-      titleKey: "commands.bot.generate.scene.invalid_cycles_title",
-      descriptionKey: "commands.bot.generate.scene.invalid_cycles_description",
+      titleKey: "commands.generate.scene.invalid_cycles_title",
+      descriptionKey: "commands.generate.scene.invalid_cycles_description",
       descriptionVars: { max: String(maxCycles) },
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
@@ -373,7 +393,7 @@ export async function execute(
     if (!isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, speaker.personaId)) {
       await replyInfoEmbed(modalInteraction, locale, {
         titleKey: "general.message_cooldown_title",
-        descriptionKey: "commands.bot.generate.scene.persona_access_blocked",
+        descriptionKey: "commands.generate.scene.persona_access_blocked",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -393,15 +413,15 @@ export async function execute(
 
   const speakingOrder = speakers.map((speaker) => speaker.personaName).join(" → ");
   const descriptionLines = [
-    localizer(locale, "commands.bot.generate.scene.success_order_line", { order: speakingOrder }),
-    localizer(locale, "commands.bot.generate.scene.success_rounds_line", {
+    localizer(locale, "commands.generate.scene.success_order_line", { order: speakingOrder }),
+    localizer(locale, "commands.generate.scene.success_rounds_line", {
       rounds: String(cycles),
       turns: String(sequence.length),
     }),
   ];
   if (additionalInstructions) {
     descriptionLines.push(
-      localizer(locale, "commands.bot.generate.scene.success_instructions_line", {
+      localizer(locale, "commands.generate.scene.success_instructions_line", {
         instructions: additionalInstructions,
       }),
     );
@@ -416,11 +436,11 @@ export async function execute(
   await modalInteraction.reply({
     embeds: [
       new EmbedBuilder()
-        .setTitle(localizer(locale, "commands.bot.generate.scene.success_title"))
+        .setTitle(localizer(locale, "commands.generate.scene.success_title"))
         .setDescription(descriptionLines.join("\n"))
         .setColor(ColorCode.SUCCESS)
         .setFooter({
-          text: localizer(locale, "commands.bot.generate.scene.success_footer", {
+          text: localizer(locale, "commands.generate.scene.success_footer", {
             user: interaction.user.username,
           }),
           iconURL: executorAvatarUrl,
@@ -429,7 +449,7 @@ export async function execute(
   });
 
   log.info(
-    `[/bot generate scene] Starting scene in channel ${interaction.channel.id}: ${sequence
+    `[/generate scene] Starting scene in channel ${interaction.channel.id}: ${sequence
       .map((speaker) => speaker.personaName)
       .join(" -> ")}`,
   );

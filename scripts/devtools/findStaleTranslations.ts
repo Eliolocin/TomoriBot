@@ -79,7 +79,7 @@ function isIntentionallySharedTranslation(key: string, value: string): boolean {
     return true;
   }
 
-  if (key === "commands.bot.generate.image.modal.backend_novelai_label") {
+  if (key === "commands.tool.visualize.modal.backend_novelai_label") {
     return true;
   }
 

@@ -11,16 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **40**. Runnable slash commands: **222**.
-
-## `/bot`
-
-commands.bot.description
-
-| Command | Summary |
-|---|---|
-| `/bot generate image` | Generate a quick scene image from the ongoing channel context. |
-| `/bot generate scene` | Generate a short scripted text scene between selected personas. |
+Top-level command groups: **39**. Runnable slash commands: **222**.
 
 ## `/capabilities`
 
@@ -111,6 +102,7 @@ Generate AI images and videos.
 | Command | Summary |
 |---|---|
 | `/generate image` | Generate an AI image using Google Gemini or OpenRouter |
+| `/generate scene` | Generate a short scripted text scene between selected personas. |
 | `/generate video` | Generate an AI video using Google Veo, OpenRouter, or Z.ai |
 
 ## `/help`
@@ -413,7 +405,7 @@ Manage server-wide settings, channels, permissions, and integrations.
 | `/server config export` | Export this server's settings, excluding memories, personas, and personal settings. |
 | `/server config import` | Import server settings. Does not import memories, personas, or personal settings. |
 | `/server config remove` | Reset this server's configuration. |
-| `/server cooldown triggers` | Set cooldown type and duration for triggers and /bot (defaults: off, 5s). |
+| `/server cooldown triggers` | Set cooldown type and duration for triggers and manual commands (defaults: off, 5s). |
 | `/server crosschannel-blocklist` | Manage the channel blocklist for tool-driven cross-channel messages |
 | `/server deliberate-tool-context` | Set how many following turns keep recently used tools available. |
 | `/server deliberate-tool-mode` | Toggle deliberate tool mode for this server. |
@@ -506,6 +498,7 @@ Utility actions for conversation context, prompts, and diagnostics.
 | `/tool estimate cost` | Estimate API costs for paid AI providers |
 | `/tool prompt snapshot` | Dump the exact LLM prompt for a persona to a file for debugging. |
 | `/tool status` | Show current personal, server, or persona status. |
+| `/tool visualize` | Generate a quick scene image from the ongoing channel context. |
 
 ## `/update`
 

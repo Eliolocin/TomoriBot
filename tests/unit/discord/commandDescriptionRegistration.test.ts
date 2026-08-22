@@ -9,9 +9,8 @@ const UNRESOLVED_LOCALE_KEY_PATTERN = /^commands\.[a-zA-Z0-9_.-]+$/;
 
 /**
  * Known unresolved descriptions scheduled for dissolution in the current wave.
- * - "bot": The /bot root is being dissolved across Wave 1; delete this entry when /bot is removed.
  */
-const DISSOLUTION_ALLOWLIST = new Set<string>(["bot"]);
+const DISSOLUTION_ALLOWLIST = new Set<string>();
 
 type OffendingDescription = {
   path: string;
@@ -78,13 +77,5 @@ describe("Command description resolution gate", () => {
     const offending = collectUnresolvedDescriptions(registrationData);
 
     expect(offending).toEqual([]);
-  });
-
-  it("fails when an allowlisted path is checked without the allowlist", async () => {
-    const { registrationData } = await loadCommandData();
-    const offendingWithoutAllowlist = collectUnresolvedDescriptions(registrationData, new Set());
-
-    const offendingPaths = offendingWithoutAllowlist.map((item) => item.path);
-    expect(offendingPaths).toContain("bot");
   });
 });

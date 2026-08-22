@@ -457,7 +457,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
     cooldown: {
       description: `クールダウンの管理`,
       triggers: {
-        description: `トリガーと /bot のクールダウンを設定します（デフォルト: オフ、5秒）。`,
+        description: `トリガーと手動コマンドのクールダウンを設定します（デフォルト: オフ、5秒）。`,
         cooldown_type_description: `クールダウン適用方法（デフォルト: オフ、ユーザーごと等）。`,
         cooldown_length_description: `クールダウン時間（秒、1-86400、デフォルト: 5）。`,
         invalid_type_title: `無効なクールダウンタイプ`,
@@ -467,9 +467,9 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         already_set_title: `既に設定済み`,
         already_set_description: `クールダウン設定は既に **{type}**（**{length}** 秒）です。`,
         success_title: `クールダウンを更新しました`,
-        success_description: `クールダウンを **{previous_type}**（**{previous_length}** 秒）から **{type}**（**{length}** 秒）に更新しました。これはメッセージトリガーと \`/bot\` コマンドの両方に適用されます。`,
+        success_description: `クールダウンを **{previous_type}**（**{previous_length}** 秒）から **{type}**（**{length}** 秒）に更新しました。これはメッセージトリガーと手動コマンドの両方に適用されます。`,
         success_disabled_title: `クールダウンが無効化されました`,
-        success_disabled_description: `クールダウンを **{previous_type}**（**{previous_length}** 秒）から **{type}**（**{length}** 秒）に更新しました。メッセージトリガーと \`/bot\` コマンドのクールダウンは現在 **無効** です。`,
+        success_disabled_description: `クールダウンを **{previous_type}**（**{previous_length}** 秒）から **{type}**（**{length}** 秒）に更新しました。メッセージトリガーと手動コマンドのクールダウンは現在 **無効** です。`,
         type: {
           choice_off: `オフ`,
           choice_per_user: `ユーザーごと`,

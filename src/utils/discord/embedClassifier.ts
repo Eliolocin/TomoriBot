@@ -119,7 +119,7 @@ export function checkTargetEmbedTitle(embedTitle: string | null | undefined): Ta
 
     // Scene-generation status embed: surfaced to the LLM so it knows a scripted
     //     scene is underway and can read the speaking order / instructions as context.
-    if (embedTitle === localizer(supportedLocale, "commands.bot.generate.scene.success_title")) {
+    if (embedTitle === localizer(supportedLocale, "commands.generate.scene.success_title")) {
       return { isTarget: true, type: "scene_directive" };
     }
 

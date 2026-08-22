@@ -95,11 +95,11 @@ function serializeToTypeScript(obj: unknown, indent = 0): string {
 
 interface LocaleSlice {
   filePath: string;
-  /** Path relative to src/locales/, e.g. "en-US/commands/bot.ts" */
+  /** Path relative to src/locales/, e.g. "en-US/commands/tool.ts" */
   relPath: string;
   /**
    * The locale key segment that the parent assembler adds above this file's exports.
-   * For files in a subdirectory (e.g. commands/bot.ts) this is the dir name ("commands").
+   * For files in a subdirectory (e.g. commands/tool.ts) this is the dir name ("commands").
    * For top-level files (e.g. general.ts) this is "": the file's own export keys are root-level.
    */
   keyPrefix: string;
@@ -196,7 +196,7 @@ async function main(): Promise<void> {
   log.info(`Loaded ${slices.length} leaf slice files`);
 
   // For each unused key, find the matching slice(s) and delete the sub-path.
-  //    A key like "commands.bot.generate.description" maps to sub-path "bot.generate.description"
+  //    A key like "commands.tool.visualize.description" maps to sub-path "tool.visualize.description"
   //    in the slice whose keyPrefix is "commands".
   //    A key like "general.defaults.bot_name" maps to sub-path "general.defaults.bot_name"
   //    in the top-level slice with keyPrefix "".

@@ -46,7 +46,8 @@ describe("/compact registration", () => {
     expect(toolSubcommands?.has("delete.turn")).toBe(true);
     expect(toolSubcommands?.has("estimate.cost")).toBe(true);
     expect(toolSubcommands?.has("prompt.snapshot")).toBe(true);
-    expect(toolSubcommands?.size).toBe(4);
+    expect(toolSubcommands?.has("visualize")).toBe(true);
+    expect(toolSubcommands?.size).toBe(5);
   });
 
   it("resolves the description key in both locales without returning the key path", () => {

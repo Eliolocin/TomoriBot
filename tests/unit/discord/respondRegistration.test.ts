@@ -36,15 +36,10 @@ describe("/respond registration", () => {
     expect(executionMap.get("respond")?.has(ROOT_COMMAND_EXECUTION_KEY)).toBe(true);
   }, 30000);
 
-  it("removes the old /bot respond leaf while /bot keeps its other members", async () => {
+  it("ensures /bot no longer exists", async () => {
     const { executionMap } = await loadCommandData();
-
     const botCommands = executionMap.get("bot");
-    expect(botCommands).toBeDefined();
-    if (!botCommands) return;
-
-    expect(botCommands.has("respond")).toBe(false);
-    expect(botCommands.size).toBeGreaterThan(0);
+    expect(botCommands).toBeUndefined();
   }, 30000);
 
   it("resolves all three relocated namespaces in both locales", async () => {

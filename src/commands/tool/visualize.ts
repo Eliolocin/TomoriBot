@@ -26,11 +26,11 @@ import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
 import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
 import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/persona/personaAccess";
 
-const MODAL_CUSTOM_ID = "bot_generate_image_modal";
-const PROMPT_INPUT_ID = "bot_generate_image_prompt";
-const SETTING_INPUT_ID = "bot_generate_image_setting";
-const BACKEND_INPUT_ID = "bot_generate_image_backend";
-const PERSONA_INPUT_ID = "bot_generate_image_persona";
+const MODAL_CUSTOM_ID = "tool_visualize_modal";
+const PROMPT_INPUT_ID = "tool_visualize_prompt";
+const SETTING_INPUT_ID = "tool_visualize_setting";
+const BACKEND_INPUT_ID = "tool_visualize_backend";
+const PERSONA_INPUT_ID = "tool_visualize_persona";
 
 type SceneSettingId = "storybeat" | "character" | "snapshot" | "vertical";
 type SceneImageBackend = "current_provider" | "novelai";
@@ -102,29 +102,29 @@ interface PersonaSummary {
 type ImageQuotaCheckResult = Awaited<ReturnType<typeof checkImageQuota>>;
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("image").setDescription(localizer("en-US", "commands.bot.generate.image.description"));
+  subcommand.setName("visualize").setDescription(localizer("en-US", "commands.tool.visualize.description"));
 
 function getSettingOptions(locale: string) {
   return [
     {
-      label: localizer(locale, "commands.bot.generate.image.modal.setting_storybeat_label"),
+      label: localizer(locale, "commands.tool.visualize.modal.setting_storybeat_label"),
       value: "storybeat",
-      description: localizer(locale, "commands.bot.generate.image.modal.setting_storybeat_description"),
+      description: localizer(locale, "commands.tool.visualize.modal.setting_storybeat_description"),
     },
     {
-      label: localizer(locale, "commands.bot.generate.image.modal.setting_character_label"),
+      label: localizer(locale, "commands.tool.visualize.modal.setting_character_label"),
       value: "character",
-      description: localizer(locale, "commands.bot.generate.image.modal.setting_character_description"),
+      description: localizer(locale, "commands.tool.visualize.modal.setting_character_description"),
     },
     {
-      label: localizer(locale, "commands.bot.generate.image.modal.setting_snapshot_label"),
+      label: localizer(locale, "commands.tool.visualize.modal.setting_snapshot_label"),
       value: "snapshot",
-      description: localizer(locale, "commands.bot.generate.image.modal.setting_snapshot_description"),
+      description: localizer(locale, "commands.tool.visualize.modal.setting_snapshot_description"),
     },
     {
-      label: localizer(locale, "commands.bot.generate.image.modal.setting_vertical_label"),
+      label: localizer(locale, "commands.tool.visualize.modal.setting_vertical_label"),
       value: "vertical",
-      description: localizer(locale, "commands.bot.generate.image.modal.setting_vertical_description"),
+      description: localizer(locale, "commands.tool.visualize.modal.setting_vertical_description"),
     },
   ];
 }
@@ -132,16 +132,16 @@ function getSettingOptions(locale: string) {
 function getBackendOptions(locale: string, providerName: string) {
   return [
     {
-      label: localizer(locale, "commands.bot.generate.image.modal.backend_current_label"),
+      label: localizer(locale, "commands.tool.visualize.modal.backend_current_label"),
       value: "current_provider",
-      description: localizer(locale, "commands.bot.generate.image.modal.backend_current_description", {
+      description: localizer(locale, "commands.tool.visualize.modal.backend_current_description", {
         provider: providerName,
       }),
     },
     {
-      label: localizer(locale, "commands.bot.generate.image.modal.backend_novelai_label"),
+      label: localizer(locale, "commands.tool.visualize.modal.backend_novelai_label"),
       value: "novelai",
-      description: localizer(locale, "commands.bot.generate.image.modal.backend_novelai_description"),
+      description: localizer(locale, "commands.tool.visualize.modal.backend_novelai_description"),
     },
   ];
 }
@@ -239,18 +239,7 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  if (!interaction.guild || !interaction.channel || !("messages" in interaction.channel)) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "general.errors.guild_only_title",
-      descriptionKey: "general.errors.guild_only_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const botMember = interaction.guild.members.me;
-  if (!botMember) {
+  if (!interaction.channel || !("messages" in interaction.channel)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",
@@ -260,40 +249,56 @@ export async function execute(
     return;
   }
 
-  const guildChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
-  if (!("permissionsFor" in guildChannel)) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "general.errors.unknown_error_title",
-      descriptionKey: "general.errors.unknown_error_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
+  const isDMChannel = !interaction.guildId;
+  const serverDiscId = interaction.guildId ?? interaction.user.id;
+
+  if (!isDMChannel) {
+    const botMember = interaction.guild?.members.me;
+    if (!botMember) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const guildChannel = interaction.guild?.channels.cache.get(interaction.channel.id) ?? interaction.channel;
+    if (!("permissionsFor" in guildChannel)) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const permissions = guildChannel.permissionsFor(botMember);
+    const requiresThreadSendPermission =
+      "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread();
+    const canSendMessages = requiresThreadSendPermission
+      ? permissions?.has(PermissionFlagsBits.SendMessagesInThreads)
+      : permissions?.has(PermissionFlagsBits.SendMessages);
+
+    if (
+      !permissions?.has(PermissionFlagsBits.ViewChannel) ||
+      !permissions?.has(PermissionFlagsBits.ReadMessageHistory) ||
+      !permissions?.has(PermissionFlagsBits.AttachFiles) ||
+      !canSendMessages
+    ) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.tool.visualize.missing_permissions_title",
+        descriptionKey: "commands.tool.visualize.missing_permissions_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
   }
 
-  const permissions = guildChannel.permissionsFor(botMember);
-  const requiresThreadSendPermission =
-    "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread();
-  const canSendMessages = requiresThreadSendPermission
-    ? permissions?.has(PermissionFlagsBits.SendMessagesInThreads)
-    : permissions?.has(PermissionFlagsBits.SendMessages);
-
-  if (
-    !permissions?.has(PermissionFlagsBits.ViewChannel) ||
-    !permissions?.has(PermissionFlagsBits.ReadMessageHistory) ||
-    !permissions?.has(PermissionFlagsBits.AttachFiles) ||
-    !canSendMessages
-  ) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.bot.generate.image.missing_permissions_title",
-      descriptionKey: "commands.bot.generate.image.missing_permissions_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const baseTomoriState = await personaRepository.loadState(interaction.guild.id);
+  const baseTomoriState = await personaRepository.loadState(serverDiscId);
   if (!baseTomoriState) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
@@ -311,7 +316,7 @@ export async function execute(
   const cooldownType = tomoriState.config.cooldown_type ?? CooldownType.OFF;
   const cooldownLength = tomoriState.config.cooldown_length ?? 5;
   const cooldownResult = await cooldownRepository.checkMessageTriggerCooldownWithWhitelist(
-    interaction.guild.id,
+    serverDiscId,
     interaction.user.id,
     interaction.channel.id,
     cooldownType,
@@ -322,7 +327,7 @@ export async function execute(
     if (cooldownResult.blockedByWhitelist) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.message_cooldown_title",
-        descriptionKey: "commands.bot.generate.image.channel_not_whitelisted",
+        descriptionKey: "commands.tool.visualize.channel_not_whitelisted",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -334,7 +339,7 @@ export async function execute(
       interaction.user,
       locale,
       "general.message_cooldown_title",
-      "commands.bot.generate.image.cooldown_active",
+      "commands.tool.visualize.cooldown_active",
       {
         seconds: cooldownResult.remainingSeconds.toString(),
         botName: tomoriState.persona_nickname,
@@ -347,11 +352,15 @@ export async function execute(
   }
 
   const parentChannelId =
-    "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread()
-      ? guildChannel.parent?.id
+    !isDMChannel &&
+    "isThread" in interaction.channel &&
+    typeof (interaction.channel as unknown as { isThread: () => boolean; parent?: { id: string } }).isThread ===
+      "function" &&
+    (interaction.channel as unknown as { isThread: () => boolean; parent?: { id: string } }).isThread()
+      ? (interaction.channel as unknown as { isThread: () => boolean; parent?: { id: string } }).parent?.id
       : undefined;
   const whitelistStatus = await getCachedWhitelistStatus(
-    interaction.guild.id,
+    serverDiscId,
     interaction.channel.id,
     invokingMember?.roles.cache.map((role) => role.id),
     parentChannelId,
@@ -372,7 +381,7 @@ export async function execute(
   if (availablePersonaSummaries.length === 0) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.message_cooldown_title",
-      descriptionKey: "commands.bot.generate.image.persona_access_blocked",
+      descriptionKey: "commands.tool.visualize.persona_access_blocked",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -394,8 +403,8 @@ export async function execute(
   //    Without tool support the model cannot call generate_image / generate_image_nai.
   if (!tomoriState.llm.has_tools) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.bot.generate.image.planner_unavailable_title",
-      descriptionKey: "commands.bot.generate.image.planner_unavailable_description",
+      titleKey: "commands.tool.visualize.planner_unavailable_title",
+      descriptionKey: "commands.tool.visualize.planner_unavailable_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -416,12 +425,12 @@ export async function execute(
   const backendAvailability = await resolveSceneImageBackendAvailability({
     provider,
     tomoriState,
-    serverId: interaction.guild.id,
+    serverId: serverDiscId,
   });
   if (!backendAvailability.defaultBackend) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.bot.generate.image.no_backend_title",
-      descriptionKey: "commands.bot.generate.image.no_backend_description",
+      titleKey: "commands.tool.visualize.no_backend_title",
+      descriptionKey: "commands.tool.visualize.no_backend_description",
       descriptionVars: {
         current_provider: tomoriState.llm.llm_provider,
       },
@@ -447,20 +456,20 @@ export async function execute(
     locale,
     {
       modalCustomId: MODAL_CUSTOM_ID,
-      modalTitleKey: "commands.bot.generate.image.modal.title",
+      modalTitleKey: "commands.tool.visualize.modal.title",
       components: [
         {
           customId: PERSONA_INPUT_ID,
-          labelKey: "commands.bot.generate.image.modal.persona_label",
-          descriptionKey: "commands.bot.generate.image.modal.persona_description",
+          labelKey: "commands.tool.visualize.modal.persona_label",
+          descriptionKey: "commands.tool.visualize.modal.persona_description",
           required: true,
           options: getPersonaSelectOptions(availablePersonaSummaries, defaultPersonaId),
         },
         {
           customId: PROMPT_INPUT_ID,
-          labelKey: "commands.bot.generate.image.modal.prompt_label",
-          descriptionKey: "commands.bot.generate.image.modal.prompt_description",
-          placeholder: localizer(locale, "commands.bot.generate.image.modal.prompt_placeholder"),
+          labelKey: "commands.tool.visualize.modal.prompt_label",
+          descriptionKey: "commands.tool.visualize.modal.prompt_description",
+          placeholder: localizer(locale, "commands.tool.visualize.modal.prompt_placeholder"),
           required: false,
           style: TextInputStyle.Paragraph,
           maxLength: 1000,
@@ -468,8 +477,8 @@ export async function execute(
         {
           kind: "radioGroup" as const,
           customId: SETTING_INPUT_ID,
-          labelKey: "commands.bot.generate.image.modal.setting_label",
-          descriptionKey: "commands.bot.generate.image.modal.setting_description",
+          labelKey: "commands.tool.visualize.modal.setting_label",
+          descriptionKey: "commands.tool.visualize.modal.setting_description",
           required: true,
           options: getSettingOptions(locale),
         },
@@ -478,8 +487,8 @@ export async function execute(
               {
                 kind: "radioGroup" as const,
                 customId: BACKEND_INPUT_ID,
-                labelKey: "commands.bot.generate.image.modal.backend_label",
-                descriptionKey: "commands.bot.generate.image.modal.backend_description",
+                labelKey: "commands.tool.visualize.modal.backend_label",
+                descriptionKey: "commands.tool.visualize.modal.backend_description",
                 required: true,
                 options: getBackendOptions(locale, tomoriState.llm.llm_provider),
               },
@@ -511,8 +520,8 @@ export async function execute(
 
     if (!selectedBackend) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
-        titleKey: "commands.bot.generate.image.no_backend_title",
-        descriptionKey: "commands.bot.generate.image.no_backend_description",
+        titleKey: "commands.tool.visualize.no_backend_title",
+        descriptionKey: "commands.tool.visualize.no_backend_description",
         descriptionVars: {
           current_provider: tomoriState.llm.llm_provider,
         },
@@ -534,7 +543,7 @@ export async function execute(
     ) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.message_cooldown_title",
-        descriptionKey: "commands.bot.generate.image.persona_access_blocked",
+        descriptionKey: "commands.tool.visualize.persona_access_blocked",
         color: ColorCode.WARN,
       });
       return;
@@ -549,7 +558,7 @@ export async function execute(
 
       // Attempt to get or create the channel webhook for persona-identity posting.
       // Threads and channels without ManageWebhooks permission fall back to a direct bot message.
-      const webhookChannel = interaction.guild.channels.cache.get(interaction.channel.id) ?? interaction.channel;
+      const webhookChannel = interaction.guild?.channels.cache.get(interaction.channel.id) ?? interaction.channel;
 
       if ("fetchWebhooks" in webhookChannel) {
         try {
@@ -558,13 +567,13 @@ export async function execute(
             senderWebhook = webhookResult.webhook;
             const identity = await resolvePersonaWebhookIdentity(
               selectedPersona as unknown as TomoriState,
-              interaction.guild,
+              interaction.guild ?? null,
             );
             senderPersonaAvatarUrl = identity.avatarUrl ?? identity.avatarDataUri;
           }
         } catch (webhookError) {
           log.warn(
-            "[/bot generate image] Failed to resolve persona webhook; image will post as bot",
+            "[/tool visualize] Failed to resolve persona webhook; image will post as bot",
             webhookError as Error,
           );
         }
@@ -572,7 +581,7 @@ export async function execute(
     }
 
     log.info(
-      `[/bot generate image] Starting hidden image agent for channel ${interaction.channel.id} — backend=${selectedBackend}, preset=${settingPreset.plannerLabel}, sender=${selectedPersona?.persona_nickname ?? "active"}`,
+      `[/tool visualize] Starting hidden image agent for channel ${interaction.channel.id} — backend=${selectedBackend}, preset=${settingPreset.plannerLabel}, sender=${selectedPersona?.persona_nickname ?? "active"}`,
     );
 
     // Invoke the hidden image agent turn.
@@ -594,7 +603,7 @@ export async function execute(
     const agentResult = await runHiddenImageTurn({
       channel: interaction.channel as Parameters<typeof runHiddenImageTurn>[0]["channel"],
       client,
-      guild: interaction.guild,
+      guild: interaction.guild ?? null,
       tomoriState,
       locale,
       interactingUserId: interaction.user.id,
@@ -613,8 +622,8 @@ export async function execute(
 
     if (!agentResult.success) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
-        titleKey: "commands.bot.generate.image.planner_failed_title",
-        descriptionKey: "commands.bot.generate.image.planner_failed_description",
+        titleKey: "commands.tool.visualize.planner_failed_title",
+        descriptionKey: "commands.tool.visualize.planner_failed_description",
         descriptionVars: {
           error: agentResult.error ?? "Unknown image generation error",
         },
@@ -624,19 +633,19 @@ export async function execute(
     }
 
     log.success(
-      `[/bot generate image] Hidden image agent completed for channel ${interaction.channel.id} — backend=${selectedBackend}`,
+      `[/tool visualize] Hidden image agent completed for channel ${interaction.channel.id} — backend=${selectedBackend}`,
     );
 
     // Acknowledge the modal submit interaction with an ephemeral success notice.
     await replyInfoEmbed(modalSubmitInteraction, locale, {
-      titleKey: "commands.bot.generate.image.success_title",
-      descriptionKey: "commands.bot.generate.image.success_description",
+      titleKey: "commands.tool.visualize.success_title",
+      descriptionKey: "commands.tool.visualize.success_description",
       color: ColorCode.SUCCESS,
     });
 
     // Record the cooldown entry after confirmed success.
     await cooldownRepository.setMessageTriggerCooldownWithWhitelist(
-      interaction.guild.id,
+      serverDiscId,
       interaction.user.id,
       interaction.channel.id,
       cooldownType,
@@ -644,11 +653,11 @@ export async function execute(
       invokingMember,
     );
   } catch (error) {
-    log.error("Error in /bot generate image", error as Error, {
-      errorType: "BotGenerateImageCommandError",
+    log.error("Error in /tool visualize", error as Error, {
+      errorType: "ToolVisualizeCommandError",
       metadata: {
         userId: interaction.user.id,
-        guildId: interaction.guild.id,
+        guildId: interaction.guild?.id ?? "DM",
         channelId: interaction.channel.id,
       },
     });
