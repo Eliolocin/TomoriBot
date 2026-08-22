@@ -79,10 +79,9 @@ Operational note:
 
 - Global trigger cooldown: `/server cooldown triggers`
 - Trigger whitelist:
-  - `/server whitelist channel` (leave cooldown options empty to inherit the global cooldown)
-  - `/server whitelist persona`
-  - `/server whitelist role`
-  - `/server whitelist remove` (bulk remove whitelisted personas, channels, and/or roles)
+  - `/moderation` Whitelist Channels (leave cooldown options empty to inherit the global cooldown)
+  - `/moderation` Whitelist Personas
+  - `/moderation` Whitelist Roles
 - Personal spotlight:
   - `/personal spotlight set`
   - `/personal spotlight manage`

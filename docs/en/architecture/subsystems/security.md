@@ -118,7 +118,7 @@ Current runtime effects for `FULL`:
   but typed hydration applies privacy before rendering or target projection. A hidden saved
   nickname cannot become an output mention, tool target, or copied identity.
 
-### Per-server blacklist (`/server user-blacklist add|remove`)
+### Per-server blacklist (`/moderation`)
 
 `personalization_blacklist` is server-scoped and keyed by `(server_id, user_disc_id)`.
 
@@ -132,7 +132,7 @@ enrichers run. Extension enrichers receive cloned privacy-filtered core fields a
 only owner-stamped `extension:{id}` fields; they cannot restore suppressed names, memories,
 presence, roles, timezone, or physical appearance.
 
-`/server user-blacklist remove` also lists active `persona_user_blocks` rows so moderators can remove persona-scoped mutes/blocks through the same checklist flow. These rows are separate from `personalization_blacklist`: a `mute` prevents the target from triggering that persona, while a `block` also hides the target's recent live dialogue-history messages/media from that persona's context. Persona user blocks are not data deletion, forgetting, or memory redaction.
+`/moderation` also lists active `persona_user_blocks` rows so moderators can remove persona-scoped mutes/blocks through the same checklist flow. These rows are separate from `personalization_blacklist`: a `mute` prevents the target from triggering that persona, while a `block` also hides the target's recent live dialogue-history messages/media from that persona's context. Persona user blocks are not data deletion, forgetting, or memory redaction.
 
 ## Data Export and Deletion (Current Behavior)
 

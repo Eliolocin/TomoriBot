@@ -23,6 +23,13 @@ export interface CollectionPanelViewState<T> {
   receipt?: PanelReceipt;
 }
 
+export interface ResolvedRangeSelection<T> {
+  rangeIndex: number;
+  rangeCount: number;
+  totalCount: number;
+  visibleItems: T[];
+}
+
 export type PanelActionResult<T> =
   | { status: "success"; value: T; receipt: PanelReceipt }
   | { status: "unchanged"; value: T; receipt: PanelReceipt }

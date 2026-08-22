@@ -4,7 +4,12 @@ export {
   promptWithModal,
   promptWithPaginatedModal,
   promptWithRawModal,
+  safeModalLocalizer,
   safeSelectOptionText,
   showRoutedRawModal,
+  takeRawModalCheckboxGroupValues,
   takeRawModalSelectValue,
+  takeRawModalUserSelectValue,
+  takeRawModalRoleSelectValue,
+  takeRawModalChannelSelectValue,
 } from "./interactionCore";

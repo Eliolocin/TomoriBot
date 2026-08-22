@@ -53,6 +53,8 @@ within the same server.
 Remove them with `/memory personal remove` and `/memory server remove`. Memories persist
 until you remove them.
 
+In new servers, non-manager member access to create, edit, or remove shared server memories is disabled by default. Members with `Manage Server` permission retain access at all times, and managers can opt other members in through `/moderation` Member Access.
+
 
 ### How Memories Get Saved
 
@@ -97,7 +99,7 @@ memories count against every persona's personal allowance.
 ### Document Knowledge Base (RAG)
 
 Server admins can give her documents to reference using RAG. Documents are chunked and stored as searchable embeddings; she automatically retrieves
-  relevant content when answering.
+  relevant content when answering. In new servers, document management is similarly restricted to members with `Manage Server` by default; managers can grant member access through `/moderation` Member Access.
 
 **Requires an embedding model**, configured with `/model embedding`. See
 [Providers & Models](/features/setup-administration/providers-and-models/).:

@@ -131,6 +131,17 @@ function transformModalSubmissionPacket(packet: RawDiscordWebSocketPacket): void
             ...(nestedComponent.type === 4 && {
               value: nestedComponent.value,
             }),
+            ...(nestedComponent.type === 5 && {
+              values: nestedComponent.values,
+            }),
+            ...(nestedComponent.type === 6 && {
+              values: nestedComponent.values,
+            }),
+            ...(nestedComponent.type === 8 && {
+              // CHANNEL_SELECT
+              channel_types: nestedComponent.channel_types,
+              values: nestedComponent.values,
+            }),
             ...(nestedComponent.type === 19 && {
               values: nestedComponent.values, // Array of attachment IDs
             }),
@@ -198,8 +209,11 @@ function setupWebSocketInterception(client: unknown) {
                 // Narrowed above: custom_id is guaranteed to be a non-empty string
                 const customId = inner.custom_id as string;
 
-                // String Select (type 3): store first selected value
-                if (inner.type === 3 && inner.values?.[0]) {
+                // Native select fields share one store because these routed fields accept one value each.
+                if (
+                  (inner.type === 3 || inner.type === 5 || inner.type === 6 || inner.type === 8) &&
+                  inner.values?.[0]
+                ) {
                   selectValues[customId] = inner.values[0];
                 }
 
@@ -286,6 +300,9 @@ import type {
   ModalRadioGroupField,
   ModalCheckboxGroupField,
   ModalCheckboxField,
+  ModalUserSelectField,
+  ModalRoleSelectField,
+  ModalChannelSelectField,
 } from "../../../types/discord/modal";
 import {
   isModalInputField,
@@ -294,6 +311,9 @@ import {
   isModalRadioGroupField,
   isModalCheckboxGroupField,
   isModalCheckboxField,
+  isModalUserSelectField,
+  isModalRoleSelectField,
+  isModalChannelSelectField,
 } from "../../../types/discord/modal";
 import { createStandardEmbed, createSummaryEmbed, createTipEmbed } from "../embedHelper";
 import { buildDocsLinkRow } from "@/utils/discord/docsLinks";
@@ -378,8 +398,36 @@ export async function showRoutedRawModal(
 
 export function takeRawModalSelectValue(interactionId: string, customId: string): string | undefined {
   const storedValues = modalSelectValues.get(interactionId);
-  modalSelectValues.delete(interactionId);
-  return storedValues?.[customId];
+  if (!storedValues) return undefined;
+  const val = storedValues[customId];
+  delete storedValues[customId];
+  if (Object.keys(storedValues).length === 0) {
+    modalSelectValues.delete(interactionId);
+  }
+  return val;
+}
+
+export function takeRawModalUserSelectValue(interactionId: string, customId: string): string | undefined {
+  return takeRawModalSelectValue(interactionId, customId);
+}
+
+export function takeRawModalRoleSelectValue(interactionId: string, customId: string): string | undefined {
+  return takeRawModalSelectValue(interactionId, customId);
+}
+
+export function takeRawModalChannelSelectValue(interactionId: string, customId: string): string | undefined {
+  return takeRawModalSelectValue(interactionId, customId);
+}
+
+export function takeRawModalCheckboxGroupValues(interactionId: string, customId: string): string[] | undefined {
+  const storedValues = modalCheckboxGroupValues.get(interactionId);
+  if (!storedValues) return undefined;
+  const val = storedValues[customId];
+  delete storedValues[customId];
+  if (Object.keys(storedValues).length === 0) {
+    modalCheckboxGroupValues.delete(interactionId);
+  }
+  return val;
 }
 
 /**
@@ -387,7 +435,7 @@ export function takeRawModalSelectValue(interactionId: string, customId: string)
  * @param vars Variables for localization (optional)
  * @param maxLength Maximum allowed length (defaults to modal description limit)
  */
-function safeModalLocalizer(
+export function safeModalLocalizer(
   locale: string,
   key: string,
   vars?: Record<string, string | number>,
@@ -2801,6 +2849,96 @@ export async function promptWithRawModal(
             }
 
             return checkboxLabelComponent;
+          } else if (isModalUserSelectField(component)) {
+            const us = component as ModalUserSelectField;
+            const rawComponent: RawDiscordComponent = {
+              type: 5,
+              custom_id: nonceCustomId(us.customId),
+              min_values: us.minValues ?? 1,
+              max_values: us.maxValues ?? 1,
+              required: us.required !== false,
+            };
+
+            if (us.placeholder) {
+              const placeholder =
+                typeof us.placeholder === "string" && us.placeholder.startsWith("commands.")
+                  ? localizer(locale, us.placeholder)
+                  : us.placeholder;
+              rawComponent.placeholder = safeSelectOptionText(placeholder, SELECT_PLACEHOLDER_MAX_LENGTH);
+            }
+
+            const userSelectLabelComponent: RawDiscordComponent = {
+              type: 18, // ComponentType.Label
+              label: safeSelectOptionText(localizer(locale, us.labelKey), MODAL_LABEL_MAX_LENGTH),
+              component: rawComponent,
+            };
+
+            if (us.descriptionKey) {
+              userSelectLabelComponent.description = safeModalLocalizer(locale, us.descriptionKey);
+            }
+
+            return userSelectLabelComponent;
+          } else if (isModalRoleSelectField(component)) {
+            const rs = component as ModalRoleSelectField;
+            const rawComponent: RawDiscordComponent = {
+              type: 6,
+              custom_id: nonceCustomId(rs.customId),
+              min_values: rs.minValues ?? 1,
+              max_values: rs.maxValues ?? 1,
+              required: rs.required !== false,
+            };
+
+            if (rs.placeholder) {
+              const placeholder = rs.placeholder.startsWith("commands.")
+                ? localizer(locale, rs.placeholder)
+                : rs.placeholder;
+              rawComponent.placeholder = safeSelectOptionText(placeholder, SELECT_PLACEHOLDER_MAX_LENGTH);
+            }
+
+            const roleSelectLabelComponent: RawDiscordComponent = {
+              type: 18,
+              label: safeSelectOptionText(localizer(locale, rs.labelKey), MODAL_LABEL_MAX_LENGTH),
+              component: rawComponent,
+            };
+
+            if (rs.descriptionKey) {
+              roleSelectLabelComponent.description = safeModalLocalizer(locale, rs.descriptionKey);
+            }
+
+            return roleSelectLabelComponent;
+          } else if (isModalChannelSelectField(component)) {
+            const cs = component as ModalChannelSelectField;
+            const rawComponent: RawDiscordComponent = {
+              type: 8,
+              custom_id: nonceCustomId(cs.customId),
+              min_values: cs.minValues ?? 1,
+              max_values: cs.maxValues ?? 1,
+              required: cs.required !== false,
+            };
+
+            if (cs.channelTypes) {
+              rawComponent.channel_types = cs.channelTypes;
+            }
+
+            if (cs.placeholder) {
+              const placeholder =
+                typeof cs.placeholder === "string" && cs.placeholder.startsWith("commands.")
+                  ? localizer(locale, cs.placeholder)
+                  : cs.placeholder;
+              rawComponent.placeholder = safeSelectOptionText(placeholder, SELECT_PLACEHOLDER_MAX_LENGTH);
+            }
+
+            const channelSelectLabelComponent: RawDiscordComponent = {
+              type: 18, // ComponentType.Label
+              label: safeSelectOptionText(localizer(locale, cs.labelKey), MODAL_LABEL_MAX_LENGTH),
+              component: rawComponent,
+            };
+
+            if (cs.descriptionKey) {
+              channelSelectLabelComponent.description = safeModalLocalizer(locale, cs.descriptionKey);
+            }
+
+            return channelSelectLabelComponent;
           } else if (isModalInputField(component)) {
             const rawComponent: RawDiscordComponent = {
               type: 4, // ComponentType.TextInput
@@ -2957,6 +3095,45 @@ export async function promptWithRawModal(
             }
           } catch (error) {
             log.warn(`Failed to get checkbox value for component: ${error}`);
+          }
+        } else if (isModalUserSelectField(component)) {
+          try {
+            const us = component as ModalUserSelectField;
+            const storedValues = modalSelectValues.get(submitted.id);
+            const userValue = storedValues?.[nonceCustomId(us.customId)];
+            if (userValue !== undefined) {
+              values[us.customId] = userValue;
+            } else {
+              log.warn(`Could not extract user select value for ${us.customId}`);
+            }
+          } catch (error) {
+            log.warn(`Failed to get user select value for component: ${error}`);
+          }
+        } else if (isModalRoleSelectField(component)) {
+          try {
+            const rs = component as ModalRoleSelectField;
+            const storedValues = modalSelectValues.get(submitted.id);
+            const roleValue = storedValues?.[nonceCustomId(rs.customId)];
+            if (roleValue !== undefined) {
+              values[rs.customId] = roleValue;
+            } else {
+              log.warn(`Could not extract role select value for ${rs.customId}`);
+            }
+          } catch (error) {
+            log.warn(`Failed to get role select value for component: ${error}`);
+          }
+        } else if (isModalChannelSelectField(component)) {
+          try {
+            const cs = component as ModalChannelSelectField;
+            const storedValues = modalSelectValues.get(submitted.id);
+            const channelValue = storedValues?.[nonceCustomId(cs.customId)];
+            if (channelValue !== undefined) {
+              values[cs.customId] = channelValue;
+            } else {
+              log.warn(`Could not extract channel select value for ${cs.customId}`);
+            }
+          } catch (error) {
+            log.warn(`Failed to get channel select value for component: ${error}`);
           }
         } else if (isModalInputField(component)) {
           try {

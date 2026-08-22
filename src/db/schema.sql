@@ -2551,7 +2551,7 @@ CREATE TRIGGER update_server_notice_embeds_configs_timestamp
 
 CREATE TABLE IF NOT EXISTS server_member_permissions_configs (
   server_id                          INT     PRIMARY KEY REFERENCES servers(server_id) ON DELETE CASCADE,
-  server_memteaching_enabled         BOOLEAN NOT NULL DEFAULT true,
+  server_memteaching_enabled         BOOLEAN NOT NULL DEFAULT false,
   attribute_memteaching_enabled      BOOLEAN NOT NULL DEFAULT false,
   sampledialogue_memteaching_enabled BOOLEAN NOT NULL DEFAULT false,
   self_teaching_enabled              BOOLEAN NOT NULL DEFAULT true,

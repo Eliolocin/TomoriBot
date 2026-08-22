@@ -3,7 +3,7 @@
     sampledialogue: {
       description: `Add a sample user/bot dialogue pair to as an example for how I should respond.`,
       teaching_disabled_title: `Sample Dialogue Teaching Disabled`,
-      teaching_disabled_description: `Members are currently not allowed to add or remove sample dialogues on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
+      teaching_disabled_description: `Members are currently not allowed to add or remove sample dialogues on this server. A server member with \`Manage Server\` permissions can enable this using \`/moderation\`.`,
       modal_title: `Add Sample Dialogue`,
       persona_select_label: `Persona`,
       persona_select_description: `Choose which persona this dialogue is for.`,
@@ -51,7 +51,7 @@
     attribute: {
       description: `Add a personality attribute describing me for this server.`,
       teaching_disabled_title: `Attribute Teaching Disabled`,
-      teaching_disabled_description: `Members are not currently allowed to add or remove personality attributes on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
+      teaching_disabled_description: `Members are not currently allowed to add or remove personality attributes on this server. A server member with \`Manage Server\` permissions can enable this using \`/moderation\`.`,
       modal_title: `Add Personality Attribute`,
       persona_select_label: `Persona`,
       persona_select_description: `Choose which persona this attribute is for.`,
@@ -97,7 +97,7 @@
       rag_disabled_title: `Document RAG Disabled`,
       rag_disabled_description: `Document retrieval requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension. Install pgvector in your database and restart me to enable it (see the [self-hosting setup guide](https://docs.tomoribot.app/en/self-hosting/manual-setup/)).`,
       teaching_disabled_title: `Document Teaching Disabled`,
-      teaching_disabled_description: `Members are not currently allowed to add or remove documents on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
+      teaching_disabled_description: `Members are not currently allowed to add or remove documents on this server. A server member with \`Manage Server\` permissions can enable this using \`/moderation\`.`,
       no_embedding_model_title: `No Embedding Model Set`,
       no_embedding_model_description: `An embedding model is not configured for this provider. Please set one using \`/model embedding\`.`,
       no_api_key_title: `No API Key Set`,
@@ -199,7 +199,7 @@
       server: {
         description: `Add a server memory to my knowledge base.`,
         teaching_disabled_title: `Server Memory Teaching Disabled`,
-        teaching_disabled_description: `Members are not currently allowed to add/remove server memories on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
+        teaching_disabled_description: `Members are not currently allowed to add/remove server memories on this server. A server member with \`Manage Server\` permissions can enable this using \`/moderation\`.`,
         modal_title: `Add Server Memory`,
         persona_select_label: `Persona`,
         persona_select_description: `Choose which persona this server memory is for.`,

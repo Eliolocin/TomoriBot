@@ -1,4 +1,4 @@
-import type { ModalSubmitInteraction, TextInputStyle, APIAttachment } from "discord.js";
+import type { ModalSubmitInteraction, TextInputStyle, APIAttachment, ChannelType } from "discord.js";
 
 /**
  * Options for string select menu choices
@@ -133,6 +133,55 @@ export interface ModalFileUploadField {
 }
 
 /**
+ * Options for a User Select field in a modal (Discord component type 5)
+ * Wrapped in a Label component (type 18).
+ * Use the `kind` discriminant to identify this type in the ModalComponent union.
+ */
+export interface ModalUserSelectField {
+  kind: "userSelect";
+  customId: string;
+  labelKey: string;
+  descriptionKey?: string;
+  placeholder?: string;
+  required?: boolean;
+  minValues?: number;
+  maxValues?: number;
+}
+
+/**
+ * Options for a Role Select field in a modal (Discord component type 6)
+ * Wrapped in a Label component (type 18).
+ * Use the `kind` discriminant to identify this type in the ModalComponent union.
+ */
+export interface ModalRoleSelectField {
+  kind: "roleSelect";
+  customId: string;
+  labelKey: string;
+  descriptionKey?: string;
+  placeholder?: string;
+  required?: boolean;
+  minValues?: number;
+  maxValues?: number;
+}
+
+/**
+ * Options for a Channel Select field in a modal (Discord component type 8)
+ * Wrapped in a Label component (type 18).
+ * Use the `kind` discriminant to identify this type in the ModalComponent union.
+ */
+export interface ModalChannelSelectField {
+  kind: "channelSelect";
+  customId: string;
+  labelKey: string;
+  descriptionKey?: string;
+  placeholder?: string;
+  required?: boolean;
+  minValues?: number;
+  maxValues?: number;
+  channelTypes?: ChannelType[];
+}
+
+/**
  * Union type for all modal component types
  */
 export type ModalComponent =
@@ -141,14 +190,18 @@ export type ModalComponent =
   | ModalFileUploadField
   | ModalRadioGroupField
   | ModalCheckboxGroupField
-  | ModalCheckboxField;
+  | ModalCheckboxField
+  | ModalUserSelectField
+  | ModalRoleSelectField
+  | ModalChannelSelectField;
 
 /**
  * Type guard for text input fields
  */
 export function isModalInputField(component: ModalComponent): component is ModalInputField {
   return (
-    "style" in component || (!("options" in component) && !("minValues" in component) && !("maxValues" in component))
+    "style" in component ||
+    (!("options" in component) && !("minValues" in component) && !("maxValues" in component) && !("kind" in component))
   );
 }
 
@@ -163,7 +216,7 @@ export function isModalSelectField(component: ModalComponent): component is Moda
  * Type guard for file upload fields
  */
 export function isModalFileUploadField(component: ModalComponent): component is ModalFileUploadField {
-  return "minValues" in component || "maxValues" in component;
+  return !("kind" in component) && !("options" in component) && ("minValues" in component || "maxValues" in component);
 }
 
 /**
@@ -188,6 +241,30 @@ export function isModalCheckboxGroupField(component: ModalComponent): component 
  */
 export function isModalCheckboxField(component: ModalComponent): component is ModalCheckboxField {
   return "kind" in component && (component as ModalCheckboxField).kind === "checkbox";
+}
+
+/**
+ * Type guard for User Select fields (type 5)
+ * Uses the `kind` discriminant to avoid ambiguity with other select types.
+ */
+export function isModalUserSelectField(component: ModalComponent): component is ModalUserSelectField {
+  return "kind" in component && (component as ModalUserSelectField).kind === "userSelect";
+}
+
+/**
+ * Type guard for Role Select fields (type 6)
+ * Uses the `kind` discriminant to avoid ambiguity with other select types.
+ */
+export function isModalRoleSelectField(component: ModalComponent): component is ModalRoleSelectField {
+  return "kind" in component && (component as ModalRoleSelectField).kind === "roleSelect";
+}
+
+/**
+ * Type guard for Channel Select fields (type 8)
+ * Uses the `kind` discriminant to avoid ambiguity with other select types.
+ */
+export function isModalChannelSelectField(component: ModalComponent): component is ModalChannelSelectField {
+  return "kind" in component && (component as ModalChannelSelectField).kind === "channelSelect";
 }
 
 /**

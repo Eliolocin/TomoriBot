@@ -600,6 +600,18 @@ TomoriBot renders the leading "title" line of every Components V2 container (sta
 
 Memory and scheduled-task notices use `buildNoticeContainer` in `src/utils/discord/ui/interactionCore.ts`. The old embed title maps to the H3 title, the old embed description maps to a Text Display, and the old embed footer maps to muted `-#` subtext after a separator. When the memory/task body is truncated, the Secondary "Expand" button is rendered as an Action Row inside the same container; the ephemeral full-content reveal remains a separate classic embed reply.
 
+### TomoriBot convention: panel text hierarchy
+
+Persistent and categorized control panels follow a standardized four-tier text hierarchy to maintain consistent structure across desktop and mobile clients:
+
+- **Page and Major-Section Headings (`###`)**: Used for page titles, category headers, and major section counts (for example `### Whitelisted Channels \`(3)\``). Heading depth does not exceed `###`.
+- **Nested Subsection Labels (`**Bold**`)**: Used for named sub-sections within a page where additional heading tags would create excessive vertical spacing or hit Discord client heading limitations.
+- **Plain Text Prose**: Used for section descriptions, guidance explanations, populated-section semantic descriptions, and empty-state copy. Explanatory prose is never quoted, keeping it distinct from configured values. Populated list sections explain what their entries mean before rendering quote rows. Avoid prose em dashes in panel copy; use parentheticals where compact metadata is useful.
+- **Quote Rows (`>`)**: Used for current configuration values, semantic status lines (such as `> 🟢 ...`), and populated entity rows (such as channels, users, or roles) instead of bulleted lists. Because Discord mentions (`<@id>`, `<#id>`, `<@&id>`) already encode snowflake IDs, entity rows omit redundant raw IDs beside mentions. Metadata such as persona interaction restrictions uses parentheticals (for example `(mute)` or `(block)`) instead of em dashes. Multi-line entity details (such as per-channel cooldown settings) remain inside the same quote block on subsequent lines.
+
+Persistent categorized control panels place a real divider separator (`{ type: ComponentType.Separator, divider: true, spacing: 1 }`) immediately after the top category-button action row and before the selected page title or body to clearly separate navigation controls from content. When a read fails and cached state is displayed, stale-read warnings appear as the bottommost footer element, preceded by a separate real divider separator and formatted as subdued subtext (`-# ...`).
+The startup grace marker used to disambiguate an empty workspace read is not a failed-read signal when panel data loaded successfully. Only a recorded database failure or an unavailable panel repository read disables write actions. Stale panels keep writes disabled but expose an enabled Retry action that forces a state refresh; the warning remains the bottommost footer.
+
 ---
 
 ## Thumbnail
@@ -1047,6 +1059,38 @@ Container beside the authoritative collection Container, keeping status color se
 Healthy views omit a routine refresh button because transactions reload and repaint automatically. Only stale or
 unavailable reads expose **Retry**, which performs a configuration read without testing or connecting
 to the remote MCP endpoint.
+
+TomoriBot's `/moderation` Member Access editor is the first writable page in the moderation panel.
+Its `moderation:v1` routes handle category navigation and modal transactions. Clicking **Edit Permissions**
+reauthorizes and reads fresh server state before opening a globally routed Checkbox Group modal as the
+valid first interaction acknowledgment (`showRoutedRawModal`). The modal custom ID and component ID carry a nonce
+to bind submission lifecycle. Upon modal submit, the router immediately defers update, reauthorizes, reloads
+current state, consumes the stored checkbox-group array once (`takeRawModalCheckboxGroupValues`), filters
+against recognized permission definitions, and suppresses writes if the refreshed scope is stale or unavailable.
+On changed input, a single repository update is performed, followed by a single cache invalidation on success.
+The panel then reloads authoritative state and repaints with updated semantic status rows and a separate
+top-level receipt container (`success`, `info`, or `error`), while retaining truthful receipts if a post-write
+reload fails.
+
+The `/moderation` User Blacklist page manages personalization exclusions and persona interaction restrictions.
+One paired **Add Blacklist** and **Remove Blacklist** action row avoids consuming a component for every entry.
+Remove opens nonce-bound Checkbox Groups with every presented entry selected. Unchecking entries and submitting
+removes only those entries, with no second confirmation. The submit route reauthorizes, reloads current scope, and
+compares the submission with the short-lived presented snapshot, so entries added after the modal opened are not
+removed. Canonical operations precisely invalidate affected personalization and persona-block caches after successful
+writes.
+
+The Whitelist pages use the same transaction pattern. Channel additions use a native Channel Select and retain
+the existing cooldown inheritance rules. Role additions use a native Role Select and reject the everyone role.
+Both lists expose one red bulk Remove action beside Add. Their unchecked-means-remove modals use the same snapshot,
+reauthorization, fresh-read, and immediate-submit contract as User Blacklist. Duplicate additions and missing removal
+targets do not write or invalidate; successful changes invalidate the whitelist cache after the write.
+
+The **Personas** page uses paired **Add Persona** and **Remove Persona** actions. Add opens a modal with a String
+Select for the configured persona catalog and a native text Channel Select, adding one persona-channel mapping.
+The configured persona limit keeps the String Select within Discord's 25-option bound. Remove uses the same bulk
+checkbox contract as the other lists. Canonical full-set replacement preserves concurrent mappings, suppresses
+unchanged writes, and invalidates the whitelist cache only after a successful transaction.
 
 Before the introduction of the `IS_COMPONENTS_V2` flag, message components were sent in conjunction with message content. This means that you could send a message using a subset of the available components without setting the `IS_COMPONENTS_V2` flag, and the components would be included in the message content along with `content` and `embeds`.
 

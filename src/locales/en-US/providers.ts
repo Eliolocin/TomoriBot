@@ -113,7 +113,7 @@ export default {
       nsfw_jailbreaks: `Turn on \`/nsfw jailbreaks\` to help prevent this filter.`,
       review_messages: `Review recent messages, or clear them with \`/refresh\`.`,
       review_memories: `Check your memories and config (\`/memory personal export\`, \`/memory server export\`, \`/server config export\`).`,
-      blacklist_member: `Blacklist a problematic member with \`/server user-blacklist add\`.`,
+      blacklist_member: `Blacklist a problematic member with \`/moderation\`.`,
     },
     google: {
       "400_default_message": `There was an error in your request format`,

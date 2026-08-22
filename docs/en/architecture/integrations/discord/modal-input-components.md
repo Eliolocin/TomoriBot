@@ -9,6 +9,9 @@ Discord introduced new interactive input components for modals beyond the origin
 | Type | Name                              | Description                                           | Container |
 | ---- | --------------------------------- | ----------------------------------------------------- | --------- |
 | 4    | [Text Input](#text-input)         | Free-form text entry (original modal input)           | Action Row or Label |
+| 5    | [User Select](#user-select)       | Select a user from the server or client context       | Label     |
+| 6    | [Role Select](#role-select)       | Select a role from the server context                  | Label     |
+| 8    | [Channel Select](#channel-select) | Select a channel from the server context              | Label     |
 | 18   | [Label](#label)                   | Wrapper component for new modal inputs                | —         |
 | 21   | [Radio Group](#radio-group)       | Select exactly one option from a list                 | Label     |
 | 22   | [Checkbox Group](#checkbox-group) | Select one or many options from a list                | Label     |
@@ -16,7 +19,7 @@ Discord introduced new interactive input components for modals beyond the origin
 
 ### Key Differences from Message Components
 
-- **Label wrapper required for structured inputs**: Radio Group, Checkbox Group, and Checkbox must be placed inside a Label component (type 18), _not_ an Action Row. Text Inputs can use the older Action Row layout; TomoriBot's raw modal path wraps them in Labels so the same form can carry descriptions and structured inputs.
+- **Label wrapper required for structured inputs**: Radio Group, Checkbox Group, Checkbox, User Select, Role Select, and Channel Select must be placed inside a Label component (type 18), _not_ an Action Row. Text Inputs can use the older Action Row layout; TomoriBot's raw modal path wraps them in Labels so the same form can carry descriptions and structured inputs.
 - **Modal-only**: These components are only available in modals — they cannot be used in message payloads.
 - **Submit data structure**: The interaction response nests the input component inside the Label's `component` field, not in an `ActionRow.components` array.
 
@@ -291,6 +294,177 @@ A Checkbox is a single toggle for simple yes/no questions. Unlike Checkbox Group
 
 ---
 
+## User Select
+
+A User Select modal component allows picking a Discord user from the client/guild context. In modals, it is wrapped in a Label component (type 18).
+
+### User Select Structure
+
+| Field       | Type    | Description                                                          |
+| ----------- | ------- | -------------------------------------------------------------------- |
+| type        | integer | `5` for User Select                                                  |
+| custom_id   | string  | Developer-defined identifier for the input; 1-100 characters         |
+| min_values? | integer | Minimum number of users that must be selected (default: 1)           |
+| max_values? | integer | Maximum number of users that can be selected (default: 1)             |
+| required?   | boolean | Whether a selection is required before submitting (default: true)    |
+
+### Modal Payload Example
+
+```json
+{
+  "type": 9,
+  "data": {
+    "custom_id": "moderation:v1:user-blacklist-add-submit:en-US:nonce123",
+    "title": "Add Blacklist",
+    "components": [
+      {
+        "type": 18,
+        "label": "Member",
+        "description": "Choose a member to exclude from personalization.",
+        "component": {
+          "type": 5,
+          "custom_id": "userblacklist_add_user_nonce123",
+          "min_values": 1,
+          "max_values": 1,
+          "required": true
+        }
+      }
+    ]
+  }
+}
+```
+
+### Submit Interaction Data Example
+
+```json
+{
+  "type": 5,
+  "data": {
+    "custom_id": "moderation:v1:user-blacklist-add-submit:en-US:nonce123",
+    "components": [
+      {
+        "id": 1,
+        "type": 18,
+        "component": {
+          "custom_id": "userblacklist_add_user_nonce123",
+          "id": 2,
+          "type": 5,
+          "values": ["123456789012345678"]
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Moderation compound modals
+
+TomoriBot's `/moderation` removal actions combine up to five Checkbox Groups with ten options each. Every entry
+is initially checked. Unchecking an entry expresses removal on submit, without a second confirmation. The route
+stores the presented values under the modal nonce and consumes that snapshot once, so it can distinguish an
+unchecked entry from an entry added concurrently after the modal opened. Lists above 50 entries must use a
+bounded fallback instead of silently truncating the modal.
+
+The `/moderation` **Personas** add modal combines a String Select for the configured persona with a native Channel
+Select restricted to text channels. The server persona limit is below Discord's 25-option String Select limit.
+
+---
+
+## Channel Select
+
+A Channel Select modal component allows picking a Discord channel from the server context, with optional channel type filtering (e.g. `GuildText`). In modals, it is wrapped in a Label component (type 18).
+
+### Channel Select Structure
+
+| Field          | Type             | Description                                                           |
+| -------------- | ---------------- | --------------------------------------------------------------------- |
+| type           | integer          | `8` for Channel Select                                                |
+| custom_id      | string           | Developer-defined identifier for the input; 1-100 characters          |
+| channel_types? | array of integer | Allowed channel type integers (e.g. `[0]` for GuildText)              |
+| min_values?    | integer          | Minimum number of channels that must be selected (default: 1)         |
+| max_values?    | integer          | Maximum number of channels that can be selected (default: 1)           |
+| required?      | boolean          | Whether a selection is required before submitting (default: true)     |
+
+### Modal Payload Example
+
+```json
+{
+  "type": 9,
+  "data": {
+    "custom_id": "moderation:v1:whitelist-channel-add-submit:en-US:nonce123",
+    "title": "Add or Edit Channel",
+    "components": [
+      {
+        "type": 18,
+        "label": "Channel",
+        "description": "Choose a text channel to whitelist.",
+        "component": {
+          "type": 8,
+          "custom_id": "whitelist_channel_add_channel_nonce123",
+          "channel_types": [0],
+          "min_values": 1,
+          "max_values": 1,
+          "required": true
+        }
+      }
+    ]
+  }
+}
+```
+
+### Submit Interaction Data Example
+
+```json
+{
+  "type": 5,
+  "data": {
+    "custom_id": "moderation:v1:whitelist-channel-add-submit:en-US:nonce123",
+    "components": [
+      {
+        "id": 1,
+        "type": 18,
+        "component": {
+          "custom_id": "whitelist_channel_add_channel_nonce123",
+          "id": 2,
+          "type": 8,
+          "values": ["123456789012345678"]
+        }
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Role Select
+
+A Role Select modal component picks one or more roles from the current server. It uses component type `6` and
+is wrapped in a Label component (type `18`) in modal payloads. Routed Role Select values use the same
+nonce-bounded, consume-once transport as User and Channel Select fields.
+
+```json
+{
+  "type": 18,
+  "label": "Role",
+  "description": "Choose a role whose members can trigger me.",
+  "component": {
+    "type": 6,
+    "custom_id": "whitelist_role_add_role_nonce123",
+    "min_values": 1,
+    "max_values": 1,
+    "required": true
+  }
+}
+```
+
+Submission data carries the selected role snowflake in the nested component's `values` array. The handler must
+resolve it again through the current guild role manager and reject the everyone role before writing.
+
+---
+
 ## Component Selection Standards
 
 Use this decision guide when choosing between modal input types.
@@ -416,14 +590,18 @@ When a modal is editing an existing list of configured items, prefer Checkbox Gr
 - Pre-check every current entry and treat unchecked items as "remove" or "disable".
 - Use `min_values: 0` and `required: false` so users can submit with every item unchecked.
 - Chunk one category across multiple groups of 10 options, or split different entity types into separate groups.
-- Keep the first group descriptive and use "(Continued)" labels for later groups.
+- Give the first group a domain title such as **Whitelisted Personas** and a short instruction such as
+  "Uncheck box then submit to remove whitelist." Name later groups **Continuation (1)**,
+  **Continuation (2)**, and so on, without repeating the description.
 - Respect Discord's modal ceiling: 5 checkbox groups, 10 options each, 50 total entries.
-- If the list exceeds 50, warn clearly and fall back to a different management flow rather than silently truncating.
+- If the list exceeds 50, keep the originating control panel visible and show a temporary yellow selection receipt
+  above it with bounded range buttons such as `1-50` and `51-100`. A range button opens a modal containing only
+  that snapshot. Repaint or remove the receipt after the bounded workflow ends; never silently truncate.
 - For persistent setting commands, treat checked items as the stored enabled-set and write the full checked set back on submit.
 
 Implemented examples:
 
-- `/server whitelist remove` manages personas, channels, and roles in one modal.
+- `/moderation` manages blacklist, channel, persona, and role removals through domain-specific checklist modals.
 - `/server private-channels` manages the full saved private-channel set in one modal, with paginated fallback beyond 50 channels.
 - `/server rp-channels` manages the full saved RP-channel set in one modal, with paginated fallback beyond 50 channels.
 - `/server crosschannel-blocklist` manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.

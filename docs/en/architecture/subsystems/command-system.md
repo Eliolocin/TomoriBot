@@ -297,7 +297,7 @@ Use when the user is managing an existing set of configured entries and batch ke
 
 Examples:
 
-- `/server whitelist remove`
+- `/moderation` User Blacklist and Whitelist removal actions
 - `/config remove modeloverride` (channels + personas together)
 - `/config workarounds` (experimental server-scoped workaround toggles)
 - `/server stm manage` (active server-shared STM entries)
@@ -321,7 +321,7 @@ Use when one command owns the full enabled-set of a durable setting rather than 
 Example:
 
 - `/server crosschannel-blocklist`
-- `/server whitelist persona` (after the persona picker, the command owns that persona's full enabled channel set)
+- `/moderation` Personas (each write preserves the persona's complete enabled channel set)
 
 Rules:
 

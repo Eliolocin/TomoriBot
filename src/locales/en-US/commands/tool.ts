@@ -315,7 +315,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         text_option: `Text`,
         json_option: `JSON`,
         no_permission_title: `Permission Denied`,
-        no_permission_description: `You need **Manage Server** permission, or the server owner must enable this for members via \`/server member-permissions\`.`,
+        no_permission_description: `You need **Manage Server** permission, or the server owner must enable this for members via \`/moderation\`.`,
         modal_title: `Select Persona`,
         persona_select_label: `Persona`,
         persona_select_description: `Choose which persona to snapshot the prompt for.`,

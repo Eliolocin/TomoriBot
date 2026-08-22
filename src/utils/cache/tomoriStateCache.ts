@@ -44,22 +44,8 @@ const botStartTimestamp = Date.now();
  */
 const STARTUP_GRACE_PERIOD_MS = (Number(process.env.STARTUP_GRACE_PERIOD_MINUTES) || 3) * 60 * 1000;
 
-/**
- * Checks whether the current "not set up" state is likely a transient
- * deployment artifact rather than a genuinely unconfigured server.
- *
- * Returns a synthetic error entry when:
- * - A real DB error was recently recorded for this server, OR
- * - The bot is still within the startup grace period (fresh container start)
- *
- * Used by the UI layer (replyInfoEmbed / sendStandardEmbed) to swap
- * "Initial Setup Required" for "Currently Updating..." when appropriate.
- *
- * @param serverDiscId - Discord server ID (or user ID for DMs)
- * @returns The error entry if fresh (within staleness threshold) or within
- *          startup grace period, or null if this is genuinely "not set up"
- */
-export function getLastDbError(serverDiscId: string): { message: string; timestamp: number } | null {
+/** Returns only a recent database failure recorded for this workspace. */
+export function getRecordedDbError(serverDiscId: string): { message: string; timestamp: number } | null {
   const entry = lastDbError.get(serverDiscId);
   if (entry) {
     if (Date.now() - entry.timestamp > DB_ERROR_STALENESS_MS) {
@@ -68,6 +54,17 @@ export function getLastDbError(serverDiscId: string): { message: string; timesta
       return entry;
     }
   }
+
+  return null;
+}
+
+/**
+ * Returns a recent database failure or a startup-grace marker for an empty workspace read.
+ * The synthetic startup marker must not be used to downgrade successfully loaded data.
+ */
+export function getLastDbError(serverDiscId: string): { message: string; timestamp: number } | null {
+  const entry = getRecordedDbError(serverDiscId);
+  if (entry) return entry;
 
   // During startup grace period, treat empty results as "updating"
   //    so users don't see "Initial Setup Required" on servers that ARE

@@ -77,7 +77,7 @@ than externalising SQL. Size is the signal; the split must follow a coherent dom
 
 - `server_chat_configs` — `/config humanizer`, `/config message-fetch-limit`, `/model` parameters, `cascade_limit`, `match_limit`, `context_note`, `context_note_depth`
 - `server_notice_embeds_configs` — `/config notice-embeds visibility`
-- `server_member_permissions_configs` — `/server member-permissions`; `/capabilities manage` also writes `self_teaching_enabled` and `personal_memories_enabled`
+- `server_member_permissions_configs` — `/moderation` Member Access; `/capabilities manage` also writes `self_teaching_enabled` and `personal_memories_enabled`
 - `server_channel_scope_configs` — `/server rp-channels`, `/server private-channels`, `/server crosschannel-blocklist`, thought-log channel
 - `server_welcome_configs` — `/server welcome-channel`
 - `server_trigger_behavior_configs` — `/server always-reply`, `/server deliberate-trigger-mode`, cooldown settings (`ServerScheduleRepository`)
@@ -238,6 +238,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `server_novelai_imagegen_configs.image_default_negative_tags` stores server-wide default negative image tags. NovelAI consumes them as the negative prompt, while standard image providers consume them only when the backend exposes a real negative-prompt channel.
 - `server_novelai_imagegen_configs.nai_diffusion_model_id` stores the dedicated NovelAI image-model selection for `generate_image_nai`; `NULL` means NovelAI image generation is disabled until a NovelAI model is explicitly selected again.
 - `server_novelai_imagegen_configs.nai_sampler`, `nai_steps`, `nai_scale`, `nai_noise_schedule`, and `nai_cfg_rescale` store optional server overrides for NovelAI image generation params; `NULL` means use the env fallback.
+- `server_member_permissions_configs.server_memteaching_enabled` gates non-manager member creation, editing, and removal of shared server memories and documents. The DB default is `false` (opt-in for new servers), while DM-backed pseudo-server setup initializes it to `true`. Server managers retain access regardless of this flag and can opt members in through `/moderation` Member Access.
 - `server_member_permissions_configs.self_teaching_enabled` and `server_member_permissions_configs.personal_memories_enabled` are exposed in `/capabilities manage` because they gate core bot behavior, but they remain in the member-permissions split table with the other teaching/privacy toggles.
 - `server_capabilities_configs.videogen_enabled` gates both slash-command and tool-driven video generation exposure. The DB default is `false`, so video generation starts disabled until explicitly enabled.
 - `server_capabilities_configs.user_blocking_enabled` gates the `block_user` and `unblock_user` built-in tools. The DB default is `true`.

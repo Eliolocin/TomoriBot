@@ -46,9 +46,11 @@ import shared from "./commands/shared";
 import nuke from "./commands/nuke";
 import setup from "./commands/setup";
 import compact from "./commands/compact";
+import moderation from "./commands/moderation";
 
 export default {
   commands: {
+    ...moderation,
     ...learn,
     ...speech,
     ...choices,

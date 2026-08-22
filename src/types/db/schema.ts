@@ -653,7 +653,7 @@ export type ServerChatConfigRow = z.infer<typeof serverChatConfigSchema>;
 
 const serverMemberPermissionsConfigSchema = z.object({
   server_id: z.number().int(),
-  server_memteaching_enabled: z.boolean().default(true),
+  server_memteaching_enabled: z.boolean().default(false),
   attribute_memteaching_enabled: z.boolean().default(false),
   sampledialogue_memteaching_enabled: z.boolean().default(false),
   self_teaching_enabled: z.boolean().default(true),

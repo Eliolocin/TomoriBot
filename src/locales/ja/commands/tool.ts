@@ -313,7 +313,7 @@
         text_option: `テキスト`,
         json_option: `JSON`,
         no_permission_title: `権限が不足しています`,
-        no_permission_description: `**サーバー管理**権限が必要か、サーバーオーナーが\`/server member-permissions\`でこの機能を有効にする必要があります。`,
+        no_permission_description: `**サーバー管理**権限が必要か、サーバーオーナーが\`/moderation\`でこの機能を有効にする必要があります。`,
         modal_title: `ペルソナを選択`,
         persona_select_label: `ペルソナ`,
         persona_select_description: `スナップショットを取るペルソナを選択してください。`,

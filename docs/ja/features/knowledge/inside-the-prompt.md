@@ -24,7 +24,7 @@ TomoriBotをトリガーするたびに、以下の内容が組み立てられ�
 | **ペルソナプロンプト** | *（任意）* | `/persona prompt set`（`remove` も） | システムプロンプトとは別に、アクティブなペルソナ専用に書かれたプロンプト。 |
 | [**ペルソナ属性**](/ja/features/chatting-personality/multiple-personas/#attributes) | | `/persona attribute add`（`edit`、`remove` も） | アクティブなペルソナの性格特性と話し方のパターン。 |
 | **サーバー情報** | | *（Discordから、コマンドなし）* | サーバー名、説明、彼女がいるチャンネル。Discord自体から取得されます。 |
-| [**ペルソナ・ユーザーブロック**](/ja/features/capabilities/tools-and-extensions/#built-in-tools) | *（任意）* | 確認・解除は `/server user-blacklist remove`。`/capabilities manage userblocking` でゲート | このペルソナが特定のユーザーに対して保持している、有効なミュート/ブロック制限。 |
+| [**ペルソナ・ユーザーブロック**](/ja/features/capabilities/tools-and-extensions/#built-in-tools) | *（任意）* | 確認・解除は `/moderation`。`/capabilities manage userblocking` でゲート | このペルソナが特定のユーザーに対して保持している、有効なミュート/ブロック制限。 |
 | [**サーバーの記憶**](/ja/features/knowledge/memory/#personal-vs-server-memories) | | `/memory server add`（`edit`、`remove` も） | このサーバー用に保存された長期的な事実。 |
 | [**サーバーの絵文字**](/ja/features/chatting-personality/behavior-tweaking/#capabilities-what-shes-allowed-to-do) | *（任意）* | `/capabilities manage emojiusage`（切り替えのみ）、初期化は `/expressions initialize` | サーバーに存在するカスタム絵文字。 |
 | [**サーバーのスタンプ**](/ja/features/chatting-personality/behavior-tweaking/#capabilities-what-shes-allowed-to-do) | *（任意）* | `/capabilities manage stickerusage`（切り替えのみ）、初期化は `/expressions initialize` | サーバーに存在するカスタムスタンプ。 |

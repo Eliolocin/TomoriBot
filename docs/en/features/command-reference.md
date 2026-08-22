@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **40**. Runnable slash commands: **222**.
+Top-level command groups: **41**. Runnable slash commands: **216**.
 
 ## `/capabilities`
 
@@ -210,6 +210,14 @@ Manage this server's default AI models.
 | `/model transcription` | Choose this server's active transcription endpoint. |
 | `/model video` | Change this server's video generation model. |
 | `/model vision` | Set this server's vision model for when its chat model can't see images. |
+
+## `/moderation`
+
+Manage member permissions, blacklist, and channel and role whitelist.
+
+| Command | Summary |
+|---|---|
+| `/moderation` | Manage member permissions, blacklist, and channel and role whitelist. |
 
 ## `/novelai`
 
@@ -418,7 +426,6 @@ Manage server-wide settings, channels, permissions, and integrations.
 | `/server deliberate-tool-mode` | Toggle deliberate tool mode for this server. |
 | `/server deliberate-tool-trigger` | Manage custom trigger phrases for deliberate tool mode. |
 | `/server deliberate-trigger-mode` | Toggle deliberate trigger mode (DTM) for this server. |
-| `/server member-permissions` | Configure what non-admin members can teach me. |
 | `/server private-channels` | Manage private channels where STMs are isolated and thought logs are suppressed |
 | `/server quota image-generation` | Configure daily image generation quotas for this server. |
 | `/server quota reset` | Reset a quota pool for image, text, or video generation. |
@@ -432,15 +439,9 @@ Manage server-wide settings, channels, permissions, and integrations.
 | `/server stm prompt-edit` | Customize the STM tool description and the unified refresh nudge. |
 | `/server thought-logs-channel` | Set or clear the server's thought-log channel. |
 | `/server timezone` | Set your server's timezone offset from UTC (default: 0 / UTC). |
-| `/server user-blacklist add` | Add a member to the personalization blacklist. |
-| `/server user-blacklist remove` | Review user blacklist entries and persona blocks; uncheck entries to remove. |
 | `/server user-byok toggle` | Toggle whether user-triggered messages require a member's personal provider. |
 | `/server welcome-channel remove` | Remove the configured welcome channel and stop automated greetings. |
 | `/server welcome-channel set` | Set the channel used for automated welcome greetings. |
-| `/server whitelist channel` | Add a channel to the whitelist, optionally overriding the global cooldown |
-| `/server whitelist persona` | Restrict which channels a persona can trigger in |
-| `/server whitelist remove` | Remove personas, channels, or roles from whitelist |
-| `/server whitelist role` | Add or remove whitelisted roles that can trigger the bot |
 
 ## `/setup`
 

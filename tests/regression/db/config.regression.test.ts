@@ -33,7 +33,20 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Config — regression", () => {
     expect(state?.config).not.toBeNull();
     expect(state?.config.message_fetch_limit).toBe(80);
     expect(state?.config.humanizer_degree).toBe(1);
+    expect(state?.config.server_memteaching_enabled).toBe(false);
     expect(state?.config.tool_use_enabled ?? true).toBe(true);
+  });
+
+  it("defaults new server member memory management rows to opt-in", async () => {
+    const [column] = await testSql<Array<{ column_default: string | null }>>`
+      SELECT column_default
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'server_member_permissions_configs'
+        AND column_name = 'server_memteaching_enabled'
+    `;
+
+    expect(column?.column_default?.toLowerCase()).toContain("false");
   });
 
   it("updateTomoriConfig mutates a config field by server ID", async () => {

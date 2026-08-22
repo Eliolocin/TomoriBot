@@ -20,6 +20,18 @@ type PersonaWhitelistStatus = Pick<
   "hasActivePersonaWhitelist" | "restrictedPersonaIds" | "whitelistedPersonaIds"
 >;
 
+export type WhitelistChannelsReadResult =
+  | { status: "fresh"; channels: ChannelWhitelistRow[] }
+  | { status: "unavailable"; channels: [] };
+
+export type WhitelistPersonasReadResult =
+  | { status: "fresh"; personas: ChannelPersonaWhitelistRow[] }
+  | { status: "unavailable"; personas: [] };
+
+export type WhitelistRolesReadResult =
+  | { status: "fresh"; roles: RoleWhitelistRow[] }
+  | { status: "unavailable"; roles: [] };
+
 class WhitelistRepository {
   private normalizeTomoriIds(rows: Array<{ persona_id: number | string | bigint }>): number[] {
     return rows
@@ -249,13 +261,25 @@ class WhitelistRepository {
 
   /**
    * Get all whitelisted channels for a server, ordered by creation time.
-   *
    */
   async getAllWhitelistChannels(serverId: number): Promise<ChannelWhitelistRow[]> {
     const result = await sql`
       SELECT * FROM channel_whitelist WHERE server_id = ${serverId} ORDER BY created_at ASC
     `;
     return result as ChannelWhitelistRow[];
+  }
+
+  /**
+   * Get all whitelisted channels for a server with read status provenance.
+   */
+  async getAllWhitelistChannelsResult(serverId: number): Promise<WhitelistChannelsReadResult> {
+    try {
+      const channels = await this.getAllWhitelistChannels(serverId);
+      return { status: "fresh", channels };
+    } catch (error) {
+      log.error(`Error loading whitelist channels for server ${serverId}:`, error);
+      return { status: "unavailable", channels: [] };
+    }
   }
 
   /**
@@ -319,6 +343,19 @@ class WhitelistRepository {
       ORDER BY persona_id ASC, channel_disc_id ASC, created_at ASC
     `;
     return result as ChannelPersonaWhitelistRow[];
+  }
+
+  /**
+   * Get all persona whitelist entries for a server with read status provenance.
+   */
+  async getAllWhitelistPersonasResult(serverId: number): Promise<WhitelistPersonasReadResult> {
+    try {
+      const personas = await this.getAllWhitelistPersonas(serverId);
+      return { status: "fresh", personas };
+    } catch (error) {
+      log.error(`Error loading whitelist personas for server ${serverId}:`, error);
+      return { status: "unavailable", personas: [] };
+    }
   }
 
   /**
@@ -388,6 +425,19 @@ class WhitelistRepository {
       SELECT * FROM role_whitelist WHERE server_id = ${serverId} ORDER BY created_at ASC
     `;
     return result as RoleWhitelistRow[];
+  }
+
+  /**
+   * Get all whitelisted roles for a server with read status provenance.
+   */
+  async getAllWhitelistRolesResult(serverId: number): Promise<WhitelistRolesReadResult> {
+    try {
+      const roles = await this.getAllWhitelistRoles(serverId);
+      return { status: "fresh", roles };
+    } catch (error) {
+      log.error(`Error loading whitelist roles for server ${serverId}:`, error);
+      return { status: "unavailable", roles: [] };
+    }
   }
 
   /**

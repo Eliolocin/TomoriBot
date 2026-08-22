@@ -85,7 +85,7 @@ export async function execute(
         model_randomizer_enabled: false,
       }),
       configRepository.updateMemberPermissionsConfig(serverId, {
-        server_memteaching_enabled: true,
+        server_memteaching_enabled: false,
         attribute_memteaching_enabled: false,
         sampledialogue_memteaching_enabled: false,
         self_teaching_enabled: true,

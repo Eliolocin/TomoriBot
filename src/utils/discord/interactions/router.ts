@@ -1,11 +1,12 @@
 import { MessageFlags, type Client, type Interaction } from "discord.js";
 import { helpInteractionRoute } from "@/utils/discord/interactions/helpRoutes";
 import { mcpsInteractionRoute } from "@/utils/discord/interactions/mcpsRoutes";
+import { moderationInteractionRoute } from "@/utils/discord/interactions/moderationRoutes";
 import { InteractionRouteRegistry, type GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-const registry = new InteractionRouteRegistry([helpInteractionRoute, mcpsInteractionRoute]);
+const registry = new InteractionRouteRegistry([helpInteractionRoute, mcpsInteractionRoute, moderationInteractionRoute]);
 
 export function isGlobalRoutableInteraction(interaction: Interaction): interaction is GlobalRoutableInteraction {
   return interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit();
@@ -20,12 +21,14 @@ export async function dispatchGlobalInteraction(
     if (result === "unmatched") return false;
     if (result === "stale-version") {
       const namespace = interaction.customId.split(":", 1)[0] ?? "panel";
+      const key =
+        namespace === "mcps"
+          ? "commands.mcps.outdated_panel"
+          : namespace === "moderation"
+            ? "commands.moderation.outdated_panel"
+            : "general.errors.outdated_panel";
       await interaction.reply({
-        content: localizer(
-          interaction.locale ?? interaction.guildLocale ?? "en-US",
-          namespace === "mcps" ? "commands.mcps.outdated_panel" : "general.errors.outdated_panel",
-          { command: `/${namespace}` },
-        ),
+        content: localizer(interaction.locale ?? interaction.guildLocale ?? "en-US", key, { command: `/${namespace}` }),
         flags: MessageFlags.Ephemeral,
       });
     }

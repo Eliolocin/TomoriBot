@@ -1,4 +1,11 @@
-import { ComponentType, type ComponentInContainerData, type ContainerComponentData } from "discord.js";
+import {
+  ButtonStyle,
+  ComponentType,
+  type ActionRowData,
+  type ButtonComponentData,
+  type ComponentInContainerData,
+  type ContainerComponentData,
+} from "discord.js";
 import type { PanelReceipt } from "@/types/discord/panel";
 
 const PANEL_ACCENT_BY_TONE = {
@@ -28,5 +35,22 @@ export function buildPanelReceiptContainer(receipt: PanelReceipt): ContainerComp
         content: `### ${receipt.heading}\n> ${receipt.detail}${receipt.metadata ? `\n-# ${receipt.metadata}` : ""}`,
       },
     ],
+  };
+}
+
+export function buildCategoryButtonRow<TCategory extends string>(
+  categories: readonly { id: TCategory; label: string; customId: string }[],
+  activeCategory: TCategory,
+  disabled = false,
+): ActionRowData<ButtonComponentData> {
+  return {
+    type: ComponentType.ActionRow,
+    components: categories.map((cat) => ({
+      type: ComponentType.Button,
+      style: cat.id === activeCategory ? ButtonStyle.Primary : ButtonStyle.Secondary,
+      customId: cat.customId,
+      label: cat.label,
+      disabled,
+    })),
   };
 }

@@ -12,6 +12,10 @@ export type PersonaUserBlockKey = {
   userDiscId: string;
 };
 
+export type PersonaUserBlockReadResult =
+  | { status: "fresh"; blocks: PersonaUserBlockWithPersona[] }
+  | { status: "unavailable"; blocks: [] };
+
 function parsePersonaUserBlockRows(rows: unknown[]): PersonaUserBlockRow[] {
   const parsedRows: PersonaUserBlockRow[] = [];
   for (const row of rows) {
@@ -60,7 +64,7 @@ class PersonaUserBlockRepository {
     }
   }
 
-  async loadActiveBlocksForServer(serverId: number): Promise<PersonaUserBlockWithPersona[]> {
+  async loadActiveBlocksForServerResult(serverId: number): Promise<PersonaUserBlockReadResult> {
     try {
       const rows = await sql`
         SELECT
@@ -93,11 +97,16 @@ class PersonaUserBlockRepository {
           persona_name: typeof candidate.persona_name === "string" ? candidate.persona_name : "Unknown Persona",
         });
       }
-      return parsedRows;
+      return { status: "fresh", blocks: parsedRows };
     } catch (error) {
       log.error(`Error loading persona user blocks for server ${serverId}:`, error);
-      return [];
+      return { status: "unavailable", blocks: [] };
     }
+  }
+
+  async loadActiveBlocksForServer(serverId: number): Promise<PersonaUserBlockWithPersona[]> {
+    const result = await this.loadActiveBlocksForServerResult(serverId);
+    return result.blocks;
   }
 
   async upsertBlock(params: {

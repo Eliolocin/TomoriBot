@@ -112,7 +112,7 @@ export default {
       nsfw_jailbreaks: `\`/nsfw jailbreaks\` を有効にすると、このフィルターを回避しやすくなります。`,
       review_messages: `最近のメッセージを確認するか、\`/refresh\` でクリアしてください。`,
       review_memories: `メモリーと設定を確認してください（\`/memory personal export\`、\`/memory server export\`、\`/server config export\`）。`,
-      blacklist_member: `問題のあるメンバーは \`/server user-blacklist add\` でブラックリストに追加できます。`,
+      blacklist_member: `問題のあるメンバーは \`/moderation\` でブラックリストに追加できます。`,
     },
     google: {
       "400_default_message": `リクエスト形式にエラーがありました`,

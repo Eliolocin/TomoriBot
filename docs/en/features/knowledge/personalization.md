@@ -126,11 +126,10 @@ target whichever persona you explicitly call. Press Finish to skip.
 
 - Spotlight only **narrows** access; it never expands it. The selected personas are the
   *only* ones you can trigger there.
-- It still respects server-level limits like `/server whitelist persona`.
+- It still respects server-level persona limits configured through `/moderation`.
 - Proxy chains are blocked: if your spotlight only includes Alice, an Alice reply can't hand
   off to Bob for your message chain.
 
 Review or remove entries with `/personal spotlight manage` (uncheck to remove; timed
 spotlights expire on their own). In `/help`, choose **Behavior**, then **Personal Spotlight**, for the Discord summary.
-
 

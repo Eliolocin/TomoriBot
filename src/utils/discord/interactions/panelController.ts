@@ -1,6 +1,7 @@
-import type { ResolvedCollectionSelection } from "@/types/discord/panel";
+import type { ResolvedCollectionSelection, ResolvedRangeSelection } from "@/types/discord/panel";
 
 export const COLLECTION_PANEL_RANGE_SIZE = 25;
+export const MODERATION_PANEL_RANGE_SIZE = 10;
 
 export interface PanelInteractionStart<T> {
   acknowledge(): Promise<unknown>;
@@ -68,4 +69,21 @@ export function resolveCollectionSelection<T>(
 
 export function escapeDiscordMarkdown(value: string): string {
   return value.replace(/([\\`*_{}[\]()#+\-.!|>~])/g, "\\$1");
+}
+
+export function resolveRangeSelection<T>(
+  items: readonly T[],
+  requestedRange = 0,
+  rangeSize = MODERATION_PANEL_RANGE_SIZE,
+): ResolvedRangeSelection<T> {
+  const rangeCount = Math.max(1, Math.ceil(items.length / rangeSize));
+  const rangeIndex = Math.min(Math.max(requestedRange, 0), rangeCount - 1);
+  const start = rangeIndex * rangeSize;
+
+  return {
+    rangeIndex,
+    rangeCount,
+    totalCount: items.length,
+    visibleItems: items.slice(start, start + rangeSize),
+  };
 }

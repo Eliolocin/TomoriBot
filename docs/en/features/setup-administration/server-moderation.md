@@ -34,11 +34,9 @@ You can also bootstrap a server with **no** server-side text provider at all by 
 
 ## Access Control: Whitelists
 
-- `/server whitelist channel` — only whitelisted channels can trigger her (with optional
-  per-channel cooldown overrides).
-- `/server whitelist persona` — limit which channels a specific persona can trigger in.
-- `/server whitelist role` — restrict triggering to specific roles.
-- `/server whitelist remove` — remove whitelist entries.
+- `/moderation` → **Whitelist** → **Channels** — choose triggering channels and optional cooldown overrides.
+- `/moderation` → **Whitelist** → **Personas** — limit which channels a specific persona can trigger in.
+- `/moderation` → **Whitelist** → **Roles** — restrict triggering to specific roles.
 - `/server cooldown` (or `/config cooldown`) — set the global cooldown between responses.
 
 Whitelisted channels inherit the global cooldown unless you set a channel-specific override.

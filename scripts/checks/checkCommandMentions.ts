@@ -172,7 +172,7 @@ async function main(): Promise<void> {
 
   if (stale.length === 0 && unusedBaseline.length === 0) {
     console.log(`Command mentions OK (${findings.length} checked against ${validPaths.size} registered paths)`);
-    return;
+    process.exit(0);
   }
 
   if (unusedBaseline.length > 0) {

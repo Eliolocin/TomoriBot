@@ -28,6 +28,8 @@ import type { IRepository } from "./IRepository";
 export const MANAGED_WEBHOOK_KIND_SHARED_CHANNEL = "shared_channel" as const;
 type ManagedWebhookKind = typeof MANAGED_WEBHOOK_KIND_SHARED_CHANNEL;
 
+export type BlacklistReadResult = { status: "fresh"; memberIds: string[] } | { status: "unavailable"; memberIds: [] };
+
 type ManagedDiscordWebhookRow = {
   managed_webhook_id: number;
   guild_disc_id: string;
@@ -304,6 +306,13 @@ class ServerRepository implements IRepository<ServerExportShape> {
    */
   async getBlacklistedMemberIds(serverId: number): Promise<string[]> {
     return this.sqlGetBlacklistedMemberIds(serverId);
+  }
+
+  /**
+   * Returns all blacklisted user Discord IDs for a server with read status provenance.
+   */
+  async getBlacklistedMemberIdsResult(serverId: number): Promise<BlacklistReadResult> {
+    return this.sqlGetBlacklistedMemberIdsResult(serverId);
   }
 
   /**
@@ -663,9 +672,9 @@ class ServerRepository implements IRepository<ServerExportShape> {
         `;
         await tx`
           INSERT INTO server_member_permissions_configs (
-            server_id, attribute_memteaching_enabled, sampledialogue_memteaching_enabled
+            server_id, server_memteaching_enabled, attribute_memteaching_enabled, sampledialogue_memteaching_enabled
           ) VALUES (
-            ${server.server_id}, ${isDMChannel}, ${isDMChannel}
+            ${server.server_id}, ${isDMChannel}, ${isDMChannel}, ${isDMChannel}
           ) ON CONFLICT (server_id) DO NOTHING
         `;
         await tx`
@@ -891,7 +900,7 @@ class ServerRepository implements IRepository<ServerExportShape> {
     }
   }
 
-  private async sqlGetBlacklistedMemberIds(serverId: number): Promise<string[]> {
+  private async sqlGetBlacklistedMemberIdsResult(serverId: number): Promise<BlacklistReadResult> {
     try {
       const result = await sql`
         SELECT user_disc_id FROM personalization_blacklist
@@ -900,17 +909,23 @@ class ServerRepository implements IRepository<ServerExportShape> {
       `;
 
       if (!result || result.length === 0) {
-        return [];
+        return { status: "fresh", memberIds: [] };
       }
 
-      // Map to array of Discord IDs
       const memberIds = result.map((row: unknown) => (row as { user_disc_id: string }).user_disc_id);
-      log.info(`Found ${memberIds.length} blacklisted members for server ${serverId}`);
-      return memberIds;
+      return { status: "fresh", memberIds };
     } catch (error) {
       log.error(`Error loading blacklisted members for server ${serverId}:`, error);
-      return [];
+      return { status: "unavailable", memberIds: [] };
     }
+  }
+
+  private async sqlGetBlacklistedMemberIds(serverId: number): Promise<string[]> {
+    const result = await this.sqlGetBlacklistedMemberIdsResult(serverId);
+    if (result.status === "fresh" && result.memberIds.length > 0) {
+      log.info(`Found ${result.memberIds.length} blacklisted members for server ${serverId}`);
+    }
+    return result.memberIds;
   }
 
   private async sqlUpsertManagedWebhook(params: {

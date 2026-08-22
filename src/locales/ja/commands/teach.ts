@@ -3,7 +3,7 @@
     sampledialogue: {
       description: `私がどのように応答すべきかの例として、ユーザー/ボットの対話ペアを追加します。`,
       teaching_disabled_title: `サンプル対話の教育が無効です`,
-      teaching_disabled_description: `現在、このサーバーではメンバーがサンプル対話を教える・取り除くことは許可されていません。\`サーバー管理\`権限を持つメンバーが\`/server member-permissions\`でこれを有効にできます。`,
+      teaching_disabled_description: `現在、このサーバーではメンバーがサンプル対話を教える・取り除くことは許可されていません。\`サーバー管理\`権限を持つメンバーが\`/moderation\`でこれを有効にできます。`,
       modal_title: `サンプル対話の追加`,
       persona_select_label: `ペルソナ`,
       persona_select_description: `この対話を追加するペルソナを選択してください。`,
@@ -51,7 +51,7 @@
     attribute: {
       description: `このサーバーでの私を表す人格属性を追加します。`,
       teaching_disabled_title: `属性の教育が無効です`,
-      teaching_disabled_description: `現在、このサーバーではメンバーが人格属性を教える・取り除くことは許可されていません。\`サーバー管理\`権限を持つメンバーが\`/server member-permissions\`でこれを有効にできます。`,
+      teaching_disabled_description: `現在、このサーバーではメンバーが人格属性を教える・取り除くことは許可されていません。\`サーバー管理\`権限を持つメンバーが\`/moderation\`でこれを有効にできます。`,
       modal_title: `人格属性の追加`,
       persona_select_label: `ペルソナ`,
       persona_select_description: `この属性を追加するペルソナを選択してください。`,
@@ -97,7 +97,7 @@
       rag_disabled_title: `ドキュメントRAGが無効です`,
       rag_disabled_description: `文書の参照にはデータベースに [pgvector](https://github.com/pgvector/pgvector) PostgreSQL拡張が必要です。pgvector をインストールして TomoriBot を再起動してください（[自己ホスト設定ガイド](https://docs.tomoribot.app/ja/self-hosting/manual-setup/)を参照）。`,
       teaching_disabled_title: `ドキュメントの教育が無効です`,
-      teaching_disabled_description: `現在、このサーバーではメンバーが文書を教える・削除することは許可されていません。\`サーバー管理\`権限を持つメンバーが\`/server member-permissions\`で有効にできます。`,
+      teaching_disabled_description: `現在、このサーバーではメンバーが文書を教える・削除することは許可されていません。\`サーバー管理\`権限を持つメンバーが\`/moderation\`で有効にできます。`,
       no_embedding_model_title: `埋め込みモデルが設定されていません`,
       no_embedding_model_description: `このプロバイダーには埋め込みモデルが設定されていません。\`/model embedding\`で設定してください。`,
       no_api_key_title: `APIキーがありません`,
@@ -199,7 +199,7 @@
       server: {
         description: `私の知識ベースにサーバーの記憶を追加します。`,
         teaching_disabled_title: `サーバーの記憶の教育が無効です`,
-        teaching_disabled_description: `現在、このサーバーではメンバーがサーバーの記憶を追加・取り除くすることは許可されていません。\`サーバー管理\`権限を持つメンバーが\`/server member-permissions\`でこれを有効にできます。`,
+        teaching_disabled_description: `現在、このサーバーではメンバーがサーバーの記憶を追加・取り除くすることは許可されていません。\`サーバー管理\`権限を持つメンバーが\`/moderation\`でこれを有効にできます。`,
         modal_title: `サーバーの記憶の追加`,
         persona_select_label: `ペルソナ`,
         persona_select_description: `このサーバー記憶を適用するペルソナを選択してください。`,

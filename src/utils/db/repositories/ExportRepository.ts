@@ -178,7 +178,7 @@ class ExportRepository {
           COALESCE(scc.timezone_offset, 0)                          AS timezone_offset,
           COALESCE(scc.message_fetch_limit, 80)                     AS message_fetch_limit,
           scc.system_prompt                                          AS system_prompt,
-          COALESCE(smpc.server_memteaching_enabled, true)           AS server_memteaching_enabled,
+          COALESCE(smpc.server_memteaching_enabled, false)          AS server_memteaching_enabled,
           COALESCE(smpc.attribute_memteaching_enabled, false)       AS attribute_memteaching_enabled,
           COALESCE(smpc.sampledialogue_memteaching_enabled, false)  AS sampledialogue_memteaching_enabled,
           COALESCE(smpc.self_teaching_enabled, true)                AS self_teaching_enabled,

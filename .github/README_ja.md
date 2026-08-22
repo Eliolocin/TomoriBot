@@ -264,7 +264,7 @@ bun run update
 - `/config` - TomoriBotを調整するための複数の方法
 - `/memory personal add` / `/memory personal remove` - 個人メモリーの追加/削除
 - `/memory server add` / `/memory server remove` - サーバー全体のメモリーの追加/削除
-- `/server whitelist` / `/server user-blacklist` - TomoriBotの権限の追加/削除
+- `/moderation` - TomoriBotの権限の追加/削除
 
 すべてのスラッシュコマンドについては、**[コマンドリファレンス](https://docs.tomoribot.app/ja/features/command-reference/)**の全文を参照してください。
 

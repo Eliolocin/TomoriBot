@@ -472,7 +472,7 @@ const behaviorPages: readonly HelpPageDefinition[] = [
       configHumanizer: mention("config", "humanizer"),
       configSystemPromptSet: mention("config", "system-prompt", "set"),
       capabilitiesManage: mention("capabilities", "manage"),
-      serverWhitelistChannel: mention("server", "whitelist", "channel"),
+      serverWhitelistChannel: mention("moderation"),
     }),
   },
   {
@@ -495,7 +495,7 @@ const behaviorPages: readonly HelpPageDefinition[] = [
     variables: () => ({
       personalSpotlightSet: mention("personal", "spotlight", "set"),
       personalSpotlightManage: mention("personal", "spotlight", "manage"),
-      serverWhitelistPersona: mention("server", "whitelist", "persona"),
+      serverWhitelistPersona: mention("moderation"),
     }),
   },
   {

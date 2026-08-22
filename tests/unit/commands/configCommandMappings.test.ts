@@ -148,7 +148,7 @@ describe("config command write mappings", () => {
     });
   });
 
-  describe("/server member-permissions", () => {
+  describe("/moderation Member Access", () => {
     it("routes checkbox selections to server_member_permissions_configs", () => {
       const plan = buildServerMemberPermissionsConfigWritePlan(disabledServerMemberPermissionsState, [
         "servermemories",
