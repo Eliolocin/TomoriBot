@@ -23,6 +23,7 @@ import type {
   ModalSubmitInteraction,
   InteractionReplyOptions,
   APIAttachment,
+  StringSelectMenuInteraction,
   TopLevelComponentData,
 } from "discord.js";
 import { localizer } from "../../text/localizer";
@@ -57,14 +58,19 @@ const modalResolvedAttachments = new Map<string, Record<string, APIAttachment>>(
  * Tracks interactions that were acknowledged via raw Discord REST API
  * Used to prevent "already acknowledged" errors when Discord.js state is out of sync
  */
-const rawModalAcknowledged = new WeakMap<ChatInputCommandInteraction | ButtonInteraction, boolean>();
+const rawModalAcknowledged = new WeakMap<
+  ChatInputCommandInteraction | ButtonInteraction | StringSelectMenuInteraction,
+  boolean
+>();
 
 /**
- * Reports whether a command or button interaction was acknowledged through the
+ * Reports whether a command, button, or select menu interaction was acknowledged through the
  * raw REST modal path. Discord.js does not update `replied`/`deferred` for that
  * response, so workflow code must consult this state explicitly.
  */
-export function hasRawModalAcknowledgement(interaction: ChatInputCommandInteraction | ButtonInteraction): boolean {
+export function hasRawModalAcknowledgement(
+  interaction: ChatInputCommandInteraction | ButtonInteraction | StringSelectMenuInteraction,
+): boolean {
   return rawModalAcknowledged.get(interaction) === true;
 }
 
@@ -377,7 +383,7 @@ function createRawModalRestError(response: Response, responseBody: string): Erro
 }
 
 export async function showRoutedRawModal(
-  interaction: ChatInputCommandInteraction | ButtonInteraction,
+  interaction: ChatInputCommandInteraction | ButtonInteraction | StringSelectMenuInteraction,
   data: { custom_id: string; title: string; components: RawDiscordComponent[] },
 ): Promise<void> {
   setupWebSocketInterception(interaction.client);
@@ -428,6 +434,41 @@ export function takeRawModalCheckboxGroupValues(interactionId: string, customId:
     modalCheckboxGroupValues.delete(interactionId);
   }
   return val;
+}
+
+export function takeRawModalFileUpload(interactionId: string, customId: string): APIAttachment | undefined {
+  const storedAttachments = modalResolvedAttachments.get(interactionId);
+  const storedFileUploadValues = modalFileUploadValues.get(interactionId);
+  if (!storedAttachments) return undefined;
+
+  let attachment: APIAttachment | undefined;
+  const attachmentIds = storedFileUploadValues?.[customId];
+  if (attachmentIds && attachmentIds.length > 0) {
+    const attachmentId = attachmentIds[0];
+    attachment = storedAttachments[attachmentId];
+    if (attachment) {
+      delete storedAttachments[attachmentId];
+    }
+  } else if (!storedFileUploadValues || Object.keys(storedFileUploadValues).length <= 1) {
+    const [firstId, firstAttachment] = Object.entries(storedAttachments)[0] ?? [];
+    if (firstAttachment) {
+      attachment = firstAttachment;
+      delete storedAttachments[firstId];
+    }
+  }
+
+  if (storedFileUploadValues) {
+    delete storedFileUploadValues[customId];
+    if (Object.keys(storedFileUploadValues).length === 0) {
+      modalFileUploadValues.delete(interactionId);
+    }
+  }
+
+  if (Object.keys(storedAttachments).length === 0) {
+    modalResolvedAttachments.delete(interactionId);
+  }
+
+  return attachment;
 }
 
 /**

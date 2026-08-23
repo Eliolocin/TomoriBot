@@ -627,9 +627,10 @@ const integrationPages: readonly HelpPageDefinition[] = [
     ],
     footerKey: "commands.help.st-preset.embed1_footer",
     variables: () => ({
-      stPresetImport: mention("st-preset", "import"),
-      stPresetToggle: mention("st-preset", "node", "toggle"),
-      stPresetRemove: mention("st-preset", "remove"),
+      stPresets: mention("st-presets"),
+      stPresetImport: mention("st-presets"),
+      stPresetToggle: mention("st-presets"),
+      stPresetRemove: mention("st-presets"),
       configSystemPromptSet: mention("config", "system-prompt", "set"),
       personaPromptSet: mention("persona", "prompt", "set"),
       personaAttributeAdd: mention("persona", "attribute", "add"),

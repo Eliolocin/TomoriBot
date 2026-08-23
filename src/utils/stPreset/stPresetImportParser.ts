@@ -1,25 +1,11 @@
-import {
-  MessageFlags,
-  type Attachment,
-  type ChatInputCommandInteraction,
-  type Client,
-  type SlashCommandSubcommandBuilder,
-} from "discord.js";
-import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
-import { commandRegistry } from "@/utils/discord/commandRegistry";
-import { localizer } from "@/utils/text/localizer";
+import type { StPresetNodeRow } from "@/types/db/schema";
 import { findUnsupportedPresetMacros } from "@/utils/text/stPresetEngine";
-import { log, ColorCode } from "@/utils/misc/logger";
-import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
-import { safeDownload } from "@/utils/security/safeDownload";
-import { presetRepository } from "@/utils/db/repositories/PresetRepository";
-import type { UserRow, ErrorContext, StPresetNodeRow } from "@/types/db/schema";
 
-/** Maximum file size for preset JSON uploads (in MB) */
-const MAX_PRESET_FILE_SIZE_MB = 2;
+/** Maximum file size for preset JSON uploads in MB */
+export const MAX_PRESET_FILE_SIZE_MB = 2;
 
 /** Maximum allowed preset name length (derived from filename) */
-const MAX_PRESET_NAME_LENGTH = 100;
+export const MAX_PRESET_NAME_LENGTH = 100;
 const LEGACY_POST_HISTORY_INJECTION_ORDER = 10_000;
 const LEGACY_STORY_TRIM_REGEX = /\{\{trim\}\}/gi;
 const LEGACY_STORY_BLOCK_REGEX = /\{\{#if\s+([a-zA-Z_][\w]*)\}\}([\s\S]*?)\{\{\/if\}\}/gi;
@@ -54,7 +40,7 @@ interface RawSTPromptOrderEntry {
 }
 
 /** Top-level structure of a SillyTavern preset JSON */
-interface RawSTPreset {
+export interface RawSTPreset {
   prompts?: RawSTPromptNode[];
   prompt_order?: {
     character_id: number;
@@ -63,64 +49,8 @@ interface RawSTPreset {
   [key: string]: unknown;
 }
 
-/**
- * Configure the /st-preset import subcommand.
- * Accepts a required JSON file attachment containing a SillyTavern preset.
- */
-export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
-    .setName("import")
-    .setDescription(localizer("en-US", "commands.st-preset.import.description"))
-    .addAttachmentOption((option) =>
-      option
-        .setName("file")
-        .setDescription(localizer("en-US", "commands.st-preset.import.file_description"))
-        .setRequired(true),
-    );
-
-/**
- * Validate that the attachment is a JSON file.
- * @returns Validation result with optional error key
- */
-function validateAttachment(attachment: Attachment): {
-  isValid: boolean;
-  errorKey?: string;
-} {
-  const filename = attachment.name?.toLowerCase() ?? "";
-
-  if (!filename.endsWith(".json")) {
-    return { isValid: false, errorKey: "invalid_format" };
-  }
-
-  // Check content type if provided (Discord may not always set this)
-  if (attachment.contentType && !attachment.contentType.includes("json")) {
-    return { isValid: false, errorKey: "invalid_format" };
-  }
-
-  return { isValid: true };
-}
-
-/**
- * Determine whether a prompt node is comment-only (produces no output).
- * Comment-only nodes contain only `{{// ... }}` blocks and `{{trim}}` macros.
- * @param content - The raw content string from the prompt node
- * @returns True if the content resolves to empty after macro processing
- */
-function isCommentOnly(content: string): boolean {
-  return COMMENT_ONLY_REGEX.test(content.trim());
-}
-
-/**
- * Strips the .json extension and truncates to MAX_PRESET_NAME_LENGTH.
- * @param filename - Original filename from the Discord attachment
- */
-function derivePresetName(filename: string): string {
-  const name = filename.replace(/\.json$/i, "").trim();
-  return name.length > MAX_PRESET_NAME_LENGTH ? name.slice(0, MAX_PRESET_NAME_LENGTH) : name;
-}
-
 /** Result of parsing a preset, including nodes and filtering stats */
-interface ParseResult {
+export interface ParseResult {
   nodes: Omit<StPresetNodeRow, "node_id" | "preset_id">[];
   /** Number of comment-only nodes included (stored but never injected into the prompt) */
   commentOnlyCount: number;
@@ -135,10 +65,53 @@ interface ParseResult {
 type JsonObject = Record<string, unknown>;
 type PresetSourceKind = "modern" | "legacy_text_completion";
 
-interface NormalizedPresetShape {
+export interface NormalizedPresetShape {
   preset: RawSTPreset;
   sourceKind: PresetSourceKind;
   syntheticNodeCount: number;
+}
+
+/**
+ * Validate that the attachment filename and optional content type indicate a JSON file.
+ */
+export function validateAttachment(
+  filename: string,
+  contentType?: string | null,
+): {
+  isValid: boolean;
+  errorKey?: string;
+} {
+  const lowerFilename = filename.toLowerCase();
+
+  if (!lowerFilename.endsWith(".json")) {
+    return { isValid: false, errorKey: "invalid_format" };
+  }
+
+  // Check content type if provided (Discord may not always set this)
+  if (contentType && !contentType.includes("json")) {
+    return { isValid: false, errorKey: "invalid_format" };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Determine whether a prompt node is comment-only (produces no output).
+ * Comment-only nodes contain only `{{// ... }}` blocks and `{{trim}}` macros.
+ */
+export function isCommentOnly(content: string): boolean {
+  return COMMENT_ONLY_REGEX.test(content.trim());
+}
+
+/**
+ * Strips the .json extension and truncates to MAX_PRESET_NAME_LENGTH.
+ */
+export function derivePresetName(filename: string): string {
+  const name = filename
+    .trim()
+    .replace(/\.json$/i, "")
+    .trim();
+  return name.length > MAX_PRESET_NAME_LENGTH ? name.slice(0, MAX_PRESET_NAME_LENGTH) : name;
 }
 
 function asObject(value: unknown): JsonObject | null {
@@ -358,7 +331,7 @@ function buildLegacyTextCompletionPreset(raw: RawSTPreset): NormalizedPresetShap
   };
 }
 
-function normalizePresetShape(raw: RawSTPreset): NormalizedPresetShape | null {
+export function normalizePresetShape(raw: RawSTPreset): NormalizedPresetShape | null {
   if (Array.isArray(raw.prompts) && raw.prompts.length > 0) {
     return {
       preset: raw,
@@ -441,16 +414,13 @@ function buildLegacyPromptNodes(raw: RawSTPreset, prompts: RawSTPromptNode[]): R
  * Parse a raw SillyTavern preset JSON into storable nodes.
  *
  * Processing pipeline:
- * 1. Build a lookup map from the `prompts` array (identifier → node data)
+ * 1. Build a lookup map from the `prompts` array (identifier -> node data)
  * 2. Walk the `prompt_order` for character_id 100001 (user-prompt order)
  *    to determine sequence and default enabled states
  * 3. Flag comment-only nodes with `is_comment: true` (stored but never injected)
  * 4. Return ordered nodes ready for DB insertion, plus filtering stats
- *
- * @param raw - Parsed SillyTavern preset JSON
- * @returns Parse result with nodes and stats, or null if the preset is invalid
  */
-function parsePresetNodes(normalizedPreset: NormalizedPresetShape): ParseResult | null {
+export function parsePresetNodes(normalizedPreset: NormalizedPresetShape): ParseResult | null {
   const basePrompts = normalizedPreset.preset.prompts;
   if (!Array.isArray(basePrompts) || basePrompts.length === 0) {
     return null;
@@ -470,7 +440,7 @@ function parsePresetNodes(normalizedPreset: NormalizedPresetShape): ParseResult 
   }
 
   // Find the user-prompt order (character_id 100001)
-  //    Falls back to character_id 100000 (system prompt order) if 100001 is missing
+  // Falls back to character_id 100000 (system prompt order) if 100001 is missing
   const promptOrders = normalizedPreset.preset.prompt_order;
   let orderEntries: RawSTPromptOrderEntry[] | null = null;
 
@@ -544,7 +514,7 @@ function parsePresetNodes(normalizedPreset: NormalizedPresetShape): ParseResult 
   };
 }
 
-function summarizeMacroLabels(labels: string[], maxLabels = 4): string {
+export function summarizeMacroLabels(labels: string[], maxLabels = 4): string {
   const sorted = [...labels].sort((a, b) => a.localeCompare(b));
   if (sorted.length <= maxLabels) {
     return sorted.join(", ");
@@ -554,7 +524,7 @@ function summarizeMacroLabels(labels: string[], maxLabels = 4): string {
   return `${sorted.slice(0, maxLabels).join(", ")} +${remaining} more`;
 }
 
-function collectUnsupportedEnabledMacros(nodes: Omit<StPresetNodeRow, "node_id" | "preset_id">[]): string[] {
+export function collectUnsupportedEnabledMacros(nodes: Omit<StPresetNodeRow, "node_id" | "preset_id">[]): string[] {
   const labels = new Set<string>();
 
   for (const node of nodes) {
@@ -568,202 +538,4 @@ function collectUnsupportedEnabledMacros(nodes: Omit<StPresetNodeRow, "node_id" 
   }
 
   return [...labels];
-}
-
-/**
- * Execute /st-preset import.
- * Downloads the attached JSON file, validates it as a SillyTavern preset,
- * parses prompt nodes from the prompt_order, and stores the preset + nodes
- * in the database for this server.
- *
- */
-export async function execute(
-  _client: Client,
-  interaction: ChatInputCommandInteraction,
-  userData: UserRow,
-  locale: string,
-): Promise<void> {
-  const serverId = interaction.guild?.id ?? interaction.user.id;
-  const tomoriState = await getCachedTomoriState(serverId);
-  if (!tomoriState) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "general.errors.tomori_not_setup_title",
-      descriptionKey: "general.errors.tomori_not_setup_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const attachment = interaction.options.getAttachment("file", true);
-  const validation = validateAttachment(attachment);
-  if (!validation.isValid) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.st-preset.import.invalid_file_title",
-      descriptionKey: `commands.st-preset.import.${validation.errorKey}`,
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const maxSizeBytes = MAX_PRESET_FILE_SIZE_MB * 1024 * 1024;
-  if (attachment.size && attachment.size > maxSizeBytes) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.st-preset.import.file_too_large_title",
-      descriptionKey: "commands.st-preset.import.file_too_large_description",
-      descriptionVars: { max_size: MAX_PRESET_FILE_SIZE_MB.toString() },
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  // Defer reply (download + parsing may take a moment)
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  try {
-    const downloadResult = await safeDownload(attachment.url, {
-      maxSizeMB: MAX_PRESET_FILE_SIZE_MB,
-      timeoutMs: 15000,
-      knownSize: attachment.size,
-    });
-
-    if (!downloadResult.success || !downloadResult.buffer) {
-      await interaction.editReply({
-        content: localizer(locale, "commands.st-preset.import.download_failed"),
-      });
-      return;
-    }
-
-    let rawPreset: RawSTPreset;
-    try {
-      rawPreset = JSON.parse(downloadResult.buffer.toString("utf-8"));
-    } catch {
-      await interaction.editReply({
-        content: localizer(locale, "commands.st-preset.import.invalid_json"),
-      });
-      return;
-    }
-
-    const normalizedPreset = normalizePresetShape(rawPreset);
-    if (!normalizedPreset) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.st-preset.import.not_a_preset_title",
-        descriptionKey: "commands.st-preset.import.not_a_preset_description",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    const parseResult = parsePresetNodes(normalizedPreset);
-    if (!parseResult) {
-      await interaction.editReply({
-        content: localizer(locale, "commands.st-preset.import.no_nodes"),
-      });
-      return;
-    }
-
-    const { nodes, commentOnlyCount, disabledByPreset, legacyNodeCount, sourceKind } = parseResult;
-
-    const presetName = derivePresetName(attachment.name ?? "Unnamed Preset");
-
-    const preset = await presetRepository.insertPresetWithNodes(tomoriState.server_id, presetName, rawPreset, nodes);
-
-    if (!preset) {
-      await interaction.editReply({
-        content: localizer(locale, "general.errors.unknown_error_description"),
-      });
-      return;
-    }
-
-    if (preset.preset_id) {
-      await presetRepository.setActivePreset(tomoriState.server_id, preset.preset_id);
-    }
-
-    const markerCount = nodes.filter((n) => n.is_marker).length;
-    const toggleableCount = nodes.filter((n) => !n.is_marker).length;
-    // Excludes comment-only nodes: they never inject regardless of enabled state
-    const enabledCount = nodes.filter((n) => n.is_enabled && !n.is_marker && !n.is_comment).length;
-
-    const unsupportedEnabledMacros = collectUnsupportedEnabledMacros(nodes);
-
-    const filterNotes: string[] = [];
-    if (commentOnlyCount > 0) {
-      filterNotes.push(
-        localizer(locale, "commands.st-preset.import.note_comment_only", {
-          count: commentOnlyCount.toString(),
-        }),
-      );
-    }
-    if (disabledByPreset > 0) {
-      filterNotes.push(
-        localizer(locale, "commands.st-preset.import.note_disabled_by_preset", {
-          count: disabledByPreset.toString(),
-        }),
-      );
-    }
-    if (unsupportedEnabledMacros.length > 0) {
-      filterNotes.push(
-        localizer(locale, "commands.st-preset.import.note_unsupported_macros", {
-          macros: summarizeMacroLabels(unsupportedEnabledMacros),
-        }),
-      );
-    }
-    if (sourceKind === "legacy_text_completion") {
-      filterNotes.push(localizer(locale, "commands.st-preset.import.note_legacy_text_completion"));
-    }
-    const notes = filterNotes.length > 0 ? filterNotes.join("\n") : "";
-
-    if (legacyNodeCount > 0) {
-      log.info(`[ST Preset Import] Added ${legacyNodeCount} synthetic prompt node(s) from legacy preset compatibility`);
-    }
-    if (unsupportedEnabledMacros.length > 0) {
-      log.warn(
-        `[ST Preset Import] "${presetName}" contains unsupported macro(s) in enabled nodes: ${unsupportedEnabledMacros.join(", ")}`,
-      );
-    }
-    if (sourceKind === "legacy_text_completion") {
-      log.info(`[ST Preset Import] "${presetName}" was converted from a legacy text-completions preset shape`);
-    }
-
-    const stPresetToggleMention = commandRegistry.getCommandMention("st-preset", "node", "toggle");
-    const stPresetRemoveMention = commandRegistry.getCommandMention("st-preset", "remove");
-    const helpStPresetMention = commandRegistry.getCommandMention("help");
-
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.st-preset.import.success_title",
-      descriptionKey: "commands.st-preset.import.success_description",
-      descriptionVars: {
-        name: presetName,
-        total: nodes.length.toString(),
-        markers: markerCount.toString(),
-        toggleable: toggleableCount.toString(),
-        enabled: enabledCount.toString(),
-        notes,
-        stPresetToggle: stPresetToggleMention,
-        stPresetRemove: stPresetRemoveMention,
-        helpStPreset: helpStPresetMention,
-      },
-      color: ColorCode.SUCCESS,
-    });
-
-    log.success(
-      `[ST Preset Import] "${presetName}" imported for server ${serverId} — ${nodes.length} nodes (${toggleableCount} toggleable, ${markerCount} markers, ${commentOnlyCount} comment-only, ${disabledByPreset} disabled by preset)`,
-    );
-  } catch (error) {
-    const context: ErrorContext = {
-      userId: userData.user_id,
-      serverId: null,
-      personaId: null,
-      errorType: "CommandExecutionError",
-      metadata: { command: "st-preset import" },
-    };
-    await log.error("Error executing /st-preset import", error as Error, context);
-
-    await interaction.editReply({
-      content: localizer(locale, "general.errors.unknown_error_description"),
-    });
-  }
 }

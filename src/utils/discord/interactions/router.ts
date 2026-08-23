@@ -2,11 +2,17 @@ import { MessageFlags, type Client, type Interaction } from "discord.js";
 import { helpInteractionRoute } from "@/utils/discord/interactions/helpRoutes";
 import { mcpsInteractionRoute } from "@/utils/discord/interactions/mcpsRoutes";
 import { moderationInteractionRoute } from "@/utils/discord/interactions/moderationRoutes";
+import { stPresetsInteractionRoute } from "@/utils/discord/interactions/stPresetsRoutes";
 import { InteractionRouteRegistry, type GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-const registry = new InteractionRouteRegistry([helpInteractionRoute, mcpsInteractionRoute, moderationInteractionRoute]);
+const registry = new InteractionRouteRegistry([
+  helpInteractionRoute,
+  mcpsInteractionRoute,
+  moderationInteractionRoute,
+  stPresetsInteractionRoute,
+]);
 
 export function isGlobalRoutableInteraction(interaction: Interaction): interaction is GlobalRoutableInteraction {
   return interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit();
@@ -26,7 +32,9 @@ export async function dispatchGlobalInteraction(
           ? "commands.mcps.outdated_panel"
           : namespace === "moderation"
             ? "commands.moderation.outdated_panel"
-            : "general.errors.outdated_panel";
+            : namespace === "st-presets"
+              ? "commands.st-presets.outdated_panel"
+              : "general.errors.outdated_panel";
       await interaction.reply({
         content: localizer(interaction.locale ?? interaction.guildLocale ?? "en-US", key, { command: `/${namespace}` }),
         flags: MessageFlags.Ephemeral,

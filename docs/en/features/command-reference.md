@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **42**. Runnable slash commands: **214**.
+Top-level command groups: **42**. Runnable slash commands: **211**.
 
 ## `/capabilities`
 
@@ -471,16 +471,13 @@ Manage speech voices and samples.
 | `/speech voice-design set` | Set a voice design prompt for a persona. |
 | `/speech voice-remove` | Remove a local TTS voice sample from this server. |
 
-## `/st-preset`
+## `/st-presets`
 
-Manage SillyTavern presets. See SillyTavern Presets in /help.
+Manage and switch SillyTavern chat completion presets.
 
 | Command | Summary |
 |---|---|
-| `/st-preset import` | Import a SillyTavern preset JSON file. See SillyTavern Presets in /help. |
-| `/st-preset node toggle` | Toggle preset prompt nodes on or off |
-| `/st-preset remove` | Remove imported SillyTavern presets |
-| `/st-preset switch` | Switch the active SillyTavern preset |
+| `/st-presets` | Manage and switch SillyTavern chat completion presets. |
 
 ## `/stats`
 

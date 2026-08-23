@@ -35,6 +35,13 @@ import { getBaseTriggerWords } from "@/utils/text/localizer";
 import { EMPTY_PERSONA_NAMING_CONFIG } from "@/types/personaNaming";
 import { userNamingRepository } from "@/utils/db/repositories/UserNamingRepository";
 
+export type StPresetsReadResult = { status: "fresh"; presets: StPresetRow[] } | { status: "unavailable"; presets: [] };
+
+export interface StPresetNodeCounts {
+  total: number;
+  enabled: number;
+}
+
 type JsonObject = Record<string, unknown>;
 
 type DialoguePair = {
@@ -515,6 +522,7 @@ class PresetRepository {
     presetName: string,
     rawJson: unknown,
     nodes: Omit<StPresetNodeRow, "node_id" | "preset_id">[],
+    description?: string | null,
   ): Promise<StPresetRow | null> {
     try {
       // Use a transaction to ensure atomicity (preset + all nodes or nothing)
@@ -528,8 +536,8 @@ class PresetRepository {
 
         // Insert the preset metadata + raw JSON
         const [preset] = await tx`
-          INSERT INTO st_presets (server_id, preset_name, raw_json)
-          VALUES (${serverId}, ${presetName}, ${JSON.stringify(rawJson)})
+          INSERT INTO st_presets (server_id, preset_name, raw_json, description)
+          VALUES (${serverId}, ${presetName}, ${JSON.stringify(rawJson)}, ${description ?? null})
           RETURNING *
         `;
 
@@ -573,39 +581,45 @@ class PresetRepository {
   }
 
   /**
+   * Load all ST presets for a server with read status provenance.
+   */
+  async loadPresetsForServerResult(serverId: number): Promise<StPresetsReadResult> {
+    try {
+      const rows = await sql`
+        SELECT preset_id, server_id, preset_name, is_active, description, created_at, updated_at
+        FROM st_presets
+        WHERE server_id = ${serverId}
+        ORDER BY created_at ASC
+      `;
+      return { status: "fresh", presets: rows as StPresetRow[] };
+    } catch (error) {
+      log.error(`[PresetRepository] Failed to load presets for server ${serverId}`, error);
+      return { status: "unavailable", presets: [] };
+    }
+  }
+
+  /**
    * Load all ST presets for a server (metadata only, no nodes).
    *
    * @returns Array of preset rows ordered by creation date
    */
   async loadPresetsForServer(serverId: number): Promise<StPresetRow[]> {
-    try {
-      const rows = await sql`
-        SELECT preset_id, server_id, preset_name, is_active, created_at, updated_at
-        FROM st_presets
-        WHERE server_id = ${serverId}
-        ORDER BY created_at ASC
-      `;
-      return rows as StPresetRow[];
-    } catch (error) {
-      log.error(`[PresetRepository] Failed to load presets for server ${serverId}`, error);
-      return [];
-    }
+    const result = await this.loadPresetsForServerResult(serverId);
+    return result.presets;
   }
 
   /**
-   * Load a single preset by ID (with raw JSON).
-   *
-   * @param presetId - The preset_id to load
-   * @returns The preset row or null if not found
+   * Load a single preset by ID and server scope (with raw JSON).
    */
-  async loadPresetById(presetId: number): Promise<StPresetRow | null> {
+  async loadPresetByIdForServer(presetId: number, serverId: number): Promise<StPresetRow | null> {
     try {
       const [row] = await sql`
-        SELECT * FROM st_presets WHERE preset_id = ${presetId}
+        SELECT * FROM st_presets
+        WHERE preset_id = ${presetId} AND server_id = ${serverId}
       `;
       return (row as StPresetRow) ?? null;
     } catch (error) {
-      log.error(`[PresetRepository] Failed to load preset ${presetId}`, error);
+      log.error(`[PresetRepository] Failed to load preset ${presetId} for server ${serverId}`, error);
       return null;
     }
   }
@@ -651,6 +665,35 @@ class PresetRepository {
   }
 
   /**
+   * Returns total non-marker and enabled non-marker node counts in a single query
+   * scoped to the server.
+   */
+  async countToggleableNodesForServer(presetId: number, serverId: number): Promise<StPresetNodeCounts> {
+    try {
+      const [row] = await sql`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(CASE WHEN n.is_enabled = true THEN 1 END)::int AS enabled
+        FROM st_preset_nodes n
+        JOIN st_presets p ON p.preset_id = n.preset_id
+        WHERE n.preset_id = ${presetId}
+          AND p.server_id = ${serverId}
+          AND n.is_marker = false
+      `;
+      return {
+        total: Number(row?.total ?? 0),
+        enabled: Number(row?.enabled ?? 0),
+      };
+    } catch (error) {
+      log.error(
+        `[PresetRepository] Failed to count toggleable nodes for preset ${presetId} on server ${serverId}`,
+        error,
+      );
+      return { total: 0, enabled: 0 };
+    }
+  }
+
+  /**
    * Load ALL nodes for a preset (including markers), ordered by node_order.
    * Used by the context builder when assembling the full prompt.
    *
@@ -673,11 +716,11 @@ class PresetRepository {
 
   /**
    * Batch-update enabled states for multiple nodes in a single transaction.
-   * Accepts a map of identifier → is_enabled for all nodes in the preset.
+   * Accepts a map of identifier -> is_enabled for all nodes in the preset.
    *
    * @param presetId - The preset_id owning these nodes
-   * @param enabledMap - Map of node identifier → desired enabled state
-   * @param serverId - Internal server_id for cache invalidation
+   * @param enabledMap - Map of node identifier -> desired enabled state
+   * @param serverId - Internal server_id for scope resolution and cache invalidation
    * @returns True if the update succeeded
    */
   async updateNodeEnabledStates(
@@ -686,7 +729,15 @@ class PresetRepository {
     serverId: number,
   ): Promise<boolean> {
     try {
-      await sql.begin(async (tx) => {
+      const success = await sql.begin(async (tx) => {
+        const [preset] = await tx<Array<{ preset_id: number }>>`
+          SELECT preset_id FROM st_presets
+          WHERE preset_id = ${presetId} AND server_id = ${serverId}
+        `;
+        if (!preset) {
+          return false;
+        }
+
         for (const [identifier, isEnabled] of enabledMap) {
           await tx`
             UPDATE st_preset_nodes
@@ -694,11 +745,14 @@ class PresetRepository {
             WHERE preset_id = ${presetId} AND identifier = ${identifier}
           `;
         }
+        return true;
       });
 
-      log.info(`[PresetRepository] Updated ${enabledMap.size} node states for preset ${presetId}`);
-      invalidateStPresetCache(serverId);
-      return true;
+      if (success) {
+        log.info(`[PresetRepository] Updated ${enabledMap.size} node states for preset ${presetId}`);
+        invalidateStPresetCache(serverId);
+      }
+      return success;
     } catch (error) {
       log.error(`[PresetRepository] Failed to update node states for preset ${presetId}`, error);
       return false;
@@ -709,22 +763,24 @@ class PresetRepository {
    * Delete a preset and all its nodes (CASCADE handles node cleanup).
    *
    * @param presetId - The preset_id to delete
-   * @param serverId - Internal server_id for cache invalidation
+   * @param serverId - Internal server_id for scope resolution and cache invalidation
    * @returns True if a row was deleted
    */
   async deletePreset(presetId: number, serverId: number): Promise<boolean> {
     try {
-      const result = await sql`
-        DELETE FROM st_presets WHERE preset_id = ${presetId}
+      const rows = await sql<Array<{ preset_id: number }>>`
+        DELETE FROM st_presets
+        WHERE preset_id = ${presetId} AND server_id = ${serverId}
+        RETURNING preset_id
       `;
-      const deleted = (result as unknown[]).length > 0 || (result as { count?: number }).count === 1;
+      const deleted = rows.length > 0;
       if (deleted) {
-        log.success(`[PresetRepository] Deleted preset ${presetId}`);
+        log.success(`[PresetRepository] Deleted preset ${presetId} for server ${serverId}`);
         invalidateStPresetCache(serverId);
       }
       return deleted;
     } catch (error) {
-      log.error(`[PresetRepository] Failed to delete preset ${presetId}`, error);
+      log.error(`[PresetRepository] Failed to delete preset ${presetId} for server ${serverId}`, error);
       return false;
     }
   }
@@ -732,30 +788,62 @@ class PresetRepository {
   /**
    * Set a preset as active and deactivate all others for the same server.
    * Uses a transaction to ensure only one preset is active at a time.
+   * Target preset must belong to serverId; forged or cross-scope targets perform no write.
    *
+   * @param serverId - Internal server_id for scope resolution and cache invalidation
    * @param presetId - The preset_id to activate
    * @returns True if the activation succeeded
    */
   async setActivePreset(serverId: number, presetId: number): Promise<boolean> {
     try {
-      await sql.begin(async (tx) => {
-        // Deactivate all presets for this server
+      const success = await sql.begin(async (tx) => {
+        const [target] = await tx<Array<{ preset_id: number }>>`
+          SELECT preset_id FROM st_presets
+          WHERE preset_id = ${presetId} AND server_id = ${serverId}
+        `;
+        if (!target) {
+          return false;
+        }
+
         await tx`
           UPDATE st_presets SET is_active = false
           WHERE server_id = ${serverId}
         `;
-        // Activate the target preset
         await tx`
           UPDATE st_presets SET is_active = true
           WHERE preset_id = ${presetId} AND server_id = ${serverId}
         `;
+        return true;
       });
 
-      log.success(`[PresetRepository] Activated preset ${presetId} for server ${serverId}`);
+      if (success) {
+        log.success(`[PresetRepository] Activated preset ${presetId} for server ${serverId}`);
+        invalidateStPresetCache(serverId);
+      }
+      return success;
+    } catch (error) {
+      log.error(`[PresetRepository] Failed to activate preset ${presetId} for server ${serverId}`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Deactivate all presets for a server.
+   *
+   * @param serverId - Internal server_id for scope resolution and cache invalidation
+   * @returns True if the deactivation succeeded
+   */
+  async deactivateAllPresets(serverId: number): Promise<boolean> {
+    try {
+      await sql`
+        UPDATE st_presets SET is_active = false
+        WHERE server_id = ${serverId}
+      `;
+      log.success(`[PresetRepository] Deactivated all presets for server ${serverId}`);
       invalidateStPresetCache(serverId);
       return true;
     } catch (error) {
-      log.error(`[PresetRepository] Failed to activate preset ${presetId} for server ${serverId}`, error);
+      log.error(`[PresetRepository] Failed to deactivate all presets for server ${serverId}`, error);
       return false;
     }
   }

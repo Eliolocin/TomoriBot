@@ -18,7 +18,7 @@ This is distinct from [SillyTavern Card Import](/architecture/integrations/silly
 
 ## How It Works (User Perspective)
 
-1. User imports an ST preset JSON via `/st-preset import`
+1. User imports an ST preset JSON via `/st-presets`
 2. The preset becomes active for that server
 3. On every LLM call, the context builder detects the active preset and rearranges blocks accordingly
 4. The `/sysprompt` and personality settings still apply — the preset controls *where* they appear, not *whether* they exist
@@ -30,59 +30,24 @@ This is distinct from [SillyTavern Card Import](/architecture/integrations/silly
 - **Phase 1: Import & Visualization** — implemented
 - **Phase 2: Template Engine** — implemented
 - **Phase 3: Context Assembly Override** — implemented
-- **Phase 4: Management Commands** — not yet implemented (`/st-preset activate`, `/st-preset deactivate`, `/st-preset delete`)
+- **Phase 4: Management UI**, implemented as the `/st-presets` collection panel
 
 ## Commands
 
 For a user-facing explanation of behavior, surprises, and limitations in SillyTavern terms, open `/help`, choose **Integrations**, then **SillyTavern Presets**.
 
-### `/st-preset import`
+### `/st-presets`
 
-Imports a SillyTavern preset JSON file and stores it for the current server.
+The `/st-presets` command opens an interactive collection panel for managing SillyTavern presets.
 
-**Flow:**
-1. User attaches a `.json` file to the slash command
-2. Bot validates the file (format, size <= 2 MB, and a supported preset shape)
-3. If the preset already has a Prompt Manager `prompts` array, parses `prompt_order` (prefers `character_id 100001`, falls back to `100000`) to determine node sequence and default enabled states
-4. If the preset is an older text-completions export with `context.story_string` + `sysprompt.content`, converts that legacy layout into synthetic Prompt Manager-style nodes and markers
-5. Normalizes legacy post-history fields carried by modern or converted presets into synthetic depth-injection nodes
-6. Filters out comment-only nodes (content resolves to empty after macro stripping)
-7. Stores preset metadata + raw JSON in `st_presets`, individual nodes in `st_preset_nodes`
-8. Activates the preset for the server
-9. Replies with an import summary (total nodes, markers, toggleable count, and warnings for enabled unsupported macros)
-
-**Preset name:** Derived from the uploaded filename (minus `.json` extension), truncated to 100 chars. Must be unique per server.
+**Capabilities:**
+- **Add preset**: Upload a SillyTavern preset `.json` file with an optional author-written description.
+- **Switch preset**: Select from imported presets to activate immediately.
+- **Disable presets**: Choose None / Disable Presets to revert to default context assembly.
+- **Toggle nodes**: Edit enabled states of prompt nodes for the active preset (paginated via range chooser when node list exceeds 50).
+- **Delete preset**: Remove a preset with confirmation and automatic promotion of surviving presets.
 
 **Legacy compatibility:** TomoriBot accepts modern Prompt Manager presets directly. It also accepts older text-completions presets when they provide `context.story_string` + `sysprompt.content`; those are converted best-effort into synthetic Prompt Manager-style nodes at import time. In both shapes, extra legacy `post_history` fields such as root `post_history`, `sysprompt.post_history`, or `context.post_history` are converted into synthetic depth-injection nodes instead of being ignored.
-
-### `/st-preset node toggle`
-
-Shows a modal with checkbox groups representing the preset's toggleable prompt nodes.
-
-**Flow:**
-1. Loads the active preset for the server (or falls back to the first available)
-2. Queries `st_preset_nodes` for non-marker nodes ordered by `node_order`
-3. Chunks nodes into up to 5 checkbox groups (10 options each, 50 max per modal)
-4. If more than 50 nodes, shows page-selection buttons first (up to 9 pages)
-5. Modal title = preset name (dynamic, truncated at 45 chars by Discord)
-6. On submit, persists changed enabled states and invalidates the preset cache
-
-### `/st-preset remove`
-
-Deletes the currently active SillyTavern preset for this server, reverting context assembly to native fixed-block order.
-
-**Flow:**
-1. Loads the active preset for the server
-2. If no active preset, replies with "nothing to remove"
-3. Deletes the preset (cascade deletes all nodes) and invalidates the preset cache
-4. Replies with confirmation
-
-### Missing Commands (Phase 4)
-
-| Command | DB Function | Purpose |
-|---------|-------------|---------|
-| `/st-preset activate` | `setActivePreset()` | Switch between uploaded presets |
-| `/st-preset list` | `loadPresetsForServer()` | Show all presets for the server |
 
 ## Template Engine (Phase 2)
 
@@ -479,11 +444,12 @@ This section documents what our implementation supports versus what native Silly
 |------|---------|
 | `src/db/schema_stpreset.sql` | Database table definitions |
 | `src/types/db/schema.ts` | `StPresetRow` and `StPresetNodeRow` type definitions |
-| `src/utils/db/stPresetDb.ts` | CRUD operations + cache invalidation hooks |
+| `src/utils/stPreset/stPresetOperations.ts` | Preset domain operations and repository scoping |
+| `src/utils/stPreset/stPresetImportParser.ts` | ST preset JSON parsing and validation |
 | `src/utils/cache/stPresetCache.ts` | In-memory preset cache with TTL |
 | `src/utils/text/stPresetEngine.ts` | Template macro engine (two-pass resolution) |
 | `src/utils/text/presetContextBuilder.ts` | Preset-driven context rearrangement |
-| `src/utils/text/contextBuilder.ts` | Routing wrapper + native context assembly |
-| `src/commands/st-preset/import.ts` | `/st-preset import` command |
-| `src/commands/st-preset/remove.ts` | `/st-preset remove` command |
-| `src/commands/st-preset/node/toggle.ts` | `/st-preset node toggle` command |
+| `src/utils/text/contextBuilder.ts` | Routing wrapper and native context assembly |
+| `src/commands/st-presets.ts` | `/st-presets` bare root slash command |
+| `src/utils/discord/interactions/stPresetsRoutes.ts` | Panel route registry and interaction adapter |
+| `src/utils/discord/ui/stPresetsPanel.ts` | Components V2 panel rendering |

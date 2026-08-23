@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS st_presets (
   preset_name  TEXT NOT NULL,
   raw_json     JSONB NOT NULL,
   is_active    BOOLEAN DEFAULT false,
+  description  TEXT,
   created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
@@ -48,3 +49,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_st_preset_nodes_preset_identifier
 
 -- Add is_comment column for existing databases (comment-only nodes now stored rather than filtered)
 SELECT add_column_if_not_exists('st_preset_nodes', 'is_comment', 'BOOLEAN', 'false');
+
+-- Add description column for existing databases
+SELECT add_column_if_not_exists('st_presets', 'description', 'TEXT');

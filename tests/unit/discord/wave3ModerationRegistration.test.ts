@@ -1,7 +1,8 @@
 /**
- * Wave 3 moved manager-only moderation controls out of `/server` while `/st-preset`
- * remains available in guild and DM-backed workspaces. This gate lives outside the
- * implementation slice so command restrictions cannot be weakened with their assertion.
+ * Wave 3 moved manager-only moderation controls out of `/server`. This gate lives outside the
+ * implementation slice so command restrictions cannot be weakened with their assertion. The preset
+ * tree's own restrictions moved to `wave3StPresetsRegistration.test.ts` when the bare-root cutover
+ * replaced them.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { PermissionsBitField } from "discord.js";
@@ -65,22 +66,5 @@ describe("Wave 3 moderation registration restrictions", () => {
       "whitelist.role",
     ];
     expect(moderationKeys.filter((key) => server.has(key))).toEqual([]);
-  });
-
-  it("pins the current DM-capable /st-preset command tree", async () => {
-    const { executionMap, registrationData } = await loadCommandData();
-    const preset = findRegistration(registrationData, "st-preset");
-
-    expect(preset).toBeDefined();
-    if (!preset) return;
-
-    expect(preset.contexts).toBeUndefined();
-    expect(preset.default_member_permissions).toBeUndefined();
-    expect(Array.from(executionMap.get("st-preset")?.keys() ?? []).sort()).toEqual([
-      "import",
-      "node.toggle",
-      "remove",
-      "switch",
-    ]);
   });
 });

@@ -441,7 +441,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
     "st-preset": {
       description: `Learn how SillyTavern presets behave here`,
       embed1_title: `SillyTavern Presets`,
-      embed1_description: `Use {stPresetImport} to load a Prompt Manager preset, {stPresetToggle} to inspect which imported nodes are enabled, and {stPresetRemove} to go back to the normal layout.`,
+      embed1_description: `Use {stPresets} to load Prompt Manager presets, inspect enabled nodes, and switch or disable active presets.`,
       embed1_controls_title: `What A Preset Controls`,
       embed1_controls_description: `- Prompt order and marker placement
 - Custom prompt nodes
@@ -465,14 +465,14 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
       embed1_footer: `Return to the SillyTavern Presets page in /help anytime after importing a preset`,
       embed2_title: `Limits And Compatibility (Page 1)`,
       embed2_description: `These are the main reasons a preset author thinks something was ignored or moved.
-- Imported does not always mean sent: nodes disabled in \`prompt_order\` stay off until you enable them with {stPresetToggle}
+- Imported does not always mean sent: nodes disabled in \`prompt_order\` stay off until you enable them with {stPresets}
 - Comment-only nodes and nodes that become empty after \`{{trim}}\` are never sent
 - If enabled nodes still contain unsupported preset macros after import, the import summary warns you; those tags may still be sent literally or behave differently here
 - Unknown markers are skipped
 - Order is literal: if you place \`chatHistory\` before \`dialogueExamples\`, live chat comes first
 - I use the \`prompt_order\` in the .json with \`character_id: 100001\`, and falls back to \`100000\` only if \`100001\` is missing
 - If sample chats end up last, the bot adds a short separator so strict providers do not continue the example`,
-      embed2_footer: `If something looks missing, compare the imported node list in {stPresetToggle} against your preset JSON`,
+      embed2_footer: `If something looks missing, compare the imported node list in {stPresets} against your preset JSON`,
       embed3_title: `Limits And Compatibility (Page 2)`,
       embed3_description: `- Post-history / depth injections are merged into existing chat history entries, not inserted as standalone messages
 - Multiple nodes at the same depth are batched together
@@ -488,7 +488,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - \`worldInfo\` markers use retrieved document context instead of ST lorebooks
 - Some automatic server/context blocks may still be inserted even if your preset does not place explicit ST markers for them
 - Provider-specific behavior still applies: assistant prefill may work on some providers and be ignored on others`,
-      embed3_footer: `Use {stPresetRemove} to disable preset mode instantly`,
+      embed3_footer: `Use {stPresets} to disable preset mode instantly`,
     },
     "api-key": {
       description: `Learn how to set up API keys for AI providers`,

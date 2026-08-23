@@ -12,4 +12,5 @@ export {
   takeRawModalUserSelectValue,
   takeRawModalRoleSelectValue,
   takeRawModalChannelSelectValue,
+  takeRawModalFileUpload,
 } from "./interactionCore";

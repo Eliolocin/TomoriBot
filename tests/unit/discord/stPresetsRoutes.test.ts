@@ -1,0 +1,782 @@
+import { beforeAll, describe, expect, it } from "bun:test";
+import type {
+  ButtonInteraction,
+  ChatInputCommandInteraction,
+  Client,
+  ModalSubmitInteraction,
+  StringSelectMenuInteraction,
+} from "discord.js";
+import type { StPresetNodeRow, StPresetRow } from "@/types/db/schema";
+import {
+  buildInitialStPresetsPanel,
+  createStPresetsInteractionRoute,
+  stPresetsInteractionRoute,
+  type StPresetsRouteDependencies,
+} from "@/utils/discord/interactions/stPresetsRoutes";
+import { InteractionRouteRegistry } from "@/utils/discord/interactions/routeRegistry";
+import { initializeLocalizer } from "@/utils/text/localizer";
+
+beforeAll(async () => initializeLocalizer());
+
+function preset(id: number, overrides: Partial<StPresetRow> = {}): StPresetRow {
+  return {
+    preset_id: id,
+    server_id: 1,
+    preset_name: `Preset ${id}`,
+    raw_json: {},
+    is_active: false,
+    description: `Description ${id}`,
+    created_at: new Date(id * 1000),
+    updated_at: new Date(id * 1000),
+    ...overrides,
+  };
+}
+
+function node(id: number, overrides: Partial<StPresetNodeRow> = {}): StPresetNodeRow {
+  return {
+    node_id: id,
+    preset_id: 1,
+    identifier: `node_${id}`,
+    name: `Node ${id}`,
+    role: "system",
+    content: `Content ${id}`,
+    is_marker: false,
+    is_enabled: true,
+    is_comment: false,
+    node_order: id,
+    injection_position: 0,
+    injection_depth: 4,
+    injection_order: 100,
+    ...overrides,
+  };
+}
+
+function makeDependencies(
+  calls: string[],
+  overrides: Partial<StPresetsRouteDependencies> = {},
+): StPresetsRouteDependencies {
+  let activeId: number | null = 1;
+  const presets = [preset(1, { is_active: true }), preset(2)];
+
+  const snapshots = new Map<string, { presetId: number; identifiers: string[] }>();
+
+  return {
+    resolveScope: async (_interaction, forceRefresh) => {
+      calls.push(forceRefresh ? "resolveScope-fresh" : "resolveScope");
+      return {
+        discordId: "100",
+        kind: "guild",
+        state: { server_id: 1 } as never,
+        data: {
+          scopeDiscId: "100",
+          serverId: 1,
+          readStatus: "fresh",
+          presets: presets.map((p) => ({ ...p, is_active: p.preset_id === activeId })),
+          activePresetId: activeId,
+        },
+      };
+    },
+    operations: {
+      activateStPreset: async (input) => {
+        calls.push(`activate:${input.presetId}`);
+        activeId = input.presetId;
+        return true;
+      },
+      deactivateAllStPresets: async () => {
+        calls.push("deactivateAll");
+        activeId = null;
+        return true;
+      },
+      importStPreset: async (input) => {
+        calls.push(`import:${input.attachmentName}`);
+        const imported = preset(3, { preset_name: input.customPresetName ?? "Imported", is_active: true });
+        presets.push(imported);
+        activeId = 3;
+        return {
+          status: "success",
+          preset: imported,
+          presetName: imported.preset_name,
+          nodes: [node(1), node(2)],
+          enabledCount: 2,
+        };
+      },
+      updateStPresetNodes: async (input) => {
+        calls.push(`updateNodes:${input.presetId}`);
+        return true;
+      },
+      removeStPresetsWithPromotion: async (input) => {
+        calls.push(`removeWithPromotion:${input.presetIdsToRemove.join(",")}`);
+        return {
+          successCount: 1,
+          failureCount: 0,
+          promotedPreset: preset(2, { is_active: true }),
+        };
+      },
+      deleteStPreset: async () => true,
+      loadStPresetScopeData: async () => null,
+      loadToggleableNodes: async () => [],
+    },
+    loadToggleableNodes: async (presetId) => {
+      calls.push(`loadToggleableNodes:${presetId}`);
+      return [node(1), node(2)];
+    },
+    createNonce: () => "fixed-nonce-123",
+    showAddModal: async () => {
+      calls.push("showAddModal");
+    },
+    showNodesModal: async () => {
+      calls.push("showNodesModal");
+    },
+    takeFileUpload: (_interactionId, nonce) => {
+      calls.push(`takeFileUpload:${nonce}`);
+      return {
+        id: "att-1",
+        url: "https://example.com/preset.json",
+        filename: "preset.json",
+        size: 1024,
+        content_type: "application/json",
+      } as never;
+    },
+    takeNodeCheckboxValues: (_interactionId, nonce, groupIndex) => {
+      calls.push(`takeNodeCheckbox:${nonce}:${groupIndex}`);
+      return groupIndex === 0 ? ["node_1"] : [];
+    },
+    storeNodeSnapshot: (nonce, snapshot) => {
+      calls.push(`storeNodeSnapshot:${nonce}`);
+      snapshots.set(nonce, snapshot);
+    },
+    takeNodeSnapshot: (nonce) => {
+      calls.push(`takeNodeSnapshot:${nonce}`);
+      return snapshots.get(nonce) ?? { presetId: 1, identifiers: ["node_1", "node_2"] };
+    },
+    ...overrides,
+  };
+}
+
+function makeButtonInteraction(
+  customId: string,
+  calls: string[],
+  overrides: Record<string, unknown> = {},
+): ButtonInteraction {
+  return {
+    customId,
+    guildId: "100",
+    user: { id: "100" },
+    memberPermissions: { has: (perm: string) => perm === "ManageGuild" },
+    isButton: () => true,
+    isStringSelectMenu: () => false,
+    isModalSubmit: () => false,
+    deferUpdate: async () => {
+      calls.push("deferUpdate");
+    },
+    reply: async () => {
+      calls.push("reply");
+    },
+    editReply: async () => {
+      calls.push("editReply");
+    },
+    ...overrides,
+  } as unknown as ButtonInteraction;
+}
+
+function makeSelectInteraction(
+  customId: string,
+  values: string[],
+  calls: string[],
+  overrides: Record<string, unknown> = {},
+): StringSelectMenuInteraction {
+  return {
+    customId,
+    guildId: "100",
+    user: { id: "100" },
+    values,
+    memberPermissions: { has: (perm: string) => perm === "ManageGuild" },
+    isButton: () => false,
+    isStringSelectMenu: () => true,
+    isModalSubmit: () => false,
+    deferUpdate: async () => {
+      calls.push("deferUpdate");
+    },
+    reply: async () => {
+      calls.push("reply");
+    },
+    editReply: async () => {
+      calls.push("editReply");
+    },
+    ...overrides,
+  } as unknown as StringSelectMenuInteraction;
+}
+
+function makeModalInteraction(
+  id: string,
+  customId: string,
+  calls: string[],
+  overrides: Record<string, unknown> = {},
+): ModalSubmitInteraction {
+  return {
+    id,
+    customId,
+    guildId: "100",
+    user: { id: "100" },
+    memberPermissions: { has: (perm: string) => perm === "ManageGuild" },
+    isButton: () => false,
+    isStringSelectMenu: () => false,
+    isModalSubmit: () => true,
+    deferUpdate: async () => {
+      calls.push("deferUpdate");
+    },
+    reply: async () => {
+      calls.push("reply");
+    },
+    editReply: async () => {
+      calls.push("editReply");
+    },
+    fields: {
+      getTextInputValue: (fieldId: string) => (fieldId.startsWith("name") ? "New Preset" : "My description"),
+    },
+    ...overrides,
+  } as unknown as ModalSubmitInteraction;
+}
+
+describe("ST Presets interaction routes", () => {
+  it("opens Add modal directly with no deferUpdate on add-open and select + Add", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+
+    const buttonInteraction = makeButtonInteraction("st-presets:v1:add-open:en-US", calls);
+
+    await route.execute({} as Client, buttonInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["add-open", "en-US"],
+    });
+
+    expect(calls).toEqual(["showAddModal"]);
+
+    calls.length = 0;
+    const selectInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["add"], calls);
+
+    await route.execute({} as Client, selectInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+
+    expect(calls).toEqual(["showAddModal"]);
+  });
+
+  it("selecting None with active preset deactivates immediately and repaints with disabled receipt", async () => {
+    const calls: string[] = [];
+    let editReplyPayload: unknown = null;
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+
+    const selectNoneInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["none"], calls, {
+      editReply: async (opts: unknown) => {
+        calls.push("editReply");
+        editReplyPayload = opts;
+      },
+    });
+
+    await route.execute({} as Client, selectNoneInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "deactivateAll", "resolveScope-fresh", "editReply"]);
+    const serialized = JSON.stringify(editReplyPayload);
+    expect(serialized).toContain("Presets disabled");
+  });
+
+  it("selecting None with nothing active performs no write and shows no receipt", async () => {
+    const calls: string[] = [];
+    let editReplyPayload: unknown = null;
+    const route = createStPresetsInteractionRoute(
+      makeDependencies(calls, {
+        resolveScope: async () => {
+          calls.push("resolveScope");
+          return {
+            discordId: "100",
+            kind: "guild",
+            state: { server_id: 1 } as never,
+            data: {
+              scopeDiscId: "100",
+              serverId: 1,
+              readStatus: "fresh",
+              presets: [preset(1, { is_active: false }), preset(2, { is_active: false })],
+              activePresetId: null,
+            },
+          };
+        },
+      }),
+    );
+
+    const selectNoneInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["none"], calls, {
+      editReply: async (opts: unknown) => {
+        calls.push("editReply");
+        editReplyPayload = opts;
+      },
+    });
+
+    await route.execute({} as Client, selectNoneInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
+    expect(calls).not.toContain("deactivateAll");
+    const serialized = JSON.stringify(editReplyPayload);
+    expect(serialized).not.toContain("Presets disabled");
+  });
+
+  it("selecting None on stale read performs no write", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute(
+      makeDependencies(calls, {
+        resolveScope: async () => {
+          calls.push("resolveScope-stale");
+          return {
+            discordId: "100",
+            kind: "guild",
+            state: { server_id: 1 } as never,
+            data: {
+              scopeDiscId: "100",
+              serverId: 1,
+              readStatus: "stale",
+              presets: [preset(1, { is_active: true }), preset(2)],
+              activePresetId: 1,
+            },
+          };
+        },
+      }),
+    );
+
+    const selectNoneInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["none"], calls);
+
+    await route.execute({} as Client, selectNoneInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope-stale", "editReply"]);
+    expect(calls).not.toContain("deactivateAll");
+  });
+
+  it("handles legacy disable and none route actions", async () => {
+    const calls: string[] = [];
+    let editReplyPayload: unknown = null;
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+
+    // Legacy disable button
+    const disableInteraction = makeButtonInteraction("st-presets:v1:disable:en-US", calls, {
+      editReply: async (opts: unknown) => {
+        calls.push("editReply");
+        editReplyPayload = opts;
+      },
+    });
+
+    await route.execute({} as Client, disableInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["disable", "en-US"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "deactivateAll", "resolveScope-fresh", "editReply"]);
+    expect(JSON.stringify(editReplyPayload)).toContain("Presets disabled");
+
+    // Legacy none route action
+    calls.length = 0;
+    editReplyPayload = null;
+    const noneInteraction = makeButtonInteraction("st-presets:v1:none:en-US", calls, {
+      editReply: async (opts: unknown) => {
+        calls.push("editReply");
+        editReplyPayload = opts;
+      },
+    });
+
+    await route.execute({} as Client, noneInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["none", "en-US"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
+    expect(calls).not.toContain("deactivateAll");
+  });
+
+  it("repaints vanished-preset state on active preset page when one is active and None page when none is", async () => {
+    const calls: string[] = [];
+    let editReplyPayload: unknown = null;
+
+    // Case 1: Preset 99 selected (not found), but Preset 1 is active -> lands on Preset 1 page with changed receipt
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+    const selectMissingInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["99"], calls, {
+      editReply: async (opts: unknown) => {
+        calls.push("editReply");
+        editReplyPayload = opts;
+      },
+    });
+
+    await route.execute({} as Client, selectMissingInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
+    let serialized = JSON.stringify(editReplyPayload);
+    expect(serialized).toContain("Preset list changed");
+    expect(serialized).toContain("Preset 1");
+
+    // Case 2: Preset 99 selected (not found), and nothing is active -> lands on None page with changed receipt
+    calls.length = 0;
+    editReplyPayload = null;
+    const routeNoActive = createStPresetsInteractionRoute(
+      makeDependencies(calls, {
+        resolveScope: async () => {
+          calls.push("resolveScope");
+          return {
+            discordId: "100",
+            kind: "guild",
+            state: { server_id: 1 } as never,
+            data: {
+              scopeDiscId: "100",
+              serverId: 1,
+              readStatus: "fresh",
+              presets: [preset(1, { is_active: false })],
+              activePresetId: null,
+            },
+          };
+        },
+      }),
+    );
+
+    const selectMissingNoActive = makeSelectInteraction("st-presets:v1:select:en-US", ["99"], calls, {
+      editReply: async (opts: unknown) => {
+        calls.push("editReply");
+        editReplyPayload = opts;
+      },
+    });
+
+    await routeNoActive.execute({} as Client, selectMissingNoActive, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
+    serialized = JSON.stringify(editReplyPayload);
+    expect(serialized).toContain("Preset list changed");
+    expect(serialized).toContain("No Active Preset");
+  });
+
+  it("selecting a preset activates it and repaints with receipt", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+
+    const selectInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["2"], calls);
+
+    await route.execute({} as Client, selectInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "activate:2", "resolveScope-fresh", "editReply"]);
+  });
+
+  it("handles Add submission with acknowledgment before write", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+
+    const modalInteraction = makeModalInteraction("modal-1", "st-presets:v1:add-submit:en-US:fixed-nonce-123", calls);
+
+    await route.execute({} as Client, modalInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["add-submit", "en-US", "fixed-nonce-123"],
+    });
+
+    expect(calls).toEqual([
+      "deferUpdate",
+      "resolveScope",
+      "takeFileUpload:fixed-nonce-123",
+      "import:preset.json",
+      "resolveScope-fresh",
+      "editReply",
+    ]);
+  });
+
+  it("nodes-open with <= 50 nodes opens modal directly", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+
+    const buttonInteraction = makeButtonInteraction("st-presets:v1:nodes-open:en-US:1", calls);
+
+    await route.execute({} as Client, buttonInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["nodes-open", "en-US", "1"],
+    });
+
+    expect(calls).toEqual([
+      "resolveScope",
+      "loadToggleableNodes:1",
+      "storeNodeSnapshot:fixed-nonce-123",
+      "showNodesModal",
+    ]);
+  });
+
+  it("nodes-open with > 50 nodes navigates to range chooser", async () => {
+    const calls: string[] = [];
+    const manyNodes = Array.from({ length: 60 }, (_, i) => node(i + 1));
+    const route = createStPresetsInteractionRoute(
+      makeDependencies(calls, {
+        loadToggleableNodes: async (presetId) => {
+          calls.push(`loadToggleableNodes:${presetId}`);
+          return manyNodes;
+        },
+      }),
+    );
+
+    const buttonInteraction = makeButtonInteraction("st-presets:v1:nodes-open:en-US:1", calls);
+
+    await route.execute({} as Client, buttonInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["nodes-open", "en-US", "1"],
+    });
+
+    expect(calls).toEqual(["resolveScope", "loadToggleableNodes:1", "deferUpdate", "editReply"]);
+  });
+
+  it("nodes-submit updates enabled nodes and repaints with receipt", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+
+    const modalInteraction = makeModalInteraction(
+      "modal-nodes-1",
+      "st-presets:v1:nodes-submit:en-US:1:fixed-nonce-123",
+      calls,
+    );
+
+    await route.execute({} as Client, modalInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["nodes-submit", "en-US", "1", "fixed-nonce-123"],
+    });
+
+    expect(calls).toContain("takeNodeSnapshot:fixed-nonce-123");
+    expect(calls).toContain("updateNodes:1");
+    expect(calls).toContain("resolveScope-fresh");
+    expect(calls).toContain("editReply");
+  });
+
+  it("delete confirm deletes with promotion and cancel writes nothing", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+
+    // Cancel
+    const cancelInteraction = makeButtonInteraction("st-presets:v1:delete-cancel:en-US:1", calls);
+
+    await route.execute({} as Client, cancelInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["delete-cancel", "en-US", "1"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
+
+    // Confirm
+    calls.length = 0;
+    const confirmInteraction = makeButtonInteraction("st-presets:v1:delete-confirm:en-US:1", calls);
+
+    await route.execute({} as Client, confirmInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["delete-confirm", "en-US", "1"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "removeWithPromotion:1", "resolveScope-fresh", "editReply"]);
+  });
+
+  it("blocks writes on stale or unavailable state", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute(
+      makeDependencies(calls, {
+        resolveScope: async () => {
+          calls.push("resolveScope-stale");
+          return {
+            discordId: "100",
+            kind: "guild",
+            state: { server_id: 1 } as never,
+            data: {
+              scopeDiscId: "100",
+              serverId: 1,
+              readStatus: "stale",
+              presets: [preset(1, { is_active: true }), preset(2)],
+              activePresetId: 1,
+            },
+          };
+        },
+      }),
+    );
+
+    const selectInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["2"], calls);
+
+    await route.execute({} as Client, selectInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope-stale", "editReply"]);
+    expect(calls).not.toContain("activate:2");
+  });
+
+  it("denies non-manager guild interactions without performing writes or opening modals", async () => {
+    const calls: string[] = [];
+    let replyPayload: unknown = null;
+    let editReplyPayload: unknown = null;
+
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+    const nonManagerOverrides = {
+      memberPermissions: { has: () => false },
+      reply: async (opts: unknown) => {
+        calls.push("reply-denied");
+        replyPayload = opts;
+      },
+      editReply: async (opts: unknown) => {
+        calls.push("editReply-denied");
+        editReplyPayload = opts;
+      },
+    };
+
+    // add-open denied
+    calls.length = 0;
+    const addOpenBtn = makeButtonInteraction("st-presets:v1:add-open:en-US", calls, nonManagerOverrides);
+    await route.execute({} as Client, addOpenBtn, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["add-open", "en-US"],
+    });
+    expect(calls).toEqual(["reply-denied"]);
+    expect(JSON.stringify(replyPayload)).toContain("Manage Server");
+
+    // select "add" denied
+    calls.length = 0;
+    const selectAdd = makeSelectInteraction("st-presets:v1:select:en-US", ["add"], calls, nonManagerOverrides);
+    await route.execute({} as Client, selectAdd, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+    expect(calls).toEqual(["reply-denied"]);
+
+    // nodes-open denied
+    calls.length = 0;
+    const nodesOpen = makeButtonInteraction("st-presets:v1:nodes-open:en-US:1", calls, nonManagerOverrides);
+    await route.execute({} as Client, nodesOpen, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["nodes-open", "en-US", "1"],
+    });
+    expect(calls).toEqual(["reply-denied"]);
+
+    // select activation denied without write
+    calls.length = 0;
+    const selectPreset = makeSelectInteraction("st-presets:v1:select:en-US", ["2"], calls, nonManagerOverrides);
+    await route.execute({} as Client, selectPreset, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+    expect(calls).toEqual(["deferUpdate", "editReply-denied"]);
+    expect(JSON.stringify(editReplyPayload)).toContain("Manage Server");
+    expect(calls).not.toContain("activate:2");
+
+    // disable denied without write
+    calls.length = 0;
+    const disableBtn = makeButtonInteraction("st-presets:v1:disable:en-US", calls, nonManagerOverrides);
+    await route.execute({} as Client, disableBtn, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["disable", "en-US"],
+    });
+    expect(calls).toEqual(["deferUpdate", "editReply-denied"]);
+    expect(calls).not.toContain("deactivateAll");
+
+    // delete-confirm denied without write
+    calls.length = 0;
+    const deleteBtn = makeButtonInteraction("st-presets:v1:delete-confirm:en-US:1", calls, nonManagerOverrides);
+    await route.execute({} as Client, deleteBtn, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["delete-confirm", "en-US", "1"],
+    });
+    expect(calls).toEqual(["deferUpdate", "editReply-denied"]);
+    expect(calls).not.toContain("removeWithPromotion:1");
+  });
+
+  it("allows DM interactions without guild permissions", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute(makeDependencies(calls));
+
+    const dmInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["2"], calls, {
+      guildId: null,
+      memberPermissions: null,
+    });
+
+    await route.execute({} as Client, dmInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "activate:2", "resolveScope-fresh", "editReply"]);
+  });
+
+  it("dispatches through InteractionRouteRegistry and handles stale-version", async () => {
+    const registry = new InteractionRouteRegistry([stPresetsInteractionRoute]);
+
+    const validInteraction = makeButtonInteraction("st-presets:v1:retry:en-US", []);
+
+    const result = await registry.dispatchDetailed({} as Client, validInteraction);
+    expect(result).toBe("handled");
+
+    const staleInteraction = makeButtonInteraction("st-presets:v99:retry:en-US", []);
+
+    const staleResult = await registry.dispatchDetailed({} as Client, staleInteraction);
+    expect(staleResult).toBe("stale-version");
+  });
+
+  it("buildInitialStPresetsPanel gates by manager permissions in guild and allows in DMs", async () => {
+    // Non-manager in guild is denied
+    const nonManagerGuild = {
+      guildId: "guild-1",
+      user: { id: "user-1" },
+      memberPermissions: { has: () => false },
+    } as unknown as ChatInputCommandInteraction;
+    const deniedPayload = await buildInitialStPresetsPanel(nonManagerGuild, "en-US");
+    expect(JSON.stringify(deniedPayload)).toContain("Manage Server");
+
+    // Manager in guild with nonexistent state returns unavailable
+    const managerGuild = {
+      guildId: "nonexistent-guild-12345",
+      user: { id: "user-123" },
+      memberPermissions: { has: () => true },
+    } as unknown as ChatInputCommandInteraction;
+    const managerPayload = await buildInitialStPresetsPanel(managerGuild, "en-US");
+    expect(JSON.stringify(managerPayload)).toContain("Preset data could not be loaded");
+
+    // DM with nonexistent state returns unavailable without permission check failure
+    const dmInteraction = {
+      guildId: null,
+      user: { id: "nonexistent-dm-user-12345" },
+    } as unknown as ChatInputCommandInteraction;
+    const dmPayload = await buildInitialStPresetsPanel(dmInteraction, "en-US");
+    expect(JSON.stringify(dmPayload)).toContain("Preset data could not be loaded");
+  });
+});

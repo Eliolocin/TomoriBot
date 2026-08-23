@@ -1644,6 +1644,7 @@ const stPresetSchema = z.object({
   preset_name: z.string(),
   raw_json: z.unknown(),
   is_active: z.boolean().default(false),
+  description: z.string().nullable().optional(),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
