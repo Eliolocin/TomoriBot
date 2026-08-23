@@ -47,7 +47,7 @@ function buildCheckboxOptions(endpoints: CustomEndpointRow[]): CheckboxGroupOpti
     return {
       value: endpoint.custom_endpoint_id?.toString() ?? `${endpoint.capability}:${endpoint.label}`,
       label: truncateModalText(optionLabel, 100),
-      description: truncateModalText(endpoint.display_name || endpoint.endpoint_url, 100),
+      description: truncateModalText(endpoint.model_name?.trim() || endpoint.label, 100),
       default: true,
     };
   });

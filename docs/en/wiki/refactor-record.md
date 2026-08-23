@@ -282,7 +282,7 @@ Budget was ~1,000 lines per Repository file once SQL is inlined.
 | New repository | Tables owned |
 |---|---|
 | `LlmModelRepository` | `llms`, `embedding_models`, `diffusion_models`, `video_generation_models` |
-| `LlmProviderRepository` | `saved_provider_configs`, `user_saved_provider_configs`, `custom_endpoints`, `openrouter_*_registrations` |
+| `LlmProviderRepository` | `saved_provider_configs`, `user_saved_provider_configs`, `custom_endpoint_connections`, `custom_endpoints`, `openrouter_*_registrations` |
 | `LlmOverrideRepository` | `channel_llm_overrides`, `persona_llm_overrides`, fallback refs |
 
 `toExportShape()` / `fromExportShape()` moved to `LlmProviderRepository` (saved provider configs and OpenRouter registrations are the exportable state; model catalog is global seed data).

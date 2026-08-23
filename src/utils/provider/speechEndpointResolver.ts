@@ -1,6 +1,6 @@
 import type { CustomEndpointRow } from "@/types/db/schema";
 import { log } from "@/utils/misc/logger";
-import { buildServerCustomProviderName } from "@/utils/provider/customProviderUtils";
+import { buildCustomProviderName } from "@/utils/provider/customProviderUtils";
 import { decryptApiKey } from "@/utils/security/crypto";
 import { loadActiveEndpoint, loadEndpointCredentials } from "@/utils/db/repositories/SpeechRepository";
 
@@ -25,7 +25,7 @@ async function resolveActiveEndpointByCapability(
     // Find the active (is_default) custom endpoint for this capability on the server via repository
     const endpoint = await loadActiveEndpoint(serverId, capability);
 
-    if (!endpoint) {
+    if (!endpoint?.connection_id) {
       return null;
     }
 
@@ -35,7 +35,7 @@ async function resolveActiveEndpointByCapability(
     }
 
     // Credentials are stored in saved_provider_configs keyed by the internal provider name via repository
-    const providerName = buildServerCustomProviderName(serverId, endpoint.label);
+    const providerName = buildCustomProviderName(endpoint.connection_id);
     const configRow = await loadEndpointCredentials(serverId, providerName);
 
     if (!configRow?.api_key) {

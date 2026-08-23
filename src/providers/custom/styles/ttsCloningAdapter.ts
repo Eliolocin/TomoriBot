@@ -106,7 +106,7 @@ function stripUnsupportedChatterboxTurboTags(text: string): string {
 }
 
 function isIrodoriTtsEndpoint(endpoint: CustomEndpointRow): boolean {
-  return [endpoint.label, endpoint.display_name, endpoint.model_name, endpoint.endpoint_url].some((value) =>
+  return [endpoint.label, endpoint.model_name, endpoint.endpoint_url].some((value) =>
     value?.toLowerCase().includes("irodori"),
   );
 }

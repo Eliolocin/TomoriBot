@@ -20,9 +20,8 @@ import {
   buildUserSavedProviderConfigFromExistingOrDefaults,
 } from "@/utils/provider/savedProviderConfig";
 import {
-  buildServerCustomProviderName,
+  buildCustomProviderName,
   buildSyntheticCustomModelCodename,
-  buildUserCustomProviderName,
   parseCustomProvider,
 } from "@/utils/provider/customProviderUtils";
 import { buildFallbackModelPersistence, prunePrimaryFallbackRefs } from "@/utils/provider/fallbackModelIdentity";
@@ -50,7 +49,6 @@ export interface CustomEndpointRegistrationInput {
   capability: CustomEndpointCapability;
   apiStyle: CustomEndpointApiStyle;
   endpointUrl: string;
-  displayName: string;
   modelName?: string | null;
   authToken?: string | null;
   numCtx?: number | null;
@@ -74,10 +72,8 @@ export interface CustomEndpointRegistrationResult {
   modelId: number | null;
 }
 
-function getInternalProviderName(scope: RegistrationScope, label: string): string {
-  return scope.kind === "server"
-    ? buildServerCustomProviderName(scope.ownerId, label)
-    : buildUserCustomProviderName(scope.ownerId, label);
+function getSyntheticModelDescription(endpoint: CustomEndpointRegistrationInput): string {
+  return endpoint.modelName?.trim() || endpoint.label;
 }
 
 async function getExistingSavedConfig(
@@ -93,11 +89,12 @@ async function upsertSyntheticTextModel(
   provider: string,
   endpoint: CustomEndpointRegistrationInput,
 ): Promise<number | null> {
-  const codename = buildSyntheticCustomModelCodename(provider, "text", endpoint.modelName);
+  const codename = buildSyntheticCustomModelCodename(endpoint.label, endpoint.modelName);
+  const description = getSyntheticModelDescription(endpoint);
   const modelId = await llmModelRepo.upsertSyntheticCustomLlm({
     provider,
     codename,
-    displayName: endpoint.displayName,
+    displayName: description,
     hasTools: endpoint.hasTools ?? false,
     seesImages: endpoint.seesImages ?? false,
     seesVideos: endpoint.seesVideos ?? false,
@@ -113,11 +110,12 @@ async function upsertSyntheticEmbeddingModel(
   provider: string,
   endpoint: CustomEndpointRegistrationInput,
 ): Promise<number | null> {
-  const codename = buildSyntheticCustomModelCodename(provider, "embedding", endpoint.modelName);
+  const codename = buildSyntheticCustomModelCodename(endpoint.label, endpoint.modelName);
+  const description = getSyntheticModelDescription(endpoint);
   const modelId = await llmModelRepo.upsertSyntheticCustomEmbeddingModel({
     provider,
     codename,
-    displayName: endpoint.displayName,
+    displayName: description,
   });
 
   return modelId;
@@ -127,11 +125,12 @@ async function upsertSyntheticImageModel(
   provider: string,
   endpoint: CustomEndpointRegistrationInput,
 ): Promise<number | null> {
-  const codename = buildSyntheticCustomModelCodename(provider, "image", endpoint.modelName);
+  const codename = buildSyntheticCustomModelCodename(endpoint.label, endpoint.modelName);
+  const description = getSyntheticModelDescription(endpoint);
   const modelId = await llmModelRepo.upsertSyntheticCustomDiffusionModel({
     provider,
     codename,
-    displayName: endpoint.displayName,
+    displayName: description,
   });
 
   return modelId;
@@ -141,11 +140,12 @@ async function upsertSyntheticVideoModel(
   provider: string,
   endpoint: CustomEndpointRegistrationInput,
 ): Promise<number | null> {
-  const codename = buildSyntheticCustomModelCodename(provider, "video", endpoint.modelName);
+  const codename = buildSyntheticCustomModelCodename(endpoint.label, endpoint.modelName);
+  const description = getSyntheticModelDescription(endpoint);
   const modelId = await llmModelRepo.upsertSyntheticCustomVideoModel({
     provider,
     codename,
-    displayName: endpoint.displayName,
+    displayName: description,
   });
 
   return modelId;
@@ -189,12 +189,13 @@ async function writeSyntheticCapabilityModel(
     return null;
   }
 
-  const codename = buildSyntheticCustomModelCodename(provider, endpoint.capability, endpoint.modelName);
+  const codename = buildSyntheticCustomModelCodename(endpoint.label, endpoint.modelName);
+  const description = getSyntheticModelDescription(endpoint);
   await llmModelRepo.updateSyntheticCustomCapabilityModelById({
     modelRefId: existingModelRefId,
     capability: endpoint.capability,
     codename,
-    displayName: endpoint.displayName,
+    displayName: description,
     hasTools: endpoint.hasTools ?? false,
     seesImages: endpoint.seesImages ?? false,
     seesVideos: endpoint.seesVideos ?? false,
@@ -507,33 +508,45 @@ function capabilitiesClaimedByEndpoint(endpoint: {
 export async function registerCustomEndpoint(
   input: CustomEndpointRegistrationInput,
 ): Promise<CustomEndpointRegistrationResult | null> {
-  const provider = getInternalProviderName(input.scope, input.label);
-  const existingConfig = await getExistingSavedConfig(input.scope, provider);
   const isEdit = input.editingEndpointId != null;
 
   const editingRow = isEdit
     ? ((await llmProviderRepo.loadCustomEndpointsByIds([input.editingEndpointId as number]))[0] ?? null)
     : null;
 
-  // Determine sibling metadata for inherited auth. Add registrations are activated immediately;
-  //    edit registrations preserve the row's existing default flag and active model selection.
-  const allEndpoints =
-    input.scope.kind === "server"
-      ? await llmProviderRepo.loadCustomEndpointsForServer(input.scope.ownerId)
-      : await llmProviderRepo.loadCustomEndpointsForUser(input.scope.ownerId);
-  const otherSiblings = allEndpoints.filter(
-    (endpoint) =>
-      endpoint.label === input.label &&
-      endpoint.capability === input.capability &&
-      endpoint.custom_endpoint_id !== input.editingEndpointId,
-  );
+  if (isEdit && !editingRow) {
+    return null;
+  }
+
+  // The connection must exist before synthetic models and saved configs can reference its stable ID.
+  const connectionId = isEdit
+    ? editingRow?.connection_id
+    : await llmProviderRepo.upsertCustomEndpointConnection({
+        serverId: input.scope.kind === "server" ? input.scope.ownerId : null,
+        userId: input.scope.kind === "personal" ? input.scope.ownerId : null,
+        label: input.label,
+        capability: input.capability,
+        apiStyle: input.apiStyle,
+        endpointUrl: input.endpointUrl,
+        requiresAuth: Boolean(input.authToken?.trim()),
+      });
+
+  if (!connectionId) {
+    return null;
+  }
+
+  const provider = buildCustomProviderName(connectionId);
+  const existingConfig = await getExistingSavedConfig(input.scope, provider);
+
+  // Keep activation semantics separate so edits preserve the selected row while additions claim the provider.
+  const allEndpoints = await llmProviderRepo.loadCustomEndpointsByConnectionId(connectionId);
+  const otherSiblings = allEndpoints.filter((endpoint) => endpoint.custom_endpoint_id !== input.editingEndpointId);
   const shouldActivateNewRegistration = !isEdit;
   const shouldBeDefault = isEdit ? (editingRow?.is_default ?? false) : false;
 
   const modelId = await writeSyntheticCapabilityModel(provider, input, editingRow?.model_ref_id ?? null);
 
-  // Auth is shared per label (one stored key). A new sibling inherits requires_auth from an existing
-  // sibling/edited row when no fresh token is supplied, so the "one connection" model stays coherent.
+  // Authentication belongs to the connection, so tokenless siblings inherit its credential requirement.
   const authSibling = editingRow ?? otherSiblings[0] ?? null;
   const trimmedAuthToken = input.authToken?.trim();
   const requiresAuth = trimmedAuthToken && trimmedAuthToken.length > 0 ? true : (authSibling?.requires_auth ?? false);
@@ -549,7 +562,6 @@ export async function registerCustomEndpoint(
       endpointUrl: input.endpointUrl,
       modelName: input.modelName ?? null,
       modelRefId: modelId,
-      displayName: input.displayName,
       numCtx: input.numCtx ?? null,
       requiresAuth,
       extraConfig: input.extraConfig ?? {},
@@ -673,12 +685,11 @@ export async function setActiveCustomEndpoint(params: {
  * Resolves the custom endpoint row backing a provider for a capability.
  *
  * When an active model id is supplied, the specific endpoint owning that synthetic model is
- * returned: this is how the runtime picks the right row when several models share a label+capability.
- * When omitted (or no match, e.g. legacy rows whose model_ref_id was not backfilled), it falls back
- * to the most-recently-updated endpoint for the label+capability. Speech/transcription always use
- * the fallback since they have no synthetic model.
+ * returned: this is how the runtime picks the right row when several models share a connection.
+ * When omitted (or no match), it falls back to the most-recently-updated endpoint for the connection.
  *
- * @param provider      - Internal custom provider name
+ * @param provider      - Internal custom provider name (custom:<connection_id>)
+ * @param capability    - Endpoint capability
  * @param activeModelId - Optional id of the currently-active synthetic model for this capability
  */
 export async function resolveCustomEndpointForProvider(
@@ -691,28 +702,7 @@ export async function resolveCustomEndpointForProvider(
     return null;
   }
 
-  if (activeModelId != null) {
-    const byModel = await llmProviderRepo.loadCustomEndpointByModelRef(
-      parsed.scope === "server"
-        ? { serverId: parsed.ownerId, capability, modelRefId: activeModelId }
-        : { userId: parsed.ownerId, capability, modelRefId: activeModelId },
-    );
-    if (byModel) {
-      return byModel;
-    }
-  }
-
-  return parsed.scope === "server"
-    ? await llmProviderRepo.loadCustomEndpoint({
-        serverId: parsed.ownerId,
-        label: parsed.label,
-        capability,
-      })
-    : await llmProviderRepo.loadCustomEndpoint({
-        userId: parsed.ownerId,
-        label: parsed.label,
-        capability,
-      });
+  return await llmProviderRepo.loadCustomEndpointByConnection(parsed.connectionId, capability, activeModelId);
 }
 
 export async function removeCustomEndpointRegistration(params: {
@@ -722,10 +712,13 @@ export async function removeCustomEndpointRegistration(params: {
   capability: CustomEndpointCapability;
   modelRefId: number | null;
 }): Promise<boolean> {
-  const provider = getInternalProviderName(params.scope, params.label);
-  const existingConfig = await getExistingSavedConfig(params.scope, provider);
+  const endpoints = await llmProviderRepo.loadCustomEndpointsByIds([params.customEndpointId]);
+  const targetEndpoint = endpoints[0] ?? null;
+  const connectionId = targetEndpoint?.connection_id ?? null;
+  const provider = connectionId ? buildCustomProviderName(connectionId) : null;
+  const existingConfig = provider ? await getExistingSavedConfig(params.scope, provider) : null;
 
-  // Delete the specific endpoint row (one model among possibly several under this label+capability).
+  // Keep sibling models and their shared connection when removing one model.
   const deleted =
     params.scope.kind === "server"
       ? await llmProviderRepo.deleteCustomEndpointById(params.customEndpointId, {
@@ -738,21 +731,15 @@ export async function removeCustomEndpointRegistration(params: {
     return false;
   }
 
-  // Load remaining endpoints under the same label to find a sibling to auto-promote to when the
-  //    removed model was the active one. Prefer the default-flagged sibling, then first available.
-  const remaining =
-    params.scope.kind === "server"
-      ? await llmProviderRepo.loadCustomEndpointsForServer(params.scope.ownerId)
-      : await llmProviderRepo.loadCustomEndpointsForUser(params.scope.ownerId);
-  const sameLabelRemaining = remaining.filter((endpoint) => endpoint.label === params.label);
-  const sameLabelCapabilityRemaining = sameLabelRemaining.filter(
+  // Prefer the default sibling during promotion so an explicit model preference survives removal.
+  const remaining = connectionId ? await llmProviderRepo.loadCustomEndpointsByConnectionId(connectionId) : [];
+  const sameCapabilityRemaining = remaining.filter(
     (endpoint) => endpoint.capability === params.capability && endpoint.model_ref_id != null,
   );
   const siblingModelId =
-    (sameLabelCapabilityRemaining.find((e) => e.is_default) ?? sameLabelCapabilityRemaining[0])?.model_ref_id ?? null;
+    (sameCapabilityRemaining.find((e) => e.is_default) ?? sameCapabilityRemaining[0])?.model_ref_id ?? null;
 
-  // Clear live server config + channel/persona overrides that pointed at this exact model,
-  //    auto-promoting to the sibling when one exists.
+  // Preserve live references by moving them to a surviving sibling when possible.
   if (params.scope.kind === "server") {
     await clearServerScopedLiveReferences(params.scope, params.capability, params.modelRefId, siblingModelId);
   }
@@ -761,21 +748,25 @@ export async function removeCustomEndpointRegistration(params: {
     await llmModelRepo.deleteSyntheticCustomCapabilityModelById(params.modelRefId, params.capability);
   }
 
-  // If no models remain for the whole label, drop the saved provider config entirely.
-  if (sameLabelRemaining.length === 0) {
-    if (params.scope.kind === "server") {
-      await llmProviderRepo.deleteSavedProviderConfig(params.scope.ownerId, provider, {
-        serverDiscId: params.scope.serverDiscId,
-      });
-    } else {
-      await llmProviderRepo.deleteUserSavedProviderConfig(params.scope.ownerId, provider);
+  // Connection-scoped state is removable only after its final model is gone.
+  if (remaining.length === 0) {
+    if (connectionId) {
+      await llmProviderRepo.deleteCustomEndpointConnectionById(connectionId);
+    }
+    if (provider) {
+      if (params.scope.kind === "server") {
+        await llmProviderRepo.deleteSavedProviderConfig(params.scope.ownerId, provider, {
+          serverDiscId: params.scope.serverDiscId,
+        });
+      } else {
+        await llmProviderRepo.deleteUserSavedProviderConfig(params.scope.ownerId, provider);
+      }
     }
     return true;
   }
 
-  // Otherwise, update the saved config's active slot for this capability. If it pointed at the
-  //    removed model, promote to the sibling; null only when no sibling exists.
-  if (!existingConfig || params.modelRefId == null) {
+  // Keep the saved capability selection aligned with the live endpoint after removal.
+  if (!existingConfig || params.modelRefId == null || !provider) {
     return true;
   }
   const activeForCapability = getCapabilityModelId(existingConfig, params.capability);
@@ -809,24 +800,11 @@ export async function removeCustomEndpointRegistration(params: {
 
 export async function cleanupCustomProviderArtifacts(provider: string): Promise<void> {
   const parsed = parseCustomProvider(provider);
-  if (!parsed || parsed.ownerId === null) {
+  if (!parsed) {
     return;
   }
 
-  const registeredEndpoints =
-    parsed.scope === "server"
-      ? await llmProviderRepo.loadCustomEndpointsForServer(parsed.ownerId)
-      : await llmProviderRepo.loadCustomEndpointsForUser(parsed.ownerId);
-
-  const matchingEndpoints = registeredEndpoints.filter((endpoint) => endpoint.label === parsed.label);
-
-  for (const endpoint of matchingEndpoints) {
-    if (endpoint.custom_endpoint_id != null) {
-      await llmProviderRepo.deleteCustomEndpointById(endpoint.custom_endpoint_id, {
-        serverId: parsed.scope === "server" ? parsed.ownerId : null,
-      });
-    }
-  }
+  await llmProviderRepo.deleteCustomEndpointConnectionById(parsed.connectionId);
 
   // Drop every synthetic model owned by this custom provider across all capability tables.
   await llmModelRepo.deleteAllSyntheticModelsForProvider(parsed.raw);

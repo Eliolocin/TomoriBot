@@ -156,7 +156,7 @@ export function formatFallbackChain(
         const label =
           entry.kind === "llm"
             ? formatLlmDisplayLabel(entry.model, customModelName, otherModelCodename)
-            : `\`${truncateText(entry.endpoint.display_name, 48)}\` (${localizer(locale, "commands.tool.status.custom_endpoint_capability_label", { capability: entry.endpoint.capability })})`;
+            : `\`${truncateText(entry.endpoint.model_name || entry.endpoint.label, 48)}\` (${localizer(locale, "commands.tool.status.custom_endpoint_capability_label", { capability: entry.endpoint.capability })})`;
         return `${index + 1}. ${label}`;
       })
       .join("\n");
@@ -182,7 +182,7 @@ export function formatCustomEndpoints(endpoints: CustomEndpointRow[], locale: st
       const authLabel = ep.requires_auth
         ? localizer(locale, "commands.tool.status.mcp_server_auth_present")
         : localizer(locale, "commands.tool.status.mcp_server_auth_absent");
-      return `${index + 1}. **${truncateText(ep.display_name, 32)}** · ${ep.capability} · ${ep.api_style} · ${authLabel}`;
+      return `${index + 1}. **${truncateText(ep.model_name || ep.label, 32)}** · ${ep.capability} · ${ep.api_style} · ${authLabel}`;
     })
     .join("\n");
 }

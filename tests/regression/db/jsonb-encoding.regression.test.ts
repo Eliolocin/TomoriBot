@@ -60,17 +60,18 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("JSONB encoding", () => {
       userId: null,
       label: "_jsonb_probe_endpoint",
       capability: "text",
-      apiStyle: "openai",
+      apiStyle: "openai-compatible",
       endpointUrl: "https://example.invalid/v1",
-      displayName: "JSONB Probe",
+      modelName: "jsonb-probe-model",
       requiresAuth: false,
       extraConfig: { headers: { "x-probe": "1" } },
     });
 
     const [row] = await testSql`
-      SELECT jsonb_typeof(extra_config) AS kind, extra_config #>> '{headers,x-probe}' AS header_value
-      FROM custom_endpoints
-      WHERE server_id = ${serverId} AND label = '_jsonb_probe_endpoint'`;
+      SELECT jsonb_typeof(ce.extra_config) AS kind, ce.extra_config #>> '{headers,x-probe}' AS header_value
+      FROM custom_endpoints ce
+      JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+      WHERE cec.server_id = ${serverId} AND cec.label = '_jsonb_probe_endpoint'`;
 
     expect(row.kind).toBe("object");
     expect(row.header_value).toBe("1");

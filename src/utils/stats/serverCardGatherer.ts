@@ -15,7 +15,6 @@ import type { TopUserEntry } from "@/utils/db/repositories/StatRepository";
 import { log } from "@/utils/misc/logger";
 import { loadStoredPersonaAvatarDataUri } from "@/utils/storage/avatarStorage";
 import { type Timeframe, resolveWindowFrom } from "@/utils/stats/statsDashboard";
-import { prettifyModelCodename } from "@/utils/provider/customProviderUtils";
 import { extractAvatarAccentColor, extractCardPalette, loadTomoriconDataUri } from "@/utils/stats/cardColor";
 import { loadStatsPersonaAvatarDataUri, loadStatsPresetAvatarLookup } from "@/utils/stats/personaAvatar";
 import type {
@@ -139,7 +138,7 @@ export async function gatherServerCardData(args: GatherServerCardArgs): Promise<
   );
 
   const topModels: ServerModelBar[] = modelCosts.map((entry) => ({
-    name: prettifyModelCodename(entry.model),
+    name: entry.model,
     totalTokens: entry.inputTokens + entry.outputTokens,
     estimatedCost: entry.cost,
   }));

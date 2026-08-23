@@ -87,7 +87,10 @@ export async function execute(
     const visibleSavedConfigs = (
       await Promise.all(
         rawSavedConfigs.map(async (config) => {
-          if (isCustomProvider(config.provider) && (await hasRegisteredCustomProvider(config.provider))) {
+          if (
+            isCustomProvider(config.provider) &&
+            (await hasRegisteredCustomProvider(config.provider, { serverId: tomoriState.server_id }))
+          ) {
             return null;
           }
           return config;

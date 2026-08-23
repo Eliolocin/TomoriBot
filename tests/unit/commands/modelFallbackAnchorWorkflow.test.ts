@@ -78,6 +78,7 @@ function makeScenario(): Scenario {
 function makeCustomEndpoint() {
   return {
     custom_endpoint_id: 5,
+    connection_id: 12,
     server_id: 7,
     user_id: null,
     label: "local",
@@ -86,7 +87,6 @@ function makeCustomEndpoint() {
     endpoint_url: "https://example.invalid/v1",
     model_name: "primary-model",
     model_ref_id: scenario.primaryLlmId,
-    display_name: "Primary Custom Model",
     requires_auth: true,
     extra_config: {},
     has_tools: false,
@@ -153,9 +153,7 @@ scopedMock.module("@/utils/cache/tomoriStateCache", () => ({
 
 scopedMock.module("@/utils/provider/savedProviderConfig", () => ({
   ...realSavedProviderConfig,
-  loadSavedProvidersForCapability: async () => [
-    { provider: scenario.customEndpointMode ? "custom:s7:local" : "provider-a" },
-  ],
+  loadSavedProvidersForCapability: async () => [{ provider: scenario.customEndpointMode ? "custom:12" : "provider-a" }],
   loadUserSavedProvidersForCapability: async () => [{ provider: "provider-a" }],
 }));
 
@@ -204,8 +202,7 @@ scopedMock.module("@/utils/provider/providerInfoRegistry", () => ({
 scopedMock.module("@/utils/provider/customProviderUtils", () => ({
   ...realCustomProviderUtils,
   isCustomProvider: () => scenario.customEndpointMode,
-  parseCustomProvider: () =>
-    scenario.customEndpointMode ? { raw: "custom:s7:local", label: "local", scope: "server", ownerId: 7 } : null,
+  parseCustomProvider: () => (scenario.customEndpointMode ? { raw: "custom:12", connectionId: 12 } : null),
 }));
 
 scopedMock.module("@/utils/discord/commandRegistry", () => ({

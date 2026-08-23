@@ -55,6 +55,7 @@ function readEndpointImageModeConfig(endpoint: CustomEndpointRow): Record<string
 function resolveCustomEndpointImageCapabilities(endpoint: CustomEndpointRow): ImageToolCapabilities {
   const imageModeConfig = readEndpointImageModeConfig(endpoint);
   const supports = readImageEndpointSupports(endpoint);
+  const sourceLabel = endpoint.model_name?.trim() || endpoint.label;
 
   if (endpoint.api_style === "comfyui") {
     return {
@@ -63,7 +64,7 @@ function resolveCustomEndpointImageCapabilities(endpoint: CustomEndpointRow): Im
       inpaint: supports.inpaint,
       outpaint: imageModeConfig ? readBooleanField(imageModeConfig, "outpaint", supports.inpaint) : supports.inpaint,
       negativePrompt: supports.negative_prompt,
-      sourceLabel: endpoint.display_name,
+      sourceLabel,
     };
   }
 
@@ -75,14 +76,14 @@ function resolveCustomEndpointImageCapabilities(endpoint: CustomEndpointRow): Im
       inpaint,
       outpaint: readBooleanField(imageModeConfig, "outpaint", false),
       negativePrompt: supports.negative_prompt,
-      sourceLabel: endpoint.display_name,
+      sourceLabel,
     };
   }
 
   return {
     ...TEXT_ONLY_IMAGE_CAPABILITIES,
     negativePrompt: supports.negative_prompt,
-    sourceLabel: endpoint.display_name,
+    sourceLabel,
   };
 }
 

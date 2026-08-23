@@ -48,7 +48,6 @@ import type {
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { prettifyModelCodename } from "@/utils/provider/customProviderUtils";
 
 /** Selectable time windows. `all_time` omits the bucket floor entirely. */
 export type Timeframe = "today" | "week" | "month" | "year" | "all_time";
@@ -123,7 +122,7 @@ function modelCostList(locale: string, entries: ModelCostEntry[]): string {
   return entries
     .map(
       (e, i) =>
-        `**${i + 1}.** \`${prettifyModelCodename(e.model)}\`: ${fmtInt(e.inputTokens)} ${inShort} / ${fmtInt(e.outputTokens)} ${outShort} / ${fmtUsd(e.cost)}`,
+        `**${i + 1}.** \`${e.model}\`: ${fmtInt(e.inputTokens)} ${inShort} / ${fmtInt(e.outputTokens)} ${outShort} / ${fmtUsd(e.cost)}`,
     )
     .join("\n");
 }
@@ -582,9 +581,7 @@ export async function buildPersonalTabs(args: {
     .slice(0, 5)
     .map((c) => ({ label: lineageLabel(locale, names, c.lineageId), count: c.punishments }));
 
-  const favoriteModel = modelCost[0]
-    ? prettifyModelCodename(modelCost[0].model)
-    : localizer(locale, "commands.stats.empty");
+  const favoriteModel = modelCost[0] ? modelCost[0].model : localizer(locale, "commands.stats.empty");
 
   const overviewFields: StatField[] = [
     statField("commands.stats.fields.messages_personal", fmtInt(messages)),
@@ -985,9 +982,7 @@ export async function buildServerTabs(args: {
   const mostPopularPersonaName = popularPersonas[0]
     ? lineageLabel(locale, names, popularPersonas[0].lineageId)
     : localizer(locale, "commands.stats.empty");
-  const mostPopularModel = modelCost[0]
-    ? prettifyModelCodename(modelCost[0].model)
-    : localizer(locale, "commands.stats.empty");
+  const mostPopularModel = modelCost[0] ? modelCost[0].model : localizer(locale, "commands.stats.empty");
 
   // ── Overview (shared core; Images/Videos are deliberately omitted on the
   // persona view to keep this card focused on conversational affinity). ──

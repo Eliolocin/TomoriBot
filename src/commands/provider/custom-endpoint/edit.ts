@@ -70,7 +70,7 @@ export async function execute(
         capabilityTranscription: "commands.config.custom_models.remove.capability_transcription",
       },
       strictRemoteValidation: false,
-      loadEndpoints: llmProviderRepo.loadCustomEndpointsForServer,
+      loadEndpoints: (ownerId) => llmProviderRepo.loadCustomEndpointsForServer(ownerId),
       onSuccess: () => {
         invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
       },

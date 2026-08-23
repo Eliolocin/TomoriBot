@@ -31,7 +31,7 @@ import {
   resolveCapabilityCredentials,
 } from "@/utils/provider/credentialResolver";
 import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
-import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
+import { formatCustomModelDisplay } from "@/utils/provider/customProviderUtils";
 import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { isOpenRouterVideoCapabilityError } from "@/providers/openrouter/openrouterVideoRequest";
@@ -433,7 +433,7 @@ export async function execute(
 
     const modelCodename = await getVideoModelCodename(videoModelId);
     const displayModelName = videoCreds.customEndpoint
-      ? formatCustomEndpointModelDisplay(videoCreds.customEndpoint)
+      ? formatCustomModelDisplay(videoCreds.customEndpoint)
       : modelCodename;
 
     log.info(

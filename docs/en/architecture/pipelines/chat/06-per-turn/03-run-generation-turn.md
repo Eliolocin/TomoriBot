@@ -53,7 +53,7 @@ a non-error result *and* the loop falls through (rare; defensive).
   (custom-endpoint or saved-provider-config flavor). The lead attempt is always
   labelled `"primary"` in logs even when the randomizer (below) promoted a
   fallback into that slot; the true model is still visible via `successModel`.
-- Resolves a custom-endpoint fallback from the endpoint row's owner scope. Server
+- Resolves a custom-endpoint fallback from the endpoint row's connection ID. Server
   endpoints use the server's saved custom provider, while personal endpoints use
   the owning user's saved provider and key. Personal fallback refs are isolated
   from the server chain and retain their configured order.

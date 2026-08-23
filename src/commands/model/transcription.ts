@@ -60,7 +60,7 @@ export async function execute(
     }
 
     const options: SelectOption[] = endpoints.map((endpoint) => ({
-      label: safeSelectOptionText(endpoint.display_name),
+      label: safeSelectOptionText(`${endpoint.label} (${endpoint.capability})`),
       value: String(endpoint.custom_endpoint_id),
       description: safeSelectOptionText(
         localizer(locale, "commands.model.transcription.endpoint_description", {
@@ -101,11 +101,12 @@ export async function execute(
       return;
     }
 
+    const selectedLabel = `${selectedEndpoint.label} (${selectedEndpoint.capability})`;
     if (selectedEndpoint.is_default) {
       await replyInfoEmbed(modalResult.interaction, locale, {
         titleKey: "commands.model.transcription.already_selected_title",
         descriptionKey: "commands.model.transcription.already_selected_description",
-        descriptionVars: { endpoint: selectedEndpoint.display_name },
+        descriptionVars: { endpoint: selectedLabel },
         color: ColorCode.WARN,
       });
       return;
@@ -130,7 +131,7 @@ export async function execute(
     await replyInfoEmbed(modalResult.interaction, locale, {
       titleKey: "commands.model.transcription.success_title",
       descriptionKey: "commands.model.transcription.success_description",
-      descriptionVars: { endpoint: selectedEndpoint.display_name },
+      descriptionVars: { endpoint: selectedLabel },
       color: ColorCode.SUCCESS,
     });
   } catch (error) {

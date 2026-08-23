@@ -102,17 +102,17 @@ function buildEndpointSelectOptions(
   //    produce duplicate option labels, so Discord silently drops the second one.
   const labelCounts = new Map<string, number>();
   for (const endpoint of endpoints) {
-    const primaryName = endpoint.model_name?.trim() || endpoint.display_name;
-    const base = `${primaryName} (${endpoint.label})`;
+    const primaryName = endpoint.model_name?.trim() || endpoint.label;
+    const base = endpoint.model_name?.trim() ? `${primaryName} (${endpoint.label})` : endpoint.label;
     labelCounts.set(base, (labelCounts.get(base) ?? 0) + 1);
   }
 
   const labelIndex = new Map<string, number>();
   return endpoints.map((endpoint) => {
-    const primaryName = endpoint.model_name?.trim() || endpoint.display_name;
+    const primaryName = endpoint.model_name?.trim() || endpoint.label;
     const capability = getCapabilityLabel(locale, keys, endpoint.capability);
-    const base = `${primaryName} (${endpoint.label})`;
-    const description = `${endpoint.display_name} (${capability})`;
+    const base = endpoint.model_name?.trim() ? `${primaryName} (${endpoint.label})` : endpoint.label;
+    const description = `${primaryName} (${capability})`;
 
     let label = base;
     if ((labelCounts.get(base) ?? 0) > 1) {
@@ -161,12 +161,6 @@ function buildEndpointSummaryEmbed(locale: string, endpoint: CustomEndpointRow):
   if (endpoint.model_name) {
     lines.push(
       `**${localizer(locale, "commands.config.custom_models.capability_modal.model_name_label")}:** \`${endpoint.model_name}\``,
-    );
-  }
-
-  if (endpoint.display_name) {
-    lines.push(
-      `**${localizer(locale, "commands.config.custom_models.capability_modal.display_name_label")}:** ${endpoint.display_name}`,
     );
   }
 
@@ -345,7 +339,6 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
     locale,
     {
       modelName: existingEndpoint.model_name,
-      displayName: existingEndpoint.display_name,
       endpointUrl: existingEndpoint.endpoint_url,
       numCtx: existingEndpoint.num_ctx,
       hasTools: existingEndpoint.has_tools,
@@ -413,11 +406,11 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
     );
 
     const endpointUrl = parsed.endpointUrl || existingEndpoint.endpoint_url;
-    const displayName = parsed.displayName || existingEndpoint.display_name;
     const modelName =
       parsed.modelName !== null
         ? parsed.modelName || existingEndpoint.model_name || null
         : (existingEndpoint.model_name ?? null);
+    const displayName = modelName || existingEndpoint.label;
     const numCtx = parsed.numCtx ?? existingEndpoint.num_ctx ?? null;
     // Checkbox group always returns definitive state (pre-filled with existing); use directly.
     const hasTools = parsed.hasTools;
@@ -508,7 +501,6 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
       capability: existingEndpoint.capability,
       apiStyle: existingEndpoint.api_style,
       endpointUrl,
-      displayName,
       modelName,
       authToken,
       numCtx,

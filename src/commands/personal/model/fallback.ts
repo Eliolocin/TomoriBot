@@ -115,8 +115,8 @@ function buildSlotPlaceholder(
 
   const epLabel = `${entry.endpoint.label}:${entry.endpoint.model_name ?? entry.endpoint.label}`;
   const parsed = parseCustomProvider(selectedProvider);
-  const selectedLabel = parsed?.label ?? null;
-  if (selectedLabel !== entry.endpoint.label) {
+  const selectedConnectionId = parsed?.connectionId ?? null;
+  if (selectedConnectionId !== entry.endpoint.connection_id) {
     return localizer(locale, "commands.model.fallback.current_placeholder_with_provider", {
       model: truncatePlaceholderValue(epLabel),
       provider: localizer(locale, "commands.model.fallback.custom_provider_label"),
@@ -213,9 +213,11 @@ export async function execute(
 
     if (isCustomProvider(selectedProvider)) {
       const parsed = parseCustomProvider(selectedProvider);
-      const label = parsed?.label ?? null;
+      const connectionId = parsed?.connectionId ?? null;
       const allEndpoints = await llmProviderRepo.loadCustomEndpointsForUser(userData.user_id);
-      availableEndpoints = label ? allEndpoints.filter((ep) => ep.label === label && ep.capability === "text") : [];
+      availableEndpoints = connectionId
+        ? allEndpoints.filter((ep) => ep.connection_id === connectionId && ep.capability === "text")
+        : [];
 
       if (availableEndpoints.length === 0) {
         await phase.useButton(modalButton).replace(

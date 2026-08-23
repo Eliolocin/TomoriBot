@@ -1,7 +1,7 @@
 /**
  * SpeechRepository: manages voice sample CRUD and speech endpoint resolution.
  *
- * Owns tables: voice_samples, custom_endpoints (speech/transcription rows),
+ * Owns tables: voice_samples, custom_endpoints and custom_endpoint_connections (speech/transcription rows),
  * saved_provider_configs (credential lookup by provider name), and
  * persona_voice_configs.speech_voice_sample_id (persona voice assignment).
  *
@@ -40,12 +40,36 @@ export async function loadActiveEndpoint(
 ): Promise<CustomEndpointRow | null> {
   try {
     const rows = await sql`
-      SELECT * FROM custom_endpoints
-      WHERE server_id = ${serverId}
-        AND capability = ${capability}
-        AND user_id IS NULL
-        AND is_default = true
-      ORDER BY updated_at DESC, custom_endpoint_id DESC
+      SELECT
+        ce.custom_endpoint_id,
+        ce.connection_id,
+        cec.server_id,
+        cec.user_id,
+        cec.label,
+        cec.capability,
+        cec.api_style,
+        cec.endpoint_url,
+        ce.model_name,
+        ce.model_ref_id,
+        ce.num_ctx,
+        cec.requires_auth,
+        ce.extra_config,
+        ce.has_tools,
+        ce.sees_images,
+        ce.sees_videos,
+        ce.supports_structoutput,
+        ce.strict_role_alternation,
+        ce.supports_prefix_completion,
+        ce.is_default,
+        ce.created_at,
+        ce.updated_at
+      FROM custom_endpoints ce
+      JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+      WHERE cec.server_id = ${serverId}
+        AND cec.capability = ${capability}
+        AND cec.user_id IS NULL
+        AND ce.is_default = true
+      ORDER BY ce.updated_at DESC, ce.custom_endpoint_id DESC
       LIMIT 1
     `;
     if (!rows || rows.length === 0) return null;
@@ -68,7 +92,7 @@ export async function loadActiveEndpoint(
  * Load encrypted credentials for a provider (keyed by internal provider name).
  * Returns null when no credentials are stored.
  *
- * @param providerName - Internal provider name (e.g. "custom:s123:label")
+ * @param providerName - Internal provider name (for example, "custom:123")
  * @returns Raw encrypted credential row or null
  */
 export async function loadEndpointCredentials(

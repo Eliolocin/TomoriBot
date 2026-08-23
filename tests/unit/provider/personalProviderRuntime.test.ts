@@ -8,6 +8,7 @@ const fallback = { llm_id: 12, llm_provider: "google", llm_codename: "fallback" 
 const serverFallback = { llm_id: 90, llm_provider: "google", llm_codename: "server-fallback" } as LlmRow;
 const endpoint = {
   custom_endpoint_id: 5,
+  connection_id: 1,
   server_id: null,
   user_id: 4,
   label: "local",

@@ -1799,6 +1799,7 @@ class ServerRepository implements IRepository<ServerExportShape> {
     "matrix_channel_links",
     "channel_llm_overrides",
     "guild_mcp_servers",
+    "custom_endpoint_connections",
     "custom_endpoints",
     // Model registrations
     "openrouter_model_registrations",

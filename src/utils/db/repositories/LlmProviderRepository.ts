@@ -1,4 +1,5 @@
 import {
+  customEndpointConnectionSchema,
   customEndpointSchema,
   diffusionModelSchema,
   embeddingModelSchema,
@@ -12,6 +13,7 @@ import {
   videoGenerationModelSchema,
   type CustomEndpointApiStyle,
   type CustomEndpointCapability,
+  type CustomEndpointConnectionRow,
   type CustomEndpointRow,
   type DiffusionModelRow,
   type EmbeddingModelRow,
@@ -29,6 +31,7 @@ import {
 import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCacheStore";
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
+import { buildCustomProviderName, rememberCustomProviderLabel } from "@/utils/provider/customProviderUtils";
 import type { OpenRouterModelScope } from "./LlmModelRepository";
 import type { IRepository } from "./IRepository";
 
@@ -48,11 +51,55 @@ type ChannelLlmCacheOptions = LlmProviderCacheOptions & {
 /**
  * LlmProviderRepository: saved provider configs, custom endpoints, and OpenRouter registrations.
  *
- * Owns tables: saved_provider_configs, user_saved_provider_configs, custom_endpoints,
- * openrouter_model_registrations, openrouter_embedding_model_registrations,
+ * Owns tables: saved_provider_configs, user_saved_provider_configs, custom_endpoint_connections,
+ * custom_endpoints, openrouter_model_registrations, openrouter_embedding_model_registrations,
  * openrouter_image_model_registrations, openrouter_video_model_registrations.
  */
 class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
+  private hydrateCustomEndpointRow(row: unknown): CustomEndpointRow | null {
+    const parsed = customEndpointSchema.safeParse(row);
+    if (!parsed.success) return null;
+
+    rememberCustomProviderLabel(buildCustomProviderName(parsed.data.connection_id), parsed.data.label);
+    return parsed.data;
+  }
+
+  private hydrateCustomEndpointRows(rows: readonly unknown[]): CustomEndpointRow[] {
+    return rows.flatMap((row) => {
+      const endpoint = this.hydrateCustomEndpointRow(row);
+      return endpoint ? [endpoint] : [];
+    });
+  }
+
+  private async hydrateCustomProviderLabelsForOwner(owner: { serverId?: number; userId?: number }): Promise<void> {
+    try {
+      const rows =
+        owner.serverId !== undefined
+          ? await sql<unknown[]>`
+              SELECT connection_id, label
+              FROM custom_endpoint_connections
+              WHERE server_id = ${owner.serverId} AND user_id IS NULL
+            `
+          : owner.userId !== undefined
+            ? await sql<unknown[]>`
+                SELECT connection_id, label
+                FROM custom_endpoint_connections
+                WHERE user_id = ${owner.userId} AND server_id IS NULL
+              `
+            : [];
+
+      for (const row of rows) {
+        const connectionId = (row as { connection_id?: unknown }).connection_id;
+        const label = (row as { label?: unknown }).label;
+        if (typeof connectionId === "number" && typeof label === "string") {
+          rememberCustomProviderLabel(buildCustomProviderName(connectionId), label);
+        }
+      }
+    } catch (error) {
+      log.warn("Unable to hydrate custom provider labels for saved provider configs:", error);
+    }
+  }
+
   private async scopedLlmRows(scope: OpenRouterModelScope, includeDeprecated: boolean): Promise<unknown[]> {
     if (scope.kind === "server") {
       return includeDeprecated
@@ -427,6 +474,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
           );
         }
       }
+      await this.hydrateCustomProviderLabelsForOwner({ serverId });
       return validated;
     } catch (error) {
       log.error(`Error loading saved provider configs for server ${serverId}:`, error);
@@ -488,6 +536,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
           );
         }
       }
+      await this.hydrateCustomProviderLabelsForOwner({ userId });
       return validated;
     } catch (error) {
       log.error(`Error loading user saved provider configs for user ${userId}:`, error);
@@ -535,16 +584,37 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       // Returns every model row; a label+capability may now hold several models (distinguished by
       // model_name), so we no longer collapse with DISTINCT ON. Ordered for stable picker listing.
       const rows = await sql<unknown[]>`
-        SELECT *
-        FROM custom_endpoints
-        WHERE server_id = ${serverId}
-          AND user_id IS NULL
-        ORDER BY label ASC, capability ASC, model_name ASC NULLS FIRST, custom_endpoint_id ASC
+        SELECT
+          ce.custom_endpoint_id,
+          ce.connection_id,
+          cec.server_id,
+          cec.user_id,
+          cec.label,
+          cec.capability,
+          cec.api_style,
+          cec.endpoint_url,
+          ce.model_name,
+          ce.model_ref_id,
+          ce.num_ctx,
+          cec.requires_auth,
+          ce.extra_config,
+          ce.has_tools,
+          ce.sees_images,
+          ce.sees_videos,
+          ce.supports_structoutput,
+          ce.strict_role_alternation,
+          ce.supports_prefix_completion,
+          ce.is_default,
+          ce.created_at,
+          ce.updated_at
+        FROM custom_endpoints ce
+        JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+        WHERE cec.server_id = ${serverId}
+          AND cec.user_id IS NULL
+        ORDER BY cec.label ASC, cec.capability ASC, ce.model_name ASC NULLS FIRST, ce.custom_endpoint_id ASC
       `;
 
-      return rows
-        .map((row) => customEndpointSchema.safeParse(row))
-        .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+      return this.hydrateCustomEndpointRows(rows);
     } catch (error) {
       log.error(`Error loading custom endpoints for server ${serverId}:`, error);
       return [];
@@ -561,16 +631,37 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       // Returns every model row; a label+capability may now hold several models (distinguished by
       // model_name), so we no longer collapse with DISTINCT ON. Ordered for stable picker listing.
       const rows = await sql<unknown[]>`
-        SELECT *
-        FROM custom_endpoints
-        WHERE user_id = ${userId}
-          AND server_id IS NULL
-        ORDER BY label ASC, capability ASC, model_name ASC NULLS FIRST, custom_endpoint_id ASC
+        SELECT
+          ce.custom_endpoint_id,
+          ce.connection_id,
+          cec.server_id,
+          cec.user_id,
+          cec.label,
+          cec.capability,
+          cec.api_style,
+          cec.endpoint_url,
+          ce.model_name,
+          ce.model_ref_id,
+          ce.num_ctx,
+          cec.requires_auth,
+          ce.extra_config,
+          ce.has_tools,
+          ce.sees_images,
+          ce.sees_videos,
+          ce.supports_structoutput,
+          ce.strict_role_alternation,
+          ce.supports_prefix_completion,
+          ce.is_default,
+          ce.created_at,
+          ce.updated_at
+        FROM custom_endpoints ce
+        JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+        WHERE cec.user_id = ${userId}
+          AND cec.server_id IS NULL
+        ORDER BY cec.label ASC, cec.capability ASC, ce.model_name ASC NULLS FIRST, ce.custom_endpoint_id ASC
       `;
 
-      return rows
-        .map((row) => customEndpointSchema.safeParse(row))
-        .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+      return this.hydrateCustomEndpointRows(rows);
     } catch (error) {
       log.error(`Error loading custom endpoints for user ${userId}:`, error);
       return [];
@@ -591,7 +682,32 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const distinctIds = Array.from(new Set(ids));
       const placeholders = distinctIds.map((_, i) => `$${i + 1}`).join(", ");
       const rows = await sql.unsafe(
-        `SELECT * FROM custom_endpoints WHERE custom_endpoint_id IN (${placeholders})`,
+        `SELECT
+          ce.custom_endpoint_id,
+          ce.connection_id,
+          cec.server_id,
+          cec.user_id,
+          cec.label,
+          cec.capability,
+          cec.api_style,
+          cec.endpoint_url,
+          ce.model_name,
+          ce.model_ref_id,
+          ce.num_ctx,
+          cec.requires_auth,
+          ce.extra_config,
+          ce.has_tools,
+          ce.sees_images,
+          ce.sees_videos,
+          ce.supports_structoutput,
+          ce.strict_role_alternation,
+          ce.supports_prefix_completion,
+          ce.is_default,
+          ce.created_at,
+          ce.updated_at
+        FROM custom_endpoints ce
+        JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+        WHERE ce.custom_endpoint_id IN (${placeholders})`,
         distinctIds,
       );
 
@@ -599,6 +715,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       for (const row of rows) {
         const parsed = customEndpointSchema.safeParse(row);
         if (parsed.success && parsed.data.custom_endpoint_id !== undefined) {
+          rememberCustomProviderLabel(buildCustomProviderName(parsed.data.connection_id), parsed.data.label);
           rowMap.set(parsed.data.custom_endpoint_id, parsed.data);
         } else if (!parsed.success) {
           log.warn(
@@ -635,23 +752,69 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const rows =
         serverId !== null
           ? await sql`
-              SELECT *
-              FROM custom_endpoints
-              WHERE server_id = ${serverId}
-                AND user_id IS NULL
-                AND label = ${label}
-                AND capability = ${capability}
-              ORDER BY updated_at DESC, custom_endpoint_id DESC
+              SELECT
+                ce.custom_endpoint_id,
+                ce.connection_id,
+                cec.server_id,
+                cec.user_id,
+                cec.label,
+                cec.capability,
+                cec.api_style,
+                cec.endpoint_url,
+                ce.model_name,
+                ce.model_ref_id,
+                ce.num_ctx,
+                cec.requires_auth,
+                ce.extra_config,
+                ce.has_tools,
+                ce.sees_images,
+                ce.sees_videos,
+                ce.supports_structoutput,
+                ce.strict_role_alternation,
+                ce.supports_prefix_completion,
+                ce.is_default,
+                ce.created_at,
+                ce.updated_at
+              FROM custom_endpoints ce
+              JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+              WHERE cec.server_id = ${serverId}
+                AND cec.user_id IS NULL
+                AND cec.label = ${label}
+                AND cec.capability = ${capability}
+              ORDER BY ce.updated_at DESC, ce.custom_endpoint_id DESC
               LIMIT 1
             `
           : await sql`
-              SELECT *
-              FROM custom_endpoints
-              WHERE user_id = ${userId}
-                AND server_id IS NULL
-                AND label = ${label}
-                AND capability = ${capability}
-              ORDER BY updated_at DESC, custom_endpoint_id DESC
+              SELECT
+                ce.custom_endpoint_id,
+                ce.connection_id,
+                cec.server_id,
+                cec.user_id,
+                cec.label,
+                cec.capability,
+                cec.api_style,
+                cec.endpoint_url,
+                ce.model_name,
+                ce.model_ref_id,
+                ce.num_ctx,
+                cec.requires_auth,
+                ce.extra_config,
+                ce.has_tools,
+                ce.sees_images,
+                ce.sees_videos,
+                ce.supports_structoutput,
+                ce.strict_role_alternation,
+                ce.supports_prefix_completion,
+                ce.is_default,
+                ce.created_at,
+                ce.updated_at
+              FROM custom_endpoints ce
+              JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+              WHERE cec.user_id = ${userId}
+                AND cec.server_id IS NULL
+                AND cec.label = ${label}
+                AND cec.capability = ${capability}
+              ORDER BY ce.updated_at DESC, ce.custom_endpoint_id DESC
               LIMIT 1
             `;
 
@@ -666,7 +829,8 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         return null;
       }
 
-      return parsed.data;
+      const endpoint = this.hydrateCustomEndpointRow(rows[0]);
+      return endpoint;
     } catch (error) {
       const owner = serverId !== null ? `server ${serverId}` : `user ${userId}`;
       log.error(`Error loading custom endpoint for ${owner}, label ${label}, capability ${capability}:`, error);
@@ -695,23 +859,69 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const rows =
         serverId !== null
           ? await sql`
-              SELECT *
-              FROM custom_endpoints
-              WHERE server_id = ${serverId}
-                AND user_id IS NULL
-                AND capability = ${capability}
-                AND model_ref_id = ${modelRefId}
-              ORDER BY updated_at DESC, custom_endpoint_id DESC
+              SELECT
+                ce.custom_endpoint_id,
+                ce.connection_id,
+                cec.server_id,
+                cec.user_id,
+                cec.label,
+                cec.capability,
+                cec.api_style,
+                cec.endpoint_url,
+                ce.model_name,
+                ce.model_ref_id,
+                ce.num_ctx,
+                cec.requires_auth,
+                ce.extra_config,
+                ce.has_tools,
+                ce.sees_images,
+                ce.sees_videos,
+                ce.supports_structoutput,
+                ce.strict_role_alternation,
+                ce.supports_prefix_completion,
+                ce.is_default,
+                ce.created_at,
+                ce.updated_at
+              FROM custom_endpoints ce
+              JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+              WHERE cec.server_id = ${serverId}
+                AND cec.user_id IS NULL
+                AND cec.capability = ${capability}
+                AND ce.model_ref_id = ${modelRefId}
+              ORDER BY ce.updated_at DESC, ce.custom_endpoint_id DESC
               LIMIT 1
             `
           : await sql`
-              SELECT *
-              FROM custom_endpoints
-              WHERE user_id = ${userId}
-                AND server_id IS NULL
-                AND capability = ${capability}
-                AND model_ref_id = ${modelRefId}
-              ORDER BY updated_at DESC, custom_endpoint_id DESC
+              SELECT
+                ce.custom_endpoint_id,
+                ce.connection_id,
+                cec.server_id,
+                cec.user_id,
+                cec.label,
+                cec.capability,
+                cec.api_style,
+                cec.endpoint_url,
+                ce.model_name,
+                ce.model_ref_id,
+                ce.num_ctx,
+                cec.requires_auth,
+                ce.extra_config,
+                ce.has_tools,
+                ce.sees_images,
+                ce.sees_videos,
+                ce.supports_structoutput,
+                ce.strict_role_alternation,
+                ce.supports_prefix_completion,
+                ce.is_default,
+                ce.created_at,
+                ce.updated_at
+              FROM custom_endpoints ce
+              JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+              WHERE cec.user_id = ${userId}
+                AND cec.server_id IS NULL
+                AND cec.capability = ${capability}
+                AND ce.model_ref_id = ${modelRefId}
+              ORDER BY ce.updated_at DESC, ce.custom_endpoint_id DESC
               LIMIT 1
             `;
 
@@ -723,9 +933,214 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         return null;
       }
 
-      return parsed.data;
+      const endpoint = this.hydrateCustomEndpointRow(rows[0]);
+      return endpoint;
     } catch (error) {
       log.error(`Error loading custom endpoint by model_ref_id ${modelRefId}/${capability}:`, error);
+      return null;
+    }
+  }
+
+  /** Returns a custom endpoint connection by its primary key ID. */
+  async loadCustomEndpointConnectionById(connectionId: number): Promise<CustomEndpointConnectionRow | null> {
+    try {
+      const rows = await sql`
+        SELECT * FROM custom_endpoint_connections
+        WHERE connection_id = ${connectionId}
+        LIMIT 1
+      `;
+      if (!rows.length) return null;
+      const parsed = customEndpointConnectionSchema.safeParse(rows[0]);
+      if (parsed.success) {
+        rememberCustomProviderLabel(buildCustomProviderName(parsed.data.connection_id), parsed.data.label);
+      }
+      return parsed.success ? parsed.data : null;
+    } catch (error) {
+      log.error(`Error loading custom endpoint connection by id ${connectionId}:`, error);
+      return null;
+    }
+  }
+
+  /** Returns all endpoints belonging to a specific connection. */
+  async loadCustomEndpointsByConnectionId(connectionId: number): Promise<CustomEndpointRow[]> {
+    try {
+      const rows = await sql<unknown[]>`
+        SELECT
+          ce.custom_endpoint_id,
+          ce.connection_id,
+          cec.server_id,
+          cec.user_id,
+          cec.label,
+          cec.capability,
+          cec.api_style,
+          cec.endpoint_url,
+          ce.model_name,
+          ce.model_ref_id,
+          ce.num_ctx,
+          cec.requires_auth,
+          ce.extra_config,
+          ce.has_tools,
+          ce.sees_images,
+          ce.sees_videos,
+          ce.supports_structoutput,
+          ce.strict_role_alternation,
+          ce.supports_prefix_completion,
+          ce.is_default,
+          ce.created_at,
+          ce.updated_at
+        FROM custom_endpoints ce
+        JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+        WHERE ce.connection_id = ${connectionId}
+        ORDER BY ce.updated_at DESC, ce.custom_endpoint_id DESC
+      `;
+      return this.hydrateCustomEndpointRows(rows);
+    } catch (error) {
+      log.error(`Error loading custom endpoints by connection_id ${connectionId}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Returns a custom endpoint for a connection, optionally matching a specific synthetic model ID.
+   */
+  async loadCustomEndpointByConnection(
+    connectionId: number,
+    capability: CustomEndpointCapability,
+    modelRefId?: number | null,
+  ): Promise<CustomEndpointRow | null> {
+    try {
+      const rows =
+        modelRefId != null
+          ? await sql`
+              SELECT
+                ce.custom_endpoint_id,
+                ce.connection_id,
+                cec.server_id,
+                cec.user_id,
+                cec.label,
+                cec.capability,
+                cec.api_style,
+                cec.endpoint_url,
+                ce.model_name,
+                ce.model_ref_id,
+                ce.num_ctx,
+                cec.requires_auth,
+                ce.extra_config,
+                ce.has_tools,
+                ce.sees_images,
+                ce.sees_videos,
+                ce.supports_structoutput,
+                ce.strict_role_alternation,
+                ce.supports_prefix_completion,
+                ce.is_default,
+                ce.created_at,
+                ce.updated_at
+              FROM custom_endpoints ce
+              JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+              WHERE ce.connection_id = ${connectionId}
+                AND cec.capability = ${capability}
+                AND ce.model_ref_id = ${modelRefId}
+              ORDER BY ce.updated_at DESC, ce.custom_endpoint_id DESC
+              LIMIT 1
+            `
+          : await sql`
+              SELECT
+                ce.custom_endpoint_id,
+                ce.connection_id,
+                cec.server_id,
+                cec.user_id,
+                cec.label,
+                cec.capability,
+                cec.api_style,
+                cec.endpoint_url,
+                ce.model_name,
+                ce.model_ref_id,
+                ce.num_ctx,
+                cec.requires_auth,
+                ce.extra_config,
+                ce.has_tools,
+                ce.sees_images,
+                ce.sees_videos,
+                ce.supports_structoutput,
+                ce.strict_role_alternation,
+                ce.supports_prefix_completion,
+                ce.is_default,
+                ce.created_at,
+                ce.updated_at
+              FROM custom_endpoints ce
+              JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+              WHERE ce.connection_id = ${connectionId}
+                AND cec.capability = ${capability}
+              ORDER BY ce.updated_at DESC, ce.custom_endpoint_id DESC
+              LIMIT 1
+            `;
+      if (!rows.length) return null;
+      return this.hydrateCustomEndpointRow(rows[0]);
+    } catch (error) {
+      log.error(`Error loading custom endpoint by connection ${connectionId}:`, error);
+      return null;
+    }
+  }
+
+  /** Deletes a custom endpoint connection and cascades to its models. */
+  async deleteCustomEndpointConnectionById(connectionId: number): Promise<boolean> {
+    try {
+      const result = await sql`
+        DELETE FROM custom_endpoint_connections
+        WHERE connection_id = ${connectionId}
+      `;
+      return result.count > 0;
+    } catch (error) {
+      log.error(`Error deleting custom endpoint connection ${connectionId}:`, error);
+      return false;
+    }
+  }
+
+  /** Reuses the connection identity needed by model rows and saved provider snapshots. */
+  async upsertCustomEndpointConnection(params: {
+    serverId?: number | null;
+    userId?: number | null;
+    label: string;
+    capability: CustomEndpointCapability;
+    apiStyle: CustomEndpointApiStyle;
+    endpointUrl: string;
+    requiresAuth: boolean;
+  }): Promise<number | null> {
+    const { serverId = null, userId = null, label, capability, apiStyle, endpointUrl, requiresAuth } = params;
+    try {
+      const rows =
+        serverId !== null
+          ? await sql<[{ connection_id: number }]>`
+              INSERT INTO custom_endpoint_connections (
+                server_id, user_id, label, capability, api_style, endpoint_url, requires_auth
+              ) VALUES (
+                ${serverId}, NULL, ${label}, ${capability}, ${apiStyle}, ${endpointUrl}, ${requiresAuth}
+              )
+              ON CONFLICT (server_id, label, capability) WHERE user_id IS NULL
+              DO UPDATE SET
+                api_style = EXCLUDED.api_style,
+                endpoint_url = EXCLUDED.endpoint_url,
+                requires_auth = custom_endpoint_connections.requires_auth OR EXCLUDED.requires_auth,
+                updated_at = CURRENT_TIMESTAMP
+              RETURNING connection_id
+            `
+          : await sql<[{ connection_id: number }]>`
+              INSERT INTO custom_endpoint_connections (
+                server_id, user_id, label, capability, api_style, endpoint_url, requires_auth
+              ) VALUES (
+                NULL, ${userId}, ${label}, ${capability}, ${apiStyle}, ${endpointUrl}, ${requiresAuth}
+              )
+              ON CONFLICT (user_id, label, capability) WHERE server_id IS NULL
+              DO UPDATE SET
+                api_style = EXCLUDED.api_style,
+                endpoint_url = EXCLUDED.endpoint_url,
+                requires_auth = custom_endpoint_connections.requires_auth OR EXCLUDED.requires_auth,
+                updated_at = CURRENT_TIMESTAMP
+              RETURNING connection_id
+            `;
+      return rows[0]?.connection_id ?? null;
+    } catch (error) {
+      log.error(`Error upserting custom endpoint connection for ${label}/${capability}:`, error);
       return null;
     }
   }
@@ -1211,7 +1626,6 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       endpointUrl: string;
       modelName?: string | null;
       modelRefId?: number | null;
-      displayName: string;
       numCtx?: number | null;
       requiresAuth: boolean;
       extraConfig?: Record<string, unknown>;
@@ -1237,7 +1651,6 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       endpointUrl,
       modelName = null,
       modelRefId = null,
-      displayName,
       numCtx = null,
       requiresAuth,
       extraConfig = {},
@@ -1252,107 +1665,157 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
     } = params;
 
     try {
-      const rows =
-        customEndpointId !== null
-          ? await sql`
-              UPDATE custom_endpoints SET
-                api_style = ${apiStyle},
-                endpoint_url = ${endpointUrl},
-                model_name = ${modelName},
-                model_ref_id = ${modelRefId},
-                display_name = ${displayName},
-                num_ctx = ${numCtx},
-                requires_auth = ${requiresAuth},
-                extra_config = ${extraConfig},
-                has_tools = ${hasTools},
-                sees_images = ${seesImages},
-                sees_videos = ${seesVideos},
-                supports_structoutput = ${supportsStructOutput},
-                strict_role_alternation = ${strictRoleAlternation},
-                supports_prefix_completion = ${supportsPrefixCompletion},
-                is_default = ${isDefault},
-                updated_at = CURRENT_TIMESTAMP
-              WHERE custom_endpoint_id = ${customEndpointId}
-              RETURNING *
-            `
-          : serverId !== null
-            ? await sql`
-              INSERT INTO custom_endpoints (
-                server_id, user_id, label, capability, api_style,
-                endpoint_url, model_name, model_ref_id, display_name, num_ctx, requires_auth,
-                extra_config, has_tools, sees_images, sees_videos,
-                supports_structoutput, strict_role_alternation, supports_prefix_completion, is_default
-              ) VALUES (
-                ${serverId}, NULL, ${label}, ${capability}, ${apiStyle},
-                ${endpointUrl}, ${modelName}, ${modelRefId}, ${displayName}, ${numCtx}, ${requiresAuth},
-                ${extraConfig}, ${hasTools}, ${seesImages}, ${seesVideos},
-                ${supportsStructOutput}, ${strictRoleAlternation}, ${supportsPrefixCompletion}, ${isDefault}
-              )
-              ON CONFLICT (server_id, label, capability, COALESCE(model_name, '')) WHERE user_id IS NULL
-              DO UPDATE SET
-                api_style = EXCLUDED.api_style,
-                endpoint_url = EXCLUDED.endpoint_url,
-                model_name = EXCLUDED.model_name,
-                model_ref_id = EXCLUDED.model_ref_id,
-                display_name = EXCLUDED.display_name,
-                num_ctx = EXCLUDED.num_ctx,
-                requires_auth = EXCLUDED.requires_auth,
-                extra_config = EXCLUDED.extra_config,
-                has_tools = EXCLUDED.has_tools,
-                sees_images = EXCLUDED.sees_images,
-                sees_videos = EXCLUDED.sees_videos,
-                supports_structoutput = EXCLUDED.supports_structoutput,
-                strict_role_alternation = EXCLUDED.strict_role_alternation,
-                supports_prefix_completion = EXCLUDED.supports_prefix_completion,
-                is_default = EXCLUDED.is_default,
-                updated_at = CURRENT_TIMESTAMP
-              RETURNING *
-            `
-            : userId !== null
-              ? await sql`
-                INSERT INTO custom_endpoints (
-                  server_id, user_id, label, capability, api_style,
-                  endpoint_url, model_name, model_ref_id, display_name, num_ctx, requires_auth,
-                  extra_config, has_tools, sees_images, sees_videos,
-                  supports_structoutput, strict_role_alternation, supports_prefix_completion, is_default
-                ) VALUES (
-                  NULL, ${userId}, ${label}, ${capability}, ${apiStyle},
-                  ${endpointUrl}, ${modelName}, ${modelRefId}, ${displayName}, ${numCtx}, ${requiresAuth},
-                  ${extraConfig}, ${hasTools}, ${seesImages}, ${seesVideos},
-                  ${supportsStructOutput}, ${strictRoleAlternation}, ${supportsPrefixCompletion}, ${isDefault}
-                )
-                ON CONFLICT (user_id, label, capability, COALESCE(model_name, '')) WHERE server_id IS NULL
-                DO UPDATE SET
-                  api_style = EXCLUDED.api_style,
-                  endpoint_url = EXCLUDED.endpoint_url,
-                  model_name = EXCLUDED.model_name,
-                  model_ref_id = EXCLUDED.model_ref_id,
-                  display_name = EXCLUDED.display_name,
-                  num_ctx = EXCLUDED.num_ctx,
-                  requires_auth = EXCLUDED.requires_auth,
-                  extra_config = EXCLUDED.extra_config,
-                  has_tools = EXCLUDED.has_tools,
-                  sees_images = EXCLUDED.sees_images,
-                  sees_videos = EXCLUDED.sees_videos,
-                  supports_structoutput = EXCLUDED.supports_structoutput,
-                  strict_role_alternation = EXCLUDED.strict_role_alternation,
-                  supports_prefix_completion = EXCLUDED.supports_prefix_completion,
-                  is_default = EXCLUDED.is_default,
-                  updated_at = CURRENT_TIMESTAMP
-                RETURNING *
-              `
-              : [];
+      let resolvedCustomEndpointId: number | null = customEndpointId;
 
-      if (!rows.length) return null;
+      if (customEndpointId !== null) {
+        resolvedCustomEndpointId = await sql.begin(async (tx) => {
+          const existingRows = await tx<[{ connection_id: number }]>`
+            SELECT connection_id FROM custom_endpoints WHERE custom_endpoint_id = ${customEndpointId} LIMIT 1
+          `;
+          if (!existingRows.length) return null;
+          const connectionId = existingRows[0].connection_id;
 
-      const parsed = customEndpointSchema.safeParse(rows[0]);
-      if (!parsed.success) {
-        log.warn(`Failed to validate custom endpoint ${label}/${capability}: ${parsed.error.message}`);
+          await tx`
+            UPDATE custom_endpoint_connections
+            SET
+              label = ${label},
+              capability = ${capability},
+              api_style = ${apiStyle},
+              endpoint_url = ${endpointUrl},
+              requires_auth = ${requiresAuth},
+              updated_at = CURRENT_TIMESTAMP
+            WHERE connection_id = ${connectionId}
+          `;
+
+          const updatedRows = await tx<[{ custom_endpoint_id: number }]>`
+            UPDATE custom_endpoints
+            SET
+              model_name = ${modelName},
+              model_ref_id = ${modelRefId},
+              num_ctx = ${numCtx},
+              extra_config = ${extraConfig},
+              has_tools = ${hasTools},
+              sees_images = ${seesImages},
+              sees_videos = ${seesVideos},
+              supports_structoutput = ${supportsStructOutput},
+              strict_role_alternation = ${strictRoleAlternation},
+              supports_prefix_completion = ${supportsPrefixCompletion},
+              is_default = ${isDefault},
+              updated_at = CURRENT_TIMESTAMP
+            WHERE custom_endpoint_id = ${customEndpointId}
+            RETURNING custom_endpoint_id
+          `;
+          if (!updatedRows.length) {
+            throw new Error(`Custom endpoint ${customEndpointId} not found during update`);
+          }
+
+          return customEndpointId;
+        });
+      } else if (serverId !== null) {
+        resolvedCustomEndpointId = await sql.begin(async (tx) => {
+          const [connRow] = await tx<[{ connection_id: number }]>`
+            INSERT INTO custom_endpoint_connections (
+              server_id, user_id, label, capability, api_style, endpoint_url, requires_auth
+            ) VALUES (
+              ${serverId}, NULL, ${label}, ${capability}, ${apiStyle}, ${endpointUrl}, ${requiresAuth}
+            )
+            ON CONFLICT (server_id, label, capability) WHERE user_id IS NULL
+            DO UPDATE SET
+              api_style = EXCLUDED.api_style,
+              endpoint_url = EXCLUDED.endpoint_url,
+              requires_auth = custom_endpoint_connections.requires_auth OR EXCLUDED.requires_auth,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING connection_id
+          `;
+          if (!connRow) return null;
+          const connectionId = connRow.connection_id;
+
+          const [epRow] = await tx<[{ custom_endpoint_id: number }]>`
+            INSERT INTO custom_endpoints (
+              connection_id, model_name, model_ref_id, num_ctx,
+              extra_config, has_tools, sees_images, sees_videos,
+              supports_structoutput, strict_role_alternation, supports_prefix_completion, is_default
+            ) VALUES (
+              ${connectionId}, ${modelName}, ${modelRefId}, ${numCtx},
+              ${extraConfig}, ${hasTools}, ${seesImages}, ${seesVideos},
+              ${supportsStructOutput}, ${strictRoleAlternation}, ${supportsPrefixCompletion}, ${isDefault}
+            )
+            ON CONFLICT (connection_id, COALESCE(model_name, ''))
+            DO UPDATE SET
+              model_ref_id = EXCLUDED.model_ref_id,
+              num_ctx = EXCLUDED.num_ctx,
+              extra_config = EXCLUDED.extra_config,
+              has_tools = EXCLUDED.has_tools,
+              sees_images = EXCLUDED.sees_images,
+              sees_videos = EXCLUDED.sees_videos,
+              supports_structoutput = EXCLUDED.supports_structoutput,
+              strict_role_alternation = EXCLUDED.strict_role_alternation,
+              supports_prefix_completion = EXCLUDED.supports_prefix_completion,
+              is_default = EXCLUDED.is_default,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING custom_endpoint_id
+          `;
+          if (!epRow) return null;
+          return epRow.custom_endpoint_id;
+        });
+      } else if (userId !== null) {
+        resolvedCustomEndpointId = await sql.begin(async (tx) => {
+          const [connRow] = await tx<[{ connection_id: number }]>`
+            INSERT INTO custom_endpoint_connections (
+              server_id, user_id, label, capability, api_style, endpoint_url, requires_auth
+            ) VALUES (
+              NULL, ${userId}, ${label}, ${capability}, ${apiStyle}, ${endpointUrl}, ${requiresAuth}
+            )
+            ON CONFLICT (user_id, label, capability) WHERE server_id IS NULL
+            DO UPDATE SET
+              api_style = EXCLUDED.api_style,
+              endpoint_url = EXCLUDED.endpoint_url,
+              requires_auth = custom_endpoint_connections.requires_auth OR EXCLUDED.requires_auth,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING connection_id
+          `;
+          if (!connRow) return null;
+          const connectionId = connRow.connection_id;
+
+          const [epRow] = await tx<[{ custom_endpoint_id: number }]>`
+            INSERT INTO custom_endpoints (
+              connection_id, model_name, model_ref_id, num_ctx,
+              extra_config, has_tools, sees_images, sees_videos,
+              supports_structoutput, strict_role_alternation, supports_prefix_completion, is_default
+            ) VALUES (
+              ${connectionId}, ${modelName}, ${modelRefId}, ${numCtx},
+              ${extraConfig}, ${hasTools}, ${seesImages}, ${seesVideos},
+              ${supportsStructOutput}, ${strictRoleAlternation}, ${supportsPrefixCompletion}, ${isDefault}
+            )
+            ON CONFLICT (connection_id, COALESCE(model_name, ''))
+            DO UPDATE SET
+              model_ref_id = EXCLUDED.model_ref_id,
+              num_ctx = EXCLUDED.num_ctx,
+              extra_config = EXCLUDED.extra_config,
+              has_tools = EXCLUDED.has_tools,
+              sees_images = EXCLUDED.sees_images,
+              sees_videos = EXCLUDED.sees_videos,
+              supports_structoutput = EXCLUDED.supports_structoutput,
+              strict_role_alternation = EXCLUDED.strict_role_alternation,
+              supports_prefix_completion = EXCLUDED.supports_prefix_completion,
+              is_default = EXCLUDED.is_default,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING custom_endpoint_id
+          `;
+          if (!epRow) return null;
+          return epRow.custom_endpoint_id;
+        });
+      } else {
         return null;
       }
 
+      if (resolvedCustomEndpointId === null) return null;
+
+      const hydrated = await this.loadCustomEndpointsByIds([resolvedCustomEndpointId]);
+      if (!hydrated.length) return null;
+
       if (serverId !== null && options.serverDiscId) invalidateTomoriStateCache(options.serverDiscId);
-      return parsed.data;
+      return hydrated[0];
     } catch (error) {
       const owner = serverId !== null ? `server ${serverId}` : `user ${userId}`;
       log.error(`Error upserting custom endpoint ${label}/${capability} for ${owner}:`, error);
@@ -1381,14 +1844,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const result =
         serverId !== null
           ? await sql`
-              DELETE FROM custom_endpoints
+              DELETE FROM custom_endpoint_connections
               WHERE server_id = ${serverId}
                 AND user_id IS NULL
                 AND label = ${label}
                 AND capability = ${capability}
             `
           : await sql`
-              DELETE FROM custom_endpoints
+              DELETE FROM custom_endpoint_connections
               WHERE user_id = ${userId}
                 AND server_id IS NULL
                 AND label = ${label}
@@ -1470,22 +1933,24 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const selectedRows =
         serverId !== null
           ? await sql<[{ custom_endpoint_id: number; label: string }]>`
-              SELECT custom_endpoint_id, label
-              FROM custom_endpoints
-              WHERE custom_endpoint_id = ${params.customEndpointId}
-                AND server_id = ${serverId}
-                AND user_id IS NULL
-                AND capability = ${params.capability}
+              SELECT ce.custom_endpoint_id, cec.label
+              FROM custom_endpoints ce
+              JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+              WHERE ce.custom_endpoint_id = ${params.customEndpointId}
+                AND cec.server_id = ${serverId}
+                AND cec.user_id IS NULL
+                AND cec.capability = ${params.capability}
               LIMIT 1
             `
           : userId !== null
             ? await sql<[{ custom_endpoint_id: number; label: string }]>`
-                SELECT custom_endpoint_id, label
-                FROM custom_endpoints
-                WHERE custom_endpoint_id = ${params.customEndpointId}
-                  AND user_id = ${userId}
-                  AND server_id IS NULL
-                  AND capability = ${params.capability}
+                SELECT ce.custom_endpoint_id, cec.label
+                FROM custom_endpoints ce
+                JOIN custom_endpoint_connections cec ON ce.connection_id = cec.connection_id
+                WHERE ce.custom_endpoint_id = ${params.customEndpointId}
+                  AND cec.user_id = ${userId}
+                  AND cec.server_id IS NULL
+                  AND cec.capability = ${params.capability}
                 LIMIT 1
               `
             : [];
@@ -1498,51 +1963,59 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       if (serverId !== null) {
         if (clearScope === "capability") {
           await sql`
-            UPDATE custom_endpoints
+            UPDATE custom_endpoints ce
             SET is_default = false,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE server_id = ${serverId}
-              AND user_id IS NULL
-              AND capability = ${params.capability}
-              AND custom_endpoint_id <> ${params.customEndpointId}
-              AND is_default = true
+            FROM custom_endpoint_connections cec
+            WHERE ce.connection_id = cec.connection_id
+              AND cec.server_id = ${serverId}
+              AND cec.user_id IS NULL
+              AND cec.capability = ${params.capability}
+              AND ce.custom_endpoint_id <> ${params.customEndpointId}
+              AND ce.is_default = true
           `;
         } else {
           await sql`
-            UPDATE custom_endpoints
+            UPDATE custom_endpoints ce
             SET is_default = false,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE server_id = ${serverId}
-              AND user_id IS NULL
-              AND label = ${selectedEndpoint.label}
-              AND capability = ${params.capability}
-              AND custom_endpoint_id <> ${params.customEndpointId}
-              AND is_default = true
+            FROM custom_endpoint_connections cec
+            WHERE ce.connection_id = cec.connection_id
+              AND cec.server_id = ${serverId}
+              AND cec.user_id IS NULL
+              AND cec.label = ${selectedEndpoint.label}
+              AND cec.capability = ${params.capability}
+              AND ce.custom_endpoint_id <> ${params.customEndpointId}
+              AND ce.is_default = true
           `;
         }
       } else if (userId !== null) {
         if (clearScope === "capability") {
           await sql`
-            UPDATE custom_endpoints
+            UPDATE custom_endpoints ce
             SET is_default = false,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = ${userId}
-              AND server_id IS NULL
-              AND capability = ${params.capability}
-              AND custom_endpoint_id <> ${params.customEndpointId}
-              AND is_default = true
+            FROM custom_endpoint_connections cec
+            WHERE ce.connection_id = cec.connection_id
+              AND cec.user_id = ${userId}
+              AND cec.server_id IS NULL
+              AND cec.capability = ${params.capability}
+              AND ce.custom_endpoint_id <> ${params.customEndpointId}
+              AND ce.is_default = true
           `;
         } else {
           await sql`
-            UPDATE custom_endpoints
+            UPDATE custom_endpoints ce
             SET is_default = false,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = ${userId}
-              AND server_id IS NULL
-              AND label = ${selectedEndpoint.label}
-              AND capability = ${params.capability}
-              AND custom_endpoint_id <> ${params.customEndpointId}
-              AND is_default = true
+            FROM custom_endpoint_connections cec
+            WHERE ce.connection_id = cec.connection_id
+              AND cec.user_id = ${userId}
+              AND cec.server_id IS NULL
+              AND cec.label = ${selectedEndpoint.label}
+              AND cec.capability = ${params.capability}
+              AND ce.custom_endpoint_id <> ${params.customEndpointId}
+              AND ce.is_default = true
           `;
         }
       }
@@ -1550,22 +2023,26 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const result =
         serverId !== null
           ? await sql`
-              UPDATE custom_endpoints
+              UPDATE custom_endpoints ce
               SET is_default = true,
                   updated_at = CURRENT_TIMESTAMP
-              WHERE custom_endpoint_id = ${params.customEndpointId}
-                AND server_id = ${serverId}
-                AND user_id IS NULL
-                AND capability = ${params.capability}
+              FROM custom_endpoint_connections cec
+              WHERE ce.connection_id = cec.connection_id
+                AND ce.custom_endpoint_id = ${params.customEndpointId}
+                AND cec.server_id = ${serverId}
+                AND cec.user_id IS NULL
+                AND cec.capability = ${params.capability}
             `
           : await sql`
-              UPDATE custom_endpoints
+              UPDATE custom_endpoints ce
               SET is_default = true,
                   updated_at = CURRENT_TIMESTAMP
-              WHERE custom_endpoint_id = ${params.customEndpointId}
-                AND user_id = ${userId}
-                AND server_id IS NULL
-                AND capability = ${params.capability}
+              FROM custom_endpoint_connections cec
+              WHERE ce.connection_id = cec.connection_id
+                AND ce.custom_endpoint_id = ${params.customEndpointId}
+                AND cec.user_id = ${userId}
+                AND cec.server_id IS NULL
+                AND cec.capability = ${params.capability}
             `;
 
       const ok = result.count > 0;

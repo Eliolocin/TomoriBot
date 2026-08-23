@@ -1139,7 +1139,7 @@ class LlmModelRepository {
           provider, codename, model_family, model_description,
           ja_description, is_default, is_deprecated
         ) VALUES (
-          ${params.provider}, ${params.codename}, ${`custom:${params.provider}`},
+          ${params.provider}, ${params.codename}, ${params.provider},
           ${params.displayName}, ${params.displayName}, true, false
         )
         ON CONFLICT (provider, codename) DO UPDATE SET
@@ -1602,7 +1602,7 @@ class LlmModelRepository {
    * Used when tearing down a custom provider entirely, so a label+capability may now own several
    * synthetic models, so codename-by-codename deletion is insufficient.
    *
-   * @param provider - Internal custom provider name (e.g. "custom:s123:home")
+   * @param provider - Internal custom provider name (for example, "custom:123")
    */
   async deleteAllSyntheticModelsForProvider(provider: string): Promise<void> {
     await sql`DELETE FROM llms WHERE llm_provider = ${provider}`;

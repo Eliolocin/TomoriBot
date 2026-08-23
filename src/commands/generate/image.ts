@@ -33,7 +33,7 @@ import {
   resolveCapabilityCredentials,
 } from "@/utils/provider/credentialResolver";
 import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
-import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
+import { formatCustomModelDisplay } from "@/utils/provider/customProviderUtils";
 import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
 
@@ -483,7 +483,7 @@ export async function execute(
 
     const modelCodename = await getDiffusionModelCodename(diffusionModelId);
     const displayModelName = imageCreds.customEndpoint
-      ? formatCustomEndpointModelDisplay(imageCreds.customEndpoint)
+      ? formatCustomModelDisplay(imageCreds.customEndpoint)
       : modelCodename;
 
     log.info(

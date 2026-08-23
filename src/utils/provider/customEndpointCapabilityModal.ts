@@ -5,18 +5,19 @@
  * enabling Radio Group (type 21), Checkbox Group (type 22), and Checkbox (type 23) inputs.
  *
  * Field layout per capability:
- *   text:          model_name (text), display_name (text), num_ctx (text), text_capabilities (checkbox group)
- *   embedding:     model_name (text), display_name (text)
- *   speech:        display_name (text), voice_mode (radio group), script_markup (radio group)
- *   transcription: display_name (text), transcription_model (text), transcription_language (text)
- *   image/video:   display_name (text) + workflow_json file upload (separate path via promptWithRawModal)
+ *   text:          model_name (text), num_ctx (text), text_capabilities (checkbox group)
+ *   embedding:     model_name (text)
+ *   speech:        voice_mode (radio group), script_markup (radio group)
+ *   transcription: transcription_model (text), transcription_language (text)
+ *   image/video:   model_name (text) + workflow_json file upload (separate path via promptWithRawModal)
  *
  * For the add flow, endpoint_url and auth_token come from the initial slash params.
  * The edit flow includes endpoint_url and auth_token as editable text inputs.
  */
 
-import type { CustomEndpointCapability } from "@/types/db/schema";
+import type { CustomEndpointApiStyle, CustomEndpointCapability } from "@/types/db/schema";
 import type { ModalComponent } from "@/types/discord/modal";
+import { buildImageEndpointSupportsComponent } from "@/utils/provider/customImageEndpointSupport";
 import { localizer } from "@/utils/text/localizer";
 
 /** Custom ID for the workflow JSON file upload field (used in ComfyUI image/video edit modals). */
@@ -25,7 +26,6 @@ export const WORKFLOW_UPLOAD_ID = "workflow_json";
 /** Custom IDs for each modal field */
 export const ModalFieldId = {
   model_name: "model_name",
-  display_name: "display_name",
   num_ctx: "num_ctx",
   text_capabilities: "text_capabilities",
   voice_mode: "voice_mode",
@@ -52,7 +52,6 @@ function parseNumCtxField(value: string): number | null {
 
 export interface ParsedCapabilityModalFields {
   modelName: string | null;
-  displayName: string | null;
   endpointUrl: string | null;
   authToken: string | null;
   numCtx: number | null;
@@ -78,7 +77,6 @@ export function parseCapabilityModalFields(
 ): ParsedCapabilityModalFields {
   const result: ParsedCapabilityModalFields = {
     modelName: null,
-    displayName: values[ModalFieldId.display_name]?.trim() || null,
     endpointUrl: values[ModalFieldId.endpoint_url]?.trim() || null,
     authToken: values[ModalFieldId.auth_token]?.trim() || null,
     numCtx: null,
@@ -156,13 +154,6 @@ export function buildCapabilityAddModalComponents(
           maxLength: 200,
         },
         {
-          customId: ModalFieldId.display_name,
-          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-          required: false,
-          maxLength: 100,
-        },
-        {
           customId: ModalFieldId.num_ctx,
           labelKey: "commands.config.custom_models.capability_modal.num_ctx_label",
           placeholder: localizer(locale, "commands.config.custom_models.capability_modal.num_ctx_placeholder"),
@@ -230,24 +221,10 @@ export function buildCapabilityAddModalComponents(
           required: true,
           maxLength: 200,
         },
-        {
-          customId: ModalFieldId.display_name,
-          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-          required: false,
-          maxLength: 100,
-        },
       ];
 
     case "speech":
       return [
-        {
-          customId: ModalFieldId.display_name,
-          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-          required: false,
-          maxLength: 100,
-        },
         {
           kind: "radioGroup" as const,
           customId: ModalFieldId.voice_mode,
@@ -321,13 +298,6 @@ export function buildCapabilityAddModalComponents(
     case "transcription":
       return [
         {
-          customId: ModalFieldId.display_name,
-          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-          required: false,
-          maxLength: 100,
-        },
-        {
           customId: ModalFieldId.transcription_model,
           labelKey: "commands.config.custom_models.capability_modal.transcription_model_label",
           placeholder: localizer(
@@ -355,9 +325,33 @@ export function buildCapabilityAddModalComponents(
   }
 }
 
+export function buildImageVideoAddModalComponents(
+  capability: "image" | "video",
+  locale: string,
+  apiStyle: CustomEndpointApiStyle,
+): ModalComponent[] {
+  return [
+    {
+      customId: ModalFieldId.model_name,
+      labelKey: "commands.config.custom_models.capability_modal.model_name_label",
+      placeholder: localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"),
+      required: true,
+      maxLength: 200,
+    },
+    {
+      customId: WORKFLOW_UPLOAD_ID,
+      labelKey: "commands.config.custom_models.capability_modal.workflow_json_label",
+      descriptionKey: "commands.config.custom_models.capability_modal.workflow_json_description",
+      minValues: 0,
+      maxValues: 1,
+      required: false,
+    },
+    ...(capability === "image" ? [buildImageEndpointSupportsComponent(locale, apiStyle)] : []),
+  ];
+}
+
 export interface EditModalExistingValues {
   modelName?: string | null;
-  displayName?: string | null;
   endpointUrl?: string | null;
   numCtx?: number | null;
   hasTools?: boolean;
@@ -403,14 +397,6 @@ export function buildCapabilityEditModalComponents(
           required: false,
           maxLength: 200,
           value: existing.modelName ?? undefined,
-        },
-        {
-          customId: ModalFieldId.display_name,
-          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-          required: false,
-          maxLength: 100,
-          value: existing.displayName ?? undefined,
         },
         {
           customId: ModalFieldId.num_ctx,
@@ -488,14 +474,6 @@ export function buildCapabilityEditModalComponents(
           maxLength: 200,
           value: existing.modelName ?? undefined,
         },
-        {
-          customId: ModalFieldId.display_name,
-          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-          required: false,
-          maxLength: 100,
-          value: existing.displayName ?? undefined,
-        },
         urlComponent,
         {
           customId: ModalFieldId.auth_token,
@@ -510,14 +488,6 @@ export function buildCapabilityEditModalComponents(
       const currentMarkup = existing.scriptMarkup?.toLowerCase();
       const currentVoiceMode = existing.voiceMode?.toLowerCase();
       return [
-        {
-          customId: ModalFieldId.display_name,
-          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-          required: false,
-          maxLength: 100,
-          value: existing.displayName ?? undefined,
-        },
         urlComponent,
         {
           customId: ModalFieldId.auth_token,
@@ -603,14 +573,6 @@ export function buildCapabilityEditModalComponents(
 
     case "transcription":
       return [
-        {
-          customId: ModalFieldId.display_name,
-          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-          required: false,
-          maxLength: 100,
-          value: existing.displayName ?? undefined,
-        },
         urlComponent,
         {
           customId: ModalFieldId.auth_token,
@@ -654,20 +616,12 @@ export function buildCapabilityEditModalComponents(
           maxLength: 200,
           value: existing.modelName ?? undefined,
         },
-        {
-          customId: ModalFieldId.display_name,
-          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-          required: false,
-          maxLength: 100,
-          value: existing.displayName ?? undefined,
-        },
         urlComponent,
       ];
 
       if (isComfyUi) {
-        // Slot 4: workflow upload (replaces auth_token for ComfyUI: token changes are rare,
-        // workflow iteration is the common edit operation for self-hosted ComfyUI instances).
+        // Workflow upload replaces auth_token for ComfyUI: token changes are rare,
+        // workflow iteration is the common edit operation for self-hosted ComfyUI instances.
         baseComponents.push({
           customId: WORKFLOW_UPLOAD_ID,
           labelKey: "commands.config.custom_models.capability_modal.workflow_json_label",

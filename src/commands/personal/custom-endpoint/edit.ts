@@ -71,7 +71,7 @@ export async function execute(
       },
       strictRemoteValidation:
         process.env.RUN_ENV === "production" || process.env.ALLOW_PERSONAL_LOCAL_ENDPOINTS !== "true",
-      loadEndpoints: llmProviderRepo.loadCustomEndpointsForUser,
+      loadEndpoints: (ownerId) => llmProviderRepo.loadCustomEndpointsForUser(ownerId),
     });
   } catch (error) {
     const context: ErrorContext = {

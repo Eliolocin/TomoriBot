@@ -54,9 +54,8 @@ const VISION_ANALYSIS_TIMEOUT_MS =
 /**
  * Resolves the model identifier the vision backend will accept.
  *
- * A custom endpoint's `llm_codename` is a locally synthesized label
- * (`custom-s2-gemini-text-google-gemini-3-5-flash-lite`); the id the backend accepts lives on
- * the endpoint row, so sending the codename is rejected as an unknown model. This mirrors the
+ * A custom endpoint's `llm_codename` is a local catalog value; the backend model string lives on
+ * the endpoint row, so sending the catalog value can be rejected as an unknown model. This mirrors the
  * text path's resolution in `customProvider`, which falls back to the codename for backends
  * that ignore the field entirely (KoboldCpp and similar).
  */

@@ -59,6 +59,7 @@ const requiredTables = [
   "personal_memories",
   "saved_provider_configs",
   "user_saved_provider_configs",
+  "custom_endpoint_connections",
   "custom_endpoints",
   "nai_presets",
   "st_presets",

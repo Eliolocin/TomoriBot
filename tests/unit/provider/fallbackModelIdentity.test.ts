@@ -8,6 +8,7 @@ import {
 
 const endpoint = {
   custom_endpoint_id: 5,
+  connection_id: 1,
   model_ref_id: 42,
 } as CustomEndpointRow;
 

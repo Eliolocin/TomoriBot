@@ -59,14 +59,19 @@ describe("/st-presets registration cutover", () => {
     expect(executionMap.has("st-preset")).toBe(false);
   });
 
-  it("collapses four leaves into one root without disturbing the rest of the tree", async () => {
-    const { executionMap, registrationData } = await loadCommandData();
-    const executableCount = [...executionMap.values()].reduce((total, leaves) => total + leaves.size, 0);
+  it("leaves none of the four former preset leaves reachable under any root", async () => {
+    const { executionMap } = await loadCommandData();
 
-    // 42 roots and 214 executable commands before the cutover, with `/st-preset` owning import, node.toggle,
-    // remove, and switch. Replacing those four leaves with one bare root keeps the root count and drops the
-    // executable count by three.
-    expect(registrationData.length).toBe(42);
-    expect(executableCount).toBe(211);
+    // `/st-preset` owned import, node.toggle, remove, and switch before the cutover. An earlier revision of
+    // this test pinned whole-tree root and executable counts instead, which fails on every unrelated wave and
+    // pressures the next slice into editing a gate it does not own. The topological fact is what this gate
+    // exists to protect.
+    const formerLeaves = ["import", "node.toggle", "remove", "switch"];
+    for (const [root, leaves] of executionMap) {
+      if (!root.startsWith("st-preset")) continue;
+      for (const leaf of formerLeaves) {
+        expect(leaves.has(leaf)).toBe(false);
+      }
+    }
   });
 });

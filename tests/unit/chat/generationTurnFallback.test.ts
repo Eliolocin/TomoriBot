@@ -597,6 +597,7 @@ describe("runGenerationTurn fallback behavior", () => {
     const context = makeContext(primaryModel, makeLlm(2, "unused-fallback"));
     const endpoint = {
       custom_endpoint_id: 5,
+      connection_id: 42,
       server_id: null,
       user_id: 4,
       label: "local",
@@ -634,7 +635,7 @@ describe("runGenerationTurn fallback behavior", () => {
     await runGenerationTurn(context, sink);
 
     expect(toolLoopCalls.map((call) => call.model)).toEqual(["primary-model", "personal-fallback"]);
-    expect(personalSavedConfigLoads).toEqual([{ userId: 4, provider: "custom:u4:local" }]);
+    expect(personalSavedConfigLoads).toEqual([{ userId: 4, provider: "custom:42" }]);
   });
 
   it("deletes the timed-out primary's partial message when a fallback succeeds", async () => {

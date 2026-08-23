@@ -290,23 +290,29 @@ const customEndpointApiStyleSchema = z.enum([
 ]);
 export type CustomEndpointApiStyle = z.infer<typeof customEndpointApiStyleSchema>;
 
-export const customEndpointSchema = z.object({
-  custom_endpoint_id: z.number().optional(),
+export const customEndpointConnectionSchema = z.object({
+  connection_id: z.number().int().positive(),
   server_id: z.number().nullable().optional(),
   user_id: z.number().nullable().optional(),
   label: z.string(),
   capability: customEndpointCapabilitySchema,
   api_style: customEndpointApiStyleSchema,
   endpoint_url: z.string(),
+  requires_auth: z.boolean().default(false),
+  created_at: z.coerce.date().optional(),
+  updated_at: z.coerce.date().optional(),
+});
+export type CustomEndpointConnectionRow = z.infer<typeof customEndpointConnectionSchema>;
+
+export const customEndpointSchema = customEndpointConnectionSchema.extend({
+  custom_endpoint_id: z.number().optional(),
   model_name: z.string().nullable().optional(),
   // Links this endpoint row to the synthetic model row it owns (llms / embedding_models /
   // image_diffusion_models / video_generation_models, disambiguated by `capability`). Lets the
   // runtime resolve the specific selected model back to its endpoint when several models share a
-  // label+capability. Null for legacy rows until backfilled and for speech/transcription.
+  // connection. Null for legacy rows until backfilled and for speech/transcription.
   model_ref_id: z.number().int().nullable().optional(),
-  display_name: z.string(),
   num_ctx: z.number().int().min(512).nullable().optional(),
-  requires_auth: z.boolean().default(false),
   extra_config: z.preprocess((value) => {
     if (typeof value === "string") {
       try {
@@ -326,8 +332,6 @@ export const customEndpointSchema = z.object({
   strict_role_alternation: z.boolean().default(false),
   supports_prefix_completion: z.boolean().default(false),
   is_default: z.boolean().default(false),
-  created_at: z.coerce.date().optional(),
-  updated_at: z.coerce.date().optional(),
 });
 export type CustomEndpointRow = z.infer<typeof customEndpointSchema>;
 

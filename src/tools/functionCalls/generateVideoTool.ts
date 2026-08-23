@@ -22,7 +22,7 @@ import { checkVideoQuota, incrementVideoQuota, type VideoQuotaCheckResult } from
 import { statRepository } from "@/utils/db/repositories";
 import { resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
 import { generateCustomVideoViaEndpoint } from "@/providers/custom/customEndpointDispatcher";
-import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
+import { formatCustomModelDisplay } from "@/utils/provider/customProviderUtils";
 import type { ProviderNativeVideoResolution } from "@/types/provider/featureInterfaces";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 import { llmModelRepo } from "@/utils/db/repositories/LlmModelRepository";
@@ -462,9 +462,7 @@ export class GenerateVideoTool extends BaseTool {
       }
 
       const modelCodename = await this.getVideoModelCodename(videoModelId);
-      const displayModelName = creds.customEndpoint
-        ? formatCustomEndpointModelDisplay(creds.customEndpoint)
-        : modelCodename;
+      const displayModelName = creds.customEndpoint ? formatCustomModelDisplay(creds.customEndpoint) : modelCodename;
       log.info(`Using video model: ${modelCodename} for video generation`);
 
       const apiKey = creds.apiKey;

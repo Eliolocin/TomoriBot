@@ -9,13 +9,14 @@ import { log, ColorCode } from "@/utils/misc/logger";
 import { validateRemoteUrl } from "@/utils/security/remoteUrlSecurity";
 import {
   buildCapabilityAddModalComponents,
+  buildImageVideoAddModalComponents,
   capabilityNeedsAddModal,
   ModalFieldId,
   parseCapabilityModalFields,
+  WORKFLOW_UPLOAD_ID,
 } from "@/utils/provider/customEndpointCapabilityModal";
 import { registerCustomEndpoint, validateCustomEndpointReachability } from "@/utils/provider/customEndpointService";
 import {
-  buildImageEndpointSupportsComponent,
   IMAGE_ENDPOINT_SUPPORTS_ID,
   imageEndpointSupportsFromSubmittedValues,
 } from "@/utils/provider/customImageEndpointSupport";
@@ -23,8 +24,6 @@ import { isValidCustomEndpointLabel, normalizeCustomEndpointLabel } from "@/util
 import { IMPORT_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { localizer } from "@/utils/text/localizer";
-
-const WORKFLOW_UPLOAD_ID = "workflow_json";
 
 /** Download and parse a workflow JSON from a URL returned by Discord's CDN. */
 async function loadWorkflowJson(url: string | null): Promise<Record<string, unknown> | null> {
@@ -236,7 +235,7 @@ export async function execute(
         return;
       }
 
-      const displayName = parsed.displayName || parsed.modelName || label;
+      const displayName = parsed.modelName || label;
 
       const registered = await registerCustomEndpoint({
         scope: { kind: "personal", ownerId: userData.user_id, baseConfig: tomoriState.config },
@@ -244,7 +243,6 @@ export async function execute(
         capability,
         apiStyle,
         endpointUrl,
-        displayName,
         modelName: parsed.modelName,
         authToken,
         numCtx: parsed.numCtx,
@@ -297,31 +295,7 @@ export async function execute(
   const modalResult = await promptWithRawModal(interaction, locale, {
     modalCustomId: imageVideoModalCustomId,
     modalTitleKey: `commands.config.custom_models.capability_modal.${capability}_title`,
-    components: [
-      {
-        customId: ModalFieldId.model_name,
-        labelKey: "commands.config.custom_models.capability_modal.model_name_label",
-        placeholder: localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"),
-        required: false,
-        maxLength: 200,
-      },
-      {
-        customId: ModalFieldId.display_name,
-        labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-        placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-        required: false,
-        maxLength: 100,
-      },
-      {
-        customId: WORKFLOW_UPLOAD_ID,
-        labelKey: "commands.config.custom_models.capability_modal.workflow_json_label",
-        descriptionKey: "commands.config.custom_models.capability_modal.workflow_json_description",
-        minValues: 0,
-        maxValues: 1,
-        required: false,
-      },
-      ...(capability === "image" ? [buildImageEndpointSupportsComponent(locale, apiStyle)] : []),
-    ],
+    components: buildImageVideoAddModalComponents(capability as "image" | "video", locale, apiStyle),
   });
 
   if (modalResult.outcome !== "submit") {
@@ -335,7 +309,16 @@ export async function execute(
     await modalSubmit.deferReply({ flags: MessageFlags.Ephemeral });
 
     const modelName = modalResult.values?.[ModalFieldId.model_name]?.trim() || null;
-    const displayName = modalResult.values?.[ModalFieldId.display_name]?.trim() || label;
+    if (!modelName) {
+      await replyInfoEmbed(modalSubmit, locale, {
+        titleKey: "general.errors.invalid_option_title",
+        descriptionKey: "commands.config.custom_models.validation.model_name_required",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const displayName = modelName || label;
     const workflowAttachment = modalResult.attachments?.[WORKFLOW_UPLOAD_ID];
     const workflowSupportValues = modalResult.multiValues?.[IMAGE_ENDPOINT_SUPPORTS_ID];
 
@@ -384,7 +367,6 @@ export async function execute(
       capability,
       apiStyle,
       endpointUrl,
-      displayName,
       modelName,
       authToken,
       extraConfig: {

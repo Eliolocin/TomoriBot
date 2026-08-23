@@ -100,10 +100,10 @@ export async function showServerModelStatus(
     ? `${embeddingModel.codename} (${embeddingModel.provider})`
     : localizer(locale, "commands.choices.none");
   const speechModelValue = speechModel
-    ? `${speechModel.endpoint.display_name} (${speechModel.endpoint.api_style})`
+    ? `${speechModel.endpoint.model_name || speechModel.endpoint.label} (${speechModel.endpoint.api_style})`
     : localizer(locale, "commands.choices.none");
   const transcriptionModelValue = transcriptionModel
-    ? `${transcriptionModel.endpoint.display_name} (${transcriptionModel.endpoint.api_style})`
+    ? `${transcriptionModel.endpoint.model_name || transcriptionModel.endpoint.label} (${transcriptionModel.endpoint.api_style})`
     : localizer(locale, "commands.choices.none");
   const customEndpointConfiguredValue = formatBooleanLocalized(!!config.custom_endpoint_url, locale);
   const naiDiffusionModelValue = naiDiffusionModel

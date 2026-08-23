@@ -60,7 +60,7 @@ export async function execute(
     }
 
     const options: SelectOption[] = endpoints.map((endpoint) => ({
-      label: safeSelectOptionText(endpoint.display_name),
+      label: safeSelectOptionText(`${endpoint.label} (${endpoint.capability})`),
       value: String(endpoint.custom_endpoint_id),
       description: safeSelectOptionText(
         localizer(locale, "commands.model.speech.endpoint_description", {
@@ -101,12 +101,13 @@ export async function execute(
       return;
     }
 
+    const selectedLabel = `${selectedEndpoint.label} (${selectedEndpoint.capability})`;
     const previousEndpoint = endpoints.find((endpoint) => endpoint.is_default) ?? null;
     if (previousEndpoint?.custom_endpoint_id === selectedEndpoint.custom_endpoint_id) {
       await replyInfoEmbed(modalResult.interaction, locale, {
         titleKey: "commands.model.speech.already_selected_title",
         descriptionKey: "commands.model.speech.already_selected_description",
-        descriptionVars: { endpoint: selectedEndpoint.display_name },
+        descriptionVars: { endpoint: selectedLabel },
         color: ColorCode.WARN,
       });
       return;
@@ -135,7 +136,7 @@ export async function execute(
           ? "commands.model.speech.success_source_changed_description"
           : "commands.model.speech.success_description",
       descriptionVars: {
-        endpoint: selectedEndpoint.display_name,
+        endpoint: selectedLabel,
         voice_assign_command: "`/speech voice-assign`",
       },
       color: ColorCode.SUCCESS,

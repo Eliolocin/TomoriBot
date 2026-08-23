@@ -140,6 +140,14 @@ function scopeExportValue(scope: MockScope, name: string, realValue: unknown, mo
         const destination = scope.isActive() ? mockedValue : target;
         return Reflect.set(destination, property, value, receiver === proxy ? destination : receiver);
       },
+      defineProperty(target, property, descriptor) {
+        const destination = scope.isActive() ? mockedValue : target;
+        return Reflect.defineProperty(destination, property, descriptor);
+      },
+      deleteProperty(target, property) {
+        const destination = scope.isActive() ? mockedValue : target;
+        return Reflect.deleteProperty(destination, property);
+      },
     });
     return proxy;
   }

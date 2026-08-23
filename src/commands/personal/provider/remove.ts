@@ -51,7 +51,10 @@ export async function execute(
     const savedProviders = (
       await Promise.all(
         rawSavedProviders.map(async (config) => {
-          if (!isCustomProvider(config.provider) || (await hasRegisteredCustomProvider(config.provider))) {
+          if (
+            !isCustomProvider(config.provider) ||
+            (await hasRegisteredCustomProvider(config.provider, { userId: userData.user_id }))
+          ) {
             return config;
           }
 

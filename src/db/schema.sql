@@ -2188,21 +2188,81 @@ CREATE TRIGGER update_saved_provider_configs_timestamp
   FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
 -- ============================================================
--- Custom Endpoints (Phase 3)
+-- Custom Endpoints
 -- ============================================================
-CREATE TABLE IF NOT EXISTS custom_endpoints (
-  custom_endpoint_id SERIAL PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS custom_endpoint_connections (
+  connection_id SERIAL PRIMARY KEY,
   server_id INT NULL,
   user_id INT NULL,
   label TEXT NOT NULL,
   capability TEXT NOT NULL,
   api_style TEXT NOT NULL,
   endpoint_url TEXT NOT NULL,
+  requires_auth BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  CHECK ((server_id IS NULL) <> (user_id IS NULL))
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_endpoint_connections_server ON custom_endpoint_connections(server_id);
+CREATE INDEX IF NOT EXISTS idx_custom_endpoint_connections_user ON custom_endpoint_connections(user_id);
+CREATE INDEX IF NOT EXISTS idx_custom_endpoint_connections_label ON custom_endpoint_connections(label);
+
+-- The static snapshot runs before numbered migrations, so 070 must normalize
+-- legacy label collisions before the final owner-scope uniqueness is installed.
+DO $$
+DECLARE
+  final_connection_indexes_ready BOOLEAN;
+BEGIN
+  IF to_regclass('public.schema_migrations') IS NULL THEN
+    final_connection_indexes_ready := true;
+  ELSE
+    EXECUTE $query$
+      SELECT EXISTS (
+        SELECT 1
+        FROM public.schema_migrations
+        WHERE name = '070_custom_endpoint_codename_and_keys'
+      )
+    $query$ INTO final_connection_indexes_ready;
+
+    IF NOT final_connection_indexes_ready THEN
+      EXECUTE $query$
+        SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'custom_endpoints'
+            AND column_name = 'connection_id'
+        )
+        AND NOT EXISTS (SELECT 1 FROM public.custom_endpoint_connections)
+        AND NOT EXISTS (SELECT 1 FROM public.custom_endpoints)
+      $query$ INTO final_connection_indexes_ready;
+    END IF;
+  END IF;
+
+  IF final_connection_indexes_ready THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_endpoint_connections_server_unique
+      ON custom_endpoint_connections(server_id, label, capability)
+      WHERE user_id IS NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_endpoint_connections_user_unique
+      ON custom_endpoint_connections(user_id, label, capability)
+      WHERE server_id IS NULL;
+  END IF;
+END $$;
+
+DROP TRIGGER IF EXISTS update_custom_endpoint_connections_timestamp ON custom_endpoint_connections;
+CREATE TRIGGER update_custom_endpoint_connections_timestamp
+  BEFORE UPDATE ON custom_endpoint_connections
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS custom_endpoints (
+  custom_endpoint_id SERIAL PRIMARY KEY,
+  connection_id INT NOT NULL,
   model_name TEXT NULL,
   model_ref_id INT NULL,
-  display_name TEXT NOT NULL,
   num_ctx INT NULL,
-  requires_auth BOOLEAN DEFAULT false,
   extra_config JSONB DEFAULT '{}'::JSONB,
   has_tools BOOLEAN DEFAULT false,
   sees_images BOOLEAN DEFAULT false,
@@ -2213,35 +2273,24 @@ CREATE TABLE IF NOT EXISTS custom_endpoints (
   is_default BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+  FOREIGN KEY (connection_id) REFERENCES custom_endpoint_connections(connection_id) ON DELETE CASCADE
 );
 
-ALTER TABLE custom_endpoints
-  DROP CONSTRAINT IF EXISTS custom_endpoints_server_id_user_id_label_capability_key;
-
--- Idempotent self-heal for databases created before model_ref_id existed (migration 024).
-SELECT add_column_if_not_exists('custom_endpoints', 'model_ref_id', 'INT');
-
--- Idempotent self-heal for the strict chat-completion compatibility flags (migration 025).
-SELECT add_column_if_not_exists('custom_endpoints', 'strict_role_alternation', 'BOOLEAN', 'false');
-SELECT add_column_if_not_exists('custom_endpoints', 'supports_prefix_completion', 'BOOLEAN', 'false');
-
-CREATE INDEX IF NOT EXISTS idx_custom_endpoints_server ON custom_endpoints(server_id);
-CREATE INDEX IF NOT EXISTS idx_custom_endpoints_user ON custom_endpoints(user_id);
-CREATE INDEX IF NOT EXISTS idx_custom_endpoints_label ON custom_endpoints(label);
--- Uniqueness is per (owner, label, capability, model_name): a single labeled connection may host
--- multiple models of the same capability, distinguished by model_name. COALESCE collapses NULL to ''
--- so at most one unnamed model can coexist with any number of named ones. Drop the older
--- model-agnostic indexes first (migration 024 widened the key).
-DROP INDEX IF EXISTS idx_custom_endpoints_server_label_capability_unique;
-DROP INDEX IF EXISTS idx_custom_endpoints_user_label_capability_unique;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_endpoints_server_label_capability_model_unique
-  ON custom_endpoints(server_id, label, capability, COALESCE(model_name, ''))
-  WHERE user_id IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_endpoints_user_label_capability_model_unique
-  ON custom_endpoints(user_id, label, capability, COALESCE(model_name, ''))
-  WHERE server_id IS NULL;
+-- Legacy pre-068 tables do not have connection_id until migration 068 adds it.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'custom_endpoints'
+      AND column_name = 'connection_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_custom_endpoints_connection ON custom_endpoints(connection_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_endpoints_connection_model_unique
+      ON custom_endpoints(connection_id, COALESCE(model_name, ''));
+  END IF;
+END $$;
 
 DROP TRIGGER IF EXISTS update_custom_endpoints_timestamp ON custom_endpoints;
 CREATE TRIGGER update_custom_endpoints_timestamp
