@@ -43,7 +43,7 @@ function dependencies(
 }
 
 describe("provider panel read operations", () => {
-  it("selects the workspace active custom connection and keeps a zero-model endpoint visible", async () => {
+  it("selects the currently active custom connection and keeps a zero-model endpoint visible", async () => {
     const result = await loadServerProviderPanelScope("123", false, dependencies());
 
     expect(result?.data.readStatus).toBe("fresh");

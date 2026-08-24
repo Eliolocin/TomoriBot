@@ -7,7 +7,9 @@ import {
   buildAddProviderModal,
   buildEditEndpointModal,
   buildEditProviderModal,
+  buildModelSelectionValue,
   buildProviderModelModal,
+  parseModelSelectionValue,
   buildProvidersPanelPayload,
 } from "@/utils/discord/ui/providersPanel";
 import { initializeLocalizer } from "@/utils/text/localizer";
@@ -184,7 +186,7 @@ describe("providers panel rendering", () => {
     const actions = collectComponents(payload).filter((component) => component.type === ComponentType.Button);
 
     expect(String(body?.content)).toContain("**Transcription**");
-    expect(String(body?.content)).toContain("workspace active");
+    expect(String(body?.content)).toContain("currently active");
     expect(String(body?.content)).toContain("provider fallback");
     expect(String(body?.content)).toContain("custom registration");
     expect(String(body?.content)).not.toContain("unverified");
@@ -409,6 +411,117 @@ describe("providers panel rendering", () => {
     expect(JSON.stringify(endpointTextModal)).toContain("num-ctx_abcdefgh");
     expect(JSON.stringify(imageModal)).toContain("workflow_abcdefgh");
     expect(imageModal.custom_id).toBe("providers:v1:model-submit:en-US:endpoint:73:image:0:abcdefgh");
+  });
+
+  it("offers image capability checkboxes and gates inpainting on ComfyUI", () => {
+    const comfyModal = buildProviderModelModal("en-US", "endpoint", "73", "image", null, "abcdefgh", {
+      image: { supports: { txt2img: true, img2img: true, inpaint: true, negative_prompt: false }, allowInpaint: true },
+    });
+    const genericModal = buildProviderModelModal("en-US", "endpoint", "73", "image", null, "abcdefgh", {
+      image: {
+        supports: { txt2img: true, img2img: false, inpaint: false, negative_prompt: true },
+        allowInpaint: false,
+      },
+    });
+    const videoModal = buildProviderModelModal("en-US", "endpoint", "73", "video", null, "abcdefgh");
+    const curatedModal = buildProviderModelModal("en-US", "provider", "google", "image", null, "abcdefgh", {
+      image: { supports: { txt2img: true, img2img: true, inpaint: false, negative_prompt: false }, allowInpaint: true },
+    });
+    const undeclarableModal = buildProviderModelModal("en-US", "provider", "novelai", "image", null, "abcdefgh");
+
+    const comfyField = comfyModal.components.find(
+      (entry) => entry.component?.custom_id === "image-supports_abcdefgh",
+    )?.component;
+    const genericField = genericModal.components.find(
+      (entry) => entry.component?.custom_id === "image-supports_abcdefgh",
+    )?.component;
+
+    expect(comfyField?.options?.map((option) => option.value)).toEqual([
+      "txt2img",
+      "img2img",
+      "inpaint",
+      "negative_prompt",
+    ]);
+    expect(comfyField?.options?.filter((option) => option.default).map((option) => option.value)).toEqual([
+      "txt2img",
+      "img2img",
+      "inpaint",
+    ]);
+    expect(genericField?.options?.map((option) => option.value)).toEqual(["txt2img", "img2img", "negative_prompt"]);
+    expect(genericField?.options?.filter((option) => option.default).map((option) => option.value)).toEqual([
+      "txt2img",
+      "negative_prompt",
+    ]);
+    expect(JSON.stringify(videoModal)).not.toContain("image-supports_abcdefgh");
+
+    // A curated provider offers inpainting as a declaration, unticked by default.
+    const curatedField = curatedModal.components.find(
+      (entry) => entry.component?.custom_id === "image-supports_abcdefgh",
+    )?.component;
+    expect(curatedField?.options?.map((option) => option.value)).toEqual([
+      "txt2img",
+      "img2img",
+      "inpaint",
+      "negative_prompt",
+    ]);
+    expect(curatedField?.options?.filter((option) => option.default).map((option) => option.value)).toEqual([
+      "txt2img",
+      "img2img",
+    ]);
+
+    // Nothing stores a declaration for a provider whose image path ignores it, so no section renders.
+    expect(JSON.stringify(undeclarableModal)).not.toContain("image-supports_abcdefgh");
+  });
+
+  it("prefills an edit modal from the model the selector names", () => {
+    const editModal = buildProviderModelModal("en-US", "endpoint", "73", "text", 91, "abcdefgh", {
+      codeName: "lighthouse/model",
+      text: {
+        numCtx: 4096,
+        hasTools: true,
+        seesImages: false,
+        supportsStructOutput: false,
+        strictRoleAlternation: false,
+        supportsPrefixCompletion: true,
+      },
+    });
+    const codeInput = editModal.components[0]?.component;
+    const flagsField = editModal.components.find((entry) => entry.component?.custom_id === "flags_abcdefgh")?.component;
+
+    expect(codeInput?.value).toBe("lighthouse/model");
+    expect(flagsField?.options?.filter((option) => option.default).map((option) => option.value)).toEqual([
+      "tools",
+      "prefix",
+    ]);
+  });
+
+  it("validates selector values without decoding anything beyond the model identity", () => {
+    expect(buildModelSelectionValue("add", "image")).toBe("add:image");
+    expect(
+      buildModelSelectionValue("edit", "image", {
+        id: 42,
+        codeName: "flux",
+        isWorkspaceActive: false,
+        isWorkspaceFallback: false,
+        isProviderFallback: false,
+        isCustomRegistration: true,
+      }),
+    ).toBe("edit:image:42");
+
+    expect(parseModelSelectionValue("edit:text:91")).toEqual({
+      mode: "edit",
+      capability: "text",
+      editingModelId: 91,
+    });
+    expect(parseModelSelectionValue("add:image")).toEqual({
+      mode: "add",
+      capability: "image",
+      editingModelId: null,
+    });
+    expect(parseModelSelectionValue("edit:image:0")).toBeNull();
+    expect(parseModelSelectionValue("remove:image:1")).toBeNull();
+    expect(parseModelSelectionValue("edit:nonsense:1")).toBeNull();
+    expect(parseModelSelectionValue(undefined)).toBeNull();
   });
 
   it("renders provider editing with per-provider rotation controls while Brave stays key-only", () => {

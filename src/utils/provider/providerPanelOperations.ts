@@ -36,6 +36,15 @@ import { toolRepository, type BraveApiKeyStatusReadResult } from "@/utils/db/rep
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 import { validateElevenLabsApiKey } from "@/utils/audio/elevenLabsAccount";
 import { parseCustomProvider } from "@/utils/provider/customProviderUtils";
+import {
+  type ImageEndpointSupports,
+  imageEndpointSupportsFromSubmittedValues,
+  readImageEndpointSupports,
+} from "@/utils/provider/customImageEndpointSupport";
+import {
+  curatedImageSupportsFromSubmittedValues,
+  resolveCuratedImageSupports,
+} from "@/utils/provider/providerImageCapabilities";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { getStaticProviderInfo } from "@/utils/provider/providerInfoRegistry";
 import { ProviderFactory } from "@/utils/provider/providerFactory";
@@ -179,6 +188,9 @@ export interface SaveProviderModelInput {
   supportsStructOutput?: boolean;
   strictRoleAlternation?: boolean;
   supportsPrefixCompletion?: boolean;
+  // Raw checkbox values, because only the resolved connection knows the api style that decides
+  // whether inpainting was offerable in the modal at all.
+  imageSupportValues?: string[];
   workflow?: Record<string, unknown>;
 }
 
@@ -298,6 +310,7 @@ function createModel(
   customRegistration = false,
   fallbackId = id,
   textSettings?: ProviderPanelModel["textSettings"],
+  imageSettings?: ImageEndpointSupports,
 ): ProviderPanelModel | null {
   if (id === undefined) return null;
   const resolvedFallbackId = fallbackId ?? id;
@@ -309,6 +322,7 @@ function createModel(
     isProviderFallback: hasFallback(providerFallbacks, fallbackType, resolvedFallbackId),
     isCustomRegistration: customRegistration,
     textSettings,
+    imageSettings,
   };
 }
 
@@ -394,6 +408,9 @@ async function buildCuratedCapabilities(
         [],
         "llm",
         row.is_scoped_registration,
+        row.diffusion_model_id,
+        undefined,
+        resolveCuratedImageSupports(provider, row) ?? undefined,
       );
       return model ? [model] : [];
     }),
@@ -486,6 +503,7 @@ function buildEndpointCapabilities(
                 supportsPrefixCompletion: endpoint.supports_prefix_completion,
               }
             : undefined,
+          capability === "image" ? readImageEndpointSupports(endpoint) : undefined,
         );
         if (!model) return [];
         if (capability === "speech" || capability === "transcription") {
@@ -494,7 +512,7 @@ function buildEndpointCapabilities(
         return [model];
       });
 
-    return { capability, availability: "available", models };
+    return { capability, availability: "available", models, apiStyle: capabilityConnections[0]?.api_style };
   });
 }
 
@@ -1065,6 +1083,9 @@ async function registerSharedProviderModel(
       userId ? { kind: "personal", ownerId: userId } : { kind: "server", ownerId: input.state.server_id },
       input.capability,
       input.codeName,
+      input.imageSupportValues
+        ? (curatedImageSupportsFromSubmittedValues(input.imageSupportValues, provider) ?? undefined)
+        : undefined,
     );
     if (result.status === "invalid_model") return { status: "invalid-model" };
     if (result.status === "already_available") {
@@ -1117,7 +1138,14 @@ async function registerSharedProviderModel(
       : input.capability === "embedding"
         ? await llmModelRepo.upsertScopedEmbeddingModel(codeName, provider)
         : input.capability === "image"
-          ? await llmModelRepo.upsertScopedDiffusionModel(codeName, provider)
+          ? await llmModelRepo.upsertScopedDiffusionModel(
+              codeName,
+              provider,
+              // Undeclared stays NULL so the model keeps following its provider's defaults.
+              input.imageSupportValues
+                ? (curatedImageSupportsFromSubmittedValues(input.imageSupportValues, provider) ?? undefined)
+                : undefined,
+            )
           : await llmModelRepo.upsertScopedVideoModel(codeName, provider);
   if (!modelId) return { status: "write-failed" };
 
@@ -1229,9 +1257,16 @@ async function registerEndpointModel(input: SaveProviderModelInput): Promise<Sav
     return { status: "invalid-model" };
   }
 
-  const extraConfig = input.workflow
+  const workflowConfig = input.workflow
     ? { ...(editingEndpoint?.extra_config ?? {}), workflow: input.workflow }
     : editingEndpoint?.extra_config;
+  const extraConfig =
+    input.capability === "image"
+      ? {
+          ...(workflowConfig ?? {}),
+          workflow_supports: imageEndpointSupportsFromSubmittedValues(input.imageSupportValues, connection.api_style),
+        }
+      : workflowConfig;
 
   const registered = await registerCustomEndpoint({
     scope: {

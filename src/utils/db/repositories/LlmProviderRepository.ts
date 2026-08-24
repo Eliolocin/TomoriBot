@@ -2452,20 +2452,25 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   }): Promise<OpenRouterModelRegistrationRow | null> {
     const { serverId = null, userId = null, llmId } = params;
 
+    // Every scoped_model_registrations arbiter here repeats the `<column> IS NOT NULL` half of its
+    // partial index predicate. Postgres infers a partial unique index only when the statement's WHERE
+    // implies the index's, so dropping that conjunct as redundant makes the upsert fail at runtime with
+    // 42P10, "no unique or exclusion constraint matching the ON CONFLICT specification". The same
+    // applies to the embedding, diffusion, and video registrations below.
     try {
       const rows =
         serverId !== null
           ? await sql`
               INSERT INTO scoped_model_registrations (server_id, user_id, llm_id)
               VALUES (${serverId}, NULL, ${llmId})
-              ON CONFLICT (server_id, llm_id) WHERE user_id IS NULL
+              ON CONFLICT (server_id, llm_id) WHERE user_id IS NULL AND llm_id IS NOT NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `
           : await sql`
               INSERT INTO scoped_model_registrations (server_id, user_id, llm_id)
               VALUES (NULL, ${userId}, ${llmId})
-              ON CONFLICT (user_id, llm_id) WHERE server_id IS NULL
+              ON CONFLICT (user_id, llm_id) WHERE server_id IS NULL AND llm_id IS NOT NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `;
@@ -2534,14 +2539,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
           ? await sql`
               INSERT INTO scoped_model_registrations (server_id, user_id, embedding_model_id)
               VALUES (${serverId}, NULL, ${embeddingModelId})
-              ON CONFLICT (server_id, embedding_model_id) WHERE user_id IS NULL
+              ON CONFLICT (server_id, embedding_model_id) WHERE user_id IS NULL AND embedding_model_id IS NOT NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `
           : await sql`
               INSERT INTO scoped_model_registrations (server_id, user_id, embedding_model_id)
               VALUES (NULL, ${userId}, ${embeddingModelId})
-              ON CONFLICT (user_id, embedding_model_id) WHERE server_id IS NULL
+              ON CONFLICT (user_id, embedding_model_id) WHERE server_id IS NULL AND embedding_model_id IS NOT NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `;
@@ -2618,14 +2623,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
           ? await sql`
               INSERT INTO scoped_model_registrations (server_id, user_id, diffusion_model_id)
               VALUES (${serverId}, NULL, ${diffusionModelId})
-              ON CONFLICT (server_id, diffusion_model_id) WHERE user_id IS NULL
+              ON CONFLICT (server_id, diffusion_model_id) WHERE user_id IS NULL AND diffusion_model_id IS NOT NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `
           : await sql`
               INSERT INTO scoped_model_registrations (server_id, user_id, diffusion_model_id)
               VALUES (NULL, ${userId}, ${diffusionModelId})
-              ON CONFLICT (user_id, diffusion_model_id) WHERE server_id IS NULL
+              ON CONFLICT (user_id, diffusion_model_id) WHERE server_id IS NULL AND diffusion_model_id IS NOT NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `;
@@ -2702,14 +2707,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
           ? await sql`
               INSERT INTO scoped_model_registrations (server_id, user_id, video_model_id)
               VALUES (${serverId}, NULL, ${videoModelId})
-              ON CONFLICT (server_id, video_model_id) WHERE user_id IS NULL
+              ON CONFLICT (server_id, video_model_id) WHERE user_id IS NULL AND video_model_id IS NOT NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `
           : await sql`
               INSERT INTO scoped_model_registrations (server_id, user_id, video_model_id)
               VALUES (NULL, ${userId}, ${videoModelId})
-              ON CONFLICT (user_id, video_model_id) WHERE server_id IS NULL
+              ON CONFLICT (user_id, video_model_id) WHERE server_id IS NULL AND video_model_id IS NOT NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `;

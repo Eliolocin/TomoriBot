@@ -108,7 +108,10 @@ than externalising SQL. Size is the signal; the split must follow a coherent dom
 ### Model registries
 
 - `llms`
-- `image_diffusion_models`
+- `image_diffusion_models`, whose per-model image declarations arrive in migration 074: `supports_txt2img`,
+  `supports_img2img`, `supports_inpaint`, and `supports_negative_prompt`. They are nullable with no default: NULL means the model follows its provider's
+  built-in image defaults, so an undeclared row is never frozen against the defaults of the day it was written.
+  `resolveCuratedImageSupports()` layers any declared column over those defaults one field at a time.
 - `video_generation_models`
 - `embedding_models`
 

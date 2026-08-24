@@ -11,6 +11,7 @@ import {
   type TopLevelComponentData,
 } from "discord.js";
 import type {
+  ProviderPanelCapability,
   ProviderPanelCapabilitySection,
   ProviderPanelEntry,
   ProviderPanelModel,
@@ -28,6 +29,7 @@ import {
 } from "@/utils/discord/providersPanelCatalog";
 import { buildPanelContainer, buildPanelReceiptContainer, buildRangeChooserComponents } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
+import type { ImageEndpointSupports } from "@/utils/provider/customImageEndpointSupport";
 import { getAllProviderChoices, getProviderAddChoiceDescriptionKey } from "@/utils/provider/providerInfoRegistry";
 import { localizer } from "@/utils/text/localizer";
 
@@ -335,7 +337,58 @@ export type ProvidersPanelPage =
   | { kind: "models"; entryId: string; rangeIndex?: number }
   | { kind: "remove"; entryId: string };
 
-export type ProviderModelModalField = "code-name" | "num-ctx" | "flags" | "workflow";
+export type ProviderModelModalField = "code-name" | "num-ctx" | "flags" | "image-supports" | "workflow";
+
+const MODEL_SELECTION_CAPABILITIES: readonly ProviderPanelCapability[] = [
+  "text",
+  "image",
+  "embedding",
+  "video",
+  "speech",
+  "transcription",
+];
+
+const IMAGE_SUPPORT_FIELDS: ReadonlyArray<keyof ImageEndpointSupports> = [
+  "txt2img",
+  "img2img",
+  "inpaint",
+  "negative_prompt",
+];
+
+export interface ProviderModelModalDefaults {
+  codeName?: string;
+  text?: ProviderPanelModel["textSettings"];
+  image?: { supports: ImageEndpointSupports; allowInpaint: boolean };
+}
+
+export interface ModelSelectionValue {
+  mode: "add" | "edit";
+  capability: ProviderPanelCapability;
+  editingModelId: number | null;
+}
+
+export function buildModelSelectionValue(
+  mode: "add" | "edit",
+  capability: ProviderPanelCapability,
+  model?: ProviderPanelModel,
+): string {
+  return mode === "add" ? `add:${capability}` : `edit:${capability}:${model?.id ?? 0}`;
+}
+
+function isModelSelectionCapability(value: string | undefined): value is ProviderPanelCapability {
+  return MODEL_SELECTION_CAPABILITIES.includes(value as ProviderPanelCapability);
+}
+
+export function parseModelSelectionValue(raw: string | undefined): ModelSelectionValue | null {
+  const [mode, capability, rawModelId] = raw?.split(":") ?? [];
+  if (mode !== "add" && mode !== "edit") return null;
+  if (!isModelSelectionCapability(capability)) return null;
+  if (mode === "add") return { mode, capability, editingModelId: null };
+
+  const editingModelId = Number(rawModelId);
+  if (!Number.isSafeInteger(editingModelId) || editingModelId <= 0) return null;
+  return { mode, capability, editingModelId };
+}
 
 export function buildProviderModelModalFieldId(field: ProviderModelModalField, nonce: string): string {
   return `${field}_${nonce}`;
@@ -360,7 +413,7 @@ export function buildProviderModelModal(
   capability: ProviderPanelCapabilitySection["capability"],
   editingModelId: number | null,
   nonce: string,
-  textDefaults?: ProviderPanelModel["textSettings"],
+  defaults?: ProviderModelModalDefaults,
   routeNamespace: ProvidersRouteNamespace = PROVIDERS_ROUTE_NAMESPACE,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   const components: RawDiscordComponent[] = [
@@ -379,6 +432,7 @@ export function buildProviderModelModal(
         min_length: 1,
         max_length: 200,
         required: true,
+        value: defaults?.codeName,
       },
     },
   ];
@@ -392,7 +446,7 @@ export function buildProviderModelModal(
         custom_id: buildProviderModelModalFieldId("num-ctx", nonce),
         style: TextInputStyle.Short,
         placeholder: "8192",
-        value: textDefaults?.numCtx ? String(textDefaults.numCtx) : undefined,
+        value: defaults?.text?.numCtx ? String(defaults.text.numCtx) : undefined,
         max_length: 8,
         required: false,
       },
@@ -410,11 +464,11 @@ export function buildProviderModelModal(
         max_values: 5,
         required: false,
         options: [
-          ["tools", textDefaults?.hasTools],
-          ["images", textDefaults?.seesImages],
-          ["structured", textDefaults?.supportsStructOutput],
-          ["strict-roles", textDefaults?.strictRoleAlternation],
-          ["prefix", textDefaults?.supportsPrefixCompletion],
+          ["tools", defaults?.text?.hasTools],
+          ["images", defaults?.text?.seesImages],
+          ["structured", defaults?.text?.supportsStructOutput],
+          ["strict-roles", defaults?.text?.strictRoleAlternation],
+          ["prefix", defaults?.text?.supportsPrefixCompletion],
         ].map(([value, selected]) => ({
           value: String(value),
           label: localizer(locale, `commands.providers.model_flags.${String(value)}`),
@@ -434,6 +488,28 @@ export function buildProviderModelModal(
         min_values: 0,
         max_values: 1,
         required: false,
+      },
+    });
+  }
+  // The caller omits `image` when nothing would store the declaration: a curated provider whose image
+  // path never consults these flags, such as NovelAI's own tool.
+  if (capability === "image" && defaults?.image) {
+    const offered = IMAGE_SUPPORT_FIELDS.filter((field) => field !== "inpaint" || defaults.image?.allowInpaint);
+    components.push({
+      type: 18,
+      label: safeSelectOptionText(localizer(locale, "commands.providers.model_image_supports_label"), 45),
+      description: safeSelectOptionText(localizer(locale, "commands.providers.model_image_supports_description"), 100),
+      component: {
+        type: 22,
+        custom_id: buildProviderModelModalFieldId("image-supports", nonce),
+        min_values: 1,
+        max_values: offered.length,
+        required: true,
+        options: offered.map((field) => ({
+          value: field,
+          label: localizer(locale, `commands.providers.model_image_supports.${field}`),
+          default: defaults.image?.supports[field] ?? false,
+        })),
       },
     });
   }
@@ -644,13 +720,13 @@ function buildModelsPage(
       }),
       100,
     ),
-    value: `add:${capability}`,
+    value: buildModelSelectionValue("add", capability),
   }));
   const options: SelectMenuComponentOptionData[] = [
     ...addOptions,
     ...selection.visibleItems.map(({ capability, model }) => ({
       label: safeSelectOptionText(model.codeName, 100),
-      value: `edit:${capability}:${model.id}`,
+      value: buildModelSelectionValue("edit", capability, model),
       description: safeSelectOptionText(
         `${localizer(locale, `commands.providers.capabilities.${capability}`)} · ${localizer(
           locale,

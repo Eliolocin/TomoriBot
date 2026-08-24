@@ -91,6 +91,8 @@ API compatibility, and save the connection. Saving prepares the capabilities sup
 protocol without registering any models. Then select the new endpoint, choose **Add or Edit a
 Model**, and register its exact model code and capability. Adding a model activates it for that
 capability. Use the same model action to attach more models or edit a workspace-added registration.
+Text models declare their own capabilities in that form, and image models declare which request modes
+they support.
 
 API compatibility determines the request paths and payloads the service implements, so it also determines which
 capability slots the connection prepares. Registering exact models for those slots is a separate step, and the
@@ -131,6 +133,13 @@ services. Not every feature is available on every provider.
 | **NovelAI** | ✅ | ✅ | ✅ | Can combine with other providers |
 | **NVIDIA** | ✅ | – | – | Text-to-image only; reference images are ignored |
 | **Z.ai** | ✅ | – | – | – |
+
+These are the **defaults** a provider's image models start from, and NovelAI runs through its own pipeline
+rather than this table. Registering an image model through `/providers` lets you declare that model's own
+modes, which is how you enable inpainting on a ComfyUI workflow or on a provider model whose API supports
+masked editing. A model you never declare keeps following the defaults above, so a later correction to them
+reaches it automatically. Declare only what the model really does: Tomori offers the tool exactly the modes
+you tick, and a mode the API rejects becomes a failed generation.
 
 ### Video Generation
 

@@ -7,7 +7,9 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from "discord.js";
+import type { CustomEndpointCapability } from "@/types/db/schema";
 import type { PanelReceipt } from "@/types/discord/panel";
+import type { ProviderPanelCapabilitySection, ProviderPanelModel } from "@/types/discord/providerPanel";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import {
   beginPanelInteraction,
@@ -35,11 +37,15 @@ import {
   buildEditProviderModalFieldId,
   buildEditEndpointModal,
   buildEditEndpointModalFieldId,
+  parseModelSelectionValue,
   PROVIDERS_ENTRIES_PER_SELECTOR_PAGE,
   type EditEndpointModalContext,
+  type ProviderModelModalDefaults,
   type ProvidersPanelPage,
 } from "@/utils/discord/ui/providersPanel";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
+import { getDefaultImageEndpointSupports } from "@/utils/provider/customImageEndpointSupport";
+import { resolveCuratedImageSupports } from "@/utils/provider/providerImageCapabilities";
 import {
   showRoutedRawModal,
   takeRawModalCheckboxGroupValues,
@@ -87,8 +93,10 @@ export interface ProvidersRouteDependencies {
     capability: Parameters<typeof buildProviderModelModal>[3],
     editingModelId: number | null,
     nonce: string,
+    defaults?: ProviderModelModalDefaults,
   ): Promise<void>;
   takeModelFlags(interactionId: string, nonce: string): string[] | undefined;
+  takeImageSupports(interactionId: string, nonce: string): string[] | undefined;
   takeWorkflow(interactionId: string, nonce: string): ReturnType<typeof takeRawModalFileUpload>;
   loadWorkflow(url: string): Promise<Record<string, unknown> | null>;
   showProviderEditModal(
@@ -326,6 +334,35 @@ function endpointEditReceipt(locale: string, result: EditEndpointResult): PanelR
   };
 }
 
+/**
+ * Chooses the image capability defaults a model modal opens with, or omits them entirely.
+ *
+ * A custom endpoint stores its declaration on the endpoint row and can only inpaint through ComfyUI. A
+ * curated model stores its own columns and inherits its provider's defaults until it declares otherwise;
+ * a provider whose image path ignores these flags yields no section at all.
+ */
+function imageModalDefaults(
+  capability: CustomEndpointCapability,
+  entryKind: "provider" | "endpoint",
+  entryKey: string,
+  section: ProviderPanelCapabilitySection,
+  editing: ProviderPanelModel | undefined,
+): Pick<ProviderModelModalDefaults, "image"> {
+  if (capability !== "image") return {};
+
+  if (entryKind === "endpoint") {
+    return {
+      image: {
+        supports: editing?.imageSettings ?? getDefaultImageEndpointSupports(section.apiStyle ?? "openai-compatible"),
+        allowInpaint: section.apiStyle === "comfyui",
+      },
+    };
+  }
+
+  const supports = editing?.imageSettings ?? resolveCuratedImageSupports(entryKey);
+  return supports ? { image: { supports, allowInpaint: true } } : {};
+}
+
 function endpointEditContext(scope: LoadedProviderPanelScope, connectionId: number): EditEndpointModalContext | null {
   const entry = scope.data.entries.find(
     (candidate) => candidate.kind === "endpoint" && candidate.connectionIds.includes(connectionId),
@@ -419,7 +456,7 @@ export function createProvidersInteractionRoute(
       showRoutedRawModal(interaction, buildAddEndpointModal(locale, nonce, configuration.namespace)),
     takeApiStyle: (interactionId, nonce) =>
       takeRawModalSelectValue(interactionId, buildAddEndpointModalFieldId("api-style", nonce)),
-    showModelModal: (interaction, locale, entryKind, entryKey, capability, editingModelId, nonce) =>
+    showModelModal: (interaction, locale, entryKind, entryKey, capability, editingModelId, nonce, defaults) =>
       showRoutedRawModal(
         interaction,
         buildProviderModelModal(
@@ -429,12 +466,14 @@ export function createProvidersInteractionRoute(
           capability,
           editingModelId,
           nonce,
-          undefined,
+          defaults,
           configuration.namespace,
         ),
       ),
     takeModelFlags: (interactionId, nonce) =>
       takeRawModalCheckboxGroupValues(interactionId, buildProviderModelModalFieldId("flags", nonce)),
+    takeImageSupports: (interactionId, nonce) =>
+      takeRawModalCheckboxGroupValues(interactionId, buildProviderModelModalFieldId("image-supports", nonce)),
     takeWorkflow: (interactionId, nonce) =>
       takeRawModalFileUpload(interactionId, buildProviderModelModalFieldId("workflow", nonce)),
     loadWorkflow: loadWorkflowJson,
@@ -567,26 +606,47 @@ export function createProvidersInteractionRoute(
           });
           return;
         }
-        const [mode, capability, rawModelId] = (interaction as StringSelectMenuInteraction).values[0]?.split(":") ?? [];
-        if (
-          (mode !== "add" && mode !== "edit") ||
-          !["text", "embedding", "image", "video", "speech", "transcription"].includes(capability ?? "")
-        ) {
+        const selection = parseModelSelectionValue((interaction as StringSelectMenuInteraction).values[0]);
+        if (!selection) {
           throw new Error("Malformed provider model selection");
         }
-        const editingModelId = mode === "edit" ? Number(rawModelId) : null;
-        if (mode === "edit" && (!Number.isSafeInteger(editingModelId) || Number(editingModelId) <= 0)) {
-          throw new Error("Malformed provider model edit selection");
+        // The modal is this interaction's acknowledgement, so the scope read must be the cached one
+        // Edit Endpoint already relies on. The selector is disabled unless the panel is fresh, so a
+        // stale read here means the panel outlived its data.
+        const modelScope = await dependencies.resolveScope(interaction, false);
+        const entry = modelScope?.data.entries.find(
+          (candidate) => candidate.id === `${route.entryKind}:${route.entryKey}`,
+        );
+        const section =
+          entry && entry.kind !== "brave"
+            ? entry.capabilities.find((candidate) => candidate.capability === selection.capability)
+            : undefined;
+        if (!modelScope || modelScope.data.readStatus !== "fresh" || !section) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.providers.unavailable"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
         }
+        const editing = selection.editingModelId
+          ? section.models.find(
+              (candidate) => candidate.id === selection.editingModelId && candidate.isCustomRegistration,
+            )
+          : undefined;
         const nonce = dependencies.createNonce();
         await dependencies.showModelModal(
           interaction as StringSelectMenuInteraction,
           route.locale,
           route.entryKind,
           route.entryKey,
-          capability as Parameters<typeof buildProviderModelModal>[3],
-          editingModelId,
+          selection.capability,
+          selection.editingModelId,
           nonce,
+          {
+            codeName: editing?.codeName,
+            text: editing?.textSettings,
+            ...imageModalDefaults(selection.capability, route.entryKind, route.entryKey, section, editing),
+          },
         );
         return;
       }
@@ -597,6 +657,8 @@ export function createProvidersInteractionRoute(
         route.action === "endpoint-submit" ? dependencies.takeApiStyle(interaction.id, route.nonce) : undefined;
       const selectedModelFlags =
         route.action === "model-submit" ? (dependencies.takeModelFlags(interaction.id, route.nonce) ?? []) : [];
+      const selectedImageSupports =
+        route.action === "model-submit" ? dependencies.takeImageSupports(interaction.id, route.nonce) : undefined;
       const workflowAttachment =
         route.action === "model-submit" ? dependencies.takeWorkflow(interaction.id, route.nonce) : undefined;
       const deleteRotation =
@@ -866,6 +928,7 @@ export function createProvidersInteractionRoute(
               supportsStructOutput: selectedModelFlags.includes("structured"),
               strictRoleAlternation: selectedModelFlags.includes("strict-roles"),
               supportsPrefixCompletion: selectedModelFlags.includes("prefix"),
+              imageSupportValues: route.capability === "image" ? selectedImageSupports : undefined,
               workflow: workflow ?? undefined,
             }),
           () => dependencies.resolveScope(interaction, true),

@@ -13,6 +13,7 @@ import { getCachedLLM } from "@/utils/cache/llmCache";
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
 import { isCustomProvider } from "@/utils/provider/customProviderUtils";
+import type { ImageEndpointSupports } from "@/utils/provider/customImageEndpointSupport";
 
 /** Canonical scope for OpenRouter model visibility filtering. */
 export type OpenRouterModelScope = { kind: "server"; ownerId: number } | { kind: "personal"; ownerId: number };
@@ -1001,15 +1002,23 @@ class LlmModelRepository {
    * @param modelCodename - OpenRouter model codename
    * @returns The upserted diffusion_model_id, or null on failure
    */
-  async upsertScopedDiffusionModel(modelCodename: string, provider = "openrouter"): Promise<number | null> {
+  async upsertScopedDiffusionModel(
+    modelCodename: string,
+    provider = "openrouter",
+    supports?: ImageEndpointSupports,
+  ): Promise<number | null> {
     try {
+      const declared = supports ?? null;
       const rows = await sql`
         INSERT INTO image_diffusion_models (
           provider, codename, is_scoped_registration,
-          model_description, ja_description, is_default, is_deprecated, is_free, is_uncensored
+          model_description, ja_description, is_default, is_deprecated, is_free, is_uncensored,
+          supports_txt2img, supports_img2img, supports_inpaint, supports_negative_prompt
         ) VALUES (
           ${provider}, ${modelCodename}, true,
-          ${modelCodename}, ${modelCodename}, false, false, false, false
+          ${modelCodename}, ${modelCodename}, false, false, false, false,
+          ${declared?.txt2img ?? null}, ${declared?.img2img ?? null},
+          ${declared?.inpaint ?? null}, ${declared?.negative_prompt ?? null}
         )
         ON CONFLICT (provider, codename) DO UPDATE SET
           is_scoped_registration  = true,
@@ -1019,6 +1028,14 @@ class LlmModelRepository {
           is_deprecated           = false,
           is_free                 = EXCLUDED.is_free,
           is_uncensored           = EXCLUDED.is_uncensored,
+          -- A caller that declares nothing must not erase an existing declaration.
+          supports_txt2img        = COALESCE(EXCLUDED.supports_txt2img, image_diffusion_models.supports_txt2img),
+          supports_img2img        = COALESCE(EXCLUDED.supports_img2img, image_diffusion_models.supports_img2img),
+          supports_inpaint        = COALESCE(EXCLUDED.supports_inpaint, image_diffusion_models.supports_inpaint),
+          supports_negative_prompt = COALESCE(
+            EXCLUDED.supports_negative_prompt,
+            image_diffusion_models.supports_negative_prompt
+          ),
           updated_at              = CURRENT_TIMESTAMP
         RETURNING diffusion_model_id
       `;

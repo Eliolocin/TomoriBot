@@ -424,12 +424,22 @@ CREATE TABLE IF NOT EXISTS image_diffusion_models (
   is_deprecated BOOLEAN DEFAULT false,
   is_free BOOLEAN DEFAULT false,
   is_uncensored BOOLEAN DEFAULT false,
+  supports_txt2img BOOLEAN,
+  supports_img2img BOOLEAN,
+  supports_inpaint BOOLEAN,
+  supports_negative_prompt BOOLEAN,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Moved to prevent error on first-time DB creation!
 SELECT add_column_if_not_exists('image_diffusion_models', 'is_scoped_registration', 'BOOLEAN', 'false');
+
+-- Nullable with no default: NULL means the model follows its provider's built-in image defaults.
+SELECT add_column_if_not_exists('image_diffusion_models', 'supports_txt2img', 'BOOLEAN');
+SELECT add_column_if_not_exists('image_diffusion_models', 'supports_img2img', 'BOOLEAN');
+SELECT add_column_if_not_exists('image_diffusion_models', 'supports_inpaint', 'BOOLEAN');
+SELECT add_column_if_not_exists('image_diffusion_models', 'supports_negative_prompt', 'BOOLEAN');
 
 -- Removed updated_at trigger for image_diffusion_models table (static metadata, rarely changes)
 DROP TRIGGER IF EXISTS update_image_diffusion_models_timestamp ON image_diffusion_models;

@@ -9,6 +9,7 @@ import {
   type AddServerProviderDependencies,
 } from "@/utils/provider/providerPanelOperations";
 import { llmProviderRepo } from "@/utils/db/repositories/LlmProviderRepository";
+import { llmModelRepo } from "@/utils/db/repositories/LlmModelRepository";
 
 function state(): TomoriState {
   return { server_id: 7, config: {}, llm: { llm_provider: "google" } } as TomoriState;
@@ -296,6 +297,93 @@ describe("provider panel mutations", () => {
         numCtx: 128,
       }),
     ).toEqual({ status: "invalid-model" });
+  });
+
+  it("persists declared image capabilities on the endpoint row", async () => {
+    const connection = {
+      connection_id: 73,
+      label: "lighthouse",
+      capability: "image" as const,
+      api_style: "comfyui" as const,
+      endpoint_url: "https://comfy.example.com",
+      requires_auth: false,
+      server_id: 7,
+      user_id: null,
+    };
+    const spies = [
+      spyOn(llmProviderRepo, "loadCustomEndpointConnectionById").mockResolvedValue(connection as never),
+      spyOn(llmProviderRepo, "loadCustomEndpointConnectionsForServerResult").mockResolvedValue({
+        connections: [connection],
+        endpoints: [],
+      } as never),
+      spyOn(llmProviderRepo, "upsertCustomEndpointConnection").mockResolvedValue(73 as never),
+      spyOn(llmProviderRepo, "loadSavedProviderConfig").mockResolvedValue(null as never),
+      spyOn(llmProviderRepo, "loadCustomEndpointsByConnectionId").mockResolvedValue([] as never),
+      spyOn(llmModelRepo, "upsertSyntheticCustomDiffusionModel").mockResolvedValue(900 as never),
+    ];
+    const upsert = spyOn(llmProviderRepo, "upsertCustomEndpoint").mockResolvedValue(null as never);
+
+    await saveProviderModel({
+      serverDiscId: "guild",
+      state: state(),
+      entryId: "endpoint:73",
+      capability: "image",
+      codeName: "flux",
+      imageSupportValues: ["txt2img", "inpaint"],
+      workflow: { nodes: {} },
+    });
+
+    expect(upsert).toHaveBeenCalled();
+    expect(upsert.mock.calls[0]?.[0].extraConfig).toEqual({
+      workflow: { nodes: {} },
+      workflow_supports: { txt2img: true, img2img: false, inpaint: true, negative_prompt: false },
+    });
+
+    upsert.mockRestore();
+    for (const spy of spies) spy.mockRestore();
+  });
+
+  it("declares a curated image model's capabilities without the ComfyUI inpaint gate", async () => {
+    const load = spyOn(llmModelRepo, "loadDiffusionModelByProviderAndCodename").mockResolvedValue(null as never);
+    const upsert = spyOn(llmModelRepo, "upsertScopedDiffusionModel").mockResolvedValue(null as never);
+
+    await saveProviderModel({
+      serverDiscId: "guild",
+      state: state(),
+      entryId: "provider:google",
+      capability: "image",
+      codeName: "gemini-example-image",
+      imageSupportValues: ["txt2img", "img2img", "inpaint"],
+    });
+
+    expect(upsert).toHaveBeenCalled();
+    expect(upsert.mock.calls[0]?.slice(0, 3)).toEqual([
+      "gemini-example-image",
+      "google",
+      { txt2img: true, img2img: true, inpaint: true, negative_prompt: false },
+    ]);
+
+    upsert.mockRestore();
+    load.mockRestore();
+  });
+
+  it("leaves a curated image model undeclared when the modal submitted nothing", async () => {
+    const load = spyOn(llmModelRepo, "loadDiffusionModelByProviderAndCodename").mockResolvedValue(null as never);
+    const upsert = spyOn(llmModelRepo, "upsertScopedDiffusionModel").mockResolvedValue(null as never);
+
+    await saveProviderModel({
+      serverDiscId: "guild",
+      state: state(),
+      entryId: "provider:google",
+      capability: "image",
+      codeName: "gemini-example-image",
+    });
+
+    // Undeclared must stay NULL so the model keeps following its provider's defaults.
+    expect(upsert.mock.calls[0]?.[2]).toBeUndefined();
+
+    upsert.mockRestore();
+    load.mockRestore();
   });
 
   it("refuses to remove the entry supplying the active text model", async () => {

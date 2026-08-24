@@ -4,6 +4,7 @@ import { getOrFetchOpenRouterEmbeddingModel } from "@/utils/cache/openrouterEmbe
 import { getOrFetchOpenRouterImageModel } from "@/utils/cache/openrouterImageModelCache";
 import { getOrFetchOpenRouterVideoModelCapabilities } from "@/utils/cache/openrouterVideoModelCache";
 import { llmModelRepo, llmProviderRepo } from "@/utils/db/repositories";
+import type { ImageEndpointSupports } from "@/utils/provider/customImageEndpointSupport";
 import { isOpenRouterGeminiModelCodename } from "@/utils/provider/openrouterModelCapabilities";
 
 export type OpenRouterModelRegistryScope =
@@ -143,8 +144,11 @@ async function upsertScopedOpenRouterEmbeddingModel(modelCodename: string): Prom
     : null;
 }
 
-async function upsertScopedOpenRouterDiffusionModel(modelCodename: string): Promise<DiffusionModelRow | null> {
-  const diffusionModelId = await llmModelRepo.upsertScopedDiffusionModel(modelCodename);
+async function upsertScopedOpenRouterDiffusionModel(
+  modelCodename: string,
+  supports?: ImageEndpointSupports,
+): Promise<DiffusionModelRow | null> {
+  const diffusionModelId = await llmModelRepo.upsertScopedDiffusionModel(modelCodename, "openrouter", supports);
   return diffusionModelId
     ? await llmModelRepo.loadDiffusionModelByProviderAndCodename("openrouter", modelCodename)
     : null;
@@ -231,6 +235,7 @@ export async function registerOpenRouterModelForScope(
   scope: OpenRouterModelRegistryScope,
   capability: OpenRouterModelCapability,
   modelName: string,
+  imageSupports?: ImageEndpointSupports,
 ): Promise<RegisterOpenRouterModelResult> {
   const normalizedModelName = normalizeModelCodename(modelName);
   if (!normalizedModelName) {
@@ -316,7 +321,7 @@ export async function registerOpenRouterModelForScope(
       };
     }
     case "image": {
-      const model = await upsertScopedOpenRouterDiffusionModel(normalizedModelName);
+      const model = await upsertScopedOpenRouterDiffusionModel(normalizedModelName, imageSupports);
       const entry = model ? buildRegisteredEntryFromDiffusionModel(model) : null;
       if (!entry) {
         return { status: "invalid_model" };

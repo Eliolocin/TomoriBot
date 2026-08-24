@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { llmModelRepo } from "@/utils/db/repositories";
+import { llmModelRepo, llmProviderRepo } from "@/utils/db/repositories";
 import { splitSqlStatements } from "@/utils/db/sqlSplitter";
 import { DB_TESTS_AVAILABLE, setupTestDb, testSql } from "./setup/testDb";
 
@@ -55,6 +55,55 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Scoped model registrations (Migration D)",
     expect(definitions).toContain("(server_id IS NULL) <> (user_id IS NULL)");
     expect(definitions).toContain("num_nonnulls(llm_id, embedding_model_id, diffusion_model_id, video_model_id) = 1");
     expect(definitions.match(/ON DELETE CASCADE/g)).toHaveLength(6);
+  });
+
+  it("upserts every scoped registration through the repository, in both scopes", async () => {
+    // The isolation test below inserts with raw SQL, so it never exercised ON CONFLICT inference.
+    // Each arbiter must repeat its partial index's `IS NOT NULL` conjunct or Postgres raises 42P10.
+    const [llm] = await testSql<[{ llm_id: number }]>`
+      INSERT INTO llms (llm_provider, llm_codename, is_scoped_registration)
+      VALUES (${SHARED_PROVIDER}, 'arbiter-text', true) RETURNING llm_id
+    `;
+    const [embedding] = await testSql<[{ embedding_model_id: number }]>`
+      INSERT INTO embedding_models (provider, codename, model_family, is_scoped_registration)
+      VALUES (${SHARED_PROVIDER}, 'arbiter-embedding', 'arbiter-embedding', true) RETURNING embedding_model_id
+    `;
+    const [diffusion] = await testSql<[{ diffusion_model_id: number }]>`
+      INSERT INTO image_diffusion_models (provider, codename, is_scoped_registration)
+      VALUES (${SHARED_PROVIDER}, 'arbiter-image', true) RETURNING diffusion_model_id
+    `;
+    const [video] = await testSql<[{ video_model_id: number }]>`
+      INSERT INTO video_generation_models (provider, codename, is_scoped_registration)
+      VALUES (${SHARED_PROVIDER}, 'arbiter-video', true) RETURNING video_model_id
+    `;
+    const llmId = Number(llm.llm_id);
+    const embeddingId = Number(embedding.embedding_model_id);
+    const diffusionId = Number(diffusion.diffusion_model_id);
+    const videoId = Number(video.video_model_id);
+
+    for (const owner of [{ serverId: serverAId }, { userId: userAId }]) {
+      // Twice each: the first insert plans the arbiter, the second takes the DO UPDATE branch.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        expect(await llmProviderRepo.upsertOpenRouterModelRegistration({ ...owner, llmId })).not.toBeNull();
+        expect(
+          await llmProviderRepo.upsertOpenRouterEmbeddingModelRegistration({ ...owner, embeddingModelId: embeddingId }),
+        ).not.toBeNull();
+        expect(
+          await llmProviderRepo.upsertOpenRouterImageModelRegistration({ ...owner, diffusionModelId: diffusionId }),
+        ).not.toBeNull();
+        expect(
+          await llmProviderRepo.upsertOpenRouterVideoModelRegistration({ ...owner, videoModelId: videoId }),
+        ).not.toBeNull();
+      }
+    }
+
+    const [{ count }] = await testSql<[{ count: string }]>`
+      SELECT COUNT(*) AS count FROM scoped_model_registrations
+      WHERE llm_id = ${llmId} OR embedding_model_id = ${embeddingId}
+        OR diffusion_model_id = ${diffusionId} OR video_model_id = ${videoId}
+    `;
+    // Four capabilities across two scopes, with the repeat attempts updating rather than duplicating.
+    expect(Number(count)).toBe(8);
   });
 
   it("isolates all four shared-provider capabilities by server and user scope", async () => {

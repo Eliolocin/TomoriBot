@@ -241,6 +241,12 @@ export const diffusionModelSchema = z.object({
   is_deprecated: z.boolean().default(false),
   is_free: z.boolean().default(false),
   is_uncensored: z.boolean().default(false),
+  // Null means the model follows its provider's built-in image defaults, so these must stay nullable
+  // rather than gaining a `.default()` that would freeze an undeclared model against today's defaults.
+  supports_txt2img: z.boolean().nullable().optional(),
+  supports_img2img: z.boolean().nullable().optional(),
+  supports_inpaint: z.boolean().nullable().optional(),
+  supports_negative_prompt: z.boolean().nullable().optional(),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });

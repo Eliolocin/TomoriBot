@@ -27,7 +27,30 @@ const scope: LoadedProviderPanelScope = {
         displayName: "Google",
         savedAt: null,
         rotationKeyCount: 2,
-        capabilities: [],
+        capabilities: [
+          {
+            capability: "text",
+            availability: "available",
+            models: [
+              {
+                id: 91,
+                codeName: "google/gemini-example",
+                isWorkspaceActive: true,
+                isWorkspaceFallback: false,
+                isProviderFallback: false,
+                isCustomRegistration: true,
+                textSettings: {
+                  numCtx: 4096,
+                  hasTools: true,
+                  seesImages: false,
+                  supportsStructOutput: false,
+                  strictRoleAlternation: false,
+                  supportsPrefixCompletion: false,
+                },
+              },
+            ],
+          },
+        ],
       },
     ],
     initialEntryId: "provider:google",
@@ -418,10 +441,13 @@ describe("providers routes", () => {
       isButton: () => false,
       deferUpdate: async () => calls.push("deferUpdate"),
     };
+    let openedWith: unknown;
     const route = createProvidersInteractionRoute({
       createNonce: () => "abcdefgh",
-      showModelModal: async (_interaction, _locale, _kind, _key, capability, modelId) =>
-        calls.push(`show:${capability}:${modelId}`),
+      showModelModal: async (_interaction, _locale, _kind, _key, capability, modelId, _nonce, defaults) => {
+        openedWith = defaults;
+        calls.push(`show:${capability}:${modelId}`);
+      },
       resolveScope: async () => {
         calls.push("load");
         return scope;
@@ -429,7 +455,20 @@ describe("providers routes", () => {
     });
 
     await route.execute({} as Client, interaction as never, parsed(customId));
-    expect(calls).toEqual(["show:text:91"]);
+
+    // The cached read precedes the modal, but the modal is still the acknowledgement: no deferral.
+    expect(calls).toEqual(["load", "show:text:91"]);
+    expect(openedWith).toEqual({
+      codeName: "google/gemini-example",
+      text: {
+        numCtx: 4096,
+        hasTools: true,
+        seesImages: false,
+        supportsStructOutput: false,
+        strictRoleAlternation: false,
+        supportsPrefixCompletion: false,
+      },
+    });
   });
 
   it("reloads scope before and after a model submit", async () => {
@@ -473,6 +512,134 @@ describe("providers routes", () => {
 
     await route.execute({} as Client, interaction as never, parsed(customId));
     expect(calls).toEqual(["deferUpdate", "reload", "write:google/new-model:true:true", "reload", "editReply"]);
+  });
+
+  it("carries stored image capabilities into the edit modal it opens as the acknowledgement", async () => {
+    const calls: string[] = [];
+    const customId = buildProvidersCustomId("model-select", "en-US", "endpoint", "73");
+    const interaction = {
+      customId,
+      guildId: "123",
+      user: { id: "456" },
+      memberPermissions: { has: () => true },
+      values: ["edit:image:42"],
+      isStringSelectMenu: () => true,
+      isModalSubmit: () => false,
+      isButton: () => false,
+      deferUpdate: async () => calls.push("deferUpdate"),
+    };
+    let openedWith: unknown;
+    const route = createProvidersInteractionRoute({
+      createNonce: () => "abcdefgh",
+      showModelModal: async (_interaction, _locale, _kind, _key, capability, modelId, _nonce, defaults) => {
+        openedWith = defaults;
+        calls.push(`show:${capability}:${modelId}`);
+      },
+      resolveScope: async () => ({
+        ...scope,
+        data: {
+          ...scope.data,
+          entries: [
+            {
+              id: "endpoint:73",
+              kind: "endpoint" as const,
+              displayName: "lighthouse",
+              savedAt: null,
+              connectionIds: [73],
+              connectionDetails: [
+                { connectionId: 73, endpointUrl: "https://comfy.example.com", apiStyle: "comfyui" as const },
+              ],
+              isPreset: false,
+              capabilities: [
+                {
+                  capability: "image" as const,
+                  availability: "available" as const,
+                  apiStyle: "comfyui" as const,
+                  models: [
+                    {
+                      id: 42,
+                      codeName: "anima-v1",
+                      isWorkspaceActive: true,
+                      isWorkspaceFallback: false,
+                      isProviderFallback: false,
+                      isCustomRegistration: true,
+                      imageSettings: { txt2img: true, img2img: false, inpaint: true, negative_prompt: false },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    });
+
+    await route.execute({} as Client, interaction as never, parsed(customId));
+
+    expect(calls).toEqual(["show:image:42"]);
+    expect(openedWith).toEqual({
+      codeName: "anima-v1",
+      text: undefined,
+      image: {
+        supports: { txt2img: true, img2img: false, inpaint: true, negative_prompt: false },
+        allowInpaint: true,
+      },
+    });
+  });
+
+  it("passes submitted image capability values through to the model write", async () => {
+    const calls: string[] = [];
+    const customId = buildProvidersCustomId("model-submit", "en-US", "endpoint", 73, "image", 0, "abcdefgh");
+    const interaction = {
+      id: "interaction",
+      customId,
+      guildId: "123",
+      user: { id: "456" },
+      memberPermissions: { has: () => true },
+      fields: { getTextInputValue: () => "flux" },
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      isButton: () => false,
+      deferUpdate: async () => calls.push("deferUpdate"),
+      editReply: async () => calls.push("editReply"),
+    };
+    const route = createProvidersInteractionRoute({
+      takeModelFlags: () => [],
+      takeImageSupports: () => ["txt2img", "inpaint"],
+      takeWorkflow: () => undefined,
+      resolveScope: async () => ({
+        ...scope,
+        data: {
+          ...scope.data,
+          entries: [
+            {
+              id: "endpoint:73",
+              kind: "endpoint" as const,
+              displayName: "lighthouse",
+              savedAt: null,
+              connectionIds: [73],
+              connectionDetails: [
+                { connectionId: 73, endpointUrl: "https://comfy.example.com", apiStyle: "comfyui" as const },
+              ],
+              isPreset: false,
+              capabilities: [],
+            },
+          ],
+        },
+      }),
+      operations: {
+        addServerProvider: async () => ({ status: "write-failed" }),
+        addCustomEndpointConnection: async () => ({ status: "write-failed" }),
+        saveProviderModel: async (input) => {
+          calls.push(`write:${input.imageSupportValues?.join("+")}`);
+          return { status: "success", entryId: "endpoint:73", codeName: input.codeName };
+        },
+      },
+    });
+
+    await route.execute({} as Client, interaction as never, parsed(customId));
+
+    expect(calls).toContain("write:txt2img+inpaint");
   });
 
   it("acknowledges selection before loading and performs no write", async () => {

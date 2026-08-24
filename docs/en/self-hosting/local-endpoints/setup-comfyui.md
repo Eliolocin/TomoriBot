@@ -99,6 +99,12 @@ model. Enter the checkpoint's exact code name and **upload the workflow `.json`*
 from Step 2. The model capability must match the workflow (image workflow → `image`, video
 workflow → `video`).
 
+An image model also asks for its **Image Capabilities**: text to image, reference image,
+inpainting, and negative prompt. Tick only the modes your workflow actually implements, because
+Tomori offers the tool only the modes you declare. Inpainting appears for ComfyUI connections
+only, since no other API compatibility accepts a mask. Editing the model later reopens the form
+with your current selection, so changing a code name will not clear it.
+
 Adding the model makes it the active `image`/`video` model automatically. Trigger generation by asking Tomori directly in chat. If it isn't active for some reason, run `/model image` (or `/model video`)
 and select your registered ComfyUI endpoint.
 
