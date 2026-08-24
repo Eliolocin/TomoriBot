@@ -34,6 +34,40 @@ export interface OptimizedImage {
   mimeType: string;
 }
 
+function detectImageMimeType(buffer: Buffer): string | undefined {
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) {
+    return "image/png";
+  }
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (buffer.length >= 6) {
+    const signature = buffer.subarray(0, 6).toString("ascii");
+    if (signature === "GIF87a" || signature === "GIF89a") {
+      return "image/gif";
+    }
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString("ascii") === "RIFF" &&
+    buffer.subarray(8, 12).toString("ascii") === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  if (buffer.length >= 16 && buffer.subarray(4, 8).toString("ascii") === "ftyp") {
+    const brands = buffer.subarray(8, Math.min(buffer.length, 32)).toString("ascii");
+    if (brands.includes("avif") || brands.includes("avis")) {
+      return "image/avif";
+    }
+  }
+  return undefined;
+}
+
+function normalizeMimeType(mimeType: string | undefined): string | undefined {
+  const normalized = mimeType?.split(";", 1)[0]?.trim().toLowerCase();
+  return normalized || undefined;
+}
+
 /**
  * Fetch an image from a URL and conditionally downscale it for LLM context use.
  *
@@ -61,7 +95,13 @@ export async function fetchAndOptimizeImage(url: string, sourceMimeType?: string
 
   const buffer = downloadResult.buffer;
   const rawSize = buffer.byteLength;
-  const finalMimeType = sourceMimeType || downloadResult.contentType || "image/jpeg";
+  // Discord filenames and remote headers can disagree with the payload bytes. Provider APIs use
+  // the data-URI MIME label while decoding, so prefer recognizable file signatures.
+  const finalMimeType =
+    detectImageMimeType(buffer) ??
+    normalizeMimeType(sourceMimeType) ??
+    normalizeMimeType(downloadResult.contentType) ??
+    "image/jpeg";
 
   if (rawSize <= IMAGE_CONTEXT_MAX_BYTES) {
     return { data: buffer.toString("base64"), mimeType: finalMimeType };

@@ -33,6 +33,7 @@ import {
 } from "../../utils/cache/openrouterCapabilityCache";
 import { buildProviderStopStrings } from "../utils/stopStrings";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
+import { inlineToolResponseImage } from "@/providers/utils/toolImageContent";
 import { buildOpenrouterProviderRouting } from "./providerRouting";
 import { buildOpenRouterReasoningRequest } from "@/utils/provider/thinkingControl";
 import { buildOpenRouterAttributionHeaders } from "@/utils/provider/openrouterAttribution";
@@ -2633,16 +2634,7 @@ export class OpenrouterStreamAdapter extends BaseStreamAdapter {
             if (!seesImages) {
               continue;
             }
-            const sourceUrl = img.originalUrl || img.url;
-
-            responseParts.push({
-              type: "image_url",
-              image_url: {
-                url: sourceUrl,
-                // OpenRouter allows URLs or data URLs; mimeType not required here
-              },
-            });
-            log.info(`OpenrouterStreamAdapter: Added tool image reference for context: ${sourceUrl}`);
+            responseParts.push(await inlineToolResponseImage(img, "OpenrouterStreamAdapter"));
           }
         }
 

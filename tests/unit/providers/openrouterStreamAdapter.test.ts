@@ -360,6 +360,55 @@ describe("OpenrouterStreamAdapter tool history", () => {
     expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"]);
     expect(String(messages[1]?.content)).toContain("Fetched page content");
   });
+
+  it("replays a tool-returned image as inline data", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (input, init) => {
+      if (String(input).startsWith("data:")) {
+        return await originalFetch(input, init);
+      }
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeSseResponse(["[DONE]"]);
+    }) as typeof fetch;
+
+    const pngBytes = Buffer.from("89504e470d0a1a0a00000000", "hex");
+    const context = makeStreamContext();
+    context.functionInteractionHistory = [
+      {
+        functionCall: { name: "web_search", args: { query: "birds" } },
+        functionResponse: {
+          functionResponse: { name: "web_search", response: { result: "sent" } },
+        },
+        imageMetadata: {
+          imageUrls: [
+            {
+              url: `data:image/jpeg;base64,${pngBytes.toString("base64")}`,
+              mimeType: "image/jpeg",
+              originalUrl: "https://media.discordapp.net/proxy-image.jpg",
+            },
+          ],
+          totalSent: 1,
+          totalValidated: 1,
+        },
+      },
+    ];
+    const config = { ...makeStreamConfig(), seesImages: true };
+
+    for await (const _chunk of new OpenrouterStreamAdapter().startStream(config, context)) {
+      // Drain the stream so the request body is fully assembled and processed.
+    }
+
+    const messages = requestBody?.messages as Array<Record<string, unknown>>;
+    expect(messages[2]).toEqual({
+      role: "user",
+      content: [
+        {
+          type: "image_url",
+          image_url: { url: `data:image/png;base64,${pngBytes.toString("base64")}` },
+        },
+      ],
+    });
+  });
 });
 
 describe("OpenrouterStreamAdapter parameter degradation", () => {
