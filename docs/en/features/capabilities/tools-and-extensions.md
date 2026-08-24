@@ -83,7 +83,7 @@ routes each call through an engine chain and returns the first success:
 **Brave → SearXNG → DuckDuckGo → IAsk**
 
 - **Brave** runs first when a Brave API key is configured (set it with
-  `/optional-key brave set`); it adds image, video, and news search. ⚠️ Set a $5 usage limit
+  `/providers`); it adds image, video, and news search. ⚠️ Set a $5 usage limit
   in the Brave dashboard to avoid surprise charges.
 - **DuckDuckGo** is the default when no key is set, cascading to **IAsk** on rate limits or empty results.
 - **SearXNG** and **Crawl4AI** are optional self-hosted sidecars that unlock more categories

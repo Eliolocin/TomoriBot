@@ -1,9 +1,4 @@
-import type {
-  PersonalProviderCapability,
-  SavedProviderConfigRow,
-  SavedProviderConfigUpsert,
-  TomoriState,
-} from "@/types/db/schema";
+import type { SavedProviderConfigRow, SavedProviderConfigUpsert, TomoriState } from "@/types/db/schema";
 import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { configRepository, llmModelRepo, llmProviderRepo } from "@/utils/db/repositories";
 import { isCustomProvider } from "@/utils/provider/customProviderUtils";
@@ -17,8 +12,6 @@ export interface ActivationResult {
   status: ActivationStatus;
   modelName?: string;
 }
-
-export type OpenRouterActivationCapability = "text" | "embedding" | "image" | "video";
 
 type ServerSavedProviderConfig = SavedProviderConfigRow | SavedProviderConfigUpsert;
 
@@ -89,43 +82,6 @@ export async function activateServerTextModelFromSavedConfig(params: {
   return { status: "activated", modelName: selectedModel.llm_codename };
 }
 
-export async function activateServerOpenRouterModelForCapability(params: {
-  serverId: number;
-  serverDiscId: string;
-  tomoriState: TomoriState;
-  capability: OpenRouterActivationCapability;
-  modelId: number;
-  modelName: string;
-}): Promise<ActivationResult> {
-  const openRouterConfig = await llmProviderRepo.loadSavedProviderConfig(params.serverId, "openrouter");
-  if (!openRouterConfig) {
-    return { status: "missing_provider" };
-  }
-
-  if (params.capability === "text") {
-    return await activateServerTextModelFromSavedConfig({
-      serverDiscId: params.serverDiscId,
-      tomoriState: params.tomoriState,
-      savedConfig: openRouterConfig,
-      llmId: params.modelId,
-    });
-  }
-
-  const updated =
-    params.capability === "embedding"
-      ? await configRepository.updateModelConfig(params.serverId, { embedding_model_id: params.modelId })
-      : params.capability === "image"
-        ? await configRepository.updateModelConfig(params.serverId, { diffusion_model_id: params.modelId })
-        : await configRepository.updateModelConfig(params.serverId, { video_model_id: params.modelId });
-
-  if (!updated) {
-    return { status: "update_failed" };
-  }
-
-  invalidateTomoriStateCache(params.serverDiscId);
-  return { status: "activated", modelName: params.modelName };
-}
-
 export async function activatePersonalProviderTextModel(params: {
   userId: number;
   provider: string;
@@ -148,32 +104,4 @@ export async function activatePersonalProviderTextModel(params: {
   );
 
   return updated ? { status: "activated", modelName: selectedModel.llm_codename } : { status: "update_failed" };
-}
-
-export async function activatePersonalOpenRouterModelForCapability(params: {
-  userId: number;
-  capability: OpenRouterActivationCapability;
-  modelId: number;
-  modelName: string;
-}): Promise<ActivationResult> {
-  const openRouterConfig = await llmProviderRepo.loadUserSavedProviderConfig(params.userId, "openrouter");
-  if (!openRouterConfig) {
-    return { status: "missing_provider" };
-  }
-
-  const capability = params.capability as PersonalProviderCapability;
-  const updated = await assignPersonalCapabilityToProvider(params.userId, "openrouter", capability, (row) => {
-    switch (params.capability) {
-      case "text":
-        return withPersonalTextPrimary(row, params.modelId);
-      case "embedding":
-        return { ...row, embedding_model_id: params.modelId };
-      case "image":
-        return { ...row, diffusion_model_id: params.modelId };
-      case "video":
-        return { ...row, video_model_id: params.modelId };
-    }
-  });
-
-  return updated ? { status: "activated", modelName: params.modelName } : { status: "update_failed" };
 }

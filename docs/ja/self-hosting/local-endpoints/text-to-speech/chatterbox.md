@@ -34,13 +34,12 @@ TomoriBotがChatterboxを使用している間は、そのターミナルを開�
 
 ## TomoriBotへの登録
 
-`/provider custom-endpoint add`を実行します。
+`/providers`で **Add New Custom Endpoint** を選びます。
 
-- `capability`: `speech`
-- `api_style`: `tts-clone`
+- API Compatibility: `tts-clone`
 - `endpoint_url`: `http://127.0.0.1:8011`
 
-モーダルで以下を設定します。
+保存したエンドポイントを選択し、**Add or Edit a Model** で新しい音声モデルに以下を設定します。
 
 - `Voice Source Mode`: `Clone`
 - `Script Markup Style`: `Bracket Tags`

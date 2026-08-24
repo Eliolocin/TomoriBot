@@ -23,6 +23,9 @@ type ToolExportShape = {
 };
 
 export type McpToolSnapshotUpdateResult = "updated" | "unchanged" | "not-found" | "failed";
+export type BraveApiKeyStatusReadResult =
+  | { status: "fresh"; configured: boolean }
+  | { status: "unavailable"; configured: false };
 
 class ToolRepository implements IRepository<ToolExportShape> {
   async loadMcpServers(serverId: number): Promise<GuildMcpServerRow[]> {
@@ -50,7 +53,25 @@ class ToolRepository implements IRepository<ToolExportShape> {
    *
    */
   async getBraveApiKeyStatus(serverId: number): Promise<boolean> {
-    return this.sqlGetBraveApiKeyStatus(serverId);
+    return (await this.getBraveApiKeyStatusResult(serverId)).configured;
+  }
+
+  /**
+   * Reads Brave configuration without collapsing a database failure into an unconfigured state.
+   */
+  async getBraveApiKeyStatusResult(serverId: number): Promise<BraveApiKeyStatusReadResult> {
+    try {
+      const rows = await sql`
+        SELECT api_key FROM opt_api_keys
+        WHERE server_id = ${serverId}
+          AND service_name = 'brave-search'
+        LIMIT 1
+      `;
+      return { status: "fresh", configured: rows.length > 0 && rows[0]?.api_key != null };
+    } catch (error) {
+      log.error(`Error checking Brave API key status for server ${serverId}:`, error);
+      return { status: "unavailable", configured: false };
+    }
   }
 
   /**
@@ -398,21 +419,6 @@ class ToolRepository implements IRepository<ToolExportShape> {
     } catch (error) {
       log.error(`[GuildMcpDb] Failed to decrypt auth token for MCP server "${row.name}"`, error);
       return null;
-    }
-  }
-
-  private async sqlGetBraveApiKeyStatus(serverId: number): Promise<boolean> {
-    try {
-      const result = await sql`
-        SELECT api_key FROM opt_api_keys
-        WHERE server_id = ${serverId}
-        AND service_name = 'brave-search'
-        LIMIT 1
-      `;
-      return result && result.length > 0;
-    } catch (error) {
-      log.error(`Error checking Brave API key status for server ${serverId}:`, error);
-      return false;
     }
   }
 

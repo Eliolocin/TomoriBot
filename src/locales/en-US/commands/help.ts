@@ -62,12 +62,12 @@
       setup_field: `Setup`,
       setup_value: `1. {add_command} saves a provider and immediately enables your personal **Text** model.
 2. {model_command} is optional. Use it only if you want a different text model than the default from step 1.
-3. {toggle_command} turns each capability's personal override on or off.`,
+3. Return to {toggle_command} to update credentials, endpoints, or model registrations.`,
       behavior_field: `Behavior`,
-      behavior_value: `An enabled capability overrides the server default for your requests only, across every server where you use TomoriBot. Selecting a model already enables that capability, so step 3 is mainly how you turn one back off. Thought logs attribute those turns, and you can tune them with {samplers_command} and {fallback_command}.`,
+      behavior_value: `An enabled capability overrides the server default for your requests only, across every server where you use TomoriBot. Selecting a model enables that capability. Thought logs attribute those turns, and you can tune them with {samplers_command} and {fallback_command}.`,
       byok_field: `BYOK Servers`,
       byok_value: `Servers can require member-provided providers with {byok_command}. If that mode is enabled, user-triggered messages need your personal provider before I can answer.`,
-      footer: `Server defaults live in /provider and /model. Personal overrides affect only your requests, in every server you use TomoriBot in.`,
+      footer: `Server credentials live in /providers and routing lives in /model. Personal overrides affect only your requests, in every server you use TomoriBot in.`,
     },
     custom_models: {
       description: `Learn how custom endpoints work.`,
@@ -77,16 +77,16 @@
       title: `Custom Endpoints`,
       description_body: `Custom endpoints let you register self-hosted or proxy-backed endpoints such as Ollama, LM Studio, LiteLLM, or ComfyUI as labeled provider bundles.`,
       server_field: `Server Scope`,
-      server_value: `Use {add_command} to register a server-wide endpoint and {remove_command} to remove selected capabilities from that label.`,
+      server_value: `Open {add_command}, choose **Add New Custom Endpoint**, and select the saved entry when you need to edit or remove it.`,
       personal_field: `Personal Scope`,
-      personal_value: `Use {add_command} to register your own labeled endpoint and {remove_command} to remove selected capabilities from it.`,
+      personal_value: `Open {add_command}, choose **Add New Custom Endpoint**, and select the saved entry when you need to edit or remove it.`,
       selection_field: `Selecting Them`,
-      selection_value: `After registration, choose the label from {text_command}, {image_command}, or {video_command}; if the label has several models for that capability, a picker lets you choose one. Vision-capable text endpoints also appear in \`/model vision\`. Re-run the add command with the same label and capability but a different model name to register an additional model on that connection (its endpoint URL and API style are inherited).`,
+      selection_value: `After saving a connection, select it and use **Add or Edit a Model** to register its exact model code. Adding a model activates it. Later, choose the label from {text_command}, {image_command}, or {video_command}; if the label has several models for that capability, a picker lets you choose one. Vision-capable text endpoints also appear in \`/model vision\`.`,
       selection_summary_value: `After registration, choose the label from {text_command}, {image_command}, or {video_command}. If that label has several models for the same capability, TomoriBot will ask which one to use.`,
       labels_field: `Labels And Removal`,
-      labels_value: `A label groups every capability under one custom provider bundle. {server_remove_command} and {personal_remove_command} remove only the capabilities you uncheck. {server_provider_remove_command} and {personal_provider_remove_command} delete the whole labeled bundle.`,
+      labels_value: `A label groups every capability under one custom provider bundle. Select the entry in {server_remove_command} or {personal_remove_command}, then choose **Remove** to review the impact and delete the whole labeled bundle.`,
       comfyui_page1_title: `ComfyUI Setup`,
-      comfyui_page1_description: `This guide assumes ComfyUI is already installed and running. Page 1 covers the minimum setup to reach a working \`/provider custom-endpoint add\` or \`/personal custom-endpoint add\` registration. You may also use the ready-to-use [ComfyUI workflows](https://github.com/Bredrumb/TomoriBot/tree/main/assets/comfyui-workflows) from the GitHub repository instead.`,
+      comfyui_page1_description: `This guide assumes ComfyUI is already installed and running. Page 1 covers the minimum setup to reach a working \`/providers\` or \`/personal providers\` registration. You may also use the ready-to-use [ComfyUI workflows](https://github.com/Bredrumb/TomoriBot/tree/main/assets/comfyui-workflows) from the GitHub repository instead.`,
       comfyui_page1_workflow_field: `1. Build The Workflow`,
       comfyui_page1_workflow_value: `Create and test the workflow in ComfyUI first. For images, the MVP should end in \`SaveImage\` so TomoriBot can download the finished file. A minimal image graph is usually: \`CheckpointLoaderSimple\` -> positive/negative \`CLIPTextEncode\` -> \`EmptyLatentImage\` -> \`KSampler\` -> \`VAEDecode\` -> \`SaveImage\`.`,
       comfyui_page1_placeholders_field: `2. Add Placeholders`,
@@ -94,7 +94,7 @@
       comfyui_page1_export_field: `3. Export And Edit The JSON`,
       comfyui_page1_export_value: `When the workflow works in ComfyUI, use Save (API Format). If you need numeric or boolean placeholders, edit the exported JSON before uploading and use them as the full value, for example \`"width": "{TOMORI_WIDTH}"\`, \`"height": "{TOMORI_HEIGHT}"\`, or \`"duration": "{TOMORI_VIDEO_DURATION}"\`.`,
       comfyui_page1_register_field: `4. Register And Activate`,
-      comfyui_page1_register_value: `Run {server_add_command} for a server-wide endpoint or {personal_add_command} for your own. Use your ComfyUI server URL for \`endpoint_url\` (for example \`http://127.0.0.1:8188\`), pick \`ComfyUI\` as \`api_style\`, choose \`Image\` or \`Video\` as the capability, then upload the exported JSON in the **Workflow JSON** file field that appears in the follow-up modal. Select the registered label from {image_command} or {video_command} to activate it.`,
+      comfyui_page1_register_value: `Open {server_add_command} for a server-wide endpoint or {personal_add_command} for your own. Choose **Add New Custom Endpoint**, use your ComfyUI server URL (for example \`http://127.0.0.1:8188\`), and choose \`ComfyUI\` for API Compatibility. Then select the saved endpoint, choose **Add or Edit a Model**, select \`Image\` or \`Video\`, enter the checkpoint code, and upload the exported JSON. Adding the model activates it.`,
       comfyui_page2_title: `ComfyUI Placeholders`,
       comfyui_page2_description: `Page 2 lists the main placeholders TomoriBot injects into ComfyUI workflows.`,
       comfyui_page2_core_field: `Core Values`,
@@ -121,7 +121,7 @@
       comfyui_page4_metadata_value: `TomoriBot also sends resolved values in \`extra_pnginfo\`, including prompt, model, mode, aspect ratio, width, height, size, reference-image count, and video-specific duration/resolution/audio fields. That is useful if you prefer a custom ComfyUI node that reads execution metadata instead of JSON placeholders.`,
       comfyui_summary_description: `ComfyUI custom endpoints let TomoriBot queue your saved image or video workflow and return the first saved output. The full setup guide covers workflow export, placeholders, reference images, polling, and output rules.`,
       comfyui_summary_register_field: `Register And Activate`,
-      comfyui_summary_register_value: `Register the endpoint with {server_add_command} or {personal_add_command}, then select its label from {image_command} or {video_command}. Use the docs button for the full ComfyUI workflow setup.`,
+      comfyui_summary_register_value: `Register the connection and its model with {server_add_command} or {personal_add_command}, then select its label from {image_command} or {video_command}. Use the docs button for the full ComfyUI workflow setup.`,
     },
     speech: {
       description: `Learn how speech generation works.`,
@@ -129,14 +129,14 @@
       docs_title: `Full Docs`,
       docs_description: `See the [TTS docs](https://docs.tomoribot.app/en/features/capabilities/media-generation/tts-and-stt/#text-to-speech) and [local TTS setup guides](https://docs.tomoribot.app/en/self-hosting/local-endpoints/text-to-speech/) for setup commands and wrapper notes.`,
       summary_title: `Using Speech`,
-      summary_description: `For local voice cloning, register a speech endpoint with {custom_endpoint_add}, pick it with {model_speech}, upload a sample with {voice_add}, then assign it with {voice_assign}. For ElevenLabs, run {elevenlabs}. VoiceDesign setups use {voice_design_set}.`,
+      summary_description: `For local voice cloning, register a speech connection and model with {custom_endpoint_add}, pick it with {model_speech}, upload a sample with {voice_add}, then assign it with {voice_assign}. For ElevenLabs, choose **Add New Provider** in {elevenlabs}. VoiceDesign setups use {voice_design_set}.`,
       overview: {
         title: `Speech Setup Overview`,
         description: `Speech endpoints let TomoriBot send native Discord voice messages using either a local clone server or ElevenLabs. For local voice cloning, any audio format is accepted (auto-converted to mono WAV). It is recommended to use 10-20 second clips with no background music.`,
         steps_title: `Setup Flow`,
         steps_description: `Local: start a wrapper server, register it with {custom_endpoint_add}, select it with {model_speech}, upload a sample with {voice_add}, then assign it with {voice_assign}.
 
-ElevenLabs: run {elevenlabs}, then use {voice_assign} later for more personas.
+ElevenLabs: choose **Add New Provider** and **ElevenLabs** in {elevenlabs}, then use {voice_assign} later for more personas.
 
 **Per-engine setup guides:** See the full TTS documentation linked at the bottom of the Speech page.`,
       },
@@ -151,7 +151,7 @@ ElevenLabs: run {elevenlabs}, then use {voice_assign} later for more personas.
 3. Install numpy first (build dep): \`pip install numpy\`, then install \`requirements.txt\`.
 4. *(GPU only)* Reinstall PyTorch: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
 5. Start \`server.py\`.
-6. Register with {custom_endpoint_add}: select \`Speech\` for capability, \`TTS-Clone\` for API Style, and \`Bracket Tags\` for Script Markup.
+6. Register with {custom_endpoint_add}: choose \`TTS-Clone\` for API Compatibility. Then select the saved endpoint, add a new speech model, and choose \`Bracket Tags\` for Script Markup.
 7. Select with {model_speech}, then run {voice_add} and {voice_assign}.`,
       },
       qwen3tts: {
@@ -169,7 +169,7 @@ ElevenLabs: run {elevenlabs}, then use {voice_assign} later for more personas.
 4. *(GPU)* Reinstall PyTorch: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
 5. *(Optional)* Install flash-attn for speed: requires step 4, \`pip install wheel\`, then \`pip install flash-attn --no-build-isolation\` (takes 20-40m on Win). Skip initially.
 6. Start \`server.py\` for voice cloning, \`server.py --mode voice-design\` for Qwen3-TTS VoiceDesign only, or \`server.py --mode auto\` to detect clone vs VoiceDesign from each request on one URL.
-7. Register with {custom_endpoint_add}: select \`Speech\` capability, \`TTS-Clone\` API Style, and \`Plain\` Script Markup. For VoiceDesign, choose \`VoiceDesign\` as the voice source mode; TomoriBot treats it as instruct-capable automatically. In auto mode, you can register clone and VoiceDesign endpoints that point to the same server URL.
+7. Register with {custom_endpoint_add}: choose \`TTS-Clone\` for API Compatibility. Then select the saved endpoint, add a new speech model, and choose \`Plain\` Script Markup. For VoiceDesign, choose \`VoiceDesign\` as the voice source mode; TomoriBot treats it as instruct-capable automatically. In auto mode, you can register clone and VoiceDesign endpoints that point to the same server URL.
 8. Select with {model_speech}. For clone mode, run {voice_add} and {voice_assign}; for VoiceDesign, run {voice_design_set} for each persona.`,
       },
       irodoritts: {
@@ -186,14 +186,14 @@ Windows: \`install-irodori.ps1\`
 Linux/macOS: \`bash install-irodori.sh\`
 5. *(GPU only)* Reinstall PyTorch: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
 6. Start \`server.py\`.
-7. Register with {custom_endpoint_add}: select \`Speech\` for capability, \`TTS-Clone\` for API Style, and \`Emoji Markers\` for Script Markup.
+7. Register with {custom_endpoint_add}: choose \`TTS-Clone\` for API Compatibility. Then select the saved endpoint, add a new speech model, and choose \`Emoji Markers\` for Script Markup.
 8. Select with {model_speech}, then run {voice_add} and {voice_assign}.`,
       },
       elevenlabs: {
         title: `ElevenLabs Speech`,
-        description: `ElevenLabs uses the same speech endpoint system, but setup is handled by a shortcut command.`,
+        description: `ElevenLabs uses the same endpoint system and is available as a preset provider entry.`,
         steps_title: `Setup Steps`,
-        steps_description: `Run {elevenlabs} with your ElevenLabs API key. It registers speech and transcription endpoints and selects them. Then use {voice_assign} to assign a voice to each persona.`,
+        steps_description: `Open {elevenlabs}, choose **Add New Provider**, select **ElevenLabs**, and submit your API key. It registers speech and transcription endpoints and selects them. Then use {voice_assign} to assign a voice to each persona.`,
       },
     },
     transcription: {
@@ -202,12 +202,12 @@ Linux/macOS: \`bash install-irodori.sh\`
       docs_title: `Full Docs`,
       docs_description: `See the [STT docs](https://docs.tomoribot.app/en/features/capabilities/media-generation/tts-and-stt/#speech-to-text) and [local STT setup guides](https://docs.tomoribot.app/en/self-hosting/local-endpoints/speech-to-text/).`,
       summary_title: `Using Transcription`,
-      summary_description: `Register a transcription endpoint with {custom_endpoint_add}, choose it with {model_transcription}, and use {speech_transcripts} only if you want transcripts visibly posted. ElevenLabs users can run {elevenlabs}.`,
+      summary_description: `Register a transcription connection and model with {custom_endpoint_add}, choose it with {model_transcription}, and use {speech_transcripts} only if you want transcripts visibly posted. ElevenLabs users can choose **Add New Provider** in {elevenlabs}.`,
       overview: {
         title: `Transcription Setup Overview`,
         description: `Transcription endpoints turn user audio attachments into text for background conversation context. Visible transcript posting is controlled separately by {speech_transcripts}.`,
         steps_title: `Recommended Path`,
-        steps_description: `Start with WhisperX: follow the local STT setup guide, register it with {custom_endpoint_add}, then select it with {model_transcription}. ElevenLabs users can run {elevenlabs}.
+        steps_description: `Start with WhisperX: follow the local STT setup guide, register its connection and model with {custom_endpoint_add}, then select it with {model_transcription}. ElevenLabs users can choose **Add New Provider** in {elevenlabs}.
 
 **Per-engine setup guides:** See the full STT documentation linked at the bottom of the Transcription page.`,
       },
@@ -226,7 +226,7 @@ Linux/macOS: \`bash install-irodori.sh\`
 4. *(GPU only)* Reinstall PyTorch with CUDA support:
 \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
 5. Start \`whisperx_server.py\`.
-6. Register with {custom_endpoint_add}: select \`Transcription\` for capability, \`OpenAI Compatible\` for API Style, and set the model name matching your chosen size.
+6. Register with {custom_endpoint_add}: choose \`OpenAI Compatible Transcription\` for API Compatibility. Then select the saved endpoint and add a new transcription model whose name matches your chosen size.
 7. Select with {model_transcription}.`,
         models_title: `Available Models`,
         models_description: `Set \`WHISPERX_MODEL\` before starting, use the same name when registering.
@@ -249,9 +249,9 @@ Transcription supports ~100 languages (auto-detected).`,
       },
       elevenlabs: {
         title: `ElevenLabs Transcription`,
-        description: `ElevenLabs transcription is registered automatically by the speech shortcut.`,
+        description: `ElevenLabs transcription is registered automatically by its preset provider flow.`,
         steps_title: `Setup Steps`,
-        steps_description: `Run {elevenlabs}. It registers both speech and transcription endpoints and selects them. Use {speech_transcripts} only if you want transcripts visibly posted in chat.`,
+        steps_description: `Choose **Add New Provider** and **ElevenLabs** in {elevenlabs}. It registers both speech and transcription endpoints and selects them. Use {speech_transcripts} only if you want transcripts visibly posted in chat.`,
       },
     },
     "custom-endpoint": {
@@ -275,7 +275,7 @@ Transcription supports ~100 languages (auto-detected).`,
 - I can see content within shared embeds (like tweets, articles, etc.)`,
       search_title: `Search & Information`,
       search_description: `- I can search the web for current information
-- I can also do image, video, and news search (via \`/optional-key brave set\`)
+- I can also do image, video, and news search (via \`/providers\`)
 - I can fetch and read content from URLs`,
       personality_title: `Personality & Customization`,
       personality_description: `- I can change my name and avatar using \`/persona rename\` and \`/persona avatar\`

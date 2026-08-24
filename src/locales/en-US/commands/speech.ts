@@ -93,7 +93,7 @@ Reference text: {ref_text_hint}`,
     voice_assign: {
       description: `Assign a speech voice to a persona.`,
       no_speech_endpoint_title: `No Speech Endpoint`,
-      no_speech_endpoint_description: `Register a speech endpoint first with \`/provider custom-endpoint add\`.`,
+      no_speech_endpoint_description: `Register a speech endpoint first with \`/providers\`.`,
       no_sample_title: `No Voice Samples`,
       no_sample_description: `Add a local voice sample first with \`/speech voice-add\`.`,
       select_persona_title: `Select Persona Voice Target`,

@@ -17,13 +17,12 @@ TomoriBotが使用している間は、KoboldCPPを実行したままにして�
 
 ## TomoriBotへの登録
 
-`/provider custom-endpoint add`を実行します。
+`/providers`で **Add New Custom Endpoint** を選びます。
 
-- `capability`: `transcription`
-- `api_style`: `openai-compatible-transcription`
+- API Compatibility: `openai-compatible-transcription`
 - `endpoint_url`: KoboldCPPサーバーのルートURL
 
-モーダルで以下を設定します。
+保存したエンドポイントを選択し、**Add or Edit a Model** で新しい文字起こしモデルに以下を設定します。
 
 - `Transcription Model`: サーバーが報告するモデル名
 - `Transcription Language`: 任意の言語ヒント（例: `en`や`ja`）

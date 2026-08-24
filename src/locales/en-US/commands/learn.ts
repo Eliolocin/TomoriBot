@@ -28,7 +28,7 @@ export default {
       no_embedding_model_title: `No Embedding Model Set`,
       no_embedding_model_description: `An embedding model is not configured. Please set one using \`/model embedding\`.`,
       no_api_key_title: `No API Key Set`,
-      no_api_key_description: `Saved embedding provider credentials are required to extract and embed history. Please use \`/provider add\`.`,
+      no_api_key_description: `Saved embedding provider credentials are required to extract and embed history. Please use \`/providers\`.`,
       invalid_start_id_title: `Invalid Start Message ID`,
       invalid_start_id_description: `Could not find a message with ID \`{start_message_id}\` in this channel. Verify the ID is correct and from this channel (right-click a message → Copy Message ID).`,
       invalid_end_id_title: `Invalid End Message ID`,

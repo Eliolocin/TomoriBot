@@ -151,7 +151,7 @@ export class StreamErrorUi {
         tipKeys: [
           "genai.tips.openrouter_privacy_settings",
           scoped("genai.tips.choose_supported_model"),
-          ...(isOpenRouter ? ["genai.tips.openrouter_models"] : []),
+          ...(isOpenRouter ? [scoped("genai.tips.openrouter_models")] : []),
         ],
         color: ColorCode.ERROR,
       };
@@ -174,7 +174,7 @@ export class StreamErrorUi {
         titleKey: "genai.stream.model_error_title",
         tipKeys: [
           scoped("genai.tips.choose_supported_model"),
-          ...(isOpenRouter ? ["genai.tips.openrouter_models"] : []),
+          ...(isOpenRouter ? [scoped("genai.tips.openrouter_models")] : []),
           ...disableOverrideTip,
         ],
         color: ColorCode.ERROR,
@@ -242,7 +242,7 @@ export class StreamErrorUi {
             // Rotation pools are a server-scoped, manager-only feature; a personal key has none.
             ...(isPersonal ? [] : ["genai.tips.api_key_rotation"]),
             ...modelFallbackTip,
-            ...(isOpenRouter ? ["genai.tips.openrouter_free_models"] : []),
+            ...(isOpenRouter ? [scoped("genai.tips.openrouter_free_models")] : []),
             ...(isOpenRouter && providerError.message.includes("free-models-per-day")
               ? ["genai.tips.openrouter_fund_account"]
               : []),
@@ -286,7 +286,7 @@ export class StreamErrorUi {
               : []),
             scoped("genai.tips.verify_api_key"),
             scoped("genai.tips.switch_model_provider"),
-            ...(isOpenRouter ? ["genai.tips.openrouter_models"] : []),
+            ...(isOpenRouter ? [scoped("genai.tips.openrouter_models")] : []),
             ...disableOverrideTip,
           ],
           color: providerError.retryable ? ColorCode.WARN : ColorCode.ERROR,

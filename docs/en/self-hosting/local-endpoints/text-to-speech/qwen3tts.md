@@ -41,18 +41,14 @@ Auto mode inspects each `/synthesize` request: requests with `ref_audio` use the
 
 For most users, register the auto-mode server so one endpoint can support both voice-clone and VoiceDesign personas.
 
-Run `/provider custom-endpoint add`:
+Run `/providers`, choose **Add New Custom Endpoint**, and use the speech API compatibility:
 
-- `capability`: `speech`
-- `api_style`: `tts-clone`
+- API Compatibility: `tts-clone`
 - `endpoint_url`: `http://127.0.0.1:8012`
 
-In the modal:
+After saving the connection, select it, choose **Add or Edit a Model**, and add a Speech model.
 
-- `Voice Source Mode`: `Auto`
-- `Script Markup Style`: `Plain`
-
-Registration makes the endpoint active immediately. Use `/model speech` later only when switching between speech endpoints.
+Adding the model makes the endpoint active immediately. Use `/model speech` later only when switching between speech endpoints.
 
 ## Set Up Persona Voices
 

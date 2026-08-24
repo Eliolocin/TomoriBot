@@ -18,7 +18,7 @@ and follow the self-hosting guides.
 ### ElevenLabs (cloud, easiest)
 
 1. Get an API key from [ElevenLabs](https://elevenlabs.io/app/settings/api-keys).
-2. Run `/speech elevenlabs` and paste the key. This single command:
+2. Run `/providers`, choose **Add New Provider**, select **ElevenLabs**, and paste the key. This flow:
    - registers the ElevenLabs **speech** endpoint (and the **transcription** endpoint too),
    - selects them as active,
    - can assign a voice to one persona on the spot.
@@ -26,7 +26,7 @@ and follow the self-hosting guides.
    [ElevenLabs Voice Library](https://elevenlabs.io/app/voice-library), where you can also
    clone your own.
 
-Run `/speech elevenlabs` again anytime to update the saved key.
+Select ElevenLabs in `/providers`, then choose **Edit Endpoint** anytime you need to update the key.
 
 Notes:
 
@@ -42,7 +42,7 @@ In `/help`, choose **Features**, then **Speech**, for the same walkthrough in Di
 ### Local voice-cloning engines (self-hosted)
 
 On a self-hosted instance you can run a local voice-clone server instead. The general flow is:
-start the wrapper server, register it with `/provider custom-endpoint add`, select it with
+start the wrapper server, register its connection and model with `/providers`, select it with
 `/model speech`, upload a sample with `/speech voice-add`, then assign it with
 `/speech voice-assign`. Any audio format is accepted (auto-converted to mono WAV); 10–20
 second clips with no background music work best.
@@ -66,7 +66,7 @@ context. Whether transcripts are **visibly posted** in chat is controlled separa
 
 ### ElevenLabs (cloud)
 
-Already covered above — `/speech elevenlabs` registers the transcription endpoint alongside
+Already covered above — adding ElevenLabs from `/providers` registers the transcription endpoint alongside
 speech. Use `/model transcription` to pick between transcription endpoints.
 
 ### Local engines (self-hosted)

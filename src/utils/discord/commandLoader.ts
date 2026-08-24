@@ -117,19 +117,7 @@ const GUILD_ONLY_CATEGORIES: string[] = [
   "quota",
 ];
 // Categories that require manage permissions in guild context
-const MANAGER_ONLY_CATEGORIES = [
-  "config",
-  "model",
-  "provider",
-  "capabilities",
-  "nsfw",
-  "openrouter",
-  "optional-key",
-  "server",
-  "expressions",
-  "matrix",
-  "quota",
-];
+const MANAGER_ONLY_CATEGORIES = ["config", "model", "capabilities", "nsfw", "server", "expressions", "matrix", "quota"];
 
 const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
   "commands.memory.description": "commands.teach.memory.description",
@@ -747,6 +735,7 @@ async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
       if (categoryExecutionMap && categoryExecutionMap.size === 0) {
         builders.delete(categoryName);
         executionMap.delete(categoryName);
+        autocompleteMap.delete(categoryName);
         log.info(`Skipped top-level command /${categoryName} because it has no enabled subcommands`);
       }
     }

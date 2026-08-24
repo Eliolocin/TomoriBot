@@ -101,7 +101,7 @@
       no_embedding_model_title: `埋め込みモデルが設定されていません`,
       no_embedding_model_description: `このプロバイダーには埋め込みモデルが設定されていません。\`/model embedding\`で設定してください。`,
       no_api_key_title: `APIキーがありません`,
-      no_api_key_description: `文書を埋め込むには保存済みの埋め込みプロバイダー認証情報が必要です。\`/provider add\` を使用してください。`,
+      no_api_key_description: `文書を埋め込むには保存済みの埋め込みプロバイダー認証情報が必要です。\`/providers\` を使用してください。`,
       invalid_name_title: `無効な文書名`,
       invalid_name_description: `有効な文書名を入力してください（1〜64文字）。`,
       duplicate_title: `文書名が既に存在します`,

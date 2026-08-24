@@ -85,21 +85,21 @@ README and the **Custom Endpoints** page under **Providers** in `/help`.
 
 ## 3. Register it in Discord
 
-Run **`/provider custom-endpoint add`** (or `/personal custom-endpoint add`) with:
+Run **`/providers`** (or `/personal providers`), choose **Add New Custom Endpoint**, and enter:
 
 | Field | Value for ComfyUI |
 |-------|-------------------|
 | `endpoint_label` | A name you choose, e.g. `home-comfy` |
-| `capability` | `image` (or `video`) |
-| `api_style` | `ComfyUI` |
+| API Compatibility | `ComfyUI` |
 | `endpoint_url` | `http://127.0.0.1:8188` (root, **no** `/v1`) |
 | `auth_token` | *(leave blank unless your ComfyUI is behind auth)* |
 
-In the modal that follows, **upload the workflow `.json`** you downloaded from Step 2 and select the support modes that
-match how you want it used (`txt2img` / `img2img` / `inpaint` for images). The capability you
-chose must match the workflow (image workflow → `image`, video workflow → `video`).
+After saving the connection, select it, choose **Add or Edit a Model**, and add an Image or Video
+model. Enter the checkpoint's exact code name and **upload the workflow `.json`** you downloaded
+from Step 2. The model capability must match the workflow (image workflow → `image`, video
+workflow → `video`).
 
-Registering it makes it the active `image`/`video` model automatically. Trigger generation by asking Tomori directly in chat. If it isn't active for some reason, run `/model image` (or `/model video`)
+Adding the model makes it the active `image`/`video` model automatically. Trigger generation by asking Tomori directly in chat. If it isn't active for some reason, run `/model image` (or `/model video`)
 and select your registered ComfyUI endpoint.
 
 ## Troubleshooting

@@ -87,7 +87,7 @@ export default {
         success_title: `個人用OpenRouterモデルを追加しました`,
         success_description: `OpenRouterの{capability}モデル \`{model_name}\` を個人用プロバイダー一覧に登録し、現在の個人用{capability}モデルに設定しました。`,
         missing_provider_title: `個人用OpenRouterプロバイダーが保存されていません`,
-        missing_provider_description: `モデルは登録されましたが、個人用OpenRouterの保存済み認証情報がないため有効化できませんでした。先に \`/personal provider add\` でOpenRouterを追加してください。`,
+        missing_provider_description: `モデルは登録されましたが、個人用OpenRouterの保存済み認証情報がないため有効化できませんでした。先に \`/personal providers\` でOpenRouterを追加してください。`,
         already_registered_title: `既に登録されています`,
         already_registered_description: `OpenRouterの{capability}モデル \`{model_name}\` は個人用プロバイダー一覧に既に登録されています。`,
         already_available_title: `最初から利用可能です`,
@@ -135,7 +135,7 @@ export default {
     provider: {
       description: `全サーバーで自分のリクエストに使う個人AIプロバイダーを管理します。`,
       no_saved_title: `個人プロバイダーがありません`,
-      no_saved_description: `保存された個人プロバイダーがまだありません。\`/personal provider add\` で追加してください。`,
+      no_saved_description: `保存された個人プロバイダーがまだありません。\`/personal providers\` で追加してください。`,
       capability_text: `テキスト`,
       capability_embedding: `埋め込み`,
       capability_image: `画像`,
@@ -163,7 +163,7 @@ export default {
         api_key_description: `あなた自身のリクエストにのみ使用するAPIキーです。他の人には使われません。`,
         api_key_placeholder: `APIキーを貼り付け`,
         already_existing_suffix: `保存済み`,
-        custom_deprecated_description: `/personal custom-endpoint add に移動しました。リダイレクト案内を見るときだけ選択してください。`,
+        custom_deprecated_description: `/personal providers に移動しました。リダイレクト案内を見るときだけ選択してください。`,
         custom_moved_title: `カスタムエンドポイントは移動しました`,
         custom_moved_description: `旧来のカスタムエンドポイント用プロバイダーフローは非推奨です。{custom_models_add_command} でエンドポイントを登録し、{model_text_command} で有効化してください。更新後の案内は {help_custom_models_command} を参照してください。`,
         success_title: `個人プロバイダーを保存しました`,
@@ -171,7 +171,7 @@ export default {
 
 {scope_notice}
 
-どの機能で個人上書きを使うかは \`/personal provider toggle-models\` で選択できます。`,
+どの機能で個人上書きを使うかは \`/personal providers\` で選択できます。`,
         updated_description: `{provider} の個人プロバイダー設定を更新し、個人の **テキスト** 上書きを \`{model_name}\` で有効にしました。
 
 {scope_notice}`,
@@ -256,7 +256,7 @@ export default {
       fallback: {
         description: `個人テキスト上書きのフォールバックモデルを設定し、なしで各スロットをクリアできます。`,
         no_provider_title: `有効な個人テキストプロバイダーがありません`,
-        no_provider_description: `先に \`/personal provider add\` または \`/personal provider model-text\` で個人テキスト上書きを有効化してください。`,
+        no_provider_description: `先に \`/personal providers\` または \`/personal provider model-text\` で個人テキスト上書きを有効化してください。`,
         primary_conflict_title: `選択が無効です`,
         primary_conflict_description: `選択したフォールバックモデルの一つ以上が、このプロバイダーの個人プライマリモデル \`{model}\` と一致しています。別のモデルを選択してください。`,
         success_title: `個人フォールバックを更新しました`,

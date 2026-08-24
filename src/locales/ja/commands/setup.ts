@@ -7,7 +7,7 @@ export default {
     api_provider_description: `お好みのLLMのプロバイダーを選択してください`,
     api_provider_placeholder: `選択してください...`,
     api_provider_custom_endpoint_label: `カスタムエンドポイント（セットアップ後に完了）`,
-    api_provider_custom_endpoint_description: `先にセットアップだけを完了し、その後 /provider custom-endpoint add と /model text に進みます。`,
+    api_provider_custom_endpoint_description: `先にセットアップだけを完了し、その後 /providers と /model text に進みます。`,
     api_provider_user_byok_label: `なし（ユーザーBYOK）`,
     api_provider_user_byok_description: `サーバー側のテキストプロバイダーなしで初期化します。メンバーは個人プロバイダーを使う必要があります。`,
     api_key_label: `APIキー`,
@@ -85,6 +85,6 @@ export default {
 {model_text_command} で有効なモデルを割り当てるか、{provider_add_command} で新しいプロバイダーを登録してください。`,
     already_setup_description: `このサーバーでは既に設定が完了しています。設定を変更するには、\`/config\`、\`/persona\`、\`/memory\`、\`/server\`などの他のコマンドを使用してください。
 
-				プロバイダーを変更したい場合は、\`/provider add\`で新しいデフォルトのテキストプロバイダーを登録して有効化してください。`,
+				プロバイダーを変更したい場合は、\`/providers\`で新しいデフォルトのテキストプロバイダーを登録して有効化してください。`,
   },
 };

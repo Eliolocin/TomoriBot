@@ -167,25 +167,25 @@ export function buildOpenSelectorPayload(locale: string, openId: string): Person
 
 /**
  * Terminal notice for the legacy OpenRouter "other-model" sentinel, which was moved to
- * dedicated add/remove commands. The V2 equivalent of `replyLegacyOpenRouterOtherModelMoved`
- * and, like it, points at the command pair that matches the caller's scope.
+ * the provider panel. The V2 equivalent of `replyLegacyOpenRouterOtherModelMoved`
+ * points at the panel that matches the caller's scope.
  */
 export function buildOpenRouterMovedNotice(
   locale: string,
   scopeKind: AnchorModelScopeKind = "server",
 ): PersonaWorkflowComponentsV2Payload {
-  const mention = (action: "add" | "remove"): string =>
+  const providersMention =
     scopeKind === "server"
-      ? commandRegistry.getCommandMention("openrouter", "model", action)
-      : commandRegistry.getCommandMention("personal", "openrouter-model", action);
+      ? commandRegistry.getCommandMention("providers")
+      : commandRegistry.getCommandMention("personal", "providers");
 
   return buildPersonaWorkflowNotice({
     locale,
     titleKey: "general.openrouter_model_moved_title",
     descriptionKey: "general.openrouter_model_moved_description",
     descriptionVars: {
-      add_command: mention("add"),
-      remove_command: mention("remove"),
+      add_command: providersMention,
+      remove_command: providersMention,
     },
     color: ColorCode.ERROR,
   });
@@ -193,7 +193,7 @@ export function buildOpenRouterMovedNotice(
 
 /**
  * The no-saved-providers terminal notice, used as the initial anchor payload.
- * Personal scope points the user at `/personal provider add` instead of the server
+ * Personal scope points the user at `/personal providers` instead of the server
  * setup flow, and treats it as a warning rather than an error.
  */
 export function buildNoProvidersPayload(

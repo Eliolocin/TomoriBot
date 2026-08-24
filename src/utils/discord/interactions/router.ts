@@ -2,6 +2,10 @@ import { MessageFlags, type Client, type Interaction } from "discord.js";
 import { helpInteractionRoute } from "@/utils/discord/interactions/helpRoutes";
 import { mcpsInteractionRoute } from "@/utils/discord/interactions/mcpsRoutes";
 import { moderationInteractionRoute } from "@/utils/discord/interactions/moderationRoutes";
+import {
+  personalProvidersInteractionRoute,
+  providersInteractionRoute,
+} from "@/utils/discord/interactions/providersRoutes";
 import { stPresetsInteractionRoute } from "@/utils/discord/interactions/stPresetsRoutes";
 import { InteractionRouteRegistry, type GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { log } from "@/utils/misc/logger";
@@ -11,6 +15,8 @@ const registry = new InteractionRouteRegistry([
   helpInteractionRoute,
   mcpsInteractionRoute,
   moderationInteractionRoute,
+  personalProvidersInteractionRoute,
+  providersInteractionRoute,
   stPresetsInteractionRoute,
 ]);
 
@@ -34,9 +40,12 @@ export async function dispatchGlobalInteraction(
             ? "commands.moderation.outdated_panel"
             : namespace === "st-presets"
               ? "commands.st-presets.outdated_panel"
-              : "general.errors.outdated_panel";
+              : namespace === "providers" || namespace === "personal-providers"
+                ? "commands.providers.outdated_panel"
+                : "general.errors.outdated_panel";
+      const command = namespace === "personal-providers" ? "/personal providers" : `/${namespace}`;
       await interaction.reply({
-        content: localizer(interaction.locale ?? interaction.guildLocale ?? "en-US", key, { command: `/${namespace}` }),
+        content: localizer(interaction.locale ?? interaction.guildLocale ?? "en-US", key, { command }),
         flags: MessageFlags.Ephemeral,
       });
     }

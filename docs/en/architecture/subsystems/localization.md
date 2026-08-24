@@ -110,7 +110,7 @@ genai: {
   tips: {
     title: "💡 Tip",
     wait_and_retry: "Please wait a few minutes before trying again.",
-    openrouter_models: "Browse the [OpenRouter model list](https://openrouter.ai/models) and switch models with `/openrouter model add`.",
+    openrouter_models: "Browse the [OpenRouter model list](https://openrouter.ai/models) and switch models with `/providers`.",
     // ...one key per bullet
   },
 }

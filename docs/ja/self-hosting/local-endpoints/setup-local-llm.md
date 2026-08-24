@@ -57,24 +57,22 @@ ollama list
 
 ## 2. Discordに登録する
 
-**`/provider custom-endpoint add`**（サーバー全体）または**`/personal custom-endpoint add`**（自分のみ）を以下のように実行します。
+**`/providers`**（サーバー全体）または**`/personal providers`**（自分のみ）で **Add New Custom Endpoint** を選び、以下を入力します。
 
 | フィールド | Ollama用の値 |
 |-------|------------------|
 | `endpoint_label` | 選択した名前（例: `home-ollama`） |
-| `capability` | `text` |
-| `api_style` | `OpenAI-Compatible`（推奨）または `Ollama Native` |
-| `endpoint_url` | OpenAI-Compatibleの場合は `http://127.0.0.1:11434/v1` · Ollama Nativeの場合は `http://127.0.0.1:11434` |
+| API Compatibility | `OpenAI-Compatible`（推奨）または `Ollama` |
+| `endpoint_url` | OpenAI-Compatibleの場合は `http://127.0.0.1:11434/v1` · Ollamaの場合は `http://127.0.0.1:11434` |
 | `auth_token` | *(空白のままにします)* |
 
-:::tip[APIスタイルに一致するURLを選択する]
-`OpenAI-Compatible`は`/v1`ルートを想定しています（TomoriBot自体が`/chat/completions`を追加するため、**追加しない**でください）。`Ollama Native`は`/v1`のないルートのみを想定しています。
+:::tip[API Compatibilityに一致するURLを選択する]
+`OpenAI-Compatible`は`/v1`ルートを想定しています（`/chat/completions`は自動的に追加されるため、**追加しない**でください）。`Ollama`には`/v1`のないルートを入力すると、Ollamaの`/v1`互換API用に正規化されます。
 :::
 
-送信するとモーダルが開きます。以下を入力します。
+保存したエンドポイントを選択し、**Add or Edit a Model** で新しいテキストモデルに以下を入力します。
 
 - **Model Name (exact API ID):** `gemma4:12b`、`ollama list`で確認した正確なタグ。
-- **Display Name:** オプション。空白にするとモデル名が再利用されます。
 - **Context Window Override:** オプション、**Ollama / KoboldCPPのみ**。これ（例: `8192`、`16384`）を設定してOllamaのデフォルトの`num_ctx`を上げます。設定しないと、TomoriBotの長いコンテキストが切り捨てられるほど小さくなります。サーバーのデフォルトを使用する場合は空白のままにします。
 - **Toggles:** モデルが関数呼び出しをサポートしている場合は**Tools**を有効にします。ビジョンモデルの場合のみ**Image Understanding**を有効にし、モデルがJSONスキーマを適切に処理する場合は**Structured Output**を有効にします。この例のGemma 4はこれらすべてをサポートしているため、すべてにチェックを入れます。
 
@@ -84,7 +82,7 @@ TomoriBotは送信時に接続を検証します。エンドポイントに到�
 
 ## 3. (オプション) RAG用のローカル埋め込み
 
-`capability: embedding`と埋め込みモデル（例: `ollama pull nomic-embed-text`、Model Name `nomic-embed-text:latest`）を使用してステップ2を繰り返します。RAG機能にはPostgresにpgvectorがインストールされている必要もあります。ここで[手動セットアップ](/ja/self-hosting/manual-setup/)ガイドを確認できます。
+保存したエンドポイントを選択し、**Add or Edit a Model** で埋め込みモデル（例: `ollama pull nomic-embed-text`、Model Name `nomic-embed-text:latest`）を追加します。RAG機能にはPostgresにpgvectorがインストールされている必要もあります。ここで[手動セットアップ](/ja/self-hosting/manual-setup/)ガイドを確認できます。
 
 ## その他のサーバー
 
@@ -93,7 +91,7 @@ TomoriBotは送信時に接続を検証します。エンドポイントに到�
 ### KoboldCPP
 
 - OpenAI互換を有効にして（組み込み）起動します。デフォルト: `http://127.0.0.1:5001/v1`。
-- `api_style`: `OpenAI-Compatible`。`endpoint_url`: `http://127.0.0.1:5001/v1`。
+- API Compatibility: `OpenAI-Compatible`。`endpoint_url`: `http://127.0.0.1:5001/v1`。
 - Ollamaのように**Context Window Override**を尊重します。
 - GGUFモデルを読み込みます。Model Nameは、読み込まれたモデルが報告するもの（多くの場合ファイル名）です。KoboldCPPの`/v1/models`レスポンスを確認してください。
 
@@ -103,7 +101,7 @@ TomoriBotは送信時に接続を検証します。エンドポイントに到�
   ```sh
   llama-server -m model.gguf -c 16384 --host 0.0.0.0 --port 8080
   ```
-- `api_style`: `OpenAI-Compatible`。`endpoint_url`: `http://127.0.0.1:8080/v1`。
+- API Compatibility: `OpenAI-Compatible`。`endpoint_url`: `http://127.0.0.1:8080/v1`。
 - `-c`を使用して起動時にコンテキストウィンドウを設定します。モーダルの**Context Window Override**はOllama/KoboldCPP専用であり、ここでは効果がありません。
 - Model Nameは`/v1/models`が報告するものです。`--alias my-model`できれいな名前を付けてください。
 - `--api-key`で起動した場合は、そのキーを`auth_token`に入力します。
@@ -111,20 +109,20 @@ TomoriBotは送信時に接続を検証します。エンドポイントに到�
 ### LM Studio
 
 - LM Studioで、**Local Server**（Developerタブ）を起動します。デフォルト: `http://127.0.0.1:1234/v1`。
-- `api_style`: `OpenAI-Compatible`。`endpoint_url`: `http://127.0.0.1:1234/v1`。
+- API Compatibility: `OpenAI-Compatible`。`endpoint_url`: `http://127.0.0.1:1234/v1`。
 - Model Nameは、読み込まれたモデルに対してLM Studioが表示する識別子です。
 
 ### vLLM
 
 - OpenAI互換サーバーで提供します: `vllm serve <model>` → `http://127.0.0.1:8000/v1`。
-- `api_style`: `OpenAI-Compatible`。`endpoint_url`: `http://127.0.0.1:8000/v1`。
+- API Compatibility: `OpenAI-Compatible`。`endpoint_url`: `http://127.0.0.1:8000/v1`。
 - `--api-key`でvLLMを起動した場合は、そのキーを`auth_token`に入力します。
 - Model Nameは、提供されるモデルのパス/名前です（`/v1/models`と一致します）。
 
 ### LiteLLM (複数のバックエンドに対するプロキシ)
 
 - LiteLLMプロキシを実行します。デフォルト: `http://127.0.0.1:4000/v1`。
-- `api_style`: `OpenAI-Compatible`。`endpoint_url`: `http://127.0.0.1:4000/v1`。
+- API Compatibility: `OpenAI-Compatible`。`endpoint_url`: `http://127.0.0.1:4000/v1`。
 - Model Nameは、LiteLLMの設定で定義したモデルエイリアスです。
 - プロキシがマスターキーを強制する場合は、それを`auth_token`に設定します。
 
@@ -147,6 +145,6 @@ Ollamaの厳選されたライブラリに加えて、[Hugging Face](https://hug
 
 ## 注意事項と落とし穴
 
-- **ラベルごとに1つの接続。** 1つのサーバーを共有する複数のモデルを登録するには、同じ`endpoint_label` + `capability`を再利用します。URLとAPIスタイルは継承され、新しいModel Nameを設定するだけです。真に異なるサーバーには異なるラベルを使用してください。
-- **Display NameとModel Name。** Display Nameは装飾的なものです（`/model`で表示されるもの）。Model Nameはサーバーに送信される正確な文字列です。Model Nameを間違えることは、「接続できたがレスポンスに失敗する」最も一般的な原因です。
+- **ラベルごとに1つのエンドポイント項目。** 1つのサーバーを共有する複数のモデルを登録するには、保存したエンドポイントを選び、**Add or Edit a Model** を再度使用します。異なるサーバーまたはAPIプロトコルには別々のラベルを使用してください。
+- **Model NameはAPI識別子です。** サーバーに送信される正確な文字列なので、間違えると「接続できたがレスポンスに失敗する」原因になります。
 - **TomoriBotをDockerで実行している場合:** コンテナ内の`localhost`はホストではありません。`http://host.docker.internal:<port>`（Windows/macOS）またはホストのLAN IPを使用し、モデルサーバーを`0.0.0.0`にバインドしてください。

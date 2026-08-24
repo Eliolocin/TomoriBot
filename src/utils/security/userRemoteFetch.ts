@@ -131,6 +131,13 @@ function isRedirectStatus(status: number): status is 301 | 302 | 303 | 307 | 308
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
+function isConnectionRefusedTransportError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  if (record.code === "ConnectionRefused" || record.code === "ECONNREFUSED") return true;
+  return isConnectionRefusedTransportError(record.cause);
+}
+
 function buildRedirectRequestInit(requestInit: RequestInit, status: number): RequestInit {
   const currentMethod = (requestInit.method ?? "GET").toUpperCase();
   const headers = mergeHeaders(requestInit.headers);
@@ -192,20 +199,41 @@ async function fetchUserRemoteUrlInternal(
   const redirectPolicy = requestInit.redirect ?? "follow";
   let fetchUrl = url;
   let fetchInit: BunFetchRequestInit = { ...requestInit, redirect: "manual" };
+  let response: Response | null = null;
 
   if (isIP(url.hostname) === 0) {
-    const pinnedAddress = validation.resolvedAddresses?.find((address) => isIP(address) !== 0);
-    if (!pinnedAddress) {
+    const pinnedAddresses = [...new Set(validation.resolvedAddresses?.filter((address) => isIP(address) !== 0) ?? [])];
+    if (pinnedAddresses.length === 0) {
       throw new RemoteUrlPolicyError(
         `Remote URL validation did not return a pinnable address for '${url.hostname}'.`,
         url.hostname,
         "ADDRESS_NOT_PINNABLE",
       );
     }
-    ({ url: fetchUrl, init: fetchInit } = createPinnedFetchRequest(url, requestInit, pinnedAddress));
+    const method = (requestInit.method ?? "GET").toUpperCase();
+    const canRetryAfterAnyTransportFailure = method === "GET" || method === "HEAD";
+    let lastTransportError: unknown;
+    for (const [index, pinnedAddress] of pinnedAddresses.entries()) {
+      ({ url: fetchUrl, init: fetchInit } = createPinnedFetchRequest(url, requestInit, pinnedAddress));
+      try {
+        response = await fetch(fetchUrl, fetchInit);
+        lastTransportError = undefined;
+        break;
+      } catch (error) {
+        lastTransportError = error;
+        const isFinalAddress = index === pinnedAddresses.length - 1;
+        const canRetry = canRetryAfterAnyTransportFailure || isConnectionRefusedTransportError(error);
+        if (!canRetry || requestInit.signal?.aborted || isFinalAddress) throw error;
+      }
+    }
+    if (lastTransportError !== undefined) throw lastTransportError;
+  } else {
+    response = await fetch(fetchUrl, fetchInit);
+  }
+  if (!response) {
+    throw new Error(`Remote request to '${url.hostname}' completed without a response.`);
   }
 
-  const response = await fetch(fetchUrl, fetchInit);
   // Do not expose the transport-level pinned IP to callers or redirect logic.
   Object.defineProperty(response, "url", { value: url.toString() });
 

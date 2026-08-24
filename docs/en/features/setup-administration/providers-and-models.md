@@ -10,9 +10,9 @@ specific model on that provider. You need at least one provider to use her at al
 
 ## API Keys
 
-Add a provider key during first-time setup with `/setup`, or later with
-`/config api-key set`. Keys are **encrypted at rest** — no one, including server admins, can
-read them back.
+Add a provider key during first-time setup with `/setup`, or later from `/providers` by choosing
+**Add New Provider**. Keys are **encrypted at rest** — no one, including server admins, can read
+them back.
 
 Each provider has its own key-generation steps. Run **`/help`**, choose **Setup**, then **Step 1: Get an API Key**, and pick your
 provider for the exact walkthrough, or use these starting points:
@@ -31,8 +31,8 @@ provider for the exact walkthrough, or use these starting points:
 | **Custom** | Any OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, …). | see [Custom Endpoints](#custom-endpoints) |
 
 :::caution
-Never share your API key with anyone else. Custom endpoints can add a Bearer auth token after setup with
-`/config api-key set`.
+Never share your API key with anyone else. Add or replace a custom endpoint's Bearer auth token from its
+**Edit Endpoint** action in `/providers`.
 :::
 
 **Vertex AI** authenticates with Application Default Credentials rather than a stored secret.
@@ -48,15 +48,16 @@ the catalog default, so a retired default cannot prevent a valid credential from
 ### Optional: Brave Search key
 
 Brave Search is separate from your AI provider and only enhances web search (adds image,
-video, and news search). Set it with `/optional-key brave set`. ⚠️ Brave includes $5/month
+video, and news search). Set it with `/providers`. ⚠️ Brave includes $5/month
 free credit — set a $5 usage limit in the Brave dashboard to avoid charges.
 
 ## Choosing Models
 
-`/provider` and `/model` are **server-scoped**: they set the shared defaults every member of
-this server uses, and they need the required server permission. Individual members can override
-those defaults for their own requests with `/personal provider`, which follows them across every
-server they use TomoriBot in. See
+`/providers` manages server credentials and model catalogs, while `/model` selects the shared
+defaults every member of this server uses. Both need the required server permission. Individual
+members manage their own credentials and catalogs with `/personal providers`, then select personal
+models with the `/personal provider model-*` commands. Personal settings follow them across every
+server where they use TomoriBot. See
 [Personalization](/features/knowledge/personalization/#your-own-providers) for that side.
 
 After a provider is set, pick which model each capability uses for this server:
@@ -69,22 +70,27 @@ After a provider is set, pick which model each capability uses for this server:
 - `/model speech` / `/model transcription` — [voice](/features/capabilities/media-generation/tts-and-stt/)
 
 You can also manage this server's backup keys for automatic failover and load balancing with
-`/provider api-key rotation`.
+`/providers`.
 
 ## Custom Endpoints
 
 Custom endpoints let you register self-hosted or proxy-backed services — Ollama, LM Studio,
 LiteLLM, vLLM, ComfyUI, local TTS/STT — as **labeled provider bundles**.
 
-- **Server scope:** `/provider custom-endpoint add` / `remove`.
-- **Personal scope:** `/personal custom-endpoint add` / `remove` (just you — see
+- **Server scope:** open `/providers`.
+- **Personal scope:** open `/personal providers` (just you — see
   [Personalization](/features/knowledge/personalization/#your-own-providers)).
 
-A **label** groups every capability under one bundle. After registering, select the label
-from `/model text`, `/model image`, `/model video`, etc.; if a label has several models for a
-capability, a picker lets you choose. Re-run the add command with the same label and
-capability but a different model name to register an additional model on that connection (its
-URL and API style are inherited).
+A **label** is the user-facing menu name and groups capabilities under one bundle when they share
+one endpoint URL. It is never sent to the remote endpoint. Capabilities served from different URLs
+need distinct labels. Choose **Add New Custom Endpoint**, select the
+API compatibility, and save the connection. Saving prepares the capabilities supported by that
+protocol without registering any models. Then select the new endpoint, choose **Add or Edit a
+Model**, and register its exact model code and capability. Adding a model activates it for that
+capability. Use the same model action to attach more models or edit a workspace-added registration.
+
+API compatibility determines which request paths and payloads the server implements. It is
+independent of model capability and cannot be inferred reliably from the endpoint URL.
 
 For full walkthroughs of running the servers, see:
 

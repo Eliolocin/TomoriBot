@@ -1802,10 +1802,7 @@ class ServerRepository implements IRepository<ServerExportShape> {
     "custom_endpoint_connections",
     "custom_endpoints",
     // Model registrations
-    "openrouter_model_registrations",
-    "openrouter_embedding_model_registrations",
-    "openrouter_image_model_registrations",
-    "openrouter_video_model_registrations",
+    "scoped_model_registrations",
     // Misc server-scoped
     "server_emojis",
     "server_stickers",

@@ -35,18 +35,14 @@ Keep that terminal open while TomoriBot is using Chatterbox. The default endpoin
 
 ## Register in TomoriBot
 
-Run `/provider custom-endpoint add`:
+Run `/providers`, choose **Add New Custom Endpoint**, and use the speech API compatibility:
 
-- `capability`: `speech`
-- `api_style`: `tts-clone`
+- API Compatibility: `tts-clone`
 - `endpoint_url`: `http://127.0.0.1:8011`
 
-In the modal:
+After saving the connection, select it, choose **Add or Edit a Model**, and add a Speech model.
 
-- `Voice Source Mode`: `Clone`
-- `Script Markup Style`: `Bracket Tags`
-
-Registration makes the endpoint active immediately. Use `/model speech` later only when switching between speech endpoints.
+Adding the model makes the endpoint active immediately. Use `/model speech` later only when switching between speech endpoints.
 
 ## Set Up a Persona Voice
 

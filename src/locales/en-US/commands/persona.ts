@@ -464,7 +464,7 @@ Trigger Words ({trigger_word_count}): {triggers}`,
       wrong_provider_title: `🔴 Incompatible Provider`,
       wrong_provider_description: `Preset generation requires a compatible provider. Your current provider is **{current_provider}**. Use \`/model text\` to switch to a supported provider.`,
       no_api_key_title: `🔴 No API Key`,
-      no_api_key_description: `No active provider is configured. Use \`/setup\` (first time) or \`/provider add\` to register one.`,
+      no_api_key_description: `No active provider is configured. Use \`/setup\` (first time) or \`/providers\` to register one.`,
       model_incompatible_title: `Incompatible Model`,
       model_incompatible_description: `Your current model (**{model_name}**) does not support **STRUCTURED OUTPUT**, which is required for persona generation.
 
@@ -490,7 +490,7 @@ Use \`/model text\` to switch to a model that supports structured output (e.g., 
 1. Use \`/model text\` to switch to a tool-enabled model, OR
 2. Regenerate without web search (choose "No" when asked)`,
       api_key_decrypt_failed_title: `🔴 API Key Error`,
-      api_key_decrypt_failed_description: `Failed to decrypt the active provider credentials. Please reconfigure them using \`/provider add\`.`,
+      api_key_decrypt_failed_description: `Failed to decrypt the active provider credentials. Please reconfigure them using \`/providers\`.`,
       invalid_image_title: `🔴 Invalid Image`,
       invalid_image_description: `Please upload a valid image file (PNG, JPG, JPEG, etc.).`,
       error_file_too_large: `Avatar image must be {max_size}MB or smaller.`,

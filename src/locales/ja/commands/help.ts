@@ -86,7 +86,7 @@
       labels_field: `ラベルと削除`,
       labels_value: `1つのラベルは対応する全機能をまとめたカスタムプロバイダーバンドルです。{server_remove_command} と {personal_remove_command} はチェックを外した機能だけ削除します。{server_provider_remove_command} と {personal_provider_remove_command} はそのラベル全体を削除します。`,
       comfyui_page1_title: `ComfyUI セットアップ`,
-      comfyui_page1_description: `このガイドでは、ComfyUI がすでにインストール済みかつ起動中である前提で進めます。1ページ目では、\`/provider custom-endpoint add\` または \`/personal custom-endpoint add\` まで到達する最小構成を説明します。または、GitHubリポジトリにあるそのまま使える[ComfyUIワークフロー](https://github.com/Bredrumb/TomoriBot/tree/main/assets/comfyui-workflows)を使用することもできます。`,
+      comfyui_page1_description: `このガイドでは、ComfyUI がすでにインストール済みかつ起動中である前提で進めます。1ページ目では、\`/providers\` または \`/personal providers\` まで到達する最小構成を説明します。または、GitHubリポジトリにあるそのまま使える[ComfyUIワークフロー](https://github.com/Bredrumb/TomoriBot/tree/main/assets/comfyui-workflows)を使用することもできます。`,
       comfyui_page1_workflow_field: `1. ワークフローを作る`,
       comfyui_page1_workflow_value: `まず ComfyUI 側でワークフローを作成し、正常に動くことを確認してください。画像用 MVP では、TomoriBot が完成ファイルを取得できるよう最後を \`SaveImage\` で終える必要があります。最小構成の画像グラフは通常、\`CheckpointLoaderSimple\` -> positive/negative \`CLIPTextEncode\` -> \`EmptyLatentImage\` -> \`KSampler\` -> \`VAEDecode\` -> \`SaveImage\` です。`,
       comfyui_page1_placeholders_field: `2. プレースホルダーを入れる`,
@@ -94,7 +94,7 @@
       comfyui_page1_export_field: `3. JSON を書き出して編集する`,
       comfyui_page1_export_value: `ComfyUI で動作確認できたら Save (API Format) で JSON を保存してください。数値や真偽値のプレースホルダーを使う場合は、アップロード前に JSON を編集し、値全体をプレースホルダーに置き換えます。例: \`"width": "{TOMORI_WIDTH}"\`、\`"height": "{TOMORI_HEIGHT}"\`、\`"duration": "{TOMORI_VIDEO_DURATION}"\`。`,
       comfyui_page1_register_field: `4. 登録して有効化する`,
-      comfyui_page1_register_value: `サーバー共通なら {server_add_command}、個人用なら {personal_add_command} を使います。\`endpoint_url\` には ComfyUI サーバーの URL（例: \`http://127.0.0.1:8188\`）を入れ、\`api_style\` は \`ComfyUI\`、\`capability\` は \`Image\` か \`Video\` を選択してください。コマンド実行後に表示されるモーダルの **ワークフローJSON** ファイル欄に書き出した JSON をアップロードします。その後、{image_command} または {video_command} でラベルを選択して有効化します。`,
+      comfyui_page1_register_value: `サーバー共通なら {server_add_command}、個人用なら {personal_add_command} を使います。**Add New Custom Endpoint** を選び、ComfyUI サーバーの URL（例: \`http://127.0.0.1:8188\`）を入力し、エンドポイントタイプに \`ComfyUI\` を選択してください。保存したエンドポイントで **Add or Edit a Model** を選び、\`Image\` または \`Video\` のモデルを追加して、**ワークフローJSON** 欄に書き出した JSON をアップロードします。`,
       comfyui_page2_title: `ComfyUI プレースホルダー`,
       comfyui_page2_description: `2ページ目では、TomoriBot が ComfyUI ワークフローへ注入できる主なプレースホルダーをまとめます。`,
       comfyui_page2_core_field: `基本値`,
@@ -151,7 +151,7 @@ ElevenLabs: {elevenlabs} を実行し、追加ペルソナは後で {voice_assig
 3. numpy を先にインストールします: \`pip install numpy\`、その後 \`requirements.txt\` をインストールします。
 4. *(GPU のみ)* PyTorch を再インストールします: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
 5. \`server.py\` を起動します。
-6. {custom_endpoint_add} で登録します。Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Bracket Tags\` を選択します。
+6. {custom_endpoint_add} でエンドポイントタイプに \`TTS-Clone\` を選びます。保存したエンドポイントで新しい音声モデルを追加し、Script Markup（スクリプトマークアップ）は \`Bracket Tags\` を選択します。
 7. {model_speech} で選択し、{voice_add} と {voice_assign} を実行します。`,
       },
       qwen3tts: {
@@ -169,7 +169,7 @@ ElevenLabs: {elevenlabs} を実行し、追加ペルソナは後で {voice_assig
 4. *(GPU)* PyTorch を再インストール: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
 5. *(任意)* 高速化のため flash-attn をインストール：手順 4 の後 \`pip install wheel\`、次に \`pip install flash-attn --no-build-isolation\` (Winは20-40分)。初回はスキップ。
 6. 音声クローンには \`server.py\`、Qwen3-TTS VoiceDesign のみには \`server.py --mode voice-design\`、1つのURLでリクエストごとにクローン/VoiceDesignを判定するには \`server.py --mode auto\` を起動します。
-7. {custom_endpoint_add} で登録: Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Plain\` を選択。VoiceDesign では音声ソースモードに \`VoiceDesign\` を選ぶと、TomoriBot が自動的に instruct 対応として扱います。auto モードでは、同じサーバーURLを指すクローン用と VoiceDesign 用のエンドポイントを登録できます。
+7. {custom_endpoint_add} でエンドポイントタイプに \`TTS-Clone\` を選びます。保存したエンドポイントで新しい音声モデルを追加し、Script Markup（スクリプトマークアップ）は \`Plain\` を選択します。VoiceDesign では音声ソースモードに \`VoiceDesign\` を選ぶと、TomoriBot が自動的に instruct 対応として扱います。auto モードでは、同じサーバーURLを指すクローン用と VoiceDesign 用のエンドポイントを登録できます。
 8. {model_speech} で選択します。クローンモードでは {voice_add} と {voice_assign}、VoiceDesign では各ペルソナに {voice_design_set} を実行します。`,
       },
       irodoritts: {
@@ -186,7 +186,7 @@ Windows: \`install-irodori.ps1\`
 Linux/macOS: \`bash install-irodori.sh\`
 5. *(GPU)* PyTorch を再インストール: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
 6. \`server.py\` を起動します。
-7. {custom_endpoint_add} で登録: Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Emoji Markers\` を選択。
+7. {custom_endpoint_add} でエンドポイントタイプに \`TTS-Clone\` を選びます。保存したエンドポイントで新しい音声モデルを追加し、Script Markup（スクリプトマークアップ）は \`Emoji Markers\` を選択します。
 8. {model_speech} で選択し、{voice_add} と {voice_assign} を実行します。`,
       },
       elevenlabs: {
@@ -226,7 +226,7 @@ Linux/macOS: \`bash install-irodori.sh\`
 4. *(GPU)* CUDA 対応 PyTorch を再インストール:
 \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
 5. \`whisperx_server.py\` を起動します。
-6. {custom_endpoint_add} で登録: Capability（機能）は \`Transcription\`、API Style（API スタイル）は \`OpenAI Compatible\` を選び、選択したサイズのモデル名を指定します。
+6. {custom_endpoint_add} でエンドポイントタイプに \`OpenAI Compatible Transcription\` を選びます。保存したエンドポイントで、選択したサイズと同じ名前の新しい文字起こしモデルを追加します。
 7. {model_transcription} で選択します。`,
         models_title: `利用可能なモデル`,
         models_description: `サーバー起動前に \`WHISPERX_MODEL\` を指定し、登録時も同じ名前を使います。
@@ -275,7 +275,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - 共有された埋め込み（ツイート、記事など）の内容を見ることができます`,
       search_title: `検索＆情報 `,
       search_description: `- 最新情報をウェブ検索できます
-- 画像、動画、ニュース検索も可能です（\`/optional-key brave set\`経由）
+- 画像、動画、ニュース検索も可能です（\`/providers\`経由）
 - URLからコンテンツを取得して読むことができます`,
       personality_title: `パーソナリティ＆カスタマイズ`,
       personality_description: `- \`/persona rename\`と\`/persona avatar\`で名前とアバターを変更できます

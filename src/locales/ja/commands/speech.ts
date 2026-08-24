@@ -93,7 +93,7 @@ Exaggeration: **{exaggeration}**`,
     voice_assign: {
       description: `ペルソナに音声出力用の声を割り当てます。`,
       no_speech_endpoint_title: `音声エンドポイントがありません`,
-      no_speech_endpoint_description: `まず \`/provider custom-endpoint add\` で音声エンドポイントを登録してください。`,
+      no_speech_endpoint_description: `まず \`/providers\` で音声エンドポイントを登録してください。`,
       no_sample_title: `音声サンプルがありません`,
       no_sample_description: `まず \`/speech voice-add\` でローカル音声サンプルを追加してください。`,
       select_persona_title: `音声を設定するペルソナを選択`,

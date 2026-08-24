@@ -102,9 +102,8 @@ the `REQUIRED_*_PROVIDERS` sets in `modelSeed.ts` in lockstep with `providerRequ
 
 ## Configuring a custom endpoint
 
-The two toggles appear as checkboxes in the `text` capability modal of
-`/provider custom-endpoint add|edit` and `/personal custom-endpoint add|edit` (the shared
-`text_capabilities` group in [`customEndpointCapabilityModal.ts`](../../src/utils/provider/customEndpointCapabilityModal.ts)).
+The two toggles appear in the Text model modal opened through **Add or Edit a Model** in
+`/providers` and `/personal providers`.
 
 - **Strict Role Alternation** — enable when your proxy fronts a backend that requires strict
   user/assistant alternation and a leading user turn (e.g. **Claude behind an OpenAI-shaped proxy**).

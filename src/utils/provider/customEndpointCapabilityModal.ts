@@ -37,11 +37,6 @@ export const ModalFieldId = {
   auth_token: "auth_token",
 } as const;
 
-/** Capabilities that need a detail modal after the initial slash submission (add flow). */
-export function capabilityNeedsAddModal(capability: CustomEndpointCapability): boolean {
-  return capability !== "image" && capability !== "video";
-}
-
 /** Parse a context window integer; returns null if blank or invalid (<512). */
 function parseNumCtxField(value: string): number | null {
   const v = value.trim();

@@ -39,6 +39,7 @@ For a user-facing explanation of behavior, surprises, and limitations in SillyTa
 ### `/st-presets`
 
 The `/st-presets` command opens an interactive collection panel for managing SillyTavern presets.
+Its selector keeps **Add new Preset** first, followed by the disable choice and imported presets.
 
 **Capabilities:**
 - **Add preset**: Upload a SillyTavern preset `.json` file with an optional author-written description.

@@ -21,7 +21,7 @@ export default {
       loop_unsupported: `The selected OpenRouter model \`{model}\` cannot use a last frame for looping video. Disable looping or choose a compatible video model.`,
     },
     generate_image_nai: {
-      no_google_api_key: `Inpainting requires saved Google provider credentials for image segmentation. Add them with \`/provider add\`, or switch to the Google provider.`,
+      no_google_api_key: `Inpainting requires saved Google provider credentials for image segmentation. Add them with \`/providers\`, or switch to the Google provider.`,
       model_not_configured: `NovelAI image generation is disabled right now. Select a NovelAI image model with \`/model image\` first.`,
       provider_quota_exceeded: `NovelAI image generation quota is exhausted for this account. Recharge Anlas or wait for the quota to refresh, then try again.`,
       characters_require_v4: `Character positioning requires a NovelAI V4 diffusion model or newer.`,

@@ -36,13 +36,12 @@ TomoriBotがWhisperXを使用している間は、そのターミナルを開い
 
 ## TomoriBotへの登録
 
-`/provider custom-endpoint add`を実行します。
+`/providers`で **Add New Custom Endpoint** を選びます。
 
-- `capability`: `transcription`
-- `api_style`: `openai-compatible-transcription`
+- API Compatibility: `openai-compatible-transcription`
 - `endpoint_url`: `http://127.0.0.1:8021`
 
-モーダルで以下を設定します。
+保存したエンドポイントを選択し、**Add or Edit a Model** で新しい文字起こしモデルに以下を設定します。
 
 - `Transcription Model`: `large-v3`、または`WHISPERX_MODEL`に設定されている値
 - `Transcription Language`: 任意の言語ヒント（例: `en`や`ja`）

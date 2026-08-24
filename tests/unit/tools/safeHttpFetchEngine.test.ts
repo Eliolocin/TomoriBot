@@ -113,6 +113,35 @@ describe("safe HTTP fetch engine", () => {
     }
   });
 
+  it("retries a refused POST on the next validated address without duplicating the body", async () => {
+    process.env[RUN_ENV_NAME] = "development";
+    let requestCount = 0;
+    const receivedBodies: string[] = [];
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: async (request) => {
+        requestCount += 1;
+        receivedBodies.push(await request.text());
+        return Response.json({ ok: true });
+      },
+    });
+
+    try {
+      const response = await fetchUserRemoteUrl(`http://localhost:${server.port}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "hello" }),
+      });
+
+      expect(response.ok).toBe(true);
+      expect(requestCount).toBe(1);
+      expect(receivedBodies).toEqual(['{"message":"hello"}']);
+    } finally {
+      server.stop(true);
+    }
+  });
+
   it("includes fetched page content in provider-visible result data", async () => {
     process.env[RUN_ENV_NAME] = "development";
     const server = Bun.serve({

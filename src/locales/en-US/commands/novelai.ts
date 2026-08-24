@@ -62,7 +62,7 @@ export default {
         no_model_title: `NovelAI Image Model Required`,
         no_model_description: `NovelAI image generation is disabled right now. Select a NovelAI image model with \`/model image\` first.`,
         no_api_key_title: `NovelAI API Key Required`,
-        no_api_key_description: `No NovelAI provider credentials are available for this server. Save them with \`/provider add\`, or switch your main provider to NovelAI.`,
+        no_api_key_description: `No NovelAI provider credentials are available for this server. Save them with \`/providers\`, or switch your main provider to NovelAI.`,
         invalid_reference_title: `Invalid Character Reference`,
         invalid_reference_description: `The character reference must be a valid image attachment that NovelAI can read.`,
         character_reference_requires_v4_title: `V4 Model Required`,

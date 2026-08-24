@@ -36,18 +36,15 @@ Keep that terminal open while TomoriBot is using WhisperX. The default endpoint 
 
 ## Register in TomoriBot
 
-Run `/provider custom-endpoint add`:
+Run `/providers`, choose **Add New Custom Endpoint**, and use the transcription API compatibility:
 
-- `capability`: `transcription`
-- `api_style`: `openai-compatible-transcription`
+- API Compatibility: `openai-compatible-transcription`
 - `endpoint_url`: `http://127.0.0.1:8021`
 
-In the modal:
+After saving the connection, select it, choose **Add or Edit a Model**, and add `large-v3`, or
+whatever `WHISPERX_MODEL` is set to, as a Transcription model.
 
-- `Transcription Model`: `large-v3`, or whatever `WHISPERX_MODEL` is set to
-- `Transcription Language`: optional language hint, such as `en` or `ja`
-
-Registration makes the endpoint active immediately. Use `/model transcription` later only when switching endpoints.
+Adding the model makes the endpoint active immediately. Use `/model transcription` later only when switching endpoints.
 
 ## Use Transcripts
 

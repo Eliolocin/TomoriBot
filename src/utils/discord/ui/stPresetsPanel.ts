@@ -113,7 +113,10 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
   const components: ComponentInContainerData[] = [
     {
       type: ComponentType.TextDisplay,
-      content: `## ${localizer(locale, "commands.st-presets.title")}`,
+      content: `## ${localizer(locale, "commands.st-presets.title")}\n${localizer(
+        locale,
+        "commands.st-presets.selector_guidance",
+      )}`,
     },
   ];
 
@@ -143,6 +146,11 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
 
   const selectOptions: SelectMenuComponentOptionData[] = [
     {
+      label: localizer(locale, "commands.st-presets.select_add"),
+      value: "add",
+      description: localizer(locale, "commands.st-presets.select_add_description"),
+    },
+    {
       label: localizer(locale, "commands.st-presets.select_none"),
       value: "none",
       description: localizer(locale, "commands.st-presets.select_none_description"),
@@ -154,11 +162,6 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
       description: preset.description ? safeSelectOptionText(preset.description, 100) : undefined,
       default: selectedValue === String(preset.preset_id),
     })),
-    {
-      label: localizer(locale, "commands.st-presets.select_add"),
-      value: "add",
-      description: localizer(locale, "commands.st-presets.select_add_description"),
-    },
   ];
 
   const selectRow: ActionRowData<StringSelectMenuComponentData> = {

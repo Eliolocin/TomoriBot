@@ -176,10 +176,10 @@ const featureOverviewPage: HelpPageDefinition = {
 
 function customEndpointVariables(): HelpVariables {
   return {
-    add_command: mention("provider", "custom-endpoint", "add"),
-    remove_command: mention("provider", "custom-endpoint", "remove"),
-    server_add_command: mention("provider", "custom-endpoint", "add"),
-    personal_add_command: mention("personal", "custom-endpoint", "add"),
+    add_command: mention("providers"),
+    remove_command: mention("providers"),
+    server_add_command: mention("providers"),
+    personal_add_command: mention("personal", "providers"),
     text_command: mention("model", "text"),
     image_command: mention("model", "image"),
     video_command: mention("model", "video"),
@@ -188,12 +188,12 @@ function customEndpointVariables(): HelpVariables {
 
 function speechVariables(locale: string): HelpVariables {
   return {
-    custom_endpoint_add: mention("provider", "custom-endpoint", "add"),
+    custom_endpoint_add: mention("providers"),
     model_speech: mention("model", "speech"),
     voice_add: mention("speech", "voice-add"),
     voice_assign: mention("speech", "voice-assign"),
     voice_design_set: mention("speech", "voice-design", "set"),
-    elevenlabs: mention("speech", "elevenlabs"),
+    elevenlabs: mention("providers"),
     help_transcription: buildHelpPageReference(locale, "commands.help.dashboard.pages.transcription"),
   };
 }
@@ -212,9 +212,9 @@ function speechVariant(id: string, labelKey: string): HelpVariantDefinition {
 
 function transcriptionVariables(locale: string): HelpVariables {
   return {
-    custom_endpoint_add: mention("provider", "custom-endpoint", "add"),
+    custom_endpoint_add: mention("providers"),
     model_transcription: mention("model", "transcription"),
-    elevenlabs: mention("speech", "elevenlabs"),
+    elevenlabs: mention("providers"),
     speech_transcripts: mention("speech", "transcripts"),
     help_speech: buildHelpPageReference(locale, "commands.help.dashboard.pages.speech"),
   };
@@ -258,9 +258,9 @@ const featurePages: readonly HelpPageDefinition[] = [
     ],
     footerKey: "commands.help.personal-provider.footer",
     variables: () => ({
-      add_command: mention("personal", "provider", "add"),
+      add_command: mention("personal", "providers"),
       model_command: mention("personal", "provider", "model-text"),
-      toggle_command: mention("personal", "provider", "toggle-models"),
+      toggle_command: mention("personal", "providers"),
       samplers_command: mention("personal", "parameters"),
       fallback_command: mention("personal", "model", "fallback"),
       byok_command: mention("server", "user-byok", "toggle"),
@@ -278,8 +278,8 @@ const featurePages: readonly HelpPageDefinition[] = [
         titleKey: "commands.help.custom_models.personal_field",
         bodyKey: "commands.help.custom_models.personal_value",
         variables: () => ({
-          add_command: mention("personal", "custom-endpoint", "add"),
-          remove_command: mention("personal", "custom-endpoint", "remove"),
+          add_command: mention("personal", "providers"),
+          remove_command: mention("personal", "providers"),
         }),
       },
       {
@@ -301,8 +301,8 @@ const featurePages: readonly HelpPageDefinition[] = [
             titleKey: "commands.help.custom_models.personal_field",
             bodyKey: "commands.help.custom_models.personal_value",
             variables: () => ({
-              add_command: mention("personal", "custom-endpoint", "add"),
-              remove_command: mention("personal", "custom-endpoint", "remove"),
+              add_command: mention("personal", "providers"),
+              remove_command: mention("personal", "providers"),
             }),
           },
           {

@@ -40,13 +40,12 @@ python servers\tts\qwen3tts\server.py --mode auto
 
 ほとんどのユーザーは、1つのエンドポイントでボイスクローンとVoiceDesignの両方のペルソナをサポートできるように、オートモードサーバーを登録します。
 
-`/provider custom-endpoint add`を実行します。
+`/providers`で **Add New Custom Endpoint** を選びます。
 
-- `capability`: `speech`
-- `api_style`: `tts-clone`
+- API Compatibility: `tts-clone`
 - `endpoint_url`: `http://127.0.0.1:8012`
 
-モーダルで以下を設定します。
+保存したエンドポイントを選択し、**Add or Edit a Model** で新しい音声モデルに以下を設定します。
 
 - `Voice Source Mode`: `Auto`
 - `Script Markup Style`: `Plain`

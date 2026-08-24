@@ -24,7 +24,7 @@ TomoriBotは、speechをカスタムエンドポイント機能として扱い�
 ## セットアップ手順
 
 1. 上記のカードからエンジンを1つ選び、`servers/tts/`からそのラッパーを起動します。
-2. `/provider custom-endpoint add`を実行し、capabilityに`speech`を、api styleに`tts-clone`を使用して登録します。
+2. `/providers`で **Add New Custom Endpoint** を選び、API Compatibilityに`tts-clone`を使用して登録します。
 3. 登録モーダルで、そのエンジンのガイドに記載されている音声ソースモード（voice source mode）とスクリプトマークアップ（script markup）を選択します。
 
 登録すると、エンドポイントはすぐに有効になります。今後、登録済みのTTSエンドポイントを切り替える場合にのみ`/model speech`を使用します。
@@ -39,7 +39,7 @@ TomoriBotは、speechをカスタムエンドポイント機能として扱い�
 
 Qwen3-TTSのVoiceDesignの場合、音声サンプルはスキップし、代わりに各ペルソナに対して`/speech voice-design set`を実行します。
 
-ElevenLabsのユーザーは`/speech elevenlabs`を使用する必要があります。これにより、speechとtranscriptionのエンドポイントが一緒に登録されます。
+ElevenLabsのユーザーは`/providers`を使用する必要があります。これにより、speechとtranscriptionのエンドポイントが一緒に登録されます。
 
 TomoriBotは、生成する前に音声スクリプトからDiscordのカスタム絵文字構文（`:pepega:`や`<:pepega:123456789012345678>`など）を削除します。speechエンドポイントがIrodoriTTS向けに意図された絵文字マークアップを使用しない限り、Unicode絵文字も削除されます。
 

@@ -1,6 +1,9 @@
 export default {
   personal: {
     description: `Manage your personal settings`,
+    providers: {
+      description: `Manage your personal provider credentials, endpoints, and model catalogs.`,
+    },
     "image-tags": {
       description: `Set comma-separated image tags for your physical appearance to assist image generation.`,
       modal_title: `My Image Tags`,
@@ -87,7 +90,7 @@ export default {
         success_title: `Personal OpenRouter Model Added`,
         success_description: `Registered OpenRouter {capability} model \`{model_name}\` for your personal provider list and set it as your current personal {capability} model.`,
         missing_provider_title: `Personal OpenRouter Provider Not Saved`,
-        missing_provider_description: `The model was registered, but it was not activated because you do not have saved personal OpenRouter credentials. Add OpenRouter with \`/personal provider add\` first.`,
+        missing_provider_description: `The model was registered, but it was not activated because you do not have saved personal OpenRouter credentials. Add OpenRouter with \`/personal providers\` first.`,
         already_registered_title: `Model Already Registered`,
         already_registered_description: `OpenRouter {capability} model \`{model_name}\` is already registered for your personal provider list.`,
         already_available_title: `Already Available`,
@@ -135,7 +138,7 @@ export default {
     provider: {
       description: `Manage AI providers used for your own requests in every server.`,
       no_saved_title: `No Personal Providers`,
-      no_saved_description: `You do not have any saved personal providers yet. Add one with \`/personal provider add\`.`,
+      no_saved_description: `You do not have any saved personal providers yet. Add one with \`/personal providers\`.`,
       capability_text: `Text`,
       capability_embedding: `Embedding`,
       capability_image: `Image`,
@@ -163,7 +166,7 @@ Continue?`,
         api_key_description: `The API key I use for your own requests. Never for anyone else's.`,
         api_key_placeholder: `Paste your API key here`,
         already_existing_suffix: `saved`,
-        custom_deprecated_description: `Moved to /personal custom-endpoint add.`,
+        custom_deprecated_description: `Moved to /personal providers.`,
         custom_moved_title: `Custom Endpoint Moved`,
         custom_moved_description: `The legacy Custom Endpoint provider flow is deprecated. Register the endpoint with {custom_models_add_command}, then activate it with {model_text_command}. Open {help_custom_models_command}, then Features > Custom Endpoints, for the updated help page.`,
         success_title: `Personal Provider Saved`,
@@ -171,7 +174,7 @@ Continue?`,
 
 {scope_notice}
 
-Choose which capabilities use a personal override with \`/personal provider toggle-models\`.`,
+Choose which capabilities use a personal override with \`/personal providers\`.`,
         updated_description: `{provider} was updated in your personal provider vault, and your personal **Text** override is now enabled with \`{model_name}\`.
 
 {scope_notice}`,
@@ -256,7 +259,7 @@ Continue?`,
       fallback: {
         description: `Set fallback models for your personal text override, or clear slots with None.`,
         no_provider_title: `No Active Personal Text Provider`,
-        no_provider_description: `Enable a personal text override first with \`/personal provider add\` or \`/personal provider model-text\`.`,
+        no_provider_description: `Enable a personal text override first with \`/personal providers\` or \`/personal provider model-text\`.`,
         primary_conflict_title: `Invalid Selection`,
         primary_conflict_description: `One or more selected fallback models matches your personal primary model \`{model}\` for this provider. Please choose different models.`,
         success_title: `Personal Fallback Updated`,

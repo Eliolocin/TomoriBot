@@ -101,7 +101,7 @@
       no_embedding_model_title: `No Embedding Model Set`,
       no_embedding_model_description: `An embedding model is not configured for this provider. Please set one using \`/model embedding\`.`,
       no_api_key_title: `No API Key Set`,
-      no_api_key_description: `Saved embedding provider credentials are required to embed documents. Please use \`/provider add\`.`,
+      no_api_key_description: `Saved embedding provider credentials are required to embed documents. Please use \`/providers\`.`,
       invalid_name_title: `Invalid Document Name`,
       invalid_name_description: `Please provide a valid document name (1-64 characters).`,
       duplicate_title: `Document Name Already Exists`,

@@ -105,17 +105,17 @@ export function getProviderGuide(providerId: HelpProviderId): ProviderGuideDefin
 
 export function getProviderGuideVariables(locale: string): HelpVariables {
   return {
-    configBraveapiSet: commandRegistry.getCommandMention("optional-key", "brave", "set"),
+    configBraveapiSet: commandRegistry.getCommandMention("providers"),
     configSetup: commandRegistry.getCommandMention("setup"),
-    configApikeySet: commandRegistry.getCommandMention("provider", "add"),
+    configApikeySet: commandRegistry.getCommandMention("providers"),
     configModel: commandRegistry.getCommandMention("model", "text"),
     configModelEmbedding: commandRegistry.getCommandMention("model", "embedding"),
     configModelImage: commandRegistry.getCommandMention("model", "image"),
-    configCustomModelsAdd: commandRegistry.getCommandMention("provider", "custom-endpoint", "add"),
-    personalCustomModelsAdd: commandRegistry.getCommandMention("personal", "custom-endpoint", "add"),
+    configCustomModelsAdd: commandRegistry.getCommandMention("providers"),
+    personalCustomModelsAdd: commandRegistry.getCommandMention("personal", "providers"),
     helpCustomModels: buildHelpPageReference(locale, "commands.help.dashboard.pages.custom_endpoints"),
     supportServer: commandRegistry.getCommandMention("support", "discord"),
-    configSpeechElevenlabs: commandRegistry.getCommandMention("speech", "elevenlabs"),
+    configSpeechElevenlabs: commandRegistry.getCommandMention("providers"),
     configSpeechVoiceAssign: commandRegistry.getCommandMention("speech", "voice-assign"),
     configSpeechTranscripts: commandRegistry.getCommandMention("speech", "transcripts"),
   };

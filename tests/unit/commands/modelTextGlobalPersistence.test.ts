@@ -253,7 +253,7 @@ scopedMock.module("@/utils/provider/providerInfoRegistry", () => ({
 scopedMock.module("@/utils/discord/commandRegistry", () => ({
   ...realCommandRegistry,
   commandRegistry: overrideMembers(realCommandRegistry.commandRegistry, {
-    getCommandMention: () => "/openrouter model",
+    getCommandMention: () => "/providers",
   }),
 }));
 

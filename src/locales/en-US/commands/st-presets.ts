@@ -2,6 +2,7 @@ export default {
   "st-presets": {
     description: `Manage and switch SillyTavern chat completion presets.`,
     title: `SillyTavern Presets`,
+    selector_guidance: `**Select** or **add** a preset using the dropdown below.`,
     select_placeholder: `Choose a preset or action...`,
     select_none: `None (no chat completion preset)`,
     select_none_description: `Disable chat completion presets`,
@@ -21,7 +22,7 @@ export default {
     stale_warning: `Saved data may be out of date because the read failed. Write actions are unavailable until a fresh read succeeds.`,
     unavailable: `Preset data could not be loaded. Retry to try again.`,
     outdated_panel: `This preset panel is outdated. Run /st-presets again.`,
-    not_setup: `TomoriBot is not set up in this workspace yet. Run /setup first.`,
+    not_setup: `This workspace is not set up yet. Run /setup first.`,
     add_modal_title: `Add New Preset`,
     file_label: `Preset File (.json)`,
     file_description: `Upload a SillyTavern JSON preset file`,

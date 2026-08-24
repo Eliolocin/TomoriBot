@@ -26,7 +26,7 @@ TomoriBotは、Speech-to-Textを`transcription`カスタムエンドポイント
 ## セットアップ手順
 
 1. 上記のエンジンガイドからSTTサーバーを1つ起動します。
-2. `/provider custom-endpoint add`を実行し、capabilityに`transcription`を、api styleに`openai-compatible-transcription`を使用して登録します。
+2. `/providers`で **Add New Custom Endpoint** を選び、API Compatibilityに`openai-compatible-transcription`を使用して登録します。
 3. 今後、登録済みのSTTエンドポイントを切り替える場合にのみ`/model transcription`を使用します。
 
 ## 文字起こしの流れ
@@ -35,4 +35,4 @@ transcriptionエンドポイントが有効な場合、TomoriBotはサポート�
 
 文字起こしをチャットに表示して投稿したい場合にのみ、`/speech transcripts`を使用してください。
 
-ElevenLabsのユーザーは`/speech elevenlabs`を使用する必要があります。これにより、speechと一緒にtranscriptionが登録されます。
+ElevenLabsのユーザーは`/providers`を使用する必要があります。これにより、speechと一緒にtranscriptionが登録されます。

@@ -333,7 +333,9 @@ export async function addRotationKey(serverId: number, provider: string, apiKey:
   try {
     const existingPointer = await sql`
       SELECT rotation_key_id FROM api_key_rotation
-      WHERE server_id = ${serverId} AND is_main_key_pointer = true
+      WHERE server_id = ${serverId}
+        AND provider = ${normalizedProvider}
+        AND is_main_key_pointer = true
       LIMIT 1
     `;
 
@@ -446,6 +448,22 @@ export async function getRotationKeyCount(serverId: number): Promise<number> {
   }
 }
 
+/** Returns the additional-key count for one provider pool. */
+export async function getRotationKeyCountForProvider(serverId: number, provider: string): Promise<number> {
+  try {
+    const result = await sql`
+      SELECT COUNT(*) as count FROM api_key_rotation
+      WHERE server_id = ${serverId}
+        AND provider = ${provider.toLowerCase()}
+        AND is_main_key_pointer = false
+    `;
+    return Number(result[0]?.count || 0);
+  } catch (error) {
+    log.error(`Error counting rotation keys for server ${serverId}, provider ${provider}:`, error);
+    return 0;
+  }
+}
+
 /**
  * Gets all rotation keys for a server (for loading into TomoriState).
  * JOINs runtime state so the returned rows include usage/error telemetry.
@@ -454,7 +472,7 @@ export async function getRotationKeyCount(serverId: number): Promise<number> {
  */
 export async function loadRotationKeys(serverId: number): Promise<ApiKeyRotationRow[]> {
   try {
-    const rows = await sql`
+    const rows = await sql<unknown[]>`
       SELECT
         akr.rotation_key_id, akr.server_id, akr.provider, akr.api_key, akr.key_version,
         akr.is_main_key_pointer, akr.is_enabled, akr.created_at, akr.updated_at,
@@ -489,6 +507,33 @@ export async function loadRotationKeys(serverId: number): Promise<ApiKeyRotation
   }
 }
 
+/** Loads the joined rotation pool for one provider. */
+export async function loadRotationKeysForProvider(serverId: number, provider: string): Promise<ApiKeyRotationRow[]> {
+  const normalizedProvider = provider.toLowerCase();
+  try {
+    const rows = await sql<unknown[]>`
+      SELECT
+        akr.rotation_key_id, akr.server_id, akr.provider, akr.api_key, akr.key_version,
+        akr.is_main_key_pointer, akr.is_enabled, akr.created_at, akr.updated_at,
+        COALESCE(rs.usage_count, 0) AS usage_count,
+        COALESCE(rs.error_count, 0) AS error_count,
+        rs.last_used_at, rs.last_error_at, rs.last_error_type, rs.last_error_message
+      FROM api_key_rotation akr
+      LEFT JOIN api_key_rotation_runtime_state rs USING (rotation_key_id)
+      WHERE akr.server_id = ${serverId}
+        AND akr.provider = ${normalizedProvider}
+      ORDER BY COALESCE(rs.usage_count, 0) ASC, akr.rotation_key_id ASC
+    `;
+    return rows.flatMap((row) => {
+      const parsed = apiKeyRotationSchema.safeParse(row);
+      return parsed.success ? [parsed.data] : [];
+    });
+  } catch (error) {
+    log.error(`Error loading rotation keys for server ${serverId}, provider ${provider}:`, error);
+    return [];
+  }
+}
+
 /**
  * Checks if API key rotation is active for a server.
  * Rotation is active when there are 2+ keys in the pool (main pointer + at least 1 rotation key).
@@ -505,6 +550,20 @@ export async function isRotationActive(serverId: number): Promise<boolean> {
     return Number(result[0]?.count || 0) >= 2;
   } catch (error) {
     log.error(`Error checking rotation status for server ${serverId}:`, error);
+    return false;
+  }
+}
+
+/** Reports whether one provider has a pointer and at least one additional key. */
+export async function isRotationActiveForProvider(serverId: number, provider: string): Promise<boolean> {
+  try {
+    const result = await sql`
+      SELECT COUNT(*) as count FROM api_key_rotation
+      WHERE server_id = ${serverId} AND provider = ${provider.toLowerCase()}
+    `;
+    return Number(result[0]?.count || 0) >= 2;
+  } catch (error) {
+    log.error(`Error checking rotation status for server ${serverId}, provider ${provider}:`, error);
     return false;
   }
 }

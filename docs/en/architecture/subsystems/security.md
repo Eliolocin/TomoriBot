@@ -52,6 +52,7 @@ Main encrypted storage locations:
 - `server_model_configs.api_key` + `server_model_configs.key_version` *(deprecated Phase 1.5 mirror; drop scheduled for step #14.5)*
 - `opt_api_keys.api_key` + `opt_api_keys.key_version`
 - `api_key_rotation.api_key` + `api_key_rotation.key_version` (except main-key pointer rows)
+- `saved_provider_configs.api_key` and `user_saved_provider_configs.api_key`, each paired with `key_version`
 
 ## Key Versioning and Rotation
 
@@ -89,10 +90,13 @@ Primary file:
 - Temporary cooldown on errored keys
   - `rate_limit`: 60s
   - `api_error`: 5min
-- Main key pointer support (`is_main_key_pointer=true`) so `server_model_configs.api_key` can participate in the pool
+- One main-key pointer per `(server_id, provider)` (`is_main_key_pointer=true`) so each saved provider's primary
+  key can participate in its own pool without coupling rotation state to another provider
 - Success/error recording updates counters and cooldown metadata
 
 This is separate from encryption key version rotation. It controls runtime provider key usage and failover.
+Personal provider credentials do not use this pool. `/personal providers` edits only the user's primary saved
+credential and never reads or writes server rotation rows.
 
 ## Privacy Model
 
@@ -187,11 +191,11 @@ Primary files:
 Current runtime protections for guild MCP servers and custom endpoints:
 - URL preflight validation still enforces the existing protocol/host policy from `validateRemoteUrl()`.
 - Actual HTTP requests no longer trust that preflight alone; each request revalidates the target URL immediately before sending.
-- The real connection is pinned to the just-validated DNS result via a per-request dispatcher, so the request does not perform a second untrusted DNS lookup.
+- The real connection is pinned to the just-validated DNS results, so the request does not perform a second untrusted DNS lookup. Idempotent `GET` and `HEAD` requests try the next validated address after a transport failure, covering hosts such as `localhost` that resolve to both IPv6 and IPv4 while listening on only one family. Non-idempotent requests fail over only after an explicit connection refusal, which occurs before the remote service accepts or processes the request.
 - Custom endpoint redirects are handled hop-by-hop with revalidation on every `Location` target and a bounded redirect depth (`USER_REMOTE_FETCH_MAX_REDIRECTS`, default `3`).
 - Guild MCP HTTP transports continue to reject redirects (`redirect: "error"`), but now use the same pinned-DNS fetch path for the underlying network call.
 
-Key takeaway: TomoriBot no longer relies on a validation-only DNS check for user-supplied remote endpoints; the validated address is now the address actually used for the request.
+Key takeaway: user-supplied remote endpoints no longer rely on a validation-only DNS check; every attempted address comes from the validated result set.
 
 The same URL-validation path is also used by `safeDownload()` for user/media downloads. Discord attachment imports, workflow JSON uploads, image/GIF/video context expansion, avatar/character-reference reloads, and provider-returned media downloads get bounded size checks, timeout enforcement, redirect revalidation, and production SSRF blocking before bytes are read into memory.
 

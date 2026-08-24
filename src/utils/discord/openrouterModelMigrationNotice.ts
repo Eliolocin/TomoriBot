@@ -11,21 +11,17 @@ export async function replyLegacyOpenRouterOtherModelMoved(
   locale: string,
   scopeKind: "server" | "personal",
 ): Promise<void> {
-  const addCommand =
+  const providersCommand =
     scopeKind === "server"
-      ? commandRegistry.getCommandMention("openrouter", "model", "add")
-      : commandRegistry.getCommandMention("personal", "openrouter-model", "add");
-  const removeCommand =
-    scopeKind === "server"
-      ? commandRegistry.getCommandMention("openrouter", "model", "remove")
-      : commandRegistry.getCommandMention("personal", "openrouter-model", "remove");
+      ? commandRegistry.getCommandMention("providers")
+      : commandRegistry.getCommandMention("personal", "providers");
 
   await replyInfoEmbed(interaction, locale, {
     titleKey: "general.openrouter_model_moved_title",
     descriptionKey: "general.openrouter_model_moved_description",
     descriptionVars: {
-      add_command: addCommand,
-      remove_command: removeCommand,
+      add_command: providersCommand,
+      remove_command: providersCommand,
     },
     color: ColorCode.ERROR,
     ...(interaction.deferred || interaction.replied ? {} : { flags: MessageFlags.Ephemeral }),

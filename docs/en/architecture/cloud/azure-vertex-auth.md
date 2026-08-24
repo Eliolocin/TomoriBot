@@ -46,7 +46,7 @@ changing its audience or impersonation target changes the identity TomoriBot req
 
 ## Discord configuration
 
-Run `/provider add`, choose **Google Vertex AI**, and enter your own project and location in
+Run `/providers`, choose **Google Vertex AI**, and enter your own project and location in
 `<gcp-project-id>::<location>` form, for example:
 
 ```text

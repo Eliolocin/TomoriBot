@@ -60,7 +60,7 @@ export default {
         no_model_title: `NovelAI画像モデルが必要です`,
         no_model_description: `現在、NovelAI画像生成は無効です。まず \`/model image\` でNovelAI画像モデルを選択してください。`,
         no_api_key_title: `NovelAI APIキーが必要です`,
-        no_api_key_description: `このサーバーには利用可能なNovelAIプロバイダー認証情報がありません。\`/provider add\`で保存するか、メインプロバイダーをNovelAIに切り替えてください。`,
+        no_api_key_description: `このサーバーには利用可能なNovelAIプロバイダー認証情報がありません。\`/providers\`で保存するか、メインプロバイダーをNovelAIに切り替えてください。`,
         invalid_reference_title: `無効なキャラクター参照画像です`,
         invalid_reference_description: `キャラクター参照画像には、NovelAIが読み取れる有効な画像添付を指定してください。`,
         character_reference_requires_v4_title: `V4モデルが必要です`,

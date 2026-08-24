@@ -92,7 +92,8 @@ const llmSpec: TableSpec<LlmInput> = {
   input_price_per_million = EXCLUDED.input_price_per_million,
   output_price_per_million = EXCLUDED.output_price_per_million,
   updated_at = CURRENT_TIMESTAMP
-  WHERE COALESCE(llms.is_scoped_registration, false) = false`,
+  WHERE COALESCE(llms.is_scoped_registration, false) = false
+     OR EXCLUDED.is_deprecated = false`,
   hasSmartest: true,
   sections: llmSections,
 };
@@ -123,7 +124,8 @@ const imageSpec: TableSpec<ImageInput> = {
   is_scoped_registration = false,
   provider = EXCLUDED.provider,
   updated_at = CURRENT_TIMESTAMP
-  WHERE COALESCE(image_diffusion_models.is_scoped_registration, false) = false`,
+  WHERE COALESCE(image_diffusion_models.is_scoped_registration, false) = false
+     OR EXCLUDED.is_deprecated = false`,
   hasSmartest: false,
   sections: imageSections,
 };
@@ -152,7 +154,8 @@ const videoSpec: TableSpec<VideoInput> = {
   is_scoped_registration = false,
   provider = EXCLUDED.provider,
   updated_at = CURRENT_TIMESTAMP
-  WHERE COALESCE(video_generation_models.is_scoped_registration, false) = false`,
+  WHERE COALESCE(video_generation_models.is_scoped_registration, false) = false
+     OR EXCLUDED.is_deprecated = false`,
   hasSmartest: false,
   sections: videoSections,
 };
@@ -181,7 +184,8 @@ const embeddingSpec: TableSpec<EmbeddingInput> = {
   is_scoped_registration = false,
   provider = EXCLUDED.provider,
   updated_at = CURRENT_TIMESTAMP
-  WHERE COALESCE(embedding_models.is_scoped_registration, false) = false`,
+  WHERE COALESCE(embedding_models.is_scoped_registration, false) = false
+     OR EXCLUDED.is_deprecated = false`,
   hasSmartest: false,
   sections: embeddingSections,
 };

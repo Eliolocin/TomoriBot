@@ -48,12 +48,24 @@ type ChannelLlmCacheOptions = LlmProviderCacheOptions & {
   channelDiscId?: string;
 };
 
+export type SavedProviderConfigsReadResult =
+  | { status: "fresh"; configs: SavedProviderConfigRow[] }
+  | { status: "unavailable"; configs: [] };
+
+type UserSavedProviderConfigsReadResult =
+  | { status: "fresh"; configs: UserSavedProviderConfigRow[] }
+  | { status: "unavailable"; configs: [] };
+
+export type CustomEndpointConnectionsReadResult =
+  | { status: "fresh"; connections: CustomEndpointConnectionRow[]; endpoints: CustomEndpointRow[] }
+  | { status: "unavailable"; connections: []; endpoints: [] };
+
 /**
- * LlmProviderRepository: saved provider configs, custom endpoints, and OpenRouter registrations.
+ * LlmProviderRepository: saved provider configs, custom endpoints, and scoped model registrations.
  *
  * Owns tables: saved_provider_configs, user_saved_provider_configs, custom_endpoint_connections,
- * custom_endpoints, openrouter_model_registrations, openrouter_embedding_model_registrations,
- * openrouter_image_model_registrations, openrouter_video_model_registrations.
+ * custom_endpoints, scoped_model_registrations, scoped_model_registrations,
+ * scoped_model_registrations, scoped_model_registrations.
  */
 class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   private hydrateCustomEndpointRow(row: unknown): CustomEndpointRow | null {
@@ -100,20 +112,24 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
     }
   }
 
-  private async scopedLlmRows(scope: OpenRouterModelScope, includeDeprecated: boolean): Promise<unknown[]> {
+  private async scopedLlmRows(
+    scope: OpenRouterModelScope,
+    includeDeprecated: boolean,
+    provider = "openrouter",
+  ): Promise<unknown[]> {
     if (scope.kind === "server") {
       return includeDeprecated
         ? await sql`
             SELECT l.*
             FROM llms l
-            WHERE l.llm_provider = 'openrouter'
+            WHERE l.llm_provider = ${provider}
               AND (
                 COALESCE(l.is_scoped_registration, false) = false
                 OR (
                   COALESCE(l.is_scoped_registration, false) = true
                   AND EXISTS (
                     SELECT 1
-                    FROM openrouter_model_registrations omr
+                    FROM scoped_model_registrations omr
                     WHERE omr.llm_id = l.llm_id
                       AND omr.server_id = ${scope.ownerId}
                       AND omr.user_id IS NULL
@@ -125,7 +141,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         : await sql`
             SELECT l.*
             FROM llms l
-            WHERE l.llm_provider = 'openrouter'
+            WHERE l.llm_provider = ${provider}
               AND l.is_deprecated = false
               AND (
                 COALESCE(l.is_scoped_registration, false) = false
@@ -133,7 +149,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
                   COALESCE(l.is_scoped_registration, false) = true
                   AND EXISTS (
                     SELECT 1
-                    FROM openrouter_model_registrations omr
+                    FROM scoped_model_registrations omr
                     WHERE omr.llm_id = l.llm_id
                       AND omr.server_id = ${scope.ownerId}
                       AND omr.user_id IS NULL
@@ -148,14 +164,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       ? await sql`
           SELECT l.*
           FROM llms l
-          WHERE l.llm_provider = 'openrouter'
+          WHERE l.llm_provider = ${provider}
             AND (
               COALESCE(l.is_scoped_registration, false) = false
               OR (
                 COALESCE(l.is_scoped_registration, false) = true
                 AND EXISTS (
                   SELECT 1
-                  FROM openrouter_model_registrations omr
+                  FROM scoped_model_registrations omr
                   WHERE omr.llm_id = l.llm_id
                     AND omr.user_id = ${scope.ownerId}
                     AND omr.server_id IS NULL
@@ -167,7 +183,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       : await sql`
           SELECT l.*
           FROM llms l
-          WHERE l.llm_provider = 'openrouter'
+          WHERE l.llm_provider = ${provider}
             AND l.is_deprecated = false
             AND (
               COALESCE(l.is_scoped_registration, false) = false
@@ -175,7 +191,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
                 COALESCE(l.is_scoped_registration, false) = true
                 AND EXISTS (
                   SELECT 1
-                  FROM openrouter_model_registrations omr
+                  FROM scoped_model_registrations omr
                   WHERE omr.llm_id = l.llm_id
                     AND omr.user_id = ${scope.ownerId}
                     AND omr.server_id IS NULL
@@ -186,20 +202,24 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         `;
   }
 
-  private async scopedEmbeddingModelRows(scope: OpenRouterModelScope, includeDeprecated: boolean): Promise<unknown[]> {
+  private async scopedEmbeddingModelRows(
+    scope: OpenRouterModelScope,
+    includeDeprecated: boolean,
+    provider = "openrouter",
+  ): Promise<unknown[]> {
     if (scope.kind === "server") {
       return includeDeprecated
         ? await sql`
             SELECT em.*
             FROM embedding_models em
-            WHERE em.provider = 'openrouter'
+            WHERE em.provider = ${provider}
               AND (
                 COALESCE(em.is_scoped_registration, false) = false
                 OR (
                   COALESCE(em.is_scoped_registration, false) = true
                   AND EXISTS (
                     SELECT 1
-                    FROM openrouter_embedding_model_registrations oemr
+                    FROM scoped_model_registrations oemr
                     WHERE oemr.embedding_model_id = em.embedding_model_id
                       AND oemr.server_id = ${scope.ownerId}
                       AND oemr.user_id IS NULL
@@ -211,7 +231,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         : await sql`
             SELECT em.*
             FROM embedding_models em
-            WHERE em.provider = 'openrouter'
+            WHERE em.provider = ${provider}
               AND em.is_deprecated = false
               AND (
                 COALESCE(em.is_scoped_registration, false) = false
@@ -219,7 +239,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
                   COALESCE(em.is_scoped_registration, false) = true
                   AND EXISTS (
                     SELECT 1
-                    FROM openrouter_embedding_model_registrations oemr
+                    FROM scoped_model_registrations oemr
                     WHERE oemr.embedding_model_id = em.embedding_model_id
                       AND oemr.server_id = ${scope.ownerId}
                       AND oemr.user_id IS NULL
@@ -234,14 +254,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       ? await sql`
           SELECT em.*
           FROM embedding_models em
-          WHERE em.provider = 'openrouter'
+          WHERE em.provider = ${provider}
             AND (
               COALESCE(em.is_scoped_registration, false) = false
               OR (
                 COALESCE(em.is_scoped_registration, false) = true
                 AND EXISTS (
                   SELECT 1
-                  FROM openrouter_embedding_model_registrations oemr
+                  FROM scoped_model_registrations oemr
                   WHERE oemr.embedding_model_id = em.embedding_model_id
                     AND oemr.user_id = ${scope.ownerId}
                     AND oemr.server_id IS NULL
@@ -253,7 +273,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       : await sql`
           SELECT em.*
           FROM embedding_models em
-          WHERE em.provider = 'openrouter'
+          WHERE em.provider = ${provider}
             AND em.is_deprecated = false
             AND (
               COALESCE(em.is_scoped_registration, false) = false
@@ -261,7 +281,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
                 COALESCE(em.is_scoped_registration, false) = true
                 AND EXISTS (
                   SELECT 1
-                  FROM openrouter_embedding_model_registrations oemr
+                  FROM scoped_model_registrations oemr
                   WHERE oemr.embedding_model_id = em.embedding_model_id
                     AND oemr.user_id = ${scope.ownerId}
                     AND oemr.server_id IS NULL
@@ -272,20 +292,24 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         `;
   }
 
-  private async scopedDiffusionModelRows(scope: OpenRouterModelScope, includeDeprecated: boolean): Promise<unknown[]> {
+  private async scopedDiffusionModelRows(
+    scope: OpenRouterModelScope,
+    includeDeprecated: boolean,
+    provider = "openrouter",
+  ): Promise<unknown[]> {
     if (scope.kind === "server") {
       return includeDeprecated
         ? await sql`
             SELECT dm.*
             FROM image_diffusion_models dm
-            WHERE dm.provider = 'openrouter'
+            WHERE dm.provider = ${provider}
               AND (
                 COALESCE(dm.is_scoped_registration, false) = false
                 OR (
                   COALESCE(dm.is_scoped_registration, false) = true
                   AND EXISTS (
                     SELECT 1
-                    FROM openrouter_image_model_registrations oimr
+                    FROM scoped_model_registrations oimr
                     WHERE oimr.diffusion_model_id = dm.diffusion_model_id
                       AND oimr.server_id = ${scope.ownerId}
                       AND oimr.user_id IS NULL
@@ -297,7 +321,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         : await sql`
             SELECT dm.*
             FROM image_diffusion_models dm
-            WHERE dm.provider = 'openrouter'
+            WHERE dm.provider = ${provider}
               AND dm.is_deprecated = false
               AND (
                 COALESCE(dm.is_scoped_registration, false) = false
@@ -305,7 +329,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
                   COALESCE(dm.is_scoped_registration, false) = true
                   AND EXISTS (
                     SELECT 1
-                    FROM openrouter_image_model_registrations oimr
+                    FROM scoped_model_registrations oimr
                     WHERE oimr.diffusion_model_id = dm.diffusion_model_id
                       AND oimr.server_id = ${scope.ownerId}
                       AND oimr.user_id IS NULL
@@ -320,14 +344,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       ? await sql`
           SELECT dm.*
           FROM image_diffusion_models dm
-          WHERE dm.provider = 'openrouter'
+          WHERE dm.provider = ${provider}
             AND (
               COALESCE(dm.is_scoped_registration, false) = false
               OR (
                 COALESCE(dm.is_scoped_registration, false) = true
                 AND EXISTS (
                   SELECT 1
-                  FROM openrouter_image_model_registrations oimr
+                  FROM scoped_model_registrations oimr
                   WHERE oimr.diffusion_model_id = dm.diffusion_model_id
                     AND oimr.user_id = ${scope.ownerId}
                     AND oimr.server_id IS NULL
@@ -339,7 +363,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       : await sql`
           SELECT dm.*
           FROM image_diffusion_models dm
-          WHERE dm.provider = 'openrouter'
+          WHERE dm.provider = ${provider}
             AND dm.is_deprecated = false
             AND (
               COALESCE(dm.is_scoped_registration, false) = false
@@ -347,7 +371,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
                 COALESCE(dm.is_scoped_registration, false) = true
                 AND EXISTS (
                   SELECT 1
-                  FROM openrouter_image_model_registrations oimr
+                  FROM scoped_model_registrations oimr
                   WHERE oimr.diffusion_model_id = dm.diffusion_model_id
                     AND oimr.user_id = ${scope.ownerId}
                     AND oimr.server_id IS NULL
@@ -358,20 +382,24 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         `;
   }
 
-  private async scopedVideoModelRows(scope: OpenRouterModelScope, includeDeprecated: boolean): Promise<unknown[]> {
+  private async scopedVideoModelRows(
+    scope: OpenRouterModelScope,
+    includeDeprecated: boolean,
+    provider = "openrouter",
+  ): Promise<unknown[]> {
     if (scope.kind === "server") {
       return includeDeprecated
         ? await sql`
             SELECT vm.*
             FROM video_generation_models vm
-            WHERE vm.provider = 'openrouter'
+            WHERE vm.provider = ${provider}
               AND (
                 COALESCE(vm.is_scoped_registration, false) = false
                 OR (
                   COALESCE(vm.is_scoped_registration, false) = true
                   AND EXISTS (
                     SELECT 1
-                    FROM openrouter_video_model_registrations ovmr
+                    FROM scoped_model_registrations ovmr
                     WHERE ovmr.video_model_id = vm.video_model_id
                       AND ovmr.server_id = ${scope.ownerId}
                       AND ovmr.user_id IS NULL
@@ -383,7 +411,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         : await sql`
             SELECT vm.*
             FROM video_generation_models vm
-            WHERE vm.provider = 'openrouter'
+            WHERE vm.provider = ${provider}
               AND vm.is_deprecated = false
               AND (
                 COALESCE(vm.is_scoped_registration, false) = false
@@ -391,7 +419,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
                   COALESCE(vm.is_scoped_registration, false) = true
                   AND EXISTS (
                     SELECT 1
-                    FROM openrouter_video_model_registrations ovmr
+                    FROM scoped_model_registrations ovmr
                     WHERE ovmr.video_model_id = vm.video_model_id
                       AND ovmr.server_id = ${scope.ownerId}
                       AND ovmr.user_id IS NULL
@@ -406,14 +434,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       ? await sql`
           SELECT vm.*
           FROM video_generation_models vm
-          WHERE vm.provider = 'openrouter'
+          WHERE vm.provider = ${provider}
             AND (
               COALESCE(vm.is_scoped_registration, false) = false
               OR (
                 COALESCE(vm.is_scoped_registration, false) = true
                 AND EXISTS (
                   SELECT 1
-                  FROM openrouter_video_model_registrations ovmr
+                  FROM scoped_model_registrations ovmr
                   WHERE ovmr.video_model_id = vm.video_model_id
                     AND ovmr.user_id = ${scope.ownerId}
                     AND ovmr.server_id IS NULL
@@ -425,7 +453,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       : await sql`
           SELECT vm.*
           FROM video_generation_models vm
-          WHERE vm.provider = 'openrouter'
+          WHERE vm.provider = ${provider}
             AND vm.is_deprecated = false
             AND (
               COALESCE(vm.is_scoped_registration, false) = false
@@ -433,7 +461,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
                 COALESCE(vm.is_scoped_registration, false) = true
                 AND EXISTS (
                   SELECT 1
-                  FROM openrouter_video_model_registrations ovmr
+                  FROM scoped_model_registrations ovmr
                   WHERE ovmr.video_model_id = vm.video_model_id
                     AND ovmr.user_id = ${scope.ownerId}
                     AND ovmr.server_id IS NULL
@@ -454,6 +482,13 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
    * @param serverId - Internal server DB ID
    */
   async loadSavedProviderConfigs(serverId: number): Promise<SavedProviderConfigRow[]> {
+    return (await this.loadSavedProviderConfigsResult(serverId)).configs;
+  }
+
+  /**
+   * Loads saved server provider rows without presenting a failed database read as an empty collection.
+   */
+  async loadSavedProviderConfigsResult(serverId: number): Promise<SavedProviderConfigsReadResult> {
     try {
       const rows = await sql`
         SELECT * FROM saved_provider_configs
@@ -461,7 +496,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         ORDER BY provider ASC
       `;
 
-      if (!rows || rows.length === 0) return [];
+      if (!rows || rows.length === 0) return { status: "fresh", configs: [] };
 
       const validated: SavedProviderConfigRow[] = [];
       for (const row of rows) {
@@ -475,10 +510,10 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         }
       }
       await this.hydrateCustomProviderLabelsForOwner({ serverId });
-      return validated;
+      return { status: "fresh", configs: validated };
     } catch (error) {
       log.error(`Error loading saved provider configs for server ${serverId}:`, error);
-      return [];
+      return { status: "unavailable", configs: [] };
     }
   }
 
@@ -516,6 +551,10 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
    * @param userId - Internal user DB ID
    */
   async loadUserSavedProviderConfigs(userId: number): Promise<UserSavedProviderConfigRow[]> {
+    return (await this.loadUserSavedProviderConfigsResult(userId)).configs;
+  }
+
+  async loadUserSavedProviderConfigsResult(userId: number): Promise<UserSavedProviderConfigsReadResult> {
     try {
       const rows = await sql`
         SELECT * FROM user_saved_provider_configs
@@ -523,7 +562,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         ORDER BY provider ASC
       `;
 
-      if (!rows || rows.length === 0) return [];
+      if (!rows || rows.length === 0) return { status: "fresh", configs: [] };
 
       const validated: UserSavedProviderConfigRow[] = [];
       for (const row of rows) {
@@ -537,10 +576,10 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         }
       }
       await this.hydrateCustomProviderLabelsForOwner({ userId });
-      return validated;
+      return { status: "fresh", configs: validated };
     } catch (error) {
       log.error(`Error loading user saved provider configs for user ${userId}:`, error);
-      return [];
+      return { status: "unavailable", configs: [] };
     }
   }
 
@@ -580,10 +619,24 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
    * @param serverId - Internal server DB ID
    */
   async loadCustomEndpointsForServer(serverId: number): Promise<CustomEndpointRow[]> {
+    return (await this.loadCustomEndpointConnectionsForServerResult(serverId)).endpoints;
+  }
+
+  /**
+   * Loads connection entities and their optional model rows together, including zero-model connections.
+   */
+  async loadCustomEndpointConnectionsForServerResult(serverId: number): Promise<CustomEndpointConnectionsReadResult> {
     try {
-      // Returns every model row; a label+capability may now hold several models (distinguished by
-      // model_name), so we no longer collapse with DISTINCT ON. Ordered for stable picker listing.
-      const rows = await sql<unknown[]>`
+      const [connectionRows, endpointRows] = await Promise.all([
+        sql<unknown[]>`
+          SELECT connection_id, server_id, user_id, label, capability, api_style,
+                 endpoint_url, requires_auth, created_at, updated_at
+          FROM custom_endpoint_connections
+          WHERE server_id = ${serverId}
+            AND user_id IS NULL
+          ORDER BY created_at ASC, connection_id ASC
+        `,
+        sql<unknown[]>`
         SELECT
           ce.custom_endpoint_id,
           ce.connection_id,
@@ -612,12 +665,24 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         WHERE cec.server_id = ${serverId}
           AND cec.user_id IS NULL
         ORDER BY cec.label ASC, cec.capability ASC, ce.model_name ASC NULLS FIRST, ce.custom_endpoint_id ASC
-      `;
+        `,
+      ]);
 
-      return this.hydrateCustomEndpointRows(rows);
+      const connections: CustomEndpointConnectionRow[] = [];
+      for (const row of connectionRows) {
+        const parsed = customEndpointConnectionSchema.safeParse(row);
+        if (parsed.success) {
+          rememberCustomProviderLabel(buildCustomProviderName(parsed.data.connection_id), parsed.data.label);
+          connections.push(parsed.data);
+        } else {
+          log.warn(`Invalid custom endpoint connection row for server ${serverId}: ${parsed.error.message}`);
+        }
+      }
+
+      return { status: "fresh", connections, endpoints: this.hydrateCustomEndpointRows(endpointRows) };
     } catch (error) {
-      log.error(`Error loading custom endpoints for server ${serverId}:`, error);
-      return [];
+      log.error(`Error loading custom endpoint connections for server ${serverId}:`, error);
+      return { status: "unavailable", connections: [], endpoints: [] };
     }
   }
 
@@ -627,10 +692,22 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
    * @param userId - Internal user DB ID
    */
   async loadCustomEndpointsForUser(userId: number): Promise<CustomEndpointRow[]> {
+    return (await this.loadCustomEndpointConnectionsForUserResult(userId)).endpoints;
+  }
+
+  /** Loads user-owned connections and their optional model rows, including zero-model connections. */
+  async loadCustomEndpointConnectionsForUserResult(userId: number): Promise<CustomEndpointConnectionsReadResult> {
     try {
-      // Returns every model row; a label+capability may now hold several models (distinguished by
-      // model_name), so we no longer collapse with DISTINCT ON. Ordered for stable picker listing.
-      const rows = await sql<unknown[]>`
+      const [connectionRows, endpointRows] = await Promise.all([
+        sql<unknown[]>`
+          SELECT connection_id, server_id, user_id, label, capability, api_style,
+                 endpoint_url, requires_auth, created_at, updated_at
+          FROM custom_endpoint_connections
+          WHERE user_id = ${userId}
+            AND server_id IS NULL
+          ORDER BY created_at ASC, connection_id ASC
+        `,
+        sql<unknown[]>`
         SELECT
           ce.custom_endpoint_id,
           ce.connection_id,
@@ -659,12 +736,23 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
         WHERE cec.user_id = ${userId}
           AND cec.server_id IS NULL
         ORDER BY cec.label ASC, cec.capability ASC, ce.model_name ASC NULLS FIRST, ce.custom_endpoint_id ASC
-      `;
+        `,
+      ]);
 
-      return this.hydrateCustomEndpointRows(rows);
+      const connections: CustomEndpointConnectionRow[] = [];
+      for (const row of connectionRows) {
+        const parsed = customEndpointConnectionSchema.safeParse(row);
+        if (parsed.success) {
+          rememberCustomProviderLabel(buildCustomProviderName(parsed.data.connection_id), parsed.data.label);
+          connections.push(parsed.data);
+        } else {
+          log.warn(`Invalid custom endpoint connection row for user ${userId}: ${parsed.error.message}`);
+        }
+      }
+      return { status: "fresh", connections, endpoints: this.hydrateCustomEndpointRows(endpointRows) };
     } catch (error) {
-      log.error(`Error loading custom endpoints for user ${userId}:`, error);
-      return [];
+      log.error(`Error loading custom endpoint connections for user ${userId}:`, error);
+      return { status: "unavailable", connections: [], endpoints: [] };
     }
   }
 
@@ -1145,11 +1233,289 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
     }
   }
 
+  /** Updates one server-owned endpoint group and its credential snapshots atomically. */
+  async updateServerCustomEndpointConnectionGroup(params: {
+    serverId: number;
+    connectionIds: number[];
+    label?: string;
+    endpointUrl?: string;
+    encryptedApiKey?: Buffer;
+    keyVersion?: number;
+  }): Promise<boolean> {
+    if (params.connectionIds.length === 0) return false;
+    try {
+      return await sql.begin(async (tx) => {
+        const owned = await tx<Array<{ connection_id: number }>>`
+          SELECT connection_id
+          FROM custom_endpoint_connections
+          WHERE server_id = ${params.serverId}
+            AND user_id IS NULL
+            AND connection_id = ANY(${sql.array(params.connectionIds, "int4")})
+          FOR UPDATE
+        `;
+        if (owned.length !== params.connectionIds.length) return false;
+
+        await tx`
+          UPDATE custom_endpoint_connections
+          SET
+            label = COALESCE(${params.label ?? null}, label),
+            endpoint_url = COALESCE(${params.endpointUrl ?? null}, endpoint_url),
+            requires_auth = CASE WHEN ${params.encryptedApiKey ?? null}::bytea IS NULL THEN requires_auth ELSE true END,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE connection_id = ANY(${sql.array(params.connectionIds, "int4")})
+        `;
+
+        if (params.encryptedApiKey) {
+          const providerKeys = params.connectionIds.map((connectionId) => `custom:${connectionId}`);
+          const updated = await tx`
+            UPDATE saved_provider_configs
+            SET
+              api_key = ${params.encryptedApiKey},
+              key_version = ${params.keyVersion ?? 1},
+              updated_at = CURRENT_TIMESTAMP
+            WHERE server_id = ${params.serverId}
+              AND provider = ANY(${sql.array(providerKeys, "text")})
+          `;
+          if (updated.count !== providerKeys.length) {
+            throw new Error("Endpoint credential snapshot count changed during group edit");
+          }
+        }
+        return true;
+      });
+    } catch (error) {
+      log.error(`Error updating custom endpoint group for server ${params.serverId}:`, error);
+      return false;
+    }
+  }
+
+  /** Updates one user-owned endpoint group and its credential snapshots atomically. */
+  async updateUserCustomEndpointConnectionGroup(params: {
+    userId: number;
+    connectionIds: number[];
+    label?: string;
+    endpointUrl?: string;
+    encryptedApiKey?: Buffer;
+    keyVersion?: number;
+  }): Promise<boolean> {
+    if (params.connectionIds.length === 0) return false;
+    try {
+      return await sql.begin(async (tx) => {
+        const owned = await tx<Array<{ connection_id: number }>>`
+          SELECT connection_id
+          FROM custom_endpoint_connections
+          WHERE user_id = ${params.userId}
+            AND server_id IS NULL
+            AND connection_id = ANY(${sql.array(params.connectionIds, "int4")})
+          FOR UPDATE
+        `;
+        if (owned.length !== params.connectionIds.length) return false;
+
+        await tx`
+          UPDATE custom_endpoint_connections
+          SET
+            label = COALESCE(${params.label ?? null}, label),
+            endpoint_url = COALESCE(${params.endpointUrl ?? null}, endpoint_url),
+            requires_auth = CASE WHEN ${params.encryptedApiKey ?? null}::bytea IS NULL THEN requires_auth ELSE true END,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE connection_id = ANY(${sql.array(params.connectionIds, "int4")})
+        `;
+
+        if (params.encryptedApiKey) {
+          const providerKeys = params.connectionIds.map((connectionId) => `custom:${connectionId}`);
+          const updated = await tx`
+            UPDATE user_saved_provider_configs
+            SET
+              api_key = ${params.encryptedApiKey},
+              key_version = ${params.keyVersion ?? 1},
+              updated_at = CURRENT_TIMESTAMP
+            WHERE user_id = ${params.userId}
+              AND provider = ANY(${sql.array(providerKeys, "text")})
+          `;
+          if (updated.count !== providerKeys.length) {
+            throw new Error("Personal endpoint credential snapshot count changed during group edit");
+          }
+        }
+        return true;
+      });
+    } catch (error) {
+      log.error(`Error updating custom endpoint group for user ${params.userId}:`, error);
+      return false;
+    }
+  }
+
+  /** Deletes a server provider snapshot, its rotation pool, and its scope-local model registrations atomically. */
+  async deleteServerProviderRegistration(serverId: number, provider: string): Promise<boolean> {
+    const normalizedProvider = provider.toLowerCase();
+    try {
+      return await sql.begin(async (tx) => {
+        const deleted = await tx`
+          DELETE FROM saved_provider_configs
+          WHERE server_id = ${serverId} AND provider = ${normalizedProvider}
+        `;
+        if (deleted.count === 0) return false;
+
+        await tx`
+          DELETE FROM api_key_rotation
+          WHERE server_id = ${serverId} AND provider = ${normalizedProvider}
+        `;
+        await tx`
+          DELETE FROM scoped_model_registrations registration
+          WHERE registration.server_id = ${serverId}
+            AND (
+              EXISTS (
+                SELECT 1 FROM llms model
+                WHERE model.llm_id = registration.llm_id AND model.llm_provider = ${normalizedProvider}
+              )
+              OR EXISTS (
+                SELECT 1 FROM embedding_models model
+                WHERE model.embedding_model_id = registration.embedding_model_id
+                  AND model.provider = ${normalizedProvider}
+              )
+              OR EXISTS (
+                SELECT 1 FROM image_diffusion_models model
+                WHERE model.diffusion_model_id = registration.diffusion_model_id
+                  AND model.provider = ${normalizedProvider}
+              )
+              OR EXISTS (
+                SELECT 1 FROM video_generation_models model
+                WHERE model.video_model_id = registration.video_model_id
+                  AND model.provider = ${normalizedProvider}
+              )
+            )
+        `;
+        return true;
+      });
+    } catch (error) {
+      log.error(`Error deleting server provider registration ${provider}:`, error);
+      return false;
+    }
+  }
+
+  /** Deletes a personal provider snapshot and its scope-local model registrations atomically. */
+  async deleteUserProviderRegistration(userId: number, provider: string): Promise<boolean> {
+    const normalizedProvider = provider.toLowerCase();
+    try {
+      return await sql.begin(async (tx) => {
+        const deleted = await tx`
+          DELETE FROM user_saved_provider_configs
+          WHERE user_id = ${userId} AND provider = ${normalizedProvider}
+        `;
+        if (deleted.count === 0) return false;
+
+        await tx`
+          DELETE FROM scoped_model_registrations registration
+          WHERE registration.user_id = ${userId}
+            AND (
+              EXISTS (
+                SELECT 1 FROM llms model
+                WHERE model.llm_id = registration.llm_id AND model.llm_provider = ${normalizedProvider}
+              )
+              OR EXISTS (
+                SELECT 1 FROM embedding_models model
+                WHERE model.embedding_model_id = registration.embedding_model_id
+                  AND model.provider = ${normalizedProvider}
+              )
+              OR EXISTS (
+                SELECT 1 FROM image_diffusion_models model
+                WHERE model.diffusion_model_id = registration.diffusion_model_id
+                  AND model.provider = ${normalizedProvider}
+              )
+              OR EXISTS (
+                SELECT 1 FROM video_generation_models model
+                WHERE model.video_model_id = registration.video_model_id
+                  AND model.provider = ${normalizedProvider}
+              )
+            )
+        `;
+        return true;
+      });
+    } catch (error) {
+      log.error(`Error deleting personal provider registration ${provider}:`, error);
+      return false;
+    }
+  }
+
+  /** Deletes server-owned endpoint connections, snapshots, and synthetic models as one durable entity group. */
+  async deleteServerCustomEndpointConnectionGroup(serverId: number, connectionIds: number[]): Promise<boolean> {
+    const uniqueIds = [...new Set(connectionIds)];
+    if (uniqueIds.length === 0) return false;
+    try {
+      return await sql.begin(async (tx) => {
+        const owned = await tx<Array<{ connection_id: number }>>`
+          SELECT connection_id
+          FROM custom_endpoint_connections
+          WHERE server_id = ${serverId}
+            AND user_id IS NULL
+            AND connection_id = ANY(${sql.array(uniqueIds, "int4")})
+          FOR UPDATE
+        `;
+        if (owned.length !== uniqueIds.length) return false;
+
+        const providerKeys = uniqueIds.map((connectionId) => `custom:${connectionId}`);
+        await tx`
+          DELETE FROM saved_provider_configs
+          WHERE server_id = ${serverId}
+            AND provider = ANY(${sql.array(providerKeys, "text")})
+        `;
+        await tx`
+          DELETE FROM custom_endpoint_connections
+          WHERE connection_id = ANY(${sql.array(uniqueIds, "int4")})
+        `;
+        await tx`DELETE FROM llms WHERE llm_provider = ANY(${sql.array(providerKeys, "text")})`;
+        await tx`DELETE FROM embedding_models WHERE provider = ANY(${sql.array(providerKeys, "text")})`;
+        await tx`DELETE FROM image_diffusion_models WHERE provider = ANY(${sql.array(providerKeys, "text")})`;
+        await tx`DELETE FROM video_generation_models WHERE provider = ANY(${sql.array(providerKeys, "text")})`;
+        return true;
+      });
+    } catch (error) {
+      log.error(`Error deleting server endpoint connection group ${connectionIds.join(",")}:`, error);
+      return false;
+    }
+  }
+
+  /** Deletes user-owned endpoint connections, snapshots, and synthetic models as one durable entity group. */
+  async deleteUserCustomEndpointConnectionGroup(userId: number, connectionIds: number[]): Promise<boolean> {
+    const uniqueIds = [...new Set(connectionIds)];
+    if (uniqueIds.length === 0) return false;
+    try {
+      return await sql.begin(async (tx) => {
+        const owned = await tx<Array<{ connection_id: number }>>`
+          SELECT connection_id
+          FROM custom_endpoint_connections
+          WHERE user_id = ${userId}
+            AND server_id IS NULL
+            AND connection_id = ANY(${sql.array(uniqueIds, "int4")})
+          FOR UPDATE
+        `;
+        if (owned.length !== uniqueIds.length) return false;
+
+        const providerKeys = uniqueIds.map((connectionId) => `custom:${connectionId}`);
+        await tx`
+          DELETE FROM user_saved_provider_configs
+          WHERE user_id = ${userId}
+            AND provider = ANY(${sql.array(providerKeys, "text")})
+        `;
+        await tx`
+          DELETE FROM custom_endpoint_connections
+          WHERE connection_id = ANY(${sql.array(uniqueIds, "int4")})
+        `;
+        await tx`DELETE FROM llms WHERE llm_provider = ANY(${sql.array(providerKeys, "text")})`;
+        await tx`DELETE FROM embedding_models WHERE provider = ANY(${sql.array(providerKeys, "text")})`;
+        await tx`DELETE FROM image_diffusion_models WHERE provider = ANY(${sql.array(providerKeys, "text")})`;
+        await tx`DELETE FROM video_generation_models WHERE provider = ANY(${sql.array(providerKeys, "text")})`;
+        return true;
+      });
+    } catch (error) {
+      log.error(`Error deleting personal endpoint connection group ${connectionIds.join(",")}:`, error);
+      return false;
+    }
+  }
+
   /** Returns LLM registrations for a server. @param serverId - Internal server DB ID */
   async loadOpenRouterModelRegistrationsForServer(serverId: number): Promise<OpenRouterModelRegistrationRow[]> {
     try {
       const rows = await sql<unknown[]>`
-        SELECT * FROM openrouter_model_registrations
+        SELECT * FROM scoped_model_registrations
         WHERE server_id = ${serverId} AND user_id IS NULL
         ORDER BY llm_id ASC
       `;
@@ -1166,7 +1532,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   async loadOpenRouterModelRegistrationsForUser(userId: number): Promise<OpenRouterModelRegistrationRow[]> {
     try {
       const rows = await sql<unknown[]>`
-        SELECT * FROM openrouter_model_registrations
+        SELECT * FROM scoped_model_registrations
         WHERE user_id = ${userId} AND server_id IS NULL
         ORDER BY llm_id ASC
       `;
@@ -1185,7 +1551,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   ): Promise<OpenRouterEmbeddingModelRegistrationRow[]> {
     try {
       const rows = await sql<unknown[]>`
-        SELECT * FROM openrouter_embedding_model_registrations
+        SELECT * FROM scoped_model_registrations
         WHERE server_id = ${serverId} AND user_id IS NULL
         ORDER BY embedding_model_id ASC
       `;
@@ -1204,7 +1570,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   ): Promise<OpenRouterEmbeddingModelRegistrationRow[]> {
     try {
       const rows = await sql<unknown[]>`
-        SELECT * FROM openrouter_embedding_model_registrations
+        SELECT * FROM scoped_model_registrations
         WHERE user_id = ${userId} AND server_id IS NULL
         ORDER BY embedding_model_id ASC
       `;
@@ -1223,7 +1589,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   ): Promise<OpenRouterImageModelRegistrationRow[]> {
     try {
       const rows = await sql<unknown[]>`
-        SELECT * FROM openrouter_image_model_registrations
+        SELECT * FROM scoped_model_registrations
         WHERE server_id = ${serverId} AND user_id IS NULL
         ORDER BY diffusion_model_id ASC
       `;
@@ -1240,7 +1606,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   async loadOpenRouterImageModelRegistrationsForUser(userId: number): Promise<OpenRouterImageModelRegistrationRow[]> {
     try {
       const rows = await sql<unknown[]>`
-        SELECT * FROM openrouter_image_model_registrations
+        SELECT * FROM scoped_model_registrations
         WHERE user_id = ${userId} AND server_id IS NULL
         ORDER BY diffusion_model_id ASC
       `;
@@ -1259,7 +1625,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   ): Promise<OpenRouterVideoModelRegistrationRow[]> {
     try {
       const rows = await sql<unknown[]>`
-        SELECT * FROM openrouter_video_model_registrations
+        SELECT * FROM scoped_model_registrations
         WHERE server_id = ${serverId} AND user_id IS NULL
         ORDER BY video_model_id ASC
       `;
@@ -1276,7 +1642,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   async loadOpenRouterVideoModelRegistrationsForUser(userId: number): Promise<OpenRouterVideoModelRegistrationRow[]> {
     try {
       const rows = await sql<unknown[]>`
-        SELECT * FROM openrouter_video_model_registrations
+        SELECT * FROM scoped_model_registrations
         WHERE user_id = ${userId} AND server_id IS NULL
         ORDER BY video_model_id ASC
       `;
@@ -1295,20 +1661,24 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
    * @param scope             - {kind: "server"|"personal", ownerId: number}
    * @param includeDeprecated - Include deprecated models
    */
-  async loadScopedOpenRouterModels(scope: OpenRouterModelScope, includeDeprecated = false): Promise<LlmRow[]> {
+  async loadScopedOpenRouterModels(
+    scope: OpenRouterModelScope,
+    includeDeprecated = false,
+    provider = "openrouter",
+  ): Promise<LlmRow[]> {
     try {
-      const rows = await this.scopedLlmRows(scope, includeDeprecated);
+      const rows = await this.scopedLlmRows(scope, includeDeprecated, provider);
       const parsed = llmSchema.array().safeParse(rows);
       if (!parsed.success) {
         log.error(
-          `Failed to validate scoped OpenRouter model data for ${scope.kind} ${scope.ownerId}:`,
+          `Failed to validate scoped ${provider} model data for ${scope.kind} ${scope.ownerId}:`,
           parsed.error.flatten(),
         );
         return [];
       }
       return parsed.data;
     } catch (error) {
-      log.error(`Error loading scoped OpenRouter models for ${scope.kind} ${scope.ownerId}:`, error);
+      log.error(`Error loading scoped ${provider} models for ${scope.kind} ${scope.ownerId}:`, error);
       return [];
     }
   }
@@ -1322,20 +1692,21 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   async loadScopedOpenRouterEmbeddingModels(
     scope: OpenRouterModelScope,
     includeDeprecated = false,
+    provider = "openrouter",
   ): Promise<EmbeddingModelRow[]> {
     try {
-      const rows = await this.scopedEmbeddingModelRows(scope, includeDeprecated);
+      const rows = await this.scopedEmbeddingModelRows(scope, includeDeprecated, provider);
       const parsed = embeddingModelSchema.array().safeParse(rows);
       if (!parsed.success) {
         log.error(
-          `Failed to validate scoped OpenRouter embedding model data for ${scope.kind} ${scope.ownerId}:`,
+          `Failed to validate scoped ${provider} embedding model data for ${scope.kind} ${scope.ownerId}:`,
           parsed.error.flatten(),
         );
         return [];
       }
       return parsed.data;
     } catch (error) {
-      log.error(`Error loading scoped OpenRouter embedding models for ${scope.kind} ${scope.ownerId}:`, error);
+      log.error(`Error loading scoped ${provider} embedding models for ${scope.kind} ${scope.ownerId}:`, error);
       return [];
     }
   }
@@ -1349,20 +1720,21 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   async loadScopedOpenRouterDiffusionModels(
     scope: OpenRouterModelScope,
     includeDeprecated = false,
+    provider = "openrouter",
   ): Promise<DiffusionModelRow[]> {
     try {
-      const rows = await this.scopedDiffusionModelRows(scope, includeDeprecated);
+      const rows = await this.scopedDiffusionModelRows(scope, includeDeprecated, provider);
       const parsed = diffusionModelSchema.array().safeParse(rows);
       if (!parsed.success) {
         log.error(
-          `Failed to validate scoped OpenRouter diffusion model data for ${scope.kind} ${scope.ownerId}:`,
+          `Failed to validate scoped ${provider} diffusion model data for ${scope.kind} ${scope.ownerId}:`,
           parsed.error.flatten(),
         );
         return [];
       }
       return parsed.data;
     } catch (error) {
-      log.error(`Error loading scoped OpenRouter diffusion models for ${scope.kind} ${scope.ownerId}:`, error);
+      log.error(`Error loading scoped ${provider} diffusion models for ${scope.kind} ${scope.ownerId}:`, error);
       return [];
     }
   }
@@ -1376,20 +1748,21 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
   async loadScopedOpenRouterVideoGenerationModels(
     scope: OpenRouterModelScope,
     includeDeprecated = false,
+    provider = "openrouter",
   ): Promise<VideoGenerationModelRow[]> {
     try {
-      const rows = await this.scopedVideoModelRows(scope, includeDeprecated);
+      const rows = await this.scopedVideoModelRows(scope, includeDeprecated, provider);
       const parsed = videoGenerationModelSchema.array().safeParse(rows);
       if (!parsed.success) {
         log.error(
-          `Failed to validate scoped OpenRouter video model data for ${scope.kind} ${scope.ownerId}:`,
+          `Failed to validate scoped ${provider} video model data for ${scope.kind} ${scope.ownerId}:`,
           parsed.error.flatten(),
         );
         return [];
       }
       return parsed.data;
     } catch (error) {
-      log.error(`Error loading scoped OpenRouter video models for ${scope.kind} ${scope.ownerId}:`, error);
+      log.error(`Error loading scoped ${provider} video models for ${scope.kind} ${scope.ownerId}:`, error);
       return [];
     }
   }
@@ -2083,14 +2456,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const rows =
         serverId !== null
           ? await sql`
-              INSERT INTO openrouter_model_registrations (server_id, user_id, llm_id)
+              INSERT INTO scoped_model_registrations (server_id, user_id, llm_id)
               VALUES (${serverId}, NULL, ${llmId})
               ON CONFLICT (server_id, llm_id) WHERE user_id IS NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `
           : await sql`
-              INSERT INTO openrouter_model_registrations (server_id, user_id, llm_id)
+              INSERT INTO scoped_model_registrations (server_id, user_id, llm_id)
               VALUES (NULL, ${userId}, ${llmId})
               ON CONFLICT (user_id, llm_id) WHERE server_id IS NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
@@ -2128,11 +2501,11 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const result =
         serverId !== null
           ? await sql`
-              DELETE FROM openrouter_model_registrations
+              DELETE FROM scoped_model_registrations
               WHERE server_id = ${serverId} AND user_id IS NULL AND llm_id = ${llmId}
             `
           : await sql`
-              DELETE FROM openrouter_model_registrations
+              DELETE FROM scoped_model_registrations
               WHERE user_id = ${userId} AND server_id IS NULL AND llm_id = ${llmId}
             `;
       return result.count > 0;
@@ -2159,14 +2532,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const rows =
         serverId !== null
           ? await sql`
-              INSERT INTO openrouter_embedding_model_registrations (server_id, user_id, embedding_model_id)
+              INSERT INTO scoped_model_registrations (server_id, user_id, embedding_model_id)
               VALUES (${serverId}, NULL, ${embeddingModelId})
               ON CONFLICT (server_id, embedding_model_id) WHERE user_id IS NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `
           : await sql`
-              INSERT INTO openrouter_embedding_model_registrations (server_id, user_id, embedding_model_id)
+              INSERT INTO scoped_model_registrations (server_id, user_id, embedding_model_id)
               VALUES (NULL, ${userId}, ${embeddingModelId})
               ON CONFLICT (user_id, embedding_model_id) WHERE server_id IS NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
@@ -2209,11 +2582,11 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const result =
         serverId !== null
           ? await sql`
-              DELETE FROM openrouter_embedding_model_registrations
+              DELETE FROM scoped_model_registrations
               WHERE server_id = ${serverId} AND user_id IS NULL AND embedding_model_id = ${embeddingModelId}
             `
           : await sql`
-              DELETE FROM openrouter_embedding_model_registrations
+              DELETE FROM scoped_model_registrations
               WHERE user_id = ${userId} AND server_id IS NULL AND embedding_model_id = ${embeddingModelId}
             `;
       return result.count > 0;
@@ -2243,14 +2616,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const rows =
         serverId !== null
           ? await sql`
-              INSERT INTO openrouter_image_model_registrations (server_id, user_id, diffusion_model_id)
+              INSERT INTO scoped_model_registrations (server_id, user_id, diffusion_model_id)
               VALUES (${serverId}, NULL, ${diffusionModelId})
               ON CONFLICT (server_id, diffusion_model_id) WHERE user_id IS NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `
           : await sql`
-              INSERT INTO openrouter_image_model_registrations (server_id, user_id, diffusion_model_id)
+              INSERT INTO scoped_model_registrations (server_id, user_id, diffusion_model_id)
               VALUES (NULL, ${userId}, ${diffusionModelId})
               ON CONFLICT (user_id, diffusion_model_id) WHERE server_id IS NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
@@ -2293,11 +2666,11 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const result =
         serverId !== null
           ? await sql`
-              DELETE FROM openrouter_image_model_registrations
+              DELETE FROM scoped_model_registrations
               WHERE server_id = ${serverId} AND user_id IS NULL AND diffusion_model_id = ${diffusionModelId}
             `
           : await sql`
-              DELETE FROM openrouter_image_model_registrations
+              DELETE FROM scoped_model_registrations
               WHERE user_id = ${userId} AND server_id IS NULL AND diffusion_model_id = ${diffusionModelId}
             `;
       return result.count > 0;
@@ -2327,14 +2700,14 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const rows =
         serverId !== null
           ? await sql`
-              INSERT INTO openrouter_video_model_registrations (server_id, user_id, video_model_id)
+              INSERT INTO scoped_model_registrations (server_id, user_id, video_model_id)
               VALUES (${serverId}, NULL, ${videoModelId})
               ON CONFLICT (server_id, video_model_id) WHERE user_id IS NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
               RETURNING *
             `
           : await sql`
-              INSERT INTO openrouter_video_model_registrations (server_id, user_id, video_model_id)
+              INSERT INTO scoped_model_registrations (server_id, user_id, video_model_id)
               VALUES (NULL, ${userId}, ${videoModelId})
               ON CONFLICT (user_id, video_model_id) WHERE server_id IS NULL
               DO UPDATE SET updated_at = CURRENT_TIMESTAMP
@@ -2377,11 +2750,11 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       const result =
         serverId !== null
           ? await sql`
-              DELETE FROM openrouter_video_model_registrations
+              DELETE FROM scoped_model_registrations
               WHERE server_id = ${serverId} AND user_id IS NULL AND video_model_id = ${videoModelId}
             `
           : await sql`
-              DELETE FROM openrouter_video_model_registrations
+              DELETE FROM scoped_model_registrations
               WHERE user_id = ${userId} AND server_id IS NULL AND video_model_id = ${videoModelId}
             `;
       return result.count > 0;

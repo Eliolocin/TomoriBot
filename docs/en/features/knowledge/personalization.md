@@ -45,7 +45,7 @@ server's defaults. This is bring-your-own-key (BYOK) at the individual level.
 
 Two scopes are in play, and it's worth keeping them straight:
 
-- **Server default**: shared configuration for one server, managed through `/provider` and
+- **Server default**: shared credentials and catalogs in `/providers`, with routing selected through
   `/model` by members with the required server permission. It applies to everyone there.
 - **Personal override**: configuration used only for your own requests. When enabled it
   overrides the server default for that capability **across every server** where you use
@@ -53,19 +53,15 @@ Two scopes are in play, and it's worth keeping them straight:
 
 **Setup:**
 
-1. `/personal provider add` saves a provider (your key is encrypted). This also enables your
+1. `/personal providers` saves a provider (your key is encrypted). This also enables your
    personal **Text** override immediately, using that provider's default text model.
 2. `/personal provider model-text` is optional. Use it only if you want a different text model
    than the default chosen in step 1. Picking a model here keeps Text enabled.
-3. `/personal provider toggle-models` enables or disables overrides per capability (Text,
-   Embedding, Image, Video, Vision).
+3. Return to `/personal providers` whenever you need to update credentials, manage custom
+   endpoints, or add and edit personal model registrations.
 
-Step 3 is not required after every model selection. Selecting a model with any
-`/personal provider model-*` command already activates that capability; the toggle command is
-how you turn one back **off** and hand the capability back to each server's default.
-
-Turning a capability off remembers which provider was serving it, so switching it back on
-returns to that same provider rather than to whichever one you happen to have saved first.
+Selecting a model with any `/personal provider model-*` command activates that capability for
+your requests.
 
 Because steps 1 and 2 switch you onto a cross-server override, TomoriBot asks you to confirm
 before saving whenever a capability moves from the server default to a personal one. Rotating
@@ -75,14 +71,13 @@ routing isn't changing.
 Thought logs attribute those turns to you, and you can tune them with `/personal parameters`
 and `/personal model fallback`. Both affect your requests everywhere and never touch this
 server's settings. You can also register personal custom endpoints with
-`/personal custom-endpoint add`; see
+`/personal providers`; see
 [Custom Endpoints](/features/setup-administration/providers-and-models/#custom-endpoints).
 
 If a request fails while using your personal provider, the error's "What you can do" tips name
-the personal commands that can actually fix it (`/personal provider model-text`,
-`/personal model fallback`, `/personal parameters`) rather than the server-manager ones. Turning
-**Text** off in `/personal provider toggle-models` usually hands the turn back to the server
-model, unless that server runs User BYOK mode, which requires a personal provider.
+the personal commands that can actually fix it (`/personal providers`,
+`/personal provider model-text`, `/personal model fallback`, `/personal parameters`) rather than
+the server-manager ones.
 
 :::note[BYOK-required servers]
 A server can require member-provided providers with User BYOK mode
@@ -132,4 +127,3 @@ target whichever persona you explicitly call. Press Finish to skip.
 
 Review or remove entries with `/personal spotlight manage` (uncheck to remove; timed
 spotlights expire on their own). In `/help`, choose **Behavior**, then **Personal Spotlight**, for the Discord summary.
-

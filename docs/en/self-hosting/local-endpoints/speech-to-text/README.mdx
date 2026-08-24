@@ -26,8 +26,9 @@ Visible transcript posting is separate. `/speech transcripts` only controls whet
 ## Setup Flow
 
 1. Start one STT server from the engine guides above.
-2. Register it with `/provider custom-endpoint add` using capability `transcription` and api style `openai-compatible-transcription`.
-3. Use `/model transcription` later only when switching between registered STT endpoints.
+2. In `/providers`, choose **Add New Custom Endpoint** and use API Compatibility `openai-compatible-transcription`.
+3. Select the saved endpoint, choose **Add or Edit a Model**, and add the model code reported by the server.
+4. Use `/model transcription` later only when switching between registered STT endpoints.
 
 ## Transcript Flow
 
@@ -35,4 +36,4 @@ When a transcription endpoint is active, TomoriBot reads supported audio attachm
 
 Use `/speech transcripts` only if you also want those transcripts posted visibly in chat.
 
-ElevenLabs users should use `/speech elevenlabs`; it registers transcription alongside speech.
+ElevenLabs users should choose **Add New Provider** and **ElevenLabs** in `/providers`; it registers transcription alongside speech.

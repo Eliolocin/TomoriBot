@@ -202,7 +202,7 @@ export const llmSchema = z.object({
   llm_id: z.number().optional(),
   llm_provider: z.string(),
   llm_codename: z.string(),
-  is_scoped_registration: z.boolean().default(false), // Scoped OpenRouter registration; exclude from global provider pickers unless explicitly joined for the owner
+  is_scoped_registration: z.boolean().default(false), // Shared-provider registration; exclude from global pickers unless joined for the owner
   is_smartest: z.boolean().default(false),
   is_default: z.boolean().default(false),
   is_reasoning: z.boolean().default(false),
@@ -234,7 +234,7 @@ export const diffusionModelSchema = z.object({
   diffusion_model_id: z.number().optional(),
   provider: z.string(),
   codename: z.string(),
-  is_scoped_registration: z.boolean().default(false), // Scoped OpenRouter registration; exclude from global image pickers unless explicitly joined for the owner
+  is_scoped_registration: z.boolean().default(false), // Shared-provider registration; exclude from global image pickers unless joined for the owner
   model_description: z.string().nullable().optional(),
   ja_description: z.string().nullable().optional(),
   is_default: z.boolean().default(false),
@@ -250,7 +250,7 @@ export const videoGenerationModelSchema = z.object({
   video_model_id: z.number().optional(),
   provider: z.string(),
   codename: z.string(),
-  is_scoped_registration: z.boolean().default(false), // Scoped OpenRouter registration; exclude from global video pickers unless explicitly joined for the owner
+  is_scoped_registration: z.boolean().default(false), // Shared-provider registration; exclude from global video pickers unless joined for the owner
   model_description: z.string().nullable().optional(),
   ja_description: z.string().nullable().optional(),
   is_default: z.boolean().default(false),
@@ -266,7 +266,7 @@ export const embeddingModelSchema = z.object({
   provider: z.string(),
   codename: z.string(),
   model_family: z.string(),
-  is_scoped_registration: z.boolean().default(false), // Scoped OpenRouter registration; exclude from global embedding pickers unless explicitly joined for the owner
+  is_scoped_registration: z.boolean().default(false), // Shared-provider registration; exclude from global embedding pickers unless joined for the owner
   model_description: z.string().nullable().optional(),
   ja_description: z.string().nullable().optional(),
   is_default: z.boolean().default(false),

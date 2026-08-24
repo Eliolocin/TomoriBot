@@ -33,11 +33,11 @@ APIキーは絶対に他人と共有しないでください。カスタムエ�
 
 ### オプション：Brave Searchキー
 
-Brave SearchはAIプロバイダーとは別であり、ウェブ検索を強化するだけのものです（画像、動画、ニュースの検索を追加します）。`/optional-key brave set`で設定します。⚠️ Braveには月額5ドルの無料クレジットが含まれています。料金の発生を防ぐため、Braveのダッシュボードで5ドルの利用制限を設定してください。
+Brave SearchはAIプロバイダーとは別であり、ウェブ検索を強化するだけのものです（画像、動画、ニュースの検索を追加します）。`/providers`で設定します。⚠️ Braveには月額5ドルの無料クレジットが含まれています。料金の発生を防ぐため、Braveのダッシュボードで5ドルの利用制限を設定してください。
 
 ## モデルの選択
 
-`/provider`と`/model`は**サーバースコープ**です。このサーバーの全員が使う共通の既定を設定するもので、実行には必要なサーバー権限が要ります。個々のメンバーは`/personal provider`で自分自身のリクエスト用に既定を上書きでき、その設定はTomoriBotを使うすべてのサーバーに引き継がれます。詳しくは[パーソナライゼーション](/ja/features/knowledge/personalization/#個人のプロバイダー)を参照してください。
+`/providers`と`/model`は**サーバースコープ**です。このサーバーの全員が使う共通の既定を設定するもので、実行には必要なサーバー権限が要ります。個々のメンバーは`/personal providers`で自分自身のリクエスト用に既定を上書きでき、その設定はTomoriBotを使うすべてのサーバーに引き継がれます。詳しくは[パーソナライゼーション](/ja/features/knowledge/personalization/#個人のプロバイダー)を参照してください。
 
 プロバイダーを設定した後、このサーバーの各機能で使用するモデルを選択します。
 
@@ -48,16 +48,16 @@ Brave SearchはAIプロバイダーとは別であり、ウェブ検索を強化
 - `/model embedding`：[ドキュメントナレッジベース](/ja/features/knowledge/memory/#document-knowledge-base-rag)用の埋め込み（embeddings）
 - `/model speech` / `/model transcription`：[音声](/ja/features/capabilities/media-generation/tts-and-stt/)
 
-また、`/provider api-key rotation`を使用して、このサーバーの自動フェイルオーバーと負荷分散用のバックアップキーを管理することもできます。
+また、`/providers`を使用して、このサーバーの自動フェイルオーバーと負荷分散用のバックアップキーを管理することもできます。
 
 ## カスタムエンドポイント
 
 カスタムエンドポイントを使用すると、セルフホストまたはプロキシベースのサービス（Ollama、LM Studio、LiteLLM、vLLM、ComfyUI、ローカルのTTS/STTなど）を**ラベル付きのプロバイダーバンドル**として登録できます。
 
-- **サーバー全体：** `/provider custom-endpoint add` / `remove`。
-- **個人用：** `/personal custom-endpoint add` / `remove`（あなた専用です。[パーソナライゼーション](/ja/features/knowledge/personalization/#your-own-providers)を参照）。
+- **サーバー全体：** `/providers` / `remove`。
+- **個人用：** `/personal providers` / `remove`（あなた専用です。[パーソナライゼーション](/ja/features/knowledge/personalization/#your-own-providers)を参照）。
 
-**ラベル**は、すべての機能を1つのバンドルにグループ化します。登録後、`/model text`、`/model image`、`/model video`などからラベルを選択します。ラベルに機能ごとの複数のモデルがある場合は、ピッカーから選択できます。同じラベルと機能で、異なるモデル名を指定して追加コマンドを再実行すると、その接続に追加のモデルを登録できます（URLとAPIスタイルは継承されます）。
+**ラベル**はユーザー向けメニューに表示される名前で、同じエンドポイントURLを使用する機能を1つのバンドルにグループ化します。リモートエンドポイントには送信されません。異なるURLから提供される機能には、別々のラベルが必要です。**Add New Custom Endpoint**でAPI Compatibility（API互換性）を選ぶと、そのプロトコルが対応する機能の接続がモデル未登録の状態で作成されます。その後、新しいエンドポイントを選択し、**Add or Edit a Model**で機能と正確なモデルコードを登録します。モデルを追加すると、その機能で直ちに有効になります。API Compatibilityは使用するリクエストパスとペイロード形式を指定するものであり、モデルの機能とは独立しています。
 
 サーバーの実行に関する完全な手順については、以下をご覧ください。
 

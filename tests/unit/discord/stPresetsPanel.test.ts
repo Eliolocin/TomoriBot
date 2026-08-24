@@ -181,7 +181,7 @@ describe("ST Presets route codec", () => {
 });
 
 describe("ST Presets panel rendering", () => {
-  it("orders selector options as None, presets, + Add new Preset", () => {
+  it("orders selector options as + Add new Preset, None, and presets", () => {
     const presets = [makePreset(1, { is_active: true }), makePreset(2)];
     const payload = buildStPresetsPanelPayload({
       locale: "en-US",
@@ -197,15 +197,16 @@ describe("ST Presets panel rendering", () => {
     expect(serialized).toContain("Preset 1");
     expect(serialized).toContain("Preset 2");
     expect(serialized).toContain("+ Add new Preset");
+    expect(serialized).toContain("**Select** or **add** a preset using the dropdown below.");
 
     const nonePos = serialized.indexOf("None (no chat completion preset)");
     const p1Pos = serialized.indexOf("Preset 1");
     const p2Pos = serialized.indexOf("Preset 2");
     const addPos = serialized.indexOf("+ Add new Preset");
 
+    expect(addPos).toBeLessThan(nonePos);
     expect(nonePos).toBeLessThan(p1Pos);
     expect(p1Pos).toBeLessThan(p2Pos);
-    expect(p2Pos).toBeLessThan(addPos);
   });
 
   it("enforces selector ceiling of 23 presets and renders range controls only beyond it", () => {

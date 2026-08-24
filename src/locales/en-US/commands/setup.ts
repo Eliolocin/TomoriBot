@@ -7,7 +7,7 @@ export default {
     api_provider_description: `Please choose the provider of the LLM of your choice`,
     api_provider_placeholder: `Choose a provider...`,
     api_provider_custom_endpoint_label: `Custom Endpoint (finish after setup)`,
-    api_provider_custom_endpoint_description: `Bootstraps the server first, then points you to /provider custom-endpoint add and /model text.`,
+    api_provider_custom_endpoint_description: `Bootstraps the server first, then points you to /providers and /model text.`,
     api_provider_user_byok_label: `None (User BYOK)`,
     api_provider_user_byok_description: `Bootstraps the server with no server-side text provider. Members must use personal providers.`,
     api_key_label: `API Key`,
@@ -85,6 +85,6 @@ export default {
 Try {model_text_command} to assign a working model, or {provider_add_command} to register a new provider.`,
     already_setup_description: `I am already set up for this server. To modify my configuration, please use other commands like \`/config\`, \`/persona\`, \`/memory\`, and \`/server\`.
 
-				If you wish to change my provider, use \`/provider add\` to register and activate a new default text provider.`,
+				If you wish to change my provider, use \`/providers\` to register and activate a new default text provider.`,
   },
 };

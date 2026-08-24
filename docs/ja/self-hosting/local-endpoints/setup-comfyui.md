@@ -58,17 +58,16 @@ curl http://127.0.0.1:8188/system_stats
 
 ## 3. Discordに登録する
 
-**`/provider custom-endpoint add`**（または`/personal custom-endpoint add`）を以下のように実行します。
+**`/providers`**（または`/personal providers`）で **Add New Custom Endpoint** を選び、以下を入力します。
 
 | フィールド | ComfyUI用の値 |
 |-------|-------------------|
 | `endpoint_label` | 選択した名前（例: `home-comfy`） |
-| `capability` | `image`（または`video`） |
-| `api_style` | `ComfyUI` |
+| API Compatibility | `ComfyUI` |
 | `endpoint_url` | `http://127.0.0.1:8188`（ルート、`/v1`は**なし**） |
 | `auth_token` | *(ComfyUIが認証の背後にない限り空白のままにします)* |
 
-続くモーダルで、ステップ2でダウンロードした**ワークフローの`.json`をアップロード**し、使用方法と一致するサポートモード（画像の場合は`txt2img` / `img2img` / `inpaint`）を選択します。選択した機能はワークフローと一致している必要があります（画像ワークフロー → `image`、動画ワークフロー → `video`）。
+保存したエンドポイントを選択し、**Add or Edit a Model** で画像または動画モデルを追加します。ステップ2でダウンロードした**ワークフローの`.json`をアップロード**し、使用方法と一致するサポートモード（画像の場合は`txt2img` / `img2img` / `inpaint`）を選択します。モデルの機能はワークフローと一致している必要があります（画像ワークフロー → `image`、動画ワークフロー → `video`）。
 
 これを登録すると、自動的にアクティブな`image`/`video`モデルになります。チャットでトモリに直接尋ねて生成をトリガーします。何らかの理由でアクティブにならない場合は、`/model image`（または`/model video`）を実行し、登録したComfyUIエンドポイントを選択します。
 

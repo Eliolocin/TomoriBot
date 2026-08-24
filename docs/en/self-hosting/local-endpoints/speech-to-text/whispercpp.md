@@ -19,18 +19,15 @@ If your whisper.cpp build exposes a different endpoint shape, place a thin wrapp
 
 ## Register in TomoriBot
 
-Run `/provider custom-endpoint add`:
+Run `/providers`, choose **Add New Custom Endpoint**, and use the transcription API compatibility:
 
-- `capability`: `transcription`
-- `api_style`: `openai-compatible-transcription`
+- API Compatibility: `openai-compatible-transcription`
 - `endpoint_url`: your whisper.cpp server root
 
-In the modal:
+After saving the connection, select it, choose **Add or Edit a Model**, and add the model name your
+server reports as a Transcription model.
 
-- `Transcription Model`: the model name your server reports
-- `Transcription Language`: optional language hint, such as `en` or `ja`
-
-Registration makes the endpoint active immediately. Use `/model transcription` later only when switching endpoints.
+Adding the model makes the endpoint active immediately. Use `/model transcription` later only when switching endpoints.
 
 ## Use Transcripts
 

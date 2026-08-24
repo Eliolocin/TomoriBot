@@ -95,7 +95,7 @@ export async function execute(
         //    user isn't permanently locked out by a setup guard that uses a weaker health check
         //    than the commands that actually require a healthy state.
         if (existingTomoriState) {
-          const providerAddMention = commandRegistry.getCommandMention("provider", "add");
+          const providerAddMention = commandRegistry.getCommandMention("providers");
           const modelTextMention = commandRegistry.getCommandMention("model", "text");
           const userByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
           const helpPersonalProviderMention = commandRegistry.getCommandMention("help");
@@ -154,7 +154,7 @@ export async function execute(
           `[Setup] Server ${serverId} has a main persona row but state validation failed — surfacing repair guidance`,
         );
         const modelTextMention = commandRegistry.getCommandMention("model", "text");
-        const providerAddMention = commandRegistry.getCommandMention("provider", "add");
+        const providerAddMention = commandRegistry.getCommandMention("providers");
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.setup.broken_state_title",
           descriptionKey: "commands.setup.broken_state_description",
@@ -707,7 +707,7 @@ export async function execute(
       }
 
       if (isCustomEndpointSetup) {
-        const customModelsAddMention = commandRegistry.getCommandMention("provider", "custom-endpoint", "add");
+        const customModelsAddMention = commandRegistry.getCommandMention("providers");
         const modelTextMention = commandRegistry.getCommandMention("model", "text");
         const helpCustomModelsMention = commandRegistry.getCommandMention("help");
         const helpSpeechMention = commandRegistry.getCommandMention("help");

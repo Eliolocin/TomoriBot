@@ -35,6 +35,8 @@ export interface RawDiscordComponent {
   label?: string;
   /** Component description text */
   description?: string;
+  /** Markdown content for modal text displays */
+  content?: string;
   /** Component value (string for text inputs and radio groups; boolean for checkboxes) */
   value?: string | boolean;
   /** Default checked state (for checkbox components, type 23) */

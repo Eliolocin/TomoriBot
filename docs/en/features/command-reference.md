@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **42**. Runnable slash commands: **211**.
+Top-level command groups: **40**. Runnable slash commands: **194**.
 
 ## `/capabilities`
 
@@ -247,24 +247,6 @@ Completely wipe all server data. Requires re-running /setup afterwards.
 |---|---|
 | `/nuke` | Completely wipe all server data. Requires re-running /setup afterwards. |
 
-## `/openrouter`
-
-Manage OpenRouter-specific models and settings.
-
-| Command | Summary |
-|---|---|
-| `/openrouter model add` | Register an OpenRouter model codename for this server. |
-| `/openrouter model remove` | Remove registered OpenRouter models from this server. |
-
-## `/optional-key`
-
-Manage optional service API keys
-
-| Command | Summary |
-|---|---|
-| `/optional-key brave remove` | Remove the currently configured Brave Search API key. |
-| `/optional-key brave set` | Set the Brave Search API key for this server. |
-
 ## `/persona`
 
 Manage personality presets
@@ -309,29 +291,22 @@ Manage your personal settings
 | `/personal config export` | Export your personal settings, excluding server settings, personas, and memories. |
 | `/personal config import` | Import your personal settings only. Does not import server settings or memories. |
 | `/personal config remove` | Reset your personal configuration. |
-| `/personal custom-endpoint add` | Register a model under a personal custom endpoint label (reuse the label to add more). |
-| `/personal custom-endpoint edit` | Edit fields on a registered personal custom endpoint. |
-| `/personal custom-endpoint remove` | Remove selected capabilities from personal custom endpoints. |
 | `/personal deliberate-tool-mode` | Set your personal deliberate tool mode preference. |
 | `/personal deliberate-trigger-mode` | Set your personal deliberate trigger mode (DTM) preference. |
 | `/personal image-tags` | Set comma-separated image tags for your physical appearance to assist image generation. |
 | `/personal impersonate prompt` | Set a reusable prompt that tells me how to impersonate you. |
 | `/personal language` | Set your preferred language for my interface. |
 | `/personal model fallback` | Set fallback models for your personal text override, or clear slots with None. |
-| `/personal openrouter-model add` | Register an OpenRouter model codename for your personal provider list. |
-| `/personal openrouter-model remove` | Remove registered OpenRouter models from your personal provider list. |
 | `/personal parameters` | Adjust sampler settings for your personal providers, not this server's. |
 | `/personal privacy` | Control personal memory storage and privacy settings |
 | `/personal profile about` | Set your optional profile details and preferred style of address. |
 | `/personal profile nickname` | Configure the nickname, prefix, and suffix a persona uses for you. |
-| `/personal provider add` | Save your API key and enable its default personal text model everywhere. |
 | `/personal provider model-embedding` | Select and enable your personal embedding model, used in every server. |
 | `/personal provider model-image` | Select and enable your personal image model, used in every server. |
 | `/personal provider model-text` | Select and enable your personal text model, used in every server. |
 | `/personal provider model-video` | Select and enable your personal video model, used in every server. |
 | `/personal provider model-vision` | Select and enable your personal vision model, used in every server. |
-| `/personal provider remove` | Remove one of your cross-server personal provider configurations. |
-| `/personal provider toggle-models` | Choose which capabilities use your personal provider instead of the server's. |
+| `/personal providers` | Manage your personal provider credentials, endpoints, and model catalogs. |
 | `/personal spotlight manage` | Remove your active personal spotlights. See Personal Spotlight in /help. |
 | `/personal spotlight set` | Set a personal persona spotlight for one channel. See Personal Spotlight in /help. |
 | `/personal stm` | Configure STM (short-term memory) settings |
@@ -345,18 +320,13 @@ Check the bot's latency.
 |---|---|
 | `/ping` | Check the bot's latency. |
 
-## `/provider`
+## `/providers`
 
-Manage this server's shared AI providers.
+Add, view, edit, and remove provider credentials, endpoints, and model catalogs.
 
 | Command | Summary |
 |---|---|
-| `/provider add` | Save credentials for this server and activate its saved text model. |
-| `/provider api-key rotation` | Manage API key rotation for load balancing and failover. |
-| `/provider custom-endpoint add` | Register a model under a custom endpoint label (reuse the label to add more). |
-| `/provider custom-endpoint edit` | Edit fields on a registered custom endpoint. |
-| `/provider custom-endpoint remove` | Remove selected capabilities from labeled custom endpoints. |
-| `/provider remove` | Remove a saved provider configuration from this server. |
+| `/providers` | Add, view, edit, and remove provider credentials, endpoints, and model catalogs. |
 
 ## `/punish`
 
@@ -463,7 +433,6 @@ Manage speech voices and samples.
 | Command | Summary |
 |---|---|
 | `/speech chatterbox parameters` | Tune Chatterbox Turbo and standard-model speech generation. |
-| `/speech elevenlabs` | Connect ElevenLabs speech and transcription. |
 | `/speech transcripts` | Toggle visible transcript posting for voice messages. |
 | `/speech voice-add` | Upload a local TTS reference voice sample. |
 | `/speech voice-assign` | Assign a speech voice to a persona. |

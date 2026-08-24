@@ -49,9 +49,11 @@ import setup from "./commands/setup";
 import compact from "./commands/compact";
 import moderation from "./commands/moderation";
 import quota from "./commands/quota";
+import providers from "./commands/providers";
 
 export default {
   commands: {
+    ...providers,
     ...quota,
     ...moderation,
     ...learn,

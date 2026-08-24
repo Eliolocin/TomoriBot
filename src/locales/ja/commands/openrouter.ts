@@ -10,7 +10,7 @@ export default {
         success_title: `OpenRouterモデルを追加しました`,
         success_description: `OpenRouterの{capability}モデル \`{model_name}\` をこのサーバーに登録し、現在の{capability}モデルに設定しました。`,
         missing_provider_title: `OpenRouterプロバイダーが保存されていません`,
-        missing_provider_description: `モデルは登録されましたが、このサーバーにOpenRouterの保存済み認証情報がないため有効化できませんでした。先に \`/provider add\` でOpenRouterを追加してください。`,
+        missing_provider_description: `モデルは登録されましたが、このサーバーにOpenRouterの保存済み認証情報がないため有効化できませんでした。先に \`/providers\` でOpenRouterを追加してください。`,
         already_registered_title: `既に登録されています`,
         already_registered_description: `OpenRouterの{capability}モデル \`{model_name}\` はこのサーバーに既に登録されています。`,
         already_available_title: `最初から利用可能です`,

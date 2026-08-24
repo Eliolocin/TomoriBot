@@ -2573,6 +2573,7 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
         FROM api_key_rotation akr
         LEFT JOIN api_key_rotation_runtime_state rs USING (rotation_key_id)
         WHERE akr.server_id = ${tomoriData.server_id}
+          AND akr.provider = ${llmData.llm_provider.toLowerCase()}
         ORDER BY COALESCE(rs.usage_count, 0) ASC, akr.rotation_key_id ASC
       `;
 
@@ -2865,6 +2866,7 @@ class PersonaRepository implements IRepository<PersonaExportShape> {
             FROM api_key_rotation akr
             LEFT JOIN api_key_rotation_runtime_state rs USING (rotation_key_id)
             WHERE akr.server_id = ${serverId}
+              AND akr.provider = ${llmData.llm_provider.toLowerCase()}
             ORDER BY COALESCE(rs.usage_count, 0) ASC, akr.rotation_key_id ASC
           `;
 

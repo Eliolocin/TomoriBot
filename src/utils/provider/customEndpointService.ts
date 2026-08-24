@@ -5,14 +5,12 @@ import type {
   PersonalProviderCapability,
   SavedProviderConfigUpsert,
   SavedProviderConfigRow,
-  ServerModelConfigRow,
-  ServerNovelaiImagegenConfigRow,
   AssembledServerConfig,
   UserSavedProviderConfigUpsert,
   UserSavedProviderConfigRow,
 } from "@/types/db/schema";
 import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
-import { configRepository, llmModelRepo, llmOverrideRepo, llmProviderRepo } from "@/utils/db/repositories";
+import { configRepository, llmModelRepo, llmProviderRepo } from "@/utils/db/repositories";
 
 import { CUSTOM_ENDPOINT_PLACEHOLDER_KEY } from "@/utils/provider/legacyCustomProvider";
 import {
@@ -369,75 +367,6 @@ async function activatePersonalCustomEndpointForCapability(params: {
   return updated;
 }
 
-async function clearServerScopedLiveReferences(
-  scope: Extract<RegistrationScope, { kind: "server" }>,
-  capability: CustomEndpointCapability,
-  modelId: number | null,
-  siblingModelId: number | null,
-): Promise<void> {
-  if (!modelId) {
-    return;
-  }
-
-  const serverId = scope.ownerId;
-  const modelPatch: Partial<ServerModelConfigRow> = {};
-  const novelaiPatch: Partial<ServerNovelaiImagegenConfigRow> = {};
-
-  switch (capability) {
-    case "text":
-      if (scope.baseConfig.llm_id === modelId) {
-        modelPatch.llm_id = siblingModelId;
-        modelPatch.custom_endpoint_url = null;
-        modelPatch.custom_model_name = null;
-        modelPatch.custom_num_ctx = null;
-      }
-      if (scope.baseConfig.vision_llm_id === modelId) {
-        modelPatch.vision_llm_id = null;
-      }
-      await Promise.all([
-        updateModelConfigIfNeeded(serverId, modelPatch),
-        llmOverrideRepo.deleteChannelLlmOverridesForModel(serverId, modelId, { serverDiscId: scope.serverDiscId }),
-        llmOverrideRepo.clearPersonaLlmOverridesForModel(serverId, modelId, { serverDiscId: scope.serverDiscId }),
-      ]);
-      return;
-    case "embedding":
-      if (scope.baseConfig.embedding_model_id === modelId) {
-        modelPatch.embedding_model_id = siblingModelId;
-      }
-      await updateModelConfigIfNeeded(serverId, modelPatch);
-      return;
-    case "image":
-      if (scope.baseConfig.diffusion_model_id === modelId) {
-        modelPatch.diffusion_model_id = siblingModelId;
-      }
-      if (scope.baseConfig.nai_diffusion_model_id === modelId) {
-        novelaiPatch.nai_diffusion_model_id = null;
-      }
-      await Promise.all([
-        updateModelConfigIfNeeded(serverId, modelPatch),
-        updateNovelaiImagegenConfigIfNeeded(serverId, novelaiPatch),
-      ]);
-      return;
-    case "video":
-      if (scope.baseConfig.video_model_id === modelId) {
-        modelPatch.video_model_id = siblingModelId;
-      }
-      await updateModelConfigIfNeeded(serverId, modelPatch);
-      return;
-  }
-}
-
-async function updateModelConfigIfNeeded(serverId: number, patch: Partial<ServerModelConfigRow>): Promise<boolean> {
-  return Object.keys(patch).length > 0 ? await configRepository.updateModelConfig(serverId, patch) : true;
-}
-
-async function updateNovelaiImagegenConfigIfNeeded(
-  serverId: number,
-  patch: Partial<ServerNovelaiImagegenConfigRow>,
-): Promise<boolean> {
-  return Object.keys(patch).length > 0 ? await configRepository.updateNovelaiImagegenConfig(serverId, patch) : true;
-}
-
 async function buildSavedConfigForCustomEndpoint(
   scope: RegistrationScope,
   provider: string,
@@ -705,111 +634,6 @@ export async function resolveCustomEndpointForProvider(
   return await llmProviderRepo.loadCustomEndpointByConnection(parsed.connectionId, capability, activeModelId);
 }
 
-export async function removeCustomEndpointRegistration(params: {
-  scope: RegistrationScope;
-  customEndpointId: number;
-  label: string;
-  capability: CustomEndpointCapability;
-  modelRefId: number | null;
-}): Promise<boolean> {
-  const endpoints = await llmProviderRepo.loadCustomEndpointsByIds([params.customEndpointId]);
-  const targetEndpoint = endpoints[0] ?? null;
-  const connectionId = targetEndpoint?.connection_id ?? null;
-  const provider = connectionId ? buildCustomProviderName(connectionId) : null;
-  const existingConfig = provider ? await getExistingSavedConfig(params.scope, provider) : null;
-
-  // Keep sibling models and their shared connection when removing one model.
-  const deleted =
-    params.scope.kind === "server"
-      ? await llmProviderRepo.deleteCustomEndpointById(params.customEndpointId, {
-          serverId: params.scope.ownerId,
-          serverDiscId: params.scope.serverDiscId,
-        })
-      : await llmProviderRepo.deleteCustomEndpointById(params.customEndpointId);
-
-  if (!deleted) {
-    return false;
-  }
-
-  // Prefer the default sibling during promotion so an explicit model preference survives removal.
-  const remaining = connectionId ? await llmProviderRepo.loadCustomEndpointsByConnectionId(connectionId) : [];
-  const sameCapabilityRemaining = remaining.filter(
-    (endpoint) => endpoint.capability === params.capability && endpoint.model_ref_id != null,
-  );
-  const siblingModelId =
-    (sameCapabilityRemaining.find((e) => e.is_default) ?? sameCapabilityRemaining[0])?.model_ref_id ?? null;
-
-  // Preserve live references by moving them to a surviving sibling when possible.
-  if (params.scope.kind === "server") {
-    await clearServerScopedLiveReferences(params.scope, params.capability, params.modelRefId, siblingModelId);
-  }
-
-  if (params.modelRefId != null) {
-    await llmModelRepo.deleteSyntheticCustomCapabilityModelById(params.modelRefId, params.capability);
-  }
-
-  // Connection-scoped state is removable only after its final model is gone.
-  if (remaining.length === 0) {
-    if (connectionId) {
-      await llmProviderRepo.deleteCustomEndpointConnectionById(connectionId);
-    }
-    if (provider) {
-      if (params.scope.kind === "server") {
-        await llmProviderRepo.deleteSavedProviderConfig(params.scope.ownerId, provider, {
-          serverDiscId: params.scope.serverDiscId,
-        });
-      } else {
-        await llmProviderRepo.deleteUserSavedProviderConfig(params.scope.ownerId, provider);
-      }
-    }
-    return true;
-  }
-
-  // Keep the saved capability selection aligned with the live endpoint after removal.
-  if (!existingConfig || params.modelRefId == null || !provider) {
-    return true;
-  }
-  const activeForCapability = getCapabilityModelId(existingConfig, params.capability);
-  const visionMatches = params.capability === "text" && existingConfig.vision_llm_id === params.modelRefId;
-  if (activeForCapability !== params.modelRefId && !visionMatches) {
-    return true;
-  }
-
-  const clearActive = activeForCapability === params.modelRefId;
-  const nextConfig = {
-    ...existingConfig,
-    llm_id: params.capability === "text" && clearActive ? siblingModelId : existingConfig.llm_id,
-    vision_llm_id: visionMatches ? null : existingConfig.vision_llm_id,
-    embedding_model_id:
-      params.capability === "embedding" && clearActive ? siblingModelId : existingConfig.embedding_model_id,
-    diffusion_model_id:
-      params.capability === "image" && clearActive ? siblingModelId : existingConfig.diffusion_model_id,
-    video_model_id: params.capability === "video" && clearActive ? siblingModelId : existingConfig.video_model_id,
-  };
-
-  if (params.scope.kind === "server") {
-    await llmProviderRepo.upsertSavedProviderConfig(params.scope.ownerId, nextConfig as SavedProviderConfigRow, {
-      serverDiscId: params.scope.serverDiscId,
-    });
-  } else {
-    await llmProviderRepo.upsertUserSavedProviderConfig(params.scope.ownerId, nextConfig as UserSavedProviderConfigRow);
-  }
-
-  return true;
-}
-
-export async function cleanupCustomProviderArtifacts(provider: string): Promise<void> {
-  const parsed = parseCustomProvider(provider);
-  if (!parsed) {
-    return;
-  }
-
-  await llmProviderRepo.deleteCustomEndpointConnectionById(parsed.connectionId);
-
-  // Drop every synthetic model owned by this custom provider across all capability tables.
-  await llmModelRepo.deleteAllSyntheticModelsForProvider(parsed.raw);
-}
-
 export async function validateCustomEndpointReachability(params: {
   apiStyle: CustomEndpointApiStyle;
   endpointUrl: string;
@@ -846,6 +670,12 @@ export async function validateCustomEndpointReachability(params: {
       return fallback.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
     }
 
+    if (params.apiStyle === "ollama-native") {
+      const ollamaRoot = baseUrl.replace(/\/v1$/i, "");
+      const response = await fetchUserRemoteUrl(`${ollamaRoot}/api/tags`, { headers }, fetchOptions);
+      return response.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
+    }
+
     const response = await fetchUserRemoteUrl(`${baseUrl}/models`, { headers }, fetchOptions);
     return response.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
   } catch (error) {
@@ -854,4 +684,10 @@ export async function validateCustomEndpointReachability(params: {
       reason: error instanceof Error ? error.message : String(error),
     };
   }
+}
+
+export function normalizeCustomEndpointUrlForStorage(apiStyle: CustomEndpointApiStyle, endpointUrl: string): string {
+  const baseUrl = endpointUrl.trim().replace(/\/+$/, "");
+  if (apiStyle !== "ollama-native" || /\/v1$/i.test(baseUrl)) return baseUrl;
+  return `${baseUrl}/v1`;
 }

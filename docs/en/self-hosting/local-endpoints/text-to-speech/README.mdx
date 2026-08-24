@@ -25,10 +25,10 @@ TomoriBot treats speech as a custom endpoint capability. Local engines run outsi
 ## Setup Flow
 
 1. Pick one engine from the cards above and start its wrapper from `servers/tts/`.
-2. Register it with `/provider custom-endpoint add` using capability `speech` and api style `tts-clone`.
-3. In the registration modal, choose the voice source mode and script markup listed in that engine's guide.
+2. In `/providers`, choose **Add New Custom Endpoint** and use API Compatibility `tts-clone`.
+3. Select the saved endpoint, choose **Add or Edit a Model**, and add its exact model code.
 
-Registration makes the endpoint active immediately. Use `/model speech` later only when switching between registered TTS endpoints.
+Adding the model makes the endpoint active immediately. Use `/model speech` later only when switching between registered TTS endpoints.
 
 ## Persona Voice Flow
 
@@ -40,7 +40,7 @@ For clone engines, add and assign one voice sample per persona:
 
 For Qwen3-TTS VoiceDesign, skip the audio sample and run `/speech voice-design set` for each persona instead.
 
-ElevenLabs users should use `/speech elevenlabs`; it registers the speech and transcription endpoints together.
+ElevenLabs users should choose **Add New Provider** and **ElevenLabs** in `/providers`; it registers the speech and transcription endpoints together.
 
 TomoriBot strips Discord custom emoji syntax such as `:pepega:` or `<:pepega:123456789012345678>` from generated voice scripts before synthesis. Unicode emojis are also stripped unless the speech endpoint uses emoji markup, which is intended for IrodoriTTS.
 

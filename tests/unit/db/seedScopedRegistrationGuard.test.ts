@@ -1,14 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { buildModelSeedStatements } from "@/db/seed/catalog/modelSeed";
 
-// Locks in the scoped-registration protection on the per-boot catalog reseed.
-//
-// Each model table's `ON CONFLICT ... DO UPDATE` must carry a WHERE guard that
-// skips rows a scope has promoted to a scoped OpenRouter registration
-// (is_scoped_registration = true). Without it, the reseed would reset
-// is_scoped_registration = false and re-apply is_deprecated on every restart,
-// silently reverting a user's deprecated-model registration. See
-// docs/subsystems/database-schema.md (OpenRouter scoped registrations).
+// A live curated model must publish globally even when a workspace registered its codename first.
+// Deprecated seed rows still leave an explicit scoped registration untouched across restarts.
 
 describe("model seed scoped-registration guard", () => {
   // Map each backing table to the guard clause its ON CONFLICT must contain.
@@ -26,9 +20,9 @@ describe("model seed scoped-registration guard", () => {
       const statement = statements.find((s) => s.startsWith(`INSERT INTO ${table} `));
       expect(statement, `no seed statement for table ${table}`).toBeDefined();
 
-      // It must promote on conflict AND only touch curated (non-scoped) rows.
       expect(statement).toContain("ON CONFLICT");
       expect(statement).toContain(guard);
+      expect(statement).toContain("OR EXCLUDED.is_deprecated = false");
     }
   });
 

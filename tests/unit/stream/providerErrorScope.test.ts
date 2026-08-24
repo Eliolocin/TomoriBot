@@ -115,13 +115,13 @@ describe("provider error tips resolve against the credential source", () => {
     expect(tips).not.toContain("/model text");
   });
 
-  it("offers the disable-override recovery path on personal failures", async () => {
+  it("offers the personal provider panel recovery path on personal failures", async () => {
     const tips = await renderTips(API_ERROR, "personal");
 
-    expect(tips).toContain("/personal provider toggle-models");
+    expect(tips).toContain("/personal providers");
   });
 
-  it("never shows the disable-override hint for a server-scoped failure", async () => {
+  it("never shows personal recovery guidance for a server-scoped failure", async () => {
     const tips = await renderTips(API_ERROR, "server");
 
     expect(tips).not.toContain("toggle-models");
@@ -132,7 +132,7 @@ describe("provider error tips resolve against the credential source", () => {
     const serverTips = await renderTips(RATE_LIMIT_ERROR, "server");
     const personalTips = await renderTips(RATE_LIMIT_ERROR, "personal");
 
-    expect(serverTips).toContain("/provider api-key rotation");
+    expect(serverTips).toContain("/providers");
     expect(personalTips).not.toContain("api-key rotation");
   });
 

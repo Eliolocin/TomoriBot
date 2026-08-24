@@ -10,7 +10,7 @@ export default {
         success_title: `OpenRouter Model Added`,
         success_description: `Registered OpenRouter {capability} model \`{model_name}\` for this server and set it as the current {capability} model.`,
         missing_provider_title: `OpenRouter Provider Not Saved`,
-        missing_provider_description: `The model was registered, but it was not activated because this server does not have saved OpenRouter credentials. Add OpenRouter with \`/provider add\` first.`,
+        missing_provider_description: `The model was registered, but it was not activated because this server does not have saved OpenRouter credentials. Add OpenRouter with \`/providers\` first.`,
         already_registered_title: `Model Already Registered`,
         already_registered_description: `OpenRouter {capability} model \`{model_name}\` is already registered for this server.`,
         already_available_title: `Already Available`,
