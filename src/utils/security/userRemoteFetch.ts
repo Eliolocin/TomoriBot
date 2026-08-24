@@ -283,8 +283,7 @@ async function fetchUserRemoteUrlInternal(
 }
 
 export interface FetchUserRemoteUrlOptions {
-  /** Enforce the private/link-local/loopback blocklist even outside production.
-   *  Pass true for personal (user-scoped) endpoint calls. */
+  /** Enforce the private/link-local/loopback blocklist even outside production. */
   strict?: boolean;
   /** Permit private/internal targets even in production, aligning with the
    *  `fetch_url` `FETCH_URL_ALLOW_PRIVATE_NETWORK` opt-in. The always-on

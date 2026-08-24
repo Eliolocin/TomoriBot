@@ -13,7 +13,9 @@
  *   TEST_DB_READY=1 POSTGRES_DB=<name> POSTGRES_PASSWORD=<pw> bun test tests/regression/db/
  */
 import { SQL } from "bun";
+import { readFile } from "node:fs/promises";
 import { initializeDatabase } from "@/utils/db/initializeDatabase";
+import { splitSqlStatements } from "@/utils/db/sqlSplitter";
 import { keyManager } from "@/utils/security/keyManager";
 
 const effectiveHost = process.env.TEST_POSTGRES_HOST ?? process.env.POSTGRES_HOST ?? "localhost";
@@ -52,6 +54,26 @@ export const testSql = new SQL({
   password: effectivePassword ?? "dummy",
   database: effectiveDatabase,
 });
+
+/** Executes a migration script on one reserved transaction connection. */
+export async function executeTestSqlFile(filePath: string): Promise<void> {
+  const sqlText = await readFile(filePath, "utf-8");
+  const statements = splitSqlStatements(sqlText);
+  const executableStatements = statements.filter((statement) => {
+    const command = statement
+      .replace(/^\s*(?:--[^\r\n]*(?:\r?\n|$)\s*)*/g, "")
+      .trim()
+      .replace(/;$/, "")
+      .toUpperCase();
+    return command !== "BEGIN" && command !== "COMMIT";
+  });
+
+  await testSql.begin(async (tx) => {
+    for (const statement of executableStatements) {
+      await tx.unsafe(statement);
+    }
+  });
+}
 
 /** Memoized bootstrap, shared by every `beforeAll` in the process. */
 let bootstrapPromise: Promise<void> | null = null;

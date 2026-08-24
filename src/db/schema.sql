@@ -2294,7 +2294,18 @@ BEGIN
 
     IF NOT endpoint_group_urls_ready THEN
       EXECUTE $query$
-        SELECT NOT EXISTS (SELECT 1 FROM public.custom_endpoint_connections)
+        SELECT
+          NOT EXISTS (SELECT 1 FROM public.custom_endpoint_connections)
+          AND (
+            to_regclass('public.custom_endpoints') IS NULL
+            OR EXISTS (
+              SELECT 1
+              FROM information_schema.columns
+              WHERE table_schema = 'public'
+                AND table_name = 'custom_endpoints'
+                AND column_name = 'connection_id'
+            )
+          )
       $query$ INTO endpoint_group_urls_ready;
     END IF;
   END IF;

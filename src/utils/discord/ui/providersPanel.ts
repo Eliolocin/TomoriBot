@@ -738,10 +738,12 @@ function selectedEntryId(input: ProvidersPanelRenderInput): string | null {
 export function buildProvidersPanelPayload(input: ProvidersPanelRenderInput): ProvidersPanelPayload {
   const { locale, entries, readStatus } = input;
   const routeNamespace = input.routeNamespace ?? PROVIDERS_ROUTE_NAMESPACE;
+  const titleKey =
+    routeNamespace === PROVIDERS_ROUTE_NAMESPACE ? "commands.providers.title" : "commands.providers.personal_title";
   const components: ComponentInContainerData[] = [
     {
       type: ComponentType.TextDisplay,
-      content: `## ${localizer(locale, "commands.providers.title")}\n${localizer(locale, "commands.providers.selector_guidance")}`,
+      content: `## ${localizer(locale, titleKey)}\n${localizer(locale, "commands.providers.selector_guidance")}`,
     },
   ];
 

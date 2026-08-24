@@ -1,7 +1,8 @@
 export default {
   providers: {
     description: `Add, view, edit, and remove provider credentials, endpoints, and model catalogs.`,
-    title: `Providers`,
+    title: `Server Providers`,
+    personal_title: `Personal Providers`,
     selector_guidance: `**Select** or **add** a provider or endpoint using the dropdown below.`,
     select_placeholder: `Choose a provider, endpoint, or action...`,
     select_add_provider: `+ Add New Provider`,

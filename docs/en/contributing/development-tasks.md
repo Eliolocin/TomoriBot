@@ -37,6 +37,13 @@ bun run db:lifecycle    # schema lifecycle test (when schema.sql changed; needs 
 permission. It creates and drops its own temporary database, then tests fresh initialization plus
 backup/restore and DB maintenance scripts.
 
+To run selected regression files through the same disposable-database harness, pass their paths to
+the test script:
+
+```bash
+bun run test tests/regression/db/llm.regression.test.ts
+```
+
 ---
 
 ## Coding Conventions

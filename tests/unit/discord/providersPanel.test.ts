@@ -102,6 +102,8 @@ describe("providers panel rendering", () => {
     expect(JSON.stringify(editModal)).not.toContain("rotation-key");
     expect(JSON.stringify(panel)).toContain("personal-providers:v1:");
     expect(JSON.stringify(panel)).not.toContain('"customId":"providers:v1:');
+    expect(JSON.stringify(panel)).toContain("## Personal Providers");
+    expect(JSON.stringify(panel)).not.toContain("## Server Providers");
   });
 
   it("offers every API compatibility in one valid modal", () => {
@@ -137,12 +139,35 @@ describe("providers panel rendering", () => {
     const serialized = JSON.stringify(payload);
     const select = collectComponents(payload).find((component) => component.type === ComponentType.StringSelect);
 
+    expect(serialized).toContain("## Server Providers");
+    expect(serialized).not.toContain("## Personal Providers");
     expect(serialized).toContain("No Saved Providers");
     expect(serialized).toContain("**Select** or **add** a provider or endpoint using the dropdown below.");
     expect(serialized).toContain("+ Add New Provider");
     expect(serialized).toContain("+ Add New Custom Endpoint");
     expect(serialized).toContain("`/model text`");
     expect((select?.options as unknown[])?.length).toBe(2);
+  });
+
+  it("localizes server and personal ownership in the panel title", () => {
+    const serverPanel = buildProvidersPanelPayload({
+      locale: "ja",
+      entries: [],
+      initialEntryId: null,
+      readStatus: "fresh",
+      page: { kind: "entry" },
+    });
+    const personalPanel = buildProvidersPanelPayload({
+      locale: "ja",
+      entries: [],
+      initialEntryId: null,
+      readStatus: "fresh",
+      page: { kind: "entry" },
+      routeNamespace: PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
+    });
+
+    expect(JSON.stringify(serverPanel)).toContain("## サーバープロバイダー");
+    expect(JSON.stringify(personalPanel)).toContain("## 個人プロバイダー");
   });
 
   it("renders all provider capabilities in one body display with workspace-derived markers", () => {

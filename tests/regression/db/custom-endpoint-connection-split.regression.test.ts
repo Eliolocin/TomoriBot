@@ -1,18 +1,9 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { splitSqlStatements } from "@/utils/db/sqlSplitter";
 import { llmProviderRepo } from "@/utils/db/repositories";
 import * as SpeechRepository from "@/utils/db/repositories/SpeechRepository";
 import { encryptApiKey } from "@/utils/security/crypto";
-import { DB_TESTS_AVAILABLE, setupTestDb, testSql } from "./setup/testDb";
-
-async function executeSqlFile(filePath: string): Promise<void> {
-  const sqlText = await readFile(filePath, "utf-8");
-  for (const stmt of splitSqlStatements(sqlText)) {
-    await testSql.unsafe(stmt);
-  }
-}
+import { DB_TESTS_AVAILABLE, executeTestSqlFile, setupTestDb, testSql } from "./setup/testDb";
 
 const PROBE_SERVER = "_custom_endpoint_split_server";
 const PROBE_USER = "_custom_endpoint_split_user";
@@ -20,6 +11,20 @@ const PROBE_USER = "_custom_endpoint_split_user";
 describe.skipIf(!DB_TESTS_AVAILABLE)("Custom Endpoint connection and model split (Migration A)", () => {
   let serverId: number;
   let userId: number;
+  const migration073UpPath = path.join(
+    process.cwd(),
+    "src",
+    "db",
+    "migrations",
+    "073_unify_custom_endpoint_group_urls.sql",
+  );
+  const migration073DownPath = path.join(
+    process.cwd(),
+    "src",
+    "db",
+    "migrations",
+    "073_unify_custom_endpoint_group_urls.down.sql",
+  );
 
   beforeAll(async () => {
     await setupTestDb();
@@ -166,9 +171,9 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Custom Endpoint connection and model split
   });
 
   it("preserves divergent URLs under the same label/capability as distinct connections", async () => {
-    // Fresh installs carry Migration 070's final owner/label/capability index.
-    // Recreate Migration A's URL-sensitive coexistence index only for this
-    // assertion, then restore the current schema before the next regression.
+    // Recreate the historical URL-sensitive identity without Migration 073's
+    // grouped-URL invariant, then restore the current schema below.
+    await executeTestSqlFile(migration073DownPath);
     await testSql`DROP INDEX IF EXISTS idx_custom_endpoint_connections_server_unique`;
     await testSql`CREATE UNIQUE INDEX idx_custom_endpoint_connections_server_unique
       ON custom_endpoint_connections(server_id, label, capability, api_style, endpoint_url)
@@ -218,6 +223,47 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Custom Endpoint connection and model split
       await testSql`CREATE UNIQUE INDEX idx_custom_endpoint_connections_server_unique
         ON custom_endpoint_connections(server_id, label, capability)
         WHERE user_id IS NULL`;
+      await executeTestSqlFile(migration073UpPath);
+    }
+  });
+
+  it("migration 073 separates legacy URL groups and installs the one-URL invariant", async () => {
+    await executeTestSqlFile(migration073DownPath);
+
+    try {
+      await testSql`
+        INSERT INTO custom_endpoint_connections (
+          server_id, user_id, label, capability, api_style, endpoint_url, requires_auth
+        ) VALUES
+          (${serverId}, NULL, 'legacy-group', 'text', 'openai-compatible', 'http://10.0.0.1:8000/v1', false),
+          (${serverId}, NULL, 'legacy-group', 'image', 'comfyui', 'http://10.0.0.2:8188', false)
+      `;
+
+      await executeTestSqlFile(migration073UpPath);
+
+      const migrated = await testSql<Array<{ label: string; endpoint_url: string }>>`
+        SELECT label, endpoint_url
+        FROM custom_endpoint_connections
+        WHERE server_id = ${serverId} AND label LIKE 'legacy-group-%'
+        ORDER BY endpoint_url
+      `;
+      expect(migrated).toEqual([
+        { label: "legacy-group-1", endpoint_url: "http://10.0.0.1:8000/v1" },
+        { label: "legacy-group-2", endpoint_url: "http://10.0.0.2:8188" },
+      ]);
+
+      const [trigger] = await testSql<[{ tgdeferrable: boolean; tginitdeferred: boolean }]>`
+        SELECT tgdeferrable, tginitdeferred
+        FROM pg_trigger
+        WHERE tgname = 'enforce_custom_endpoint_group_url'
+      `;
+      expect(trigger).toEqual({ tgdeferrable: true, tginitdeferred: true });
+    } finally {
+      await testSql`
+        DELETE FROM custom_endpoint_connections
+        WHERE server_id = ${serverId} AND label LIKE 'legacy-group-%'
+      `;
+      await executeTestSqlFile(migration073UpPath);
     }
   });
 
@@ -452,7 +498,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Custom Endpoint connection and model split
     const downPath = path.join(process.cwd(), "src", "db", "migrations", "068_custom_endpoint_connections.down.sql");
     const upPath = path.join(process.cwd(), "src", "db", "migrations", "068_custom_endpoint_connections.sql");
 
-    await executeSqlFile(downPath);
+    await executeTestSqlFile(downPath);
 
     try {
       const [downRow] = await testSql<
@@ -479,11 +525,11 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Custom Endpoint connection and model split
       expect(downRow.endpoint_url).toBe("http://cycle.local:8000/v1");
       expect(downRow.requires_auth).toBe(true);
     } finally {
-      await executeSqlFile(upPath);
+      await executeTestSqlFile(upPath);
     }
 
     try {
-      await executeSqlFile(upPath);
+      await executeTestSqlFile(upPath);
 
       const reloadedList = await llmProviderRepo.loadCustomEndpointsForServer(serverId);
       const reloaded = reloadedList.find((e) => e.label === "migration-cycle");

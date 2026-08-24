@@ -1,17 +1,8 @@
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { splitSqlStatements } from "@/utils/db/sqlSplitter";
 import { llmProviderRepo } from "@/utils/db/repositories";
 import { getCustomProviderDisplayName } from "@/utils/provider/customProviderUtils";
-import { DB_TESTS_AVAILABLE, setupTestDb, testSql } from "./setup/testDb";
-
-async function executeSqlFile(filePath: string): Promise<void> {
-  const sqlText = await readFile(filePath, "utf-8");
-  for (const stmt of splitSqlStatements(sqlText)) {
-    await testSql.unsafe(stmt);
-  }
-}
+import { DB_TESTS_AVAILABLE, executeTestSqlFile, setupTestDb, testSql } from "./setup/testDb";
 
 const PROBE_SERVER = "_custom_endpoint_m070_server";
 const PROBE_USER = "_custom_endpoint_m070_user";
@@ -27,6 +18,14 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Custom Endpoint codename and keys (Migrati
     "db",
     "migrations",
     "070_custom_endpoint_codename_and_keys.down.sql",
+  );
+  const upPath073 = path.join(process.cwd(), "src", "db", "migrations", "073_unify_custom_endpoint_group_urls.sql");
+  const downPath073 = path.join(
+    process.cwd(),
+    "src",
+    "db",
+    "migrations",
+    "073_unify_custom_endpoint_group_urls.down.sql",
   );
 
   beforeAll(async () => {
@@ -130,7 +129,8 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Custom Endpoint codename and keys (Migrati
   });
 
   it("migration 070 migrates saved_provider_configs, model codenames, and telemetry, and rolls back cleanly", async () => {
-    await executeSqlFile(downPath070);
+    await executeTestSqlFile(downPath073);
+    await executeTestSqlFile(downPath070);
 
     try {
       // Legacy keys are retained here to prove the migration can disambiguate them.
@@ -303,7 +303,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Custom Endpoint codename and keys (Migrati
           (${serverId}, ${userId}, 'video_generated', 'custom-s' || ${serverId} || '-m070-video-video-vid-v1', '2026-01-03', 6, '2026-01-03 00:00:00+00', '2026-01-06 00:00:00+00')
       `;
 
-      await executeSqlFile(upPath070);
+      await executeTestSqlFile(upPath070);
 
       const newProviderKey = `custom:${connA.connection_id}`;
       const [savedConfig] = await testSql<[{ provider: string; llm_id: number }]>`
@@ -401,7 +401,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Custom Endpoint codename and keys (Migrati
       `;
       expect(unrelatedModel.llm_provider).toBe(`custom:s${serverId}:m070-label`);
 
-      await executeSqlFile(downPath070);
+      await executeTestSqlFile(downPath070);
 
       const [restoredConfig] = await testSql<[{ provider: string }]>`
         SELECT provider FROM saved_provider_configs
@@ -415,9 +415,10 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Custom Endpoint codename and keys (Migrati
       expect(restoredLlm.llm_provider).toBe(`custom:s${serverId}:m070-label`);
       expect(restoredLlm.llm_codename).toBe(`custom-s${serverId}-m070-label-text-llama-3`);
     } finally {
-      await executeSqlFile(upPath070);
+      await executeTestSqlFile(upPath070);
+      await executeTestSqlFile(upPath073);
     }
 
-    await executeSqlFile(upPath070);
+    await executeTestSqlFile(upPath070);
   });
 });

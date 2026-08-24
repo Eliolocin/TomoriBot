@@ -13,7 +13,9 @@
  * Test files are grouped into LANES that run concurrently: see {@link planLanes}
  * for the grouping rules and why they are safe.
  *
- * Invoke via `bun run test` (package.json): not `bun test tests/` directly.
+ * Invoke via `bun run test` (package.json), optionally followed by explicit test
+ * files for a focused disposable-database run. Do not call `bun test tests/`
+ * directly when database coverage is required.
  */
 
 import type { SQL } from "bun";
@@ -244,14 +246,17 @@ async function runLane(lane: Lane, extraEnv: Record<string, string>, requestedOu
     }
 
     // Spawn the batch and track it so signal-driven cleanup can terminate it.
+    const streamOutput = process.env.TOMORI_TEST_STREAM_OUTPUT === "true";
     const proc = Bun.spawn(["bun", "test", ...batch.files, ...reporterArgs], {
       env: { ...process.env, ...extraEnv },
-      stdout: "pipe",
-      stderr: "pipe",
+      stdout: streamOutput ? "inherit" : "pipe",
+      stderr: streamOutput ? "inherit" : "pipe",
     });
     liveProcesses.add(proc);
 
-    const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+    const [stdout, stderr] = streamOutput
+      ? ["", ""]
+      : await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
     const code = (await proc.exited) ?? 1;
     liveProcesses.delete(proc);
 
@@ -296,9 +301,15 @@ async function main(): Promise<void> {
     throw new Error("[test-runner] Refusing to run with RUN_ENV=production.");
   }
 
-  const testFiles = await discoverTestFiles();
+  const requestedFiles = process.argv.slice(2).filter((argument) => !argument.startsWith("--"));
+  const testFiles = requestedFiles.length > 0 ? requestedFiles : await discoverTestFiles();
+  if (requestedFiles.length > 0) process.env.TOMORI_TEST_STREAM_OUTPUT = "true";
   if (testFiles.length === 0) {
     console.error("[test-runner] No test files found under tests/.");
+    process.exit(1);
+  }
+  if (testFiles.some((file) => !file.replaceAll("\\", "/").startsWith("tests/") || !file.endsWith(".test.ts"))) {
+    console.error("[test-runner] Focused test paths must be .test.ts files under tests/.");
     process.exit(1);
   }
 

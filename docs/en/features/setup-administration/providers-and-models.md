@@ -60,6 +60,9 @@ models with the `/personal provider model-*` commands. Personal settings follow 
 server where they use TomoriBot. See
 [Personalization](/features/knowledge/personalization/#your-own-providers) for that side.
 
+The panels are titled **Server Providers** and **Personal Providers** so their ownership remains visible after
+the command interaction opens.
+
 After a provider is set, pick which model each capability uses for this server:
 
 - `/model text` — the main chat model
@@ -89,8 +92,9 @@ protocol without registering any models. Then select the new endpoint, choose **
 Model**, and register its exact model code and capability. Adding a model activates it for that
 capability. Use the same model action to attach more models or edit a workspace-added registration.
 
-API compatibility determines which request paths and payloads the server implements. It is
-independent of model capability and cannot be inferred reliably from the endpoint URL.
+API compatibility determines the request paths and payloads the service implements, so it also determines which
+capability slots the connection prepares. Registering exact models for those slots is a separate step, and the
+protocol cannot be inferred reliably from the endpoint URL.
 
 For full walkthroughs of running the servers, see:
 

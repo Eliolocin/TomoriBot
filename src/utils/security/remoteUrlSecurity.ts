@@ -238,7 +238,7 @@ function buildBlockedAddressDetails(
 
 export interface ValidateRemoteUrlOptions {
   /** Always enforce the private/link-local/loopback blocklist, regardless of RUN_ENV.
-   *  Use for user-scoped (personal) endpoints where the operator cannot vet the target. */
+   *  Use when a caller's policy must remain production-strict during development. */
   strict?: boolean;
   /** Permit private/internal targets even in production, mirroring the `fetch_url`
    *  `FETCH_URL_ALLOW_PRIVATE_NETWORK` opt-in so both SSRF gates stay aligned.
