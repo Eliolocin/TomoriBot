@@ -414,7 +414,7 @@ export class GoogleStreamAdapter extends BaseStreamAdapter {
         }
       }
 
-      yield this.createProviderErrorChunk(error);
+      yield this.createProviderErrorChunk(error, context);
     }
   }
 

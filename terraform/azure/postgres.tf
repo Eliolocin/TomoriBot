@@ -28,8 +28,13 @@ resource "azurerm_postgresql_flexible_server" "main" {
   # Azure selects an availability zone when none is configured. Preserve that
   # provider-assigned zone on later applies; changing it requires a coordinated
   # standby-zone exchange that this single-server deployment does not use.
+  #
+  # prevent_destroy fails at plan time rather than at apply, so it also stops a destroy run from a
+  # workstation, which the CI destroy gate cannot see. Removing this server is not a deploy-time
+  # decision: deliberate teardown means editing this block first, which is the friction we want.
   lifecycle {
-    ignore_changes = [zone]
+    ignore_changes  = [zone]
+    prevent_destroy = true
   }
 }
 
@@ -38,6 +43,12 @@ resource "azurerm_postgresql_flexible_server_database" "tomoribot" {
   server_id = azurerm_postgresql_flexible_server.main.id
   charset   = "UTF8"
   collation = "en_US.utf8"
+
+  # This resource is the production data. A rename of var.postgres_database_name would otherwise
+  # plan as destroy-then-create and silently start the bot against an empty database.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "azurerm_postgresql_flexible_server_firewall_rule" "vm" {

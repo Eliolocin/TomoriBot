@@ -81,28 +81,6 @@ variable "vm_size" {
   }
 }
 
-# --- Azure Monitor ---
-
-variable "vm_insights_data_collection_rule_id" {
-  description = "Existing Azure Monitor data collection rule resource ID that sends VM Insights guest metrics to the TomoriBot Log Analytics workspace."
-  type        = string
-
-  validation {
-    condition     = can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.Insights/dataCollectionRules/[^/]+$", var.vm_insights_data_collection_rule_id))
-    error_message = "vm_insights_data_collection_rule_id must be a complete Azure data collection rule resource ID."
-  }
-}
-
-variable "application_logs_data_collection_rule_id" {
-  description = "Existing Azure Monitor data collection rule resource ID that ingests TomoriBot application logs and cache metrics."
-  type        = string
-
-  validation {
-    condition     = can(regex("^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.Insights/dataCollectionRules/[^/]+$", var.application_logs_data_collection_rule_id))
-    error_message = "application_logs_data_collection_rule_id must be a complete Azure data collection rule resource ID."
-  }
-}
-
 # --- PostgreSQL Flexible Server ---
 
 variable "postgres_server_name" {

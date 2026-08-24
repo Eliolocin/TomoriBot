@@ -58,7 +58,119 @@ environment-scoped Run Command deployment succeeds.
 
 The workflow deliberately separates recurring releases from one-time lifecycle operations.
 
-### VM replacement protection and monitoring recovery
+### Progress watchdog
+
+Docker restarts a container that *exits* and leaves a merely `unhealthy` one alone, so neither
+covers the case where the process is alive and reporting healthy while making no progress. That gap
+is not theoretical: a long synchronous main-thread job once pinned the event loop for over fifteen
+hours while the gateway stayed connected and `/healthz` kept answering 200.
+
+A host timer (`tomoribot-watchdog.timer`, every minute) probes `/healthz` and reads the
+`eventLoop.stalenessMs` field the bot publishes. Two shapes count as no progress, and they look
+different on the wire: a *starved* loop still answers with an inflated staleness, while a *fully
+blocked* one cannot answer at all, because the health server shares that loop, so the probe times
+out. Both increment the same counter.
+
+It runs on the host rather than inside the bot deliberately. An in-process detector stops running
+during exactly the starvation it exists to detect.
+
+Four rules keep it from becoming a restart loop, and all of them are configured in
+`/etc/tomoribot/watchdog.conf`:
+
+- **Consecutive failures**, not one. Five checks at a one-minute cadence, so roughly five minutes of
+  continuous failure. Acting on a single sample is how a naive threshold has already taken this host
+  down once.
+- **A startup grace period**, so a cold start is not read as a stall.
+- **A minimum interval between recycles.** A repeat inside that interval means the previous recycle
+  did not fix it, which is a worse problem than a single stall, so it is logged as an alert instead
+  of retried.
+- **Co-tenants first**, matching the daily recycle order. Recycling them alone was measured cutting
+  host IO pressure 43%, so the cheap rung sits below the expensive one.
+
+**It ships disarmed** (`WATCHDOG_ARMED=false`) and logs what it would have done. The staleness
+threshold has no calibration behind it yet, and arming a watchdog on an uncalibrated threshold is
+how you manufacture the outage you were trying to prevent. Arm it only after the observation period
+shows it would not have fired spuriously.
+
+Behaviour is covered by `bun run test-watchdog`, which extracts the script from `cloud-init.yaml` on
+every run rather than testing a copy, so the harness cannot drift from what ships.
+
+**Installing it on a host that already exists is a separate step, and it is the easy thing to miss.**
+`cloud-init` is consumed once at provision time and never re-runs, and `vm.tf` carries
+`ignore_changes = [custom_data]` so Terraform will not push an edited `cloud-init.yaml` to a running
+VM either (that guard is what stops a comment change from planning a VM replacement). A deploy
+therefore does **not** deliver the watchdog to an existing host. Extract the four files from
+`cloud-init.yaml`, write them through the Run Command path, then `systemctl daemon-reload` and
+`systemctl enable --now tomoribot-watchdog.timer`. Extract rather than retype: the cloud-init copy
+is the one the test harness exercises. The entry in `cloud-init.yaml` is what makes a future
+rebuild come up with the watchdog already present.
+
+Verify the install by what the timer does, not by whether the files exist. On a healthy bot the
+script prints nothing at all and exits 0, so `journalctl -u tomoribot-watchdog.service` should show
+only `Starting` and `Finished` pairs at a one-minute cadence, and `/run/tomoribot-watchdog.state`
+should read `FAILURES=0`. Note the unit name: the script logs with plain `echo`, so its output
+belongs to the unit and `journalctl -t tomoribot-watchdog` finds nothing.
+
+### Production data protection
+
+The database is guarded in three independent places, because each one covers a path the others
+cannot see.
+
+**Terraform `prevent_destroy`** on the resource group, the PostgreSQL flexible server, and the
+database itself. This fails at `plan` time rather than at `apply`, so it also stops a `terraform
+destroy` run from a workstation, which no CI gate observes. Deliberate teardown means editing the
+`lifecycle` block first, and that friction is the point. The resource group is included because
+deleting one deletes everything inside it, including the server's backups.
+
+Firewall rules are deliberately **not** given `prevent_destroy`: the Grafana operator address
+rotates with the maintainer's ISP, and a rule that legitimately needs replacing must not require a
+code change. The destruction gate below still catches them.
+
+**The destruction gate** in the deploy workflow, described below, which additionally protects the
+firewall rules, networking, and alerts.
+
+**The destructive-migration gate**, which blocks a deploy introducing `DROP TABLE`, `DROP COLUMN`,
+`DROP CONSTRAINT`, `ALTER COLUMN ... TYPE`, `TRUNCATE`, or an unfiltered `DELETE` unless the
+deployer opted into a pre-deploy backup, either with `(Checkpoint)` in the commit message or
+`create_db_backup=true` on manual dispatch.
+
+That gate compares migration files against **the last successful deploy**, not the previous push.
+The distinction is the whole correctness of it: the gate is git-delta-scoped while the migration
+runner is database-state-scoped, so they desync on any failed run. If a deploy stops at the gate,
+the destructive migrations stay pending in the database, but a push-scoped diff on the next attempt
+finds no new migration files, passes, and the `DROP` statements then run at startup with no backup.
+Anchoring on the last green deploy keeps the window open until one actually succeeds. The base is
+read from this workflow's own run history, which is why the job requests `actions: read` and checks
+out with `fetch-depth: 0`. If no successful run is reachable it falls back to the push delta and
+emits a warning annotation rather than failing an otherwise valid deploy.
+
+### Destruction protection
+
+Three guards run between `terraform plan` and `terraform apply -auto-approve`. The first two select
+on a single resource type each (the PostgreSQL server, the VM), so a third, type-agnostic guard
+covers everything else.
+
+It always prints an inventory of every planned destroy, which is the part that matters most: a plan
+that legitimately removes a component still shows exactly what it removes, in the deploy log, before
+it happens. On top of that it fails the deploy when either condition holds:
+
+- **A protected resource would be destroyed or replaced.** The resource group, the database, the
+  PostgreSQL firewall rule, the NSG, the network interface, the virtual network, the subnet, the
+  public IP, or a metric alert. Losing any of these breaks production in a way the deploy still
+  reports as successful, and the list is kept to types that exist in `terraform/azure` so it can be
+  audited against the repo rather than drifting into aspiration.
+- **More than `MAX_UNAPPROVED_DESTROYS` resources would be destroyed** (3 by default). Retiring one
+  small component legitimately removes a handful at once, such as an extension plus its rule
+  associations. Beyond that a plan is more likely wrong than intended.
+
+A replacement counts: Terraform reports it as `delete,create`, and the guard matches on the presence
+of `delete` rather than on a pure destroy, so an in-place rebuild of the public IP is caught the same
+way an outright deletion is.
+
+Either failure is cleared the same way as the VM guard: review the saved plan, then dispatch manually
+with `allow_infrastructure_destruction=true`. Release-branch pushes cannot bypass it.
+
+### VM replacement protection
 
 Terraform plans that delete or replace the production VM stop before apply. After reviewing the
 saved plan, an operator may approve the replacement only through a manual dispatch with
@@ -76,26 +188,27 @@ a deliberate act, though: removing the VM from state or destroying it, never a p
 Verify a backport against the live host rather than trusting a clean plan, because Terraform no
 longer reports drift on this field.
 
-The Azure Monitor Linux Agent and both DCR associations are Terraform-managed children of the VM.
-The DCR definitions, DCE, Log Analytics workspace, and custom tables remain externally managed and
-are referenced through the non-sensitive DCR resource IDs in `terraform.ci.tfvars`. A normal
-Terraform apply installs the agent and restores both associations on the current VM. A later
-approved VM replacement destroys and recreates these attachments in the same dependency graph, so
-guest-memory and cache telemetry recover without a separate portal operation. Update the committed
-IDs only when an operator deliberately replaces a DCR.
+A replacement no longer has monitoring children to recover. The Azure Monitor Linux Agent and its
+two data collection rule associations were Terraform-managed children of the VM until the bot began
+writing its own telemetry to PostgreSQL, at which point they were removed: this stack installs no
+monitoring agent, and `terraform.ci.tfvars` carries no data collection rule IDs.
 
-To inventory the existing DCR IDs before the first adoption apply, authenticate Azure CLI and run:
+**The driver was memory, not cost.** On a host with 842 MB of usable RAM, the agent held roughly
+179 MB of resident set, a fifth of the machine spent shipping metrics that a table in a database the
+bot already holds a connection to can store instead. The bot now writes a row to `metric_samples`
+every `CACHE_METRICS_INTERVAL_MS`, and Grafana reads that table through the operator firewall rule
+it already needs. See [Caching](/architecture/subsystems/caching/) for the dual-sink design.
 
-```sh
-az resource list \
-  --resource-type Microsoft.Insights/dataCollectionRules \
-  --query "[].{name:name,resourceGroup:resourceGroup,id:id}" \
-  --output table
-```
+The three metric alerts are unaffected, because they read `Microsoft.Compute/virtualMachines`
+platform metrics served by the Azure guest agent rather than by the monitoring agent. That is
+measured rather than assumed: during a ten-hour window when the monitoring agent was dead, Available
+Memory Bytes and OS Disk Queue Depth both kept reporting.
 
-If the current VM already has an extension or association with the Terraform names, import that live
-object instead of deleting it; a recreated VM normally has no such child objects, so the first apply
-creates them.
+Reinstating the pipeline is a rollback, not a rebuild. The Log Analytics workspace, its custom
+tables, the data collection endpoint, and the rule definitions were always externally managed, so
+they survive untouched and only the extension and the two associations need re-adding to
+`monitoring.tf`. [Azure Application Logs](/architecture/cloud/azure-application-logs/) covers that
+pipeline for a deployment that wants it.
 
 ### Database bootstrap
 
@@ -115,7 +228,7 @@ merging. Later operator-requested reruns can be manually dispatched from `releas
 The administrator bundle contains only PostgreSQL connection fields, is staged for the one-shot
 container, and is deleted when Run Command exits. It is never installed as `/etc/tomoribot/secrets.json`.
 For an existing PostgreSQL server, bootstrap skips all schema and seed operations and changes only
-the runtime role and its privileges — schema and migrations are instead applied on every deploy by the
+the runtime role and its privileges: schema and migrations are instead applied on every deploy by the
 separate always-on step below. Schema-container failures are retained in the access-controlled
 Azure Run Command record without exposing that output in the public Actions log.
 
@@ -129,16 +242,27 @@ is (re)started. It:
 
 1. runs the same `initializeCli` entrypoint the local boot path uses (idempotent `schema.sql` plus the
    tracked `NNN_*.sql` migration runner), in a one-shot container using the database-only administrator
-   bundle — the only identity permitted to create tables or apply migrations in production;
+   bundle (the only identity permitted to create tables or apply migrations in production);
 2. touches no roles or grants: new tables inherit runtime and Grafana privileges automatically from the
    `ALTER DEFAULT PRIVILEGES` rules `bootstrap-database.sh` installs for the administrator role; and
 3. fails the deploy (before the bot restarts) if migration does not report success.
 
 Destructive migrations (`DROP`, `ALTER COLUMN ... TYPE`, `TRUNCATE`, unfiltered `DELETE`, etc.) are still
-blocked upstream by the **Destructive migration gate** unless the deployer opts into a pre-deploy backup
-(a `(Checkpoint)` commit message on push, or `create_db_backup=true` on manual dispatch). This is why the
-gate matters: routine pushes now genuinely apply migrations, so an unguarded destructive change is caught
-before it reaches the database.
+blocked upstream by the **Destructive migration gate**. Routine pushes genuinely apply migrations, so the
+gate is what catches an unguarded destructive change before it reaches the database.
+
+:::caution[`(Checkpoint)` does not produce a backup on this deployment]
+A `(Checkpoint)` commit message, or `create_db_backup=true` on manual dispatch, skips the gate and then
+runs `az postgres flexible-server backup create`. **Azure rejects customer on-demand backups on the
+Burstable tier**, which is what this server runs (`Standard_B1ms`), so that step fails and takes the
+deploy down with it. The outcome is safe, because nothing deploys and the migration never reaches the
+database, but it is not a backup and the gate has been spent for nothing.
+
+The real recovery point on Burstable is **point-in-time restore from the automated backups**
+(`backup_retention_days`, 7 by default). Before shipping a destructive migration, record the current UTC
+timestamp as your restore target, or take an explicit logical dump. Re-enable the on-demand path only if
+this server moves to General Purpose or Memory Optimized, where Azure permits it.
+:::
 
 ### Recurring deployment
 
@@ -189,12 +313,19 @@ endpoint, the runtime client sets pool-recycling options (`src/utils/db/client.t
 gateway silently reaps idle TCP connections after roughly four minutes without sending a RST; a
 pooled connection reaped this way becomes a black hole, so the next query hangs until an application
 timeout fires (~3 minutes). Chat turns exhibited this, but lightweight slash commands, which touch
-the pool more opportunistically, largely did not. `POSTGRES_IDLE_TIMEOUT_SECONDS` (default 30)
+the pool more opportunistically, largely did not. `POSTGRES_IDLE_TIMEOUT_SECONDS` (default 180)
 recycles idle connections before the gateway can reap them, `POSTGRES_MAX_LIFETIME_SECONDS`
-(default 600) caps total connection age, and `POSTGRES_CONNECTION_TIMEOUT_SECONDS` (default 10)
-turns a dead-path hang into a fast, retryable failure. Defaults are production-safe; tune only during
+(default 1800) caps total connection age, `POSTGRES_CONNECTION_TIMEOUT_SECONDS` (default 10)
+turns a dead-path hang into a fast, retryable failure, and `POSTGRES_POOL_MAX` (default 10) states
+the pool width explicitly instead of inheriting Bun's. Defaults are production-safe; tune only during
 an incident. This was fixed at the client layer deliberately, so the private endpoint stays removed
 and the free-tier cost target holds.
+
+Both timeouts sit as far from their motivating constraint as that constraint allows, because every
+firing is also a chance to hit the Bun defect described below. The gateway reap at roughly four
+minutes is the binding limit on the idle timer, not the much lower value it is tempting to pick;
+idle retirements were the larger share of a production cascade that left the bot unresponsive while
+every health signal stayed green.
 
 When tuning, keep `POSTGRES_IDLE_TIMEOUT_SECONDS` comfortably above the slowest single statement the
 bot issues. Bun measures that timer as wall-clock silence on the socket, and a statement the server
@@ -215,8 +346,14 @@ production this surfaced as `PostgresError: Max lifetime timeout reached after 1
 stale prepared-statement plans it originally handled, but the two paths differ: a cached-plan error
 calls `resetDatabaseConnection()` first, while a retired connection must not, because the pool has
 already discarded the dead socket and a reset would throw away the rest of a healthy pool.
-`POSTGRES_TRANSIENT_RETRY_ATTEMPTS` (default 2 total attempts) and
+`POSTGRES_TRANSIENT_RETRY_ATTEMPTS` (default 3 total attempts) and
 `POSTGRES_TRANSIENT_RETRY_DELAY_MS` (default 100) tune it.
+
+Three attempts rather than two because a cascade retires successive cohorts, so the second attempt
+frequently lands inside the same episode as the first. The delay is applied with full jitter,
+uniform over zero to the configured value: a mass retirement fails every in-flight caller within the
+same few milliseconds, and a fixed delay would re-synchronise exactly the callers that most need
+spreading out, landing them together on the replacement cohort.
 
 One retirement reaches the application under several codes, so the classifier matches a set rather
 than a single value. Alongside `ERR_POSTGRES_LIFETIME_TIMEOUT`, `ERR_POSTGRES_IDLE_TIMEOUT`, and
@@ -233,6 +370,59 @@ transaction is safe because a socket that dies mid-transaction makes the server 
 emoji and sticker reconciles qualify additionally because they are upsert-only. A non-idempotent
 write must not use it: if the socket dies between `COMMIT` being sent and its acknowledgement
 arriving, the replay double-applies.
+
+#### Reads that must not answer from a `catch`
+
+Retrying narrows the window; it does not close it. When every attempt is consumed inside one
+episode, the error reaches a repository, and what the repository does with it decides whether users
+see a brief pause or a bot that appears broken.
+
+A `catch` that returns a plausible default cannot distinguish an unreadable database from a real
+reading, so any question whose answer changes a decision must fail **closed** instead. These four
+paths now throw `DatabaseUnavailableError` rather than answering:
+
+| Read | Old answer on error | Why it mattered |
+|---|---|---|
+| `UserRepository.getPrivacyLevel` | `MINIMAL` (full personalization) | A user who chose `FULL` (completely invisible) was treated as fully personalizable for the length of every cascade |
+| `UserRepository.isBlacklisted` | `false` | A moderation control that lifts itself on a database hiccup is not a control |
+| `PersonaUserBlockRepository.loadActiveBlocksForUser` | `[]` | An empty list reads downstream as "no blocks apply", lifting every persona-level block |
+| `LlmProviderRepository.loadSavedProviderConfig` | `null` | Indistinguishable from "no row", so it rendered an "API Key Missing" embed telling an admin to run `/config setup` during a transient blip |
+
+The genuine-absence branches above each `catch` are deliberately kept separate: a user with no row
+really is new, and `MINIMAL` remains correct for them. Only the failure path changed.
+
+Callers that cannot propagate pick the restrictive side rather than inventing a value. Participant
+hydration fails closed per participant so one unreadable record does not abort a whole turn, while
+the user cache returns the restrictive pair **without storing it**, so a blip measured in seconds
+cannot pin a degraded answer for the full cache TTL. Chat turns and slash commands both surface a
+"Database Unreachable" notice that says the attempt is worth repeating, instead of setup
+instructions for a server that is already configured.
+
+#### Pool telemetry
+
+A single cascade once produced 8,276 error lines from repositories each blaming their own subsystem,
+which buried the one fact that mattered and made the log a load source during the incident. Only the
+first retirement in an episode is now logged, as a `pool_event` record; the rest are counted into the
+periodic `host_memory` metric sample as `pool_errors_5m`, `pool_lifetime_5m`, `pool_idle_5m`,
+`pool_other_5m`, `pool_retries_recovered_5m`, and `pool_retries_exhausted_5m`. `POOL_EVENT_EPISODE_QUIET_MS`
+(default 60000) sets how much silence starts a new episode.
+
+Two of those fields exist because they were previously unrecoverable. `pool_retries_recovered_5m`
+counts retirements a retry absorbed: the per-retry log line is `log.warn`, and the production logger
+is pinned at `error`, so only *exhausted* retries were ever visible and the masked-to-visible ratio
+could not be measured at all. And `pool_last_lifetime_phase_s` folds process uptime into the
+configured lifetime window, because Bun exposes no per-connection age. A pool whose connections were
+created in one burst retires them together, which shows up as lifetime failures clustering at a
+consistent phase; a flat distribution instead means age is not what drives retirement, and raising
+`POSTGRES_MAX_LIFETIME_SECONDS` would not help.
+
+These ride the existing `host_memory` sample rather than a series of their own so a cascade can be
+read against swap, PSI, and event-loop lag on one time axis.
+
+For the same reason, a failed metric write reports through `log.metric` rather than `log.warn`.
+Production pins pino at level `error`, so the previous warning was dropped before either sink and a
+telemetry blackout during a live outage left no trace anywhere. `log.error` is the wrong alternative
+here: it would attempt an `error_logs` insert down the same pool that just failed.
 
 ### Read-only production data inspection
 
@@ -276,8 +466,10 @@ when a brief Discord disconnect is acceptable, then verify `/healthz`, Discord c
 public-FQDN database access over verified TLS, and Vertex WIF after the reboot.
 
 Docker uses `json-file` rotation with three 10 MiB files, live restore, and daemon-level
-`no-new-privileges`. Application error JSONL remains on `/var/log/tomoribot`; Azure Monitor retains
-ingested records for 30 days. Backup and application-data mounts remain under
+`no-new-privileges`. Application error JSONL remains on `/var/log/tomoribot`, which is the
+durable copy: it survives container recreate and VM reboot, and it is what incident triage greps.
+Cache and process-memory samples land in the `metric_samples` table, pruned on the write path after
+`METRIC_SAMPLE_RETENTION_DAYS` (30 by default). Backup and application-data mounts remain under
 `/var/lib/tomoribot` and require explicit operator retention decisions.
 
 Each deploy pulls a new image digest and leaves the previous one untagged, so
@@ -515,6 +707,33 @@ schedule itself:
 Pick the hour from your own traffic histogram rather than copying one. Note also that `docker
 restart` does not increment `RestartCount`, so adopting a restart schedule does not blunt the
 "something is killing it" signal that a rising `RestartCount` gives during triage.
+
+### Recycle the co-tenants, not just the application
+
+**The application is rarely the only thing on the host that grows, and it is easily the only thing
+anything restarts.** On this deployment the search backend and the monitoring agent each roughly
+quadrupled between a fresh boot and thirteen hours of uptime, and together they were comparable in
+size to the headroom that separated a healthy host from a saturated one. The monitoring agent was
+later removed outright, which is the stronger version of the same move: recycling bounds a
+co-tenant's growth, while deleting it reclaims the whole floor.
+
+Two properties make co-tenants worth recycling on the same timer:
+
+- **They are not subject to the application's age gate.** Their growth tracks host uptime, not
+  container age, so a run that skips a freshly deployed container should still recycle them.
+- **A runtime that returns freed memory to its own arenas rather than to the OS sets a permanent
+  floor.** Peak concurrency, not steady-state load, decides that floor, so bounding concurrency is
+  the durable fix and recycling is what reclaims what has already been committed.
+
+Beware of self-limiting guards that key on RSS. A worker configured to respawn above an RSS ceiling
+cannot fire once it has been swapped out, because its RSS then reads near zero exactly when its
+true footprint is largest. **On a swap-backed host, any RSS-triggered guard is anti-correlated with
+the pressure it exists to catch.**
+
+Order the recycles so the heaviest cold start runs last, with the reclaimed memory already
+available. Let a co-tenant failure fail the unit for visibility, but never let it skip the
+application's own restart: a monitoring agent that quietly stops shipping is a failure mode worth
+surfacing loudly, and an unattended job is exactly where it would otherwise hide.
 
 **This is symptom management.** It bounds the depth without addressing the accumulation, and it is
 worth adopting only alongside the hunt for what is growing. Its one genuine diagnostic benefit is

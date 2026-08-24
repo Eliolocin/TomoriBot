@@ -1,0 +1,1426 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "description": "Health, usage and memory overview for a TomoriBot deployment. Reads only tables that exist in every install, so it works self-hosted and in the cloud alike.",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Process Memory",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS \"time\",\n       (fields->>'heap_used_mb')::float     AS heap_used_mb,\n       (fields->>'external_mb')::float      AS external_mb,\n       (fields->>'array_buffers_mb')::float AS array_buffers_mb\nFROM metric_samples\nWHERE metric_name = 'cache_sizes' AND $__timeFilter(created_at)\nORDER BY created_at",
+          "refId": "A"
+        }
+      ],
+      "description": "Heap, external and ArrayBuffer growth. External and array_buffers are native allocations that no cache counter decomposes, so this is the panel that separates a real leak from cache growth."
+    },
+    {
+      "type": "timeseries",
+      "title": "Cache Entries (lazy-expiry watchlist)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS \"time\",\n       (fields->>'channelWhitelist')::int AS \"channelWhitelist\",\n       (fields->>'shortTermMemory')::int  AS \"shortTermMemory\",\n       (fields->>'userCache')::int        AS \"userCache\",\n       (fields->>'tomoriState')::int      AS \"tomoriState\"\nFROM metric_samples\nWHERE metric_name = 'cache_sizes' AND $__timeFilter(created_at)\nORDER BY created_at",
+          "refId": "A"
+        }
+      ],
+      "description": "These four expire lazily on read, so an entry whose key is never read again is never removed: the TTL bounds staleness, not size. A monotonic climb here is the signature."
+    },
+    {
+      "type": "timeseries",
+      "title": "Errors per Hour by Type",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT $__timeGroupAlias(created_at, '1h'),\n       error_type AS metric,\n       count(*)   AS value\nFROM error_logs\nWHERE $__timeFilter(created_at)\nGROUP BY 1, error_type\nORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "description": "Requires ERROR_DB_LOGGING_ENABLED. A flat line during a suspected incident may mean the repository's circuit breaker is open, not that errors stopped."
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "description": "Daily token consumption (input + output combined) per model from stat_counters. Fixed 30-day window; daily grain is the finest the stat table stores, so this ignores the dashboard time picker like the other DB panels.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 7
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "sortBy": "Total",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "dataset": "tomoribot",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  bucket AS \"time\",\n  metric_key AS metric,\n  SUM(count) AS value\nFROM stat_counters\nWHERE metric IN ('tokens_in', 'tokens_out')\n  AND bucket >= CURRENT_DATE - INTERVAL '30 days'\nGROUP BY bucket, metric_key\nORDER BY bucket;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "30d",
+      "title": "Token Usage by Model (daily)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "description": "When Tomori is busiest: total turns by hour-of-day from the active_hour metric (summed across all servers/personas). Fixed all-time window like the other DB panels.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineWidth": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 10,
+        "h": 6
+      },
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.9,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        },
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "dataset": "tomoribot",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  LPAD(metric_key, 2, '0') || ':00' AS \"Hour\",\n  SUM(count) AS \"Turns\"\nFROM stat_counters\nWHERE metric = 'active_hour'\n  AND $__timeFilter(bucket)\nGROUP BY metric_key\nORDER BY metric_key::int;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "7d",
+      "title": "Activity by Hour",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "description": "Most-used commands (command_used metric, all-time). High churn = heavily relied on.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Uses"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "gauge",
+                  "valueDisplayMode": "color"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-GrYlRd"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 28,
+        "w": 7,
+        "h": 6
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "dataset": "tomoribot",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  metric_key AS \"Command\",\n  SUM(count) AS \"Uses\"\nFROM stat_counters\nWHERE metric = 'command_used'\n  AND $__timeFilter(bucket)\nGROUP BY metric_key\nORDER BY \"Uses\" DESC",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "7d",
+      "title": "Top Commands",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 17,
+        "y": 28,
+        "w": 7,
+        "h": 6
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "text": {
+          "titleSize": 20,
+          "valueSize": 50
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "dataset": "tomoribot",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "builder",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(user_id) AS \"Users\" FROM users LIMIT 50 ",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "alias": "\"Users\"",
+                "name": "COUNT",
+                "parameters": [
+                  {
+                    "name": "user_id",
+                    "type": "functionParameter"
+                  }
+                ],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
+          "table": "users"
+        },
+        {
+          "dataset": "tomoribot",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "builder",
+          "format": "table",
+          "hide": false,
+          "rawQuery": true,
+          "rawSql": "SELECT COUNT(server_id) AS \"Servers\" FROM servers LIMIT 50 ",
+          "refId": "B",
+          "sql": {
+            "columns": [
+              {
+                "alias": "\"Servers\"",
+                "name": "COUNT",
+                "parameters": [
+                  {
+                    "name": "server_id",
+                    "type": "functionParameter"
+                  }
+                ],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
+          "table": "servers"
+        }
+      ],
+      "title": "Reach",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "en-US"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ja"
+            },
+            "properties": []
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 6,
+        "h": 6
+      },
+      "options": {
+        "displayLabels": [],
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true
+        },
+        "pieType": "pie",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": true
+        },
+        "sort": "desc",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "dataset": "tomoribot",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- Query to show user registration locale distribution for pie chart\r\nSELECT\r\n  COALESCE(registration_locale, 'Unknown') as locale,\r\n  COUNT(user_id) as value\r\nFROM users\r\nGROUP BY registration_locale\r\nORDER BY value DESC;\r\n",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          },
+          "table": "servers"
+        }
+      ],
+      "title": "User Locales",
+      "type": "piechart"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "description": "Tomori's mood cloud: combined emotion breakdown mirroring /stats generate persona affinity: tagged emojis (emoji_used joined to server_emojis.emotion_key), tagged stickers (sticker_used joined to server_stickers.emotion_key), and non-identity sprites (sprite_emotion). Global across all servers.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 34,
+        "w": 6,
+        "h": 6
+      },
+      "options": {
+        "series_index": 0,
+        "tokenization": false,
+        "wordCloudOptions": {
+          "deterministic": true,
+          "enableTooltip": true,
+          "fontFamily": "arial",
+          "fontSizes": [15, 80],
+          "padding": 1,
+          "rotationAngles": [0, 0],
+          "rotations": 2,
+          "scale": "sqrt",
+          "spiral": "archimedean",
+          "transitionDuration": 800
+        }
+      },
+      "pluginVersion": "1.2.11",
+      "targets": [
+        {
+          "dataset": "tomoribot",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT emotion_key AS \"word\", LN(SUM(cnt)) AS \"metric\"\nFROM (\n  SELECT se.emotion_key AS emotion_key, sc.count AS cnt\n  FROM stat_counters sc\n  JOIN server_emojis se ON se.server_id = sc.server_id AND se.emoji_name = sc.metric_key\n  WHERE sc.metric = 'emoji_used' \n    AND se.emotion_key IS NOT NULL \n    AND $__timeFilter(sc.bucket)\n  UNION ALL\n  SELECT ss.emotion_key AS emotion_key, sc.count AS cnt\n  FROM stat_counters sc\n  JOIN server_stickers ss ON ss.server_id = sc.server_id AND ss.sticker_name = sc.metric_key\n  WHERE sc.metric = 'sticker_used' \n    AND ss.emotion_key IS NOT NULL \n    AND $__timeFilter(sc.bucket)\n  UNION ALL\n  SELECT LOWER(sc.metric_key) AS emotion_key, sc.count AS cnt\n  FROM stat_counters sc\n  WHERE sc.metric = 'sprite_emotion' \n    AND $__timeFilter(sc.bucket)\n) sub\nWHERE emotion_key != 'unset'\nGROUP BY emotion_key\nORDER BY \"metric\" DESC\nLIMIT 50;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Emotion Cloud",
+      "type": "magnesium-wordcloud-panel"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Active Servers"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "lcd",
+                  "type": "gauge",
+                  "valueDisplayMode": "color"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-RdYlGr"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "value"
+            },
+            "properties": []
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "preset_type"
+            },
+            "properties": []
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "カスタム"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ボーイッシュ"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": ["value"],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": []
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "メスガキ"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ダウナー"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Preset"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 172
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 34,
+        "w": 6,
+        "h": 6
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "dataset": "tomoribot",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  COALESCE(pp.persona_preset_name, 'Custom Personality') AS \"Preset\",\n  COUNT(DISTINCT p.server_id) AS \"Active Servers\"\nFROM personas p\nLEFT JOIN persona_presets pp\n  ON pp.preset_lineage_id = p.preset_lineage_id\n AND pp.preset_language = p.preset_language\nWHERE p.is_alter = false\nGROUP BY COALESCE(pp.persona_preset_name, 'Custom Personality')\nORDER BY \"Active Servers\" DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Persona Presets",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": true
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Active Servers"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "lcd",
+                  "type": "gauge",
+                  "valueDisplayMode": "color"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-BlPu"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Provider"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 131
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Model"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 183
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 34,
+        "w": 6,
+        "h": 6
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "dataset": "tomoribot",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  l.llm_codename AS \"Model\",\n  l.llm_provider AS \"Provider\",\n  COUNT(smc.server_id) AS \"Active Servers\"\nFROM server_model_configs smc\nJOIN llms l ON l.llm_id = smc.llm_id\nGROUP BY l.llm_codename, l.llm_provider\nORDER BY \"Active Servers\" DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Models in Use",
+      "type": "table"
+    },
+    {
+      "type": "timeseries",
+      "title": "Host Memory and Swap Tiers",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "decmbytes"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS \"time\",\n       (fields->>'swapfile_used_mb')::float AS swapfile_used_mb,\n       (fields->>'zram_used_mb')::float     AS zram_used_mb,\n       (fields->>'host_avail_mb')::float    AS host_avail_mb\nFROM metric_samples\nWHERE metric_name = 'host_memory' AND $__timeFilter(created_at)\nORDER BY created_at",
+          "refId": "A"
+        }
+      ],
+      "description": "Host memory split by swap tier. zram and the disk-backed /swapfile differ by roughly 100x in fault cost, so the aggregate cannot say whether the host is merely compressing or actually paging to disk. A rising swapfile_used_mb is the expensive case. swapon reports uncompressed size and cannot make this distinction."
+    },
+    {
+      "type": "timeseries",
+      "title": "Host Pressure (PSI) and Swap-In Rate",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS \"time\",\n       (fields->>'io_full_avg60')::float  AS io_full_avg60,\n       (fields->>'mem_full_avg60')::float AS mem_full_avg60,\n       (fields->>'swap_in_per_s')::float  AS swap_in_per_s\nFROM metric_samples\nWHERE metric_name = 'host_memory' AND $__timeFilter(created_at)\nORDER BY created_at",
+          "refId": "A"
+        }
+      ],
+      "description": "PSI full is the share of wall time every task was blocked, and io_full is the signal that tracked every host incident in this deployment. swap_in_per_s separates a large swap level that is merely cold pages evicted once (harmless) from a working set that is genuinely oversubscribed. The first sample after a restart carries no rate."
+    },
+    {
+      "type": "timeseries",
+      "title": "Pool Retirements by Code",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS \"time\",\n       (fields->>'pool_lifetime_5m')::int AS lifetime_timeout,\n       (fields->>'pool_idle_5m')::int     AS idle_timeout,\n       (fields->>'pool_other_5m')::int    AS other\nFROM metric_samples\nWHERE metric_name = 'host_memory' AND $__timeFilter(created_at)\nORDER BY created_at",
+          "refId": "A"
+        }
+      ],
+      "description": "Connections Bun retired out from under a live query (oven-sh/bun#30646), counted per 5 minute sample. Read this against the host panels above: a cascade that tracks swap and PSI is a different problem from one that fires at a healthy memory reading. Retirements at some rate are normal and are not by themselves a fault; see the retry panel."
+    },
+    {
+      "type": "timeseries",
+      "title": "Pool Retry Outcome",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 14,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS \"time\",\n       (fields->>'pool_retries_recovered_5m')::int AS recovered,\n       (fields->>'pool_retries_exhausted_5m')::int AS exhausted\nFROM metric_samples\nWHERE metric_name = 'host_memory' AND $__timeFilter(created_at)\nORDER BY created_at",
+          "refId": "A"
+        }
+      ],
+      "description": "The panel that says whether users felt anything. Recovered retirements were absorbed by withTransientDbRetry and cost only latency; only exhausted ones reach a user as a failed turn or a Database Unreachable notice. Rising exhausted against flat recovered is a retry budget decision (POSTGRES_TRANSIENT_RETRY_ATTEMPTS), not a pool timeout one."
+    },
+    {
+      "type": "timeseries",
+      "title": "Lifetime Retirement Phase",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "tomoribot-postgres"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 14,
+        "w": 8,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 0,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "spanNulls": false,
+            "pointSize": 6
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "tomoribot-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT created_at AS \"time\",\n       NULLIF((fields->>'pool_last_lifetime_phase_s')::int, -1) AS phase_s\nFROM metric_samples\nWHERE metric_name = 'host_memory' AND $__timeFilter(created_at)\nORDER BY created_at",
+          "refId": "A"
+        }
+      ],
+      "description": "Process uptime folded into POSTGRES_MAX_LIFETIME_SECONDS, because Bun exposes no per-connection age. Points clustering at one height mean the pool was created in a burst and retires as a synchronised cohort, which is what would justify a driver level fix; a scattered band means age is not what drives retirement. The -1 sentinel (no lifetime retirement in that interval) is filtered out, so gaps here are the normal state."
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "tags": ["tomoribot"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "TomoriBot Overview",
+  "uid": "tomoribot-overview",
+  "version": 3,
+  "weekStart": ""
+}

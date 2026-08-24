@@ -69,6 +69,31 @@ describe("applyAssistantPrefixCompletion", () => {
     const body: { messages: unknown[] } = { messages: [] };
     expect(() => applyAssistantPrefixCompletion(body, prefill)).not.toThrow();
   });
+
+  it("stamps reasoning_content: '' on the prefix turn when requiresReasoningContent is true", () => {
+    const body = {
+      messages: [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: prefill },
+      ],
+    };
+    applyAssistantPrefixCompletion(body, prefill, true);
+    const last = body.messages.at(-1) as Record<string, unknown>;
+    expect(last.prefix).toBe(true);
+    expect(last.reasoning_content).toBe("");
+  });
+
+  it("omits reasoning_content when requiresReasoningContent is false or omitted", () => {
+    const body = { messages: [{ role: "assistant", content: prefill }] };
+    applyAssistantPrefixCompletion(body, prefill, false);
+    expect((body.messages[0] as Record<string, unknown>).reasoning_content).toBeUndefined();
+  });
+
+  it("does not clobber an already-present reasoning_content", () => {
+    const body = { messages: [{ role: "assistant", content: prefill, reasoning_content: "captured CoT" }] };
+    applyAssistantPrefixCompletion(body, prefill, true);
+    expect((body.messages[0] as Record<string, unknown>).reasoning_content).toBe("captured CoT");
+  });
 });
 
 describe("mergeConsecutiveSameRole", () => {

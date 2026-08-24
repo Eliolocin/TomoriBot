@@ -90,6 +90,11 @@ describe("testIsolation detectors", () => {
     expect(usesModuleMocks("const spy = spyOn(obj, 'method');")).toBe(false);
   });
 
+  it("ignores module-mock markers in comments", () => {
+    expect(usesModuleMocks(`/** ${MOCK_CALL} */\nconst value = 1;`)).toBe(false);
+    expect(usesModuleMocks(`// ${SCOPED_MOCK_CALL}\nconst value = 1;`)).toBe(false);
+  });
+
   it("detects reachability of the fixture database", () => {
     expect(reachesTestDatabase(DB_IMPORT)).toBe(true);
     expect(reachesTestDatabase(`import { resolveTls } from "@/utils/db/client"`)).toBe(false);

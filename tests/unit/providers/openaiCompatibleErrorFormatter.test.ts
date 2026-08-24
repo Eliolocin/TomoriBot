@@ -135,4 +135,29 @@ describe("openAI-compatible provider error formatting", () => {
     expect(description).toContain("**Details:**");
     expect(description).toContain("min_p and logit_bias");
   });
+
+  it("does not blame a parameter on an opaque NVIDIA 500", () => {
+    // A user acted on the old unconditional copy and changed a setting the payload never carried.
+    // Wrong copy is worse than no copy, so the remediation is gated on NVIDIA naming a parameter.
+    const description = createOpenAICompatibleErrorDescription(
+      {
+        type: "provider_overloaded",
+        message: "NVIDIA API error: HTTP 500: Internal server error (internal_server_error)",
+        code: "500",
+        retryable: true,
+      },
+      "en-US",
+      {
+        localeNamespace: "genai.nvidia",
+        fallbackMessage: "Fallback should not be needed",
+        appendDetailsForCodes: ["500"],
+      },
+    );
+
+    expect(description).not.toContain("`/model parameters`");
+    expect(description).not.toContain("`/model logit-bias remove`");
+    expect(description).toContain("The NVIDIA backend serving this model failed");
+    expect(description).toContain("**Details:**");
+    expect(description).toContain("internal_server_error");
+  });
 });

@@ -431,7 +431,7 @@ export class VertexStreamAdapter extends BaseStreamAdapter {
         }
       }
 
-      yield this.createProviderErrorChunk(error, undefined, this.providerName);
+      yield this.createProviderErrorChunk(error, context, undefined, this.providerName);
     }
   }
 

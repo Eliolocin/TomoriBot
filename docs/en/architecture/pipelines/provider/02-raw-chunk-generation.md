@@ -90,6 +90,26 @@ land on a working configuration. For direct OpenAI-compatible providers a 502 is
 that degradation cannot fix, so those adapters fail fast and let key rotation and model fallback
 (chat pipeline stage 06) take over instead of walking the ladder against a dead endpoint.
 
+An opt-in `degradeOnOpaque5xx` covers the inverse case: a backend that reports "I do not support
+this input" as an internal server error rather than a parameter rejection. It fires only when the
+status is 5xx **and** the message carries no diagnostic content of its own (empty, `error`,
+`internal server error`), so a descriptive outage still fails fast. NVIDIA enables it because NIM
+on the vLLM V2 model runner answers an unsupported request key with a bare
+`Internal server error`, and when streaming it does so mid-SSE after a `200 OK`.
+
+Adapters that inject request keys of their own (via `mutateRequestBody`) declare them in
+`degradationPriorityKeys`. The ladder otherwise cannot tell an injected key from junk and sorts it
+into the unknown tail, so a backend dropping support for one is never probed. Declared keys are
+probed **before** the user's own samplers: each rung drops one key from the same baseline and the
+ladder stops at the first success, so ordering is pure latency and the winning rung ships the same
+payload either way. Reaching an injected key first cuts NVIDIA's recovery from eight round trips to
+three, and a key the user never asked for is the better first hypothesis.
+
+Declare only keys that are safe to drop. A key that changes the shape of the reply belongs in
+`mandatoryBodyKeys` instead, because probing it early would find a "working" request that silently
+lost a capability. NVIDIA declares `reasoning_budget` as droppable and keeps `chat_template_kwargs`
+mandatory, since the latter is what enables thinking.
+
 An SSE error can restart transparently only before the attempt commits. The commitment point is the
 first meaningful chunk yielded to the consumer: visible text, reasoning, a tool-call delta, or usage.
 Keepalives and empty chunks do not commit. On a degradable pre-commit error, the adapter cancels and
@@ -98,7 +118,17 @@ degraded attempt without yielding the error. Once committed, errors are yielded 
 then could duplicate output or tool activity already observed by the consumer.
 
 Degradation and recovery are operator-visible through structured terminal logs only. They do not add
-thought-log entries or user-facing Discord notices.
+thought-log entries or user-facing Discord notices. Three logs exist specifically so an incident
+does not require a live bisect to reproduce: the raw SSE error event (including the provider's
+`error.type`) whenever one arrives before commitment, the raw `responseErrorText` on a terminal
+HTTP failure before `createOpenAICompatibleHttpError` collapses it to a message, and the usual
+retry/recovery lines.
+
+Error classification is shared between transports. `classifyOpenAICompatibleStatus()` maps a status
+code and message onto a `ProviderError` type for both the thrown-fetch path and the SSE path, so a
+mid-stream 500 is `provider_overloaded` with `retryable: true` exactly as the HTTP path reports it.
+An SSE error event's `type` (e.g. `internal_server_error`) is carried into the `ProviderError`
+message when it is not already there, because an opaque message is the common case for this path.
 
 ## Input
 
@@ -123,10 +153,11 @@ generator until it returns.
 - **Speaker guard:** Mutates adapter instance state (`speakerGuardPendingTail`,
   `streamedTextTail`) across chunk boundaries — these fields are reset at the start of each
   `startStream()` call so they are scoped to a single stream lifetime.
-- **Error chunks:** `BaseStreamAdapter.onProviderError()` is called when an error is caught
-  (no-op in base class; available for subclass override). OpenRouter and OpenAI-compatible adapters
-  suppress only degradable SSE errors received before commitment while transparently retrying the
-  current request.
+- **Error chunks:** `BaseStreamAdapter.onProviderError()` is called when an error is caught. The
+  base implementation records the `provider_error` stat counter (`{provider}:{code}`), which is the
+  only aggregate record of provider failures that exists, so a subclass override must call `super`.
+  OpenRouter and OpenAI-compatible adapters suppress only degradable SSE errors received before
+  commitment while transparently retrying the current request.
 
 ## Invariants
 

@@ -1,17 +1,23 @@
 /**
- * Azure Monitor collection and curated metric alerts for the singleton
- * TomoriBot VM.
+ * Curated metric alerts for the singleton TomoriBot VM.
  *
- * The Azure Monitor Agent and DCR associations are deliberately managed with
- * the VM. Azure deletes both child resources when Terraform replaces the VM,
- * even if the replacement keeps the same Azure resource ID. Keeping them in
- * the same state ensures guest memory and application cache telemetry resume
- * automatically after replacement.
+ * The Azure Monitor Agent and its two DCR associations used to be declared here,
+ * managed alongside the VM because Azure deletes both child resources whenever
+ * Terraform replaces it. They were removed once the bot began writing its own
+ * telemetry to Postgres (`metric_samples`), which Grafana reads over the
+ * operator firewall rule that already exists. The driver was memory, not cost:
+ * the agent held ~179 MB of RSS on a host with 842 MB of usable RAM and a
+ * saturating 1024 MB zram device.
  *
- * The workspace, custom tables, DCE, and DCR definitions predate this
- * Terraform stack and remain externally managed. Their existing resource IDs
- * are supplied as variables so adopting the VM attachments cannot rewrite
- * ingestion schemas or transforms.
+ * The three alerts below are unaffected, because they are
+ * `Microsoft.Compute/virtualMachines` platform metrics served by `walinuxagent`
+ * rather than by the agent that was removed. This is measured, not assumed:
+ * during a 10 h window when the agent was dead, Available Memory Bytes and OS
+ * Disk Queue Depth both kept reporting.
+ *
+ * The workspace, custom tables, DCE, and DCR definitions predate this Terraform
+ * stack and remain externally managed, so they survive the removal untouched
+ * and can be re-associated if the agent is ever reinstated.
  *
  * Replaces the VM Insights "recommended alerts" bundle (7 rules) that was
  * auto-provisioned outside Terraform. Those defaults were unsuited to a 1 GiB
@@ -34,8 +40,9 @@
  * ADOPTION: the live rules already existed (created by VM Insights, then pruned
  * and re-thresholded via `az`), so a plain apply would fail with "resource
  * already exists". The `import` blocks below let the pipeline adopt them into
- * state during `terraform plan`/`apply` — no out-of-band `terraform import`
- * step. The metric-alert resource ID is built from the managed resource group
+ * state during `terraform plan`/`apply`, so no out-of-band `terraform import`
+ * step is needed. The metric-alert resource ID is built from the managed
+ * resource group
  * (`.../resourceGroups/tomoribot-rg/providers/Microsoft.Insights/metricAlerts/<name>`)
  * so the subscription ID stays out of source control.
  *
@@ -43,38 +50,6 @@
  * become no-ops (Terraform skips resources already in state) and may be removed
  * on a later cleanup pass; leaving them is harmless and keeps re-runs robust.
  */
-
-locals {
-  azure_monitor_data_collection_rules = {
-    application-logs = var.application_logs_data_collection_rule_id
-    vm-insights      = var.vm_insights_data_collection_rule_id
-  }
-}
-
-resource "azurerm_virtual_machine_extension" "azure_monitor_linux_agent" {
-  name                       = "AzureMonitorLinuxAgent"
-  virtual_machine_id         = azurerm_linux_virtual_machine.tomoribot.id
-  publisher                  = "Microsoft.Azure.Monitor"
-  type                       = "AzureMonitorLinuxAgent"
-  type_handler_version       = "1.0"
-  auto_upgrade_minor_version = true
-  automatic_upgrade_enabled  = true
-  tags                       = local.common_tags
-
-  # Associations can exist before AMA is installed. Creating them first avoids
-  # AMA caching an initial "VM is not associated with a DCR" response while a
-  # replacement VM's dependency graph is still being applied.
-  depends_on = [azurerm_monitor_data_collection_rule_association.tomoribot]
-}
-
-resource "azurerm_monitor_data_collection_rule_association" "tomoribot" {
-  for_each = local.azure_monitor_data_collection_rules
-
-  name                    = "tomoribot-${each.key}"
-  target_resource_id      = azurerm_linux_virtual_machine.tomoribot.id
-  data_collection_rule_id = each.value
-  description             = "TomoriBot ${each.key} telemetry collection."
-}
 
 # Existing VM Insights action group (email notifications); not managed here.
 data "azurerm_monitor_action_group" "vmi" {

@@ -3,7 +3,7 @@ import { DMChannel } from "discord.js";
 import type { AssembledServerConfig, TomoriState } from "@/types/db/schema";
 import { isMatrixBridgeWebhookUsername } from "@/utils/bridges";
 import { normalizeRenderModifierName, resolveRenderModifierSourcePersona } from "@/utils/discord/renderModifierParser";
-import { escapeRegExp } from "@/utils/text/processors/regexUtils";
+import { escapeRegExp, wrapWithWordBoundary } from "@/utils/text/processors/regexUtils";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
 
 const NEVER_MATCH_REGEX = /a^/i;
@@ -28,7 +28,7 @@ function createScreamingRegex(trigger: string): RegExp {
     }
   }
 
-  return new RegExp(`\\b${pattern}\\b`, "i");
+  return new RegExp(wrapWithWordBoundary(pattern), "iu");
 }
 
 function createDeliberateTriggerRegex(trigger: string): RegExp {

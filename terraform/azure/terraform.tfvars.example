@@ -7,10 +7,6 @@ azure_location        = "japanwest"
 # Public half of the dedicated Phase 0 deploy keypair.
 vm_admin_ssh_public_key = "ssh-ed25519 AAAA... gh-actions-deploy"
 
-# Existing DCRs are retained; Terraform manages their associations to the VM.
-vm_insights_data_collection_rule_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/tomoribot-rg/providers/Microsoft.Insights/dataCollectionRules/example-vm-insights-dcr"
-application_logs_data_collection_rule_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/tomoribot-rg/providers/Microsoft.Insights/dataCollectionRules/example-application-logs-dcr"
-
 # PostgreSQL password - store this securely; it is also used in TOMORI_SECRETS_JSON.
 postgres_admin_password = "change-me"
 

@@ -30,11 +30,15 @@ async function readBodyWithLimit(response: Response, maxBytes: number): Promise<
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let totalBytes = 0;
+  let completed = false;
 
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        completed = true;
+        break;
+      }
       totalBytes += value.byteLength;
       if (totalBytes > maxBytes) {
         throw new Error(`Fetched content exceeds the ${FETCH_LIMITS.MAX_FETCH_SIZE_MB} MB limit.`);
@@ -42,7 +46,11 @@ async function readBodyWithLimit(response: Response, maxBytes: number): Promise<
       chunks.push(value);
     }
   } finally {
-    reader.releaseLock();
+    // `releaseLock` only detaches the reader: the body stays open and keeps its buffers and
+    // connection. The oversized-response throw above is exactly the case where that matters.
+    if (!completed) {
+      await reader.cancel().catch(() => undefined);
+    }
   }
 
   const body = new Uint8Array(totalBytes);

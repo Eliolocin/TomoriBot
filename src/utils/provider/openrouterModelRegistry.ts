@@ -1,5 +1,5 @@
 import type { DiffusionModelRow, EmbeddingModelRow, LlmRow, VideoGenerationModelRow } from "@/types/db/schema";
-import { getOrFetchOpenRouterCapabilities } from "@/utils/cache/openrouterCapabilityCache";
+import { getOpenRouterPricing, getOrFetchOpenRouterCapabilities } from "@/utils/cache/openrouterCapabilityCache";
 import { getOrFetchOpenRouterEmbeddingModel } from "@/utils/cache/openrouterEmbeddingModelCache";
 import { getOrFetchOpenRouterImageModel } from "@/utils/cache/openrouterImageModelCache";
 import { getOrFetchOpenRouterVideoModelCapabilities } from "@/utils/cache/openrouterVideoModelCache";
@@ -127,13 +127,24 @@ async function upsertScopedOpenRouterLlm(modelCodename: string): Promise<LlmRow 
     return null;
   }
 
-  const llmId = await llmModelRepo.upsertScopedLlm(modelCodename, {
-    hasTools: capabilities.hasTools,
-    seesImages: capabilities.seesImages,
-    seesVideos: capabilities.seesVideos,
-    seesYoutube: isOpenRouterGeminiModelCodename(modelCodename),
-    supportsStructuredOutput: capabilities.supportsStructuredOutput,
-  });
+  // Read pricing after the capability fetch: an on-demand model is only in the pricing
+  // cache once that fetch has populated it.
+  const pricing = getOpenRouterPricing(modelCodename);
+
+  const llmId = await llmModelRepo.upsertScopedLlm(
+    modelCodename,
+    {
+      hasTools: capabilities.hasTools,
+      seesImages: capabilities.seesImages,
+      seesVideos: capabilities.seesVideos,
+      seesYoutube: isOpenRouterGeminiModelCodename(modelCodename),
+      supportsStructuredOutput: capabilities.supportsStructuredOutput,
+    },
+    "openrouter",
+    pricing
+      ? { inputPerMillion: pricing.promptPricePerMillion, outputPerMillion: pricing.completionPricePerMillion }
+      : null,
+  );
   return llmId ? await llmModelRepo.loadByProviderAndCodename("openrouter", modelCodename) : null;
 }
 

@@ -87,4 +87,4 @@ describe("renderServerCard PNG", () => {
     expect(getServerCardHeight(SAMPLE_EN)).toBeGreaterThan(getServerCardHeight(SAMPLE_JA));
     expect(getServerCardHeight({ ...SAMPLE_EN, totalTriggers: 0 })).toBeLessThan(getServerCardHeight(SAMPLE_EN));
   });
-}, 30_000);
+});

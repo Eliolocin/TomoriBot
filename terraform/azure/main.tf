@@ -49,4 +49,10 @@ resource "azurerm_resource_group" "main" {
   name     = var.resource_group_name
   location = var.azure_location
   tags     = local.common_tags
+
+  # Deleting a resource group deletes everything inside it, including the PostgreSQL server and its
+  # backups, so this is the widest blast radius in the configuration and the cheapest one to guard.
+  lifecycle {
+    prevent_destroy = true
+  }
 }

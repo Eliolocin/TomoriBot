@@ -92,8 +92,12 @@ services:
       GRANIAN_WORKERS_MAX_RSS: ${SEARXNG_WORKER_MAX_RSS_MB:-180}
       GRANIAN_RSS_SAMPLE_INTERVAL: ${SEARXNG_RSS_SAMPLE_INTERVAL:-10s}
       # Bounds how many upstream engine calls run at once, which is what actually drives the
-      # peak: without a cap Granian sizes this from host CPU count.
-      GRANIAN_BLOCKING_THREADS: ${SEARXNG_BLOCKING_THREADS:-2}
+      # peak: without a cap Granian sizes this from host CPU count. Held at 1 because the
+      # arena high-water mark never falls back, so peak concurrency sets the floor this
+      # container occupies in swap for the rest of its life. On a host whose compressed swap
+      # device saturates, that floor is what pushes later pages onto disk. Raising this trades
+      # search latency for a permanently larger resident footprint, not just a larger peak.
+      GRANIAN_BLOCKING_THREADS: ${SEARXNG_BLOCKING_THREADS:-1}
     tmpfs:
       - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777
       - /etc/searxng:rw,noexec,nosuid,nodev,size=16m

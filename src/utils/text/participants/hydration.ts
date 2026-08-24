@@ -339,12 +339,21 @@ async function hydrateDiscordUserBase(
   const fallbackUser = member ? null : await dependencies.loadFallbackUser(params.client, discordId).catch(() => null);
   const personalizationEnabled = params.tomoriConfig.personal_memories_enabled ?? true;
   const isTriggerer = params.snapshot?.triggererUserRow?.user_disc_id === discordId;
+  // Both reads fail closed per participant rather than aborting the turn. Exposure is decided
+  // below from these two values, so the restrictive pair reduces this participant to the least
+  // exposure the policy can express while everyone else in the context still hydrates normally.
   const blacklisted = isTriggerer
     ? (params.snapshot?.isTriggererBlacklisted ?? false)
-    : await dependencies.isBlacklisted(params.guildId, discordId);
+    : await dependencies.isBlacklisted(params.guildId, discordId).catch((error: unknown) => {
+        log.error(`Blacklist read failed while hydrating ${discordId}, excluding from personalization`, error);
+        return true;
+      });
   const privacyLevel = isTriggerer
     ? (params.snapshot?.triggererPrivacyLevel ?? PrivacyLevel.MINIMAL)
-    : await dependencies.getPrivacyLevel(discordId);
+    : await dependencies.getPrivacyLevel(discordId).catch((error: unknown) => {
+        log.error(`Privacy read failed while hydrating ${discordId}, treating as fully private`, error);
+        return PrivacyLevel.FULL;
+      });
   const serverNickname = member?.nickname ?? null;
   const globalName = member?.user.globalName ?? fallbackUser?.globalName ?? null;
   const username = member?.user.username ?? fallbackUser?.username ?? null;

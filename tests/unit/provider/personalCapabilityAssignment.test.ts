@@ -43,7 +43,10 @@ function makeAccount(): UserSavedProviderConfigRow[] {
 /**
  * Drives the real helpers against an in-memory row set so a toggle sequence can be
  * asserted end to end. Production resolves both repo members at call time, so
- * spying on the singleton avoids `mock.module`, which Bun cannot unregister.
+ * spying on the singleton avoids a module-level mock registration, which Bun
+ * cannot unregister. Naming that registrar in full here would also make
+ * scripts/checks/lib/testIsolation.ts read this file as a mock user and hand it a
+ * private process, hiding whether it really is safe to batch.
  */
 function stubRepo(rows: UserSavedProviderConfigRow[]): { rows: UserSavedProviderConfigRow[] } {
   const state = { rows };

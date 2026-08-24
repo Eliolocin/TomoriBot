@@ -13,11 +13,17 @@ services:
       # resolves relative paths against the first -f file's directory, which is
       # always the repo-root docker-compose.yaml (required for the external network).
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      # Dashboard JSON lives outside provisioning/ because the provider file under
+      # provisioning/dashboards/ points at this path; putting the JSON alongside the provider
+      # would make Grafana try to parse the provider YAML as a dashboard.
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
     environment:
       # Set a default password to skip the "change password" screen
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
       # Allow installing plugins (needed for some advanced widgets)
-      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,googlecloud-logging-datasource
+      # magnesium-wordcloud-panel backs the Emotion Cloud panel in the shipped dashboard;
+      # without it that panel renders as "panel plugin not found".
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource,googlecloud-logging-datasource,magnesium-wordcloud-panel
       # PostgreSQL connection details (connects to postgres container in docker-compose.yaml)
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432

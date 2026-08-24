@@ -64,8 +64,15 @@ image is unavailable or undecodable.
 in one grouped query, applying the matched model's input/output pricing to each
 persona lineage; no per-row database queries are issued during card generation.
 Because an LLM codename can appear under more than one provider, pricing joins
-first collapse to one conservative rate per codename. This prevents duplicated
-join rows from inflating a persona's token total beyond the card aggregate.
+first collapse to one rate per codename (`MAX` over the providers that publish
+one). The collapse is what prevents duplicated join rows from inflating a
+persona's token total beyond the card aggregate, but it is a genuine
+approximation: `stat_counters.metric_key` records only the codename, never the
+provider, so a codename carried by two providers at different rates cannot be
+attributed correctly and bills at the higher one. Two NVIDIA rows currently share
+a codename with a priced OpenRouter row (`moonshotai/kimi-k2.6`,
+`google/gemma-4-31b-it`). Attributing these exactly requires the provider in the
+stat key, which is a metric-shape change, not a query fix.
 
 ## Minimal infographic design guide
 

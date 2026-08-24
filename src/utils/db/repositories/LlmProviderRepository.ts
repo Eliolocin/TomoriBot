@@ -29,7 +29,8 @@ import {
   type VideoGenerationModelRow,
 } from "@/types/db/schema";
 import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCacheStore";
-import { sql } from "@/utils/db/client";
+import { DatabaseUnavailableError } from "@/types/errors";
+import { sql, withTransientDbRetry } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
 import { buildCustomProviderName, rememberCustomProviderLabel } from "@/utils/provider/customProviderUtils";
 import type { OpenRouterModelScope } from "./LlmModelRepository";
@@ -482,7 +483,11 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
    * @param serverId - Internal server DB ID
    */
   async loadSavedProviderConfigs(serverId: number): Promise<SavedProviderConfigRow[]> {
-    return (await this.loadSavedProviderConfigsResult(serverId)).configs;
+    const result = await this.loadSavedProviderConfigsResult(serverId);
+    if (result.status === "unavailable") {
+      throw new DatabaseUnavailableError(`Failed to read saved provider configs for server ${serverId}`);
+    }
+    return result.configs;
   }
 
   /**
@@ -490,11 +495,15 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
    */
   async loadSavedProviderConfigsResult(serverId: number): Promise<SavedProviderConfigsReadResult> {
     try {
-      const rows = await sql`
-        SELECT * FROM saved_provider_configs
-        WHERE server_id = ${serverId}
-        ORDER BY provider ASC
-      `;
+      const rows = await withTransientDbRetry(
+        async () =>
+          await sql`
+          SELECT * FROM saved_provider_configs
+          WHERE server_id = ${serverId}
+          ORDER BY provider ASC
+        `,
+        "load saved provider configs",
+      );
 
       if (!rows || rows.length === 0) return { status: "fresh", configs: [] };
 
@@ -524,12 +533,16 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
    */
   async loadSavedProviderConfig(serverId: number, provider: string): Promise<SavedProviderConfigRow | null> {
     try {
-      const rows = await sql`
-        SELECT * FROM saved_provider_configs
-        WHERE server_id = ${serverId}
-          AND provider = ${provider.toLowerCase()}
-        LIMIT 1
-      `;
+      const rows = await withTransientDbRetry(
+        async () =>
+          await sql`
+          SELECT * FROM saved_provider_configs
+          WHERE server_id = ${serverId}
+            AND provider = ${provider.toLowerCase()}
+          LIMIT 1
+        `,
+        "load saved provider config",
+      );
 
       if (!rows || rows.length === 0) return null;
 
@@ -540,8 +553,12 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       }
       return parsed.data;
     } catch (error) {
+      // `null` here is read downstream as "no row", which becomes CredentialUnavailableError
+      // with reason `no_saved_config` and renders an "API Key Missing" embed telling an admin
+      // to run /config setup during a transient blip. The caller has to be able to tell the
+      // two apart, so an unreadable database must not answer with the absence sentinel.
       log.error(`Error loading saved provider config for server ${serverId}, provider ${provider}:`, error);
-      return null;
+      throw new DatabaseUnavailableError(`Failed to read the saved provider config for server ${serverId}`);
     }
   }
 
@@ -551,16 +568,24 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
    * @param userId - Internal user DB ID
    */
   async loadUserSavedProviderConfigs(userId: number): Promise<UserSavedProviderConfigRow[]> {
-    return (await this.loadUserSavedProviderConfigsResult(userId)).configs;
+    const result = await this.loadUserSavedProviderConfigsResult(userId);
+    if (result.status === "unavailable") {
+      throw new DatabaseUnavailableError(`Failed to read saved provider configs for user ${userId}`);
+    }
+    return result.configs;
   }
 
   async loadUserSavedProviderConfigsResult(userId: number): Promise<UserSavedProviderConfigsReadResult> {
     try {
-      const rows = await sql`
-        SELECT * FROM user_saved_provider_configs
-        WHERE user_id = ${userId}
-        ORDER BY provider ASC
-      `;
+      const rows = await withTransientDbRetry(
+        async () =>
+          await sql`
+          SELECT * FROM user_saved_provider_configs
+          WHERE user_id = ${userId}
+          ORDER BY provider ASC
+        `,
+        "load user saved provider configs",
+      );
 
       if (!rows || rows.length === 0) return { status: "fresh", configs: [] };
 
@@ -590,12 +615,16 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
    */
   async loadUserSavedProviderConfig(userId: number, provider: string): Promise<UserSavedProviderConfigRow | null> {
     try {
-      const rows = await sql`
-        SELECT * FROM user_saved_provider_configs
-        WHERE user_id = ${userId}
-          AND provider = ${provider.toLowerCase()}
-        LIMIT 1
-      `;
+      const rows = await withTransientDbRetry(
+        async () =>
+          await sql`
+          SELECT * FROM user_saved_provider_configs
+          WHERE user_id = ${userId}
+            AND provider = ${provider.toLowerCase()}
+          LIMIT 1
+        `,
+        "load user saved provider config",
+      );
 
       if (!rows || rows.length === 0) return null;
 
@@ -609,7 +638,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       return parsed.data;
     } catch (error) {
       log.error(`Error loading user saved provider config for user ${userId}, provider ${provider}:`, error);
-      return null;
+      throw new DatabaseUnavailableError(`Failed to read the saved provider config for user ${userId}`);
     }
   }
 

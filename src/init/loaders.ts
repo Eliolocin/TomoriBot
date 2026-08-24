@@ -4,6 +4,51 @@ import { initializeLocalizer } from "@/utils/text/localizer";
 import eventHandler from "@/handlers/eventHandler";
 
 /**
+ * Mirrors the live OpenRouter rates into the llms catalog so SQL-computed cost surfaces
+ * (`/stats` estimated cost and its per-model and per-persona breakdowns) can price OpenRouter
+ * usage. Those queries join llms and cannot reach the in-memory pricing cache, so without this
+ * step every OpenRouter token reports as $0.00.
+ *
+ * Runs after the capability cache is populated and refreshes the LLM cache when rows changed,
+ * because that cache was loaded from the pre-sync catalog earlier in startup.
+ */
+async function syncOpenrouterCatalogPricing(): Promise<void> {
+  try {
+    const { getAllOpenRouterPricing } = await import("@/utils/cache/openrouterCapabilityCache");
+    const { llmModelRepo } = await import("@/utils/db/repositories");
+
+    const livePricing = getAllOpenRouterPricing();
+    if (livePricing.size === 0) {
+      log.warn("No OpenRouter pricing available to sync (non-critical) - cost surfaces keep their stored rates");
+      return;
+    }
+
+    const prices = new Map<string, { inputPerMillion: number; outputPerMillion: number }>();
+    for (const [codename, pricing] of livePricing) {
+      prices.set(codename, {
+        inputPerMillion: pricing.promptPricePerMillion,
+        outputPerMillion: pricing.completionPricePerMillion,
+      });
+    }
+
+    const updated = await llmModelRepo.syncOpenrouterPrices(prices);
+    if (updated === null) {
+      log.warn("OpenRouter pricing sync failed (non-critical) - cost surfaces keep their stored rates");
+      return;
+    }
+
+    if (updated > 0) {
+      const { initializeLLMCache } = await import("@/utils/cache/llmCache");
+      await initializeLLMCache();
+    }
+
+    log.success(`OpenRouter pricing synced: ${updated} catalog rows updated from ${livePricing.size} live rates`);
+  } catch (error) {
+    log.warn("Failed to sync OpenRouter pricing (non-critical)", error);
+  }
+}
+
+/**
  * Initializes all application subsystems that must be ready before the bot
  * starts responding: tool registry, localizer, LLM caches, preset avatar cache,
  * and the event handler (which registers all Discord event listeners).
@@ -49,6 +94,9 @@ export async function initLoaders(client: Client): Promise<void> {
       error,
     );
   }
+
+  log.section("Syncing OpenRouter Pricing to Catalog...");
+  await syncOpenrouterCatalogPricing();
 
   log.section("Initializing OpenRouter Modality Catalogs...");
   try {

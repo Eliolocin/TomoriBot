@@ -12,6 +12,24 @@ operational rules that keep ingestion reliable and cheap.
 For monitoring a local instance with Grafana instead, see
 [Local Grafana Monitoring](/self-hosting/local-monitoring/).
 
+:::note[TomoriBot's own deployment no longer runs this pipeline]
+Everything below still works and is still supported. It is simply no longer what the reference
+deployment does: the Azure Monitor Agent was removed once the bot began writing its cache and
+process-memory samples straight into PostgreSQL, where Grafana already had a datasource. The reason
+was memory rather than cost. The agent held roughly 179 MB of resident set on a host with 842 MB of
+usable RAM, which is a fifth of the machine spent shipping telemetry.
+
+Choose this pipeline if you want log *search* over structured error records, which a table of
+counters cannot give you. Choose the database sink if your host is small, you already run Grafana
+against your bot's database, and per-cache and per-memory series are what you actually graph. See
+[Caching](/architecture/subsystems/caching/) for that design, and
+[Azure Production Deployment](/architecture/cloud/azure-production-deployment/) for the removal.
+
+The bot-side JSONL output in Step 1 is independent of the agent and is worth enabling either way: it
+survives container recreate and VM reboot, and it keeps recording during the incidents that stop a
+database write from landing.
+:::
+
 ## Pipeline overview
 
 ```text
@@ -353,10 +371,19 @@ rules reference the *old* query's series names and silently misfire on Azure que
 - **Retention is 30 days.** Keep the workspace at the production 30-day retention baseline unless
   an explicit incident-response or cost decision changes it.
 
-- **Keep the file append-only.** Do not add log rotation that renames files into a pattern
-  the DCR's file glob still matches — Azure Monitor Agent treats a renamed file as new
-  content and duplicates ingestion. Design retention so rotated files fall outside the
-  collected pattern, and only after the pipeline is verified.
+- **Keep the file append-only from the agent's point of view.** Do not add log rotation that
+  renames files into a pattern the DCR's file glob still matches: Azure Monitor Agent treats a
+  renamed file as new content and duplicates ingestion. Design retention so rotated files fall
+  outside the collected pattern, and only after the pipeline is verified.
+
+  Rotation now exists (`/etc/logrotate.d/tomoribot-jsonl`) and satisfies this two ways over. The
+  DCR's file pattern is the literal path `/var/log/tomoribot/tomoribot.jsonl`, not a glob, so
+  `tomoribot.jsonl.1` and `tomoribot.jsonl.2.gz` cannot match it. And the config uses
+  `copytruncate`, which never renames the live file at all: it copies the contents aside and
+  truncates the original in place, so the inode the agent is tailing survives. `copytruncate` is
+  there for a different reason anyway, and that reason is not optional: pino holds the file open
+  through `pino.destination({ append: true, sync: true })` and does not reopen on a signal, so a
+  rename-based rotation would leave the bot writing into an unlinked inode until its next restart.
 - **Cost control lives in the DCR transform.** Prefer adding `where` clauses there over
   widening what the bot writes; everything that passes the transform is billed ingestion.
 - **stdout is unaffected.** `docker logs` keeps working regardless of `TOMORI_LOG_FILE`, so

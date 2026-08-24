@@ -508,7 +508,7 @@ export class NovelaiStreamAdapter extends BaseStreamAdapter {
       // - GLM 4.6: sentence-boundary buffering drops incomplete trailing fragments
       yield* this.streamSinglePass(request, config);
     } catch (error) {
-      yield this.createProviderErrorChunk(error);
+      yield this.createProviderErrorChunk(error, context);
     }
   }
 

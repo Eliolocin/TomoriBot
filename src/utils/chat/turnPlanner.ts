@@ -1,6 +1,7 @@
 import type { Guild, Message } from "discord.js";
 import type { TomoriState, UserRow } from "@/types/db/schema";
 import { CooldownType, PrivacyLevel } from "@/types/db/schema";
+import { DatabaseUnavailableError } from "@/types/errors";
 import { getCachedUserRow, getCachedBlacklistStatus, getCachedPrivacyLevel } from "@/utils/cache/userCache";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { configRepository, userRepository, whitelistRepository } from "@/utils/db/repositories";
@@ -542,6 +543,21 @@ async function resolveTextCredentialPolicy(params: {
       personalTextProvider: textCreds.source === "personal" ? textCreds.provider : null,
     };
   } catch (error) {
+    // Checked ahead of CredentialUnavailableError because an unreadable database used to arrive
+    // here as `no_saved_config` and render "API Key Missing", telling an admin to run
+    // /config setup during a transient blip. That embed logged 41 times in one cascade.
+    if (error instanceof DatabaseUnavailableError) {
+      if (params.shouldSurfaceUserErrors) {
+        await sendStandardEmbed(params.channel as SendableChannel, params.locale, {
+          color: ColorCode.ERROR,
+          titleKey: "general.errors.database_unavailable_title",
+          descriptionKey: "general.errors.database_unavailable_description",
+        });
+      } else {
+        log.warn("Suppressing database-unavailable embed for non-deliberate chat turn.", error);
+      }
+      return null;
+    }
     if (error instanceof PersonalProviderRequiredError) {
       if (params.shouldSurfaceUserErrors) {
         await sendStandardEmbed(params.channel as SendableChannel, params.locale, {

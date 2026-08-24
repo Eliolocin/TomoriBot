@@ -437,3 +437,77 @@ describe("OpenrouterStreamAdapter parameter degradation", () => {
     expect(chunks.at(-1)?.data).toMatchObject({ error: { code: 502 } });
   });
 });
+
+/**
+ * Unlike `makeSseResponse`, this reports whether the body was cancelled and never closes the
+ * stream, which is the state an abandoned response is really in: the server has not ended it.
+ */
+function makeCancelObservableSseResponse(events: unknown[]): {
+  response: Response;
+  wasCancelled: () => boolean;
+} {
+  let cancelled = false;
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      }
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  return {
+    response: new Response(stream, {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    }),
+    wasCancelled: () => cancelled,
+  };
+}
+
+/**
+ * A retained response body holds its buffers and its connection. Production heap snapshots showed
+ * these accumulating one per abandoned request, so the teardown is load-bearing rather than tidiness.
+ */
+describe("OpenrouterStreamAdapter response body teardown", () => {
+  it("cancels the body when the consumer stops iterating early", async () => {
+    const { response, wasCancelled } = makeCancelObservableSseResponse([
+      { choices: [{ index: 0, delta: { content: "Hello" } }] },
+    ]);
+    globalThis.fetch = (async () => response) as typeof fetch;
+
+    for await (const _chunk of new OpenrouterStreamAdapter().startStream(makeStreamConfig(), makeStreamContext())) {
+      break;
+    }
+
+    expect(wasCancelled()).toBe(true);
+  });
+
+  it("leaves a body that ended on its own alone", async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    globalThis.fetch = (async () =>
+      new Response(stream, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      })) as typeof fetch;
+
+    for await (const _chunk of new OpenrouterStreamAdapter().startStream(makeStreamConfig(), makeStreamContext())) {
+      // Drain fully so the stream reaches its natural end.
+    }
+
+    expect(cancelled).toBe(false);
+  });
+});

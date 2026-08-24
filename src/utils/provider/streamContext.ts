@@ -105,6 +105,8 @@ export function buildStreamContext(params: BuildStreamContextParams): StreamCont
     // Opaque message ID map for snowflake ID abstraction in LLM-visible text
     messageIdMap: streamingContext?.messageIdMap,
 
+    triggererUserId: streamingContext?.triggererUserId,
+
     // Superseded-delivery sink: copy the ARRAY REFERENCE (not a clone) so the orchestrator's
     //    successful-send appends are visible to runGenerationTurn even after the SDK-call-timeout
     //    race abandons this StreamContext's owning promise.

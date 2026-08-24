@@ -296,7 +296,7 @@ export class AnthropicStreamAdapter extends BaseStreamAdapter {
 
       const anthropicError = new Error(JSON.stringify({ error: errorData }));
       Object.assign(anthropicError, { statusCode: response.status });
-      yield this.createProviderErrorChunk(anthropicError);
+      yield this.createProviderErrorChunk(anthropicError, context);
       return;
     }
 
@@ -308,11 +308,13 @@ export class AnthropicStreamAdapter extends BaseStreamAdapter {
     const decoder = new TextDecoder();
     let buffer = "";
     let pendingEventType: string | null = null;
+    let completed = false;
 
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
+          completed = true;
           break;
         }
 
@@ -376,7 +378,11 @@ export class AnthropicStreamAdapter extends BaseStreamAdapter {
         }
       }
     } finally {
-      reader.releaseLock();
+      // `releaseLock` only detaches the reader: the body stays open and keeps its buffers and
+      // connection. A consumer that stops iterating this generator early would otherwise leak them.
+      if (!completed) {
+        await reader.cancel().catch(() => undefined);
+      }
     }
   }
 

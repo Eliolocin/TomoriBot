@@ -1377,7 +1377,8 @@ CREATE TABLE IF NOT EXISTS error_logs (
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE SET NULL
 );
 
--- Removed updated_at trigger for error_logs table (error logging disabled, table no longer actively used)
+-- No updated_at trigger on error_logs: a recorded error is immutable, so the column would only
+-- ever repeat created_at. Writes are controlled by ERROR_DB_LOGGING_ENABLED (default on).
 DROP TRIGGER IF EXISTS update_error_logs_timestamp ON error_logs;
 
 -- ============================================================================

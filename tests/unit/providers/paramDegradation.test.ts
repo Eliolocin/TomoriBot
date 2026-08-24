@@ -105,6 +105,53 @@ describe("buildDegradationAttempts", () => {
     }
   });
 
+  it("probes declared injected keys before the user's samplers", () => {
+    // Without the declaration, reasoning_budget and custom_option are indistinguishable, so the
+    // key the backend actually rejected sorts into the tail behind unrelated junk. Ordering is
+    // pure latency (the ladder stops at the first success, so the winning rung ships the same
+    // payload either way), and a key the user never asked for is the better first hypothesis.
+    const attempts = buildDegradationAttempts(
+      {
+        model: "nvidia/example",
+        messages: [],
+        stream: true,
+        temperature: 0.8,
+        min_p: 0.1,
+        custom_option: true,
+        chat_template_kwargs: { enable_thinking: true },
+        reasoning_budget: 16384,
+      },
+      {
+        mandatoryKeys: new Set(["model", "messages", "stream"]),
+        priorityKeys: ["reasoning_budget", "chat_template_kwargs"],
+      },
+    );
+
+    expect(attempts.map((attempt) => attempt.label)).toEqual([
+      "default",
+      "probe_drop_reasoning_budget",
+      "probe_drop_chat_template_kwargs",
+      "probe_drop_min_p",
+      "probe_drop_temperature",
+      "probe_drop_custom_option",
+      "minimal_payload",
+    ]);
+  });
+
+  it("leaves undeclared keys in the unknown tail", () => {
+    const attempts = buildDegradationAttempts(
+      { model: "nvidia/example", messages: [], stream: true, temperature: 0.8, reasoning_budget: 16384 },
+      { mandatoryKeys: new Set(["model", "messages", "stream"]) },
+    );
+
+    expect(attempts.map((attempt) => attempt.label)).toEqual([
+      "default",
+      "probe_drop_temperature",
+      "probe_drop_reasoning_budget",
+      "minimal_payload",
+    ]);
+  });
+
   it("deduplicates identical serialized bodies", () => {
     const attempts = buildDegradationAttempts(
       { model: "example/model", messages: [], stream: true },
@@ -260,6 +307,35 @@ describe("classifyDegradableError", () => {
       "backend_incompatible_502",
     );
     expect(classifyDegradableError({ statusCode: 502, message: "Bad gateway" })).toBeNull();
+  });
+
+  it("degrades an opaque 5xx only when the provider opts in", () => {
+    // NVIDIA NIM reports an unsupported request key as a bare "Internal server error", and when
+    // streaming it does so mid-SSE after a 200, so nothing else in the ladder can see it.
+    expect(classifyDegradableError({ statusCode: 500, message: "Internal server error" })).toBeNull();
+    expect(
+      classifyDegradableError({ statusCode: 500, message: "Internal server error", degradeOnOpaque5xx: true }),
+    ).toBe("opaque_5xx");
+    expect(classifyDegradableError({ statusCode: 503, message: "", degradeOnOpaque5xx: true })).toBe("opaque_5xx");
+  });
+
+  it("fails a descriptive 5xx fast instead of walking the ladder", () => {
+    // A genuine outage says so. Degrading against a dead endpoint burns every rung and delays
+    // the key-rotation and model-fallback paths that can actually recover the turn.
+    expect(
+      classifyDegradableError({
+        statusCode: 503,
+        message: "Service temporarily overloaded, please try again later",
+        degradeOnOpaque5xx: true,
+      }),
+    ).toBeNull();
+    expect(
+      classifyDegradableError({
+        statusCode: 500,
+        message: "thinking_token_budget is not yet supported by the V2 model runner",
+        degradeOnOpaque5xx: true,
+      }),
+    ).toBeNull();
   });
 
   it("supports provider-specific classifiers", () => {

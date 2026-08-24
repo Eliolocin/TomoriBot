@@ -1,3 +1,4 @@
+import { errorMessageNamesRejectableParam } from "@/providers/utils/paramDegradation";
 import type { ProviderError } from "@/types/stream/interfaces";
 import { isProviderModelErrorMessage } from "@/utils/provider/providerErrorClassification";
 import { localizer } from "@/utils/text/localizer";
@@ -24,6 +25,67 @@ export function createOpenAICompatibleHttpError(statusCode: number, statusText: 
   return new Error(`HTTP ${statusCode}: ${message}`);
 }
 
+/** Normalized type/code/retryable triple derived from one upstream failure. */
+export interface OpenAICompatibleErrorClassification {
+  type: ProviderError["type"];
+  code: string;
+  retryable: boolean;
+}
+
+/**
+ * Map an HTTP-or-SSE status code plus its message onto a {@link ProviderError} type.
+ *
+ * Shared by `normalizeOpenAICompatibleProviderError` (thrown fetch failures) and the adapter's
+ * `processChunk` (errors injected mid-SSE after a 200) so both paths agree. They previously
+ * disagreed: the SSE path hardcoded a non-retryable `api_error`, which reported a transient
+ * mid-stream 500 to the user as a permanent request error.
+ *
+ * @param statusCode - Upstream status, or null when the failure carried none.
+ */
+export function classifyOpenAICompatibleStatus(
+  statusCode: number | null,
+  message: string,
+): OpenAICompatibleErrorClassification {
+  if (statusCode === null) {
+    return { type: "unknown", code: "unknown", retryable: false };
+  }
+
+  const code = String(statusCode);
+
+  if (statusCode === 401 || statusCode === 403 || statusCode === 400 || statusCode === 404) {
+    return { type: "api_error", code, retryable: false };
+  }
+  if (statusCode === 429) {
+    // Some providers (e.g. Z.ai) use 429 for billing/plan/access denial, not just rate limiting.
+    // Detect these by checking the error message for subscription or balance keywords.
+    const lowerMessage = message.toLowerCase();
+    const isBalanceDenial =
+      lowerMessage.includes("insufficient balance") ||
+      lowerMessage.includes("insufficient credits") ||
+      lowerMessage.includes("not enough credits") ||
+      lowerMessage.includes("no resource package") ||
+      lowerMessage.includes("please recharge");
+    const isPlanAccessDenial =
+      lowerMessage.includes("subscription plan") ||
+      lowerMessage.includes("does not yet include access") ||
+      lowerMessage.includes("plan does not include");
+    if (isBalanceDenial) {
+      return { type: "api_error", code: "429_balance", retryable: false };
+    }
+    if (isPlanAccessDenial) {
+      return { type: "api_error", code: "429_plan_access", retryable: false };
+    }
+    return { type: "rate_limit", code, retryable: true };
+  }
+  if (statusCode === 408 || statusCode === 504) {
+    return { type: "timeout", code, retryable: true };
+  }
+  if (statusCode === 500 || statusCode === 502 || statusCode === 503) {
+    return { type: "provider_overloaded", code, retryable: true };
+  }
+  return { type: "api_error", code, retryable: false };
+}
+
 export function normalizeOpenAICompatibleProviderError(
   error: unknown,
   options: NormalizeProviderErrorOptions,
@@ -37,46 +99,10 @@ export function normalizeOpenAICompatibleProviderError(
   if (errorMessage.includes("HTTP 4") || errorMessage.includes("HTTP 5")) {
     const statusMatch = errorMessage.match(/HTTP (\d{3})/);
     if (statusMatch) {
-      errorCode = statusMatch[1];
-      const status = Number.parseInt(errorCode, 10);
-
-      if (status === 401 || status === 403 || status === 400 || status === 404) {
-        errorType = "api_error";
-      } else if (status === 429) {
-        // Some providers (e.g. Z.ai) use 429 for billing/plan/access denial, not just rate limiting.
-        // Detect these by checking the error message for subscription or balance keywords.
-        const lowerMessage = errorMessage.toLowerCase();
-        const isBalanceDenial =
-          lowerMessage.includes("insufficient balance") ||
-          lowerMessage.includes("insufficient credits") ||
-          lowerMessage.includes("not enough credits") ||
-          lowerMessage.includes("no resource package") ||
-          lowerMessage.includes("please recharge");
-        const isPlanAccessDenial =
-          lowerMessage.includes("subscription plan") ||
-          lowerMessage.includes("does not yet include access") ||
-          lowerMessage.includes("plan does not include");
-        if (isBalanceDenial) {
-          errorType = "api_error";
-          errorCode = "429_balance";
-          retryable = false;
-        } else if (isPlanAccessDenial) {
-          errorType = "api_error";
-          errorCode = "429_plan_access";
-          retryable = false;
-        } else {
-          errorType = "rate_limit";
-          retryable = true;
-        }
-      } else if (status === 408 || status === 504) {
-        errorType = "timeout";
-        retryable = true;
-      } else if (status === 500 || status === 502 || status === 503) {
-        errorType = "provider_overloaded";
-        retryable = true;
-      } else {
-        errorType = "api_error";
-      }
+      const classification = classifyOpenAICompatibleStatus(Number.parseInt(statusMatch[1], 10), errorMessage);
+      errorType = classification.type;
+      errorCode = classification.code;
+      retryable = classification.retryable;
     }
   }
 
@@ -140,8 +166,18 @@ export function createOpenAICompatibleErrorDescription(
       break;
   }
 
+  // A 5xx that names a request parameter is a rejection wearing an outage's status code, so a
+  // namespace may define remediation copy for exactly that case. Gating it on the upstream text
+  // is the point: asserting a parameter cause on every 5xx sends users to change settings the
+  // failing payload never carried.
+  const parameterMessage =
+    (error.type === "api_error" || error.type === "provider_overloaded") &&
+    errorMessageNamesRejectableParam(error.message)
+      ? resolveLocalizedOrNull(locale, `${options.localeNamespace}.${errorCode}_parameter_default_message`)
+      : null;
+
   const localeKey = `${options.localeNamespace}.${messageKey}`;
-  let message = localizer(locale, localeKey);
+  let message = parameterMessage ?? localizer(locale, localeKey);
   let detailsAppended = false;
 
   if (error.type === "model_error") {

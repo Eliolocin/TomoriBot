@@ -2,8 +2,11 @@ import type { Client } from "discord.js";
 import { log } from "./logger";
 
 /**
- * Health tracking system for monitoring bot responsiveness
- * Tracks Discord activity, WebSocket heartbeat, and event loop health
+ * Health tracking system for monitoring bot connectivity.
+ *
+ * Tracks Discord readiness and WebSocket heartbeat only. **It does not observe the event loop**,
+ * despite what the health endpoint's name suggests; `eventLoopMonitor` does that and reports
+ * separately.
  */
 class HealthTracker {
   /**
@@ -90,13 +93,17 @@ class HealthTracker {
     }
 
     // Activity timeout check (DISABLED)
-    // This check is intentionally commented out to prevent false positives during quiet hours.
-    // The "Lonely Bot" problem: During periods of low activity (e.g., 3 AM), no Discord events
-    // are received, causing the bot to report "unhealthy" despite being perfectly functional.
-    // This would trigger AWS ECS to kill and restart the container in an endless loop.
+    // Kept off to prevent false positives during quiet hours. The "Lonely Bot" problem: during
+    // periods of low activity (e.g. 3 AM) no Discord events arrive, so the bot reports "unhealthy"
+    // while perfectly functional, which on a platform that restarts unhealthy containers becomes a
+    // restart loop.
     //
-    // The WebSocket ping and client ready state are sufficient indicators of connectivity health.
-    // If the event loop were frozen, the HTTP health check request itself would timeout.
+    // An earlier version of this comment justified the omission by claiming that "if the event loop
+    // were frozen, the HTTP health check request itself would timeout". **That is false**, and it
+    // is why a starved main thread went unnoticed for hours: a loop that yields between chunks of
+    // work still answers a short health probe in milliseconds while multi-step handlers behind it
+    // make no progress. Liveness and progress are different properties. `eventLoopMonitor` measures
+    // the second one and exposes it on the same endpoint.
     //
     // If you want to re-enable this check, ensure you're listening to 'raw' events via
     // client.on('raw', () => healthTracker.recordActivity()) to catch all Discord activity.

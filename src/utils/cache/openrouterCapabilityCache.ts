@@ -260,6 +260,19 @@ export function resetOpenRouterCapabilityCache(): void {
 }
 
 /**
+ * Every model rate from the current catalog snapshot, keyed by OpenRouter codename.
+ *
+ * Returns an empty map when the catalog has no usable snapshot.
+ */
+export function getAllOpenRouterPricing(): ReadonlyMap<string, ModelPricing> {
+  const pricing = new Map<string, ModelPricing>();
+  for (const metadata of textCatalog.values()) {
+    if (metadata.pricing) pricing.set(metadata.id, metadata.pricing);
+  }
+  return pricing;
+}
+
+/**
  * Tests account-setting model by making a minimal request to detect the actual model
  *
  * When a user selects "account-setting" in OpenRouter, it resolves to their default model
@@ -335,7 +348,10 @@ export async function testAccountSettingModel(apiKey: string): Promise<
         }
       }
     } finally {
-      reader.cancel();
+      // This probe reads one chunk and abandons the rest, so the body always needs cancelling.
+      // Awaited and caught because an aborted or already-errored stream rejects here, and an
+      // unhandled rejection from a background capability probe would surface as a crash.
+      await reader.cancel().catch(() => undefined);
     }
 
     if (!actualModel) {

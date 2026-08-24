@@ -2,6 +2,7 @@ import { SQL } from "bun";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "@/utils/misc/logger";
+import { recordPoolEvent, recordPoolRetryExhausted, recordPoolRetryRecovered } from "@/utils/db/poolEvents";
 
 /**
  * Parse an integer environment flag with a default and enforced minimum.
@@ -19,6 +20,7 @@ export interface PostgresPoolOptions {
   idleTimeout: number;
   maxLifetime: number;
   connectionTimeout: number;
+  max: number;
 }
 
 /**
@@ -39,14 +41,26 @@ export interface PostgresPoolOptions {
  * tuning without a rebuild. (Azure Flexible Server's public endpoint, whose gateway
  * reaps at ~4 minutes, is one such path.)
  *
+ * Every firing of `idleTimeout` or `maxLifetime` is also a chance to hit oven-sh/bun#30646,
+ * which rejects in-flight queries instead of draining them (see
+ * {@link RETIRED_CONNECTION_ERROR_CODES}). The timeouts are therefore set as far from the
+ * constraint that motivates them as that constraint allows: the gateway reap is the binding
+ * limit, not the 30s that was originally chosen, and idle retirements were the larger share of
+ * a production cascade that took the bot down in front of users.
+ *
  */
 function resolveProductionPoolOptions(): PostgresPoolOptions {
   return {
-    // Close idle pooled connections after 30s before any gateway/proxy can reap them.
-    idleTimeout: parseIntegerEnvFlag(process.env.POSTGRES_IDLE_TIMEOUT_SECONDS, 30, 5),
+    // Well inside the ~4 minute gateway reap while giving Bun's buggy timer far fewer chances
+    // to fire than the 30s this previously used.
+    idleTimeout: parseIntegerEnvFlag(process.env.POSTGRES_IDLE_TIMEOUT_SECONDS, 180, 5),
     // Hard age cap so no connection lingers indefinitely even under steady load.
-    maxLifetime: parseIntegerEnvFlag(process.env.POSTGRES_MAX_LIFETIME_SECONDS, 600, 30),
+    maxLifetime: parseIntegerEnvFlag(process.env.POSTGRES_MAX_LIFETIME_SECONDS, 1800, 30),
     connectionTimeout: parseIntegerEnvFlag(process.env.POSTGRES_CONNECTION_TIMEOUT_SECONDS, 10, 1),
+    // Stated rather than inherited so the pool width is auditable from this file and tunable
+    // during an incident without a rebuild. Matches Bun's own default, so this is not a
+    // behaviour change on its own.
+    max: parseIntegerEnvFlag(process.env.POSTGRES_POOL_MAX, 10, 1),
   };
 }
 
@@ -273,11 +287,25 @@ interface TransientRetryOptions {
 
 function resolveTransientRetryOptions(): TransientRetryOptions {
   return {
-    attempts: parseIntegerEnvFlag(process.env.POSTGRES_TRANSIENT_RETRY_ATTEMPTS, 2, 1),
+    // Three rather than two because a cascade retires successive cohorts: production logged
+    // `Exhausted 2 attempt(s)` 1,905 times in one episode and 103 times in eight minutes of
+    // another, so the second attempt frequently lands inside the same cascade as the first.
+    attempts: parseIntegerEnvFlag(process.env.POSTGRES_TRANSIENT_RETRY_ATTEMPTS, 3, 1),
     // A retired socket is replaced on the pool's next tick; retrying in the same tick
     // can land on the still-closing connection.
     delayMs: parseIntegerEnvFlag(process.env.POSTGRES_TRANSIENT_RETRY_DELAY_MS, 100, 0),
   };
+}
+
+/**
+ * Full jitter over the configured delay.
+ *
+ * A mass retirement fails every in-flight caller within the same few milliseconds, so a fixed
+ * delay re-synchronises exactly the callers that most need spreading out and lands them
+ * together on the replacement cohort.
+ */
+function jitteredDelayMs(delayMs: number): number {
+  return delayMs <= 0 ? 0 : Math.floor(Math.random() * delayMs);
 }
 
 /**
@@ -308,10 +336,15 @@ function resolveTransientRetryOptions(): TransientRetryOptions {
  */
 export async function withTransientDbRetry<T>(queryFn: () => Promise<T>, operationName: string): Promise<T> {
   const { attempts, delayMs } = resolveTransientRetryOptions();
+  let sawRetiredConnection = false;
 
   for (let attempt = 1; ; attempt++) {
     try {
-      return await queryFn();
+      const result = await queryFn();
+      if (sawRetiredConnection) {
+        recordPoolRetryRecovered();
+      }
+      return result;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isCachedPlanError = errorMessage.includes("cached plan must not change result type");
@@ -321,7 +354,15 @@ export async function withTransientDbRetry<T>(queryFn: () => Promise<T>, operati
         throw error;
       }
 
+      if (isRetiredConnection) {
+        sawRetiredConnection = true;
+        reportPoolEvent(error, operationName, attempt, attempts);
+      }
+
       if (attempt >= attempts) {
+        if (isRetiredConnection) {
+          recordPoolRetryExhausted();
+        }
         await log.error(`Exhausted ${attempt} attempt(s) for "${operationName}"`, error);
         throw error;
       }
@@ -335,9 +376,40 @@ export async function withTransientDbRetry<T>(queryFn: () => Promise<T>, operati
       log.warn(
         `Pool retired the connection during "${operationName}" (attempt ${attempt}/${attempts}), retrying on a fresh connection`,
       );
-      if (delayMs > 0) {
-        await Bun.sleep(delayMs);
+      const backoff = jitteredDelayMs(delayMs);
+      if (backoff > 0) {
+        await Bun.sleep(backoff);
       }
     }
   }
+}
+
+/**
+ * Counts one retirement and logs only the event that opens an episode.
+ *
+ * The rest go to the counters alone. A single production cascade produced 8,276 error lines
+ * from repositories each blaming their own subsystem, which buried the one fact that mattered
+ * and made the log itself a load source during the incident.
+ */
+function reportPoolEvent(error: unknown, operationName: string, attempt: number, attempts: number): void {
+  const code = (error as { code?: string }).code ?? "unknown";
+  const { maxLifetime } = resolveProductionPoolOptions();
+  const { isFirstOfEpisode, uptimeS, lifetimePhaseS } = recordPoolEvent(code, maxLifetime);
+
+  if (!isFirstOfEpisode) {
+    return;
+  }
+
+  // `log.metric` rather than `log.error`: production pins pino at level `error`, so this is the
+  // only route besides an error that reaches the host JSONL, and an episode marker is a
+  // measurement rather than a fault the operator must act on line by line.
+  log.metric("pool_event", {
+    code,
+    operation: operationName,
+    attempt,
+    attempts,
+    uptime_s: uptimeS,
+    lifetime_phase_s: lifetimePhaseS,
+    max_lifetime_s: maxLifetime,
+  });
 }

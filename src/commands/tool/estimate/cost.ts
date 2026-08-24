@@ -1188,8 +1188,9 @@ async function measureOpenRouterInputTokens(
   }
 
   // OpenRouter pricing is authoritative from the live API cache and auto-updates with OpenRouter's
-  // rates, so it wins here. The catalog row's price (Phase 5) is only a cache-miss safety net: if the
-  // live cache has no entry for this model, fall back to the seeded DB price before giving up.
+  // rates, so it wins here. The catalog row's price is only a cache-miss safety net: if the live cache
+  // has no entry for this model, fall back to the DB price (seeded, or mirrored from the live rates at
+  // startup by syncOpenrouterCatalogPricing) before giving up.
   const livePricing = getOpenRouterPricing(providerConfig.model);
   const pricing = livePricing
     ? { input: livePricing.promptPricePerMillion, output: livePricing.completionPricePerMillion }
