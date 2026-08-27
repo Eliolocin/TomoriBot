@@ -177,6 +177,10 @@ All four share the refresh machinery in `openrouterCatalog.ts`:
 - Concurrent refreshes are collapsed into one request, and attempts are rate-limited by
   `OPENROUTER_CATALOG_REFRESH_MIN_INTERVAL_MS` (default 60s) so an unrecognized codename cannot
   amplify into a fetch per lookup
+- Interactive model registration passes `{ fresh: true }` to `getOrFetch`, which refreshes
+  before the lookup and ignores that rate limit. A codename someone types by hand is usually
+  one OpenRouter published minutes ago, and the rate is bounded by submitted registrations
+  rather than by chat turns
 - `OPENROUTER_CATALOG_TTL_MS` (default 6h) drives the background refresher in
   `timers/openrouterCatalogRefresher.ts`, which exists for the synchronous readers: pricing,
   context limits, tokenizer, and `supported_parameters` are consulted per turn and never

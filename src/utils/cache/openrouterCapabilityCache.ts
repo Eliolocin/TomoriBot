@@ -383,8 +383,12 @@ export async function testAccountSettingModel(apiKey: string): Promise<
  *
  * Use this wherever the codename can be newer than the cached catalog (scoped model
  * registration, account-setting resolution). The refresh is cooldown-gated, so repeated
- * lookups of a codename OpenRouter does not publish cost one fetch per window.
+ * lookups of a codename OpenRouter does not publish cost one fetch per window; `fresh`
+ * lifts that gate for callers a human is waiting on.
  */
-export async function getOrFetchOpenRouterCapabilities(modelCodename: string): Promise<ModelCapabilities | undefined> {
-  return (await textCatalog.getOrFetch(modelCodename))?.capabilities;
+export async function getOrFetchOpenRouterCapabilities(
+  modelCodename: string,
+  options?: { fresh?: boolean },
+): Promise<ModelCapabilities | undefined> {
+  return (await textCatalog.getOrFetch(modelCodename, options))?.capabilities;
 }

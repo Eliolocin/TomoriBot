@@ -72,8 +72,9 @@ export async function initializeOpenRouterVideoModelCache(): Promise<void> {
 
 export function getOrFetchOpenRouterVideoModelCapabilities(
   modelCodename: string,
+  options?: { fresh?: boolean },
 ): Promise<OpenRouterVideoModelCapabilities | undefined> {
-  return videoCatalog.getOrFetch(modelCodename);
+  return videoCatalog.getOrFetch(modelCodename, options);
 }
 
 export function refreshOpenRouterVideoModelCacheIfStale(): Promise<boolean> {

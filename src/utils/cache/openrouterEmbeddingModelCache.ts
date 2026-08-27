@@ -30,8 +30,9 @@ export async function initializeOpenRouterEmbeddingModelCache(): Promise<void> {
 
 export function getOrFetchOpenRouterEmbeddingModel(
   modelCodename: string,
+  options?: { fresh?: boolean },
 ): Promise<OpenRouterCatalogModelEntry | undefined> {
-  return embeddingCatalog.getOrFetch(modelCodename);
+  return embeddingCatalog.getOrFetch(modelCodename, options);
 }
 
 export function refreshOpenRouterEmbeddingModelCacheIfStale(): Promise<boolean> {

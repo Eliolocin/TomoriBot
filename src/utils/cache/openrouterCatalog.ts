@@ -66,8 +66,11 @@ export interface OpenRouterCatalog<TEntry> {
   get(codename: string): TEntry | undefined;
   /** Iterates the current immutable-by-convention snapshot without triggering a refresh. */
   values(): IterableIterator<TEntry>;
-  /** Lookup that refreshes once, subject to the cooldown, when the codename is unknown. */
-  getOrFetch(codename: string): Promise<TEntry | undefined>;
+  /**
+   * Lookup that refreshes once, subject to the cooldown, when the codename is unknown.
+   * `fresh` refreshes before the lookup instead and ignores the cooldown.
+   */
+  getOrFetch(codename: string, options?: { fresh?: boolean }): Promise<TEntry | undefined>;
   isReady(): boolean;
   size(): number;
   getStatus(): OpenRouterCatalogStatus;
@@ -172,8 +175,13 @@ export function createOpenRouterCatalog<TEntry>(source: OpenRouterCatalogSource<
     values(): IterableIterator<TEntry> {
       return entries.values();
     },
-    async getOrFetch(codename: string): Promise<TEntry | undefined> {
+    async getOrFetch(codename: string, options?: { fresh?: boolean }): Promise<TEntry | undefined> {
       const key = normalizeOpenRouterCodename(codename);
+      if (options?.fresh) {
+        await refresh({ force: true });
+        return entries.get(key);
+      }
+
       const cached = entries.get(key);
       if (cached) {
         return cached;

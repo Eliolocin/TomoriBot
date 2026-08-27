@@ -31,8 +31,9 @@ export async function initializeOpenRouterImageModelCache(): Promise<void> {
 
 export function getOrFetchOpenRouterImageModel(
   modelCodename: string,
+  options?: { fresh?: boolean },
 ): Promise<OpenRouterCatalogModelEntry | undefined> {
-  return imageCatalog.getOrFetch(modelCodename);
+  return imageCatalog.getOrFetch(modelCodename, options);
 }
 
 export function refreshOpenRouterImageModelCacheIfStale(): Promise<boolean> {

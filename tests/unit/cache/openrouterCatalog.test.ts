@@ -116,6 +116,30 @@ describe("OpenRouter catalog refresh", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("bypasses the cooldown for a fresh lookup", async () => {
+    process.env.OPENROUTER_CATALOG_REFRESH_MIN_INTERVAL_MS = "600000";
+    const catalog = makeCatalog();
+    await catalog.initialize();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    fetchSpy.mockImplementation(mock(async () => jsonResponse(["vendor/first", "vendor/published-later"])));
+
+    expect(await catalog.getOrFetch("vendor/published-later")).toBeUndefined();
+    expect(await catalog.getOrFetch("vendor/published-later", { fresh: true })).toEqual({
+      id: "vendor/published-later",
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes on a fresh lookup even when the codename is already cached", async () => {
+    process.env.OPENROUTER_CATALOG_REFRESH_MIN_INTERVAL_MS = "600000";
+    const catalog = makeCatalog();
+    await catalog.initialize();
+
+    expect(await catalog.getOrFetch("vendor/first", { fresh: true })).toEqual({ id: "vendor/first" });
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("collapses concurrent misses into a single fetch", async () => {
     process.env.OPENROUTER_CATALOG_REFRESH_MIN_INTERVAL_MS = "0";
     const catalog = makeCatalog();

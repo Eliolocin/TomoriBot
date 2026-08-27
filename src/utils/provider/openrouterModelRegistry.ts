@@ -104,20 +104,27 @@ function buildRegisteredEntryFromVideoModel(model: VideoGenerationModelRow): Reg
  * that serve it: embedding models are absent from `/models` entirely, and image generation
  * has a far larger catalog than the handful of chat models with image output. Each
  * capability therefore has to be checked against its own endpoint.
+ *
+ * `fresh` bypasses the shared refresh cooldown because this check only runs when someone is
+ * registering a codename by hand, and the codename they type is most often one OpenRouter
+ * published minutes ago. Answering that from a snapshot up to a TTL old reports a live model
+ * as nonexistent, and the amplification the cooldown guards against cannot happen here: the
+ * rate is one fetch per submitted registration, not one per chat turn.
  */
 async function modelExistsInOpenRouterCatalog(
   capability: OpenRouterModelCapability,
   modelCodename: string,
 ): Promise<boolean> {
+  const fresh = { fresh: true };
   switch (capability) {
     case "text":
-      return Boolean(await getOrFetchOpenRouterCapabilities(modelCodename));
+      return Boolean(await getOrFetchOpenRouterCapabilities(modelCodename, fresh));
     case "embedding":
-      return Boolean(await getOrFetchOpenRouterEmbeddingModel(modelCodename));
+      return Boolean(await getOrFetchOpenRouterEmbeddingModel(modelCodename, fresh));
     case "image":
-      return Boolean(await getOrFetchOpenRouterImageModel(modelCodename));
+      return Boolean(await getOrFetchOpenRouterImageModel(modelCodename, fresh));
     case "video":
-      return Boolean(await getOrFetchOpenRouterVideoModelCapabilities(modelCodename));
+      return Boolean(await getOrFetchOpenRouterVideoModelCapabilities(modelCodename, fresh));
   }
 }
 
