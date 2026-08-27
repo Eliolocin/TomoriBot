@@ -14,6 +14,9 @@
  *                     consistency.
  *   - command_used  → full command path, space-joined (e.g. "config humanizer",
  *                     "server welcome-channel set"); not just the top-level category
+ *   - panel_action  → stable action identifier (e.g. "providers.workspace.provider.add",
+ *                     "moderation.workspace.member-access.set"); one per successfully completed
+ *                     semantic panel operation from the closed registry in panelActions.ts
  *   - model_used    → model id / codename
  *   - tokens_in     → model id / codename (count accumulates input token deltas, not 1)
  *   - tokens_out    → model id / codename (count accumulates output token deltas, not 1)
@@ -68,6 +71,7 @@ const STAT_METRICS = [
   "video_generated",
   "audio_generated",
   "provider_error",
+  "panel_action",
 ] as const;
 
 /** Union of all valid `stat_counters.metric` values. */
@@ -78,4 +82,4 @@ export type StatMetric = (typeof STAT_METRICS)[number];
  * are always written with the lineage-0 sentinel (see plan §5). All other
  * metrics carry the active persona's lineage id.
  */
-export const PERSONA_AGNOSTIC_METRICS = new Set<StatMetric>(["command_used", "provider_error"]);
+export const PERSONA_AGNOSTIC_METRICS = new Set<StatMetric>(["command_used", "provider_error", "panel_action"]);

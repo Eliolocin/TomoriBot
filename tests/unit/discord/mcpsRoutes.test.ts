@@ -25,7 +25,7 @@ function configuredRow(): GuildMcpServerRow {
   };
 }
 
-function dependencies(calls: string[]): McpsRouteDependencies {
+function dependencies(calls: string[], overrides: Partial<McpsRouteDependencies> = {}): McpsRouteDependencies {
   return {
     resolveScope: async (_interaction, forceRefresh) => {
       calls.push(forceRefresh ? "load-fresh" : "load");
@@ -53,6 +53,8 @@ function dependencies(calls: string[]): McpsRouteDependencies {
     createNonce: () => "12345678",
     showAddModal: async () => calls.push("showAddModal"),
     takeServerType: () => "none",
+    recordAction: overrides.recordAction ?? (() => {}),
+    ...overrides,
   };
 }
 
@@ -591,5 +593,185 @@ describe("MCP panel routes", () => {
       expect(calls.indexOf(write)).toBeGreaterThan(calls.indexOf("load"));
       expect(calls.indexOf("load")).toBeGreaterThan(calls.indexOf("deferUpdate"));
     }
+  });
+
+  it("records panel_action telemetry on success and skips telemetry on failure or unchanged", async () => {
+    const recorded: string[] = [];
+    const recordAction = (input: { action: string; serverId: number; userDiscId: string }) => {
+      recorded.push(`${input.action}:${input.serverId}:${input.userDiscId}`);
+    };
+
+    const addRoute = createMcpsInteractionRoute({
+      ...dependencies([], { recordAction }),
+      operations: {
+        ...dependencies([]).operations,
+        add: async () => ({
+          status: "success",
+          row: configuredRow(),
+          test: { success: true, toolCount: 1, functionNames: ["test_tool"] },
+        }),
+      },
+    });
+    const addInteraction = {
+      customId: "mcps:v1:add-submit:en-US:12345678",
+      guildId: null,
+      user: { id: "user-123" },
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+      fields: { getTextInputValue: () => "value" },
+    } as unknown as ModalSubmitInteraction;
+    await addRoute.execute({} as Client, addInteraction, {
+      namespace: "mcps",
+      version: "v1",
+      segments: ["add-submit", "en-US", "12345678"],
+    });
+    expect(recorded).toContain("mcps.workspace.server.add:10:user-123");
+
+    const failedRecorded: string[] = [];
+    const failedAddRoute = createMcpsInteractionRoute({
+      ...dependencies([], {
+        recordAction: (input) => {
+          failedRecorded.push(input.action);
+        },
+      }),
+      operations: {
+        ...dependencies([]).operations,
+        add: async () => ({ status: "connection-failed", error: "fail" }),
+      },
+    });
+    await failedAddRoute.execute({} as Client, addInteraction, {
+      namespace: "mcps",
+      version: "v1",
+      segments: ["add-submit", "en-US", "12345678"],
+    });
+    expect(failedRecorded.length).toBe(0);
+
+    const enableRecorded: string[] = [];
+    const enableRoute = createMcpsInteractionRoute({
+      ...dependencies([], {
+        recordAction: (input) => {
+          enableRecorded.push(`${input.action}:${input.serverId}:${input.userDiscId}`);
+        },
+      }),
+      operations: {
+        ...dependencies([]).operations,
+        setEnabled: async () => ({ status: "success", row: configuredRow() }),
+      },
+    });
+    const enableInteraction = {
+      customId: "mcps:v1:set-enabled:en-US:1:1",
+      guildId: null,
+      user: { id: "user-123" },
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+    await enableRoute.execute({} as Client, enableInteraction, {
+      namespace: "mcps",
+      version: "v1",
+      segments: ["set-enabled", "en-US", "1", "1"],
+    });
+    expect(enableRecorded).toContain("mcps.workspace.server.enable:10:user-123");
+
+    const disableRecorded: string[] = [];
+    const disableRoute = createMcpsInteractionRoute({
+      ...dependencies([], {
+        recordAction: (input) => {
+          disableRecorded.push(`${input.action}:${input.serverId}:${input.userDiscId}`);
+        },
+      }),
+      operations: {
+        ...dependencies([]).operations,
+        setEnabled: async () => ({ status: "success", row: configuredRow() }),
+      },
+    });
+    const disableInteraction = {
+      customId: "mcps:v1:set-enabled:en-US:1:0",
+      guildId: null,
+      user: { id: "user-123" },
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+    await disableRoute.execute({} as Client, disableInteraction, {
+      namespace: "mcps",
+      version: "v1",
+      segments: ["set-enabled", "en-US", "1", "0"],
+    });
+    expect(disableRecorded).toContain("mcps.workspace.server.disable:10:user-123");
+
+    const unchangedRecorded: string[] = [];
+    const unchangedRoute = createMcpsInteractionRoute({
+      ...dependencies([], {
+        recordAction: (input) => {
+          unchangedRecorded.push(input.action);
+        },
+      }),
+      operations: {
+        ...dependencies([]).operations,
+        setEnabled: async () => ({ status: "unchanged", row: configuredRow() }),
+      },
+    });
+    await unchangedRoute.execute({} as Client, enableInteraction, {
+      namespace: "mcps",
+      version: "v1",
+      segments: ["set-enabled", "en-US", "1", "1"],
+    });
+    expect(unchangedRecorded.length).toBe(0);
+
+    const removeRecorded: string[] = [];
+    const removeRoute = createMcpsInteractionRoute({
+      ...dependencies([], {
+        recordAction: (input) => {
+          removeRecorded.push(`${input.action}:${input.serverId}:${input.userDiscId}`);
+        },
+      }),
+      operations: {
+        ...dependencies([]).operations,
+        remove: async () => ({ status: "success", row: configuredRow() }),
+      },
+    });
+    const removeInteraction = {
+      customId: "mcps:v1:remove-confirm:en-US:1",
+      guildId: null,
+      user: { id: "user-123" },
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+    await removeRoute.execute({} as Client, removeInteraction, {
+      namespace: "mcps",
+      version: "v1",
+      segments: ["remove-confirm", "en-US", "1"],
+    });
+    expect(removeRecorded).toContain("mcps.workspace.server.remove:10:user-123");
+
+    const notFoundRecorded: string[] = [];
+    const notFoundRemoveRoute = createMcpsInteractionRoute({
+      ...dependencies([], {
+        recordAction: (input) => {
+          notFoundRecorded.push(input.action);
+        },
+      }),
+      operations: {
+        ...dependencies([]).operations,
+        remove: async () => ({ status: "not-found" }),
+      },
+    });
+    await notFoundRemoveRoute.execute({} as Client, removeInteraction, {
+      namespace: "mcps",
+      version: "v1",
+      segments: ["remove-confirm", "en-US", "1"],
+    });
+    expect(notFoundRecorded.length).toBe(0);
   });
 });

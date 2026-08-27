@@ -19,6 +19,7 @@ import { showRoutedRawModal, takeRawModalSelectValue } from "@/utils/discord/ui/
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
 import { mcpConfigOperations, type McpConfigOperations, parseMcpServerType } from "@/utils/mcp/mcpConfigOperations";
 import { formatMcpToolNamesForDiscord } from "@/utils/mcp/mcpToolSnapshot";
+import { recordPanelActionStat, type RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
 
 export interface McpsScope {
@@ -34,6 +35,7 @@ export interface McpsRouteDependencies {
     forceRefresh?: boolean,
   ): Promise<McpsScope | null>;
   operations: Pick<McpConfigOperations, "add" | "setEnabled" | "remove">;
+  recordAction(input: RecordPanelActionInput): void;
   createNonce(): string;
   showAddModal(interaction: ButtonInteraction, locale: string, nonce: string): Promise<void>;
   takeServerType(interactionId: string, nonce: string): string | undefined;
@@ -149,6 +151,9 @@ export function createMcpsInteractionRoute(overrides: Partial<McpsRouteDependenc
   const dependencies: McpsRouteDependencies = {
     resolveScope,
     operations: mcpConfigOperations,
+    recordAction: (input) => {
+      void recordPanelActionStat(input);
+    },
     createNonce: () => crypto.randomUUID().replaceAll("-", "").slice(0, 12),
     showAddModal: (interaction, locale, nonce) => showRoutedRawModal(interaction, buildAddMcpModal(locale, nonce)),
     takeServerType: (interactionId, nonce) =>
@@ -253,6 +258,11 @@ export function createMcpsInteractionRoute(overrides: Partial<McpsRouteDependenc
         const result = action.result;
         scope = action.state ?? unavailableScope(scope);
         if (result.status === "success") {
+          dependencies.recordAction({
+            action: "mcps.workspace.server.add",
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
           const toolNames = formatMcpToolNamesForDiscord(result.test.functionNames);
           await repaint(
             interaction,
@@ -296,6 +306,13 @@ export function createMcpsInteractionRoute(overrides: Partial<McpsRouteDependenc
         );
         const result = action.result;
         scope = action.state ?? unavailableScope(scope);
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: route.enabled ? "mcps.workspace.server.enable" : "mcps.workspace.server.disable",
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         const success = result.status === "success" || result.status === "unchanged";
         await repaint(
           interaction,
@@ -362,6 +379,13 @@ export function createMcpsInteractionRoute(overrides: Partial<McpsRouteDependenc
         );
         const result = action.result;
         scope = action.state ?? unavailableScope(scope);
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "mcps.workspace.server.remove",
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         await repaint(
           interaction,
           route.locale,

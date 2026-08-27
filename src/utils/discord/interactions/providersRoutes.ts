@@ -64,6 +64,8 @@ import {
   type EditEndpointResult,
   type RemoveProviderEntryResult,
 } from "@/utils/provider/providerPanelOperations";
+import { resolveProviderPanelAction } from "@/constants/panelActions";
+import { recordPanelActionStat, type RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { IMPORT_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { localizer } from "@/utils/text/localizer";
@@ -82,6 +84,7 @@ export interface ProvidersRouteDependencies {
     | "editServerEndpoint"
     | "removeServerProviderEntry"
   >;
+  recordAction(input: RecordPanelActionInput): void;
   createNonce(): string;
   showAddProviderModal(interaction: StringSelectMenuInteraction, locale: string, nonce: string): Promise<void>;
   takeProvider(interactionId: string, nonce: string): string | undefined;
@@ -468,6 +471,9 @@ export function createProvidersInteractionRoute(
   const dependencies: ProvidersRouteDependencies = {
     resolveScope: defaultResolveScope,
     operations: providerPanelOperations,
+    recordAction: (input) => {
+      void recordPanelActionStat(input);
+    },
     createNonce: () => crypto.randomUUID().replaceAll("-", "").slice(0, 12),
     showAddProviderModal: (interaction, locale, nonce) =>
       showRoutedRawModal(
@@ -767,6 +773,13 @@ export function createProvidersInteractionRoute(
           () => dependencies.resolveScope(interaction, true),
         );
         const nextScope = action.state ?? unavailableScope(scope);
+        if (action.result.status === "success") {
+          dependencies.recordAction({
+            action: resolveProviderPanelAction(scope.scopeKind, "provider.add"),
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         await repaint(
           interaction,
           route.locale,
@@ -816,6 +829,13 @@ export function createProvidersInteractionRoute(
           () => dependencies.resolveScope(interaction, true),
         );
         const nextScope = action.state ?? unavailableScope(scope);
+        if (action.result.status === "success") {
+          dependencies.recordAction({
+            action: resolveProviderPanelAction(scope.scopeKind, "entry.remove"),
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         const nextEntryId = nextScope.data.initialEntryId ?? nextScope.data.entries[0]?.id;
         await repaint(
           interaction,
@@ -846,6 +866,13 @@ export function createProvidersInteractionRoute(
           () => dependencies.resolveScope(interaction, true),
         );
         const nextScope = action.state ?? unavailableScope(scope);
+        if (action.result.status === "success") {
+          dependencies.recordAction({
+            action: resolveProviderPanelAction(scope.scopeKind, "endpoint.add"),
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         await repaint(
           interaction,
           route.locale,
@@ -881,6 +908,13 @@ export function createProvidersInteractionRoute(
           () => dependencies.resolveScope(interaction, true),
         );
         const nextScope = action.state ?? unavailableScope(scope);
+        if (action.result.status === "success") {
+          dependencies.recordAction({
+            action: resolveProviderPanelAction(scope.scopeKind, "provider.edit"),
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         await repaint(
           interaction,
           route.locale,
@@ -918,6 +952,13 @@ export function createProvidersInteractionRoute(
           () => dependencies.resolveScope(interaction, true),
         );
         const nextScope = action.state ?? unavailableScope(scope);
+        if (action.result.status === "success") {
+          dependencies.recordAction({
+            action: resolveProviderPanelAction(scope.scopeKind, "endpoint.edit"),
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         await repaint(
           interaction,
           route.locale,
@@ -990,6 +1031,13 @@ export function createProvidersInteractionRoute(
           () => dependencies.resolveScope(interaction, true),
         );
         const nextScope = action.state ?? unavailableScope(scope);
+        if (action.result.status === "success") {
+          dependencies.recordAction({
+            action: resolveProviderPanelAction(scope.scopeKind, "model.save"),
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         await repaint(
           interaction,
           route.locale,

@@ -3784,5 +3784,108 @@ describe("moderation whitelist role routes", () => {
       });
       expect(JSON.stringify(edits.at(-1))).toContain("Image Generation quotas updated");
     });
+
+    it("records panel_action telemetry across all moderation operations", async () => {
+      const recorded: string[] = [];
+      const recordAction = (input: { action: string; serverId: number; userDiscId: string }) => {
+        recorded.push(`${input.action}:${input.serverId}:${input.userDiscId}`);
+      };
+
+      // user-blacklist-add-submit
+      const addRoute = createModerationInteractionRoute({
+        resolveScope: async () => createScopeData({ serverId: 55 }),
+        resolveUser: async () => ({ id: "123456789012345678", username: "target", bot: false }) as never,
+        takeUserSelectValue: () => "123456789012345678",
+        operations: {
+          ...moderationOperations,
+          addUserToBlacklist: async () => ({ status: "success" }),
+        },
+        recordAction,
+      });
+      const addInteraction = {
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => true,
+        customId: "moderation:v1:user-blacklist-add-submit:en-US:nonce12345678",
+        guildId: "guild-1",
+        user: { id: "mod-1" },
+        memberPermissions: { has: () => true },
+        deferUpdate: async () => {},
+        editReply: async () => {},
+        fields: { getTextInputValue: () => "123456789012345678" },
+      } as unknown as ModalSubmitInteraction;
+      await addRoute.execute({} as Client, addInteraction, {
+        namespace: "moderation",
+        version: "v1",
+        segments: ["user-blacklist-add-submit", "en-US", "nonce12345678"],
+      });
+      expect(recorded).toContain("moderation.workspace.user-blacklist.add:55:mod-1");
+
+      // model-access-set
+      const modelRoute = createModerationInteractionRoute({
+        resolveScope: async () => createScopeData({ serverId: 55 }),
+        operations: {
+          ...moderationOperations,
+          updateServerModelAccess: async () => ({ status: "success", allowServerModels: false }),
+        },
+        recordAction,
+      });
+      const modelInteraction = {
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        customId: "moderation:v1:model-access-set:en-US:allow",
+        guildId: "guild-1",
+        user: { id: "mod-1" },
+        memberPermissions: { has: () => true },
+        deferUpdate: async () => {},
+        editReply: async () => {},
+      } as unknown as ButtonInteraction;
+      await modelRoute.execute({} as Client, modelInteraction, {
+        namespace: "moderation",
+        version: "v1",
+        segments: ["model-access-set", "en-US", "allow"],
+      });
+      expect(recorded).toContain("moderation.workspace.model-access.set:55:mod-1");
+
+      // quota-edit-submit
+      const quotaRoute = createModerationInteractionRoute({
+        resolveScope: async () => createScopeData({ serverId: 55 }),
+        operations: {
+          ...moderationOperations,
+          updateQuotaSettings: async () => ({
+            status: "success",
+            quotaType: "text",
+            appliedFields: ["daily_user_quota"],
+          }),
+        },
+        recordAction,
+      });
+      const quotaInteraction = {
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => true,
+        customId: "moderation:v1:quota-edit-submit:en-US:text:nonce2",
+        guildId: "guild-1",
+        user: { id: "mod-1" },
+        memberPermissions: { has: () => true },
+        deferUpdate: async () => {},
+        editReply: async () => {},
+        fields: {
+          getTextInputValue: (fieldId: string) => {
+            if (fieldId === buildQuotaModalFieldId("nonce2", "daily_user_quota")) return "20";
+            if (fieldId === buildQuotaModalFieldId("nonce2", "serverwide_quota")) return "500";
+            if (fieldId === buildQuotaModalFieldId("nonce2", "serverwide_quota_resets_in")) return "14";
+            return "";
+          },
+        },
+      } as unknown as ModalSubmitInteraction;
+      await quotaRoute.execute({} as Client, quotaInteraction, {
+        namespace: "moderation",
+        version: "v1",
+        segments: ["quota-edit-submit", "en-US", "text", "nonce2"],
+      });
+      expect(recorded).toContain("moderation.workspace.quota.set:55:mod-1");
+    });
   });
 });

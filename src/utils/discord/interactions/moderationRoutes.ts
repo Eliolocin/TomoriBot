@@ -63,6 +63,7 @@ import {
   type ModerationWhitelistChannelAddScopeData,
   type QuotaConfigState,
 } from "@/utils/moderation/moderationOperations";
+import { recordPanelActionStat, type RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
 
 export interface ModerationRouteDependencies {
@@ -97,6 +98,7 @@ export interface ModerationRouteDependencies {
     | "replacePersonaChannelWhitelist"
     | "updateQuotaSettings"
   >;
+  recordAction(input: RecordPanelActionInput): void;
   createNonce(): string;
   showMemberAccessModal(
     interaction: ButtonInteraction,
@@ -341,6 +343,9 @@ export function createModerationInteractionRoute(
     resolveWhitelistChannelAdd: defaultResolveWhitelistChannelAdd,
     resolveWhitelistRoleAdd: defaultResolveWhitelistChannelAdd,
     operations: moderationOperations,
+    recordAction: (input) => {
+      void recordPanelActionStat(input);
+    },
     createNonce: () => crypto.randomUUID().replaceAll("-", "").slice(0, 12),
     showMemberAccessModal: (interaction, locale, state, nonce) =>
       showRoutedRawModal(interaction, buildMemberAccessModal(locale, state, nonce)),
@@ -566,6 +571,11 @@ export function createModerationInteractionRoute(
 
         let panelReceipt: PanelReceipt;
         if (result.status === "success") {
+          dependencies.recordAction({
+            action: "moderation.workspace.user-blacklist.add",
+            serverId: scope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
           panelReceipt = {
             tone: "success",
             heading: localizer(route.locale, "commands.moderation.user_blacklist_add_success"),
@@ -646,6 +656,14 @@ export function createModerationInteractionRoute(
         const reloadedScope = await dependencies.resolveScope(interaction, false);
         scope = reloadedScope ?? { ...scope, readStatus: "unavailable" };
 
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "moderation.workspace.model-access.set",
+            serverId: scope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
+
         const panelReceipt: PanelReceipt =
           result.status === "success"
             ? {
@@ -725,6 +743,11 @@ export function createModerationInteractionRoute(
 
         let panelReceipt: PanelReceipt;
         if (result.status === "success") {
+          dependencies.recordAction({
+            action: "moderation.workspace.member-access.set",
+            serverId: scope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
           panelReceipt = {
             tone: "success",
             heading: localizer(route.locale, "commands.moderation.member_access_updated"),
@@ -850,6 +873,22 @@ export function createModerationInteractionRoute(
                 personalizationUserIds,
                 personaBlockKeys,
               });
+        if (result && result.status === "success") {
+          if (result.removedPersonalizationCount > 0) {
+            dependencies.recordAction({
+              action: "moderation.workspace.user-blacklist.remove",
+              serverId: scope.serverId,
+              userDiscId: interaction.user?.id ?? "",
+            });
+          }
+          if (result.removedPersonaBlocks.length > 0) {
+            dependencies.recordAction({
+              action: "moderation.workspace.persona-block.remove",
+              serverId: scope.serverId,
+              userDiscId: interaction.user?.id ?? "",
+            });
+          }
+        }
         const receipt: PanelReceipt =
           result?.status === "failure"
             ? {
@@ -1001,6 +1040,11 @@ export function createModerationInteractionRoute(
             targetUserId: target.userId,
           });
           if (result.status === "success") {
+            dependencies.recordAction({
+              action: "moderation.workspace.user-blacklist.remove",
+              serverId: scope.serverId,
+              userDiscId: interaction.user?.id ?? "",
+            });
             panelReceipt = {
               tone: "success",
               heading: localizer(route.locale, "commands.moderation.user_blacklist_remove_success"),
@@ -1027,6 +1071,11 @@ export function createModerationInteractionRoute(
             targetUserId: target.userId,
           });
           if (result.status === "success") {
+            dependencies.recordAction({
+              action: "moderation.workspace.persona-block.remove",
+              serverId: scope.serverId,
+              userDiscId: interaction.user?.id ?? "",
+            });
             panelReceipt = {
               tone: "success",
               heading: localizer(route.locale, "commands.moderation.user_blacklist_remove_success"),
@@ -1204,6 +1253,11 @@ export function createModerationInteractionRoute(
 
         let panelReceipt: PanelReceipt;
         if (result.status === "success") {
+          dependencies.recordAction({
+            action: "moderation.workspace.whitelist-channel.add",
+            serverId: channelAddScope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
           panelReceipt = {
             tone: "success",
             heading: localizer(route.locale, "commands.moderation.whitelist_channel_add_success"),
@@ -1314,13 +1368,22 @@ export function createModerationInteractionRoute(
           if (channel?.type === ChannelType.GuildText) ids.push(channelId);
         }
         let failed = false;
+        let successCount = 0;
         for (const channelId of ids) {
           const result = await dependencies.operations.removeWhitelistChannel({
             guildId: scope.guildId,
             serverId: scope.serverId,
             channelId,
           });
+          if (result.status === "success") successCount++;
           if (result.status === "failure") failed = true;
+        }
+        if (successCount > 0) {
+          dependencies.recordAction({
+            action: "moderation.workspace.whitelist-channel.remove",
+            serverId: scope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
         }
         const receipt: PanelReceipt = failed
           ? {
@@ -1486,6 +1549,11 @@ export function createModerationInteractionRoute(
 
         let panelReceipt: PanelReceipt;
         if (result.status === "success") {
+          dependencies.recordAction({
+            action: "moderation.workspace.whitelist-channel.remove",
+            serverId: scope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
           panelReceipt = {
             tone: "success",
             heading: localizer(route.locale, "commands.moderation.whitelist_channel_remove_success"),
@@ -1627,6 +1695,13 @@ export function createModerationInteractionRoute(
           serverId: writeScope.serverId,
           roleId: currentRole.id,
         });
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "moderation.workspace.whitelist-role.add",
+            serverId: writeScope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         const roleMention = `<@&${currentRole.id}>`;
         const panelReceipt: PanelReceipt =
           result.status === "success"
@@ -1735,13 +1810,22 @@ export function createModerationInteractionRoute(
           if (role && role.id !== scope.guildId) ids.push(roleId);
         }
         let failed = false;
+        let successCount = 0;
         for (const roleId of ids) {
           const result = await dependencies.operations.removeWhitelistRole({
             guildId: scope.guildId,
             serverId: scope.serverId,
             roleId,
           });
+          if (result.status === "success") successCount++;
           if (result.status === "failure") failed = true;
+        }
+        if (successCount > 0) {
+          dependencies.recordAction({
+            action: "moderation.workspace.whitelist-role.remove",
+            serverId: scope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
         }
         const receipt: PanelReceipt = failed
           ? {
@@ -1856,6 +1940,13 @@ export function createModerationInteractionRoute(
           serverId: scope.serverId,
           roleId: role.id,
         });
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "moderation.workspace.whitelist-role.remove",
+            serverId: scope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         const roleMention = `<@&${role.id}>`;
         const panelReceipt: PanelReceipt =
           result.status === "success"
@@ -1942,6 +2033,13 @@ export function createModerationInteractionRoute(
           selectedChannelIds,
           availableChannelIds: [...selectedChannelIds],
         });
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "moderation.workspace.persona-channel.add",
+            serverId: scope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
         const persona = scope.whitelist.personaNames.get(personaId) ?? "Persona";
         const receipt: PanelReceipt =
           result.status === "failure"
@@ -2047,6 +2145,7 @@ export function createModerationInteractionRoute(
         const removed = new Set(presented.filter((value) => !kept.has(value) && currentValues.has(value)));
         const affectedPersonaIds = new Set([...removed].map((value) => Number(value.split(":")[1])));
         let failed = false;
+        let successCount = 0;
         for (const personaId of affectedPersonaIds) {
           const currentIds = scope.whitelist.personaChannels
             .filter((row) => row.persona_id === personaId)
@@ -2059,7 +2158,15 @@ export function createModerationInteractionRoute(
             selectedChannelIds,
             availableChannelIds: currentIds,
           });
+          if (result.status === "success") successCount++;
           if (result.status === "failure") failed = true;
+        }
+        if (successCount > 0) {
+          dependencies.recordAction({
+            action: "moderation.workspace.persona-channel.remove",
+            serverId: scope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
         }
         const receipt: PanelReceipt = failed
           ? {
@@ -2248,6 +2355,11 @@ export function createModerationInteractionRoute(
 
         let panelReceipt: PanelReceipt;
         if (result.status === "success") {
+          dependencies.recordAction({
+            action: "moderation.workspace.quota.set",
+            serverId: scope.serverId,
+            userDiscId: interaction.user?.id ?? "",
+          });
           panelReceipt = {
             tone: "success",
             heading: localizer(route.locale, "commands.moderation.quota_edit_success", { type: typeName }),

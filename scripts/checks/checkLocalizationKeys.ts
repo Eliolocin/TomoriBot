@@ -286,6 +286,11 @@ function isValidLocalizationKey(key: string): boolean {
     // Database/SQL patterns - require whole SQL keywords so locale keys like
     // "commands.data.delete.success_personal_settings_title" are not rejected.
     /\b(?:SELECT|INSERT|UPDATE|DELETE)\b[\s\S]*\b(?:FROM|WHERE|INTO|SET)\b/i,
+    // Panel action telemetry keys (<surface>.<scope>.<resource>.<verb>). The surface is anchored to the
+    // known panel list because "workspace|personal" alone also matches real keys such as
+    // "commands.personal.stm.description", which would exempt the whole commands.personal namespace from
+    // validation. A new panel surface that omits itself here fails loudly as a missing key.
+    /^(?:mcps|st-presets|providers|moderation)\.(?:workspace|personal)\.[a-z0-9-]+\.[a-z0-9-]+$/,
   ];
 
   for (const pattern of falsePositives) {

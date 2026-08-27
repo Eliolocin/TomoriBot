@@ -33,6 +33,7 @@ import {
   stPresetOperations,
   type StPresetScopeData,
 } from "@/utils/stPreset/stPresetOperations";
+import { recordPanelActionStat, type RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
 
 interface StPresetsScope {
@@ -48,6 +49,7 @@ export interface StPresetsRouteDependencies {
     forceRefresh?: boolean,
   ): Promise<StPresetsScope | null>;
   operations: typeof stPresetOperations;
+  recordAction(input: RecordPanelActionInput): void;
   loadToggleableNodes(presetId: number): Promise<StPresetNodeRow[]>;
   createNonce(): string;
   showAddModal(
@@ -207,6 +209,9 @@ export function createStPresetsInteractionRoute(
   const dependencies: StPresetsRouteDependencies = {
     resolveScope: defaultResolveScope,
     operations: stPresetOperations,
+    recordAction: (input) => {
+      void recordPanelActionStat(input);
+    },
     loadToggleableNodes: (presetId) => loadStPresetToggleableNodes(presetId),
     createNonce: () => crypto.randomUUID().replaceAll("-", "").slice(0, 12),
     showAddModal: (interaction, locale, nonce) => showRoutedRawModal(interaction, buildAddStPresetModal(locale, nonce)),
@@ -301,6 +306,14 @@ export function createStPresetsInteractionRoute(
           );
           scope = action.state ?? { ...scope, data: { ...scope.data, readStatus: "unavailable" } };
 
+          if (action.result) {
+            dependencies.recordAction({
+              action: "st-presets.workspace.preset.deactivate",
+              serverId: scope.state.server_id,
+              userDiscId: interaction.user?.id ?? "",
+            });
+          }
+
           await repaint(
             interaction,
             route.locale,
@@ -359,6 +372,11 @@ export function createStPresetsInteractionRoute(
         scope = action.state ?? { ...scope, data: { ...scope.data, readStatus: "unavailable" } };
 
         if (action.result) {
+          dependencies.recordAction({
+            action: "st-presets.workspace.preset.activate",
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
           await repaint(
             interaction,
             route.locale,
@@ -577,6 +595,14 @@ export function createStPresetsInteractionRoute(
         );
         scope = action.state ?? { ...scope, data: { ...scope.data, readStatus: "unavailable" } };
 
+        if (action.result) {
+          dependencies.recordAction({
+            action: "st-presets.workspace.preset.deactivate",
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
+
         await repaint(
           interaction,
           route.locale,
@@ -653,6 +679,11 @@ export function createStPresetsInteractionRoute(
         const result = action.result;
 
         if (result.status === "success") {
+          dependencies.recordAction({
+            action: "st-presets.workspace.preset.add",
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
           await repaint(
             interaction,
             route.locale,
@@ -740,6 +771,14 @@ export function createStPresetsInteractionRoute(
         );
         scope = action.state ?? { ...scope, data: { ...scope.data, readStatus: "unavailable" } };
 
+        if (action.result) {
+          dependencies.recordAction({
+            action: "st-presets.workspace.nodes.save",
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
+
         const targetPreset = scope.data.presets.find((p) => p.preset_id === route.presetId);
         await repaint(
           interaction,
@@ -804,6 +843,11 @@ export function createStPresetsInteractionRoute(
         const result = action.result;
 
         if (result && result.successCount > 0) {
+          dependencies.recordAction({
+            action: "st-presets.workspace.preset.remove",
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
           if (result.promotedPreset && result.promotedPreset.preset_id !== undefined) {
             await repaint(
               interaction,

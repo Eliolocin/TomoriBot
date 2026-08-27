@@ -149,6 +149,7 @@ function makeDependencies(
       calls.push(`takeNodeSnapshot:${nonce}`);
       return snapshots.get(nonce) ?? { presetId: 1, identifiers: ["node_1", "node_2"] };
     },
+    recordAction: overrides.recordAction ?? (() => {}),
     ...overrides,
   };
 }
@@ -778,5 +779,95 @@ describe("ST Presets interaction routes", () => {
     } as unknown as ChatInputCommandInteraction;
     const dmPayload = await buildInitialStPresetsPanel(dmInteraction, "en-US");
     expect(JSON.stringify(dmPayload)).toContain("Preset data could not be loaded");
+  });
+
+  it("records panel_action telemetry on ST preset operations", async () => {
+    const recorded: string[] = [];
+    const recordAction = (input: { action: string; serverId: number; userDiscId: string }) => {
+      recorded.push(`${input.action}:${input.serverId}:${input.userDiscId}`);
+    };
+
+    // Activate preset via select
+    const activateRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
+    const activateInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["2"], []);
+    await activateRoute.execute({} as Client, activateInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+    expect(recorded).toContain("st-presets.workspace.preset.activate:1:100");
+
+    // Deactivate via select none
+    const deactivateSelectRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
+    const deactivateSelectInteraction = makeSelectInteraction("st-presets:v1:select:en-US", ["none"], []);
+    await deactivateSelectRoute.execute({} as Client, deactivateSelectInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["select", "en-US"],
+    });
+    expect(recorded).toContain("st-presets.workspace.preset.deactivate:1:100");
+
+    // Deactivate via disable button
+    const disableButtonRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
+    const disableButtonInteraction = makeButtonInteraction("st-presets:v1:disable:en-US", []);
+    await disableButtonRoute.execute({} as Client, disableButtonInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["disable", "en-US"],
+    });
+    expect(recorded).toContain("st-presets.workspace.preset.deactivate:1:100");
+
+    // Import preset (add-submit)
+    const addRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
+    const addInteraction = {
+      id: "submit-add",
+      customId: "st-presets:v1:add-submit:en-US:fixed-nonce-123",
+      guildId: "100",
+      user: { id: "100" },
+      memberPermissions: { has: () => true },
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+      fields: { getTextInputValue: () => "My Preset" },
+    } as unknown as ModalSubmitInteraction;
+    await addRoute.execute({} as Client, addInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["add-submit", "en-US", "fixed-nonce-123"],
+    });
+    expect(recorded).toContain("st-presets.workspace.preset.add:1:100");
+
+    // Update nodes (nodes-submit)
+    const nodesRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
+    const nodesInteraction = {
+      id: "submit-nodes",
+      customId: "st-presets:v1:nodes-submit:en-US:1:fixed-nonce-123",
+      guildId: "100",
+      user: { id: "100" },
+      memberPermissions: { has: () => true },
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as ModalSubmitInteraction;
+    await nodesRoute.execute({} as Client, nodesInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["nodes-submit", "en-US", "1", "fixed-nonce-123"],
+    });
+    expect(recorded).toContain("st-presets.workspace.nodes.save:1:100");
+
+    // Delete preset (delete-confirm)
+    const deleteRoute = createStPresetsInteractionRoute(makeDependencies([], { recordAction }));
+    const deleteInteraction = makeButtonInteraction("st-presets:v1:delete-confirm:en-US:1", []);
+    await deleteRoute.execute({} as Client, deleteInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["delete-confirm", "en-US", "1"],
+    });
+    expect(recorded).toContain("st-presets.workspace.preset.remove:1:100");
   });
 });

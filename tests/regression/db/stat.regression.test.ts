@@ -115,7 +115,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("StatRepository — regression", () => {
     expect(await readCount("message_sent", "", lineageA, altUserId)).toBe(1);
   });
 
-  it("persona-agnostic metric (command_used) writes the lineage-0 sentinel", async () => {
+  it("persona-agnostic metrics (command_used, panel_action) write the lineage-0 sentinel", async () => {
     statRepository.recordStat({
       serverId: refs.serverId,
       userId: refs.userId,
@@ -123,9 +123,18 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("StatRepository — regression", () => {
       metric: "command_used",
       metricKey: "config",
     });
+    statRepository.recordStat({
+      serverId: refs.serverId,
+      userId: refs.userId,
+      lineageId: lineageA,
+      metric: "panel_action",
+      metricKey: "providers.workspace.provider.add",
+    });
     await statRepository.flush();
     expect(await readCount("command_used", "config", 0, refs.userId)).toBe(1);
     expect(await readCount("command_used", "config", lineageA, refs.userId)).toBe(0);
+    expect(await readCount("panel_action", "providers.workspace.provider.add", 0, refs.userId)).toBe(1);
+    expect(await readCount("panel_action", "providers.workspace.provider.add", lineageA, refs.userId)).toBe(0);
   });
 
   it("user impersonation counters retain actor, target, and answering persona", async () => {

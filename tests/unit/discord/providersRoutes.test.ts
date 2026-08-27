@@ -16,7 +16,7 @@ import { initializeLocalizer } from "@/utils/text/localizer";
 beforeAll(async () => initializeLocalizer());
 
 const scope: LoadedProviderPanelScope = {
-  state: {} as TomoriState,
+  state: { server_id: 42 } as TomoriState,
   data: {
     readStatus: "fresh",
     entries: [
@@ -1153,5 +1153,153 @@ describe("providers routes", () => {
       return { components: [], flags: 32768 };
     });
     expect(calls).toEqual(["deferReply", "load", "editReply"]);
+  });
+
+  it("records panel_action telemetry on provider operations across scopes", async () => {
+    const recorded: string[] = [];
+    const recordAction = (input: { action: string; serverId: number; userDiscId: string }) => {
+      recorded.push(`${input.action}:${input.serverId}:${input.userDiscId}`);
+    };
+
+    // Add provider (server scope)
+    const addCustomId = buildProvidersCustomId("add-submit", "en-US", "nonce-12345678");
+    const addInteraction = {
+      id: "interaction-add",
+      customId: addCustomId,
+      guildId: "123",
+      user: { id: "user-456" },
+      memberPermissions: { has: () => true },
+      fields: { getTextInputValue: () => "api-key" },
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      isButton: () => false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    };
+    const addRoute = createProvidersInteractionRoute({
+      resolveScope: async () => scope,
+      takeServerType: () => "google",
+      operations: {
+        addServerProvider: async () => ({ status: "success", entryId: "provider:google" }),
+      } as never,
+      recordAction,
+    });
+    await addRoute.execute({} as Client, addInteraction as never, parsed(addCustomId));
+    expect(recorded).toContain("providers.workspace.provider.add:42:user-456");
+
+    // Remove provider (personal scope)
+    const personalScope: LoadedProviderPanelScope = {
+      ...scope,
+      scopeKind: "personal",
+      ownerId: 77,
+      routeNamespace: PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
+    };
+    const removeCustomId = buildProvidersCustomIdForNamespace(
+      PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
+      "remove-confirm",
+      "en-US",
+      "provider",
+      "google",
+    );
+    const removeInteraction = {
+      customId: removeCustomId,
+      guildId: "123",
+      user: { id: "user-456" },
+      memberPermissions: { has: () => true },
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      isButton: () => true,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    };
+    const removeRoute = createProvidersInteractionRoute(
+      {
+        resolveScope: async () => personalScope,
+        operations: {
+          removeServerProviderEntry: async () => ({ status: "success", deletedEntryId: "provider:google" }),
+        } as never,
+        recordAction,
+      },
+      {
+        namespace: PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
+        authorize: () => true,
+        includeBrave: false,
+        allowRotation: false,
+      },
+    );
+    await removeRoute.execute({} as Client, removeInteraction as never, parsed(removeCustomId));
+    expect(recorded).toContain("providers.personal.entry.remove:42:user-456");
+
+    // Endpoint add (server scope)
+    const endpointAddCustomId = buildProvidersCustomId("endpoint-submit", "en-US", "nonce-12345678");
+    const endpointAddInteraction = {
+      id: "interaction-endpoint-add",
+      customId: endpointAddCustomId,
+      guildId: "123",
+      user: { id: "user-456" },
+      memberPermissions: { has: () => true },
+      fields: {
+        getTextInputValue: (fieldId: string) => (fieldId.startsWith("endpoint-url") ? "https://api.example.com" : ""),
+      },
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      isButton: () => false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    };
+    const endpointAddRoute = createProvidersInteractionRoute({
+      resolveScope: async () => scope,
+      takeServerType: () => "custom-1",
+      operations: {
+        addCustomEndpointConnection: async () => ({ status: "success", entryId: "endpoint:custom-1:1" }),
+      } as never,
+      recordAction,
+    });
+    await endpointAddRoute.execute({} as Client, endpointAddInteraction as never, parsed(endpointAddCustomId));
+    expect(recorded).toContain("providers.workspace.endpoint.add:42:user-456");
+
+    // Model save (personal scope)
+    const modelSaveCustomId = buildProvidersCustomIdForNamespace(
+      PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
+      "model-submit",
+      "en-US",
+      "provider",
+      "google",
+      "text",
+      "0",
+      "nonce-12345678",
+    );
+    const modelSaveInteraction = {
+      id: "interaction-model-save",
+      customId: modelSaveCustomId,
+      guildId: "123",
+      user: { id: "user-456" },
+      memberPermissions: { has: () => true },
+      fields: {
+        getTextInputValue: (fieldId: string) => (fieldId.startsWith("code-name") ? "gemini-pro" : ""),
+      },
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      isButton: () => false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    };
+    const modelSaveRoute = createProvidersInteractionRoute(
+      {
+        resolveScope: async () => personalScope,
+        operations: {
+          saveProviderModel: async () => ({ status: "success", entryId: "provider:google" }),
+        } as never,
+        recordAction,
+      },
+      {
+        namespace: PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
+        authorize: () => true,
+        includeBrave: false,
+        allowRotation: false,
+      },
+    );
+    await modelSaveRoute.execute({} as Client, modelSaveInteraction as never, parsed(modelSaveCustomId));
+    expect(recorded).toContain("providers.personal.model.save:42:user-456");
   });
 });
