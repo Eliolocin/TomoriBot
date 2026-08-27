@@ -54,6 +54,12 @@ export const PANEL_ACTIONS = [
   "moderation.workspace.persona-channel.add",
   "moderation.workspace.persona-channel.remove",
   "moderation.workspace.quota.set",
+
+  // personal-memories
+  "personal-memories.personal.memory.add",
+  "personal-memories.personal.memory.edit",
+  "personal-memories.personal.memory.remove",
+  "personal-memories.personal.stm.clear",
 ] as const;
 
 /** Union of all valid panel action metric keys. */

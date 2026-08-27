@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **40**. Runnable slash commands: **193**.
+Top-level command groups: **40**. Runnable slash commands: **194**.
 
 ## `/capabilities`
 
@@ -296,6 +296,7 @@ Manage your personal settings
 | `/personal image-tags` | Set comma-separated image tags for your physical appearance to assist image generation. |
 | `/personal impersonate prompt` | Set a reusable prompt that tells me how to impersonate you. |
 | `/personal language` | Set your preferred language for my interface. |
+| `/personal memories` | Manage your personal long-term memories and short-term conversational context. |
 | `/personal model fallback` | Set fallback models for your personal text override, or clear slots with None. |
 | `/personal parameters` | Adjust sampler settings for your personal providers, not this server's. |
 | `/personal privacy` | Control personal memory storage and privacy settings |
