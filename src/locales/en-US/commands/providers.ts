@@ -19,7 +19,7 @@ export default {
     stale_warning: `Saved data may be out of date because the read failed. Actions are unavailable until a fresh read succeeds.`,
     outdated_panel: `This provider panel is outdated. Run {command} again.`,
     not_setup: `This workspace is not set up yet. Run /setup first.`,
-    capability_models_explanation: `These models are available through this entry.`,
+    capability_models_explanation: `These models are available through this provider:`,
     capability_empty: `No models are registered for this capability.`,
     capability_unavailable: `This provider kind does not expose this capability.`,
     capabilities: {

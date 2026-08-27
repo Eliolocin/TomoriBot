@@ -340,10 +340,14 @@ export async function planChatTurns(lockedTurn: LockedChatTurn): Promise<ChatTur
     triggererPrivacyLevel: await getCachedPrivacyLevel(userDiscId),
     preloadedMember: !isDMChannel && guild ? await guild.members.fetch(userDiscId).catch(() => null) : null,
   };
-  const displayName =
-    incoming.manualTriggerInvoker?.member?.displayName ??
-    incoming.manualTriggerInvoker?.username ??
-    message.author.username;
+  const displayName = resolvePreferredDiscordDisplayName({
+    memberDisplayName:
+      incoming.manualTriggerInvoker?.member?.displayName ??
+      requestSnapshot.preloadedMember?.displayName ??
+      message.member?.displayName,
+    user: incoming.manualTriggerInvoker ? { username: incoming.manualTriggerInvoker.username } : message.author,
+    fallback: incoming.manualTriggerInvoker?.username ?? message.author.username,
+  });
   let triggererName =
     requestSnapshot.isTriggererBlacklisted ||
     tomoriState.config.personal_memories_enabled === false ||

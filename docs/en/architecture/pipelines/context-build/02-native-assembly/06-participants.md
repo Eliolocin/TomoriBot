@@ -263,8 +263,7 @@ After this stage runs:
 - Eligibility requires `message_sent`/`command_used` activity or meaningful
   state: personal memories, pending reminders/tasks, non-default
   personalization/image settings, timezone, privacy, or a deliberate-mode
-  preference. Registration language, the initial nickname, and default rows
-  alone do not qualify.
+  preference. Registration language and default rows alone do not qualify.
 - Visible authors, historical synthetic identities, bridges, real mentions, textual aliases,
   persona triggers, historical personas, and co-responders are isolated source functions.
   Repeated sources merge by typed key while preserving every reason and earliest seen order.
@@ -315,6 +314,10 @@ the receiving persona: persona-lineage override, global nickname, then live Disc
 prefix and suffix resolved independently. Stable Discord-derived mention handles remain
 separate from display labels; exact plain and formatted names are additional collision-aware
 aliases, never reparsed to discover a target.
+
+Registration leaves the global nickname null, so an uncustomized user continues to follow
+their live Discord display name. Saving a global nickname opts into a stable custom value;
+clearing it restores the live fallback.
 
 `{user}` is the plain effective nickname, `{user_formatted}` is the deterministic formatted
 name, and `{user_term}` is a persona-authored standalone address term. Single- and

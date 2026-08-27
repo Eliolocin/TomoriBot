@@ -44,14 +44,14 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User — regression", () => {
     const user = await userRepository.register(FIXTURE_IDS.regUserDiscId, "_rt_reg_name", "en");
     expect(user).not.toBeNull();
     expect(user?.user_disc_id).toBe(FIXTURE_IDS.regUserDiscId);
-    expect(user?.user_nickname).toBe("_rt_reg_name");
+    expect(user?.user_nickname).toBeNull();
   });
 
-  it("registerUser is idempotent — re-registering returns existing row", async () => {
+  it("registerUser is idempotent and does not freeze a later Discord display name", async () => {
     const first = await userRepository.register(FIXTURE_IDS.regUserDiscId, "_rt_reg_name", "en");
     const second = await userRepository.register(FIXTURE_IDS.regUserDiscId, "_rt_different_name", "en");
     expect(second?.user_id).toBe(first?.user_id);
-    expect(second?.user_nickname).toBe("_rt_reg_name");
+    expect(second?.user_nickname).toBeNull();
   });
 
   it("setPrivacyLevel updates the row and returns the updated user", async () => {
@@ -70,6 +70,11 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User — regression", () => {
     if (!userRow) throw new Error("Expected registered user to exist");
     const updated = await userRepository.update(userRow.user_id, { user_nickname: "_rt_renamed" });
     expect(updated?.user_nickname).toBe("_rt_renamed");
+  });
+
+  it("re-registering preserves an explicitly saved nickname", async () => {
+    const user = await userRepository.register(FIXTURE_IDS.regUserDiscId, "_rt_live_display_name", "en");
+    expect(user?.user_nickname).toBe("_rt_renamed");
   });
 
   // Deliberately skip this test in normal runs; enable it manually to verify the

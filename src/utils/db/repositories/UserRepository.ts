@@ -429,10 +429,13 @@ class UserRepository implements IRepository<UserExportShape> {
   }
 
   /**
-   * Registers a user (upsert: preserves existing nickname and preferences on conflict).
+   * Registers a user while preserving existing preferences on conflict.
+   * The observed Discord display name is diagnostic only. A null saved nickname
+   * keeps the user's name linked to their live Discord profile until they opt in
+   * to a custom name.
    * Invalidates the user cache after write.
    *
-   * @param language    - Registration locale
+   * @param language - Registration locale
    * @returns UserRow on success, null on failure
    */
   async register(userDiscId: string, displayName: string, language = "en"): Promise<UserRow | null> {
@@ -1001,7 +1004,7 @@ class UserRepository implements IRepository<UserExportShape> {
     `;
 
     return {
-      user_nickname: user.user_nickname ?? user.user_disc_id,
+      user_nickname: user.user_nickname,
       language_pref: user.language_pref,
       impersonation_prompt: user.impersonation_prompt ?? null,
       privacy_level: user.privacy_level,
@@ -1228,7 +1231,7 @@ class UserRepository implements IRepository<UserExportShape> {
           throw new Error(`User ${userDiscId} was not returned after registration upsert`);
         }
 
-        await this.ensureUserPersonalizationConfigRow(row.user_id, tx, displayName);
+        await this.ensureUserPersonalizationConfigRow(row.user_id, tx);
       });
 
       const userData = await this.loadByDiscordId(userDiscId);

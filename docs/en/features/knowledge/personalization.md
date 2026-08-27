@@ -24,7 +24,9 @@ fields are exposed only at Minimal privacy.
 `/personal profile nickname` opens a naming modal for either global or persona scope. A persona-scoped
 preference follows that persona's stable lineage across servers. Nicknames inherit from the
 persona preference to the global preference and then the live Discord display name. A blank
-prefix or suffix inherits the same way, and typed text overrides it, so `Master Sparrow-san`
+global nickname keeps following Discord, including later display-name changes. Saving a global
+nickname freezes that custom value until it is cleared. A blank prefix or suffix inherits the
+same way, and typed text overrides it, so `Master Sparrow-san`
 can combine values from different levels without changing the underlying Discord mention
 target. To drop a title a persona supplies on its own, ask the persona directly ("stop calling
 me Master"); that suppresses it for that persona while leaving your other personas alone.

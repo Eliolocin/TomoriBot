@@ -381,6 +381,18 @@ describe("participant hydration", () => {
     });
   });
 
+  it("follows the live Discord display name while the saved nickname is unset", async () => {
+    const fixture = createFixture({ userRow: createUserRow({ user_nickname: null }) });
+
+    const result = await hydrateParticipantProfiles(fixture.params, fixture.dependencies);
+
+    expect(result.profiles[0]).toMatchObject({
+      displayName: "Alice Guild",
+      primaryAlias: "Alice Guild",
+      resolvableTargetId: USER_ID,
+    });
+  });
+
   it("uses triggerer snapshot policy and member fast paths", async () => {
     const preloadedMember = createMember();
     const fixture = createFixture({

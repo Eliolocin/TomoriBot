@@ -103,9 +103,14 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Repositories — delegation & cache regres
       expect(fresh?.user_disc_id).toBe(REPO_USER_ID);
     });
 
-    it("is idempotent — re-registering preserves the original nickname", async () => {
+    it("is idempotent and leaves an uncustomized nickname unset", async () => {
       const again = await userRepository.register(REPO_USER_ID, "_rt_different_name", "en");
-      expect(again?.user_nickname).toBe("_rt_repo_name");
+      expect(again?.user_nickname).toBeNull();
+    });
+
+    it("exports an unset nickname without freezing a Discord ID", async () => {
+      const shape = await userRepository.toExportShape(REPO_USER_ID);
+      expect(shape?.user_nickname).toBeNull();
     });
   });
 
