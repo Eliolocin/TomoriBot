@@ -4,6 +4,7 @@ import {
   relocateAssistantMediaContextItems,
   relocateAssistantMediaToUserTurns,
 } from "@/providers/utils/strictChatCompat";
+import { inlineToolResponseImage } from "@/providers/utils/toolImageContent";
 import { log } from "@/utils/misc/logger";
 import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
 
@@ -232,12 +233,7 @@ export async function buildOpenAICompatibleMessages(
         interaction.imageMetadata.imageUrls.length > 0
       ) {
         for (const image of interaction.imageMetadata.imageUrls) {
-          responseParts.push({
-            type: "image_url",
-            image_url: {
-              url: image.originalUrl || image.url,
-            },
-          });
+          responseParts.push(await inlineToolResponseImage(image, options.adapterName));
         }
       }
 

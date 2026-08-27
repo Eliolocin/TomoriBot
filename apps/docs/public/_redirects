@@ -56,5 +56,13 @@
 /features/matrix-bridge/ /en/features/integrations/matrix-bridge/ 301
 /features/sillytavern-support /en/features/integrations/sillytavern-support/ 301
 /features/sillytavern-support/ /en/features/integrations/sillytavern-support/ 301
-/architecture/cloud/azure-terraform-state-recovery /en/wiki/azure-terraform-state-recovery/ 301
-/architecture/cloud/azure-terraform-state-recovery/ /en/wiki/azure-terraform-state-recovery/ 301
+# Cloud deployment pages moved to the release branch (docs/en/wiki/cloud/azure/), so the whole
+# subtree is absent from the built site. A splat rather than paired entries because this removes a
+# subtree rather than moving pages one-to-one, and it also covers the old
+# azure-terraform-state-recovery rule whose destination is now gone too.
+/architecture/cloud /en/architecture/ 301
+/architecture/cloud/ /en/architecture/ 301
+/architecture/cloud/* /en/architecture/ 301
+/en/architecture/cloud /en/architecture/ 301
+/en/architecture/cloud/ /en/architecture/ 301
+/en/architecture/cloud/* /en/architecture/ 301

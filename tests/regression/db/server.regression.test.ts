@@ -58,4 +58,72 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Server — regression", () => {
     const result = await userRepository.isBlacklisted(FIXTURE_IDS.serverDiscId, FIXTURE_IDS.userDiscId);
     expect(result).toBe(false);
   });
+
+  // ── setup's alter-name collision guard ────────────────────────────────────
+  // Exercises the disambiguating UPDATE from sqlSetupServer against the real schema rather
+  // than through setup() itself, which needs a Guild and a seeded persona_presets row. What
+  // has to hold is that the statement parses, renames only the colliding alter, and leaves
+  // idx_personas_server_nickname_ci_unique satisfied for the main persona insert that follows.
+
+  it("setup's guard renames a colliding alter so the default-named main persona can insert", async () => {
+    const defaultName = "Tomori";
+
+    const [alter] = await testSql`
+      INSERT INTO personas (server_id, persona_nickname, is_alter)
+      VALUES (${refs.serverId}, ${defaultName}, true)
+      RETURNING persona_id
+    `;
+
+    await testSql`
+      UPDATE personas
+      SET persona_nickname = persona_nickname || ' [dup-' || persona_id::TEXT || ']'
+      WHERE server_id = ${refs.serverId}
+        AND is_alter = true
+        AND lower(btrim(persona_nickname)) = lower(btrim(${defaultName}))
+    `;
+
+    const [renamed] = await testSql`
+      SELECT persona_nickname FROM personas WHERE persona_id = ${alter.persona_id}
+    `;
+    expect(renamed.persona_nickname).toBe(`${defaultName} [dup-${alter.persona_id}]`);
+
+    // The fixture main persona keeps its own name: the guard is scoped to alters.
+    const [mainPersona] = await testSql`
+      SELECT persona_nickname FROM personas WHERE persona_id = ${refs.personaId}
+    `;
+    expect(mainPersona.persona_nickname).toBe("_rt_persona");
+
+    // The name is now free, which is the whole point of the guard.
+    const [claimed] = await testSql`
+      INSERT INTO personas (server_id, persona_nickname, is_alter)
+      VALUES (${refs.serverId}, ${defaultName}, true)
+      RETURNING persona_id
+    `;
+    expect(claimed.persona_id).toBeGreaterThan(0);
+
+    await testSql`
+      DELETE FROM personas WHERE persona_id IN (${alter.persona_id}, ${claimed.persona_id})
+    `;
+  });
+
+  it("setup's guard is a no-op when no alter holds the default name", async () => {
+    const [before] = await testSql`
+      SELECT count(*)::int AS n FROM personas WHERE server_id = ${refs.serverId}
+    `;
+
+    await testSql`
+      UPDATE personas
+      SET persona_nickname = persona_nickname || ' [dup-' || persona_id::TEXT || ']'
+      WHERE server_id = ${refs.serverId}
+        AND is_alter = true
+        AND lower(btrim(persona_nickname)) = lower(btrim('Tomori'))
+    `;
+
+    const [after] = await testSql`
+      SELECT count(*)::int AS n FROM personas
+      WHERE server_id = ${refs.serverId} AND persona_nickname LIKE '% [dup-%'
+    `;
+    expect(after.n).toBe(0);
+    expect(before.n).toBeGreaterThan(0);
+  });
 });

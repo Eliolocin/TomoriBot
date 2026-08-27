@@ -26,6 +26,18 @@ function normalizeProviderName(providerName: string): string | null {
   return trimmed.toLowerCase();
 }
 
+// The driver passes a JS array as plain toString() output, which PostgreSQL rejects
+// ("Array value must start with {"), so array parameters are formatted explicitly.
+function toPgTextArrayLiteral(values: string[]): string {
+  if (values.length === 0) return "{}";
+  return `{${values.map((v) => `"${v.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+}
+
+function toPgNumericArrayLiteral(values: number[]): string {
+  if (values.length === 0) return "{}";
+  return `{${values.join(",")}}`;
+}
+
 /**
  * LlmModelRepository: global model catalog for all LLM modalities.
  *
@@ -919,8 +931,13 @@ class LlmModelRepository {
    * Upsert a scoped OpenRouter LLM into the llms catalog.
    * ON CONFLICT updates all capability flags and clears is_deprecated.
    *
+   * Pricing is persisted alongside the flags because the stat surfaces cost models purely in
+   * SQL (StatRepository joins llms) and cannot reach the in-memory OpenRouter pricing cache.
+   * A row registered without a rate reports every token it burns as $0.00.
+   *
    * @param modelCodename - OpenRouter model codename (e.g. "openai/gpt-4o")
    * @param caps          - Resolved capability flags
+   * @param pricing       - USD per million tokens, omitted when OpenRouter reports no rate
    * @returns The upserted llm_id, or null on failure
    */
   async upsertScopedLlm(
@@ -932,18 +949,24 @@ class LlmModelRepository {
       seesYoutube: boolean;
       supportsStructuredOutput: boolean;
     },
+    pricing?: { inputPerMillion: number; outputPerMillion: number } | null,
   ): Promise<number | null> {
+    const inputPrice = pricing?.inputPerMillion ?? null;
+    const outputPrice = pricing?.outputPerMillion ?? null;
+
     try {
       const rows = await sql`
         INSERT INTO llms (
           llm_provider, llm_codename, is_scoped_registration, is_smartest,
           is_default, is_reasoning, is_deprecated, is_free, has_tools,
           sees_images, sees_videos, sees_youtube, is_uncensored,
-          supports_structoutput, llm_description, ja_description
+          supports_structoutput, llm_description, ja_description,
+          input_price_per_million, output_price_per_million
         ) VALUES (
           'openrouter', ${modelCodename}, true, false, false, false, false, false,
           ${caps.hasTools}, ${caps.seesImages}, ${caps.seesVideos}, ${caps.seesYoutube},
-          false, ${caps.supportsStructuredOutput}, ${modelCodename}, ${modelCodename}
+          false, ${caps.supportsStructuredOutput}, ${modelCodename}, ${modelCodename},
+          ${inputPrice}, ${outputPrice}
         )
         ON CONFLICT (llm_provider, llm_codename) DO UPDATE SET
           is_scoped_registration  = true,
@@ -955,6 +978,10 @@ class LlmModelRepository {
           supports_structoutput   = EXCLUDED.supports_structoutput,
           llm_description         = EXCLUDED.llm_description,
           ja_description          = EXCLUDED.ja_description,
+          -- COALESCE, not EXCLUDED: a re-registration during an OpenRouter outage resolves no
+          -- price, and overwriting a known rate with null would zero out historical cost rows.
+          input_price_per_million  = COALESCE(EXCLUDED.input_price_per_million, llms.input_price_per_million),
+          output_price_per_million = COALESCE(EXCLUDED.output_price_per_million, llms.output_price_per_million),
           updated_at              = CURRENT_TIMESTAMP
         RETURNING llm_id
       `;
@@ -962,6 +989,66 @@ class LlmModelRepository {
       return Number.isInteger(id) ? id : null;
     } catch (error) {
       log.error(`LlmModelRepository.upsertScopedLlm: failed for ${modelCodename}`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Write live OpenRouter rates onto the matching llms rows, in one statement.
+   *
+   * OpenRouter models are not priced by the seed catalog (see METERED_FIRST_PARTY_PROVIDERS in
+   * src/db/seed/catalog/modelSeed.ts): their rates move on OpenRouter's schedule, so the live
+   * API is the source of truth. That leaves the DB columns null, and every cost figure computed
+   * in SQL (StatRepository's estimated cost, per-persona and per-model breakdowns) silently
+   * reports $0.00 for OpenRouter usage. Mirroring the live rates into the catalog closes that
+   * gap without moving pricing authority off the API.
+   *
+   * Only rows whose stored rate actually differs are touched, so an unchanged catalog leaves
+   * updated_at alone and the returned count reports real drift rather than row volume.
+   *
+   * @param prices - Live rates keyed by OpenRouter codename, USD per million tokens
+   * @returns Number of rows whose stored rate changed, or null on failure
+   */
+  async syncOpenrouterPrices(
+    prices: ReadonlyMap<string, { inputPerMillion: number; outputPerMillion: number }>,
+  ): Promise<number | null> {
+    if (prices.size === 0) {
+      return 0;
+    }
+
+    const codenames: string[] = [];
+    const inputPrices: number[] = [];
+    const outputPrices: number[] = [];
+    for (const [codename, price] of prices) {
+      codenames.push(codename);
+      inputPrices.push(price.inputPerMillion);
+      outputPrices.push(price.outputPerMillion);
+    }
+
+    try {
+      const rows = await sql`
+        UPDATE llms l
+        SET input_price_per_million  = v.input_price,
+            output_price_per_million = v.output_price,
+            updated_at               = CURRENT_TIMESTAMP
+        FROM (
+          SELECT * FROM unnest(
+            ${toPgTextArrayLiteral(codenames)}::text[],
+            ${toPgNumericArrayLiteral(inputPrices)}::numeric[],
+            ${toPgNumericArrayLiteral(outputPrices)}::numeric[]
+          ) AS t(codename, input_price, output_price)
+        ) v
+        WHERE l.llm_provider = 'openrouter'
+          AND l.llm_codename = v.codename
+          AND (
+            l.input_price_per_million  IS DISTINCT FROM v.input_price
+            OR l.output_price_per_million IS DISTINCT FROM v.output_price
+          )
+        RETURNING l.llm_id
+      `;
+      return rows.length;
+    } catch (error) {
+      log.error("LlmModelRepository.syncOpenrouterPrices: failed", error);
       return null;
     }
   }

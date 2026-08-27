@@ -88,4 +88,67 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("LLM — regression", () => {
     const unique = [...new Set(providers)];
     expect(unique.length).toBe(providers.length);
   });
+
+  // Pricing mirror: the stat cost surfaces join llms in SQL and cannot read the live
+  // OpenRouter cache, so a null price silently renders as $0.00 rather than as an error.
+  describe("OpenRouter pricing mirror", () => {
+    const SCOPED_CODENAME = "tomori-test/priced-scoped-model";
+    const caps = {
+      hasTools: true,
+      seesImages: false,
+      seesVideos: false,
+      seesYoutube: false,
+      supportsStructuredOutput: true,
+    };
+
+    it("upsertScopedLlm persists the rate it was registered with", async () => {
+      const id = await llmModelRepo.upsertScopedLlm(SCOPED_CODENAME, caps, {
+        inputPerMillion: 0.25,
+        outputPerMillion: 0.75,
+      });
+      expect(id).not.toBeNull();
+
+      const row = await llmModelRepo.loadByProviderAndCodename("openrouter", SCOPED_CODENAME);
+      expect(row?.input_price_per_million).toBe(0.25);
+      expect(row?.output_price_per_million).toBe(0.75);
+    });
+
+    it("re-registering without a rate keeps the stored price", async () => {
+      await llmModelRepo.upsertScopedLlm(SCOPED_CODENAME, caps, null);
+
+      const row = await llmModelRepo.loadByProviderAndCodename("openrouter", SCOPED_CODENAME);
+      expect(row?.input_price_per_million).toBe(0.25);
+      expect(row?.output_price_per_million).toBe(0.75);
+    });
+
+    it("syncOpenrouterPrices writes live rates and is idempotent", async () => {
+      const prices = new Map([[SCOPED_CODENAME, { inputPerMillion: 0.5, outputPerMillion: 1.5 }]]);
+
+      expect(await llmModelRepo.syncOpenrouterPrices(prices)).toBe(1);
+      // Second pass must report zero drift, so the count stays a meaningful signal and
+      // unchanged rows keep their updated_at.
+      expect(await llmModelRepo.syncOpenrouterPrices(prices)).toBe(0);
+
+      const row = await llmModelRepo.loadByProviderAndCodename("openrouter", SCOPED_CODENAME);
+      expect(row?.input_price_per_million).toBe(0.5);
+      expect(row?.output_price_per_million).toBe(1.5);
+    });
+
+    it("syncOpenrouterPrices leaves same-codename rows of other providers alone", async () => {
+      const firstParty = await llmModelRepo.loadByProviderAndCodename("deepseek", "deepseek-v4-pro");
+      if (!firstParty) throw new Error("Expected the seeded first-party deepseek-v4-pro row");
+
+      await llmModelRepo.syncOpenrouterPrices(
+        new Map([["deepseek-v4-pro", { inputPerMillion: 999, outputPerMillion: 999 }]]),
+      );
+
+      const after = await llmModelRepo.loadByProviderAndCodename("deepseek", "deepseek-v4-pro");
+      expect(after?.input_price_per_million).toBe(firstParty.input_price_per_million ?? null);
+      expect(after?.output_price_per_million).toBe(firstParty.output_price_per_million ?? null);
+    });
+
+    it("syncOpenrouterPrices treats an empty map as a no-op", async () => {
+      expect(await llmModelRepo.syncOpenrouterPrices(new Map())).toBe(0);
+    });
+  });
 });

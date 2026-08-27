@@ -1,6 +1,7 @@
 import type { PersonaUserBlockRow, PersonaUserBlockType } from "@/types/db/schema";
 import { personaUserBlockSchema } from "@/types/db/schema";
-import { sql } from "@/utils/db/client";
+import { DatabaseUnavailableError } from "@/types/errors";
+import { sql, withTransientDbRetry } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
 
 export type PersonaUserBlockWithPersona = PersonaUserBlockRow & {
@@ -45,18 +46,24 @@ class PersonaUserBlockRepository {
 
   async loadActiveBlocksForUser(serverId: number, userDiscId: string): Promise<PersonaUserBlockRow[]> {
     try {
-      const rows = await sql`
-        SELECT server_id, persona_id, user_disc_id, block_type, reason, expires_at, created_at, updated_at
-        FROM persona_user_blocks
-        WHERE server_id = ${serverId}
-          AND user_disc_id = ${userDiscId}
-          AND expires_at > NOW()
-        ORDER BY expires_at ASC
-      `;
+      const rows = await withTransientDbRetry(
+        async () =>
+          await sql`
+          SELECT server_id, persona_id, user_disc_id, block_type, reason, expires_at, created_at, updated_at
+          FROM persona_user_blocks
+          WHERE server_id = ${serverId}
+            AND user_disc_id = ${userDiscId}
+            AND expires_at > NOW()
+          ORDER BY expires_at ASC
+        `,
+        "load active persona user blocks",
+      );
       return parsePersonaUserBlockRows(rows as unknown[]);
     } catch (error) {
+      // An empty list is indistinguishable from "no blocks apply", so returning it here lifted
+      // every persona-level block for the duration of a pool cascade. Fail closed instead.
       log.error(`Error loading persona user blocks for user ${userDiscId} in server ${serverId}:`, error);
-      return [];
+      throw new DatabaseUnavailableError(`Failed to read persona blocks for user ${userDiscId}`);
     }
   }
 

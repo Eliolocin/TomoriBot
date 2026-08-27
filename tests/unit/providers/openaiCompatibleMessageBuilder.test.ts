@@ -176,6 +176,75 @@ describe("buildOpenAICompatibleMessages — assistant media relocation (golden)"
     expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"]);
     expect(messages[1]?.content).toBe(JSON.stringify(functionResponse));
   });
+
+  it("inlines tool-returned images and corrects a misleading MIME label", async () => {
+    const pngBytes = Buffer.from("89504e470d0a1a0a00000000", "hex");
+    const messages = await buildOpenAICompatibleMessages({
+      adapterName: "TestAdapter",
+      contextItems: [],
+      currentTurnModelParts: [],
+      functionInteractionHistory: [
+        {
+          functionCall: { name: "web_search", args: { query: "birds" } },
+          functionResponse: { functionResponse: { name: "web_search", response: { result: "sent" } } },
+          imageMetadata: {
+            imageUrls: [
+              {
+                url: `data:image/jpeg;base64,${pngBytes.toString("base64")}`,
+                mimeType: "image/jpeg",
+                originalUrl: "https://media.discordapp.net/proxy-image.jpg",
+              },
+            ],
+            totalSent: 1,
+            totalValidated: 1,
+          },
+        },
+      ],
+      seesImages: true,
+    });
+
+    expect(messages).toHaveLength(3);
+    expect(messages[2]).toEqual({
+      role: "user",
+      content: [
+        {
+          type: "image_url",
+          image_url: { url: `data:image/png;base64,${pngBytes.toString("base64")}` },
+        },
+      ],
+    });
+  });
+
+  it("replaces a tool-returned GIF instead of sending it to the provider", async () => {
+    const gifBytes = Buffer.from("GIF89a");
+    const messages = await buildOpenAICompatibleMessages({
+      adapterName: "TestAdapter",
+      contextItems: [],
+      currentTurnModelParts: [],
+      functionInteractionHistory: [
+        {
+          functionCall: { name: "web_search", args: { query: "animation" } },
+          functionResponse: { functionResponse: { name: "web_search", response: { result: "sent" } } },
+          imageMetadata: {
+            imageUrls: [
+              {
+                url: `data:image/jpeg;base64,${gifBytes.toString("base64")}`,
+                mimeType: "image/jpeg",
+              },
+            ],
+            totalSent: 1,
+            totalValidated: 1,
+          },
+        },
+      ],
+      seesImages: true,
+    });
+
+    expect(messages[2]).toEqual({
+      role: "user",
+      content: "[System: A GIF returned by the tool is not supported by this endpoint.]",
+    });
+  });
 });
 
 describe("buildOpenAICompatibleMessages — reasoning_content replay", () => {

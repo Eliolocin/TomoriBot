@@ -255,6 +255,17 @@ export function getOpenRouterPricing(modelCodename: string): ModelPricing | unde
   return textCatalog.get(modelCodename)?.pricing;
 }
 
+/** Every complete rate in the current text catalog, keyed by OpenRouter codename. */
+export function getAllOpenRouterPricing(): ReadonlyMap<string, ModelPricing> {
+  const pricing = new Map<string, ModelPricing>();
+  for (const model of textCatalog.values()) {
+    if (model.pricing) {
+      pricing.set(model.id, model.pricing);
+    }
+  }
+  return pricing;
+}
+
 export function resetOpenRouterCapabilityCache(): void {
   textCatalog.reset();
 }
@@ -335,7 +346,10 @@ export async function testAccountSettingModel(apiKey: string): Promise<
         }
       }
     } finally {
-      reader.cancel();
+      // This probe reads one chunk and abandons the rest, so the body always needs cancelling.
+      // Awaited and caught because an aborted or already-errored stream rejects here, and an
+      // unhandled rejection from a background capability probe would surface as a crash.
+      await reader.cancel().catch(() => undefined);
     }
 
     if (!actualModel) {

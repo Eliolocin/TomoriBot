@@ -68,10 +68,17 @@ export function providerRequiresPrefixCompletion(provider: string): boolean {
  *
  * @param requestBody - The OpenAI-shaped request body (mutated in place).
  * @param outputPrefill - The already-trimmed output prefill, or undefined when none is set.
+ * @param requiresReasoningContent - When `true`, also stamps `reasoning_content: ""` on the
+ *   flagged turn. DeepSeek's thinking-mode backend rejects a `prefix: true` assistant turn that
+ *   omits the key (`"reasoning_content in the thinking mode must be passed back"`), the same
+ *   requirement the tool-call replay path already carries. Empty string because a manual prefill
+ *   has no captured chain-of-thought to echo. Gated behind the caller's flag (only DeepSeek sets
+ *   it today) so Z.ai/zaicoding prefix completion stays byte-identical.
  */
 export function applyAssistantPrefixCompletion(
   requestBody: Record<string, unknown>,
   outputPrefill: string | undefined,
+  requiresReasoningContent?: boolean,
 ): void {
   if (!outputPrefill) {
     return;
@@ -95,6 +102,9 @@ export function applyAssistantPrefixCompletion(
   }
 
   lastMessage.prefix = true;
+  if (requiresReasoningContent && lastMessage.reasoning_content === undefined) {
+    lastMessage.reasoning_content = "";
+  }
 }
 
 /** Canonical text used when prepending a synthetic leading `user` turn (Anthropic's wording). */

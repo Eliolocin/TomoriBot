@@ -1,6 +1,6 @@
 {
   "name": "tomoribot",
-  "version": "0.7.9.9997",
+  "version": "0.7.9.99997",
   "description": "Customizable AI Assistant Discord Bot",
   "main": "./src/index.ts",
   "type": "module",
@@ -37,6 +37,7 @@
     "check-runtime-imports": "bun run scripts/checks/checkRuntimeImports.ts",
     "check-mock-module-surfaces": "bun run scripts/checks/checkMockModuleSurface.ts",
     "audit-comments": "bun run scripts/checks/checkCommentPolicy.ts --audit",
+    "test-watchdog": "bash scripts/devtools/testProgressWatchdog.sh",
     "compress-media": "bun run scripts/devtools/compressMedia.ts",
     "audit-keys": "bun run scripts/devtools/auditKeyVersions.ts",
     "audit-sql": "bun run scripts/checks/audit_sql.ts",

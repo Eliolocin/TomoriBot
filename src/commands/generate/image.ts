@@ -34,6 +34,7 @@ import {
 } from "@/utils/provider/credentialResolver";
 import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
 import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
+import { generateOpenRouterImage } from "@/providers/openrouter/openrouterImageGeneration";
 import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
 
@@ -87,129 +88,6 @@ async function convertAttachmentToBase64(attachment: APIAttachment): Promise<{ m
     mimeType: attachment.content_type,
     data: base64Data,
   };
-}
-
-/**
- * Generate image using OpenRouter API
- * @param aspectRatio - Aspect ratio (e.g., "16:9")
- * @param referenceImages - Optional array of reference images for img2img
- * @returns Promise resolving to generated image data and mimeType
- */
-async function generateImageWithOpenRouter(
-  apiKey: string,
-  modelCodename: string,
-  prompt: string,
-  aspectRatio: string,
-  referenceImages?: Array<{ mimeType: string; data: string }>,
-): Promise<{ imageData: string | null; mimeType: string | null }> {
-  log.info(
-    `[OpenRouter] Sending image request to model "${modelCodename}" (aspect ratio: ${aspectRatio}, refs: ${referenceImages?.length ?? 0})`,
-  );
-
-  // Build content array with text prompt first (OpenRouter recommendation)
-  const contentParts: Array<{
-    type: string;
-    text?: string;
-    image_url?: { url: string };
-  }> = [{ type: "text", text: prompt }];
-
-  if (referenceImages && referenceImages.length > 0) {
-    for (const img of referenceImages) {
-      contentParts.push({
-        type: "image_url",
-        image_url: {
-          url: `data:${img.mimeType};base64,${img.data}`,
-        },
-      });
-    }
-    log.info(`[OpenRouter] Added ${referenceImages.length} reference image(s) to content array`);
-  }
-
-  const requestPayload = {
-    model: modelCodename,
-    messages: [
-      {
-        role: "user",
-        content: contentParts,
-      },
-    ],
-    modalities: ["image", "text"],
-    image_config: {
-      aspect_ratio: aspectRatio,
-    },
-  };
-
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestPayload),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    const bodySnippet = errorText.slice(0, 500);
-
-    let parsedMessage = "";
-    try {
-      const parsed = JSON.parse(errorText);
-      parsedMessage = (parsed?.error?.message as string | undefined) || (parsed?.message as string | undefined) || "";
-    } catch {}
-
-    const friendlyMessage = parsedMessage || bodySnippet || `${response.status} ${response.statusText}`.trim();
-
-    throw new Error(`OpenRouter API request failed (${response.status} ${response.statusText}): ${friendlyMessage}`);
-  }
-
-  const result = await response.json();
-
-  // Extract image from response.
-  // OpenRouter may return images either in `message.images` or embedded in `message.content` parts.
-  const message = result.choices?.[0]?.message;
-
-  let imageUrl: string | null = null;
-
-  if (message?.images?.[0]) {
-    const firstImage = message.images[0];
-    // OpenRouter may return either snake_case (image_url) or camelCase (imageUrl)
-    imageUrl = firstImage?.image_url?.url || firstImage?.imageUrl?.url || null;
-  } else if (Array.isArray(message?.content)) {
-    const firstImagePart = message.content.find(
-      (part: unknown) =>
-        typeof part === "object" && part !== null && "type" in part && (part as { type?: string }).type === "image_url",
-    ) as { image_url?: { url?: string } } | undefined;
-
-    imageUrl = firstImagePart?.image_url?.url || null;
-  }
-
-  if (imageUrl) {
-    // OpenRouter may return data URLs like "data:image/png;base64,..." OR a normal URL.
-    const dataUrlMatches = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
-    if (dataUrlMatches) {
-      return {
-        imageData: dataUrlMatches[2],
-        mimeType: dataUrlMatches[1],
-      };
-    }
-
-    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-      const imageResponse = await safeDownload(imageUrl, {
-        maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
-        timeoutMs: 15_000,
-      });
-      if (imageResponse.success && imageResponse.buffer) {
-        const mimeType = imageResponse.contentType?.split(";")[0] || null;
-        return {
-          imageData: imageResponse.buffer.toString("base64"),
-          mimeType,
-        };
-      }
-    }
-  }
-
-  return { imageData: null, mimeType: null };
 }
 
 /**
@@ -521,13 +399,13 @@ export async function execute(
       generatedImageData = result.imageData;
       generatedImageMimeType = result.mimeType;
     } else if (imageGenerationImplementation === "openrouter") {
-      const result = await generateImageWithOpenRouter(
+      const result = await generateOpenRouterImage({
         apiKey,
         modelCodename,
         prompt,
         aspectRatio,
-        referenceImages.length > 0 ? referenceImages : undefined,
-      );
+        ...(referenceImages.length > 0 ? { referenceImages } : {}),
+      });
       generatedImageData = result.imageData;
       generatedImageMimeType = result.mimeType;
     } else if (imageGenerationImplementation === "google") {

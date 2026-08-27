@@ -33,6 +33,13 @@
  *                         so the total is SUM(count) over keys while still exposing a
  *                         per-model breakdown that cannot be backfilled later)
  *   - video_generated   → model codename (one per successful video generation)
+ *   - provider_error    → "{provider}:{code}" (e.g. "nvidia:500"), one per terminal provider
+ *                         failure. Low cardinality by construction: no model id, no user content,
+ *                         no upstream message text. Paired with model_used (successful turns per
+ *                         model) it makes a per-model success rate computable, which is the signal
+ *                         that catches a default model failing 100% of the time without waiting
+ *                         for a bug report. OPERATIONAL TELEMETRY ONLY: nothing behavioral may
+ *                         read it, so no persona or routing decision ever takes it as input.
  *   - audio_generated   → TTS backend label ("elevenlabs" | "tts-clone" |
  *                         "tts-voice-design"); one per successful voice message.
  *                         Backend (not raw voice id) is used: low-cardinality,
@@ -60,6 +67,7 @@ const STAT_METRICS = [
   "image_generated",
   "video_generated",
   "audio_generated",
+  "provider_error",
 ] as const;
 
 /** Union of all valid `stat_counters.metric` values. */
@@ -70,4 +78,4 @@ export type StatMetric = (typeof STAT_METRICS)[number];
  * are always written with the lineage-0 sentinel (see plan §5). All other
  * metrics carry the active persona's lineage id.
  */
-export const PERSONA_AGNOSTIC_METRICS = new Set<StatMetric>(["command_used"]);
+export const PERSONA_AGNOSTIC_METRICS = new Set<StatMetric>(["command_used", "provider_error"]);

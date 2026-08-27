@@ -4,10 +4,18 @@ import { resolveErrorContext } from "@/utils/misc/errorContextStore";
 import pino from "pino";
 
 /**
- * Feature flag to control database error logging
- * Set to false to rely on CloudWatch instead and reduce RDS costs
+ * Whether `log.error` also persists a structured row to the `error_logs` table.
+ *
+ * Read per call rather than captured at module load so tests and a running process can flip it
+ * without a restart. Defaults on: the structured table is what makes errors queryable from
+ * Grafana, and the write is cheap (roughly 1.6 kB per row, a few hundred rows on a normal day).
+ * The storm case is handled by the repository's circuit breaker, not by this flag.
  */
-const ENABLE_ERROR_DB_LOGGING = false;
+function isErrorDbLoggingEnabled(): boolean {
+  const raw = process.env.ERROR_DB_LOGGING_ENABLED;
+  if (raw === undefined) return true;
+  return ["true", "1", "yes", "on"].includes(raw.trim().toLowerCase());
+}
 
 /**
  * Standard color scheme for both console logs and Discord embeds
@@ -306,13 +314,15 @@ export const log = {
       pinoLogger.error({ context: sanitizeLogPayload(resolvedContext) }, sanitizeLogString(coloredMsg));
     }
 
-    // Skip database logging when disabled (relying on CloudWatch instead)
-    if (!ENABLE_ERROR_DB_LOGGING) {
+    if (!isErrorDbLoggingEnabled()) {
       return;
     }
 
     const dbPayload = buildErrorLogPayload(msg, err, resolvedContext);
 
+    // insertErrorLog never throws and reports a skip separately from a failure. Neither is
+    // logged here: the record above already reached the durable host file, and emitting a
+    // second error line per failed insert is what turns a database outage into a log storm.
     try {
       await errorLogRepository.insertErrorLog(dbPayload);
     } catch (dbError) {

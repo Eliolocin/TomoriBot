@@ -151,8 +151,11 @@ recorded but never surfaces in her prompt. Review or clear entries with `/condit
 
 ## Controlling When Memories Activate
 
-By default, **every memory is sent with every prompt**. Tagging lets you control which
-memories activate and where. Turn it on with `/memory tagging set`.
+Scope narrows things before anything else does: a server memory only ever reaches prompts
+in its own server, a personal memory only when that user is visible in the conversation,
+and both only for the persona that owns them. Within that scope, **every memory is sent
+with every prompt** by default. Tagging narrows it further, so a memory activates only on
+a keyword or only in one channel. Turn it on with `/memory tagging set`.
 
 ### Keyword Tags
 

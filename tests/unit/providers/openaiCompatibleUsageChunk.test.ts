@@ -96,7 +96,76 @@ describe("OpenAICompatibleStreamAdapter usage capture", () => {
   });
 });
 
+/**
+ * Mirrors the NVIDIA adapter's configuration: it injects thinking params via mutateRequestBody,
+ * opts into opaque-5xx degradation, and declares the keys it injects.
+ */
+function makeNvidiaLikeAdapter(): OpenAICompatibleStreamAdapter {
+  return new OpenAICompatibleStreamAdapter({
+    providerName: "test",
+    adapterName: "TestAdapter",
+    localeNamespace: "test",
+    errorMessagePrefix: "Test",
+    degradeOnOpaque5xx: true,
+    degradationPriorityKeys: ["reasoning_budget"],
+    mandatoryBodyKeys: ["chat_template_kwargs"],
+    resolveApiUrl: () => "https://example.invalid/v1/chat/completions",
+    mutateRequestBody: ({ requestBody }) => {
+      requestBody.reasoning_budget = 16384;
+      requestBody.chat_template_kwargs = { enable_thinking: true };
+    },
+  });
+}
+
 describe("OpenAICompatibleStreamAdapter parameter degradation", () => {
+  it("recovers from an opaque mid-SSE 500 caused by an injected parameter", async () => {
+    // The NVIDIA outage, end to end: NIM on the vLLM V2 runner answers `reasoning_budget` with a
+    // 200 followed by a content-free mid-SSE 500, naming nothing. Recovery needs the opaque-5xx
+    // classifier (to queue any retry at all) and the priority-key declaration (so the injected key
+    // is probed instead of sorting into the unknown tail) working together.
+    const requestBodies: Array<Record<string, unknown>> = [];
+    globalThis.fetch = (async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requestBodies.push(body);
+      if ("reasoning_budget" in body) {
+        return makeSseResponse([
+          { error: { code: 500, message: "Internal server error", type: "internal_server_error" } },
+        ]);
+      }
+      return makeSseResponse([{ choices: [{ index: 0, delta: { content: "Recovered" } }] }, "[DONE]"]);
+    }) as typeof fetch;
+
+    const chunks = await collectRawChunks(makeNvidiaLikeAdapter());
+
+    // default, no_stream_options, then the injected key. Asserted because the count is the whole
+    // user-visible cost of this path: every rung is a full chat completion the user waits through,
+    // and the ladder is deliberately not cached, so it is paid again on the next message.
+    expect(requestBodies).toHaveLength(3);
+
+    const successfulBody = requestBodies[requestBodies.length - 1];
+    expect(successfulBody).not.toHaveProperty("reasoning_budget");
+    expect(successfulBody).toHaveProperty("chat_template_kwargs");
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.data).toMatchObject({ choices: [{ delta: { content: "Recovered" } }] });
+  });
+
+  it("fails fast on a descriptive 5xx instead of walking the ladder", async () => {
+    // A real outage says so, and every rung would fail identically. Burning the ladder here only
+    // delays the key-rotation and model-fallback paths that can actually recover the turn.
+    let fetchCalls = 0;
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      return makeSseResponse([
+        { error: { code: 503, message: "Service temporarily overloaded, please try again later" } },
+      ]);
+    }) as typeof fetch;
+
+    const chunks = await collectRawChunks(makeNvidiaLikeAdapter());
+
+    expect(fetchCalls).toBe(1);
+    expect(chunks.at(-1)?.data).toMatchObject({ error: { code: 503 } });
+  });
+
   it("restarts an uncommitted SSE error with all named parameters removed", async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
     globalThis.fetch = (async (_input, init) => {

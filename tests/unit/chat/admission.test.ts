@@ -88,6 +88,27 @@ describe("shouldBlockReplyToOtherBot", () => {
 
     expect(reason).toBeNull();
   });
+
+  it("does not treat a base trigger word wrapped in a diacritic-adjacent word as direct address", async () => {
+    // Boundary semantics live in tests/unit/text/regexUtils.test.ts; this pins that a
+    // base trigger word buried in an unrelated word does not read as being addressed.
+    const wordContainingTrigger = "prätomo";
+    const otherBotReference = {
+      partial: false,
+      author: { id: "another-bot", bot: true },
+      webhookId: null,
+    } as Message;
+    const { incoming } = makeReplyIncoming(otherBotReference, otherBotReference);
+    incoming.message.content = `this message only contains the unrelated word ${wordContainingTrigger}`;
+
+    const reason = await shouldBlockReplyToOtherBot({
+      incoming,
+      earlyAllPersonas: [],
+      isBotAuthor: false,
+    });
+
+    expect(reason).toBe("reply_to_other_bot");
+  });
 });
 
 describe("resolveAdmissionChannelScope DM server key", () => {

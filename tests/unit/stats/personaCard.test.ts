@@ -79,7 +79,7 @@ describe("renderPersonaCard PNG", () => {
   it("shortens time-window cards when the all-time memory tile is absent", () => {
     expect(getPersonaCardHeight({ ...SAMPLE_EN, memoryCount: null })).toBeLessThan(getPersonaCardHeight(SAMPLE_EN));
   });
-}, 30_000);
+});
 
 describe("buildDonutSvg", () => {
   it("renders segments and a zero-value track", () => {

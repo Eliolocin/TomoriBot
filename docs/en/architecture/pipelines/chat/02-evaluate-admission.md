@@ -87,6 +87,33 @@ on authorship.
 `userDiscId` follows the same rule: in a DM, a trigger message authored by the
 client user falls back to the recipient rather than to the bot.
 
+## Can the bot actually deliver a reply?
+
+Three checks answer this, in a guild channel only, and they are separate because each one sees
+something the others cannot. All three run before any model call, so a channel that cannot receive
+a reply costs nothing to generate for.
+
+| Block reason | Catches | Why the others miss it |
+|---|---|---|
+| `cannot_send_in_channel` | `SendMessages`, or `SendMessagesInThreads` in a thread | The ordinary case |
+| `bot_timed_out_in_guild` | A moderator timeout on the bot | A timed-out member keeps **every permission bit**, so the bitfield check passes and Discord still rejects the send with 50013. The state lives on the member as `communicationDisabledUntilTimestamp`, entirely outside permissions |
+| `recent_send_refused` | Any channel whose last send was actually refused | Reacts to a refusal that happened rather than predicting one, so it holds for causes not yet identified |
+
+The timeout check reads the cached member and never fetches: turning a per-turn gate into a Discord
+round trip would cost more than the failures it prevents, and a stale answer self-corrects because
+the send path still classifies the resulting 50013 into the third check.
+
+That third check is `sendFailureCache`, populated by the stream send path on a 50013 or 50001 and
+cleared the moment any send to that channel lands, so lifting a timeout or granting a permission
+takes effect on the next message instead of after `SEND_FAILURE_RETRY_MINUTES`. It deliberately
+ignores transient codes such as 429: silencing a channel that is having a bad minute is worse than
+the wasted call it exists to prevent.
+
+This matters because the failure is otherwise invisible and expensive. A production guild timed the
+bot out and drew **397 refused sends over two days**, each one a fully generated response discarded
+at the last step, and at two error rows per attempt it accounted for 63% of that day's error volume
+while looking exactly like a correctly configured channel.
+
 ## Invariants
 
 After this stage runs:
@@ -94,6 +121,8 @@ After this stage runs:
 - If `disposition === "run"`, `tomoriState` and `allPersonas` are non-undefined.
 - Privacy-level `FULL` users are blocked unconditionally (except for
   self-reminders and manual triggers).
+- A guild channel that just refused a send is not generated for again until the entry expires or
+  a later send succeeds.
 - DM channels never carry a guild; guild text/thread/voice channels always do.
 - In a DM, `serverDiscId` is the persisted system-trigger identity when one is
   supplied; otherwise it is the channel recipient's ID regardless of who

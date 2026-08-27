@@ -66,6 +66,8 @@ export interface OpenRouterCatalog<TEntry> {
   get(codename: string): TEntry | undefined;
   /** Lookup that refreshes once, subject to the cooldown, when the codename is unknown. */
   getOrFetch(codename: string): Promise<TEntry | undefined>;
+  /** Stable snapshot for consumers that need to scan the whole current catalog. */
+  values(): readonly TEntry[];
   isReady(): boolean;
   size(): number;
   getStatus(): OpenRouterCatalogStatus;
@@ -180,6 +182,9 @@ export function createOpenRouterCatalog<TEntry>(source: OpenRouterCatalogSource<
       // until a restart.
       await refresh();
       return entries.get(key);
+    },
+    values(): readonly TEntry[] {
+      return Array.from(entries.values());
     },
     isReady(): boolean {
       return ready;

@@ -589,6 +589,11 @@ In-memory caches:
 
 - **Context refresh**: later personas do not see earlier persona replies (deferred).
 - **Webhook username collision**: reply routing relies on unique persona nicknames.
+- **Setup re-run with a colliding alter**: `idx_personas_server_nickname_ci_unique` covers mains and
+  alters alike, so an alter holding the default bot name (usually the previous main, demoted by a
+  persona swap) would collide with the main persona that setup recreates. Setup renames that alter to
+  `<name> [dup-<persona_id>]` before inserting, matching the suffix the schema already applies to
+  legacy duplicates. Mains are never renamed: the alter yields the name.
 - **DMs**: no webhook support; alters are not available in DMs.
 - **Sticker rendering**: alter personas send sticker **URL previews** instead of actual stickers.
 

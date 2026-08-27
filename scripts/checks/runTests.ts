@@ -26,6 +26,18 @@ import { usesModuleMocks } from "./lib/testIsolation";
 
 config({ quiet: true });
 
+/**
+ * Per-test and per-hook budget handed to every `bun test` child.
+ *
+ * Bun defaults to 5 s, which is sized for a quiet machine. Lanes here run concurrently, so a
+ * CPU-bound suite can starve an unrelated lane and surface as a timeout in whichever test happened
+ * to be running: a full-tree TypeScript parse and a database `beforeAll` both failed this way on CI
+ * at just over 5 s while finishing in about 1 s locally. Applied as a CLI flag rather than a
+ * per-test argument because only the flag also covers hooks; Bun silently ignores a third argument
+ * to `describe`.
+ */
+const TEST_TIMEOUT_MS = process.env.TOMORI_TEST_TIMEOUT_MS ?? "30000";
+
 /** Unique suffix for the disposable database created per run. */
 const runId = `test_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 const tempDbName = `tomoribot_${runId}`;
@@ -244,7 +256,7 @@ async function runLane(lane: Lane, extraEnv: Record<string, string>, requestedOu
     }
 
     // Spawn the batch and track it so signal-driven cleanup can terminate it.
-    const proc = Bun.spawn(["bun", "test", ...batch.files, ...reporterArgs], {
+    const proc = Bun.spawn(["bun", "test", "--timeout", TEST_TIMEOUT_MS, ...batch.files, ...reporterArgs], {
       env: { ...process.env, ...extraEnv },
       stdout: "pipe",
       stderr: "pipe",

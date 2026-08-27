@@ -29,6 +29,8 @@ bun run setup
 
 ## 用意しておくもの
 
+- **[Bun](https://bun.sh/)** (ボットおよびウィザード自体の実行に必要です)。
+- **Node.js v20+** (MCPツールで使用されます)。
 - `GuildMembers`、`MessageContent`、および `GuildPresences` の特権インテントが有効になっている**Discordボットのトークン**。
 - **データベース。** TomoriBotはすべてをPostgreSQLに保存します。ウィザードが自動で行うため、手動で設定する必要はありません。PostgreSQLがすでにインストールされている場合はそれを使用し、インストールされていない場合は[Docker](https://www.docker.com/)上で実行します。始める前に、どちらか一方がインストールされていることだけを確認してください。
 

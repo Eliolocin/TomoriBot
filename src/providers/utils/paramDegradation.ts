@@ -39,6 +39,7 @@ export type DegradableErrorKind =
   | "parameter_rejection_400"
   | "no_endpoints_404"
   | "backend_incompatible_502"
+  | "opaque_5xx"
   | "provider_specific";
 
 /** Input supplied to built-in and provider-specific degradation classifiers. */
@@ -59,12 +60,34 @@ export interface ClassifyDegradableErrorOptions extends DegradableErrorInput {
    * is almost always a genuine outage that degradation cannot fix.
    */
   degradeOn502?: boolean;
+  /**
+   * Treat a 5xx whose message carries no diagnostic content as a parameter-incompatibility
+   * signal. Some backends (NVIDIA NIM on the vLLM V2 runner) report an unsupported request key
+   * as an internal server error instead of a parameter rejection, and when streaming they do it
+   * mid-SSE after a 200, so nothing else in the ladder can see it.
+   *
+   * The generic-message gate is what keeps this safe: a real outage returns descriptive text
+   * (`Service temporarily overloaded`) and still fails fast into key/model fallback rather than
+   * walking the whole ladder against a dead endpoint.
+   */
+  degradeOnOpaque5xx?: boolean;
 }
 
 export interface BuildDegradationAttemptsOptions {
   mandatoryKeys: ReadonlySet<string>;
   /** Adapter-owned message transformer because multimodal message shapes differ. */
   stripImages?: (messages: unknown) => unknown;
+  /**
+   * Keys the adapter injects itself (via `mutateRequestBody`) rather than deriving from user
+   * settings. Without this they are indistinguishable from junk and sort into the unknown tail,
+   * so a backend that drops support for one is never probed. Declared keys are probed first, ahead
+   * of the user's own samplers.
+   *
+   * Declare only keys that are safe to drop. A key that changes the shape of the reply belongs in
+   * the adapter's mandatory set instead, since probing it early would find a "working" request
+   * that silently lost a capability.
+   */
+  priorityKeys?: readonly string[];
 }
 
 function cloneWithoutKeys(input: Record<string, unknown>, keysToRemove: readonly string[]): Record<string, unknown> {
@@ -75,10 +98,23 @@ function cloneWithoutKeys(input: Record<string, unknown>, keysToRemove: readonly
   return cloned;
 }
 
+/**
+ * True when an upstream error message carries no diagnostic content of its own, so the status
+ * code is the only evidence available. Trailing punctuation is stripped because backends are
+ * inconsistent about it and a lone period would otherwise defeat the match.
+ */
 function isLikelyGenericErrorMessage(message: string): boolean {
-  const normalized = message.trim().toLowerCase();
+  const normalized = message
+    .trim()
+    .toLowerCase()
+    .replace(/[.!\s]+$/, "");
   return (
-    normalized.length === 0 || normalized === "error" || normalized === "bad request" || normalized === "request failed"
+    normalized.length === 0 ||
+    normalized === "error" ||
+    normalized === "bad request" ||
+    normalized === "request failed" ||
+    normalized === "internal server error" ||
+    normalized === "internal error"
   );
 }
 
@@ -104,12 +140,22 @@ export function extractRejectedParams(errorMessage: string, requestBody: Record<
   });
 }
 
+/**
+ * True when an upstream error message names any droppable request parameter. Unlike
+ * {@link extractRejectedParams} this takes no request body, so it answers the weaker question
+ * user-facing error copy needs: did the endpoint blame a parameter at all?
+ */
+export function errorMessageNamesRejectableParam(errorMessage: string): boolean {
+  return REJECTABLE_PARAM_TOKENS.some((param) => new RegExp(`\\b${param}\\b`, "i").test(errorMessage));
+}
+
 /** Classify whether an HTTP response or SSE error can be retried with fewer parameters. */
 export function classifyDegradableError({
   statusCode,
   message,
   extraClassifiers = [],
   degradeOn502 = false,
+  degradeOnOpaque5xx = false,
 }: ClassifyDegradableErrorOptions): DegradableErrorKind | null {
   if (statusCode === 400 && isLikelyGenericErrorMessage(message)) {
     return "generic_400";
@@ -123,10 +169,38 @@ export function classifyDegradableError({
   if (statusCode === 502 && degradeOn502) {
     return "backend_incompatible_502";
   }
+  if (degradeOnOpaque5xx && statusCode !== null && statusCode >= 500 && isLikelyGenericErrorMessage(message)) {
+    return "opaque_5xx";
+  }
   if (extraClassifiers.some((classifier) => classifier({ statusCode, message }))) {
     return "provider_specific";
   }
   return null;
+}
+
+/** Operator-facing label for a degradation trigger, shared so adapter logs stay comparable. */
+function describeDegradableErrorKind(kind: DegradableErrorKind): string {
+  switch (kind) {
+    case "generic_400":
+      return "generic HTTP 400";
+    case "parameter_rejection_400":
+      return "parameter rejection (400)";
+    case "no_endpoints_404":
+      return "no endpoints found (404)";
+    case "backend_incompatible_502":
+      return "backend incompatible with parameters (502)";
+    case "opaque_5xx":
+      return "an opaque server error with no diagnostic message (5xx)";
+    case "provider_specific":
+      return "provider-specific parameter rejection";
+  }
+}
+
+/** Log label for whichever signal made a failed attempt eligible for a retry. */
+export function describeDegradationTrigger(kind: DegradableErrorKind | null, queuedImageStrip: boolean): string {
+  if (kind) return describeDegradableErrorKind(kind);
+  if (queuedImageStrip) return "a multimodal/image-input rejection";
+  return "an error naming request parameters";
 }
 
 /**
@@ -135,7 +209,7 @@ export function classifyDegradableError({
  */
 export function buildDegradationAttempts(
   baseBody: Record<string, unknown>,
-  { mandatoryKeys, stripImages }: BuildDegradationAttemptsOptions,
+  { mandatoryKeys, stripImages, priorityKeys = [] }: BuildDegradationAttemptsOptions,
 ): DegradationAttempt[] {
   const attempts: DegradationAttempt[] = [];
   const seenSerializedBodies = new Set<string>();
@@ -151,16 +225,22 @@ export function buildDegradationAttempts(
   const probeBaseline = "stream_options" in baseBody ? cloneWithoutKeys(baseBody, ["stream_options"]) : { ...baseBody };
   addAttempt("no_stream_options", probeBaseline);
 
+  // Declared injected keys are probed before the user's samplers. Each rung drops one key from the
+  // same baseline and the ladder stops at the first success, so ordering is pure latency: whichever
+  // rung wins ships the identical payload either way. Probing an adapter-injected key first reaches
+  // that rung in two requests instead of eight, and it is the better first hypothesis anyway
+  // because the user never asked for the key.
+  const probeRank = (key: string): number => {
+    const priorityIdx = priorityKeys.indexOf(key);
+    if (priorityIdx !== -1) return priorityIdx;
+    const standardIdx = PARAM_DROP_PRIORITY.indexOf(key as (typeof PARAM_DROP_PRIORITY)[number]);
+    if (standardIdx !== -1) return priorityKeys.length + standardIdx;
+    return priorityKeys.length + PARAM_DROP_PRIORITY.length;
+  };
+
   const probeCandidateKeys = Object.keys(probeBaseline)
     .filter((key) => !mandatoryKeys.has(key) && key !== "tools")
-    .sort((a, b) => {
-      const aIdx = PARAM_DROP_PRIORITY.indexOf(a as (typeof PARAM_DROP_PRIORITY)[number]);
-      const bIdx = PARAM_DROP_PRIORITY.indexOf(b as (typeof PARAM_DROP_PRIORITY)[number]);
-      if (aIdx === -1 && bIdx === -1) return 0;
-      if (aIdx === -1) return 1;
-      if (bIdx === -1) return -1;
-      return aIdx - bIdx;
-    });
+    .sort((a, b) => probeRank(a) - probeRank(b));
 
   for (const key of probeCandidateKeys) {
     addAttempt(`probe_drop_${key}`, cloneWithoutKeys(probeBaseline, [key]));

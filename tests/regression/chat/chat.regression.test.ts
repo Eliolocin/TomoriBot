@@ -424,6 +424,79 @@ describe("chat regression harness", () => {
     expect(shouldBotReply(message, mainPersona, personas)).toBe(true);
   });
 
+  it("does not treat a diacritic letter as a word boundary around a trigger word", () => {
+    const client = makeClient();
+    // Boundary semantics live in tests/unit/text/regexUtils.test.ts; this pins that persona
+    // routing consumes them, so a trigger buried in an unrelated word admits no persona.
+    const triggerWord = "lex";
+    const wordContainingTrigger = `prä${triggerWord}`;
+    const fixture: ConversationFixture = {
+      id: "diacritic-word-boundary",
+      provider: "google",
+      description: "an accented letter must not fake a word boundary next to a trigger substring",
+      message: {
+        authorId: "user_diacritic_trigger",
+        authorName: "Diacritic User",
+        content: `this message only contains the unrelated word ${wordContainingTrigger}`,
+        mentionedUserIds: [],
+      },
+      state: {
+        deliberateTriggerMode: false,
+        alwaysReplyEnabled: false,
+        autochDiscIds: [],
+        autochPersonaOverrides: [],
+        autochCounter: 0,
+        autochNextTarget: 0,
+      },
+      personas: [
+        {
+          id: 1,
+          nickname: "Tomori",
+          isAlter: false,
+          triggers: ["tomori"],
+        },
+        {
+          id: 2,
+          nickname: "Placeholder",
+          isAlter: true,
+          triggers: [triggerWord],
+        },
+      ],
+      triggerContext: {
+        isReplyToBot: false,
+        replyPersonaId: null,
+        isBotMentioned: false,
+        isAutoMsgHit: false,
+        isAlwaysReply: false,
+        autoTriggerPersonaId: null,
+        alwaysReplyFallbackPersonaId: null,
+        deliberateTriggerMode: false,
+        isAutochatDtmExemptChannel: false,
+        allowedPersonaIds: null,
+      },
+    };
+    const message = makeMessage(fixture, client);
+    const personas = fixture.personas.map((persona) => makeTomoriState(fixture, persona));
+
+    expect(
+      determineMatchingPersonas(
+        message,
+        personas,
+        client,
+        fixture.triggerContext.isReplyToBot,
+        null,
+        fixture.triggerContext.isBotMentioned,
+        fixture.triggerContext.isAutoMsgHit,
+        fixture.triggerContext.isAlwaysReply,
+        fixture.triggerContext.autoTriggerPersonaId,
+        fixture.triggerContext.alwaysReplyFallbackPersonaId,
+        fixture.triggerContext.deliberateTriggerMode,
+        fixture.triggerContext.isAutochatDtmExemptChannel,
+        null,
+      ).map((persona) => persona.persona_nickname),
+    ).toEqual([]);
+  });
+
   it("acquireChannelLockForTurn sets isLocked and releaseChannelLockAndReplayQueue clears it", () => {
     const lockEntry = getOrCreateChannelLockEntry(channelId, guildId);
 

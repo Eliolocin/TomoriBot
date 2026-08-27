@@ -55,8 +55,17 @@ export async function getCachedActiveBlocksForUser(
     userCache.set(key, { value, cachedAt: Date.now() });
     return value;
   } catch (error) {
-    log.warn(`Failed to load persona user block cache for user ${userDiscId}`, error as Error);
-    return cached?.value ?? [];
+    // Stale entries were read successfully once, so they still describe real blocks.
+    if (cached) {
+      log.warn(`Serving stale persona user block cache for user ${userDiscId}`, error as Error);
+      return cached.value;
+    }
+
+    // With nothing cached, "which personas are blocked" has no safe expressible answer: an empty
+    // list is read downstream as "none", which lifts every block. Propagating instead aborts the
+    // turn, and a persona that stays silent is the same outcome the block asks for.
+    log.error(`Failed to load persona user blocks for user ${userDiscId}`, error);
+    throw error;
   }
 }
 

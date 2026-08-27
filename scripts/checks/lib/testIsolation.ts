@@ -35,7 +35,63 @@ const DB_HARNESS_MARKERS = [`setup${"/"}testDb`, `TEST_DB${"_"}READY`];
  * process-wide state they mutate is harmless too.
  */
 export function usesModuleMocks(source: string): boolean {
-  return source.includes(MODULE_MOCK_MARKER) || source.includes(SCOPED_MODULE_MOCK_MARKER);
+  const executableSource = withoutComments(source);
+  return executableSource.includes(MODULE_MOCK_MARKER) || executableSource.includes(SCOPED_MODULE_MOCK_MARKER);
+}
+
+/**
+ * Removes line and block comments before lightweight source classification.
+ *
+ * The lane planner must only react to executable mock registrations. A marker
+ * in explanatory prose would otherwise change process topology and conceal
+ * failures that a monolithic `bun test` exposes.
+ */
+function withoutComments(source: string): string {
+  let result = "";
+  let index = 0;
+  let quote: '"' | "'" | "`" | undefined;
+
+  while (index < source.length) {
+    const character = source[index];
+    const next = source[index + 1];
+
+    if (quote) {
+      result += character;
+      if (character === "\\") {
+        result += next ?? "";
+        index += 2;
+        continue;
+      }
+      if (character === quote) quote = undefined;
+      index++;
+      continue;
+    }
+
+    if (character === '"' || character === "'" || character === "`") {
+      quote = character;
+      result += character;
+      index++;
+      continue;
+    }
+
+    if (character === "/" && next === "/") {
+      index += 2;
+      while (index < source.length && source[index] !== "\n") index++;
+      continue;
+    }
+
+    if (character === "/" && next === "*") {
+      index += 2;
+      while (index < source.length && !(source[index] === "*" && source[index + 1] === "/")) index++;
+      index += 2;
+      continue;
+    }
+
+    result += character;
+    index++;
+  }
+
+  return result;
 }
 
 /**

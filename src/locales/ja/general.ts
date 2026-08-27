@@ -107,6 +107,8 @@
       api_key_missing_description: `応答するには有効なプロバイダー設定が必要です。**サーバー管理**権限を持つメンバーが、初回は \`/config setup\`、追加や更新は \`/provider add\` で設定できます。`,
       api_key_error_title: `APIキーエラー`,
       api_key_error_description: `設定されたプロバイダー認証情報へのアクセスまたは復号化で問題が発生しました。\`/provider add\`で再設定してください。`,
+      database_unavailable_title: `データベースに接続できません`,
+      database_unavailable_description: `ただいまデータベースに接続できず、このサーバーの設定を読み取れませんでした。故障ではなく、設定が変更されたわけでもありません。少し時間をおいてからもう一度お試しください。`,
       personal_provider_required_title: `個人プロバイダーが必要です`,
       personal_provider_required_description: `このサーバーでは、ユーザーが発言したメッセージに対してメンバー自身のAIプロバイダー設定を使用しています。\`/help personal-provider\` を確認し、\`/personal provider add\` で設定してください。`,
       personal_provider_credentials_error_title: `個人プロバイダーエラー`,

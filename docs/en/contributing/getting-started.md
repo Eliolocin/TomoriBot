@@ -145,8 +145,10 @@ its own — downscaling (invisible at Discord's <=128px avatar render size) is t
 `compress-media` also normalizes release cards under `.github/release/**` (not gate-scoped)
 to WebP q`RELEASE_CARD_WEBP_QUALITY` (default 90) at full resolution, rewriting sibling
 `release-notes.md` references. Already-WebP cards are skipped (re-encoding lossy WebP each
-run would degrade it). Published GitHub release bodies hotlink `raw/main`, so after converting
-a card you must update the published body (`gh release edit`) — the command prints the reminder.
+run would degrade it). That tree lives on the `release` branch only, so run this from a
+`release` checkout. During deployment, the release workflow rewrites the card URL to the immutable
+release tag and tags the deployed commit. After converting a card for an already-published release,
+you must still update its published body (`gh release edit`).
 
 ## Quick Health Checks
 

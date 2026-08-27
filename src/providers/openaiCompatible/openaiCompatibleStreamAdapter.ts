@@ -3,6 +3,7 @@ import {
   logSanitizedOpenAICompatibleRequest,
 } from "@/providers/openaiCompatible/openaiCompatibleMessageBuilder";
 import {
+  classifyOpenAICompatibleStatus,
   createOpenAICompatibleErrorDescription,
   createOpenAICompatibleHttpError,
   normalizeOpenAICompatibleProviderError,
@@ -21,12 +22,12 @@ import {
   buildImageStripAttempt,
   buildTargetedAttempt,
   classifyDegradableError,
+  describeDegradationTrigger,
   extractRejectedParams,
   isMultimodalRejectionError,
   MAX_TARGETED_DEGRADATION_ATTEMPTS,
   stripImageBlocksWithNotice,
   type DegradableErrorInput,
-  type DegradableErrorKind,
 } from "@/providers/utils/paramDegradation";
 import { ReasoningContentSpillGuard } from "@/providers/utils/reasoningContentSpillGuard";
 import { buildProviderStopStrings } from "@/providers/utils/stopStrings";
@@ -61,6 +62,12 @@ import {
   isAllowedRenderModifierSpeakerLabel,
 } from "@/utils/discord/renderModifierParser";
 import { collectPersonaNameAliases } from "@/utils/discord/stream/textConfig";
+
+/** A pre-commitment SSE error event, in the shape the shared degradation classifier accepts. */
+interface OpenAICompatibleMidStreamError extends DegradableErrorInput {
+  /** Provider-declared error type (e.g. `internal_server_error`), when the event carried one. */
+  type?: string;
+}
 
 export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
   private static readonly SPEAKER_GUARD_HOLDBACK_CHARS = 32;
@@ -241,7 +248,11 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
         providerRequiresPrefixCompletion(this.options.providerName) ||
         (context.tomoriState.llm?.supports_prefix_completion ?? false);
       if (enablePrefixCompletion) {
-        applyAssistantPrefixCompletion(requestBody, context.outputPrefill?.trim());
+        applyAssistantPrefixCompletion(
+          requestBody,
+          context.outputPrefill?.trim(),
+          this.options.requiresReasoningContentReplay,
+        );
       }
 
       const headers: Record<string, string> = {
@@ -277,6 +288,7 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
           Array.isArray(attemptMessages)
             ? stripImageBlocksWithNotice(attemptMessages as Array<Record<string, unknown>>)
             : attemptMessages,
+        priorityKeys: this.options.degradationPriorityKeys,
       });
       const attemptedSerializedBodies = new Set<string>();
       let targetedAttemptCount = 0;
@@ -389,15 +401,23 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
               statusCode: response.status,
               message: responseErrorText,
               extraClassifiers,
+              degradeOnOpaque5xx: this.options.degradeOnOpaque5xx,
             });
             if ((degradationKind || queuedTargeted || queuedImageStrip) && i < attempts.length - 1) {
               log.warn(
-                `${this.options.adapterName}: Endpoint returned ${this.describeDegradationTrigger(degradationKind, queuedImageStrip)} on attempt '${attempt.label}', trying fallback payload`,
+                `${this.options.adapterName}: Endpoint returned ${describeDegradationTrigger(degradationKind, queuedImageStrip)} on attempt '${attempt.label}', trying fallback payload`,
                 { model: config.model, errorMessage: responseErrorText },
               );
               continue;
             }
 
+            // createOpenAICompatibleHttpError collapses the payload to `message`, dropping any
+            // sibling fields the endpoint used to name the real cause. Log the raw body here so a
+            // terminal failure leaves the same evidence a retried one does.
+            log.warn(
+              `${this.options.adapterName}: Endpoint returned HTTP ${response.status} on attempt '${attempt.label}' with no remaining fallback payload`,
+              { model: config.model, statusText: response.statusText, responseErrorText },
+            );
             throw createOpenAICompatibleHttpError(response.status, response.statusText, responseErrorText);
           }
 
@@ -412,17 +432,30 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
           for await (const chunk of streamOpenAICompatibleSseChunks(response)) {
             const midStreamError = this.getMidStreamError(chunk);
             if (midStreamError && !committedToAttempt) {
+              // An opaque mid-SSE error is the only evidence the endpoint gives, and everything
+              // downstream narrows it: the classifier keeps status + message, the ProviderError
+              // keeps message + type. Log the raw event so a future bisect starts from the wire.
+              log.warn(`${this.options.adapterName}: Raw SSE error event before stream commitment`, {
+                model: config.model,
+                attemptLabel: attempt.label,
+                statusCode: midStreamError.statusCode,
+                errorType: midStreamError.type,
+                errorMessage: midStreamError.message,
+                rawError: chunk.error,
+              });
               // Same rule as the fetch path: a message naming droppable params
               // justifies a retry even without a generic classifier match.
               const queuedTargeted = queueTargetedAttempt(i, attempt.body, midStreamError.message);
               const queuedImageStrip = queueImageStripAttempt(i, attempt.body, midStreamError.message);
               const degradationKind = classifyDegradableError({
-                ...midStreamError,
+                statusCode: midStreamError.statusCode,
+                message: midStreamError.message,
                 extraClassifiers,
+                degradeOnOpaque5xx: this.options.degradeOnOpaque5xx,
               });
               if ((degradationKind || queuedTargeted || queuedImageStrip) && i < attempts.length - 1) {
                 log.warn(
-                  `${this.options.adapterName}: Received ${this.describeDegradationTrigger(degradationKind, queuedImageStrip)} before stream commitment on attempt '${attempt.label}', trying fallback payload`,
+                  `${this.options.adapterName}: Received ${describeDegradationTrigger(degradationKind, queuedImageStrip)} before stream commitment on attempt '${attempt.label}', trying fallback payload`,
                   { model: config.model, errorMessage: midStreamError.message },
                 );
                 currentController.abort();
@@ -552,7 +585,7 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
         yield flushedThinkChunk;
       }
 
-      yield this.createProviderErrorChunk(error);
+      yield this.createProviderErrorChunk(error, context);
     }
   }
 
@@ -560,21 +593,36 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
     const openAIChunk = chunk.data as OpenAICompatibleStreamChunk;
 
     if ("error" in openAIChunk && openAIChunk.error) {
-      const errorMessage = openAIChunk.error.message || `${this.options.errorMessagePrefix}: provider API error`;
-      const isModelError = isProviderModelErrorMessage(errorMessage);
+      const rawMessage = openAIChunk.error.message || `${this.options.errorMessagePrefix}: provider API error`;
+      const rawCode = openAIChunk.error.code;
+      const rawType = openAIChunk.error.type;
+      const isModelError = isProviderModelErrorMessage(rawMessage);
+
+      // An SSE error event carries the same status semantics as a failed fetch, so route it
+      // through the shared classifier. Hardcoding a non-retryable api_error here is what made a
+      // transient mid-stream 500 read to the user as a permanent request error.
+      const numericCode = typeof rawCode === "number" ? rawCode : Number(rawCode);
+      const classification = classifyOpenAICompatibleStatus(
+        Number.isFinite(numericCode) ? numericCode : null,
+        rawMessage,
+      );
+
+      // An opaque message is the common case for this path, so surface the provider's own error
+      // type alongside it: the details block otherwise shows nothing actionable at all.
+      const message =
+        rawType && !rawMessage.toLowerCase().includes(rawType.toLowerCase())
+          ? `${rawMessage} (${rawType})`
+          : rawMessage;
+      const resolvedCode =
+        classification.code !== "unknown" ? classification.code : rawCode !== undefined ? String(rawCode) : "unknown";
+
       return this.attachPendingThoughts({
         type: "error",
         error: {
-          type: isModelError ? "model_error" : "api_error",
-          message: errorMessage,
-          code: isModelError
-            ? openAIChunk.error.code !== undefined
-              ? `${String(openAIChunk.error.code)}_model`
-              : "model_error"
-            : openAIChunk.error.code !== undefined
-              ? String(openAIChunk.error.code)
-              : "unknown",
-          retryable: false,
+          type: isModelError ? "model_error" : classification.type,
+          message,
+          code: isModelError ? (rawCode !== undefined ? `${String(rawCode)}_model` : "model_error") : resolvedCode,
+          retryable: isModelError ? false : classification.retryable,
           originalError: openAIChunk.error,
         },
       });
@@ -747,12 +795,13 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
     this.thinkBlockStripper.reset(personaSpeakerLabelRegex);
   }
 
-  private getMidStreamError(chunk: OpenAICompatibleStreamChunk): DegradableErrorInput | null {
+  private getMidStreamError(chunk: OpenAICompatibleStreamChunk): OpenAICompatibleMidStreamError | null {
     if (!chunk.error) return null;
     const numericCode = typeof chunk.error.code === "number" ? chunk.error.code : Number(chunk.error.code);
     return {
       statusCode: Number.isFinite(numericCode) ? numericCode : null,
       message: chunk.error.message || `${this.options.errorMessagePrefix}: provider API error`,
+      type: chunk.error.type,
     };
   }
 
@@ -766,28 +815,6 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
         (typeof delta.reasoning_content === "string" && delta.reasoning_content.length > 0) ||
         (delta.tool_calls && delta.tool_calls.length > 0),
     );
-  }
-
-  private describeDegradationKind(kind: DegradableErrorKind): string {
-    switch (kind) {
-      case "generic_400":
-        return "generic HTTP 400";
-      case "parameter_rejection_400":
-        return "parameter rejection (400)";
-      case "no_endpoints_404":
-        return "no endpoints found (404)";
-      case "backend_incompatible_502":
-        return "backend incompatible with parameters (502)";
-      case "provider_specific":
-        return "provider-specific parameter rejection";
-    }
-  }
-
-  /** Log label for whichever signal made the failed attempt eligible for a retry. */
-  private describeDegradationTrigger(kind: DegradableErrorKind | null, queuedImageStrip: boolean): string {
-    if (kind) return this.describeDegradationKind(kind);
-    if (queuedImageStrip) return "a multimodal/image-input rejection";
-    return "an error naming request parameters";
   }
 
   private stripThinkBlocksFromChunkContent(chunk: OpenAICompatibleStreamChunk): OpenAICompatibleStreamChunk {

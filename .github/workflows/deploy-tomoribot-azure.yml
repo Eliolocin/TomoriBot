@@ -29,6 +29,11 @@ on:
         required: false
         type: boolean
         default: false
+      allow_infrastructure_destruction:
+        description: "Allow Terraform to destroy protected or unusually many resources after reviewing the saved plan"
+        required: false
+        type: boolean
+        default: false
 
 # Least-privilege default token: OIDC for Workload Identity Federation + read-only
 # repo contents for checkout. Jobs that need more (e.g. create-release) elevate locally.
@@ -437,6 +442,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      # Reads this workflow's own run history so the destructive-migration gate can diff against
+      # the last SUCCESSFUL deploy rather than the previous push. See that step for why.
+      actions: read
     needs: push-to-docker-hub
     if: needs['push-to-docker-hub'].outputs.deploy == 'true'
     outputs:
@@ -456,15 +464,22 @@ jobs:
       TF_VAR_azure_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       TF_VAR_postgres_admin_password: ${{ secrets.AZURE_POSTGRES_ADMIN_PASSWORD }}
       TF_VAR_vm_admin_ssh_public_key: ${{ secrets.AZURE_VM_SSH_PUBLIC_KEY }}
-      TF_VAR_grafana_egress_ip: ${{ vars.GRAFANA_EGRESS_IP }}
+      # A secret rather than a variable: this is an operator's ISP egress address, and
+      # repository variables are not masked, so a job-level env block publishes it in the
+      # logs of a public repository. Masking it after the fact is not possible here, since
+      # registering the mask requires the value to appear first. Nothing is lost by making
+      # it write-only: the authoritative pair to compare when the ISP rotates is the
+      # operator's current address against the live allow-grafana-operator firewall rule,
+      # and both are readable without this value.
+      TF_VAR_grafana_egress_ip: ${{ secrets.GRAFANA_EGRESS_IP }}
       TF_IN_AUTOMATION: "1"
       TF_INPUT: "0"
     steps:
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          # Full history so the destructive-migration gate can diff against
-          # github.event.before; a shallow (depth-1) clone lacks the prev ref.
+          # Full history so the destructive-migration gate can diff against the last successful
+          # deploy, which may be many pushes back; a shallow clone lacks that commit.
           fetch-depth: 0
 
       - name: Setup Bun
@@ -559,8 +574,34 @@ jobs:
             (github.event_name == 'workflow_dispatch' && inputs.create_db_backup == true) ||
             (github.event_name == 'push' && contains(github.event.head_commit.message, '(Checkpoint)'))
           )
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PREV_REF="${{ github.event.before }}"
+          # The base must be the last SUCCESSFULLY DEPLOYED commit, not the previous push.
+          # This gate is git-delta-scoped while the migration runner is database-state-scoped, so
+          # the two desync on any failed run: if a deploy stops here, the destructive migrations
+          # stay pending in the database, but the next push diffs against the failed push's tip,
+          # finds no new migration files, passes, and the DROPs then run at startup with no backup.
+          # Diffing against the last green deploy keeps the window open until one actually succeeds.
+          # Query params rather than repeated flags so this needs no line continuations.
+          LAST_GREEN=$(gh api "repos/${{ github.repository }}/actions/workflows/deploy-tomoribot-azure.yml/runs?branch=${{ github.ref_name }}&status=success&per_page=1" --jq '.workflow_runs[0].head_sha' 2>/dev/null || true)
+          PREV_REF=""
+          if [ -n "$LAST_GREEN" ] && [ "$LAST_GREEN" != "null" ] && git cat-file -e "${LAST_GREEN}^{commit}" 2>/dev/null; then
+            PREV_REF="$LAST_GREEN"
+            echo "Diffing migrations against the last successful deploy: $PREV_REF"
+          fi
+
+          if [ -z "$PREV_REF" ]; then
+            # No green deploy is reachable: either this is the first one, the run history has aged
+            # out, or the commit is not in this clone. Fall back to the push delta, which is the
+            # previous behaviour, and say so plainly rather than failing an otherwise fine deploy.
+            PREV_REF="${{ github.event.before }}"
+            if [ -n "$PREV_REF" ] && [ "$PREV_REF" != "0000000000000000000000000000000000000000" ]; then
+              echo "No reachable successful deploy; falling back to the push delta $PREV_REF."
+              echo "::warning::Destructive-migration gate fell back to the push delta. A migration that failed this gate on an earlier push will not be re-detected; deploy with (Checkpoint) if that is possible."
+            fi
+          fi
+
           if [ -z "$PREV_REF" ] || [ "$PREV_REF" = "0000000000000000000000000000000000000000" ]; then
             # workflow_dispatch has no event.before. The repository is checked
             # out with full history, so compare the selected commit to its
@@ -569,13 +610,12 @@ jobs:
             if [ -z "$PREV_REF" ]; then
               echo "No parent commit available; scanning all up-migrations as a conservative fallback."
               bun run scripts/checks/checkPendingMigrations.ts --all
-            else
-              echo "No event previous-ref available; scanning migrations changed since parent $PREV_REF."
-              bun run scripts/checks/checkPendingMigrations.ts --changed-since "$PREV_REF"
+              exit 0
             fi
-          else
-            bun run scripts/checks/checkPendingMigrations.ts --changed-since "$PREV_REF"
+            echo "No event previous-ref available; scanning migrations changed since parent $PREV_REF."
           fi
+
+          bun run scripts/checks/checkPendingMigrations.ts --changed-since "$PREV_REF"
 
       - name: Optional Azure PostgreSQL backup (manual or (Checkpoint) commit)
         # Azure PostgreSQL B1ms rejects customer on-demand backups. Keep this
@@ -633,6 +673,59 @@ jobs:
           else
             echo "No production VM replacement detected."
           fi
+
+      # The two guards above select on a single resource type each, so every other destroy reaches
+      # `apply -auto-approve` unreviewed. Retiring the monitoring agent ran three destroys through
+      # that path with nothing inspecting them. This gate is type-agnostic: it always prints the
+      # inventory, and it fails on anything protected or on an unexpectedly wide blast radius.
+      - name: Guard against unreviewed infrastructure destruction
+        working-directory: terraform/azure
+        env:
+          ALLOW_DESTRUCTION: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_infrastructure_destruction == true }}
+          # Removing one small component legitimately destroys a handful of resources at once (an
+          # extension plus its associations). Above that, a plan is more likely wrong than intended.
+          MAX_UNAPPROVED_DESTROYS: "3"
+        run: |
+          plan_json=$(terraform show -json tfplan)
+
+          destroys=$(echo "$plan_json" | jq -r '.resource_changes[]
+            | select(.change.actions | index("delete"))
+            | [.type, .address, (.change.actions | join(","))]
+            | @tsv')
+
+          if [ -z "$destroys" ]; then
+            echo "No resource destruction planned."
+            exit 0
+          fi
+
+          destroy_count=$(echo "$destroys" | wc -l | tr -d ' ')
+          echo "Planned destroys ($destroy_count):"
+          echo "$destroys" | sed 's/^/  /'
+
+          # Every type here exists in terraform/azure, so this list is auditable against the repo
+          # rather than aspirational. Losing any of them breaks production in a way the deploy still
+          # reports green: the resource group takes everything with it, the database is the data
+          # itself, the firewall rule is what admits the VM to PostgreSQL, and the public IP is the
+          # address that firewall rule names.
+          protected=$(echo "$destroys" | grep -E '^(azurerm_resource_group|azurerm_postgresql_flexible_server_database|azurerm_postgresql_flexible_server_firewall_rule|azurerm_network_security_group|azurerm_network_interface|azurerm_virtual_network|azurerm_subnet|azurerm_public_ip|azurerm_monitor_metric_alert)[[:space:]]' || true)
+
+          if [ -n "$protected" ]; then
+            echo "::error::Protected infrastructure would be destroyed:"
+            echo "$protected" | sed 's/^/  /' >&2
+            if [ "$ALLOW_DESTRUCTION" != "true" ]; then
+              echo "Review the saved plan, then rerun manually with allow_infrastructure_destruction=true." >&2
+              exit 1
+            fi
+            echo "Approved manual deployment permits the planned destruction of protected resources."
+          fi
+
+          if [ "$destroy_count" -gt "$MAX_UNAPPROVED_DESTROYS" ] && [ "$ALLOW_DESTRUCTION" != "true" ]; then
+            echo "::error::$destroy_count resources would be destroyed, above the unapproved limit of $MAX_UNAPPROVED_DESTROYS." >&2
+            echo "Review the saved plan, then rerun manually with allow_infrastructure_destruction=true." >&2
+            exit 1
+          fi
+
+          echo "Destroy count within limits."
 
       - name: Terraform apply
         working-directory: terraform/azure
@@ -1038,6 +1131,9 @@ jobs:
           releaseNotes="${releaseNotes//\{COMMIT_HASH\}/$COMMIT_HASH}"
           releaseNotes="${releaseNotes//\{REPO_OWNER\}/${{ github.repository_owner }}}"
           releaseNotes="${releaseNotes//\{REPO_NAME\}/${{ github.event.repository.name }}}"
+          # Published images use the tag created below so historical release bodies do not depend
+          # on files remaining at the release branch tip.
+          releaseNotes=$(printf '%s' "$releaseNotes" | sed "s|/raw/release/\\.github/release/|/raw/v$VERSION/.github/release/|g")
 
           echo "$releaseNotes" > processed-release-notes.md
           echo "image-name=$imageName" >> "$GITHUB_OUTPUT"
@@ -1048,7 +1144,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check-release-assets.outputs.version }}
         run: |
+          # Without --target the tag is cut from the default branch, which no longer carries
+          # .github/release/ and is not the tree that just deployed. Both the release-note image
+          # URLs and the source archive read from this tag, so it has to be the deployed commit.
           gh release create "v$VERSION" \
+            --target "${{ github.sha }}" \
             --title "TomoriBot v$VERSION" \
             --notes-file "processed-release-notes.md" \
             --latest
@@ -1093,7 +1193,10 @@ jobs:
           hasImage=false
           imageFile=""
           if [ -n "$IMAGE_NAME" ]; then
-            imageUrl="https://github.com/${{ github.repository }}/raw/release/.github/release/v$VERSION/$IMAGE_NAME"
+            # Read from the release tag, not a branch: the tag is immutable, so a past release's
+            # image survives any future pruning of .github/release/ from the branch tip. Release
+            # creation always runs before this point, so the tag resolves.
+            imageUrl="https://github.com/${{ github.repository }}/raw/v$VERSION/.github/release/v$VERSION/$IMAGE_NAME"
             imageFile="release-post-image.${IMAGE_NAME##*.}"
             if curl -sL --max-time 30 "$imageUrl" -o "$imageFile" && [ -s "$imageFile" ]; then
               hasImage=true

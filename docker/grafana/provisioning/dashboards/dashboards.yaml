@@ -1,0 +1,17 @@
+apiVersion: 1
+
+providers:
+  # Loads every dashboard JSON under the mounted path. `foldersFromFilesStructure` is off
+  # because the repo ships a flat directory; turning it on would nest dashboards by folder name.
+  - name: TomoriBot
+    type: file
+    # Dashboards stay editable in the UI so an operator can adjust a panel during an incident.
+    # Edits are lost on the next container restart, since the file on disk is the source of
+    # truth: export and commit anything worth keeping.
+    allowUiUpdates: true
+    # Without this, deleting a dashboard in the UI leaves it orphaned rather than restoring it
+    # from disk on the next provisioning pass.
+    disableDeletion: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

@@ -33,6 +33,7 @@ import {
 } from "../../utils/cache/openrouterCapabilityCache";
 import { buildProviderStopStrings } from "../utils/stopStrings";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
+import { inlineToolResponseImage } from "@/providers/utils/toolImageContent";
 import { buildOpenrouterProviderRouting } from "./providerRouting";
 import { buildOpenRouterReasoningRequest } from "@/utils/provider/thinkingControl";
 import { buildOpenRouterAttributionHeaders } from "@/utils/provider/openrouterAttribution";
@@ -46,12 +47,12 @@ import {
   buildImageStripAttempt,
   buildTargetedAttempt,
   classifyDegradableError,
+  describeDegradationTrigger,
   extractRejectedParams,
   isMultimodalRejectionError,
   MAX_TARGETED_DEGRADATION_ATTEMPTS,
   stripImageBlocksWithNotice,
   type DegradableErrorInput,
-  type DegradableErrorKind,
 } from "@/providers/utils/paramDegradation";
 import type {
   ProcessedChunk,
@@ -155,7 +156,11 @@ interface AccumulatedToolCall {
   functionArguments: string;
 }
 
-const OPENROUTER_VERBOSE_FETCH = (process.env.OPENROUTER_VERBOSE_FETCH ?? "true").trim().toLowerCase() === "true";
+// Defaults off because Bun's `verbose` prints every request header, including the
+// `Authorization: Bearer` line, and it prints below application code so nothing here can
+// redact it. Enabling this writes the OpenRouter API key in clear text to container logs
+// and to anything shipping them onward.
+const OPENROUTER_VERBOSE_FETCH = (process.env.OPENROUTER_VERBOSE_FETCH ?? "false").trim().toLowerCase() === "true";
 
 /**
  * OpenRouter streaming adapter implementation
@@ -323,28 +328,6 @@ export class OpenrouterStreamAdapter extends BaseStreamAdapter {
         (delta.reasoning_details && delta.reasoning_details.length > 0) ||
         (delta.reasoningDetails && delta.reasoningDetails.length > 0),
     );
-  }
-
-  private describeDegradationKind(kind: DegradableErrorKind): string {
-    switch (kind) {
-      case "generic_400":
-        return "generic HTTP 400";
-      case "parameter_rejection_400":
-        return "parameter rejection (400)";
-      case "no_endpoints_404":
-        return "no endpoints found (404)";
-      case "backend_incompatible_502":
-        return "backend incompatible with parameters (502)";
-      case "provider_specific":
-        return "provider-specific parameter rejection";
-    }
-  }
-
-  /** Log label for whichever signal made the failed attempt eligible for a retry. */
-  private describeDegradationTrigger(kind: DegradableErrorKind | null, queuedImageStrip: boolean): string {
-    if (kind) return this.describeDegradationKind(kind);
-    if (queuedImageStrip) return "a multimodal/image-input rejection";
-    return "an error naming request parameters";
   }
 
   private parseHttpErrorFromResponse(
@@ -785,7 +768,7 @@ export class OpenrouterStreamAdapter extends BaseStreamAdapter {
             });
             if ((degradationKind || queuedTargeted || queuedImageStrip) && i < attempts.length - 1) {
               log.warn(
-                `OpenRouter returned ${this.describeDegradationTrigger(degradationKind, queuedImageStrip)} on attempt '${attempt.label}', trying fallback payload`,
+                `OpenRouter returned ${describeDegradationTrigger(degradationKind, queuedImageStrip)} on attempt '${attempt.label}', trying fallback payload`,
                 { model: config.model, errorMessage: parsedError.errorMessage },
               );
               continue;
@@ -804,6 +787,9 @@ export class OpenrouterStreamAdapter extends BaseStreamAdapter {
           let lastMeaningfulAt = Date.now();
           let committedToAttempt = false;
           let recoveryLogged = false;
+          // True once the body no longer needs cancelling: either the stream ended on its own,
+          // or a retry path already cancelled it.
+          let readerSettled = false;
 
           const logRecovery = () => {
             if (!isRetry || recoveryLogged) return;
@@ -832,120 +818,136 @@ export class OpenrouterStreamAdapter extends BaseStreamAdapter {
             }
           };
 
-          while (true) {
-            const readResult = (await readWithTimeout()) as {
-              done: boolean;
-              value?: Uint8Array;
-            };
+          try {
+            while (true) {
+              const readResult = (await readWithTimeout()) as {
+                done: boolean;
+                value?: Uint8Array;
+              };
 
-            if (readResult.done) break;
-            if (!readResult.value) continue;
-
-            buffer += decoder.decode(readResult.value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-
-            for (const line of lines) {
-              const trimmedLine = line.trim();
-              if (!trimmedLine || trimmedLine.startsWith(":") || !trimmedLine.startsWith("data:")) continue;
-
-              const data = trimmedLine.slice(5).trim();
-              if (!data) continue;
-              if (data === "[DONE]") {
-                log.info("OpenrouterStreamAdapter: Stream completed [DONE]");
-                continue;
+              if (readResult.done) {
+                readerSettled = true;
+                break;
               }
+              if (!readResult.value) continue;
 
-              let parsed: unknown;
-              try {
-                parsed = JSON.parse(data);
-              } catch (parseError) {
-                log.warn(`OpenrouterStreamAdapter: Failed to parse SSE data: ${data}`, {
-                  error: parseError instanceof Error ? parseError.message : String(parseError),
-                });
-                continue;
-              }
+              buffer += decoder.decode(readResult.value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
 
-              const normalizedChunk = this.normalizeOpenrouterChunk(parsed);
-              if (!normalizedChunk) continue;
+              for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine || trimmedLine.startsWith(":") || !trimmedLine.startsWith("data:")) continue;
 
-              const midStreamError = this.getMidStreamError(normalizedChunk);
-              if (midStreamError && !committedToAttempt) {
-                // Same rule as the fetch path: a message naming droppable params
-                // justifies a retry even without a generic classifier match.
-                const queuedTargeted = queueTargetedAttempt(i, attempt.body, midStreamError.message);
-                const queuedImageStrip = queueImageStripAttempt(i, attempt.body, midStreamError.message);
-                const degradationKind = classifyDegradableError({ ...midStreamError, degradeOn502: true });
-                if ((degradationKind || queuedTargeted || queuedImageStrip) && i < attempts.length - 1) {
-                  log.warn(
-                    `OpenRouter received ${this.describeDegradationTrigger(degradationKind, queuedImageStrip)} before stream commitment on attempt '${attempt.label}', trying fallback payload`,
-                    { model: config.model, errorMessage: midStreamError.message },
+                const data = trimmedLine.slice(5).trim();
+                if (!data) continue;
+                if (data === "[DONE]") {
+                  log.info("OpenrouterStreamAdapter: Stream completed [DONE]");
+                  continue;
+                }
+
+                let parsed: unknown;
+                try {
+                  parsed = JSON.parse(data);
+                } catch (parseError) {
+                  log.warn(`OpenrouterStreamAdapter: Failed to parse SSE data: ${data}`, {
+                    error: parseError instanceof Error ? parseError.message : String(parseError),
+                  });
+                  continue;
+                }
+
+                const normalizedChunk = this.normalizeOpenrouterChunk(parsed);
+                if (!normalizedChunk) continue;
+
+                const midStreamError = this.getMidStreamError(normalizedChunk);
+                if (midStreamError && !committedToAttempt) {
+                  // Same rule as the fetch path: a message naming droppable params
+                  // justifies a retry even without a generic classifier match.
+                  const queuedTargeted = queueTargetedAttempt(i, attempt.body, midStreamError.message);
+                  const queuedImageStrip = queueImageStripAttempt(i, attempt.body, midStreamError.message);
+                  const degradationKind = classifyDegradableError({ ...midStreamError, degradeOn502: true });
+                  if ((degradationKind || queuedTargeted || queuedImageStrip) && i < attempts.length - 1) {
+                    log.warn(
+                      `OpenRouter received ${describeDegradationTrigger(degradationKind, queuedImageStrip)} before stream commitment on attempt '${attempt.label}', trying fallback payload`,
+                      { model: config.model, errorMessage: midStreamError.message },
+                    );
+                    // Cancelled before aborting so the teardown is graceful rather than a
+                    // rejected read, which is why this path cancels here instead of leaving it
+                    // to the `finally` below.
+                    const cancelPromise = reader.cancel().catch(() => undefined);
+                    readerSettled = true;
+                    currentController.abort();
+                    await cancelPromise;
+                    this.resetPerAttemptState(personaSpeakerLabelRegex);
+                    continue attemptLoop;
+                  }
+                }
+
+                const chunksToEmit = this.splitChunkWithTextAndToolSignals(normalizedChunk);
+                for (const chunkToEmit of chunksToEmit) {
+                  const strippedChunk = this.stripThinkBlocksFromChunkContent(chunkToEmit);
+                  const spillGuardedChunk = this.applyReasoningContentSpillGuard(strippedChunk);
+                  const deduplicatedChunk = this.deduplicateChunkTextAgainstRecentStream(spillGuardedChunk);
+                  const guardResult = this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
+                  const commitsStream = this.isMeaningfulCommitmentChunk(guardResult.chunk);
+                  if (commitsStream && !committedToAttempt) {
+                    committedToAttempt = true;
+                    logRecovery();
+                  }
+
+                  if (this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(guardResult.chunk)) {
+                    yield {
+                      data: {
+                        choices: [{ index: 0, delta: { content: this.speakerGuardPendingTail } }],
+                      } satisfies OpenrouterStreamChunk,
+                      provider: "openrouter",
+                      metadata: { timestamp: Date.now(), model: config.model },
+                    };
+                    this.speakerGuardPendingTail = "";
+                  }
+
+                  const hasMeaningfulData = Boolean(
+                    guardResult.chunk.error ||
+                      guardResult.chunk.usage ||
+                      (guardResult.chunk.choices && guardResult.chunk.choices.length > 0),
                   );
-                  const cancelPromise = reader.cancel().catch(() => undefined);
-                  currentController.abort();
-                  await cancelPromise;
-                  this.resetPerAttemptState(personaSpeakerLabelRegex);
-                  continue attemptLoop;
-                }
-              }
+                  if (!hasMeaningfulData) {
+                    if (guardResult.stopTriggered) {
+                      log.warn(
+                        `OpenRouter speaker guard: generation stopped at detected speaker label "${guardResult.matchedSpeaker ?? "unknown"}"`,
+                      );
+                      return;
+                    }
+                    continue;
+                  }
 
-              const chunksToEmit = this.splitChunkWithTextAndToolSignals(normalizedChunk);
-              for (const chunkToEmit of chunksToEmit) {
-                const strippedChunk = this.stripThinkBlocksFromChunkContent(chunkToEmit);
-                const spillGuardedChunk = this.applyReasoningContentSpillGuard(strippedChunk);
-                const deduplicatedChunk = this.deduplicateChunkTextAgainstRecentStream(spillGuardedChunk);
-                const guardResult = this.applySpeakerBoundaryFallbackGuard(deduplicatedChunk);
-                const commitsStream = this.isMeaningfulCommitmentChunk(guardResult.chunk);
-                if (commitsStream && !committedToAttempt) {
-                  committedToAttempt = true;
-                  logRecovery();
-                }
-
-                if (this.shouldFlushSpeakerGuardTailBeforeNonTextChunk(guardResult.chunk)) {
+                  lastMeaningfulAt = Date.now();
                   yield {
-                    data: {
-                      choices: [{ index: 0, delta: { content: this.speakerGuardPendingTail } }],
-                    } satisfies OpenrouterStreamChunk,
+                    data: guardResult.chunk,
                     provider: "openrouter",
                     metadata: { timestamp: Date.now(), model: config.model },
                   };
-                  this.speakerGuardPendingTail = "";
-                }
 
-                const hasMeaningfulData = Boolean(
-                  guardResult.chunk.error ||
-                    guardResult.chunk.usage ||
-                    (guardResult.chunk.choices && guardResult.chunk.choices.length > 0),
-                );
-                if (!hasMeaningfulData) {
                   if (guardResult.stopTriggered) {
                     log.warn(
                       `OpenRouter speaker guard: generation stopped at detected speaker label "${guardResult.matchedSpeaker ?? "unknown"}"`,
                     );
                     return;
                   }
-                  continue;
-                }
-
-                lastMeaningfulAt = Date.now();
-                yield {
-                  data: guardResult.chunk,
-                  provider: "openrouter",
-                  metadata: { timestamp: Date.now(), model: config.model },
-                };
-
-                if (guardResult.stopTriggered) {
-                  log.warn(
-                    `OpenRouter speaker guard: generation stopped at detected speaker label "${guardResult.matchedSpeaker ?? "unknown"}"`,
-                  );
-                  return;
                 }
               }
-            }
 
-            if (Date.now() - lastMeaningfulAt > inactivityTimeoutMs) {
-              currentController.abort();
-              throw new Error("OpenRouter stream timed out due to inactivity");
+              if (Date.now() - lastMeaningfulAt > inactivityTimeoutMs) {
+                currentController.abort();
+                throw new Error("OpenRouter stream timed out due to inactivity");
+              }
+            }
+          } finally {
+            // Every exit other than a completed stream (retry, early return, inactivity
+            // timeout, or a consumer abandoning this generator) leaves the response body open,
+            // holding its buffers and connection until it is cancelled explicitly.
+            if (!readerSettled) {
+              await reader.cancel().catch(() => undefined);
             }
           }
 
@@ -1051,7 +1053,7 @@ export class OpenrouterStreamAdapter extends BaseStreamAdapter {
           },
         };
       }
-      yield this.createProviderErrorChunk(error);
+      yield this.createProviderErrorChunk(error, context);
     }
   }
 
@@ -2632,16 +2634,7 @@ export class OpenrouterStreamAdapter extends BaseStreamAdapter {
             if (!seesImages) {
               continue;
             }
-            const sourceUrl = img.originalUrl || img.url;
-
-            responseParts.push({
-              type: "image_url",
-              image_url: {
-                url: sourceUrl,
-                // OpenRouter allows URLs or data URLs; mimeType not required here
-              },
-            });
-            log.info(`OpenrouterStreamAdapter: Added tool image reference for context: ${sourceUrl}`);
+            responseParts.push(await inlineToolResponseImage(img, "OpenrouterStreamAdapter"));
           }
         }
 

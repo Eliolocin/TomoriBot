@@ -9,6 +9,7 @@ import type { ErrorContext, PrivacyLevel, UserPersonalizationConfigsRow, UserRow
 import { PrivacyLevel as PrivacyLevelValue, userSchema } from "@/types/db/schema";
 import type { PersonalSettingsExportData } from "@/types/db/dataExport";
 import { personalSettingsExportDataSchema } from "@/types/db/dataExport";
+import { DatabaseUnavailableError } from "@/types/errors";
 import { getCachedUserRow, invalidateUserCache, invalidateUserBlacklistCache } from "@/utils/cache/userCache";
 import { sql, withTransientDbRetry } from "@/utils/db/client";
 import { validateUserFields } from "@/utils/db/sqlSecurity";
@@ -302,13 +303,20 @@ class UserRepository implements IRepository<UserExportShape> {
    */
   async getPrivacyLevel(userDiscId: string): Promise<PrivacyLevel> {
     try {
-      const result = await sql`
-        SELECT privacy_level
-        FROM users
-        WHERE user_disc_id = ${userDiscId}
-        LIMIT 1
-      `;
+      const result = await withTransientDbRetry(
+        async () =>
+          await sql`
+          SELECT privacy_level
+          FROM users
+          WHERE user_disc_id = ${userDiscId}
+          LIMIT 1
+        `,
+        "get privacy level",
+      );
 
+      // A user with no row is genuinely new, and MINIMAL is the right default for them. This
+      // branch must not be merged with the failure path below: an absent row and an unreadable
+      // database are different facts, and only one of them permits a permissive answer.
       if (!result.length) {
         return PrivacyLevelValue.MINIMAL;
       }
@@ -322,8 +330,11 @@ class UserRepository implements IRepository<UserExportShape> {
 
       return level as PrivacyLevel;
     } catch (error) {
+      // Returning MINIMAL here treated a user who chose FULL (completely invisible) as fully
+      // personalizable for the duration of every pool cascade, because this catch cannot tell
+      // an unreadable database from a new user. Callers that cannot propagate must pick FULL.
       log.error(`Error checking privacy level for user ${userDiscId}:`, error);
-      return PrivacyLevelValue.MINIMAL;
+      throw new DatabaseUnavailableError(`Failed to read the privacy level for user ${userDiscId}`);
     }
   }
 
@@ -368,21 +379,27 @@ class UserRepository implements IRepository<UserExportShape> {
    */
   async isBlacklisted(serverDiscId: string, userDiscId: string): Promise<boolean> {
     try {
-      const result = await sql`
-        SELECT EXISTS (
-          SELECT 1
-          FROM personalization_blacklist pb
-          JOIN servers s ON pb.server_id = s.server_id
-          WHERE s.server_disc_id = ${serverDiscId}
-          AND pb.user_disc_id = ${userDiscId}
-        ) as "exists";
-      `;
+      const result = await withTransientDbRetry(
+        async () =>
+          await sql`
+          SELECT EXISTS (
+            SELECT 1
+            FROM personalization_blacklist pb
+            JOIN servers s ON pb.server_id = s.server_id
+            WHERE s.server_disc_id = ${serverDiscId}
+            AND pb.user_disc_id = ${userDiscId}
+          ) as "exists";
+        `,
+        "check personalization blacklist",
+      );
 
       // biome-ignore lint/style/noNonNullAssertion: Query guarantees result[0] exists.
       return result[0]!.exists;
     } catch (error) {
+      // Returning false meant a moderation control that evaporated whenever the database
+      // hiccuped. Callers that cannot propagate must treat the restriction as still in force.
       log.error(`Error checking blacklist for user ${userDiscId} in server ${serverDiscId}:`, error);
-      return false;
+      throw new DatabaseUnavailableError(`Failed to read the blacklist entry for user ${userDiscId}`);
     }
   }
 
@@ -1182,37 +1199,42 @@ class UserRepository implements IRepository<UserExportShape> {
     try {
       log.info(`Ensuring user ${userDiscId} exists (${displayName})`);
 
-      await sql.begin(async (tx) => {
-        const [row] = await tx`
-          WITH inserted_user AS (
-            INSERT INTO users (
-              user_disc_id,
-              language_pref,
-              registration_locale
-            ) VALUES (
-              ${userDiscId},
-              ${language},
-              ${language}
+      // Wrapped where the raw driver error can still reach the helper: a `try/catch` inside the
+      // thunk would hand it a resolved value and the retry would never fire. Replay-safe because
+      // both writes are `ON CONFLICT DO NOTHING`.
+      await withTransientDbRetry(async () => {
+        await sql.begin(async (tx) => {
+          const [row] = await tx`
+            WITH inserted_user AS (
+              INSERT INTO users (
+                user_disc_id,
+                language_pref,
+                registration_locale
+              ) VALUES (
+                ${userDiscId},
+                ${language},
+                ${language}
+              )
+              ON CONFLICT (user_disc_id) DO NOTHING
+              RETURNING user_id
             )
-            ON CONFLICT (user_disc_id) DO NOTHING
-            RETURNING user_id
-          )
-          SELECT user_id
-          FROM inserted_user
-          UNION ALL
-          SELECT user_id
-          FROM users
-          WHERE user_disc_id = ${userDiscId}
-            AND NOT EXISTS (SELECT 1 FROM inserted_user)
-          LIMIT 1
-        `;
+            SELECT user_id
+            FROM inserted_user
+            UNION ALL
+            SELECT user_id
+            FROM users
+            WHERE user_disc_id = ${userDiscId}
+              AND NOT EXISTS (SELECT 1 FROM inserted_user)
+            LIMIT 1
+          `;
 
-        if (!row?.user_id) {
-          throw new Error(`User ${userDiscId} was not returned after registration upsert`);
-        }
+          if (!row?.user_id) {
+            throw new Error(`User ${userDiscId} was not returned after registration upsert`);
+          }
 
-        await this.ensureUserPersonalizationConfigRow(row.user_id, tx, displayName);
-      });
+          await this.ensureUserPersonalizationConfigRow(row.user_id, tx, displayName);
+        });
+      }, "register user");
 
       const userData = await this.loadByDiscordId(userDiscId);
 

@@ -54,6 +54,8 @@ interface ModuleMockRegistrar {
 
 interface MockScope {
   isActive(): boolean;
+  /** Registers an undo run in the declaring file's `afterAll`, before the scope closes. */
+  onClose(restore: () => void): void;
 }
 
 /**
@@ -61,10 +63,12 @@ interface MockScope {
  * file that declared them.
  *
  * Bun keeps the mocked exports in its process-wide registry after the file
- * finishes. The returned values therefore remain stable proxies, but switch
- * back to the matching hoisted-real export in this file's `afterAll` hook.
- * This preserves the test's behavioral stubs while making the leaked module
- * harmless to files that run later in the same `bun test` process.
+ * finishes, so each export is neutralised in this file's `afterAll` hook rather
+ * than unregistered. A function export becomes a proxy that switches back to the
+ * hoisted-real function; an object export keeps its genuine identity and has the
+ * overridden members restored on it ({@link scopeObjectExport} explains why the
+ * two differ). Either way the file's behavioral stubs survive while the leaked
+ * module stays harmless to files that run later in the same `bun test` process.
  *
  * Every registered module must have a matching hoisted namespace in
  * `realModules`. Factories should still spread that namespace so newly-added
@@ -79,12 +83,17 @@ export function createScopedModuleMocker(
   realModules: Readonly<Record<string, object>>,
 ): ModuleMockRegistrar {
   let active = true;
+  const restores: Array<() => void> = [];
   const scope: MockScope = {
     isActive: () => active,
+    onClose: (restore) => restores.push(restore),
   };
 
   afterAll(() => {
     active = false;
+    // Reverse order so nested overrides of the same member unwind correctly.
+    for (const restore of restores.reverse()) restore();
+    restores.length = 0;
   });
 
   return {
@@ -129,19 +138,7 @@ function scopeExportValue(scope: MockScope, name: string, realValue: unknown, mo
   }
 
   if (isObject(realValue) && isObject(mockedValue)) {
-    let proxy: object;
-    proxy = new Proxy(realValue, {
-      get(target, property, receiver) {
-        const source = scope.isActive() ? mockedValue : target;
-        const value = Reflect.get(source, property, source === target ? receiver : source);
-        return typeof value === "function" && requiresBoundReceiver(source) ? value.bind(source) : value;
-      },
-      set(target, property, value, receiver) {
-        const destination = scope.isActive() ? mockedValue : target;
-        return Reflect.set(destination, property, value, receiver === proxy ? destination : receiver);
-      },
-    });
-    return proxy;
+    return scopeObjectExport(scope, realValue, mockedValue);
   }
 
   throw new Error(
@@ -154,14 +151,45 @@ function isObject(value: unknown): value is object {
   return typeof value === "object" && value !== null;
 }
 
-function requiresBoundReceiver(value: object): boolean {
-  return (
-    value instanceof Map ||
-    value instanceof Set ||
-    value instanceof WeakMap ||
-    value instanceof WeakSet ||
-    value instanceof Date
-  );
+/**
+ * Pristine descriptors captured the first time a member is overridden, so a
+ * second scope overriding the same member still restores the genuine one rather
+ * than a previous file's stub.
+ */
+const pristineMembers = new WeakMap<object, Map<PropertyKey, PropertyDescriptor | undefined>>();
+
+/**
+ * Installs a factory's overrides directly onto the genuine export and returns
+ * that same object, undoing them when the declaring file's scope closes.
+ *
+ * A Proxy stand-in cannot be used for object exports. Bun's `spyOn` installs
+ * nothing at all on a Proxy: no throw, no missing export, the spy records zero
+ * calls, and a later file's assertions quietly observe the unspied
+ * implementation. Keeping the export identity genuine is what lets that spy
+ * land, which is the same reason `stubLogMembers` mutates the `log` singleton.
+ */
+function scopeObjectExport(scope: MockScope, realValue: object, mockedValue: object): object {
+  const pristine = pristineMembers.get(realValue) ?? new Map<PropertyKey, PropertyDescriptor | undefined>();
+  pristineMembers.set(realValue, pristine);
+
+  for (const key of Reflect.ownKeys(mockedValue)) {
+    const override = Reflect.getOwnPropertyDescriptor(mockedValue, key);
+    if (!override) continue;
+
+    if (!pristine.has(key)) pristine.set(key, Reflect.getOwnPropertyDescriptor(realValue, key));
+    const original = pristine.get(key);
+
+    // A frozen or sealed export cannot be overridden; leaving it real is safer
+    // than throwing from inside a `mock.module` factory, which runs at link time.
+    if (!Reflect.defineProperty(realValue, key, { ...override, configurable: true })) continue;
+
+    scope.onClose(() => {
+      if (original) Reflect.defineProperty(realValue, key, original);
+      else Reflect.deleteProperty(realValue, key);
+    });
+  }
+
+  return realValue;
 }
 
 /**

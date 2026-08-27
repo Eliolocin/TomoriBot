@@ -107,6 +107,8 @@
       api_key_missing_description: `I need an active provider to respond. A member with **Manage Server** permission can run \`/config setup\` for first setup or \`/provider add\` to save a provider.`,
       api_key_error_title: `API Key Error`,
       api_key_error_description: `There was an issue accessing or decrypting the configured provider credentials. Please reconfigure them using \`/provider add\`.`,
+      database_unavailable_title: `Database Unreachable`,
+      database_unavailable_description: `I could not reach my database just now, so I do not know how this server is configured. Nothing is broken and no settings were changed. Please try again in a moment.`,
       personal_provider_required_title: `Personal Provider Required`,
       personal_provider_required_description: `This server is using member-provided AI access for user-triggered messages. Run \`/help personal-provider\` and then \`/personal provider add\` to set up your own provider.`,
       personal_provider_credentials_error_title: `Personal Provider Error`,

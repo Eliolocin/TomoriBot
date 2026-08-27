@@ -17,7 +17,14 @@ friends still run through host Bun and the host PostgreSQL client tools. See
 [Maintenance & Backups](/self-hosting/maintenance/) for the Compose-specific procedures.
 :::
 
-## 1. Required `.env` values
+## 1. Get the code
+
+```sh
+git clone https://github.com/Bredrumb/TomoriBot.git
+cd TomoriBot
+```
+
+## 2. Required `.env` values
 
 Start from the example file:
 
@@ -44,7 +51,7 @@ document/RAG memory and scheduled cleanup work out of the box. Don't set `POSTGR
 `POSTGRES_PORT`, `POSTGRES_USER`, or `POSTGRES_DB` for Compose; they're managed for you.
 :::
 
-## 2. Build and run
+## 3. Build and run
 
 ```sh
 docker compose build   # first time, or after code/dependency changes
@@ -55,7 +62,7 @@ For later starts, `docker compose up` alone is enough unless you changed code or
 dependencies. When the bot is online, run `/config setup` in Discord to add your AI
 provider key — see the [Quickstart](/introduction/quickstart/) for the in-Discord side.
 
-## 3. Optional sidecars (Compose profiles)
+## 4. Optional sidecars (Compose profiles)
 
 Sidecars are opt-in via Compose profiles, so you only run what you need:
 

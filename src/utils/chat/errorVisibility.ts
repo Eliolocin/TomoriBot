@@ -3,9 +3,9 @@ import type { TomoriState } from "@/types/db/schema";
 import type { ChatIncoming } from "@/utils/chat/types";
 import { doesMessageMatchTrigger } from "@/utils/chat/triggerProcessor";
 import { normalizeRenderModifierName, resolveRenderModifierSourcePersona } from "@/utils/discord/renderModifierParser";
-import { escapeRegExp } from "@/utils/text/processors/regexUtils";
+import { escapeRegExp, wrapWithWordBoundary } from "@/utils/text/processors/regexUtils";
 
-const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",")
+export const BASE_TRIGGER_WORDS: readonly string[] = process.env.BASE_TRIGGER_WORDS?.split(",")
   .map((word) => word.trim())
   .filter((word) => word.length > 0) || ["tomori", "tomo", "トモリ", "ともり"];
 
@@ -15,7 +15,7 @@ export function isBaseTriggerWordMatch(content: string): boolean {
       if (content.includes(baseWord)) {
         return true;
       }
-    } else if (new RegExp(`\\b${escapeRegExp(baseWord)}\\b`, "i").test(content)) {
+    } else if (new RegExp(wrapWithWordBoundary(escapeRegExp(baseWord)), "iu").test(content)) {
       return true;
     }
   }

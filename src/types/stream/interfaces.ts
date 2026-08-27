@@ -28,6 +28,7 @@ import type { TomoriState } from "../db/schema";
 import type { StructuredContextItem } from "../misc/context";
 import type { DeliveredStreamMessage } from "../tool/interfaces";
 import type { MessageIdMap } from "@/utils/text/messageIdMap";
+import { recordProviderErrorStat } from "@/utils/provider/providerErrorMetrics";
 
 /**
  * Normalized chunk format that all providers convert their raw chunks to
@@ -140,6 +141,9 @@ export interface StreamContext {
 
   messageIdMap?: MessageIdMap;
 
+  /** Internal `users` FK of the turn's triggerer; scopes provider-failure telemetry. */
+  triggererUserId?: number;
+
   // Shared sink (reference threaded from StreamingContext) that the orchestrator appends to on
   // every successful send, so runGenerationTurn can delete a superseded attempt's partial output.
   deliveredMessageRefs?: DeliveredStreamMessage[];
@@ -227,7 +231,16 @@ export abstract class BaseStreamAdapter implements StreamProvider {
 
   protected onRawChunk(_chunk: RawStreamChunk): void {}
 
-  protected onProviderError(_error: unknown): void {}
+  /**
+   * Fired once per terminal provider failure, before the error chunk is yielded.
+   *
+   * The base implementation records the `provider_error` counter, which is the only aggregate
+   * record of provider failures that exists: `error_logs` is dead by decision, so a subclass that
+   * overrides this must call `super.onProviderError(...)` or that provider goes dark.
+   */
+  protected onProviderError(_error: unknown, providerError: ProviderError, context?: StreamContext): void {
+    recordProviderErrorStat(this.adapterInfo.name, providerError, context);
+  }
 
   getProviderInfo(): {
     name: string;
@@ -260,15 +273,21 @@ export abstract class BaseStreamAdapter implements StreamProvider {
     return chunk;
   }
 
+  /**
+   * @param context - The failing stream's context; omit only where none is in scope. Without it
+   *                  the failure cannot be scoped to a server and goes unrecorded.
+   */
   protected createProviderErrorChunk(
     error: unknown,
+    context?: StreamContext,
     metadata?: Record<string, unknown>,
     providerName = this.adapterInfo.name,
   ): RawStreamChunk {
-    this.onProviderError(error);
+    const providerError = this.handleProviderError(error);
+    this.onProviderError(error, providerError, context);
     return this.createRawChunk(
       {
-        error: this.handleProviderError(error),
+        error: providerError,
       },
       {
         error: true,

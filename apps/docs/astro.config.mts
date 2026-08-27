@@ -280,9 +280,6 @@ export default defineConfig({
     "/en/": "/en/introduction/",
     "/ja/": "/ja/introduction/",
     "/architecture/entry-point/": "/en/architecture/entry-point/",
-    "/architecture/cloud/azure-application-logs/": "/en/architecture/cloud/azure-application-logs/",
-    "/architecture/cloud/azure-production-deployment/": "/en/architecture/cloud/azure-production-deployment/",
-    "/architecture/cloud/azure-vertex-auth/": "/en/architecture/cloud/azure-vertex-auth/",
     "/architecture/integrations/discord/message-components-v2/": "/en/architecture/integrations/discord/message-components-v2/",
     "/architecture/integrations/discord/modal-input-components/": "/en/architecture/integrations/discord/modal-input-components/",
     "/architecture/integrations/matrix/bridge/": "/en/architecture/integrations/matrix/bridge/",
@@ -409,8 +406,6 @@ export default defineConfig({
     "/self-hosting/local-endpoints/text-to-speech/chatterbox/": "/en/self-hosting/local-endpoints/text-to-speech/chatterbox/",
     "/self-hosting/local-endpoints/text-to-speech/irodoritts/": "/en/self-hosting/local-endpoints/text-to-speech/irodoritts/",
     "/self-hosting/local-endpoints/text-to-speech/qwen3tts/": "/en/self-hosting/local-endpoints/text-to-speech/qwen3tts/",
-    "/wiki/azure-production-inspection/": "/en/wiki/azure-production-inspection/",
-    "/wiki/azure-terraform-state-recovery/": "/en/wiki/azure-terraform-state-recovery/",
     "/wiki/refactor-record/": "/en/wiki/refactor-record/",
     "/wiki/threat-models/": "/en/wiki/threat-models/",
     "/introduction/quickstart/": "/en/introduction/quickstart/",
@@ -432,7 +427,6 @@ export default defineConfig({
     "/features/stats-and-insights": "/en/features/setup-administration/stats-and-insights/",
     "/features/matrix-bridge": "/en/features/integrations/matrix-bridge/",
     "/features/sillytavern-support": "/en/features/integrations/sillytavern-support/",
-    "/architecture/cloud/azure-terraform-state-recovery": "/en/wiki/azure-terraform-state-recovery/"
   },
 
   // Docs content lives at repo-root `docs/`, surfaced via a junction at `src/content/docs`

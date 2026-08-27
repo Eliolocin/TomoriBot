@@ -1,4 +1,4 @@
-﻿## English | [日本語](.github/README_ja.md)
+## English | [日本語](.github/README_ja.md)
 
 > [!NOTE]
 > This README is a quick overview. For the full, up-to-date documentation (setup guides, feature walkthroughs, provider info, and more) visit **[docs.tomoribot.app](https://docs.tomoribot.app/)**.

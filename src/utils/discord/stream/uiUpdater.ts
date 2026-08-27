@@ -8,6 +8,7 @@ import { invalidateWebhookCache } from "@/utils/discord/webhook/cache";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhook/personaDispatch";
 import type { ResolvedWebhookIdentity } from "@/utils/discord/webhook/identity";
 import { sendWebhookReplyNotice } from "@/utils/discord/webhookReply";
+import { classifySendFailure, clearSendFailure, noteSendFailure } from "@/utils/discord/stream/sendFailureCache";
 import {
   recordChannelDeliveredBotMessage,
   recordChannelDeliveredWebhookIdentity,
@@ -238,6 +239,9 @@ export class StreamUiUpdater {
         });
       }
 
+      // Clears any cached refusal so a lifted timeout or a granted permission takes effect at
+      // once, rather than after the remainder of the TTL.
+      clearSendFailure(context.channel.id);
       this.recordSuccessfulSend(payload, textForAccumulation, context, state, sentMessage, deliveredWebhookIdentity);
       return sentMessage;
     } catch (discordError) {
@@ -282,7 +286,16 @@ export class StreamUiUpdater {
         );
       }
 
-      log.error("Stream Send: Discord API error when sending message", discordError, {
+      // A refused send is cached so the admission gate can stop generating for this channel.
+      // Only the first refusal of an episode is logged at error level: the rest are the same
+      // fact repeated, and at error level they crowd out unrelated signal (one guild's timeout
+      // once accounted for 63% of a day's error rows).
+      const sendFailureReason = classifySendFailure(discordError);
+      const isFirstOfEpisode = sendFailureReason
+        ? noteSendFailure(context.channel.id, sendFailureReason).isFirstOfEpisode
+        : true;
+
+      const sendErrorMetadata = {
         serverId: context.tomoriState?.server_id,
         errorType: "StreamOrchestrator",
         metadata: {
@@ -290,8 +303,18 @@ export class StreamUiUpdater {
           contentLength: textForAccumulation.length,
           contentPreview: textForAccumulation.substring(0, 200),
           usingWebhook: !!context.webhook || !!identityOverride,
+          ...(sendFailureReason ? { sendFailureReason } : {}),
         },
-      });
+      };
+
+      if (isFirstOfEpisode) {
+        log.error("Stream Send: Discord API error when sending message", discordError, sendErrorMetadata);
+      } else {
+        log.warn(
+          `Stream Send: suppressed repeat ${sendFailureReason} for channel ${context.channel.id}`,
+          discordError as Error,
+        );
+      }
 
       throw new Error(
         `Discord send failed: ${discordError instanceof Error ? discordError.message : String(discordError)}`,

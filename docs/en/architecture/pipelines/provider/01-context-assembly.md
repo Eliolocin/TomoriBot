@@ -78,6 +78,10 @@ After context assembly completes (before the generator loop begins):
   the misleading `Requests ending with a model turn are not supported`. AI Studio accepts the mixed
   shape, but both Gemini-schema adapters emit the stricter one so a payload that works on one works
   on the other. OpenAI-compatible builders reach the same shape via a synthetic `user` message.
+  They download tool-returned images locally, verify their MIME type from recognizable file bytes,
+  optimize them, and replay them as inline data URLs. Providers never need to fetch expiring or
+  access-restricted Discord media URLs. Tool-returned GIFs use a compatibility placeholder instead
+  of being submitted to endpoints that reject animated image input.
 - `config.tools` (if non-empty) has been attached to the request config after dynamic tool assembly
   and provider-specific serialization.
 

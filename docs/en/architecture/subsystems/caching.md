@@ -47,6 +47,30 @@ guilds recorded roughly 90,900 discord.js entries (members ~31,800, users ~27,10
 channels ~11,200, emojis ~6,500) against roughly 6,500 entries across every cache in this document.
 `cacheMetricsLogger` reports both under `discord_*` and per-cache names.
 
+### Where the measurements go
+
+`cacheMetricsLogger` writes each snapshot to two sinks, because they fail at different times:
+
+| Sink | Written by | Survives |
+|---|---|---|
+| Structured log line | `log.metric("cache_sizes", ...)` | container recreate, host reboot, and the bot stalling, since it lands in a host file |
+| `metric_samples` row | `metricSampleRepository.recordSample()` | whatever the database survives; it is the copy Grafana can graph |
+
+The same interval emits a second row under `metric_name = 'host_memory'`, sampling the host's
+`/proc` and `/sys` counters rather than this process's. It deliberately has no `log.metric()` twin:
+`tomoribot-oom-observer` already writes those counters to disk every 15 s, so a 5-minute copy would
+duplicate a finer record while adding to that file's growth. The database row is the part that did
+not exist, since removing the monitoring agent left host memory with no queryable series.
+
+The database insert is fire-and-forget and never rejects: a telemetry sample must not be able to
+break the interval that produces it. It is deliberately **not** retried, because for a 5-minute
+sample a retry adds load to a connection pool at exactly the moment the pool is already failing.
+
+Retention rides the same write path, pruning at most once per `METRIC_SAMPLE_PRUNE_INTERVAL_MS` and
+deleting rows older than `METRIC_SAMPLE_RETENTION_DAYS`. It is not a scheduled job: production runs
+with schema management disabled, which skips all pg_cron setup, and pg_cron is not installed on the
+server, so a scheduled job would never run and nothing would report that the table was growing.
+
 Investigate `sweepers` in `src/init/discord.ts` before tuning anything here. Configured sweepers:
 
 | Cache | Policy |
@@ -211,7 +235,7 @@ the next refresh window to reclaim a few hundred KB.
 
 ### 14b) Channel system prompt cache (`channelPromptCache.ts`)
 
-- **Scope:** per `(server_id, channel_disc_id)` — one entry per channel that may carry an override
+- **Scope:** per `(server_id, channel_disc_id)`: one entry per channel that may carry an override
 - **Value:** `{ prompt, mode }` (`append`/`replace`) for the per-channel system prompt, or `null`
 - **Negative caching:** channels with no override cache `null` so DM channels and unconfigured channels cost a single cheap lookup
 - Default TTL: `TOMORI_STATE_CACHE_TTL_MINUTES` (default 10)
@@ -232,7 +256,7 @@ the next refresh window to reclaim a few hundred KB.
 
 - **Scope:** per Discord `message_disc_id`
 - **Value:** the `persona_sprite_messages` mapping row, or `null` (negative entry) when the
-  message has no sprite mapping — most persona webhook messages are plain sends, so caching
+  message has no sprite mapping. Most persona webhook messages are plain sends, so caching
   the miss avoids re-querying them every turn
 - Entries are **immutable** (a sent message's sprite never changes), so the cache needs no
   invalidation; the TTL only bounds memory (`PERSONA_SPRITE_MESSAGE_CACHE_TTL_MINUTES`, default 120)

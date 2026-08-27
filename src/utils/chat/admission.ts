@@ -9,8 +9,9 @@ import { transcribeMessageAudioAttachment } from "@/utils/audio/audioAttachmentT
 import { extractBridgeUserId } from "@/utils/bridges";
 import { createStandardEmbed, sendStandardEmbed } from "@/utils/discord/embedHelper";
 import { sendUserTranscriptViaWebhook } from "@/utils/discord/webhook/webhookCore";
+import { getBlockedSendReason } from "@/utils/discord/stream/sendFailureCache";
 import { ColorCode, log } from "@/utils/misc/logger";
-import { escapeRegExp } from "@/utils/text/processors/regexUtils";
+import { escapeRegExp, wrapWithWordBoundary } from "@/utils/text/processors/regexUtils";
 import { doesMessageMatchTrigger, isMatrixRelayMessage, isRealUserLikeMessage } from "@/utils/chat/triggerProcessor";
 import { isActiveNaturalStopTurn, selfReplySuppressionUntil } from "@/utils/chat/channelQueue";
 import { cleanupTextQuotaTriggerStates } from "@/utils/chat/textQuotaState";
@@ -22,6 +23,18 @@ import {
 } from "@/utils/chat/selfReplyState";
 import type { ChatAdmission, ChatIncoming, NonRunnableChatAdmission, TomoriChatInput } from "@/utils/chat/types";
 import type { Message } from "discord.js";
+
+/**
+ * Whether a moderator has timed the bot out in this guild.
+ *
+ * Reads the cached member only. Fetching would turn a per-turn gate into a Discord round trip,
+ * and a stale answer is self-correcting: the send path still classifies the resulting 50013.
+ */
+function isBotTimedOut(guild: Guild, client: ChatIncoming["client"]): boolean {
+  if (!client.user) return false;
+  const botMember = guild.members.cache.get(client.user.id);
+  return botMember?.isCommunicationDisabled() ?? false;
+}
 
 export function normalizeChatInvocation(input: TomoriChatInput): ChatIncoming {
   return {
@@ -228,6 +241,21 @@ export async function evaluateChatAdmission(incoming: ChatIncoming): Promise<Cha
     if (!canSend) {
       return blocked("cannot_send_in_channel");
     }
+
+    // A timed-out member keeps every permission bit, so the check above passes while Discord
+    // rejects the send with 50013 regardless. Nothing in the bitfield expresses this, which is
+    // why it has to be read from the member. One production guild timed the bot out and drew
+    // 397 failed sends across two days, each one a completed LLM call thrown away.
+    if (isBotTimedOut(channel.guild, client)) {
+      return blocked("bot_timed_out_in_guild");
+    }
+
+    // Backstop for whatever the two checks above cannot see. They both reason about state that
+    // should predict a refusal; this one reacts to a refusal that actually happened, so it holds
+    // for causes not yet identified. Cleared the moment a send lands.
+    if (getBlockedSendReason(channel.id)) {
+      return blocked("recent_send_refused");
+    }
   }
 
   const { earlyTomoriState, earlyAllPersonas } = await loadEarlyTomoriState(channelScope.serverDiscId, channel.id);
@@ -427,15 +455,18 @@ function createNaturalStopPatterns(): RegExp[] {
     "ちょっと待って",
   ];
 
+  // Only the single-word English stops take a word boundary. The Japanese phrases must stay
+  // unwrapped: Japanese writes without inter-word spaces, so a boundary would reject every
+  // natural form that continues past the phrase (「もういい」 inside 「もういいよ」).
   const patterns: RegExp[] = [];
   for (const stop of basicStops) {
-    patterns.push(new RegExp(`\\b${stop}\\b`, "i"));
+    patterns.push(new RegExp(wrapWithWordBoundary(stop), "iu"));
   }
   for (const polite of politeStops) {
     patterns.push(new RegExp(polite, "i"));
   }
   for (const dismiss of dismissive) {
-    patterns.push(new RegExp(`\\b${dismiss}\\b`, "i"));
+    patterns.push(new RegExp(wrapWithWordBoundary(dismiss), "iu"));
   }
   for (const jp of japanese) {
     patterns.push(new RegExp(jp, "i"));
@@ -498,7 +529,7 @@ export async function resolveAdmissionChannelScope(
       if (/[\u3040-\u30FF\u4E00-\u9FFF]/.test(baseWord)) {
         return message.content.includes(baseWord);
       }
-      return new RegExp(`\\b${escapeRegExp(baseWord)}\\b`, "i").test(message.content);
+      return new RegExp(wrapWithWordBoundary(escapeRegExp(baseWord)), "iu").test(message.content);
     });
   }
   if (!hasExplicitErrorVisibility && !shouldShowError && client.user && message.mentions.users.has(client.user.id)) {
@@ -591,7 +622,7 @@ export async function shouldBlockReplyToOtherBot(args: {
       if (/[\u3040-\u30FF\u4E00-\u9FFF]/.test(word)) {
         return message.content.includes(word);
       }
-      return new RegExp(`\\b${escapeRegExp(word)}\\b`, "i").test(message.content);
+      return new RegExp(wrapWithWordBoundary(escapeRegExp(word)), "iu").test(message.content);
     }) ||
     earlyAllPersonas.some((persona) => {
       const triggers = persona.trigger_words ?? [];

@@ -186,13 +186,17 @@ export function buildGoogleThinkingConfig(
   }
 
   if (effectiveLevel === "none") {
+    const isMinimalSupported = isGeminiFlashModel(model) && !model.includes("3.7");
     return {
-      thinkingLevel: isGeminiFlashModel(model) ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW,
+      thinkingLevel: isMinimalSupported ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW,
     };
   }
 
   if (effectiveLevel === "minimal") {
-    return { thinkingLevel: ThinkingLevel.MINIMAL };
+    const isMinimalSupported = !model.includes("3.7");
+    return {
+      thinkingLevel: isMinimalSupported ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW,
+    };
   }
 
   if (effectiveLevel === "low") {

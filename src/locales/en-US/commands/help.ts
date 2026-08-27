@@ -701,7 +701,7 @@ Unknown placeholders are stripped automatically.`,
     "memory-tagging": {
       description: `Learn how memory keyword and channel tagging works`,
       title: `Memory Tagging`,
-      embed_description: `By default, all memories are sent with every prompt. Tagging lets you control which memories activate and where. Turn on memory and channel tagging with {memoryTaggingSet}.`,
+      embed_description: `Scope narrows things first: a server memory only reaches prompts in its own server, a personal memory only when that user is visible in the conversation, and both only for the persona that owns them. Within that scope, all memories are sent with every prompt by default. Tagging narrows it further. Turn on memory and channel tagging with {memoryTaggingSet}.`,
       keywords_title: `Keyword Tags`,
       keywords_description: `- Memories **without** keyword tags will always be active (default behavior)
 - Memories **with** keyword tags will only activate when the keyword is visible in the context

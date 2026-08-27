@@ -216,6 +216,7 @@ export async function buildChatTurnContext(turn: ChatTurn): Promise<ChatTurnCont
     naiContinuationPrefill: incoming.naiContinuationPrefill,
     emptyResponseRetryCount: incoming.retryCount,
     messageIdMap,
+    triggererUserId: turn.userRow.user_id,
     forcedMentions: await resolveForcedMentions(turn),
   };
 

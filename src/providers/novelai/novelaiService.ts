@@ -335,6 +335,7 @@ async function* novelaiGenerateStreamOpenAI(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let completed = false;
 
     try {
       while (true) {
@@ -356,6 +357,7 @@ async function* novelaiGenerateStreamOpenAI(
 
         if (done) {
           log.info("NovelAI OpenAI stream complete");
+          completed = true;
           break;
         }
 
@@ -400,7 +402,11 @@ async function* novelaiGenerateStreamOpenAI(
         }
       }
     } finally {
-      reader.releaseLock();
+      // `releaseLock` only detaches the reader: the body stays open and keeps its buffers and
+      // connection. The inactivity timeout above exits without `done`, which is exactly that case.
+      if (!completed) {
+        await reader.cancel().catch(() => undefined);
+      }
     }
   } catch (error) {
     if (error instanceof Error) {
@@ -413,7 +419,7 @@ async function* novelaiGenerateStreamOpenAI(
         // Per-read inactivity timeout because NAI stopped sending data mid-stream.
         // Yield a final chunk so the stream adapter can flush any buffered text
         // (e.g., incomplete sentence trailing buffer) and terminate cleanly.
-        log.warn(`NovelAI OpenAI: ${error.message} — yielding final chunk to flush buffers`);
+        log.warn(`NovelAI OpenAI: ${error.message}; yielding final chunk to flush buffers`);
         yield { final: true };
       } else {
         log.error("NovelAI OpenAI streaming error:", error);
@@ -480,6 +486,7 @@ async function* novelaiGenerateStreamNative(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let completed = false;
 
     try {
       while (true) {
@@ -499,6 +506,7 @@ async function* novelaiGenerateStreamNative(
 
         if (done) {
           log.info("NovelAI stream completed");
+          completed = true;
           yield { final: true };
           break;
         }
@@ -536,7 +544,11 @@ async function* novelaiGenerateStreamNative(
         }
       }
     } finally {
-      reader.releaseLock();
+      // `releaseLock` only detaches the reader: the body stays open and keeps its buffers and
+      // connection. The inactivity timeout above exits without `done`, which is exactly that case.
+      if (!completed) {
+        await reader.cancel().catch(() => undefined);
+      }
     }
   } catch (error) {
     if (error instanceof Error) {
@@ -545,7 +557,7 @@ async function* novelaiGenerateStreamNative(
         yield { error: "Request timed out" };
       } else if (error.message.includes("stream read timed out")) {
         // Per-read inactivity timeout because NAI stopped sending data mid-stream
-        log.warn(`NovelAI Native: ${error.message} — yielding final chunk to flush buffers`);
+        log.warn(`NovelAI Native: ${error.message}; yielding final chunk to flush buffers`);
         yield { final: true };
       } else {
         log.error("NovelAI streaming failed:", error);
@@ -726,19 +738,19 @@ export async function fetchNovelAISubscription(apiKey: string): Promise<NovelAIS
 
     if (!response.ok) {
       log.warn(
-        `NovelAI subscription fetch failed with status ${response.status} — falling back to env var context limit`,
+        `NovelAI subscription fetch failed with status ${response.status}, so falling back to env var context limit`,
       );
       return null;
     }
 
     const data = (await response.json()) as NovelAISubscription;
     log.info(
-      `NovelAI subscription: tier=${data.tier}, active=${data.active}, perks.contextTokens=${data.perks?.contextTokens ?? "unknown"} (note: contextTokens is NOT the context window — tier number determines that)`,
+      `NovelAI subscription: tier=${data.tier}, active=${data.active}, perks.contextTokens=${data.perks?.contextTokens ?? "unknown"} (note: contextTokens is NOT the context window; tier number determines that)`,
     );
     return data;
   } catch (error) {
     clearTimeout(timeoutId);
-    log.warn("NovelAI subscription fetch threw an error — falling back to env var context limit", error);
+    log.warn("NovelAI subscription fetch threw an error, so falling back to env var context limit", error);
     return null;
   }
 }

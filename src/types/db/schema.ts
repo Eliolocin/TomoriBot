@@ -221,8 +221,10 @@ export const llmSchema = z.object({
   supports_prefix_completion: z.boolean().default(false),
   llm_description: z.string().nullable().optional(),
   ja_description: z.string().nullable().optional(),
-  // Official per-model pricing (USD per million tokens, uncached standard rate). Null for OpenRouter
-  // (dynamic live cache) and free/non-metered providers. Coerced because Postgres NUMERIC arrives as a string.
+  // Official per-model pricing (USD per million tokens, uncached standard rate). Null for
+  // free/non-metered providers. OpenRouter rows are not seeded with a price but are refreshed
+  // from the live API at startup, so SQL-computed cost surfaces can price them; the live cache
+  // stays authoritative for request-time math. Coerced because Postgres NUMERIC arrives as a string.
   input_price_per_million: z.coerce.number().nullable().optional(),
   output_price_per_million: z.coerce.number().nullable().optional(),
   created_at: z.date().optional(),

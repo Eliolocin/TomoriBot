@@ -263,7 +263,8 @@ export function collectStrictChatFlagViolations(rows: LlmInput[]): string[] {
 // providers must carry an explicit catalog price: the env-based price fallback has been removed, so an
 // unpriced row makes resolveModelPricing (src/commands/tool/estimate/cost.ts) return null and the command
 // reports "pricing unavailable". OpenRouter is intentionally absent, because it is priced live from the OpenRouter
-// API cache, with any catalog price acting only as a cache-miss fallback.
+// API cache, with any catalog price acting only as a cache-miss fallback. Its llms rows are still filled in at
+// startup by syncOpenrouterCatalogPricing (src/init/loaders.ts), which SQL-computed cost surfaces read.
 const METERED_FIRST_PARTY_PROVIDERS = new Set<string>([
   "google",
   "vertex",

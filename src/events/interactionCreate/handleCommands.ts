@@ -3,6 +3,7 @@ import { enrichErrorContext, runWithErrorContext } from "@/utils/misc/errorConte
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import { ColorCode, log } from "../../utils/misc/logger";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
+import { DatabaseUnavailableError } from "@/types/errors";
 import { cooldownRepository, serverRepository, statRepository, userRepository } from "@/utils/db/repositories";
 import {
   loadCommandData,
@@ -291,10 +292,18 @@ const runChatInputCommand = async (client: Client, interaction: ChatInputCommand
     // Reply to user with enhanced defensive error handling
     // The improved replyInfoEmbed function can now handle various interaction states more robustly
     try {
+      // A pool retirement now reaches here as a typed error rather than as a plausible-looking
+      // wrong answer, so the reply can say the run is worth repeating instead of implying the
+      // command itself is broken.
+      const isDatabaseUnavailable = error instanceof DatabaseUnavailableError;
       // Always attempt to use the helper function - it will handle the interaction state internally
       await replyInfoEmbed(interaction, initialLocale, {
-        titleKey: "general.errors.unknown_error_title",
-        descriptionKey: "general.errors.unknown_error_description",
+        titleKey: isDatabaseUnavailable
+          ? "general.errors.database_unavailable_title"
+          : "general.errors.unknown_error_title",
+        descriptionKey: isDatabaseUnavailable
+          ? "general.errors.database_unavailable_description"
+          : "general.errors.unknown_error_description",
         color: ColorCode.ERROR,
       });
     } catch (replyError) {

@@ -593,6 +593,21 @@ class ServerRepository implements IRepository<ServerExportShape> {
           RETURNING *
         `;
 
+        // Setup reaches here only when the server has no main persona, and it deliberately
+        // preserves alters while clearing config rows. An alter can therefore already hold the
+        // default name (swapPersona demotes the old main into one), and the persona INSERT below
+        // is the only write in this transaction without an ON CONFLICT clause, so the collision
+        // surfaced as a raw constraint violation that blocked recovery entirely.
+        // Suffixing the alter rather than the incoming main matches the priority schema.sql
+        // already applies to legacy duplicates: `ORDER BY is_alter ASC` keeps mains unsuffixed.
+        await tx`
+          UPDATE personas
+          SET persona_nickname = persona_nickname || ' [dup-' || persona_id::TEXT || ']'
+          WHERE server_id = ${server.server_id}
+            AND is_alter = true
+            AND lower(btrim(persona_nickname)) = lower(btrim(${validConfig.tomoriName}))
+        `;
+
         const [tomori] = await tx`
           INSERT INTO personas (
             server_id,

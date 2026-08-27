@@ -29,9 +29,31 @@ scopedMock.module("@/utils/db/repositories", () => ({
 ```
 
 `createScopedModuleMocker` keeps the controlled behavior active for the declaring
-test file, then delegates leaked exports back to the hoisted real module after its
-`afterAll` hook. Use `overrideMembers` for class instances and classes used through
-static methods; object spread does not copy prototype members.
+test file, then neutralises the leaked exports after its `afterAll` hook. Use
+`overrideMembers` for class instances and classes used through static methods;
+object spread does not copy prototype members.
+
+How an export is neutralised depends on its kind, and the difference matters:
+
+- A **function** export becomes a proxy that switches back to the hoisted real
+  function once the scope closes.
+- An **object** export (a repository singleton, a registry) keeps its genuine
+  identity. The overridden members are installed on the real object and restored
+  from their pristine descriptors when the scope closes.
+
+Objects are handled that way because `spyOn` cannot instrument a proxy. Bun
+installs nothing on one: no throw, no missing export, the spy records zero calls,
+and a later file's assertions quietly observe the unspied implementation. This is
+the same reason `stubLogMembers` mutates the `log` singleton instead of mocking
+`@/utils/misc/logger`.
+
+## Lane classification ignores comments
+
+`scripts/checks/lib/testIsolation.ts` decides which files get a private `bun test`
+process by matching the module-mock marker after removing comments. Explaining a module
+mock in JSDoc therefore does not hand a file a private process. A file that does not
+register a mock shares its lane, so both `bun run test` and a plain `bun test` exercise
+the same shared-process path.
 
 For a pure passthrough, a raw factory with only the matching spread is harmless:
 

@@ -184,7 +184,11 @@ The selected model requires allowing data for paid model training, but your Open
     },
     nvidia: {
       "404_default_message": `The requested NVIDIA NIM model could not be found. It may be deprecated by NVIDIA.`,
-      "500_default_message": `NVIDIA rejected one or more request parameters for this model. If the details name unsupported sampler parameters such as \`min_p\`, set them to \`0\` with \`/model parameters\` to turn them off. If the details name \`logit_bias\`, clear saved entries with \`/model logit-bias remove\`.`,
+      "500_default_message": `The NVIDIA backend serving this model failed. This is usually transient, so try again in a moment. The details below are NVIDIA's own report and are authoritative: if they name a request parameter, adjust that setting rather than guessing.`,
+      // Shown instead of 500_default_message only when NVIDIA's own text names a droppable request
+      // parameter. Asserting this cause on every 500 previously sent users to change settings the
+      // failing payload never carried.
+      "500_parameter_default_message": `NVIDIA rejected one or more request parameters for this model. If the details name unsupported sampler parameters such as \`min_p\`, set them to \`0\` with \`/model parameters\` to turn them off. If the details name \`logit_bias\`, clear saved entries with \`/model logit-bias remove\`.`,
       unknown_default_message: `An unexpected error occurred`,
     },
     self_teach: {

@@ -38,7 +38,8 @@ and **keeps real resource names**, because substituting placeholders into a runb
 Link it from the related architecture page rather than the sidebar.
 
 "Specific to a cloud provider" and "specific to our account" are different axes.
-`docs/en/architecture/cloud/` covers the first; only `docs/en/wiki/` covers the second.
+Both now live under `docs/en/wiki/cloud/<provider>/` on the `release` branch, because the IaC they
+describe ships there too.
 
 Regardless of type, never write credentials, API keys, tokens, private keys, connection strings,
 tenant IDs, or the production VM's public IP into any page. GitHub push protection blocks true
@@ -46,8 +47,7 @@ credentials but does not flag infrastructure identifiers, so those are on the au
 
 A page may legitimately be part guide and part runbook. Split it: keep the architecture description
 public and move the step-by-step procedure to `wiki/`, leaving a one-line pointer behind. See
-[Azure Production Deployment](/architecture/cloud/azure-production-deployment/) and
-[Azure Production Data Inspection](/wiki/azure-production-inspection/) for that shape.
+`docs/en/wiki/cloud/azure/` on the `release` branch for that shape.
 
 ## Frontmatter
 

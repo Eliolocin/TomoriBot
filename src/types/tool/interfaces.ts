@@ -140,6 +140,13 @@ export interface StreamingContext {
   messageIdMap?: MessageIdMap;
 
   /**
+   * Internal `users` FK of whoever triggered this turn, carried so the streaming layer can scope
+   * telemetry without a DB lookup on a hot path. Absent for turns with no resolved triggerer
+   * (scheduler-driven jobs, some manual flows), which simply record nothing.
+   */
+  triggererUserId?: number;
+
+  /**
    * Shared, mutable sink of messages the streaming layer has committed to Discord this turn.
    * The orchestrator pushes one entry per successful send (see uiUpdater's `recordSuccessfulSend`);
    * because it is a reference threaded through {@link buildStreamContext} onto the per-attempt
