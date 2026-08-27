@@ -21,7 +21,8 @@ interval.
 
 ## User BYOK (Bring Your Own Key)
 
-`/server user-byok toggle` requires each member to bring their **own** personal provider for
+`/moderation` **((Member Access))** carries this as a two-state choice. **Allow Server Models** is the
+default; **Require Personal Providers** makes each member bring their **own** personal provider for
 their triggers — the server pays for nothing on user-initiated messages. Server-initiated
 triggers still use the server provider. This is the strongest cost control: it shifts API
 spend entirely to members. Members set theirs up under

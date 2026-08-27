@@ -36,6 +36,7 @@ export type ModerationPanelRoute =
     }
   | { action: "member-access-open"; locale: string }
   | { action: "member-access-submit"; locale: string; nonce: string }
+  | { action: "model-access-set"; locale: string; allowServerModels: boolean }
   | { action: "user-blacklist-add-open"; locale: string }
   | { action: "user-blacklist-add-submit"; locale: string; nonce: string }
   | { action: "user-blacklist-remove-open"; locale: string }
@@ -163,6 +164,11 @@ export function parseModerationPanelRoute(route: ParsedInteractionRoute): Modera
     return { action, locale };
   }
 
+  if (action === "model-access-set" && route.segments.length === 3) {
+    const choice = route.segments[2];
+    if (choice !== "allow" && choice !== "require-personal") return null;
+    return { action, locale, allowServerModels: choice === "allow" };
+  }
   if (action === "member-access-submit" && route.segments.length === 3) {
     const nonce = first;
     if (!nonce || !/^[a-zA-Z0-9_-]+$/.test(nonce)) return null;

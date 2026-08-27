@@ -3,6 +3,11 @@ import type { ChannelPersonaWhitelistRow, ChannelWhitelistRow, RoleWhitelistRow,
 import { CooldownType } from "@/types/db/schema";
 import { whitelistRepository } from "@/utils/db/repositories";
 import type { PersonaUserBlockWithPersona } from "@/utils/db/repositories/PersonaUserBlockRepository";
+import type {
+  ServerModelAccessOperationsDependencies,
+  UpdateServerModelAccessInput,
+  UpdateServerModelAccessResult,
+} from "@/utils/moderation/moderationOperations";
 import {
   addUserToBlacklist,
   addWhitelistRole,
@@ -18,6 +23,7 @@ import {
   replacePersonaChannelWhitelist,
   updateMemberPermissions,
   updateQuotaSettings,
+  updateServerModelAccess,
   upsertWhitelistChannel,
   type ModerationDataDependencies,
   type ModerationMemberAccessDataDependencies,
@@ -1833,5 +1839,65 @@ describe("quota operations (updateQuotaSettings)", () => {
     if (result.status === "failed") {
       expect((result.error as Error).message).toBe("DB write error on daily quota");
     }
+  });
+});
+
+describe("server model access operation", () => {
+  function harness(updateSucceeds: boolean) {
+    const calls: string[] = [];
+    const deps: ServerModelAccessOperationsDependencies = {
+      updateByokConfig: async (serverId, patch) => {
+        calls.push(`write:${serverId}:${patch.user_byok_mode}`);
+        return updateSucceeds;
+      },
+      invalidateCache: (guildId) => {
+        calls.push(`invalidate:${guildId}`);
+      },
+    };
+    return { calls, deps };
+  }
+
+  const input = (overrides: Partial<UpdateServerModelAccessInput> = {}): UpdateServerModelAccessInput => ({
+    guildId: "guild-1",
+    serverId: 7,
+    currentAllowServerModels: true,
+    allowServerModels: false,
+    ...overrides,
+  });
+
+  it("stores the inverse of the positive choice and invalidates only after the write succeeds", async () => {
+    const { calls, deps } = harness(true);
+    const result: UpdateServerModelAccessResult = await updateServerModelAccess(input(), deps);
+
+    // "Require Personal Providers" is the positive label for the stored `user_byok_mode: true`.
+    expect(calls).toEqual(["write:7:true", "invalidate:guild-1"]);
+    expect(result).toEqual({ status: "success", allowServerModels: false });
+  });
+
+  it("stores false when members are allowed back onto the server's models", async () => {
+    const { calls, deps } = harness(true);
+    const result = await updateServerModelAccess(
+      input({ currentAllowServerModels: false, allowServerModels: true }),
+      deps,
+    );
+
+    expect(calls).toEqual(["write:7:false", "invalidate:guild-1"]);
+    expect(result).toEqual({ status: "success", allowServerModels: true });
+  });
+
+  it("writes nothing when the policy already matches", async () => {
+    const { calls, deps } = harness(true);
+    const result = await updateServerModelAccess(input({ allowServerModels: true }), deps);
+
+    expect(calls).toEqual([]);
+    expect(result).toEqual({ status: "unchanged", allowServerModels: true });
+  });
+
+  it("leaves the cache alone when the write fails, so a stale read cannot look authoritative", async () => {
+    const { calls, deps } = harness(false);
+    const result = await updateServerModelAccess(input(), deps);
+
+    expect(calls).toEqual(["write:7:true"]);
+    expect(result).toEqual({ status: "failure", allowServerModels: true });
   });
 });

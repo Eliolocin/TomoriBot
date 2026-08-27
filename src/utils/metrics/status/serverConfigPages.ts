@@ -82,7 +82,7 @@ export async function showServerConfigStatus(
       : autochThresholdMax > config.autoch_threshold
         ? `${config.autoch_threshold}-${autochThresholdMax}`
         : String(config.autoch_threshold);
-  const serverUserByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
+  const serverUserByokToggleMention = commandRegistry.getCommandMention("moderation");
   const userByokValue = localizer(
     locale,
     config.user_byok_mode

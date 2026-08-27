@@ -85,6 +85,7 @@ export interface ModerationRouteDependencies {
   operations: Pick<
     ModerationOperations,
     | "updateMemberPermissions"
+    | "updateServerModelAccess"
     | "addUserToBlacklist"
     | "removeUserFromBlacklist"
     | "removePersonaUserBlock"
@@ -606,6 +607,70 @@ export function createModerationInteractionRoute(
         }
 
         await repaint(interaction, route.locale, "user-blacklist", "channels", 0, scope, panelReceipt);
+        return;
+      }
+
+      if (route.action === "model-access-set") {
+        // Acknowledge before any read or write: Discord drops an unacknowledged interaction after
+        // three seconds, and under a slow database the write would land while the user is told the
+        // application did not respond, inviting a second click on a policy that already changed.
+        await interaction.deferUpdate();
+
+        if (!isAuthorized(interaction)) {
+          await interaction.editReply(terminalPayload(route.locale, "commands.moderation.permission_denied"));
+          return;
+        }
+
+        let scope = await dependencies.resolveScope(interaction, false);
+        if (!scope) {
+          await interaction.editReply(terminalPayload(route.locale, "commands.moderation.not_setup"));
+          return;
+        }
+
+        if (scope.readStatus !== "fresh") {
+          await repaint(interaction, route.locale, "member-access", "channels", 0, scope, {
+            tone: "error",
+            heading: localizer(route.locale, "commands.moderation.model_access_failed"),
+            detail: localizer(route.locale, "commands.moderation.stale_warning"),
+          });
+          return;
+        }
+
+        const result = await dependencies.operations.updateServerModelAccess({
+          guildId: scope.guildId,
+          serverId: scope.serverId,
+          currentAllowServerModels: scope.serverModelAccess.allowServerModels,
+          allowServerModels: route.allowServerModels,
+        });
+
+        const reloadedScope = await dependencies.resolveScope(interaction, false);
+        scope = reloadedScope ?? { ...scope, readStatus: "unavailable" };
+
+        const panelReceipt: PanelReceipt =
+          result.status === "success"
+            ? {
+                tone: "success",
+                heading: localizer(route.locale, "commands.moderation.model_access_updated"),
+                detail: localizer(
+                  route.locale,
+                  result.allowServerModels
+                    ? "commands.moderation.model_access_updated_allowed"
+                    : "commands.moderation.model_access_updated_personal",
+                ),
+              }
+            : result.status === "unchanged"
+              ? {
+                  tone: "info",
+                  heading: localizer(route.locale, "commands.moderation.model_access_unchanged"),
+                  detail: localizer(route.locale, "commands.moderation.model_access_unchanged_detail"),
+                }
+              : {
+                  tone: "error",
+                  heading: localizer(route.locale, "commands.moderation.model_access_failed"),
+                  detail: localizer(route.locale, "commands.moderation.model_access_failed_detail"),
+                };
+
+        await repaint(interaction, route.locale, "member-access", "channels", 0, scope, panelReceipt);
         return;
       }
 

@@ -56,8 +56,8 @@ channels ~11,200, emojis ~6,500) against roughly 6,500 entries across every cach
 | Structured log line | `log.metric("cache_sizes", ...)` | container recreate, host reboot, and the bot stalling, since it lands in a host file |
 | `metric_samples` row | `metricSampleRepository.recordSample()` | whatever the database survives; it is the copy Grafana can graph |
 
-The same interval emits a second row under `metric_name = 'host_memory'`, sampling the host's
-`/proc` and `/sys` counters rather than this process's. It deliberately has no `log.metric()` twin:
+The same interval emits a second row under `metric_name = 'host_memory'`, sampling the host's `procfs`
+and `sysfs` counters rather than this process's. It deliberately has no `log.metric()` twin:
 `tomoribot-oom-observer` already writes those counters to disk every 15 s, so a 5-minute copy would
 duplicate a finer record while adding to that file's growth. The database row is the part that did
 not exist, since removing the monitoring agent left host memory with no queryable series.

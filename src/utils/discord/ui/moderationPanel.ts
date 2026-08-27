@@ -240,6 +240,41 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
           },
         ],
       },
+      {
+        type: ComponentType.TextDisplay,
+        content: `**${localizer(locale, "commands.moderation.model_access_title")}**
+> ${localizer(
+          locale,
+          data.serverModelAccess.allowServerModels
+            ? "commands.moderation.model_access_allowed"
+            : "commands.moderation.model_access_personal_required",
+        )}`,
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            // Only the transition away from the current policy is offered, so the button always
+            // names the change it performs rather than restating the state above it. The route
+            // segment names the stored policy rather than the label, so already-open panels keep
+            // resolving after copy changes.
+            customId: buildModerationCustomId(
+              "model-access-set",
+              locale,
+              data.serverModelAccess.allowServerModels ? "require-personal" : "allow",
+            ),
+            label: localizer(
+              locale,
+              data.serverModelAccess.allowServerModels
+                ? "commands.moderation.model_access_disable_button"
+                : "commands.moderation.model_access_allow_button",
+            ),
+            disabled: data.readStatus !== "fresh",
+          },
+        ],
+      },
     );
   } else if (category === "user-blacklist") {
     if (input.removeTarget) {

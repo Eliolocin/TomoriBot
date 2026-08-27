@@ -86,7 +86,7 @@ than externalising SQL. Size is the signal; the split must follow a coherent dom
 - `server_novelai_imagegen_configs` — `/novelai` image parameters, `/config image-tags` defaults, `nai_diffusion_model_id`
 - `server_nsfw_configs` — `/nsfw` jailbreak toggles
 - `server_speech_configs` — `/speech` Chatterbox parameters, `chatterbox_turbo_enabled`, `chatterbox_cfg_weight`, `chatterbox_exaggeration`
-- `server_byok_configs` — `/server user-byok`
+- `server_byok_configs` — `/moderation` ((Member Access)) server model access
 - `server_memory_configs` — `/memory tagging` settings (`ServerMemoryRepository`)
 - `server_model_configs` — active model-selection FKs (`llm_id`, `embedding_model_id`, `diffusion_model_id`, `video_model_id`, `vision_llm_id`) plus runtime credential/thinking mirrors and Phase 3 inline custom endpoint fields that remain on the active assembled server config
 

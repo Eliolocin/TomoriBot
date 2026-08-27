@@ -263,7 +263,7 @@ const featurePages: readonly HelpPageDefinition[] = [
       toggle_command: mention("personal", "providers"),
       samplers_command: mention("personal", "parameters"),
       fallback_command: mention("personal", "model", "fallback"),
-      byok_command: mention("server", "user-byok", "toggle"),
+      byok_command: mention("moderation"),
     }),
   },
   {

@@ -32,6 +32,7 @@ function createScopeData(overrides: Partial<ModerationScopeData> = {}): Moderati
       sampledialogueMemteachingEnabled: true,
       promptSnapshotEnabled: false,
     },
+    serverModelAccess: { allowServerModels: true },
     userBlacklist: {
       personalizationUserIds: ["u1"],
       personaBlocks: [],
@@ -419,6 +420,122 @@ describe("moderation interaction routes", () => {
       sampledialogueMemteachingEnabled: true,
       promptSnapshotEnabled: false,
     });
+  });
+
+  it("acknowledges the model-access write before it runs, not after", async () => {
+    let acknowledgedAtWrite: boolean | null = null;
+    const interaction = {
+      id: "int-byok",
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: "moderation:v1:model-access-set:en-US:require-personal",
+      guildId: "guild-1",
+      user: { id: "u-manager" },
+      memberPermissions: { has: () => true },
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {
+        interaction.deferred = true;
+      },
+      editReply: async () => undefined,
+    } as unknown as Record<string, unknown> & { deferred: boolean; replied: boolean };
+
+    const route = createModerationInteractionRoute({
+      resolveScope: async () => createScopeData(),
+      operations: {
+        // Sampled from inside the write: ordering is invisible in *what* was called, and Discord
+        // drops an interaction that is not acknowledged within three seconds.
+        updateServerModelAccess: async () => {
+          acknowledgedAtWrite = interaction.deferred || interaction.replied;
+          return { status: "success", allowServerModels: false };
+        },
+      } as never,
+    });
+
+    await route.execute({} as Client, interaction as never, {
+      namespace: "moderation",
+      version: "v1",
+      segments: ["model-access-set", "en-US", "require-personal"],
+    });
+
+    expect(acknowledgedAtWrite).toBe(true);
+  });
+
+  it("denies the model-access write without Manage Server and never touches the setting", async () => {
+    let writeCalls = 0;
+    const editReplyCalls: unknown[] = [];
+    const interaction = {
+      id: "int-byok-denied",
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: "moderation:v1:model-access-set:en-US:require-personal",
+      guildId: "guild-1",
+      user: { id: "u-member" },
+      memberPermissions: { has: () => false },
+      deferUpdate: async () => undefined,
+      editReply: async (payload: unknown) => {
+        editReplyCalls.push(payload);
+      },
+    };
+
+    const route = createModerationInteractionRoute({
+      resolveScope: async () => createScopeData(),
+      operations: {
+        updateServerModelAccess: async () => {
+          writeCalls += 1;
+          return { status: "success", allowServerModels: false };
+        },
+      } as never,
+    });
+
+    await route.execute({} as Client, interaction as never, {
+      namespace: "moderation",
+      version: "v1",
+      segments: ["model-access-set", "en-US", "require-personal"],
+    });
+
+    expect(writeCalls).toBe(0);
+    expect(editReplyCalls).toHaveLength(1);
+  });
+
+  it("blocks the model-access write on a stale read and says so", async () => {
+    let writeCalls = 0;
+    const editReplyCalls: unknown[] = [];
+    const interaction = {
+      id: "int-byok-stale",
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: "moderation:v1:model-access-set:en-US:allow",
+      guildId: "guild-1",
+      user: { id: "u-manager" },
+      memberPermissions: { has: () => true },
+      deferUpdate: async () => undefined,
+      editReply: async (payload: unknown) => {
+        editReplyCalls.push(payload);
+      },
+    };
+
+    const route = createModerationInteractionRoute({
+      resolveScope: async () => createScopeData({ readStatus: "stale" }),
+      operations: {
+        updateServerModelAccess: async () => {
+          writeCalls += 1;
+          return { status: "success", allowServerModels: true };
+        },
+      } as never,
+    });
+
+    await route.execute({} as Client, interaction as never, {
+      namespace: "moderation",
+      version: "v1",
+      segments: ["model-access-set", "en-US", "allow"],
+    });
+
+    expect(writeCalls).toBe(0);
+    expect(JSON.stringify(editReplyCalls[0])).toContain("Server model access was not changed");
   });
 
   it("denies member-access-submit on permission loss between open and submit before any write", async () => {

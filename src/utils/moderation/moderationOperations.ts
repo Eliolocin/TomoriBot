@@ -97,11 +97,22 @@ interface ModerationWhitelistData {
   personaNames: Map<number, string>;
 }
 
+/**
+ * Deliberately a sibling of `memberAccess` rather than a field inside it. The four member-access
+ * checkboxes write `server_member_permissions_configs` in one submit; this writes
+ * `server_byok_configs`. Folding it in would invite a single interaction that writes two tables with
+ * no transaction around them.
+ */
+interface ModerationServerModelAccessData {
+  allowServerModels: boolean;
+}
+
 export interface ModerationScopeData {
   guildId: string;
   serverId: number;
   readStatus: PanelReadStatus;
   memberAccess: ModerationMemberAccessData;
+  serverModelAccess: ModerationServerModelAccessData;
   userBlacklist: ModerationUserBlacklistData;
   whitelist: ModerationWhitelistData;
   quotas: ModerationQuotasData;
@@ -323,6 +334,7 @@ export async function loadModerationScopeData(
           sampledialogueMemteachingEnabled: false,
           promptSnapshotEnabled: false,
         },
+        serverModelAccess: { allowServerModels: true },
         userBlacklist: {
           personalizationUserIds: [],
           personaBlocks: [],
@@ -428,6 +440,9 @@ export async function loadModerationScopeData(
       sampledialogueMemteachingEnabled: Boolean(tomoriState.config.sampledialogue_memteaching_enabled),
       promptSnapshotEnabled: Boolean(tomoriState.config.prompt_snapshot_enabled),
     },
+    // The column is negative (`user_byok_mode` true means members must bring their own provider);
+    // the panel states the permissive side, so it is inverted exactly here and nowhere else.
+    serverModelAccess: { allowServerModels: !tomoriState.config.user_byok_mode },
     userBlacklist: {
       personalizationUserIds: blacklistResult.memberIds,
       personaBlocks: personaBlocksResult.blocks,
@@ -526,6 +541,42 @@ export async function updateMemberPermissions(
     changes: writePlan.changes,
     patch: writePlan.patch,
   };
+}
+
+export interface UpdateServerModelAccessInput {
+  guildId: string;
+  serverId: number;
+  currentAllowServerModels: boolean;
+  allowServerModels: boolean;
+}
+
+export type UpdateServerModelAccessResult = { status: "success" | "unchanged" | "failure"; allowServerModels: boolean };
+
+export interface ServerModelAccessOperationsDependencies {
+  updateByokConfig(serverId: number, patch: { user_byok_mode: boolean }): Promise<boolean>;
+  invalidateCache(guildId: string): void;
+}
+
+const defaultServerModelAccessDependencies: ServerModelAccessOperationsDependencies = {
+  updateByokConfig: (serverId, patch) => configRepository.updateByokConfig(serverId, patch),
+  invalidateCache: (guildId) => invalidateTomoriStateCache(guildId),
+};
+
+export async function updateServerModelAccess(
+  input: UpdateServerModelAccessInput,
+  deps: ServerModelAccessOperationsDependencies = defaultServerModelAccessDependencies,
+): Promise<UpdateServerModelAccessResult> {
+  if (input.currentAllowServerModels === input.allowServerModels) {
+    return { status: "unchanged", allowServerModels: input.allowServerModels };
+  }
+
+  const updated = await deps.updateByokConfig(input.serverId, { user_byok_mode: !input.allowServerModels });
+  if (!updated) {
+    return { status: "failure", allowServerModels: input.currentAllowServerModels };
+  }
+
+  deps.invalidateCache(input.guildId);
+  return { status: "success", allowServerModels: input.allowServerModels };
 }
 
 export interface AddUserToBlacklistInput {
@@ -1281,6 +1332,10 @@ export interface ModerationOperations {
     input: UpdateMemberPermissionsInput,
     deps?: MemberPermissionsOperationsDependencies,
   ): Promise<UpdateMemberPermissionsResult>;
+  updateServerModelAccess(
+    input: UpdateServerModelAccessInput,
+    deps?: ServerModelAccessOperationsDependencies,
+  ): Promise<UpdateServerModelAccessResult>;
   addUserToBlacklist(
     input: AddUserToBlacklistInput,
     deps?: UserBlacklistOperationsDependencies,
@@ -1325,6 +1380,7 @@ export interface ModerationOperations {
 
 export const moderationOperations: ModerationOperations = {
   updateMemberPermissions,
+  updateServerModelAccess,
   addUserToBlacklist,
   removeUserFromBlacklist,
   removePersonaUserBlock,

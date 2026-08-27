@@ -97,7 +97,7 @@ export async function execute(
         if (existingTomoriState) {
           const providerAddMention = commandRegistry.getCommandMention("providers");
           const modelTextMention = commandRegistry.getCommandMention("model", "text");
-          const userByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
+          const userByokToggleMention = commandRegistry.getCommandMention("moderation");
           const helpPersonalProviderMention = commandRegistry.getCommandMention("help");
           const currentModelValue =
             existingTomoriState.config.llm_id && existingTomoriState.llm
@@ -695,7 +695,7 @@ export async function execute(
       }
 
       if (isUserByokSetup) {
-        const userByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
+        const userByokToggleMention = commandRegistry.getCommandMention("moderation");
         const helpPersonalProviderMention = commandRegistry.getCommandMention("help");
         headsUpNotes.push({
           label: localizer(locale, "commands.setup.byok_bootstrap_field"),

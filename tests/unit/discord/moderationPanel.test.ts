@@ -30,6 +30,7 @@ function createScopeData(overrides: Partial<ModerationScopeData> = {}): Moderati
     guildId: "12345",
     serverId: 1,
     readStatus: "fresh",
+    serverModelAccess: { allowServerModels: true },
     memberAccess: {
       serverMemteachingEnabled: true,
       attributeMemteachingEnabled: false,
@@ -467,6 +468,40 @@ describe("moderationPanel UI rendering", () => {
     expect(container.components[1].spacing).toBe(1);
     expect(container.components[2].type).toBe(ComponentType.TextDisplay);
     expect(container.components[2].content).toBe("## Server Moderation");
+  });
+
+  it("states server model access positively and makes only the inactive choice clickable", () => {
+    const allowed = JSON.stringify(
+      buildModerationPanelPayload({
+        locale: "en-US",
+        category: "member-access",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: createScopeData({ serverModelAccess: { allowServerModels: true } }),
+      }),
+    );
+    const required = JSON.stringify(
+      buildModerationPanelPayload({
+        locale: "en-US",
+        category: "member-access",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: createScopeData({ serverModelAccess: { allowServerModels: false } }),
+      }),
+    );
+
+    expect(allowed).toContain("Server model access");
+    // The status row matches its four Member Access siblings, emoji included.
+    expect(allowed).toContain("🟢 Server members may use this server's models.");
+    expect(required).toContain("🔴 Server members cannot use this server's models (personal providers are required).");
+
+    // Exactly one button, naming the transition away from the current policy.
+    expect(allowed).toContain('"customId":"moderation:v1:model-access-set:en-US:require-personal"');
+    expect(allowed).toContain('"label":"Disable Server Models"');
+    expect(allowed).not.toContain("model-access-set:en-US:allow");
+    expect(required).toContain('"customId":"moderation:v1:model-access-set:en-US:allow"');
+    expect(required).toContain('"label":"Allow Server Models"');
+    expect(required).not.toContain("model-access-set:en-US:require-personal");
   });
 
   it("renders opposite member access status sentence variants across all four flags", () => {
@@ -1492,7 +1527,9 @@ describe("moderationPanel UI rendering", () => {
 
       const lastComp = inner[inner.length - 1];
       expect(lastComp.type).toBe(ComponentType.ActionRow);
-      const button = lastComp.components?.find((b) => b.label === tc.actionLabel);
+      // Member Access carries a second action row for server model access, so the page's own action
+      // is no longer guaranteed to sit in the last one.
+      const button = inner.flatMap((component) => component.components ?? []).find((b) => b.label === tc.actionLabel);
       expect(button).toBeDefined();
     }
   });

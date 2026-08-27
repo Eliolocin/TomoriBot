@@ -1235,7 +1235,7 @@ class UserRepository implements IRepository<UserExportShape> {
             throw new Error(`User ${userDiscId} was not returned after registration upsert`);
           }
 
-          await this.ensureUserPersonalizationConfigRow(row.user_id, tx, displayName);
+          await this.ensureUserPersonalizationConfigRow(row.user_id, tx);
         });
       }, "register user");
 

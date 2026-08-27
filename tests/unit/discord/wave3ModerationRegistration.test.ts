@@ -67,4 +67,20 @@ describe("Wave 3 moderation registration restrictions", () => {
     ];
     expect(moderationKeys.filter((key) => server.has(key))).toEqual([]);
   });
+
+  it("dissolves the member server-model policy leaf into the panel", async () => {
+    const { executionMap, registrationData } = await loadCommandData();
+    const server = executionMap.get("server");
+
+    expect(server).toBeDefined();
+    if (!server) return;
+
+    expect(server.has("user-byok.toggle")).toBe(false);
+    expect([...server.keys()].filter((key) => key.startsWith("user-byok"))).toEqual([]);
+    // The destination stays a bare root: the policy is a panel action, never a subcommand.
+    expect([...(executionMap.get("moderation")?.keys() ?? [])]).toEqual([ROOT_COMMAND_EXECUTION_KEY]);
+    expect(findRegistration(registrationData, "moderation")?.default_member_permissions).toBe(
+      String(PermissionsBitField.Flags.ManageGuild),
+    );
+  });
 });
