@@ -71,9 +71,18 @@ a non-error result *and* the loop falls through (rare; defensive).
   failover after the lead fails still notifies correctly.
 - When the toggle is `false`, the pool order is unchanged (`[primary,
   ...fallbacks]`), preserving the deterministic primary-first behavior.
-- The toggle is server-level (`server_chat_configs.model_randomizer_enabled`)
-  and is enabled via `/config model-randomizer`, which refuses to enable unless
-  ≥1 fallback model is configured — guaranteeing the pool always has ≥2 members.
+- The server toggle is `server_chat_configs.model_randomizer_enabled`, set via
+  `/config model-randomizer`, which refuses to enable unless ≥1 fallback model is
+  configured — guaranteeing the pool always has ≥2 members.
+- `config.model_randomizer_enabled` is not always the server value. When a user has
+  an **active personal Text route**, `applyPersonalProviderSelectionsToTomoriState`
+  overlays that provider row's own `user_saved_provider_configs.model_randomizer_enabled`
+  (migration 076), so a personal preference wins in both directions: personal `false`
+  suppresses a server `true`, and personal `true` applies under a server `false`. A row
+  counts as the active Text route only when it has the `text` capability enabled **and**
+  a configured text model, so a personal row whose model pointer went NULL leaves the
+  server value in place. The personal flag has no user-facing control yet, so today it is
+  written only through its repository setter.
 
 **Per-attempt context prep (`prepareProviderContextItems`):**
 

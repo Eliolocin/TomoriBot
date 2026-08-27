@@ -2554,6 +2554,7 @@ CREATE INDEX IF NOT EXISTS idx_voice_samples_server ON voice_samples(server_id);
 -- User-configurable generation length cap per saved provider. NULL = use provider default (8192 or hardcoded fallback).
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_max_output_tokens', 'INTEGER', 'NULL');
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_max_output_tokens', 'INTEGER', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'model_randomizer_enabled', 'BOOLEAN', 'false', 'NOT NULL');
 
 -- ============================================================
 -- Server Config Split Tables (migration 002)

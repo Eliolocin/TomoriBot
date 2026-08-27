@@ -103,6 +103,7 @@ export async function applyPersonalProviderSelectionsToTomoriState(
     nextConfig.llm_disabled_params = activeConfigs.text.llm_disabled_params ?? nextConfig.llm_disabled_params;
     nextConfig.llm_logit_biases = activeConfigs.text.llm_logit_biases ?? nextConfig.llm_logit_biases;
     nextConfig.thinking_level = activeConfigs.text.thinking_level ?? nextConfig.thinking_level;
+    nextConfig.model_randomizer_enabled = activeConfigs.text.model_randomizer_enabled;
     const personalFallbackIds = (activeConfigs.text.fallback_model_refs ?? [])
       .filter((r) => r.type === "llm")
       .map((r) => r.id);

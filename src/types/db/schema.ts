@@ -1615,6 +1615,7 @@ export const userSavedProviderConfigSchema = z.object({
     z.array(logitBiasEntrySchema).default([]),
   ),
   thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL),
+  model_randomizer_enabled: z.boolean().default(false),
   // Which of this row's assigned capabilities are currently switched on.
   // Always a subset of assigned_capabilities; see migration 060 for why the two are separate.
   enabled_capabilities: z.preprocess(

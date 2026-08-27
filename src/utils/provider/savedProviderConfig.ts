@@ -266,6 +266,7 @@ export async function buildUserSavedProviderConfigFromExistingOrDefaults(params:
     llm_disabled_params: existingConfig?.llm_disabled_params ?? params.baseConfig.llm_disabled_params ?? [],
     llm_logit_biases: existingConfig?.llm_logit_biases ?? params.baseConfig.llm_logit_biases ?? [],
     thinking_level: existingConfig?.thinking_level ?? params.baseConfig.thinking_level,
+    model_randomizer_enabled: existingConfig?.model_randomizer_enabled ?? false,
     enabled_capabilities: enabledCapabilities,
     // Anything switched on here is owned here. Previously assigned capabilities are
     // kept even when currently off, so a re-enable still resolves to this provider.

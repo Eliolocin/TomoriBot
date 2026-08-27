@@ -46,11 +46,13 @@ function makeState(): TomoriState {
 
 function makePersonalRow(
   enabledCapabilities: UserSavedProviderConfigRow["enabled_capabilities"],
+  modelRandomizerEnabled = false,
 ): UserSavedProviderConfigRow {
   return {
     user_id: 4,
     provider: "custom:u4:local",
     enabled_capabilities: enabledCapabilities,
+    model_randomizer_enabled: modelRandomizerEnabled,
     llm_id: 11,
     fallback_model_refs: [
       { type: "custom_endpoint", id: 5 },
@@ -87,5 +89,15 @@ describe("personal provider fallback overlay", () => {
 
     expect(result.tomoriState.fallback_chain).toBe(state.fallback_chain);
     expect(result.tomoriState.fallback_llms).toBe(state.fallback_llms);
+  });
+
+  it("overlays personal model randomizer state when personal text is active", async () => {
+    rows = [makePersonalRow(["text"], true)];
+    const state = { ...makeState(), config: { ...makeState().config, model_randomizer_enabled: false } };
+
+    const { applyPersonalProviderSelectionsToTomoriState } = await import("@/utils/provider/personalProviderRuntime");
+    const result = await applyPersonalProviderSelectionsToTomoriState(state, 4);
+
+    expect(result.tomoriState.config.model_randomizer_enabled).toBe(true);
   });
 });

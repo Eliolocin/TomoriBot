@@ -1928,7 +1928,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
           llm_id, diffusion_model_id, embedding_model_id,
           video_model_id,
           nai_diffusion_model_id, vision_llm_id, nai_preset_name,
-          thinking_level, enabled_capabilities, assigned_capabilities, fallback_model_refs,
+          thinking_level, model_randomizer_enabled, enabled_capabilities, assigned_capabilities, fallback_model_refs,
           llm_temperature, llm_top_p, llm_top_k,
           llm_frequency_penalty, llm_presence_penalty, llm_min_p,
           llm_max_output_tokens,
@@ -1938,7 +1938,7 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
           ${config.llm_id}, ${config.diffusion_model_id}, ${config.embedding_model_id},
           ${config.video_model_id ?? null},
           ${config.nai_diffusion_model_id}, ${config.vision_llm_id ?? null}, ${config.nai_preset_name},
-          ${config.thinking_level}, ${enabledCapabilitiesLiteral}::text[], ${assignedCapabilitiesLiteral}::text[],
+          ${config.thinking_level}, ${config.model_randomizer_enabled ?? false}, ${enabledCapabilitiesLiteral}::text[], ${assignedCapabilitiesLiteral}::text[],
           ${fallbackModelRefsJson}::jsonb,
           ${config.llm_temperature ?? null}, ${config.llm_top_p ?? null}, ${config.llm_top_k ?? null},
           ${config.llm_frequency_penalty ?? null}, ${config.llm_presence_penalty ?? null}, ${config.llm_min_p ?? null},
@@ -1985,6 +1985,26 @@ class LlmProviderRepository implements IRepository<LlmProviderExportShape> {
       return true;
     } catch (error) {
       log.error(`Error upserting user saved provider config for user ${userId}, provider ${config.provider}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Updates the personal text model randomizer preference for a user and provider pair.
+   * Scoped on both user ID and provider to isolate writes across users and sibling providers.
+   */
+  async updatePersonalModelRandomizer(userId: number, provider: string, enabled: boolean): Promise<boolean> {
+    try {
+      const result = await sql`
+        UPDATE user_saved_provider_configs
+        SET model_randomizer_enabled = ${enabled}, updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ${userId}
+          AND provider = ${provider.toLowerCase()}
+      `;
+
+      return result.count > 0;
+    } catch (error) {
+      log.error(`Error updating personal model randomizer for user ${userId}, provider ${provider}:`, error);
       return false;
     }
   }
