@@ -30,15 +30,19 @@ export interface ErrorLogPayload {
  * @param context - Optional caller-supplied context IDs and metadata
  */
 export function buildErrorLogPayload(msg: string, err: unknown, context?: ErrorContext): ErrorLogPayload {
-  const errorMessage = toErrorMessage(err);
   const stackTrace = toErrorStack(err);
+
+  // Mirrors the `if (err)` branch in `logger.error`, so a row matches the line already on stdout.
+  // `log.error(msg)` with no error is a valid call at roughly 400 sites, and appending
+  // `toErrorMessage(undefined)` wrote a literal " - undefined" into every one of those rows.
+  const errorMessage = err ? ` - ${toErrorMessage(err)}` : "";
 
   return {
     persona_id: context?.personaId ?? null,
     user_id: context?.userId ?? null,
     server_id: context?.serverId ?? null,
     error_type: context?.errorType ?? "GenericError",
-    error_message: `${msg} - ${errorMessage}`,
+    error_message: `${msg}${errorMessage}`,
     stack_trace: stackTrace,
     error_metadata: context?.metadata ?? null,
   };

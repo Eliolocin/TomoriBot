@@ -132,10 +132,13 @@ Supporting services that pipelines depend on.
 
 Production infrastructure on cloud provider services (Azure, AWS, GCP).
 
-- [`architecture/cloud/`](./architecture/cloud/) — deployment and operations on cloud providers
-  - [`cloud/azure-production-deployment.md`](./architecture/cloud/azure-production-deployment) — hardened OIDC/Run Command production deployment and operations
-  - [`cloud/azure-application-logs.md`](./architecture/cloud/azure-application-logs) — shipping error logs to Azure Log Analytics + Grafana
-  - [`cloud/azure-vertex-auth.md`](./architecture/cloud/azure-vertex-auth) — keyless Azure VM authentication to Google Vertex AI
+These pages live on the `release` branch under `docs/en/wiki/cloud/`, next to the `terraform/` and
+`deploy/` trees they document. A `main` checkout omits them so a self-hoster's clone carries only
+the bot. Read one without switching branches:
+
+```bash
+git show release:docs/en/wiki/cloud/azure/azure-production-deployment.md
+```
 
 ## Meet Tomori (order 6)
 

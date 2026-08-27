@@ -255,21 +255,19 @@ export function getOpenRouterPricing(modelCodename: string): ModelPricing | unde
   return textCatalog.get(modelCodename)?.pricing;
 }
 
-export function resetOpenRouterCapabilityCache(): void {
-  textCatalog.reset();
-}
-
-/**
- * Every model rate from the current catalog snapshot, keyed by OpenRouter codename.
- *
- * Returns an empty map when the catalog has no usable snapshot.
- */
+/** Every complete rate in the current text catalog, keyed by OpenRouter codename. */
 export function getAllOpenRouterPricing(): ReadonlyMap<string, ModelPricing> {
   const pricing = new Map<string, ModelPricing>();
-  for (const metadata of textCatalog.values()) {
-    if (metadata.pricing) pricing.set(metadata.id, metadata.pricing);
+  for (const model of textCatalog.values()) {
+    if (model.pricing) {
+      pricing.set(model.id, model.pricing);
+    }
   }
   return pricing;
+}
+
+export function resetOpenRouterCapabilityCache(): void {
+  textCatalog.reset();
 }
 
 /**

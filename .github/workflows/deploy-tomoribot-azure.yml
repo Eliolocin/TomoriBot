@@ -1131,6 +1131,9 @@ jobs:
           releaseNotes="${releaseNotes//\{COMMIT_HASH\}/$COMMIT_HASH}"
           releaseNotes="${releaseNotes//\{REPO_OWNER\}/${{ github.repository_owner }}}"
           releaseNotes="${releaseNotes//\{REPO_NAME\}/${{ github.event.repository.name }}}"
+          # Published images use the tag created below so historical release bodies do not depend
+          # on files remaining at the release branch tip.
+          releaseNotes=$(printf '%s' "$releaseNotes" | sed "s|/raw/release/\\.github/release/|/raw/v$VERSION/.github/release/|g")
 
           echo "$releaseNotes" > processed-release-notes.md
           echo "image-name=$imageName" >> "$GITHUB_OUTPUT"
@@ -1141,7 +1144,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check-release-assets.outputs.version }}
         run: |
+          # Without --target the tag is cut from the default branch, which no longer carries
+          # .github/release/ and is not the tree that just deployed. Both the release-note image
+          # URLs and the source archive read from this tag, so it has to be the deployed commit.
           gh release create "v$VERSION" \
+            --target "${{ github.sha }}" \
             --title "TomoriBot v$VERSION" \
             --notes-file "processed-release-notes.md" \
             --latest
@@ -1186,7 +1193,10 @@ jobs:
           hasImage=false
           imageFile=""
           if [ -n "$IMAGE_NAME" ]; then
-            imageUrl="https://github.com/${{ github.repository }}/raw/release/.github/release/v$VERSION/$IMAGE_NAME"
+            # Read from the release tag, not a branch: the tag is immutable, so a past release's
+            # image survives any future pruning of .github/release/ from the branch tip. Release
+            # creation always runs before this point, so the tag resolves.
+            imageUrl="https://github.com/${{ github.repository }}/raw/v$VERSION/.github/release/v$VERSION/$IMAGE_NAME"
             imageFile="release-post-image.${IMAGE_NAME##*.}"
             if curl -sL --max-time 30 "$imageUrl" -o "$imageFile" && [ -s "$imageFile" ]; then
               hasImage=true

@@ -10,6 +10,19 @@ Thanks for your interest in contributing! This guide covers what you need to kno
 | `release` | Deploy gate, stable versions that reflect the public deployed TomoriBot.|
 | `dev` | Maintainer's personal (unstable) development branch. |
 
+Cloud deployment lives on `release` only. A `main` checkout has no `terraform/`, `deploy/`,
+`.github/release/`, or `docs/en/wiki/cloud/`, which keeps a self-hoster's clone to the bot itself.
+Read a release-only file without switching branches:
+
+```bash
+git show release:terraform/azure/main.tf
+```
+
+Fixes belong on `main` and flow forward into `release`. Never merge `release` into `main`: that
+reintroduces those paths to `main` and recreates a merge base containing them, after which the next
+`main` into `release` merge deletes them from `release` with no conflict and no warning. CI enforces
+this on PRs to `main`.
+
 ## Quality Gates
 
 The project has no strict coding standards other than what the automated tools enforce, but reading the official [Contributing](https://docs.tomoribot.app/en/contributing/) and [Architecture](https://docs.tomoribot.app/en/architecture/) docs can help you understand and follow established code conventions in the project.

@@ -2,6 +2,9 @@
 title: "Threat Models"
 ---
 
+> Evidence paths under `terraform/` and `deploy/` cited below live on the `release` branch and are
+> absent from `main`. Read one with `git show release:terraform/aws/ecs-health-check.tf`.
+
 ## TL;DR
 
 - **API keys are encrypted** in the database with `pgcrypto`. A full DB dump is useless without the `CRYPTO_SECRET`. If the host or secret is compromised, rotate all provider keys immediately.

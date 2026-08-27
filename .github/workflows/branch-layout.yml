@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
+name: Branch Layout
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cloud-paths-stay-on-release:
+    name: Cloud deployment stays on release
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # Checkout resolves a pull_request event to the merge result, so this inspects the tree main
+      # would actually end up with. Asking git rather than diffing the change set closes every route
+      # back in: a release merge, a hand-copied file, a rename, a revert. It asks git rather than the
+      # filesystem because the invariant is about tracked content, and a local terraform/ survives
+      # deletion as untracked provider cache.
+      - name: Assert release-only paths are absent
+        run: |
+          set -euo pipefail
+          violations=""
+          for path in terraform deploy .github/release docs/en/wiki/cloud; do
+            if [ -n "$(git ls-files -- "$path")" ]; then
+              violations="${violations}${path}\n"
+            fi
+          done
+          if [ -n "$violations" ]; then
+            echo "::error::Cloud deployment paths must stay on the release branch"
+            printf 'Present on this tree but forbidden on main:\n'
+            printf "%b" "$violations"
+            cat <<'MSG'
+
+          Merging release into main reintroduces these paths and recreates a merge base that
+          contains them. The next main into release merge then deletes them from release with no
+          conflict and no warning, taking the production IaC with it.
+
+          Fixes belong on main and flow forward into release. See .github/CONTRIBUTING.md.
+          MSG
+            exit 1
+          fi
+          echo "No release-only paths present on main."

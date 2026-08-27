@@ -1202,37 +1202,42 @@ class UserRepository implements IRepository<UserExportShape> {
     try {
       log.info(`Ensuring user ${userDiscId} exists (${displayName})`);
 
-      await sql.begin(async (tx) => {
-        const [row] = await tx`
-          WITH inserted_user AS (
-            INSERT INTO users (
-              user_disc_id,
-              language_pref,
-              registration_locale
-            ) VALUES (
-              ${userDiscId},
-              ${language},
-              ${language}
+      // Wrapped where the raw driver error can still reach the helper: a `try/catch` inside the
+      // thunk would hand it a resolved value and the retry would never fire. Replay-safe because
+      // both writes are `ON CONFLICT DO NOTHING`.
+      await withTransientDbRetry(async () => {
+        await sql.begin(async (tx) => {
+          const [row] = await tx`
+            WITH inserted_user AS (
+              INSERT INTO users (
+                user_disc_id,
+                language_pref,
+                registration_locale
+              ) VALUES (
+                ${userDiscId},
+                ${language},
+                ${language}
+              )
+              ON CONFLICT (user_disc_id) DO NOTHING
+              RETURNING user_id
             )
-            ON CONFLICT (user_disc_id) DO NOTHING
-            RETURNING user_id
-          )
-          SELECT user_id
-          FROM inserted_user
-          UNION ALL
-          SELECT user_id
-          FROM users
-          WHERE user_disc_id = ${userDiscId}
-            AND NOT EXISTS (SELECT 1 FROM inserted_user)
-          LIMIT 1
-        `;
+            SELECT user_id
+            FROM inserted_user
+            UNION ALL
+            SELECT user_id
+            FROM users
+            WHERE user_disc_id = ${userDiscId}
+              AND NOT EXISTS (SELECT 1 FROM inserted_user)
+            LIMIT 1
+          `;
 
-        if (!row?.user_id) {
-          throw new Error(`User ${userDiscId} was not returned after registration upsert`);
-        }
+          if (!row?.user_id) {
+            throw new Error(`User ${userDiscId} was not returned after registration upsert`);
+          }
 
-        await this.ensureUserPersonalizationConfigRow(row.user_id, tx);
-      });
+          await this.ensureUserPersonalizationConfigRow(row.user_id, tx, displayName);
+        });
+      }, "register user");
 
       const userData = await this.loadByDiscordId(userDiscId);
 
