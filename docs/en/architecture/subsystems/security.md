@@ -147,8 +147,6 @@ Primary files:
 - `src/commands/memory/server/export.ts`
 - `src/commands/memory/server/remove.ts`
 - `src/commands/memory/server/edit.ts`
-- `src/commands/personal/config/export.ts`
-- `src/commands/personal/config/remove.ts`
 - `src/commands/server/config/export.ts`
 - `src/commands/server/config/remove.ts`
 - `src/utils/db/repositories/ImportExportRepository.ts`

@@ -37,7 +37,6 @@ TomoriBotはデータに対して透明性を持つように設計されてい�
 
 - `/memory personal export`：個人のメモリー（1つのペルソナのスコープ、またはグローバルスコープ）。
 - `/memory server export`：選択したペルソナのサーバーメモリー。
-- `/personal config export`：個人の設定（ニックネーム、言語など）。
 - `/server config export`：サーバーの設定値（APIキーやトリガーは含まれません）。
 - `/persona export`：完全なペルソナの定義。
 
@@ -46,7 +45,7 @@ TomoriBotはデータに対して透明性を持つように設計されてい�
 以前にエクスポートしたファイルを添付して復元します。
 
 - `/memory personal import`, `/memory server import`：ファイルタイプは自動的に検出されます。ターゲットのペルソナまたはグローバルスコープを選択します。
-- `/personal config import`, `/server config import`：サーバーのインポートには**サーバー管理**権限が必要です。
+- `/server config import`：サーバーのインポートには**サーバー管理**権限が必要です。
 - `/persona import`：ペルソナを復元します（SillyTavernカードのインポートも可能です。[SillyTavernサポート](/ja/features/integrations/sillytavern-support/)を参照）。
 
 ## データの削除
@@ -54,7 +53,6 @@ TomoriBotはデータに対して透明性を持つように設計されてい�
 これらはデータを完全に削除またはリセットします。**元に戻すことはできません**。
 
 - `/memory personal remove`, `/memory server remove`
-- `/personal config remove`（個人設定をリセット）
 - `/server config remove`（サーバー設定をリセット）
 
 ## オプトアウト

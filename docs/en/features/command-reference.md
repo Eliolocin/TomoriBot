@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **40**. Runnable slash commands: **194**.
+Top-level command groups: **40**. Runnable slash commands: **192**.
 
 ## `/capabilities`
 
@@ -288,9 +288,7 @@ Manage your personal settings
 
 | Command | Summary |
 |---|---|
-| `/personal config export` | Export your personal settings, excluding server settings, personas, and memories. |
-| `/personal config import` | Import your personal settings only. Does not import server settings or memories. |
-| `/personal config remove` | Reset your personal configuration. |
+| `/personal config` | Manage your personal preferences, privacy, models, and profile. |
 | `/personal deliberate-tool-mode` | Set your personal deliberate tool mode preference. |
 | `/personal deliberate-trigger-mode` | Set your personal deliberate trigger mode (DTM) preference. |
 | `/personal image-tags` | Set comma-separated image tags for your physical appearance to assist image generation. |

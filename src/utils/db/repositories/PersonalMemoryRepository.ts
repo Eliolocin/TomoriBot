@@ -101,6 +101,26 @@ class PersonalMemoryRepository implements IRepository<PersonalMemoryExportShape>
     }
   }
 
+  /**
+   * Returns the total count of personal memories for a user across all personas and global scope.
+   *
+   * @param userId - Internal user DB ID
+   * @returns Total count of personal memories
+   */
+  async countAllForUser(userId: number): Promise<number> {
+    try {
+      const rows = await sql<Array<{ count: string | number }>>`
+        SELECT COUNT(*) as count
+        FROM personal_memories
+        WHERE user_id = ${userId}
+      `;
+      return Number(rows[0]?.count ?? 0);
+    } catch (error) {
+      log.error(`Error counting personal memories for user ${userId}:`, error);
+      return 0;
+    }
+  }
+
   async edit(personalMemoryId: number, content: string, tags: string[] = []): Promise<boolean> {
     try {
       const [updated] = await sql`

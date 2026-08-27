@@ -60,6 +60,20 @@ export const PANEL_ACTIONS = [
   "personal-memories.personal.memory.edit",
   "personal-memories.personal.memory.remove",
   "personal-memories.personal.stm.clear",
+
+  // personal-config
+  "personal-config.personal.naming.set",
+  "personal-config.personal.about.set",
+  "personal-config.personal.language.set",
+  "personal-config.personal.timezone.set",
+  "personal-config.personal.appearance.set",
+  "personal-config.personal.privacy.set",
+  "personal-config.personal.crossserver-stm.set",
+  "personal-config.personal.model.set",
+  "personal-config.personal.model-routing.set",
+  "personal-config.personal.parameters.set",
+  "personal-config.personal.fallbacks.set",
+  "personal-config.personal.randomizer.set",
 ] as const;
 
 /** Union of all valid panel action metric keys. */

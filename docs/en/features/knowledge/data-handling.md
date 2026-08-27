@@ -43,7 +43,6 @@ Everything exportable is sent to your DMs as a JSON file:
 
 - `/memory personal export` — your personal memories (one persona scope, or your global scope).
 - `/memory server export` — server memories for a selected persona.
-- `/personal config export` — your personal settings (nickname, language, etc.).
 - `/server config export` — server configuration values (no API keys or triggers).
 - `/persona export` — full persona definitions.
 
@@ -53,7 +52,7 @@ Attach a previously exported file to restore it:
 
 - `/memory personal import`, `/memory server import` — file type is auto-detected; you choose
   a target persona or global scope.
-- `/personal config import`, `/server config import` — server imports require **Manage
+- `/server config import` — server imports require **Manage
   Server**.
 - `/persona import` — restore a persona (also imports SillyTavern cards — see
   [SillyTavern Support](/features/integrations/sillytavern-support/)).
@@ -63,7 +62,6 @@ Attach a previously exported file to restore it:
 These permanently remove or reset data — **they cannot be undone**:
 
 - `/memory personal remove`, `/memory server remove`
-- `/personal config remove` (reset personal settings)
 - `/server config remove` (reset server configuration)
 
 ## Opting Out

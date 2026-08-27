@@ -225,11 +225,12 @@ export async function assignPersonalCapabilityToProvider(
   for (const row of rows) {
     if (row.provider.toLowerCase() === provider.toLowerCase()) {
       const nextRow = updater(row);
-      await llmProviderRepo.upsertUserSavedProviderConfig(userId, {
+      const ok = await llmProviderRepo.upsertUserSavedProviderConfig(userId, {
         ...nextRow,
         enabled_capabilities: Array.from(new Set([...nextRow.enabled_capabilities, capability])),
         assigned_capabilities: Array.from(new Set([...nextRow.assigned_capabilities, capability])),
       });
+      if (!ok) return false;
       updated = true;
       continue;
     }
@@ -237,7 +238,8 @@ export async function assignPersonalCapabilityToProvider(
     // Ownership is exclusive, so the losing rows give up the assignment as well as
     // the on/off state; otherwise two rows would claim the same capability.
     if (claimsCapability(row, capability)) {
-      await llmProviderRepo.upsertUserSavedProviderConfig(userId, withCapabilityUnassigned(row, capability));
+      const ok = await llmProviderRepo.upsertUserSavedProviderConfig(userId, withCapabilityUnassigned(row, capability));
+      if (!ok) return false;
     }
   }
 
@@ -266,18 +268,27 @@ export async function setPersonalCapabilityEnabled(
     // on/off state is cleared.
     if (!enabled) {
       if (row.enabled_capabilities.includes(capability)) {
-        await llmProviderRepo.upsertUserSavedProviderConfig(userId, withCapabilityEnabled(row, capability, false));
+        const ok = await llmProviderRepo.upsertUserSavedProviderConfig(
+          userId,
+          withCapabilityEnabled(row, capability, false),
+        );
+        if (!ok) return false;
       }
       continue;
     }
 
     if (row.provider.toLowerCase() === targetRow.provider.toLowerCase()) {
-      await llmProviderRepo.upsertUserSavedProviderConfig(userId, withCapabilityEnabled(row, capability, true));
+      const ok = await llmProviderRepo.upsertUserSavedProviderConfig(
+        userId,
+        withCapabilityEnabled(row, capability, true),
+      );
+      if (!ok) return false;
       continue;
     }
 
     if (claimsCapability(row, capability)) {
-      await llmProviderRepo.upsertUserSavedProviderConfig(userId, withCapabilityUnassigned(row, capability));
+      const ok = await llmProviderRepo.upsertUserSavedProviderConfig(userId, withCapabilityUnassigned(row, capability));
+      if (!ok) return false;
     }
   }
 

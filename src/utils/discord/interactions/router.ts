@@ -2,6 +2,7 @@ import { MessageFlags, type Client, type Interaction } from "discord.js";
 import { helpInteractionRoute } from "@/utils/discord/interactions/helpRoutes";
 import { mcpsInteractionRoute } from "@/utils/discord/interactions/mcpsRoutes";
 import { moderationInteractionRoute } from "@/utils/discord/interactions/moderationRoutes";
+import { personalConfigInteractionRoute } from "@/utils/discord/interactions/personalConfigRoutes";
 import { personalMemoriesInteractionRoute } from "@/utils/discord/interactions/personalMemoriesRoutes";
 import {
   personalProvidersInteractionRoute,
@@ -16,6 +17,7 @@ const registry = new InteractionRouteRegistry([
   helpInteractionRoute,
   mcpsInteractionRoute,
   moderationInteractionRoute,
+  personalConfigInteractionRoute,
   personalMemoriesInteractionRoute,
   personalProvidersInteractionRoute,
   providersInteractionRoute,
@@ -46,13 +48,17 @@ export async function dispatchGlobalInteraction(
                 ? "commands.providers.outdated_panel"
                 : namespace === "personal-memories"
                   ? "commands.personal.memories.outdated_panel"
-                  : "general.errors.outdated_panel";
+                  : namespace === "personal-config"
+                    ? "commands.personal.config.outdated_panel"
+                    : "general.errors.outdated_panel";
       const command =
         namespace === "personal-providers"
           ? "/personal providers"
           : namespace === "personal-memories"
             ? "/personal memories"
-            : `/${namespace}`;
+            : namespace === "personal-config"
+              ? "/personal config"
+              : `/${namespace}`;
       await interaction.reply({
         content: localizer(interaction.locale ?? interaction.guildLocale ?? "en-US", key, { command }),
         flags: MessageFlags.Ephemeral,
