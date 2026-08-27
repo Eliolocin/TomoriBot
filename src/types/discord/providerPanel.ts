@@ -1,6 +1,7 @@
 import type { CustomEndpointApiStyle, CustomEndpointCapability } from "@/types/db/schema";
 import type { PanelReadStatus } from "@/types/discord/panel";
 import type { ImageEndpointSupports } from "@/utils/provider/customImageEndpointSupport";
+import type { SpeechEndpointSettings } from "@/utils/provider/customSpeechEndpointSettings";
 
 export type ProviderPanelCapability = CustomEndpointCapability;
 
@@ -20,6 +21,7 @@ export interface ProviderPanelModel {
     supportsPrefixCompletion: boolean;
   };
   imageSettings?: ImageEndpointSupports;
+  speechSettings?: SpeechEndpointSettings;
 }
 
 export interface ProviderPanelCapabilitySection {

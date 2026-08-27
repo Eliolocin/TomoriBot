@@ -37,6 +37,7 @@ import {
   buildEditProviderModalFieldId,
   buildEditEndpointModal,
   buildEditEndpointModalFieldId,
+  offeredChatCompatFlags,
   parseModelSelectionValue,
   PROVIDERS_ENTRIES_PER_SELECTOR_PAGE,
   type EditEndpointModalContext,
@@ -45,6 +46,7 @@ import {
 } from "@/utils/discord/ui/providersPanel";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
 import { getDefaultImageEndpointSupports } from "@/utils/provider/customImageEndpointSupport";
+import { getDefaultSpeechEndpointSettings } from "@/utils/provider/customSpeechEndpointSettings";
 import { resolveCuratedImageSupports } from "@/utils/provider/providerImageCapabilities";
 import {
   showRoutedRawModal,
@@ -97,6 +99,10 @@ export interface ProvidersRouteDependencies {
   ): Promise<void>;
   takeModelFlags(interactionId: string, nonce: string): string[] | undefined;
   takeImageSupports(interactionId: string, nonce: string): string[] | undefined;
+  takeCompatFlags(interactionId: string, nonce: string): string[] | undefined;
+  takeVoiceMode(interactionId: string, nonce: string): string | undefined;
+  takeScriptMarkup(interactionId: string, nonce: string): string | undefined;
+  takeSupportsInstruct(interactionId: string, nonce: string): string[] | undefined;
   takeWorkflow(interactionId: string, nonce: string): ReturnType<typeof takeRawModalFileUpload>;
   loadWorkflow(url: string): Promise<Record<string, unknown> | null>;
   showProviderEditModal(
@@ -363,6 +369,24 @@ function imageModalDefaults(
   return supports ? { image: { supports, allowInpaint: true } } : {};
 }
 
+function speechModalDefaults(
+  capability: CustomEndpointCapability,
+  section: ProviderPanelCapabilitySection,
+  editing: ProviderPanelModel | undefined,
+): Pick<ProviderModelModalDefaults, "speech"> {
+  if (capability !== "speech") return {};
+
+  // Only a `tts-clone` server implements the clone/VoiceDesign/Auto split; `isVoiceDesignEndpoint`
+  // requires that api style, so offering it for the ElevenLabs preset would store a dead value.
+  const apiStyle = section.apiStyle ?? "tts-clone";
+  return {
+    speech: {
+      settings: editing?.speechSettings ?? getDefaultSpeechEndpointSettings(apiStyle),
+      allowVoiceMode: apiStyle === "tts-clone",
+    },
+  };
+}
+
 function endpointEditContext(scope: LoadedProviderPanelScope, connectionId: number): EditEndpointModalContext | null {
   const entry = scope.data.entries.find(
     (candidate) => candidate.kind === "endpoint" && candidate.connectionIds.includes(connectionId),
@@ -474,6 +498,14 @@ export function createProvidersInteractionRoute(
       takeRawModalCheckboxGroupValues(interactionId, buildProviderModelModalFieldId("flags", nonce)),
     takeImageSupports: (interactionId, nonce) =>
       takeRawModalCheckboxGroupValues(interactionId, buildProviderModelModalFieldId("image-supports", nonce)),
+    takeCompatFlags: (interactionId, nonce) =>
+      takeRawModalCheckboxGroupValues(interactionId, buildProviderModelModalFieldId("compat", nonce)),
+    takeVoiceMode: (interactionId, nonce) =>
+      takeRawModalSelectValue(interactionId, buildProviderModelModalFieldId("voice-mode", nonce)),
+    takeScriptMarkup: (interactionId, nonce) =>
+      takeRawModalSelectValue(interactionId, buildProviderModelModalFieldId("script-markup", nonce)),
+    takeSupportsInstruct: (interactionId, nonce) =>
+      takeRawModalCheckboxGroupValues(interactionId, buildProviderModelModalFieldId("supports-instruct", nonce)),
     takeWorkflow: (interactionId, nonce) =>
       takeRawModalFileUpload(interactionId, buildProviderModelModalFieldId("workflow", nonce)),
     loadWorkflow: loadWorkflowJson,
@@ -617,9 +649,14 @@ export function createProvidersInteractionRoute(
         const entry = modelScope?.data.entries.find(
           (candidate) => candidate.id === `${route.entryKind}:${route.entryKey}`,
         );
+        // A panel opened before a capability stopped being exposed can still carry its option, and
+        // the write would fail with `unsupported-capability` or `not-found` after the modal closed.
         const section =
           entry && entry.kind !== "brave"
-            ? entry.capabilities.find((candidate) => candidate.capability === selection.capability)
+            ? entry.capabilities.find(
+                (candidate) =>
+                  candidate.capability === selection.capability && candidate.availability !== "unavailable",
+              )
             : undefined;
         if (!modelScope || modelScope.data.readStatus !== "fresh" || !section) {
           await interaction.reply({
@@ -646,6 +683,7 @@ export function createProvidersInteractionRoute(
             codeName: editing?.codeName,
             text: editing?.textSettings,
             ...imageModalDefaults(selection.capability, route.entryKind, route.entryKey, section, editing),
+            ...speechModalDefaults(selection.capability, section, editing),
           },
         );
         return;
@@ -659,6 +697,14 @@ export function createProvidersInteractionRoute(
         route.action === "model-submit" ? (dependencies.takeModelFlags(interaction.id, route.nonce) ?? []) : [];
       const selectedImageSupports =
         route.action === "model-submit" ? dependencies.takeImageSupports(interaction.id, route.nonce) : undefined;
+      const selectedCompatFlags =
+        route.action === "model-submit" ? dependencies.takeCompatFlags(interaction.id, route.nonce) : undefined;
+      const selectedVoiceMode =
+        route.action === "model-submit" ? dependencies.takeVoiceMode(interaction.id, route.nonce) : undefined;
+      const selectedScriptMarkup =
+        route.action === "model-submit" ? dependencies.takeScriptMarkup(interaction.id, route.nonce) : undefined;
+      const selectedInstructValues =
+        route.action === "model-submit" ? dependencies.takeSupportsInstruct(interaction.id, route.nonce) : undefined;
       const workflowAttachment =
         route.action === "model-submit" ? dependencies.takeWorkflow(interaction.id, route.nonce) : undefined;
       const deleteRotation =
@@ -698,7 +744,7 @@ export function createProvidersInteractionRoute(
           route.locale,
           scope,
           route.action === "model-submit"
-            ? { kind: "models", entryId: `${route.entryKind}:${route.entryKey}` }
+            ? { kind: "entry", entryId: `${route.entryKind}:${route.entryKey}` }
             : { kind: "entry" },
           0,
           readUnavailableReceipt(route.locale),
@@ -897,9 +943,16 @@ export function createProvidersInteractionRoute(
           await repaint(interaction, route.locale, scope, { kind: "entry" }, 0, changedReceipt(route.locale));
           return;
         }
+        // Re-derived rather than inferred from the submission: a panel can outlive the answer, and a
+        // flag this provider never offered must keep its stored value instead of being written false.
+        const offeredCompat = offeredChatCompatFlags(route.entryKind, route.entryKey);
+        const resolveCompatFlag = (flag: string, stored: boolean | undefined): boolean =>
+          offeredCompat.includes(flag as (typeof offeredCompat)[number])
+            ? (selectedCompatFlags?.includes(flag) ?? false)
+            : (stored ?? false);
         const workflow = workflowAttachment ? await dependencies.loadWorkflow(workflowAttachment.url) : undefined;
         if (workflowAttachment && !workflow) {
-          await repaint(interaction, route.locale, scope, { kind: "models", entryId }, 0, {
+          await repaint(interaction, route.locale, scope, { kind: "entry", entryId }, 0, {
             tone: "error",
             heading: localizer(route.locale, "commands.providers.model_save_failed"),
             detail: localizer(route.locale, "commands.providers.model_workflow_invalid"),
@@ -926,9 +979,12 @@ export function createProvidersInteractionRoute(
               hasTools: selectedModelFlags.includes("tools"),
               seesImages: selectedModelFlags.includes("images"),
               supportsStructOutput: selectedModelFlags.includes("structured"),
-              strictRoleAlternation: selectedModelFlags.includes("strict-roles"),
-              supportsPrefixCompletion: selectedModelFlags.includes("prefix"),
+              strictRoleAlternation: resolveCompatFlag("strict-roles", target?.textSettings?.strictRoleAlternation),
+              supportsPrefixCompletion: resolveCompatFlag("prefix", target?.textSettings?.supportsPrefixCompletion),
               imageSupportValues: route.capability === "image" ? selectedImageSupports : undefined,
+              speechVoiceMode: route.capability === "speech" ? selectedVoiceMode : undefined,
+              speechScriptMarkup: route.capability === "speech" ? selectedScriptMarkup : undefined,
+              speechInstructValues: route.capability === "speech" ? selectedInstructValues : undefined,
               workflow: workflow ?? undefined,
             }),
           () => dependencies.resolveScope(interaction, true),
@@ -938,7 +994,7 @@ export function createProvidersInteractionRoute(
           interaction,
           route.locale,
           nextScope,
-          { kind: "models", entryId },
+          { kind: "entry", entryId },
           rangeForEntry(nextScope, entryId),
           modelReceipt(route.locale, action.result),
         );
@@ -976,9 +1032,11 @@ export function createProvidersInteractionRoute(
           interaction,
           route.locale,
           scope,
-          route.action === "model-close"
-            ? { kind: "entry", entryId }
-            : { kind: "models", entryId, rangeIndex: route.action === "model-range" ? route.rangeIndex : 0 },
+          {
+            kind: "entry",
+            entryId,
+            modelRangeIndex: route.action === "model-range" ? route.rangeIndex : 0,
+          },
           rangeForEntry(scope, entryId),
         );
         return;

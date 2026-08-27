@@ -94,7 +94,7 @@ Run **`/providers`** (or `/personal providers`), choose **Add New Custom Endpoin
 | `endpoint_url` | `http://127.0.0.1:8188` (root, **no** `/v1`) |
 | `auth_token` | *(leave blank unless your ComfyUI is behind auth)* |
 
-After saving the connection, select it, choose **Add or Edit a Model**, and add an Image or Video
+After saving the connection, select it and use its model dropdown to add an Image or Video
 model. Enter the checkpoint's exact code name and **upload the workflow `.json`** you downloaded
 from Step 2. The model capability must match the workflow (image workflow → `image`, video
 workflow → `video`).

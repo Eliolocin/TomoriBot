@@ -90,7 +90,7 @@ If you want to use only a self-hosted or proxy-backed custom endpoint, `/setup` 
 ```
 
 Choose **Add New Custom Endpoint** to save its API compatibility and connection details. Then select
-the saved entry and use **Add or Edit a Model** to register and activate a model capability. Later
+the saved entry and use its model dropdown to register and activate a model capability. Later
 changes to that registration can be done in place with `/providers`.
 
 If you want to save and activate an additional provider afterward:

@@ -85,7 +85,7 @@ Custom Endpoint**, and enter:
 **not** add it). `Ollama` accepts the bare root and normalizes it to Ollama's `/v1` compatibility API.
 :::
 
-After saving the connection, select it, choose **Add or Edit a Model**, then **Add a Text Model**.
+After saving the connection, select it and choose **+ Add new Text Model** from its model dropdown.
 Fill in:
 
 - **Model Name (exact API ID):** `gemma4:12b`, the exact tag from `ollama list`.
@@ -111,7 +111,7 @@ setting one behind a vision-capable chat model has no effect until you switch.
 
 ## 3. (Optional) Local embeddings for RAG
 
-Select the saved endpoint, choose **Add or Edit a Model**, and add an Embedding model (e.g.
+Select the saved endpoint and use its model dropdown to add an Embedding model (e.g.
 `ollama pull nomic-embed-text`, Model Name `nomic-embed-text:latest`). RAG features also need
 pgvector installed in Postgres. You can see the [manual setup](/self-hosting/manual-setup/) guide here.
 
@@ -192,7 +192,7 @@ model at Q8**.
 ## Notes & gotchas
 
 - **One endpoint entry per label.** To register several models that share one server, select the
-  saved endpoint and use **Add or Edit a Model** again. Use distinct labels for genuinely different
+  saved endpoint and use its model dropdown again. Use distinct labels for genuinely different
   servers or API protocols.
 - **Model Name is the API identifier.** It is the exact string sent to the server. Getting it wrong is the most
   common "it connected but responses fail" cause.

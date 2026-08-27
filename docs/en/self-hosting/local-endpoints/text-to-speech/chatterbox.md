@@ -40,7 +40,8 @@ Run `/providers`, choose **Add New Custom Endpoint**, and use the speech API com
 - API Compatibility: `tts-clone`
 - `endpoint_url`: `http://127.0.0.1:8011`
 
-After saving the connection, select it, choose **Add or Edit a Model**, and add a Speech model.
+After saving the connection, select it and use its model dropdown to add a Speech model. Choose `Voice Clone`
+as the Voice Source Mode and `Bracket Tags` as the Script Markup so delivery tags survive the send.
 
 Adding the model makes the endpoint active immediately. Use `/model speech` later only when switching between speech endpoints.
 

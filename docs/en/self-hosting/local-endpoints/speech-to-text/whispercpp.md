@@ -24,7 +24,7 @@ Run `/providers`, choose **Add New Custom Endpoint**, and use the transcription 
 - API Compatibility: `openai-compatible-transcription`
 - `endpoint_url`: your whisper.cpp server root
 
-After saving the connection, select it, choose **Add or Edit a Model**, and add the model name your
+After saving the connection, select it and use its model dropdown to add the model name your
 server reports as a Transcription model.
 
 Adding the model makes the endpoint active immediately. Use `/model transcription` later only when switching endpoints.

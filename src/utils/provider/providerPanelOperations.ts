@@ -42,6 +42,10 @@ import {
   readImageEndpointSupports,
 } from "@/utils/provider/customImageEndpointSupport";
 import {
+  readSpeechEndpointSettings,
+  speechEndpointSettingsFromSubmittedValues,
+} from "@/utils/provider/customSpeechEndpointSettings";
+import {
   curatedImageSupportsFromSubmittedValues,
   resolveCuratedImageSupports,
 } from "@/utils/provider/providerImageCapabilities";
@@ -191,6 +195,11 @@ export interface SaveProviderModelInput {
   // Raw checkbox values, because only the resolved connection knows the api style that decides
   // whether inpainting was offerable in the modal at all.
   imageSupportValues?: string[];
+  // Raw modal values for the same reason: the resolved connection's api style decides whether the
+  // clone/VoiceDesign/Auto split applies at all.
+  speechVoiceMode?: string;
+  speechScriptMarkup?: string;
+  speechInstructValues?: string[];
   workflow?: Record<string, unknown>;
 }
 
@@ -459,8 +468,12 @@ function buildEndpointCapabilities(
 
   return CAPABILITIES.map((capability) => {
     const capabilityConnections = connections.filter((connection) => connection.capability === capability);
+    // `addCustomEndpointConnection` creates a connection for every capability the chosen API style
+    // supports, so a missing one means this endpoint cannot host that capability at all:
+    // `registerEndpointModel` answers `not-found` for it. Reporting it unavailable keeps the panel
+    // from offering a model modal that can only fail.
     if (capabilityConnections.length === 0) {
-      return { capability, availability: "available", models: [] };
+      return { capability, availability: "unavailable", models: [] };
     }
 
     const models = endpoints
@@ -508,6 +521,9 @@ function buildEndpointCapabilities(
         if (!model) return [];
         if (capability === "speech" || capability === "transcription") {
           model.isWorkspaceActive = endpoint.is_default;
+        }
+        if (capability === "speech") {
+          model.speechSettings = readSpeechEndpointSettings(endpoint);
         }
         return [model];
       });
@@ -1260,13 +1276,30 @@ async function registerEndpointModel(input: SaveProviderModelInput): Promise<Sav
   const workflowConfig = input.workflow
     ? { ...(editingEndpoint?.extra_config ?? {}), workflow: input.workflow }
     : editingEndpoint?.extra_config;
+  const speechSettings =
+    input.capability === "speech"
+      ? speechEndpointSettingsFromSubmittedValues(
+          connection.api_style,
+          input.speechVoiceMode,
+          input.speechScriptMarkup,
+          input.speechInstructValues,
+        )
+      : null;
   const extraConfig =
     input.capability === "image"
       ? {
           ...(workflowConfig ?? {}),
           workflow_supports: imageEndpointSupportsFromSubmittedValues(input.imageSupportValues, connection.api_style),
         }
-      : workflowConfig;
+      : speechSettings
+        ? {
+            // Merge over the stored row so an edit never drops a key the modal did not present.
+            ...(editingEndpoint?.extra_config ?? {}),
+            voice_mode: speechSettings.voiceMode,
+            script_markup: speechSettings.scriptMarkup,
+            supports_instruct: speechSettings.supportsInstruct,
+          }
+        : workflowConfig;
 
   const registered = await registerCustomEndpoint({
     scope: {

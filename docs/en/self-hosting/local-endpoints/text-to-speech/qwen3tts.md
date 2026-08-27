@@ -46,7 +46,8 @@ Run `/providers`, choose **Add New Custom Endpoint**, and use the speech API com
 - API Compatibility: `tts-clone`
 - `endpoint_url`: `http://127.0.0.1:8012`
 
-After saving the connection, select it, choose **Add or Edit a Model**, and add a Speech model.
+After saving the connection, select it and use its model dropdown to add a Speech model. The model form
+asks for **Voice Source Mode** and **Script Markup**; choose `Auto` and `Plain` for the auto-mode server.
 
 Adding the model makes the endpoint active immediately. Use `/model speech` later only when switching between speech endpoints.
 
@@ -93,4 +94,5 @@ TOMORI_TTS_MODE=voice-design python servers/tts/qwen3tts/server.py
 
 You can also pass `--mode voice-design` instead of setting `TOMORI_TTS_MODE`. The default VoiceDesign-only endpoint URL is `http://127.0.0.1:8014`.
 
-Register it the same way as auto mode, but use endpoint URL `http://127.0.0.1:8014` and select `VoiceDesign` as the voice source mode.
+Register it the same way as auto mode, but use endpoint URL `http://127.0.0.1:8014` and choose `VoiceDesign`
+as the Voice Source Mode on the Speech model.

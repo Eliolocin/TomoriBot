@@ -30,7 +30,17 @@ import {
 import { buildPanelContainer, buildPanelReceiptContainer, buildRangeChooserComponents } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import type { ImageEndpointSupports } from "@/utils/provider/customImageEndpointSupport";
-import { getAllProviderChoices, getProviderAddChoiceDescriptionKey } from "@/utils/provider/providerInfoRegistry";
+import {
+  SPEECH_SCRIPT_MARKUPS,
+  SPEECH_VOICE_MODES,
+  type SpeechEndpointSettings,
+} from "@/utils/provider/customSpeechEndpointSettings";
+import {
+  getAllProviderChoices,
+  getProviderAddChoiceDescriptionKey,
+  providerUsesApiFamily,
+} from "@/utils/provider/providerInfoRegistry";
+import { providerRequiresAlternation, providerRequiresPrefixCompletion } from "@/providers/utils/strictChatCompat";
 import { localizer } from "@/utils/text/localizer";
 
 export const PROVIDERS_ENTRIES_PER_SELECTOR_PAGE = 23;
@@ -331,13 +341,21 @@ export function buildEditEndpointModal(
 }
 
 export type ProvidersPanelPage =
-  | { kind: "entry"; entryId?: string }
+  | { kind: "entry"; entryId?: string; modelRangeIndex?: number }
   | { kind: "entry-chooser"; chooserPage?: number }
   | { kind: "add-provider" }
-  | { kind: "models"; entryId: string; rangeIndex?: number }
   | { kind: "remove"; entryId: string };
 
-export type ProviderModelModalField = "code-name" | "num-ctx" | "flags" | "image-supports" | "workflow";
+export type ProviderModelModalField =
+  | "code-name"
+  | "num-ctx"
+  | "flags"
+  | "compat"
+  | "image-supports"
+  | "voice-mode"
+  | "script-markup"
+  | "supports-instruct"
+  | "workflow";
 
 const MODEL_SELECTION_CAPABILITIES: readonly ProviderPanelCapability[] = [
   "text",
@@ -347,6 +365,28 @@ const MODEL_SELECTION_CAPABILITIES: readonly ProviderPanelCapability[] = [
   "speech",
   "transcription",
 ];
+
+const TEXT_CAPABILITY_FLAGS = ["tools", "images", "structured"] as const;
+const CHAT_COMPAT_FLAGS = ["strict-roles", "prefix"] as const;
+
+/**
+ * Strict role alternation and prefix completion describe the backend's parser, not the model, and
+ * only the OpenAI-compatible and Anthropic adapters read their columns. A flag the request path
+ * either ignores or force-overrides is a control that cannot change anything, so it is not offered.
+ * Re-derive this at submit time too: a panel may outlive the answer.
+ */
+export function offeredChatCompatFlags(
+  entryKind: "provider" | "endpoint",
+  entryKey: string,
+): ReadonlyArray<(typeof CHAT_COMPAT_FLAGS)[number]> {
+  // A custom endpoint is served by the `custom` provider, whose OpenAI-compatible adapter reads both
+  // columns. These toggles were introduced for exactly that case and must keep working there.
+  const provider = entryKind === "endpoint" ? "custom" : entryKey;
+  if (!providerUsesApiFamily(provider, "openai-compatible")) return [];
+  return CHAT_COMPAT_FLAGS.filter((flag) =>
+    flag === "strict-roles" ? !providerRequiresAlternation(provider) : !providerRequiresPrefixCompletion(provider),
+  );
+}
 
 const IMAGE_SUPPORT_FIELDS: ReadonlyArray<keyof ImageEndpointSupports> = [
   "txt2img",
@@ -359,6 +399,7 @@ export interface ProviderModelModalDefaults {
   codeName?: string;
   text?: ProviderPanelModel["textSettings"];
   image?: { supports: ImageEndpointSupports; allowInpaint: boolean };
+  speech?: { settings: SpeechEndpointSettings; allowVoiceMode: boolean };
 }
 
 export interface ModelSelectionValue {
@@ -453,6 +494,19 @@ export function buildProviderModelModal(
     });
   }
   if (capability === "text") {
+    const storedFlags: Record<string, boolean | undefined> = {
+      tools: defaults?.text?.hasTools,
+      images: defaults?.text?.seesImages,
+      structured: defaults?.text?.supportsStructOutput,
+      "strict-roles": defaults?.text?.strictRoleAlternation,
+      prefix: defaults?.text?.supportsPrefixCompletion,
+    };
+    const flagOption = (value: string) => ({
+      value,
+      label: safeSelectOptionText(localizer(locale, `commands.providers.model_flags.${value}`), 100),
+      description: safeSelectOptionText(localizer(locale, `commands.providers.model_flag_descriptions.${value}`), 100),
+      default: Boolean(storedFlags[value]),
+    });
     components.push({
       type: 18,
       label: safeSelectOptionText(localizer(locale, "commands.providers.model_flags_label"), 45),
@@ -461,21 +515,101 @@ export function buildProviderModelModal(
         type: 22,
         custom_id: buildProviderModelModalFieldId("flags", nonce),
         min_values: 0,
-        max_values: 5,
+        max_values: TEXT_CAPABILITY_FLAGS.length,
         required: false,
-        options: [
-          ["tools", defaults?.text?.hasTools],
-          ["images", defaults?.text?.seesImages],
-          ["structured", defaults?.text?.supportsStructOutput],
-          ["strict-roles", defaults?.text?.strictRoleAlternation],
-          ["prefix", defaults?.text?.supportsPrefixCompletion],
-        ].map(([value, selected]) => ({
-          value: String(value),
-          label: localizer(locale, `commands.providers.model_flags.${String(value)}`),
-          default: Boolean(selected),
+        options: TEXT_CAPABILITY_FLAGS.map(flagOption),
+      },
+    });
+    const compatFlags = offeredChatCompatFlags(entryKind, entryKey);
+    if (compatFlags.length > 0) {
+      components.push({
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.providers.model_compat_label"), 45),
+        description: safeSelectOptionText(localizer(locale, "commands.providers.model_compat_description"), 100),
+        component: {
+          type: 22,
+          custom_id: buildProviderModelModalFieldId("compat", nonce),
+          min_values: 0,
+          max_values: compatFlags.length,
+          required: false,
+          options: compatFlags.map(flagOption),
+        },
+      });
+    }
+  }
+  // A curated provider has no speech capability at all, so these only ever reach an endpoint. The
+  // clone/VoiceDesign/Auto split describes a `tts-clone` server, which is why the ElevenLabs preset
+  // gets script markup without it.
+  if (capability === "speech" && defaults?.speech) {
+    const speech = defaults.speech;
+    if (speech.allowVoiceMode) {
+      components.push({
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.providers.model_voice_mode_label"), 45),
+        description: safeSelectOptionText(localizer(locale, "commands.providers.model_voice_mode_description"), 100),
+        component: {
+          type: 21,
+          custom_id: buildProviderModelModalFieldId("voice-mode", nonce),
+          required: true,
+          options: SPEECH_VOICE_MODES.map((mode) => ({
+            value: mode,
+            label: safeSelectOptionText(localizer(locale, `commands.providers.voice_modes.${mode}`), 100),
+            description: safeSelectOptionText(
+              localizer(locale, `commands.providers.voice_mode_descriptions.${mode}`),
+              100,
+            ),
+            default: mode === speech.settings.voiceMode,
+          })),
+        },
+      });
+    }
+    components.push({
+      type: 18,
+      label: safeSelectOptionText(localizer(locale, "commands.providers.model_script_markup_label"), 45),
+      description: safeSelectOptionText(localizer(locale, "commands.providers.model_script_markup_description"), 100),
+      component: {
+        type: 21,
+        custom_id: buildProviderModelModalFieldId("script-markup", nonce),
+        required: true,
+        options: SPEECH_SCRIPT_MARKUPS.map((markup) => ({
+          value: markup,
+          label: safeSelectOptionText(localizer(locale, `commands.providers.script_markups.${markup}`), 100),
+          description: safeSelectOptionText(
+            localizer(locale, `commands.providers.script_markup_descriptions.${markup}`),
+            100,
+          ),
+          default: markup === speech.settings.scriptMarkup,
         })),
       },
     });
+    if (speech.allowVoiceMode) {
+      components.push({
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.providers.model_supports_instruct_label"), 45),
+        description: safeSelectOptionText(
+          localizer(locale, "commands.providers.model_supports_instruct_description"),
+          100,
+        ),
+        component: {
+          type: 22,
+          custom_id: buildProviderModelModalFieldId("supports-instruct", nonce),
+          min_values: 0,
+          max_values: 1,
+          required: false,
+          options: [
+            {
+              value: "supports-instruct",
+              label: safeSelectOptionText(localizer(locale, "commands.providers.model_supports_instruct_option"), 100),
+              description: safeSelectOptionText(
+                localizer(locale, "commands.providers.model_supports_instruct_option_description"),
+                100,
+              ),
+              default: speech.settings.supportsInstruct,
+            },
+          ],
+        },
+      });
+    }
   }
   if (capability === "image" || capability === "video") {
     components.push({
@@ -608,12 +742,6 @@ function buildCapabilitySection(
   routeNamespace: ProvidersRouteNamespace,
 ): string {
   const label = localizer(locale, `commands.providers.capabilities.${section.capability}`);
-  if (section.availability === "unavailable") {
-    return `**${label}**\n${localizer(locale, "commands.providers.capability_unavailable")}`;
-  }
-  if (section.models.length === 0) {
-    return `**${label}**\n${localizer(locale, "commands.providers.capability_empty")}`;
-  }
   return [
     `**${label}**`,
     localizer(locale, "commands.providers.capability_models_explanation"),
@@ -629,7 +757,11 @@ function buildEntryBody(locale: string, entry: ProviderPanelEntry, routeNamespac
     ].join("\n");
   }
 
-  return entry.capabilities.map((section) => buildCapabilitySection(locale, section, routeNamespace)).join("\n\n");
+  // A sparse entry would otherwise print one empty block per unpopulated capability, so absence is
+  // stated once for the whole page instead.
+  const populated = entry.capabilities.filter((section) => section.models.length > 0);
+  if (populated.length === 0) return localizer(locale, "commands.providers.entry_no_models");
+  return populated.map((section) => buildCapabilitySection(locale, section, routeNamespace)).join("\n\n");
 }
 
 function buildEntryActions(
@@ -641,18 +773,6 @@ function buildEntryActions(
 ): ActionRowData<ButtonComponentData> {
   const unavailable = readStatus !== "fresh";
   const buttons: ButtonComponentData[] = [];
-  if (entry.kind !== "brave") {
-    const routeSegments = entryRouteSegments(entry);
-    buttons.push({
-      type: ComponentType.Button,
-      style: ButtonStyle.Secondary,
-      customId: routeSegments
-        ? buildProvidersCustomIdForNamespace(routeNamespace, "model-open", locale, ...routeSegments)
-        : buildProvidersCustomIdForNamespace(routeNamespace, "retry", locale),
-      label: localizer(locale, "commands.providers.add_or_edit_model"),
-      disabled: unavailable || !enabledActions?.has("model"),
-    });
-  }
   buttons.push(
     {
       type: ComponentType.Button,
@@ -689,18 +809,26 @@ function buildEntryActions(
         locale,
         ...removalRouteSegments(entry),
       ),
-      label: localizer(locale, "commands.providers.remove"),
+      label: localizer(
+        locale,
+        entry.kind === "endpoint"
+          ? "commands.providers.remove_endpoint"
+          : entry.kind === "brave"
+            ? "commands.providers.remove_key"
+            : "commands.providers.remove_provider",
+      ),
       disabled: unavailable || !enabledActions?.has("remove"),
     },
   );
   return { type: ComponentType.ActionRow, components: buttons };
 }
 
-function buildModelsPage(
+function buildEntryModelSelector(
   locale: string,
   entry: ProviderPanelEntry,
   readStatus: PanelReadStatus,
   rangeIndex = 0,
+  enabledActions: ProvidersPanelRenderInput["enabledActions"],
   routeNamespace: ProvidersRouteNamespace,
 ): ComponentInContainerData[] {
   const routeSegments = entryRouteSegments(entry);
@@ -711,9 +839,12 @@ function buildModelsPage(
       .map((model) => ({ capability: section.capability, model })),
   );
   const selection = resolveRangeSelection(customModels, rangeIndex, MAX_MODELS_PER_SELECTOR_PAGE);
-  const addOptions: SelectMenuComponentOptionData[] = (
-    ["text", "image", "embedding", "video", "speech", "transcription"] as const
-  ).map((capability) => ({
+  // A capability the entry does not expose cannot be registered: the shared-provider path answers
+  // `unsupported-capability` and the endpoint path `not-found`, so offering it is a dead end.
+  const offeredCapabilities = MODEL_SELECTION_CAPABILITIES.filter((capability) =>
+    entry.capabilities.some((section) => section.capability === capability && section.availability !== "unavailable"),
+  );
+  const addOptions: SelectMenuComponentOptionData[] = offeredCapabilities.map((capability) => ({
     label: safeSelectOptionText(
       localizer(locale, "commands.providers.add_capability_model", {
         capability: localizer(locale, `commands.providers.capabilities.${capability}`),
@@ -736,14 +867,9 @@ function buildModelsPage(
       ),
     })),
   ];
+  // Discord rejects a String Select with no options, so an entry exposing nothing renders none.
+  if (options.length === 0) return [];
   const components: ComponentInContainerData[] = [
-    {
-      type: ComponentType.TextDisplay,
-      content: `### ${localizer(locale, "commands.providers.manage_models_title", { provider: entry.displayName })}\n${localizer(
-        locale,
-        "commands.providers.manage_models_description",
-      )}`,
-    },
     {
       type: ComponentType.ActionRow,
       components: [
@@ -752,7 +878,7 @@ function buildModelsPage(
           customId: buildProvidersCustomIdForNamespace(routeNamespace, "model-select", locale, ...routeSegments),
           placeholder: localizer(locale, "commands.providers.manage_models_placeholder"),
           options,
-          disabled: readStatus !== "fresh",
+          disabled: readStatus !== "fresh" || !enabledActions?.has("model"),
         },
       ],
     },
@@ -790,24 +916,12 @@ function buildModelsPage(
       ],
     });
   }
-  components.push({
-    type: ComponentType.ActionRow,
-    components: [
-      {
-        type: ComponentType.Button,
-        style: ButtonStyle.Secondary,
-        customId: buildProvidersCustomIdForNamespace(routeNamespace, "model-close", locale, ...routeSegments),
-        label: localizer(locale, "commands.providers.back_to_provider"),
-      },
-    ],
-  });
   return components;
 }
 
 function selectedEntryId(input: ProvidersPanelRenderInput): string | null {
   if (input.page.kind === "entry") return input.page.entryId ?? input.initialEntryId;
   if (input.page.kind === "remove") return input.page.entryId;
-  if (input.page.kind === "models") return input.page.entryId;
   return null;
 }
 
@@ -942,15 +1056,6 @@ ${localizer(locale, `commands.providers.remove_impact_${entry.kind}`, {
         content: localizer(locale, "commands.providers.changed_receipt_detail"),
       });
     }
-  } else if (input.page.kind === "models") {
-    const modelPage = input.page;
-    const entry = entries.find((candidate) => candidate.id === modelPage.entryId);
-    if (entry) components.push(...buildModelsPage(locale, entry, readStatus, modelPage.rangeIndex, routeNamespace));
-    else
-      components.push({
-        type: ComponentType.TextDisplay,
-        content: localizer(locale, "commands.providers.changed_receipt_detail"),
-      });
   } else if (input.page.kind === "add-provider") {
     components.push({
       type: ComponentType.TextDisplay,
@@ -962,8 +1067,24 @@ ${localizer(locale, `commands.providers.remove_impact_${entry.kind}`, {
   } else {
     const entry = entries.find((candidate) => candidate.id === selectedId) ?? entries[0];
     if (entry) {
+      const modelSelector = buildEntryModelSelector(
+        locale,
+        entry,
+        readStatus,
+        input.page.kind === "entry" ? input.page.modelRangeIndex : 0,
+        input.enabledActions,
+        routeNamespace,
+      );
+      const body = buildEntryBody(locale, entry, routeNamespace);
       components.push(
-        { type: ComponentType.TextDisplay, content: buildEntryBody(locale, entry, routeNamespace) },
+        {
+          type: ComponentType.TextDisplay,
+          content:
+            modelSelector.length > 0
+              ? `${body}\n\n${localizer(locale, "commands.providers.model_selector_guidance")}`
+              : body,
+        },
+        ...modelSelector,
         buildEntryActions(locale, entry, readStatus, input.enabledActions, routeNamespace),
       );
     } else {

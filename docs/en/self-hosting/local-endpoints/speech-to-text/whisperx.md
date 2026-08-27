@@ -41,7 +41,7 @@ Run `/providers`, choose **Add New Custom Endpoint**, and use the transcription 
 - API Compatibility: `openai-compatible-transcription`
 - `endpoint_url`: `http://127.0.0.1:8021`
 
-After saving the connection, select it, choose **Add or Edit a Model**, and add `large-v3`, or
+After saving the connection, select it and use its model dropdown to add `large-v3`, or
 whatever `WHISPERX_MODEL` is set to, as a Transcription model.
 
 Adding the model makes the endpoint active immediately. Use `/model transcription` later only when switching endpoints.

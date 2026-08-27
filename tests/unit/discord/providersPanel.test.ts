@@ -9,6 +9,7 @@ import {
   buildEditProviderModal,
   buildModelSelectionValue,
   buildProviderModelModal,
+  offeredChatCompatFlags,
   parseModelSelectionValue,
   buildProvidersPanelPayload,
 } from "@/utils/discord/ui/providersPanel";
@@ -172,7 +173,7 @@ describe("providers panel rendering", () => {
     expect(JSON.stringify(personalPanel)).toContain("## 個人プロバイダー");
   });
 
-  it("renders all provider capabilities in one body display with workspace-derived markers", () => {
+  it("renders only populated capability sections with workspace-derived markers", () => {
     const entry = providerEntry("provider:google");
     const payload = buildProvidersPanelPayload({
       locale: "en-US",
@@ -185,14 +186,39 @@ describe("providers panel rendering", () => {
     const body = textDisplays.find((component) => String(component.content).includes("**Text**"));
     const actions = collectComponents(payload).filter((component) => component.type === ComponentType.Button);
 
-    expect(String(body?.content)).toContain("**Transcription**");
     expect(String(body?.content)).toContain("currently active");
     expect(String(body?.content)).toContain("provider fallback");
     expect(String(body?.content)).toContain("custom registration");
+    expect(String(body?.content)).toContain("Use the dropdown below to add or edit a model capability:");
+    expect(String(body?.content)).not.toContain("**Image**");
+    expect(String(body?.content)).not.toContain("**Transcription**");
+    expect(String(body?.content)).not.toContain("No models are registered");
     expect(String(body?.content)).not.toContain("unverified");
     expect(String(body?.content)).not.toContain("Workspace ID");
     expect(String(body?.content)).not.toContain("### Google");
     expect(actions.filter((action) => action.label !== "Retry").every((action) => action.disabled === true)).toBe(true);
+    expect(actions.map((action) => action.label)).toContain("Remove Provider");
+  });
+
+  it("states absence once when an entry has no registered models at all", () => {
+    const entry = providerEntry("provider:google");
+    if (entry.kind !== "provider") throw new Error("Expected provider fixture");
+    for (const section of entry.capabilities) section.models = [];
+    const payload = buildProvidersPanelPayload({
+      locale: "en-US",
+      entries: [entry],
+      initialEntryId: entry.id,
+      readStatus: "fresh",
+      page: { kind: "entry" },
+    });
+    const body = collectComponents(payload)
+      .filter((component) => component.type === ComponentType.TextDisplay)
+      .find((component) => String(component.content).includes("No models are registered here yet."));
+
+    expect(body).toBeDefined();
+    expect(String(body?.content)).not.toContain("**Text**");
+    expect(String(body?.content).match(/No models are registered/g)).toHaveLength(1);
+    expect(String(body?.content)).toContain("Use the dropdown below to add or edit a model capability:");
   });
 
   it("renders endpoint and Brave pages without exposing endpoint internals", () => {
@@ -256,8 +282,11 @@ describe("providers panel rendering", () => {
     expect(endpointPayload).not.toContain("connectionIds");
     expect(endpointPayload).not.toContain("custom:41");
     expect(endpointPayload).not.toContain("### lighthouse");
+    expect(endpointPayload).toContain("Remove Endpoint");
     expect(bravePayload).toContain("API key configured");
-    expect(bravePayload).not.toContain("Add or Edit a Model");
+    expect(bravePayload).toContain("Remove Key");
+    expect(bravePayload).not.toContain("model-select");
+    expect(bravePayload).not.toContain("Use the dropdown below to add or edit a model capability:");
     expect(bravePayload).not.toContain("### Brave Search");
   });
 
@@ -338,7 +367,7 @@ describe("providers panel rendering", () => {
     expect(options[2]).toMatchObject({ value: activeEntry.id, default: true });
   });
 
-  it("lists model-add actions first and keeps the parent provider selected", () => {
+  it("lists exposed model-add actions first on the entry page and keeps the provider selected", () => {
     const entry = providerEntry("provider:google");
     if (entry.kind !== "provider") throw new Error("Expected provider fixture");
     const text = entry.capabilities[0];
@@ -356,14 +385,14 @@ describe("providers panel rendering", () => {
       entries: [entry],
       initialEntryId: entry.id,
       readStatus: "fresh",
-      page: { kind: "models", entryId: entry.id, rangeIndex: 0 },
+      page: { kind: "entry", entryId: entry.id, modelRangeIndex: 0 },
     });
     const second = buildProvidersPanelPayload({
       locale: "en-US",
       entries: [entry],
       initialEntryId: entry.id,
       readStatus: "fresh",
-      page: { kind: "models", entryId: entry.id, rangeIndex: 1 },
+      page: { kind: "entry", entryId: entry.id, modelRangeIndex: 1 },
     });
     const firstSelect = collectComponents(first).find(
       (component) =>
@@ -376,19 +405,22 @@ describe("providers panel rendering", () => {
     const firstOptions = firstSelect?.options as Array<{ description?: string; label: string; value: string }>;
     const secondOptions = secondSelect?.options as Array<{ label: string; value: string }>;
 
-    expect(firstOptions).toHaveLength(25);
-    expect(firstOptions.slice(0, 6).map((option) => option.value)).toEqual([
+    // The fixture marks speech and transcription unavailable, so neither may be offered as a modal
+    // target: both would fail at the write with `unsupported-capability`.
+    expect(firstOptions.slice(0, 4).map((option) => option.value)).toEqual([
       "add:text",
       "add:image",
       "add:embedding",
       "add:video",
-      "add:speech",
-      "add:transcription",
     ]);
-    expect(firstOptions[6]?.value).toBe("edit:text:1");
-    expect(firstOptions[6]?.description).toBe("Text · custom registration");
-    expect(secondOptions).toHaveLength(7);
-    expect(secondOptions[6]?.value).toBe("edit:text:20");
+    expect(firstOptions.map((option) => option.value)).not.toContain("add:speech");
+    expect(firstOptions.map((option) => option.value)).not.toContain("add:transcription");
+    expect(firstOptions).toHaveLength(23);
+    expect(firstOptions.length).toBeLessThanOrEqual(25);
+    expect(firstOptions[4]?.value).toBe("edit:text:1");
+    expect(firstOptions[4]?.description).toBe("Text · custom registration");
+    expect(secondOptions).toHaveLength(5);
+    expect(secondOptions[4]?.value).toBe("edit:text:20");
 
     const panelSelect = collectComponents(first).find(
       (component) =>
@@ -407,6 +439,7 @@ describe("providers panel rendering", () => {
     expect(codeInput?.placeholder).toBe("anthropic/claude-4-sonnet");
     expect(codeInput?.value).toBeUndefined();
     expect(JSON.stringify(textModal)).toContain("flags_abcdefgh");
+    expect(JSON.stringify(textModal)).not.toContain("compat_abcdefgh");
     expect(JSON.stringify(textModal)).not.toContain("num-ctx_abcdefgh");
     expect(JSON.stringify(endpointTextModal)).toContain("num-ctx_abcdefgh");
     expect(JSON.stringify(imageModal)).toContain("workflow_abcdefgh");
@@ -473,6 +506,91 @@ describe("providers panel rendering", () => {
     expect(JSON.stringify(undeclarableModal)).not.toContain("image-supports_abcdefgh");
   });
 
+  it("separates chat-completion compatibility from what the model can actually do", () => {
+    const endpointModal = buildProviderModelModal("en-US", "endpoint", "73", "text", null, "abcdefgh");
+    const capabilities = endpointModal.components.find(
+      (entry) => entry.component?.custom_id === "flags_abcdefgh",
+    )?.component;
+    const compat = endpointModal.components.find(
+      (entry) => entry.component?.custom_id === "compat_abcdefgh",
+    )?.component;
+
+    expect(capabilities?.options?.map((option) => option.value)).toEqual(["tools", "images", "structured"]);
+    expect(compat?.options?.map((option) => option.value)).toEqual(["strict-roles", "prefix"]);
+    expect(JSON.stringify(endpointModal)).toContain("Chat Completion Compatibilities");
+    // Every option says what it does and when to tick it.
+    expect(compat?.options?.every((option) => (option.description?.length ?? 0) > 0)).toBe(true);
+    expect(capabilities?.options?.every((option) => (option.description?.length ?? 0) > 0)).toBe(true);
+    expect(JSON.stringify(endpointModal)).toContain("a proxy fronting Claude");
+  });
+
+  it("offers each compatibility only where the request path can honour it", () => {
+    // Endpoints resolve through the `custom` provider's OpenAI-compatible adapter, which reads both.
+    expect(offeredChatCompatFlags("endpoint", "73")).toEqual(["strict-roles", "prefix"]);
+    expect(offeredChatCompatFlags("provider", "nvidia")).toEqual(["strict-roles", "prefix"]);
+    // DeepSeek and Z.ai force prefix completion on regardless of the column, so the toggle is inert.
+    expect(offeredChatCompatFlags("provider", "deepseek")).toEqual(["strict-roles"]);
+    expect(offeredChatCompatFlags("provider", "zai")).toEqual(["strict-roles"]);
+    // Anthropic forces alternation and never reads prefix; the rest never read either column.
+    expect(offeredChatCompatFlags("provider", "anthropic")).toEqual([]);
+    expect(offeredChatCompatFlags("provider", "openrouter")).toEqual([]);
+    expect(offeredChatCompatFlags("provider", "google")).toEqual([]);
+    expect(offeredChatCompatFlags("provider", "novelai")).toEqual([]);
+  });
+
+  it("renders no compatibility group for a provider that cannot honour either flag", () => {
+    const json = JSON.stringify(buildProviderModelModal("en-US", "provider", "openrouter", "text", null, "abcdefgh"));
+    expect(json).toContain("flags_abcdefgh");
+    expect(json).not.toContain("compat_abcdefgh");
+    expect(json).not.toContain("Chat Completion Compatibilities");
+  });
+
+  it("asks a clone server for its voice mode, markup, and instruct support", () => {
+    const modal = buildProviderModelModal("en-US", "endpoint", "73", "speech", null, "abcdefgh", {
+      speech: {
+        settings: { voiceMode: "auto", scriptMarkup: "emoji", supportsInstruct: true },
+        allowVoiceMode: true,
+      },
+    });
+    const json = JSON.stringify(modal);
+    const field = (id: string) => modal.components.find((entry) => entry.component?.custom_id === id)?.component;
+
+    expect(modal.components).toHaveLength(4);
+    expect(field("voice-mode_abcdefgh")?.options?.map((option) => option.value)).toEqual([
+      "clone",
+      "voice-design",
+      "auto",
+    ]);
+    expect(field("voice-mode_abcdefgh")?.options?.find((option) => option.default)?.value).toBe("auto");
+    expect(field("script-markup_abcdefgh")?.options?.find((option) => option.default)?.value).toBe("emoji");
+    expect(field("supports-instruct_abcdefgh")?.options?.[0]?.default).toBe(true);
+
+    // Every choice explains when to pick it, which is the whole point of splitting these out.
+    expect(json).toContain("Pick this for --mode auto.");
+    expect(json).toContain("Strip every cue.");
+    expect(json).toContain("/speech voice-design");
+  });
+
+  it("omits the clone-only controls for a preset endpoint that has no voice-mode split", () => {
+    const modal = buildProviderModelModal("en-US", "endpoint", "51", "speech", null, "abcdefgh", {
+      speech: {
+        settings: { voiceMode: "clone", scriptMarkup: "bracket-tags", supportsInstruct: false },
+        allowVoiceMode: false,
+      },
+    });
+    const json = JSON.stringify(modal);
+
+    expect(modal.components).toHaveLength(2);
+    expect(json).not.toContain("voice-mode_abcdefgh");
+    expect(json).not.toContain("supports-instruct_abcdefgh");
+    expect(json).toContain("script-markup_abcdefgh");
+  });
+
+  it("renders no speech controls when nothing resolved stored settings", () => {
+    const modal = buildProviderModelModal("en-US", "endpoint", "73", "speech", null, "abcdefgh");
+    expect(modal.components).toHaveLength(1);
+  });
+
   it("prefills an edit modal from the model the selector names", () => {
     const editModal = buildProviderModelModal("en-US", "endpoint", "73", "text", 91, "abcdefgh", {
       codeName: "lighthouse/model",
@@ -487,12 +605,14 @@ describe("providers panel rendering", () => {
     });
     const codeInput = editModal.components[0]?.component;
     const flagsField = editModal.components.find((entry) => entry.component?.custom_id === "flags_abcdefgh")?.component;
+    const compatField = editModal.components.find(
+      (entry) => entry.component?.custom_id === "compat_abcdefgh",
+    )?.component;
 
     expect(codeInput?.value).toBe("lighthouse/model");
-    expect(flagsField?.options?.filter((option) => option.default).map((option) => option.value)).toEqual([
-      "tools",
-      "prefix",
-    ]);
+    // The prefill has to reach the group each flag now lives in, not just the modal.
+    expect(flagsField?.options?.filter((option) => option.default).map((option) => option.value)).toEqual(["tools"]);
+    expect(compatField?.options?.filter((option) => option.default).map((option) => option.value)).toEqual(["prefix"]);
   });
 
   it("validates selector values without decoding anything beyond the model identity", () => {

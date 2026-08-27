@@ -88,9 +88,9 @@ A **label** is the user-facing menu name and groups capabilities under one bundl
 one endpoint URL. It is never sent to the remote endpoint. Capabilities served from different URLs
 need distinct labels. Choose **Add New Custom Endpoint**, select the
 API compatibility, and save the connection. Saving prepares the capabilities supported by that
-protocol without registering any models. Then select the new endpoint, choose **Add or Edit a
-Model**, and register its exact model code and capability. Adding a model activates it for that
-capability. Use the same model action to attach more models or edit a workspace-added registration.
+protocol without registering any models. Then select the new endpoint and use its model
+dropdown to register an exact model code and capability. Adding a model activates it for that
+capability. Use the same dropdown to attach more models or edit a workspace-added registration.
 Text models declare their own capabilities in that form, and image models declare which request modes
 they support.
 
