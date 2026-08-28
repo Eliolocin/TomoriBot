@@ -74,6 +74,11 @@ export const PANEL_ACTIONS = [
   "personal-config.personal.parameters.set",
   "personal-config.personal.fallbacks.set",
   "personal-config.personal.randomizer.set",
+  "personal-config.personal.trigger-mode.set",
+  "personal-config.personal.tool-mode.set",
+  "personal-config.personal.impersonation.set",
+  "personal-config.personal.spotlight.set",
+  "personal-config.personal.spotlight.remove",
 ] as const;
 
 /** Union of all valid panel action metric keys. */

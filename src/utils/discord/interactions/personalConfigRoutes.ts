@@ -1,4 +1,5 @@
 import {
+  ChannelType,
   ComponentType,
   MessageFlags,
   type ButtonInteraction,
@@ -16,8 +17,11 @@ import {
   type FallbackModelRef,
   type PersonalProviderCapability,
 } from "@/types/db/schema";
+import type { PersonalSpotlightStatus } from "@/utils/db/repositories/UserRepository";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { UserPersonaNamingPreference } from "@/types/personaNaming";
+import { getCachedAllPersonas, getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import { invalidatePersonalSpotlightCache } from "@/utils/cache/personalSpotlightCache";
 import { getShortTermMemoriesForUser, preWarmUserStmEntries } from "@/utils/cache/shortTermMemoryCache";
 import { getCachedUserRow, invalidateUserCache } from "@/utils/cache/userCache";
 import {
@@ -34,6 +38,7 @@ import { beginPanelInteraction, performPanelAction } from "@/utils/discord/inter
 import {
   PERSONAL_CONFIG_ROUTE_NAMESPACE,
   PERSONAL_CONFIG_ROUTE_VERSION,
+  SPOTLIGHT_REMOVE_PAGE_SIZE,
   decodeProviderParam,
   parsePersonalConfigPanelRoute,
   type PersonalConfigCategory,
@@ -44,6 +49,7 @@ import {
   buildAboutModal,
   buildAppearanceModal,
   buildFallbacksModal,
+  buildImpersonationModal,
   buildLanguageModal,
   buildModelSelectModal,
   buildNamingModal,
@@ -54,11 +60,15 @@ import {
   buildPersonalConfigPanelPayload,
   buildPrivacyLevelModal,
   buildQuickToggleModal,
+  buildSpotlightAutoTriggerModal,
+  buildSpotlightRemoveModal,
+  buildSpotlightSetModal,
   buildTimezoneModal,
   type PersonalConfigFallbackDisplaySlot,
   type PersonalConfigModelDisplayInfo,
   type PersonalConfigPanelView,
   type PersonalConfigRoutingRow,
+  type PersonalConfigSpotlightDisplayInfo,
 } from "@/utils/discord/ui/personalConfigPanel";
 import {
   showRoutedRawModal,
@@ -202,6 +212,41 @@ export interface PersonalConfigOperations {
     | { status: "no-changes" }
     | { status: "requires-fallbacks" | "not-found" | "write-failed" }
   >;
+  setTriggerMode(input: {
+    userId: number;
+    userDiscId: string;
+    mode: "off" | "follow" | "on";
+  }): Promise<{ status: "success" } | { status: "invalid-value" | "write-failed" }>;
+  setToolMode(input: {
+    userId: number;
+    userDiscId: string;
+    mode: "off" | "follow" | "on";
+  }): Promise<{ status: "success" } | { status: "invalid-value" | "write-failed" }>;
+  setImpersonationPrompt(input: {
+    userId: number;
+    userDiscId: string;
+    prompt: string | null;
+  }): Promise<{ status: "success" } | { status: "write-failed" }>;
+  setSpotlight(input: {
+    serverId: number;
+    userId: number;
+    userDiscId: string;
+    channelId: string;
+    personaIds: number[];
+    autoTriggerPersonaId: number | null;
+    expiresAt: Date | null;
+  }): Promise<{ status: "success" } | { status: "no-personas" | "invalid-auto-trigger" | "write-failed" }>;
+  removeSpotlights(input: {
+    serverId: number;
+    userId: number;
+    userDiscId: string;
+    channelIds: string[];
+  }): Promise<
+    | { status: "success"; removedCount: number }
+    | { status: "no-changes" }
+    | { status: "partial-failure"; removedCount: number; failedCount: number }
+    | { status: "write-failed" }
+  >;
 }
 
 export interface PersonalConfigRouteDependencies {
@@ -225,6 +270,12 @@ export interface PersonalConfigRouteDependencies {
     provider: string,
     capability: PersonalConfigManagedCapability,
   ): Promise<Array<{ id: number; name: string; description?: string }>>;
+  loadActiveSpotlights(serverId: number, userId: number): Promise<PersonalSpotlightStatus[]>;
+  loadGuildPersonas(guildId: string): Promise<Array<{ id: number; name: string; isAlter: boolean }>>;
+  loadTomoriState(guildId: string): Promise<TomoriState | null>;
+  loadServerTriggerBehavior(
+    guildId: string,
+  ): Promise<{ deliberate_trigger_mode: boolean; deliberate_tool_mode: boolean } | null>;
   operations: PersonalConfigOperations;
   recordAction(input: RecordPanelActionInput): void;
   createNonce(): string;
@@ -307,6 +358,36 @@ export interface PersonalConfigRouteDependencies {
     provider: string,
     availableOptions: Array<{ refKey: string; label: string }>,
     currentRefs: FallbackModelRef[],
+  ): Promise<void>;
+  showImpersonationModal(
+    interaction: ButtonInteraction,
+    locale: string,
+    nonce: string,
+    currentPrompt: string | null,
+  ): Promise<void>;
+  showSpotlightSetModal(
+    interaction: ButtonInteraction,
+    locale: string,
+    nonce: string,
+    personas: Array<{ id: number; name: string; isAlter: boolean }>,
+  ): Promise<void>;
+  showSpotlightAutoTriggerModal(
+    interaction: ButtonInteraction,
+    locale: string,
+    nonce: string,
+    channelId: string,
+    hours: number,
+    mask: string,
+    selectedPersonas: Array<{ id: number; name: string; isAlter: boolean }>,
+  ): Promise<void>;
+  showSpotlightRemoveModal(
+    interaction: ButtonInteraction,
+    locale: string,
+    nonce: string,
+    start: number,
+    activeSpotlights: PersonalSpotlightStatus[],
+    personas: Array<{ id: number; name: string; isAlter: boolean }>,
+    guildChannels: Map<string, { name: string }> | undefined,
   ): Promise<void>;
 }
 
@@ -721,6 +802,92 @@ export const personalConfigOperations: PersonalConfigOperations = {
     const ok = await llmProviderRepo.updatePersonalModelRandomizer(userId, provider, enabled);
     if (!ok) return { status: "write-failed" };
     return { status: "success", enabled };
+  },
+
+  async setTriggerMode({ userId, userDiscId, mode }) {
+    if (mode !== "off" && mode !== "follow" && mode !== "on") {
+      return { status: "invalid-value" };
+    }
+    const ok = await userRepository.setDeliberateTriggerMode(userId, mode);
+    if (!ok) return { status: "write-failed" };
+    invalidateUserCache(userDiscId);
+    return { status: "success" };
+  },
+
+  async setToolMode({ userId, userDiscId, mode }) {
+    if (mode !== "off" && mode !== "follow" && mode !== "on") {
+      return { status: "invalid-value" };
+    }
+    const updated = await userRepository.update(userId, {
+      personal_deliberate_tool_mode: mode,
+    });
+    if (!updated) return { status: "write-failed" };
+    invalidateUserCache(userDiscId);
+    return { status: "success" };
+  },
+
+  async setImpersonationPrompt({ userId, userDiscId, prompt }) {
+    const ok = await userRepository.setImpersonatePrompt(userId, prompt);
+    if (!ok) return { status: "write-failed" };
+    invalidateUserCache(userDiscId);
+    return { status: "success" };
+  },
+
+  async setSpotlight({
+    serverId,
+    userId,
+    userDiscId: _userDiscId,
+    channelId,
+    personaIds,
+    autoTriggerPersonaId,
+    expiresAt,
+  }) {
+    if (personaIds.length === 0) return { status: "no-personas" };
+    if (autoTriggerPersonaId !== null && !personaIds.includes(autoTriggerPersonaId)) {
+      return { status: "invalid-auto-trigger" };
+    }
+    try {
+      await userRepository.replacePersonalSpotlight(
+        serverId,
+        userId,
+        channelId,
+        personaIds,
+        autoTriggerPersonaId,
+        expiresAt,
+      );
+      invalidatePersonalSpotlightCache(serverId, userId, channelId);
+      return { status: "success" };
+    } catch (error) {
+      log.error("Failed to replace personal spotlight", error as Error);
+      return { status: "write-failed" };
+    }
+  },
+
+  async removeSpotlights({ serverId, userId, userDiscId: _userDiscId, channelIds }) {
+    if (channelIds.length === 0) return { status: "no-changes" };
+    let removedCount = 0;
+    let failedCount = 0;
+    for (const channelId of channelIds) {
+      try {
+        const ok = await userRepository.removePersonalSpotlight(serverId, userId, channelId);
+        if (ok) {
+          removedCount++;
+          invalidatePersonalSpotlightCache(serverId, userId, channelId);
+        } else {
+          failedCount++;
+        }
+      } catch (error) {
+        failedCount++;
+        log.error("Failed to remove personal spotlight", error as Error);
+      }
+    }
+    if (failedCount === 0 && removedCount > 0) {
+      return { status: "success", removedCount };
+    }
+    if (removedCount > 0 && failedCount > 0) {
+      return { status: "partial-failure", removedCount, failedCount };
+    }
+    return { status: "write-failed" };
   },
 };
 
@@ -1167,6 +1334,22 @@ async function repaint(
     );
   }
 
+  let spotlightDisplayInfo: PersonalConfigSpotlightDisplayInfo | undefined;
+  if (category === "advanced" && page === "spotlight" && scope.guildId && scope.internalServerId) {
+    const activeSpotlights = await dependencies.loadActiveSpotlights(scope.internalServerId, scope.userId);
+    const personas = await dependencies.loadGuildPersonas(scope.guildId);
+    spotlightDisplayInfo = { activeSpotlights, personas };
+  }
+
+  let serverTriggerBehavior: { deliberate_trigger_mode: boolean; deliberate_tool_mode: boolean } | null = null;
+  if (category === "advanced" && page === "response-modes" && scope.guildId) {
+    try {
+      serverTriggerBehavior = await dependencies.loadServerTriggerBehavior(scope.guildId);
+    } catch {
+      serverTriggerBehavior = null;
+    }
+  }
+
   await interaction.editReply(
     buildPersonalConfigPanelPayload({
       locale,
@@ -1175,6 +1358,7 @@ async function repaint(
       user: scope.user,
       resolvedNickname: scope.resolvedNickname,
       personas: scope.personas,
+      guildId: scope.guildId,
       selectedLineageId,
       personaNamingPreference: personaPref,
       memoryCount,
@@ -1186,6 +1370,8 @@ async function repaint(
       selectedParametersProvider,
       selectedFallbacksProvider,
       modelDisplayInfo,
+      spotlightDisplayInfo,
+      serverTriggerBehavior,
       view,
     }),
   );
@@ -1199,6 +1385,35 @@ const defaultDependencies: PersonalConfigRouteDependencies = {
   loadUserSavedProviders,
   loadPersonalModelDisplayInfo,
   loadAvailableModelsForCapability,
+  loadActiveSpotlights: (serverId, userId) => userRepository.getActivePersonalSpotlightsForUser(serverId, userId),
+  loadGuildPersonas: async (guildId) => {
+    const allPersonas: TomoriState[] = await getCachedAllPersonas(guildId);
+    return (
+      allPersonas
+        .filter((p): p is TomoriState & { persona_id: number } => typeof p.persona_id === "number")
+        // Spotlight selection travels as a positional bitmask over this list, so the order must not
+        // depend on cache population order between the modal and its confirmation.
+        .sort((left, right) => left.persona_id - right.persona_id)
+        .map((p) => ({
+          id: p.persona_id,
+          name: p.persona_nickname,
+          isAlter: Boolean(p.is_alter),
+        }))
+    );
+  },
+  loadTomoriState: async (guildId) => getCachedTomoriState(guildId),
+  loadServerTriggerBehavior: async (guildId) => {
+    try {
+      const tomoriState = await getCachedTomoriState(guildId);
+      if (!tomoriState?.config) return null;
+      return {
+        deliberate_trigger_mode: Boolean(tomoriState.config.deliberate_trigger_mode),
+        deliberate_tool_mode: Boolean(tomoriState.config.deliberate_tool_mode),
+      };
+    } catch {
+      return null;
+    }
+  },
   operations: personalConfigOperations,
   recordAction: (input) => {
     void recordPanelActionStat(input);
@@ -1231,6 +1446,20 @@ const defaultDependencies: PersonalConfigRouteDependencies = {
     showRoutedRawModal(interaction, buildParameters2Modal(locale, nonce, provider, currentConfig)),
   showFallbacksModal: (interaction, locale, nonce, provider, availableOptions, currentRefs) =>
     showRoutedRawModal(interaction, buildFallbacksModal(locale, nonce, provider, availableOptions, currentRefs)),
+  showImpersonationModal: (interaction, locale, nonce, currentPrompt) =>
+    showRoutedRawModal(interaction, buildImpersonationModal(locale, nonce, currentPrompt)),
+  showSpotlightSetModal: (interaction, locale, nonce, personas) =>
+    showRoutedRawModal(interaction, buildSpotlightSetModal(locale, nonce, personas)),
+  showSpotlightAutoTriggerModal: (interaction, locale, nonce, channelId, hours, mask, selectedPersonas) =>
+    showRoutedRawModal(
+      interaction,
+      buildSpotlightAutoTriggerModal(locale, nonce, channelId, hours, mask, selectedPersonas),
+    ),
+  showSpotlightRemoveModal: (interaction, locale, nonce, start, activeSpotlights, personas, guildChannels) =>
+    showRoutedRawModal(
+      interaction,
+      buildSpotlightRemoveModal(locale, nonce, start, activeSpotlights, personas, guildChannels),
+    ),
 };
 
 export function createPersonalConfigInteractionRoute(
@@ -1685,6 +1914,147 @@ export function createPersonalConfigInteractionRoute(
           );
           return;
         }
+      }
+
+      if (route.action === "impersonation-open") {
+        if (!interaction.isButton()) throw new Error("impersonation-open requires Button interaction");
+        const cachedScope = await dependencies.resolveScope(interaction, false);
+        if (!cachedScope) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.unavailable"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const nonce = dependencies.createNonce();
+        await dependencies.showImpersonationModal(
+          interaction,
+          route.locale,
+          nonce,
+          cachedScope.user.impersonation_prompt ?? null,
+        );
+        return;
+      }
+
+      if (route.action === "spotlight-set-open") {
+        if (!interaction.isButton()) throw new Error("spotlight-set-open requires Button interaction");
+        const cachedScope = await dependencies.resolveScope(interaction, false);
+        if (!cachedScope?.guildId || !cachedScope.internalServerId) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
+        if (personas.length === 0) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.spotlight_no_personas_detail"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        if (personas.length > 30) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.spotlight_too_many_personas_detail"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const nonce = dependencies.createNonce();
+        await dependencies.showSpotlightSetModal(interaction, route.locale, nonce, personas);
+        return;
+      }
+
+      if (route.action === "spot-set-auto") {
+        if (!interaction.isButton()) throw new Error("spot-set-auto requires Button interaction");
+        const cachedScope = await dependencies.resolveScope(interaction, false);
+        if (!cachedScope?.guildId || !cachedScope.internalServerId) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
+        const bitmask = BigInt(`0x${route.mask}`);
+        const selectedPersonas = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n);
+        const nonce = dependencies.createNonce();
+        await dependencies.showSpotlightAutoTriggerModal(
+          interaction,
+          route.locale,
+          nonce,
+          route.channelId,
+          route.hours,
+          route.mask,
+          selectedPersonas,
+        );
+        return;
+      }
+
+      if (route.action === "spotlight-remove-open") {
+        if (!interaction.isButton()) throw new Error("spotlight-remove-open requires Button interaction");
+        const cachedScope = await dependencies.resolveScope(interaction, false);
+        if (!cachedScope?.guildId || !cachedScope.internalServerId) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const activeSpotlights = await dependencies.loadActiveSpotlights(
+          cachedScope.internalServerId,
+          cachedScope.userId,
+        );
+        if (activeSpotlights.length === 0) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.spotlight_none_active"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        if (activeSpotlights.length <= SPOTLIGHT_REMOVE_PAGE_SIZE) {
+          const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
+          const guildChannels = interaction.guild?.channels.cache;
+          const nonce = dependencies.createNonce();
+          await dependencies.showSpotlightRemoveModal(
+            interaction,
+            route.locale,
+            nonce,
+            0,
+            activeSpotlights,
+            personas,
+            guildChannels,
+          );
+          return;
+        }
+      }
+
+      if (route.action === "spot-rem-range") {
+        if (!interaction.isButton()) throw new Error("spot-rem-range requires Button interaction");
+        const cachedScope = await dependencies.resolveScope(interaction, false);
+        if (!cachedScope?.guildId || !cachedScope.internalServerId) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const allActive = await dependencies.loadActiveSpotlights(cachedScope.internalServerId, cachedScope.userId);
+        const slice = allActive.slice(route.start, route.start + SPOTLIGHT_REMOVE_PAGE_SIZE);
+        const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
+        const guildChannels = interaction.guild?.channels.cache;
+        const nonce = dependencies.createNonce();
+        await dependencies.showSpotlightRemoveModal(
+          interaction,
+          route.locale,
+          nonce,
+          route.start,
+          slice,
+          personas,
+          guildChannels,
+        );
+        return;
       }
 
       const initialScope = await beginPanelInteraction({
@@ -3571,6 +3941,967 @@ export function createPersonalConfigInteractionRoute(
         return;
       }
 
+      if (route.action === "trigger-mode-set") {
+        if (scope.readStatus !== "fresh") {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "response-modes",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const currentMode = scope.user.personal_dtm ?? "follow";
+        if (currentMode === route.mode) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "response-modes",
+            undefined,
+            noChangesReceipt(route.locale),
+            dependencies,
+          );
+          return;
+        }
+        const action = await performPanelAction(
+          () =>
+            dependencies.operations.setTriggerMode({
+              userId: scope.userId,
+              userDiscId: scope.userDiscId,
+              mode: route.mode,
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        const result = action.result;
+        scope = action.state ?? scope;
+        if (result.status === "success") {
+          if (scope.internalServerId) {
+            dependencies.recordAction({
+              action: "personal-config.personal.trigger-mode.set",
+              serverId: scope.internalServerId,
+              userDiscId: interaction.user.id,
+            });
+          }
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "response-modes",
+            undefined,
+            {
+              tone: "success",
+              heading: localizer(route.locale, "commands.personal.config.trigger_mode_updated_heading"),
+              detail: localizer(route.locale, "commands.personal.config.trigger_mode_updated_detail", {
+                mode: localizer(route.locale, `commands.personal.config.mode_${route.mode}`),
+              }),
+            },
+            dependencies,
+          );
+          return;
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "response-modes",
+          undefined,
+          {
+            tone: "error",
+            heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
+            detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
+          },
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "tool-mode-set") {
+        if (scope.readStatus !== "fresh") {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "response-modes",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const currentMode = scope.user.personal_deliberate_tool_mode ?? "follow";
+        if (currentMode === route.mode) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "response-modes",
+            undefined,
+            noChangesReceipt(route.locale),
+            dependencies,
+          );
+          return;
+        }
+        const action = await performPanelAction(
+          () =>
+            dependencies.operations.setToolMode({
+              userId: scope.userId,
+              userDiscId: scope.userDiscId,
+              mode: route.mode,
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        const result = action.result;
+        scope = action.state ?? scope;
+        if (result.status === "success") {
+          if (scope.internalServerId) {
+            dependencies.recordAction({
+              action: "personal-config.personal.tool-mode.set",
+              serverId: scope.internalServerId,
+              userDiscId: interaction.user.id,
+            });
+          }
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "response-modes",
+            undefined,
+            {
+              tone: "success",
+              heading: localizer(route.locale, "commands.personal.config.tool_mode_updated_heading"),
+              detail: localizer(route.locale, "commands.personal.config.tool_mode_updated_detail", {
+                mode: localizer(route.locale, `commands.personal.config.mode_${route.mode}`),
+              }),
+            },
+            dependencies,
+          );
+          return;
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "response-modes",
+          undefined,
+          {
+            tone: "error",
+            heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
+            detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
+          },
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "impersonation-submit") {
+        if (!interaction.isModalSubmit()) throw new Error("impersonation-submit requires ModalSubmit interaction");
+        const modal = interaction as ModalSubmitInteraction;
+        if (scope.readStatus !== "fresh") {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "impersonation",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const fieldId = buildPersonalConfigModalFieldId("prompt", route.nonce);
+        const rawPrompt = modal.fields.getTextInputValue(fieldId).trim();
+        if (!rawPrompt) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "impersonation",
+            undefined,
+            {
+              tone: "info",
+              heading: localizer(route.locale, "commands.personal.config.impersonation_blank_refusal_heading"),
+              detail: localizer(route.locale, "commands.personal.config.impersonation_blank_refusal_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        if (rawPrompt === scope.user.impersonation_prompt?.trim()) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "impersonation",
+            undefined,
+            noChangesReceipt(route.locale),
+            dependencies,
+          );
+          return;
+        }
+        const action = await performPanelAction(
+          () =>
+            dependencies.operations.setImpersonationPrompt({
+              userId: scope.userId,
+              userDiscId: scope.userDiscId,
+              prompt: rawPrompt,
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        const result = action.result;
+        scope = action.state ?? scope;
+        if (result.status === "success") {
+          if (scope.internalServerId) {
+            dependencies.recordAction({
+              action: "personal-config.personal.impersonation.set",
+              serverId: scope.internalServerId,
+              userDiscId: interaction.user.id,
+            });
+          }
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "impersonation",
+            undefined,
+            {
+              tone: "success",
+              heading: localizer(route.locale, "commands.personal.config.impersonation_updated_heading"),
+              detail: localizer(route.locale, "commands.personal.config.impersonation_updated_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "impersonation",
+          undefined,
+          {
+            tone: "error",
+            heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
+            detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
+          },
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "impersonation-clear-view") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "impersonation",
+          undefined,
+          undefined,
+          dependencies,
+          undefined,
+          undefined,
+          undefined,
+          {
+            kind: "impersonation-clear-confirm",
+            nonce: dependencies.createNonce(),
+          },
+        );
+        return;
+      }
+
+      if (route.action === "impersonation-clear-cancel") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "impersonation",
+          undefined,
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "impersonation-clear-confirm") {
+        if (scope.readStatus !== "fresh") {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "impersonation",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        if (!scope.user.impersonation_prompt) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "impersonation",
+            undefined,
+            noChangesReceipt(route.locale),
+            dependencies,
+          );
+          return;
+        }
+        const action = await performPanelAction(
+          () =>
+            dependencies.operations.setImpersonationPrompt({
+              userId: scope.userId,
+              userDiscId: scope.userDiscId,
+              prompt: null,
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        const result = action.result;
+        scope = action.state ?? scope;
+        if (result.status === "success") {
+          if (scope.internalServerId) {
+            dependencies.recordAction({
+              action: "personal-config.personal.impersonation.set",
+              serverId: scope.internalServerId,
+              userDiscId: interaction.user.id,
+            });
+          }
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "impersonation",
+            undefined,
+            {
+              tone: "success",
+              heading: localizer(route.locale, "commands.personal.config.impersonation_cleared_heading"),
+              detail: localizer(route.locale, "commands.personal.config.impersonation_cleared_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "impersonation",
+          undefined,
+          {
+            tone: "error",
+            heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
+            detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
+          },
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "spotlight-set-submit") {
+        if (!interaction.isModalSubmit()) throw new Error("spotlight-set-submit requires ModalSubmit interaction");
+        const modal = interaction as ModalSubmitInteraction;
+        if (!scope.guildId || !scope.internalServerId) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        if (scope.readStatus !== "fresh") {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        const channelFieldId = buildPersonalConfigModalFieldId("channel", route.nonce);
+        const rawChannelId = takeRawModalSelectValue(modal.id, channelFieldId);
+        if (!rawChannelId || !/^\d{17,20}$/.test(rawChannelId)) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        const hoursFieldId = buildPersonalConfigModalFieldId("hours", route.nonce);
+        const rawHours = modal.fields.getTextInputValue(hoursFieldId).trim();
+        const parsedHours = Number.parseInt(rawHours, 10);
+        if (Number.isNaN(parsedHours) || parsedHours < 0 || !/^\d+$/.test(rawHours)) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_invalid_hours_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_invalid_hours_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        const personas = await dependencies.loadGuildPersonas(scope.guildId);
+        const selectedPersonaIds: number[] = [];
+        for (let g = 0; g < 3; g++) {
+          const groupValues = takeRawModalCheckboxGroupValues(
+            modal.id,
+            buildPersonalConfigModalFieldId(`personas_${g}`, route.nonce),
+          );
+          if (groupValues) {
+            for (const val of groupValues) {
+              const pid = Number.parseInt(val, 10);
+              if (!Number.isNaN(pid) && personas.some((p) => p.id === pid)) {
+                selectedPersonaIds.push(pid);
+              }
+            }
+          }
+        }
+
+        if (selectedPersonaIds.length === 0) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_no_selection_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_no_selection_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        let bitmask = 0n;
+        for (let i = 0; i < personas.length; i++) {
+          if (selectedPersonaIds.includes(personas[i].id)) {
+            bitmask |= 1n << BigInt(i);
+          }
+        }
+        const mask = bitmask.toString(16);
+
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "spotlight",
+          undefined,
+          undefined,
+          dependencies,
+          undefined,
+          undefined,
+          undefined,
+          {
+            kind: "spotlight-set-review",
+            channelId: rawChannelId,
+            hours: parsedHours,
+            selectedPersonaIds,
+            autoTriggerPersonaId: null,
+            mask,
+            nonce: dependencies.createNonce(),
+          },
+        );
+        return;
+      }
+
+      if (route.action === "spot-set-auto-sub") {
+        if (!interaction.isModalSubmit()) throw new Error("spot-set-auto-sub requires ModalSubmit interaction");
+        const modal = interaction as ModalSubmitInteraction;
+        if (!scope.guildId || !scope.internalServerId) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const personas = await dependencies.loadGuildPersonas(scope.guildId);
+        const bitmask = BigInt(`0x${route.mask}`);
+        const selectedPersonaIds = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n).map((p) => p.id);
+
+        const autoFieldId = buildPersonalConfigModalFieldId("auto_trigger", route.nonce);
+        const rawAutoId = takeRawModalSelectValue(modal.id, autoFieldId) ?? "0";
+        const autoTriggerId = Number.parseInt(rawAutoId, 10);
+        const validAutoId =
+          !Number.isNaN(autoTriggerId) && autoTriggerId > 0 && selectedPersonaIds.includes(autoTriggerId)
+            ? autoTriggerId
+            : null;
+
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "spotlight",
+          undefined,
+          undefined,
+          dependencies,
+          undefined,
+          undefined,
+          undefined,
+          {
+            kind: "spotlight-set-review",
+            channelId: route.channelId,
+            hours: route.hours,
+            selectedPersonaIds,
+            autoTriggerPersonaId: validAutoId,
+            mask: route.mask,
+            nonce: dependencies.createNonce(),
+          },
+        );
+        return;
+      }
+
+      if (route.action === "spot-set-cf") {
+        const serverId = scope.internalServerId;
+        if (!scope.guildId || serverId === null) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        if (scope.readStatus !== "fresh") {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        // The channel arrives from the custom ID, so the select menu that produced it is not a guard.
+        // A spotlight belongs to one guild text channel, and the write is keyed on the raw snowflake.
+        const confirmChannel = interaction.guild?.channels.cache.get(route.channelId);
+        if (!confirmChannel || confirmChannel.type !== ChannelType.GuildText) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        const personas = await dependencies.loadGuildPersonas(scope.guildId);
+        const bitmask = BigInt(`0x${route.mask}`);
+        const selectedPersonaIds = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n).map((p) => p.id);
+        if (selectedPersonaIds.length === 0) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_no_selection_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_no_selection_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        // Silently writing null here would contradict the review page the user just confirmed, so a
+        // chosen auto-trigger that no longer resolves is surfaced instead of dropped.
+        if (route.autoTriggerId > 0 && !selectedPersonaIds.includes(route.autoTriggerId)) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_auto_stale_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_auto_stale_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const autoTriggerPersonaId = route.autoTriggerId > 0 ? route.autoTriggerId : null;
+        const expiresAt = route.hours === 0 ? null : new Date(Date.now() + route.hours * 60 * 60 * 1000);
+
+        const action = await performPanelAction(
+          () =>
+            dependencies.operations.setSpotlight({
+              serverId,
+              userId: scope.userId,
+              userDiscId: scope.userDiscId,
+              channelId: route.channelId,
+              personaIds: selectedPersonaIds,
+              autoTriggerPersonaId,
+              expiresAt,
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        const result = action.result;
+        scope = action.state ?? scope;
+
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "personal-config.personal.spotlight.set",
+            serverId,
+            userDiscId: interaction.user.id,
+          });
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "success",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_saved_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_saved_detail", {
+                channel: route.channelId,
+              }),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "spotlight",
+          undefined,
+          {
+            tone: "error",
+            heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
+            detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
+          },
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "spotlight-set-cancel") {
+        await repaint(interaction, route.locale, scope, "advanced", "spotlight", undefined, undefined, dependencies);
+        return;
+      }
+
+      if (route.action === "spotlight-remove-open") {
+        if (!scope.guildId || !scope.internalServerId) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const activeSpotlights = await dependencies.loadActiveSpotlights(scope.internalServerId, scope.userId);
+        if (activeSpotlights.length > SPOTLIGHT_REMOVE_PAGE_SIZE) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            undefined,
+            dependencies,
+            undefined,
+            undefined,
+            undefined,
+            {
+              kind: "spotlight-remove-range",
+              rangePage: 0,
+              totalOptions: activeSpotlights.length,
+            },
+          );
+          return;
+        }
+        await repaint(interaction, route.locale, scope, "advanced", "spotlight", undefined, undefined, dependencies);
+        return;
+      }
+
+      if (route.action === "spotlight-remove-cancel") {
+        await repaint(interaction, route.locale, scope, "advanced", "spotlight", undefined, undefined, dependencies);
+        return;
+      }
+
+      if (route.action === "spotlight-remove-submit") {
+        if (!interaction.isModalSubmit()) throw new Error("spotlight-remove-submit requires ModalSubmit interaction");
+        const modal = interaction as ModalSubmitInteraction;
+        const serverId = scope.internalServerId;
+        if (!scope.guildId || serverId === null) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        if (scope.readStatus !== "fresh") {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        const activeSpotlights = await dependencies.loadActiveSpotlights(serverId, scope.userId);
+        const presentedSlice = activeSpotlights.slice(route.start, route.start + SPOTLIGHT_REMOVE_PAGE_SIZE);
+        const keptChannelIds = new Set<string>();
+        const presentedChannelIds: string[] = [];
+
+        for (let g = 0; g < 5 && g * 10 < presentedSlice.length; g++) {
+          const chunk = presentedSlice.slice(g * 10, (g + 1) * 10);
+          for (const entry of chunk) {
+            presentedChannelIds.push(entry.channelDiscId);
+          }
+          const groupValues = takeRawModalCheckboxGroupValues(
+            modal.id,
+            buildPersonalConfigModalFieldId(`spotlights_${g}`, route.nonce),
+          );
+          if (groupValues) {
+            for (const val of groupValues) {
+              keptChannelIds.add(val);
+            }
+          }
+        }
+
+        const removedChannelIds = presentedChannelIds.filter((chId) => !keptChannelIds.has(chId));
+        if (removedChannelIds.length === 0) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            noChangesReceipt(route.locale),
+            dependencies,
+          );
+          return;
+        }
+
+        const action = await performPanelAction(
+          () =>
+            dependencies.operations.removeSpotlights({
+              serverId,
+              userId: scope.userId,
+              userDiscId: scope.userDiscId,
+              channelIds: removedChannelIds,
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        const result = action.result;
+        scope = action.state ?? scope;
+
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "personal-config.personal.spotlight.remove",
+            serverId,
+            userDiscId: interaction.user.id,
+          });
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "success",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_removed_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_removed_detail", {
+                removed_count: result.removedCount,
+              }),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        if (result.status === "partial-failure") {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "warning",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_partial_removal_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_partial_removal_detail", {
+                removed_count: result.removedCount,
+                failed_count: result.failedCount,
+              }),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "spotlight",
+          undefined,
+          {
+            tone: "error",
+            heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
+            detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
+          },
+          dependencies,
+        );
+        return;
+      }
+
       if (route.action === "retry" || route.action === "refresh") {
         await repaint(
           interaction,
@@ -3614,6 +4945,7 @@ export async function buildInitialPersonalConfigPanel(
     user: scope.user,
     resolvedNickname: scope.resolvedNickname,
     personas: scope.personas,
+    guildId: scope.guildId,
     // Only the privacy page renders these, and the panel always opens on profile, so the counts are
     // never read here. Changing the opening category means fetching them, as `repaint` does.
     memoryCount: 0,

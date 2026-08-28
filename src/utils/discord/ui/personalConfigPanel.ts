@@ -1,5 +1,6 @@
 import {
   ButtonStyle,
+  ChannelType,
   ComponentType,
   MessageFlags,
   TextInputStyle,
@@ -18,6 +19,7 @@ import {
   type FallbackModelRef,
   type PersonalProviderCapability,
 } from "@/types/db/schema";
+import type { PersonalSpotlightStatus } from "@/utils/db/repositories/UserRepository";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { UserPersonaNamingPreference } from "@/types/personaNaming";
@@ -29,6 +31,7 @@ import {
 import {
   buildPersonalConfigCustomId,
   DEFAULT_PAGE_FOR_CATEGORY,
+  SPOTLIGHT_REMOVE_PAGE_SIZE,
   encodeProviderParam,
   type PersonalConfigCategory,
   type PersonalConfigManagedCapability,
@@ -47,6 +50,9 @@ import {
 } from "@/utils/provider/personalProviderHelpers";
 import { getFallbackModelRefKey } from "@/utils/provider/fallbackModelIdentity";
 import { THINKING_LEVEL_LOCALIZER_KEYS, THINKING_LEVEL_VALUES } from "@/constants/thinkingLevels";
+
+/** Discord rejects a String Select carrying more than 25 options. */
+const PERSONA_SELECT_MAX_OPTIONS = 25;
 
 export interface PersonalConfigPanelPayload {
   components: TopLevelComponentData[];
@@ -81,6 +87,21 @@ export type PersonalConfigPanelView =
       mask: string;
       newlyEnabledCaps: PersonalProviderCapability[];
       nonce: string;
+    }
+  | { kind: "impersonation-clear-confirm"; nonce: string }
+  | {
+      kind: "spotlight-set-review";
+      channelId: string;
+      hours: number;
+      selectedPersonaIds: number[];
+      autoTriggerPersonaId: number | null;
+      mask: string;
+      nonce: string;
+    }
+  | {
+      kind: "spotlight-remove-range";
+      rangePage: number;
+      totalOptions: number;
     };
 
 export interface PersonalConfigRoutingRow {
@@ -109,6 +130,11 @@ export interface PersonalConfigModelDisplayInfo {
   canEnableRandomizer: boolean;
 }
 
+export interface PersonalConfigSpotlightDisplayInfo {
+  activeSpotlights: PersonalSpotlightStatus[];
+  personas: Array<{ id: number; name: string; isAlter: boolean }>;
+}
+
 export interface PersonalConfigPanelRenderInput {
   locale: string;
   category: PersonalConfigCategory;
@@ -116,6 +142,7 @@ export interface PersonalConfigPanelRenderInput {
   user: UserRow;
   resolvedNickname: string;
   personas: TomoriState[];
+  guildId: string | null;
   selectedLineageId?: number;
   personaNamingPreference?: UserPersonaNamingPreference | null;
   memoryCount: number;
@@ -127,6 +154,8 @@ export interface PersonalConfigPanelRenderInput {
   selectedParametersProvider?: string;
   selectedFallbacksProvider?: string;
   modelDisplayInfo?: PersonalConfigModelDisplayInfo;
+  spotlightDisplayInfo?: PersonalConfigSpotlightDisplayInfo;
+  serverTriggerBehavior?: { deliberate_trigger_mode: boolean; deliberate_tool_mode: boolean } | null;
   view?: PersonalConfigPanelView;
 }
 
@@ -871,6 +900,233 @@ export function buildFallbacksModal(
   };
 }
 
+export function buildImpersonationModal(
+  locale: string,
+  nonce: string,
+  currentPrompt: string | null,
+): { custom_id: string; title: string; components: RawDiscordComponent[] } {
+  return {
+    custom_id: buildPersonalConfigCustomId("impersonation-submit", locale, nonce),
+    title: safeSelectOptionText(localizer(locale, "commands.personal.config.impersonation_modal_title"), 45),
+    components: [
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.personal.config.impersonation_modal_label"), 45),
+        description: safeModalLocalizer(locale, "commands.personal.config.impersonation_modal_desc"),
+        component: {
+          type: 4,
+          custom_id: buildPersonalConfigModalFieldId("prompt", nonce),
+          style: TextInputStyle.Paragraph,
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.personal.config.impersonation_modal_placeholder"),
+            100,
+          ),
+          max_length: 4000,
+          required: false,
+          value: currentPrompt ?? "",
+        },
+      },
+    ],
+  };
+}
+
+export function buildSpotlightSetModal(
+  locale: string,
+  nonce: string,
+  personas: Array<{ id: number; name: string; isAlter: boolean }>,
+): { custom_id: string; title: string; components: RawDiscordComponent[] } {
+  const components: RawDiscordComponent[] = [
+    {
+      type: 18,
+      label: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_channel_label"), 45),
+      description: safeModalLocalizer(locale, "commands.personal.config.spotlight_channel_desc"),
+      component: {
+        type: 8,
+        custom_id: buildPersonalConfigModalFieldId("channel", nonce),
+        channel_types: [ChannelType.GuildText],
+        min_values: 1,
+        max_values: 1,
+        required: true,
+      },
+    },
+    {
+      type: 18,
+      label: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_hours_label"), 45),
+      description: safeModalLocalizer(locale, "commands.personal.config.spotlight_hours_desc"),
+      component: {
+        type: 4,
+        custom_id: buildPersonalConfigModalFieldId("hours", nonce),
+        style: TextInputStyle.Short,
+        placeholder: safeSelectOptionText(
+          localizer(locale, "commands.personal.config.spotlight_hours_placeholder"),
+          100,
+        ),
+        max_length: 6,
+        required: true,
+        value: "0",
+      },
+    },
+  ];
+
+  const maxGroups = 3;
+  for (let g = 0; g < maxGroups && g * 10 < personas.length; g++) {
+    const chunk = personas.slice(g * 10, (g + 1) * 10);
+    components.push({
+      type: 18,
+      label: safeSelectOptionText(
+        localizer(
+          locale,
+          g === 0
+            ? "commands.personal.config.spotlight_personas_label"
+            : "commands.personal.config.spotlight_personas_label_continued",
+        ),
+        45,
+      ),
+      description: g === 0 ? safeModalLocalizer(locale, "commands.personal.config.spotlight_personas_desc") : undefined,
+      component: {
+        type: 22,
+        custom_id: buildPersonalConfigModalFieldId(`personas_${g}`, nonce),
+        min_values: 0,
+        max_values: chunk.length,
+        required: false,
+        options: chunk.map((p) => ({
+          label: safeSelectOptionText(p.name, 100),
+          value: String(p.id),
+          description: safeSelectOptionText(
+            localizer(
+              locale,
+              p.isAlter
+                ? "commands.shared.persona_select.alter_persona_description"
+                : "commands.shared.persona_select.main_persona_description",
+            ),
+            100,
+          ),
+          default: false,
+        })),
+      },
+    });
+  }
+
+  return {
+    custom_id: buildPersonalConfigCustomId("spotlight-set-submit", locale, nonce),
+    title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_set_modal_title"), 45),
+    components,
+  };
+}
+
+export function buildSpotlightAutoTriggerModal(
+  locale: string,
+  nonce: string,
+  channelId: string,
+  hours: number,
+  mask: string,
+  selectedPersonas: Array<{ id: number; name: string; isAlter: boolean }>,
+): { custom_id: string; title: string; components: RawDiscordComponent[] } {
+  const options = [
+    {
+      value: "0",
+      label: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_auto_none"), 100),
+      default: true,
+    },
+    ...selectedPersonas.slice(0, 24).map((p) => ({
+      value: String(p.id),
+      label: safeSelectOptionText(p.name, 100),
+      description: safeSelectOptionText(
+        localizer(
+          locale,
+          p.isAlter
+            ? "commands.shared.persona_select.alter_persona_description"
+            : "commands.shared.persona_select.main_persona_description",
+        ),
+        100,
+      ),
+    })),
+  ];
+
+  return {
+    custom_id: buildPersonalConfigCustomId("spot-set-auto-sub", locale, channelId, hours, mask, nonce),
+    title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_auto_modal_title"), 45),
+    components: [
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_auto_select_label"), 45),
+        description: safeModalLocalizer(locale, "commands.personal.config.spotlight_auto_select_desc"),
+        component: {
+          type: 21,
+          custom_id: buildPersonalConfigModalFieldId("auto_trigger", nonce),
+          required: true,
+          options,
+        },
+      },
+    ],
+  };
+}
+
+export function buildSpotlightRemoveModal(
+  locale: string,
+  nonce: string,
+  start: number,
+  activeSpotlights: PersonalSpotlightStatus[],
+  personas: Array<{ id: number; name: string; isAlter: boolean }>,
+  guildChannels: Map<string, { name: string }> | undefined,
+): { custom_id: string; title: string; components: RawDiscordComponent[] } {
+  const personaMap = new Map(personas.map((p) => [p.id, p.name]));
+  const components: RawDiscordComponent[] = [];
+
+  for (let g = 0; g < 5 && g * 10 < activeSpotlights.length; g++) {
+    const chunk = activeSpotlights.slice(g * 10, (g + 1) * 10);
+    components.push({
+      type: 18,
+      label: safeSelectOptionText(
+        localizer(
+          locale,
+          g === 0
+            ? "commands.personal.config.spotlight_remove_label"
+            : "commands.personal.config.spotlight_remove_label_continued",
+        ),
+        45,
+      ),
+      description: g === 0 ? safeModalLocalizer(locale, "commands.personal.config.spotlight_remove_desc") : undefined,
+      component: {
+        type: 22,
+        custom_id: buildPersonalConfigModalFieldId(`spotlights_${g}`, nonce),
+        min_values: 0,
+        max_values: chunk.length,
+        required: false,
+        options: chunk.map((entry) => {
+          const chName = guildChannels?.get(entry.channelDiscId)?.name ?? "unknown";
+          const durStr =
+            entry.expiresAt === null
+              ? localizer(locale, "commands.personal.config.spotlight_duration_permanent")
+              : localizer(locale, "commands.personal.config.spotlight_duration_until", {
+                  expires_at: `<t:${Math.floor(entry.expiresAt.getTime() / 1000)}:R>`,
+                });
+          const autoStr =
+            entry.autoTriggerPersonaId !== null
+              ? (personaMap.get(entry.autoTriggerPersonaId) ?? String(entry.autoTriggerPersonaId))
+              : localizer(locale, "commands.personal.config.spotlight_auto_none");
+          const autoLabel = localizer(locale, "commands.personal.config.spotlight_auto_label");
+          const countStr = localizer(locale, "commands.personal.config.spotlight_persona_count", {
+            count: entry.personaIds.length,
+          });
+          return {
+            label: safeSelectOptionText(`#${chName}`, 100),
+            value: entry.channelDiscId,
+            description: safeSelectOptionText(`${durStr} · ${autoLabel}: ${autoStr} · ${countStr}`, 100),
+            default: true,
+          };
+        }),
+      },
+    });
+  }
+
+  return {
+    custom_id: buildPersonalConfigCustomId("spotlight-remove-submit", locale, start, nonce),
+    title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_remove_modal_title"), 45),
+    components,
+  };
+}
+
 function buildRetryRow(
   locale: string,
   category: PersonalConfigCategory,
@@ -909,6 +1165,7 @@ function getPageOptionsForCategory(
   locale: string,
   category: PersonalConfigCategory,
   currentPage: PersonalConfigPage,
+  guildId: string | null,
 ): SelectMenuComponentOptionData[] {
   switch (category) {
     case "profile":
@@ -955,8 +1212,8 @@ function getPageOptionsForCategory(
           default: currentPage === "fallbacks",
         },
       ];
-    case "advanced":
-      return [
+    case "advanced": {
+      const options: SelectMenuComponentOptionData[] = [
         {
           label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_response_modes"), 100),
           value: "response-modes",
@@ -967,12 +1224,16 @@ function getPageOptionsForCategory(
           value: "impersonation",
           default: currentPage === "impersonation",
         },
-        {
+      ];
+      if (guildId !== null) {
+        options.push({
           label: safeSelectOptionText(localizer(locale, "commands.personal.config.page_spotlight"), 100),
           value: "spotlight",
           default: currentPage === "spotlight",
-        },
-      ];
+        });
+      }
+      return options;
+    }
   }
 }
 
@@ -1171,6 +1432,147 @@ ${localizer(locale, "commands.personal.config.fallbacks_range_desc", { provider:
         ...rows,
       ];
     }
+    case "impersonation-clear-confirm": {
+      return [
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.personal.config.impersonation_clear_confirm_title")}
+${localizer(locale, "commands.personal.config.impersonation_clear_confirm_desc")}`,
+        },
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Danger,
+              customId: buildPersonalConfigCustomId("impersonation-clear-confirm", locale, view.nonce),
+              label: localizer(locale, "commands.personal.config.impersonation_clear_button"),
+            },
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Secondary,
+              customId: buildPersonalConfigCustomId("impersonation-clear-cancel", locale),
+              label: localizer(locale, "commands.personal.config.cancel"),
+            },
+          ],
+        },
+      ];
+    }
+    case "spotlight-set-review": {
+      const personas = input.spotlightDisplayInfo?.personas ?? [];
+      const personaMap = new Map(personas.map((p) => [p.id, p.name]));
+      const selectedPersonas = personas.filter((p) => view.selectedPersonaIds.includes(p.id));
+      const durationText =
+        view.hours === 0
+          ? localizer(locale, "commands.personal.config.spotlight_duration_permanent")
+          : localizer(locale, "commands.personal.config.spotlight_duration_hours", {
+              hours: view.hours,
+            });
+      const personaNamesList = selectedPersonas.map((p) => `**${p.name}**`).join(", ");
+      const autoTriggerName = view.autoTriggerPersonaId
+        ? (personaMap.get(view.autoTriggerPersonaId) ?? String(view.autoTriggerPersonaId))
+        : localizer(locale, "commands.personal.config.spotlight_auto_none");
+      return [
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.personal.config.spotlight_review_title")}
+
+> Channel: <#${view.channelId}>
+> Duration: ${durationText}
+> Personas: ${personaNamesList}
+> Auto-trigger: ${autoTriggerName}
+
+${localizer(locale, "commands.personal.config.spotlight_review_prompt")}`,
+        },
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Success,
+              customId: buildPersonalConfigCustomId(
+                "spot-set-cf",
+                locale,
+                view.channelId,
+                view.hours,
+                view.autoTriggerPersonaId ?? 0,
+                view.mask,
+                view.nonce,
+              ),
+              label: localizer(locale, "commands.personal.config.spotlight_save_button"),
+            },
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Primary,
+              customId: buildPersonalConfigCustomId(
+                "spot-set-auto",
+                locale,
+                view.channelId,
+                view.hours,
+                view.mask,
+                view.nonce,
+              ),
+              label: localizer(locale, "commands.personal.config.spotlight_auto_button"),
+              disabled: selectedPersonas.length <= 1,
+            },
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Secondary,
+              customId: buildPersonalConfigCustomId("spotlight-set-cancel", locale),
+              label: localizer(locale, "commands.personal.config.cancel"),
+            },
+          ],
+        },
+      ];
+    }
+    case "spotlight-remove-range": {
+      const totalRanges = Math.ceil(view.totalOptions / SPOTLIGHT_REMOVE_PAGE_SIZE);
+      const startRange = view.rangePage * 5;
+      const endRange = Math.min(startRange + 5, totalRanges);
+
+      const buttons: ButtonComponentData[] = [];
+      for (let r = startRange; r < endRange; r++) {
+        const start = r * SPOTLIGHT_REMOVE_PAGE_SIZE + 1;
+        const end = Math.min((r + 1) * SPOTLIGHT_REMOVE_PAGE_SIZE, view.totalOptions);
+        buttons.push({
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildPersonalConfigCustomId("spot-rem-range", locale, r * SPOTLIGHT_REMOVE_PAGE_SIZE),
+          label: `${start} - ${end}`,
+        });
+      }
+
+      const rows: ActionRowData<ButtonComponentData>[] = [];
+      if (buttons.length > 0) {
+        rows.push({
+          type: ComponentType.ActionRow,
+          components: buttons,
+        });
+      }
+
+      const navButtons: ButtonComponentData[] = [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Danger,
+          customId: buildPersonalConfigCustomId("spotlight-remove-cancel", locale),
+          label: localizer(locale, "general.pagination.cancel"),
+        },
+      ];
+
+      rows.push({
+        type: ComponentType.ActionRow,
+        components: navButtons,
+      });
+
+      return [
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.personal.config.spotlight_remove_range_title")}
+${localizer(locale, "commands.personal.config.spotlight_remove_range_desc")}`,
+        },
+        ...rows,
+      ];
+    }
   }
 }
 
@@ -1218,7 +1620,7 @@ export function buildPersonalConfigPanelPayload(input: PersonalConfigPanelRender
     readStatus === "unavailable",
   );
 
-  const pageOptions = getPageOptionsForCategory(locale, category, page);
+  const pageOptions = getPageOptionsForCategory(locale, category, page, input.guildId);
   const pageSelectorRow: ActionRowData<StringSelectMenuComponentData> = {
     type: ComponentType.ActionRow,
     components: [
@@ -1265,10 +1667,10 @@ export function buildPersonalConfigPanelPayload(input: PersonalConfigPanelRender
 
       const prefixLabel = user.prefix_override
         ? `\`${escapeDiscordMarkdown(user.prefix_override)}\``
-        : localizer(locale, "commands.personal.config.inherited_label");
+        : localizer(locale, "commands.personal.config.general_naming_inherited");
       const suffixLabel = user.suffix_override
         ? `\`${escapeDiscordMarkdown(user.suffix_override)}\``
-        : localizer(locale, "commands.personal.config.inherited_label");
+        : localizer(locale, "commands.personal.config.general_naming_inherited");
 
       const genderLabel = user.gender_identity
         ? escapeDiscordMarkdown(user.gender_identity)
@@ -1290,6 +1692,7 @@ export function buildPersonalConfigPanelPayload(input: PersonalConfigPanelRender
 ${localizer(locale, "commands.personal.config.preferences_description")}
 
 **${localizer(locale, "commands.personal.config.interface_section")}**
+${localizer(locale, "commands.personal.config.interface_description")}
 > ${localizer(locale, "commands.personal.config.language_label")}: ${languageLabel}
 > ${localizer(locale, "commands.personal.config.timezone_label")}: ${timezoneLabel}`,
         },
@@ -1322,6 +1725,7 @@ ${localizer(locale, "commands.personal.config.preferences_description")}
         {
           type: ComponentType.TextDisplay,
           content: `**${localizer(locale, "commands.personal.config.naming_section")}**
+${localizer(locale, "commands.personal.config.naming_description")}
 > ${localizer(locale, "commands.personal.config.nickname_label")}: \`${escapeDiscordMarkdown(resolvedNickname)}\`
 > ${localizer(locale, "commands.personal.config.prefix_label")}: ${prefixLabel}
 > ${localizer(locale, "commands.personal.config.suffix_label")}: ${suffixLabel}`,
@@ -1341,6 +1745,7 @@ ${localizer(locale, "commands.personal.config.preferences_description")}
         {
           type: ComponentType.TextDisplay,
           content: `**${localizer(locale, "commands.personal.config.about_section")}**
+${localizer(locale, "commands.personal.config.about_description")}
 > ${localizer(locale, "commands.personal.config.gender_label")}: ${genderLabel}
 > ${localizer(locale, "commands.personal.config.pronouns_label")}: ${pronounsLabel}
 > ${localizer(locale, "commands.personal.config.style_label")}: ${styleLabel}
@@ -1373,23 +1778,47 @@ ${localizer(locale, "commands.personal.config.persona_naming_description")}`,
         });
       } else {
         const currentLineage = selectedLineageId ?? personas[0]?.persona_lineage_id ?? 0;
-        const personaOptions: SelectMenuComponentOptionData[] = personas.map((p) => ({
-          label: safeSelectOptionText(
-            p.persona_nickname || localizer(locale, "commands.personal.config.persona_default_name"),
-            100,
-          ),
-          value: String(p.persona_lineage_id),
-          description: safeSelectOptionText(
-            localizer(
-              locale,
-              p.is_alter
-                ? "commands.personal.config.persona_alter_description"
-                : "commands.personal.config.persona_main_description",
+
+        // Naming preferences are keyed by lineage, not by persona, and two personas in one server can
+        // share a lineage. Emitting one option per persona then repeats an option value, which Discord
+        // rejects outright with COMPONENT_OPTION_VALUE_DUPLICATED.
+        const personasByLineage = new Map<number, TomoriState[]>();
+        for (const p of personas) {
+          const lineage = p.persona_lineage_id;
+          if (lineage === undefined || lineage === null) continue;
+          const bucket = personasByLineage.get(lineage);
+          if (bucket) bucket.push(p);
+          else personasByLineage.set(lineage, [p]);
+        }
+
+        const lineageEntries = [...personasByLineage.entries()];
+        const visibleLineages = lineageEntries.slice(0, PERSONA_SELECT_MAX_OPTIONS);
+        const hiddenLineageCount = lineageEntries.length - visibleLineages.length;
+
+        const personaOptions: SelectMenuComponentOptionData[] = visibleLineages.map(([lineage, sharing]) => {
+          const first = sharing[0];
+          return {
+            label: safeSelectOptionText(
+              first?.persona_nickname || localizer(locale, "commands.personal.config.persona_default_name"),
+              100,
             ),
-            100,
-          ),
-          default: p.persona_lineage_id === currentLineage,
-        }));
+            value: String(lineage),
+            description: safeSelectOptionText(
+              sharing.length > 1
+                ? localizer(locale, "commands.personal.config.persona_shared_lineage_description", {
+                    count: sharing.length,
+                  })
+                : localizer(
+                    locale,
+                    first?.is_alter
+                      ? "commands.personal.config.persona_alter_description"
+                      : "commands.personal.config.persona_main_description",
+                  ),
+              100,
+            ),
+            default: lineage === currentLineage,
+          };
+        });
 
         components.push({
           type: ComponentType.ActionRow,
@@ -1404,15 +1833,24 @@ ${localizer(locale, "commands.personal.config.persona_naming_description")}`,
           ],
         });
 
+        if (hiddenLineageCount > 0) {
+          components.push({
+            type: ComponentType.TextDisplay,
+            content: `-# ${localizer(locale, "commands.personal.config.persona_select_truncated", {
+              count: hiddenLineageCount,
+            })}`,
+          });
+        }
+
         const nicknameOverrideLabel = personaNamingPreference?.nickname_override
           ? `\`${escapeDiscordMarkdown(personaNamingPreference.nickname_override)}\``
-          : localizer(locale, "commands.personal.config.inherited_label");
+          : localizer(locale, "commands.personal.config.persona_naming_inherited");
         const prefixOverrideLabel = personaNamingPreference?.prefix_override
           ? `\`${escapeDiscordMarkdown(personaNamingPreference.prefix_override)}\``
-          : localizer(locale, "commands.personal.config.inherited_label");
+          : localizer(locale, "commands.personal.config.persona_naming_inherited");
         const suffixOverrideLabel = personaNamingPreference?.suffix_override
           ? `\`${escapeDiscordMarkdown(personaNamingPreference.suffix_override)}\``
-          : localizer(locale, "commands.personal.config.inherited_label");
+          : localizer(locale, "commands.personal.config.persona_naming_inherited");
 
         components.push(
           {
@@ -1447,7 +1885,6 @@ ${localizer(locale, "commands.personal.config.persona_naming_description")}`,
           type: ComponentType.TextDisplay,
           content: `### ${localizer(locale, "commands.personal.config.appearance_title")}
 ${localizer(locale, "commands.personal.config.appearance_description")}
-
 > ${localizer(locale, "commands.personal.config.tags_label")}: ${tagsText}
 -# ${localizer(locale, "commands.personal.config.teach_persona_hint").split("\n").join("\n-# ")}`,
         },
@@ -1489,7 +1926,6 @@ ${localizer(locale, "commands.personal.config.appearance_description")}
         type: ComponentType.TextDisplay,
         content: `### ${localizer(locale, "commands.personal.config.privacy_title")}
 ${localizer(locale, "commands.personal.config.privacy_description")}
-
 > ${localizer(locale, "commands.personal.config.privacy_level_label")}: ${levelLabel}
 > ${localizer(locale, "commands.personal.config.privacy_msg_visible")}: ${msgVisible}
 > ${localizer(locale, "commands.personal.config.privacy_memories_visible")}: ${memoriesVisible}
@@ -1513,15 +1949,18 @@ ${localizer(locale, "commands.personal.config.privacy_description")}
         content: `**${localizer(locale, "commands.personal.config.your_data_section")}**
 ${localizer(locale, "commands.personal.config.memories_count_label", { count: memoryCount })}
 -# ${localizer(locale, "commands.personal.config.memories_manage_hint")}
-
 ${localizer(locale, "commands.personal.config.stm_count_label", { count: stmCount })}
--# ${localizer(locale, "commands.personal.config.stm_clear_hint")}
-
+-# ${localizer(locale, "commands.personal.config.stm_clear_hint")}`,
+      },
+      {
+        type: ComponentType.TextDisplay,
+        content: `**${localizer(locale, "commands.personal.config.crossserver_section_title")}**
 ${
   isCrossServerOn
     ? localizer(locale, "commands.personal.config.crossserver_stm_on")
     : localizer(locale, "commands.personal.config.crossserver_stm_off")
-}`,
+}
+-# ${localizer(locale, "commands.personal.config.crossserver_stm_footer")}`,
       },
       {
         type: ComponentType.ActionRow,
@@ -1561,7 +2000,6 @@ ${
           type: ComponentType.TextDisplay,
           content: `### ${localizer(locale, "commands.personal.config.models_title")}
 ${localizer(locale, "commands.personal.config.models_description")}
-
 > ${localizer(locale, "commands.personal.config.routing_text")}: \`${textDisplay}\`
 > ${localizer(locale, "commands.personal.config.routing_vision")}: \`${visionDisplay}\`
 > ${localizer(locale, "commands.personal.config.routing_embedding")}: \`${embeddingDisplay}\`
@@ -1600,32 +2038,35 @@ ${localizer(locale, "commands.personal.config.models_description")}
       const capabilityOptions: SelectMenuComponentOptionData[] = [
         {
           value: "text",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_text"), 100),
+          label: safeSelectOptionText(localizer(locale, "commands.personal.config.capability_option_text"), 100),
           default: selectedCap === "text",
         },
         {
           value: "vision",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_vision"), 100),
+          label: safeSelectOptionText(localizer(locale, "commands.personal.config.capability_option_vision"), 100),
           default: selectedCap === "vision",
         },
         {
           value: "embedding",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_embedding"), 100),
+          label: safeSelectOptionText(localizer(locale, "commands.personal.config.capability_option_embedding"), 100),
           default: selectedCap === "embedding",
         },
         {
           value: "image",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_image_standard"), 100),
+          label: safeSelectOptionText(
+            localizer(locale, "commands.personal.config.capability_option_image_standard"),
+            100,
+          ),
           default: selectedCap === "image",
         },
         {
           value: "image_nai",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_image_nai"), 100),
+          label: safeSelectOptionText(localizer(locale, "commands.personal.config.capability_option_image_nai"), 100),
           default: selectedCap === "image_nai",
         },
         {
           value: "video",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_video"), 100),
+          label: safeSelectOptionText(localizer(locale, "commands.personal.config.capability_option_video"), 100),
           default: selectedCap === "video",
         },
       ];
@@ -1914,11 +2355,223 @@ ${statusStr}`,
       }
     }
   } else if (category === "advanced") {
-    components.push({
-      type: ComponentType.TextDisplay,
-      content: `### ${localizer(locale, "commands.personal.config.advanced_stub_title")}
-${localizer(locale, "commands.personal.config.advanced_stub_description")}`,
-    });
+    if (page === "response-modes") {
+      const dtmMode = user.personal_dtm ?? "follow";
+      const toolMode = user.personal_deliberate_tool_mode ?? "follow";
+      const isGuild = input.guildId !== null;
+
+      const serverDtm = input.serverTriggerBehavior?.deliberate_trigger_mode ?? false;
+      const serverToolMode = input.serverTriggerBehavior?.deliberate_tool_mode ?? false;
+
+      let dtmEffectText: string;
+      let dtmStatusText: string;
+      if (!isGuild) {
+        dtmEffectText = localizer(locale, "commands.personal.config.dtm_effect_dm");
+        dtmStatusText =
+          dtmMode === "on"
+            ? localizer(locale, "commands.personal.config.mode_status_on")
+            : dtmMode === "off"
+              ? localizer(locale, "commands.personal.config.mode_status_off")
+              : localizer(locale, "commands.personal.config.mode_status_follow_dm");
+      } else {
+        const isDtmActive = dtmMode === "on" || (dtmMode === "follow" && serverDtm);
+        dtmEffectText = isDtmActive
+          ? localizer(locale, "commands.personal.config.dtm_effect_active")
+          : localizer(locale, "commands.personal.config.dtm_effect_inactive");
+
+        if (dtmMode === "on") {
+          dtmStatusText = localizer(locale, "commands.personal.config.mode_status_on");
+        } else if (dtmMode === "off") {
+          dtmStatusText = localizer(locale, "commands.personal.config.mode_status_off");
+        } else {
+          dtmStatusText = serverDtm
+            ? localizer(locale, "commands.personal.config.mode_status_follow_server_on")
+            : localizer(locale, "commands.personal.config.mode_status_follow_server_off");
+        }
+      }
+
+      const isToolModeActive = toolMode === "on" || (toolMode === "follow" && (isGuild ? serverToolMode : false));
+      const toolEffectText = isToolModeActive
+        ? localizer(locale, "commands.personal.config.tool_mode_effect_active")
+        : localizer(locale, "commands.personal.config.tool_mode_effect_inactive");
+
+      let toolStatusText: string;
+      if (toolMode === "on") {
+        toolStatusText = localizer(locale, "commands.personal.config.mode_status_on");
+      } else if (toolMode === "off") {
+        toolStatusText = localizer(locale, "commands.personal.config.mode_status_off");
+      } else if (isGuild) {
+        toolStatusText = serverToolMode
+          ? localizer(locale, "commands.personal.config.mode_status_follow_server_on")
+          : localizer(locale, "commands.personal.config.mode_status_follow_server_off");
+      } else {
+        toolStatusText = localizer(locale, "commands.personal.config.mode_status_follow_dm");
+      }
+
+      components.push(
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.personal.config.response_modes_title")}`,
+        },
+        {
+          type: ComponentType.TextDisplay,
+          content: `**[${localizer(locale, "commands.personal.config.dtm_section_title")}](https://docs.tomoribot.app/en/features/chatting-personality/chatting-and-triggers/#deliberate-trigger-mode)**\n${localizer(locale, "commands.personal.config.dtm_description")}\n> ${dtmEffectText}\n> ${dtmStatusText}`,
+        },
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.Button,
+              style: dtmMode === "off" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              customId: buildPersonalConfigCustomId("trigger-mode-set", locale, "off"),
+              label: localizer(locale, "commands.personal.config.mode_off"),
+              disabled: writesDisabled || dtmMode === "off",
+            },
+            {
+              type: ComponentType.Button,
+              style: dtmMode === "follow" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              customId: buildPersonalConfigCustomId("trigger-mode-set", locale, "follow"),
+              label: localizer(locale, "commands.personal.config.mode_follow"),
+              disabled: writesDisabled || dtmMode === "follow",
+            },
+            {
+              type: ComponentType.Button,
+              style: dtmMode === "on" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              customId: buildPersonalConfigCustomId("trigger-mode-set", locale, "on"),
+              label: localizer(locale, "commands.personal.config.mode_on"),
+              disabled: writesDisabled || dtmMode === "on",
+            },
+          ],
+        },
+        { type: ComponentType.Separator, divider: true, spacing: 1 },
+        {
+          type: ComponentType.TextDisplay,
+          content: `**[${localizer(locale, "commands.personal.config.tool_mode_section_title")}](https://docs.tomoribot.app/en/features/capabilities/tools-and-extensions/#deliberate-tool-mode)** (EXPERIMENTAL)\n${localizer(locale, "commands.personal.config.tool_mode_description")}\n> ${toolEffectText}\n> ${toolStatusText}`,
+        },
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.Button,
+              style: toolMode === "off" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              customId: buildPersonalConfigCustomId("tool-mode-set", locale, "off"),
+              label: localizer(locale, "commands.personal.config.mode_off"),
+              disabled: writesDisabled || toolMode === "off",
+            },
+            {
+              type: ComponentType.Button,
+              style: toolMode === "follow" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              customId: buildPersonalConfigCustomId("tool-mode-set", locale, "follow"),
+              label: localizer(locale, "commands.personal.config.mode_follow"),
+              disabled: writesDisabled || toolMode === "follow",
+            },
+            {
+              type: ComponentType.Button,
+              style: toolMode === "on" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              customId: buildPersonalConfigCustomId("tool-mode-set", locale, "on"),
+              label: localizer(locale, "commands.personal.config.mode_on"),
+              disabled: writesDisabled || toolMode === "on",
+            },
+          ],
+        },
+      );
+    } else if (page === "impersonation") {
+      const prompt = user.impersonation_prompt?.trim();
+      let previewText: string;
+      if (!prompt) {
+        previewText = localizer(locale, "commands.personal.config.impersonation_no_prompt");
+      } else {
+        const truncated = prompt.length > 200 ? `${prompt.slice(0, 197)}...` : prompt;
+        previewText = escapeDiscordMarkdown(truncated);
+      }
+
+      components.push(
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.personal.config.impersonation_title")}\n${localizer(locale, "commands.personal.config.impersonation_description")}\n> ${previewText}`,
+        },
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Primary,
+              customId: buildPersonalConfigCustomId("impersonation-open", locale),
+              label: localizer(locale, "commands.personal.config.impersonation_edit_button"),
+              disabled: writesDisabled,
+            },
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Danger,
+              customId: buildPersonalConfigCustomId("impersonation-clear-view", locale),
+              label: localizer(locale, "commands.personal.config.impersonation_clear_button"),
+              disabled: writesDisabled || !prompt,
+            },
+          ],
+        },
+      );
+    } else if (page === "spotlight") {
+      if (input.guildId === null) {
+        components.push({
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.personal.config.spotlight_title")}\n${localizer(locale, "commands.personal.config.spotlight_guild_only_detail")}`,
+        });
+      } else {
+        const activeSpotlights = input.spotlightDisplayInfo?.activeSpotlights ?? [];
+        const personas = input.spotlightDisplayInfo?.personas ?? [];
+        const personaMap = new Map(personas.map((p) => [p.id, p.name]));
+
+        let spotlightRowsText = "";
+        if (activeSpotlights.length === 0) {
+          spotlightRowsText = `> ${localizer(locale, "commands.personal.config.spotlight_none_active")}`;
+        } else {
+          const rows = activeSpotlights.map((entry) => {
+            const durationStr =
+              entry.expiresAt === null
+                ? localizer(locale, "commands.personal.config.spotlight_duration_permanent")
+                : localizer(locale, "commands.personal.config.spotlight_duration_until", {
+                    expires_at: `<t:${Math.floor(entry.expiresAt.getTime() / 1000)}:R>`,
+                  });
+            const countStr = localizer(locale, "commands.personal.config.spotlight_persona_count", {
+              count: entry.personaIds.length,
+            });
+            const autoStr =
+              entry.autoTriggerPersonaId !== null
+                ? (personaMap.get(entry.autoTriggerPersonaId) ?? String(entry.autoTriggerPersonaId))
+                : localizer(locale, "commands.personal.config.spotlight_auto_none");
+            const autoLabel = localizer(locale, "commands.personal.config.spotlight_auto_label");
+            return `> <#${entry.channelDiscId}> · ${durationStr} · ${countStr} · ${autoLabel}: ${autoStr}`;
+          });
+          spotlightRowsText = rows.join("\n");
+        }
+
+        components.push(
+          {
+            type: ComponentType.TextDisplay,
+            content: `### ${localizer(locale, "commands.personal.config.spotlight_title")}\n${localizer(locale, "commands.personal.config.spotlight_description")}\n${spotlightRowsText}`,
+          },
+          {
+            type: ComponentType.ActionRow,
+            components: [
+              {
+                type: ComponentType.Button,
+                style: ButtonStyle.Primary,
+                customId: buildPersonalConfigCustomId("spotlight-set-open", locale),
+                label: localizer(locale, "commands.personal.config.spotlight_set_button"),
+                disabled: writesDisabled,
+              },
+              {
+                type: ComponentType.Button,
+                style: ButtonStyle.Danger,
+                customId: buildPersonalConfigCustomId("spotlight-remove-open", locale),
+                label: localizer(locale, "commands.personal.config.spotlight_remove_button"),
+                disabled: writesDisabled || activeSpotlights.length === 0,
+              },
+            ],
+          },
+        );
+      }
+    }
   }
 
   if (readStatus === "stale") {

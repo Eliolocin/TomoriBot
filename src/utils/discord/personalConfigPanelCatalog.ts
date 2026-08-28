@@ -22,6 +22,13 @@ export const DEFAULT_PAGE_FOR_CATEGORY: Record<PersonalConfigCategory, PersonalC
 
 export type PersonalConfigManagedCapability = "text" | "vision" | "embedding" | "image" | "image_nai" | "video";
 
+/**
+ * Rows one Spotlight removal modal can present: Discord allows five components, each a ten-option
+ * checkbox group. The renderer, the range chooser, and the submit handler must agree on it, because
+ * unchecked-means-remove derives the removal set from the slice that was presented.
+ */
+export const SPOTLIGHT_REMOVE_PAGE_SIZE = 50;
+
 export function encodeProviderParam(provider: string): string {
   return provider.replace(/:/g, "~");
 }
@@ -94,6 +101,48 @@ export type PersonalConfigPanelRoute =
   | { action: "fallbacks-range-open"; locale: string; provider: string; start: number }
   | { action: "fallbacks-submit"; locale: string; provider: string; nonce: string }
   | { action: "randomizer-toggle"; locale: string; provider: string }
+  // Advanced - Response Modes
+  | { action: "trigger-mode-set"; locale: string; mode: "off" | "follow" | "on" }
+  | { action: "tool-mode-set"; locale: string; mode: "off" | "follow" | "on" }
+  // Advanced - Impersonation
+  | { action: "impersonation-open"; locale: string }
+  | { action: "impersonation-submit"; locale: string; nonce: string }
+  | { action: "impersonation-clear-view"; locale: string }
+  | { action: "impersonation-clear-confirm"; locale: string; nonce: string }
+  | { action: "impersonation-clear-cancel"; locale: string }
+  // Advanced - Personal Spotlight
+  | { action: "spotlight-set-open"; locale: string }
+  | { action: "spotlight-set-submit"; locale: string; nonce: string }
+  | {
+      action: "spot-set-cf";
+      locale: string;
+      channelId: string;
+      hours: number;
+      autoTriggerId: number;
+      mask: string;
+      nonce: string;
+    }
+  | {
+      action: "spot-set-auto";
+      locale: string;
+      channelId: string;
+      hours: number;
+      mask: string;
+      nonce: string;
+    }
+  | {
+      action: "spot-set-auto-sub";
+      locale: string;
+      channelId: string;
+      hours: number;
+      mask: string;
+      nonce: string;
+    }
+  | { action: "spotlight-set-cancel"; locale: string }
+  | { action: "spotlight-remove-open"; locale: string }
+  | { action: "spot-rem-range"; locale: string; start: number }
+  | { action: "spotlight-remove-submit"; locale: string; start: number; nonce: string }
+  | { action: "spotlight-remove-cancel"; locale: string }
   | {
       action: "retry" | "refresh";
       locale: string;
@@ -184,12 +233,27 @@ function parseProvider(value: string | undefined): string | null {
   return decodeProviderParam(value);
 }
 
+function parseDtmMode(value: string | undefined): "off" | "follow" | "on" | null {
+  if (value === "off" || value === "follow" || value === "on") return value;
+  return null;
+}
+
+function parseSnowflake(value: string | undefined): string | null {
+  if (!value || !/^\d{17,20}$/.test(value)) return null;
+  return value;
+}
+
+function parseHexMask(value: string | undefined): string | null {
+  if (!value || !/^[0-9a-fA-F]{1,16}$/.test(value)) return null;
+  return value;
+}
+
 export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): PersonalConfigPanelRoute | null {
   if (route.namespace !== PERSONAL_CONFIG_ROUTE_NAMESPACE || route.version !== PERSONAL_CONFIG_ROUTE_VERSION) {
     return null;
   }
 
-  const [action, rawLocale, first, second, third, fourth] = route.segments;
+  const [action, rawLocale, first, second, third, fourth, fifth] = route.segments;
   const locale = parseLocale(rawLocale);
   if (!locale || !action) return null;
 
@@ -207,6 +271,11 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
     return lineageId === null ? null : { action, locale, lineageId };
   }
 
+  if ((action === "trigger-mode-set" || action === "tool-mode-set") && route.segments.length === 3) {
+    const mode = parseDtmMode(first);
+    return mode === null ? null : { action, locale, mode };
+  }
+
   if (
     action === "language-open" ||
     action === "timezone-open" ||
@@ -221,7 +290,14 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
     action === "quick-toggle-cancel" ||
     action === "model-act-cancel" ||
     action === "parameters-provider-select" ||
-    action === "fallbacks-provider-select"
+    action === "fallbacks-provider-select" ||
+    action === "impersonation-open" ||
+    action === "impersonation-clear-view" ||
+    action === "impersonation-clear-cancel" ||
+    action === "spotlight-set-open" ||
+    action === "spotlight-set-cancel" ||
+    action === "spotlight-remove-open" ||
+    action === "spotlight-remove-cancel"
   ) {
     if (route.segments.length !== 2) return null;
     return { action, locale };
@@ -234,11 +310,47 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
     action === "about-submit" ||
     action === "appearance-submit" ||
     action === "privacy-level-submit" ||
-    action === "quick-toggle-submit"
+    action === "quick-toggle-submit" ||
+    action === "impersonation-submit" ||
+    action === "impersonation-clear-confirm" ||
+    action === "spotlight-set-submit"
   ) {
     if (route.segments.length !== 3) return null;
     const nonce = parseNonce(first);
     return nonce === null ? null : { action, locale, nonce };
+  }
+
+  if (action === "spot-set-cf" && route.segments.length === 7) {
+    const channelId = parseSnowflake(first);
+    const hours = parseNonNegativeInt(second);
+    const autoTriggerId = parseNonNegativeInt(third);
+    const mask = parseHexMask(fourth);
+    const nonce = parseNonce(fifth);
+    if (!channelId || hours === null || autoTriggerId === null || !mask || !nonce) return null;
+    return { action, locale, channelId, hours, autoTriggerId, mask, nonce };
+  }
+
+  if ((action === "spot-set-auto" || action === "spot-set-auto-sub") && route.segments.length === 6) {
+    const channelId = parseSnowflake(first);
+    const hours = parseNonNegativeInt(second);
+    const mask = parseHexMask(third);
+    const nonce = parseNonce(fourth);
+    if (!channelId || hours === null || !mask || !nonce) return null;
+    return { action, locale, channelId, hours, mask, nonce };
+  }
+
+  if (action === "spot-rem-range" && route.segments.length === 3) {
+    const start = parseNonNegativeInt(first);
+    return start === null ? null : { action, locale, start };
+  }
+
+  // The removal modal presents one 50-row slice, and unchecked-means-remove derives the removal set
+  // from the rows that were presented. Without the offset the submit handler recomputes that set from
+  // the first slice and deletes rows the user never saw.
+  if (action === "spotlight-remove-submit" && route.segments.length === 4) {
+    const start = parseNonNegativeInt(first);
+    const nonce = parseNonce(second);
+    return start === null || nonce === null ? null : { action, locale, start, nonce };
   }
 
   if (action === "quick-toggle-confirm" && route.segments.length === 4) {

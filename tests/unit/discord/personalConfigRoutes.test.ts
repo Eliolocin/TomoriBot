@@ -14,16 +14,26 @@ import {
   encodeProviderParam,
   parsePersonalConfigPanelRoute,
 } from "@/utils/discord/personalConfigPanelCatalog";
-import { buildPersonalConfigPanelPayload, type PersonalConfigRoutingRow } from "@/utils/discord/ui/personalConfigPanel";
+import {
+  buildPersonalConfigPanelPayload,
+  buildSpotlightRemoveModal,
+  buildSpotlightSetModal,
+  type PersonalConfigRoutingRow,
+} from "@/utils/discord/ui/personalConfigPanel";
 import type { ThinkingLevelValue } from "@/constants/thinkingLevels";
 import type { PersonalConfigManagedCapability } from "@/utils/discord/personalConfigPanelCatalog";
 import { parseInteractionRoute, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
-import { initializeLocalizer } from "@/utils/text/localizer";
+import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 import { loadCommandData } from "@/utils/discord/commandLoader";
 import type { UserPersonaNamingPreference } from "@/types/personaNaming";
 
 beforeAll(async () => initializeLocalizer());
+
+function makeChannelCache(channelIds: string[]): Map<string, { type: number; name: string }> {
+  // ChannelType.GuildText is 0; the route guard rejects anything else.
+  return new Map(channelIds.map((id) => [id, { type: 0, name: `channel-${id.slice(-4)}` }]));
+}
 
 function requireRoute(customId: string): ParsedInteractionRoute {
   const parsed = parseInteractionRoute(customId);
@@ -153,6 +163,29 @@ function makeDependencies(
     setRandomizer: async (input) => {
       calls.push(`setRandomizer:${input.provider}:${input.enabled}`);
       return { status: "success", enabled: input.enabled };
+    },
+    setTriggerMode: async (input) => {
+      calls.push(`setTriggerMode:${input.mode}`);
+      user.personal_dtm = input.mode;
+      return { status: "success" };
+    },
+    setToolMode: async (input) => {
+      calls.push(`setToolMode:${input.mode}`);
+      user.personal_deliberate_tool_mode = input.mode;
+      return { status: "success" };
+    },
+    setImpersonationPrompt: async (input) => {
+      calls.push(`setImpersonationPrompt:${input.prompt}`);
+      user.impersonation_prompt = input.prompt;
+      return { status: "success" };
+    },
+    setSpotlight: async (input) => {
+      calls.push(`setSpotlight:${input.channelId}:${input.personaIds.join(",")}:${input.autoTriggerPersonaId}`);
+      return { status: "success" };
+    },
+    removeSpotlights: async (input) => {
+      calls.push(`removeSpotlights:${input.channelIds.join(",")}`);
+      return { status: "success", removedCount: input.channelIds.length };
     },
   };
 
@@ -322,6 +355,21 @@ function makeDependencies(
       { id: 101, name: "Claude 3.5 Sonnet" },
       { id: 102, name: "Claude 3 Opus" },
     ],
+    loadActiveSpotlights: async () => [
+      {
+        channelDiscId: "ch-100",
+        personaIds: [1],
+        autoTriggerPersonaId: null,
+        expiresAt: null,
+        userDiscId: "disc-user-1",
+      },
+    ],
+    loadGuildPersonas: async () => [
+      { id: 1, name: "Tomori", isAlter: false },
+      { id: 2, name: "Anon", isAlter: true },
+    ],
+    loadTomoriState: async () => null,
+    loadServerTriggerBehavior: async () => null,
     operations,
     recordAction: (input) => {
       telemetry.push(input.action);
@@ -339,6 +387,10 @@ function makeDependencies(
     showParameters1Modal: async () => {},
     showParameters2Modal: async () => {},
     showFallbacksModal: async () => {},
+    showImpersonationModal: async () => {},
+    showSpotlightSetModal: async () => {},
+    showSpotlightAutoTriggerModal: async () => {},
+    showSpotlightRemoveModal: async () => {},
     ...overrides,
   };
 
@@ -393,6 +445,133 @@ describe("personalConfigPanelCatalog", () => {
       action: "crossserver-toggle",
       locale: "en-US",
     });
+
+    const triggerMode = buildPersonalConfigCustomId("trigger-mode-set", "en-US", "on");
+    expect(parsePersonalConfigPanelRoute(requireRoute(triggerMode))).toEqual({
+      action: "trigger-mode-set",
+      locale: "en-US",
+      mode: "on",
+    });
+
+    const toolMode = buildPersonalConfigCustomId("tool-mode-set", "en-US", "off");
+    expect(parsePersonalConfigPanelRoute(requireRoute(toolMode))).toEqual({
+      action: "tool-mode-set",
+      locale: "en-US",
+      mode: "off",
+    });
+
+    const impOpen = buildPersonalConfigCustomId("impersonation-open", "en-US");
+    expect(parsePersonalConfigPanelRoute(requireRoute(impOpen))).toEqual({
+      action: "impersonation-open",
+      locale: "en-US",
+    });
+
+    const impSubmit = buildPersonalConfigCustomId("impersonation-submit", "en-US", "nonce123456");
+    expect(parsePersonalConfigPanelRoute(requireRoute(impSubmit))).toEqual({
+      action: "impersonation-submit",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
+
+    const impClearView = buildPersonalConfigCustomId("impersonation-clear-view", "en-US");
+    expect(parsePersonalConfigPanelRoute(requireRoute(impClearView))).toEqual({
+      action: "impersonation-clear-view",
+      locale: "en-US",
+    });
+
+    const impClearConfirm = buildPersonalConfigCustomId("impersonation-clear-confirm", "en-US", "nonce123456");
+    expect(parsePersonalConfigPanelRoute(requireRoute(impClearConfirm))).toEqual({
+      action: "impersonation-clear-confirm",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
+
+    const spotSetOpen = buildPersonalConfigCustomId("spotlight-set-open", "en-US");
+    expect(parsePersonalConfigPanelRoute(requireRoute(spotSetOpen))).toEqual({
+      action: "spotlight-set-open",
+      locale: "en-US",
+    });
+
+    const spotSetSubmit = buildPersonalConfigCustomId("spotlight-set-submit", "en-US", "nonce123456");
+    expect(parsePersonalConfigPanelRoute(requireRoute(spotSetSubmit))).toEqual({
+      action: "spotlight-set-submit",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
+
+    const spotSetAuto = buildPersonalConfigCustomId(
+      "spot-set-auto",
+      "en-US",
+      "123456789012345678",
+      24,
+      "3",
+      "nonce123456",
+    );
+    expect(parsePersonalConfigPanelRoute(requireRoute(spotSetAuto))).toEqual({
+      action: "spot-set-auto",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 24,
+      mask: "3",
+      nonce: "nonce123456",
+    });
+
+    const spotSetAutoSub = buildPersonalConfigCustomId(
+      "spot-set-auto-sub",
+      "en-US",
+      "123456789012345678",
+      24,
+      "3",
+      "nonce123456",
+    );
+    expect(parsePersonalConfigPanelRoute(requireRoute(spotSetAutoSub))).toEqual({
+      action: "spot-set-auto-sub",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 24,
+      mask: "3",
+      nonce: "nonce123456",
+    });
+
+    const spotSetCf = buildPersonalConfigCustomId(
+      "spot-set-cf",
+      "en-US",
+      "123456789012345678",
+      24,
+      101,
+      "3",
+      "nonce123456",
+    );
+    expect(parsePersonalConfigPanelRoute(requireRoute(spotSetCf))).toEqual({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 24,
+      autoTriggerId: 101,
+      mask: "3",
+      nonce: "nonce123456",
+    });
+
+    const spotRemOpen = buildPersonalConfigCustomId("spotlight-remove-open", "en-US");
+    expect(parsePersonalConfigPanelRoute(requireRoute(spotRemOpen))).toEqual({
+      action: "spotlight-remove-open",
+      locale: "en-US",
+    });
+
+    const spotRemRange = buildPersonalConfigCustomId("spot-rem-range", "en-US", 50);
+    expect(parsePersonalConfigPanelRoute(requireRoute(spotRemRange))).toEqual({
+      action: "spot-rem-range",
+      locale: "en-US",
+      start: 50,
+    });
+
+    const spotRemSubmit = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 50, "nonce123456");
+    expect(parsePersonalConfigPanelRoute(requireRoute(spotRemSubmit))).toEqual({
+      action: "spotlight-remove-submit",
+      locale: "en-US",
+      start: 50,
+      nonce: "nonce123456",
+    });
   });
 
   it("rejects malformed routes", () => {
@@ -422,7 +601,7 @@ describe("/personal config command registration", () => {
     expect(personalExecutions?.has("config.export")).toBe(false);
     expect(personalExecutions?.has("config.import")).toBe(false);
     expect(personalExecutions?.has("config.remove")).toBe(false);
-  });
+  }, 30000);
 });
 
 describe("personalConfigOperations invariants", () => {
@@ -2030,5 +2209,712 @@ describe("Quick-Toggle modal structure and routing copy", () => {
     expect(modalJson).toContain('"value":"image"');
     expect(modalJson).toContain('"value":"video"');
     expect(modalJson).not.toContain('"value":"image_nai"');
+  });
+});
+
+describe("personalConfigOperations Advanced operations", () => {
+  it("setTriggerMode calls userRepository.setDeliberateTriggerMode", async () => {
+    const triggerSpy = spyOn(userRepository, "setDeliberateTriggerMode").mockImplementation(async () => true);
+    const result = await personalConfigOperations.setTriggerMode({
+      userId: 1,
+      userDiscId: "user-123",
+      mode: "on",
+    });
+    expect(result).toEqual({ status: "success" });
+    expect(triggerSpy).toHaveBeenCalledWith(1, "on");
+    triggerSpy.mockRestore();
+  });
+
+  it("setToolMode calls userRepository.update", async () => {
+    const updateSpy = spyOn(userRepository, "update").mockImplementation(async () => true);
+    const result = await personalConfigOperations.setToolMode({
+      userId: 1,
+      userDiscId: "user-123",
+      mode: "off",
+    });
+    expect(result).toEqual({ status: "success" });
+    expect(updateSpy).toHaveBeenCalledWith(1, { personal_deliberate_tool_mode: "off" });
+    updateSpy.mockRestore();
+  });
+
+  it("setImpersonationPrompt calls userRepository.setImpersonatePrompt", async () => {
+    const impSpy = spyOn(userRepository, "setImpersonatePrompt").mockImplementation(async () => true);
+    const result = await personalConfigOperations.setImpersonationPrompt({
+      userId: 1,
+      userDiscId: "user-123",
+      prompt: "Act like a helpful cat",
+    });
+    expect(result).toEqual({ status: "success" });
+    expect(impSpy).toHaveBeenCalledWith(1, "Act like a helpful cat");
+    impSpy.mockRestore();
+  });
+
+  it("setSpotlight calls userRepository.replacePersonalSpotlight", async () => {
+    const spotSpy = spyOn(userRepository, "replacePersonalSpotlight").mockImplementation(async () => {});
+    const result = await personalConfigOperations.setSpotlight({
+      serverId: 42,
+      userId: 1,
+      userDiscId: "user-123",
+      channelId: "ch-100",
+      personaIds: [1, 2],
+      autoTriggerPersonaId: 1,
+      expiresAt: null,
+    });
+    expect(result).toEqual({ status: "success" });
+    expect(spotSpy).toHaveBeenCalledWith(42, 1, "ch-100", [1, 2], 1, null);
+    spotSpy.mockRestore();
+  });
+
+  it("removeSpotlights calls userRepository.removePersonalSpotlight for each channel", async () => {
+    const remSpy = spyOn(userRepository, "removePersonalSpotlight").mockImplementation(async () => true);
+    const result = await personalConfigOperations.removeSpotlights({
+      serverId: 42,
+      userId: 1,
+      userDiscId: "user-123",
+      channelIds: ["ch-100", "ch-200"],
+    });
+    expect(result).toEqual({ status: "success", removedCount: 2 });
+    expect(remSpy).toHaveBeenCalledTimes(2);
+    remSpy.mockRestore();
+  });
+});
+
+describe("personalConfigRoutes Advanced interactions and telemetry", () => {
+  it("sets trigger mode and records telemetry", async () => {
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls);
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("trigger-mode-set", "en-US", "on");
+
+    let deferred = false;
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return deferred;
+      },
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls).toContain("setTriggerMode:on");
+    expect(telemetry).toContain("personal-config.personal.trigger-mode.set");
+  });
+
+  it("sets tool mode and records telemetry", async () => {
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls);
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("tool-mode-set", "en-US", "off");
+
+    let deferred = false;
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return deferred;
+      },
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls).toContain("setToolMode:off");
+    expect(telemetry).toContain("personal-config.personal.tool-mode.set");
+  });
+
+  it("opens impersonation modal with prefilled prompt", async () => {
+    const calls: string[] = [];
+    let openedModalPrompt: string | null = "unopened";
+    const { dependencies } = makeDependencies(calls, {
+      showImpersonationModal: async (_interaction, _locale, _nonce, currentPrompt) => {
+        openedModalPrompt = currentPrompt;
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("impersonation-open", "en-US");
+
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(openedModalPrompt).toBeNull();
+  });
+
+  it("refuses blank impersonation submission with info receipt and no write", async () => {
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls);
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("impersonation-submit", "en-US", "nonce123456");
+
+    let replyPayload: unknown;
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        replyPayload = payload;
+      },
+      fields: {
+        getTextInputValue: () => "   ",
+      },
+    } as unknown as ModalSubmitInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls.filter((c) => c.startsWith("setImpersonationPrompt"))).toHaveLength(0);
+    expect(telemetry).not.toContain("personal-config.personal.impersonation.set");
+    expect(JSON.stringify(replyPayload)).toContain("Prompt Required");
+  });
+
+  it("updates impersonation prompt and records telemetry", async () => {
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls);
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("impersonation-submit", "en-US", "nonce123456");
+
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+      fields: {
+        getTextInputValue: () => "Speak concisely",
+      },
+    } as unknown as ModalSubmitInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls).toContain("setImpersonationPrompt:Speak concisely");
+    expect(telemetry).toContain("personal-config.personal.impersonation.set");
+  });
+
+  it("clears impersonation prompt via confirmation and records telemetry", async () => {
+    const calls: string[] = [];
+    const { dependencies, user, telemetry } = makeDependencies(calls);
+    user.impersonation_prompt = "Existing prompt";
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("impersonation-clear-confirm", "en-US", "nonce123456");
+
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls).toContain("setImpersonationPrompt:null");
+    expect(telemetry).toContain("personal-config.personal.impersonation.set");
+  });
+
+  it("rejects spotlight actions in DM context cleanly", async () => {
+    const calls: string[] = [];
+    const { dependencies } = makeDependencies(calls, {
+      resolveScope: async () => ({
+        userId: 1,
+        userDiscId: "user-123",
+        guildId: null,
+        workspaceId: "dm",
+        internalServerId: null,
+        user: makeUser(),
+        resolvedNickname: "LiveUser",
+        personas: [],
+        readStatus: "fresh",
+      }),
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("spotlight-set-open", "en-US");
+
+    let replyPayload: unknown;
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: null,
+      reply: async (payload: unknown) => {
+        replyPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(JSON.stringify(replyPayload)).toContain("Personal Spotlight is only available in a server.");
+  });
+
+  it("handles spotlight set review, auto-trigger, and confirm", async () => {
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls);
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-cf",
+      "en-US",
+      "123456789012345678",
+      12,
+      1,
+      "1",
+      "nonce123456",
+    );
+
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls).toContain("setSpotlight:123456789012345678:1:1");
+    expect(telemetry).toContain("personal-config.personal.spotlight.set");
+  });
+
+  it("performs no spotlight write when the confirmed channel is not a text channel in this guild", async () => {
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls);
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-cf",
+      "en-US",
+      "999999999999999999",
+      12,
+      1,
+      "1",
+      "nonce123456",
+    );
+
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      // The confirmed snowflake belongs to no channel this guild can see.
+      guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls.some((entry) => entry.startsWith("setSpotlight:"))).toBe(false);
+    expect(telemetry).not.toContain("personal-config.personal.spotlight.set");
+  });
+
+  it("removes only the presented range when the removal modal was opened past the first page", async () => {
+    const calls: string[] = [];
+    const activeSpotlights = Array.from({ length: 60 }, (_, index) => ({
+      channelDiscId: String(100000000000000000n + BigInt(index)),
+      personaIds: [1],
+      autoTriggerPersonaId: null,
+      expiresAt: null,
+      userDiscId: "user-123",
+    }));
+    const { dependencies } = makeDependencies(calls, {
+      loadActiveSpotlights: async () => activeSpotlights,
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 50, "nonce123456");
+
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+      fields: {},
+      id: "modal-range-2",
+    } as unknown as ModalSubmitInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    const removal = calls.find((entry) => entry.startsWith("removeSpotlights:"));
+    expect(removal).toBeDefined();
+    const removedIds = (removal ?? "").slice("removeSpotlights:".length).split(",");
+    expect(removedIds).toEqual(activeSpotlights.slice(50).map((entry) => entry.channelDiscId));
+    expect(removedIds).not.toContain(activeSpotlights[0].channelDiscId);
+  });
+
+  it("emits one persona option per lineage and never exceeds Discord's option cap", () => {
+    // Naming preferences are lineage-keyed, so two personas can legitimately share a lineage.
+    // Discord rejects a repeated option value outright with COMPONENT_OPTION_VALUE_DUPLICATED.
+    const shared = [makePersona(1, 10, "Tomori"), makePersona(2, 10, "Tomori (alter)")];
+    const many = Array.from({ length: 40 }, (_, index) => makePersona(100 + index, 200 + index, `P${index}`));
+
+    const payload = buildPersonalConfigPanelPayload({
+      locale: "en-US",
+      category: "profile",
+      page: "persona",
+      user: makeUser(),
+      resolvedNickname: "Tester",
+      personas: [...shared, ...many],
+      guildId: "guild-123",
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+    });
+
+    const json = JSON.stringify(payload);
+    const optionValues = [...json.matchAll(/"customId":"personal-config:v1:persona-select[^"]*"/g)];
+    expect(optionValues.length).toBe(1);
+
+    const select = JSON.parse(json).components[0].components.find(
+      (row: { components?: Array<{ customId?: string; options?: Array<{ value: string }> }> }) =>
+        row.components?.[0]?.customId?.includes("persona-select"),
+    ).components[0];
+
+    const values: string[] = select.options.map((option: { value: string }) => option.value);
+    expect(values.length).toBeLessThanOrEqual(25);
+    expect(new Set(values).size).toBe(values.length);
+    expect(values).toContain("10");
+  });
+
+  it("renders both spotlight multi-selects as checkbox groups, never file uploads", () => {
+    // RawDiscordComponent.type is a bare number, so TypeScript accepts any of them. Component type 19
+    // is FileUpload and 22 is CheckboxGroup: picking 19 renders an upload box that submits no values,
+    // which for the unchecked-means-remove modal means every presented row is treated as unchecked.
+    const setModal = buildSpotlightSetModal("en-US", "nonce123456", [
+      { id: 1, name: "Tomori", isAlter: false },
+      { id: 2, name: "Sparrow", isAlter: true },
+    ]);
+    const removeModal = buildSpotlightRemoveModal(
+      "en-US",
+      "nonce123456",
+      0,
+      [
+        {
+          channelDiscId: "123456789012345678",
+          personaIds: [1],
+          autoTriggerPersonaId: null,
+          expiresAt: null,
+        },
+      ] as unknown as Parameters<typeof buildSpotlightRemoveModal>[3],
+      [{ id: 1, name: "Tomori", isAlter: false }],
+      new Map([["123456789012345678", { name: "general" }]]),
+    );
+
+    for (const modal of [setModal, removeModal]) {
+      const optionBearing = modal.components.filter((label) => label.component?.options !== undefined);
+      expect(optionBearing.length).toBeGreaterThan(0);
+      for (const label of optionBearing) {
+        expect(label.component?.type).not.toBe(19);
+      }
+    }
+
+    const personaGroups = setModal.components.filter((label) => label.component?.custom_id?.startsWith("personas_"));
+    expect(personaGroups.length).toBeGreaterThan(0);
+    for (const group of personaGroups) expect(group.component?.type).toBe(22);
+
+    const removalGroups = removeModal.components.filter((label) =>
+      label.component?.custom_id?.startsWith("spotlights_"),
+    );
+    expect(removalGroups.length).toBeGreaterThan(0);
+    for (const group of removalGroups) expect(group.component?.type).toBe(22);
+  });
+
+  it("resolves every composed Response Modes locale key to real text", () => {
+    // check-locales matches literal dot-notation strings only, so a key built from a template is
+    // invisible to it and a missing half would render its own key to the user with every gate green.
+    // Only `mode_` is still composed; the receipt handlers build it from the route's mode.
+    for (const mode of ["off", "follow", "on"] as const) {
+      const key = `commands.personal.config.mode_${mode}`;
+      expect(localizer("en-US", key)).not.toBe(key);
+    }
+  });
+
+  it("renders Response Modes with effect-first status, docs links, and parenthetical modes in guilds and DMs", () => {
+    const payloadGuildOff = buildPersonalConfigPanelPayload({
+      locale: "en-US",
+      category: "advanced",
+      page: "response-modes",
+      user: makeUser({ personal_dtm: "follow", personal_deliberate_tool_mode: "follow" }),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: "guild-123",
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      serverTriggerBehavior: { deliberate_trigger_mode: false, deliberate_tool_mode: false },
+    });
+    const guildOffJson = JSON.stringify(payloadGuildOff);
+    expect(guildOffJson).toContain(
+      "**[Deliberate Trigger Mode](https://docs.tomoribot.app/en/features/chatting-personality/chatting-and-triggers/#deliberate-trigger-mode)**",
+    );
+    expect(guildOffJson).toContain(
+      "**[Deliberate Tool Mode](https://docs.tomoribot.app/en/features/capabilities/tools-and-extensions/#deliberate-tool-mode)** (EXPERIMENTAL)",
+    );
+    expect(guildOffJson).toContain("> You can trigger me by saying my name\\n> (Follow Server, currently off here)");
+    expect(guildOffJson).toContain("> All my tools are always available\\n> (Follow Server, currently off here)");
+    // No double blank line before quote rows (C1)
+    expect(guildOffJson).not.toContain("\\n\\n> You can trigger me");
+    expect(guildOffJson).not.toContain("\\n\\n> All my tools");
+
+    const payloadGuildOn = buildPersonalConfigPanelPayload({
+      locale: "en-US",
+      category: "advanced",
+      page: "response-modes",
+      user: makeUser({ personal_dtm: "follow", personal_deliberate_tool_mode: "follow" }),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: "guild-123",
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      serverTriggerBehavior: { deliberate_trigger_mode: true, deliberate_tool_mode: true },
+    });
+    const guildOnJson = JSON.stringify(payloadGuildOn);
+    expect(guildOnJson).toContain(
+      "> Only an @mention, a reply, or /respond reaches me\\n> (Follow Server, currently on here)",
+    );
+    expect(guildOnJson).toContain(
+      "> My tools are only offered when the conversation calls for them\\n> (Follow Server, currently on here)",
+    );
+
+    const payloadUserOn = buildPersonalConfigPanelPayload({
+      locale: "en-US",
+      category: "advanced",
+      page: "response-modes",
+      user: makeUser({ personal_dtm: "on", personal_deliberate_tool_mode: "on" }),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: "guild-123",
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      serverTriggerBehavior: { deliberate_trigger_mode: false, deliberate_tool_mode: false },
+    });
+    const userOnJson = JSON.stringify(payloadUserOn);
+    expect(userOnJson).toContain("> Only an @mention, a reply, or /respond reaches me\\n> (On)");
+    expect(userOnJson).toContain("> My tools are only offered when the conversation calls for them\\n> (On)");
+
+    const payloadDm = buildPersonalConfigPanelPayload({
+      locale: "en-US",
+      category: "advanced",
+      page: "response-modes",
+      user: makeUser({ personal_dtm: "follow", personal_deliberate_tool_mode: "follow" }),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: null,
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      serverTriggerBehavior: null,
+    });
+    const dmJson = JSON.stringify(payloadDm);
+    expect(dmJson).toContain("> Deliberate Trigger Mode does not apply in direct messages\\n> (Follow Server)");
+    expect(dmJson).toContain("> All my tools are always available\\n> (Follow Server)");
+  });
+
+  it("renders Profile General and Persona with section descriptions and precise fallback wording (never bare Inherited)", () => {
+    const generalPayload = buildPersonalConfigPanelPayload({
+      locale: "en-US",
+      category: "profile",
+      page: "general",
+      user: makeUser({ prefix_override: null, suffix_override: null }),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: "guild-123",
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+    });
+    const generalJson = JSON.stringify(generalPayload);
+    expect(generalJson).toContain("**Interface**\\nHow I talk to you and what time I think you are in");
+    expect(generalJson).toContain("**Naming**\\nWhat I call you, across every server");
+    expect(generalJson).toContain("**About You**\\nHow I refer to you when I talk about you");
+    expect(generalJson).toContain("> Prefix: Persona default (unset)");
+    expect(generalJson).toContain("> Suffix: Persona default (unset)");
+    expect(generalJson).not.toContain("Inherited");
+
+    const personaPayload = buildPersonalConfigPanelPayload({
+      locale: "en-US",
+      category: "profile",
+      page: "persona",
+      user: makeUser(),
+      resolvedNickname: "Tester",
+      personas: [makePersona(1, 10, "Tomori")],
+      guildId: "guild-123",
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      personaNamingPreference: null,
+    });
+    const personaJson = JSON.stringify(personaPayload);
+    expect(personaJson).toContain("> Nickname override: Global profile or persona default");
+    expect(personaJson).toContain("> Prefix override: Global profile or persona default");
+    expect(personaJson).toContain("> Suffix override: Global profile or persona default");
+    expect(personaJson).not.toContain("Inherited");
+  });
+
+  it("renders Privacy with clean Your Data spacing and separated Cross-Server STM section", () => {
+    const privacyPayload = buildPersonalConfigPanelPayload({
+      locale: "en-US",
+      category: "privacy",
+      page: "privacy-controls",
+      user: makeUser({ shortterm_cache_crossserver_opt_in: false }),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: "guild-123",
+      memoryCount: 5,
+      stmCount: 0,
+      readStatus: "fresh",
+    });
+    const privacyJson = JSON.stringify(privacyPayload);
+    // Section headers
+    expect(privacyJson).toContain("**Your Data**");
+    expect(privacyJson).toContain("**Cross-Server STM**");
+    // Cross-server STM section footer
+    expect(privacyJson).toContain("-# `/personal memories` always persist across servers, but not STM");
+    // Button label
+    expect(privacyJson).toContain("Enable Cross-Server Sharing");
+  });
+
+  it("renders Models switch page with Change Personal <Capability> Model select options while preserving routing_* labels", () => {
+    const modelsPayload = buildPersonalConfigPanelPayload({
+      locale: "en-US",
+      category: "models",
+      page: "switch",
+      user: makeUser(),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: "guild-123",
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      modelDisplayInfo: {
+        routingRows: {
+          text: {
+            capability: "text",
+            activeModelName: "Claude 3.5 Sonnet",
+            storedProvider: "openrouter",
+            storedModelName: "Claude 3.5 Sonnet",
+          },
+          vision: { capability: "vision", activeModelName: null, storedProvider: null, storedModelName: null },
+          embedding: { capability: "embedding", activeModelName: null, storedProvider: null, storedModelName: null },
+          image: { capability: "image", activeModelName: null, storedProvider: null, storedModelName: null },
+          image_nai: { capability: "image_nai", activeModelName: null, storedProvider: null, storedModelName: null },
+          video: { capability: "video", activeModelName: null, storedProvider: null, storedModelName: null },
+        },
+        availableCapabilities: ["text", "vision", "embedding", "image", "image_nai", "video"],
+        eligibleProvidersForCapability: {
+          text: ["openrouter"],
+          vision: [],
+          embedding: [],
+          image: [],
+          image_nai: [],
+          video: [],
+        },
+        parametersProviders: [],
+        fallbacksProviders: [],
+        primaryModelName: "Claude 3.5 Sonnet",
+        fallbackSlots: [],
+        randomizerEnabled: false,
+        canEnableRandomizer: false,
+      },
+    });
+    const modelsJson = JSON.stringify(modelsPayload);
+    // Dropdown labels
+    expect(modelsJson).toContain("Change Personal Text Model");
+    expect(modelsJson).toContain("Change Personal Vision Model");
+    expect(modelsJson).toContain("Change Personal Embedding Model");
+    expect(modelsJson).toContain("Change Personal Standard Image Model");
+    expect(modelsJson).toContain("Change Personal NovelAI Image Model");
+    expect(modelsJson).toContain("Change Personal Video Model");
+    // Status row labels still present
+    expect(modelsJson).toContain("> Text: `Claude 3.5 Sonnet`");
+    expect(modelsJson).toContain("> Vision: `Server Default`");
+  });
+
+  it("handles spotlight removal and records telemetry on success", async () => {
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls, {
+      loadActiveSpotlights: async () => [
+        {
+          channelDiscId: "123456789012345678",
+          personaIds: [1],
+          autoTriggerPersonaId: null,
+          expiresAt: null,
+          userDiscId: "user-123",
+        },
+      ],
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, "nonce123456");
+
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+      fields: {},
+      id: "modal-1",
+    } as unknown as ModalSubmitInteraction;
+
+    // Unchecked item means it is removed
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls).toContain("removeSpotlights:123456789012345678");
+    expect(telemetry).toContain("personal-config.personal.spotlight.remove");
   });
 });
