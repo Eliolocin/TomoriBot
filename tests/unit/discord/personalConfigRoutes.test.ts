@@ -10,12 +10,15 @@ import {
 import { llmModelRepo, llmProviderRepo, userNamingRepository, userRepository } from "@/utils/db/repositories";
 import {
   buildPersonalConfigCustomId,
+  computeSpotlightRemoveFingerprint,
+  computeSpotlightSetFingerprint,
   decodeProviderParam,
   encodeProviderParam,
   parsePersonalConfigPanelRoute,
 } from "@/utils/discord/personalConfigPanelCatalog";
 import {
   buildPersonalConfigPanelPayload,
+  buildSpotlightAutoTriggerModal,
   buildSpotlightRemoveModal,
   buildSpotlightSetModal,
   type PersonalConfigRoutingRow,
@@ -492,10 +495,11 @@ describe("personalConfigPanelCatalog", () => {
       locale: "en-US",
     });
 
-    const spotSetSubmit = buildPersonalConfigCustomId("spotlight-set-submit", "en-US", "nonce123456");
+    const spotSetSubmit = buildPersonalConfigCustomId("spotlight-set-submit", "en-US", "a1b2c3d4", "nonce123456");
     expect(parsePersonalConfigPanelRoute(requireRoute(spotSetSubmit))).toEqual({
       action: "spotlight-set-submit",
       locale: "en-US",
+      fp: "a1b2c3d4",
       nonce: "nonce123456",
     });
 
@@ -505,6 +509,7 @@ describe("personalConfigPanelCatalog", () => {
       "123456789012345678",
       24,
       "3",
+      "a1b2c3d4",
       "nonce123456",
     );
     expect(parsePersonalConfigPanelRoute(requireRoute(spotSetAuto))).toEqual({
@@ -513,6 +518,7 @@ describe("personalConfigPanelCatalog", () => {
       channelId: "123456789012345678",
       hours: 24,
       mask: "3",
+      fp: "a1b2c3d4",
       nonce: "nonce123456",
     });
 
@@ -522,6 +528,7 @@ describe("personalConfigPanelCatalog", () => {
       "123456789012345678",
       24,
       "3",
+      "a1b2c3d4",
       "nonce123456",
     );
     expect(parsePersonalConfigPanelRoute(requireRoute(spotSetAutoSub))).toEqual({
@@ -530,6 +537,7 @@ describe("personalConfigPanelCatalog", () => {
       channelId: "123456789012345678",
       hours: 24,
       mask: "3",
+      fp: "a1b2c3d4",
       nonce: "nonce123456",
     });
 
@@ -540,6 +548,7 @@ describe("personalConfigPanelCatalog", () => {
       24,
       101,
       "3",
+      "a1b2c3d4",
       "nonce123456",
     );
     expect(parsePersonalConfigPanelRoute(requireRoute(spotSetCf))).toEqual({
@@ -549,6 +558,7 @@ describe("personalConfigPanelCatalog", () => {
       hours: 24,
       autoTriggerId: 101,
       mask: "3",
+      fp: "a1b2c3d4",
       nonce: "nonce123456",
     });
 
@@ -558,29 +568,45 @@ describe("personalConfigPanelCatalog", () => {
       locale: "en-US",
     });
 
-    const spotRemRange = buildPersonalConfigCustomId("spot-rem-range", "en-US", 50);
+    const spotRemRange = buildPersonalConfigCustomId("spot-rem-range", "en-US", 50, "a1b2c3d4");
     expect(parsePersonalConfigPanelRoute(requireRoute(spotRemRange))).toEqual({
       action: "spot-rem-range",
       locale: "en-US",
       start: 50,
+      fp: "a1b2c3d4",
     });
 
-    const spotRemSubmit = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 50, "nonce123456");
+    const spotRemSubmit = buildPersonalConfigCustomId(
+      "spotlight-remove-submit",
+      "en-US",
+      50,
+      "a1b2c3d4",
+      "nonce123456",
+    );
     expect(parsePersonalConfigPanelRoute(requireRoute(spotRemSubmit))).toEqual({
       action: "spotlight-remove-submit",
       locale: "en-US",
       start: 50,
+      fp: "a1b2c3d4",
       nonce: "nonce123456",
     });
   });
 
   it("rejects malformed routes", () => {
-    expect(parsePersonalConfigPanelRoute(requireRoute("other:v1:category:en-US:profile:general"))).toBeNull();
-    expect(parsePersonalConfigPanelRoute(requireRoute("personal-config:v2:category:en-US:profile:general"))).toBeNull();
+    expect(parsePersonalConfigPanelRoute(requireRoute("other:v2:category:en-US:profile:general"))).toBeNull();
+    expect(parsePersonalConfigPanelRoute(requireRoute("personal-config:v1:category:en-US:profile:general"))).toBeNull();
     expect(
-      parsePersonalConfigPanelRoute(requireRoute("personal-config:v1:category:invalid-locale:profile:general")),
+      parsePersonalConfigPanelRoute(requireRoute("personal-config:v2:category:invalid-locale:profile:general")),
     ).toBeNull();
-    expect(parsePersonalConfigPanelRoute(requireRoute("personal-config:v1:category:en-US:unknown:general"))).toBeNull();
+    expect(parsePersonalConfigPanelRoute(requireRoute("personal-config:v2:category:en-US:unknown:general"))).toBeNull();
+    expect(
+      parsePersonalConfigPanelRoute(requireRoute("personal-config:v2:s-set-sub:en-US:short:nonce123456")),
+    ).toBeNull();
+    expect(
+      parsePersonalConfigPanelRoute(
+        requireRoute("personal-config:v2:spot-set-cf:en-US:123456789012345678:0:0:1:a1b2c3d4:nonce123456"),
+      ),
+    ).toBeNull();
   });
 });
 
@@ -1159,11 +1185,13 @@ describe("Models interaction routing and telemetry", () => {
   it("quick-toggle-submit acknowledges before the operation and records telemetry on success", async () => {
     const calls: string[] = [];
     let deferred = false;
+    let acknowledgedDuringWrite = false;
+    let interaction: ModalSubmitInteraction;
     const { dependencies, telemetry } = makeDependencies(calls);
     dependencies.operations = {
       ...dependencies.operations,
       setQuickToggleRouting: async () => {
-        expect(deferred).toBe(true);
+        acknowledgedDuringWrite = interaction.deferred || interaction.replied;
         calls.push("setQuickToggleRouting");
         return { status: "success" };
       },
@@ -1171,7 +1199,7 @@ describe("Models interaction routing and telemetry", () => {
     const route = createPersonalConfigInteractionRoute(dependencies);
     const customId = buildPersonalConfigCustomId("quick-toggle-submit", "en-US", "nonce123456");
 
-    const interaction = {
+    interaction = {
       id: "modal-1",
       isButton: () => false,
       isStringSelectMenu: () => false,
@@ -1194,6 +1222,7 @@ describe("Models interaction routing and telemetry", () => {
     await route.execute({} as Client, interaction, requireRoute(customId));
 
     expect(calls.some((c) => c.startsWith("setQuickToggleRouting"))).toBe(true);
+    expect(acknowledgedDuringWrite).toBe(true);
     expect(telemetry).toContain("personal-config.personal.model-routing.set");
   });
 
@@ -2490,6 +2519,8 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalConfigInteractionRoute(dependencies);
+    const personas = [{ id: 1 }, { id: 2 }];
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
     const customId = buildPersonalConfigCustomId(
       "spot-set-cf",
       "en-US",
@@ -2497,6 +2528,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
       12,
       1,
       "1",
+      fp,
       "nonce123456",
     );
 
@@ -2523,6 +2555,8 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalConfigInteractionRoute(dependencies);
+    const personas = [{ id: 1 }, { id: 2 }];
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
     const customId = buildPersonalConfigCustomId(
       "spot-set-cf",
       "en-US",
@@ -2530,6 +2564,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
       12,
       1,
       "1",
+      fp,
       "nonce123456",
     );
 
@@ -2540,7 +2575,6 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
       customId,
       user: { id: "user-123", username: "tester", displayName: "Tester" },
       guildId: "guild-123",
-      // The confirmed snowflake belongs to no channel this guild can see.
       guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
       deferred: false,
       deferUpdate: async () => {},
@@ -2566,7 +2600,8 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
       loadActiveSpotlights: async () => activeSpotlights,
     });
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 50, "nonce123456");
+    const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
+    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 50, fp, "nonce123456");
 
     const interaction = {
       isButton: () => false,
@@ -2611,7 +2646,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     });
 
     const json = JSON.stringify(payload);
-    const optionValues = [...json.matchAll(/"customId":"personal-config:v1:persona-select[^"]*"/g)];
+    const optionValues = [...json.matchAll(/"customId":"personal-config:v2:persona-select[^"]*"/g)];
     expect(optionValues.length).toBe(1);
 
     const select = JSON.parse(json).components[0].components.find(
@@ -2629,7 +2664,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     // RawDiscordComponent.type is a bare number, so TypeScript accepts any of them. Component type 19
     // is FileUpload and 22 is CheckboxGroup: picking 19 renders an upload box that submits no values,
     // which for the unchecked-means-remove modal means every presented row is treated as unchecked.
-    const setModal = buildSpotlightSetModal("en-US", "nonce123456", [
+    const setModal = buildSpotlightSetModal("en-US", "nonce123456", "a1b2c3d4", [
       { id: 1, name: "Tomori", isAlter: false },
       { id: 2, name: "Sparrow", isAlter: true },
     ]);
@@ -2637,6 +2672,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
       "en-US",
       "nonce123456",
       0,
+      "a1b2c3d4",
       [
         {
           channelDiscId: "123456789012345678",
@@ -2644,7 +2680,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
           autoTriggerPersonaId: null,
           expiresAt: null,
         },
-      ] as unknown as Parameters<typeof buildSpotlightRemoveModal>[3],
+      ] as unknown as Parameters<typeof buildSpotlightRemoveModal>[4],
       [{ id: 1, name: "Tomori", isAlter: false }],
       new Map([["123456789012345678", { name: "general" }]]),
     );
@@ -2883,19 +2919,21 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
 
   it("handles spotlight removal and records telemetry on success", async () => {
     const calls: string[] = [];
+    const activeSpotlights = [
+      {
+        channelDiscId: "123456789012345678",
+        personaIds: [1],
+        autoTriggerPersonaId: null,
+        expiresAt: null,
+        userDiscId: "user-123",
+      },
+    ];
     const { dependencies, telemetry } = makeDependencies(calls, {
-      loadActiveSpotlights: async () => [
-        {
-          channelDiscId: "123456789012345678",
-          personaIds: [1],
-          autoTriggerPersonaId: null,
-          expiresAt: null,
-          userDiscId: "user-123",
-        },
-      ],
+      loadActiveSpotlights: async () => activeSpotlights,
     });
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, "nonce123456");
+    const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
+    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, fp, "nonce123456");
 
     const interaction = {
       isButton: () => false,
@@ -2911,10 +2949,893 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
       id: "modal-1",
     } as unknown as ModalSubmitInteraction;
 
-    // Unchecked item means it is removed
     await route.execute({} as Client, interaction, requireRoute(customId));
 
     expect(calls).toContain("removeSpotlights:123456789012345678");
     expect(telemetry).toContain("personal-config.personal.spotlight.remove");
+  });
+});
+
+describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () => {
+  it("detects persona inserted before selected position and fails stale with zero writes or telemetry", async () => {
+    const calls: string[] = [];
+    const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-cf",
+      "en-US",
+      "123456789012345678",
+      0,
+      0,
+      "2",
+      fp,
+      "nonce123456",
+    );
+
+    const driftedPersonas = [
+      makePersona(99, 99, "NewPersona"),
+      makePersona(1, 10, "Tomori"),
+      makePersona(2, 20, "Anon"),
+    ];
+
+    let editPayload: unknown;
+    const { dependencies, telemetry } = makeDependencies(calls, {
+      loadGuildPersonas: async () => driftedPersonas,
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        editPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls.filter((c) => c.startsWith("setSpotlight"))).toHaveLength(0);
+    expect(telemetry).not.toContain("personal-config.personal.spotlight.set");
+    expect(JSON.stringify(editPayload)).toContain("Personal configuration is currently unavailable.");
+  });
+
+  it("detects persona deleted before selected position and fails stale with zero writes or telemetry", async () => {
+    const calls: string[] = [];
+    const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon"), makePersona(3, 30, "Soy")];
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-cf",
+      "en-US",
+      "123456789012345678",
+      0,
+      0,
+      "4",
+      fp,
+      "nonce123456",
+    );
+
+    const driftedPersonas = [makePersona(2, 20, "Anon"), makePersona(3, 30, "Soy")];
+
+    let editPayload: unknown;
+    const { dependencies, telemetry } = makeDependencies(calls, {
+      loadGuildPersonas: async () => driftedPersonas,
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        editPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls.filter((c) => c.startsWith("setSpotlight"))).toHaveLength(0);
+    expect(telemetry).not.toContain("personal-config.personal.spotlight.set");
+    expect(JSON.stringify(editPayload)).toContain("Personal configuration is currently unavailable.");
+  });
+
+  it("fails stale on spotlight-set-submit when personas drift before modal submit", async () => {
+    const calls: string[] = [];
+    const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
+    const customId = buildPersonalConfigCustomId("spotlight-set-submit", "en-US", fp, "nonce123456");
+
+    const driftedPersonas = [makePersona(99, 99, "New"), makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
+
+    let editPayload: unknown;
+    const { dependencies, telemetry } = makeDependencies(calls, {
+      loadGuildPersonas: async () => driftedPersonas,
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        editPayload = payload;
+      },
+      fields: {
+        getTextInputValue: () => "0",
+      },
+      id: "modal-1",
+    } as unknown as ModalSubmitInteraction;
+
+    const modalsModule = await import("@/utils/discord/ui/modals");
+    const takeSpy = spyOn(modalsModule, "takeRawModalSelectValue").mockReturnValue("123456789012345678");
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    takeSpy.mockRestore();
+
+    expect(calls.filter((c) => c.startsWith("setSpotlight"))).toHaveLength(0);
+    expect(telemetry).not.toContain("personal-config.personal.spotlight.set");
+    expect(JSON.stringify(editPayload)).toContain("Personal configuration is currently unavailable.");
+  });
+
+  it("fails stale on spot-set-auto button click when personas drift", async () => {
+    const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-auto",
+      "en-US",
+      "123456789012345678",
+      0,
+      "3",
+      fp,
+      "nonce123456",
+    );
+
+    let modalCalled = false;
+    let replyPayload: unknown;
+    const { dependencies } = makeDependencies([], {
+      loadGuildPersonas: async () => [makePersona(99, 99, "Drifted"), ...initialPersonas],
+      showSpotlightAutoTriggerModal: async () => {
+        modalCalled = true;
+      },
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      reply: async (payload: unknown) => {
+        replyPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(modalCalled).toBe(false);
+    expect(JSON.stringify(replyPayload)).toContain("This panel may be out of date.");
+  });
+
+  it("fails stale on spot-set-auto-sub modal submission when personas drift", async () => {
+    const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-auto-sub",
+      "en-US",
+      "123456789012345678",
+      0,
+      "3",
+      fp,
+      "nonce123456",
+    );
+
+    let editPayload: unknown;
+    const { dependencies } = makeDependencies([], {
+      loadGuildPersonas: async () => [makePersona(99, 99, "Drifted"), ...initialPersonas],
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        editPayload = payload;
+      },
+      fields: {
+        getTextInputValue: () => "0",
+      },
+      id: "modal-auto",
+    } as unknown as ModalSubmitInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(JSON.stringify(editPayload)).toContain("Personal configuration is currently unavailable.");
+  });
+
+  it("detects presented spotlight inserted, deleted, or expired between modal render and submit", async () => {
+    const calls: string[] = [];
+    const initialSpotlights = [
+      {
+        channelDiscId: "123456789012345678",
+        personaIds: [1],
+        autoTriggerPersonaId: null,
+        expiresAt: null,
+        userDiscId: "user-123",
+      },
+      {
+        channelDiscId: "987654321098765432",
+        personaIds: [2],
+        autoTriggerPersonaId: null,
+        expiresAt: null,
+        userDiscId: "user-123",
+      },
+    ];
+    const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", initialSpotlights);
+    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, fp, "nonce123456");
+
+    const insertedSpotlights = [
+      ...initialSpotlights,
+      {
+        channelDiscId: "111222333444555666",
+        personaIds: [1],
+        autoTriggerPersonaId: null,
+        expiresAt: null,
+        userDiscId: "user-123",
+      },
+    ];
+    let editPayload: unknown;
+    const { dependencies: depInserted, telemetry: telInserted } = makeDependencies(calls, {
+      loadActiveSpotlights: async () => insertedSpotlights,
+    });
+    const routeInserted = createPersonalConfigInteractionRoute(depInserted);
+
+    const interactionA = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        editPayload = payload;
+      },
+      fields: {},
+      id: "modal-drift-a",
+    } as unknown as ModalSubmitInteraction;
+
+    await routeInserted.execute({} as Client, interactionA, requireRoute(customId));
+
+    expect(calls.filter((c) => c.startsWith("removeSpotlights"))).toHaveLength(0);
+    expect(telInserted).not.toContain("personal-config.personal.spotlight.remove");
+    expect(JSON.stringify(editPayload)).toContain("Personal configuration is currently unavailable.");
+
+    const expiredSpotlights = [initialSpotlights[1]];
+    const { dependencies: depExpired, telemetry: telExpired } = makeDependencies(calls, {
+      loadActiveSpotlights: async () => expiredSpotlights,
+    });
+    const routeExpired = createPersonalConfigInteractionRoute(depExpired);
+
+    const interactionB = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        editPayload = payload;
+      },
+      fields: {},
+      id: "modal-drift-b",
+    } as unknown as ModalSubmitInteraction;
+
+    await routeExpired.execute({} as Client, interactionB, requireRoute(customId));
+
+    expect(calls.filter((c) => c.startsWith("removeSpotlights"))).toHaveLength(0);
+    expect(telExpired).not.toContain("personal-config.personal.spotlight.remove");
+    expect(JSON.stringify(editPayload)).toContain("Personal configuration is currently unavailable.");
+  });
+
+  it("fails stale on spot-rem-range button click when active spotlights drift", async () => {
+    const initialSpotlights = [
+      {
+        channelDiscId: "123456789012345678",
+        personaIds: [1],
+        autoTriggerPersonaId: null,
+        expiresAt: null,
+        userDiscId: "user-123",
+      },
+    ];
+    const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", initialSpotlights);
+    const customId = buildPersonalConfigCustomId("spot-rem-range", "en-US", 0, fp);
+
+    let modalCalled = false;
+    let replyPayload: unknown;
+    const { dependencies } = makeDependencies([], {
+      loadActiveSpotlights: async () => [],
+      showSpotlightRemoveModal: async () => {
+        modalCalled = true;
+      },
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      reply: async (payload: unknown) => {
+        replyPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(modalCalled).toBe(false);
+    expect(JSON.stringify(replyPayload)).toContain("This panel may be out of date.");
+  });
+
+  it("executes a newly constructed route from transported fingerprint without setup or snapshot state", async () => {
+    const calls: string[] = [];
+    const activeSpotlights = [
+      {
+        channelDiscId: "123456789012345678",
+        personaIds: [1],
+        autoTriggerPersonaId: null,
+        expiresAt: null,
+        userDiscId: "user-123",
+      },
+    ];
+    const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
+    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, fp, "nonce123456");
+
+    const { dependencies, telemetry } = makeDependencies(calls, {
+      loadActiveSpotlights: async () => activeSpotlights,
+    });
+    const freshRoute = createPersonalConfigInteractionRoute(dependencies);
+
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+      fields: {},
+      id: "modal-restart",
+    } as unknown as ModalSubmitInteraction;
+
+    await freshRoute.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls).toContain("removeSpotlights:123456789012345678");
+    expect(telemetry).toContain("personal-config.personal.spotlight.remove");
+  });
+
+  it("rejects token replay by another actor or workspace", async () => {
+    const calls: string[] = [];
+    const personas = [{ id: 1 }, { id: 2 }];
+    const validFp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-cf",
+      "en-US",
+      "123456789012345678",
+      0,
+      0,
+      "1",
+      validFp,
+      "nonce123456",
+    );
+
+    let editPayloadActor: unknown;
+    const actorInteraction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-999", username: "attacker", displayName: "Attacker" },
+      guildId: "guild-123",
+      guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        editPayloadActor = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    const { dependencies: depActor, telemetry: telActor } = makeDependencies(calls, {
+      resolveScope: async () => ({
+        userId: 999,
+        userDiscId: "user-999",
+        guildId: "guild-123",
+        workspaceId: "guild-123",
+        internalServerId: 42,
+        user: makeUser({ user_id: 999, user_disc_id: "user-999" }),
+        resolvedNickname: "Attacker",
+        personas: [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")],
+        readStatus: "fresh",
+      }),
+    });
+    const routeActor = createPersonalConfigInteractionRoute(depActor);
+
+    await routeActor.execute({} as Client, actorInteraction, requireRoute(customId));
+
+    expect(calls.filter((c) => c.startsWith("setSpotlight"))).toHaveLength(0);
+    expect(telActor).not.toContain("personal-config.personal.spotlight.set");
+    expect(JSON.stringify(editPayloadActor)).toContain("Personal configuration is currently unavailable.");
+
+    let editPayloadGuild: unknown;
+    const guildInteraction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-999",
+      guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        editPayloadGuild = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    const { dependencies: depGuild, telemetry: telGuild } = makeDependencies(calls, {
+      resolveScope: async () => ({
+        userId: 1,
+        userDiscId: "user-123",
+        guildId: "guild-999",
+        workspaceId: "guild-999",
+        internalServerId: 99,
+        user: makeUser(),
+        resolvedNickname: "Tester",
+        personas: [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")],
+        readStatus: "fresh",
+      }),
+    });
+    const routeGuild = createPersonalConfigInteractionRoute(depGuild);
+
+    await routeGuild.execute({} as Client, guildInteraction, requireRoute(customId));
+
+    expect(calls.filter((c) => c.startsWith("setSpotlight"))).toHaveLength(0);
+    expect(telGuild).not.toContain("personal-config.personal.spotlight.set");
+    expect(JSON.stringify(editPayloadGuild)).toContain("Personal configuration is currently unavailable.");
+  });
+
+  it("fails stale on old v1 controls through real global router with no mutation", async () => {
+    let replyPayload: unknown;
+    const v1Interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: "personal-config:v1:spot-set-cf:en-US:123456789012345678:12:1:1:nonce123456",
+      locale: "en-US",
+      user: { id: "user-123" },
+      reply: async (payload: unknown) => {
+        replyPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    const replaceSpy = spyOn(userRepository, "replacePersonalSpotlight").mockImplementation(async () => {});
+    const removeSpy = spyOn(userRepository, "removePersonalSpotlight").mockImplementation(async () => true);
+
+    const handled = await dispatchGlobalInteraction({} as Client, v1Interaction);
+
+    expect(handled).toBe(true);
+    expect(replaceSpy).not.toHaveBeenCalled();
+    expect(removeSpy).not.toHaveBeenCalled();
+    expect(JSON.stringify(replyPayload)).toContain("/personal config");
+
+    replaceSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
+
+  it("attempts all selected channels on partial failure and surfaces partial status without success telemetry", async () => {
+    const remSpy = spyOn(userRepository, "removePersonalSpotlight").mockImplementation(async (_srvId, _usrId, chId) => {
+      return chId !== "ch-200";
+    });
+
+    const result = await personalConfigOperations.removeSpotlights({
+      serverId: 42,
+      userId: 1,
+      userDiscId: "user-123",
+      channelIds: ["ch-100", "ch-200", "ch-300"],
+    });
+
+    expect(result).toEqual({
+      status: "partial-failure",
+      removedCount: 2,
+      failedCount: 1,
+    });
+    expect(remSpy).toHaveBeenCalledTimes(3);
+    remSpy.mockRestore();
+
+    const calls: string[] = [];
+    const activeSpotlights = [
+      { channelDiscId: "ch-100", personaIds: [1], autoTriggerPersonaId: null, expiresAt: null, userDiscId: "user-123" },
+      { channelDiscId: "ch-200", personaIds: [1], autoTriggerPersonaId: null, expiresAt: null, userDiscId: "user-123" },
+    ];
+    const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
+    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, fp, "nonce123456");
+
+    let editPayload: unknown;
+    const { dependencies, telemetry } = makeDependencies(calls, {
+      loadActiveSpotlights: async () => activeSpotlights,
+      operations: {
+        ...personalConfigOperations,
+        removeSpotlights: async () => ({
+          status: "partial-failure",
+          removedCount: 1,
+          failedCount: 1,
+        }),
+      },
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        editPayload = payload;
+      },
+      fields: {},
+      id: "modal-partial",
+    } as unknown as ModalSubmitInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(telemetry).not.toContain("personal-config.personal.spotlight.remove");
+    expect(JSON.stringify(editPayload)).toContain("Partial Removal");
+  });
+
+  it("asserts raw numeric component types across all touched spotlight modals", () => {
+    const setModal = buildSpotlightSetModal("en-US", "nonce123456", "a1b2c3d4", [
+      { id: 1, name: "Tomori", isAlter: false },
+      { id: 2, name: "Anon", isAlter: false },
+    ]);
+    const autoModal = buildSpotlightAutoTriggerModal(
+      "en-US",
+      "nonce123456",
+      "123456789012345678",
+      12,
+      "3",
+      "a1b2c3d4",
+      [{ id: 1, name: "Tomori", isAlter: false }],
+    );
+    const removeModal = buildSpotlightRemoveModal(
+      "en-US",
+      "nonce123456",
+      0,
+      "a1b2c3d4",
+      [
+        {
+          channelDiscId: "123456789012345678",
+          personaIds: [1],
+          autoTriggerPersonaId: null,
+          expiresAt: null,
+          userDiscId: "user-123",
+        },
+      ],
+      [{ id: 1, name: "Tomori", isAlter: false }],
+      new Map([["123456789012345678", { name: "general" }]]),
+    );
+
+    const channelComp = setModal.components.find((c) => c.component?.custom_id?.startsWith("channel_"));
+    expect(channelComp?.component?.type).toBe(8);
+
+    const hoursComp = setModal.components.find((c) => c.component?.custom_id?.startsWith("hours_"));
+    expect(hoursComp?.component?.type).toBe(4);
+
+    const personaGroup = setModal.components.find((c) => c.component?.custom_id?.startsWith("personas_"));
+    expect(personaGroup?.component?.type).toBe(22);
+
+    const autoComp = autoModal.components.find((c) => c.component?.custom_id?.startsWith("auto_trigger_"));
+    expect(autoComp?.component?.type).toBe(21);
+
+    const removeGroup = removeModal.components.find((c) => c.component?.custom_id?.startsWith("spotlights_"));
+    expect(removeGroup?.component?.type).toBe(22);
+
+    for (const modal of [setModal, autoModal, removeModal]) {
+      for (const row of modal.components) {
+        expect(row.type).toBe(18);
+      }
+    }
+  });
+
+  it("guarantees worst-case custom ID length stays <= 100 characters for Spotlight v2 routes and round-trips to semantic actions", () => {
+    const locale = "en-US";
+    const snowflake = "12345678901234567890";
+    const hours = 999999;
+    const personaId = 2147483647;
+    const nonce = "nonce1234567";
+    const fp = "a1b2c3d4";
+    const mask = "3fffffff";
+    const rangePage = 3999;
+    const removeStart = 999950;
+
+    const setModal = buildSpotlightSetModal(locale, nonce, fp, [{ id: personaId, name: "Tomori", isAlter: false }]);
+    const autoModal = buildSpotlightAutoTriggerModal(locale, nonce, snowflake, hours, mask, fp, [
+      { id: personaId, name: "Tomori", isAlter: false },
+    ]);
+    const removeModal = buildSpotlightRemoveModal(
+      locale,
+      nonce,
+      removeStart,
+      fp,
+      [
+        {
+          channelDiscId: snowflake,
+          personaIds: [personaId],
+          autoTriggerPersonaId: null,
+          expiresAt: null,
+          userDiscId: "user-123",
+        },
+      ],
+      [{ id: personaId, name: "Tomori", isAlter: false }],
+      new Map([[snowflake, { name: "general" }]]),
+    );
+
+    const reviewPayload = buildPersonalConfigPanelPayload({
+      locale,
+      category: "advanced",
+      page: "spotlight",
+      user: makeUser(),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: snowflake,
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      spotlightDisplayInfo: {
+        activeSpotlights: [],
+        personas: [{ id: personaId, name: "Tomori", isAlter: false }],
+      },
+      view: {
+        kind: "spotlight-set-review",
+        channelId: snowflake,
+        hours,
+        selectedPersonaIds: [personaId],
+        autoTriggerPersonaId: personaId,
+        mask,
+        fp,
+        nonce,
+      },
+    });
+    const rangePayload = buildPersonalConfigPanelPayload({
+      locale,
+      category: "advanced",
+      page: "spotlight",
+      user: makeUser(),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: snowflake,
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      spotlightDisplayInfo: {
+        activeSpotlights: [],
+        personas: [{ id: personaId, name: "Tomori", isAlter: false }],
+      },
+      view: {
+        kind: "spotlight-remove-range",
+        rangePage,
+        totalOptions: 1_000_000,
+        fp,
+      },
+    });
+
+    const producedCustomIds = [...JSON.stringify([reviewPayload, rangePayload]).matchAll(/"customId":"([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    const producedRoute = (action: string) => {
+      const customId = producedCustomIds.find((candidate) => {
+        const parsed = parseInteractionRoute(candidate);
+        return parsed ? parsePersonalConfigPanelRoute(parsed)?.action === action : false;
+      });
+      if (!customId) throw new Error(`Missing produced Spotlight route for ${action}`);
+      return customId;
+    };
+
+    const rangeCustomId = producedRoute("spot-rem-range");
+    const parsedRange = parsePersonalConfigPanelRoute(requireRoute(rangeCustomId));
+    if (!parsedRange || parsedRange.action !== "spot-rem-range") {
+      throw new Error("Produced Spotlight removal range did not parse");
+    }
+    const rangeStart = parsedRange.start;
+
+    const testCases: Array<{
+      customId: string;
+      expected: ReturnType<typeof parsePersonalConfigPanelRoute>;
+    }> = [
+      {
+        customId: setModal.custom_id,
+        expected: { action: "spotlight-set-submit", locale, fp, nonce },
+      },
+      {
+        customId: producedRoute("spot-set-cf"),
+        expected: {
+          action: "spot-set-cf",
+          locale,
+          channelId: snowflake,
+          hours,
+          autoTriggerId: personaId,
+          mask,
+          fp,
+          nonce,
+        },
+      },
+      {
+        customId: producedRoute("spot-set-auto"),
+        expected: { action: "spot-set-auto", locale, channelId: snowflake, hours, mask, fp, nonce },
+      },
+      {
+        customId: autoModal.custom_id,
+        expected: { action: "spot-set-auto-sub", locale, channelId: snowflake, hours, mask, fp, nonce },
+      },
+      {
+        customId: rangeCustomId,
+        expected: { action: "spot-rem-range", locale, start: rangeStart, fp },
+      },
+      {
+        customId: removeModal.custom_id,
+        expected: { action: "spotlight-remove-submit", locale, start: removeStart, fp, nonce },
+      },
+    ];
+
+    for (const { customId, expected } of testCases) {
+      expect(customId.length).toBeLessThanOrEqual(100);
+      const parsed = parseInteractionRoute(customId);
+      expect(parsed).not.toBeNull();
+      if (!parsed) {
+        throw new Error(`Failed to parse interaction route for customId: ${customId}`);
+      }
+      const route = parsePersonalConfigPanelRoute(parsed);
+      expect(route).toEqual(expected);
+    }
+  });
+
+  it("acknowledges interaction before writes on spotlight set and removal paths", async () => {
+    const calls: string[] = [];
+    const personas = [{ id: 1 }, { id: 2 }];
+    const setFp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
+    const setCustomId = buildPersonalConfigCustomId(
+      "spot-set-cf",
+      "en-US",
+      "123456789012345678",
+      0,
+      0,
+      "1",
+      setFp,
+      "nonce123456",
+    );
+
+    let acknowledgedDuringSetWrite = false;
+    let acknowledgedDuringRemoveWrite = false;
+
+    let deferredState = false;
+    let setInteraction: ButtonInteraction;
+    const { dependencies: depSet } = makeDependencies(calls, {
+      operations: {
+        ...personalConfigOperations,
+        setSpotlight: async () => {
+          acknowledgedDuringSetWrite = setInteraction.deferred || setInteraction.replied;
+          return { status: "success" };
+        },
+      },
+    });
+    const setRoute = createPersonalConfigInteractionRoute(depSet);
+
+    setInteraction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: setCustomId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
+      get deferred() {
+        return deferredState;
+      },
+      get replied() {
+        return false;
+      },
+      deferUpdate: async () => {
+        deferredState = true;
+      },
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await setRoute.execute({} as Client, setInteraction, requireRoute(setCustomId));
+    expect(acknowledgedDuringSetWrite).toBe(true);
+
+    const activeSpotlights = [
+      {
+        channelDiscId: "123456789012345678",
+        personaIds: [1],
+        autoTriggerPersonaId: null,
+        expiresAt: null,
+        userDiscId: "user-123",
+      },
+    ];
+    const remFp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
+    const remCustomId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, remFp, "nonce123456");
+
+    let remDeferredState = false;
+    let remInteraction: ModalSubmitInteraction;
+    const { dependencies: depRem } = makeDependencies(calls, {
+      loadActiveSpotlights: async () => activeSpotlights,
+      operations: {
+        ...personalConfigOperations,
+        removeSpotlights: async () => {
+          acknowledgedDuringRemoveWrite = remInteraction.deferred || remInteraction.replied;
+          return { status: "success", removedCount: 1 };
+        },
+      },
+    });
+    const remRoute = createPersonalConfigInteractionRoute(depRem);
+
+    remInteraction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId: remCustomId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return remDeferredState;
+      },
+      get replied() {
+        return false;
+      },
+      deferUpdate: async () => {
+        remDeferredState = true;
+      },
+      editReply: async () => {},
+      fields: {},
+      id: "modal-ack",
+    } as unknown as ModalSubmitInteraction;
+
+    await remRoute.execute({} as Client, remInteraction, requireRoute(remCustomId));
+    expect(acknowledgedDuringRemoveWrite).toBe(true);
   });
 });

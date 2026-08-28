@@ -96,12 +96,14 @@ export type PersonalConfigPanelView =
       selectedPersonaIds: number[];
       autoTriggerPersonaId: number | null;
       mask: string;
+      fp: string;
       nonce: string;
     }
   | {
       kind: "spotlight-remove-range";
       rangePage: number;
       totalOptions: number;
+      fp: string;
     };
 
 export interface PersonalConfigRoutingRow {
@@ -933,6 +935,7 @@ export function buildImpersonationModal(
 export function buildSpotlightSetModal(
   locale: string,
   nonce: string,
+  fp: string,
   personas: Array<{ id: number; name: string; isAlter: boolean }>,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   const components: RawDiscordComponent[] = [
@@ -1008,7 +1011,7 @@ export function buildSpotlightSetModal(
   }
 
   return {
-    custom_id: buildPersonalConfigCustomId("spotlight-set-submit", locale, nonce),
+    custom_id: buildPersonalConfigCustomId("spotlight-set-submit", locale, fp, nonce),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_set_modal_title"), 45),
     components,
   };
@@ -1020,6 +1023,7 @@ export function buildSpotlightAutoTriggerModal(
   channelId: string,
   hours: number,
   mask: string,
+  fp: string,
   selectedPersonas: Array<{ id: number; name: string; isAlter: boolean }>,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   const options = [
@@ -1044,7 +1048,7 @@ export function buildSpotlightAutoTriggerModal(
   ];
 
   return {
-    custom_id: buildPersonalConfigCustomId("spot-set-auto-sub", locale, channelId, hours, mask, nonce),
+    custom_id: buildPersonalConfigCustomId("spot-set-auto-sub", locale, channelId, hours, mask, fp, nonce),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_auto_modal_title"), 45),
     components: [
       {
@@ -1066,6 +1070,7 @@ export function buildSpotlightRemoveModal(
   locale: string,
   nonce: string,
   start: number,
+  fp: string,
   activeSpotlights: PersonalSpotlightStatus[],
   personas: Array<{ id: number; name: string; isAlter: boolean }>,
   guildChannels: Map<string, { name: string }> | undefined,
@@ -1121,7 +1126,7 @@ export function buildSpotlightRemoveModal(
   }
 
   return {
-    custom_id: buildPersonalConfigCustomId("spotlight-remove-submit", locale, start, nonce),
+    custom_id: buildPersonalConfigCustomId("spotlight-remove-submit", locale, start, fp, nonce),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_remove_modal_title"), 45),
     components,
   };
@@ -1497,6 +1502,7 @@ ${localizer(locale, "commands.personal.config.spotlight_review_prompt")}`,
                 view.hours,
                 view.autoTriggerPersonaId ?? 0,
                 view.mask,
+                view.fp,
                 view.nonce,
               ),
               label: localizer(locale, "commands.personal.config.spotlight_save_button"),
@@ -1510,6 +1516,7 @@ ${localizer(locale, "commands.personal.config.spotlight_review_prompt")}`,
                 view.channelId,
                 view.hours,
                 view.mask,
+                view.fp,
                 view.nonce,
               ),
               label: localizer(locale, "commands.personal.config.spotlight_auto_button"),
@@ -1537,7 +1544,7 @@ ${localizer(locale, "commands.personal.config.spotlight_review_prompt")}`,
         buttons.push({
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          customId: buildPersonalConfigCustomId("spot-rem-range", locale, r * SPOTLIGHT_REMOVE_PAGE_SIZE),
+          customId: buildPersonalConfigCustomId("spot-rem-range", locale, r * SPOTLIGHT_REMOVE_PAGE_SIZE, view.fp),
           label: `${start} - ${end}`,
         });
       }

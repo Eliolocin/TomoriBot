@@ -39,6 +39,8 @@ import {
   PERSONAL_CONFIG_ROUTE_NAMESPACE,
   PERSONAL_CONFIG_ROUTE_VERSION,
   SPOTLIGHT_REMOVE_PAGE_SIZE,
+  computeSpotlightRemoveFingerprint,
+  computeSpotlightSetFingerprint,
   decodeProviderParam,
   parsePersonalConfigPanelRoute,
   type PersonalConfigCategory,
@@ -369,6 +371,7 @@ export interface PersonalConfigRouteDependencies {
     interaction: ButtonInteraction,
     locale: string,
     nonce: string,
+    fp: string,
     personas: Array<{ id: number; name: string; isAlter: boolean }>,
   ): Promise<void>;
   showSpotlightAutoTriggerModal(
@@ -378,6 +381,7 @@ export interface PersonalConfigRouteDependencies {
     channelId: string,
     hours: number,
     mask: string,
+    fp: string,
     selectedPersonas: Array<{ id: number; name: string; isAlter: boolean }>,
   ): Promise<void>;
   showSpotlightRemoveModal(
@@ -385,6 +389,7 @@ export interface PersonalConfigRouteDependencies {
     locale: string,
     nonce: string,
     start: number,
+    fp: string,
     activeSpotlights: PersonalSpotlightStatus[],
     personas: Array<{ id: number; name: string; isAlter: boolean }>,
     guildChannels: Map<string, { name: string }> | undefined,
@@ -1448,17 +1453,17 @@ const defaultDependencies: PersonalConfigRouteDependencies = {
     showRoutedRawModal(interaction, buildFallbacksModal(locale, nonce, provider, availableOptions, currentRefs)),
   showImpersonationModal: (interaction, locale, nonce, currentPrompt) =>
     showRoutedRawModal(interaction, buildImpersonationModal(locale, nonce, currentPrompt)),
-  showSpotlightSetModal: (interaction, locale, nonce, personas) =>
-    showRoutedRawModal(interaction, buildSpotlightSetModal(locale, nonce, personas)),
-  showSpotlightAutoTriggerModal: (interaction, locale, nonce, channelId, hours, mask, selectedPersonas) =>
+  showSpotlightSetModal: (interaction, locale, nonce, fp, personas) =>
+    showRoutedRawModal(interaction, buildSpotlightSetModal(locale, nonce, fp, personas)),
+  showSpotlightAutoTriggerModal: (interaction, locale, nonce, channelId, hours, mask, fp, selectedPersonas) =>
     showRoutedRawModal(
       interaction,
-      buildSpotlightAutoTriggerModal(locale, nonce, channelId, hours, mask, selectedPersonas),
+      buildSpotlightAutoTriggerModal(locale, nonce, channelId, hours, mask, fp, selectedPersonas),
     ),
-  showSpotlightRemoveModal: (interaction, locale, nonce, start, activeSpotlights, personas, guildChannels) =>
+  showSpotlightRemoveModal: (interaction, locale, nonce, start, fp, activeSpotlights, personas, guildChannels) =>
     showRoutedRawModal(
       interaction,
-      buildSpotlightRemoveModal(locale, nonce, start, activeSpotlights, personas, guildChannels),
+      buildSpotlightRemoveModal(locale, nonce, start, fp, activeSpotlights, personas, guildChannels),
     ),
 };
 
@@ -1962,7 +1967,8 @@ export function createPersonalConfigInteractionRoute(
           return;
         }
         const nonce = dependencies.createNonce();
-        await dependencies.showSpotlightSetModal(interaction, route.locale, nonce, personas);
+        const fp = computeSpotlightSetFingerprint(cachedScope.guildId, cachedScope.userDiscId, personas);
+        await dependencies.showSpotlightSetModal(interaction, route.locale, nonce, fp, personas);
         return;
       }
 
@@ -1977,6 +1983,14 @@ export function createPersonalConfigInteractionRoute(
           return;
         }
         const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
+        const expectedFp = computeSpotlightSetFingerprint(cachedScope.guildId, cachedScope.userDiscId, personas);
+        if (expectedFp !== route.fp) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.stale_warning"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
         const bitmask = BigInt(`0x${route.mask}`);
         const selectedPersonas = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n);
         const nonce = dependencies.createNonce();
@@ -1987,6 +2001,7 @@ export function createPersonalConfigInteractionRoute(
           route.channelId,
           route.hours,
           route.mask,
+          route.fp,
           selectedPersonas,
         );
         return;
@@ -2013,6 +2028,7 @@ export function createPersonalConfigInteractionRoute(
           });
           return;
         }
+        const fp = computeSpotlightRemoveFingerprint(cachedScope.guildId, cachedScope.userDiscId, activeSpotlights);
         if (activeSpotlights.length <= SPOTLIGHT_REMOVE_PAGE_SIZE) {
           const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
           const guildChannels = interaction.guild?.channels.cache;
@@ -2022,6 +2038,7 @@ export function createPersonalConfigInteractionRoute(
             route.locale,
             nonce,
             0,
+            fp,
             activeSpotlights,
             personas,
             guildChannels,
@@ -2041,6 +2058,14 @@ export function createPersonalConfigInteractionRoute(
           return;
         }
         const allActive = await dependencies.loadActiveSpotlights(cachedScope.internalServerId, cachedScope.userId);
+        const expectedFp = computeSpotlightRemoveFingerprint(cachedScope.guildId, cachedScope.userDiscId, allActive);
+        if (expectedFp !== route.fp) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.stale_warning"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
         const slice = allActive.slice(route.start, route.start + SPOTLIGHT_REMOVE_PAGE_SIZE);
         const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
         const guildChannels = interaction.guild?.channels.cache;
@@ -2050,6 +2075,7 @@ export function createPersonalConfigInteractionRoute(
           route.locale,
           nonce,
           route.start,
+          route.fp,
           slice,
           personas,
           guildChannels,
@@ -4415,6 +4441,24 @@ export function createPersonalConfigInteractionRoute(
         }
 
         const personas = await dependencies.loadGuildPersonas(scope.guildId);
+        const expectedFp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
+        if (expectedFp !== route.fp) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
         const selectedPersonaIds: number[] = [];
         for (let g = 0; g < 3; g++) {
           const groupValues = takeRawModalCheckboxGroupValues(
@@ -4476,6 +4520,7 @@ export function createPersonalConfigInteractionRoute(
             selectedPersonaIds,
             autoTriggerPersonaId: null,
             mask,
+            fp: route.fp,
             nonce: dependencies.createNonce(),
           },
         );
@@ -4503,6 +4548,24 @@ export function createPersonalConfigInteractionRoute(
           return;
         }
         const personas = await dependencies.loadGuildPersonas(scope.guildId);
+        const expectedFp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
+        if (expectedFp !== route.fp) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
         const bitmask = BigInt(`0x${route.mask}`);
         const selectedPersonaIds = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n).map((p) => p.id);
 
@@ -4533,6 +4596,7 @@ export function createPersonalConfigInteractionRoute(
             selectedPersonaIds,
             autoTriggerPersonaId: validAutoId,
             mask: route.mask,
+            fp: route.fp,
             nonce: dependencies.createNonce(),
           },
         );
@@ -4597,6 +4661,24 @@ export function createPersonalConfigInteractionRoute(
         }
 
         const personas = await dependencies.loadGuildPersonas(scope.guildId);
+        const expectedFp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
+        if (expectedFp !== route.fp) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
         const bitmask = BigInt(`0x${route.mask}`);
         const selectedPersonaIds = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n).map((p) => p.id);
         if (selectedPersonaIds.length === 0) {
@@ -4722,6 +4804,7 @@ export function createPersonalConfigInteractionRoute(
         }
         const activeSpotlights = await dependencies.loadActiveSpotlights(scope.internalServerId, scope.userId);
         if (activeSpotlights.length > SPOTLIGHT_REMOVE_PAGE_SIZE) {
+          const fp = computeSpotlightRemoveFingerprint(scope.guildId, scope.userDiscId, activeSpotlights);
           await repaint(
             interaction,
             route.locale,
@@ -4738,6 +4821,7 @@ export function createPersonalConfigInteractionRoute(
               kind: "spotlight-remove-range",
               rangePage: 0,
               totalOptions: activeSpotlights.length,
+              fp,
             },
           );
           return;
@@ -4791,6 +4875,24 @@ export function createPersonalConfigInteractionRoute(
         }
 
         const activeSpotlights = await dependencies.loadActiveSpotlights(serverId, scope.userId);
+        const expectedFp = computeSpotlightRemoveFingerprint(scope.guildId, scope.userDiscId, activeSpotlights);
+        if (expectedFp !== route.fp) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
         const presentedSlice = activeSpotlights.slice(route.start, route.start + SPOTLIGHT_REMOVE_PAGE_SIZE);
         const keptChannelIds = new Set<string>();
         const presentedChannelIds: string[] = [];

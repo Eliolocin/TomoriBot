@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto";
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import { getSupportedLocales } from "@/utils/text/localizer";
 
 export const PERSONAL_CONFIG_ROUTE_NAMESPACE = "personal-config";
-export const PERSONAL_CONFIG_ROUTE_VERSION = "v1";
+export const PERSONAL_CONFIG_ROUTE_VERSION = "v2";
 
 export type PersonalConfigCategory = "profile" | "privacy" | "models" | "advanced";
 
@@ -35,6 +36,35 @@ export function encodeProviderParam(provider: string): string {
 
 export function decodeProviderParam(encoded: string): string {
   return encoded.replace(/~/g, ":");
+}
+
+/**
+ * Binds spotlight set selection to the exact presented persona collection and actor scope.
+ * Drift in persona count or ordering invalidates the continuation without writing.
+ */
+export function computeSpotlightSetFingerprint(
+  guildId: string,
+  userDiscId: string,
+  personas: readonly { id: number }[],
+): string {
+  const ids = personas.map((p) => p.id).join(",");
+  return createHash("sha256").update(`spotlight-set:${guildId}:${userDiscId}:${ids}`).digest("base64url").slice(0, 8);
+}
+
+/**
+ * Binds spotlight removal to the exact active rows presented when the removal action started.
+ * Drift in active rows or ordering invalidates unchecked-means-remove derivation without writing.
+ */
+export function computeSpotlightRemoveFingerprint(
+  guildId: string,
+  userDiscId: string,
+  spotlights: readonly { channelDiscId: string }[],
+): string {
+  const ids = spotlights.map((s) => s.channelDiscId).join(",");
+  return createHash("sha256")
+    .update(`spotlight-remove:${guildId}:${userDiscId}:${ids}`)
+    .digest("base64url")
+    .slice(0, 8);
 }
 
 export type PersonalConfigPanelRoute =
@@ -112,7 +142,7 @@ export type PersonalConfigPanelRoute =
   | { action: "impersonation-clear-cancel"; locale: string }
   // Advanced - Personal Spotlight
   | { action: "spotlight-set-open"; locale: string }
-  | { action: "spotlight-set-submit"; locale: string; nonce: string }
+  | { action: "spotlight-set-submit"; locale: string; fp: string; nonce: string }
   | {
       action: "spot-set-cf";
       locale: string;
@@ -120,6 +150,7 @@ export type PersonalConfigPanelRoute =
       hours: number;
       autoTriggerId: number;
       mask: string;
+      fp: string;
       nonce: string;
     }
   | {
@@ -128,6 +159,7 @@ export type PersonalConfigPanelRoute =
       channelId: string;
       hours: number;
       mask: string;
+      fp: string;
       nonce: string;
     }
   | {
@@ -136,12 +168,13 @@ export type PersonalConfigPanelRoute =
       channelId: string;
       hours: number;
       mask: string;
+      fp: string;
       nonce: string;
     }
   | { action: "spotlight-set-cancel"; locale: string }
   | { action: "spotlight-remove-open"; locale: string }
-  | { action: "spot-rem-range"; locale: string; start: number }
-  | { action: "spotlight-remove-submit"; locale: string; start: number; nonce: string }
+  | { action: "spot-rem-range"; locale: string; start: number; fp: string }
+  | { action: "spotlight-remove-submit"; locale: string; start: number; fp: string; nonce: string }
   | { action: "spotlight-remove-cancel"; locale: string }
   | {
       action: "retry" | "refresh";
@@ -153,15 +186,25 @@ export type PersonalConfigPanelRoute =
       provider?: string;
     };
 
+const WIRE_ACTION_TOKENS: Record<string, string> = {
+  "spotlight-set-submit": "s-set-sub",
+  "spot-set-cf": "s-cf",
+  "spot-set-auto": "s-auto",
+  "spot-set-auto-sub": "s-asub",
+  "spot-rem-range": "s-rem-r",
+  "spotlight-remove-submit": "s-rem-sub",
+};
+
 export function buildPersonalConfigCustomId(
   action: string,
   locale: string,
   ...segments: Array<string | number>
 ): string {
+  const wireAction = WIRE_ACTION_TOKENS[action] ?? action;
   return buildInteractionRouteId(
     PERSONAL_CONFIG_ROUTE_NAMESPACE,
     PERSONAL_CONFIG_ROUTE_VERSION,
-    action,
+    wireAction,
     locale,
     ...segments.map(String),
   );
@@ -248,12 +291,17 @@ function parseHexMask(value: string | undefined): string | null {
   return value;
 }
 
+function parseFingerprint(value: string | undefined): string | null {
+  if (!value || !/^[A-Za-z0-9_-]{8}$/.test(value)) return null;
+  return value;
+}
+
 export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): PersonalConfigPanelRoute | null {
   if (route.namespace !== PERSONAL_CONFIG_ROUTE_NAMESPACE || route.version !== PERSONAL_CONFIG_ROUTE_VERSION) {
     return null;
   }
 
-  const [action, rawLocale, first, second, third, fourth, fifth] = route.segments;
+  const [action, rawLocale, first, second, third, fourth, fifth, sixth] = route.segments;
   const locale = parseLocale(rawLocale);
   if (!locale || !action) return null;
 
@@ -312,45 +360,66 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
     action === "privacy-level-submit" ||
     action === "quick-toggle-submit" ||
     action === "impersonation-submit" ||
-    action === "impersonation-clear-confirm" ||
-    action === "spotlight-set-submit"
+    action === "impersonation-clear-confirm"
   ) {
     if (route.segments.length !== 3) return null;
     const nonce = parseNonce(first);
     return nonce === null ? null : { action, locale, nonce };
   }
 
-  if (action === "spot-set-cf" && route.segments.length === 7) {
+  if (action === "s-set-sub" && route.segments.length === 4) {
+    const fp = parseFingerprint(first);
+    const nonce = parseNonce(second);
+    return fp === null || nonce === null ? null : { action: "spotlight-set-submit", locale, fp, nonce };
+  }
+
+  if (action === "s-cf" && route.segments.length === 8) {
     const channelId = parseSnowflake(first);
     const hours = parseNonNegativeInt(second);
     const autoTriggerId = parseNonNegativeInt(third);
     const mask = parseHexMask(fourth);
-    const nonce = parseNonce(fifth);
-    if (!channelId || hours === null || autoTriggerId === null || !mask || !nonce) return null;
-    return { action, locale, channelId, hours, autoTriggerId, mask, nonce };
+    const fp = parseFingerprint(fifth);
+    const nonce = parseNonce(sixth);
+    if (!channelId || hours === null || autoTriggerId === null || !mask || !fp || !nonce) return null;
+    return { action: "spot-set-cf", locale, channelId, hours, autoTriggerId, mask, fp, nonce };
   }
 
-  if ((action === "spot-set-auto" || action === "spot-set-auto-sub") && route.segments.length === 6) {
+  if (action === "s-auto" && route.segments.length === 7) {
     const channelId = parseSnowflake(first);
     const hours = parseNonNegativeInt(second);
     const mask = parseHexMask(third);
-    const nonce = parseNonce(fourth);
-    if (!channelId || hours === null || !mask || !nonce) return null;
-    return { action, locale, channelId, hours, mask, nonce };
+    const fp = parseFingerprint(fourth);
+    const nonce = parseNonce(fifth);
+    if (!channelId || hours === null || !mask || !fp || !nonce) return null;
+    return { action: "spot-set-auto", locale, channelId, hours, mask, fp, nonce };
   }
 
-  if (action === "spot-rem-range" && route.segments.length === 3) {
+  if (action === "s-asub" && route.segments.length === 7) {
+    const channelId = parseSnowflake(first);
+    const hours = parseNonNegativeInt(second);
+    const mask = parseHexMask(third);
+    const fp = parseFingerprint(fourth);
+    const nonce = parseNonce(fifth);
+    if (!channelId || hours === null || !mask || !fp || !nonce) return null;
+    return { action: "spot-set-auto-sub", locale, channelId, hours, mask, fp, nonce };
+  }
+
+  if (action === "s-rem-r" && route.segments.length === 4) {
     const start = parseNonNegativeInt(first);
-    return start === null ? null : { action, locale, start };
+    const fp = parseFingerprint(second);
+    return start === null || fp === null ? null : { action: "spot-rem-range", locale, start, fp };
   }
 
   // The removal modal presents one 50-row slice, and unchecked-means-remove derives the removal set
   // from the rows that were presented. Without the offset the submit handler recomputes that set from
   // the first slice and deletes rows the user never saw.
-  if (action === "spotlight-remove-submit" && route.segments.length === 4) {
+  if (action === "s-rem-sub" && route.segments.length === 5) {
     const start = parseNonNegativeInt(first);
-    const nonce = parseNonce(second);
-    return start === null || nonce === null ? null : { action, locale, start, nonce };
+    const fp = parseFingerprint(second);
+    const nonce = parseNonce(third);
+    return start === null || fp === null || nonce === null
+      ? null
+      : { action: "spotlight-remove-submit", locale, start, fp, nonce };
   }
 
   if (action === "quick-toggle-confirm" && route.segments.length === 4) {
