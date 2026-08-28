@@ -51,14 +51,25 @@ function makeMemory(id: number, overrides: Partial<PersonalMemoryRow> = {}): Per
   };
 }
 
-function makePersona(id: number, lineageId: number, name: string): TomoriState {
+function makePersona(id: number, lineageId: number, name: string, isAlter = false): TomoriState {
   return {
     persona_id: id,
     persona_lineage_id: lineageId,
     persona_nickname: name,
-    is_alter: false,
+    is_alter: isAlter,
     is_active: true,
   } as unknown as TomoriState;
+}
+
+/** Every String Select in the payload, flattened, so a test can pick one out by custom ID. */
+function collectSelects(
+  value: unknown,
+): Array<{ customId?: string; options?: Array<{ value?: string; label?: string; description?: string }> }> {
+  if (Array.isArray(value)) return value.flatMap(collectSelects);
+  if (typeof value !== "object" || value === null) return [];
+  const record = value as Record<string, unknown>;
+  const self = record.type === 3 ? [record as never] : [];
+  return [...self, ...Object.values(record).flatMap(collectSelects)];
 }
 
 function makeDependencies(
@@ -128,6 +139,19 @@ function makeDependencies(
       return lineageId === 0
         ? memories.filter((m) => m.persona_lineage_id === 0)
         : memories.filter((m) => m.persona_lineage_id === lineageId);
+    },
+    getMemoryCountsByLineage: async (_userId) => {
+      calls.push("getMemoryCountsByLineage");
+      const counts = new Map<number, number>();
+      for (const memory of memories) {
+        if (memory.persona_lineage_id === 0) continue;
+        counts.set(memory.persona_lineage_id, (counts.get(memory.persona_lineage_id) ?? 0) + 1);
+      }
+      return counts;
+    },
+    getPersonaAvatarUrl: async (_interaction, persona) => {
+      calls.push(`getPersonaAvatarUrl:${persona.persona_id}`);
+      return `https://cdn.example.invalid/${persona.persona_id}.png`;
     },
     getStmCount: async (_userDiscId) => {
       calls.push("getStmCount");
@@ -626,6 +650,101 @@ describe("memory selector pagination & 25-option ceiling", () => {
     expect(selectMenu?.options?.[0]?.value).toBe("action:add");
     expect(selectMenu?.options?.[1]?.value).toBe("1");
     expect(selectMenu?.options?.[24]?.value).toBe("24");
+  });
+});
+
+describe("persona selector lineage identity", () => {
+  function buildPersonaPage(
+    personas: TomoriState[],
+    memoryCountsByLineage?: Map<number, number>,
+    selectedPersonaAvatarUrl?: string | null,
+  ) {
+    return buildPersonalMemoriesPanelPayload({
+      locale: "en-US",
+      category: "persona",
+      selectedLineageId: personas[0]?.persona_lineage_id ?? 0,
+      personas,
+      memoryCountsByLineage,
+      selectedPersonaAvatarUrl,
+      memories: [],
+      stmCount: 0,
+      privacyLevel: PrivacyLevel.MINIMAL,
+      readStatus: "fresh",
+      page: { kind: "main" },
+    });
+  }
+
+  function personaSelect(payload: unknown) {
+    return collectSelects(payload).find((select) => select.customId?.includes(":persona-select:"));
+  }
+
+  it("emits one option per lineage when two personas share one", () => {
+    // A preset-derived persona keeps its ancestor's lineage, so two personas in one guild can share
+    // a memory scope. Discord rejects the whole payload if that repeats an option value.
+    const payload = buildPersonaPage([
+      makePersona(51, 1770, "Timori", true),
+      makePersona(55, 1770, "Aphel"),
+      makePersona(39, 3585, "Tomori", true),
+      makePersona(50, 3585, "Lilya", true),
+      makePersona(60, 10010, "Sparrow"),
+    ]);
+
+    const select = personaSelect(payload);
+    expect(select).toBeDefined();
+    const values = select?.options?.map((option) => option.value) ?? [];
+    expect(values).toEqual(["1770", "3585", "10010"]);
+    expect(new Set(values).size).toBe(values.length);
+
+    // The non-alter member names the shared scope; an all-alter lineage falls back to its first.
+    expect(select?.options?.map((option) => option.label)).toEqual(["Aphel", "Tomori", "Sparrow"]);
+  });
+
+  it("describes each lineage by its memory count, singular and shared included", () => {
+    const personas = [
+      makePersona(51, 1770, "Timori", true),
+      makePersona(55, 1770, "Aphel"),
+      makePersona(60, 10010, "Sparrow"),
+      makePersona(61, 10011, "Wren"),
+    ];
+    const payload = buildPersonaPage(
+      personas,
+      new Map([
+        [1770, 3],
+        [10010, 1],
+      ]),
+    );
+
+    // 10011 is absent from the map rather than zero: a lineage with no memories is never returned
+    // by the grouped query, so an absent entry has to read as none rather than as unknown.
+    expect(personaSelect(payload)?.options?.map((option) => option.description)).toEqual([
+      "3 memories, shared across 2 personas",
+      "1 memory",
+      "0 memories",
+    ]);
+  });
+
+  it("pins the selected persona's avatar to the heading, and drops the Section when unfetchable", () => {
+    const personas = [makePersona(51, 1770, "Timori", true), makePersona(55, 1770, "Aphel")];
+
+    const withAvatar = JSON.stringify(buildPersonaPage(personas, undefined, "https://cdn.example.invalid/55.png"));
+    // Type 9 is Section and 11 is Thumbnail: the heading has to become a Section to host one.
+    expect(withAvatar).toContain('"type":9');
+    expect(withAvatar).toContain('"type":11');
+    expect(withAvatar).toContain("https://cdn.example.invalid/55.png");
+
+    // A local-path or data-URI avatar resolves to null, and a Thumbnail cannot load either.
+    const withoutAvatar = JSON.stringify(buildPersonaPage(personas, undefined, null));
+    expect(withoutAvatar).not.toContain('"type":11');
+    expect(withoutAvatar).toContain("Persona-Scoped Personal Memories");
+  });
+
+  it("caps the selector at 25 lineages and says how many are hidden", () => {
+    const personas = Array.from({ length: 30 }, (_, index) => makePersona(index + 1, 20000 + index, `P${index}`));
+    const payload = buildPersonaPage(personas);
+
+    const select = personaSelect(payload);
+    expect(select?.options).toHaveLength(25);
+    expect(JSON.stringify(payload)).toContain("5 more personas are not listed here.");
   });
 });
 

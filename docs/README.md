@@ -89,6 +89,7 @@ Per-task guides:
 - [`contributing/adding-persona-preset.md`](./contributing/adding-persona-preset)
 - [`contributing/adding-participant-extension.md`](./contributing/adding-participant-extension)
 - [`contributing/comment-policy.md`](./contributing/comment-policy) — durable comments and the advisory policy audit
+- [`contributing/panel-prose-and-layout.md`](./contributing/panel-prose-and-layout) — text width, markers, and structure inside a panel
 - [`contributing/raw-sql-boundary.md`](./contributing/raw-sql-boundary) — keeping raw SQL in the repository layer
 - [`contributing/docs-authoring.md`](./contributing/docs-authoring) — docs routes, frontmatter, sidebar, cards, and asset conventions
 - [`contributing/dependency-security-policy.md`](./contributing/dependency-security-policy) — dependency overrides, patches, and audit exceptions

@@ -12,15 +12,21 @@ import {
   buildPersonalConfigCustomId,
   computeSpotlightRemoveFingerprint,
   computeSpotlightSetFingerprint,
+  decodeSpotlightMask,
+  encodeSpotlightMask,
   decodeProviderParam,
   encodeProviderParam,
   parsePersonalConfigPanelRoute,
+  PERSONAL_PROVIDER_RANGE_VALUE,
+  SPOTLIGHT_PERSONA_PAGE_SIZE,
 } from "@/utils/discord/personalConfigPanelCatalog";
 import {
   buildPersonalConfigPanelPayload,
+  buildModelSelectModal,
   buildSpotlightAutoTriggerModal,
   buildSpotlightRemoveModal,
   buildSpotlightSetModal,
+  buildSpotlightStep1Modal,
   type PersonalConfigRoutingRow,
 } from "@/utils/discord/ui/personalConfigPanel";
 import type { ThinkingLevelValue } from "@/constants/thinkingLevels";
@@ -42,6 +48,42 @@ function requireRoute(customId: string): ParsedInteractionRoute {
   const parsed = parseInteractionRoute(customId);
   if (!parsed) throw new Error(`Failed to parse route for customId: ${customId}`);
   return parsed;
+}
+
+interface ObservedComponent {
+  type?: number;
+  customId?: string;
+  placeholder?: string;
+  disabled?: boolean;
+  options?: Array<{ value?: string; label?: string }>;
+}
+
+function collectComponents(value: unknown): ObservedComponent[] {
+  if (Array.isArray(value)) return value.flatMap(collectComponents);
+  if (typeof value !== "object" || value === null) return [];
+
+  const record = value as Record<string, unknown>;
+  const current: ObservedComponent[] =
+    typeof record.type === "number"
+      ? [
+          {
+            type: record.type,
+            customId: typeof record.customId === "string" ? record.customId : undefined,
+            placeholder: typeof record.placeholder === "string" ? record.placeholder : undefined,
+            disabled: typeof record.disabled === "boolean" ? record.disabled : undefined,
+            options: Array.isArray(record.options)
+              ? record.options.map((option) => {
+                  const entry = option as Record<string, unknown>;
+                  return {
+                    value: typeof entry.value === "string" ? entry.value : undefined,
+                    label: typeof entry.label === "string" ? entry.label : undefined,
+                  };
+                })
+              : undefined,
+          },
+        ]
+      : [];
+  return [...current, ...Object.values(record).flatMap(collectComponents)];
 }
 
 function makeUser(overrides: Partial<UserRow> = {}): UserRow {
@@ -241,39 +283,39 @@ function makeDependencies(
       routingRows: {
         text: {
           capability: "text",
-          activeModelName: "OpenRouter · Claude 3.5 Sonnet",
+          activeModelName: "Claude 3.5 Sonnet",
           storedProvider: "openrouter",
-          storedModelName: "OpenRouter · Claude 3.5 Sonnet",
+          storedModelName: "Claude 3.5 Sonnet",
         },
         vision: {
           capability: "vision",
-          activeModelName: "OpenRouter · GPT-4o",
+          activeModelName: "GPT-4o",
           storedProvider: "openrouter",
-          storedModelName: "OpenRouter · GPT-4o",
+          storedModelName: "GPT-4o",
         },
         embedding: {
           capability: "embedding",
-          activeModelName: "OpenRouter · text-embedding-3",
+          activeModelName: "text-embedding-3",
           storedProvider: "openrouter",
-          storedModelName: "OpenRouter · text-embedding-3",
+          storedModelName: "text-embedding-3",
         },
         image: {
           capability: "image",
-          activeModelName: "OpenRouter · Flux.1 Schnell",
+          activeModelName: "Flux.1 Schnell",
           storedProvider: "openrouter",
-          storedModelName: "OpenRouter · Flux.1 Schnell",
+          storedModelName: "Flux.1 Schnell",
         },
         image_nai: {
           capability: "image_nai",
-          activeModelName: "NovelAI · NAI Diffusion V3",
+          activeModelName: "NAI Diffusion V3",
           storedProvider: "novelai",
-          storedModelName: "NovelAI · NAI Diffusion V3",
+          storedModelName: "NAI Diffusion V3",
         },
         video: {
           capability: "video",
-          activeModelName: "OpenRouter · VideoGen 1",
+          activeModelName: "VideoGen 1",
           storedProvider: "openrouter",
-          storedModelName: "OpenRouter · VideoGen 1",
+          storedModelName: "VideoGen 1",
         },
       },
       availableCapabilities: ["text", "vision", "embedding", "image", "image_nai", "video"],
@@ -495,10 +537,21 @@ describe("personalConfigPanelCatalog", () => {
       locale: "en-US",
     });
 
-    const spotSetSubmit = buildPersonalConfigCustomId("spotlight-set-submit", "en-US", "a1b2c3d4", "nonce123456");
+    const spotSetSubmit = buildPersonalConfigCustomId(
+      "spotlight-set-submit",
+      "en-US",
+      "123456789012345678",
+      0,
+      0,
+      "a1b2c3d4",
+      "nonce123456",
+    );
     expect(parsePersonalConfigPanelRoute(requireRoute(spotSetSubmit))).toEqual({
       action: "spotlight-set-submit",
       locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      blockIdx: 0,
       fp: "a1b2c3d4",
       nonce: "nonce123456",
     });
@@ -508,6 +561,7 @@ describe("personalConfigPanelCatalog", () => {
       "en-US",
       "123456789012345678",
       24,
+      0,
       "3",
       "a1b2c3d4",
       "nonce123456",
@@ -517,6 +571,7 @@ describe("personalConfigPanelCatalog", () => {
       locale: "en-US",
       channelId: "123456789012345678",
       hours: 24,
+      blockIdx: 0,
       mask: "3",
       fp: "a1b2c3d4",
       nonce: "nonce123456",
@@ -527,6 +582,7 @@ describe("personalConfigPanelCatalog", () => {
       "en-US",
       "123456789012345678",
       24,
+      0,
       "3",
       "a1b2c3d4",
       "nonce123456",
@@ -536,6 +592,7 @@ describe("personalConfigPanelCatalog", () => {
       locale: "en-US",
       channelId: "123456789012345678",
       hours: 24,
+      blockIdx: 0,
       mask: "3",
       fp: "a1b2c3d4",
       nonce: "nonce123456",
@@ -546,7 +603,8 @@ describe("personalConfigPanelCatalog", () => {
       "en-US",
       "123456789012345678",
       24,
-      101,
+      7,
+      0,
       "3",
       "a1b2c3d4",
       "nonce123456",
@@ -556,7 +614,8 @@ describe("personalConfigPanelCatalog", () => {
       locale: "en-US",
       channelId: "123456789012345678",
       hours: 24,
-      autoTriggerId: 101,
+      autoIdx: 7,
+      blockIdx: 0,
       mask: "3",
       fp: "a1b2c3d4",
       nonce: "nonce123456",
@@ -914,12 +973,11 @@ describe("personalConfigPanelCatalog Models routes", () => {
 
   it("builds custom IDs within 100 characters for all Models actions", () => {
     const actions: Array<[string, ...unknown[]]> = [
-      ["capability-select", "en-US"],
       ["quick-toggle-open", "en-US"],
       ["quick-toggle-submit", "en-US", "nonce123456"],
-      ["model-enable", "en-US", "image_nai"],
-      ["model-default", "en-US", "image_nai"],
       ["model-provider-select", "en-US", "image_nai"],
+      ["model-provider-range-open", "en-US", "image_nai", 25],
+      ["model-provider-range-page", "en-US", "image_nai", 399],
       ["model-modal-submit", "en-US", "image_nai", encodeProviderParam("custom:123456789"), "nonce123456"],
       ["parameters-provider-select", "en-US"],
       ["parameters-1-open", "en-US", encodeProviderParam("custom:123456789")],
@@ -942,6 +1000,20 @@ describe("personalConfigPanelCatalog Models routes", () => {
       const parsed = parsePersonalConfigPanelRoute(requireRoute(id));
       expect(parsed).toBeDefined();
       expect(parsed?.action).toBe(action);
+    }
+  });
+
+  it("refuses the Switch Models controls that the six capability selects replaced", () => {
+    // buildPersonalConfigCustomId takes a bare string action, so a retired control is only
+    // unreachable once the parser stops recognizing it.
+    const retired = [
+      buildPersonalConfigCustomId("capability-select", "en-US"),
+      buildPersonalConfigCustomId("model-enable", "en-US", "text"),
+      buildPersonalConfigCustomId("model-default", "en-US", "text"),
+    ];
+
+    for (const customId of retired) {
+      expect(parsePersonalConfigPanelRoute(requireRoute(customId))).toBeNull();
     }
   });
 });
@@ -1025,21 +1097,34 @@ describe("personalConfigOperations Models invariants", () => {
     upsertSpy.mockRestore();
   });
 
-  it("setQuickToggleRouting attempts all five capabilities after a partial failure", async () => {
-    const savedRow = {
-      provider: "openrouter",
-      llm_id: 101,
-      vision_llm_id: 102,
-      embedding_model_id: 201,
-      diffusion_model_id: 301,
-      nai_diffusion_model_id: null,
-      video_model_id: 401,
-      enabled_capabilities: [],
-      assigned_capabilities: ["text", "vision", "embedding", "image", "video"],
-    } as unknown as UserSavedProviderConfigRow;
-    const loadConfigsSpy = spyOn(llmProviderRepo, "loadUserSavedProviderConfigs").mockImplementation(async () => [
-      savedRow,
-    ]);
+  it("setQuickToggleRouting attempts all six capabilities after a partial failure", async () => {
+    const savedRows = [
+      {
+        provider: "openrouter",
+        llm_id: 101,
+        vision_llm_id: 102,
+        embedding_model_id: 201,
+        diffusion_model_id: 301,
+        nai_diffusion_model_id: null,
+        video_model_id: 401,
+        enabled_capabilities: [],
+        assigned_capabilities: ["text", "vision", "embedding", "image", "video"],
+      } as unknown as UserSavedProviderConfigRow,
+      {
+        provider: "novelai",
+        llm_id: null,
+        vision_llm_id: null,
+        embedding_model_id: null,
+        diffusion_model_id: null,
+        nai_diffusion_model_id: 501,
+        video_model_id: null,
+        enabled_capabilities: [],
+        assigned_capabilities: ["image_nai"],
+      } as unknown as UserSavedProviderConfigRow,
+    ];
+    const loadConfigsSpy = spyOn(llmProviderRepo, "loadUserSavedProviderConfigs").mockImplementation(
+      async () => savedRows,
+    );
     let writeCount = 0;
     const upsertSpy = spyOn(llmProviderRepo, "upsertUserSavedProviderConfig").mockImplementation(async () => {
       writeCount += 1;
@@ -1049,11 +1134,11 @@ describe("personalConfigOperations Models invariants", () => {
     const result = await personalConfigOperations.setQuickToggleRouting({
       userId: 1,
       userDiscId: "user-123",
-      selectedCapabilities: new Set(["text", "vision", "embedding", "image", "video"]),
+      selectedCapabilities: new Set(["text", "vision", "embedding", "image", "image_nai", "video"]),
     });
 
     expect(result).toEqual({ status: "write-failed" });
-    expect(writeCount).toBe(5);
+    expect(writeCount).toBe(6);
     loadConfigsSpy.mockRestore();
     upsertSpy.mockRestore();
   });
@@ -1226,38 +1311,6 @@ describe("Models interaction routing and telemetry", () => {
     expect(telemetry).toContain("personal-config.personal.model-routing.set");
   });
 
-  it("model-enable records personal-config.personal.model.set telemetry", async () => {
-    const calls: string[] = [];
-    const { dependencies, telemetry } = makeDependencies(calls);
-    const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("model-enable", "en-US", "text");
-
-    let deferred = false;
-    const interaction = {
-      isButton: () => true,
-      isStringSelectMenu: () => false,
-      isModalSubmit: () => false,
-      customId,
-      user: { id: "user-123", username: "tester", displayName: "Tester" },
-      guildId: "guild-123",
-      get deferred() {
-        return deferred;
-      },
-      get replied() {
-        return false;
-      },
-      deferUpdate: async () => {
-        deferred = true;
-      },
-      editReply: async () => {},
-    } as unknown as ButtonInteraction;
-
-    await route.execute({} as Client, interaction, requireRoute(customId));
-
-    expect(calls).toContain("setCapabilityEnabled:text:true");
-    expect(telemetry).toContain("personal-config.personal.model.set");
-  });
-
   it("randomizer-toggle records personal-config.personal.randomizer.set telemetry", async () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
@@ -1381,7 +1434,7 @@ describe("Models interaction routing and telemetry", () => {
 });
 
 describe("Models panel rendering", () => {
-  it("renders 6 routing rows and never renders Off as a routing status on Switch Models page", () => {
+  it("renders six always-visible routing controls with bounded placeholders and no cursor or duplicate buttons", () => {
     const user = makeUser();
     const payload = buildPersonalConfigPanelPayload({
       locale: "en-US",
@@ -1397,9 +1450,9 @@ describe("Models panel rendering", () => {
         routingRows: {
           text: {
             capability: "text",
-            activeModelName: "OpenRouter · Claude 3.5 Sonnet",
+            activeModelName: "Claude 3.5 Sonnet",
             storedProvider: "openrouter",
-            storedModelName: "OpenRouter · Claude 3.5 Sonnet",
+            storedModelName: "Claude 3.5 Sonnet",
           },
           vision: {
             capability: "vision",
@@ -1409,21 +1462,21 @@ describe("Models panel rendering", () => {
           },
           embedding: {
             capability: "embedding",
-            activeModelName: "OpenRouter · text-embedding-3",
+            activeModelName: "text-embedding-3",
             storedProvider: "openrouter",
-            storedModelName: "OpenRouter · text-embedding-3",
+            storedModelName: "text-embedding-3",
           },
           image: {
             capability: "image",
-            activeModelName: "OpenRouter · Flux.1 Schnell",
+            activeModelName: "Flux.1 Schnell",
             storedProvider: "openrouter",
-            storedModelName: "OpenRouter · Flux.1 Schnell",
+            storedModelName: "Flux.1 Schnell",
           },
           image_nai: {
             capability: "image_nai",
-            activeModelName: "NovelAI · NAI Diffusion V3",
+            activeModelName: "NAI Diffusion V3",
             storedProvider: "novelai",
-            storedModelName: "NovelAI · NAI Diffusion V3",
+            storedModelName: "NAI Diffusion V3",
           },
           video: {
             capability: "video",
@@ -1452,17 +1505,45 @@ describe("Models panel rendering", () => {
       },
     });
 
+    const components = collectComponents(payload);
+    const routingControls = components.filter((component) =>
+      component.customId?.includes(":model-provider-select:en-US:"),
+    );
+    expect(routingControls).toHaveLength(6);
+    expect(routingControls.map((component) => component.customId?.split(":").at(-1))).toEqual([
+      "text",
+      "vision",
+      "embedding",
+      "image",
+      "image_nai",
+      "video",
+    ]);
+    expect(routingControls.map((component) => component.placeholder)).toEqual([
+      "Text: ~Claude 3.5 Sonnet (OpenRouter)",
+      "Vision: Using Server Default",
+      "Embedding: ~text-embedding-3 (OpenRouter)",
+      "Standard Image: ~Flux.1 Schnell (OpenRouter)",
+      "NovelAI Image: ~NAI Diffusion V3 (NovelAI)",
+      "Video: Using Server Default",
+    ]);
+    expect(routingControls.every((component) => component.placeholder && component.placeholder.length <= 150)).toBe(
+      true,
+    );
+    expect(routingControls.every((component) => component.disabled === false)).toBe(true);
+    expect(routingControls[1].options?.map((option) => option.value)).toEqual(["__server_default__", "openrouter"]);
+    expect(components.some((component) => component.customId?.includes(":capability-select:"))).toBe(false);
+    expect(components.some((component) => component.customId?.includes(":model-default:"))).toBe(false);
+    expect(components.some((component) => component.customId?.includes(":model-enable:"))).toBe(false);
+
+    // Components V2 renders in array order, so the providers hint reads as a footer under the six
+    // rows only while it sits between the last select and the Quick-Toggle button.
     const payloadJson = JSON.stringify(payload);
-    expect(payloadJson).toContain("Text");
-    expect(payloadJson).toContain("Vision");
-    expect(payloadJson).toContain("Embedding");
-    expect(payloadJson).toContain("Standard Image");
-    expect(payloadJson).toContain("NovelAI Image");
-    expect(payloadJson).toContain("Video");
-    expect(payloadJson).toContain("Server Default");
-    // Routing status should never render "Off"
-    expect(payloadJson).not.toContain("`Off`");
-    expect(payloadJson).not.toContain("`off`");
+    const lastSelectAt = payloadJson.indexOf(":model-provider-select:en-US:video");
+    const hintAt = payloadJson.indexOf("to add more model choices");
+    const quickToggleAt = payloadJson.indexOf(":quick-toggle-open:");
+    expect(lastSelectAt).toBeGreaterThan(-1);
+    expect(hintAt).toBeGreaterThan(lastSelectAt);
+    expect(quickToggleAt).toBeGreaterThan(hintAt);
   });
 
   it("renders Parameters page with 8 parameter rows and split 1-5 and 6-8 edit buttons", () => {
@@ -1608,8 +1689,8 @@ describe("Models panel rendering", () => {
   });
 });
 
-describe("Activation confirmation semantics", () => {
-  it("prompts for confirmation when model assignment newly activates an override", async () => {
+describe("Model assignment writes on modal submit", () => {
+  it("writes on submit even when the assignment newly activates a cross-server override", async () => {
     const calls: string[] = [];
     let repaintedView: unknown = null;
 
@@ -1666,14 +1747,12 @@ describe("Activation confirmation semantics", () => {
 
     takeSpy.mockRestore();
 
-    // Did NOT execute write yet
-    expect(calls.some((c) => c.startsWith("setCapabilityModel"))).toBe(false);
-    // Did NOT emit telemetry
-    expect(telemetry).not.toContain("personal-config.personal.model.set");
-    // Repainted with confirmation view
+    // Submitting the model is the decision, so there is no second confirmation step.
+    expect(calls).toContain("setCapabilityModel:text:openrouter:102");
+    expect(telemetry).toContain("personal-config.personal.model.set");
     const json = JSON.stringify(repaintedView);
-    expect(json).toContain("model-act-confirm");
-    expect(json).toContain("model-act-cancel");
+    expect(json).not.toContain("model-act-confirm");
+    expect(json).toContain("Text now routes to OpenRouter using Claude 3 Opus");
   });
 
   it("writes immediately without confirmation when capability is already an active override", async () => {
@@ -1739,41 +1818,6 @@ describe("Activation confirmation semantics", () => {
     expect(json).toContain("Text now routes to OpenRouter using Claude 3 Opus");
   });
 
-  it("model-act-confirm executes write and emits telemetry on success", async () => {
-    const calls: string[] = [];
-    const { dependencies, telemetry } = makeDependencies(calls, {
-      loadAvailableModelsForCapability: async () => [{ id: 102, name: "Claude 3 Opus" }],
-    });
-
-    const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId(
-      "model-act-confirm",
-      "en-US",
-      "text",
-      encodeProviderParam("openrouter"),
-      102,
-      "nonce123456",
-    );
-
-    const interaction = {
-      isButton: () => true,
-      isStringSelectMenu: () => false,
-      isModalSubmit: () => false,
-      customId,
-      user: { id: "user-123", username: "tester", displayName: "Tester" },
-      guildId: "guild-123",
-      deferred: false,
-      replied: false,
-      deferUpdate: async () => {},
-      editReply: async () => {},
-    } as unknown as ButtonInteraction;
-
-    await route.execute({} as Client, interaction, requireRoute(customId));
-
-    expect(calls).toContain("setCapabilityModel:text:openrouter:102");
-    expect(telemetry).toContain("personal-config.personal.model.set");
-  });
-
   it("model-act-cancel repaints without writing or emitting telemetry", async () => {
     const calls: string[] = [];
     let repaintedView: unknown = null;
@@ -1802,30 +1846,30 @@ describe("Activation confirmation semantics", () => {
     expect(calls.some((c) => c.startsWith("setCapabilityModel"))).toBe(false);
     expect(telemetry).toHaveLength(0);
     const json = JSON.stringify(repaintedView);
-    expect(json).toContain("Activation Cancelled");
+    expect(json).toContain("No Changes Made");
   });
 
-  it("fails closed on model-act-confirm when target model is no longer available", async () => {
+  it("fails closed on modal submit when the chosen model is no longer available", async () => {
     const calls: string[] = [];
     let repaintedView: unknown = null;
     const { dependencies, telemetry } = makeDependencies(calls, {
-      loadAvailableModelsForCapability: async () => [], // model 999 no longer exists!
+      loadAvailableModelsForCapability: async () => [], // model 999 no longer exists
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
     const customId = buildPersonalConfigCustomId(
-      "model-act-confirm",
+      "model-modal-submit",
       "en-US",
       "text",
       encodeProviderParam("openrouter"),
-      999,
       "nonce123456",
     );
 
     const interaction = {
-      isButton: () => true,
+      id: "modal-1",
+      isButton: () => false,
       isStringSelectMenu: () => false,
-      isModalSubmit: () => false,
+      isModalSubmit: () => true,
       customId,
       user: { id: "user-123", username: "tester", displayName: "Tester" },
       guildId: "guild-123",
@@ -1835,14 +1879,21 @@ describe("Activation confirmation semantics", () => {
       editReply: async (payload: unknown) => {
         repaintedView = payload;
       },
-    } as unknown as ButtonInteraction;
+      fields: {
+        getTextInputValue: () => "",
+      },
+    } as unknown as ModalSubmitInteraction;
+
+    const modalsModule = await import("@/utils/discord/ui/modals");
+    const takeSpy = spyOn(modalsModule, "takeRawModalSelectValue").mockReturnValue("999");
 
     await route.execute({} as Client, interaction, requireRoute(customId));
 
+    takeSpy.mockRestore();
+
     expect(calls.some((c) => c.startsWith("setCapabilityModel"))).toBe(false);
     expect(telemetry).toHaveLength(0);
-    const json = JSON.stringify(repaintedView);
-    expect(json).toContain("Operation Failed");
+    expect(JSON.stringify(repaintedView)).toContain("Operation Failed");
   });
 });
 
@@ -1911,9 +1962,160 @@ describe("Re-resolution and zero model guard", () => {
     expect(calls).toContain("setCapabilityEnabled:text:false");
     expect(telemetry).toContain("personal-config.personal.model.set");
   });
+
+  it("acknowledges before disabling and emits no success telemetry for an unchanged Server Default choice", async () => {
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls);
+    let deferred = false;
+    let acknowledgedInsideWrite = false;
+    dependencies.operations.setCapabilityEnabled = async () => {
+      acknowledgedInsideWrite = deferred;
+      return { status: "no-changes" };
+    };
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("model-provider-select", "en-US", "vision");
+    let repainted: unknown = null;
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => true,
+      isModalSubmit: () => false,
+      customId,
+      values: ["__server_default__"],
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return deferred;
+      },
+      replied: false,
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async (payload: unknown) => {
+        repainted = payload;
+      },
+    } as unknown as StringSelectMenuInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(acknowledgedInsideWrite).toBe(true);
+    expect(JSON.stringify(repainted)).toContain("No Changes");
+    expect(telemetry).toEqual([]);
+  });
 });
 
 describe("Range pagination workflow", () => {
+  it("routes provider overflow through the shared range chooser and opens the selected provider page", async () => {
+    const providers = Array.from({ length: 30 }, (_, index) => `custom:${index + 1}`);
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls);
+    const originalLoader = dependencies.loadPersonalModelDisplayInfo;
+    dependencies.loadPersonalModelDisplayInfo = async (...args) => {
+      const info = await originalLoader(...args);
+      return {
+        ...info,
+        eligibleProvidersForCapability: {
+          ...info.eligibleProvidersForCapability,
+          text: providers,
+        },
+      };
+    };
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const overflowId = buildPersonalConfigCustomId("model-provider-select", "en-US", "text");
+    let rangePayload: unknown = null;
+    const overflowInteraction = {
+      isButton: () => false,
+      isStringSelectMenu: () => true,
+      isModalSubmit: () => false,
+      customId: overflowId,
+      values: [PERSONAL_PROVIDER_RANGE_VALUE],
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        rangePayload = payload;
+      },
+    } as unknown as StringSelectMenuInteraction;
+
+    await route.execute({} as Client, overflowInteraction, requireRoute(overflowId));
+
+    const rangeComponents = collectComponents(rangePayload);
+    expect(rangeComponents.some((component) => component.customId?.includes(":model-provider-range-open:"))).toBe(true);
+    expect(JSON.stringify(rangePayload)).toContain("1-25");
+    expect(JSON.stringify(rangePayload)).toContain("26-30");
+
+    const pageId = buildPersonalConfigCustomId("model-provider-range-open", "en-US", "text", 25);
+    let pagePayload: unknown = null;
+    const pageInteraction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: pageId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        pagePayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, pageInteraction, requireRoute(pageId));
+
+    const providerSelect = collectComponents(pagePayload).find((component) =>
+      component.customId?.endsWith(":model-provider-select:en-US:text"),
+    );
+    expect(providerSelect?.options?.map((option) => option.value)).toEqual([
+      "custom~26",
+      "custom~27",
+      "custom~28",
+      "custom~29",
+      "custom~30",
+    ]);
+    expect(calls).toEqual([]);
+    expect(telemetry).toEqual([]);
+  });
+
+  it("fails a stale provider range without writing or emitting telemetry", async () => {
+    const providers = Array.from({ length: 30 }, (_, index) => `custom:${index + 1}`);
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls);
+    const originalLoader = dependencies.loadPersonalModelDisplayInfo;
+    dependencies.loadPersonalModelDisplayInfo = async (...args) => {
+      const info = await originalLoader(...args);
+      return {
+        ...info,
+        eligibleProvidersForCapability: { ...info.eligibleProvidersForCapability, text: providers },
+      };
+    };
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("model-provider-range-open", "en-US", "text", 50);
+    let repainted: unknown = null;
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repainted = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(JSON.stringify(repainted)).toContain("Personal configuration is currently unavailable.");
+    expect(calls).toEqual([]);
+    expect(telemetry).toEqual([]);
+  });
+
   it("renders range view when available models exceed 25", async () => {
     let modalShown = false;
     let repaintedView: unknown = null;
@@ -1954,8 +2156,8 @@ describe("Range pagination workflow", () => {
     expect(modalShown).toBe(false);
     const json = JSON.stringify(repaintedView);
     expect(json).toContain("Select Text Model Range");
-    expect(json).toContain("1 - 25");
-    expect(json).toContain("26 - 30");
+    expect(json).toContain("1-25");
+    expect(json).toContain("26-30");
   });
 
   it("opens modal with sliced models on model-range-open", async () => {
@@ -2214,7 +2416,7 @@ describe("Fallbacks submission re-resolution and invariants", () => {
 });
 
 describe("Quick-Toggle modal structure and routing copy", () => {
-  it("renders 5 checkbox options labeled Image controlling Standard and NovelAI Image", () => {
+  it("renders 6 checkbox options with type 22 and max_values 6 in canonical order", () => {
     const { buildQuickToggleModal } = require("@/utils/discord/ui/personalConfigPanel");
     const modal = buildQuickToggleModal("en-US", "nonce123456", [
       {
@@ -2223,21 +2425,192 @@ describe("Quick-Toggle modal structure and routing copy", () => {
         provider: "openrouter",
         enabled_capabilities: ["text", "image"],
         assigned_capabilities: ["text", "image"],
+        diffusion_model_id: 10,
+        nai_diffusion_model_id: null,
+      } as unknown as UserSavedProviderConfigRow,
+      {
+        user_saved_config_id: 2,
+        user_id: 1,
+        provider: "novelai",
+        enabled_capabilities: ["image_nai"],
+        assigned_capabilities: ["image_nai"],
+        diffusion_model_id: null,
+        nai_diffusion_model_id: 20,
       } as unknown as UserSavedProviderConfigRow,
     ]);
 
     const modalJson = JSON.stringify(modal);
     expect(modalJson).toContain("Toggle Personal Capabilities");
     expect(modalJson).toContain("Checked capabilities are personal overrides in every server");
-    // Checkbox label should be "Image", not "Standard Image"
-    expect(modalJson).toContain('"label":"Image"');
-    // 5 options in checkbox group: text, vision, embedding, image, video
-    expect(modalJson).toContain('"value":"text"');
-    expect(modalJson).toContain('"value":"vision"');
-    expect(modalJson).toContain('"value":"embedding"');
-    expect(modalJson).toContain('"value":"image"');
-    expect(modalJson).toContain('"value":"video"');
-    expect(modalJson).not.toContain('"value":"image_nai"');
+
+    const component = modal.components[0]?.component;
+    expect(component?.type).toBe(22);
+    expect(component?.min_values).toBe(0);
+    expect(component?.max_values).toBe(6);
+    expect(component?.options).toHaveLength(6);
+
+    const values = component?.options.map((opt: { value: string }) => opt.value);
+    expect(values).toEqual(["text", "vision", "embedding", "image", "image_nai", "video"]);
+
+    const labels = component?.options.map((opt: { label: string }) => opt.label);
+    expect(labels).toEqual(["Text", "Vision", "Embedding", "Standard Image", "NovelAI Image", "Video"]);
+
+    const imageOpt = component?.options.find((opt: { value: string }) => opt.value === "image");
+    expect(imageOpt?.default).toBe(true);
+    expect(imageOpt?.description).toContain("OpenRouter");
+
+    const naiOpt = component?.options.find((opt: { value: string }) => opt.value === "image_nai");
+    expect(naiOpt?.default).toBe(true);
+    expect(naiOpt?.description).toContain("NovelAI");
+
+    // The group description is capped at 100 characters, so anything past that never reaches a client.
+    const groupDescription = modal.components[0]?.description as string;
+    expect(groupDescription.length).toBeLessThanOrEqual(100);
+    expect(groupDescription).toBe(
+      "Checked capabilities are personal overrides in every server. Unchecked use the server default.",
+    );
+  });
+
+  it("keeps naming the saved provider for a capability that is assigned but switched off", () => {
+    const { buildQuickToggleModal } = require("@/utils/discord/ui/personalConfigPanel");
+    // Every model column must be present and null: an absent column reads as configured, which
+    // would make the untouched capabilities report a provider they do not own.
+    const modal = buildQuickToggleModal("en-US", "nonce123456", [
+      {
+        user_saved_config_id: 1,
+        user_id: 1,
+        provider: "openrouter",
+        enabled_capabilities: [],
+        assigned_capabilities: ["text"],
+        llm_id: 10,
+        vision_llm_id: null,
+        embedding_model_id: null,
+        diffusion_model_id: null,
+        nai_diffusion_model_id: null,
+        video_model_id: null,
+      } as unknown as UserSavedProviderConfigRow,
+    ]);
+
+    const component = modal.components[0]?.component;
+    const textOpt = component?.options.find((opt: { value: string }) => opt.value === "text");
+    expect(textOpt?.default).toBe(false);
+    expect(textOpt?.description).toContain("OpenRouter");
+
+    const visionOpt = component?.options.find((opt: { value: string }) => opt.value === "vision");
+    expect(visionOpt?.default).toBe(false);
+    expect(visionOpt?.description).toBe("Server default (no model configured)");
+  });
+
+  it("carries the submitted capability set straight to the write with no confirmation step", async () => {
+    const calls: string[] = [];
+    let repaintedView: unknown = null;
+    const { dependencies, telemetry } = makeDependencies(calls, {
+      loadUserSavedProviders: async () => [
+        {
+          user_saved_config_id: 1,
+          user_id: 1,
+          provider: "openrouter",
+          // Nothing is switched on yet, so every checked capability is a new cross-server override.
+          enabled_capabilities: [],
+          assigned_capabilities: ["text", "vision"],
+          llm_id: 101,
+          vision_llm_id: 201,
+          embedding_model_id: null,
+          diffusion_model_id: null,
+          nai_diffusion_model_id: null,
+          video_model_id: null,
+        } as unknown as UserSavedProviderConfigRow,
+      ],
+      operations: {
+        setQuickToggleRouting: async (input) => {
+          calls.push(`setQuickToggleRouting:${Array.from(input.selectedCapabilities).join(",")}`);
+          return { status: "success" };
+        },
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("quick-toggle-submit", "en-US", "nonce123456");
+    const interaction = {
+      id: "modal-1",
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repaintedView = payload;
+      },
+    } as unknown as ModalSubmitInteraction;
+
+    const modalsModule = await import("@/utils/discord/ui/modals");
+    const takeSpy = spyOn(modalsModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["text", "vision"]);
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    takeSpy.mockRestore();
+
+    expect(calls).toContain("setQuickToggleRouting:text,vision");
+    expect(telemetry).toContain("personal-config.personal.model-routing.set");
+    const json = JSON.stringify(repaintedView);
+    expect(json).not.toContain("quick-toggle-confirm");
+    expect(json).toContain("Personal Routing Updated");
+  });
+
+  it("fails closed when a checked capability has no configured model", async () => {
+    const calls: string[] = [];
+    let repaintedView: unknown = null;
+    const { dependencies, telemetry } = makeDependencies(calls, {
+      loadUserSavedProviders: async () => [
+        {
+          user_saved_config_id: 1,
+          user_id: 1,
+          provider: "openrouter",
+          enabled_capabilities: [],
+          assigned_capabilities: ["text"],
+          llm_id: 101,
+          vision_llm_id: null,
+          embedding_model_id: null,
+          diffusion_model_id: null,
+          nai_diffusion_model_id: null,
+          video_model_id: null,
+        } as unknown as UserSavedProviderConfigRow,
+      ],
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("quick-toggle-submit", "en-US", "nonce123456");
+    const interaction = {
+      id: "modal-1",
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repaintedView = payload;
+      },
+    } as unknown as ModalSubmitInteraction;
+
+    const modalsModule = await import("@/utils/discord/ui/modals");
+    const takeSpy = spyOn(modalsModule, "takeRawModalCheckboxGroupValues").mockReturnValue(["text", "video"]);
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    takeSpy.mockRestore();
+
+    // The guard that used to sit behind the confirmation still runs before any write.
+    expect(calls.some((c) => c.startsWith("setQuickToggleRouting"))).toBe(false);
+    expect(telemetry).toHaveLength(0);
+    expect(JSON.stringify(repaintedView)).toContain("Model Required");
   });
 });
 
@@ -2527,6 +2900,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
       "123456789012345678",
       12,
       1,
+      0,
       "1",
       fp,
       "nonce123456",
@@ -2563,6 +2937,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
       "999999999999999999",
       12,
       1,
+      0,
       "1",
       fp,
       "nonce123456",
@@ -2664,7 +3039,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     // RawDiscordComponent.type is a bare number, so TypeScript accepts any of them. Component type 19
     // is FileUpload and 22 is CheckboxGroup: picking 19 renders an upload box that submits no values,
     // which for the unchecked-means-remove modal means every presented row is treated as unchecked.
-    const setModal = buildSpotlightSetModal("en-US", "nonce123456", "a1b2c3d4", [
+    const setModal = buildSpotlightSetModal("en-US", "nonce123456", "123456789012345678", 0, 0, "a1b2c3d4", [
       { id: 1, name: "Tomori", isAlter: false },
       { id: 2, name: "Sparrow", isAlter: true },
     ]);
@@ -2854,14 +3229,14 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     const privacyJson = JSON.stringify(privacyPayload);
     // Section headers
     expect(privacyJson).toContain("**Your Data**");
-    expect(privacyJson).toContain("**Cross-Server STM**");
+    expect(privacyJson).toContain("**Cross-Server [STM](");
     // Cross-server STM section footer
     expect(privacyJson).toContain("-# `/personal memories` always persist across servers, but not STM");
     // Button label
     expect(privacyJson).toContain("Enable Cross-Server Sharing");
   });
 
-  it("renders Models switch page with Change Personal <Capability> Model select options while preserving routing_* labels", () => {
+  it("keeps Server Default actionable when a capability has no eligible providers", () => {
     const modelsPayload = buildPersonalConfigPanelPayload({
       locale: "en-US",
       category: "models",
@@ -2904,17 +3279,11 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
         canEnableRandomizer: false,
       },
     });
-    const modelsJson = JSON.stringify(modelsPayload);
-    // Dropdown labels
-    expect(modelsJson).toContain("Change Personal Text Model");
-    expect(modelsJson).toContain("Change Personal Vision Model");
-    expect(modelsJson).toContain("Change Personal Embedding Model");
-    expect(modelsJson).toContain("Change Personal Standard Image Model");
-    expect(modelsJson).toContain("Change Personal NovelAI Image Model");
-    expect(modelsJson).toContain("Change Personal Video Model");
-    // Status row labels still present
-    expect(modelsJson).toContain("> Text: `Claude 3.5 Sonnet`");
-    expect(modelsJson).toContain("> Vision: `Server Default`");
+    const components = collectComponents(modelsPayload);
+    const visionControl = components.find((component) => component.customId?.endsWith(":vision"));
+    expect(visionControl?.disabled).toBe(false);
+    expect(visionControl?.options?.map((option) => option.value)).toEqual(["__server_default__"]);
+    expect(visionControl?.placeholder).toBe("Vision: Using Server Default");
   });
 
   it("handles spotlight removal and records telemetry on success", async () => {
@@ -2967,6 +3336,7 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       "123456789012345678",
       0,
       0,
+      0,
       "2",
       fp,
       "nonce123456",
@@ -3016,6 +3386,7 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       "123456789012345678",
       0,
       0,
+      0,
       "4",
       fp,
       "nonce123456",
@@ -3055,7 +3426,15 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
     const calls: string[] = [];
     const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
     const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
-    const customId = buildPersonalConfigCustomId("spotlight-set-submit", "en-US", fp, "nonce123456");
+    const customId = buildPersonalConfigCustomId(
+      "spotlight-set-submit",
+      "en-US",
+      "123456789012345678",
+      0,
+      0,
+      fp,
+      "nonce123456",
+    );
 
     const driftedPersonas = [makePersona(99, 99, "New"), makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
 
@@ -3103,6 +3482,7 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       "en-US",
       "123456789012345678",
       0,
+      0,
       "3",
       fp,
       "nonce123456",
@@ -3143,6 +3523,7 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       "spot-set-auto-sub",
       "en-US",
       "123456789012345678",
+      0,
       0,
       "3",
       fp,
@@ -3356,6 +3737,7 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       "123456789012345678",
       0,
       0,
+      0,
       "1",
       validFp,
       "nonce123456",
@@ -3529,15 +3911,17 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
   });
 
   it("asserts raw numeric component types across all touched spotlight modals", () => {
-    const setModal = buildSpotlightSetModal("en-US", "nonce123456", "a1b2c3d4", [
+    const setModal = buildSpotlightSetModal("en-US", "nonce123456", "123456789012345678", 0, 0, "a1b2c3d4", [
       { id: 1, name: "Tomori", isAlter: false },
       { id: 2, name: "Anon", isAlter: false },
     ]);
+    const step1Modal = buildSpotlightStep1Modal("en-US", "nonce123456");
     const autoModal = buildSpotlightAutoTriggerModal(
       "en-US",
       "nonce123456",
       "123456789012345678",
       12,
+      0,
       "3",
       "a1b2c3d4",
       [{ id: 1, name: "Tomori", isAlter: false }],
@@ -3560,22 +3944,27 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       new Map([["123456789012345678", { name: "general" }]]),
     );
 
-    const channelComp = setModal.components.find((c) => c.component?.custom_id?.startsWith("channel_"));
+    const channelComp = step1Modal.components.find((c) => c.component?.custom_id?.startsWith("channel_"));
     expect(channelComp?.component?.type).toBe(8);
 
-    const hoursComp = setModal.components.find((c) => c.component?.custom_id?.startsWith("hours_"));
+    const hoursComp = step1Modal.components.find((c) => c.component?.custom_id?.startsWith("hours_"));
     expect(hoursComp?.component?.type).toBe(4);
+
+    // Splitting channel and duration out is what frees all five modal components for personas.
+    expect(setModal.components.every((c) => c.component?.type === 22)).toBe(true);
 
     const personaGroup = setModal.components.find((c) => c.component?.custom_id?.startsWith("personas_"));
     expect(personaGroup?.component?.type).toBe(22);
 
+    // A persona catalog is a dropdown. This assertion previously pinned 21 (RadioGroup), which
+    // type-checks, renders nothing locally, and 400s in Discord past ten options.
     const autoComp = autoModal.components.find((c) => c.component?.custom_id?.startsWith("auto_trigger_"));
-    expect(autoComp?.component?.type).toBe(21);
+    expect(autoComp?.component?.type).toBe(3);
 
     const removeGroup = removeModal.components.find((c) => c.component?.custom_id?.startsWith("spotlights_"));
     expect(removeGroup?.component?.type).toBe(22);
 
-    for (const modal of [setModal, autoModal, removeModal]) {
+    for (const modal of [step1Modal, setModal, autoModal, removeModal]) {
       for (const row of modal.components) {
         expect(row.type).toBe(18);
       }
@@ -3589,12 +3978,14 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
     const personaId = 2147483647;
     const nonce = "nonce1234567";
     const fp = "a1b2c3d4";
-    const mask = "3fffffff";
+    const mask = ((1n << BigInt(50)) - 1n).toString(36);
     const rangePage = 3999;
     const removeStart = 999950;
 
-    const setModal = buildSpotlightSetModal(locale, nonce, fp, [{ id: personaId, name: "Tomori", isAlter: false }]);
-    const autoModal = buildSpotlightAutoTriggerModal(locale, nonce, snowflake, hours, mask, fp, [
+    const setModal = buildSpotlightSetModal(locale, nonce, snowflake, hours, 999, fp, [
+      { id: personaId, name: "Tomori", isAlter: false },
+    ]);
+    const autoModal = buildSpotlightAutoTriggerModal(locale, nonce, snowflake, hours, 999, mask, fp, [
       { id: personaId, name: "Tomori", isAlter: false },
     ]);
     const removeModal = buildSpotlightRemoveModal(
@@ -3634,8 +4025,10 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
         kind: "spotlight-set-review",
         channelId: snowflake,
         hours,
+        blockIdx: 999,
         selectedPersonaIds: [personaId],
         autoTriggerPersonaId: personaId,
+        autoIdx: 50,
         mask,
         fp,
         nonce,
@@ -3659,14 +4052,84 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       view: {
         kind: "spotlight-remove-range",
         rangePage,
-        totalOptions: 1_000_000,
+        totalOptions: 2_000_000,
         fp,
       },
     });
+    const autoRangePayload = buildPersonalConfigPanelPayload({
+      locale,
+      category: "advanced",
+      page: "spotlight",
+      user: makeUser(),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: snowflake,
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      spotlightDisplayInfo: {
+        activeSpotlights: [],
+        personas: [{ id: personaId, name: "Tomori", isAlter: false }],
+      },
+      view: {
+        kind: "spotlight-auto-range",
+        channelId: snowflake,
+        hours,
+        blockIdx: 999,
+        mask,
+        fp,
+        rangePage: 1,
+        totalOptions: 500,
+      },
+    });
+    const modelRangePayload = buildPersonalConfigPanelPayload({
+      locale,
+      category: "models",
+      page: "switch",
+      user: makeUser(),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: snowflake,
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      view: {
+        kind: "model-range",
+        capability: "embedding",
+        provider: "fireworks",
+        rangePage: 399,
+        totalOptions: 100_000,
+      },
+    });
+    const fallbacksRangePayload = buildPersonalConfigPanelPayload({
+      locale,
+      category: "models",
+      page: "fallbacks",
+      user: makeUser(),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: snowflake,
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+      view: {
+        kind: "fallbacks-range",
+        provider: "openrouter",
+        rangePage: 399,
+        totalOptions: 100_000,
+      },
+    });
 
-    const producedCustomIds = [...JSON.stringify([reviewPayload, rangePayload]).matchAll(/"customId":"([^"]+)"/g)].map(
-      (match) => match[1],
-    );
+    const producedCustomIds = [
+      ...JSON.stringify([
+        reviewPayload,
+        rangePayload,
+        autoRangePayload,
+        modelRangePayload,
+        fallbacksRangePayload,
+      ]).matchAll(/"customId":"([^"]+)"/g),
+    ].map((match) => match[1]);
+
     const producedRoute = (action: string) => {
       const customId = producedCustomIds.find((candidate) => {
         const parsed = parseInteractionRoute(candidate);
@@ -3683,13 +4146,20 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
     }
     const rangeStart = parsedRange.start;
 
+    const autoRangeCustomId = producedRoute("spot-set-auto-range");
+    const parsedAutoRange = parsePersonalConfigPanelRoute(requireRoute(autoRangeCustomId));
+    if (!parsedAutoRange || parsedAutoRange.action !== "spot-set-auto-range") {
+      throw new Error("Produced Spotlight auto range did not parse");
+    }
+    const autoRangeStart = parsedAutoRange.start;
+
     const testCases: Array<{
       customId: string;
       expected: ReturnType<typeof parsePersonalConfigPanelRoute>;
     }> = [
       {
         customId: setModal.custom_id,
-        expected: { action: "spotlight-set-submit", locale, fp, nonce },
+        expected: { action: "spotlight-set-submit", locale, channelId: snowflake, hours, blockIdx: 999, fp, nonce },
       },
       {
         customId: producedRoute("spot-set-cf"),
@@ -3698,7 +4168,8 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
           locale,
           channelId: snowflake,
           hours,
-          autoTriggerId: personaId,
+          autoIdx: 50,
+          blockIdx: 999,
           mask,
           fp,
           nonce,
@@ -3706,11 +4177,11 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       },
       {
         customId: producedRoute("spot-set-auto"),
-        expected: { action: "spot-set-auto", locale, channelId: snowflake, hours, mask, fp, nonce },
+        expected: { action: "spot-set-auto", locale, channelId: snowflake, hours, blockIdx: 999, mask, fp, nonce },
       },
       {
         customId: autoModal.custom_id,
-        expected: { action: "spot-set-auto-sub", locale, channelId: snowflake, hours, mask, fp, nonce },
+        expected: { action: "spot-set-auto-sub", locale, channelId: snowflake, hours, blockIdx: 999, mask, fp, nonce },
       },
       {
         customId: rangeCustomId,
@@ -3719,6 +4190,67 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       {
         customId: removeModal.custom_id,
         expected: { action: "spotlight-remove-submit", locale, start: removeStart, fp, nonce },
+      },
+      {
+        customId: producedRoute("spotlight-remove-page"),
+        expected: { action: "spotlight-remove-page", locale, chooserPage: 3998, fp },
+      },
+      {
+        customId: autoRangeCustomId,
+        expected: {
+          action: "spot-set-auto-range",
+          locale,
+          channelId: snowflake,
+          hours,
+          blockIdx: 999,
+          mask,
+          fp,
+          start: autoRangeStart,
+        },
+      },
+      {
+        customId: producedRoute("spot-set-auto-page"),
+        expected: {
+          action: "spot-set-auto-page",
+          locale,
+          channelId: snowflake,
+          hours,
+          blockIdx: 999,
+          mask,
+          fp,
+          chooserPage: 0,
+        },
+      },
+      {
+        customId: producedRoute("spot-set-auto-cancel"),
+        expected: {
+          action: "spot-set-auto-cancel",
+          locale,
+          channelId: snowflake,
+          hours,
+          blockIdx: 999,
+          mask,
+          fp,
+        },
+      },
+      {
+        customId: producedRoute("model-range-page"),
+        expected: {
+          action: "model-range-page",
+          locale,
+          capability: "embedding",
+          provider: "fireworks",
+          chooserPage: 398,
+        },
+      },
+      {
+        customId: producedRoute("fallbacks-range-page"),
+        expected: {
+          action: "fallbacks-range-page",
+          locale,
+          provider: "openrouter",
+          chooserPage: 398,
+        },
       },
     ];
 
@@ -3742,6 +4274,7 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       "spot-set-cf",
       "en-US",
       "123456789012345678",
+      0,
       0,
       0,
       "1",
@@ -3837,5 +4370,711 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
 
     await remRoute.execute({} as Client, remInteraction, requireRoute(remCustomId));
     expect(acknowledgedDuringRemoveWrite).toBe(true);
+  });
+});
+
+describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 Phase 2a)", () => {
+  it("assigns single selected persona directly as auto-trigger without modal", async () => {
+    let modalOpened = false;
+    let repaintedPayload: unknown = null;
+    const persona = { id: 10, name: "Tomori", isAlter: false };
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", [persona]);
+    const mask = "1";
+
+    const { dependencies } = makeDependencies([], {
+      loadGuildPersonas: async () => [persona],
+      showSpotlightAutoTriggerModal: async () => {
+        modalOpened = true;
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-auto",
+      "en-US",
+      "123456789012345678",
+      0,
+      0,
+      mask,
+      fp,
+      "nonce123456",
+    );
+
+    let deferred = false;
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async (payload: unknown) => {
+        repaintedPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(deferred).toBe(true);
+    expect(modalOpened).toBe(false);
+    const json = JSON.stringify(repaintedPayload);
+    expect(json).toContain("Auto-trigger: Tomori");
+  });
+
+  it("renders range chooser when >24 personas are selected and opens sliced modal on range click", async () => {
+    const personas = Array.from({ length: 30 }, (_, i) => ({
+      id: 100 + i,
+      name: `Persona ${i + 1}`,
+      isAlter: false,
+    }));
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
+    // Every one of the thirty personas selected, in the single block they occupy.
+    const mask = ((1n << BigInt(personas.length)) - 1n).toString(36);
+
+    let modalOpenedWith: Array<{ id: number; name: string }> = [];
+    let repaintedPayload: unknown = null;
+
+    const { dependencies } = makeDependencies([], {
+      loadGuildPersonas: async () => personas,
+      showSpotlightAutoTriggerModal: async (_interaction, _locale, _nonce, _ch, _h, _blk, _m, _fp, selected) => {
+        modalOpenedWith = selected;
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+
+    const autoCustomId = buildPersonalConfigCustomId(
+      "spot-set-auto",
+      "en-US",
+      "123456789012345678",
+      0,
+      0,
+      mask,
+      fp,
+      "nonce123456",
+    );
+
+    let deferred = false;
+    const autoInteraction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: autoCustomId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async (payload: unknown) => {
+        repaintedPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, autoInteraction, requireRoute(autoCustomId));
+
+    expect(deferred).toBe(true);
+    expect(modalOpenedWith).toHaveLength(0);
+    const json = JSON.stringify(repaintedPayload);
+    expect(json).toContain("1-24");
+    expect(json).toContain("25-30");
+
+    const rangeCustomId = buildPersonalConfigCustomId(
+      "spot-set-auto-range",
+      "en-US",
+      "123456789012345678",
+      0,
+      0,
+      mask,
+      fp,
+      24,
+    );
+
+    const rangeInteraction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: rangeCustomId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, rangeInteraction, requireRoute(rangeCustomId));
+
+    expect(modalOpenedWith).toHaveLength(6);
+    expect(modalOpenedWith[0].id).toBe(124);
+    expect(modalOpenedWith[5].id).toBe(129);
+  });
+
+  it("navigates model range page past model 125 and fallback range page past model 120", async () => {
+    const models = Array.from({ length: 150 }, (_, i) => ({
+      id: 200 + i,
+      name: `Model ${i + 1}`,
+    }));
+    let repaintedPayload: unknown = null;
+
+    const { dependencies } = makeDependencies([], {
+      loadAvailableModelsForCapability: async () => models,
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+
+    const modelPageCustomId = buildPersonalConfigCustomId(
+      "model-range-page",
+      "en-US",
+      "text",
+      encodeProviderParam("openrouter"),
+      1,
+    );
+
+    const modelInteraction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: modelPageCustomId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repaintedPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, modelInteraction, requireRoute(modelPageCustomId));
+    const modelJson = JSON.stringify(repaintedPayload);
+    expect(modelJson).toContain("Select Text Model Range");
+    expect(modelJson).toContain("26-50");
+
+    const fallbackPageCustomId = buildPersonalConfigCustomId(
+      "fallbacks-range-page",
+      "en-US",
+      encodeProviderParam("openrouter"),
+      1,
+    );
+
+    const fallbackInteraction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: fallbackPageCustomId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repaintedPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, fallbackInteraction, requireRoute(fallbackPageCustomId));
+    const fallbackJson = JSON.stringify(repaintedPayload);
+    expect(fallbackJson).toContain("Select Fallback Models Range");
+  });
+
+  it("navigates spotlight remove range page past row 250", async () => {
+    const activeSpotlights = Array.from({ length: 300 }, (_, i) => ({
+      channelDiscId: `1234567890123456${i.toString().padStart(2, "0")}`,
+      personaIds: [1],
+      autoTriggerPersonaId: null,
+      expiresAt: null,
+      userDiscId: "user-123",
+    }));
+    const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
+    let repaintedPayload: unknown = null;
+
+    const { dependencies } = makeDependencies([], {
+      loadActiveSpotlights: async () => activeSpotlights,
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const removePageCustomId = buildPersonalConfigCustomId("spotlight-remove-page", "en-US", 5, fp);
+
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: removePageCustomId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repaintedPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(removePageCustomId));
+    const json = JSON.stringify(repaintedPayload);
+    expect(json).toContain("Select Spotlight Range");
+    expect(json).toContain("251-300");
+  });
+
+  it("routes a no-changes result to an info receipt without telemetry", async () => {
+    const persona = { id: 10, name: "Tomori", isAlter: false };
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", [persona]);
+    const channelId = "123456789012345678";
+
+    let writeCalled = false;
+    let telemetryRecorded = false;
+    let repaintedPayload: unknown = null;
+
+    const { dependencies } = makeDependencies([], {
+      loadGuildPersonas: async () => [persona],
+      operations: {
+        ...personalConfigOperations,
+        setSpotlight: async (input) => {
+          if (
+            input.expiresAt === null &&
+            input.autoTriggerPersonaId === 10 &&
+            input.personaIds.length === 1 &&
+            input.personaIds[0] === 10
+          ) {
+            return { status: "no-changes" };
+          }
+          writeCalled = true;
+          return { status: "success" };
+        },
+      },
+      recordAction: () => {
+        telemetryRecorded = true;
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("spot-set-cf", "en-US", channelId, 0, 1, 0, "1", fp, "nonce123456");
+
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      guild: { channels: { cache: makeChannelCache([channelId]) } },
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repaintedPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(writeCalled).toBe(false);
+    expect(telemetryRecorded).toBe(false);
+    const json = JSON.stringify(repaintedPayload);
+    expect(json).toContain("No Changes");
+  });
+
+  it("unchanged permanent spotlight set is a no-op that skips the write", async () => {
+    const personalSpotlightCache = await import("@/utils/cache/personalSpotlightCache");
+    const getCachedSpy = spyOn(personalSpotlightCache, "getCachedPersonalSpotlightStatus").mockImplementation(
+      async () => ({
+        channelDiscId: "123456789012345678",
+        personaIds: [1, 2],
+        autoTriggerPersonaId: 1,
+        expiresAt: null,
+        userDiscId: "user-123",
+      }),
+    );
+    const replaceSpy = spyOn(userRepository, "replacePersonalSpotlight").mockImplementation(async () => {});
+
+    const result = await personalConfigOperations.setSpotlight({
+      serverId: 1,
+      userId: 1,
+      userDiscId: "user-123",
+      channelId: "123456789012345678",
+      personaIds: [1, 2],
+      autoTriggerPersonaId: 1,
+      expiresAt: null,
+    });
+
+    expect(result.status).toBe("no-changes");
+    expect(replaceSpy).not.toHaveBeenCalled();
+    getCachedSpy.mockRestore();
+    replaceSpy.mockRestore();
+  });
+
+  it("partial removal attempts all selected rows and repaints with warning receipt", async () => {
+    const activeSpotlights = [
+      {
+        channelDiscId: "111111111111111111",
+        personaIds: [1],
+        autoTriggerPersonaId: null,
+        expiresAt: null,
+        userDiscId: "user-123",
+      },
+      {
+        channelDiscId: "222222222222222222",
+        personaIds: [2],
+        autoTriggerPersonaId: null,
+        expiresAt: null,
+        userDiscId: "user-123",
+      },
+    ];
+    const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
+    let repaintedPayload: unknown = null;
+
+    const { dependencies } = makeDependencies([], {
+      loadActiveSpotlights: async () => activeSpotlights,
+      operations: {
+        ...personalConfigOperations,
+        removeSpotlights: async () => ({
+          status: "partial-failure",
+          removedCount: 1,
+          failedCount: 1,
+        }),
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, fp, "nonce123456");
+
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repaintedPayload = payload;
+      },
+      fields: {},
+      id: "modal-submit-123",
+    } as unknown as ModalSubmitInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    const json = JSON.stringify(repaintedPayload);
+    expect(json).toContain("Partial Removal");
+  });
+});
+
+describe("Wave 5 Phase 2b: persona reachability beyond one modal", () => {
+  const makeBlockPersonas = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({ id: 100 + i, name: `Persona ${i + 1}`, isAlter: false }));
+
+  it("carries channel and duration from the step one modal into the persona step", async () => {
+    const personas = makeBlockPersonas(SPOTLIGHT_PERSONA_PAGE_SIZE + 10);
+    const { dependencies } = makeDependencies([], { loadGuildPersonas: async () => personas });
+    const nonce = "nonce123456";
+    const customId = buildPersonalConfigCustomId("spotlight-set-step1", "en-US", nonce);
+    const modalsModule = await import("@/utils/discord/ui/modals");
+    const takeSpy = spyOn(modalsModule, "takeRawModalSelectValue").mockReturnValue("123456789012345678");
+
+    let repainted: unknown = null;
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      id: "modal-step1",
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      fields: { getTextInputValue: () => "12" },
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repainted = payload;
+      },
+    } as unknown as ModalSubmitInteraction;
+
+    await createPersonalConfigInteractionRoute(dependencies).execute({} as Client, interaction, requireRoute(customId));
+
+    takeSpy.mockRestore();
+    const json = JSON.stringify(repainted);
+    // The block button must carry both, because the persona modal that follows cannot ask again.
+    expect(json).toContain("s-blk:en-US:123456789012345678:12:");
+  });
+
+  it("round-trips a full-block base36 mask and refuses one bit past the bound", () => {
+    const full = (1n << BigInt(SPOTLIGHT_PERSONA_PAGE_SIZE)) - 1n;
+    const encoded = encodeSpotlightMask(full);
+    expect(decodeSpotlightMask(encoded)).toBe(full);
+    expect(encoded).toMatch(/^[0-9a-z]+$/);
+    expect(decodeSpotlightMask(encodeSpotlightMask(1n << BigInt(SPOTLIGHT_PERSONA_PAGE_SIZE)))).toBeNull();
+  });
+
+  it("keeps a worst-case full-block spot-set-cf inside 100 characters", () => {
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-cf",
+      "en-US",
+      "12345678901234567890",
+      999999,
+      SPOTLIGHT_PERSONA_PAGE_SIZE,
+      999,
+      encodeSpotlightMask((1n << BigInt(SPOTLIGHT_PERSONA_PAGE_SIZE)) - 1n),
+      "a1b2c3d4",
+      "nonce1234567",
+    );
+    expect(customId.length).toBeLessThanOrEqual(100);
+    const parsed = parsePersonalConfigPanelRoute(requireRoute(customId));
+    expect(parsed?.action).toBe("spot-set-cf");
+  });
+
+  it("renders no block chooser at or below one block and a chooser above it", () => {
+    const render = (totalPersonas: number) =>
+      JSON.stringify(
+        buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "advanced",
+          page: "spotlight",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "123456789012345678",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          view: {
+            kind: "spotlight-persona-select",
+            channelId: "123456789012345678",
+            hours: 0,
+            fp: "a1b2c3d4",
+            totalPersonas,
+            chooserPage: 0,
+          },
+        }),
+      );
+
+    const atBound = render(SPOTLIGHT_PERSONA_PAGE_SIZE);
+    expect(atBound).toContain("s-blk:");
+    expect(atBound).not.toContain("s-blk-p:");
+
+    const aboveBound = render(SPOTLIGHT_PERSONA_PAGE_SIZE * 3);
+    expect(aboveBound).toContain("s-blk:");
+    expect(aboveBound).toContain("1-50");
+    expect(aboveBound).toContain("101-150");
+  });
+
+  it("opens the persona modal for the block the range button named", async () => {
+    const personas = makeBlockPersonas(SPOTLIGHT_PERSONA_PAGE_SIZE * 2);
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
+    let openedWith: Array<{ id: number }> = [];
+    let openedBlock = -1;
+
+    const { dependencies } = makeDependencies([], {
+      loadGuildPersonas: async () => personas,
+      showSpotlightSetModal: async (_i, _l, _n, _ch, _h, blockIdx, _fp, block) => {
+        openedBlock = blockIdx;
+        openedWith = block;
+      },
+    });
+
+    const customId = buildPersonalConfigCustomId("spotlight-set-block", "en-US", "123456789012345678", 0, fp, 1);
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      reply: async () => {},
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await createPersonalConfigInteractionRoute(dependencies).execute({} as Client, interaction, requireRoute(customId));
+
+    expect(openedBlock).toBe(1);
+    expect(openedWith.map((p) => p.id)).toEqual(personas.slice(50, 100).map((p) => p.id));
+  });
+
+  it("resolves the block-relative auto index to the persona the review displayed", async () => {
+    const personas = makeBlockPersonas(SPOTLIGHT_PERSONA_PAGE_SIZE * 2);
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
+    // Second block, its first three personas selected, the third chosen as auto-trigger.
+    const mask = encodeSpotlightMask(0b111n);
+    let written: { personaIds: number[]; autoTriggerPersonaId: number | null } | null = null;
+
+    const { dependencies } = makeDependencies([], {
+      loadGuildPersonas: async () => personas,
+      operations: {
+        ...personalConfigOperations,
+        setSpotlight: async (input) => {
+          written = { personaIds: input.personaIds, autoTriggerPersonaId: input.autoTriggerPersonaId };
+          return { status: "success" };
+        },
+      },
+    });
+
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-cf",
+      "en-US",
+      "123456789012345678",
+      0,
+      3,
+      1,
+      mask,
+      fp,
+      "nonce123456",
+    );
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await createPersonalConfigInteractionRoute(dependencies).execute({} as Client, interaction, requireRoute(customId));
+
+    expect(written).not.toBeNull();
+    expect(written?.personaIds).toEqual([personas[50].id, personas[51].id, personas[52].id]);
+    expect(written?.autoTriggerPersonaId).toBe(personas[52].id);
+  });
+
+  it("fails stale without writing when the mask names more personas than the block still holds", async () => {
+    const personas = makeBlockPersonas(SPOTLIGHT_PERSONA_PAGE_SIZE + 5);
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
+    // Second block holds five personas; a mask claiming a tenth bit cannot have come from it.
+    const mask = encodeSpotlightMask(1n << 9n);
+    let wrote = false;
+
+    const { dependencies } = makeDependencies([], {
+      loadGuildPersonas: async () => personas,
+      operations: {
+        ...personalConfigOperations,
+        setSpotlight: async () => {
+          wrote = true;
+          return { status: "success" };
+        },
+      },
+    });
+
+    const customId = buildPersonalConfigCustomId(
+      "spot-set-cf",
+      "en-US",
+      "123456789012345678",
+      0,
+      0,
+      1,
+      mask,
+      fp,
+      "nonce123456",
+    );
+    let repainted: unknown = null;
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repainted = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await createPersonalConfigInteractionRoute(dependencies).execute({} as Client, interaction, requireRoute(customId));
+
+    expect(wrote).toBe(false);
+    expect(JSON.stringify(repainted)).toContain("out of date");
+  });
+});
+
+describe("Raw modal component types and their option bounds", () => {
+  // Discord rejects a RadioGroup or CheckboxGroup outside 2-10 options with BASE_TYPE_BAD_LENGTH,
+  // while a StringSelect holds 25. `RawDiscordComponent.type` is a bare number, so nothing but a
+  // test distinguishes them: a catalog behind a RadioGroup type-checks and 400s at runtime.
+  const RADIO = 21;
+  const CHECKBOX = 22;
+  const STRING_SELECT = 3;
+
+  const assertBounds = (modal: { components: Array<{ component?: Record<string, unknown> }> }, label: string) => {
+    for (const row of modal.components) {
+      const component = row.component;
+      if (!component) continue;
+      const type = component.type as number;
+      const options = (component.options ?? []) as unknown[];
+      if (type === RADIO || type === CHECKBOX) {
+        expect(`${label}:${type}:${options.length}`).toBe(
+          `${label}:${type}:${Math.min(Math.max(options.length, 2), 10)}`,
+        );
+      }
+      if (type === STRING_SELECT) {
+        expect(options.length).toBeGreaterThanOrEqual(1);
+        expect(options.length).toBeLessThanOrEqual(25);
+      }
+    }
+  };
+
+  const manyModels = Array.from({ length: 25 }, (_, i) => ({
+    id: 1000 + i,
+    name: `provider/model-${i}`,
+    description: "d",
+  }));
+  const manyPersonas = Array.from({ length: 24 }, (_, i) => ({
+    id: 200 + i,
+    name: `Persona ${i}`,
+    isAlter: false,
+  }));
+
+  it("puts catalogs behind a StringSelect, never a RadioGroup", () => {
+    const model = buildModelSelectModal("en-US", "nonce123456", "text", "openrouter", manyModels, 1000);
+    const auto = buildSpotlightAutoTriggerModal(
+      "en-US",
+      "nonce123456",
+      "123456789012345678",
+      0,
+      0,
+      "1",
+      "a1b2c3d4",
+      manyPersonas,
+    );
+
+    expect(model.components[0]?.component?.type).toBe(STRING_SELECT);
+    expect(auto.components[0]?.component?.type).toBe(STRING_SELECT);
+    assertBounds(model, "model");
+    assertBounds(auto, "auto");
+  });
+
+  it("keeps every checkbox group between 2 and 10 options at awkward counts", () => {
+    // Eleven splits 6 and 5, not 10 and 1: a greedy split leaves a group Discord rejects.
+    for (const count of [2, 10, 11, 21, 41, 50]) {
+      const personas = Array.from({ length: count }, (_, i) => ({
+        id: 300 + i,
+        name: `P${i}`,
+        isAlter: false,
+      }));
+      const modal = buildSpotlightSetModal("en-US", "nonce123456", "123456789012345678", 0, 0, "a1b2c3d4", personas);
+      const sizes = modal.components.map((row) => ((row.component?.options ?? []) as unknown[]).length);
+      expect(`${count}:${sizes.join(",")}`).toBe(`${count}:${sizes.join(",")}`);
+      expect(sizes.reduce((a, b) => a + b, 0)).toBe(count);
+      for (const size of sizes) {
+        expect(size).toBeGreaterThanOrEqual(2);
+        expect(size).toBeLessThanOrEqual(10);
+      }
+    }
   });
 });

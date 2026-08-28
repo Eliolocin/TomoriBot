@@ -27,7 +27,12 @@ import {
   PROVIDERS_ROUTE_VERSION,
   type ProvidersRouteNamespace,
 } from "@/utils/discord/providersPanelCatalog";
-import { buildPanelContainer, buildPanelReceiptContainer, buildRangeChooserComponents } from "@/utils/discord/ui/panel";
+import {
+  buildPanelContainer,
+  buildPanelReceiptContainer,
+  buildRangeChooserComponents,
+  withLinePrefix,
+} from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import type { ImageEndpointSupports } from "@/utils/provider/customImageEndpointSupport";
 import {
@@ -1115,7 +1120,7 @@ ${localizer(locale, `commands.providers.remove_impact_${entry.kind}`, {
   if (readStatus === "stale") {
     components.push(buildRetryRow(locale, routeNamespace), {
       type: ComponentType.TextDisplay,
-      content: `-# ${localizer(locale, "commands.providers.stale_warning")}`,
+      content: withLinePrefix("-# ", localizer(locale, "commands.providers.stale_warning")),
     });
   }
   return buildPayload(components, input.receipt);

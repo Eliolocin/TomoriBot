@@ -30,7 +30,9 @@ import {
   buildPersonalMemoriesPanelPayload,
   buildPersonalMemoryModalFieldId,
   parsePersonalMemoryTags,
+  personaRepresentativeForLineage,
 } from "@/utils/discord/ui/personalMemoriesPanel";
+import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 import { showRoutedRawModal } from "@/utils/discord/ui/modals";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
 import { getMemoryLimits, validateMemoryContent } from "@/utils/misc/memoryLimits";
@@ -88,6 +90,11 @@ export interface PersonalMemoriesRouteDependencies {
     forceRefresh?: boolean,
   ): Promise<PersonalMemoriesScope | null>;
   loadMemories(userId: number, lineageId: number): Promise<PersonalMemoryRow[]>;
+  getMemoryCountsByLineage(userId: number): Promise<Map<number, number>>;
+  getPersonaAvatarUrl(
+    interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
+    persona: TomoriState,
+  ): Promise<string | null>;
   getStmCount(userDiscId: string): Promise<number>;
   operations: PersonalMemoriesOperations;
   recordAction(input: RecordPanelActionInput): void;
@@ -246,6 +253,32 @@ async function loadMemories(userId: number, lineageId: number): Promise<Personal
   return lineageId === 0 ? rows : rows.filter((m) => m.persona_lineage_id === lineageId);
 }
 
+function getMemoryCountsByLineage(userId: number): Promise<Map<number, number>> {
+  return personalMemoryRepository.memoryCountsByLineage(userId);
+}
+
+/**
+ * Avatar URL for one persona, or null when none is fetchable.
+ *
+ * A main persona has no stored avatar: it speaks as the bot, so its face is the bot's per-guild
+ * member avatar, which only the client knows. A local-path alter avatar resolves to null rather
+ * than a data URI, because a Components V2 Thumbnail can only load a URL Discord can fetch.
+ */
+async function getPersonaAvatarUrl(
+  interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
+  persona: TomoriState,
+): Promise<string | null> {
+  if (persona.is_alter) {
+    return resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url);
+  }
+  const avatarOptions = { size: 256, extension: "png", forceStatic: true } as const;
+  return (
+    interaction.guild?.members.me?.displayAvatarURL(avatarOptions) ??
+    interaction.client.user?.displayAvatarURL(avatarOptions) ??
+    resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url)
+  );
+}
+
 async function getStmCount(userDiscId: string): Promise<number> {
   await preWarmUserStmEntries(userDiscId);
   return getShortTermMemoriesForUser(userDiscId).length;
@@ -298,6 +331,13 @@ async function repaint(
   dependencies: PersonalMemoriesRouteDependencies = defaultDependencies,
 ): Promise<void> {
   const stmCount = category === "global" ? await dependencies.getStmCount(scope.userDiscId) : 0;
+  const memoryCountsByLineage =
+    category === "persona" ? await dependencies.getMemoryCountsByLineage(scope.userId) : undefined;
+  const representative =
+    category === "persona" ? personaRepresentativeForLineage(scope.personas, selectedLineageId) : null;
+  const selectedPersonaAvatarUrl = representative
+    ? await dependencies.getPersonaAvatarUrl(interaction, representative)
+    : undefined;
   await interaction.editReply(
     buildPersonalMemoriesPanelPayload({
       locale,
@@ -305,6 +345,8 @@ async function repaint(
       selectedLineageId,
       personas: scope.personas,
       memories,
+      memoryCountsByLineage,
+      selectedPersonaAvatarUrl,
       stmCount,
       privacyLevel: scope.privacyLevel,
       readStatus: scope.readStatus,
@@ -317,6 +359,8 @@ async function repaint(
 const defaultDependencies: PersonalMemoriesRouteDependencies = {
   resolveScope,
   loadMemories,
+  getMemoryCountsByLineage,
+  getPersonaAvatarUrl,
   getStmCount,
   operations: personalMemoriesOperations,
   recordAction: (input) => {

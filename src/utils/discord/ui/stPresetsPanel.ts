@@ -19,7 +19,12 @@ import {
   ST_PRESETS_ROUTE_NAMESPACE,
   ST_PRESETS_ROUTE_VERSION,
 } from "@/utils/discord/stPresetsPanelCatalog";
-import { buildPanelContainer, buildPanelReceiptContainer, buildRangeChooserComponents } from "@/utils/discord/ui/panel";
+import {
+  buildPanelContainer,
+  buildPanelReceiptContainer,
+  buildRangeChooserComponents,
+  withLinePrefix,
+} from "@/utils/discord/ui/panel";
 import { safeModalLocalizer, safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { localizer } from "@/utils/text/localizer";
 
@@ -318,7 +323,7 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
   if (readStatus === "stale") {
     components.push({ type: ComponentType.Separator, divider: true, spacing: 1 }, buildRetryRow(locale), {
       type: ComponentType.TextDisplay,
-      content: `-# ${localizer(locale, "commands.st-presets.stale_warning")}`,
+      content: withLinePrefix("-# ", localizer(locale, "commands.st-presets.stale_warning")),
     });
   }
 

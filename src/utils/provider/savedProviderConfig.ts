@@ -2,6 +2,7 @@ import type {
   CustomEndpointCapability,
   DiffusionModelRow,
   LlmRow,
+  PersonalProviderCapability,
   SavedProviderConfigRow,
   SavedProviderConfigUpsert,
   AssembledServerConfig,
@@ -224,7 +225,7 @@ export async function buildUserSavedProviderConfigFromExistingOrDefaults(params:
   baseConfig: AssembledServerConfig;
   existingConfig?: UserSavedProviderConfigRow | null;
   llmId?: number | null;
-  enabledCapabilities?: Array<"text" | "embedding" | "image" | "video" | "vision">;
+  enabledCapabilities?: PersonalProviderCapability[];
 }): Promise<UserSavedProviderConfigUpsert> {
   const normalizedProvider = params.provider.toLowerCase();
   const existingConfig = params.existingConfig ?? null;

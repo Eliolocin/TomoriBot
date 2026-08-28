@@ -48,6 +48,20 @@ export type RangeChooserComponentsOptions = RangeChooserComponentsBase &
     | { buildSegments: RangeChooserRouteSegments; baseSegments?: never }
   );
 
+/**
+ * Applies a Discord line marker to every line of `text`.
+ *
+ * `-#` and `>` are per-line markers, so a wrapped string behind a single leading marker renders
+ * only its first line styled. Panel prose carries its own line breaks to keep the container as
+ * narrow as the selects, which makes multi-line the normal case rather than the exception.
+ */
+export function withLinePrefix(prefix: string, text: string): string {
+  return text
+    .split("\n")
+    .map((line) => `${prefix}${line}`)
+    .join("\n");
+}
+
 export function buildPanelContainer(
   components: ComponentInContainerData[],
 ): ContainerComponentData<ComponentInContainerData> {

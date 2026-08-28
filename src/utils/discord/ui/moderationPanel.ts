@@ -33,7 +33,12 @@ import {
   type ServerMemberPermissionsCommandConfigState,
 } from "@/utils/discord/memberPermissionsConfigMapping";
 import { safeModalLocalizer, safeSelectOptionText } from "@/utils/discord/ui/modals";
-import { buildCategoryButtonRow, buildPanelContainer, buildPanelReceiptContainer } from "@/utils/discord/ui/panel";
+import {
+  buildCategoryButtonRow,
+  buildPanelContainer,
+  buildPanelReceiptContainer,
+  withLinePrefix,
+} from "@/utils/discord/ui/panel";
 import type {
   ModerationMemberAccessData,
   ModerationScopeData,
@@ -321,7 +326,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
               { type: ComponentType.Separator, divider: true, spacing: 1 },
               {
                 type: ComponentType.TextDisplay,
-                content: `-# ${localizer(locale, "commands.moderation.stale_warning")}`,
+                content: withLinePrefix("-# ", localizer(locale, "commands.moderation.stale_warning")),
               },
             );
           }
@@ -380,7 +385,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
               { type: ComponentType.Separator, divider: true, spacing: 1 },
               {
                 type: ComponentType.TextDisplay,
-                content: `-# ${localizer(locale, "commands.moderation.stale_warning")}`,
+                content: withLinePrefix("-# ", localizer(locale, "commands.moderation.stale_warning")),
               },
             );
           }
@@ -832,7 +837,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
       { type: ComponentType.Separator, divider: true, spacing: 1 },
       {
         type: ComponentType.TextDisplay,
-        content: `-# ${localizer(locale, "commands.moderation.stale_warning")}`,
+        content: withLinePrefix("-# ", localizer(locale, "commands.moderation.stale_warning")),
       },
     );
   }

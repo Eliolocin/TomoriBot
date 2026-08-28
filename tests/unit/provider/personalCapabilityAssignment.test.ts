@@ -185,6 +185,45 @@ describe("setPersonalCapabilityEnabled", () => {
     expect(providerOf(state.rows, "vision")).toEqual({ active: "google", assigned: "google" });
   });
 
+  it("disables and re-enables Standard and NAI Image independently without cross-talk", async () => {
+    const rows = [
+      makeRow({
+        provider: "openrouter",
+        diffusion_model_id: 10,
+        enabled_capabilities: ["image"],
+        assigned_capabilities: ["image"],
+      }),
+      makeRow({
+        provider: "novelai",
+        nai_diffusion_model_id: 20,
+        enabled_capabilities: ["image_nai"],
+        assigned_capabilities: ["image_nai"],
+      }),
+    ];
+    const state = stubRepo(rows);
+
+    expect(providerOf(state.rows, "image")).toEqual({ active: "openrouter", assigned: "openrouter" });
+    expect(providerOf(state.rows, "image_nai")).toEqual({ active: "novelai", assigned: "novelai" });
+
+    await setPersonalCapabilityEnabled(1, "image_nai", false);
+    expect(providerOf(state.rows, "image")).toEqual({ active: "openrouter", assigned: "openrouter" });
+    expect(providerOf(state.rows, "image_nai")).toEqual({ active: null, assigned: "novelai" });
+    expect(state.rows.find((r) => r.provider === "novelai")?.nai_diffusion_model_id).toBe(20);
+    expect(state.rows.find((r) => r.provider === "openrouter")?.diffusion_model_id).toBe(10);
+
+    await setPersonalCapabilityEnabled(1, "image", false);
+    expect(providerOf(state.rows, "image")).toEqual({ active: null, assigned: "openrouter" });
+    expect(providerOf(state.rows, "image_nai")).toEqual({ active: null, assigned: "novelai" });
+
+    await setPersonalCapabilityEnabled(1, "image_nai", true);
+    expect(providerOf(state.rows, "image")).toEqual({ active: null, assigned: "openrouter" });
+    expect(providerOf(state.rows, "image_nai")).toEqual({ active: "novelai", assigned: "novelai" });
+
+    await setPersonalCapabilityEnabled(1, "image", true);
+    expect(providerOf(state.rows, "image")).toEqual({ active: "openrouter", assigned: "openrouter" });
+    expect(providerOf(state.rows, "image_nai")).toEqual({ active: "novelai", assigned: "novelai" });
+  });
+
   it("reports failure when no row could serve the capability", async () => {
     const state = stubRepo([makeRow({ provider: "anthropic" })]);
 

@@ -26,7 +26,9 @@ export function hasConfiguredPersonalModel(
     case "embedding":
       return row.embedding_model_id !== null;
     case "image":
-      return row.diffusion_model_id !== null || row.nai_diffusion_model_id !== null;
+      return row.diffusion_model_id !== null;
+    case "image_nai":
+      return row.nai_diffusion_model_id !== null;
     case "video":
       return row.video_model_id !== null;
     case "vision":
@@ -82,30 +84,15 @@ export function getStoredPersonalProviderForCapability(
  * Whether writing a model for `capability` would newly move it off the server default and onto a
  * personal override.
  *
- * A personal override follows the user into every server, so that transition is the one operation
- * worth confirming before the write. Switching models or providers inside an override that is
- * already active changes nothing about scope and must not prompt again.
+ * Only the legacy `/personal provider model-*` leaves still gate on this. `/personal config` writes
+ * on modal submit, because the submit already is the decision. Switching models or providers inside
+ * an override that is already active changes nothing about scope either way.
  */
 export function activatesNewPersonalOverride(
   rows: UserSavedProviderConfigRow[],
   capability: PersonalProviderCapability,
 ): boolean {
   return getActivePersonalProviderForCapability(rows, capability) === null;
-}
-
-/**
- * The capabilities a `toggle-models` submission moves from the server default onto a personal
- * override. Capabilities being switched off are deliberately excluded: unchecking already
- * expresses that intent through the submitted modal.
- */
-export function findNewlyEnabledPersonalCapabilities(
-  rows: UserSavedProviderConfigRow[],
-  selected: ReadonlySet<PersonalProviderCapability>,
-  capabilities: readonly PersonalProviderCapability[],
-): PersonalProviderCapability[] {
-  return capabilities.filter(
-    (capability) => selected.has(capability) && activatesNewPersonalOverride(rows, capability),
-  );
 }
 
 /**
@@ -134,11 +121,14 @@ export async function resolveActivePersonalProviderModelSelections(
       return model ? [{ model: model.codename, provider: row.provider }] : [];
     }
     case "image": {
-      const modelIds = [row.diffusion_model_id, row.nai_diffusion_model_id].filter(
-        (modelId): modelId is number => typeof modelId === "number",
-      );
-      const models = await Promise.all(modelIds.map((modelId) => llmModelRepo.loadDiffusionModelById(modelId)));
-      return models.flatMap((model) => (model ? [{ model: model.codename, provider: row.provider }] : []));
+      const model = row.diffusion_model_id ? await llmModelRepo.loadDiffusionModelById(row.diffusion_model_id) : null;
+      return model ? [{ model: model.codename, provider: row.provider }] : [];
+    }
+    case "image_nai": {
+      const model = row.nai_diffusion_model_id
+        ? await llmModelRepo.loadDiffusionModelById(row.nai_diffusion_model_id)
+        : null;
+      return model ? [{ model: model.codename, provider: row.provider }] : [];
     }
     case "video": {
       const model = row.video_model_id ? await llmModelRepo.loadVideoGenerationModelById(row.video_model_id) : null;

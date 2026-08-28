@@ -145,7 +145,7 @@ describe("providers panel rendering", () => {
     expect(serialized).toContain("## Server Providers");
     expect(serialized).not.toContain("## Personal Providers");
     expect(serialized).toContain("No Saved Providers");
-    expect(serialized).toContain("**Select** or **add** a provider or endpoint using the dropdown below.");
+    expect(serialized).toContain("**Select** or **add** a provider or endpoint");
     expect(serialized).toContain("+ Add New Provider");
     expect(serialized).toContain("+ Add New Custom Endpoint");
     expect(serialized).toContain("`/model text`");

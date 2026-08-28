@@ -66,8 +66,9 @@ function mapCapabilityToPersonalCapability(capability: Capability): PersonalProv
     case "embedding":
       return "embedding";
     case "image-standard":
-    case "image-nai":
       return "image";
+    case "image-nai":
+      return "image_nai";
     case "video":
       return "video";
     case "vision":

@@ -546,7 +546,7 @@ describe("moderationPanel UI rendering", () => {
     expect(serialized).toContain("**Persona User Blocks**");
     expect(serialized).toContain("No active persona user blocks.");
     expect(serialized).not.toContain("> No active persona");
-    expect(serialized).not.toContain("The following members have persona-specific interaction restrictions:");
+    expect(serialized).not.toContain("The following members have persona-specific");
     expect(serialized).not.toContain("•");
     expect(serialized).toContain("+ Add Blacklist");
     expect(serialized).toContain("- Remove Blacklist");
@@ -588,7 +588,7 @@ describe("moderationPanel UI rendering", () => {
     expect(serialized).not.toContain("(`p-user-1`)");
     expect(serialized).not.toContain("(`p-user-2`)");
     expect(serialized).toContain("**Persona User Blocks**");
-    expect(serialized).toContain("The following members have persona-specific interaction restrictions:");
+    expect(serialized).toContain("The following members have persona-specific");
     expect(serialized).toContain("> <@block-user-1> for **Tomori** (mute)");
     expect(serialized).not.toContain("(`block-user-1`)");
     expect(serialized).not.toContain("—");
@@ -630,7 +630,7 @@ describe("moderationPanel UI rendering", () => {
     expect(serialized).not.toContain("I do not load personal memories or saved names for these members:");
     expect(serialized).toContain("No members blacklisted from personalization.");
     expect(serialized).toContain("**Persona User Blocks**");
-    expect(serialized).toContain("The following members have persona-specific interaction restrictions:");
+    expect(serialized).toContain("The following members have persona-specific");
     expect(serialized).toContain("> <@block-user-1> for **Tomori** (mute)");
     expect(serialized).not.toContain("No active persona user blocks.");
   });
@@ -658,7 +658,7 @@ describe("moderationPanel UI rendering", () => {
     expect(serialized).not.toContain("(`user-1`)");
     expect(serialized).not.toContain("(`user-10`)");
     expect(serialized).not.toContain("user-11");
-    expect(serialized).not.toContain("The following members have persona-specific interaction restrictions:");
+    expect(serialized).not.toContain("The following members have persona-specific");
     expect(serialized).toContain("No active persona user blocks.");
     expect(serialized).toContain("Page 1 of 2");
     expect(serialized).toContain("moderation:v1:range:en-US:user-blacklist:none:1");
@@ -707,7 +707,7 @@ describe("moderationPanel UI rendering", () => {
     expect(page1Serialized).not.toContain("p-user-12");
 
     expect(page1Serialized).toContain("**Persona User Blocks**");
-    expect(page1Serialized).toContain("The following members have persona-specific interaction restrictions:");
+    expect(page1Serialized).toContain("The following members have persona-specific");
     expect(page1Serialized).not.toContain("<@block-user-1>");
     expect(page1Serialized).not.toContain("No active persona user blocks.");
     expect(page1Serialized).toContain("Page 1 of 2");
@@ -733,7 +733,7 @@ describe("moderationPanel UI rendering", () => {
     expect(page2Serialized).not.toContain("No members blacklisted from personalization.");
 
     expect(page2Serialized).toContain("**Persona User Blocks**");
-    expect(page2Serialized).toContain("The following members have persona-specific interaction restrictions:");
+    expect(page2Serialized).toContain("The following members have persona-specific");
     expect(page2Serialized).toContain("> <@block-user-1> for **Tomori** (mute)");
     expect(page2Serialized).not.toContain("(`block-user-1`)");
     expect(page2Serialized).not.toContain("—");
@@ -1454,7 +1454,7 @@ describe("moderationPanel UI rendering", () => {
 
       expect(lastComp.type).toBe(ComponentType.TextDisplay);
       expect(lastComp.content).toBe(
-        "-# Saved data may be out of date because the read failed. Write actions are unavailable until a fresh read succeeds.",
+        "-# Saved data may be out of date because the read failed.\n-# Write actions are unavailable until a fresh read succeeds.",
       );
 
       expect(bottomSeparatorComp.type).toBe(ComponentType.Separator);
@@ -1582,9 +1582,7 @@ describe("moderationPanel UI rendering", () => {
 
     const serialized = JSON.stringify(payload);
     expect(serialized).toContain("### Remove Blacklisted Member");
-    expect(serialized).toContain(
-      "Remove <@p-user-1> from the personalization blacklist? I will resume loading personal memories and saved names for this member.",
-    );
+    expect(serialized).toContain("Remove <@p-user-1> from the personalization blacklist?");
     expect(serialized).toContain("moderation:v1:user-blacklist-remove-confirm:en-US:personalization:p-user-1");
     expect(serialized).toContain("moderation:v1:user-blacklist-remove-cancel:en-US");
     expect(serialized).not.toContain("### Blacklisted Members");
@@ -1619,7 +1617,7 @@ describe("moderationPanel UI rendering", () => {
 
     const serialized = JSON.stringify(payload);
     expect(serialized).toContain("### Remove Blacklisted Member");
-    expect(serialized).toContain("Remove the interaction restriction for <@b-user-1> on **Anon** (mute)?");
+    expect(serialized).toContain("Remove the interaction restriction for <@b-user-1> on");
     expect(serialized).toContain("moderation:v1:user-blacklist-remove-confirm:en-US:persona-block:2:b-user-1");
     expect(serialized).toContain("moderation:v1:user-blacklist-remove-cancel:en-US");
   });

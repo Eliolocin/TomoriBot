@@ -192,6 +192,8 @@ export default {
         video_workflow_edit_title: `Edit Video Workflow`,
         model_name_label: `Model Name (Exact API ID)`,
         model_name_placeholder: `Exact ID sent in API requests, e.g. deepseek-v4-flash, qwen-chat, gemma3:latest`,
+        display_name_label: `Display Name`,
+        display_name_placeholder: `Uses the model name when omitted`,
         num_ctx_label: `Context Window Override`,
         num_ctx_placeholder: `e.g. 8192 (leave blank for endpoint default)`,
         text_capabilities_label: `Enabled Capabilities`,

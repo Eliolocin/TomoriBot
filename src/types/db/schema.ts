@@ -1579,7 +1579,7 @@ export type SavedProviderConfigRow = z.infer<typeof savedProviderConfigSchema>;
  */
 export type SavedProviderConfigUpsert = Omit<SavedProviderConfigRow, "saved_config_id" | "saved_at" | "updated_at">;
 
-export const personalProviderCapabilitySchema = z.enum(["text", "embedding", "image", "video", "vision"]);
+export const personalProviderCapabilitySchema = z.enum(["text", "embedding", "image", "image_nai", "video", "vision"]);
 export type PersonalProviderCapability = z.infer<typeof personalProviderCapabilitySchema>;
 
 /**

@@ -30,15 +30,32 @@ import {
 } from "@/types/personaNaming";
 import {
   buildPersonalConfigCustomId,
+  buildPersonalConfigSegments,
   DEFAULT_PAGE_FOR_CATEGORY,
+  PERSONAL_CONFIG_ROUTE_NAMESPACE,
+  PERSONAL_CONFIG_ROUTE_VERSION,
+  PERSONAL_FALLBACK_PAGE_SIZE,
+  PERSONAL_MODEL_PAGE_SIZE,
+  PERSONAL_PROVIDER_DIRECT_LIMIT,
+  PERSONAL_PROVIDER_PAGE_SIZE,
+  PERSONAL_PROVIDER_RANGE_VALUE,
+  QUICK_TOGGLE_CAPABILITIES,
+  SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE,
+  SPOTLIGHT_PERSONA_PAGE_SIZE,
   SPOTLIGHT_REMOVE_PAGE_SIZE,
   encodeProviderParam,
   type PersonalConfigCategory,
   type PersonalConfigManagedCapability,
   type PersonalConfigPage,
 } from "@/utils/discord/personalConfigPanelCatalog";
-import { buildCategoryButtonRow, buildPanelContainer, buildPanelReceiptContainer } from "@/utils/discord/ui/panel";
+import {
+  buildCategoryButtonRow,
+  buildPanelContainer,
+  buildPanelReceiptContainer,
+  buildRangeChooserComponents,
+} from "@/utils/discord/ui/panel";
 import { safeModalLocalizer, safeSelectOptionText } from "@/utils/discord/ui/modals";
+import { buildModelRoutingControl } from "@/utils/discord/ui/modelRoutingControls";
 import { escapeDiscordMarkdown } from "@/utils/discord/interactions/panelController";
 import { formatImageTagsForModalValue, TAGS_MODAL_MAX_LENGTH } from "@/utils/image/tagHelpers";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
@@ -69,35 +86,52 @@ export type PersonalConfigPanelView =
       totalOptions: number;
     }
   | {
-      kind: "fallbacks-range";
-      provider: string;
+      kind: "model-provider-range";
+      capability: PersonalConfigManagedCapability;
       rangePage: number;
       totalOptions: number;
     }
   | {
-      kind: "model-activate-confirm";
+      kind: "model-provider-page";
       capability: PersonalConfigManagedCapability;
-      provider: string;
-      modelId: number;
-      modelName: string;
-      nonce: string;
+      start: number;
     }
   | {
-      kind: "quick-toggle-confirm";
-      mask: string;
-      newlyEnabledCaps: PersonalProviderCapability[];
-      nonce: string;
+      kind: "fallbacks-range";
+      provider: string;
+      rangePage: number;
+      totalOptions: number;
     }
   | { kind: "impersonation-clear-confirm"; nonce: string }
   | {
       kind: "spotlight-set-review";
       channelId: string;
       hours: number;
+      blockIdx: number;
       selectedPersonaIds: number[];
       autoTriggerPersonaId: number | null;
+      autoIdx: number;
       mask: string;
       fp: string;
       nonce: string;
+    }
+  | {
+      kind: "spotlight-persona-select";
+      channelId: string;
+      hours: number;
+      fp: string;
+      totalPersonas: number;
+      chooserPage: number;
+    }
+  | {
+      kind: "spotlight-auto-range";
+      channelId: string;
+      hours: number;
+      blockIdx: number;
+      mask: string;
+      fp: string;
+      rangePage: number;
+      totalOptions: number;
     }
   | {
       kind: "spotlight-remove-range";
@@ -521,16 +555,18 @@ export function buildQuickToggleModal(
   savedProviders: UserSavedProviderConfigRow[],
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   const textActive = Boolean(getActivePersonalProviderForCapability(savedProviders, "text"));
+  const visionActive = Boolean(getActivePersonalProviderForCapability(savedProviders, "vision"));
   const embedActive = Boolean(getActivePersonalProviderForCapability(savedProviders, "embedding"));
   const imageActive = Boolean(getActivePersonalProviderForCapability(savedProviders, "image"));
+  const imageNaiActive = Boolean(getActivePersonalProviderForCapability(savedProviders, "image_nai"));
   const videoActive = Boolean(getActivePersonalProviderForCapability(savedProviders, "video"));
-  const visionActive = Boolean(getActivePersonalProviderForCapability(savedProviders, "vision"));
 
   const textStored = getStoredPersonalProviderForCapability(savedProviders, "text");
+  const visionStored = getStoredPersonalProviderForCapability(savedProviders, "vision");
   const embedStored = getStoredPersonalProviderForCapability(savedProviders, "embedding");
   const imageStored = getStoredPersonalProviderForCapability(savedProviders, "image");
+  const imageNaiStored = getStoredPersonalProviderForCapability(savedProviders, "image_nai");
   const videoStored = getStoredPersonalProviderForCapability(savedProviders, "video");
-  const visionStored = getStoredPersonalProviderForCapability(savedProviders, "vision");
 
   const getDesc = (stored: UserSavedProviderConfigRow | null): string =>
     stored
@@ -554,7 +590,7 @@ export function buildQuickToggleModal(
           type: 22,
           custom_id: buildPersonalConfigModalFieldId("capabilities", nonce),
           min_values: 0,
-          max_values: 5,
+          max_values: 6,
           required: false,
           options: [
             {
@@ -564,6 +600,12 @@ export function buildQuickToggleModal(
               default: textActive,
             },
             {
+              value: "vision",
+              label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_vision"), 100),
+              description: safeSelectOptionText(getDesc(visionStored), 100),
+              default: visionActive,
+            },
+            {
               value: "embedding",
               label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_embedding"), 100),
               description: safeSelectOptionText(getDesc(embedStored), 100),
@@ -571,21 +613,21 @@ export function buildQuickToggleModal(
             },
             {
               value: "image",
-              label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_image"), 100),
+              label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_image_standard"), 100),
               description: safeSelectOptionText(getDesc(imageStored), 100),
               default: imageActive,
+            },
+            {
+              value: "image_nai",
+              label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_image_nai"), 100),
+              description: safeSelectOptionText(getDesc(imageNaiStored), 100),
+              default: imageNaiActive,
             },
             {
               value: "video",
               label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_video"), 100),
               description: safeSelectOptionText(getDesc(videoStored), 100),
               default: videoActive,
-            },
-            {
-              value: "vision",
-              label: safeSelectOptionText(localizer(locale, "commands.personal.config.routing_vision"), 100),
-              description: safeSelectOptionText(getDesc(visionStored), 100),
-              default: visionActive,
             },
           ],
         },
@@ -602,11 +644,8 @@ export function buildModelSelectModal(
   availableModels: Array<{ id: number; name: string; description?: string }>,
   currentModelId: number | null,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
-  const capName = localizer(
-    locale,
-    `commands.personal.config.routing_${capability === "image_nai" ? "image_nai" : capability === "image" ? "image_standard" : capability}`,
-  );
-  const options = availableModels.slice(0, 25).map((m) => ({
+  const capName = localizer(locale, ROUTING_CAPABILITY_LOCALE_KEYS[capability]);
+  const options = availableModels.slice(0, PERSONAL_MODEL_PAGE_SIZE).map((m) => ({
     value: String(m.id),
     label: safeSelectOptionText(m.name, 100),
     description: m.description ? safeSelectOptionText(m.description, 100) : undefined,
@@ -636,9 +675,11 @@ export function buildModelSelectModal(
           100,
         ),
         component: {
-          type: 21,
+          type: 3,
           custom_id: buildPersonalConfigModalFieldId("model", nonce),
           required: true,
+          min_values: 1,
+          max_values: 1,
           options,
         },
       },
@@ -872,7 +913,7 @@ export function buildFallbacksModal(
         description: safeSelectOptionText(localizer(locale, "commands.personal.config.fallback_none_desc"), 100),
         default: currentRefKey === null,
       },
-      ...availableOptions.slice(0, 24).map((opt) => ({
+      ...availableOptions.slice(0, PERSONAL_FALLBACK_PAGE_SIZE).map((opt) => ({
         value: opt.refKey,
         label: safeSelectOptionText(opt.label, 100),
         default: currentRefKey === opt.refKey,
@@ -887,9 +928,11 @@ export function buildFallbacksModal(
         100,
       ),
       component: {
-        type: 21,
+        type: 3,
         custom_id: buildPersonalConfigModalFieldId(`slot_${slot}`, nonce),
         required: false,
+        min_values: 0,
+        max_values: 1,
         options,
       },
     });
@@ -932,48 +975,87 @@ export function buildImpersonationModal(
   };
 }
 
+/**
+ * Channel and duration take their own step so the persona modal that follows gets all five of
+ * Discord's modal components as checkbox groups. A modal submit cannot open another modal, so the
+ * persona step is reached through the message in between rather than directly from here.
+ */
+/**
+ * Splits items into checkbox groups of at most ten. Sizes are balanced rather than greedy because a
+ * greedy split leaves a remainder group of one, and Discord rejects a modal choice component holding
+ * fewer than two options.
+ */
+function chunkForCheckboxGroups<T>(items: readonly T[], maxGroups: number): T[][] {
+  const groupCount = Math.min(maxGroups, Math.max(1, Math.ceil(items.length / 10)));
+  const base = Math.floor(items.length / groupCount);
+  const remainder = items.length % groupCount;
+
+  const groups: T[][] = [];
+  let cursor = 0;
+  for (let g = 0; g < groupCount; g += 1) {
+    const size = base + (g < remainder ? 1 : 0);
+    if (size === 0) break;
+    groups.push(items.slice(cursor, cursor + size));
+    cursor += size;
+  }
+  return groups;
+}
+
+export function buildSpotlightStep1Modal(
+  locale: string,
+  nonce: string,
+): { custom_id: string; title: string; components: RawDiscordComponent[] } {
+  return {
+    custom_id: buildPersonalConfigCustomId("spotlight-set-step1", locale, nonce),
+    title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_set_modal_title"), 45),
+    components: [
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_channel_label"), 45),
+        description: safeModalLocalizer(locale, "commands.personal.config.spotlight_channel_desc"),
+        component: {
+          type: 8,
+          custom_id: buildPersonalConfigModalFieldId("channel", nonce),
+          channel_types: [ChannelType.GuildText],
+          min_values: 1,
+          max_values: 1,
+          required: true,
+        },
+      },
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_hours_label"), 45),
+        description: safeModalLocalizer(locale, "commands.personal.config.spotlight_hours_desc"),
+        component: {
+          type: 4,
+          custom_id: buildPersonalConfigModalFieldId("hours", nonce),
+          style: TextInputStyle.Short,
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.personal.config.spotlight_hours_placeholder"),
+            100,
+          ),
+          max_length: 6,
+          required: true,
+          value: "0",
+        },
+      },
+    ],
+  };
+}
+
 export function buildSpotlightSetModal(
   locale: string,
   nonce: string,
+  channelId: string,
+  hours: number,
+  blockIdx: number,
   fp: string,
   personas: Array<{ id: number; name: string; isAlter: boolean }>,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
-  const components: RawDiscordComponent[] = [
-    {
-      type: 18,
-      label: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_channel_label"), 45),
-      description: safeModalLocalizer(locale, "commands.personal.config.spotlight_channel_desc"),
-      component: {
-        type: 8,
-        custom_id: buildPersonalConfigModalFieldId("channel", nonce),
-        channel_types: [ChannelType.GuildText],
-        min_values: 1,
-        max_values: 1,
-        required: true,
-      },
-    },
-    {
-      type: 18,
-      label: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_hours_label"), 45),
-      description: safeModalLocalizer(locale, "commands.personal.config.spotlight_hours_desc"),
-      component: {
-        type: 4,
-        custom_id: buildPersonalConfigModalFieldId("hours", nonce),
-        style: TextInputStyle.Short,
-        placeholder: safeSelectOptionText(
-          localizer(locale, "commands.personal.config.spotlight_hours_placeholder"),
-          100,
-        ),
-        max_length: 6,
-        required: true,
-        value: "0",
-      },
-    },
-  ];
+  const components: RawDiscordComponent[] = [];
 
-  const maxGroups = 3;
-  for (let g = 0; g < maxGroups && g * 10 < personas.length; g++) {
-    const chunk = personas.slice(g * 10, (g + 1) * 10);
+  const personaGroups = chunkForCheckboxGroups(personas, SPOTLIGHT_PERSONA_PAGE_SIZE / 10);
+  for (const [g, chunk] of personaGroups.entries()) {
     components.push({
       type: 18,
       label: safeSelectOptionText(
@@ -1011,7 +1093,7 @@ export function buildSpotlightSetModal(
   }
 
   return {
-    custom_id: buildPersonalConfigCustomId("spotlight-set-submit", locale, fp, nonce),
+    custom_id: buildPersonalConfigCustomId("spotlight-set-submit", locale, channelId, hours, blockIdx, fp, nonce),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_set_modal_title"), 45),
     components,
   };
@@ -1022,6 +1104,7 @@ export function buildSpotlightAutoTriggerModal(
   nonce: string,
   channelId: string,
   hours: number,
+  blockIdx: number,
   mask: string,
   fp: string,
   selectedPersonas: Array<{ id: number; name: string; isAlter: boolean }>,
@@ -1032,7 +1115,7 @@ export function buildSpotlightAutoTriggerModal(
       label: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_auto_none"), 100),
       default: true,
     },
-    ...selectedPersonas.slice(0, 24).map((p) => ({
+    ...selectedPersonas.map((p) => ({
       value: String(p.id),
       label: safeSelectOptionText(p.name, 100),
       description: safeSelectOptionText(
@@ -1048,7 +1131,7 @@ export function buildSpotlightAutoTriggerModal(
   ];
 
   return {
-    custom_id: buildPersonalConfigCustomId("spot-set-auto-sub", locale, channelId, hours, mask, fp, nonce),
+    custom_id: buildPersonalConfigCustomId("spot-set-auto-sub", locale, channelId, hours, blockIdx, mask, fp, nonce),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_auto_modal_title"), 45),
     components: [
       {
@@ -1056,9 +1139,11 @@ export function buildSpotlightAutoTriggerModal(
         label: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_auto_select_label"), 45),
         description: safeModalLocalizer(locale, "commands.personal.config.spotlight_auto_select_desc"),
         component: {
-          type: 21,
+          type: 3,
           custom_id: buildPersonalConfigModalFieldId("auto_trigger", nonce),
           required: true,
+          min_values: 1,
+          max_values: 1,
           options,
         },
       },
@@ -1078,8 +1163,8 @@ export function buildSpotlightRemoveModal(
   const personaMap = new Map(personas.map((p) => [p.id, p.name]));
   const components: RawDiscordComponent[] = [];
 
-  for (let g = 0; g < 5 && g * 10 < activeSpotlights.length; g++) {
-    const chunk = activeSpotlights.slice(g * 10, (g + 1) * 10);
+  const removalGroups = chunkForCheckboxGroups(activeSpotlights, SPOTLIGHT_REMOVE_PAGE_SIZE / 10);
+  for (const [g, chunk] of removalGroups.entries()) {
     components.push({
       type: 18,
       label: safeSelectOptionText(
@@ -1242,199 +1327,184 @@ function getPageOptionsForCategory(
   }
 }
 
+/**
+ * Literal locale key per routing capability. Keep these literal: `check-locales` only sees
+ * dot-notation string literals, so a composed key resolves to raw text with every gate green.
+ */
+export const ROUTING_CAPABILITY_LOCALE_KEYS: Record<PersonalProviderCapability, string> = {
+  text: "commands.personal.config.routing_text",
+  vision: "commands.personal.config.routing_vision",
+  embedding: "commands.personal.config.routing_embedding",
+  image: "commands.personal.config.routing_image_standard",
+  image_nai: "commands.personal.config.routing_image_nai",
+  video: "commands.personal.config.routing_video",
+};
+
 function renderPanelView(
   input: PersonalConfigPanelRenderInput,
   view: Exclude<PersonalConfigPanelView, { kind: "main" }>,
 ): ComponentInContainerData[] {
   const locale = input.locale;
   switch (view.kind) {
-    case "model-activate-confirm": {
-      const capName = localizer(
-        locale,
-        `commands.personal.config.routing_${view.capability === "image_nai" ? "image_nai" : view.capability === "image" ? "image_standard" : view.capability}`,
-      );
-      return [
-        {
-          type: ComponentType.TextDisplay,
-          content: `### ${localizer(locale, "commands.personal.provider.activation_confirm_title")}`,
-        },
-        {
-          type: ComponentType.TextDisplay,
-          content: localizer(locale, "commands.personal.provider.activation_confirm_description", {
-            capability: capName,
-            provider: getProviderDisplayName(view.provider),
-            model: view.modelName,
-          }),
-        },
-        {
-          type: ComponentType.ActionRow,
-          components: [
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Success,
-              customId: buildPersonalConfigCustomId(
-                "model-act-confirm",
-                locale,
-                view.capability,
-                encodeProviderParam(view.provider),
-                view.modelId,
-                view.nonce,
-              ),
-              label: localizer(locale, "commands.personal.provider.activation_confirm_continue"),
-            },
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Danger,
-              customId: buildPersonalConfigCustomId("model-act-cancel", locale),
-              label: localizer(locale, "commands.personal.provider.activation_confirm_cancel"),
-            },
-          ],
-        },
-      ];
-    }
-    case "quick-toggle-confirm": {
-      const newlyEnabledText = view.newlyEnabledCaps
-        .map((cap) => `• **${localizer(locale, `commands.personal.provider.capability_${cap}`)}**`)
-        .join("\n");
-      return [
-        {
-          type: ComponentType.TextDisplay,
-          content: `### ${localizer(locale, "commands.personal.provider.toggle-models.confirm_title")}`,
-        },
-        {
-          type: ComponentType.TextDisplay,
-          content: localizer(locale, "commands.personal.provider.toggle-models.confirm_description", {
-            newly_enabled: newlyEnabledText,
-          }),
-        },
-        {
-          type: ComponentType.ActionRow,
-          components: [
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Success,
-              customId: buildPersonalConfigCustomId("quick-toggle-confirm", locale, view.mask, view.nonce),
-              label: localizer(locale, "commands.personal.provider.activation_confirm_continue"),
-            },
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Danger,
-              customId: buildPersonalConfigCustomId("quick-toggle-cancel", locale),
-              label: localizer(locale, "commands.personal.provider.activation_confirm_cancel"),
-            },
-          ],
-        },
-      ];
-    }
     case "model-range": {
-      const capName = localizer(
-        locale,
-        `commands.personal.config.routing_${view.capability === "image_nai" ? "image_nai" : view.capability === "image" ? "image_standard" : view.capability}`,
-      );
-      const totalRanges = Math.ceil(view.totalOptions / 25);
-      const startRange = view.rangePage * 5;
-      const endRange = Math.min(startRange + 5, totalRanges);
-
-      const buttons: ButtonComponentData[] = [];
-      for (let r = startRange; r < endRange; r++) {
-        const start = r * 25 + 1;
-        const end = Math.min((r + 1) * 25, view.totalOptions);
-        buttons.push({
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildPersonalConfigCustomId(
-            "model-range-open",
-            locale,
-            view.capability,
-            encodeProviderParam(view.provider),
-            r * 25,
-          ),
-          label: `${start} - ${end}`,
-        });
-      }
-
-      const rows: ActionRowData<ButtonComponentData>[] = [];
-      if (buttons.length > 0) {
-        rows.push({
-          type: ComponentType.ActionRow,
-          components: buttons,
-        });
-      }
-
-      const navButtons: ButtonComponentData[] = [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Danger,
-          customId: buildPersonalConfigCustomId("model-act-cancel", locale),
-          label: localizer(locale, "general.pagination.cancel"),
-        },
-      ];
-
-      rows.push({
-        type: ComponentType.ActionRow,
-        components: navButtons,
-      });
-
+      const capName = localizer(locale, ROUTING_CAPABILITY_LOCALE_KEYS[view.capability]);
       return [
         {
           type: ComponentType.TextDisplay,
           content: `### ${localizer(locale, "commands.personal.config.model_range_title", { capability: capName })}
 ${localizer(locale, "commands.personal.config.model_range_desc", { provider: getProviderDisplayName(view.provider) })}`,
         },
-        ...rows,
+        ...buildRangeChooserComponents({
+          locale,
+          totalCount: view.totalOptions,
+          pageSize: PERSONAL_MODEL_PAGE_SIZE,
+          chooserPage: view.rangePage,
+          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
+          version: PERSONAL_CONFIG_ROUTE_VERSION,
+          buildSegments: {
+            range: (rangeIndex) =>
+              buildPersonalConfigSegments(
+                "model-range-open",
+                locale,
+                view.capability,
+                encodeProviderParam(view.provider),
+                rangeIndex * PERSONAL_MODEL_PAGE_SIZE,
+              ),
+            previous: (targetPage) =>
+              buildPersonalConfigSegments(
+                "model-range-page",
+                locale,
+                view.capability,
+                encodeProviderParam(view.provider),
+                targetPage,
+              ),
+            next: (targetPage) =>
+              buildPersonalConfigSegments(
+                "model-range-page",
+                locale,
+                view.capability,
+                encodeProviderParam(view.provider),
+                targetPage,
+              ),
+            cancel: () => buildPersonalConfigSegments("model-act-cancel", locale),
+          },
+        }),
+      ];
+    }
+    case "model-provider-range": {
+      const capName = localizer(locale, ROUTING_CAPABILITY_LOCALE_KEYS[view.capability]);
+      return [
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "general.pagination.select_page_title")}\n**${capName}**`,
+        },
+        ...buildRangeChooserComponents({
+          locale,
+          totalCount: view.totalOptions,
+          pageSize: PERSONAL_PROVIDER_PAGE_SIZE,
+          chooserPage: view.rangePage,
+          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
+          version: PERSONAL_CONFIG_ROUTE_VERSION,
+          buildSegments: {
+            range: (rangeIndex) =>
+              buildPersonalConfigSegments(
+                "model-provider-range-open",
+                locale,
+                view.capability,
+                rangeIndex * PERSONAL_PROVIDER_PAGE_SIZE,
+              ),
+            previous: (targetPage) =>
+              buildPersonalConfigSegments("model-provider-range-page", locale, view.capability, targetPage),
+            next: (targetPage) =>
+              buildPersonalConfigSegments("model-provider-range-page", locale, view.capability, targetPage),
+            cancel: () => buildPersonalConfigSegments("model-act-cancel", locale),
+          },
+        }),
+      ];
+    }
+    case "model-provider-page": {
+      const capName = localizer(locale, ROUTING_CAPABILITY_LOCALE_KEYS[view.capability]);
+      const providers =
+        input.modelDisplayInfo?.eligibleProvidersForCapability[view.capability].slice(
+          view.start,
+          view.start + PERSONAL_PROVIDER_PAGE_SIZE,
+        ) ?? [];
+      return [
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.personal.config.manage_capability_heading", {
+            capability: capName,
+          })}`,
+        },
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.StringSelect,
+              customId: buildPersonalConfigCustomId("model-provider-select", locale, view.capability),
+              placeholder: safeSelectOptionText(
+                localizer(locale, "commands.personal.config.choose_model_placeholder"),
+                150,
+              ),
+              options: providers.map((provider) => ({
+                value: encodeProviderParam(provider),
+                label: safeSelectOptionText(getProviderDisplayName(provider), 100),
+              })),
+            },
+          ],
+        },
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Danger,
+              customId: buildPersonalConfigCustomId("model-act-cancel", locale),
+              label: localizer(locale, "general.pagination.cancel"),
+            },
+          ],
+        },
       ];
     }
     case "fallbacks-range": {
-      const totalRanges = Math.ceil(view.totalOptions / 24);
-      const startRange = view.rangePage * 5;
-      const endRange = Math.min(startRange + 5, totalRanges);
-
-      const buttons: ButtonComponentData[] = [];
-      for (let r = startRange; r < endRange; r++) {
-        const start = r * 24 + 1;
-        const end = Math.min((r + 1) * 24, view.totalOptions);
-        buttons.push({
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildPersonalConfigCustomId(
-            "fallbacks-range-open",
-            locale,
-            encodeProviderParam(view.provider),
-            r * 24,
-          ),
-          label: `${start} - ${end}`,
-        });
-      }
-
-      const rows: ActionRowData<ButtonComponentData>[] = [];
-      if (buttons.length > 0) {
-        rows.push({
-          type: ComponentType.ActionRow,
-          components: buttons,
-        });
-      }
-
-      const navButtons: ButtonComponentData[] = [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Danger,
-          customId: buildPersonalConfigCustomId("model-act-cancel", locale),
-          label: localizer(locale, "general.pagination.cancel"),
-        },
-      ];
-
-      rows.push({
-        type: ComponentType.ActionRow,
-        components: navButtons,
-      });
-
       return [
         {
           type: ComponentType.TextDisplay,
           content: `### ${localizer(locale, "commands.personal.config.fallbacks_range_title")}
 ${localizer(locale, "commands.personal.config.fallbacks_range_desc", { provider: getProviderDisplayName(view.provider) })}`,
         },
-        ...rows,
+        ...buildRangeChooserComponents({
+          locale,
+          totalCount: view.totalOptions,
+          pageSize: PERSONAL_FALLBACK_PAGE_SIZE,
+          chooserPage: view.rangePage,
+          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
+          version: PERSONAL_CONFIG_ROUTE_VERSION,
+          buildSegments: {
+            range: (rangeIndex) =>
+              buildPersonalConfigSegments(
+                "fallbacks-range-open",
+                locale,
+                encodeProviderParam(view.provider),
+                rangeIndex * PERSONAL_FALLBACK_PAGE_SIZE,
+              ),
+            previous: (targetPage) =>
+              buildPersonalConfigSegments(
+                "fallbacks-range-page",
+                locale,
+                encodeProviderParam(view.provider),
+                targetPage,
+              ),
+            next: (targetPage) =>
+              buildPersonalConfigSegments(
+                "fallbacks-range-page",
+                locale,
+                encodeProviderParam(view.provider),
+                targetPage,
+              ),
+            cancel: () => buildPersonalConfigSegments("model-act-cancel", locale),
+          },
+        }),
       ];
     }
     case "impersonation-clear-confirm": {
@@ -1500,7 +1570,8 @@ ${localizer(locale, "commands.personal.config.spotlight_review_prompt")}`,
                 locale,
                 view.channelId,
                 view.hours,
-                view.autoTriggerPersonaId ?? 0,
+                view.autoIdx,
+                view.blockIdx,
                 view.mask,
                 view.fp,
                 view.nonce,
@@ -1515,12 +1586,13 @@ ${localizer(locale, "commands.personal.config.spotlight_review_prompt")}`,
                 locale,
                 view.channelId,
                 view.hours,
+                view.blockIdx,
                 view.mask,
                 view.fp,
                 view.nonce,
               ),
               label: localizer(locale, "commands.personal.config.spotlight_auto_button"),
-              disabled: selectedPersonas.length <= 1,
+              disabled: selectedPersonas.length === 0,
             },
             {
               type: ComponentType.Button,
@@ -1532,52 +1604,171 @@ ${localizer(locale, "commands.personal.config.spotlight_review_prompt")}`,
         },
       ];
     }
-    case "spotlight-remove-range": {
-      const totalRanges = Math.ceil(view.totalOptions / SPOTLIGHT_REMOVE_PAGE_SIZE);
-      const startRange = view.rangePage * 5;
-      const endRange = Math.min(startRange + 5, totalRanges);
+    case "spotlight-persona-select": {
+      const header = {
+        type: ComponentType.TextDisplay,
+        content: `### ${localizer(locale, "commands.personal.config.spotlight_personas_label")}
+${localizer(locale, "commands.personal.config.spotlight_personas_desc")}`,
+      } satisfies ComponentInContainerData;
 
-      const buttons: ButtonComponentData[] = [];
-      for (let r = startRange; r < endRange; r++) {
-        const start = r * SPOTLIGHT_REMOVE_PAGE_SIZE + 1;
-        const end = Math.min((r + 1) * SPOTLIGHT_REMOVE_PAGE_SIZE, view.totalOptions);
-        buttons.push({
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildPersonalConfigCustomId("spot-rem-range", locale, r * SPOTLIGHT_REMOVE_PAGE_SIZE, view.fp),
-          label: `${start} - ${end}`,
-        });
+      // At or below one block every persona fits in a single submit, so a chooser would add a step
+      // that can only ever have one answer.
+      if (view.totalPersonas <= SPOTLIGHT_PERSONA_PAGE_SIZE) {
+        return [
+          header,
+          {
+            type: ComponentType.ActionRow,
+            components: [
+              {
+                type: ComponentType.Button,
+                style: ButtonStyle.Primary,
+                customId: buildPersonalConfigCustomId(
+                  "spotlight-set-block",
+                  locale,
+                  view.channelId,
+                  view.hours,
+                  view.fp,
+                  0,
+                ),
+                label: localizer(locale, "commands.personal.config.spotlight_personas_label"),
+              },
+              {
+                type: ComponentType.Button,
+                style: ButtonStyle.Secondary,
+                customId: buildPersonalConfigCustomId("spotlight-set-cancel", locale),
+                label: localizer(locale, "commands.personal.config.cancel"),
+              },
+            ],
+          },
+        ];
       }
 
-      const rows: ActionRowData<ButtonComponentData>[] = [];
-      if (buttons.length > 0) {
-        rows.push({
-          type: ComponentType.ActionRow,
-          components: buttons,
-        });
-      }
-
-      const navButtons: ButtonComponentData[] = [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Danger,
-          customId: buildPersonalConfigCustomId("spotlight-remove-cancel", locale),
-          label: localizer(locale, "general.pagination.cancel"),
-        },
+      return [
+        header,
+        ...buildRangeChooserComponents({
+          locale,
+          totalCount: view.totalPersonas,
+          pageSize: SPOTLIGHT_PERSONA_PAGE_SIZE,
+          chooserPage: view.chooserPage,
+          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
+          version: PERSONAL_CONFIG_ROUTE_VERSION,
+          buildSegments: {
+            range: (rangeIndex) =>
+              buildPersonalConfigSegments(
+                "spotlight-set-block",
+                locale,
+                view.channelId,
+                view.hours,
+                view.fp,
+                rangeIndex,
+              ),
+            previous: (targetPage) =>
+              buildPersonalConfigSegments(
+                "spotlight-set-block-page",
+                locale,
+                view.channelId,
+                view.hours,
+                view.fp,
+                targetPage,
+              ),
+            next: (targetPage) =>
+              buildPersonalConfigSegments(
+                "spotlight-set-block-page",
+                locale,
+                view.channelId,
+                view.hours,
+                view.fp,
+                targetPage,
+              ),
+            cancel: () => buildPersonalConfigSegments("spotlight-set-cancel", locale),
+          },
+        }),
       ];
-
-      rows.push({
-        type: ComponentType.ActionRow,
-        components: navButtons,
-      });
-
+    }
+    case "spotlight-auto-range": {
+      return [
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.personal.config.spotlight_auto_modal_title")}
+${localizer(locale, "commands.personal.config.spotlight_auto_select_desc")}`,
+        },
+        ...buildRangeChooserComponents({
+          locale,
+          totalCount: view.totalOptions,
+          pageSize: SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE,
+          chooserPage: view.rangePage,
+          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
+          version: PERSONAL_CONFIG_ROUTE_VERSION,
+          buildSegments: {
+            range: (rangeIndex) =>
+              buildPersonalConfigSegments(
+                "spot-set-auto-range",
+                locale,
+                view.channelId,
+                view.hours,
+                view.blockIdx,
+                view.mask,
+                view.fp,
+                rangeIndex * SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE,
+              ),
+            previous: (targetPage) =>
+              buildPersonalConfigSegments(
+                "spot-set-auto-page",
+                locale,
+                view.channelId,
+                view.hours,
+                view.blockIdx,
+                view.mask,
+                view.fp,
+                targetPage,
+              ),
+            next: (targetPage) =>
+              buildPersonalConfigSegments(
+                "spot-set-auto-page",
+                locale,
+                view.channelId,
+                view.hours,
+                view.blockIdx,
+                view.mask,
+                view.fp,
+                targetPage,
+              ),
+            cancel: () =>
+              buildPersonalConfigSegments(
+                "spot-set-auto-cancel",
+                locale,
+                view.channelId,
+                view.hours,
+                view.blockIdx,
+                view.mask,
+                view.fp,
+              ),
+          },
+        }),
+      ];
+    }
+    case "spotlight-remove-range": {
       return [
         {
           type: ComponentType.TextDisplay,
           content: `### ${localizer(locale, "commands.personal.config.spotlight_remove_range_title")}
 ${localizer(locale, "commands.personal.config.spotlight_remove_range_desc")}`,
         },
-        ...rows,
+        ...buildRangeChooserComponents({
+          locale,
+          totalCount: view.totalOptions,
+          pageSize: SPOTLIGHT_REMOVE_PAGE_SIZE,
+          chooserPage: view.rangePage,
+          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
+          version: PERSONAL_CONFIG_ROUTE_VERSION,
+          buildSegments: {
+            range: (rangeIndex) =>
+              buildPersonalConfigSegments("spot-rem-range", locale, rangeIndex * SPOTLIGHT_REMOVE_PAGE_SIZE, view.fp),
+            previous: (targetPage) => buildPersonalConfigSegments("spotlight-remove-page", locale, targetPage, view.fp),
+            next: (targetPage) => buildPersonalConfigSegments("spotlight-remove-page", locale, targetPage, view.fp),
+            cancel: () => buildPersonalConfigSegments("spotlight-remove-cancel", locale),
+          },
+        }),
       ];
     }
   }
@@ -1987,33 +2178,39 @@ ${
   } else if (category === "models") {
     if (page === "switch") {
       const info = input.modelDisplayInfo;
-      const selectedCap: PersonalConfigManagedCapability = input.selectedCapability ?? "text";
       const routing = info?.routingRows;
 
-      const textDisplay = routing?.text.activeModelName ?? localizer(locale, "commands.personal.config.server_default");
-      const visionDisplay =
-        routing?.vision.activeModelName ?? localizer(locale, "commands.personal.config.server_default");
-      const embeddingDisplay =
-        routing?.embedding.activeModelName ?? localizer(locale, "commands.personal.config.server_default");
-      const imageStandardDisplay =
-        routing?.image.activeModelName ?? localizer(locale, "commands.personal.config.server_default");
-      const imageNaiDisplay =
-        routing?.image_nai.activeModelName ?? localizer(locale, "commands.personal.config.server_default");
-      const videoDisplay =
-        routing?.video.activeModelName ?? localizer(locale, "commands.personal.config.server_default");
+      components.push({
+        type: ComponentType.TextDisplay,
+        content: `### ${localizer(locale, "commands.personal.config.models_title")}
+${localizer(locale, "commands.personal.config.models_description")}`,
+      });
+
+      for (const capability of QUICK_TOGGLE_CAPABILITIES) {
+        const row = routing?.[capability];
+        components.push(
+          buildModelRoutingControl({
+            capabilityLabel: localizer(locale, ROUTING_CAPABILITY_LOCALE_KEYS[capability]),
+            activeModelName: row?.activeModelName ?? null,
+            activeProvider: row?.storedProvider ?? null,
+            eligibleProviders: info?.eligibleProvidersForCapability[capability] ?? [],
+            customId: buildPersonalConfigCustomId("model-provider-select", locale, capability),
+            serverDefaultValue: "__server_default__",
+            serverDefaultLabel: localizer(locale, "commands.personal.config.override_status_server_default"),
+            serverDefaultDisplay: localizer(locale, "commands.personal.config.override_status_server_default"),
+            providerOverflowValue: PERSONAL_PROVIDER_RANGE_VALUE,
+            providerOverflowLabel: localizer(locale, "general.pagination.select_page_title"),
+            directProviderLimit: PERSONAL_PROVIDER_DIRECT_LIMIT,
+            encodeProviderValue: encodeProviderParam,
+            disabled: writesDisabled,
+          }),
+        );
+      }
 
       components.push(
         {
           type: ComponentType.TextDisplay,
-          content: `### ${localizer(locale, "commands.personal.config.models_title")}
-${localizer(locale, "commands.personal.config.models_description")}
-> ${localizer(locale, "commands.personal.config.routing_text")}: \`${textDisplay}\`
-> ${localizer(locale, "commands.personal.config.routing_vision")}: \`${visionDisplay}\`
-> ${localizer(locale, "commands.personal.config.routing_embedding")}: \`${embeddingDisplay}\`
-> ${localizer(locale, "commands.personal.config.routing_image_standard")}: \`${imageStandardDisplay}\`
-> ${localizer(locale, "commands.personal.config.routing_image_nai")}: \`${imageNaiDisplay}\`
-> ${localizer(locale, "commands.personal.config.routing_video")}: \`${videoDisplay}\`
--# ${localizer(locale, "commands.personal.config.manage_providers_hint")}`,
+          content: `-# ${localizer(locale, "commands.personal.config.manage_providers_hint")}`,
         },
         {
           type: ComponentType.ActionRow,
@@ -2027,134 +2224,7 @@ ${localizer(locale, "commands.personal.config.models_description")}
             },
           ],
         },
-        { type: ComponentType.Separator, divider: true, spacing: 1 },
       );
-
-      const capRow = routing?.[selectedCap];
-      const isActive = Boolean(capRow?.activeModelName);
-      const storedDesc = capRow?.storedModelName ?? localizer(locale, "commands.personal.config.saved_assignment_none");
-      const statusDesc = isActive
-        ? localizer(locale, "commands.personal.config.override_status_personal")
-        : localizer(locale, "commands.personal.config.override_status_server_default");
-
-      const capName = localizer(
-        locale,
-        `commands.personal.config.routing_${selectedCap === "image_nai" ? "image_nai" : selectedCap === "image" ? "image_standard" : selectedCap}`,
-      );
-
-      const capabilityOptions: SelectMenuComponentOptionData[] = [
-        {
-          value: "text",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.capability_option_text"), 100),
-          default: selectedCap === "text",
-        },
-        {
-          value: "vision",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.capability_option_vision"), 100),
-          default: selectedCap === "vision",
-        },
-        {
-          value: "embedding",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.capability_option_embedding"), 100),
-          default: selectedCap === "embedding",
-        },
-        {
-          value: "image",
-          label: safeSelectOptionText(
-            localizer(locale, "commands.personal.config.capability_option_image_standard"),
-            100,
-          ),
-          default: selectedCap === "image",
-        },
-        {
-          value: "image_nai",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.capability_option_image_nai"), 100),
-          default: selectedCap === "image_nai",
-        },
-        {
-          value: "video",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.capability_option_video"), 100),
-          default: selectedCap === "video",
-        },
-      ];
-
-      components.push(
-        {
-          type: ComponentType.ActionRow,
-          components: [
-            {
-              type: ComponentType.StringSelect,
-              customId: buildPersonalConfigCustomId("capability-select", locale),
-              placeholder: safeSelectOptionText(
-                localizer(locale, "commands.personal.config.capability_select_placeholder"),
-                100,
-              ),
-              options: capabilityOptions,
-              disabled: writesDisabled,
-            },
-          ],
-        },
-        {
-          type: ComponentType.TextDisplay,
-          content: `**${localizer(locale, "commands.personal.config.manage_capability_heading", { capability: capName })}**
-> ${localizer(locale, "commands.personal.config.override_status_label")}: ${statusDesc}
-> ${localizer(locale, "commands.personal.config.saved_assignment_label")}: ${storedDesc}`,
-        },
-      );
-
-      const eligibleProviders = info?.eligibleProvidersForCapability?.[selectedCap] ?? [];
-      const providerOptions: SelectMenuComponentOptionData[] = [
-        {
-          value: "__server_default__",
-          label: safeSelectOptionText(localizer(locale, "commands.personal.config.use_server_default_option"), 100),
-        },
-        ...eligibleProviders.map((p) => ({
-          value: encodeProviderParam(p),
-          label: safeSelectOptionText(getProviderDisplayName(p), 100),
-        })),
-      ];
-
-      components.push({
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.StringSelect,
-            customId: buildPersonalConfigCustomId("model-provider-select", locale, selectedCap),
-            placeholder: safeSelectOptionText(
-              localizer(locale, "commands.personal.config.choose_model_placeholder"),
-              100,
-            ),
-            options: providerOptions,
-            disabled: writesDisabled || eligibleProviders.length === 0,
-          },
-        ],
-      });
-
-      const actionButtons: ButtonComponentData[] = [];
-      if (isActive) {
-        actionButtons.push({
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildPersonalConfigCustomId("model-default", locale, selectedCap),
-          label: localizer(locale, "commands.personal.config.use_server_default_button"),
-          disabled: writesDisabled,
-        });
-      } else if (capRow?.storedModelName) {
-        actionButtons.push({
-          type: ComponentType.Button,
-          style: ButtonStyle.Primary,
-          customId: buildPersonalConfigCustomId("model-enable", locale, selectedCap),
-          label: localizer(locale, "commands.personal.config.enable_saved_override_button"),
-          disabled: writesDisabled,
-        });
-      }
-
-      if (actionButtons.length > 0) {
-        components.push({
-          type: ComponentType.ActionRow,
-          components: actionButtons,
-        });
-      }
     } else if (page === "parameters") {
       const selectedProvider = input.selectedParametersProvider ?? input.modelDisplayInfo?.parametersProviders[0] ?? "";
       const config = input.modelDisplayInfo?.selectedParametersConfig;

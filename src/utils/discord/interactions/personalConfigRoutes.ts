@@ -21,7 +21,10 @@ import type { PersonalSpotlightStatus } from "@/utils/db/repositories/UserReposi
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { UserPersonaNamingPreference } from "@/types/personaNaming";
 import { getCachedAllPersonas, getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
-import { invalidatePersonalSpotlightCache } from "@/utils/cache/personalSpotlightCache";
+import {
+  getCachedPersonalSpotlightStatus,
+  invalidatePersonalSpotlightCache,
+} from "@/utils/cache/personalSpotlightCache";
 import { getShortTermMemoriesForUser, preWarmUserStmEntries } from "@/utils/cache/shortTermMemoryCache";
 import { getCachedUserRow, invalidateUserCache } from "@/utils/cache/userCache";
 import {
@@ -38,9 +41,19 @@ import { beginPanelInteraction, performPanelAction } from "@/utils/discord/inter
 import {
   PERSONAL_CONFIG_ROUTE_NAMESPACE,
   PERSONAL_CONFIG_ROUTE_VERSION,
+  PERSONAL_FALLBACK_PAGE_SIZE,
+  PERSONAL_MODEL_PAGE_SIZE,
+  PERSONAL_PROVIDER_DIRECT_LIMIT,
+  PERSONAL_PROVIDER_PAGE_SIZE,
+  PERSONAL_PROVIDER_RANGE_VALUE,
+  QUICK_TOGGLE_CAPABILITIES,
+  SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE,
+  SPOTLIGHT_PERSONA_PAGE_SIZE,
   SPOTLIGHT_REMOVE_PAGE_SIZE,
   computeSpotlightRemoveFingerprint,
   computeSpotlightSetFingerprint,
+  decodeSpotlightMask,
+  encodeSpotlightMask,
   decodeProviderParam,
   parsePersonalConfigPanelRoute,
   type PersonalConfigCategory,
@@ -65,10 +78,12 @@ import {
   buildSpotlightAutoTriggerModal,
   buildSpotlightRemoveModal,
   buildSpotlightSetModal,
+  buildSpotlightStep1Modal,
   buildTimezoneModal,
   type PersonalConfigFallbackDisplaySlot,
   type PersonalConfigModelDisplayInfo,
   type PersonalConfigPanelView,
+  ROUTING_CAPABILITY_LOCALE_KEYS,
   type PersonalConfigRoutingRow,
   type PersonalConfigSpotlightDisplayInfo,
 } from "@/utils/discord/ui/personalConfigPanel";
@@ -84,9 +99,7 @@ import { recordPanelActionStat, type RecordPanelActionInput } from "@/utils/stat
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { localizer } from "@/utils/text/localizer";
 import {
-  activatesNewPersonalOverride,
   assignPersonalCapabilityToProvider,
-  findNewlyEnabledPersonalCapabilities,
   getActivePersonalProviderForCapability,
   getStoredPersonalProviderForCapability,
   hasConfiguredPersonalModel,
@@ -101,7 +114,10 @@ import {
 import { DEFAULT_THINKING_LEVEL, isThinkingLevelValue, type ThinkingLevelValue } from "@/constants/thinkingLevels";
 import type { ModelParameterOptions } from "@/utils/discord/modelParametersConfigMapping";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
-import { loadUserSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
+import {
+  loadUserSavedProvidersForCapability,
+  type SavedProviderCapability,
+} from "@/utils/provider/savedProviderConfig";
 import { isCustomProvider, parseCustomProvider } from "@/utils/provider/customProviderUtils";
 
 interface PersonalConfigScope {
@@ -237,7 +253,9 @@ export interface PersonalConfigOperations {
     personaIds: number[];
     autoTriggerPersonaId: number | null;
     expiresAt: Date | null;
-  }): Promise<{ status: "success" } | { status: "no-personas" | "invalid-auto-trigger" | "write-failed" }>;
+  }): Promise<
+    { status: "success" } | { status: "no-changes" | "no-personas" | "invalid-auto-trigger" | "write-failed" }
+  >;
   removeSpotlights(input: {
     serverId: number;
     userId: number;
@@ -367,10 +385,14 @@ export interface PersonalConfigRouteDependencies {
     nonce: string,
     currentPrompt: string | null,
   ): Promise<void>;
+  showSpotlightStep1Modal(interaction: ButtonInteraction, locale: string, nonce: string): Promise<void>;
   showSpotlightSetModal(
     interaction: ButtonInteraction,
     locale: string,
     nonce: string,
+    channelId: string,
+    hours: number,
+    blockIdx: number,
     fp: string,
     personas: Array<{ id: number; name: string; isAlter: boolean }>,
   ): Promise<void>;
@@ -380,6 +402,7 @@ export interface PersonalConfigRouteDependencies {
     nonce: string,
     channelId: string,
     hours: number,
+    blockIdx: number,
     mask: string,
     fp: string,
     selectedPersonas: Array<{ id: number; name: string; isAlter: boolean }>,
@@ -501,11 +524,10 @@ export const personalConfigOperations: PersonalConfigOperations = {
   },
 
   async setCapabilityModel({ userId, userDiscId: _userDiscId, capability, provider, modelId }) {
-    const underlyingCap: PersonalProviderCapability =
-      capability === "image_nai" ? "image" : (capability as PersonalProviderCapability);
     if (!Number.isInteger(modelId) || modelId <= 0) return { status: "write-failed" };
 
-    const eligibleRows = await loadUserSavedProvidersForCapability(userId, underlyingCap);
+    const catalogCap: SavedProviderCapability = capability === "image_nai" ? "image" : capability;
+    const eligibleRows = await loadUserSavedProvidersForCapability(userId, catalogCap);
     const targetRow = eligibleRows.find((row) => row.provider.toLowerCase() === provider.toLowerCase());
     if (!targetRow) return { status: "write-failed" };
 
@@ -524,14 +546,14 @@ export const personalConfigOperations: PersonalConfigOperations = {
               : capability === "image_nai"
                 ? targetRow.nai_diffusion_model_id
                 : targetRow.video_model_id;
-    const activeRow = getActivePersonalProviderForCapability(eligibleRows, underlyingCap);
+    const activeRow = getActivePersonalProviderForCapability(eligibleRows, capability);
     if (currentModelId === modelId && activeRow?.provider.toLowerCase() === provider.toLowerCase()) {
       return { status: "no-changes" };
     }
 
     const endpoints = await llmProviderRepo.loadCustomEndpointsForUser(userId);
 
-    const ok = await assignPersonalCapabilityToProvider(userId, provider, underlyingCap, (row) => {
+    const ok = await assignPersonalCapabilityToProvider(userId, provider, capability, (row) => {
       if (capability === "text") {
         return withPersonalTextPrimary(row, modelId, endpoints);
       }
@@ -583,14 +605,13 @@ export const personalConfigOperations: PersonalConfigOperations = {
       }
     }
 
-    const ALL_CAPS: PersonalProviderCapability[] = ["text", "vision", "embedding", "image", "video"];
-    const hasChange = ALL_CAPS.some(
+    const hasChange = QUICK_TOGGLE_CAPABILITIES.some(
       (cap) => (getActivePersonalProviderForCapability(rows, cap) !== null) !== selectedCapabilities.has(cap),
     );
     if (!hasChange) return { status: "no-changes" };
 
     let allWritesSucceeded = true;
-    for (const cap of ALL_CAPS) {
+    for (const cap of QUICK_TOGGLE_CAPABILITIES) {
       const ok = await setPersonalCapabilityEnabled(userId, cap, selectedCapabilities.has(cap));
       allWritesSucceeded &&= ok;
     }
@@ -851,6 +872,18 @@ export const personalConfigOperations: PersonalConfigOperations = {
     if (autoTriggerPersonaId !== null && !personaIds.includes(autoTriggerPersonaId)) {
       return { status: "invalid-auto-trigger" };
     }
+    if (expiresAt === null) {
+      const current = await getCachedPersonalSpotlightStatus(serverId, userId, channelId);
+      if (
+        current &&
+        current.expiresAt === null &&
+        current.autoTriggerPersonaId === autoTriggerPersonaId &&
+        current.personaIds.length === personaIds.length &&
+        current.personaIds.every((id, idx) => id === personaIds[idx])
+      ) {
+        return { status: "no-changes" };
+      }
+    }
     try {
       await userRepository.replacePersonalSpotlight(
         serverId,
@@ -1110,7 +1143,6 @@ async function loadPersonalModelDisplayInfo(
     cap: PersonalConfigManagedCapability,
   ): Promise<string | null> => {
     if (!row) return null;
-    const providerName = getProviderDisplayName(row.provider);
     let modelName: string | null = null;
     try {
       if (cap === "text" && row.llm_id) {
@@ -1135,19 +1167,21 @@ async function loadPersonalModelDisplayInfo(
     } catch {
       modelName = null;
     }
-    return modelName ? `${providerName} · ${modelName}` : null;
+    return modelName;
   };
 
   const textActive = getActivePersonalProviderForCapability(savedProviders, "text");
   const visionActive = getActivePersonalProviderForCapability(savedProviders, "vision");
   const embeddingActive = getActivePersonalProviderForCapability(savedProviders, "embedding");
   const imageActive = getActivePersonalProviderForCapability(savedProviders, "image");
+  const imageNaiActive = getActivePersonalProviderForCapability(savedProviders, "image_nai");
   const videoActive = getActivePersonalProviderForCapability(savedProviders, "video");
 
   const textStored = getStoredPersonalProviderForCapability(savedProviders, "text");
   const visionStored = getStoredPersonalProviderForCapability(savedProviders, "vision");
   const embeddingStored = getStoredPersonalProviderForCapability(savedProviders, "embedding");
   const imageStored = getStoredPersonalProviderForCapability(savedProviders, "image");
+  const imageNaiStored = getStoredPersonalProviderForCapability(savedProviders, "image_nai");
   const videoStored = getStoredPersonalProviderForCapability(savedProviders, "video");
 
   const [
@@ -1167,14 +1201,14 @@ async function loadPersonalModelDisplayInfo(
     resolveCapName(textActive, "text"),
     resolveCapName(visionActive, "vision"),
     resolveCapName(embeddingActive, "embedding"),
-    imageActive?.diffusion_model_id ? resolveCapName(imageActive, "image") : Promise.resolve(null),
-    imageActive?.nai_diffusion_model_id ? resolveCapName(imageActive, "image_nai") : Promise.resolve(null),
+    resolveCapName(imageActive, "image"),
+    resolveCapName(imageNaiActive, "image_nai"),
     resolveCapName(videoActive, "video"),
     resolveCapName(textStored, "text"),
     resolveCapName(visionStored, "vision"),
     resolveCapName(embeddingStored, "embedding"),
-    imageStored?.diffusion_model_id ? resolveCapName(imageStored, "image") : Promise.resolve(null),
-    imageStored?.nai_diffusion_model_id ? resolveCapName(imageStored, "image_nai") : Promise.resolve(null),
+    resolveCapName(imageStored, "image"),
+    resolveCapName(imageNaiStored, "image_nai"),
     resolveCapName(videoStored, "video"),
   ]);
 
@@ -1206,7 +1240,7 @@ async function loadPersonalModelDisplayInfo(
     image_nai: {
       capability: "image_nai",
       activeModelName: activeImageNaiName,
-      storedProvider: imageStored?.provider ?? null,
+      storedProvider: imageNaiStored?.provider ?? null,
       storedModelName: storedImageNaiName,
     },
     video: {
@@ -1453,12 +1487,14 @@ const defaultDependencies: PersonalConfigRouteDependencies = {
     showRoutedRawModal(interaction, buildFallbacksModal(locale, nonce, provider, availableOptions, currentRefs)),
   showImpersonationModal: (interaction, locale, nonce, currentPrompt) =>
     showRoutedRawModal(interaction, buildImpersonationModal(locale, nonce, currentPrompt)),
-  showSpotlightSetModal: (interaction, locale, nonce, fp, personas) =>
-    showRoutedRawModal(interaction, buildSpotlightSetModal(locale, nonce, fp, personas)),
-  showSpotlightAutoTriggerModal: (interaction, locale, nonce, channelId, hours, mask, fp, selectedPersonas) =>
+  showSpotlightStep1Modal: (interaction, locale, nonce) =>
+    showRoutedRawModal(interaction, buildSpotlightStep1Modal(locale, nonce)),
+  showSpotlightSetModal: (interaction, locale, nonce, channelId, hours, blockIdx, fp, personas) =>
+    showRoutedRawModal(interaction, buildSpotlightSetModal(locale, nonce, channelId, hours, blockIdx, fp, personas)),
+  showSpotlightAutoTriggerModal: (interaction, locale, nonce, channelId, hours, blockIdx, mask, fp, selectedPersonas) =>
     showRoutedRawModal(
       interaction,
-      buildSpotlightAutoTriggerModal(locale, nonce, channelId, hours, mask, fp, selectedPersonas),
+      buildSpotlightAutoTriggerModal(locale, nonce, channelId, hours, blockIdx, mask, fp, selectedPersonas),
     ),
   showSpotlightRemoveModal: (interaction, locale, nonce, start, fp, activeSpotlights, personas, guildChannels) =>
     showRoutedRawModal(
@@ -1466,6 +1502,26 @@ const defaultDependencies: PersonalConfigRouteDependencies = {
       buildSpotlightRemoveModal(locale, nonce, start, fp, activeSpotlights, personas, guildChannels),
     ),
 };
+
+type SpotlightPersona = { id: number; name: string; isAlter: boolean };
+
+/**
+ * Resolves a block-relative selection bitmask back to personas. Returns null when the mask cannot
+ * belong to the block it names, which is how a collection that shrank under an open continuation
+ * fails stale instead of silently retargeting a different persona.
+ */
+function resolveSpotlightBlockSelection(
+  personas: readonly SpotlightPersona[],
+  blockIdx: number,
+  mask: string,
+): { block: SpotlightPersona[]; selected: SpotlightPersona[] } | null {
+  const bits = decodeSpotlightMask(mask);
+  if (bits === null) return null;
+  const blockStart = blockIdx * SPOTLIGHT_PERSONA_PAGE_SIZE;
+  const block = personas.slice(blockStart, blockStart + SPOTLIGHT_PERSONA_PAGE_SIZE);
+  if (block.length === 0 || bits >> BigInt(block.length) !== 0n) return null;
+  return { block, selected: block.filter((_, index) => (bits & (1n << BigInt(index))) !== 0n) };
+}
 
 export function createPersonalConfigInteractionRoute(
   overrides: Partial<PersonalConfigRouteDependencies> = {},
@@ -1698,7 +1754,7 @@ export function createPersonalConfigInteractionRoute(
           log.warn("Failed to load available models for fallbacks modal", { provider: route.provider, error });
         }
 
-        if (availableOptions.length > 24) {
+        if (availableOptions.length > PERSONAL_FALLBACK_PAGE_SIZE) {
           await interaction.deferUpdate();
           await repaint(
             interaction,
@@ -1767,7 +1823,7 @@ export function createPersonalConfigInteractionRoute(
           });
           return;
         }
-        const slice = availableOptions.slice(route.start, route.start + 24);
+        const slice = availableOptions.slice(route.start, route.start + PERSONAL_FALLBACK_PAGE_SIZE);
         const nonce = dependencies.createNonce();
         await dependencies.showFallbacksModal(
           interaction,
@@ -1795,7 +1851,7 @@ export function createPersonalConfigInteractionRoute(
           route.provider,
           route.capability,
         );
-        if (route.start % 25 !== 0 || route.start >= availableModels.length) {
+        if (route.start % PERSONAL_MODEL_PAGE_SIZE !== 0 || route.start >= availableModels.length) {
           await interaction.reply({
             content: localizer(route.locale, "commands.personal.config.unavailable"),
             flags: MessageFlags.Ephemeral,
@@ -1813,7 +1869,7 @@ export function createPersonalConfigInteractionRoute(
           else if (route.capability === "image_nai") currentModelId = currentConfig.nai_diffusion_model_id ?? null;
           else if (route.capability === "video") currentModelId = currentConfig.video_model_id ?? null;
         }
-        const slice = availableModels.slice(route.start, route.start + 25);
+        const slice = availableModels.slice(route.start, route.start + PERSONAL_MODEL_PAGE_SIZE);
         const nonce = dependencies.createNonce();
         await dependencies.showModelSelectModal(
           interaction,
@@ -1833,6 +1889,61 @@ export function createPersonalConfigInteractionRoute(
         }
         const selectMenu = interaction as StringSelectMenuInteraction;
         const chosen = selectMenu.values[0];
+        if (chosen === PERSONAL_PROVIDER_RANGE_VALUE) {
+          await interaction.deferUpdate();
+          const cachedScope = await dependencies.resolveScope(interaction, false);
+          if (!cachedScope) {
+            await interaction.editReply({
+              content: localizer(route.locale, "commands.personal.config.unavailable"),
+              components: [],
+            });
+            return;
+          }
+          const rows = await dependencies.loadUserSavedProviders(cachedScope.userId);
+          const displayInfo = await dependencies.loadPersonalModelDisplayInfo(
+            cachedScope.userId,
+            rows,
+            route.capability,
+          );
+          const providers = displayInfo.eligibleProvidersForCapability[route.capability];
+          if (providers.length <= PERSONAL_PROVIDER_DIRECT_LIMIT) {
+            await repaint(
+              interaction,
+              route.locale,
+              cachedScope,
+              "models",
+              "switch",
+              undefined,
+              {
+                tone: "error",
+                heading: localizer(route.locale, "commands.personal.config.unavailable"),
+                detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+              },
+              dependencies,
+            );
+            return;
+          }
+          await repaint(
+            interaction,
+            route.locale,
+            cachedScope,
+            "models",
+            "switch",
+            undefined,
+            undefined,
+            dependencies,
+            route.capability,
+            undefined,
+            undefined,
+            {
+              kind: "model-provider-range",
+              capability: route.capability,
+              rangePage: 0,
+              totalOptions: providers.length,
+            },
+          );
+          return;
+        }
         if (chosen !== "__server_default__") {
           const provider = decodeProviderParam(chosen);
           const cachedScope = await dependencies.resolveScope(interaction, false);
@@ -1871,7 +1982,7 @@ export function createPersonalConfigInteractionRoute(
             return;
           }
 
-          if (availableModels.length > 25) {
+          if (availableModels.length > PERSONAL_MODEL_PAGE_SIZE) {
             await interaction.deferUpdate();
             await repaint(
               interaction,
@@ -1959,16 +2070,48 @@ export function createPersonalConfigInteractionRoute(
           });
           return;
         }
-        if (personas.length > 30) {
+        await dependencies.showSpotlightStep1Modal(interaction, route.locale, dependencies.createNonce());
+        return;
+      }
+
+      if (route.action === "spotlight-set-block") {
+        if (!interaction.isButton()) throw new Error("spotlight-set-block requires Button interaction");
+        const cachedScope = await dependencies.resolveScope(interaction, false);
+        if (!cachedScope?.guildId || !cachedScope.internalServerId) {
           await interaction.reply({
-            content: localizer(route.locale, "commands.personal.config.spotlight_too_many_personas_detail"),
+            content: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
             flags: MessageFlags.Ephemeral,
           });
           return;
         }
-        const nonce = dependencies.createNonce();
-        const fp = computeSpotlightSetFingerprint(cachedScope.guildId, cachedScope.userDiscId, personas);
-        await dependencies.showSpotlightSetModal(interaction, route.locale, nonce, fp, personas);
+        const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
+        const expectedFp = computeSpotlightSetFingerprint(cachedScope.guildId, cachedScope.userDiscId, personas);
+        if (expectedFp !== route.fp) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.stale_warning"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const blockStart = route.blockIdx * SPOTLIGHT_PERSONA_PAGE_SIZE;
+        const block = personas.slice(blockStart, blockStart + SPOTLIGHT_PERSONA_PAGE_SIZE);
+        if (block.length === 0) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.stale_warning"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        await dependencies.showSpotlightSetModal(
+          interaction,
+          route.locale,
+          dependencies.createNonce(),
+          route.channelId,
+          route.hours,
+          route.blockIdx,
+          route.fp,
+          block,
+        );
         return;
       }
 
@@ -1991,8 +2134,82 @@ export function createPersonalConfigInteractionRoute(
           });
           return;
         }
-        const bitmask = BigInt(`0x${route.mask}`);
-        const selectedPersonas = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n);
+        const resolved = resolveSpotlightBlockSelection(personas, route.blockIdx, route.mask);
+        if (!resolved) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.stale_warning"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const selectedPersonas = resolved.selected;
+        if (selectedPersonas.length === 0) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.spotlight_no_selection_detail"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        if (selectedPersonas.length === 1) {
+          await interaction.deferUpdate();
+          const selectedPersonaIds = selectedPersonas.map((p) => p.id);
+          const autoTriggerPersonaId = selectedPersonas[0]?.id ?? null;
+          const autoIdx =
+            autoTriggerPersonaId === null ? 0 : resolved.block.findIndex((p) => p.id === autoTriggerPersonaId) + 1;
+          await repaint(
+            interaction,
+            route.locale,
+            cachedScope,
+            "advanced",
+            "spotlight",
+            undefined,
+            undefined,
+            dependencies,
+            undefined,
+            undefined,
+            undefined,
+            {
+              kind: "spotlight-set-review",
+              channelId: route.channelId,
+              hours: route.hours,
+              blockIdx: route.blockIdx,
+              selectedPersonaIds,
+              autoTriggerPersonaId,
+              autoIdx,
+              mask: route.mask,
+              fp: route.fp,
+              nonce: dependencies.createNonce(),
+            },
+          );
+          return;
+        }
+        if (selectedPersonas.length > SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE) {
+          await interaction.deferUpdate();
+          await repaint(
+            interaction,
+            route.locale,
+            cachedScope,
+            "advanced",
+            "spotlight",
+            undefined,
+            undefined,
+            dependencies,
+            undefined,
+            undefined,
+            undefined,
+            {
+              kind: "spotlight-auto-range",
+              channelId: route.channelId,
+              hours: route.hours,
+              blockIdx: route.blockIdx,
+              mask: route.mask,
+              fp: route.fp,
+              rangePage: 0,
+              totalOptions: selectedPersonas.length,
+            },
+          );
+          return;
+        }
         const nonce = dependencies.createNonce();
         await dependencies.showSpotlightAutoTriggerModal(
           interaction,
@@ -2000,9 +2217,53 @@ export function createPersonalConfigInteractionRoute(
           nonce,
           route.channelId,
           route.hours,
+          route.blockIdx,
           route.mask,
           route.fp,
           selectedPersonas,
+        );
+        return;
+      }
+
+      if (route.action === "spot-set-auto-range") {
+        if (!interaction.isButton()) throw new Error("spot-set-auto-range requires Button interaction");
+        const cachedScope = await dependencies.resolveScope(interaction, false);
+        if (!cachedScope?.guildId || !cachedScope.internalServerId) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
+        const expectedFp = computeSpotlightSetFingerprint(cachedScope.guildId, cachedScope.userDiscId, personas);
+        if (expectedFp !== route.fp) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.stale_warning"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const resolvedRange = resolveSpotlightBlockSelection(personas, route.blockIdx, route.mask);
+        if (!resolvedRange) {
+          await interaction.reply({
+            content: localizer(route.locale, "commands.personal.config.stale_warning"),
+            flags: MessageFlags.Ephemeral,
+          });
+          return;
+        }
+        const slice = resolvedRange.selected.slice(route.start, route.start + SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE);
+        const nonce = dependencies.createNonce();
+        await dependencies.showSpotlightAutoTriggerModal(
+          interaction,
+          route.locale,
+          nonce,
+          route.channelId,
+          route.hours,
+          route.blockIdx,
+          route.mask,
+          route.fp,
+          slice,
         );
         return;
       }
@@ -2773,23 +3034,6 @@ export function createPersonalConfigInteractionRoute(
         return;
       }
 
-      if (route.action === "capability-select") {
-        const selectMenu = interaction as StringSelectMenuInteraction;
-        const chosenCap = (selectMenu.values[0] as PersonalConfigManagedCapability) ?? "text";
-        await repaint(
-          interaction,
-          route.locale,
-          scope,
-          "models",
-          "switch",
-          undefined,
-          undefined,
-          dependencies,
-          chosenCap,
-        );
-        return;
-      }
-
       if (route.action === "parameters-provider-select") {
         const selectMenu = interaction as StringSelectMenuInteraction;
         const chosenProvider = decodeProviderParam(selectMenu.values[0]);
@@ -2837,10 +3081,7 @@ export function createPersonalConfigInteractionRoute(
         for (const cap of selectedCapSet) {
           const target = getStoredPersonalProviderForCapability(rows, cap);
           if (!target || !hasConfiguredPersonalModel(target, cap)) {
-            const capLabel = localizer(
-              route.locale,
-              `commands.personal.config.routing_${cap === "image" ? "image_standard" : cap}`,
-            );
+            const capLabel = localizer(route.locale, ROUTING_CAPABILITY_LOCALE_KEYS[cap]);
             await repaint(
               interaction,
               route.locale,
@@ -2861,8 +3102,7 @@ export function createPersonalConfigInteractionRoute(
           }
         }
 
-        const ALL_CAPS: PersonalProviderCapability[] = ["text", "vision", "embedding", "image", "video"];
-        const hasChange = ALL_CAPS.some(
+        const hasChange = QUICK_TOGGLE_CAPABILITIES.some(
           (cap) => (getActivePersonalProviderForCapability(rows, cap) !== null) !== selectedCapSet.has(cap),
         );
         if (!hasChange) {
@@ -2883,31 +3123,6 @@ export function createPersonalConfigInteractionRoute(
           return;
         }
 
-        const newlyEnabled = findNewlyEnabledPersonalCapabilities(rows, selectedCapSet, ALL_CAPS);
-        if (newlyEnabled.length > 0) {
-          const mask = ALL_CAPS.map((c) => (selectedCapSet.has(c) ? "1" : "0")).join("");
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "models",
-            "switch",
-            undefined,
-            undefined,
-            dependencies,
-            undefined,
-            undefined,
-            undefined,
-            {
-              kind: "quick-toggle-confirm",
-              mask,
-              newlyEnabledCaps: newlyEnabled,
-              nonce: dependencies.createNonce(),
-            },
-          );
-          return;
-        }
-
         const action = await performPanelAction(
           () =>
             dependencies.operations.setQuickToggleRouting({
@@ -2976,284 +3191,29 @@ export function createPersonalConfigInteractionRoute(
         return;
       }
 
-      if (route.action === "quick-toggle-confirm") {
-        const ALL_CAPS: PersonalProviderCapability[] = ["text", "vision", "embedding", "image", "video"];
-        const selectedCapSet = new Set<PersonalProviderCapability>();
-        for (let i = 0; i < ALL_CAPS.length; i++) {
-          if (route.mask[i] === "1") selectedCapSet.add(ALL_CAPS[i]);
-        }
+      // Now only backs the model, provider, and fallback range choosers: the activation confirmation
+      // it was named for is gone, so the receipt reports the state, not a cancelled activation.
+      if (route.action === "model-act-cancel") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "models",
+          "switch",
+          undefined,
+          noChangesReceipt(route.locale),
+          dependencies,
+        );
+        return;
+      }
 
-        const rows = await dependencies.loadUserSavedProviders(scope.userId);
-        for (const cap of selectedCapSet) {
-          const target = getStoredPersonalProviderForCapability(rows, cap);
-          if (!target || !hasConfiguredPersonalModel(target, cap)) {
-            const capLabel = localizer(
-              route.locale,
-              `commands.personal.config.routing_${cap === "image" ? "image_standard" : cap}`,
-            );
-            await repaint(
-              interaction,
-              route.locale,
-              scope,
-              "models",
-              "switch",
-              undefined,
-              {
-                tone: "error",
-                heading: localizer(route.locale, "commands.personal.config.missing_model_heading"),
-                detail: localizer(route.locale, "commands.personal.config.missing_model_detail", {
-                  capability: capLabel,
-                }),
-              },
-              dependencies,
-            );
-            return;
-          }
-        }
-
+      if (route.action === "model-provider-select") {
         const action = await performPanelAction(
           () =>
-            dependencies.operations.setQuickToggleRouting({
+            dependencies.operations.setCapabilityEnabled({
               userId: scope.userId,
               userDiscId: scope.userDiscId,
-              selectedCapabilities: selectedCapSet,
-            }),
-          () => dependencies.resolveScope(interaction, true),
-        );
-        const result = action.result;
-        scope = action.state ?? scope;
-
-        if (result.status === "no-changes") {
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "models",
-            "switch",
-            undefined,
-            noChangesReceipt(route.locale),
-            dependencies,
-          );
-          return;
-        }
-
-        if (result.status === "success") {
-          if (scope.internalServerId) {
-            dependencies.recordAction({
-              action: "personal-config.personal.model-routing.set",
-              serverId: scope.internalServerId,
-              userDiscId: interaction.user.id,
-            });
-          }
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "models",
-            "switch",
-            undefined,
-            {
-              tone: "success",
-              heading: localizer(route.locale, "commands.personal.config.routing_updated_heading"),
-              detail: localizer(route.locale, "commands.personal.config.routing_updated_detail"),
-            },
-            dependencies,
-          );
-          return;
-        }
-
-        await repaint(
-          interaction,
-          route.locale,
-          scope,
-          "models",
-          "switch",
-          undefined,
-          {
-            tone: "error",
-            heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
-            detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
-          },
-          dependencies,
-        );
-        return;
-      }
-
-      if (route.action === "quick-toggle-cancel" || route.action === "model-act-cancel") {
-        await repaint(
-          interaction,
-          route.locale,
-          scope,
-          "models",
-          "switch",
-          undefined,
-          {
-            tone: "info",
-            heading: localizer(route.locale, "commands.personal.config.activation_cancelled_heading"),
-            detail: localizer(route.locale, "commands.personal.config.activation_cancelled_detail"),
-          },
-          dependencies,
-        );
-        return;
-      }
-
-      if (route.action === "model-enable") {
-        const underlyingCap: PersonalProviderCapability =
-          route.capability === "image_nai" ? "image" : (route.capability as PersonalProviderCapability);
-
-        const rows = await dependencies.loadUserSavedProviders(scope.userId);
-        const target = getStoredPersonalProviderForCapability(rows, underlyingCap);
-        const storedModelId = target
-          ? route.capability === "text"
-            ? target.llm_id
-            : route.capability === "vision"
-              ? target.vision_llm_id
-              : route.capability === "embedding"
-                ? target.embedding_model_id
-                : route.capability === "image"
-                  ? target.diffusion_model_id
-                  : route.capability === "image_nai"
-                    ? target.nai_diffusion_model_id
-                    : target.video_model_id
-          : null;
-        const availableModels =
-          target && storedModelId
-            ? await dependencies.loadAvailableModelsForCapability(scope.userId, target.provider, route.capability)
-            : [];
-        const storedModel = availableModels.find((model) => model.id === storedModelId);
-        if (!target || !storedModelId || !storedModel) {
-          const capLabel = localizer(
-            route.locale,
-            `commands.personal.config.routing_${route.capability === "image_nai" ? "image_nai" : route.capability === "image" ? "image_standard" : route.capability}`,
-          );
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "models",
-            "switch",
-            undefined,
-            {
-              tone: "error",
-              heading: localizer(route.locale, "commands.personal.config.missing_model_heading"),
-              detail: localizer(route.locale, "commands.personal.config.missing_model_detail", {
-                capability: capLabel,
-              }),
-            },
-            dependencies,
-            route.capability,
-          );
-          return;
-        }
-
-        const activatesOverride = activatesNewPersonalOverride(rows, underlyingCap);
-        if (activatesOverride) {
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "models",
-            "switch",
-            undefined,
-            undefined,
-            dependencies,
-            route.capability,
-            undefined,
-            undefined,
-            {
-              kind: "model-activate-confirm",
               capability: route.capability,
-              provider: target.provider,
-              modelId: storedModelId,
-              modelName: storedModel.name,
-              nonce: dependencies.createNonce(),
-            },
-          );
-          return;
-        }
-
-        const action = await performPanelAction(
-          () =>
-            dependencies.operations.setCapabilityEnabled({
-              userId: scope.userId,
-              userDiscId: scope.userDiscId,
-              capability: underlyingCap,
-              enabled: true,
-            }),
-          () => dependencies.resolveScope(interaction, true),
-        );
-        const result = action.result;
-        scope = action.state ?? scope;
-
-        if (result.status === "no-changes") {
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "models",
-            "switch",
-            undefined,
-            noChangesReceipt(route.locale),
-            dependencies,
-            route.capability,
-          );
-          return;
-        }
-
-        if (result.status === "success") {
-          if (scope.internalServerId) {
-            dependencies.recordAction({
-              action: "personal-config.personal.model.set",
-              serverId: scope.internalServerId,
-              userDiscId: interaction.user.id,
-            });
-          }
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "models",
-            "switch",
-            undefined,
-            {
-              tone: "success",
-              heading: localizer(route.locale, "commands.personal.config.routing_updated_heading"),
-              detail: localizer(route.locale, "commands.personal.config.routing_updated_detail"),
-            },
-            dependencies,
-            route.capability,
-          );
-          return;
-        }
-
-        await repaint(
-          interaction,
-          route.locale,
-          scope,
-          "models",
-          "switch",
-          undefined,
-          {
-            tone: "error",
-            heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
-            detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
-          },
-          dependencies,
-          route.capability,
-        );
-        return;
-      }
-
-      if (route.action === "model-default" || route.action === "model-provider-select") {
-        const underlyingCap: PersonalProviderCapability =
-          route.capability === "image_nai" ? "image" : (route.capability as PersonalProviderCapability);
-
-        const action = await performPanelAction(
-          () =>
-            dependencies.operations.setCapabilityEnabled({
-              userId: scope.userId,
-              userDiscId: scope.userDiscId,
-              capability: underlyingCap,
               enabled: false,
             }),
           () => dependencies.resolveScope(interaction, true),
@@ -3284,10 +3244,7 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          const capLabel = localizer(
-            route.locale,
-            `commands.personal.config.routing_${route.capability === "image_nai" ? "image_nai" : route.capability === "image" ? "image_standard" : route.capability}`,
-          );
+          const capLabel = localizer(route.locale, ROUTING_CAPABILITY_LOCALE_KEYS[route.capability]);
           await repaint(
             interaction,
             route.locale,
@@ -3358,36 +3315,6 @@ export function createPersonalConfigInteractionRoute(
           return;
         }
 
-        const rows = await dependencies.loadUserSavedProviders(scope.userId);
-        const underlyingCap: PersonalProviderCapability =
-          route.capability === "image_nai" ? "image" : (route.capability as PersonalProviderCapability);
-        const activatesOverride = activatesNewPersonalOverride(rows, underlyingCap);
-
-        if (activatesOverride) {
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "models",
-            "switch",
-            undefined,
-            undefined,
-            dependencies,
-            route.capability,
-            undefined,
-            undefined,
-            {
-              kind: "model-activate-confirm",
-              capability: route.capability,
-              provider: route.provider,
-              modelId,
-              modelName: validModel.name,
-              nonce: dependencies.createNonce(),
-            },
-          );
-          return;
-        }
-
         const action = await performPanelAction(
           () =>
             dependencies.operations.setCapabilityModel({
@@ -3425,10 +3352,7 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          const capLabel = localizer(
-            route.locale,
-            `commands.personal.config.routing_${route.capability === "image_nai" ? "image_nai" : route.capability === "image" ? "image_standard" : route.capability}`,
-          );
+          const capLabel = localizer(route.locale, ROUTING_CAPABILITY_LOCALE_KEYS[route.capability]);
           await repaint(
             interaction,
             route.locale,
@@ -3469,74 +3393,58 @@ export function createPersonalConfigInteractionRoute(
         return;
       }
 
-      if (route.action === "model-act-confirm") {
+      if (route.action === "model-range-page") {
         const availableModels = await dependencies.loadAvailableModelsForCapability(
           scope.userId,
           route.provider,
           route.capability,
         );
-        const validModel = availableModels.find((m) => m.id === route.modelId);
-
-        if (!validModel || route.modelId === 0) {
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "models",
-            "switch",
-            undefined,
-            {
-              tone: "error",
-              heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
-              detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
-            },
-            dependencies,
-            route.capability,
-          );
-          return;
-        }
-
-        const action = await performPanelAction(
-          () =>
-            dependencies.operations.setCapabilityModel({
-              userId: scope.userId,
-              userDiscId: scope.userDiscId,
-              capability: route.capability,
-              provider: route.provider,
-              modelId: route.modelId,
-            }),
-          () => dependencies.resolveScope(interaction, true),
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "models",
+          "switch",
+          undefined,
+          undefined,
+          dependencies,
+          route.capability,
+          undefined,
+          undefined,
+          {
+            kind: "model-range",
+            capability: route.capability,
+            provider: route.provider,
+            rangePage: route.chooserPage,
+            totalOptions: availableModels.length,
+          },
         );
-        const result = action.result;
-        scope = action.state ?? scope;
+        return;
+      }
 
-        if (result.status === "no-changes") {
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "models",
-            "switch",
-            undefined,
-            noChangesReceipt(route.locale),
-            dependencies,
-            route.capability,
-          );
-          return;
-        }
+      if (route.action === "model-provider-range-open" || route.action === "model-provider-range-page") {
+        const rows = await dependencies.loadUserSavedProviders(scope.userId);
+        const displayInfo = await dependencies.loadPersonalModelDisplayInfo(scope.userId, rows, route.capability);
+        const providers = displayInfo.eligibleProvidersForCapability[route.capability];
 
-        if (result.status === "success") {
-          if (scope.internalServerId) {
-            dependencies.recordAction({
-              action: "personal-config.personal.model.set",
-              serverId: scope.internalServerId,
-              userDiscId: interaction.user.id,
-            });
+        if (route.action === "model-provider-range-open") {
+          if (route.start % PERSONAL_PROVIDER_PAGE_SIZE !== 0 || route.start >= providers.length) {
+            await repaint(
+              interaction,
+              route.locale,
+              scope,
+              "models",
+              "switch",
+              undefined,
+              {
+                tone: "error",
+                heading: localizer(route.locale, "commands.personal.config.unavailable"),
+                detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+              },
+              dependencies,
+            );
+            return;
           }
-          const capLabel = localizer(
-            route.locale,
-            `commands.personal.config.routing_${route.capability === "image_nai" ? "image_nai" : route.capability === "image" ? "image_standard" : route.capability}`,
-          );
           await repaint(
             interaction,
             route.locale,
@@ -3544,17 +3452,12 @@ export function createPersonalConfigInteractionRoute(
             "models",
             "switch",
             undefined,
-            {
-              tone: "success",
-              heading: localizer(route.locale, "commands.personal.config.model_updated_heading"),
-              detail: localizer(route.locale, "commands.personal.config.model_updated_detail", {
-                capability: capLabel,
-                provider: getProviderDisplayName(route.provider),
-                model: validModel.name,
-              }),
-            },
+            undefined,
             dependencies,
             route.capability,
+            undefined,
+            undefined,
+            { kind: "model-provider-page", capability: route.capability, start: route.start },
           );
           return;
         }
@@ -3566,13 +3469,46 @@ export function createPersonalConfigInteractionRoute(
           "models",
           "switch",
           undefined,
-          {
-            tone: "error",
-            heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
-            detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
-          },
+          undefined,
           dependencies,
           route.capability,
+          undefined,
+          undefined,
+          {
+            kind: "model-provider-range",
+            capability: route.capability,
+            rangePage: route.chooserPage,
+            totalOptions: providers.length,
+          },
+        );
+        return;
+      }
+
+      if (route.action === "fallbacks-range-page") {
+        let availableOptions: Array<{ refKey: string; label: string }> = [];
+        try {
+          availableOptions = await loadFallbackSelectionOptions(scope.userId, route.provider);
+        } catch (error) {
+          log.warn("Failed to load available models for fallbacks modal", { provider: route.provider, error });
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "models",
+          "fallbacks",
+          undefined,
+          undefined,
+          dependencies,
+          undefined,
+          undefined,
+          route.provider,
+          {
+            kind: "fallbacks-range",
+            provider: route.provider,
+            rangePage: route.chooserPage,
+            totalOptions: availableOptions.length,
+          },
         );
         return;
       }
@@ -4361,6 +4297,123 @@ export function createPersonalConfigInteractionRoute(
         return;
       }
 
+      if (route.action === "spotlight-set-step1" || route.action === "spotlight-set-block-page") {
+        if (!scope.guildId || !scope.internalServerId) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+
+        const personas = await dependencies.loadGuildPersonas(scope.guildId);
+        const fp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
+
+        let channelId: string;
+        let hours: number;
+        let chooserPage = 0;
+
+        if (route.action === "spotlight-set-block-page") {
+          if (fp !== route.fp) {
+            await repaint(
+              interaction,
+              route.locale,
+              scope,
+              "advanced",
+              "spotlight",
+              undefined,
+              {
+                tone: "error",
+                heading: localizer(route.locale, "commands.personal.config.unavailable"),
+                detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+              },
+              dependencies,
+            );
+            return;
+          }
+          channelId = route.channelId;
+          hours = route.hours;
+          chooserPage = route.chooserPage;
+        } else {
+          const modal = interaction as ModalSubmitInteraction;
+          const rawChannelId = takeRawModalSelectValue(
+            modal.id,
+            buildPersonalConfigModalFieldId("channel", route.nonce),
+          );
+          if (!rawChannelId || !/^\d{17,20}$/.test(rawChannelId)) {
+            await repaint(
+              interaction,
+              route.locale,
+              scope,
+              "advanced",
+              "spotlight",
+              undefined,
+              {
+                tone: "error",
+                heading: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_heading"),
+                detail: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_detail"),
+              },
+              dependencies,
+            );
+            return;
+          }
+          const rawHours = modal.fields.getTextInputValue(buildPersonalConfigModalFieldId("hours", route.nonce)).trim();
+          const parsedHours = Number.parseInt(rawHours, 10);
+          if (Number.isNaN(parsedHours) || parsedHours < 0 || !/^\d+$/.test(rawHours)) {
+            await repaint(
+              interaction,
+              route.locale,
+              scope,
+              "advanced",
+              "spotlight",
+              undefined,
+              {
+                tone: "error",
+                heading: localizer(route.locale, "commands.personal.config.spotlight_invalid_hours_heading"),
+                detail: localizer(route.locale, "commands.personal.config.spotlight_invalid_hours_detail"),
+              },
+              dependencies,
+            );
+            return;
+          }
+          channelId = rawChannelId;
+          hours = parsedHours;
+        }
+
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "spotlight",
+          undefined,
+          undefined,
+          dependencies,
+          undefined,
+          undefined,
+          undefined,
+          {
+            kind: "spotlight-persona-select",
+            channelId,
+            hours,
+            fp,
+            totalPersonas: personas.length,
+            chooserPage,
+          },
+        );
+        return;
+      }
+
       if (route.action === "spotlight-set-submit") {
         if (!interaction.isModalSubmit()) throw new Error("spotlight-set-submit requires ModalSubmit interaction");
         const modal = interaction as ModalSubmitInteraction;
@@ -4399,50 +4452,11 @@ export function createPersonalConfigInteractionRoute(
           return;
         }
 
-        const channelFieldId = buildPersonalConfigModalFieldId("channel", route.nonce);
-        const rawChannelId = takeRawModalSelectValue(modal.id, channelFieldId);
-        if (!rawChannelId || !/^\d{17,20}$/.test(rawChannelId)) {
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
-              tone: "error",
-              heading: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_heading"),
-              detail: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_detail"),
-            },
-            dependencies,
-          );
-          return;
-        }
-
-        const hoursFieldId = buildPersonalConfigModalFieldId("hours", route.nonce);
-        const rawHours = modal.fields.getTextInputValue(hoursFieldId).trim();
-        const parsedHours = Number.parseInt(rawHours, 10);
-        if (Number.isNaN(parsedHours) || parsedHours < 0 || !/^\d+$/.test(rawHours)) {
-          await repaint(
-            interaction,
-            route.locale,
-            scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
-              tone: "error",
-              heading: localizer(route.locale, "commands.personal.config.spotlight_invalid_hours_heading"),
-              detail: localizer(route.locale, "commands.personal.config.spotlight_invalid_hours_detail"),
-            },
-            dependencies,
-          );
-          return;
-        }
-
         const personas = await dependencies.loadGuildPersonas(scope.guildId);
         const expectedFp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
-        if (expectedFp !== route.fp) {
+        const blockStart = route.blockIdx * SPOTLIGHT_PERSONA_PAGE_SIZE;
+        const block = personas.slice(blockStart, blockStart + SPOTLIGHT_PERSONA_PAGE_SIZE);
+        if (expectedFp !== route.fp || block.length === 0) {
           await repaint(
             interaction,
             route.locale,
@@ -4459,18 +4473,21 @@ export function createPersonalConfigInteractionRoute(
           );
           return;
         }
+
+        let bitmask = 0n;
         const selectedPersonaIds: number[] = [];
-        for (let g = 0; g < 3; g++) {
+        for (let g = 0; g < SPOTLIGHT_PERSONA_PAGE_SIZE / 10; g++) {
           const groupValues = takeRawModalCheckboxGroupValues(
             modal.id,
             buildPersonalConfigModalFieldId(`personas_${g}`, route.nonce),
           );
-          if (groupValues) {
-            for (const val of groupValues) {
-              const pid = Number.parseInt(val, 10);
-              if (!Number.isNaN(pid) && personas.some((p) => p.id === pid)) {
-                selectedPersonaIds.push(pid);
-              }
+          if (!groupValues) continue;
+          for (const val of groupValues) {
+            const pid = Number.parseInt(val, 10);
+            const indexInBlock = block.findIndex((p) => p.id === pid);
+            if (indexInBlock >= 0) {
+              bitmask |= 1n << BigInt(indexInBlock);
+              selectedPersonaIds.push(pid);
             }
           }
         }
@@ -4493,14 +4510,6 @@ export function createPersonalConfigInteractionRoute(
           return;
         }
 
-        let bitmask = 0n;
-        for (let i = 0; i < personas.length; i++) {
-          if (selectedPersonaIds.includes(personas[i].id)) {
-            bitmask |= 1n << BigInt(i);
-          }
-        }
-        const mask = bitmask.toString(16);
-
         await repaint(
           interaction,
           route.locale,
@@ -4515,11 +4524,13 @@ export function createPersonalConfigInteractionRoute(
           undefined,
           {
             kind: "spotlight-set-review",
-            channelId: rawChannelId,
-            hours: parsedHours,
+            channelId: route.channelId,
+            hours: route.hours,
+            blockIdx: route.blockIdx,
             selectedPersonaIds,
             autoTriggerPersonaId: null,
-            mask,
+            autoIdx: 0,
+            mask: encodeSpotlightMask(bitmask),
             fp: route.fp,
             nonce: dependencies.createNonce(),
           },
@@ -4566,8 +4577,25 @@ export function createPersonalConfigInteractionRoute(
           );
           return;
         }
-        const bitmask = BigInt(`0x${route.mask}`);
-        const selectedPersonaIds = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n).map((p) => p.id);
+        const resolvedSub = resolveSpotlightBlockSelection(personas, route.blockIdx, route.mask);
+        if (!resolvedSub) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const selectedPersonaIds = resolvedSub.selected.map((p) => p.id);
 
         const autoFieldId = buildPersonalConfigModalFieldId("auto_trigger", route.nonce);
         const rawAutoId = takeRawModalSelectValue(modal.id, autoFieldId) ?? "0";
@@ -4576,6 +4604,7 @@ export function createPersonalConfigInteractionRoute(
           !Number.isNaN(autoTriggerId) && autoTriggerId > 0 && selectedPersonaIds.includes(autoTriggerId)
             ? autoTriggerId
             : null;
+        const validAutoIdx = validAutoId === null ? 0 : resolvedSub.block.findIndex((p) => p.id === validAutoId) + 1;
 
         await repaint(
           interaction,
@@ -4593,8 +4622,10 @@ export function createPersonalConfigInteractionRoute(
             kind: "spotlight-set-review",
             channelId: route.channelId,
             hours: route.hours,
+            blockIdx: route.blockIdx,
             selectedPersonaIds,
             autoTriggerPersonaId: validAutoId,
+            autoIdx: validAutoIdx,
             mask: route.mask,
             fp: route.fp,
             nonce: dependencies.createNonce(),
@@ -4679,8 +4710,25 @@ export function createPersonalConfigInteractionRoute(
           );
           return;
         }
-        const bitmask = BigInt(`0x${route.mask}`);
-        const selectedPersonaIds = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n).map((p) => p.id);
+        const resolvedConfirm = resolveSpotlightBlockSelection(personas, route.blockIdx, route.mask);
+        if (!resolvedConfirm) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const selectedPersonaIds = resolvedConfirm.selected.map((p) => p.id);
         if (selectedPersonaIds.length === 0) {
           await repaint(
             interaction,
@@ -4699,9 +4747,13 @@ export function createPersonalConfigInteractionRoute(
           return;
         }
 
+        // The auto-trigger travels as a position inside the presented block rather than a persona ID,
+        // because 50 explicit IDs do not fit beside a snowflake and a fingerprint in 100 characters.
+        const autoPersona = route.autoIdx > 0 ? (resolvedConfirm.block[route.autoIdx - 1] ?? null) : null;
+
         // Silently writing null here would contradict the review page the user just confirmed, so a
         // chosen auto-trigger that no longer resolves is surfaced instead of dropped.
-        if (route.autoTriggerId > 0 && !selectedPersonaIds.includes(route.autoTriggerId)) {
+        if (route.autoIdx > 0 && (autoPersona === null || !selectedPersonaIds.includes(autoPersona.id))) {
           await repaint(
             interaction,
             route.locale,
@@ -4718,7 +4770,7 @@ export function createPersonalConfigInteractionRoute(
           );
           return;
         }
-        const autoTriggerPersonaId = route.autoTriggerId > 0 ? route.autoTriggerId : null;
+        const autoTriggerPersonaId = autoPersona?.id ?? null;
         const expiresAt = route.hours === 0 ? null : new Date(Date.now() + route.hours * 60 * 60 * 1000);
 
         const action = await performPanelAction(
@@ -4736,6 +4788,24 @@ export function createPersonalConfigInteractionRoute(
         );
         const result = action.result;
         scope = action.state ?? scope;
+
+        if (result.status === "no-changes") {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "info",
+              heading: localizer(route.locale, "commands.personal.config.no_changes_heading"),
+              detail: localizer(route.locale, "commands.personal.config.no_changes_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
 
         if (result.status === "success") {
           dependencies.recordAction({
@@ -4830,8 +4900,219 @@ export function createPersonalConfigInteractionRoute(
         return;
       }
 
+      if (route.action === "spotlight-remove-page") {
+        const serverId = scope.internalServerId;
+        if (!scope.guildId || serverId === null) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const activeSpotlights = await dependencies.loadActiveSpotlights(serverId, scope.userId);
+        const expectedFp = computeSpotlightRemoveFingerprint(scope.guildId, scope.userDiscId, activeSpotlights);
+        if (expectedFp !== route.fp) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "spotlight",
+          undefined,
+          undefined,
+          dependencies,
+          undefined,
+          undefined,
+          undefined,
+          {
+            kind: "spotlight-remove-range",
+            rangePage: route.chooserPage,
+            totalOptions: activeSpotlights.length,
+            fp: route.fp,
+          },
+        );
+        return;
+      }
+
       if (route.action === "spotlight-remove-cancel") {
         await repaint(interaction, route.locale, scope, "advanced", "spotlight", undefined, undefined, dependencies);
+        return;
+      }
+
+      if (route.action === "spot-set-auto-page") {
+        const serverId = scope.internalServerId;
+        if (!scope.guildId || serverId === null) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const personas = await dependencies.loadGuildPersonas(scope.guildId);
+        const expectedFp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
+        if (expectedFp !== route.fp) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const bitmask = BigInt(`0x${route.mask}`);
+        const selectedPersonas = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n);
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "spotlight",
+          undefined,
+          undefined,
+          dependencies,
+          undefined,
+          undefined,
+          undefined,
+          {
+            kind: "spotlight-auto-range",
+            channelId: route.channelId,
+            hours: route.hours,
+            blockIdx: route.blockIdx,
+            mask: route.mask,
+            fp: route.fp,
+            rangePage: route.chooserPage,
+            totalOptions: selectedPersonas.length,
+          },
+        );
+        return;
+      }
+
+      if (route.action === "spot-set-auto-cancel") {
+        const serverId = scope.internalServerId;
+        if (!scope.guildId || serverId === null) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
+              detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const personas = await dependencies.loadGuildPersonas(scope.guildId);
+        const expectedFp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
+        if (expectedFp !== route.fp) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const resolvedCancel = resolveSpotlightBlockSelection(personas, route.blockIdx, route.mask);
+        if (!resolvedCancel) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "advanced",
+            "spotlight",
+            undefined,
+            {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.unavailable"),
+              detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+            },
+            dependencies,
+          );
+          return;
+        }
+        const selectedPersonaIds = resolvedCancel.selected.map((p) => p.id);
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "advanced",
+          "spotlight",
+          undefined,
+          undefined,
+          dependencies,
+          undefined,
+          undefined,
+          undefined,
+          {
+            kind: "spotlight-set-review",
+            channelId: route.channelId,
+            hours: route.hours,
+            blockIdx: route.blockIdx,
+            selectedPersonaIds,
+            autoTriggerPersonaId: null,
+            autoIdx: 0,
+            mask: route.mask,
+            fp: route.fp,
+            nonce: dependencies.createNonce(),
+          },
+        );
         return;
       }
 

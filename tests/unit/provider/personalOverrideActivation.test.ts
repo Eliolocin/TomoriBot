@@ -1,12 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import type { PersonalProviderCapability, UserSavedProviderConfigRow } from "@/types/db/schema";
+import type { UserSavedProviderConfigRow } from "@/types/db/schema";
 import {
   activatesNewPersonalOverride,
-  findNewlyEnabledPersonalCapabilities,
   isPersonalTextCredentialRotation,
 } from "@/utils/provider/personalProviderHelpers";
-
-const CAPABILITIES: PersonalProviderCapability[] = ["text", "embedding", "image", "video", "vision"];
 
 function makeRow(overrides: Partial<UserSavedProviderConfigRow> & { provider: string }): UserSavedProviderConfigRow {
   return {
@@ -60,34 +57,6 @@ describe("activatesNewPersonalOverride", () => {
 
   it("scopes the decision per capability", () => {
     expect(activatesNewPersonalOverride([ACTIVE_TEXT_OPENROUTER], "image")).toBe(true);
-  });
-});
-
-describe("findNewlyEnabledPersonalCapabilities", () => {
-  it("returns only capabilities moving from the server default onto a personal override", () => {
-    const rows = [ACTIVE_TEXT_OPENROUTER, makeRow({ provider: "google", diffusion_model_id: 30 })];
-    const selected = new Set<PersonalProviderCapability>(["text", "image"]);
-
-    expect(findNewlyEnabledPersonalCapabilities(rows, selected, CAPABILITIES)).toEqual(["image"]);
-  });
-
-  it("returns nothing when the submission only turns capabilities off", () => {
-    const selected = new Set<PersonalProviderCapability>();
-
-    expect(findNewlyEnabledPersonalCapabilities([ACTIVE_TEXT_OPENROUTER], selected, CAPABILITIES)).toEqual([]);
-  });
-
-  it("returns nothing when the submission re-checks what was already on", () => {
-    const selected = new Set<PersonalProviderCapability>(["text"]);
-
-    expect(findNewlyEnabledPersonalCapabilities([ACTIVE_TEXT_OPENROUTER], selected, CAPABILITIES)).toEqual([]);
-  });
-
-  it("preserves the caller's capability order", () => {
-    const rows = [makeRow({ provider: "google", llm_id: 1, diffusion_model_id: 2, vision_llm_id: 3 })];
-    const selected = new Set<PersonalProviderCapability>(["vision", "text", "image"]);
-
-    expect(findNewlyEnabledPersonalCapabilities(rows, selected, CAPABILITIES)).toEqual(["text", "image", "vision"]);
   });
 });
 

@@ -38,5 +38,6 @@ conventions, then jump to the guide for your task.
 ## Conventions and Policies
 
 - [`comment-policy.md`](./comment-policy) — durable comments and the advisory policy audit
+- [`panel-prose-and-layout.md`](./panel-prose-and-layout) — text width, markers, and structure inside a panel
 - [`raw-sql-boundary.md`](./raw-sql-boundary) — keeping raw SQL in the repository layer
 - [`dependency-security-policy.md`](./dependency-security-policy) — overrides, patches, and audit exceptions

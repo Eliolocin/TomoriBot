@@ -13,7 +13,7 @@ import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import { escapeDiscordMarkdown } from "@/utils/discord/interactions/panelController";
 import { buildMcpsCustomId } from "@/utils/discord/mcpsPanelCatalog";
-import { buildPanelContainer, buildPanelReceiptContainer } from "@/utils/discord/ui/panel";
+import { buildPanelContainer, buildPanelReceiptContainer, withLinePrefix } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { MAX_MCP_SERVERS_PER_WORKSPACE, safeMcpEndpoint } from "@/utils/mcp/mcpConfigOperations";
 import { formatMcpToolNamesForDiscord } from "@/utils/mcp/mcpToolSnapshot";
@@ -98,7 +98,7 @@ function buildEmptyState(
     },
     {
       type: ComponentType.TextDisplay,
-      content: `-# ${localizer(locale, "commands.mcps.trust_warning")}`,
+      content: withLinePrefix("-# ", localizer(locale, "commands.mcps.trust_warning")),
     },
   ];
 }
@@ -129,7 +129,10 @@ function buildAddArea(
   return [
     { type: ComponentType.Separator, divider: true, spacing: 1 },
     { type: ComponentType.ActionRow, components: buttons },
-    { type: ComponentType.TextDisplay, content: `-# ${localizer(locale, "commands.mcps.trust_warning")}` },
+    {
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.mcps.trust_warning")),
+    },
   ];
 }
 

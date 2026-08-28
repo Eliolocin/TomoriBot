@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { PersonalProviderCapability } from "@/types/db/schema";
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import { getSupportedLocales } from "@/utils/text/localizer";
 
@@ -23,12 +24,62 @@ export const DEFAULT_PAGE_FOR_CATEGORY: Record<PersonalConfigCategory, PersonalC
 
 export type PersonalConfigManagedCapability = "text" | "vision" | "embedding" | "image" | "image_nai" | "video";
 
+export const QUICK_TOGGLE_CAPABILITIES: readonly PersonalProviderCapability[] = [
+  "text",
+  "vision",
+  "embedding",
+  "image",
+  "image_nai",
+  "video",
+] as const;
+
 /**
  * Rows one Spotlight removal modal can present: Discord allows five components, each a ten-option
  * checkbox group. The renderer, the range chooser, and the submit handler must agree on it, because
  * unchecked-means-remove derives the removal set from the slice that was presented.
  */
 export const SPOTLIGHT_REMOVE_PAGE_SIZE = 50;
+
+/**
+ * Options one String Select modal page can present. A String Select caps at 25, so a page that
+ * reserves a slot for its own "none" entry holds 24. Each renderer, range chooser, and modal
+ * builder that slices the same list must share one of these, because a range button carries an
+ * absolute row offset and a reader that divides by a different size lands on another page.
+ */
+export const PERSONAL_MODEL_PAGE_SIZE = 25;
+export const PERSONAL_PROVIDER_PAGE_SIZE = 25;
+export const PERSONAL_PROVIDER_DIRECT_LIMIT = 24;
+export const PERSONAL_PROVIDER_RANGE_VALUE = "__provider_range__";
+export const PERSONAL_FALLBACK_PAGE_SIZE = 24;
+export const SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE = 24;
+
+/**
+ * Personas one Spotlight persona modal can present: five components, each a ten-option checkbox
+ * group. Channel and duration take their own earlier step precisely so all five are available here.
+ * A spotlight's personas therefore come from one block of this size, which is why the selection
+ * bitmask is block-relative and the block index travels with it.
+ */
+export const SPOTLIGHT_PERSONA_PAGE_SIZE = 50;
+
+/**
+ * Base36 rather than hex because the bitmask shares a 100-character custom ID with a snowflake, a
+ * duration, a fingerprint, and a nonce. At the 50-bit bound a hex mask is 13 characters and lands
+ * `spot-set-cf` on exactly 100 with no headroom; base36 is 10.
+ */
+export function encodeSpotlightMask(bits: bigint): string {
+  return bits.toString(36);
+}
+
+export function decodeSpotlightMask(value: string | undefined): bigint | null {
+  if (!value || !/^[0-9a-z]{1,11}$/.test(value)) return null;
+  let bits = 0n;
+  for (const char of value) {
+    const digit = Number.parseInt(char, 36);
+    if (Number.isNaN(digit)) return null;
+    bits = bits * 36n + BigInt(digit);
+  }
+  return bits >> BigInt(SPOTLIGHT_PERSONA_PAGE_SIZE) === 0n ? bits : null;
+}
 
 export function encodeProviderParam(provider: string): string {
   return provider.replace(/:/g, "~");
@@ -88,14 +139,21 @@ export type PersonalConfigPanelRoute =
   | { action: "privacy-level-submit"; locale: string; nonce: string }
   | { action: "crossserver-toggle"; locale: string }
   // Models - Switch Models
-  | { action: "capability-select"; locale: string }
   | { action: "quick-toggle-open"; locale: string }
   | { action: "quick-toggle-submit"; locale: string; nonce: string }
-  | { action: "quick-toggle-confirm"; locale: string; mask: string; nonce: string }
-  | { action: "quick-toggle-cancel"; locale: string }
-  | { action: "model-enable"; locale: string; capability: PersonalConfigManagedCapability }
-  | { action: "model-default"; locale: string; capability: PersonalConfigManagedCapability }
   | { action: "model-provider-select"; locale: string; capability: PersonalConfigManagedCapability }
+  | {
+      action: "model-provider-range-open";
+      locale: string;
+      capability: PersonalConfigManagedCapability;
+      start: number;
+    }
+  | {
+      action: "model-provider-range-page";
+      locale: string;
+      capability: PersonalConfigManagedCapability;
+      chooserPage: number;
+    }
   | {
       action: "model-range-open";
       locale: string;
@@ -104,18 +162,17 @@ export type PersonalConfigPanelRoute =
       start: number;
     }
   | {
+      action: "model-range-page";
+      locale: string;
+      capability: PersonalConfigManagedCapability;
+      provider: string;
+      chooserPage: number;
+    }
+  | {
       action: "model-modal-submit";
       locale: string;
       capability: PersonalConfigManagedCapability;
       provider: string;
-      nonce: string;
-    }
-  | {
-      action: "model-act-confirm";
-      locale: string;
-      capability: PersonalConfigManagedCapability;
-      provider: string;
-      modelId: number;
       nonce: string;
     }
   | { action: "model-act-cancel"; locale: string }
@@ -129,6 +186,7 @@ export type PersonalConfigPanelRoute =
   | { action: "fallbacks-provider-select"; locale: string }
   | { action: "fallbacks-open"; locale: string; provider: string }
   | { action: "fallbacks-range-open"; locale: string; provider: string; start: number }
+  | { action: "fallbacks-range-page"; locale: string; provider: string; chooserPage: number }
   | { action: "fallbacks-submit"; locale: string; provider: string; nonce: string }
   | { action: "randomizer-toggle"; locale: string; provider: string }
   // Advanced - Response Modes
@@ -142,13 +200,32 @@ export type PersonalConfigPanelRoute =
   | { action: "impersonation-clear-cancel"; locale: string }
   // Advanced - Personal Spotlight
   | { action: "spotlight-set-open"; locale: string }
-  | { action: "spotlight-set-submit"; locale: string; fp: string; nonce: string }
+  | { action: "spotlight-set-step1"; locale: string; nonce: string }
+  | { action: "spotlight-set-block"; locale: string; channelId: string; hours: number; fp: string; blockIdx: number }
+  | {
+      action: "spotlight-set-block-page";
+      locale: string;
+      channelId: string;
+      hours: number;
+      fp: string;
+      chooserPage: number;
+    }
+  | {
+      action: "spotlight-set-submit";
+      locale: string;
+      channelId: string;
+      hours: number;
+      blockIdx: number;
+      fp: string;
+      nonce: string;
+    }
   | {
       action: "spot-set-cf";
       locale: string;
       channelId: string;
       hours: number;
-      autoTriggerId: number;
+      autoIdx: number;
+      blockIdx: number;
       mask: string;
       fp: string;
       nonce: string;
@@ -158,15 +235,46 @@ export type PersonalConfigPanelRoute =
       locale: string;
       channelId: string;
       hours: number;
+      blockIdx: number;
       mask: string;
       fp: string;
       nonce: string;
+    }
+  | {
+      action: "spot-set-auto-range";
+      locale: string;
+      channelId: string;
+      hours: number;
+      blockIdx: number;
+      mask: string;
+      fp: string;
+      start: number;
+    }
+  | {
+      action: "spot-set-auto-page";
+      locale: string;
+      channelId: string;
+      hours: number;
+      blockIdx: number;
+      mask: string;
+      fp: string;
+      chooserPage: number;
+    }
+  | {
+      action: "spot-set-auto-cancel";
+      locale: string;
+      channelId: string;
+      hours: number;
+      blockIdx: number;
+      mask: string;
+      fp: string;
     }
   | {
       action: "spot-set-auto-sub";
       locale: string;
       channelId: string;
       hours: number;
+      blockIdx: number;
       mask: string;
       fp: string;
       nonce: string;
@@ -174,6 +282,7 @@ export type PersonalConfigPanelRoute =
   | { action: "spotlight-set-cancel"; locale: string }
   | { action: "spotlight-remove-open"; locale: string }
   | { action: "spot-rem-range"; locale: string; start: number; fp: string }
+  | { action: "spotlight-remove-page"; locale: string; chooserPage: number; fp: string }
   | { action: "spotlight-remove-submit"; locale: string; start: number; fp: string; nonce: string }
   | { action: "spotlight-remove-cancel"; locale: string }
   | {
@@ -188,25 +297,38 @@ export type PersonalConfigPanelRoute =
 
 const WIRE_ACTION_TOKENS: Record<string, string> = {
   "spotlight-set-submit": "s-set-sub",
+  "spotlight-set-step1": "s-step1",
+  "spotlight-set-block": "s-blk",
+  "spotlight-set-block-page": "s-blk-p",
   "spot-set-cf": "s-cf",
   "spot-set-auto": "s-auto",
+  "spot-set-auto-range": "s-auto-r",
+  "spot-set-auto-page": "s-auto-p",
+  "spot-set-auto-cancel": "s-auto-c",
   "spot-set-auto-sub": "s-asub",
   "spot-rem-range": "s-rem-r",
+  "spotlight-remove-page": "s-rem-p",
   "spotlight-remove-submit": "s-rem-sub",
 };
+
+export function buildPersonalConfigSegments(
+  action: string,
+  locale: string,
+  ...segments: Array<string | number>
+): string[] {
+  const wireAction = WIRE_ACTION_TOKENS[action] ?? action;
+  return [wireAction, locale, ...segments.map(String)];
+}
 
 export function buildPersonalConfigCustomId(
   action: string,
   locale: string,
   ...segments: Array<string | number>
 ): string {
-  const wireAction = WIRE_ACTION_TOKENS[action] ?? action;
   return buildInteractionRouteId(
     PERSONAL_CONFIG_ROUTE_NAMESPACE,
     PERSONAL_CONFIG_ROUTE_VERSION,
-    wireAction,
-    locale,
-    ...segments.map(String),
+    ...buildPersonalConfigSegments(action, locale, ...segments),
   );
 }
 
@@ -286,9 +408,8 @@ function parseSnowflake(value: string | undefined): string | null {
   return value;
 }
 
-function parseHexMask(value: string | undefined): string | null {
-  if (!value || !/^[0-9a-fA-F]{1,16}$/.test(value)) return null;
-  return value;
+function parseSpotlightMask(value: string | undefined): string | null {
+  return decodeSpotlightMask(value) === null ? null : (value as string);
 }
 
 function parseFingerprint(value: string | undefined): string | null {
@@ -301,7 +422,7 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
     return null;
   }
 
-  const [action, rawLocale, first, second, third, fourth, fifth, sixth] = route.segments;
+  const [action, rawLocale, first, second, third, fourth, fifth, sixth, seventh] = route.segments;
   const locale = parseLocale(rawLocale);
   if (!locale || !action) return null;
 
@@ -333,9 +454,7 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
     action === "appearance-open" ||
     action === "privacy-level-open" ||
     action === "crossserver-toggle" ||
-    action === "capability-select" ||
     action === "quick-toggle-open" ||
-    action === "quick-toggle-cancel" ||
     action === "model-act-cancel" ||
     action === "parameters-provider-select" ||
     action === "fallbacks-provider-select" ||
@@ -367,47 +486,91 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
     return nonce === null ? null : { action, locale, nonce };
   }
 
-  if (action === "s-set-sub" && route.segments.length === 4) {
-    const fp = parseFingerprint(first);
-    const nonce = parseNonce(second);
-    return fp === null || nonce === null ? null : { action: "spotlight-set-submit", locale, fp, nonce };
+  if (action === "s-step1" && route.segments.length === 3) {
+    const nonce = parseNonce(first);
+    return nonce === null ? null : { action: "spotlight-set-step1", locale, nonce };
   }
 
-  if (action === "s-cf" && route.segments.length === 8) {
+  if ((action === "s-blk" || action === "s-blk-p") && route.segments.length === 6) {
     const channelId = parseSnowflake(first);
     const hours = parseNonNegativeInt(second);
-    const autoTriggerId = parseNonNegativeInt(third);
-    const mask = parseHexMask(fourth);
+    const fp = parseFingerprint(third);
+    const index = parseNonNegativeInt(fourth);
+    if (!channelId || hours === null || !fp || index === null) return null;
+    return action === "s-blk"
+      ? { action: "spotlight-set-block", locale, channelId, hours, fp, blockIdx: index }
+      : { action: "spotlight-set-block-page", locale, channelId, hours, fp, chooserPage: index };
+  }
+
+  if (action === "s-set-sub" && route.segments.length === 7) {
+    const channelId = parseSnowflake(first);
+    const hours = parseNonNegativeInt(second);
+    const blockIdx = parseNonNegativeInt(third);
+    const fp = parseFingerprint(fourth);
+    const nonce = parseNonce(fifth);
+    if (!channelId || hours === null || blockIdx === null || !fp || !nonce) return null;
+    return { action: "spotlight-set-submit", locale, channelId, hours, blockIdx, fp, nonce };
+  }
+
+  if (action === "s-cf" && route.segments.length === 9) {
+    const channelId = parseSnowflake(first);
+    const hours = parseNonNegativeInt(second);
+    const autoIdx = parseNonNegativeInt(third);
+    const blockIdx = parseNonNegativeInt(fourth);
+    const mask = parseSpotlightMask(fifth);
+    const fp = parseFingerprint(sixth);
+    const nonce = parseNonce(seventh);
+    if (!channelId || hours === null || autoIdx === null || blockIdx === null || !mask || !fp || !nonce) return null;
+    if (autoIdx > SPOTLIGHT_PERSONA_PAGE_SIZE) return null;
+    return { action: "spot-set-cf", locale, channelId, hours, autoIdx, blockIdx, mask, fp, nonce };
+  }
+
+  if ((action === "s-auto" || action === "s-asub") && route.segments.length === 8) {
+    const channelId = parseSnowflake(first);
+    const hours = parseNonNegativeInt(second);
+    const blockIdx = parseNonNegativeInt(third);
+    const mask = parseSpotlightMask(fourth);
     const fp = parseFingerprint(fifth);
     const nonce = parseNonce(sixth);
-    if (!channelId || hours === null || autoTriggerId === null || !mask || !fp || !nonce) return null;
-    return { action: "spot-set-cf", locale, channelId, hours, autoTriggerId, mask, fp, nonce };
+    if (!channelId || hours === null || blockIdx === null || !mask || !fp || !nonce) return null;
+    return action === "s-auto"
+      ? { action: "spot-set-auto", locale, channelId, hours, blockIdx, mask, fp, nonce }
+      : { action: "spot-set-auto-sub", locale, channelId, hours, blockIdx, mask, fp, nonce };
   }
 
-  if (action === "s-auto" && route.segments.length === 7) {
+  if ((action === "s-auto-r" || action === "s-auto-p") && route.segments.length === 8) {
     const channelId = parseSnowflake(first);
     const hours = parseNonNegativeInt(second);
-    const mask = parseHexMask(third);
-    const fp = parseFingerprint(fourth);
-    const nonce = parseNonce(fifth);
-    if (!channelId || hours === null || !mask || !fp || !nonce) return null;
-    return { action: "spot-set-auto", locale, channelId, hours, mask, fp, nonce };
+    const blockIdx = parseNonNegativeInt(third);
+    const mask = parseSpotlightMask(fourth);
+    const fp = parseFingerprint(fifth);
+    const index = parseNonNegativeInt(sixth);
+    if (!channelId || hours === null || blockIdx === null || !mask || !fp || index === null) return null;
+    return action === "s-auto-r"
+      ? { action: "spot-set-auto-range", locale, channelId, hours, blockIdx, mask, fp, start: index }
+      : { action: "spot-set-auto-page", locale, channelId, hours, blockIdx, mask, fp, chooserPage: index };
   }
 
-  if (action === "s-asub" && route.segments.length === 7) {
+  if (action === "s-auto-c" && route.segments.length === 7) {
     const channelId = parseSnowflake(first);
     const hours = parseNonNegativeInt(second);
-    const mask = parseHexMask(third);
-    const fp = parseFingerprint(fourth);
-    const nonce = parseNonce(fifth);
-    if (!channelId || hours === null || !mask || !fp || !nonce) return null;
-    return { action: "spot-set-auto-sub", locale, channelId, hours, mask, fp, nonce };
+    const blockIdx = parseNonNegativeInt(third);
+    const mask = parseSpotlightMask(fourth);
+    const fp = parseFingerprint(fifth);
+    if (!channelId || hours === null || blockIdx === null || !mask || !fp) return null;
+    return { action: "spot-set-auto-cancel", locale, channelId, hours, blockIdx, mask, fp };
   }
 
   if (action === "s-rem-r" && route.segments.length === 4) {
     const start = parseNonNegativeInt(first);
     const fp = parseFingerprint(second);
     return start === null || fp === null ? null : { action: "spot-rem-range", locale, start, fp };
+  }
+
+  if (action === "s-rem-p" && route.segments.length === 4) {
+    const chooserPage = parseNonNegativeInt(first);
+    const fp = parseFingerprint(second);
+    return chooserPage === null || fp === null ? null : { action: "spotlight-remove-page", locale, chooserPage, fp };
   }
 
   // The removal modal presents one 50-row slice, and unchecked-means-remove derives the removal set
@@ -422,13 +585,6 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
       : { action: "spotlight-remove-submit", locale, start, fp, nonce };
   }
 
-  if (action === "quick-toggle-confirm" && route.segments.length === 4) {
-    const mask = first;
-    const nonce = parseNonce(second);
-    if (!mask || !/^[01]{5}$/.test(mask) || nonce === null) return null;
-    return { action, locale, mask, nonce };
-  }
-
   if (action === "persona-naming-open" && route.segments.length === 3) {
     const lineageId = parsePositiveId(first);
     return lineageId === null ? null : { action, locale, lineageId };
@@ -440,10 +596,7 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
     return lineageId === null || nonce === null ? null : { action, locale, lineageId, nonce };
   }
 
-  if (
-    (action === "model-enable" || action === "model-default" || action === "model-provider-select") &&
-    route.segments.length === 3
-  ) {
+  if (action === "model-provider-select" && route.segments.length === 3) {
     const capability = parseManagedCapability(first);
     return capability === null ? null : { action, locale, capability };
   }
@@ -457,6 +610,27 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
       : { action, locale, capability, provider, start };
   }
 
+  if (action === "model-provider-range-open" && route.segments.length === 4) {
+    const capability = parseManagedCapability(first);
+    const start = parseNonNegativeInt(second);
+    return capability === null || start === null ? null : { action, locale, capability, start };
+  }
+
+  if (action === "model-provider-range-page" && route.segments.length === 4) {
+    const capability = parseManagedCapability(first);
+    const chooserPage = parseNonNegativeInt(second);
+    return capability === null || chooserPage === null ? null : { action, locale, capability, chooserPage };
+  }
+
+  if (action === "model-range-page" && route.segments.length === 5) {
+    const capability = parseManagedCapability(first);
+    const provider = parseProvider(second);
+    const chooserPage = parseNonNegativeInt(third);
+    return capability === null || provider === null || chooserPage === null
+      ? null
+      : { action, locale, capability, provider, chooserPage };
+  }
+
   if (action === "model-modal-submit" && route.segments.length === 5) {
     const capability = parseManagedCapability(first);
     const provider = parseProvider(second);
@@ -464,16 +638,6 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
     return capability === null || provider === null || nonce === null
       ? null
       : { action, locale, capability, provider, nonce };
-  }
-
-  if (action === "model-act-confirm" && route.segments.length === 6) {
-    const capability = parseManagedCapability(first);
-    const provider = parseProvider(second);
-    const modelId = parsePositiveId(third);
-    const nonce = parseNonce(fourth);
-    return capability === null || provider === null || modelId === null || nonce === null
-      ? null
-      : { action, locale, capability, provider, modelId, nonce };
   }
 
   if (
@@ -491,6 +655,12 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
     const provider = parseProvider(first);
     const start = parseNonNegativeInt(second);
     return provider === null || start === null ? null : { action, locale, provider, start };
+  }
+
+  if (action === "fallbacks-range-page" && route.segments.length === 4) {
+    const provider = parseProvider(first);
+    const chooserPage = parseNonNegativeInt(second);
+    return provider === null || chooserPage === null ? null : { action, locale, provider, chooserPage };
   }
 
   if (

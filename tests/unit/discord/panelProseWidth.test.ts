@@ -1,0 +1,190 @@
+import { describe, expect, it } from "bun:test";
+import { readdirSync, readFileSync } from "node:fs";
+import { ComponentType } from "discord.js";
+import { PrivacyLevel, type TomoriState } from "@/types/db/schema";
+import { buildPersonalMemoriesPanelPayload } from "@/utils/discord/ui/personalMemoriesPanel";
+import { initializeLocalizer, localizer } from "@/utils/text/localizer";
+
+await initializeLocalizer();
+
+const PANEL_UI_DIR = "src/utils/discord/ui";
+
+/**
+ * Panel body prose wraps at the container width, and a line longer than this stretches the
+ * container wider than the select menus beneath it, so the page stops looking like one column.
+ * Authored strings therefore carry their own line breaks rather than relying on the client.
+ */
+const MAX_PANEL_PROSE_LINE = 65;
+
+/**
+ * Budget for a `TextDisplay` sharing a Section with a Thumbnail accessory.
+ *
+ * The thumbnail takes its width from the same row, so prose beside it wraps sooner and pushes the
+ * container back out past the selects. Roughly a third of the row is gone, hence the tighter cap.
+ */
+const MAX_PANEL_PROSE_LINE_BESIDE_THUMBNAIL = 40;
+
+/**
+ * Panel builders that render a Thumbnail, each of which needs a payload walked below.
+ *
+ * The static scan cannot tell which keys land beside a thumbnail: the wrapping is conditional and
+ * the heading is built as a variable first. Listing the files here is what makes that gap fail
+ * loudly, because a panel that grows a thumbnail without render coverage breaks this test.
+ */
+const THUMBNAIL_PANELS_WITH_RENDER_COVERAGE = new Set(["personalMemoriesPanel.ts"]);
+
+/**
+ * Width as Discord draws it, not as the string is stored.
+ *
+ * A link's URL, and the markers around bold, italic, strikethrough, and inline code, all occupy
+ * no width once rendered. Measuring them would push authors to break lines that already fit, and
+ * would make a documentation link impossible to add to a heading.
+ */
+function renderedWidth(line: string): number {
+  return line
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replaceAll("**", "")
+    .replaceAll("__", "")
+    .replaceAll("~~", "")
+    .replaceAll("`", "").length;
+}
+
+interface ProseWidthViolation {
+  where: string;
+  width: number;
+  budget: number;
+  line: string;
+}
+
+/**
+ * Walks a built payload and measures every `TextDisplay` against the budget for where it sits.
+ *
+ * Rendering rather than reading source is the only way to know a heading ended up inside a
+ * Section with a Thumbnail accessory, because that wrapping is a runtime decision.
+ */
+export function collectProseWidthViolations(node: unknown, besideThumbnail = false): ProseWidthViolation[] {
+  if (Array.isArray(node)) return node.flatMap((child) => collectProseWidthViolations(child, besideThumbnail));
+  if (typeof node !== "object" || node === null) return [];
+
+  const record = node as Record<string, unknown>;
+  const accessory = record.accessory as { type?: number } | undefined;
+  const inThumbnailSection =
+    besideThumbnail || (record.type === ComponentType.Section && accessory?.type === ComponentType.Thumbnail);
+
+  if (record.type === ComponentType.TextDisplay && typeof record.content === "string") {
+    const budget = inThumbnailSection ? MAX_PANEL_PROSE_LINE_BESIDE_THUMBNAIL : MAX_PANEL_PROSE_LINE;
+    return record.content
+      .split("\n")
+      .map((line) => ({ line, width: renderedWidth(line) }))
+      .filter(({ width }) => width > budget)
+      .map(({ line, width }) => ({
+        where: inThumbnailSection ? "beside thumbnail" : "panel body",
+        width,
+        budget,
+        line,
+      }));
+  }
+
+  return Object.values(record).flatMap((child) => collectProseWidthViolations(child, inThumbnailSection));
+}
+
+/**
+ * Locale keys rendered into a `TextDisplay` body, per panel file.
+ *
+ * Only `content:` values are collected. Modal field labels and descriptions are laid out by
+ * Discord inside the modal and never widen the panel container, so they are out of scope even
+ * though the same files build them.
+ */
+function collectTextDisplayKeys(): Map<string, string[]> {
+  const byFile = new Map<string, string[]>();
+
+  for (const file of readdirSync(PANEL_UI_DIR).filter((name) => name.endsWith("Panel.ts"))) {
+    const source = readFileSync(`${PANEL_UI_DIR}/${file}`, "utf8");
+    const keys = new Set<string>();
+
+    for (const block of source.matchAll(/content:\s*`([\s\S]*?)`,?\n/g)) {
+      for (const call of block[1].matchAll(/localizer\(\s*[A-Za-z0-9_.]+\s*,\s*"([a-z0-9_.-]+)"/g)) {
+        keys.add(call[1]);
+      }
+    }
+    for (const direct of source.matchAll(/content:\s*localizer\(\s*[A-Za-z0-9_.]+\s*,\s*"([a-z0-9_.-]+)"/g)) {
+      keys.add(direct[1]);
+    }
+
+    if (keys.size > 0) byFile.set(file, [...keys].sort());
+  }
+
+  return byFile;
+}
+
+describe("panel prose width", () => {
+  const keysByFile = collectTextDisplayKeys();
+
+  it("finds TextDisplay keys in every panel builder", () => {
+    // Guards the extraction itself: a regex that silently matches nothing would make every
+    // width assertion below vacuous.
+    expect(keysByFile.size).toBeGreaterThanOrEqual(6);
+    for (const [file, keys] of keysByFile) {
+      expect(keys.length, `${file} yielded no TextDisplay locale keys`).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps every authored panel line at or under 65 characters", () => {
+    const violations: string[] = [];
+
+    for (const [file, keys] of keysByFile) {
+      for (const key of keys) {
+        const text = localizer("en-US", key);
+        // A key that resolves to itself is composed at runtime or missing; the composed-key
+        // tests own that case and an unresolved key has no authored width to measure.
+        if (text === key) continue;
+
+        for (const line of text.split("\n")) {
+          const width = renderedWidth(line);
+          if (width > MAX_PANEL_PROSE_LINE) {
+            violations.push(`${file} ${key} (${width}): ${line.slice(0, 72)}`);
+          }
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it("covers every panel that renders a Thumbnail with a payload walk", () => {
+    const thumbnailPanels = readdirSync(PANEL_UI_DIR)
+      .filter((name) => name.endsWith("Panel.ts"))
+      .filter((name) => readFileSync(`${PANEL_UI_DIR}/${name}`, "utf8").includes("ComponentType.Thumbnail"));
+
+    // Fails closed: a panel that grows a thumbnail must gain a walk below, because the static
+    // scan above would keep measuring its heading against the wider body budget.
+    expect(thumbnailPanels.sort()).toEqual([...THUMBNAIL_PANELS_WITH_RENDER_COVERAGE].sort());
+  });
+
+  it("holds persona-scoped memories to 40 characters beside its avatar", () => {
+    const personas = [
+      {
+        persona_id: 55,
+        persona_lineage_id: 1770,
+        persona_nickname: "Aphel",
+        is_alter: false,
+      } as unknown as TomoriState,
+    ];
+    const build = (selectedPersonaAvatarUrl: string | null) =>
+      buildPersonalMemoriesPanelPayload({
+        locale: "en-US",
+        category: "persona",
+        selectedLineageId: 1770,
+        personas,
+        selectedPersonaAvatarUrl,
+        memories: [],
+        stmCount: 0,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "fresh",
+        page: { kind: "main" },
+      });
+
+    expect(collectProseWidthViolations(build("https://cdn.example.invalid/55.png"))).toEqual([]);
+    expect(collectProseWidthViolations(build(null))).toEqual([]);
+  });
+});

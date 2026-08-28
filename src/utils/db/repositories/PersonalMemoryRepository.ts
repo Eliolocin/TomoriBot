@@ -74,6 +74,31 @@ class PersonalMemoryRepository implements IRepository<PersonalMemoryExportShape>
   }
 
   /**
+   * Personal memory counts per persona lineage, for the `/personal memories` persona selector.
+   *
+   * Grouped rather than one count per persona: the selector renders up to 25 lineages, and the
+   * sibling eligibility query above exists for the same reason.
+   *
+   * Lineage `0` is excluded to match `loadForUserLineage(userId, lineageId, false)`, so a count
+   * always equals what selecting that persona will list.
+   */
+  async memoryCountsByLineage(userId: number): Promise<Map<number, number>> {
+    try {
+      const rows = await sql<Array<{ persona_lineage_id: number | string; count: string | number }>>`
+        SELECT persona_lineage_id, COUNT(*) AS count
+        FROM personal_memories
+        WHERE user_id = ${userId}
+          AND persona_lineage_id <> 0
+        GROUP BY persona_lineage_id
+      `;
+      return new Map(rows.map((row) => [Number(row.persona_lineage_id), Number(row.count)]));
+    } catch (error) {
+      log.error(`Error counting personal memories per lineage for user ${userId}:`, error);
+      return new Map();
+    }
+  }
+
+  /**
    * Returns the set of persona lineage ids for which this user has at least one
    * personal memory. Batched eligibility source for the persona-scoped `/memory
    * personal` picker filters, which load with `includeGlobalMemories = false`.

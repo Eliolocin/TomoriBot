@@ -246,6 +246,18 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Persona eligibility batched queries — re
     expect(batch.has(pOwn.persona_lineage_id)).toBe(true);
   });
 
+  it("memoryCountsByLineage agrees with loadForUserLineage and omits empty lineages", async () => {
+    const counts = await personalMemoryRepository.memoryCountsByLineage(altUserId);
+    for (const lineage of [pOwn.persona_lineage_id, pShareA.persona_lineage_id, pEmpty.persona_lineage_id]) {
+      const loaded = await personalMemoryRepository.loadForUserLineage(altUserId, lineage, false);
+      // Absent rather than zero: the selector has to read a missing entry as none.
+      expect(counts.get(lineage) ?? 0).toBe(loaded.length);
+    }
+    expect(counts.has(0)).toBe(false);
+    expect(counts.get(pOwn.persona_lineage_id)).toBeGreaterThan(0);
+    expect(counts.has(pEmpty.persona_lineage_id)).toBe(false);
+  });
+
   it("personaIdsWithSprites agrees with listForPersona, including the zero-own-row preset pointer", async () => {
     if (!hasSprites) return; // RAG/sprite schema absent (no pgvector), so skip sprite parity
     const personas = [pOwn, pEmpty, pPointer, pShareA, pShareB];

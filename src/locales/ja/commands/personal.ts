@@ -243,12 +243,6 @@ export default {
 {active_summary}
 
 {scope_notice}`,
-        confirm_title: `個人上書きを有効にしますか？`,
-        confirm_description: `私を使うすべてのサーバーで、次の機能がサーバー既定から個人プロバイダーへ切り替わります。**この設定はあなた自身のリクエストにのみ影響し、このサーバーの他のメンバーには影響しません:**
-
-{newly_enabled}
-
-続行しますか？`,
       },
     },
     model: {
