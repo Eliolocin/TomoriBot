@@ -295,7 +295,9 @@ export class MemoryTool extends BaseTool {
         );
 
         if (dbResult) {
-          log.success(`Tomori self-taught a server-wide memory (ID: ${dbResult.server_memory_id}): "${memoryContent}"`);
+          log.success(
+            `Tomori self-taught a server memory for her own persona lineage (ID: ${dbResult.server_memory_id}): "${memoryContent}"`,
+          );
 
           // Process memory content for display (convert {user} and {bot} tokens to actual names)
           // Security: Ensure we have a valid server ID to prevent user data mixing
@@ -353,18 +355,18 @@ export class MemoryTool extends BaseTool {
           };
         }
 
-        log.error("Failed to save server-wide memory via self-teach (DB error)");
+        log.error("Failed to save server memory via self-teach (DB error)");
         return {
           success: false,
-          error: "Database operation failed to save server-wide memory",
+          error: "Database operation failed to save server memory",
           data: {
             status: "memory_save_failed_db_error",
             scope: "server_wide",
-            reason: "Database operation failed to save server-wide memory",
+            reason: "Database operation failed to save server memory",
           },
         };
       } catch (error) {
-        log.error("Database error during server-wide memory save", error as Error);
+        log.error("Database error during server memory save", error as Error);
         return {
           success: false,
           error: "Database error occurred while saving memory",

@@ -11,7 +11,11 @@ import {
 import type { ServerMemoryRow, TomoriState } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { PanelAction } from "@/constants/panelActions";
-import { getShortTermMemoriesForServer, preWarmServerStmEntries } from "@/utils/cache/shortTermMemoryCache";
+import {
+  clearShortTermMemoryForServerChannel,
+  getShortTermMemoriesForServer,
+  preWarmServerStmEntries,
+} from "@/utils/cache/shortTermMemoryCache";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { getCachedUserRow } from "@/utils/cache/userCache";
 import { personaRepository, serverMemoryRepository, serverRepository, userRepository } from "@/utils/db/repositories";
@@ -20,21 +24,31 @@ import { beginPanelInteraction, performPanelAction } from "@/utils/discord/inter
 import {
   MEMORIES_ROUTE_NAMESPACE,
   MEMORIES_ROUTE_VERSION,
+  computeServerStmFingerprint,
   parseMemoriesPanelRoute,
   type MemoriesCategory,
 } from "@/utils/discord/memoriesPanelCatalog";
 import {
+  buildAddDocumentModal,
   buildAddServerMemoryModal,
+  buildEditDocumentChunkModal,
   buildEditServerMemoryModal,
   buildMemoriesPanelPayload,
+  buildServerStmModal,
   buildServerMemoryModalFieldId,
+  buildDocumentModalFieldId,
+  buildStmCheckboxFieldId,
+  buildVectorizeMemoryModal,
+  MAX_STM_MANAGEABLE_ENTRIES,
+  MAX_STM_OPTIONS_PER_GROUP,
   parseServerMemoryTags,
   personaRepresentativeForLineage,
   type MemoriesPanelPayload,
+  type StmPanelEntry,
 } from "@/utils/discord/ui/memoriesPanel";
 import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
-import { showRoutedRawModal, takeRawModalFileUpload } from "@/utils/discord/ui/modals";
+import { showRoutedRawModal, takeRawModalCheckboxGroupValues, takeRawModalFileUpload } from "@/utils/discord/ui/modals";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   dedupeCaseInsensitive,
@@ -46,6 +60,12 @@ import { getMemoryLimits, validateMemoryContent } from "@/utils/misc/memoryLimit
 import { recordPanelActionStat } from "@/utils/stats/panelActionMetrics";
 import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
+import {
+  serverDocumentsOperations,
+  type DocumentChunkRow,
+  type DocumentListRow,
+} from "@/utils/discord/interactions/memoriesDocumentOperations";
+import { parseInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 
 interface MemoriesScope {
   serverId: number;
@@ -56,6 +76,7 @@ interface MemoriesScope {
   canManage: boolean;
   isBlacklisted: boolean;
   memteachingEnabled: boolean;
+  configuredEmbeddingModelId: number | null;
   personas: TomoriState[];
   readStatus: PanelReadStatus;
 }
@@ -333,14 +354,25 @@ export interface MemoriesRouteDependencies {
     forceRefresh?: boolean,
   ): Promise<MemoriesScope | null>;
   loadMemories(serverId: number, lineageId: number, userId?: number): Promise<ServerMemoryRow[]>;
-  getEligibleLineageIds(serverId: number, userId?: number): Promise<Set<number>>;
+  getMemoryCountsByLineage(serverId: number, userId?: number): Promise<Map<number, number>>;
   getPersonaAvatarUrl(
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
     persona: TomoriState,
   ): Promise<string | null>;
-  getStmCount(workspaceId: string): Promise<number>;
+  loadDocuments(serverId: number, personaId: number | null): Promise<DocumentListRow[]>;
+  loadDocumentMeta(
+    serverId: number,
+    personaId: number | null,
+    documentId: number,
+  ): Promise<{ document_name: string; channel_tags: string[] } | null>;
+  loadDocumentChunks(serverId: number, personaId: number | null, documentId: number): Promise<DocumentChunkRow[]>;
+  getDocumentCounts(serverId: number, personaId: number | null): Promise<{ documents: number; chunks: number }>;
+  getDocumentCountsByPersona(serverId: number): Promise<{ byPersona: Map<number, number>; serverwide: number }>;
+  getEligibleHistoryPersonaIds(serverId: number): Promise<Set<number>>;
+  getStmEntries(workspaceId: string, personas: TomoriState[], locale: string): Promise<StmPanelEntry[]>;
   preWarmServerStm(workspaceId: string): Promise<void>;
   operations: ServerMemoriesOperations;
+  documentOperations: typeof serverDocumentsOperations;
   recordAction(input: { action: PanelAction; serverId: number; userDiscId: string }): void;
   createNonce(): string;
   showAddModal(
@@ -350,6 +382,7 @@ export interface MemoriesRouteDependencies {
     nonce: string,
   ): Promise<void>;
   takeFileUpload(interactionId: string, nonce: string): APIAttachment | undefined;
+  takeDocumentFileUpload(interactionId: string, nonce: string): APIAttachment | undefined;
   readUploadedText(attachment: APIAttachment): Promise<TxtUploadReadResult>;
   showEditModal(
     interaction: ButtonInteraction,
@@ -358,9 +391,84 @@ export interface MemoriesRouteDependencies {
     memory: ServerMemoryRow,
     nonce: string,
   ): Promise<void>;
+  showAddDocumentModal(
+    interaction: StringSelectMenuInteraction | ButtonInteraction,
+    locale: string,
+    personaId: number,
+    nonce: string,
+  ): Promise<void>;
+  showEditChunkModal(
+    interaction: ButtonInteraction,
+    locale: string,
+    personaId: number,
+    documentId: number,
+    chunk: DocumentChunkRow,
+    channelTags: string[],
+    nonce: string,
+  ): Promise<void>;
+  showVectorizeModal(
+    interaction: ButtonInteraction,
+    locale: string,
+    lineageId: number,
+    personaId: number,
+    memory: ServerMemoryRow,
+    nonce: string,
+  ): Promise<void>;
+  showStmModal(
+    interaction: ButtonInteraction,
+    locale: string,
+    entries: StmPanelEntry[],
+    fingerprint: string,
+  ): Promise<void>;
+  takeCheckboxValues(interactionId: string, fieldId: string): string[] | undefined;
+  clearStm(workspaceId: string, channelId: string, personaId: number | null): void;
 }
 
-const ERROR_RECEIPT_KEYS = new Set([
+export const MEMORIES_RECEIPT_KEYS = [
+  "added",
+  "edited",
+  "removed",
+  "no_changes",
+  "changed_state",
+  "write_failed",
+  "content_too_long",
+  "limit_reached",
+  "empty_content",
+  "batch_added",
+  "batch_file_invalid",
+  "batch_file_too_large",
+  "batch_all_duplicates",
+  "batch_limit_reached",
+  "blacklisted_error",
+  "teaching_disabled_error",
+  "manager_only",
+  "document_added",
+  "document_removed",
+  "document_chunk_edited",
+  "document_chunk_removed",
+  "document_removed_with_last_chunk",
+  "vectorized",
+  "vectorize_partial_failure",
+  "document_rag_disabled",
+  "document_memory_critical",
+  "document_invalid_name",
+  "document_invalid_file",
+  "document_file_too_large",
+  "document_download_failed",
+  "document_empty_content",
+  "document_content_too_long",
+  "document_too_many_chunks",
+  "document_limit",
+  "document_chunk_limit",
+  "document_duplicate",
+  "document_quota",
+  "embedding_credentials_missing",
+  "embedding_model_missing",
+  "stm_changed_state",
+  "stm_cleared",
+] as const;
+
+const ERROR_RECEIPT_KEYS = new Set<string>([
   "blacklisted_error",
   "teaching_disabled_error",
   "empty_content",
@@ -371,6 +479,24 @@ const ERROR_RECEIPT_KEYS = new Set([
   "batch_file_too_large",
   "batch_all_duplicates",
   "batch_limit_reached",
+  "manager_only",
+  "document_invalid_name",
+  "document_rag_disabled",
+  "document_memory_critical",
+  "document_invalid_file",
+  "document_file_too_large",
+  "document_download_failed",
+  "document_empty_content",
+  "document_content_too_long",
+  "document_too_many_chunks",
+  "document_limit",
+  "document_chunk_limit",
+  "document_duplicate",
+  "document_quota",
+  "embedding_credentials_missing",
+  "embedding_model_missing",
+  "vectorize_partial_failure",
+  "stm_changed_state",
 ]);
 
 function receipt(locale: string, key: string, variables?: Record<string, string | number>): PanelReceipt {
@@ -378,6 +504,21 @@ function receipt(locale: string, key: string, variables?: Record<string, string 
     tone: ERROR_RECEIPT_KEYS.has(key) ? "error" : "success",
     heading: localizer(locale, `commands.memories.${key}_heading`),
     detail: localizer(locale, `commands.memories.${key}_detail`, variables),
+  };
+}
+
+/**
+ * Yellow interim receipt painted before an embedding call.
+ *
+ * Document upload and vectorize both wait on the embedding provider, and the panel is already
+ * deferred by then, so without this the message sits unchanged for several seconds with nothing to
+ * say the work started. This paint is overwritten by the real receipt when the operation returns.
+ */
+function workingReceipt(locale: string, key: string): PanelReceipt {
+  return {
+    tone: "warning",
+    heading: localizer(locale, `commands.memories.${key}_heading`),
+    detail: localizer(locale, `commands.memories.${key}_detail`),
   };
 }
 
@@ -411,6 +552,62 @@ function terminalPayload(locale: string, key: string): InteractionEditReplyOptio
   };
 }
 
+function parseDocumentChannelTags(raw: string, interaction: GlobalRoutableInteraction): string[] {
+  if (!raw.trim()) return [];
+  return [
+    ...new Set(
+      raw
+        .split(",")
+        .map((part) => {
+          const value = part.trim();
+          const mention = value.match(/^<#(\d+)>$/);
+          if (mention) {
+            const channel = interaction.client.channels.cache.get(mention[1]);
+            return channel && "name" in channel && channel.name ? channel.name.toLowerCase() : "";
+          }
+          return value.toLowerCase().replace(/^#+/, "");
+        })
+        .filter((value) => value.length > 0 && /^[\w-]+$/.test(value))
+        .map((value) => `#${value}`),
+    ),
+  ];
+}
+
+/**
+ * Receipt key for each non-success document operation status.
+ *
+ * Exported so a test can prove every value here is also in `MEMORIES_RECEIPT_KEYS`: a status
+ * mapped to a key nobody registered renders the raw key to the user, and `check-locales` cannot
+ * see it because the heading and detail suffixes are composed at call time.
+ */
+export const DOCUMENT_RESULT_RECEIPT_KEYS: Record<string, string> = {
+  blacklisted: "blacklisted_error",
+  "teaching-disabled": "teaching_disabled_error",
+  "rag-disabled": "document_rag_disabled",
+  "memory-critical": "document_memory_critical",
+  "invalid-name": "document_invalid_name",
+  "invalid-file": "document_invalid_file",
+  "file-too-large": "document_file_too_large",
+  "download-failed": "document_download_failed",
+  "empty-content": "document_empty_content",
+  "content-too-long": "document_content_too_long",
+  "too-many-chunks": "document_too_many_chunks",
+  "document-limit": "document_limit",
+  "chunk-limit": "document_chunk_limit",
+  duplicate: "document_duplicate",
+  "quota-exceeded": "document_quota",
+  "credentials-missing": "embedding_credentials_missing",
+  "model-missing": "embedding_model_missing",
+  "write-failed": "write_failed",
+  forbidden: "manager_only",
+};
+
+function documentResultReceipt(locale: string, status: string, variables?: Record<string, string | number>) {
+  if (status === "not-found") return changedStateReceipt(locale);
+  if (status === "unchanged") return noChangesReceipt(locale);
+  return receipt(locale, DOCUMENT_RESULT_RECEIPT_KEYS[status] ?? "write_failed", variables);
+}
+
 async function resolveScope(
   interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
   _forceRefresh = false,
@@ -427,11 +624,15 @@ async function resolveScope(
       ? ((await userRepository.isBlacklisted(interaction.guildId, userDiscId)) ?? false)
       : false;
 
+    // The state is required rather than optional. Reading the teaching flag as
+    // `tomoriState?.config.server_memteaching_enabled ?? false` turns a cache miss into a
+    // confident "teaching is disabled" on a server where it is enabled, and every legacy leaf
+    // instead dereferences a non-null state, so a missing one means unavailable, not restricted.
     const tomoriState = await getCachedTomoriState(workspaceId);
     const internalServerId = tomoriState?.server_id ?? (await serverRepository.loadServerIdByDiscId(workspaceId));
-    if (!internalServerId) return null;
+    if (!internalServerId || !tomoriState) return null;
 
-    const memteachingEnabled = tomoriState?.config.server_memteaching_enabled ?? false;
+    const memteachingEnabled = tomoriState.config.server_memteaching_enabled;
 
     let personas: TomoriState[] = [];
     try {
@@ -452,6 +653,7 @@ async function resolveScope(
       canManage,
       isBlacklisted,
       memteachingEnabled,
+      configuredEmbeddingModelId: tomoriState.config.embedding_model_id ?? null,
       personas,
       readStatus: "fresh",
     };
@@ -465,8 +667,61 @@ async function loadMemories(serverId: number, lineageId: number, userId?: number
   return serverMemoryRepository.loadServerMemoriesScoped(serverId, lineageId, userId);
 }
 
-async function getEligibleLineageIds(serverId: number, userId?: number): Promise<Set<number>> {
-  return serverMemoryRepository.lineageIdsWithServerMemories(serverId, userId);
+async function getMemoryCountsByLineage(serverId: number, userId?: number): Promise<Map<number, number>> {
+  return serverMemoryRepository.memoryCountsByLineage(serverId, userId);
+}
+
+async function loadDocuments(serverId: number, personaId: number | null): Promise<DocumentListRow[]> {
+  const [documents, history] = await Promise.all([
+    serverMemoryRepository.loadDocuments(serverId, personaId),
+    serverMemoryRepository.loadHistoryDocuments(serverId, personaId),
+  ]);
+  const historyIds = new Set(history.map((document) => document.document_id));
+  return documents.map((document) => ({ ...document, isHistory: historyIds.has(document.document_id) }));
+}
+
+async function loadDocumentChunks(
+  serverId: number,
+  personaId: number | null,
+  documentId: number,
+): Promise<DocumentChunkRow[]> {
+  return serverMemoryRepository.loadDocumentChunks(documentId, serverId, personaId);
+}
+
+async function loadDocumentMeta(serverId: number, personaId: number | null, documentId: number) {
+  return serverMemoryRepository.loadDocumentMeta(documentId, serverId, personaId);
+}
+
+async function getDocumentCounts(
+  serverId: number,
+  personaId: number | null,
+): Promise<{ documents: number; chunks: number }> {
+  const [documents, chunks] = await Promise.all([
+    serverMemoryRepository.countDocumentsScoped(serverId, personaId),
+    serverMemoryRepository.countChunksScoped(serverId, personaId),
+  ]);
+  return { documents, chunks };
+}
+
+async function getStmEntries(workspaceId: string, personas: TomoriState[], locale: string): Promise<StmPanelEntry[]> {
+  await preWarmServerStmEntries(workspaceId);
+  const names = new Map<number, string>();
+  for (const persona of personas) {
+    if (persona.persona_id) names.set(persona.persona_id, persona.persona_nickname);
+  }
+  return getShortTermMemoriesForServer(workspaceId)
+    .map((entry) => ({
+      channelId: entry.channelId,
+      channelName: entry.channelName,
+      personaId: entry.personaId,
+      personaName:
+        entry.personaId == null
+          ? localizer(locale, "commands.memories.stm_unscoped")
+          : (names.get(entry.personaId) ?? localizer(locale, "commands.memories.persona_default_name")),
+      summary: entry.summary,
+      lastUpdated: entry.lastUpdated,
+    }))
+    .sort((left, right) => right.lastUpdated - left.lastUpdated);
 }
 
 /**
@@ -495,9 +750,43 @@ async function preWarmServerStm(workspaceId: string): Promise<void> {
   await preWarmServerStmEntries(workspaceId);
 }
 
-async function getStmCount(workspaceId: string): Promise<number> {
-  await preWarmServerStmEntries(workspaceId);
-  return getShortTermMemoriesForServer(workspaceId).length;
+/**
+ * Refuse a modal-opening branch by repainting the panel with an error receipt.
+ *
+ * These branches sit above `beginPanelInteraction` because a modal is its own acknowledgement, so
+ * they arrive unacknowledged. A refusal is not going to open a modal, which frees it to
+ * `deferUpdate` and edit the panel in place; replying ephemerally instead posts a second, stray
+ * message that reads as an unrelated error rather than as this panel's answer.
+ */
+async function refuseInPlace(
+  interaction: GlobalRoutableInteraction,
+  locale: string,
+  scope: MemoriesScope | null,
+  category: MemoriesCategory,
+  selectedId: number,
+  receiptKey: string,
+  dependencies: MemoriesRouteDependencies,
+): Promise<void> {
+  await interaction.deferUpdate();
+  if (!scope) {
+    await interaction.editReply(terminalPayload(locale, "commands.memories.unavailable"));
+    return;
+  }
+  const memories =
+    category === "memories" && selectedId
+      ? await dependencies.loadMemories(scope.serverId, selectedId, scope.canManage ? undefined : scope.userId)
+      : [];
+  await repaint(
+    interaction,
+    locale,
+    scope,
+    category,
+    selectedId,
+    memories,
+    category === "documents" ? { kind: "documents" } : { kind: "main" },
+    receiptKey === "changed_state" ? changedStateReceipt(locale) : receipt(locale, receiptKey),
+    dependencies,
+  );
 }
 
 async function repaint(
@@ -512,19 +801,55 @@ async function repaint(
   dependencies: MemoriesRouteDependencies = defaultDependencies,
 ): Promise<void> {
   const ownerFilter = scope.canManage ? undefined : scope.userId;
-  let stmCount: number | undefined;
+  let stmEntries: StmPanelEntry[] | undefined;
   if (category === "stm") {
     if (scope.canManage) {
       await dependencies.preWarmServerStm(scope.workspaceId);
-      stmCount = await dependencies.getStmCount(scope.workspaceId);
+      stmEntries = await dependencies.getStmEntries(scope.workspaceId, scope.personas, locale);
     }
   }
 
-  const eligibleLineageIds =
-    category === "memories" ? await dependencies.getEligibleLineageIds(scope.serverId, ownerFilter) : undefined;
+  let documents: DocumentListRow[] | undefined;
+  let documentCount: number | undefined;
+  let documentChunkCount: number | undefined;
+  let documentChunks: DocumentChunkRow[] | undefined;
+  let documentCountsByPersona: Map<number, number> | undefined;
+  let eligibleHistoryPersonaIds: Set<number> | undefined;
+  if (category === "documents" && (scope.canManage || scope.memteachingEnabled)) {
+    const personaId = selectedLineageId === 0 ? null : selectedLineageId;
+    let scopedCounts: { byPersona: Map<number, number>; serverwide: number };
+    [documents, scopedCounts, eligibleHistoryPersonaIds] = await Promise.all([
+      dependencies.loadDocuments(scope.serverId, personaId),
+      dependencies.getDocumentCountsByPersona(scope.serverId),
+      dependencies.getEligibleHistoryPersonaIds(scope.serverId),
+    ]);
+    documentCountsByPersona = scopedCounts.byPersona;
+    const counts = await dependencies.getDocumentCounts(scope.serverId, personaId);
+    documentCount = counts.documents;
+    documentChunkCount = counts.chunks;
+    const documentId =
+      page.kind === "documents"
+        ? page.selectedDocumentId
+        : page.kind === "document-remove" || page.kind === "document-chunk-remove"
+          ? page.documentId
+          : undefined;
+    const selectedDocumentId = documentId ?? documents[0]?.document_id;
+    if (selectedDocumentId) {
+      documentChunks = await dependencies.loadDocumentChunks(scope.serverId, personaId, selectedDocumentId);
+    }
+  }
 
+  const memoryCountsByLineage =
+    category === "memories" ? await dependencies.getMemoryCountsByLineage(scope.serverId, ownerFilter) : undefined;
+
+  // Documents key on persona_id, so the face beside that heading is looked up directly rather
+  // than through the lineage representative the Memories page uses. Serverwide (0) has none.
   const representative =
-    category === "memories" ? personaRepresentativeForLineage(scope.personas, selectedLineageId) : null;
+    category === "memories"
+      ? personaRepresentativeForLineage(scope.personas, selectedLineageId)
+      : category === "documents" && selectedLineageId !== 0
+        ? (scope.personas.find((persona) => persona.persona_id === selectedLineageId) ?? null)
+        : null;
   const selectedPersonaAvatarUrl = representative
     ? await dependencies.getPersonaAvatarUrl(interaction, representative)
     : undefined;
@@ -535,10 +860,19 @@ async function repaint(
       category,
       selectedLineageId,
       personas: scope.personas,
-      eligibleLineageIds,
+      memoryCountsByLineage,
       selectedPersonaAvatarUrl,
       memories,
-      stmCount,
+      selectedDocumentPersonaId: category === "documents" ? selectedLineageId : undefined,
+      documents,
+      documentCount,
+      documentChunkCount,
+      documentChunks,
+      documentCountsByPersona,
+      eligibleHistoryPersonaIds,
+      stmEntries,
+      stmCount: stmEntries?.length,
+      memteachingEnabled: scope.memteachingEnabled,
       canManage: scope.canManage,
       readStatus: scope.readStatus,
       page,
@@ -550,11 +884,18 @@ async function repaint(
 const defaultDependencies: MemoriesRouteDependencies = {
   resolveScope,
   loadMemories,
-  getEligibleLineageIds,
+  getMemoryCountsByLineage,
   getPersonaAvatarUrl,
-  getStmCount,
+  loadDocuments,
+  loadDocumentMeta,
+  loadDocumentChunks,
+  getDocumentCounts,
+  getDocumentCountsByPersona: (serverId) => serverMemoryRepository.documentCountsByPersona(serverId),
+  getEligibleHistoryPersonaIds: (serverId) => serverMemoryRepository.personaIdsWithHistoryDocuments(serverId),
+  getStmEntries,
   preWarmServerStm,
   operations: serverMemoriesOperations,
+  documentOperations: serverDocumentsOperations,
   recordAction: (input) => {
     void recordPanelActionStat(input);
   },
@@ -563,6 +904,8 @@ const defaultDependencies: MemoriesRouteDependencies = {
     showRoutedRawModal(interaction, buildAddServerMemoryModal(locale, lineageId, nonce)),
   takeFileUpload: (interactionId, nonce) =>
     takeRawModalFileUpload(interactionId, buildServerMemoryModalFieldId("file", nonce)),
+  takeDocumentFileUpload: (interactionId, nonce) =>
+    takeRawModalFileUpload(interactionId, buildDocumentModalFieldId("file", nonce)),
   readUploadedText: readTxtUpload,
   showEditModal: (interaction, locale, lineageId, memory, nonce) =>
     showRoutedRawModal(
@@ -576,6 +919,30 @@ const defaultDependencies: MemoriesRouteDependencies = {
         nonce,
       ),
     ),
+  showAddDocumentModal: (interaction, locale, personaId, nonce) =>
+    showRoutedRawModal(interaction, buildAddDocumentModal(locale, personaId, nonce)),
+  showEditChunkModal: (interaction, locale, personaId, documentId, chunk, channelTags, nonce) =>
+    showRoutedRawModal(
+      interaction,
+      buildEditDocumentChunkModal(locale, personaId, documentId, chunk.chunk_index, chunk.content, channelTags, nonce),
+    ),
+  showVectorizeModal: (interaction, locale, lineageId, personaId, memory, nonce) =>
+    showRoutedRawModal(
+      interaction,
+      buildVectorizeMemoryModal(
+        locale,
+        lineageId,
+        personaId,
+        memory.server_memory_id ?? 0,
+        memory.content,
+        memory.tags ?? [],
+        nonce,
+      ),
+    ),
+  showStmModal: (interaction, locale, entries, fingerprint) =>
+    showRoutedRawModal(interaction, buildServerStmModal(locale, entries, fingerprint)),
+  takeCheckboxValues: takeRawModalCheckboxGroupValues,
+  clearStm: clearShortTermMemoryForServerChannel,
 };
 
 export async function buildInitialMemoriesPanel(
@@ -602,7 +969,7 @@ export async function buildInitialMemoriesPanel(
   const memories = selectedLineageId
     ? await dependencies.loadMemories(scope.serverId, selectedLineageId, ownerFilter)
     : [];
-  const eligibleLineageIds = await dependencies.getEligibleLineageIds(scope.serverId, ownerFilter);
+  const memoryCountsByLineage = await dependencies.getMemoryCountsByLineage(scope.serverId, ownerFilter);
   const representative = personaRepresentativeForLineage(scope.personas, selectedLineageId);
   const selectedPersonaAvatarUrl = representative
     ? await dependencies.getPersonaAvatarUrl(interaction, representative)
@@ -613,7 +980,7 @@ export async function buildInitialMemoriesPanel(
     category: "memories",
     selectedLineageId,
     personas: scope.personas,
-    eligibleLineageIds,
+    memoryCountsByLineage,
     selectedPersonaAvatarUrl,
     memories,
     canManage: scope.canManage,
@@ -646,24 +1013,39 @@ export function createMemoriesInteractionRoute(
         if (selectedValue === "action:add") {
           const cachedScope = await dependencies.resolveScope(interaction, false);
           if (!cachedScope) {
-            await interaction.reply({
-              content: localizer(route.locale, "commands.memories.unavailable"),
-              flags: MessageFlags.Ephemeral,
-            });
+            await refuseInPlace(
+              interaction,
+              route.locale,
+              null,
+              "memories",
+              route.lineageId,
+              "write_failed",
+              dependencies,
+            );
             return;
           }
           if (cachedScope.isBlacklisted && !cachedScope.canManage) {
-            await interaction.reply({
-              content: localizer(route.locale, "commands.memories.blacklisted_error_detail"),
-              flags: MessageFlags.Ephemeral,
-            });
+            await refuseInPlace(
+              interaction,
+              route.locale,
+              cachedScope,
+              "memories",
+              route.lineageId,
+              "blacklisted_error",
+              dependencies,
+            );
             return;
           }
           if (!cachedScope.memteachingEnabled && !cachedScope.canManage) {
-            await interaction.reply({
-              content: localizer(route.locale, "commands.memories.teaching_disabled_error_detail"),
-              flags: MessageFlags.Ephemeral,
-            });
+            await refuseInPlace(
+              interaction,
+              route.locale,
+              cachedScope,
+              "memories",
+              route.lineageId,
+              "teaching_disabled_error",
+              dependencies,
+            );
             return;
           }
           const nonce = dependencies.createNonce();
@@ -678,17 +1060,27 @@ export function createMemoriesInteractionRoute(
         }
         const cachedScope = await dependencies.resolveScope(interaction, false);
         if (!cachedScope) {
-          await interaction.reply({
-            content: localizer(route.locale, "commands.memories.unavailable"),
-            flags: MessageFlags.Ephemeral,
-          });
+          await refuseInPlace(
+            interaction,
+            route.locale,
+            null,
+            "memories",
+            route.lineageId,
+            "write_failed",
+            dependencies,
+          );
           return;
         }
         if (cachedScope.isBlacklisted && !cachedScope.canManage) {
-          await interaction.reply({
-            content: localizer(route.locale, "commands.memories.blacklisted_error_detail"),
-            flags: MessageFlags.Ephemeral,
-          });
+          await refuseInPlace(
+            interaction,
+            route.locale,
+            cachedScope,
+            "memories",
+            route.lineageId,
+            "blacklisted_error",
+            dependencies,
+          );
           return;
         }
         const ownerFilter = cachedScope.canManage ? undefined : cachedScope.userId;
@@ -714,6 +1106,217 @@ export function createMemoriesInteractionRoute(
         return;
       }
 
+      if (route.action === "document-select" && interaction.isStringSelectMenu()) {
+        const selectedValue = interaction.values[0];
+        if (selectedValue === "action:add-document") {
+          const cachedScope = await dependencies.resolveScope(interaction, false);
+          if (!cachedScope) {
+            await refuseInPlace(
+              interaction,
+              route.locale,
+              null,
+              "documents",
+              route.personaId,
+              "write_failed",
+              dependencies,
+            );
+            return;
+          }
+          if (!cachedScope.canManage && !cachedScope.memteachingEnabled) {
+            await refuseInPlace(
+              interaction,
+              route.locale,
+              cachedScope,
+              "documents",
+              route.personaId,
+              "teaching_disabled_error",
+              dependencies,
+            );
+            return;
+          }
+          if (cachedScope.isBlacklisted && !cachedScope.canManage) {
+            await refuseInPlace(
+              interaction,
+              route.locale,
+              cachedScope,
+              "documents",
+              route.personaId,
+              "blacklisted_error",
+              dependencies,
+            );
+            return;
+          }
+          if (
+            route.personaId !== 0 &&
+            !cachedScope.personas.some((persona) => persona.persona_id === route.personaId)
+          ) {
+            await refuseInPlace(
+              interaction,
+              route.locale,
+              cachedScope,
+              "documents",
+              route.personaId,
+              "changed_state",
+              dependencies,
+            );
+            return;
+          }
+          await dependencies.showAddDocumentModal(
+            interaction,
+            route.locale,
+            route.personaId,
+            dependencies.createNonce(),
+          );
+          return;
+        }
+      }
+
+      if (route.action === "document-chunk-edit-open") {
+        if (!interaction.isButton()) throw new Error("Document chunk edit route requires Button interaction");
+        const cachedScope = await dependencies.resolveScope(interaction, false);
+        if (!cachedScope?.canManage) {
+          await refuseInPlace(
+            interaction,
+            route.locale,
+            cachedScope,
+            "documents",
+            route.personaId,
+            "manager_only",
+            dependencies,
+          );
+          return;
+        }
+        const personaId = route.personaId === 0 ? null : route.personaId;
+        const [meta, chunks] = await Promise.all([
+          dependencies.loadDocumentMeta(cachedScope.serverId, personaId, route.documentId),
+          dependencies.loadDocumentChunks(cachedScope.serverId, personaId, route.documentId),
+        ]);
+        const chunk = chunks.find((candidate) => candidate.chunk_index === route.chunkIdx);
+        if (!meta || !chunk || chunk.content.length > 4000) {
+          await refuseInPlace(
+            interaction,
+            route.locale,
+            cachedScope,
+            "documents",
+            route.personaId,
+            "changed_state",
+            dependencies,
+          );
+          return;
+        }
+        await dependencies.showEditChunkModal(
+          interaction,
+          route.locale,
+          route.personaId,
+          route.documentId,
+          chunk,
+          meta.channel_tags,
+          dependencies.createNonce(),
+        );
+        return;
+      }
+
+      if (route.action === "vectorize-confirm") {
+        if (!interaction.isButton()) throw new Error("Vectorize confirm route requires Button interaction");
+        const cachedScope = await dependencies.resolveScope(interaction, false);
+        if (!cachedScope) {
+          await refuseInPlace(
+            interaction,
+            route.locale,
+            null,
+            "memories",
+            route.lineageId,
+            "write_failed",
+            dependencies,
+          );
+          return;
+        }
+        if (cachedScope.isBlacklisted && !cachedScope.canManage) {
+          await refuseInPlace(
+            interaction,
+            route.locale,
+            cachedScope,
+            "memories",
+            route.lineageId,
+            "blacklisted_error",
+            dependencies,
+          );
+          return;
+        }
+        if (!cachedScope.memteachingEnabled && !cachedScope.canManage) {
+          await refuseInPlace(
+            interaction,
+            route.locale,
+            cachedScope,
+            "memories",
+            route.lineageId,
+            "teaching_disabled_error",
+            dependencies,
+          );
+          return;
+        }
+        const representativeMatches = cachedScope.personas.some(
+          (persona) => persona.persona_id === route.personaId && persona.persona_lineage_id === route.lineageId,
+        );
+        const owner = cachedScope.canManage ? undefined : cachedScope.userId;
+        const memories = representativeMatches
+          ? await dependencies.loadMemories(cachedScope.serverId, route.lineageId, owner)
+          : [];
+        const memory = memories.find((candidate) => candidate.server_memory_id === route.memoryId);
+        if (!memory) {
+          await refuseInPlace(
+            interaction,
+            route.locale,
+            cachedScope,
+            "memories",
+            route.lineageId,
+            "changed_state",
+            dependencies,
+          );
+          return;
+        }
+        await dependencies.showVectorizeModal(
+          interaction,
+          route.locale,
+          route.lineageId,
+          route.personaId,
+          memory,
+          dependencies.createNonce(),
+        );
+        return;
+      }
+
+      if (route.action === "stm-open") {
+        if (!interaction.isButton()) throw new Error("STM manage route requires Button interaction");
+        const cachedScope = await dependencies.resolveScope(interaction, false);
+        if (!cachedScope?.canManage) {
+          await refuseInPlace(interaction, route.locale, cachedScope, "stm", 0, "manager_only", dependencies);
+          return;
+        }
+        await dependencies.preWarmServerStm(cachedScope.workspaceId);
+        const entries = await dependencies.getStmEntries(cachedScope.workspaceId, cachedScope.personas, route.locale);
+        // Repaint rather than reply: the Short-Term page already states the active count and the
+        // ceiling, so the refreshed page is a better answer than a second, stray message.
+        if (entries.length === 0 || entries.length > MAX_STM_MANAGEABLE_ENTRIES) {
+          await interaction.deferUpdate();
+          await repaint(
+            interaction,
+            route.locale,
+            cachedScope,
+            "stm",
+            0,
+            [],
+            { kind: "main" },
+            undefined,
+            dependencies,
+          );
+          return;
+        }
+        const fingerprint = computeServerStmFingerprint(cachedScope.workspaceId, cachedScope.userDiscId, entries);
+        await dependencies.showStmModal(interaction, route.locale, entries, fingerprint);
+        return;
+      }
+
       const initialScope = await beginPanelInteraction({
         acknowledge: () => interaction.deferUpdate(),
         authorize: () => true,
@@ -726,6 +1329,7 @@ export function createMemoriesInteractionRoute(
       const ownerFilter = scope.canManage ? undefined : scope.userId;
 
       if (route.action === "category") {
+        // Documents open on the serverwide scope, which is the sentinel 0 rather than a persona.
         const lineageId = route.category === "memories" ? (scope.personas[0]?.persona_lineage_id ?? 0) : 0;
         const memories =
           route.category === "memories" && lineageId
@@ -844,6 +1448,632 @@ export function createMemoriesInteractionRoute(
           memories,
           { kind: "main", rangeIndex: route.rangeIndex },
           undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-scope" || route.action === "document-persona-select") {
+        if (route.action === "document-persona-select" && !interaction.isStringSelectMenu()) {
+          throw new Error("Document persona route requires StringSelectMenu interaction");
+        }
+        const submittedPersonaId =
+          route.action === "document-persona-select"
+            ? Number((interaction as StringSelectMenuInteraction).values[0])
+            : route.personaId;
+        const personaId =
+          submittedPersonaId === 0 || scope.personas.some((persona) => persona.persona_id === submittedPersonaId)
+            ? submittedPersonaId
+            : 0;
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          personaId,
+          [],
+          { kind: "documents" },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-select") {
+        if (!interaction.isStringSelectMenu()) {
+          throw new Error("Document select route requires StringSelectMenu interaction");
+        }
+        const documentId = Number(interaction.values[0]);
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "documents", selectedDocumentId: documentId, rangeIndex: route.rangeIndex },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-range-open") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "document-range-chooser", chooserPage: 0 },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-range-page") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "document-range-chooser", chooserPage: route.chooserPage },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-range-cancel") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "documents" },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-range") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "documents", rangeIndex: route.rangeIndex },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-chunk-prev" || route.action === "document-chunk-next") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "documents", selectedDocumentId: route.documentId, chunkIdx: route.chunkIdx },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-remove-prompt" || route.action === "history-remove-prompt") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          {
+            kind: "document-remove",
+            documentId: route.documentId,
+            historyOnly: route.action === "history-remove-prompt",
+          },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-remove-cancel" || route.action === "history-remove-cancel") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "documents", selectedDocumentId: route.documentId },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-chunk-remove-prompt") {
+        if (!scope.canManage) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "documents",
+            route.personaId,
+            [],
+            { kind: "documents", selectedDocumentId: route.documentId, chunkIdx: route.chunkIdx },
+            receipt(route.locale, "manager_only"),
+            dependencies,
+          );
+          return;
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "document-chunk-remove", documentId: route.documentId, chunkIdx: route.chunkIdx },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-chunk-remove-cancel") {
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "documents", selectedDocumentId: route.documentId, chunkIdx: route.chunkIdx },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "vectorize-prompt") {
+        const representativeMatches = scope.personas.some(
+          (persona) => persona.persona_id === route.personaId && persona.persona_lineage_id === route.lineageId,
+        );
+        const memories = representativeMatches
+          ? await dependencies.loadMemories(scope.serverId, route.lineageId, ownerFilter)
+          : [];
+        const target = memories.find((memory) => memory.server_memory_id === route.memoryId);
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "memories",
+          route.lineageId,
+          memories,
+          target ? { kind: "vectorize", memoryId: route.memoryId, personaId: route.personaId } : { kind: "main" },
+          target ? undefined : changedStateReceipt(route.locale),
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "vectorize-cancel") {
+        const memories = await dependencies.loadMemories(scope.serverId, route.lineageId, ownerFilter);
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "memories",
+          route.lineageId,
+          memories,
+          { kind: "main", selectedMemoryId: route.memoryId },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-add-submit") {
+        const modal = interaction as ModalSubmitInteraction;
+        const documentName = modal.fields.getTextInputValue(buildDocumentModalFieldId("name", route.nonce));
+        let channels = "";
+        try {
+          channels = modal.fields.getTextInputValue(buildDocumentModalFieldId("channels", route.nonce));
+        } catch {
+          // Optional field
+        }
+        const personaId = route.personaId === 0 ? null : route.personaId;
+        const personaMatches = personaId === null || scope.personas.some((persona) => persona.persona_id === personaId);
+        if (!personaMatches) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "documents",
+            route.personaId,
+            [],
+            { kind: "documents" },
+            changedStateReceipt(route.locale),
+            dependencies,
+          );
+          return;
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "documents" },
+          workingReceipt(route.locale, "document_working"),
+          dependencies,
+        );
+        const action = await performPanelAction(
+          () =>
+            dependencies.documentOperations.add({
+              serverId: scope.serverId,
+              personaId,
+              userId: scope.userId,
+              userDiscId: scope.userDiscId,
+              workspaceId: scope.workspaceId,
+              configuredEmbeddingModelId: scope.configuredEmbeddingModelId,
+              isBlacklisted: scope.isBlacklisted,
+              canManage: scope.canManage,
+              memteachingEnabled: scope.memteachingEnabled,
+              documentName,
+              attachment: dependencies.takeDocumentFileUpload(interaction.id, route.nonce),
+              channelTags: parseDocumentChannelTags(channels, interaction),
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        scope = action.state ?? scope;
+        const result = action.result;
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "memories.workspace.document.add",
+            serverId: scope.serverId,
+            userDiscId: scope.userDiscId,
+          });
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          {
+            kind: "documents",
+            selectedDocumentId: result.status === "success" ? result.documentId : undefined,
+          },
+          result.status === "success"
+            ? receipt(route.locale, "document_added", {
+                name: result.documentName,
+                chunks: result.chunkCount,
+              })
+            : documentResultReceipt(route.locale, result.status, {
+                maxSize: getMemoryLimits().maxDocumentSizeMB,
+                maxText: getMemoryLimits().maxDocumentTextLength,
+                maxChunks: getMemoryLimits().maxDocumentChunks,
+                maxDocuments: getMemoryLimits().maxDocumentsPerServer,
+                maxTotalChunks: getMemoryLimits().maxDocumentChunksPerServer,
+              }),
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-remove-confirm" || route.action === "history-remove-confirm") {
+        const action = await performPanelAction(
+          () =>
+            dependencies.documentOperations.remove({
+              serverId: scope.serverId,
+              personaId: route.personaId === 0 ? null : route.personaId,
+              documentId: route.documentId,
+              workspaceId: scope.workspaceId,
+              canManage: scope.canManage,
+              memteachingEnabled: scope.memteachingEnabled,
+              historyOnly: route.action === "history-remove-confirm",
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        scope = action.state ?? scope;
+        const result = action.result;
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action:
+              route.action === "history-remove-confirm"
+                ? "memories.workspace.history-document.remove"
+                : "memories.workspace.document.remove",
+            serverId: scope.serverId,
+            userDiscId: scope.userDiscId,
+          });
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "documents" },
+          result.status === "success"
+            ? receipt(route.locale, "document_removed", { name: result.documentName })
+            : documentResultReceipt(route.locale, result.status),
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-chunk-edit-submit") {
+        const modal = interaction as ModalSubmitInteraction;
+        const content = modal.fields.getTextInputValue(buildDocumentModalFieldId("content", route.nonce));
+        let channels = "";
+        try {
+          channels = modal.fields.getTextInputValue(buildDocumentModalFieldId("channels", route.nonce));
+        } catch {
+          // Optional field
+        }
+        const action = await performPanelAction(
+          () =>
+            dependencies.documentOperations.editChunk({
+              serverId: scope.serverId,
+              personaId: route.personaId === 0 ? null : route.personaId,
+              documentId: route.documentId,
+              chunkIdx: route.chunkIdx,
+              workspaceId: scope.workspaceId,
+              userId: scope.userId,
+              configuredEmbeddingModelId: scope.configuredEmbeddingModelId,
+              canManage: scope.canManage,
+              content,
+              channelTags: parseDocumentChannelTags(channels, interaction),
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        scope = action.state ?? scope;
+        const result = action.result;
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "memories.workspace.document-chunk.edit",
+            serverId: scope.serverId,
+            userDiscId: scope.userDiscId,
+          });
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          { kind: "documents", selectedDocumentId: route.documentId, chunkIdx: route.chunkIdx },
+          result.status === "success"
+            ? receipt(route.locale, "document_chunk_edited")
+            : documentResultReceipt(route.locale, result.status),
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "document-chunk-remove-confirm") {
+        const action = await performPanelAction(
+          () =>
+            dependencies.documentOperations.removeChunk({
+              serverId: scope.serverId,
+              personaId: route.personaId === 0 ? null : route.personaId,
+              documentId: route.documentId,
+              chunkIdx: route.chunkIdx,
+              workspaceId: scope.workspaceId,
+              canManage: scope.canManage,
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        scope = action.state ?? scope;
+        const result = action.result;
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "memories.workspace.document-chunk.remove",
+            serverId: scope.serverId,
+            userDiscId: scope.userDiscId,
+          });
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          route.personaId,
+          [],
+          result.status === "success" && !result.removedDocument
+            ? { kind: "documents", selectedDocumentId: route.documentId }
+            : { kind: "documents" },
+          result.status === "success"
+            ? receipt(
+                route.locale,
+                result.removedDocument ? "document_removed_with_last_chunk" : "document_chunk_removed",
+              )
+            : documentResultReceipt(route.locale, result.status),
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "vectorize-submit") {
+        const modal = interaction as ModalSubmitInteraction;
+        const content = modal.fields.getTextInputValue(buildDocumentModalFieldId("content", route.nonce));
+        const documentName = modal.fields.getTextInputValue(buildDocumentModalFieldId("name", route.nonce));
+        let channels = "";
+        try {
+          channels = modal.fields.getTextInputValue(buildDocumentModalFieldId("channels", route.nonce));
+        } catch {
+          // Optional field
+        }
+        const personaMatches = scope.personas.some(
+          (persona) => persona.persona_id === route.personaId && persona.persona_lineage_id === route.lineageId,
+        );
+        if (!personaMatches) {
+          const memories = await dependencies.loadMemories(scope.serverId, route.lineageId, ownerFilter);
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "memories",
+            route.lineageId,
+            memories,
+            { kind: "main" },
+            changedStateReceipt(route.locale),
+            dependencies,
+          );
+          return;
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "memories",
+          route.lineageId,
+          await dependencies.loadMemories(scope.serverId, route.lineageId, ownerFilter),
+          { kind: "main" },
+          workingReceipt(route.locale, "vectorize_working"),
+          dependencies,
+        );
+        const action = await performPanelAction(
+          () =>
+            dependencies.documentOperations.vectorize({
+              serverId: scope.serverId,
+              personaId: route.personaId,
+              personaLineageId: route.lineageId,
+              memoryId: route.memoryId,
+              userId: scope.userId,
+              userDiscId: scope.userDiscId,
+              workspaceId: scope.workspaceId,
+              configuredEmbeddingModelId: scope.configuredEmbeddingModelId,
+              isBlacklisted: scope.isBlacklisted,
+              canManage: scope.canManage,
+              memteachingEnabled: scope.memteachingEnabled,
+              content,
+              documentName,
+              channelTags: parseDocumentChannelTags(channels, interaction),
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        scope = action.state ?? scope;
+        const result = action.result;
+        const currentOwner = scope.canManage ? undefined : scope.userId;
+        const memories = await dependencies.loadMemories(scope.serverId, route.lineageId, currentOwner);
+        if (result.status === "success") {
+          dependencies.recordAction({
+            action: "memories.workspace.memory.vectorize",
+            serverId: scope.serverId,
+            userDiscId: scope.userDiscId,
+          });
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "memories",
+          route.lineageId,
+          memories,
+          { kind: "main" },
+          result.status === "success"
+            ? receipt(route.locale, "vectorized", {
+                name: result.documentName,
+                chunks: result.chunkCount,
+              })
+            : result.status === "partial-failure"
+              ? receipt(route.locale, "vectorize_partial_failure", { name: result.documentName })
+              : documentResultReceipt(route.locale, result.status),
+          dependencies,
+        );
+        return;
+      }
+
+      if (route.action === "stm-submit") {
+        if (!scope.canManage) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "stm",
+            0,
+            [],
+            { kind: "main" },
+            receipt(route.locale, "manager_only"),
+            dependencies,
+          );
+          return;
+        }
+        await dependencies.preWarmServerStm(scope.workspaceId);
+        const entries = await dependencies.getStmEntries(scope.workspaceId, scope.personas, route.locale);
+        const fingerprint = computeServerStmFingerprint(scope.workspaceId, scope.userDiscId, entries);
+        if (fingerprint !== route.nonce || entries.length > MAX_STM_MANAGEABLE_ENTRIES) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            "stm",
+            0,
+            [],
+            { kind: "main" },
+            receipt(route.locale, "stm_changed_state"),
+            dependencies,
+          );
+          return;
+        }
+        const checked = new Set<string>();
+        const groupCount = Math.ceil(entries.length / MAX_STM_OPTIONS_PER_GROUP);
+        for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+          for (const value of dependencies.takeCheckboxValues(
+            interaction.id,
+            buildStmCheckboxFieldId(groupIndex, route.nonce),
+          ) ?? []) {
+            const parsedValue = parseInteractionRoute(value);
+            const entryRoute = parsedValue ? parseMemoriesPanelRoute(parsedValue) : null;
+            if (entryRoute?.action === "stm-entry") {
+              checked.add(`${entryRoute.channelId}:${entryRoute.personaId}`);
+            }
+          }
+        }
+        const toClear = entries.filter((entry) => !checked.has(`${entry.channelId}:${entry.personaId ?? 0}`));
+        for (const entry of toClear) {
+          dependencies.clearStm(scope.workspaceId, entry.channelId, entry.personaId ?? null);
+        }
+        if (toClear.length > 0) {
+          dependencies.recordAction({
+            action: "memories.workspace.stm.clear",
+            serverId: scope.serverId,
+            userDiscId: scope.userDiscId,
+          });
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "stm",
+          0,
+          [],
+          { kind: "main" },
+          toClear.length > 0
+            ? receipt(route.locale, "stm_cleared", { count: toClear.length })
+            : noChangesReceipt(route.locale),
           dependencies,
         );
         return;
@@ -1236,7 +2466,8 @@ export function createMemoriesInteractionRoute(
       }
 
       if (route.action === "retry" || route.action === "refresh") {
-        const lineageId = route.lineageId ?? scope.personas[0]?.persona_lineage_id ?? 0;
+        const lineageId =
+          route.category === "documents" ? 0 : (route.lineageId ?? scope.personas[0]?.persona_lineage_id ?? 0);
         const memories =
           route.category === "memories" && lineageId
             ? await dependencies.loadMemories(scope.serverId, lineageId, ownerFilter)
@@ -1248,7 +2479,7 @@ export function createMemoriesInteractionRoute(
           route.category,
           lineageId,
           memories,
-          { kind: "main" },
+          route.category === "documents" ? { kind: "documents" } : { kind: "main" },
           undefined,
           dependencies,
         );

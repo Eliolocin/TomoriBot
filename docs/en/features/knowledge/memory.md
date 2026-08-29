@@ -50,8 +50,10 @@ on `/personal memories`, which then applies to every persona for you specificall
 memories have no such option, each persona's server-memory set always stays separate, even
 within the same server.
 
-Remove them with `/personal memories` and `/memory server remove`. Memories persist
-until you remove them.
+Use `/memories` to browse, add, edit, remove, or move server memories into the
+document knowledge base. `/personal memories` manages the facts tied to you.
+Memories persist until you remove them. The more specific `/memory` commands remain
+available during the panel transition.
 
 In new servers, non-manager member access to create, edit, or remove shared server memories is disabled by default. Members with `Manage Server` permission retain access at all times, and managers can opt other members in through `/moderation` Member Access.
 
@@ -102,7 +104,9 @@ Server admins can give her documents to reference using RAG. Documents are chunk
   relevant content when answering. In new servers, document management is similarly restricted to members with `Manage Server` by default; managers can grant member access through `/moderation` Member Access.
 
 **Requires an embedding model**, configured with `/model embedding`. See
-[Providers & Models](/features/setup-administration/providers-and-models/).:
+[Providers & Models](/features/setup-administration/providers-and-models/). The
+Documents page in `/memories` provides persona and server-wide scopes, live document
+and chunk counts, uploads, document browsing, and removal:
 
 - `/memory document add`: upload a text, PDF, or Markdown file as server knowledge. The
   `scope` option picks whether it's tied to just this persona (the default) or `serverwide`
@@ -213,6 +217,7 @@ and refreshes as the conversation moves along. It fades on its own after a few q
 | `/server stm categories-edit` | Swap the summary for up to 5 labeled fields (*Current scene*, *Mood*, …) |
 | `/server stm prompt-edit` | Reword how she's asked to keep it |
 | `/server stm manage` | Review or clear stored memories |
+| `/memories` | Review and selectively clear active server entries from one manager panel |
 | `/server stm privacy-bypass` | Let private-channel memories surface elsewhere |
 | `/capabilities manage` | Turn the feature on or off (stored memories are kept either way) |
 

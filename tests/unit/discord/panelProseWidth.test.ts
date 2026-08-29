@@ -219,4 +219,40 @@ describe("panel prose width", () => {
     expect(collectProseWidthViolations(build("https://cdn.example.invalid/55.png"))).toEqual([]);
     expect(collectProseWidthViolations(build(null))).toEqual([]);
   });
+
+  /**
+   * The Documents page grew its own thumbnail, and it renders one only under the persona scope.
+   * Walking the serverwide payload alone would leave that Section unvisited while the file-level
+   * coverage check above still passed, because the Memories page already puts this builder in the
+   * covered set.
+   */
+  it("holds workspace documents to 40 characters beside its persona avatar", () => {
+    const personas = [
+      {
+        persona_id: 55,
+        persona_lineage_id: 1770,
+        persona_nickname: "Aphel",
+        is_alter: false,
+      } as unknown as TomoriState,
+    ];
+    const build = (selectedDocumentPersonaId: number, selectedPersonaAvatarUrl: string | null) =>
+      buildMemoriesPanelPayload({
+        locale: "en-US",
+        category: "documents",
+        selectedLineageId: selectedDocumentPersonaId,
+        selectedDocumentPersonaId,
+        personas,
+        selectedPersonaAvatarUrl,
+        memories: [],
+        documents: [],
+        documentCount: 0,
+        documentChunkCount: 0,
+        canManage: true,
+        readStatus: "fresh",
+        page: { kind: "documents" },
+      });
+
+    expect(collectProseWidthViolations(build(55, "https://cdn.example.invalid/55.png"))).toEqual([]);
+    expect(collectProseWidthViolations(build(0, null))).toEqual([]);
+  });
 });

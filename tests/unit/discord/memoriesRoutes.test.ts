@@ -10,25 +10,40 @@ import {
 import type { ServerMemoryRow, TomoriState } from "@/types/db/schema";
 import {
   buildMemoriesRouteId,
+  computeServerStmFingerprint,
+  listMemoriesPanelActions,
   parseMemoriesPanelRoute,
   type MemoriesPanelRoute,
 } from "@/utils/discord/memoriesPanelCatalog";
 import {
   buildInitialMemoriesPanel,
   createMemoriesInteractionRoute,
+  DOCUMENT_RESULT_RECEIPT_KEYS,
+  MEMORIES_RECEIPT_KEYS,
   serverMemoriesOperations,
   type MemoriesRouteDependencies,
 } from "@/utils/discord/interactions/memoriesRoutes";
 import { parseInteractionRoute, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import {
   buildAddServerMemoryModal,
+  buildAddDocumentModal,
+  buildEditDocumentChunkModal,
   buildEditServerMemoryModal,
   buildMemoriesPanelPayload,
+  buildServerStmModal,
   buildServerMemoryModalFieldId,
   parseServerMemoryTags,
 } from "@/utils/discord/ui/memoriesPanel";
 import * as tomoriStateCache from "@/utils/cache/tomoriStateCache";
-import { serverMemoryRepository } from "@/utils/db/repositories";
+import { llmModelRepo, ragRepository, serverMemoryRepository } from "@/utils/db/repositories";
+import { serverDocumentsOperations } from "@/utils/discord/interactions/memoriesDocumentOperations";
+import * as ragAvailability from "@/utils/db/ragAvailability";
+import * as documentService from "@/utils/documents/documentService";
+import * as textExtractor from "@/utils/documents/textExtractor";
+import * as embeddingProvider from "@/utils/embeddings/embeddingProvider";
+import * as credentialResolver from "@/utils/provider/credentialResolver";
+import * as rateLimiter from "@/utils/security/rateLimiter";
+import * as safeDownloadModule from "@/utils/security/safeDownload";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
@@ -126,6 +141,117 @@ describe("memories panel route catalog", () => {
       { action: "remove-cancel", locale: "en-US", lineageId: 1770, memoryId: 42 },
     ],
     [
+      "memories:v1:vectorize-prompt:en-US:1770:10:42",
+      { action: "vectorize-prompt", locale: "en-US", lineageId: 1770, personaId: 10, memoryId: 42 },
+    ],
+    [
+      "memories:v1:vectorize-confirm:en-US:1770:10:42",
+      { action: "vectorize-confirm", locale: "en-US", lineageId: 1770, personaId: 10, memoryId: 42 },
+    ],
+    [
+      "memories:v1:vectorize-submit:en-US:1770:10:42:nonce123",
+      {
+        action: "vectorize-submit",
+        locale: "en-US",
+        lineageId: 1770,
+        personaId: 10,
+        memoryId: 42,
+        nonce: "nonce123",
+      },
+    ],
+    [
+      "memories:v1:vectorize-cancel:en-US:1770:10:42",
+      { action: "vectorize-cancel", locale: "en-US", lineageId: 1770, personaId: 10, memoryId: 42 },
+    ],
+    ["memories:v1:document-scope:en-US:0", { action: "document-scope", locale: "en-US", personaId: 0 }],
+    [
+      "memories:v1:document-persona-select:en-US:10",
+      { action: "document-persona-select", locale: "en-US", personaId: 10 },
+    ],
+    [
+      "memories:v1:document-select:en-US:10:2",
+      { action: "document-select", locale: "en-US", personaId: 10, rangeIndex: 2 },
+    ],
+    [
+      "memories:v1:document-range:en-US:10:2",
+      { action: "document-range", locale: "en-US", personaId: 10, rangeIndex: 2 },
+    ],
+    ["memories:v1:document-range-open:en-US:10", { action: "document-range-open", locale: "en-US", personaId: 10 }],
+    [
+      "memories:v1:document-range-page:en-US:10:3",
+      { action: "document-range-page", locale: "en-US", personaId: 10, chooserPage: 3 },
+    ],
+    ["memories:v1:document-range-cancel:en-US:10", { action: "document-range-cancel", locale: "en-US", personaId: 10 }],
+    [
+      "memories:v1:document-add-submit:en-US:0:nonce123",
+      { action: "document-add-submit", locale: "en-US", personaId: 0, nonce: "nonce123" },
+    ],
+    [
+      "memories:v1:document-remove-prompt:en-US:10:77",
+      { action: "document-remove-prompt", locale: "en-US", personaId: 10, documentId: 77 },
+    ],
+    [
+      "memories:v1:document-remove-confirm:en-US:10:77",
+      { action: "document-remove-confirm", locale: "en-US", personaId: 10, documentId: 77 },
+    ],
+    [
+      "memories:v1:document-remove-cancel:en-US:10:77",
+      { action: "document-remove-cancel", locale: "en-US", personaId: 10, documentId: 77 },
+    ],
+    [
+      "memories:v1:history-remove-prompt:en-US:10:77",
+      { action: "history-remove-prompt", locale: "en-US", personaId: 10, documentId: 77 },
+    ],
+    [
+      "memories:v1:history-remove-confirm:en-US:10:77",
+      { action: "history-remove-confirm", locale: "en-US", personaId: 10, documentId: 77 },
+    ],
+    [
+      "memories:v1:history-remove-cancel:en-US:10:77",
+      { action: "history-remove-cancel", locale: "en-US", personaId: 10, documentId: 77 },
+    ],
+    [
+      "memories:v1:document-chunk-prev:en-US:10:77:3",
+      { action: "document-chunk-prev", locale: "en-US", personaId: 10, documentId: 77, chunkIdx: 3 },
+    ],
+    [
+      "memories:v1:document-chunk-next:en-US:10:77:3",
+      { action: "document-chunk-next", locale: "en-US", personaId: 10, documentId: 77, chunkIdx: 3 },
+    ],
+    [
+      "memories:v1:document-chunk-edit-open:en-US:10:77:3",
+      { action: "document-chunk-edit-open", locale: "en-US", personaId: 10, documentId: 77, chunkIdx: 3 },
+    ],
+    [
+      "memories:v1:document-chunk-remove-prompt:en-US:10:77:3",
+      { action: "document-chunk-remove-prompt", locale: "en-US", personaId: 10, documentId: 77, chunkIdx: 3 },
+    ],
+    [
+      "memories:v1:document-chunk-remove-confirm:en-US:10:77:3",
+      { action: "document-chunk-remove-confirm", locale: "en-US", personaId: 10, documentId: 77, chunkIdx: 3 },
+    ],
+    [
+      "memories:v1:document-chunk-remove-cancel:en-US:10:77:3",
+      { action: "document-chunk-remove-cancel", locale: "en-US", personaId: 10, documentId: 77, chunkIdx: 3 },
+    ],
+    [
+      "memories:v1:document-chunk-edit-submit:en-US:10:77:3:nonce123",
+      {
+        action: "document-chunk-edit-submit",
+        locale: "en-US",
+        personaId: 10,
+        documentId: 77,
+        chunkIdx: 3,
+        nonce: "nonce123",
+      },
+    ],
+    ["memories:v1:stm-open:en-US", { action: "stm-open", locale: "en-US" }],
+    ["memories:v1:stm-submit:en-US:nonce123", { action: "stm-submit", locale: "en-US", nonce: "nonce123" }],
+    [
+      "memories:v1:stm-entry:en-US:12345678901234567:0",
+      { action: "stm-entry", locale: "en-US", channelId: "12345678901234567", personaId: 0 },
+    ],
+    [
       "memories:v1:retry:en-US:memories:1770",
       { action: "retry", locale: "en-US", category: "memories", lineageId: 1770 },
     ],
@@ -156,6 +282,10 @@ describe("memories panel route catalog", () => {
   });
 
   it("round trips every action through buildMemoriesRouteId and parseMemoriesPanelRoute", () => {
+    const catalogActions = listMemoriesPanelActions().sort();
+    const wireActions = [...new Set(WIRE_CONTRACT_V1.map(([, route]) => route.action))].sort();
+    expect(wireActions).toEqual(catalogActions);
+
     for (const [customId, expectedRoute] of WIRE_CONTRACT_V1) {
       const encoded = buildMemoriesRouteId(expectedRoute);
       expect(encoded).toBe(customId);
@@ -187,6 +317,33 @@ describe("memories modals and tag parser", () => {
     const fileContainer = modal.components.find((c) => c.component?.custom_id?.startsWith("file_"));
     expect(fileContainer).toBeDefined();
     expect(fileContainer?.component?.type).toBe(19);
+  });
+
+  it("pins document uploads to type 19 and STM groups to type 22", () => {
+    const documentModal = buildAddDocumentModal("en-US", 0, "nonce123");
+    const file = documentModal.components.find((component) => component.component?.custom_id?.startsWith("file_"));
+    expect(file?.component?.type).toBe(19);
+
+    const stmModal = buildServerStmModal(
+      "en-US",
+      [
+        {
+          channelId: "12345678901234567",
+          personaId: null,
+          personaName: "Unscoped",
+          lastUpdated: 1,
+        },
+      ],
+      "nonce123",
+    );
+    expect(stmModal.components[0]?.component?.type).toBe(22);
+    expect(stmModal.components[0]?.component?.options).toHaveLength(1);
+  });
+
+  it("prefills document channel filters when editing a chunk", () => {
+    const modal = buildEditDocumentChunkModal("en-US", 10, 77, 0, "Stored chunk", ["#general", "#lore"], "nonce123");
+    const channels = modal.components.find((component) => component.component?.custom_id?.startsWith("channels_"));
+    expect(channels?.component?.value).toBe("#general, #lore");
   });
 
   it("builds field IDs with nonce suffix", () => {
@@ -238,6 +395,7 @@ describe("memories permissions and scoping", () => {
           canManage: isManager,
           isBlacklisted: false,
           memteachingEnabled: false,
+          configuredEmbeddingModelId: null,
           personas: [makePersona(10, 1770, "Tomori"), makePersona(20, 1880, "Anon")],
           readStatus: "fresh",
         };
@@ -249,22 +407,48 @@ describe("memories permissions and scoping", () => {
         }
         return memories.filter((m) => m.persona_lineage_id === lineageId);
       },
-      getEligibleLineageIds: async (serverId, userId) => {
-        calls.push(`getEligibleLineageIds:${serverId}:${userId ?? "undefined"}`);
-        return new Set([1770]);
+      getMemoryCountsByLineage: async (serverId, userId) => {
+        calls.push(`getMemoryCountsByLineage:${serverId}:${userId ?? "undefined"}`);
+        return new Map([
+          [1770, userId === undefined ? 2 : 1],
+          [1880, 4],
+        ]);
       },
       getPersonaAvatarUrl: async (_interaction, persona) => {
         calls.push(`getPersonaAvatarUrl:${persona.persona_id}`);
         return `https://cdn.example.invalid/${persona.persona_id}.png`;
       },
-      getStmCount: async (workspaceId) => {
-        calls.push(`getStmCount:${workspaceId}`);
-        return 3;
+      loadDocuments: async (serverId, personaId) => {
+        calls.push(`loadDocuments:${serverId}:${personaId ?? "serverwide"}`);
+        return [];
+      },
+      loadDocumentMeta: async (serverId, personaId, documentId) => {
+        calls.push(`loadDocumentMeta:${serverId}:${personaId ?? "serverwide"}:${documentId}`);
+        return null;
+      },
+      loadDocumentChunks: async (serverId, personaId, documentId) => {
+        calls.push(`loadDocumentChunks:${serverId}:${personaId ?? "serverwide"}:${documentId}`);
+        return [];
+      },
+      getDocumentCounts: async (serverId, personaId) => {
+        calls.push(`getDocumentCounts:${serverId}:${personaId ?? "serverwide"}`);
+        return { documents: 0, chunks: 0 };
+      },
+      getDocumentCountsByPersona: async () => ({ byPersona: new Map([[10, 3]]), serverwide: 1 }),
+      getEligibleHistoryPersonaIds: async () => new Set(),
+      getStmEntries: async (workspaceId) => {
+        calls.push(`getStmEntries:${workspaceId}`);
+        return [
+          { channelId: "12345678901234567", personaId: 10, personaName: "Tomori", lastUpdated: 3 },
+          { channelId: "12345678901234568", personaId: 10, personaName: "Tomori", lastUpdated: 2 },
+          { channelId: "12345678901234569", personaId: null, personaName: "Unscoped", lastUpdated: 1 },
+        ];
       },
       preWarmServerStm: async (workspaceId) => {
         calls.push(`preWarmServerStm:${workspaceId}`);
       },
       operations: serverMemoriesOperations,
+      documentOperations: serverDocumentsOperations,
       recordAction: () => {
         calls.push("recordAction");
       },
@@ -273,9 +457,26 @@ describe("memories permissions and scoping", () => {
         calls.push("showAddModal");
       },
       takeFileUpload: () => null,
+      takeDocumentFileUpload: () => null,
       readUploadedText: async () => ({ isValid: true, text: "" }),
       showEditModal: async () => {
         calls.push("showEditModal");
+      },
+      showAddDocumentModal: async () => {
+        calls.push("showAddDocumentModal");
+      },
+      showEditChunkModal: async () => {
+        calls.push("showEditChunkModal");
+      },
+      showVectorizeModal: async () => {
+        calls.push("showVectorizeModal");
+      },
+      showStmModal: async () => {
+        calls.push("showStmModal");
+      },
+      takeCheckboxValues: () => [],
+      clearStm: () => {
+        calls.push("clearStm");
       },
       ...overrides,
     };
@@ -295,7 +496,7 @@ describe("memories permissions and scoping", () => {
     const panelNonManager = await buildInitialMemoriesPanel(nonManagerInteraction, "en-US", depNonManager);
 
     expect(callsNonManager).toContain("loadMemories:1:1770:42");
-    expect(callsNonManager).toContain("getEligibleLineageIds:1:42");
+    expect(callsNonManager).toContain("getMemoryCountsByLineage:1:42");
     expect(panelNonManager.components.length).toBeGreaterThan(0);
 
     // Manager interaction
@@ -309,7 +510,7 @@ describe("memories permissions and scoping", () => {
     const panelManager = await buildInitialMemoriesPanel(managerInteraction, "en-US", depManager);
 
     expect(callsManager).toContain("loadMemories:1:1770:undefined");
-    expect(callsManager).toContain("getEligibleLineageIds:1:undefined");
+    expect(callsManager).toContain("getMemoryCountsByLineage:1:undefined");
     expect(panelManager.components.length).toBeGreaterThan(0);
   });
 
@@ -343,8 +544,8 @@ describe("memories permissions and scoping", () => {
       requireRoute(nonManagerInteraction.customId),
     );
 
-    // Non-manager must NOT trigger getStmCount or preWarmServerStm
-    expect(calls.some((c) => c.startsWith("getStmCount"))).toBe(false);
+    // Non-manager must NOT trigger getStmEntries or preWarmServerStm
+    expect(calls.some((c) => c.startsWith("getStmEntries"))).toBe(false);
     expect(calls.some((c) => c.startsWith("preWarmServerStm"))).toBe(false);
 
     // Non-manager receives the explanatory notice
@@ -379,9 +580,129 @@ describe("memories permissions and scoping", () => {
     );
 
     expect(calls).toContain("preWarmServerStm:guild-123");
-    expect(calls).toContain("getStmCount:guild-123");
+    expect(calls).toContain("getStmEntries:guild-123");
     const managerTextDisplays = collectTextDisplays(editedReply);
     expect(managerTextDisplays.some((t) => t.includes("3 active short-term memory entries."))).toBe(true);
+  });
+
+  it("blocks document reads when teaching is disabled and keeps persona and serverwide scopes distinct", async () => {
+    const { dependencies, calls } = createTestDependencies();
+    const route = createMemoriesInteractionRoute(dependencies);
+    const interaction = {
+      id: "int-documents",
+      customId: "memories:v1:category:en-US:documents",
+      user: { id: "user-42", username: "user42" },
+      guildId: "guild-123",
+      memberPermissions: { has: () => false },
+      deferred: false,
+      replied: false,
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      deferUpdate: async function (this: { deferred: boolean }) {
+        this.deferred = true;
+      },
+      editReply: async () => {},
+    };
+
+    await route.execute(
+      {} as Client,
+      interaction as unknown as StringSelectMenuInteraction,
+      requireRoute(interaction.customId),
+    );
+    expect(calls.some((call) => call.startsWith("loadDocuments"))).toBe(false);
+    expect(calls.some((call) => call.startsWith("getDocumentCounts"))).toBe(false);
+
+    calls.length = 0;
+    interaction.memberPermissions.has = () => true;
+    await route.execute(
+      {} as Client,
+      interaction as unknown as StringSelectMenuInteraction,
+      requireRoute(interaction.customId),
+    );
+    // The category opens on the serverwide scope, never on whichever persona sorts first.
+    expect(calls).toContain("loadDocuments:1:serverwide");
+    expect(calls.some((call) => call.includes("1770"))).toBe(false);
+
+    calls.length = 0;
+    interaction.customId = "memories:v1:document-scope:en-US:10";
+    await route.execute(
+      {} as Client,
+      interaction as unknown as StringSelectMenuInteraction,
+      requireRoute(interaction.customId),
+    );
+    expect(calls).toContain("loadDocuments:1:10");
+  });
+
+  it("never clears server STM for a guild non-manager and clears only unchecked composite identities", async () => {
+    const entries = [
+      { channelId: "12345678901234567", personaId: 10, personaName: "Tomori", lastUpdated: 2 },
+      { channelId: "12345678901234567", personaId: null, personaName: "Unscoped", lastUpdated: 1 },
+    ];
+    const fingerprint = computeServerStmFingerprint("guild-123", "user-42", entries);
+    let clearCalls: Array<[string, string, number | null]> = [];
+    const { dependencies } = createTestDependencies({
+      getStmEntries: async () => entries,
+      takeCheckboxValues: () => [
+        buildMemoriesRouteId({
+          action: "stm-entry",
+          locale: "en-US",
+          channelId: "12345678901234567",
+          personaId: 10,
+        }),
+      ],
+      clearStm: (workspaceId, channelId, personaId) => {
+        clearCalls.push([workspaceId, channelId, personaId]);
+      },
+    });
+    const route = createMemoriesInteractionRoute(dependencies);
+    const interaction = {
+      id: "int-stm-submit",
+      customId: `memories:v1:stm-submit:en-US:${fingerprint}`,
+      user: { id: "user-42", username: "user42" },
+      guildId: "guild-123",
+      memberPermissions: { has: () => false },
+      deferred: false,
+      replied: false,
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      deferUpdate: async function (this: { deferred: boolean }) {
+        this.deferred = true;
+      },
+      editReply: async () => {},
+    };
+
+    await route.execute(
+      {} as Client,
+      interaction as unknown as ModalSubmitInteraction,
+      requireRoute(interaction.customId),
+    );
+    expect(clearCalls).toEqual([]);
+
+    clearCalls = [];
+    interaction.memberPermissions.has = () => true;
+    await route.execute(
+      {} as Client,
+      interaction as unknown as ModalSubmitInteraction,
+      requireRoute(interaction.customId),
+    );
+    expect(clearCalls).toEqual([["guild-123", "12345678901234567", null]]);
+
+    clearCalls = [];
+    const driftRoute = createMemoriesInteractionRoute({
+      ...dependencies,
+      getStmEntries: async () => [
+        ...entries,
+        { channelId: "12345678901234568", personaId: 10, personaName: "Tomori", lastUpdated: 3 },
+      ],
+    });
+    await driftRoute.execute(
+      {} as Client,
+      interaction as unknown as ModalSubmitInteraction,
+      requireRoute(interaction.customId),
+    );
+    expect(clearCalls).toEqual([]);
   });
 
   it("deduplicates persona options by lineage without repeating option values", () => {
@@ -458,6 +779,53 @@ describe("memories permissions and scoping", () => {
     const rangeOpenButton = largeButtons.find((b) => b.customId?.includes(":range-open:"));
     expect(rangeOpenButton).toBeDefined();
     expect(rangeOpenButton?.label).toBe(localizer("en-US", "general.pagination.select_page_title"));
+
+    const largeDocumentPayload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "documents",
+      selectedLineageId: 100,
+      selectedDocumentPersonaId: 1,
+      personas,
+      memories: [],
+      documents: Array.from({ length: 150 }, (_, index) => ({
+        document_id: index + 1,
+        document_name: `Document ${index + 1}`,
+        first_chunk: null,
+        isHistory: false,
+      })),
+      canManage: true,
+      memteachingEnabled: true,
+      readStatus: "fresh",
+      page: { kind: "documents" },
+    });
+    const documentRangeOpen = collectButtons(largeDocumentPayload.components).find((button) =>
+      button.customId?.includes(":document-range-open:"),
+    );
+    expect(documentRangeOpen).toBeDefined();
+
+    const documentChooserPayload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "documents",
+      selectedLineageId: 100,
+      selectedDocumentPersonaId: 1,
+      personas,
+      memories: [],
+      documents: Array.from({ length: 150 }, (_, index) => ({
+        document_id: index + 1,
+        document_name: `Document ${index + 1}`,
+        first_chunk: null,
+        isHistory: false,
+      })),
+      canManage: true,
+      memteachingEnabled: true,
+      readStatus: "fresh",
+      page: { kind: "document-range-chooser", chooserPage: 0 },
+    });
+    expect(
+      collectButtons(documentChooserPayload.components).some((button) =>
+        button.customId?.includes(":document-range:en-US:1:5"),
+      ),
+    ).toBe(true);
   });
 
   it("acknowledges via deferUpdate before executing write operations", async () => {
@@ -512,6 +880,71 @@ describe("memories permissions and scoping", () => {
 
     expect(writeInvoked).toBe(true);
     expect(acknowledgedDuringWrite).toBe(true);
+  });
+
+  it("acknowledges every document and vectorize write before the operation starts", async () => {
+    const acknowledged: boolean[] = [];
+    let activeInteraction: { deferred: boolean; replied: boolean } | null = null;
+    const { dependencies } = createTestDependencies({
+      documentOperations: {
+        ...serverDocumentsOperations,
+        add: async () => {
+          acknowledged.push(Boolean(activeInteraction?.deferred || activeInteraction?.replied));
+          return { status: "success" as const, documentId: 77, documentName: "Guide", chunkCount: 1 };
+        },
+        remove: async () => {
+          acknowledged.push(Boolean(activeInteraction?.deferred || activeInteraction?.replied));
+          return { status: "success" as const, documentName: "Guide" };
+        },
+        editChunk: async () => {
+          acknowledged.push(Boolean(activeInteraction?.deferred || activeInteraction?.replied));
+          return { status: "success" as const };
+        },
+        removeChunk: async () => {
+          acknowledged.push(Boolean(activeInteraction?.deferred || activeInteraction?.replied));
+          return { status: "success" as const, removedDocument: false };
+        },
+        vectorize: async () => {
+          acknowledged.push(Boolean(activeInteraction?.deferred || activeInteraction?.replied));
+          return { status: "success" as const, documentId: 78, documentName: "Memory Guide", chunkCount: 1 };
+        },
+      },
+    });
+    const route = createMemoriesInteractionRoute(dependencies);
+    const customIds = [
+      "memories:v1:document-add-submit:en-US:10:nonce123",
+      "memories:v1:document-remove-confirm:en-US:10:77",
+      "memories:v1:document-chunk-edit-submit:en-US:10:77:0:nonce123",
+      "memories:v1:document-chunk-remove-confirm:en-US:10:77:0",
+      "memories:v1:vectorize-submit:en-US:1770:10:1:nonce123",
+    ];
+    for (const customId of customIds) {
+      const interaction = {
+        id: `int-${acknowledged.length}`,
+        customId,
+        user: { id: "user-42", username: "user42" },
+        guildId: "guild-123",
+        memberPermissions: { has: () => true },
+        deferred: false,
+        replied: false,
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => true,
+        deferUpdate: async function (this: { deferred: boolean }) {
+          this.deferred = true;
+        },
+        editReply: async function (this: { replied: boolean }) {
+          this.replied = true;
+        },
+        fields: {
+          getTextInputValue: (fieldId: string) =>
+            fieldId.startsWith("name_") ? "Guide" : fieldId.startsWith("content_") ? "Updated content" : "",
+        },
+      };
+      activeInteraction = interaction;
+      await route.execute({} as Client, interaction as unknown as ModalSubmitInteraction, requireRoute(customId));
+    }
+    expect(acknowledged).toEqual([true, true, true, true, true]);
   });
 
   it("opens add modal without deferUpdate on select action:add", async () => {
@@ -591,6 +1024,209 @@ describe("memories permissions and scoping", () => {
     expect(deferred).toBe(false);
   });
 
+  it("loads document metadata through the route before opening the chunk editor", async () => {
+    let modalTags: string[] | null = null;
+    const fakeInteraction = {
+      id: "int-document-edit-open",
+      customId: "memories:v1:document-chunk-edit-open:en-US:10:77:0",
+      user: { id: "user-42", username: "user42" },
+      guildId: "guild-123",
+      memberPermissions: { has: () => true },
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      reply: async () => {},
+    };
+    const { dependencies } = createTestDependencies({
+      loadDocumentMeta: async () => ({ document_name: "Guide", channel_tags: ["#general"] }),
+      loadDocumentChunks: async () => [{ document_chunk_id: 8, chunk_index: 0, content: "Stored chunk" }],
+      showEditChunkModal: async (_interaction, _locale, _personaId, _documentId, _chunk, channelTags) => {
+        modalTags = channelTags;
+      },
+    });
+
+    await createMemoriesInteractionRoute(dependencies).execute(
+      {} as Client,
+      fakeInteraction as unknown as StringSelectMenuInteraction,
+      requireRoute(fakeInteraction.customId),
+    );
+
+    expect(modalTags).toEqual(["#general"]);
+  });
+
+  it("keeps the chunk removal prompt on its own document and addresses chunks by chunk_index", async () => {
+    let editedReply: unknown = null;
+    const documents = [
+      { document_id: 70, document_name: "Alpha", first_chunk: "alpha text", isHistory: false },
+      { document_id: 77, document_name: "Beta", first_chunk: "beta text", isHistory: false },
+    ];
+    // chunk_index 1 is absent: deleteChunk never renumbers, so a real document develops gaps.
+    const chunks = [
+      { document_chunk_id: 801, chunk_index: 0, content: "Beta chunk zero" },
+      { document_chunk_id: 802, chunk_index: 2, content: "Beta chunk two" },
+      { document_chunk_id: 803, chunk_index: 5, content: "Beta chunk five" },
+    ];
+    const { dependencies } = createTestDependencies({
+      loadDocuments: async () => documents,
+      loadDocumentChunks: async (_serverId, _personaId, documentId) => (documentId === 77 ? chunks : []),
+      getDocumentCounts: async () => ({ documents: 2, chunks: 3 }),
+      getEligibleDocumentPersonaIds: async () => new Set([10]),
+    });
+    const interaction = {
+      id: "int-chunk-remove-prompt",
+      customId: "memories:v1:document-chunk-remove-prompt:en-US:10:77:2",
+      user: { id: "user-42", username: "user42" },
+      guildId: "guild-123",
+      memberPermissions: { has: () => true },
+      deferred: false,
+      replied: false,
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      deferUpdate: async function (this: { deferred: boolean }) {
+        this.deferred = true;
+      },
+      editReply: async (payload: unknown) => {
+        editedReply = payload;
+      },
+    };
+
+    await createMemoriesInteractionRoute(dependencies).execute(
+      {} as Client,
+      interaction as unknown as StringSelectMenuInteraction,
+      requireRoute(interaction.customId),
+    );
+
+    const texts = collectTextDisplays(editedReply);
+    expect(texts.some((text) => text.includes("Beta"))).toBe(true);
+    expect(texts.some((text) => text.includes("Beta chunk two"))).toBe(true);
+    expect(texts.some((text) => text.includes("Beta chunk five"))).toBe(false);
+    expect(texts.some((text) => text.includes("Alpha"))).toBe(false);
+
+    const buttons = collectButtons(editedReply);
+    expect(buttons.map((button) => button.customId)).toContain(
+      "memories:v1:document-chunk-remove-confirm:en-US:10:77:2",
+    );
+    // Navigation steps to a neighbouring stored index, never to chunk_index 1 or 3, which are absent.
+    expect(buttons.map((button) => button.customId)).toContain("memories:v1:document-chunk-prev:en-US:10:77:0");
+    expect(buttons.map((button) => button.customId)).toContain("memories:v1:document-chunk-next:en-US:10:77:5");
+  });
+
+  it("shows real per-lineage counts and tells a non-manager their view is scoped", async () => {
+    let managerReply: unknown = null;
+    let memberReply: unknown = null;
+    const { dependencies } = createTestDependencies();
+    const route = createMemoriesInteractionRoute(dependencies);
+
+    function interactionFor(isManager: boolean, sink: (payload: unknown) => void) {
+      return {
+        id: `int-counts-${isManager}`,
+        customId: "memories:v1:category:en-US:memories",
+        user: { id: "user-42", username: "user42" },
+        guildId: "guild-123",
+        memberPermissions: { has: () => isManager },
+        deferred: false,
+        replied: false,
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        deferUpdate: async function (this: { deferred: boolean }) {
+          this.deferred = true;
+        },
+        editReply: async (payload: unknown) => sink(payload),
+      };
+    }
+
+    await route.execute(
+      {} as Client,
+      interactionFor(true, (p) => {
+        managerReply = p;
+      }) as unknown as StringSelectMenuInteraction,
+      requireRoute("memories:v1:category:en-US:memories"),
+    );
+    await route.execute(
+      {} as Client,
+      interactionFor(false, (p) => {
+        memberReply = p;
+      }) as unknown as StringSelectMenuInteraction,
+      requireRoute("memories:v1:category:en-US:memories"),
+    );
+
+    // The unselected lineage carries a real count from the repository, never a fabricated 1.
+    const managerOptions = collectSelects(managerReply).flatMap((select) => select.options ?? []);
+    const unselected = managerOptions.find((option) => option.value === "1880");
+    expect(unselected?.description).toContain("4");
+    expect(unselected?.description).not.toContain("1 ");
+
+    const managerTexts = collectTextDisplays(managerReply);
+    expect(managerTexts.some((text) => text.includes("only the memories you taught"))).toBe(false);
+
+    const memberTexts = collectTextDisplays(memberReply);
+    expect(memberTexts.some((text) => text.includes("only the memories you taught"))).toBe(true);
+  });
+
+  /**
+   * A refusal used to arrive as a second ephemeral message, which reads as an unrelated error
+   * rather than as this panel's answer. Ordering is the subtle half: these branches sit above
+   * `beginPanelInteraction` precisely because they may open a modal, so a refusal has to
+   * acknowledge for itself.
+   */
+  it("answers a refused modal branch by repainting the panel, never by a separate reply", async () => {
+    const { dependencies } = createTestDependencies({
+      resolveScope: async (interaction) => ({
+        serverId: 1,
+        workspaceId: "guild-123",
+        guildId: "guild-123",
+        userDiscId: interaction.user.id,
+        userId: 42,
+        canManage: false,
+        isBlacklisted: false,
+        memteachingEnabled: false,
+        configuredEmbeddingModelId: null,
+        personas: [makePersona(10, 1770, "Tomori")],
+        readStatus: "fresh",
+      }),
+    });
+    const route = createMemoriesInteractionRoute(dependencies);
+
+    for (const [customId, isSelect] of [
+      ["memories:v1:select:en-US:1770", true],
+      ["memories:v1:document-select:en-US:0", true],
+      ["memories:v1:stm-open:en-US", false],
+    ] as const) {
+      let edited: unknown = null;
+      let replied = false;
+      const interaction = {
+        id: `int-refusal-${customId}`,
+        customId,
+        values: isSelect ? [customId.includes("document") ? "action:add-document" : "action:add"] : undefined,
+        user: { id: "user-42", username: "user42" },
+        guildId: "guild-123",
+        memberPermissions: { has: () => false },
+        deferred: false,
+        replied: false,
+        isButton: () => !isSelect,
+        isStringSelectMenu: () => isSelect,
+        isModalSubmit: () => false,
+        deferUpdate: async function (this: { deferred: boolean }) {
+          this.deferred = true;
+        },
+        reply: async () => {
+          replied = true;
+        },
+        editReply: async (payload: unknown) => {
+          edited = payload;
+        },
+      };
+
+      await route.execute({} as Client, interaction as unknown as StringSelectMenuInteraction, requireRoute(customId));
+
+      expect(replied).toBe(false);
+      expect(interaction.deferred).toBe(true);
+      expect(collectTextDisplays(edited).length).toBeGreaterThan(0);
+    }
+  });
+
   it("refuses modal opening and writes when user is blacklisted and not manager", async () => {
     let addRepositoryCalled = false;
     const addSpy = spyOn(serverMemoryRepository, "add").mockImplementation(async () => {
@@ -614,7 +1250,7 @@ describe("memories permissions and scoping", () => {
         }),
       });
 
-      let replyContent = "";
+      let refusalPayload: unknown = null;
       const selectAddInteraction = {
         id: "int-add-blacklisted",
         customId: "memories:v1:select:en-US:1770",
@@ -622,11 +1258,16 @@ describe("memories permissions and scoping", () => {
         user: { id: "user-blacklisted", username: "badactor" },
         guildId: "guild-123",
         memberPermissions: { has: () => false },
+        deferred: false,
+        replied: false,
         isButton: () => false,
         isStringSelectMenu: () => true,
         isModalSubmit: () => false,
-        reply: async (opts: { content: string }) => {
-          replyContent = opts.content;
+        deferUpdate: async function (this: { deferred: boolean }) {
+          this.deferred = true;
+        },
+        editReply: async (payload: unknown) => {
+          refusalPayload = payload;
         },
       };
 
@@ -637,7 +1278,9 @@ describe("memories permissions and scoping", () => {
         requireRoute(selectAddInteraction.customId),
       );
 
-      expect(replyContent).toContain("blacklisted");
+      // The refusal repaints the panel with a receipt rather than posting a stray ephemeral reply.
+      expect(selectAddInteraction.deferred).toBe(true);
+      expect(collectTextDisplays(refusalPayload).join(" ")).toContain("blacklisted");
       expect(addRepositoryCalled).toBe(false);
 
       // Verify add-submit also refuses write
@@ -1012,7 +1655,7 @@ describe("memories permissions and scoping", () => {
     }
   });
 
-  it("resolves all memories locale keys dynamically", () => {
+  it("resolves all panel locale keys, including every composed receipt pair", () => {
     const requiredKeys = [
       "selector_guidance",
       "add_option",
@@ -1032,39 +1675,12 @@ describe("memories permissions and scoping", () => {
       "remove_confirm",
       "remove_confirm_description",
       "cancel",
-      "added_heading",
-      "added_detail",
-      "edited_heading",
-      "edited_detail",
-      "removed_heading",
-      "removed_detail",
-      "no_changes_heading",
-      "no_changes_detail",
-      "changed_state_heading",
-      "changed_state_detail",
-      "write_failed_heading",
-      "write_failed_detail",
-      "content_too_long_heading",
-      "content_too_long_detail",
-      "limit_reached_heading",
-      "limit_reached_detail",
-      "empty_content_heading",
-      "empty_content_detail",
-      "batch_added_heading",
-      "batch_added_detail",
-      "batch_file_invalid_heading",
-      "batch_file_invalid_detail",
-      "batch_file_too_large_heading",
-      "batch_file_too_large_detail",
-      "batch_all_duplicates_heading",
-      "batch_all_duplicates_detail",
-      "batch_limit_reached_heading",
-      "batch_limit_reached_detail",
-      "blacklisted_error_heading",
-      "blacklisted_error_detail",
-      "teaching_disabled_error_heading",
-      "teaching_disabled_error_detail",
+      ...MEMORIES_RECEIPT_KEYS.flatMap((key) => [`${key}_heading`, `${key}_detail`]),
     ];
+
+    for (const receiptKey of Object.values(DOCUMENT_RESULT_RECEIPT_KEYS)) {
+      expect(MEMORIES_RECEIPT_KEYS as readonly string[]).toContain(receiptKey);
+    }
 
     for (const key of requiredKeys) {
       const fullKey = `commands.memories.${key}`;
@@ -1124,6 +1740,301 @@ describe("memories teaching gate on edit and remove", () => {
       editSpy.mockRestore();
       removeSpy.mockRestore();
       loadSpy.mockRestore();
+    }
+  });
+});
+
+describe("memories document operation ordering", () => {
+  it("updates document channel filters without regenerating an unchanged chunk embedding", async () => {
+    const metaSpy = spyOn(serverMemoryRepository, "loadDocumentMeta").mockResolvedValue({
+      document_name: "Guide",
+      channel_tags: ["#old"],
+    });
+    const chunksSpy = spyOn(serverMemoryRepository, "loadDocumentChunks").mockResolvedValue([
+      { document_chunk_id: 8, chunk_index: 0, content: "Stored chunk" },
+    ]);
+    const tagsSpy = spyOn(serverMemoryRepository, "updateDocumentChannelTags").mockResolvedValue(true);
+    const embeddingSpy = spyOn(embeddingProvider, "generateEmbeddingsBatched");
+    const invalidateSpy = spyOn(tomoriStateCache, "invalidateTomoriStateCache").mockImplementation(() => {});
+
+    try {
+      const result = await serverDocumentsOperations.editChunk({
+        serverId: 1,
+        personaId: 10,
+        documentId: 77,
+        chunkIdx: 0,
+        workspaceId: "guild-123",
+        userId: 42,
+        configuredEmbeddingModelId: null,
+        canManage: true,
+        content: "Stored chunk",
+        channelTags: ["#general"],
+      });
+
+      expect(result.status).toBe("success");
+      expect(tagsSpy).toHaveBeenCalledWith(77, 1, ["#general"], 10);
+      expect(embeddingSpy).not.toHaveBeenCalled();
+      expect(invalidateSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      metaSpy.mockRestore();
+      chunksSpy.mockRestore();
+      tagsSpy.mockRestore();
+      embeddingSpy.mockRestore();
+      invalidateSpy.mockRestore();
+    }
+  });
+
+  it("invalidates authoritative state after every successful document repository write", async () => {
+    const ragSpy = spyOn(ragAvailability, "isRagAvailable").mockReturnValue(true);
+    const memoryGuardSpy = spyOn(rateLimiter.memoryGuard, "checkMemory").mockReturnValue({
+      status: "ok",
+      usagePercent: 0,
+      heapUsedMB: 1,
+      heapTotalMB: 2,
+      rssMB: 3,
+    });
+    const quotaSpy = spyOn(rateLimiter, "reserveDocumentQuota").mockReturnValue({ allowed: true });
+    const credentialSpy = spyOn(credentialResolver, "resolveCapabilityCredentials").mockResolvedValue({
+      apiKey: "test-key",
+    });
+    const modelIdSpy = spyOn(credentialResolver, "getResolvedCapabilityModelId").mockReturnValue(5);
+    const modelSpy = spyOn(llmModelRepo, "loadEmbeddingModelById").mockResolvedValue({
+      embedding_model_id: 5,
+      provider: "google",
+      codename: "embedding-model",
+      model_family: "embedding-family",
+    });
+    const taskSpy = spyOn(embeddingProvider, "providerSupportsEmbeddingTaskType").mockResolvedValue(false);
+    const embeddingSpy = spyOn(embeddingProvider, "generateEmbeddingsBatched").mockResolvedValue([[0.1, 0.2]]);
+    const downloadSpy = spyOn(safeDownloadModule, "safeDownload").mockResolvedValue({
+      success: true,
+      buffer: Buffer.from("Document content"),
+    });
+    const extractSpy = spyOn(textExtractor, "extractTextFromBuffer").mockResolvedValue("Document content");
+    const normalizeSpy = spyOn(ragRepository, "normalizeText").mockImplementation((content) => content);
+    const chunkSpy = spyOn(ragRepository, "chunkText").mockReturnValue(["Document content"]);
+    const insertSpy = spyOn(ragRepository, "insertWithChunks").mockResolvedValue(91);
+    const duplicateSpy = spyOn(serverMemoryRepository, "documentExistsByName").mockResolvedValue(false);
+    const documentCountSpy = spyOn(serverMemoryRepository, "countDocumentsScoped").mockResolvedValue(0);
+    const chunkCountSpy = spyOn(serverMemoryRepository, "countChunksScoped").mockResolvedValue(0);
+    const loadDocumentsSpy = spyOn(serverMemoryRepository, "loadDocuments").mockResolvedValue([
+      { document_id: 91, document_name: "Guide", first_chunk: "Document content" },
+    ]);
+    const loadMetaSpy = spyOn(serverMemoryRepository, "loadDocumentMeta").mockResolvedValue({
+      document_name: "Guide",
+      channel_tags: [],
+    });
+    const loadChunksSpy = spyOn(serverMemoryRepository, "loadDocumentChunks").mockResolvedValue([
+      { document_chunk_id: 8, chunk_index: 0, content: "Document content" },
+    ]);
+    const updateChunkSpy = spyOn(serverMemoryRepository, "updateChunk").mockResolvedValue(true);
+    const deleteChunkSpy = spyOn(serverMemoryRepository, "deleteChunk").mockResolvedValue(true);
+    const removeDocumentSpy = spyOn(serverMemoryRepository, "removeDocument").mockResolvedValue("Guide");
+    const rebuildSpy = spyOn(documentService, "rebuildDocumentTextContent").mockResolvedValue(undefined);
+    const invalidateSpy = spyOn(tomoriStateCache, "invalidateTomoriStateCache").mockImplementation(() => {});
+
+    try {
+      expect(
+        (
+          await serverDocumentsOperations.add({
+            serverId: 1,
+            personaId: 10,
+            userId: 42,
+            userDiscId: "user-42",
+            workspaceId: "guild-123",
+            configuredEmbeddingModelId: 5,
+            isBlacklisted: false,
+            canManage: true,
+            memteachingEnabled: true,
+            documentName: "Guide",
+            attachment: {
+              id: "attachment-1",
+              filename: "guide.txt",
+              size: 16,
+              url: "https://cdn.example.invalid/guide.txt",
+              proxy_url: "https://proxy.example.invalid/guide.txt",
+              content_type: "text/plain",
+            },
+            channelTags: [],
+          })
+        ).status,
+      ).toBe("success");
+      expect(invalidateSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+
+      invalidateSpy.mockClear();
+      expect(
+        (
+          await serverDocumentsOperations.editChunk({
+            serverId: 1,
+            personaId: 10,
+            documentId: 91,
+            chunkIdx: 0,
+            workspaceId: "guild-123",
+            userId: 42,
+            configuredEmbeddingModelId: 5,
+            canManage: true,
+            content: "Updated content",
+            channelTags: [],
+          })
+        ).status,
+      ).toBe("success");
+      expect(updateChunkSpy).toHaveBeenCalled();
+      expect(rebuildSpy).toHaveBeenCalledWith(91);
+      expect(invalidateSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+      invalidateSpy.mockClear();
+      expect(
+        (
+          await serverDocumentsOperations.remove({
+            serverId: 1,
+            personaId: 10,
+            documentId: 91,
+            workspaceId: "guild-123",
+            canManage: true,
+            memteachingEnabled: true,
+            historyOnly: false,
+          })
+        ).status,
+      ).toBe("success");
+      expect(invalidateSpy.mock.calls.length).toBeGreaterThanOrEqual(1);
+
+      invalidateSpy.mockClear();
+      expect(
+        (
+          await serverDocumentsOperations.removeChunk({
+            serverId: 1,
+            personaId: 10,
+            documentId: 91,
+            chunkIdx: 0,
+            workspaceId: "guild-123",
+            canManage: true,
+          })
+        ).status,
+      ).toBe("success");
+      expect(deleteChunkSpy).toHaveBeenCalled();
+      expect(invalidateSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      ragSpy.mockRestore();
+      memoryGuardSpy.mockRestore();
+      quotaSpy.mockRestore();
+      credentialSpy.mockRestore();
+      modelIdSpy.mockRestore();
+      modelSpy.mockRestore();
+      taskSpy.mockRestore();
+      embeddingSpy.mockRestore();
+      downloadSpy.mockRestore();
+      extractSpy.mockRestore();
+      normalizeSpy.mockRestore();
+      chunkSpy.mockRestore();
+      insertSpy.mockRestore();
+      duplicateSpy.mockRestore();
+      documentCountSpy.mockRestore();
+      chunkCountSpy.mockRestore();
+      loadDocumentsSpy.mockRestore();
+      loadMetaSpy.mockRestore();
+      loadChunksSpy.mockRestore();
+      updateChunkSpy.mockRestore();
+      deleteChunkSpy.mockRestore();
+      removeDocumentSpy.mockRestore();
+      rebuildSpy.mockRestore();
+      invalidateSpy.mockRestore();
+    }
+  });
+
+  it("inserts and invalidates before removing a vectorized memory, and never removes after embedding failure", async () => {
+    const order: string[] = [];
+    const ragSpy = spyOn(ragAvailability, "isRagAvailable").mockReturnValue(true);
+    const memoryGuardSpy = spyOn(rateLimiter.memoryGuard, "checkMemory").mockReturnValue({
+      status: "ok",
+      usagePercent: 0,
+      heapUsedMB: 1,
+      heapTotalMB: 2,
+      rssMB: 3,
+    });
+    const quotaSpy = spyOn(rateLimiter, "reserveDocumentQuota").mockReturnValue({ allowed: true });
+    const credentialSpy = spyOn(credentialResolver, "resolveCapabilityCredentials").mockResolvedValue({
+      apiKey: "test-key",
+    });
+    const modelIdSpy = spyOn(credentialResolver, "getResolvedCapabilityModelId").mockReturnValue(5);
+    const modelSpy = spyOn(llmModelRepo, "loadEmbeddingModelById").mockResolvedValue({
+      embedding_model_id: 5,
+      provider: "google",
+      codename: "embedding-model",
+      model_family: "embedding-family",
+    });
+    const taskSpy = spyOn(embeddingProvider, "providerSupportsEmbeddingTaskType").mockResolvedValue(false);
+    const embeddingSpy = spyOn(embeddingProvider, "generateEmbeddingsBatched").mockResolvedValue([[0.1, 0.2]]);
+    const normalizeSpy = spyOn(ragRepository, "normalizeText").mockImplementation((content) => content);
+    const chunkSpy = spyOn(ragRepository, "chunkText").mockReturnValue(["Vectorized content"]);
+    const insertSpy = spyOn(ragRepository, "insertWithChunks").mockImplementation(async () => {
+      order.push("insert");
+      return 91;
+    });
+    const loadSpy = spyOn(serverMemoryRepository, "loadServerMemoriesScoped").mockResolvedValue([
+      makeMemory(7, { persona_id: 10, persona_lineage_id: 1770, user_id: 42 }),
+    ]);
+    const duplicateSpy = spyOn(serverMemoryRepository, "documentExistsByName").mockResolvedValue(false);
+    const documentCountSpy = spyOn(serverMemoryRepository, "countDocumentsScoped").mockResolvedValue(0);
+    const chunkCountSpy = spyOn(serverMemoryRepository, "countChunksScoped").mockResolvedValue(0);
+    const removeSpy = spyOn(serverMemoryRepository, "remove").mockImplementation(async () => {
+      order.push("remove");
+      return true;
+    });
+    const invalidateSpy = spyOn(tomoriStateCache, "invalidateTomoriStateCache").mockImplementation(() => {
+      order.push("invalidate");
+    });
+
+    const input = {
+      serverId: 1,
+      personaId: 10,
+      personaLineageId: 1770,
+      memoryId: 7,
+      userId: 42,
+      userDiscId: "user-42",
+      workspaceId: "guild-123",
+      configuredEmbeddingModelId: 5,
+      isBlacklisted: false,
+      canManage: true,
+      memteachingEnabled: true,
+      content: "Vectorized content",
+      documentName: "Vectorized Guide",
+      channelTags: [],
+    };
+
+    try {
+      expect((await serverDocumentsOperations.vectorize(input)).status).toBe("success");
+      expect(order).toEqual(["insert", "invalidate", "remove", "invalidate"]);
+
+      order.length = 0;
+      removeSpy.mockResolvedValueOnce(false);
+      const partial = await serverDocumentsOperations.vectorize(input);
+      expect(partial.status).toBe("partial-failure");
+      // The document survives and the state cache is invalidated once for it; the second
+      // invalidate belongs to the removal that did not happen.
+      expect(order).toEqual(["insert", "invalidate"]);
+
+      order.length = 0;
+      embeddingSpy.mockRejectedValueOnce(new Error("embedding failed"));
+      await expect(serverDocumentsOperations.vectorize(input)).rejects.toThrow("embedding failed");
+      expect(order).toEqual([]);
+    } finally {
+      ragSpy.mockRestore();
+      memoryGuardSpy.mockRestore();
+      quotaSpy.mockRestore();
+      credentialSpy.mockRestore();
+      modelIdSpy.mockRestore();
+      modelSpy.mockRestore();
+      taskSpy.mockRestore();
+      embeddingSpy.mockRestore();
+      normalizeSpy.mockRestore();
+      chunkSpy.mockRestore();
+      insertSpy.mockRestore();
+      loadSpy.mockRestore();
+      duplicateSpy.mockRestore();
+      documentCountSpy.mockRestore();
+      chunkCountSpy.mockRestore();
+      removeSpy.mockRestore();
+      invalidateSpy.mockRestore();
     }
   });
 });

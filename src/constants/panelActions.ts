@@ -65,6 +65,13 @@ export const PANEL_ACTIONS = [
   "memories.workspace.memory.add",
   "memories.workspace.memory.edit",
   "memories.workspace.memory.remove",
+  "memories.workspace.memory.vectorize",
+  "memories.workspace.document.add",
+  "memories.workspace.document.remove",
+  "memories.workspace.history-document.remove",
+  "memories.workspace.document-chunk.edit",
+  "memories.workspace.document-chunk.remove",
+  "memories.workspace.stm.clear",
 
   // personal-config
   "personal-config.personal.naming.set",
