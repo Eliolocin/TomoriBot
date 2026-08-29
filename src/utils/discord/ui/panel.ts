@@ -18,7 +18,7 @@ const PANEL_ACCENT_BY_TONE = {
   info: 0x65c6c5,
 } as const;
 
-const RANGE_BUTTONS_PER_ROW = 5;
+export const RANGE_BUTTONS_PER_ROW = 5;
 
 export interface RangeChooserRouteSegments {
   range: (rangeIndex: number) => string[];

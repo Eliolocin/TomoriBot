@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { ComponentType } from "discord.js";
 import { PrivacyLevel, type TomoriState } from "@/types/db/schema";
+import { buildMemoriesPanelPayload } from "@/utils/discord/ui/memoriesPanel";
 import { buildPersonalMemoriesPanelPayload } from "@/utils/discord/ui/personalMemoriesPanel";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
@@ -36,7 +37,7 @@ const MAX_PANEL_PROSE_LINE_BESIDE_THUMBNAIL = 40;
  * the heading is built as a variable first. Listing the files here is what makes that gap fail
  * loudly, because a panel that grows a thumbnail without render coverage breaks this test.
  */
-const THUMBNAIL_PANELS_WITH_RENDER_COVERAGE = new Set(["personalMemoriesPanel.ts"]);
+const THUMBNAIL_PANELS_WITH_RENDER_COVERAGE = new Set(["memoriesPanel.ts", "personalMemoriesPanel.ts"]);
 
 /**
  * Width as Discord draws it, not as the string is stored.
@@ -185,6 +186,32 @@ describe("panel prose width", () => {
         memories: [],
         stmCount: 0,
         privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "fresh",
+        page: { kind: "main" },
+      });
+
+    expect(collectProseWidthViolations(build("https://cdn.example.invalid/55.png"))).toEqual([]);
+    expect(collectProseWidthViolations(build(null))).toEqual([]);
+  });
+
+  it("holds workspace persona memories to 40 characters beside its avatar", () => {
+    const personas = [
+      {
+        persona_id: 55,
+        persona_lineage_id: 1770,
+        persona_nickname: "Aphel",
+        is_alter: false,
+      } as unknown as TomoriState,
+    ];
+    const build = (selectedPersonaAvatarUrl: string | null) =>
+      buildMemoriesPanelPayload({
+        locale: "en-US",
+        category: "memories",
+        selectedLineageId: 1770,
+        personas,
+        selectedPersonaAvatarUrl,
+        memories: [],
+        canManage: true,
         readStatus: "fresh",
         page: { kind: "main" },
       });

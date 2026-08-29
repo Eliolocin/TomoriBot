@@ -50,9 +50,11 @@ import compact from "./commands/compact";
 import moderation from "./commands/moderation";
 import quota from "./commands/quota";
 import providers from "./commands/providers";
+import memories from "./commands/memories";
 
 export default {
   commands: {
+    ...memories,
     ...providers,
     ...quota,
     ...moderation,

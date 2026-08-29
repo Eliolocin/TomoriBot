@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **40**. Runnable slash commands: **170**.
+Top-level command groups: **41**. Runnable slash commands: **171**.
 
 ## `/capabilities`
 
@@ -165,6 +165,14 @@ Add, list, enable, disable, and remove remote MCP tool servers.
 | Command | Summary |
 |---|---|
 | `/mcps` | Add, list, enable, disable, and remove remote MCP tool servers. |
+
+## `/memories`
+
+Inspect and manage server memories, documents, and short-term memory.
+
+| Command | Summary |
+|---|---|
+| `/memories` | Inspect and manage server memories, documents, and short-term memory. |
 
 ## `/memory`
 

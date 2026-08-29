@@ -61,6 +61,11 @@ export const PANEL_ACTIONS = [
   "personal-memories.personal.memory.remove",
   "personal-memories.personal.stm.clear",
 
+  // memories (workspace)
+  "memories.workspace.memory.add",
+  "memories.workspace.memory.edit",
+  "memories.workspace.memory.remove",
+
   // personal-config
   "personal-config.personal.naming.set",
   "personal-config.personal.about.set",

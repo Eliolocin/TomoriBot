@@ -1,6 +1,17 @@
 import { createHash } from "node:crypto";
 import type { PersonalProviderCapability } from "@/types/db/schema";
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import {
+  buildRouteSegments,
+  decodeRouteSegments,
+  indexCodecsByWireToken,
+  parseNonNegativeInt,
+  parseNonce,
+  parsePositiveId,
+  parseSnowflake,
+  type RouteCodec,
+  type RouteFieldCodec,
+} from "@/utils/discord/panelRouteCodec";
 import { parseLocale } from "@/utils/discord/panelRouteTokens";
 
 export const PERSONAL_CONFIG_ROUTE_NAMESPACE = "personal-config";
@@ -304,18 +315,6 @@ export type PersonalConfigRouteForAction<A extends PersonalConfigAction> = Perso
     : never
   : never;
 
-export interface RouteFieldCodec<TKey extends string = string, TValue = unknown> {
-  key: TKey;
-  optional?: boolean;
-  encode: (value: unknown) => string;
-  decode: (raw: string, routeSoFar: Readonly<Record<string, unknown>>) => TValue | null;
-}
-
-export interface RouteCodec<TRoute extends Record<string, unknown> = Record<string, unknown>> {
-  wireToken: string;
-  fields: readonly RouteFieldCodec<keyof TRoute & string, unknown>[];
-}
-
 export type PersonalConfigRouteCodecs = {
   [A in PersonalConfigAction]: RouteCodec<PersonalConfigRouteForAction<A>>;
 };
@@ -347,22 +346,6 @@ function parsePage(category: PersonalConfigCategory, value: string | undefined):
   }
 }
 
-function parsePositiveId(value: string | undefined): number | null {
-  if (!value || !/^[1-9]\d*$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-function parseNonNegativeInt(value: string | undefined): number | null {
-  if (!value || !/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
-}
-
-function parseNonce(value: string | undefined): string | null {
-  return value && /^[A-Za-z0-9_-]{8,32}$/.test(value) ? value : null;
-}
-
 function parseManagedCapability(value: string | undefined): PersonalConfigManagedCapability | null {
   if (
     value === "text" ||
@@ -385,11 +368,6 @@ function parseProvider(value: string | undefined): string | null {
 function parseDtmMode(value: string | undefined): "off" | "follow" | "on" | null {
   if (value === "off" || value === "follow" || value === "on") return value;
   return null;
-}
-
-function parseSnowflake(value: string | undefined): string | null {
-  if (!value || !/^\d{17,20}$/.test(value)) return null;
-  return value;
 }
 
 function parseSpotlightMask(value: string | undefined): string | null {
@@ -765,39 +743,15 @@ export const PERSONAL_CONFIG_ROUTE_CODECS: PersonalConfigRouteCodecs = {
   },
 };
 
-const CODECS_BY_WIRE_TOKEN = new Map<
-  string,
-  {
-    action: PersonalConfigAction;
-    codec: RouteCodec<PersonalConfigPanelRoute>;
-  }
->();
-
-for (const [action, codec] of Object.entries(PERSONAL_CONFIG_ROUTE_CODECS) as [
-  PersonalConfigAction,
-  RouteCodec<PersonalConfigPanelRoute>,
-][]) {
-  CODECS_BY_WIRE_TOKEN.set(codec.wireToken, { action, codec });
-}
+const CODECS_BY_WIRE_TOKEN = indexCodecsByWireToken<PersonalConfigAction, PersonalConfigPanelRoute>(
+  PERSONAL_CONFIG_ROUTE_CODECS,
+);
 
 /**
  * Encodes a typed route object through the authoritative codec table into route segments.
  */
 export function buildPersonalConfigRouteSegments(route: PersonalConfigPanelRoute): string[] {
-  const codec = PERSONAL_CONFIG_ROUTE_CODECS[route.action];
-  const segments: string[] = [codec.wireToken, route.locale];
-  const record = route as unknown as Record<string, unknown>;
-
-  for (const field of codec.fields) {
-    const value = record[field.key as string];
-    if (value === undefined) {
-      if (field.optional) continue;
-      throw new Error(`Missing required field '${String(field.key)}' for action '${route.action}'`);
-    }
-    segments.push(field.encode(value));
-  }
-
-  return segments;
+  return buildRouteSegments(PERSONAL_CONFIG_ROUTE_CODECS[route.action], route);
 }
 
 /**
@@ -825,24 +779,5 @@ export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): Pe
   const entry = CODECS_BY_WIRE_TOKEN.get(rawWireToken);
   if (!entry) return null;
 
-  const { action, codec } = entry;
-  const requiredCount = codec.fields.filter((f) => !f.optional).length;
-  const maxCount = codec.fields.length;
-
-  if (tail.length < requiredCount || tail.length > maxCount) {
-    return null;
-  }
-
-  const parsedRoute: Record<string, unknown> = { action, locale };
-
-  for (let i = 0; i < tail.length; i++) {
-    const field = codec.fields[i];
-    const decoded = field.decode(tail[i], parsedRoute);
-    if (decoded === null || decoded === undefined) {
-      return null;
-    }
-    parsedRoute[field.key] = decoded;
-  }
-
-  return parsedRoute as PersonalConfigPanelRoute;
+  return decodeRouteSegments(entry.codec, entry.action, locale, tail);
 }
