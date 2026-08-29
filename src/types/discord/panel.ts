@@ -8,21 +8,6 @@ export interface PanelReceipt {
   metadata?: string;
 }
 
-export interface ResolvedCollectionSelection<T> {
-  item: T | null;
-  itemIndex: number;
-  rangeIndex: number;
-  rangeCount: number;
-  visibleItems: T[];
-}
-
-export interface CollectionPanelViewState<T> {
-  items: T[];
-  readStatus: PanelReadStatus;
-  selection: ResolvedCollectionSelection<T>;
-  receipt?: PanelReceipt;
-}
-
 export interface ResolvedRangeSelection<T> {
   rangeIndex: number;
   rangeCount: number;

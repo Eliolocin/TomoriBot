@@ -13,6 +13,7 @@ import { getGuildMcpConfigReadResult, type GuildMcpConfigReadResult } from "@/ut
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { beginPanelInteraction, performPanelAction } from "@/utils/discord/interactions/panelController";
+import { createNonce } from "@/utils/discord/panelRouteTokens";
 import { MCPS_ROUTE_NAMESPACE, MCPS_ROUTE_VERSION, parseMcpsPanelRoute } from "@/utils/discord/mcpsPanelCatalog";
 import { buildAddMcpModal, buildMcpsAddModalFieldId, buildMcpsPanelPayload } from "@/utils/discord/ui/mcpsPanel";
 import { showRoutedRawModal, takeRawModalSelectValue } from "@/utils/discord/ui/modals";
@@ -154,7 +155,7 @@ export function createMcpsInteractionRoute(overrides: Partial<McpsRouteDependenc
     recordAction: (input) => {
       void recordPanelActionStat(input);
     },
-    createNonce: () => crypto.randomUUID().replaceAll("-", "").slice(0, 12),
+    createNonce,
     showAddModal: (interaction, locale, nonce) => showRoutedRawModal(interaction, buildAddMcpModal(locale, nonce)),
     takeServerType: (interactionId, nonce) =>
       takeRawModalSelectValue(interactionId, buildMcpsAddModalFieldId("server-type", nonce)),

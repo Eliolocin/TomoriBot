@@ -1,11 +1,5 @@
-import type {
-  ChooserRange,
-  ResolvedCollectionSelection,
-  ResolvedRangeChooser,
-  ResolvedRangeSelection,
-} from "@/types/discord/panel";
+import type { ChooserRange, ResolvedRangeChooser, ResolvedRangeSelection } from "@/types/discord/panel";
 
-export const COLLECTION_PANEL_RANGE_SIZE = 25;
 export const MODERATION_PANEL_RANGE_SIZE = 10;
 export const RANGES_PER_CHOOSER_PAGE = 10;
 
@@ -37,44 +31,6 @@ export async function performPanelAction<TResult, TState>(
 ): Promise<{ result: TResult; state: TState | null }> {
   const result = await action();
   return { result, state: await reload() };
-}
-
-export function resolveCollectionSelection<T>(
-  items: readonly T[],
-  getId: (item: T) => number,
-  requestedId?: number | null,
-  requestedRange = 0,
-  removedIndex?: number,
-): ResolvedCollectionSelection<T> {
-  const rangeCount = Math.max(1, Math.ceil(items.length / COLLECTION_PANEL_RANGE_SIZE));
-  let itemIndex = requestedId ? items.findIndex((item) => getId(item) === requestedId) : -1;
-
-  if (itemIndex < 0 && items.length > 0) {
-    if (removedIndex !== undefined) {
-      itemIndex = Math.min(Math.max(removedIndex, 0), items.length - 1);
-    } else {
-      const clampedRange = Math.min(Math.max(requestedRange, 0), rangeCount - 1);
-      itemIndex = clampedRange * COLLECTION_PANEL_RANGE_SIZE;
-    }
-  }
-
-  const rangeIndex =
-    itemIndex >= 0
-      ? Math.floor(itemIndex / COLLECTION_PANEL_RANGE_SIZE)
-      : Math.min(Math.max(requestedRange, 0), rangeCount - 1);
-  const start = rangeIndex * COLLECTION_PANEL_RANGE_SIZE;
-
-  return {
-    item: itemIndex >= 0 ? (items[itemIndex] ?? null) : null,
-    itemIndex,
-    rangeIndex,
-    rangeCount,
-    visibleItems: items.slice(start, start + COLLECTION_PANEL_RANGE_SIZE),
-  };
-}
-
-export function escapeDiscordMarkdown(value: string): string {
-  return value.replace(/([\\`*_{}[\]()#+\-.!|>~])/g, "\\$1");
 }
 
 export function resolveRangeSelection<T>(

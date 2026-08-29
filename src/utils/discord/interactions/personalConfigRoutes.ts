@@ -38,6 +38,7 @@ import {
 } from "@/utils/db/repositories";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { beginPanelInteraction, performPanelAction } from "@/utils/discord/interactions/panelController";
+import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   PERSONAL_CONFIG_ROUTE_NAMESPACE,
   PERSONAL_CONFIG_ROUTE_VERSION,
@@ -482,11 +483,10 @@ export const personalConfigOperations: PersonalConfigOperations = {
     return { status: "success" };
   },
 
-  async setAppearance({ userId, userDiscId, rawTags }) {
+  async setAppearance({ userId, userDiscId: _userDiscId, rawTags }) {
     if (rawTags.trim().length === 0) {
       const ok = await userRepository.update(userId, { physical_appearance_tags: [] });
       if (!ok) return { status: "write-failed" };
-      invalidateUserCache(userDiscId);
       return { status: "success", tags: [] };
     }
 
@@ -499,7 +499,6 @@ export const personalConfigOperations: PersonalConfigOperations = {
 
     const ok = await userRepository.update(userId, { physical_appearance_tags: validation.tags });
     if (!ok) return { status: "write-failed" };
-    invalidateUserCache(userDiscId);
     return { status: "success", tags: validation.tags };
   },
 
@@ -509,14 +508,12 @@ export const personalConfigOperations: PersonalConfigOperations = {
     }
     const updated = await userRepository.setPrivacyLevel(userDiscId, level);
     if (!updated) return { status: "write-failed" };
-    invalidateUserCache(userDiscId);
     return { status: "success" };
   },
 
   async toggleCrossServerStm({ userDiscId }) {
     try {
       const enabled = await userRepository.toggleCrossServerShmOptIn(userDiscId);
-      invalidateUserCache(userDiscId);
       return { status: "success", enabled };
     } catch {
       return { status: "write-failed" };
@@ -840,7 +837,7 @@ export const personalConfigOperations: PersonalConfigOperations = {
     return { status: "success" };
   },
 
-  async setToolMode({ userId, userDiscId, mode }) {
+  async setToolMode({ userId, userDiscId: _userDiscId, mode }) {
     if (mode !== "off" && mode !== "follow" && mode !== "on") {
       return { status: "invalid-value" };
     }
@@ -848,7 +845,6 @@ export const personalConfigOperations: PersonalConfigOperations = {
       personal_deliberate_tool_mode: mode,
     });
     if (!updated) return { status: "write-failed" };
-    invalidateUserCache(userDiscId);
     return { status: "success" };
   },
 
@@ -1335,20 +1331,39 @@ async function loadPersonalModelDisplayInfo(
   };
 }
 
+// The positional signature placed dependencies at position 8, which forced call sites
+// targeting later presentation fields to pad preceding positions with undefined.
+interface PersonalConfigRepaintOptions {
+  locale: string;
+  scope: PersonalConfigScope;
+  category: PersonalConfigCategory;
+  page: PersonalConfigPage;
+  selectedLineageId?: number;
+  panelReceipt?: PanelReceipt;
+  dependencies?: PersonalConfigRouteDependencies;
+  selectedCapability?: PersonalConfigManagedCapability;
+  selectedParametersProvider?: string;
+  selectedFallbacksProvider?: string;
+  view?: PersonalConfigPanelView;
+}
+
 async function repaint(
   interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
-  locale: string,
-  scope: PersonalConfigScope,
-  category: PersonalConfigCategory,
-  page: PersonalConfigPage,
-  selectedLineageId?: number,
-  panelReceipt?: PanelReceipt,
-  dependencies: PersonalConfigRouteDependencies = defaultDependencies,
-  selectedCapability?: PersonalConfigManagedCapability,
-  selectedParametersProvider?: string,
-  selectedFallbacksProvider?: string,
-  view?: PersonalConfigPanelView,
+  options: PersonalConfigRepaintOptions,
 ): Promise<void> {
+  const {
+    locale,
+    scope,
+    category,
+    page,
+    selectedLineageId,
+    panelReceipt,
+    dependencies = defaultDependencies,
+    selectedCapability,
+    selectedParametersProvider,
+    selectedFallbacksProvider,
+    view,
+  } = options;
   let personaPref: UserPersonaNamingPreference | null = null;
   if (category === "profile" && page === "persona") {
     const currentLineage = selectedLineageId ?? scope.personas[0]?.persona_lineage_id;
@@ -1457,7 +1472,7 @@ const defaultDependencies: PersonalConfigRouteDependencies = {
   recordAction: (input) => {
     void recordPanelActionStat(input);
   },
-  createNonce: () => crypto.randomUUID().replaceAll("-", "").slice(0, 12),
+  createNonce,
   showLanguageModal: (interaction, locale, nonce, currentLanguage) =>
     showRoutedRawModal(interaction, buildLanguageModal(locale, nonce, currentLanguage)),
   showTimezoneModal: (interaction, locale, nonce, currentOffset) =>
@@ -1756,25 +1771,20 @@ export function createPersonalConfigInteractionRoute(
 
         if (availableOptions.length > PERSONAL_FALLBACK_PAGE_SIZE) {
           await interaction.deferUpdate();
-          await repaint(
-            interaction,
-            route.locale,
-            cachedScope,
-            "models",
-            "fallbacks",
-            undefined,
-            undefined,
+          await repaint(interaction, {
+            locale: route.locale,
+            scope: cachedScope,
+            category: "models",
+            page: "fallbacks",
             dependencies,
-            undefined,
-            undefined,
-            route.provider,
-            {
+            selectedFallbacksProvider: route.provider,
+            view: {
               kind: "fallbacks-range",
               provider: route.provider,
               rangePage: 0,
               totalOptions: availableOptions.length,
             },
-          );
+          });
           return;
         }
 
@@ -1907,41 +1917,34 @@ export function createPersonalConfigInteractionRoute(
           );
           const providers = displayInfo.eligibleProvidersForCapability[route.capability];
           if (providers.length <= PERSONAL_PROVIDER_DIRECT_LIMIT) {
-            await repaint(
-              interaction,
-              route.locale,
-              cachedScope,
-              "models",
-              "switch",
-              undefined,
-              {
+            await repaint(interaction, {
+              locale: route.locale,
+              scope: cachedScope,
+              category: "models",
+              page: "switch",
+              panelReceipt: {
                 tone: "error",
                 heading: localizer(route.locale, "commands.personal.config.unavailable"),
                 detail: localizer(route.locale, "commands.personal.config.stale_warning"),
               },
               dependencies,
-            );
+            });
             return;
           }
-          await repaint(
-            interaction,
-            route.locale,
-            cachedScope,
-            "models",
-            "switch",
-            undefined,
-            undefined,
+          await repaint(interaction, {
+            locale: route.locale,
+            scope: cachedScope,
+            category: "models",
+            page: "switch",
             dependencies,
-            route.capability,
-            undefined,
-            undefined,
-            {
+            selectedCapability: route.capability,
+            view: {
               kind: "model-provider-range",
               capability: route.capability,
               rangePage: 0,
               totalOptions: providers.length,
             },
-          );
+          });
           return;
         }
         if (chosen !== "__server_default__") {
@@ -1962,14 +1965,12 @@ export function createPersonalConfigInteractionRoute(
 
           if (availableModels.length === 0) {
             await interaction.deferUpdate();
-            await repaint(
-              interaction,
-              route.locale,
-              cachedScope,
-              "models",
-              "switch",
-              undefined,
-              {
+            await repaint(interaction, {
+              locale: route.locale,
+              scope: cachedScope,
+              category: "models",
+              page: "switch",
+              panelReceipt: {
                 tone: "error",
                 heading: localizer(route.locale, "commands.personal.config.no_models_available_heading"),
                 detail: localizer(route.locale, "commands.personal.config.no_models_available_detail", {
@@ -1977,33 +1978,28 @@ export function createPersonalConfigInteractionRoute(
                 }),
               },
               dependencies,
-              route.capability,
-            );
+              selectedCapability: route.capability,
+            });
             return;
           }
 
           if (availableModels.length > PERSONAL_MODEL_PAGE_SIZE) {
             await interaction.deferUpdate();
-            await repaint(
-              interaction,
-              route.locale,
-              cachedScope,
-              "models",
-              "switch",
-              undefined,
-              undefined,
+            await repaint(interaction, {
+              locale: route.locale,
+              scope: cachedScope,
+              category: "models",
+              page: "switch",
               dependencies,
-              route.capability,
-              undefined,
-              undefined,
-              {
+              selectedCapability: route.capability,
+              view: {
                 kind: "model-range",
                 capability: route.capability,
                 provider,
                 rangePage: 0,
                 totalOptions: availableModels.length,
               },
-            );
+            });
             return;
           }
 
@@ -2156,19 +2152,13 @@ export function createPersonalConfigInteractionRoute(
           const autoTriggerPersonaId = selectedPersonas[0]?.id ?? null;
           const autoIdx =
             autoTriggerPersonaId === null ? 0 : resolved.block.findIndex((p) => p.id === autoTriggerPersonaId) + 1;
-          await repaint(
-            interaction,
-            route.locale,
-            cachedScope,
-            "advanced",
-            "spotlight",
-            undefined,
-            undefined,
+          await repaint(interaction, {
+            locale: route.locale,
+            scope: cachedScope,
+            category: "advanced",
+            page: "spotlight",
             dependencies,
-            undefined,
-            undefined,
-            undefined,
-            {
+            view: {
               kind: "spotlight-set-review",
               channelId: route.channelId,
               hours: route.hours,
@@ -2180,24 +2170,18 @@ export function createPersonalConfigInteractionRoute(
               fp: route.fp,
               nonce: dependencies.createNonce(),
             },
-          );
+          });
           return;
         }
         if (selectedPersonas.length > SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE) {
           await interaction.deferUpdate();
-          await repaint(
-            interaction,
-            route.locale,
-            cachedScope,
-            "advanced",
-            "spotlight",
-            undefined,
-            undefined,
+          await repaint(interaction, {
+            locale: route.locale,
+            scope: cachedScope,
+            category: "advanced",
+            page: "spotlight",
             dependencies,
-            undefined,
-            undefined,
-            undefined,
-            {
+            view: {
               kind: "spotlight-auto-range",
               channelId: route.channelId,
               hours: route.hours,
@@ -2207,7 +2191,7 @@ export function createPersonalConfigInteractionRoute(
               rangePage: 0,
               totalOptions: selectedPersonas.length,
             },
-          );
+          });
           return;
         }
         const nonce = dependencies.createNonce();
@@ -2355,34 +2339,34 @@ export function createPersonalConfigInteractionRoute(
       let scope = initialScope;
 
       if (route.action === "category") {
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          route.category,
-          route.page,
-          route.category === "profile" && route.page === "persona" ? scope.personas[0]?.persona_lineage_id : undefined,
-          undefined,
+          category: route.category,
+          page: route.page,
+          selectedLineageId:
+            route.category === "profile" && route.page === "persona"
+              ? scope.personas[0]?.persona_lineage_id
+              : undefined,
           dependencies,
-        );
+        });
         return;
       }
 
       if (route.action === "page") {
         const selectMenu = interaction as StringSelectMenuInteraction;
         const selectedPage = (selectMenu.values[0] as PersonalConfigPage) ?? route.page;
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          route.category,
-          selectedPage,
-          route.category === "profile" && selectedPage === "persona"
-            ? scope.personas[0]?.persona_lineage_id
-            : undefined,
-          undefined,
+          category: route.category,
+          page: selectedPage,
+          selectedLineageId:
+            route.category === "profile" && selectedPage === "persona"
+              ? scope.personas[0]?.persona_lineage_id
+              : undefined,
           dependencies,
-        );
+        });
         return;
       }
 
@@ -2392,7 +2376,14 @@ export function createPersonalConfigInteractionRoute(
         const validLineage = scope.personas.some((p) => p.persona_lineage_id === selectedLineage)
           ? selectedLineage
           : (scope.personas[0]?.persona_lineage_id ?? 0);
-        await repaint(interaction, route.locale, scope, "profile", "persona", validLineage, undefined, dependencies);
+        await repaint(interaction, {
+          locale: route.locale,
+          scope,
+          category: "profile",
+          page: "persona",
+          selectedLineageId: validLineage,
+          dependencies,
+        });
         return;
       }
 
@@ -2425,14 +2416,12 @@ export function createPersonalConfigInteractionRoute(
             language === "ja"
               ? localizer(route.locale, "commands.personal.config.language_ja")
               : localizer(route.locale, "commands.personal.config.language_en");
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "profile",
-            "general",
-            undefined,
-            {
+            category: "profile",
+            page: "general",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.language_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.language_updated_detail", {
@@ -2440,24 +2429,22 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "profile",
-          "general",
-          undefined,
-          {
+          category: "profile",
+          page: "general",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
@@ -2468,20 +2455,18 @@ export function createPersonalConfigInteractionRoute(
         const parsedOffset = Number(rawOffset);
 
         if (Number.isNaN(parsedOffset) || parsedOffset < -12 || parsedOffset > 14) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "profile",
-            "general",
-            undefined,
-            {
+            category: "profile",
+            page: "general",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.invalid_timezone_heading"),
               detail: localizer(route.locale, "commands.personal.config.invalid_timezone_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
@@ -2505,14 +2490,12 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "profile",
-            "general",
-            undefined,
-            {
+            category: "profile",
+            page: "general",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.timezone_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.timezone_updated_detail", {
@@ -2520,24 +2503,22 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "profile",
-          "general",
-          undefined,
-          {
+          category: "profile",
+          page: "general",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
@@ -2562,37 +2543,33 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "profile",
-            "general",
-            undefined,
-            {
+            category: "profile",
+            page: "general",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.timezone_cleared_heading"),
               detail: localizer(route.locale, "commands.personal.config.timezone_cleared_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "profile",
-          "general",
-          undefined,
-          {
+          category: "profile",
+          page: "general",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
@@ -2630,37 +2607,33 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "profile",
-            "general",
-            undefined,
-            {
+            category: "profile",
+            page: "general",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.naming_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.naming_updated_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "profile",
-          "general",
-          undefined,
-          {
+          category: "profile",
+          page: "general",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
@@ -2699,37 +2672,35 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "profile",
-            "persona",
-            route.lineageId,
-            {
+            category: "profile",
+            page: "persona",
+            selectedLineageId: route.lineageId,
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.naming_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.naming_updated_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "profile",
-          "persona",
-          route.lineageId,
-          {
+          category: "profile",
+          page: "persona",
+          selectedLineageId: route.lineageId,
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
@@ -2780,37 +2751,33 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "profile",
-            "general",
-            undefined,
-            {
+            category: "profile",
+            page: "general",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.about_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.about_updated_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "profile",
-          "general",
-          undefined,
-          {
+          category: "profile",
+          page: "general",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
@@ -2839,14 +2806,12 @@ export function createPersonalConfigInteractionRoute(
             });
           }
           const isCleared = result.tags.length === 0;
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "profile",
-            "appearance",
-            undefined,
-            {
+            category: "profile",
+            page: "appearance",
+            panelReceipt: {
               tone: "success",
               heading: localizer(
                 route.locale,
@@ -2862,7 +2827,7 @@ export function createPersonalConfigInteractionRoute(
               ),
             },
             dependencies,
-          );
+          });
           return;
         }
 
@@ -2884,20 +2849,18 @@ export function createPersonalConfigInteractionRoute(
           detailKey = "commands.personal.config.invalid_tags_detail";
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "profile",
-          "appearance",
-          undefined,
-          {
+          category: "profile",
+          page: "appearance",
+          panelReceipt: {
             tone,
             heading: localizer(route.locale, headingKey),
             detail: localizer(route.locale, detailKey, vars),
           },
           dependencies,
-        );
+        });
         return;
       }
 
@@ -2934,14 +2897,12 @@ export function createPersonalConfigInteractionRoute(
                 ? localizer(route.locale, "commands.personal.config.privacy_level_partial")
                 : localizer(route.locale, "commands.personal.config.privacy_level_minimal");
 
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "privacy",
-            "controls",
-            undefined,
-            {
+            category: "privacy",
+            page: "controls",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.privacy_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.privacy_updated_detail", {
@@ -2949,24 +2910,22 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "privacy",
-          "controls",
-          undefined,
-          {
+          category: "privacy",
+          page: "controls",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
@@ -2990,14 +2949,12 @@ export function createPersonalConfigInteractionRoute(
             });
           }
           const isEnabled = result.enabled;
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "privacy",
-            "controls",
-            undefined,
-            {
+            category: "privacy",
+            page: "controls",
+            panelReceipt: {
               tone: "success",
               heading: localizer(
                 route.locale,
@@ -3013,61 +2970,50 @@ export function createPersonalConfigInteractionRoute(
               ),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "privacy",
-          "controls",
-          undefined,
-          {
+          category: "privacy",
+          page: "controls",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
       if (route.action === "parameters-provider-select") {
         const selectMenu = interaction as StringSelectMenuInteraction;
         const chosenProvider = decodeProviderParam(selectMenu.values[0]);
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "parameters",
-          undefined,
-          undefined,
+          category: "models",
+          page: "parameters",
           dependencies,
-          undefined,
-          chosenProvider,
-        );
+          selectedParametersProvider: chosenProvider,
+        });
         return;
       }
 
       if (route.action === "fallbacks-provider-select") {
         const selectMenu = interaction as StringSelectMenuInteraction;
         const chosenProvider = decodeProviderParam(selectMenu.values[0]);
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "fallbacks",
-          undefined,
-          undefined,
+          category: "models",
+          page: "fallbacks",
           dependencies,
-          undefined,
-          undefined,
-          chosenProvider,
-        );
+          selectedFallbacksProvider: chosenProvider,
+        });
         return;
       }
 
@@ -3082,14 +3028,12 @@ export function createPersonalConfigInteractionRoute(
           const target = getStoredPersonalProviderForCapability(rows, cap);
           if (!target || !hasConfiguredPersonalModel(target, cap)) {
             const capLabel = localizer(route.locale, ROUTING_CAPABILITY_LOCALE_KEYS[cap]);
-            await repaint(
-              interaction,
-              route.locale,
+            await repaint(interaction, {
+              locale: route.locale,
               scope,
-              "models",
-              "switch",
-              undefined,
-              {
+              category: "models",
+              page: "switch",
+              panelReceipt: {
                 tone: "error",
                 heading: localizer(route.locale, "commands.personal.config.missing_model_heading"),
                 detail: localizer(route.locale, "commands.personal.config.missing_model_detail", {
@@ -3097,7 +3041,7 @@ export function createPersonalConfigInteractionRoute(
                 }),
               },
               dependencies,
-            );
+            });
             return;
           }
         }
@@ -3106,20 +3050,18 @@ export function createPersonalConfigInteractionRoute(
           (cap) => (getActivePersonalProviderForCapability(rows, cap) !== null) !== selectedCapSet.has(cap),
         );
         if (!hasChange) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "switch",
-            undefined,
-            {
+            category: "models",
+            page: "switch",
+            panelReceipt: {
               tone: "info",
               heading: localizer(route.locale, "commands.personal.config.no_changes_heading"),
               detail: localizer(route.locale, "commands.personal.config.no_changes_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
@@ -3136,16 +3078,14 @@ export function createPersonalConfigInteractionRoute(
         scope = action.state ?? scope;
 
         if (result.status === "no-changes") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "switch",
-            undefined,
-            noChangesReceipt(route.locale),
+            category: "models",
+            page: "switch",
+            panelReceipt: noChangesReceipt(route.locale),
             dependencies,
-          );
+          });
           return;
         }
 
@@ -3157,53 +3097,47 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "switch",
-            undefined,
-            {
+            category: "models",
+            page: "switch",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.routing_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.routing_updated_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "switch",
-          undefined,
-          {
+          category: "models",
+          page: "switch",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
       // Now only backs the model, provider, and fallback range choosers: the activation confirmation
       // it was named for is gone, so the receipt reports the state, not a cancelled activation.
       if (route.action === "model-act-cancel") {
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "switch",
-          undefined,
-          noChangesReceipt(route.locale),
+          category: "models",
+          page: "switch",
+          panelReceipt: noChangesReceipt(route.locale),
           dependencies,
-        );
+        });
         return;
       }
 
@@ -3222,17 +3156,15 @@ export function createPersonalConfigInteractionRoute(
         scope = action.state ?? scope;
 
         if (result.status === "no-changes") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "switch",
-            undefined,
-            noChangesReceipt(route.locale),
+            category: "models",
+            page: "switch",
+            panelReceipt: noChangesReceipt(route.locale),
             dependencies,
-            route.capability,
-          );
+            selectedCapability: route.capability,
+          });
           return;
         }
 
@@ -3245,14 +3177,12 @@ export function createPersonalConfigInteractionRoute(
             });
           }
           const capLabel = localizer(route.locale, ROUTING_CAPABILITY_LOCALE_KEYS[route.capability]);
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "switch",
-            undefined,
-            {
+            category: "models",
+            page: "switch",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.model_default_heading"),
               detail: localizer(route.locale, "commands.personal.config.model_default_detail", {
@@ -3260,26 +3190,24 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-            route.capability,
-          );
+            selectedCapability: route.capability,
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "switch",
-          undefined,
-          {
+          category: "models",
+          page: "switch",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-          route.capability,
-        );
+          selectedCapability: route.capability,
+        });
         return;
       }
 
@@ -3297,21 +3225,19 @@ export function createPersonalConfigInteractionRoute(
         const validModel = availableModels.find((m) => m.id === modelId);
 
         if (!validModel || modelId === 0) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "switch",
-            undefined,
-            {
+            category: "models",
+            page: "switch",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
               detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
             },
             dependencies,
-            route.capability,
-          );
+            selectedCapability: route.capability,
+          });
           return;
         }
 
@@ -3330,17 +3256,15 @@ export function createPersonalConfigInteractionRoute(
         scope = action.state ?? scope;
 
         if (result.status === "no-changes") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "switch",
-            undefined,
-            noChangesReceipt(route.locale),
+            category: "models",
+            page: "switch",
+            panelReceipt: noChangesReceipt(route.locale),
             dependencies,
-            route.capability,
-          );
+            selectedCapability: route.capability,
+          });
           return;
         }
 
@@ -3353,14 +3277,12 @@ export function createPersonalConfigInteractionRoute(
             });
           }
           const capLabel = localizer(route.locale, ROUTING_CAPABILITY_LOCALE_KEYS[route.capability]);
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "switch",
-            undefined,
-            {
+            category: "models",
+            page: "switch",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.model_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.model_updated_detail", {
@@ -3370,26 +3292,24 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-            route.capability,
-          );
+            selectedCapability: route.capability,
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "switch",
-          undefined,
-          {
+          category: "models",
+          page: "switch",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-          route.capability,
-        );
+          selectedCapability: route.capability,
+        });
         return;
       }
 
@@ -3399,26 +3319,21 @@ export function createPersonalConfigInteractionRoute(
           route.provider,
           route.capability,
         );
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "switch",
-          undefined,
-          undefined,
+          category: "models",
+          page: "switch",
           dependencies,
-          route.capability,
-          undefined,
-          undefined,
-          {
+          selectedCapability: route.capability,
+          view: {
             kind: "model-range",
             capability: route.capability,
             provider: route.provider,
             rangePage: route.chooserPage,
             totalOptions: availableModels.length,
           },
-        );
+        });
         return;
       }
 
@@ -3429,58 +3344,46 @@ export function createPersonalConfigInteractionRoute(
 
         if (route.action === "model-provider-range-open") {
           if (route.start % PERSONAL_PROVIDER_PAGE_SIZE !== 0 || route.start >= providers.length) {
-            await repaint(
-              interaction,
-              route.locale,
+            await repaint(interaction, {
+              locale: route.locale,
               scope,
-              "models",
-              "switch",
-              undefined,
-              {
+              category: "models",
+              page: "switch",
+              panelReceipt: {
                 tone: "error",
                 heading: localizer(route.locale, "commands.personal.config.unavailable"),
                 detail: localizer(route.locale, "commands.personal.config.stale_warning"),
               },
               dependencies,
-            );
+            });
             return;
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "switch",
-            undefined,
-            undefined,
+            category: "models",
+            page: "switch",
             dependencies,
-            route.capability,
-            undefined,
-            undefined,
-            { kind: "model-provider-page", capability: route.capability, start: route.start },
-          );
+            selectedCapability: route.capability,
+            view: { kind: "model-provider-page", capability: route.capability, start: route.start },
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "switch",
-          undefined,
-          undefined,
+          category: "models",
+          page: "switch",
           dependencies,
-          route.capability,
-          undefined,
-          undefined,
-          {
+          selectedCapability: route.capability,
+          view: {
             kind: "model-provider-range",
             capability: route.capability,
             rangePage: route.chooserPage,
             totalOptions: providers.length,
           },
-        );
+        });
         return;
       }
 
@@ -3491,25 +3394,20 @@ export function createPersonalConfigInteractionRoute(
         } catch (error) {
           log.warn("Failed to load available models for fallbacks modal", { provider: route.provider, error });
         }
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "fallbacks",
-          undefined,
-          undefined,
+          category: "models",
+          page: "fallbacks",
           dependencies,
-          undefined,
-          undefined,
-          route.provider,
-          {
+          selectedFallbacksProvider: route.provider,
+          view: {
             kind: "fallbacks-range",
             provider: route.provider,
             rangePage: route.chooserPage,
             totalOptions: availableOptions.length,
           },
-        );
+        });
         return;
       }
 
@@ -3554,14 +3452,12 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "parameters",
-            undefined,
-            {
+            category: "models",
+            page: "parameters",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.parameters_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.parameters_updated_detail", {
@@ -3569,23 +3465,20 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-            undefined,
-            route.provider,
-          );
+            selectedParametersProvider: route.provider,
+          });
           return;
         }
 
         const isInvalid = result.status === "invalid-value";
         const isNoChanges = result.status === "no-changes";
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "parameters",
-          undefined,
-          {
+          category: "models",
+          page: "parameters",
+          panelReceipt: {
             tone: isNoChanges ? "info" : "error",
             heading: localizer(
               route.locale,
@@ -3605,9 +3498,8 @@ export function createPersonalConfigInteractionRoute(
             ),
           },
           dependencies,
-          undefined,
-          route.provider,
-        );
+          selectedParametersProvider: route.provider,
+        });
         return;
       }
 
@@ -3651,14 +3543,12 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "parameters",
-            undefined,
-            {
+            category: "models",
+            page: "parameters",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.parameters_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.parameters_updated_detail", {
@@ -3666,23 +3556,20 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-            undefined,
-            route.provider,
-          );
+            selectedParametersProvider: route.provider,
+          });
           return;
         }
 
         const isInvalid = result.status === "invalid-value";
         const isNoChanges = result.status === "no-changes";
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "parameters",
-          undefined,
-          {
+          category: "models",
+          page: "parameters",
+          panelReceipt: {
             tone: isNoChanges ? "info" : "error",
             heading: localizer(
               route.locale,
@@ -3702,9 +3589,8 @@ export function createPersonalConfigInteractionRoute(
             ),
           },
           dependencies,
-          undefined,
-          route.provider,
-        );
+          selectedParametersProvider: route.provider,
+        });
         return;
       }
 
@@ -3739,14 +3625,12 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "fallbacks",
-            undefined,
-            {
+            category: "models",
+            page: "fallbacks",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.fallbacks_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.fallbacks_updated_detail", {
@@ -3754,24 +3638,20 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-            undefined,
-            undefined,
-            route.provider,
-          );
+            selectedFallbacksProvider: route.provider,
+          });
           return;
         }
 
         const isConflict = result.status === "primary-conflict";
         const isNoChanges = result.status === "no-changes";
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "fallbacks",
-          undefined,
-          {
+          category: "models",
+          page: "fallbacks",
+          panelReceipt: {
             tone: isNoChanges ? "info" : "error",
             heading: localizer(
               route.locale,
@@ -3792,10 +3672,8 @@ export function createPersonalConfigInteractionRoute(
                 : localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-          undefined,
-          undefined,
-          route.provider,
-        );
+          selectedFallbacksProvider: route.provider,
+        });
         return;
       }
 
@@ -3818,19 +3696,15 @@ export function createPersonalConfigInteractionRoute(
         scope = action.state ?? scope;
 
         if (result.status === "no-changes") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "fallbacks",
-            undefined,
-            noChangesReceipt(route.locale),
+            category: "models",
+            page: "fallbacks",
+            panelReceipt: noChangesReceipt(route.locale),
             dependencies,
-            undefined,
-            undefined,
-            route.provider,
-          );
+            selectedFallbacksProvider: route.provider,
+          });
           return;
         }
 
@@ -3843,14 +3717,12 @@ export function createPersonalConfigInteractionRoute(
             });
           }
           const isEnabled = result.enabled;
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "models",
-            "fallbacks",
-            undefined,
-            {
+            category: "models",
+            page: "fallbacks",
+            panelReceipt: {
               tone: "success",
               heading: localizer(
                 route.locale,
@@ -3867,23 +3739,19 @@ export function createPersonalConfigInteractionRoute(
               ),
             },
             dependencies,
-            undefined,
-            undefined,
-            route.provider,
-          );
+            selectedFallbacksProvider: route.provider,
+          });
           return;
         }
 
         const isRequiresFallback = result.status === "requires-fallbacks";
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "models",
-          "fallbacks",
-          undefined,
-          {
+          category: "models",
+          page: "fallbacks",
+          panelReceipt: {
             tone: "error",
             heading: localizer(
               route.locale,
@@ -3896,43 +3764,37 @@ export function createPersonalConfigInteractionRoute(
               : localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-          undefined,
-          undefined,
-          route.provider,
-        );
+          selectedFallbacksProvider: route.provider,
+        });
         return;
       }
 
       if (route.action === "trigger-mode-set") {
         if (scope.readStatus !== "fresh") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "response-modes",
-            undefined,
-            {
+            category: "advanced",
+            page: "response-modes",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const currentMode = scope.user.personal_dtm ?? "follow";
         if (currentMode === route.mode) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "response-modes",
-            undefined,
-            noChangesReceipt(route.locale),
+            category: "advanced",
+            page: "response-modes",
+            panelReceipt: noChangesReceipt(route.locale),
             dependencies,
-          );
+          });
           return;
         }
         const action = await performPanelAction(
@@ -3954,14 +3816,12 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "response-modes",
-            undefined,
-            {
+            category: "advanced",
+            page: "response-modes",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.trigger_mode_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.trigger_mode_updated_detail", {
@@ -3969,56 +3829,50 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-          );
+          });
           return;
         }
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "response-modes",
-          undefined,
-          {
+          category: "advanced",
+          page: "response-modes",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
       if (route.action === "tool-mode-set") {
         if (scope.readStatus !== "fresh") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "response-modes",
-            undefined,
-            {
+            category: "advanced",
+            page: "response-modes",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const currentMode = scope.user.personal_deliberate_tool_mode ?? "follow";
         if (currentMode === route.mode) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "response-modes",
-            undefined,
-            noChangesReceipt(route.locale),
+            category: "advanced",
+            page: "response-modes",
+            panelReceipt: noChangesReceipt(route.locale),
             dependencies,
-          );
+          });
           return;
         }
         const action = await performPanelAction(
@@ -4040,14 +3894,12 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "response-modes",
-            undefined,
-            {
+            category: "advanced",
+            page: "response-modes",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.tool_mode_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.tool_mode_updated_detail", {
@@ -4055,23 +3907,21 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-          );
+          });
           return;
         }
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "response-modes",
-          undefined,
-          {
+          category: "advanced",
+          page: "response-modes",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
@@ -4079,52 +3929,46 @@ export function createPersonalConfigInteractionRoute(
         if (!interaction.isModalSubmit()) throw new Error("impersonation-submit requires ModalSubmit interaction");
         const modal = interaction as ModalSubmitInteraction;
         if (scope.readStatus !== "fresh") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "impersonation",
-            undefined,
-            {
+            category: "advanced",
+            page: "impersonation",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const fieldId = buildPersonalConfigModalFieldId("prompt", route.nonce);
         const rawPrompt = modal.fields.getTextInputValue(fieldId).trim();
         if (!rawPrompt) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "impersonation",
-            undefined,
-            {
+            category: "advanced",
+            page: "impersonation",
+            panelReceipt: {
               tone: "info",
               heading: localizer(route.locale, "commands.personal.config.impersonation_blank_refusal_heading"),
               detail: localizer(route.locale, "commands.personal.config.impersonation_blank_refusal_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
         if (rawPrompt === scope.user.impersonation_prompt?.trim()) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "impersonation",
-            undefined,
-            noChangesReceipt(route.locale),
+            category: "advanced",
+            page: "impersonation",
+            panelReceipt: noChangesReceipt(route.locale),
             dependencies,
-          );
+          });
           return;
         }
         const action = await performPanelAction(
@@ -4146,103 +3990,86 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "impersonation",
-            undefined,
-            {
+            category: "advanced",
+            page: "impersonation",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.impersonation_updated_heading"),
               detail: localizer(route.locale, "commands.personal.config.impersonation_updated_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "impersonation",
-          undefined,
-          {
+          category: "advanced",
+          page: "impersonation",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
       if (route.action === "impersonation-clear-view") {
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "impersonation",
-          undefined,
-          undefined,
+          category: "advanced",
+          page: "impersonation",
           dependencies,
-          undefined,
-          undefined,
-          undefined,
-          {
+          view: {
             kind: "impersonation-clear-confirm",
             nonce: dependencies.createNonce(),
           },
-        );
+        });
         return;
       }
 
       if (route.action === "impersonation-clear-cancel") {
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "impersonation",
-          undefined,
-          undefined,
+          category: "advanced",
+          page: "impersonation",
           dependencies,
-        );
+        });
         return;
       }
 
       if (route.action === "impersonation-clear-confirm") {
         if (scope.readStatus !== "fresh") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "impersonation",
-            undefined,
-            {
+            category: "advanced",
+            page: "impersonation",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         if (!scope.user.impersonation_prompt) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "impersonation",
-            undefined,
-            noChangesReceipt(route.locale),
+            category: "advanced",
+            page: "impersonation",
+            panelReceipt: noChangesReceipt(route.locale),
             dependencies,
-          );
+          });
           return;
         }
         const action = await performPanelAction(
@@ -4264,55 +4091,49 @@ export function createPersonalConfigInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "impersonation",
-            undefined,
-            {
+            category: "advanced",
+            page: "impersonation",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.impersonation_cleared_heading"),
               detail: localizer(route.locale, "commands.personal.config.impersonation_cleared_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "impersonation",
-          undefined,
-          {
+          category: "advanced",
+          page: "impersonation",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
       if (route.action === "spotlight-set-step1" || route.action === "spotlight-set-block-page") {
         if (!scope.guildId || !scope.internalServerId) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
@@ -4325,20 +4146,18 @@ export function createPersonalConfigInteractionRoute(
 
         if (route.action === "spotlight-set-block-page") {
           if (fp !== route.fp) {
-            await repaint(
-              interaction,
-              route.locale,
+            await repaint(interaction, {
+              locale: route.locale,
               scope,
-              "advanced",
-              "spotlight",
-              undefined,
-              {
+              category: "advanced",
+              page: "spotlight",
+              panelReceipt: {
                 tone: "error",
                 heading: localizer(route.locale, "commands.personal.config.unavailable"),
                 detail: localizer(route.locale, "commands.personal.config.stale_warning"),
               },
               dependencies,
-            );
+            });
             return;
           }
           channelId = route.channelId;
@@ -4351,58 +4170,48 @@ export function createPersonalConfigInteractionRoute(
             buildPersonalConfigModalFieldId("channel", route.nonce),
           );
           if (!rawChannelId || !/^\d{17,20}$/.test(rawChannelId)) {
-            await repaint(
-              interaction,
-              route.locale,
+            await repaint(interaction, {
+              locale: route.locale,
               scope,
-              "advanced",
-              "spotlight",
-              undefined,
-              {
+              category: "advanced",
+              page: "spotlight",
+              panelReceipt: {
                 tone: "error",
                 heading: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_heading"),
                 detail: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_detail"),
               },
               dependencies,
-            );
+            });
             return;
           }
           const rawHours = modal.fields.getTextInputValue(buildPersonalConfigModalFieldId("hours", route.nonce)).trim();
           const parsedHours = Number.parseInt(rawHours, 10);
           if (Number.isNaN(parsedHours) || parsedHours < 0 || !/^\d+$/.test(rawHours)) {
-            await repaint(
-              interaction,
-              route.locale,
+            await repaint(interaction, {
+              locale: route.locale,
               scope,
-              "advanced",
-              "spotlight",
-              undefined,
-              {
+              category: "advanced",
+              page: "spotlight",
+              panelReceipt: {
                 tone: "error",
                 heading: localizer(route.locale, "commands.personal.config.spotlight_invalid_hours_heading"),
                 detail: localizer(route.locale, "commands.personal.config.spotlight_invalid_hours_detail"),
               },
               dependencies,
-            );
+            });
             return;
           }
           channelId = rawChannelId;
           hours = parsedHours;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "spotlight",
-          undefined,
-          undefined,
+          category: "advanced",
+          page: "spotlight",
           dependencies,
-          undefined,
-          undefined,
-          undefined,
-          {
+          view: {
             kind: "spotlight-persona-select",
             channelId,
             hours,
@@ -4410,7 +4219,7 @@ export function createPersonalConfigInteractionRoute(
             totalPersonas: personas.length,
             chooserPage,
           },
-        );
+        });
         return;
       }
 
@@ -4418,37 +4227,33 @@ export function createPersonalConfigInteractionRoute(
         if (!interaction.isModalSubmit()) throw new Error("spotlight-set-submit requires ModalSubmit interaction");
         const modal = interaction as ModalSubmitInteraction;
         if (!scope.guildId || !scope.internalServerId) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
         if (scope.readStatus !== "fresh") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
@@ -4457,20 +4262,18 @@ export function createPersonalConfigInteractionRoute(
         const blockStart = route.blockIdx * SPOTLIGHT_PERSONA_PAGE_SIZE;
         const block = personas.slice(blockStart, blockStart + SPOTLIGHT_PERSONA_PAGE_SIZE);
         if (expectedFp !== route.fp || block.length === 0) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
@@ -4493,36 +4296,28 @@ export function createPersonalConfigInteractionRoute(
         }
 
         if (selectedPersonaIds.length === 0) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_no_selection_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_no_selection_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "spotlight",
-          undefined,
-          undefined,
+          category: "advanced",
+          page: "spotlight",
           dependencies,
-          undefined,
-          undefined,
-          undefined,
-          {
+          view: {
             kind: "spotlight-set-review",
             channelId: route.channelId,
             hours: route.hours,
@@ -4534,7 +4329,7 @@ export function createPersonalConfigInteractionRoute(
             fp: route.fp,
             nonce: dependencies.createNonce(),
           },
-        );
+        });
         return;
       }
 
@@ -4542,57 +4337,51 @@ export function createPersonalConfigInteractionRoute(
         if (!interaction.isModalSubmit()) throw new Error("spot-set-auto-sub requires ModalSubmit interaction");
         const modal = interaction as ModalSubmitInteraction;
         if (!scope.guildId || !scope.internalServerId) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const personas = await dependencies.loadGuildPersonas(scope.guildId);
         const expectedFp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
         if (expectedFp !== route.fp) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const resolvedSub = resolveSpotlightBlockSelection(personas, route.blockIdx, route.mask);
         if (!resolvedSub) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const selectedPersonaIds = resolvedSub.selected.map((p) => p.id);
@@ -4606,19 +4395,13 @@ export function createPersonalConfigInteractionRoute(
             : null;
         const validAutoIdx = validAutoId === null ? 0 : resolvedSub.block.findIndex((p) => p.id === validAutoId) + 1;
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "spotlight",
-          undefined,
-          undefined,
+          category: "advanced",
+          page: "spotlight",
           dependencies,
-          undefined,
-          undefined,
-          undefined,
-          {
+          view: {
             kind: "spotlight-set-review",
             channelId: route.channelId,
             hours: route.hours,
@@ -4630,120 +4413,108 @@ export function createPersonalConfigInteractionRoute(
             fp: route.fp,
             nonce: dependencies.createNonce(),
           },
-        );
+        });
         return;
       }
 
       if (route.action === "spot-set-cf") {
         const serverId = scope.internalServerId;
         if (!scope.guildId || serverId === null) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
         if (scope.readStatus !== "fresh") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         // The channel arrives from the custom ID, so the select menu that produced it is not a guard.
         // A spotlight belongs to one guild text channel, and the write is keyed on the raw snowflake.
         const confirmChannel = interaction.guild?.channels.cache.get(route.channelId);
         if (!confirmChannel || confirmChannel.type !== ChannelType.GuildText) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_invalid_channel_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
         const personas = await dependencies.loadGuildPersonas(scope.guildId);
         const expectedFp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
         if (expectedFp !== route.fp) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const resolvedConfirm = resolveSpotlightBlockSelection(personas, route.blockIdx, route.mask);
         if (!resolvedConfirm) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const selectedPersonaIds = resolvedConfirm.selected.map((p) => p.id);
         if (selectedPersonaIds.length === 0) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_no_selection_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_no_selection_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
@@ -4754,20 +4525,18 @@ export function createPersonalConfigInteractionRoute(
         // Silently writing null here would contradict the review page the user just confirmed, so a
         // chosen auto-trigger that no longer resolves is surfaced instead of dropped.
         if (route.autoIdx > 0 && (autoPersona === null || !selectedPersonaIds.includes(autoPersona.id))) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_auto_stale_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_auto_stale_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const autoTriggerPersonaId = autoPersona?.id ?? null;
@@ -4790,20 +4559,18 @@ export function createPersonalConfigInteractionRoute(
         scope = action.state ?? scope;
 
         if (result.status === "no-changes") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "info",
               heading: localizer(route.locale, "commands.personal.config.no_changes_heading"),
               detail: localizer(route.locale, "commands.personal.config.no_changes_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
@@ -4813,14 +4580,12 @@ export function createPersonalConfigInteractionRoute(
             serverId,
             userDiscId: interaction.user.id,
           });
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.spotlight_saved_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_saved_detail", {
@@ -4828,196 +4593,184 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "spotlight",
-          undefined,
-          {
+          category: "advanced",
+          page: "spotlight",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
       if (route.action === "spotlight-set-cancel") {
-        await repaint(interaction, route.locale, scope, "advanced", "spotlight", undefined, undefined, dependencies);
+        await repaint(interaction, {
+          locale: route.locale,
+          scope,
+          category: "advanced",
+          page: "spotlight",
+          dependencies,
+        });
         return;
       }
 
       if (route.action === "spotlight-remove-open") {
         if (!scope.guildId || !scope.internalServerId) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const activeSpotlights = await dependencies.loadActiveSpotlights(scope.internalServerId, scope.userId);
         if (activeSpotlights.length > SPOTLIGHT_REMOVE_PAGE_SIZE) {
           const fp = computeSpotlightRemoveFingerprint(scope.guildId, scope.userDiscId, activeSpotlights);
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            undefined,
+            category: "advanced",
+            page: "spotlight",
             dependencies,
-            undefined,
-            undefined,
-            undefined,
-            {
+            view: {
               kind: "spotlight-remove-range",
               rangePage: 0,
               totalOptions: activeSpotlights.length,
               fp,
             },
-          );
+          });
           return;
         }
-        await repaint(interaction, route.locale, scope, "advanced", "spotlight", undefined, undefined, dependencies);
+        await repaint(interaction, {
+          locale: route.locale,
+          scope,
+          category: "advanced",
+          page: "spotlight",
+          dependencies,
+        });
         return;
       }
 
       if (route.action === "spotlight-remove-page") {
         const serverId = scope.internalServerId;
         if (!scope.guildId || serverId === null) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const activeSpotlights = await dependencies.loadActiveSpotlights(serverId, scope.userId);
         const expectedFp = computeSpotlightRemoveFingerprint(scope.guildId, scope.userDiscId, activeSpotlights);
         if (expectedFp !== route.fp) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "spotlight",
-          undefined,
-          undefined,
+          category: "advanced",
+          page: "spotlight",
           dependencies,
-          undefined,
-          undefined,
-          undefined,
-          {
+          view: {
             kind: "spotlight-remove-range",
             rangePage: route.chooserPage,
             totalOptions: activeSpotlights.length,
             fp: route.fp,
           },
-        );
+        });
         return;
       }
 
       if (route.action === "spotlight-remove-cancel") {
-        await repaint(interaction, route.locale, scope, "advanced", "spotlight", undefined, undefined, dependencies);
+        await repaint(interaction, {
+          locale: route.locale,
+          scope,
+          category: "advanced",
+          page: "spotlight",
+          dependencies,
+        });
         return;
       }
 
       if (route.action === "spot-set-auto-page") {
         const serverId = scope.internalServerId;
         if (!scope.guildId || serverId === null) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const personas = await dependencies.loadGuildPersonas(scope.guildId);
         const expectedFp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
         if (expectedFp !== route.fp) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const bitmask = BigInt(`0x${route.mask}`);
         const selectedPersonas = personas.filter((_, i) => (bitmask & (1n << BigInt(i))) !== 0n);
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "spotlight",
-          undefined,
-          undefined,
+          category: "advanced",
+          page: "spotlight",
           dependencies,
-          undefined,
-          undefined,
-          undefined,
-          {
+          view: {
             kind: "spotlight-auto-range",
             channelId: route.channelId,
             hours: route.hours,
@@ -5027,80 +4780,68 @@ export function createPersonalConfigInteractionRoute(
             rangePage: route.chooserPage,
             totalOptions: selectedPersonas.length,
           },
-        );
+        });
         return;
       }
 
       if (route.action === "spot-set-auto-cancel") {
         const serverId = scope.internalServerId;
         if (!scope.guildId || serverId === null) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const personas = await dependencies.loadGuildPersonas(scope.guildId);
         const expectedFp = computeSpotlightSetFingerprint(scope.guildId, scope.userDiscId, personas);
         if (expectedFp !== route.fp) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const resolvedCancel = resolveSpotlightBlockSelection(personas, route.blockIdx, route.mask);
         if (!resolvedCancel) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const selectedPersonaIds = resolvedCancel.selected.map((p) => p.id);
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "spotlight",
-          undefined,
-          undefined,
+          category: "advanced",
+          page: "spotlight",
           dependencies,
-          undefined,
-          undefined,
-          undefined,
-          {
+          view: {
             kind: "spotlight-set-review",
             channelId: route.channelId,
             hours: route.hours,
@@ -5112,7 +4853,7 @@ export function createPersonalConfigInteractionRoute(
             fp: route.fp,
             nonce: dependencies.createNonce(),
           },
-        );
+        });
         return;
       }
 
@@ -5121,57 +4862,51 @@ export function createPersonalConfigInteractionRoute(
         const modal = interaction as ModalSubmitInteraction;
         const serverId = scope.internalServerId;
         if (!scope.guildId || serverId === null) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.spotlight_guild_only_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
             },
             dependencies,
-          );
+          });
           return;
         }
         if (scope.readStatus !== "fresh") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
 
         const activeSpotlights = await dependencies.loadActiveSpotlights(serverId, scope.userId);
         const expectedFp = computeSpotlightRemoveFingerprint(scope.guildId, scope.userDiscId, activeSpotlights);
         if (expectedFp !== route.fp) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "error",
               heading: localizer(route.locale, "commands.personal.config.unavailable"),
               detail: localizer(route.locale, "commands.personal.config.stale_warning"),
             },
             dependencies,
-          );
+          });
           return;
         }
         const presentedSlice = activeSpotlights.slice(route.start, route.start + SPOTLIGHT_REMOVE_PAGE_SIZE);
@@ -5196,16 +4931,14 @@ export function createPersonalConfigInteractionRoute(
 
         const removedChannelIds = presentedChannelIds.filter((chId) => !keptChannelIds.has(chId));
         if (removedChannelIds.length === 0) {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            noChangesReceipt(route.locale),
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: noChangesReceipt(route.locale),
             dependencies,
-          );
+          });
           return;
         }
 
@@ -5228,14 +4961,12 @@ export function createPersonalConfigInteractionRoute(
             serverId,
             userDiscId: interaction.user.id,
           });
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "success",
               heading: localizer(route.locale, "commands.personal.config.spotlight_removed_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_removed_detail", {
@@ -5243,19 +4974,17 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-          );
+          });
           return;
         }
 
         if (result.status === "partial-failure") {
-          await repaint(
-            interaction,
-            route.locale,
+          await repaint(interaction, {
+            locale: route.locale,
             scope,
-            "advanced",
-            "spotlight",
-            undefined,
-            {
+            category: "advanced",
+            page: "spotlight",
+            panelReceipt: {
               tone: "warning",
               heading: localizer(route.locale, "commands.personal.config.spotlight_partial_removal_heading"),
               detail: localizer(route.locale, "commands.personal.config.spotlight_partial_removal_detail", {
@@ -5264,38 +4993,34 @@ export function createPersonalConfigInteractionRoute(
               }),
             },
             dependencies,
-          );
+          });
           return;
         }
 
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          "advanced",
-          "spotlight",
-          undefined,
-          {
+          category: "advanced",
+          page: "spotlight",
+          panelReceipt: {
             tone: "error",
             heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
             detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
           },
           dependencies,
-        );
+        });
         return;
       }
 
       if (route.action === "retry" || route.action === "refresh") {
-        await repaint(
-          interaction,
-          route.locale,
+        await repaint(interaction, {
+          locale: route.locale,
           scope,
-          route.category,
-          route.page,
-          route.lineageId,
-          undefined,
+          category: route.category,
+          page: route.page,
+          selectedLineageId: route.lineageId,
           dependencies,
-        );
+        });
         return;
       }
     },

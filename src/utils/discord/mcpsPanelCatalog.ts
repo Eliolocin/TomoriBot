@@ -1,5 +1,5 @@
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
-import { getSupportedLocales } from "@/utils/text/localizer";
+import { parseLocale } from "@/utils/discord/panelRouteTokens";
 import { MCP_SERVER_TYPES, type McpServerType } from "@/utils/mcp/mcpConfigOperations";
 
 export const MCPS_ROUTE_NAMESPACE = "mcps";
@@ -17,10 +17,6 @@ export type McpsPanelRoute =
 
 export function buildMcpsCustomId(action: string, ...segments: Array<string | number>): string {
   return buildInteractionRouteId(MCPS_ROUTE_NAMESPACE, MCPS_ROUTE_VERSION, action, ...segments.map(String));
-}
-
-function parseLocale(value: string | undefined): string | null {
-  return value && getSupportedLocales().includes(value) ? value : null;
 }
 
 function parsePositiveId(value: string | undefined): number | null {

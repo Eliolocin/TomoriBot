@@ -20,7 +20,8 @@ import type { CustomEndpointApiStyle, CustomEndpointCapability } from "@/types/d
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
-import { escapeDiscordMarkdown, resolveRangeSelection } from "@/utils/discord/interactions/panelController";
+import { resolveRangeSelection } from "@/utils/discord/interactions/panelController";
+import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import {
   buildProvidersCustomIdForNamespace,
   PROVIDERS_ROUTE_NAMESPACE,

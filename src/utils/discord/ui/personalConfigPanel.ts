@@ -56,7 +56,7 @@ import {
 } from "@/utils/discord/ui/panel";
 import { safeModalLocalizer, safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { buildModelRoutingControl } from "@/utils/discord/ui/modelRoutingControls";
-import { escapeDiscordMarkdown } from "@/utils/discord/interactions/panelController";
+import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import { formatImageTagsForModalValue, TAGS_MODAL_MAX_LENGTH } from "@/utils/image/tagHelpers";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { localizer } from "@/utils/text/localizer";

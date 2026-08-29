@@ -13,6 +13,7 @@ import type { PanelReceipt } from "@/types/discord/panel";
 import { getCachedTomoriState, getLastDbError } from "@/utils/cache/tomoriStateCache";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { beginPanelInteraction, performPanelAction } from "@/utils/discord/interactions/panelController";
+import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   ST_PRESETS_ROUTE_NAMESPACE,
   ST_PRESETS_ROUTE_VERSION,
@@ -213,7 +214,7 @@ export function createStPresetsInteractionRoute(
       void recordPanelActionStat(input);
     },
     loadToggleableNodes: (presetId) => loadStPresetToggleableNodes(presetId),
-    createNonce: () => crypto.randomUUID().replaceAll("-", "").slice(0, 12),
+    createNonce,
     showAddModal: (interaction, locale, nonce) => showRoutedRawModal(interaction, buildAddStPresetModal(locale, nonce)),
     showNodesModal: (interaction, locale, preset, nodes, pageOffset, nonce) =>
       showRoutedRawModal(interaction, buildNodesToggleModal(locale, preset, nodes, pageOffset, nonce)),

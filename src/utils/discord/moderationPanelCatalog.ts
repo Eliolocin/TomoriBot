@@ -1,5 +1,5 @@
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
-import { getSupportedLocales } from "@/utils/text/localizer";
+import { parseLocale } from "@/utils/discord/panelRouteTokens";
 
 export const MODERATION_ROUTE_NAMESPACE = "moderation";
 export const MODERATION_ROUTE_VERSION = "v1";
@@ -102,10 +102,6 @@ export function buildPersonaChannelAddModalFieldId(nonce: string, field: "person
 
 export function buildModerationCustomId(action: string, ...segments: Array<string | number>): string {
   return buildInteractionRouteId(MODERATION_ROUTE_NAMESPACE, MODERATION_ROUTE_VERSION, action, ...segments.map(String));
-}
-
-function parseLocale(value: string | undefined): string | null {
-  return value && getSupportedLocales().includes(value) ? value : null;
 }
 
 function parseCategory(value: string | undefined): ModerationCategory | null {

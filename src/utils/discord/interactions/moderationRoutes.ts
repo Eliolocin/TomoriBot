@@ -12,6 +12,7 @@ import type { CooldownType } from "@/types/db/schema";
 import type { PanelReceipt } from "@/types/discord/panel";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { beginPanelInteraction } from "@/utils/discord/interactions/panelController";
+import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   buildMemberAccessModalFieldId,
   buildModerationRemoveModalFieldId,
@@ -346,7 +347,7 @@ export function createModerationInteractionRoute(
     recordAction: (input) => {
       void recordPanelActionStat(input);
     },
-    createNonce: () => crypto.randomUUID().replaceAll("-", "").slice(0, 12),
+    createNonce,
     showMemberAccessModal: (interaction, locale, state, nonce) =>
       showRoutedRawModal(interaction, buildMemberAccessModal(locale, state, nonce)),
     showUserBlacklistAddModal: (interaction, locale, nonce) =>

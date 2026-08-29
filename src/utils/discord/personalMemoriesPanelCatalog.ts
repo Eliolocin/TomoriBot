@@ -1,5 +1,5 @@
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
-import { getSupportedLocales } from "@/utils/text/localizer";
+import { parseLocale } from "@/utils/discord/panelRouteTokens";
 
 export const PERSONAL_MEMORIES_ROUTE_NAMESPACE = "personal-memories";
 export const PERSONAL_MEMORIES_ROUTE_VERSION = "v1";
@@ -50,10 +50,6 @@ export function buildPersonalMemoriesCustomId(
     locale,
     ...segments.map(String),
   );
-}
-
-function parseLocale(value: string | undefined): string | null {
-  return value && getSupportedLocales().includes(value) ? value : null;
 }
 
 function parseCategory(value: string | undefined): PersonalMemoriesCategory | null {

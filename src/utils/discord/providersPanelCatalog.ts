@@ -1,5 +1,5 @@
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
-import { getSupportedLocales } from "@/utils/text/localizer";
+import { parseLocale } from "@/utils/discord/panelRouteTokens";
 import type { CustomEndpointCapability } from "@/types/db/schema";
 
 export const PROVIDERS_ROUTE_NAMESPACE = "providers";
@@ -56,10 +56,6 @@ export function buildProvidersCustomIdForNamespace(
   ...segments: Array<string | number>
 ): string {
   return buildInteractionRouteId(namespace, PROVIDERS_ROUTE_VERSION, action, ...segments.map(String));
-}
-
-function parseLocale(value: string | undefined): string | null {
-  return value && getSupportedLocales().includes(value) ? value : null;
 }
 
 function parseNonNegativeInteger(value: string | undefined): number | null {

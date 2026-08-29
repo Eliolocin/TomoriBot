@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { PersonalProviderCapability } from "@/types/db/schema";
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
-import { getSupportedLocales } from "@/utils/text/localizer";
+import { parseLocale } from "@/utils/discord/panelRouteTokens";
 
 export const PERSONAL_CONFIG_ROUTE_NAMESPACE = "personal-config";
 export const PERSONAL_CONFIG_ROUTE_VERSION = "v2";
@@ -320,10 +320,6 @@ export interface RouteCodec<TRoute extends Record<string, unknown> = Record<stri
 export type PersonalConfigRouteCodecs = {
   [A in PersonalConfigAction]: RouteCodec<PersonalConfigRouteForAction<A>>;
 };
-
-function parseLocale(value: string | undefined): string | null {
-  return value && getSupportedLocales().includes(value) ? value : null;
-}
 
 function parseCategory(value: string | undefined): PersonalConfigCategory | null {
   if (value === "profile" || value === "privacy" || value === "models" || value === "advanced") {

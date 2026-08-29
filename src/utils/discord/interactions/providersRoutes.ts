@@ -11,11 +11,9 @@ import type { CustomEndpointCapability } from "@/types/db/schema";
 import type { PanelReceipt } from "@/types/discord/panel";
 import type { ProviderPanelCapabilitySection, ProviderPanelModel } from "@/types/discord/providerPanel";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
-import {
-  beginPanelInteraction,
-  escapeDiscordMarkdown,
-  performPanelAction,
-} from "@/utils/discord/interactions/panelController";
+import { beginPanelInteraction, performPanelAction } from "@/utils/discord/interactions/panelController";
+import { createNonce } from "@/utils/discord/panelRouteTokens";
+import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import {
   PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
   PROVIDERS_ROUTE_NAMESPACE,
@@ -474,7 +472,7 @@ export function createProvidersInteractionRoute(
     recordAction: (input) => {
       void recordPanelActionStat(input);
     },
-    createNonce: () => crypto.randomUUID().replaceAll("-", "").slice(0, 12),
+    createNonce,
     showAddProviderModal: (interaction, locale, nonce) =>
       showRoutedRawModal(
         interaction,

@@ -13,7 +13,8 @@ import {
 import type { StPresetNodeRow, StPresetRow } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
-import { escapeDiscordMarkdown, resolveRangeSelection } from "@/utils/discord/interactions/panelController";
+import { resolveRangeSelection } from "@/utils/discord/interactions/panelController";
+import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import {
   buildStPresetsCustomId,
   ST_PRESETS_ROUTE_NAMESPACE,

@@ -1,5 +1,5 @@
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
-import { getSupportedLocales } from "@/utils/text/localizer";
+import { parseLocale } from "@/utils/discord/panelRouteTokens";
 
 export const ST_PRESETS_ROUTE_NAMESPACE = "st-presets";
 export const ST_PRESETS_ROUTE_VERSION = "v1";
@@ -15,10 +15,6 @@ export type StPresetsPanelRoute =
 
 export function buildStPresetsCustomId(action: string, ...segments: Array<string | number>): string {
   return buildInteractionRouteId(ST_PRESETS_ROUTE_NAMESPACE, ST_PRESETS_ROUTE_VERSION, action, ...segments.map(String));
-}
-
-function parseLocale(value: string | undefined): string | null {
-  return value && getSupportedLocales().includes(value) ? value : null;
 }
 
 function parsePositiveId(value: string | undefined): number | null {

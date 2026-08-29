@@ -2905,6 +2905,83 @@ describe("Range pagination workflow", () => {
   });
 });
 
+describe("Operations that own their cache invalidation", () => {
+  // These seven call repository methods that do NOT invalidate internally, so the operations layer
+  // is the only thing that evicts the stale row. The redundant invalidations elsewhere in this file
+  // sit after methods that do self-invalidate and are safe to drop; these are not. Removing one is
+  // invisible to every other test, which is why this asserts the call directly.
+  it("invalidates the user cache for every operation whose repository method does not", async () => {
+    const userCacheModule = await import("@/utils/cache/userCache");
+    // Every spy here is restored in the finally block. Bun shares module state across a test lane,
+    // so an unrestored repository mock silently breaks unrelated suites: leaving applyUserInfoBatch
+    // stubbed made the UpdateUserInfoTool suite fail while this file passed in isolation.
+    const invalidateSpy = spyOn(userCacheModule, "invalidateUserCache").mockImplementation(() => {});
+    const repoSpies = [
+      spyOn(userRepository, "setLanguage").mockImplementation(async () => true),
+      spyOn(userRepository, "setTimezoneOffset").mockImplementation(async () => true),
+      spyOn(userRepository, "setDeliberateTriggerMode").mockImplementation(async () => true),
+      spyOn(userRepository, "setImpersonatePrompt").mockImplementation(async () => true),
+      spyOn(userNamingRepository, "applyUserInfoBatch").mockImplementation(async () => {}),
+    ];
+
+    const cases: Array<[string, () => Promise<unknown>]> = [
+      ["setLanguage", () => personalConfigOperations.setLanguage({ userId: 1, userDiscId: "u1", language: "ja" })],
+      ["setTimezone", () => personalConfigOperations.setTimezone({ userId: 1, userDiscId: "u1", offset: 8 })],
+      [
+        "setNaming",
+        () =>
+          personalConfigOperations.setNaming({
+            userId: 1,
+            userDiscId: "u1",
+            nickname: "Sparrow",
+            prefix: null,
+            suffix: null,
+          }),
+      ],
+      [
+        "setPersonaNaming",
+        () =>
+          personalConfigOperations.setPersonaNaming({
+            userId: 1,
+            userDiscId: "u1",
+            personaLineageId: 7,
+            nickname: "Lighthouse",
+            prefix: null,
+            suffix: null,
+          }),
+      ],
+      [
+        "setAbout",
+        () =>
+          personalConfigOperations.setAbout({
+            userId: 1,
+            userDiscId: "u1",
+            genderIdentity: "unspecified",
+            pronouns: "they/them",
+            addressingStyle: "neutral",
+          }),
+      ],
+      ["setTriggerMode", () => personalConfigOperations.setTriggerMode({ userId: 1, userDiscId: "u1", mode: "on" })],
+      [
+        "setImpersonationPrompt",
+        () => personalConfigOperations.setImpersonationPrompt({ userId: 1, userDiscId: "u1", prompt: "hello" }),
+      ],
+    ];
+
+    try {
+      for (const [name, run] of cases) {
+        invalidateSpy.mockClear();
+        await run();
+        expect(`${name}:${invalidateSpy.mock.calls.length}`).toBe(`${name}:1`);
+        expect(invalidateSpy.mock.calls[0]?.[0]).toBe("u1");
+      }
+    } finally {
+      invalidateSpy.mockRestore();
+      for (const spy of repoSpies) spy.mockRestore();
+    }
+  });
+});
+
 describe("Models-page cache invalidation invariants", () => {
   it("does not call invalidateUserCache on any Models operations writes", async () => {
     const userCacheModule = await import("@/utils/cache/userCache");

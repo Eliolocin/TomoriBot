@@ -18,6 +18,7 @@ import { getCachedUserRow, invalidateUserCache } from "@/utils/cache/userCache";
 import { personaRepository, personalMemoryRepository, serverRepository, userRepository } from "@/utils/db/repositories";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { beginPanelInteraction, performPanelAction } from "@/utils/discord/interactions/panelController";
+import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   PERSONAL_MEMORIES_ROUTE_NAMESPACE,
   PERSONAL_MEMORIES_ROUTE_VERSION,
@@ -366,7 +367,7 @@ const defaultDependencies: PersonalMemoriesRouteDependencies = {
   recordAction: (input) => {
     void recordPanelActionStat(input);
   },
-  createNonce: () => crypto.randomUUID().replaceAll("-", "").slice(0, 12),
+  createNonce,
   showAddModal: (interaction, locale, category, lineageId, nonce) =>
     showRoutedRawModal(interaction, buildAddPersonalMemoryModal(locale, category, lineageId, nonce)),
   showEditModal: (interaction, locale, category, lineageId, memory, nonce) =>

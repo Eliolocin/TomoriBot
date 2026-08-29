@@ -11,7 +11,7 @@ import {
 import type { GuildMcpServerRow } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
-import { escapeDiscordMarkdown } from "@/utils/discord/interactions/panelController";
+import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import { buildMcpsCustomId } from "@/utils/discord/mcpsPanelCatalog";
 import { buildPanelContainer, buildPanelReceiptContainer, withLinePrefix } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
