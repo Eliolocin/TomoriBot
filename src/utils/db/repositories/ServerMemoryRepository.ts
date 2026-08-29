@@ -51,7 +51,7 @@ class ServerMemoryRepository implements IRepository<ServerMemoryExportShape> {
 
   /**
    * Loads server memories scoped to a persona lineage, with optional user filter.
-   * Used by /memory server edit and /memory server remove to populate the selection list.
+   * Used by /memories to populate the selection list.
    *
    * @param userId           - If provided, only returns memories owned by this user
    * @returns Ordered array of ServerMemoryRow (newest first)
@@ -87,7 +87,7 @@ class ServerMemoryRepository implements IRepository<ServerMemoryExportShape> {
 
   /**
    * Returns the set of persona lineage ids that have at least one server memory
-   * in the given server. Batched eligibility source for `/memory server` picker
+   * in the given server. Batched eligibility source for `/memories` picker
    * filters: it reproduces exactly the filters `loadServerMemoriesScoped` applies
    * (server scope, plus the optional owner filter) so the filtered picker and the
    * loader always agree.
@@ -609,7 +609,7 @@ class ServerMemoryRepository implements IRepository<ServerMemoryExportShape> {
 
   /**
    * Returns the set of persona ids that own at least one document in the given
-   * server. Batched eligibility source for the persona-scoped `/memory document`
+   * server. Batched eligibility source for the persona-scoped `/memories` (Documents)
    * picker filters. Mirrors `loadDocuments` for persona scope, which deliberately
    * applies **no** `source_type` filter: history-sourced documents count here
    * exactly as they do in that loader. Serverwide documents (`persona_id IS NULL`)
@@ -666,7 +666,7 @@ class ServerMemoryRepository implements IRepository<ServerMemoryExportShape> {
   }
 
   /**
-   * Updates a single chunk's content and embedding. Used by /memory document view edit flow.
+   * Updates a single chunk's content and embedding. Used by /memories chunk edit flow.
    * The chunk's embedding_model_id and embedding_family are overwritten to match the
    * model that produced the new embedding, so retrieval keeps working.
    */

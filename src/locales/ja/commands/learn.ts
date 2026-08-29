@@ -47,7 +47,7 @@ export default {
       duplicate_title: `ドキュメント名が既に存在します`,
       duplicate_description: `\`{name}\`という名前のドキュメントがこのスコープに既に存在します。別の名前を選んでください。`,
       limit_exceeded_title: `ドキュメント上限に達しました`,
-      limit_exceeded_description: `このスコープ（{scope}）には既に{current_count}件のドキュメントがあります（最大{max_allowed}件）。\`/memory document remove\`または\`/memory history remove\`で削除してから追加してください。`,
+      limit_exceeded_description: `このスコープ（{scope}）には既に{current_count}件のドキュメントがあります（最大{max_allowed}件）。\`/memories\`または\`/memories\`で削除してから追加してください。`,
       server_chunk_limit_title: `サーバーのチャンク上限に達しました`,
       server_chunk_limit_description: `このスコープ（{scope}）のチャンク上限 {max_chunks} を超えるため追加できません。先に文書を削除してください。`,
       progress_fetching: `チャンネルメッセージを取得中...`,

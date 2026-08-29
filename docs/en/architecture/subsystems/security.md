@@ -148,8 +148,10 @@ Primary files:
 - `src/utils/discord/ui/personalMemoriesPanel.ts`
 - `src/utils/discord/interactions/personalMemoriesOperations.ts`
 - `src/commands/memory/server/export.ts`
-- `src/commands/memory/server/remove.ts`
-- `src/commands/memory/server/edit.ts`
+- `src/commands/memories.ts`
+- `src/utils/discord/ui/memoriesPanel.ts`
+- `src/utils/discord/interactions/memoriesRoutes.ts`
+- `src/utils/discord/interactions/memoriesDocumentOperations.ts`
 - `src/commands/server/config/export.ts`
 - `src/commands/server/config/remove.ts`
 - `src/utils/db/repositories/ImportExportRepository.ts`
@@ -166,7 +168,7 @@ Delete/reset remains type-scoped. Commands that currently require confirmation c
 - personal settings reset
 - server config reset
 
-Personal row management is through `/personal memories` (type-scoped by persona/global scope), and server memory management remains type-scoped by persona scope (`/memory server remove|edit`). Both operate on one selected stored row per invocation rather than bulk-resetting a whole scope.
+Personal row management is through `/personal memories` (type-scoped by persona/global scope), and server memory management remains type-scoped by persona scope (`/memories`). Both operate on selected stored rows rather than bulk-resetting a whole scope.
 
 Important: the current reset/remove commands do not implement a blanket user-row/account hard delete path in these command implementations.
 

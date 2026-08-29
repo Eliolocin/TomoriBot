@@ -48,7 +48,7 @@ export default {
       duplicate_title: `Document Name Already Exists`,
       duplicate_description: `A document named \`{name}\` already exists in this scope. Please choose a different name.`,
       limit_exceeded_title: `Document Limit Reached`,
-      limit_exceeded_description: `This scope ({scope}) already has {current_count} documents (max {max_allowed}). Remove some with \`/memory document remove\` or \`/memory history remove\` before adding new ones.`,
+      limit_exceeded_description: `This scope ({scope}) already has {current_count} documents (max {max_allowed}). Remove some with \`/memories\` before adding new ones.`,
       server_chunk_limit_title: `Server Chunk Limit Reached`,
       server_chunk_limit_description: `This scope ({scope}) would exceed the chunk limit of {max_chunks}. Remove some documents first.`,
       progress_fetching: `Fetching channel messages...`,

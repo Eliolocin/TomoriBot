@@ -200,8 +200,8 @@ Key pattern:
 
 Example path:
 
-- file: `src/commands/memory/server/remove.ts`
-- command path: `memory.server.remove`
+- file: `src/commands/memory/server/export.ts`
+- command path: `memory.server.export`
 
 Root command example:
 
@@ -302,7 +302,7 @@ Examples:
 - `/moderation` User Blacklist and Whitelist removal actions
 - `/config remove modeloverride` (channels + personas together)
 - `/config workarounds` (experimental server-scoped workaround toggles)
-- `/server stm manage` (active server-shared STM entries)
+- `/memories` Short-Term category (active server-shared STM entries)
 - `/server private-channels`
 - `/server rp-channels`
 
@@ -515,7 +515,7 @@ every filter the loader applies:
 
 Two traps are worth stating explicitly:
 
-- **Permission-dependent eligibility.** `/memory server edit`, `remove`, and `vectorize`
+- **Permission-dependent eligibility.** `/memories` Server category operations
   scope their loads by `hasManagePermission ? undefined : userData.user_id`. The batched
   availability query takes the same optional `userId`, so a manager and a non-manager can see
   different eligible sets for the same command in the same guild.
@@ -1022,7 +1022,9 @@ Bare `/mcps` is the only registered MCP path; the legacy `mcp` subcommand tree n
 
 ### Personal-provider (BYOK) routing in commands
 
-Any command that performs AI work the invoking user triggers must overlay that user's personal (BYOK) provider onto the loaded server state via `applyPersonalProviderSelectionsToTomoriState(tomoriState, userData.user_id)` before reading `config.api_key`, deriving the provider/model name, or validating capabilities. The overlay returns the server state unchanged when the user has no enabled personal provider, so it is always safe to call. Commands that currently apply it: `/persona generate`, `/novelai image generate`, `/generate image`, `/generate video`, `/tool visualize`, `/memory document add`, `/learn history`, `/expressions initialize`, and `/tool estimate cost` (so its live estimate stays in parity with what would actually run for the user).
+Any command that performs AI work the invoking user triggers must honor that user's personal (BYOK) provider. TomoriState-consuming command handlers apply the user's personal provider onto the loaded server state via `applyPersonalProviderSelectionsToTomoriState(tomoriState, userData.user_id)` before reading `config.api_key`, deriving the provider/model name, or validating capabilities. The overlay returns the server state unchanged when the user has no enabled personal provider, so it is always safe to call. Commands that currently apply it: `/persona generate`, `/novelai image generate`, `/generate image`, `/generate video`, `/tool visualize`, `/learn history`, `/expressions initialize`, and `/tool estimate cost` (so its live estimate stays in parity with what would actually run for the user).
+
+In contrast, `/memories` resolves the invoking user's embedding credentials directly through the credential resolver via `resolveCapabilityCredentials(serverId, "embedding", { userId })` during document addition and memory vectorization operations.
 
 The one deliberate exception is `/model embedding`, which re-embeds **server-wide** documents under server credentials (`resolveCapabilityCredentials(serverId, "embedding")` with no `userId`). This is bulk maintenance of a pre-existing server resource rather than a fresh user action, so it intentionally stays on server credentials.
 

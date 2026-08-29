@@ -253,7 +253,7 @@ export async function execute(
 
     // Overlay the invoking user's personal (BYOK) provider selections onto the
     //    server state. This mirrors every other AI-generation command (e.g.
-    //    /generate image, /memory document add) and ensures generation uses the
+    //    /generate image, /memories) and ensures generation uses the
     //    user's personal text provider when configured, instead of always falling
     //    back to the server's configured model.
     const { tomoriState } = await applyPersonalProviderSelectionsToTomoriState(

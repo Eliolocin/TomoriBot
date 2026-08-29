@@ -36,17 +36,6 @@ describe("composite persona workflow migrations", () => {
     expect(callback).not.toContain("deferReply(");
   });
 
-  it("loads vectorize choices after acknowledgement and binds confirmation to a fresh button", () => {
-    const callback = selectedCallback(readSource("src/commands/memory/server/vectorize.ts"));
-
-    expect(callback).toContain("selection.openModal(async () =>");
-    expect(callback).toContain("selection.useButton(confirmationButton)");
-    expect(callback).toContain("confirmationPhase.openModal");
-    expect(callback).not.toContain("deferReply(");
-    expect(callback).not.toContain("replyInfoEmbed(");
-    expect(callback).not.toContain("editReply(");
-  });
-
   it("acknowledges sprite selection before loading sprites and uses nested page buttons", () => {
     const source = readSource("src/commands/persona/sprites/remove.ts");
     const callback = selectedCallback(source);
@@ -65,11 +54,7 @@ describe("composite persona workflow migrations", () => {
   });
 
   it("contains none of the retired low-level picker boilerplate", () => {
-    for (const relativePath of [
-      "src/commands/learn/history.ts",
-      "src/commands/memory/server/vectorize.ts",
-      "src/commands/persona/sprites/remove.ts",
-    ]) {
+    for (const relativePath of ["src/commands/learn/history.ts", "src/commands/persona/sprites/remove.ts"]) {
       const source = readSource(relativePath);
       expect(source).not.toContain("replyPaginatedPersonaChoicesV2");
       expect(source).not.toContain("preserveSelectedInteraction: true");

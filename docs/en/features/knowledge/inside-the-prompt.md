@@ -27,13 +27,13 @@ model as the main prompt/context, in this order:
 | [**Persona attributes**](/features/chatting-personality/multiple-personas/#attributes) | | `/persona attribute add` (also `edit`, `remove`) | The active persona's personality traits and speech patterns. |
 | **Server info** | | *(none, from Discord)* | The server name, description, and the channel she's in, pulled from Discord itself. |
 | [**Persona-user blocks**](/features/capabilities/tools-and-extensions/#built-in-tools) | *(Optional)* | `/moderation` to review/clear; gated by `/capabilities manage userblocking` | Active mute/block restrictions this persona holds against specific users. |
-| [**Server memories**](/features/knowledge/memory/#personal-vs-server-memories) | | `/memory server add` (also `edit`, `remove`) | The long-term facts saved for this server. |
+| [**Server memories**](/features/knowledge/memory/#personal-vs-server-memories) | | `/memories` | The long-term facts saved for this server. |
 | [**Server emojis**](/features/chatting-personality/behavior-tweaking/#capabilities-what-shes-allowed-to-do) | *(Optional)* | `/capabilities manage emojiusage` (toggle only), initialize with `/expressions initialize` | The custom emojis present in the server.|
 | [**Server stickers**](/features/chatting-personality/behavior-tweaking/#capabilities-what-shes-allowed-to-do) | *(Optional)* | `/capabilities manage stickerusage` (toggle only), initialize with `/expressions initialize` | The custom stickers present in the server. |
 | [**Persona sprites**](/features/chatting-personality/multiple-personas/#sprites-emotion-avatars) | *(Optional)* | `/persona sprites add` (also `edit`, `remove`) | Named expression sprites configured for the persona, if it has any. |
 | [**Conversation Participants**](/features/knowledge/memory/#personal-vs-server-memories) | *(Optional)* | `/personal memories` (gated by `/capabilities manage personalization`) | The people in the conversation, their nicknames and mention handles, and the personal memories saved about each of them. Loaded when the person owns a message in context, or if their name/alias get mentioned. Also carries the current channel and local time as a footer, using `/server timezone`. |
-| [**Short-term memory**](/features/knowledge/memory/#short-term-memory-stm) | | `/persona stm edit` (also `view`); `/server stm manage` to clear entries; gated by `/capabilities manage shorttermmemory` | Contains summaries and recent messages of different channels |
-| [**Documents**](/features/knowledge/memory/#document-knowledge-base-rag) | *(Optional)* | `/memory document add` (also `remove`, `view`) | Relevant chunks pulled from the knowledge base using RAG. |
+| [**Short-term memory**](/features/knowledge/memory/#short-term-memory-stm) | | `/persona stm edit` (also `view`); `/memories` to clear entries; gated by `/capabilities manage shorttermmemory` | Contains summaries and recent messages of different channels |
+| [**Documents**](/features/knowledge/memory/#document-knowledge-base-rag) | *(Optional)* | `/memories` | Relevant chunks pulled from the knowledge base using RAG. |
 | [**Conditioning**](/features/knowledge/memory/#conditioning) | *(Optional)* | `/reward <feed\|headpat\|hug\|kiss\|tickle>`, `/punish <bite\|bonk\|pinch\|spank\|squeeze>`, managed via `/conditioning manage` | Accumulated behavioral nudges for this persona in this server. |
 | [**Sample dialogues**](/features/chatting-personality/multiple-personas/#sample-dialogues) | *(Optional)* | `/persona sample-dialogue add` (also `edit`, `remove`) | Examples of how this persona talks, if any are configured. |
 | [**Recent messages**](/features/chatting-personality/behavior-tweaking/#generation-tuning) | | `/config message-fetch-limit` | The actual conversation, up to this many messages (default 80). Your `/config context-note set` and any reunion note are injected inline inside this block, at a configurable depth, rather than as a separate block of their own. |
@@ -76,5 +76,5 @@ If you want something to survive all of the above, it has to become a **long-ter
   in the bundle, close to the recent messages, she is more likely to act on it than on
   something in the system prompt. This is the best place to nudge her into saving memories
   more often.
-- `/personal memories` and `/memory server add` write directly into **Server memories** and
+- `/personal memories` and `/memories` write directly into **Server memories** and
   **Conversation Participants**, which is one of the guaranteed ways to make knowledge permanent in TomoriBot's context.

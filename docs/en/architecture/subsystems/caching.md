@@ -144,7 +144,7 @@ fallback before rendering `@UnknownUser`. Sweeping a `User` still referenced by 
   - `updateShortTermMemorySummary`
   - `clearShortTermMemoryForUser`, `clearShortTermMemoryForChannel`, `clearShortTermMemoryForServerChannel`
 - Operational note:
-  - `/server stm manage` lists the current server's active server-shared STM entries across personas.
+  - `/memories` (Short-Term category) lists the current server's active server-shared STM entries across personas.
   - Unchecking an entry clears only that server-scoped STM entry; user-scoped cross-server STM entries are left intact.
 
 ### 6) LLM model cache (`llmCache.ts`)

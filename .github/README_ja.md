@@ -263,7 +263,7 @@ bun run update
 - `/setup` - サーバーの初期ボットセットアップ
 - `/config` - TomoriBotを調整するための複数の方法
 - `/personal memories` - 個人メモリーの追加/削除
-- `/memory server add` / `/memory server remove` - サーバー全体のメモリーの追加/削除
+- `/memories` / `/memories` - サーバー全体のメモリーの追加/削除
 - `/moderation` - TomoriBotの権限の追加/削除
 
 すべてのスラッシュコマンドについては、**[コマンドリファレンス](https://docs.tomoribot.app/ja/features/command-reference/)**の全文を参照してください。

@@ -1,13 +1,12 @@
 /**
- * `/memories` absorbs leaves from two roots with opposite registration shapes, and the resulting
+ * `/memories` absorbed roots that formerly had opposite registration shapes, and the resulting
  * permission is the one thing an implementation summary can describe correctly while being wrong.
- * `memory server add` is reachable to non-managers today under `server_memteaching_enabled`, while
- * `server stm manage` is manager-only purely because it sits under the `server` category. The three
- * sibling panels this slice mirrors (`/providers`, `/mcps`, `/st-presets`) all export
- * `managerOnly = true`, so copying one of them would silently remove teaching from every non-manager
- * in every guild with nothing failing. This gate lives outside the implementation slice for that
- * reason: the manager check for the Short-Term category belongs in the route layer, not in the
- * command's registration.
+ * Shared memory teaching must remain reachable to non-managers under `server_memteaching_enabled`,
+ * while the Short-Term category remains manager-gated in the route layer. Sibling panels
+ * (`/providers`, `/mcps`, `/st-presets`) export `managerOnly = true`, so copying one of them would
+ * silently remove teaching from every non-manager in every guild with nothing failing. This gate
+ * lives outside the implementation slice for that reason: the manager check for the Short-Term
+ * category belongs in the route layer, not in the command's registration.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import type { Client } from "discord.js";
@@ -50,7 +49,7 @@ describe("Wave 5 /memories registration restrictions", () => {
     expect([...(executionMap.get("memories")?.keys() ?? [])]).toEqual([ROOT_COMMAND_EXECUTION_KEY]);
   }, 30000);
 
-  it("leaves the legacy workspace memory leaves reachable while the panel coexists", async () => {
+  it("dissolves legacy workspace memory leaves while retaining transfer, tagging, and stm configuration", async () => {
     const { executionMap } = await loadCommandData();
     const memory = executionMap.get("memory");
     const server = executionMap.get("server");
@@ -60,12 +59,19 @@ describe("Wave 5 /memories registration restrictions", () => {
     if (!memory || !server) return;
 
     for (const key of ["server.add", "server.edit", "server.remove", "server.vectorize"]) {
-      expect(memory.has(key)).toBe(true);
+      expect(memory.has(key)).toBe(false);
     }
     for (const key of ["document.add", "document.remove", "document.view", "history.remove"]) {
+      expect(memory.has(key)).toBe(false);
+    }
+    expect(server.has("stm.manage")).toBe(false);
+
+    for (const key of ["personal.export", "personal.import", "server.export", "server.import", "tagging.set"]) {
       expect(memory.has(key)).toBe(true);
     }
-    expect(server.has("stm.manage")).toBe(true);
+    for (const key of ["stm.parameters", "stm.categories-edit", "stm.prompt-edit", "stm.privacy-bypass"]) {
+      expect(server.has(key)).toBe(true);
+    }
   }, 30000);
 });
 

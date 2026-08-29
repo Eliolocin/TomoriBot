@@ -658,8 +658,6 @@ These commands still remove one dynamic item at a time, but the data shape is a 
 | -------------------------- | ---------------------------------- | --------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `/persona attribute remove` | `persona/attribute/remove.ts`      | Persona picker + single paginated select | Personality attributes are usually reviewed and pruned in batches        | Needs index-safe array rewrite if duplicate attributes must be preserved |
 | `/scheduled-task remove` | `scheduled-task/remove.ts`      | Persona picker + single paginated select | Reminder cleanup is often batch-oriented, especially for stale schedules | Manager-only reminder views may need concise descriptions              |
-| `/memory document remove`   | `memory/document/remove.ts`        | Persona picker + single paginated select | Document cleanup is an obvious multi-select management flow              | Large lists should keep paginated fallback                             |
-| `/memory history remove`    | `memory/history/remove.ts`         | Persona picker + single paginated select | History entries are frequently pruned in groups                          | Large lists should keep paginated fallback                             |
 | `/persona sample-dialogue remove` | `persona/sample-dialogue/remove.ts` | Persona picker + single paginated select | Dialogue cleanup is often batch-oriented and already has index-safe removal | Good fit for index-valued checkbox groups                              |
 | `/persona remove`          | `persona/remove.ts`                | Single paginated select | Alter persona cleanup could be batch-managed                             | Should pair the bulk UI with stronger destructive-action messaging     |
 
@@ -680,7 +678,6 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | `/persona prompt set`            | `persona/prompt/set.ts`         | Components V2 persona workflow first, then a prefilled free-form prompt modal (up to 16000 chars, 4 fields) |
 | `/persona attribute add`         | `persona/attribute/add.ts`      | Dynamic persona list, uses pagination                     |
 | `/persona sample-dialogue add`   | `persona/sample-dialogue/add.ts`| Dynamic persona list, uses pagination                     |
-| `/memory server add`             | `memory/server/add.ts`          | Dynamic memory list                                       |
 | `/persona image-tags`        | `persona/image-tags.ts`      | Components V2 persona workflow, then a prefilled free-form tag modal |
 | `/persona attribute remove`      | `persona/attribute/remove.ts`   | Dynamic attribute list, uses pagination                   |
 | `/scheduled-task remove`      | `scheduled-task/remove.ts`   | Dynamic reminder list                                     |
@@ -713,7 +710,7 @@ When a flow needs both a selection modal and a later prefilled edit modal, use:
 2. confirmation embed with buttons
 3. `showModal()` from the confirm button interaction
 
-This is the pattern used by the `/memory server edit`, `/persona attribute edit`, and `/persona sample-dialogue edit` flows.
+This is the pattern used by the `/persona attribute edit` and `/persona sample-dialogue edit` flows.
 
 For persona-scoped flows that already have a persistent ephemeral picker message, prefer replacing that same message with the confirmation embed and later success state instead of spawning a second ephemeral thread.
 

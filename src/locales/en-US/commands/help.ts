@@ -310,12 +310,12 @@ Transcription supports ~100 languages (auto-detected).`,
 - I can react to messages with relevant emojis
 - Register emojis and stickers with \`/expressions initialize\` for higher accuracy`,
       documents_title: `Document Knowledge Base`,
-      documents_description: `- Upload text, PDF, or Markdown files as server knowledge using \`/memory document add\`
+      documents_description: `- Upload text, PDF, or Markdown files as server knowledge using \`/memories\`
 - Extract channel history into searchable knowledge with \`/learn history\`
 - I retrieve and reference relevant document content when answering questions
 - I can also read file attachments shared directly in chat (PDF, source code, markdown, JSON, YAML, and more): just ask me to read it!
 - Requires an embedding model (configure with \`/model embedding\`)
-- Remove uploaded or history-extracted documents with \`/memory document remove\` and \`/memory history remove\``,
+- Remove uploaded or history-extracted documents with \`/memories\``,
       impersonation_title: `Impersonation & Tools`,
       impersonation_description: `- Use \`/impersonate\` to send messages as yourself, a persona, or inject system messages
 - Set a reusable user-impersonation prompt with \`/personal config\`
@@ -703,7 +703,7 @@ Enter \`{project_id}::{location}\` using {configSetup} or {configApikeySet}
       how_it_works_title: `How It Works:`,
       how_it_works_description: `- **Personal memories** are tied to you specifically across all servers which I only keep in mind when replying in conversations you are actively participating in
 - **Server memories** only stay within the server, I always keep them in mind when replying in a conversation within the server
-- Memories persist until you remove them with the relevant \`/memory ... remove\` command`,
+- Memories persist until you remove them with \`/memories\` or \`/personal memories\``,
       tips_title: `Memory Tips:`,
       tips_description: `- Teach me your preferences, nicknames, and important facts
 - Use server memories for shared information, inside jokes, or server rules
@@ -711,11 +711,11 @@ Enter \`{project_id}::{location}\` using {configSetup} or {configApikeySet}
 - Keep memories concise and clear for best results{legalNotice}`,
       documents_title: `Document Knowledge Base`,
       documents_description: `Server administrators can upload documents for me to reference:
-- Use \`/memory document add\` to upload text, PDF, or Markdown files
+- Use \`/memories\` to upload text, PDF, or Markdown files
 - Use \`/learn history\` to extract channel history into document memories
 - Documents are chunked and stored as searchable embeddings
 - I automatically retrieve relevant content based on the conversation
-- Use \`/memory document remove\` or \`/memory history remove\` to remove stored documents
+- Use \`/memories\` to remove stored documents
 - Requires an embedding model configured via \`/model embedding\``,
       shortterm_title: `Short-Term Memory`,
       shortterm_description: `In addition to persistent memories, I keep [STM (short-term memory)](https://docs.tomoribot.app/en/features/knowledge/memory/#short-term-memory-stm) of recent conversations:
@@ -765,7 +765,7 @@ Unknown placeholders are stripped automatically.`,
       channels_title: `Channel Tags`,
       channels_description: `- Memories with \`#channel\` tags will activate only in that channel
 - Channel tags can be combined with keyword tags
-- If using RAG, channel tags can also be applied to documents (\`/memory document add\`) and extracted histories (\`/learn history\`)`,
+- If using RAG, channel tags can also be applied to documents (\`/memories\`) and extracted histories (\`/learn history\`)`,
     },
     spotlight: {
       description: `Learn what personal spotlight does and how to use it`,

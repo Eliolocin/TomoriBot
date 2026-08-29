@@ -61,7 +61,7 @@ Attach a previously exported file to restore it:
 
 These permanently remove or reset data — **they cannot be undone**:
 
-- `/personal memories`, `/memory server remove`
+- `/personal memories`, `/memories`
 - `/server config remove` (reset server configuration)
 
 ## Opting Out

@@ -264,7 +264,7 @@ See the full **[Maintenance Documentation](https://docs.tomoribot.app/en/feature
 - `/setup` - Initial bot setup for your server
 - `/config` - Multiple ways to tweak TomoriBot
 - `/personal memories` - Manage your personal memories
-- `/memory server add` / `/memory server remove` - Add / remove server-wide memories
+- `/memories` - Manage server memories, documents, and short-term memory
 - `/moderation` - Manage member access, user blacklist, channel, persona, and role restrictions
 
 See the full **[Command Reference](https://docs.tomoribot.app/en/features/command-reference/)** for every slash command.

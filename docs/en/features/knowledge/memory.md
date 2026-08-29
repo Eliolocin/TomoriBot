@@ -39,7 +39,7 @@ There are two kinds of long-term memory:
 - **Personal memories** (`/personal memories`): facts about an individual user, e.g.
   "Amaori loves cats", "prefers dark mode", "allergic to peanuts". These are tied to *you*
   and follow you **across every server**, but she only draws on them in conversations you're actively part of.
-- **Server memories** (`/memory server add`): information relevant to the whole server,
+- **Server memories** (`/memories`): information relevant to the whole server,
   e.g. "Game night is every Friday at 8 PM", "no NSFW posting", "#general is for
   announcements". These stay within the server and are always in mind there.
 
@@ -52,8 +52,7 @@ within the same server.
 
 Use `/memories` to browse, add, edit, remove, or move server memories into the
 document knowledge base. `/personal memories` manages the facts tied to you.
-Memories persist until you remove them. The more specific `/memory` commands remain
-available during the panel transition.
+Memories persist until you remove them.
 
 In new servers, non-manager member access to create, edit, or remove shared server memories is disabled by default. Members with `Manage Server` permission retain access at all times, and managers can opt other members in through `/moderation` Member Access.
 
@@ -62,7 +61,7 @@ In new servers, non-manager member access to create, edit, or remove shared serv
 
 There are exactly two ways a long-term memory is created:
 
-1. **You save it** with `/personal memories` or `/memory server add`.
+1. **You save it** with `/personal memories` or `/memories`.
 2. **She saves it herself** when she decides something is worth keeping.
 
 When she saves one herself, she posts an embed saying she learned something. **That embed is
@@ -108,16 +107,12 @@ Server admins can give her documents to reference using RAG. Documents are chunk
 Documents page in `/memories` provides persona and server-wide scopes, live document
 and chunk counts, uploads, document browsing, and removal:
 
-- `/memory document add`: upload a text, PDF, or Markdown file as server knowledge. The
-  `scope` option picks whether it's tied to just this persona (the default) or `serverwide`
-  for every persona to reference, the same persona-isolation split as personal/server memories
-  above.
+- Upload text, PDF, or Markdown files as server knowledge. The scope picks whether it is
+  tied to just this persona (the default) or server-wide for every persona to reference.
 - `/learn history`: extract channel history into searchable knowledge.
-- `/memory document view`: browse stored documents chunk by chunk. Server admins can
-  edit individual chunks, update document channel tags, or delete a single chunk without
-  removing the whole document.
-- Remove any stored document with `/memory document remove`. `/memory history remove` is
-  a filtered shortcut that only lists documents created by `/learn history`.
+- Browse stored documents chunk by chunk. Server admins can edit individual chunks, update
+  document channel tags, or delete a single chunk without removing the whole document.
+- Remove stored documents or individual chunks directly from the panel.
 
 #### History Import Prompts
 
@@ -130,8 +125,7 @@ memories:
 
 The prompt is shown before import so you can adjust it for the channel or scene.
 
-History imports are stored as documents, so `/memory document view` and
-`/memory document remove` work on them too.
+History imports are stored as documents, so `/memories` works on them too.
 
 ### Conditioning
 
@@ -216,7 +210,6 @@ and refreshes as the conversation moves along. It fades on its own after a few q
 | `/server stm parameters` | How often she updates it, and how much detail she keeps |
 | `/server stm categories-edit` | Swap the summary for up to 5 labeled fields (*Current scene*, *Mood*, …) |
 | `/server stm prompt-edit` | Reword how she's asked to keep it |
-| `/server stm manage` | Review or clear stored memories |
 | `/memories` | Review and selectively clear active server entries from one manager panel |
 | `/server stm privacy-bypass` | Let private-channel memories surface elsewhere |
 | `/capabilities manage` | Turn the feature on or off (stored memories are kept either way) |

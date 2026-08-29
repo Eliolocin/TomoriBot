@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **41**. Runnable slash commands: **171**.
+Top-level command groups: **41**. Runnable slash commands: **162**.
 
 ## `/capabilities`
 
@@ -180,18 +180,10 @@ Manage stored memories and documents.
 
 | Command | Summary |
 |---|---|
-| `/memory document add` | Add a document to memory. |
-| `/memory document remove` | Remove a document from memory. |
-| `/memory document view` | Browse a stored document chunk by chunk, allowing you to edit or delete each chunk as well. |
-| `/memory history remove` | Remove a history-extracted document from memory. |
 | `/memory personal export` | Export personal memories to JSON. |
 | `/memory personal import` | Import personal memories from JSON. |
-| `/memory server add` | Add a server memory. |
-| `/memory server edit` | Edit a server memory. |
 | `/memory server export` | Export server memories to JSON. |
 | `/memory server import` | Import server memories from JSON. |
-| `/memory server remove` | Remove a server memory. |
-| `/memory server vectorize` | Convert a server memory into a searchable document. |
 | `/memory tagging set` | Switch to tagged memory mode |
 
 ## `/model`
@@ -393,7 +385,6 @@ Manage server-wide settings, channels, permissions, and integrations.
 | `/server private-channels` | Manage private channels where STMs are isolated and thought logs are suppressed |
 | `/server rp-channels` | Manage channels where emojis and stickers are always suppressed and `/tool delete turn` is available |
 | `/server stm categories-edit` | Define up to 5 labeled STM categories the bot fills via tool calls. |
-| `/server stm manage` | Review and clear active server-shared STMs across personas. |
 | `/server stm parameters` | Tune the STM refresh cadence, render mode, crude-message count, nudge depth, and content depth. |
 | `/server stm privacy-bypass` | Toggle whether private-channel STMs can leak into non-private channels. |
 | `/server stm prompt-edit` | Customize the STM tool description and the unified refresh nudge. |

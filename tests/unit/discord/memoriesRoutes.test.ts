@@ -1700,10 +1700,9 @@ describe("memories permissions and scoping", () => {
 
 describe("memories teaching gate on edit and remove", () => {
   /**
-   * Every legacy workspace memory leaf gates on `server_memteaching_enabled`, not just `add`:
-   * `memory/server/add.ts:111`, `edit.ts:204`, `remove.ts:132`, and `vectorize.ts:178` all carry it.
-   * Removal is the one that additionally has no blacklist check, so the two guards are asserted
-   * separately rather than assumed to travel together.
+   * Server memory edit and remove operations independently gate on `server_memteaching_enabled`,
+   * not just memory addition. Removal additionally has no blacklist check, so the two guards are
+   * asserted separately rather than assumed to travel together.
    */
   it("refuses edit and remove for a non-manager when teaching is disabled", async () => {
     const editSpy = spyOn(serverMemoryRepository, "edit").mockImplementation(async () => true);

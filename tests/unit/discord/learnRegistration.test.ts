@@ -47,20 +47,16 @@ describe("/learn and /memory registration", () => {
     expect(executionMap.get("learn")?.has("history")).toBe(true);
   }, 30000);
 
-  it("/memory history still contains remove and not import", async () => {
+  it("/memory history is no longer present under /memory", async () => {
     const { registrationData, executionMap } = await loadCommandData();
 
     const memoryCommand = registrationData.find((cmd) => cmd.name === "memory") as unknown as RegistrationPayload;
     expect(memoryCommand).toBeDefined();
 
     const historyGroup = memoryCommand.options?.find((opt: RegistrationPayload) => opt.name === "history");
-    expect(historyGroup).toBeDefined();
+    expect(historyGroup).toBeUndefined();
 
-    const subcommands = historyGroup.options?.map((opt: RegistrationPayload) => opt.name);
-    expect(subcommands).toContain("remove");
-    expect(subcommands).not.toContain("import");
-
-    expect(executionMap.get("memory")?.has("history.remove")).toBe(true);
+    expect(executionMap.get("memory")?.has("history.remove")).toBe(false);
     expect(executionMap.get("memory")?.has("history.import")).toBe(false);
   }, 30000);
 });

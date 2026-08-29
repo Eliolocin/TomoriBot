@@ -52,7 +52,7 @@ TomoriBotはデータに対して透明性を持つように設計されてい�
 
 これらはデータを完全に削除またはリセットします。**元に戻すことはできません**。
 
-- `/personal memories`, `/memory server remove`
+- `/personal memories`, `/memories`
 - `/server config remove`（サーバー設定をリセット）
 
 ## オプトアウト

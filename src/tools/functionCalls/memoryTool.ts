@@ -281,7 +281,7 @@ export class MemoryTool extends BaseTool {
               scope: "server_wide",
               current_count: serverLimitCheck.currentCount,
               max_allowed: serverLimitCheck.maxAllowed,
-              reason: `Server memory limit of ${serverLimitCheck.maxAllowed} memories has been reached. Please inform the user that they need to use '/memory server remove' to remove some memories before I can learn new ones.`,
+              reason: `Server memory limit of ${serverLimitCheck.maxAllowed} memories has been reached. Please inform the user that they need to use '/memories' to remove some memories before I can learn new ones.`,
             },
           };
         }

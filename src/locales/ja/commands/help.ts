@@ -310,12 +310,12 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - 関連する絵文字でメッセージにリアクションできます
 - \`/expressions initialize\`で絵文字とスタンプを登録すると精度が向上します`,
       documents_title: `ドキュメント知識庫`,
-      documents_description: `- \`/memory document add\`でテキスト、PDF、Markdownファイルをサーバー知識としてアップロードできます
+      documents_description: `- \`/memories\`でテキスト、PDF、Markdownファイルをサーバー知識としてアップロードできます
 - \`/learn history\`でチャンネル履歴を検索可能な知識として抽出できます
 - 質問に答える際に、私は関連するドキュメント内容を取得して参照します
 - チャットで共有されたファイル添付（PDF、ソースコード、Markdown、JSON、YAMLなど）も直接読み取れます、読んでと頼むだけ！
 - 埋め込みモデルが必要です（\`/model embedding\`で設定）
-- \`/memory document remove\`と\`/memory history remove\`で保存済みドキュメントを削除できます`,
+- \`/memories\`と\`/memories\`で保存済みドキュメントを削除できます`,
       impersonation_title: `なりきり＆ツール`,
       impersonation_description: `- \`/impersonate\`で自分自身、ペルソナ、またはシステムメッセージとしてメッセージを送信できます
 - \`/personal config\`でユーザーなりきり用の再利用プロンプトを設定できます
@@ -715,11 +715,11 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - 最良の結果を得るために記憶を簡潔明瞭に保つ{legalNotice}`,
       documents_title: `ドキュメント知識庫`,
       documents_description: `サーバー管理者は参照用のドキュメントをアップロードできます：
-- \`/memory document add\`でテキスト、PDF、Markdownファイルをアップロード
+- \`/memories\`でテキスト、PDF、Markdownファイルをアップロード
 - \`/learn history\`でチャンネル履歴をドキュメント記憶として抽出
 - ドキュメントは検索可能な埋め込みとして分割して保存されます
 - 会話に基づいて私は自動的に関連する内容を取得します
-- \`/memory document remove\`または\`/memory history remove\`で保存済みドキュメントを削除
+- \`/memories\`または\`/memories\`で保存済みドキュメントを削除
 - \`/model embedding\`で埋め込みモデルの設定が必要`,
       shortterm_title: `短期記憶`,
       shortterm_description: `永続的な記憶に加え、最近の会話は[STM（短期記憶）](https://docs.tomoribot.app/ja/features/knowledge/memory/#short-term-memory-stm)として保持しています：
@@ -769,7 +769,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       channels_title: `チャンネルタグ`,
       channels_description: `- \`#チャンネル\`タグが付いた記憶は、そのチャンネルでのみ有効になります
 - チャンネルタグはキーワードタグと組み合わせて使用できます
-- RAGを使用している場合、チャンネルタグはドキュメント（\`/memory document add\`）や履歴インポート（\`/learn history\`）にも適用できます`,
+- RAGを使用している場合、チャンネルタグはドキュメント（\`/memories\`）や履歴インポート（\`/learn history\`）にも適用できます`,
     },
     spotlight: {
       description: `パーソナルスポットライトの仕組みと使い方を学ぶ`,
