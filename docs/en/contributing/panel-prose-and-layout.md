@@ -51,6 +51,13 @@ mentions `ComponentType.Thumbnail` must therefore appear in that test's coverage
 payload walked there; adding a thumbnail without one fails the build rather than silently
 falling back to the wider budget.
 
+Both numbers are measured, not specified. Components V2 exposes no width, margin, or padding
+field on any component: the only sizing fields in the whole specification sit on media items and
+files, and Discord marks each of them "ignored and provided by the API as part of the response".
+Content is therefore the only input to layout, which is why authored line breaks are the fix
+rather than a workaround for a setting somebody forgot. If the client's rendering changes, retune
+the constants in the gate and re-run it: the failures name every string to rewrap.
+
 Width is measured **as rendered**, not as stored: a link's URL and the markers around bold,
 italic, strikethrough, and inline code occupy no width on screen and are stripped before
 counting. Runtime content is out of scope, because its length is not an authoring decision:

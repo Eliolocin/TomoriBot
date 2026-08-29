@@ -13,6 +13,11 @@ const PANEL_UI_DIR = "src/utils/discord/ui";
  * Panel body prose wraps at the container width, and a line longer than this stretches the
  * container wider than the select menus beneath it, so the page stops looking like one column.
  * Authored strings therefore carry their own line breaks rather than relying on the client.
+ *
+ * Both budgets are measured, not specified. Components V2 exposes no width, margin, or padding
+ * field on any component, so content is the only input to layout and these numbers come from
+ * reading real panels. If Discord retunes its renderer they go stale silently: change the
+ * constant and re-run, and the failures name every string that needs rewrapping.
  */
 const MAX_PANEL_PROSE_LINE = 65;
 
