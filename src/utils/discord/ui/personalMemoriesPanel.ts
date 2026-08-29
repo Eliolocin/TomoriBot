@@ -124,7 +124,7 @@ export function parsePersonalMemoryTags(rawTags: string): string[] {
   return [...new Set(parts)].slice(0, MAX_PERSONAL_MEMORY_TAGS);
 }
 
-export function buildPersonalMemoryModalFieldId(field: "content" | "tags", nonce: string): string {
+export function buildPersonalMemoryModalFieldId(field: "content" | "tags" | "file", nonce: string): string {
   return `${field}_${nonce}`;
 }
 
@@ -154,7 +154,23 @@ export function buildAddPersonalMemoryModal(
             100,
           ),
           max_length: memoryLimits.maxMemoryLength,
-          required: true,
+          // Optional because the file field below can supply the memories instead. The submit
+          // handler rejects the case where both arrive empty.
+          required: false,
+        },
+      },
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.personal.memories.modal_file_label"), 45),
+        description: safeSelectOptionText(localizer(locale, "commands.personal.memories.modal_file_description"), 100),
+        component: {
+          // 19 is FileUpload. 22 is CheckboxGroup and 3 is StringSelect, and Discord accepts any of
+          // them in a modal without complaint, so the number is load-bearing.
+          type: 19,
+          custom_id: buildPersonalMemoryModalFieldId("file", nonce),
+          min_values: 0,
+          max_values: 1,
+          required: false,
         },
       },
       {

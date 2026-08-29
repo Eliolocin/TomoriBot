@@ -742,6 +742,12 @@ function buildModelLine(locale: string, model: ProviderPanelModel, routeNamespac
   return `> \`${codeName}\`${suffix}`;
 }
 
+/**
+ * Leaves room for the model-selector guidance that is appended to this body, inside Discord's
+ * 4000-character TextDisplay limit.
+ */
+const ENTRY_BODY_LIMIT = 3600;
+
 function buildCapabilitySection(
   locale: string,
   section: ProviderPanelCapabilitySection,
@@ -767,7 +773,30 @@ function buildEntryBody(locale: string, entry: ProviderPanelEntry, routeNamespac
   // stated once for the whole page instead.
   const populated = entry.capabilities.filter((section) => section.models.length > 0);
   if (populated.length === 0) return localizer(locale, "commands.providers.entry_no_models");
-  return populated.map((section) => buildCapabilitySection(locale, section, routeNamespace)).join("\n\n");
+  const body = populated.map((section) => buildCapabilitySection(locale, section, routeNamespace)).join("\n\n");
+  return capEntryBody(locale, body);
+}
+
+/**
+ * Discord rejects a TextDisplay over 4000 characters, and the model list under each capability is
+ * unbounded, so a catalog-sized provider made the whole panel fail with BASE_TYPE_BAD_LENGTH rather
+ * than render. Trimming at a line boundary and stating the omitted count keeps the panel usable
+ * without hiding models silently. The durable fix is the shared range chooser.
+ */
+function capEntryBody(locale: string, body: string): string {
+  if (body.length <= ENTRY_BODY_LIMIT) return body;
+
+  const lines = body.split("\n");
+  const kept: string[] = [];
+  let used = 0;
+  for (const line of lines) {
+    if (used + line.length + 1 > ENTRY_BODY_LIMIT) break;
+    kept.push(line);
+    used += line.length + 1;
+  }
+
+  const omitted = lines.length - kept.length;
+  return `${kept.join("\n")}\n${localizer(locale, "commands.providers.entry_truncated", { count: omitted })}`;
 }
 
 function buildEntryActions(

@@ -373,7 +373,9 @@ export interface PersonalConfigRouteDependencies {
     currentConfig: UserSavedProviderConfigRow | null,
   ): Promise<void>;
   showFallbacksModal(
-    interaction: ButtonInteraction,
+    // Reached from the Fallbacks provider select as well as the range chooser's buttons, and a
+    // modal is a valid acknowledgement for either.
+    interaction: ButtonInteraction | StringSelectMenuInteraction,
     locale: string,
     nonce: string,
     provider: string,
@@ -1742,8 +1744,13 @@ export function createPersonalConfigInteractionRoute(
         return;
       }
 
-      if (route.action === "fallbacks-open") {
-        if (!interaction.isButton()) throw new Error("fallbacks-open requires Button interaction");
+      // Choosing a provider opens its fallback modal directly. This select replaced a separate
+      // Edit button, so it is the only entry point and must not merely repaint.
+      if (route.action === "fallbacks-provider-select") {
+        const selectMenu = interaction as StringSelectMenuInteraction;
+        const chosenProvider = decodeProviderParam(selectMenu.values[0]);
+        // A modal is its own acknowledgement, so this branch must run before the panel controller
+        // defers and must read a cached scope rather than forcing a refresh.
         const cachedScope = await dependencies.resolveScope(interaction, false);
         if (!cachedScope) {
           await interaction.reply({
@@ -1752,21 +1759,32 @@ export function createPersonalConfigInteractionRoute(
           });
           return;
         }
+
         const rows = await dependencies.loadUserSavedProviders(cachedScope.userId);
-        const config = rows.find((r) => r.provider.toLowerCase() === route.provider.toLowerCase()) ?? null;
+        const config = rows.find((r) => r.provider.toLowerCase() === chosenProvider.toLowerCase()) ?? null;
         const eligibleProviders = await loadUserSavedProvidersForCapability(cachedScope.userId, "text");
-        if (!config || !eligibleProviders.some((row) => row.provider.toLowerCase() === route.provider.toLowerCase())) {
-          await interaction.reply({
-            content: localizer(route.locale, "commands.personal.config.unavailable"),
-            flags: MessageFlags.Ephemeral,
+        if (!config || !eligibleProviders.some((row) => row.provider.toLowerCase() === chosenProvider.toLowerCase())) {
+          await repaint(interaction, {
+            locale: route.locale,
+            scope: cachedScope,
+            category: "models",
+            page: "fallbacks",
+            dependencies,
+            selectedFallbacksProvider: chosenProvider,
+            panelReceipt: {
+              tone: "error",
+              heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
+              detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
+            },
           });
           return;
         }
+
         let availableOptions: Array<{ refKey: string; label: string }> = [];
         try {
-          availableOptions = await loadFallbackSelectionOptions(cachedScope.userId, route.provider);
+          availableOptions = await loadFallbackSelectionOptions(cachedScope.userId, chosenProvider);
         } catch (error) {
-          log.warn("Failed to load available models for fallbacks modal", { provider: route.provider, error });
+          log.warn("Failed to load available models for fallbacks modal", { provider: chosenProvider, error });
         }
 
         if (availableOptions.length > PERSONAL_FALLBACK_PAGE_SIZE) {
@@ -1777,10 +1795,10 @@ export function createPersonalConfigInteractionRoute(
             category: "models",
             page: "fallbacks",
             dependencies,
-            selectedFallbacksProvider: route.provider,
+            selectedFallbacksProvider: chosenProvider,
             view: {
               kind: "fallbacks-range",
-              provider: route.provider,
+              provider: chosenProvider,
               rangePage: 0,
               totalOptions: availableOptions.length,
             },
@@ -1790,10 +1808,10 @@ export function createPersonalConfigInteractionRoute(
 
         const nonce = dependencies.createNonce();
         await dependencies.showFallbacksModal(
-          interaction,
+          selectMenu,
           route.locale,
           nonce,
-          route.provider,
+          chosenProvider,
           availableOptions,
           config?.fallback_model_refs ?? [],
         );
@@ -2999,20 +3017,6 @@ export function createPersonalConfigInteractionRoute(
           page: "parameters",
           dependencies,
           selectedParametersProvider: chosenProvider,
-        });
-        return;
-      }
-
-      if (route.action === "fallbacks-provider-select") {
-        const selectMenu = interaction as StringSelectMenuInteraction;
-        const chosenProvider = decodeProviderParam(selectMenu.values[0]);
-        await repaint(interaction, {
-          locale: route.locale,
-          scope,
-          category: "models",
-          page: "fallbacks",
-          dependencies,
-          selectedFallbacksProvider: chosenProvider,
         });
         return;
       }

@@ -7,6 +7,7 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from "discord.js";
+import type { APIAttachment } from "discord.js";
 import { PrivacyLevel, type PersonalMemoryRow, type TomoriState } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import {
@@ -34,9 +35,15 @@ import {
   personaRepresentativeForLineage,
 } from "@/utils/discord/ui/personalMemoriesPanel";
 import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
-import { showRoutedRawModal } from "@/utils/discord/ui/modals";
+import { showRoutedRawModal, takeRawModalFileUpload } from "@/utils/discord/ui/modals";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
 import { getMemoryLimits, validateMemoryContent } from "@/utils/misc/memoryLimits";
+import {
+  dedupeCaseInsensitive,
+  getNonEmptyNumberedLines,
+  readTxtUpload,
+  type TxtUploadReadResult,
+} from "@/utils/teach/batchUploadUtils";
 import { log } from "@/utils/misc/logger";
 import { recordPanelActionStat, type RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
@@ -64,6 +71,18 @@ export interface PersonalMemoriesOperations {
   }): Promise<
     | { status: "success"; row: PersonalMemoryRow }
     | { status: "privacy-blocked" | "empty-content" | "content-too-long" | "limit-reached" | "write-failed" }
+  >;
+  addBatch(input: {
+    userId: number;
+    userDiscId: string;
+    personaLineageId: number;
+    contents: string[];
+    tags: string[];
+  }): Promise<
+    | { status: "success"; added: number; skipped: number }
+    | { status: "privacy-blocked" | "empty-content" | "content-too-long" | "write-failed" }
+    | { status: "batch-limit-reached"; available: number; requested: number }
+    | { status: "all-duplicates" }
   >;
   edit(input: {
     userId: number;
@@ -115,6 +134,10 @@ export interface PersonalMemoriesRouteDependencies {
     memory: PersonalMemoryRow,
     nonce: string,
   ): Promise<void>;
+  takeFileUpload(interactionId: string, nonce: string): APIAttachment | undefined;
+  // Injected because it performs network I/O, which is the same reason every other external effect
+  // on this interface is injected.
+  readUploadedText(attachment: APIAttachment): Promise<TxtUploadReadResult>;
 }
 
 export const personalMemoriesOperations: PersonalMemoriesOperations = {
@@ -141,6 +164,45 @@ export const personalMemoriesOperations: PersonalMemoriesOperations = {
     }
     invalidateUserCache(userDiscId);
     return { status: "success", row: inserted };
+  },
+
+  async addBatch({ userId, userDiscId, personaLineageId, contents, tags }) {
+    const privacyLevel = await userRepository.getPrivacyLevel(userDiscId);
+    if (privacyLevel === PrivacyLevel.FULL) {
+      return { status: "privacy-blocked" };
+    }
+
+    const trimmed = dedupeCaseInsensitive(contents.map((entry) => entry.trim()).filter((entry) => entry.length > 0));
+    if (trimmed.length === 0) {
+      return { status: "empty-content" };
+    }
+    if (trimmed.some((entry) => !validateMemoryContent(entry).isValid)) {
+      return { status: "content-too-long" };
+    }
+
+    // Lineage 0 is the account-global bucket, and a lineage-scoped read still counts global rows
+    // toward the limit, which is the same predicate the single-insert path uses.
+    const existing = await personalMemoryRepository.loadForUserLineage(userId, personaLineageId, true);
+    const existingContents = new Set(existing.map((row) => row.content.trim().toLowerCase()));
+    const toInsert = trimmed.filter((entry) => !existingContents.has(entry.toLowerCase()));
+    if (toInsert.length === 0) {
+      return { status: "all-duplicates" };
+    }
+
+    const limitCheck = await personalMemoryRepository.checkPersonalMemoryLimit(userId, personaLineageId, true);
+    const currentCount = limitCheck.currentCount ?? existing.length;
+    const maxAllowed = limitCheck.maxAllowed ?? memoryLimits.maxPersonalMemories;
+    const available = Math.max(0, maxAllowed - currentCount);
+    if (toInsert.length > available) {
+      return { status: "batch-limit-reached", available, requested: toInsert.length };
+    }
+
+    const inserted = await personalMemoryRepository.addBatch(userId, personaLineageId, toInsert, tags);
+    if (!inserted) {
+      return { status: "write-failed" };
+    }
+    invalidateUserCache(userDiscId);
+    return { status: "success", added: toInsert.length, skipped: trimmed.length - toInsert.length };
   },
 
   async edit({ userId, userDiscId, personaLineageId, memoryId, content, tags }) {
@@ -294,6 +356,12 @@ const ERROR_RECEIPT_KEYS = new Set([
   "content_too_long",
   "limit_reached",
   "write_failed",
+  // The first two reach receipt() through a ternary rather than a string literal, so listing them
+  // here is also what makes the composed-key guard test see them.
+  "batch_file_invalid",
+  "batch_file_too_large",
+  "batch_all_duplicates",
+  "batch_limit_reached",
 ]);
 
 function receipt(locale: string, key: string, variables?: Record<string, string | number>): PanelReceipt {
@@ -370,6 +438,9 @@ const defaultDependencies: PersonalMemoriesRouteDependencies = {
   createNonce,
   showAddModal: (interaction, locale, category, lineageId, nonce) =>
     showRoutedRawModal(interaction, buildAddPersonalMemoryModal(locale, category, lineageId, nonce)),
+  takeFileUpload: (interactionId, nonce) =>
+    takeRawModalFileUpload(interactionId, buildPersonalMemoryModalFieldId("file", nonce)),
+  readUploadedText: readTxtUpload,
   showEditModal: (interaction, locale, category, lineageId, memory, nonce) =>
     showRoutedRawModal(
       interaction,
@@ -593,7 +664,12 @@ export function createPersonalMemoriesInteractionRoute(
 
       if (route.action === "add-submit") {
         const modal = interaction as ModalSubmitInteraction;
-        const content = modal.fields.getTextInputValue(buildPersonalMemoryModalFieldId("content", route.nonce));
+        let content = "";
+        try {
+          content = modal.fields.getTextInputValue(buildPersonalMemoryModalFieldId("content", route.nonce));
+        } catch {
+          // Optional once the file field can supply the memories instead.
+        }
         let tagsRaw = "";
         try {
           tagsRaw = modal.fields.getTextInputValue(buildPersonalMemoryModalFieldId("tags", route.nonce));
@@ -601,6 +677,93 @@ export function createPersonalMemoriesInteractionRoute(
           // Field optional
         }
         const tags = parsePersonalMemoryTags(tagsRaw);
+        const uploadedFile = dependencies.takeFileUpload(interaction.id, route.nonce);
+
+        if (uploadedFile) {
+          const upload = await dependencies.readUploadedText(uploadedFile);
+          if (!upload.isValid || !upload.text) {
+            const memories = await dependencies.loadMemories(scope.userId, route.lineageId);
+            await repaint(
+              interaction,
+              route.locale,
+              scope,
+              route.category,
+              route.lineageId,
+              memories,
+              { kind: "main" },
+              receipt(route.locale, upload.error === "file_too_large" ? "batch_file_too_large" : "batch_file_invalid"),
+              dependencies,
+            );
+            return;
+          }
+
+          const uploaded = getNonEmptyNumberedLines(upload.text).map((line) => line.content);
+          const typed = content.trim();
+          const batchAction = await performPanelAction(
+            () =>
+              dependencies.operations.addBatch({
+                userId: scope.userId,
+                userDiscId: scope.userDiscId,
+                personaLineageId: route.lineageId,
+                contents: typed ? [typed, ...uploaded] : uploaded,
+                tags,
+              }),
+            () => dependencies.resolveScope(interaction, true),
+          );
+          const batchResult = batchAction.result;
+          scope = batchAction.state ?? scope;
+          const memories = await dependencies.loadMemories(scope.userId, route.lineageId);
+
+          if (batchResult.status === "success") {
+            if (scope.internalServerId) {
+              dependencies.recordAction({
+                action: "personal-memories.personal.memory.add",
+                serverId: scope.internalServerId,
+                userDiscId: interaction.user.id,
+              });
+            }
+            await repaint(
+              interaction,
+              route.locale,
+              scope,
+              route.category,
+              route.lineageId,
+              memories,
+              { kind: "main" },
+              receipt(route.locale, "batch_added", {
+                added: batchResult.added,
+                skipped: batchResult.skipped,
+              }),
+              dependencies,
+            );
+            return;
+          }
+
+          const batchReceiptByStatus: Record<string, string> = {
+            "privacy-blocked": "privacy_blocked_error",
+            "empty-content": "empty_content",
+            "content-too-long": "content_too_long",
+            "all-duplicates": "batch_all_duplicates",
+            "batch-limit-reached": "batch_limit_reached",
+            "write-failed": "write_failed",
+          };
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            route.category,
+            route.lineageId,
+            memories,
+            { kind: "main" },
+            receipt(route.locale, batchReceiptByStatus[batchResult.status] ?? "write_failed", {
+              max: memoryLimits.maxPersonalMemories,
+              available: batchResult.status === "batch-limit-reached" ? batchResult.available : 0,
+              requested: batchResult.status === "batch-limit-reached" ? batchResult.requested : 0,
+            }),
+            dependencies,
+          );
+          return;
+        }
 
         const action = await performPanelAction(
           () =>

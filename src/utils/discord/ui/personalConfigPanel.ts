@@ -53,6 +53,7 @@ import {
   buildPanelContainer,
   buildPanelReceiptContainer,
   buildRangeChooserComponents,
+  withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import { safeModalLocalizer, safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { buildModelRoutingControl } from "@/utils/discord/ui/modelRoutingControls";
@@ -2443,8 +2444,27 @@ ${localizer(locale, "commands.personal.config.no_text_providers_fallbacks")}`,
 ${localizer(locale, "commands.personal.config.fallbacks_description")}`,
         });
 
-        if (input.modelDisplayInfo && input.modelDisplayInfo.fallbacksProviders.length > 1) {
-          components.push({
+        const slots = input.modelDisplayInfo?.fallbackSlots ?? [];
+        const slotLines = slots
+          .map(
+            (s) =>
+              `> ${s.slot}. \`${s.modelName ?? localizer(locale, "commands.personal.config.saved_assignment_none")}\``,
+          )
+          .join("\n");
+
+        // The select is the only way into the fallback modal, so it renders even for a single
+        // provider. The primary model is chosen on Switch Models, and repeating it here would give
+        // it a second, non-authoritative home.
+        components.push(
+          {
+            type: ComponentType.TextDisplay,
+            // The prompt also guarantees non-empty content: a provider with no slots yet would
+            // otherwise send an empty TextDisplay, which Discord rejects with BASE_TYPE_BAD_LENGTH.
+            content: slotLines
+              ? `${slotLines}\n${localizer(locale, "commands.personal.config.fallbacks_select_prompt")}`
+              : localizer(locale, "commands.personal.config.fallbacks_select_prompt"),
+          },
+          {
             type: ComponentType.ActionRow,
             components: [
               {
@@ -2454,50 +2474,14 @@ ${localizer(locale, "commands.personal.config.fallbacks_description")}`,
                   locale,
                 }),
                 placeholder: safeSelectOptionText(
-                  localizer(locale, "commands.personal.config.provider_select_placeholder"),
+                  localizer(locale, "commands.personal.config.fallbacks_provider_select_placeholder"),
                   100,
                 ),
-                options: input.modelDisplayInfo.fallbacksProviders.map((p) => ({
+                options: (input.modelDisplayInfo?.fallbacksProviders ?? []).map((p) => ({
                   value: encodeProviderParam(p),
                   label: safeSelectOptionText(getProviderDisplayName(p), 100),
                   default: p.toLowerCase() === selectedProvider.toLowerCase(),
                 })),
-                disabled: writesDisabled,
-              },
-            ],
-          });
-        }
-
-        const primaryName =
-          input.modelDisplayInfo?.primaryModelName ??
-          localizer(locale, "commands.personal.config.saved_assignment_none");
-        const slots = input.modelDisplayInfo?.fallbackSlots ?? [];
-        const slotLines = slots
-          .map(
-            (s) =>
-              `> ${s.slot}. \`${s.modelName ?? localizer(locale, "commands.personal.config.saved_assignment_none")}\``,
-          )
-          .join("\n");
-
-        components.push(
-          {
-            type: ComponentType.TextDisplay,
-            content: `> ${localizer(locale, "commands.personal.config.provider_label")}: \`${getProviderDisplayName(selectedProvider)}\`
-> ${localizer(locale, "commands.personal.config.fallbacks_primary_label")}: \`${primaryName}\`
-${slotLines}`,
-          },
-          {
-            type: ComponentType.ActionRow,
-            components: [
-              {
-                type: ComponentType.Button,
-                style: ButtonStyle.Secondary,
-                customId: buildPersonalConfigRouteId({
-                  action: "fallbacks-open",
-                  locale,
-                  provider: selectedProvider,
-                }),
-                label: localizer(locale, "commands.personal.config.edit_fallbacks_button"),
                 disabled: writesDisabled,
               },
             ],
@@ -2515,8 +2499,7 @@ ${slotLines}`,
             type: ComponentType.TextDisplay,
             content: `**${localizer(locale, "commands.personal.config.randomizer_section_title")}**
 ${localizer(locale, "commands.personal.config.randomizer_section_desc")}
-
-${statusStr}`,
+${withLinePrefix("> ", statusStr)}`,
           },
           {
             type: ComponentType.ActionRow,

@@ -931,10 +931,6 @@ describe("personalConfigPanelCatalog", () => {
       { action: "parameters-2-open", locale: "en-US", provider: "openrouter" },
     ],
     [
-      "personal-config:v2:fallbacks-open:en-US:openrouter",
-      { action: "fallbacks-open", locale: "en-US", provider: "openrouter" },
-    ],
-    [
       "personal-config:v2:randomizer-toggle:en-US:openrouter",
       { action: "randomizer-toggle", locale: "en-US", provider: "openrouter" },
     ],
@@ -1144,7 +1140,6 @@ describe("personalConfigPanelCatalog", () => {
         return [{ action, locale, capability, provider, nonce }];
       case "parameters-1-open":
       case "parameters-2-open":
-      case "fallbacks-open":
       case "randomizer-toggle":
         return [{ action, locale, provider }];
       case "parameters-1-submit":
@@ -1195,7 +1190,7 @@ describe("personalConfigPanelCatalog", () => {
 
   it("round-trips every action in the codec table", () => {
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(65);
+    expect(actions.length).toBe(64);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, false);
@@ -1231,7 +1226,7 @@ describe("personalConfigPanelCatalog", () => {
     // - page: "response-modes" (14 chars) is the longest PersonalConfigPage.
     // - mode: "follow" (6 chars) is the longest deliberate trigger/tool mode.
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(65);
+    expect(actions.length).toBe(64);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, true);
@@ -1261,15 +1256,15 @@ describe("personalConfigPanelCatalog", () => {
     );
     const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
 
-    expect(tableActions.size).toBe(65);
-    expect(handlerActions.size).toBe(65);
+    expect(tableActions.size).toBe(64);
+    expect(handlerActions.size).toBe(64);
     expect([...tableActions].filter((a) => !handlerActions.has(a))).toEqual([]);
     expect([...handlerActions].filter((a) => !tableActions.has(a))).toEqual([]);
   });
 
   it("fails closed when dropping or appending a segment for every action in the table", () => {
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(65);
+    expect(actions.length).toBe(64);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, false);
@@ -1665,6 +1660,14 @@ describe("personalConfigPanelCatalog Models routes", () => {
       provider,
       nonce: "nonce123456",
     });
+  });
+
+  it("refuses the Fallbacks edit button that the provider select replaced", () => {
+    // The button was the only producer of `fallbacks-open`, and a route with no producer is
+    // invisible to every gate, so the action was retired rather than left parseable.
+    expect(
+      parsePersonalConfigPanelRoute(requireRoute("personal-config:v2:fallbacks-open:en-US:openrouter")),
+    ).toBeNull();
   });
 
   it("refuses the Switch Models controls that the six capability selects replaced", () => {
@@ -2352,12 +2355,23 @@ describe("Models panel rendering", () => {
     });
 
     const payloadJson = JSON.stringify(payload);
-    expect(payloadJson).toContain("Primary");
-    expect(payloadJson).toContain("Claude 3.5 Sonnet");
     expect(payloadJson).toContain("Claude 3 Haiku");
-    expect(payloadJson).toContain("Edit Fallback Models");
     expect(payloadJson).toContain("Model Randomizer");
     expect(payloadJson).toContain("Enable Randomizer");
+
+    // The primary model is chosen on Switch Models, so the Fallbacks page deliberately no longer
+    // restates it or the provider. A regression that reintroduces either belongs to this assertion.
+    expect(payloadJson).not.toContain("Primary");
+    expect(payloadJson).not.toContain("Claude 3.5 Sonnet");
+
+    // The provider select replaced the Edit button and is the only way into the fallback modal, so
+    // it must render even though this fixture has a single provider.
+    expect(payloadJson).not.toContain("Edit Fallback Models");
+    expect(payloadJson).toContain("personal-config:v2:fallbacks-provider-select:en-US");
+    expect(payloadJson).toContain("Choose provider for models");
+
+    // Status is a blockquote and sits directly under the prose with no blank line between them.
+    expect(payloadJson).toContain("it will randomly choose again.\\n> 🔴 Status: Disabled");
   });
 });
 

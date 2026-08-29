@@ -21,6 +21,7 @@ export default {
     not_setup: `This workspace is not set up yet. Run /setup first.`,
     capability_models_explanation: `These models are available through this provider:`,
     entry_no_models: `No models are registered here yet.`,
+    entry_truncated: `-# {count} more lines are not shown here because Discord limits this block.`,
     model_selector_guidance: `Use the dropdown below to add or edit a model capability:`,
     capabilities: {
       text: `Text`,

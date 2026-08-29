@@ -124,6 +124,18 @@ A link inside a heading is fine: its URL costs no rendered width.
 - Cap options at 25 and say how many are hidden. An uncapped list fails at the API boundary
   once real data grows.
 
+## Button colour
+
+Colour carries one meaning per panel, so it stays reserved rather than decorative.
+
+- **Blue (`Primary`) belongs to the category row only.** It marks which category is open, and a
+  second blue elsewhere on the page competes with that signal.
+- **Everything else inside the panel is grey (`Secondary`) or red (`Danger`).** Red is for a
+  destructive action; grey is for everything else, including the primary action of a section.
+- **Do not use colour to show which option in a group is selected.** A segmented control that
+  paints the active choice blue reads as four call-to-action buttons. Put the state in the label
+  or in the prose above the row, where a screen reader also reaches it.
+
 ## Localization
 
 These rules apply to `src/locales/` prose the same as to any other authored text, including

@@ -723,3 +723,49 @@ describe("providers panel rendering", () => {
     expect(json).toContain("remove-cancel:en-US:provider:google");
   });
 });
+
+// A provider with a catalog-sized model list made the whole panel fail with
+// BASE_TYPE_BAD_LENGTH rather than render, because the per-capability model list is unbounded and
+// Discord caps a TextDisplay at 4000 characters.
+describe("Provider entry body stays inside the TextDisplay budget", () => {
+  it("caps a catalog-sized model list and states how many lines it hid", () => {
+    const many = providerEntry("provider:openrouter", "OpenRouter");
+    many.capabilities[0].models = Array.from({ length: 300 }, (_, index) => ({
+      id: index + 1,
+      codeName: `openrouter/some-fairly-long-model-identifier-${index}`,
+      isWorkspaceActive: false,
+      isWorkspaceFallback: false,
+      isProviderFallback: false,
+      isCustomRegistration: false,
+      textSettings: {
+        numCtx: 8192,
+        hasTools: true,
+        seesImages: false,
+        supportsStructOutput: false,
+        strictRoleAlternation: false,
+        supportsPrefixCompletion: false,
+      },
+    }));
+
+    const panel = buildProvidersPanelPayload({
+      locale: "en-US",
+      entries: [many],
+      initialEntryId: "provider:openrouter",
+      readStatus: "fresh",
+      page: { kind: "entry" },
+      enabledActions: new Set(["add-provider", "add-endpoint", "model", "edit", "remove"]),
+      routeNamespace: PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
+      footerCommand: { root: "personal", subcommandGroup: "provider", subcommand: "model-text" },
+    });
+
+    const container = panel.components[0] as { components: Array<{ type: number; content?: string }> };
+    const texts = container.components.filter((component) => typeof component.content === "string");
+    expect(texts.length).toBeGreaterThan(0);
+    for (const text of texts) {
+      // Discord's own bound. Exceeding it rejects the entire payload, not just this block.
+      expect((text.content as string).length).toBeLessThanOrEqual(4000);
+      expect((text.content as string).length).toBeGreaterThan(0);
+    }
+    expect(JSON.stringify(panel)).toContain("more lines are not shown here");
+  });
+});

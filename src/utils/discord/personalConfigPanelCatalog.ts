@@ -184,7 +184,6 @@ export type PersonalConfigPanelRoute =
   | { action: "parameters-2-submit"; locale: string; provider: string; nonce: string }
   // Models - Fallbacks
   | { action: "fallbacks-provider-select"; locale: string }
-  | { action: "fallbacks-open"; locale: string; provider: string }
   | { action: "fallbacks-range-open"; locale: string; provider: string; start: number }
   | { action: "fallbacks-range-page"; locale: string; provider: string; chooserPage: number }
   | { action: "fallbacks-submit"; locale: string; provider: string; nonce: string }
@@ -643,10 +642,6 @@ export const PERSONAL_CONFIG_ROUTE_CODECS: PersonalConfigRouteCodecs = {
   "fallbacks-provider-select": {
     wireToken: "fallbacks-provider-select",
     fields: [],
-  },
-  "fallbacks-open": {
-    wireToken: "fallbacks-open",
-    fields: [providerField],
   },
   "fallbacks-range-open": {
     wireToken: "fallbacks-range-open",

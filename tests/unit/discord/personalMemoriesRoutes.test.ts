@@ -16,6 +16,7 @@ import {
   type PersonalMemoriesRouteDependencies,
 } from "@/utils/discord/interactions/personalMemoriesRoutes";
 import { personalMemoryRepository, userRepository } from "@/utils/db/repositories";
+import type { APIAttachment } from "discord.js";
 import {
   buildPersonalMemoriesCustomId,
   parsePersonalMemoriesPanelRoute,
@@ -25,6 +26,7 @@ import {
 import { parseInteractionRoute, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
 import {
+  buildAddPersonalMemoryModal,
   buildPersonalMemoryModalFieldId,
   buildPersonalMemoriesPanelPayload,
 } from "@/utils/discord/ui/personalMemoriesPanel";
@@ -88,6 +90,20 @@ function makeDependencies(
   const telemetry: string[] = [];
 
   const operations: PersonalMemoriesOperations = {
+    addBatch: async (input) => {
+      calls.push(`addBatch:${input.contents.length}`);
+      for (const content of input.contents) {
+        memories.push(
+          makeMemory(200 + memories.length, {
+            user_id: input.userId,
+            persona_lineage_id: input.personaLineageId,
+            content,
+            tags: input.tags,
+          }),
+        );
+      }
+      return { status: "success", added: input.contents.length, skipped: 0 };
+    },
     add: async (input) => {
       calls.push(`add:${input.content}`);
       const newMemory = makeMemory(100, {
@@ -169,6 +185,8 @@ function makeDependencies(
     showEditModal: async () => {
       calls.push("showEditModal");
     },
+    takeFileUpload: () => undefined,
+    readUploadedText: async () => ({ isValid: true, text: "1. First memory\n2. Second memory\n" }),
     ...overrides,
   };
 
@@ -873,5 +891,97 @@ describe("receipt locale keys resolve", () => {
         expect(localizer("en-US", localeKey)).not.toBe(localeKey);
       }
     }
+  });
+});
+
+// The batch path exists so that dissolving `memory personal add` does not remove the ability to
+// author many memories in a text editor and upload them. Wave 7's import reads a JSON export, so it
+// is round-trip transfer rather than authoring and does not replace this.
+describe("Add Memory batch upload", () => {
+  function makeAddInteraction(nonce: string, typedContent: string) {
+    return {
+      id: "batch-int",
+      customId: buildPersonalMemoriesCustomId("add-submit", "en-US", "global", 0, nonce),
+      user: { id: "123456789", username: "testuser" },
+      fields: {
+        getTextInputValue: (fieldId: string) => {
+          if (fieldId === buildPersonalMemoryModalFieldId("content", nonce)) return typedContent;
+          return "";
+        },
+      },
+      deferred: false,
+      replied: false,
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      deferUpdate: async function (this: { deferred: boolean }) {
+        this.deferred = true;
+      },
+      editReply: async () => {},
+    };
+  }
+
+  it("routes an uploaded txt to addBatch and leaves the single insert untouched without one", async () => {
+    const nonce = "nonce1234567";
+
+    const noFileCalls: string[] = [];
+    const { dependencies: noFileDeps } = makeDependencies(noFileCalls);
+    const noFileRoute = createPersonalMemoriesInteractionRoute(noFileDeps);
+    const noFileInteraction = makeAddInteraction(nonce, "A single typed memory");
+    await noFileRoute.execute(
+      {} as Client,
+      noFileInteraction as unknown as ModalSubmitInteraction,
+      requireRoute(noFileInteraction.customId),
+    );
+    expect(noFileCalls).toContain("add:A single typed memory");
+    expect(noFileCalls.some((entry) => entry.startsWith("addBatch:"))).toBeFalse();
+
+    const fileCalls: string[] = [];
+    const { dependencies: fileDeps } = makeDependencies(fileCalls, {
+      takeFileUpload: () =>
+        ({
+          id: "1",
+          filename: "memories.txt",
+          size: 64,
+          url: "https://cdn.example/memories.txt",
+          proxy_url: "https://cdn.example/memories.txt",
+          content_type: "text/plain",
+        }) as unknown as APIAttachment,
+    });
+    const fileRoute = createPersonalMemoriesInteractionRoute(fileDeps);
+    const fileInteraction = makeAddInteraction(nonce, "A single typed memory");
+    await fileRoute.execute(
+      {} as Client,
+      fileInteraction as unknown as ModalSubmitInteraction,
+      requireRoute(fileInteraction.customId),
+    );
+    expect(fileCalls.some((entry) => entry.startsWith("addBatch:"))).toBeTrue();
+    expect(fileCalls).not.toContain("add:A single typed memory");
+  });
+
+  it("exposes an optional file upload of raw component type 19 on the Add Memory modal", () => {
+    const nonce = "nonce1234567";
+    const modal = buildAddPersonalMemoryModal("en-US", "global", 0, nonce);
+    const fileWrapper = modal.components.find(
+      (component) =>
+        (component as { component?: { custom_id?: string } }).component?.custom_id ===
+        buildPersonalMemoryModalFieldId("file", nonce),
+    ) as { component: { type: number; required: boolean; min_values: number; max_values: number } } | undefined;
+
+    expect(fileWrapper).toBeDefined();
+    // 19 is FileUpload. 22 is CheckboxGroup and 3 is StringSelect, and Discord renders any of them
+    // without complaint, so pinning the number is the only thing that catches a wrong one.
+    expect(fileWrapper?.component.type).toBe(19);
+    expect(fileWrapper?.component.required).toBeFalse();
+    expect(fileWrapper?.component.min_values).toBe(0);
+    expect(fileWrapper?.component.max_values).toBe(1);
+
+    const contentWrapper = modal.components.find(
+      (component) =>
+        (component as { component?: { custom_id?: string } }).component?.custom_id ===
+        buildPersonalMemoryModalFieldId("content", nonce),
+    ) as { component: { required: boolean } } | undefined;
+    // Optional so a file alone is a valid submission; the handler rejects both being empty.
+    expect(contentWrapper?.component.required).toBeFalse();
   });
 });
