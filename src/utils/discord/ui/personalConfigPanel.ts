@@ -29,8 +29,8 @@ import {
   USER_NICKNAME_MAX_LENGTH,
 } from "@/types/personaNaming";
 import {
-  buildPersonalConfigCustomId,
-  buildPersonalConfigSegments,
+  buildPersonalConfigRouteId,
+  buildPersonalConfigRouteSegments,
   DEFAULT_PAGE_FOR_CATEGORY,
   PERSONAL_CONFIG_ROUTE_NAMESPACE,
   PERSONAL_CONFIG_ROUTE_VERSION,
@@ -205,7 +205,7 @@ export function buildLanguageModal(
   currentLanguage: string,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalConfigCustomId("language-submit", locale, nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "language-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.language_modal_title"), 45),
     components: [
       {
@@ -239,7 +239,7 @@ export function buildTimezoneModal(
   currentOffset: number | null,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalConfigCustomId("timezone-submit", locale, nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "timezone-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.timezone_modal_title"), 45),
     components: [
       {
@@ -272,7 +272,7 @@ export function buildNamingModal(
   current: { nickname: string | null; prefix: string | null; suffix: string | null },
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalConfigCustomId("naming-submit", locale, nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "naming-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.naming_modal_title"), 45),
     components: [
       {
@@ -340,7 +340,7 @@ export function buildPersonaNamingModal(
   current: { nickname: string | null; prefix: string | null; suffix: string | null },
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalConfigCustomId("persona-naming-submit", locale, lineageId, nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "persona-naming-submit", locale, lineageId, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.persona_naming_modal_title"), 45),
     components: [
       {
@@ -407,7 +407,7 @@ export function buildAboutModal(
   current: { genderIdentity: string | null; pronouns: string | null; addressingStyle: string | null },
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalConfigCustomId("about-submit", locale, nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "about-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.about_modal_title"), 45),
     components: [
       {
@@ -476,7 +476,7 @@ export function buildAppearanceModal(
   currentTags: string[],
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalConfigCustomId("appearance-submit", locale, nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "appearance-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.appearance_modal_title"), 45),
     components: [
       {
@@ -503,7 +503,7 @@ export function buildPrivacyLevelModal(
   currentLevel: PrivacyLevel,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalConfigCustomId("privacy-level-submit", locale, nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "privacy-level-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.privacy_modal_title"), 45),
     components: [
       {
@@ -576,7 +576,7 @@ export function buildQuickToggleModal(
       : localizer(locale, "commands.personal.config.quick_toggle_none_desc");
 
   return {
-    custom_id: buildPersonalConfigCustomId("quick-toggle-submit", locale, nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "quick-toggle-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.quick_toggle_modal_title"), 45),
     components: [
       {
@@ -653,13 +653,13 @@ export function buildModelSelectModal(
   }));
 
   return {
-    custom_id: buildPersonalConfigCustomId(
-      "model-modal-submit",
+    custom_id: buildPersonalConfigRouteId({
+      action: "model-modal-submit",
       locale,
       capability,
-      encodeProviderParam(provider),
+      provider,
       nonce,
-    ),
+    }),
     title: safeSelectOptionText(
       localizer(locale, "commands.personal.config.model_modal_title", { capability: capName }),
       45,
@@ -694,7 +694,7 @@ export function buildParameters1Modal(
   currentConfig: UserSavedProviderConfigRow | null,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalConfigCustomId("parameters-1-submit", locale, encodeProviderParam(provider), nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "parameters-1-submit", locale, provider, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.params_1_modal_title"), 45),
     components: [
       {
@@ -819,7 +819,7 @@ export function buildParameters2Modal(
   const currentThinking = currentConfig?.thinking_level ?? "auto";
 
   return {
-    custom_id: buildPersonalConfigCustomId("parameters-2-submit", locale, encodeProviderParam(provider), nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "parameters-2-submit", locale, provider, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.params_2_modal_title"), 45),
     components: [
       {
@@ -939,7 +939,7 @@ export function buildFallbacksModal(
   }
 
   return {
-    custom_id: buildPersonalConfigCustomId("fallbacks-submit", locale, encodeProviderParam(provider), nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "fallbacks-submit", locale, provider, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.fallbacks_modal_title"), 45),
     components,
   };
@@ -951,7 +951,7 @@ export function buildImpersonationModal(
   currentPrompt: string | null,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalConfigCustomId("impersonation-submit", locale, nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "impersonation-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.impersonation_modal_title"), 45),
     components: [
       {
@@ -1006,7 +1006,7 @@ export function buildSpotlightStep1Modal(
   nonce: string,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalConfigCustomId("spotlight-set-step1", locale, nonce),
+    custom_id: buildPersonalConfigRouteId({ action: "spotlight-set-step1", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_set_modal_title"), 45),
     components: [
       {
@@ -1093,7 +1093,15 @@ export function buildSpotlightSetModal(
   }
 
   return {
-    custom_id: buildPersonalConfigCustomId("spotlight-set-submit", locale, channelId, hours, blockIdx, fp, nonce),
+    custom_id: buildPersonalConfigRouteId({
+      action: "spotlight-set-submit",
+      locale,
+      channelId,
+      hours,
+      blockIdx,
+      fp,
+      nonce,
+    }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_set_modal_title"), 45),
     components,
   };
@@ -1131,7 +1139,16 @@ export function buildSpotlightAutoTriggerModal(
   ];
 
   return {
-    custom_id: buildPersonalConfigCustomId("spot-set-auto-sub", locale, channelId, hours, blockIdx, mask, fp, nonce),
+    custom_id: buildPersonalConfigRouteId({
+      action: "spot-set-auto-sub",
+      locale,
+      channelId,
+      hours,
+      blockIdx,
+      mask,
+      fp,
+      nonce,
+    }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_auto_modal_title"), 45),
     components: [
       {
@@ -1211,7 +1228,13 @@ export function buildSpotlightRemoveModal(
   }
 
   return {
-    custom_id: buildPersonalConfigCustomId("spotlight-remove-submit", locale, start, fp, nonce),
+    custom_id: buildPersonalConfigRouteId({
+      action: "spotlight-remove-submit",
+      locale,
+      start,
+      fp,
+      nonce,
+    }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.config.spotlight_remove_modal_title"), 45),
     components,
   };
@@ -1222,8 +1245,6 @@ function buildRetryRow(
   category: PersonalConfigCategory,
   page: PersonalConfigPage,
   lineageId?: number,
-  capability?: PersonalConfigManagedCapability,
-  provider?: string,
 ): ActionRowData<ButtonComponentData> {
   return {
     type: ComponentType.ActionRow,
@@ -1231,13 +1252,13 @@ function buildRetryRow(
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildPersonalConfigCustomId(
-          "retry",
+        customId: buildPersonalConfigRouteId({
+          action: "retry",
           locale,
           category,
           page,
-          ...(lineageId ? [lineageId] : capability ? [capability] : provider ? [encodeProviderParam(provider)] : []),
-        ),
+          ...(lineageId !== undefined ? { lineageId } : {}),
+        }),
         label: localizer(locale, "commands.personal.config.retry"),
       },
     ],
@@ -1363,30 +1384,30 @@ ${localizer(locale, "commands.personal.config.model_range_desc", { provider: get
           version: PERSONAL_CONFIG_ROUTE_VERSION,
           buildSegments: {
             range: (rangeIndex) =>
-              buildPersonalConfigSegments(
-                "model-range-open",
+              buildPersonalConfigRouteSegments({
+                action: "model-range-open",
                 locale,
-                view.capability,
-                encodeProviderParam(view.provider),
-                rangeIndex * PERSONAL_MODEL_PAGE_SIZE,
-              ),
+                capability: view.capability,
+                provider: view.provider,
+                start: rangeIndex * PERSONAL_MODEL_PAGE_SIZE,
+              }),
             previous: (targetPage) =>
-              buildPersonalConfigSegments(
-                "model-range-page",
+              buildPersonalConfigRouteSegments({
+                action: "model-range-page",
                 locale,
-                view.capability,
-                encodeProviderParam(view.provider),
-                targetPage,
-              ),
+                capability: view.capability,
+                provider: view.provider,
+                chooserPage: targetPage,
+              }),
             next: (targetPage) =>
-              buildPersonalConfigSegments(
-                "model-range-page",
+              buildPersonalConfigRouteSegments({
+                action: "model-range-page",
                 locale,
-                view.capability,
-                encodeProviderParam(view.provider),
-                targetPage,
-              ),
-            cancel: () => buildPersonalConfigSegments("model-act-cancel", locale),
+                capability: view.capability,
+                provider: view.provider,
+                chooserPage: targetPage,
+              }),
+            cancel: () => buildPersonalConfigRouteSegments({ action: "model-act-cancel", locale }),
           },
         }),
       ];
@@ -1407,17 +1428,27 @@ ${localizer(locale, "commands.personal.config.model_range_desc", { provider: get
           version: PERSONAL_CONFIG_ROUTE_VERSION,
           buildSegments: {
             range: (rangeIndex) =>
-              buildPersonalConfigSegments(
-                "model-provider-range-open",
+              buildPersonalConfigRouteSegments({
+                action: "model-provider-range-open",
                 locale,
-                view.capability,
-                rangeIndex * PERSONAL_PROVIDER_PAGE_SIZE,
-              ),
+                capability: view.capability,
+                start: rangeIndex * PERSONAL_PROVIDER_PAGE_SIZE,
+              }),
             previous: (targetPage) =>
-              buildPersonalConfigSegments("model-provider-range-page", locale, view.capability, targetPage),
+              buildPersonalConfigRouteSegments({
+                action: "model-provider-range-page",
+                locale,
+                capability: view.capability,
+                chooserPage: targetPage,
+              }),
             next: (targetPage) =>
-              buildPersonalConfigSegments("model-provider-range-page", locale, view.capability, targetPage),
-            cancel: () => buildPersonalConfigSegments("model-act-cancel", locale),
+              buildPersonalConfigRouteSegments({
+                action: "model-provider-range-page",
+                locale,
+                capability: view.capability,
+                chooserPage: targetPage,
+              }),
+            cancel: () => buildPersonalConfigRouteSegments({ action: "model-act-cancel", locale }),
           },
         }),
       ];
@@ -1441,7 +1472,11 @@ ${localizer(locale, "commands.personal.config.model_range_desc", { provider: get
           components: [
             {
               type: ComponentType.StringSelect,
-              customId: buildPersonalConfigCustomId("model-provider-select", locale, view.capability),
+              customId: buildPersonalConfigRouteId({
+                action: "model-provider-select",
+                locale,
+                capability: view.capability,
+              }),
               placeholder: safeSelectOptionText(
                 localizer(locale, "commands.personal.config.choose_model_placeholder"),
                 150,
@@ -1459,7 +1494,7 @@ ${localizer(locale, "commands.personal.config.model_range_desc", { provider: get
             {
               type: ComponentType.Button,
               style: ButtonStyle.Danger,
-              customId: buildPersonalConfigCustomId("model-act-cancel", locale),
+              customId: buildPersonalConfigRouteId({ action: "model-act-cancel", locale }),
               label: localizer(locale, "general.pagination.cancel"),
             },
           ],
@@ -1482,27 +1517,27 @@ ${localizer(locale, "commands.personal.config.fallbacks_range_desc", { provider:
           version: PERSONAL_CONFIG_ROUTE_VERSION,
           buildSegments: {
             range: (rangeIndex) =>
-              buildPersonalConfigSegments(
-                "fallbacks-range-open",
+              buildPersonalConfigRouteSegments({
+                action: "fallbacks-range-open",
                 locale,
-                encodeProviderParam(view.provider),
-                rangeIndex * PERSONAL_FALLBACK_PAGE_SIZE,
-              ),
+                provider: view.provider,
+                start: rangeIndex * PERSONAL_FALLBACK_PAGE_SIZE,
+              }),
             previous: (targetPage) =>
-              buildPersonalConfigSegments(
-                "fallbacks-range-page",
+              buildPersonalConfigRouteSegments({
+                action: "fallbacks-range-page",
                 locale,
-                encodeProviderParam(view.provider),
-                targetPage,
-              ),
+                provider: view.provider,
+                chooserPage: targetPage,
+              }),
             next: (targetPage) =>
-              buildPersonalConfigSegments(
-                "fallbacks-range-page",
+              buildPersonalConfigRouteSegments({
+                action: "fallbacks-range-page",
                 locale,
-                encodeProviderParam(view.provider),
-                targetPage,
-              ),
-            cancel: () => buildPersonalConfigSegments("model-act-cancel", locale),
+                provider: view.provider,
+                chooserPage: targetPage,
+              }),
+            cancel: () => buildPersonalConfigRouteSegments({ action: "model-act-cancel", locale }),
           },
         }),
       ];
@@ -1520,13 +1555,17 @@ ${localizer(locale, "commands.personal.config.impersonation_clear_confirm_desc")
             {
               type: ComponentType.Button,
               style: ButtonStyle.Danger,
-              customId: buildPersonalConfigCustomId("impersonation-clear-confirm", locale, view.nonce),
+              customId: buildPersonalConfigRouteId({
+                action: "impersonation-clear-confirm",
+                locale,
+                nonce: view.nonce,
+              }),
               label: localizer(locale, "commands.personal.config.impersonation_clear_button"),
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("impersonation-clear-cancel", locale),
+              customId: buildPersonalConfigRouteId({ action: "impersonation-clear-cancel", locale }),
               label: localizer(locale, "commands.personal.config.cancel"),
             },
           ],
@@ -1565,39 +1604,39 @@ ${localizer(locale, "commands.personal.config.spotlight_review_prompt")}`,
             {
               type: ComponentType.Button,
               style: ButtonStyle.Success,
-              customId: buildPersonalConfigCustomId(
-                "spot-set-cf",
+              customId: buildPersonalConfigRouteId({
+                action: "spot-set-cf",
                 locale,
-                view.channelId,
-                view.hours,
-                view.autoIdx,
-                view.blockIdx,
-                view.mask,
-                view.fp,
-                view.nonce,
-              ),
+                channelId: view.channelId,
+                hours: view.hours,
+                autoIdx: view.autoIdx,
+                blockIdx: view.blockIdx,
+                mask: view.mask,
+                fp: view.fp,
+                nonce: view.nonce,
+              }),
               label: localizer(locale, "commands.personal.config.spotlight_save_button"),
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Primary,
-              customId: buildPersonalConfigCustomId(
-                "spot-set-auto",
+              customId: buildPersonalConfigRouteId({
+                action: "spot-set-auto",
                 locale,
-                view.channelId,
-                view.hours,
-                view.blockIdx,
-                view.mask,
-                view.fp,
-                view.nonce,
-              ),
+                channelId: view.channelId,
+                hours: view.hours,
+                blockIdx: view.blockIdx,
+                mask: view.mask,
+                fp: view.fp,
+                nonce: view.nonce,
+              }),
               label: localizer(locale, "commands.personal.config.spotlight_auto_button"),
               disabled: selectedPersonas.length === 0,
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("spotlight-set-cancel", locale),
+              customId: buildPersonalConfigRouteId({ action: "spotlight-set-cancel", locale }),
               label: localizer(locale, "commands.personal.config.cancel"),
             },
           ],
@@ -1622,20 +1661,20 @@ ${localizer(locale, "commands.personal.config.spotlight_personas_desc")}`,
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Primary,
-                customId: buildPersonalConfigCustomId(
-                  "spotlight-set-block",
+                customId: buildPersonalConfigRouteId({
+                  action: "spotlight-set-block",
                   locale,
-                  view.channelId,
-                  view.hours,
-                  view.fp,
-                  0,
-                ),
+                  channelId: view.channelId,
+                  hours: view.hours,
+                  fp: view.fp,
+                  blockIdx: 0,
+                }),
                 label: localizer(locale, "commands.personal.config.spotlight_personas_label"),
               },
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Secondary,
-                customId: buildPersonalConfigCustomId("spotlight-set-cancel", locale),
+                customId: buildPersonalConfigRouteId({ action: "spotlight-set-cancel", locale }),
                 label: localizer(locale, "commands.personal.config.cancel"),
               },
             ],
@@ -1654,33 +1693,33 @@ ${localizer(locale, "commands.personal.config.spotlight_personas_desc")}`,
           version: PERSONAL_CONFIG_ROUTE_VERSION,
           buildSegments: {
             range: (rangeIndex) =>
-              buildPersonalConfigSegments(
-                "spotlight-set-block",
+              buildPersonalConfigRouteSegments({
+                action: "spotlight-set-block",
                 locale,
-                view.channelId,
-                view.hours,
-                view.fp,
-                rangeIndex,
-              ),
+                channelId: view.channelId,
+                hours: view.hours,
+                fp: view.fp,
+                blockIdx: rangeIndex,
+              }),
             previous: (targetPage) =>
-              buildPersonalConfigSegments(
-                "spotlight-set-block-page",
+              buildPersonalConfigRouteSegments({
+                action: "spotlight-set-block-page",
                 locale,
-                view.channelId,
-                view.hours,
-                view.fp,
-                targetPage,
-              ),
+                channelId: view.channelId,
+                hours: view.hours,
+                fp: view.fp,
+                chooserPage: targetPage,
+              }),
             next: (targetPage) =>
-              buildPersonalConfigSegments(
-                "spotlight-set-block-page",
+              buildPersonalConfigRouteSegments({
+                action: "spotlight-set-block-page",
                 locale,
-                view.channelId,
-                view.hours,
-                view.fp,
-                targetPage,
-              ),
-            cancel: () => buildPersonalConfigSegments("spotlight-set-cancel", locale),
+                channelId: view.channelId,
+                hours: view.hours,
+                fp: view.fp,
+                chooserPage: targetPage,
+              }),
+            cancel: () => buildPersonalConfigRouteSegments({ action: "spotlight-set-cancel", locale }),
           },
         }),
       ];
@@ -1701,48 +1740,48 @@ ${localizer(locale, "commands.personal.config.spotlight_auto_select_desc")}`,
           version: PERSONAL_CONFIG_ROUTE_VERSION,
           buildSegments: {
             range: (rangeIndex) =>
-              buildPersonalConfigSegments(
-                "spot-set-auto-range",
+              buildPersonalConfigRouteSegments({
+                action: "spot-set-auto-range",
                 locale,
-                view.channelId,
-                view.hours,
-                view.blockIdx,
-                view.mask,
-                view.fp,
-                rangeIndex * SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE,
-              ),
+                channelId: view.channelId,
+                hours: view.hours,
+                blockIdx: view.blockIdx,
+                mask: view.mask,
+                fp: view.fp,
+                start: rangeIndex * SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE,
+              }),
             previous: (targetPage) =>
-              buildPersonalConfigSegments(
-                "spot-set-auto-page",
+              buildPersonalConfigRouteSegments({
+                action: "spot-set-auto-page",
                 locale,
-                view.channelId,
-                view.hours,
-                view.blockIdx,
-                view.mask,
-                view.fp,
-                targetPage,
-              ),
+                channelId: view.channelId,
+                hours: view.hours,
+                blockIdx: view.blockIdx,
+                mask: view.mask,
+                fp: view.fp,
+                chooserPage: targetPage,
+              }),
             next: (targetPage) =>
-              buildPersonalConfigSegments(
-                "spot-set-auto-page",
+              buildPersonalConfigRouteSegments({
+                action: "spot-set-auto-page",
                 locale,
-                view.channelId,
-                view.hours,
-                view.blockIdx,
-                view.mask,
-                view.fp,
-                targetPage,
-              ),
+                channelId: view.channelId,
+                hours: view.hours,
+                blockIdx: view.blockIdx,
+                mask: view.mask,
+                fp: view.fp,
+                chooserPage: targetPage,
+              }),
             cancel: () =>
-              buildPersonalConfigSegments(
-                "spot-set-auto-cancel",
+              buildPersonalConfigRouteSegments({
+                action: "spot-set-auto-cancel",
                 locale,
-                view.channelId,
-                view.hours,
-                view.blockIdx,
-                view.mask,
-                view.fp,
-              ),
+                channelId: view.channelId,
+                hours: view.hours,
+                blockIdx: view.blockIdx,
+                mask: view.mask,
+                fp: view.fp,
+              }),
           },
         }),
       ];
@@ -1763,10 +1802,27 @@ ${localizer(locale, "commands.personal.config.spotlight_remove_range_desc")}`,
           version: PERSONAL_CONFIG_ROUTE_VERSION,
           buildSegments: {
             range: (rangeIndex) =>
-              buildPersonalConfigSegments("spot-rem-range", locale, rangeIndex * SPOTLIGHT_REMOVE_PAGE_SIZE, view.fp),
-            previous: (targetPage) => buildPersonalConfigSegments("spotlight-remove-page", locale, targetPage, view.fp),
-            next: (targetPage) => buildPersonalConfigSegments("spotlight-remove-page", locale, targetPage, view.fp),
-            cancel: () => buildPersonalConfigSegments("spotlight-remove-cancel", locale),
+              buildPersonalConfigRouteSegments({
+                action: "spot-rem-range",
+                locale,
+                start: rangeIndex * SPOTLIGHT_REMOVE_PAGE_SIZE,
+                fp: view.fp,
+              }),
+            previous: (targetPage) =>
+              buildPersonalConfigRouteSegments({
+                action: "spotlight-remove-page",
+                locale,
+                chooserPage: targetPage,
+                fp: view.fp,
+              }),
+            next: (targetPage) =>
+              buildPersonalConfigRouteSegments({
+                action: "spotlight-remove-page",
+                locale,
+                chooserPage: targetPage,
+                fp: view.fp,
+              }),
+            cancel: () => buildPersonalConfigRouteSegments({ action: "spotlight-remove-cancel", locale }),
           },
         }),
       ];
@@ -1796,22 +1852,42 @@ export function buildPersonalConfigPanelPayload(input: PersonalConfigPanelRender
       {
         id: "profile",
         label: localizer(locale, "commands.personal.config.category_profile"),
-        customId: buildPersonalConfigCustomId("category", locale, "profile", DEFAULT_PAGE_FOR_CATEGORY.profile),
+        customId: buildPersonalConfigRouteId({
+          action: "category",
+          locale,
+          category: "profile",
+          page: DEFAULT_PAGE_FOR_CATEGORY.profile,
+        }),
       },
       {
         id: "privacy",
         label: localizer(locale, "commands.personal.config.category_privacy"),
-        customId: buildPersonalConfigCustomId("category", locale, "privacy", DEFAULT_PAGE_FOR_CATEGORY.privacy),
+        customId: buildPersonalConfigRouteId({
+          action: "category",
+          locale,
+          category: "privacy",
+          page: DEFAULT_PAGE_FOR_CATEGORY.privacy,
+        }),
       },
       {
         id: "models",
         label: localizer(locale, "commands.personal.config.category_models"),
-        customId: buildPersonalConfigCustomId("category", locale, "models", DEFAULT_PAGE_FOR_CATEGORY.models),
+        customId: buildPersonalConfigRouteId({
+          action: "category",
+          locale,
+          category: "models",
+          page: DEFAULT_PAGE_FOR_CATEGORY.models,
+        }),
       },
       {
         id: "advanced",
         label: localizer(locale, "commands.personal.config.category_advanced"),
-        customId: buildPersonalConfigCustomId("category", locale, "advanced", DEFAULT_PAGE_FOR_CATEGORY.advanced),
+        customId: buildPersonalConfigRouteId({
+          action: "category",
+          locale,
+          category: "advanced",
+          page: DEFAULT_PAGE_FOR_CATEGORY.advanced,
+        }),
       },
     ],
     category,
@@ -1824,7 +1900,7 @@ export function buildPersonalConfigPanelPayload(input: PersonalConfigPanelRender
     components: [
       {
         type: ComponentType.StringSelect,
-        customId: buildPersonalConfigCustomId("page", locale, category, page),
+        customId: buildPersonalConfigRouteId({ action: "page", locale, category, page }),
         placeholder: localizer(locale, "commands.personal.config.page_select_placeholder"),
         options: pageOptions,
         disabled: writesDisabled,
@@ -1900,21 +1976,21 @@ ${localizer(locale, "commands.personal.config.interface_description")}
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("language-open", locale),
+              customId: buildPersonalConfigRouteId({ action: "language-open", locale }),
               label: localizer(locale, "commands.personal.config.change_language_button"),
               disabled: writesDisabled,
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("timezone-open", locale),
+              customId: buildPersonalConfigRouteId({ action: "timezone-open", locale }),
               label: localizer(locale, "commands.personal.config.set_timezone_button"),
               disabled: writesDisabled,
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("timezone-server", locale),
+              customId: buildPersonalConfigRouteId({ action: "timezone-server", locale }),
               label: localizer(locale, "commands.personal.config.use_server_timezone_button"),
               disabled: writesDisabled || user.timezone_offset === null,
             },
@@ -1934,7 +2010,7 @@ ${localizer(locale, "commands.personal.config.naming_description")}
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("naming-open", locale),
+              customId: buildPersonalConfigRouteId({ action: "naming-open", locale }),
               label: localizer(locale, "commands.personal.config.edit_naming_button"),
               disabled: writesDisabled,
             },
@@ -1955,7 +2031,7 @@ ${localizer(locale, "commands.personal.config.about_description")}
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("about-open", locale),
+              customId: buildPersonalConfigRouteId({ action: "about-open", locale }),
               label: localizer(locale, "commands.personal.config.edit_about_button"),
               disabled: writesDisabled,
             },
@@ -2023,7 +2099,11 @@ ${localizer(locale, "commands.personal.config.persona_naming_description")}`,
           components: [
             {
               type: ComponentType.StringSelect,
-              customId: buildPersonalConfigCustomId("persona-select", locale, currentLineage),
+              customId: buildPersonalConfigRouteId({
+                action: "persona-select",
+                locale,
+                lineageId: currentLineage,
+              }),
               placeholder: localizer(locale, "commands.personal.config.persona_select_placeholder"),
               options: personaOptions,
               disabled: writesDisabled,
@@ -2064,7 +2144,11 @@ ${localizer(locale, "commands.personal.config.persona_naming_description")}`,
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Secondary,
-                customId: buildPersonalConfigCustomId("persona-naming-open", locale, currentLineage),
+                customId: buildPersonalConfigRouteId({
+                  action: "persona-naming-open",
+                  locale,
+                  lineageId: currentLineage,
+                }),
                 label: localizer(locale, "commands.personal.config.edit_persona_naming_button"),
                 disabled: writesDisabled,
               },
@@ -2092,7 +2176,7 @@ ${localizer(locale, "commands.personal.config.appearance_description")}
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("appearance-open", locale),
+              customId: buildPersonalConfigRouteId({ action: "appearance-open", locale }),
               label: localizer(locale, "commands.personal.config.edit_appearance_button"),
               disabled: writesDisabled,
             },
@@ -2136,7 +2220,7 @@ ${localizer(locale, "commands.personal.config.privacy_description")}
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildPersonalConfigCustomId("privacy-level-open", locale),
+            customId: buildPersonalConfigRouteId({ action: "privacy-level-open", locale }),
             label: localizer(locale, "commands.personal.config.change_privacy_level_button"),
             disabled: writesDisabled,
           },
@@ -2166,7 +2250,7 @@ ${
           {
             type: ComponentType.Button,
             style: isCrossServerOn ? ButtonStyle.Secondary : ButtonStyle.Primary,
-            customId: buildPersonalConfigCustomId("crossserver-toggle", locale),
+            customId: buildPersonalConfigRouteId({ action: "crossserver-toggle", locale }),
             label: isCrossServerOn
               ? localizer(locale, "commands.personal.config.disable_crossserver_button")
               : localizer(locale, "commands.personal.config.enable_crossserver_button"),
@@ -2194,7 +2278,11 @@ ${localizer(locale, "commands.personal.config.models_description")}`,
             activeModelName: row?.activeModelName ?? null,
             activeProvider: row?.storedProvider ?? null,
             eligibleProviders: info?.eligibleProvidersForCapability[capability] ?? [],
-            customId: buildPersonalConfigCustomId("model-provider-select", locale, capability),
+            customId: buildPersonalConfigRouteId({
+              action: "model-provider-select",
+              locale,
+              capability,
+            }),
             serverDefaultValue: "__server_default__",
             serverDefaultLabel: localizer(locale, "commands.personal.config.override_status_server_default"),
             serverDefaultDisplay: localizer(locale, "commands.personal.config.override_status_server_default"),
@@ -2218,7 +2306,7 @@ ${localizer(locale, "commands.personal.config.models_description")}`,
             {
               type: ComponentType.Button,
               style: ButtonStyle.Primary,
-              customId: buildPersonalConfigCustomId("quick-toggle-open", locale),
+              customId: buildPersonalConfigRouteId({ action: "quick-toggle-open", locale }),
               label: localizer(locale, "commands.personal.config.quick_toggle_button"),
               disabled: writesDisabled,
             },
@@ -2248,7 +2336,10 @@ ${localizer(locale, "commands.personal.config.parameters_description")}`,
             components: [
               {
                 type: ComponentType.StringSelect,
-                customId: buildPersonalConfigCustomId("parameters-provider-select", locale),
+                customId: buildPersonalConfigRouteId({
+                  action: "parameters-provider-select",
+                  locale,
+                }),
                 placeholder: safeSelectOptionText(
                   localizer(locale, "commands.personal.config.provider_select_placeholder"),
                   100,
@@ -2264,7 +2355,6 @@ ${localizer(locale, "commands.personal.config.parameters_description")}`,
           });
         }
 
-        const encodedP = encodeProviderParam(selectedProvider);
         const tempStr =
           config.llm_temperature !== null && config.llm_temperature !== undefined
             ? String(config.llm_temperature)
@@ -2302,7 +2392,11 @@ ${localizer(locale, "commands.personal.config.parameters_description")}`,
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Secondary,
-                customId: buildPersonalConfigCustomId("parameters-1-open", locale, encodedP),
+                customId: buildPersonalConfigRouteId({
+                  action: "parameters-1-open",
+                  locale,
+                  provider: selectedProvider,
+                }),
                 label: localizer(locale, "commands.personal.config.edit_params_1_button"),
                 disabled: writesDisabled,
               },
@@ -2320,7 +2414,11 @@ ${localizer(locale, "commands.personal.config.parameters_description")}`,
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Secondary,
-                customId: buildPersonalConfigCustomId("parameters-2-open", locale, encodedP),
+                customId: buildPersonalConfigRouteId({
+                  action: "parameters-2-open",
+                  locale,
+                  provider: selectedProvider,
+                }),
                 label: localizer(locale, "commands.personal.config.edit_params_2_button"),
                 disabled: writesDisabled,
               },
@@ -2351,7 +2449,10 @@ ${localizer(locale, "commands.personal.config.fallbacks_description")}`,
             components: [
               {
                 type: ComponentType.StringSelect,
-                customId: buildPersonalConfigCustomId("fallbacks-provider-select", locale),
+                customId: buildPersonalConfigRouteId({
+                  action: "fallbacks-provider-select",
+                  locale,
+                }),
                 placeholder: safeSelectOptionText(
                   localizer(locale, "commands.personal.config.provider_select_placeholder"),
                   100,
@@ -2367,7 +2468,6 @@ ${localizer(locale, "commands.personal.config.fallbacks_description")}`,
           });
         }
 
-        const encodedP = encodeProviderParam(selectedProvider);
         const primaryName =
           input.modelDisplayInfo?.primaryModelName ??
           localizer(locale, "commands.personal.config.saved_assignment_none");
@@ -2392,7 +2492,11 @@ ${slotLines}`,
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Secondary,
-                customId: buildPersonalConfigCustomId("fallbacks-open", locale, encodedP),
+                customId: buildPersonalConfigRouteId({
+                  action: "fallbacks-open",
+                  locale,
+                  provider: selectedProvider,
+                }),
                 label: localizer(locale, "commands.personal.config.edit_fallbacks_button"),
                 disabled: writesDisabled,
               },
@@ -2420,7 +2524,11 @@ ${statusStr}`,
               {
                 type: ComponentType.Button,
                 style: isRandomizerOn ? ButtonStyle.Secondary : ButtonStyle.Primary,
-                customId: buildPersonalConfigCustomId("randomizer-toggle", locale, encodedP),
+                customId: buildPersonalConfigRouteId({
+                  action: "randomizer-toggle",
+                  locale,
+                  provider: selectedProvider,
+                }),
                 label: isRandomizerOn
                   ? localizer(locale, "commands.personal.config.disable_randomizer_button")
                   : localizer(locale, "commands.personal.config.enable_randomizer_button"),
@@ -2500,21 +2608,33 @@ ${statusStr}`,
             {
               type: ComponentType.Button,
               style: dtmMode === "off" ? ButtonStyle.Primary : ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("trigger-mode-set", locale, "off"),
+              customId: buildPersonalConfigRouteId({
+                action: "trigger-mode-set",
+                locale,
+                mode: "off",
+              }),
               label: localizer(locale, "commands.personal.config.mode_off"),
               disabled: writesDisabled || dtmMode === "off",
             },
             {
               type: ComponentType.Button,
               style: dtmMode === "follow" ? ButtonStyle.Primary : ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("trigger-mode-set", locale, "follow"),
+              customId: buildPersonalConfigRouteId({
+                action: "trigger-mode-set",
+                locale,
+                mode: "follow",
+              }),
               label: localizer(locale, "commands.personal.config.mode_follow"),
               disabled: writesDisabled || dtmMode === "follow",
             },
             {
               type: ComponentType.Button,
               style: dtmMode === "on" ? ButtonStyle.Primary : ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("trigger-mode-set", locale, "on"),
+              customId: buildPersonalConfigRouteId({
+                action: "trigger-mode-set",
+                locale,
+                mode: "on",
+              }),
               label: localizer(locale, "commands.personal.config.mode_on"),
               disabled: writesDisabled || dtmMode === "on",
             },
@@ -2531,21 +2651,33 @@ ${statusStr}`,
             {
               type: ComponentType.Button,
               style: toolMode === "off" ? ButtonStyle.Primary : ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("tool-mode-set", locale, "off"),
+              customId: buildPersonalConfigRouteId({
+                action: "tool-mode-set",
+                locale,
+                mode: "off",
+              }),
               label: localizer(locale, "commands.personal.config.mode_off"),
               disabled: writesDisabled || toolMode === "off",
             },
             {
               type: ComponentType.Button,
               style: toolMode === "follow" ? ButtonStyle.Primary : ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("tool-mode-set", locale, "follow"),
+              customId: buildPersonalConfigRouteId({
+                action: "tool-mode-set",
+                locale,
+                mode: "follow",
+              }),
               label: localizer(locale, "commands.personal.config.mode_follow"),
               disabled: writesDisabled || toolMode === "follow",
             },
             {
               type: ComponentType.Button,
               style: toolMode === "on" ? ButtonStyle.Primary : ButtonStyle.Secondary,
-              customId: buildPersonalConfigCustomId("tool-mode-set", locale, "on"),
+              customId: buildPersonalConfigRouteId({
+                action: "tool-mode-set",
+                locale,
+                mode: "on",
+              }),
               label: localizer(locale, "commands.personal.config.mode_on"),
               disabled: writesDisabled || toolMode === "on",
             },
@@ -2573,14 +2705,14 @@ ${statusStr}`,
             {
               type: ComponentType.Button,
               style: ButtonStyle.Primary,
-              customId: buildPersonalConfigCustomId("impersonation-open", locale),
+              customId: buildPersonalConfigRouteId({ action: "impersonation-open", locale }),
               label: localizer(locale, "commands.personal.config.impersonation_edit_button"),
               disabled: writesDisabled,
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Danger,
-              customId: buildPersonalConfigCustomId("impersonation-clear-view", locale),
+              customId: buildPersonalConfigRouteId({ action: "impersonation-clear-view", locale }),
               label: localizer(locale, "commands.personal.config.impersonation_clear_button"),
               disabled: writesDisabled || !prompt,
             },
@@ -2633,14 +2765,14 @@ ${statusStr}`,
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Primary,
-                customId: buildPersonalConfigCustomId("spotlight-set-open", locale),
+                customId: buildPersonalConfigRouteId({ action: "spotlight-set-open", locale }),
                 label: localizer(locale, "commands.personal.config.spotlight_set_button"),
                 disabled: writesDisabled,
               },
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Danger,
-                customId: buildPersonalConfigCustomId("spotlight-remove-open", locale),
+                customId: buildPersonalConfigRouteId({ action: "spotlight-remove-open", locale }),
                 label: localizer(locale, "commands.personal.config.spotlight_remove_button"),
                 disabled: writesDisabled || activeSpotlights.length === 0,
               },

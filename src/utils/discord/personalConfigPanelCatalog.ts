@@ -291,46 +291,35 @@ export type PersonalConfigPanelRoute =
       category: PersonalConfigCategory;
       page: PersonalConfigPage;
       lineageId?: number;
-      capability?: PersonalConfigManagedCapability;
-      provider?: string;
     };
 
-const WIRE_ACTION_TOKENS: Record<string, string> = {
-  "spotlight-set-submit": "s-set-sub",
-  "spotlight-set-step1": "s-step1",
-  "spotlight-set-block": "s-blk",
-  "spotlight-set-block-page": "s-blk-p",
-  "spot-set-cf": "s-cf",
-  "spot-set-auto": "s-auto",
-  "spot-set-auto-range": "s-auto-r",
-  "spot-set-auto-page": "s-auto-p",
-  "spot-set-auto-cancel": "s-auto-c",
-  "spot-set-auto-sub": "s-asub",
-  "spot-rem-range": "s-rem-r",
-  "spotlight-remove-page": "s-rem-p",
-  "spotlight-remove-submit": "s-rem-sub",
+// const WIRE_ACTION_TOKENS was folded into PERSONAL_CONFIG_ROUTE_CODECS; wire tokens are defined per codec.
+
+export type PersonalConfigAction = PersonalConfigPanelRoute["action"];
+
+export type PersonalConfigRouteForAction<A extends PersonalConfigAction> = PersonalConfigPanelRoute extends infer R
+  ? R extends { action: string }
+    ? A extends R["action"]
+      ? R & { action: A }
+      : never
+    : never
+  : never;
+
+export interface RouteFieldCodec<TKey extends string = string, TValue = unknown> {
+  key: TKey;
+  optional?: boolean;
+  encode: (value: unknown) => string;
+  decode: (raw: string, routeSoFar: Readonly<Record<string, unknown>>) => TValue | null;
+}
+
+export interface RouteCodec<TRoute extends Record<string, unknown> = Record<string, unknown>> {
+  wireToken: string;
+  fields: readonly RouteFieldCodec<keyof TRoute & string, unknown>[];
+}
+
+export type PersonalConfigRouteCodecs = {
+  [A in PersonalConfigAction]: RouteCodec<PersonalConfigRouteForAction<A>>;
 };
-
-export function buildPersonalConfigSegments(
-  action: string,
-  locale: string,
-  ...segments: Array<string | number>
-): string[] {
-  const wireAction = WIRE_ACTION_TOKENS[action] ?? action;
-  return [wireAction, locale, ...segments.map(String)];
-}
-
-export function buildPersonalConfigCustomId(
-  action: string,
-  locale: string,
-  ...segments: Array<string | number>
-): string {
-  return buildInteractionRouteId(
-    PERSONAL_CONFIG_ROUTE_NAMESPACE,
-    PERSONAL_CONFIG_ROUTE_VERSION,
-    ...buildPersonalConfigSegments(action, locale, ...segments),
-  );
-}
 
 function parseLocale(value: string | undefined): string | null {
   return value && getSupportedLocales().includes(value) ? value : null;
@@ -417,272 +406,452 @@ function parseFingerprint(value: string | undefined): string | null {
   return value;
 }
 
+const categoryField: RouteFieldCodec<"category", PersonalConfigCategory> = {
+  key: "category",
+  encode: (v) => String(v),
+  decode: (v) => parseCategory(v),
+};
+
+const pageField: RouteFieldCodec<"page", PersonalConfigPage> = {
+  key: "page",
+  encode: (v) => String(v),
+  decode: (v, r) => (r.category ? parsePage(r.category as PersonalConfigCategory, v) : null),
+};
+
+const lineageIdField: RouteFieldCodec<"lineageId", number> = {
+  key: "lineageId",
+  encode: (v) => String(v),
+  decode: (v) => parsePositiveId(v),
+};
+
+const optionalLineageIdField: RouteFieldCodec<"lineageId", number> = {
+  key: "lineageId",
+  optional: true,
+  encode: (v) => String(v),
+  decode: (v) => parsePositiveId(v),
+};
+
+const nonceField: RouteFieldCodec<"nonce", string> = {
+  key: "nonce",
+  encode: (v) => String(v),
+  decode: (v) => parseNonce(v),
+};
+
+const capabilityField: RouteFieldCodec<"capability", PersonalConfigManagedCapability> = {
+  key: "capability",
+  encode: (v) => String(v),
+  decode: (v) => parseManagedCapability(v),
+};
+
+const providerField: RouteFieldCodec<"provider", string> = {
+  key: "provider",
+  encode: (v) => encodeProviderParam(String(v)),
+  decode: (v) => parseProvider(v),
+};
+
+const modeField: RouteFieldCodec<"mode", "off" | "follow" | "on"> = {
+  key: "mode",
+  encode: (v) => String(v),
+  decode: (v) => parseDtmMode(v),
+};
+
+const channelIdField: RouteFieldCodec<"channelId", string> = {
+  key: "channelId",
+  encode: (v) => String(v),
+  decode: (v) => parseSnowflake(v),
+};
+
+const hoursField: RouteFieldCodec<"hours", number> = {
+  key: "hours",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const blockIdxField: RouteFieldCodec<"blockIdx", number> = {
+  key: "blockIdx",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const chooserPageField: RouteFieldCodec<"chooserPage", number> = {
+  key: "chooserPage",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const startField: RouteFieldCodec<"start", number> = {
+  key: "start",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const autoIdxField: RouteFieldCodec<"autoIdx", number> = {
+  key: "autoIdx",
+  encode: (v) => String(v),
+  decode: (v) => {
+    const parsed = parseNonNegativeInt(v);
+    return parsed !== null && parsed <= SPOTLIGHT_PERSONA_PAGE_SIZE ? parsed : null;
+  },
+};
+
+const maskField: RouteFieldCodec<"mask", string> = {
+  key: "mask",
+  encode: (v) => String(v),
+  decode: (v) => parseSpotlightMask(v),
+};
+
+const fpField: RouteFieldCodec<"fp", string> = {
+  key: "fp",
+  encode: (v) => String(v),
+  decode: (v) => parseFingerprint(v),
+};
+
+/**
+ * Authoritative codec table for all personal-config routes.
+ * Keyed by semantic action to guarantee compile-time exhaustiveness.
+ * Preserves the exact v2 wire format: wire token, locale, and ordered field serialization.
+ */
+export const PERSONAL_CONFIG_ROUTE_CODECS: PersonalConfigRouteCodecs = {
+  category: {
+    wireToken: "category",
+    fields: [categoryField, pageField],
+  },
+  page: {
+    wireToken: "page",
+    fields: [categoryField, pageField],
+  },
+  "persona-select": {
+    wireToken: "persona-select",
+    fields: [lineageIdField],
+  },
+  "language-open": {
+    wireToken: "language-open",
+    fields: [],
+  },
+  "language-submit": {
+    wireToken: "language-submit",
+    fields: [nonceField],
+  },
+  "timezone-open": {
+    wireToken: "timezone-open",
+    fields: [],
+  },
+  "timezone-submit": {
+    wireToken: "timezone-submit",
+    fields: [nonceField],
+  },
+  "timezone-server": {
+    wireToken: "timezone-server",
+    fields: [],
+  },
+  "naming-open": {
+    wireToken: "naming-open",
+    fields: [],
+  },
+  "naming-submit": {
+    wireToken: "naming-submit",
+    fields: [nonceField],
+  },
+  "about-open": {
+    wireToken: "about-open",
+    fields: [],
+  },
+  "about-submit": {
+    wireToken: "about-submit",
+    fields: [nonceField],
+  },
+  "persona-naming-open": {
+    wireToken: "persona-naming-open",
+    fields: [lineageIdField],
+  },
+  "persona-naming-submit": {
+    wireToken: "persona-naming-submit",
+    fields: [lineageIdField, nonceField],
+  },
+  "appearance-open": {
+    wireToken: "appearance-open",
+    fields: [],
+  },
+  "appearance-submit": {
+    wireToken: "appearance-submit",
+    fields: [nonceField],
+  },
+  "privacy-level-open": {
+    wireToken: "privacy-level-open",
+    fields: [],
+  },
+  "privacy-level-submit": {
+    wireToken: "privacy-level-submit",
+    fields: [nonceField],
+  },
+  "crossserver-toggle": {
+    wireToken: "crossserver-toggle",
+    fields: [],
+  },
+  "quick-toggle-open": {
+    wireToken: "quick-toggle-open",
+    fields: [],
+  },
+  "quick-toggle-submit": {
+    wireToken: "quick-toggle-submit",
+    fields: [nonceField],
+  },
+  "model-provider-select": {
+    wireToken: "model-provider-select",
+    fields: [capabilityField],
+  },
+  "model-provider-range-open": {
+    wireToken: "model-provider-range-open",
+    fields: [capabilityField, startField],
+  },
+  "model-provider-range-page": {
+    wireToken: "model-provider-range-page",
+    fields: [capabilityField, chooserPageField],
+  },
+  "model-range-open": {
+    wireToken: "model-range-open",
+    fields: [capabilityField, providerField, startField],
+  },
+  "model-range-page": {
+    wireToken: "model-range-page",
+    fields: [capabilityField, providerField, chooserPageField],
+  },
+  "model-modal-submit": {
+    wireToken: "model-modal-submit",
+    fields: [capabilityField, providerField, nonceField],
+  },
+  "model-act-cancel": {
+    wireToken: "model-act-cancel",
+    fields: [],
+  },
+  "parameters-provider-select": {
+    wireToken: "parameters-provider-select",
+    fields: [],
+  },
+  "parameters-1-open": {
+    wireToken: "parameters-1-open",
+    fields: [providerField],
+  },
+  "parameters-1-submit": {
+    wireToken: "parameters-1-submit",
+    fields: [providerField, nonceField],
+  },
+  "parameters-2-open": {
+    wireToken: "parameters-2-open",
+    fields: [providerField],
+  },
+  "parameters-2-submit": {
+    wireToken: "parameters-2-submit",
+    fields: [providerField, nonceField],
+  },
+  "fallbacks-provider-select": {
+    wireToken: "fallbacks-provider-select",
+    fields: [],
+  },
+  "fallbacks-open": {
+    wireToken: "fallbacks-open",
+    fields: [providerField],
+  },
+  "fallbacks-range-open": {
+    wireToken: "fallbacks-range-open",
+    fields: [providerField, startField],
+  },
+  "fallbacks-range-page": {
+    wireToken: "fallbacks-range-page",
+    fields: [providerField, chooserPageField],
+  },
+  "fallbacks-submit": {
+    wireToken: "fallbacks-submit",
+    fields: [providerField, nonceField],
+  },
+  "randomizer-toggle": {
+    wireToken: "randomizer-toggle",
+    fields: [providerField],
+  },
+  "trigger-mode-set": {
+    wireToken: "trigger-mode-set",
+    fields: [modeField],
+  },
+  "tool-mode-set": {
+    wireToken: "tool-mode-set",
+    fields: [modeField],
+  },
+  "impersonation-open": {
+    wireToken: "impersonation-open",
+    fields: [],
+  },
+  "impersonation-submit": {
+    wireToken: "impersonation-submit",
+    fields: [nonceField],
+  },
+  "impersonation-clear-view": {
+    wireToken: "impersonation-clear-view",
+    fields: [],
+  },
+  "impersonation-clear-confirm": {
+    wireToken: "impersonation-clear-confirm",
+    fields: [nonceField],
+  },
+  "impersonation-clear-cancel": {
+    wireToken: "impersonation-clear-cancel",
+    fields: [],
+  },
+  "spotlight-set-open": {
+    wireToken: "spotlight-set-open",
+    fields: [],
+  },
+  "spotlight-set-step1": {
+    wireToken: "s-step1",
+    fields: [nonceField],
+  },
+  "spotlight-set-block": {
+    wireToken: "s-blk",
+    fields: [channelIdField, hoursField, fpField, blockIdxField],
+  },
+  "spotlight-set-block-page": {
+    wireToken: "s-blk-p",
+    fields: [channelIdField, hoursField, fpField, chooserPageField],
+  },
+  "spotlight-set-submit": {
+    wireToken: "s-set-sub",
+    fields: [channelIdField, hoursField, blockIdxField, fpField, nonceField],
+  },
+  "spot-set-cf": {
+    wireToken: "s-cf",
+    fields: [channelIdField, hoursField, autoIdxField, blockIdxField, maskField, fpField, nonceField],
+  },
+  "spot-set-auto": {
+    wireToken: "s-auto",
+    fields: [channelIdField, hoursField, blockIdxField, maskField, fpField, nonceField],
+  },
+  "spot-set-auto-range": {
+    wireToken: "s-auto-r",
+    fields: [channelIdField, hoursField, blockIdxField, maskField, fpField, startField],
+  },
+  "spot-set-auto-page": {
+    wireToken: "s-auto-p",
+    fields: [channelIdField, hoursField, blockIdxField, maskField, fpField, chooserPageField],
+  },
+  "spot-set-auto-cancel": {
+    wireToken: "s-auto-c",
+    fields: [channelIdField, hoursField, blockIdxField, maskField, fpField],
+  },
+  "spot-set-auto-sub": {
+    wireToken: "s-asub",
+    fields: [channelIdField, hoursField, blockIdxField, maskField, fpField, nonceField],
+  },
+  "spotlight-set-cancel": {
+    wireToken: "spotlight-set-cancel",
+    fields: [],
+  },
+  "spotlight-remove-open": {
+    wireToken: "spotlight-remove-open",
+    fields: [],
+  },
+  "spot-rem-range": {
+    wireToken: "s-rem-r",
+    fields: [startField, fpField],
+  },
+  "spotlight-remove-page": {
+    wireToken: "s-rem-p",
+    fields: [chooserPageField, fpField],
+  },
+  "spotlight-remove-submit": {
+    wireToken: "s-rem-sub",
+    fields: [startField, fpField, nonceField],
+  },
+  "spotlight-remove-cancel": {
+    wireToken: "spotlight-remove-cancel",
+    fields: [],
+  },
+  retry: {
+    wireToken: "retry",
+    fields: [categoryField, pageField, optionalLineageIdField],
+  },
+  refresh: {
+    wireToken: "refresh",
+    fields: [categoryField, pageField, optionalLineageIdField],
+  },
+};
+
+const CODECS_BY_WIRE_TOKEN = new Map<
+  string,
+  {
+    action: PersonalConfigAction;
+    codec: RouteCodec<PersonalConfigPanelRoute>;
+  }
+>();
+
+for (const [action, codec] of Object.entries(PERSONAL_CONFIG_ROUTE_CODECS) as [
+  PersonalConfigAction,
+  RouteCodec<PersonalConfigPanelRoute>,
+][]) {
+  CODECS_BY_WIRE_TOKEN.set(codec.wireToken, { action, codec });
+}
+
+/**
+ * Encodes a typed route object through the authoritative codec table into route segments.
+ */
+export function buildPersonalConfigRouteSegments(route: PersonalConfigPanelRoute): string[] {
+  const codec = PERSONAL_CONFIG_ROUTE_CODECS[route.action];
+  const segments: string[] = [codec.wireToken, route.locale];
+  const record = route as unknown as Record<string, unknown>;
+
+  for (const field of codec.fields) {
+    const value = record[field.key as string];
+    if (value === undefined) {
+      if (field.optional) continue;
+      throw new Error(`Missing required field '${String(field.key)}' for action '${route.action}'`);
+    }
+    segments.push(field.encode(value));
+  }
+
+  return segments;
+}
+
+/**
+ * Builds a custom ID from a typed route object using the authoritative codec table.
+ */
+export function buildPersonalConfigRouteId(route: PersonalConfigPanelRoute): string {
+  return buildInteractionRouteId(
+    PERSONAL_CONFIG_ROUTE_NAMESPACE,
+    PERSONAL_CONFIG_ROUTE_VERSION,
+    ...buildPersonalConfigRouteSegments(route),
+  );
+}
+
 export function parsePersonalConfigPanelRoute(route: ParsedInteractionRoute): PersonalConfigPanelRoute | null {
   if (route.namespace !== PERSONAL_CONFIG_ROUTE_NAMESPACE || route.version !== PERSONAL_CONFIG_ROUTE_VERSION) {
     return null;
   }
 
-  const [action, rawLocale, first, second, third, fourth, fifth, sixth, seventh] = route.segments;
+  const [rawWireToken, rawLocale, ...tail] = route.segments;
+  if (!rawWireToken || !rawLocale) return null;
+
   const locale = parseLocale(rawLocale);
-  if (!locale || !action) return null;
+  if (!locale) return null;
 
-  if (action === "category" || action === "page") {
-    if (route.segments.length !== 4) return null;
-    const category = parseCategory(first);
-    if (!category) return null;
-    const page = parsePage(category, second);
-    if (!page) return null;
-    return { action, locale, category, page };
+  const entry = CODECS_BY_WIRE_TOKEN.get(rawWireToken);
+  if (!entry) return null;
+
+  const { action, codec } = entry;
+  const requiredCount = codec.fields.filter((f) => !f.optional).length;
+  const maxCount = codec.fields.length;
+
+  if (tail.length < requiredCount || tail.length > maxCount) {
+    return null;
   }
 
-  if (action === "persona-select" && route.segments.length === 3) {
-    const lineageId = parsePositiveId(first);
-    return lineageId === null ? null : { action, locale, lineageId };
+  const parsedRoute: Record<string, unknown> = { action, locale };
+
+  for (let i = 0; i < tail.length; i++) {
+    const field = codec.fields[i];
+    const decoded = field.decode(tail[i], parsedRoute);
+    if (decoded === null || decoded === undefined) {
+      return null;
+    }
+    parsedRoute[field.key] = decoded;
   }
 
-  if ((action === "trigger-mode-set" || action === "tool-mode-set") && route.segments.length === 3) {
-    const mode = parseDtmMode(first);
-    return mode === null ? null : { action, locale, mode };
-  }
-
-  if (
-    action === "language-open" ||
-    action === "timezone-open" ||
-    action === "timezone-server" ||
-    action === "naming-open" ||
-    action === "about-open" ||
-    action === "appearance-open" ||
-    action === "privacy-level-open" ||
-    action === "crossserver-toggle" ||
-    action === "quick-toggle-open" ||
-    action === "model-act-cancel" ||
-    action === "parameters-provider-select" ||
-    action === "fallbacks-provider-select" ||
-    action === "impersonation-open" ||
-    action === "impersonation-clear-view" ||
-    action === "impersonation-clear-cancel" ||
-    action === "spotlight-set-open" ||
-    action === "spotlight-set-cancel" ||
-    action === "spotlight-remove-open" ||
-    action === "spotlight-remove-cancel"
-  ) {
-    if (route.segments.length !== 2) return null;
-    return { action, locale };
-  }
-
-  if (
-    action === "language-submit" ||
-    action === "timezone-submit" ||
-    action === "naming-submit" ||
-    action === "about-submit" ||
-    action === "appearance-submit" ||
-    action === "privacy-level-submit" ||
-    action === "quick-toggle-submit" ||
-    action === "impersonation-submit" ||
-    action === "impersonation-clear-confirm"
-  ) {
-    if (route.segments.length !== 3) return null;
-    const nonce = parseNonce(first);
-    return nonce === null ? null : { action, locale, nonce };
-  }
-
-  if (action === "s-step1" && route.segments.length === 3) {
-    const nonce = parseNonce(first);
-    return nonce === null ? null : { action: "spotlight-set-step1", locale, nonce };
-  }
-
-  if ((action === "s-blk" || action === "s-blk-p") && route.segments.length === 6) {
-    const channelId = parseSnowflake(first);
-    const hours = parseNonNegativeInt(second);
-    const fp = parseFingerprint(third);
-    const index = parseNonNegativeInt(fourth);
-    if (!channelId || hours === null || !fp || index === null) return null;
-    return action === "s-blk"
-      ? { action: "spotlight-set-block", locale, channelId, hours, fp, blockIdx: index }
-      : { action: "spotlight-set-block-page", locale, channelId, hours, fp, chooserPage: index };
-  }
-
-  if (action === "s-set-sub" && route.segments.length === 7) {
-    const channelId = parseSnowflake(first);
-    const hours = parseNonNegativeInt(second);
-    const blockIdx = parseNonNegativeInt(third);
-    const fp = parseFingerprint(fourth);
-    const nonce = parseNonce(fifth);
-    if (!channelId || hours === null || blockIdx === null || !fp || !nonce) return null;
-    return { action: "spotlight-set-submit", locale, channelId, hours, blockIdx, fp, nonce };
-  }
-
-  if (action === "s-cf" && route.segments.length === 9) {
-    const channelId = parseSnowflake(first);
-    const hours = parseNonNegativeInt(second);
-    const autoIdx = parseNonNegativeInt(third);
-    const blockIdx = parseNonNegativeInt(fourth);
-    const mask = parseSpotlightMask(fifth);
-    const fp = parseFingerprint(sixth);
-    const nonce = parseNonce(seventh);
-    if (!channelId || hours === null || autoIdx === null || blockIdx === null || !mask || !fp || !nonce) return null;
-    if (autoIdx > SPOTLIGHT_PERSONA_PAGE_SIZE) return null;
-    return { action: "spot-set-cf", locale, channelId, hours, autoIdx, blockIdx, mask, fp, nonce };
-  }
-
-  if ((action === "s-auto" || action === "s-asub") && route.segments.length === 8) {
-    const channelId = parseSnowflake(first);
-    const hours = parseNonNegativeInt(second);
-    const blockIdx = parseNonNegativeInt(third);
-    const mask = parseSpotlightMask(fourth);
-    const fp = parseFingerprint(fifth);
-    const nonce = parseNonce(sixth);
-    if (!channelId || hours === null || blockIdx === null || !mask || !fp || !nonce) return null;
-    return action === "s-auto"
-      ? { action: "spot-set-auto", locale, channelId, hours, blockIdx, mask, fp, nonce }
-      : { action: "spot-set-auto-sub", locale, channelId, hours, blockIdx, mask, fp, nonce };
-  }
-
-  if ((action === "s-auto-r" || action === "s-auto-p") && route.segments.length === 8) {
-    const channelId = parseSnowflake(first);
-    const hours = parseNonNegativeInt(second);
-    const blockIdx = parseNonNegativeInt(third);
-    const mask = parseSpotlightMask(fourth);
-    const fp = parseFingerprint(fifth);
-    const index = parseNonNegativeInt(sixth);
-    if (!channelId || hours === null || blockIdx === null || !mask || !fp || index === null) return null;
-    return action === "s-auto-r"
-      ? { action: "spot-set-auto-range", locale, channelId, hours, blockIdx, mask, fp, start: index }
-      : { action: "spot-set-auto-page", locale, channelId, hours, blockIdx, mask, fp, chooserPage: index };
-  }
-
-  if (action === "s-auto-c" && route.segments.length === 7) {
-    const channelId = parseSnowflake(first);
-    const hours = parseNonNegativeInt(second);
-    const blockIdx = parseNonNegativeInt(third);
-    const mask = parseSpotlightMask(fourth);
-    const fp = parseFingerprint(fifth);
-    if (!channelId || hours === null || blockIdx === null || !mask || !fp) return null;
-    return { action: "spot-set-auto-cancel", locale, channelId, hours, blockIdx, mask, fp };
-  }
-
-  if (action === "s-rem-r" && route.segments.length === 4) {
-    const start = parseNonNegativeInt(first);
-    const fp = parseFingerprint(second);
-    return start === null || fp === null ? null : { action: "spot-rem-range", locale, start, fp };
-  }
-
-  if (action === "s-rem-p" && route.segments.length === 4) {
-    const chooserPage = parseNonNegativeInt(first);
-    const fp = parseFingerprint(second);
-    return chooserPage === null || fp === null ? null : { action: "spotlight-remove-page", locale, chooserPage, fp };
-  }
-
-  // The removal modal presents one 50-row slice, and unchecked-means-remove derives the removal set
-  // from the rows that were presented. Without the offset the submit handler recomputes that set from
-  // the first slice and deletes rows the user never saw.
-  if (action === "s-rem-sub" && route.segments.length === 5) {
-    const start = parseNonNegativeInt(first);
-    const fp = parseFingerprint(second);
-    const nonce = parseNonce(third);
-    return start === null || fp === null || nonce === null
-      ? null
-      : { action: "spotlight-remove-submit", locale, start, fp, nonce };
-  }
-
-  if (action === "persona-naming-open" && route.segments.length === 3) {
-    const lineageId = parsePositiveId(first);
-    return lineageId === null ? null : { action, locale, lineageId };
-  }
-
-  if (action === "persona-naming-submit" && route.segments.length === 4) {
-    const lineageId = parsePositiveId(first);
-    const nonce = parseNonce(second);
-    return lineageId === null || nonce === null ? null : { action, locale, lineageId, nonce };
-  }
-
-  if (action === "model-provider-select" && route.segments.length === 3) {
-    const capability = parseManagedCapability(first);
-    return capability === null ? null : { action, locale, capability };
-  }
-
-  if (action === "model-range-open" && route.segments.length === 5) {
-    const capability = parseManagedCapability(first);
-    const provider = parseProvider(second);
-    const start = parseNonNegativeInt(third);
-    return capability === null || provider === null || start === null
-      ? null
-      : { action, locale, capability, provider, start };
-  }
-
-  if (action === "model-provider-range-open" && route.segments.length === 4) {
-    const capability = parseManagedCapability(first);
-    const start = parseNonNegativeInt(second);
-    return capability === null || start === null ? null : { action, locale, capability, start };
-  }
-
-  if (action === "model-provider-range-page" && route.segments.length === 4) {
-    const capability = parseManagedCapability(first);
-    const chooserPage = parseNonNegativeInt(second);
-    return capability === null || chooserPage === null ? null : { action, locale, capability, chooserPage };
-  }
-
-  if (action === "model-range-page" && route.segments.length === 5) {
-    const capability = parseManagedCapability(first);
-    const provider = parseProvider(second);
-    const chooserPage = parseNonNegativeInt(third);
-    return capability === null || provider === null || chooserPage === null
-      ? null
-      : { action, locale, capability, provider, chooserPage };
-  }
-
-  if (action === "model-modal-submit" && route.segments.length === 5) {
-    const capability = parseManagedCapability(first);
-    const provider = parseProvider(second);
-    const nonce = parseNonce(third);
-    return capability === null || provider === null || nonce === null
-      ? null
-      : { action, locale, capability, provider, nonce };
-  }
-
-  if (
-    (action === "parameters-1-open" ||
-      action === "parameters-2-open" ||
-      action === "fallbacks-open" ||
-      action === "randomizer-toggle") &&
-    route.segments.length === 3
-  ) {
-    const provider = parseProvider(first);
-    return provider === null ? null : { action, locale, provider };
-  }
-
-  if (action === "fallbacks-range-open" && route.segments.length === 4) {
-    const provider = parseProvider(first);
-    const start = parseNonNegativeInt(second);
-    return provider === null || start === null ? null : { action, locale, provider, start };
-  }
-
-  if (action === "fallbacks-range-page" && route.segments.length === 4) {
-    const provider = parseProvider(first);
-    const chooserPage = parseNonNegativeInt(second);
-    return provider === null || chooserPage === null ? null : { action, locale, provider, chooserPage };
-  }
-
-  if (
-    (action === "parameters-1-submit" || action === "parameters-2-submit" || action === "fallbacks-submit") &&
-    route.segments.length === 4
-  ) {
-    const provider = parseProvider(first);
-    const nonce = parseNonce(second);
-    return provider === null || nonce === null ? null : { action, locale, provider, nonce };
-  }
-
-  if (action === "retry" || action === "refresh") {
-    if (route.segments.length < 4 || route.segments.length > 6) return null;
-    const category = parseCategory(first);
-    if (!category) return null;
-    const page = parsePage(category, second);
-    if (!page) return null;
-    const lineageId = route.segments.length >= 5 ? (parsePositiveId(third) ?? undefined) : undefined;
-    const capability = route.segments.length >= 5 ? (parseManagedCapability(third) ?? undefined) : undefined;
-    const provider = route.segments.length >= 5 ? (parseProvider(third) ?? undefined) : undefined;
-    return { action, locale, category, page, lineageId, capability, provider };
-  }
-
-  return null;
+  return parsedRoute as PersonalConfigPanelRoute;
 }

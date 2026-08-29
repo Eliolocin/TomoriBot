@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it, spyOn } from "bun:test";
+import { readFileSync } from "node:fs";
 import type { ButtonInteraction, Client, InteractionReplyOptions, ModalSubmitInteraction } from "discord.js";
 import { PrivacyLevel, type UserRow, type TomoriState } from "@/types/db/schema";
 import {
@@ -9,7 +10,7 @@ import {
 } from "@/utils/discord/interactions/personalConfigRoutes";
 import { llmModelRepo, llmProviderRepo, userNamingRepository, userRepository } from "@/utils/db/repositories";
 import {
-  buildPersonalConfigCustomId,
+  buildPersonalConfigRouteId,
   computeSpotlightRemoveFingerprint,
   computeSpotlightSetFingerprint,
   decodeSpotlightMask,
@@ -17,6 +18,9 @@ import {
   decodeProviderParam,
   encodeProviderParam,
   parsePersonalConfigPanelRoute,
+  PERSONAL_CONFIG_ROUTE_CODECS,
+  type PersonalConfigAction,
+  type PersonalConfigPanelRoute,
   PERSONAL_PROVIDER_RANGE_VALUE,
   SPOTLIGHT_PERSONA_PAGE_SIZE,
 } from "@/utils/discord/personalConfigPanelCatalog";
@@ -444,7 +448,12 @@ function makeDependencies(
 
 describe("personalConfigPanelCatalog", () => {
   it("builds and parses category and page routes", () => {
-    const categoryId = buildPersonalConfigCustomId("category", "en-US", "privacy", "controls");
+    const categoryId = buildPersonalConfigRouteId({
+      action: "category",
+      locale: "en-US",
+      category: "privacy",
+      page: "controls",
+    });
     const parsedCategory = parsePersonalConfigPanelRoute(requireRoute(categoryId));
     expect(parsedCategory).toEqual({
       action: "category",
@@ -453,7 +462,12 @@ describe("personalConfigPanelCatalog", () => {
       page: "controls",
     });
 
-    const pageId = buildPersonalConfigCustomId("page", "en-US", "profile", "appearance");
+    const pageId = buildPersonalConfigRouteId({
+      action: "page",
+      locale: "en-US",
+      category: "profile",
+      page: "appearance",
+    });
     const parsedPage = parsePersonalConfigPanelRoute(requireRoute(pageId));
     expect(parsedPage).toEqual({
       action: "page",
@@ -464,20 +478,25 @@ describe("personalConfigPanelCatalog", () => {
   });
 
   it("builds and parses modal open and submit routes", () => {
-    const langOpen = buildPersonalConfigCustomId("language-open", "en-US");
+    const langOpen = buildPersonalConfigRouteId({ action: "language-open", locale: "en-US" });
     expect(parsePersonalConfigPanelRoute(requireRoute(langOpen))).toEqual({
       action: "language-open",
       locale: "en-US",
     });
 
-    const langSubmit = buildPersonalConfigCustomId("language-submit", "en-US", "nonce123456");
+    const langSubmit = buildPersonalConfigRouteId({ action: "language-submit", locale: "en-US", nonce: "nonce123456" });
     expect(parsePersonalConfigPanelRoute(requireRoute(langSubmit))).toEqual({
       action: "language-submit",
       locale: "en-US",
       nonce: "nonce123456",
     });
 
-    const personaNamingSubmit = buildPersonalConfigCustomId("persona-naming-submit", "en-US", 10, "nonce123456");
+    const personaNamingSubmit = buildPersonalConfigRouteId({
+      action: "persona-naming-submit",
+      locale: "en-US",
+      lineageId: 10,
+      nonce: "nonce123456",
+    });
     expect(parsePersonalConfigPanelRoute(requireRoute(personaNamingSubmit))).toEqual({
       action: "persona-naming-submit",
       locale: "en-US",
@@ -485,67 +504,75 @@ describe("personalConfigPanelCatalog", () => {
       nonce: "nonce123456",
     });
 
-    const toggle = buildPersonalConfigCustomId("crossserver-toggle", "en-US");
+    const toggle = buildPersonalConfigRouteId({ action: "crossserver-toggle", locale: "en-US" });
     expect(parsePersonalConfigPanelRoute(requireRoute(toggle))).toEqual({
       action: "crossserver-toggle",
       locale: "en-US",
     });
 
-    const triggerMode = buildPersonalConfigCustomId("trigger-mode-set", "en-US", "on");
+    const triggerMode = buildPersonalConfigRouteId({ action: "trigger-mode-set", locale: "en-US", mode: "on" });
     expect(parsePersonalConfigPanelRoute(requireRoute(triggerMode))).toEqual({
       action: "trigger-mode-set",
       locale: "en-US",
       mode: "on",
     });
 
-    const toolMode = buildPersonalConfigCustomId("tool-mode-set", "en-US", "off");
+    const toolMode = buildPersonalConfigRouteId({ action: "tool-mode-set", locale: "en-US", mode: "off" });
     expect(parsePersonalConfigPanelRoute(requireRoute(toolMode))).toEqual({
       action: "tool-mode-set",
       locale: "en-US",
       mode: "off",
     });
 
-    const impOpen = buildPersonalConfigCustomId("impersonation-open", "en-US");
+    const impOpen = buildPersonalConfigRouteId({ action: "impersonation-open", locale: "en-US" });
     expect(parsePersonalConfigPanelRoute(requireRoute(impOpen))).toEqual({
       action: "impersonation-open",
       locale: "en-US",
     });
 
-    const impSubmit = buildPersonalConfigCustomId("impersonation-submit", "en-US", "nonce123456");
+    const impSubmit = buildPersonalConfigRouteId({
+      action: "impersonation-submit",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
     expect(parsePersonalConfigPanelRoute(requireRoute(impSubmit))).toEqual({
       action: "impersonation-submit",
       locale: "en-US",
       nonce: "nonce123456",
     });
 
-    const impClearView = buildPersonalConfigCustomId("impersonation-clear-view", "en-US");
+    const impClearView = buildPersonalConfigRouteId({ action: "impersonation-clear-view", locale: "en-US" });
     expect(parsePersonalConfigPanelRoute(requireRoute(impClearView))).toEqual({
       action: "impersonation-clear-view",
       locale: "en-US",
     });
 
-    const impClearConfirm = buildPersonalConfigCustomId("impersonation-clear-confirm", "en-US", "nonce123456");
+    const impClearConfirm = buildPersonalConfigRouteId({
+      action: "impersonation-clear-confirm",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
     expect(parsePersonalConfigPanelRoute(requireRoute(impClearConfirm))).toEqual({
       action: "impersonation-clear-confirm",
       locale: "en-US",
       nonce: "nonce123456",
     });
 
-    const spotSetOpen = buildPersonalConfigCustomId("spotlight-set-open", "en-US");
+    const spotSetOpen = buildPersonalConfigRouteId({ action: "spotlight-set-open", locale: "en-US" });
     expect(parsePersonalConfigPanelRoute(requireRoute(spotSetOpen))).toEqual({
       action: "spotlight-set-open",
       locale: "en-US",
     });
 
-    const spotSetSubmit = buildPersonalConfigCustomId(
-      "spotlight-set-submit",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
-      "a1b2c3d4",
-      "nonce123456",
-    );
+    const spotSetSubmit = buildPersonalConfigRouteId({
+      action: "spotlight-set-submit",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      blockIdx: 0,
+      fp: "a1b2c3d4",
+      nonce: "nonce123456",
+    });
     expect(parsePersonalConfigPanelRoute(requireRoute(spotSetSubmit))).toEqual({
       action: "spotlight-set-submit",
       locale: "en-US",
@@ -556,16 +583,16 @@ describe("personalConfigPanelCatalog", () => {
       nonce: "nonce123456",
     });
 
-    const spotSetAuto = buildPersonalConfigCustomId(
-      "spot-set-auto",
-      "en-US",
-      "123456789012345678",
-      24,
-      0,
-      "3",
-      "a1b2c3d4",
-      "nonce123456",
-    );
+    const spotSetAuto = buildPersonalConfigRouteId({
+      action: "spot-set-auto",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 24,
+      blockIdx: 0,
+      mask: "3",
+      fp: "a1b2c3d4",
+      nonce: "nonce123456",
+    });
     expect(parsePersonalConfigPanelRoute(requireRoute(spotSetAuto))).toEqual({
       action: "spot-set-auto",
       locale: "en-US",
@@ -577,16 +604,16 @@ describe("personalConfigPanelCatalog", () => {
       nonce: "nonce123456",
     });
 
-    const spotSetAutoSub = buildPersonalConfigCustomId(
-      "spot-set-auto-sub",
-      "en-US",
-      "123456789012345678",
-      24,
-      0,
-      "3",
-      "a1b2c3d4",
-      "nonce123456",
-    );
+    const spotSetAutoSub = buildPersonalConfigRouteId({
+      action: "spot-set-auto-sub",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 24,
+      blockIdx: 0,
+      mask: "3",
+      fp: "a1b2c3d4",
+      nonce: "nonce123456",
+    });
     expect(parsePersonalConfigPanelRoute(requireRoute(spotSetAutoSub))).toEqual({
       action: "spot-set-auto-sub",
       locale: "en-US",
@@ -598,17 +625,17 @@ describe("personalConfigPanelCatalog", () => {
       nonce: "nonce123456",
     });
 
-    const spotSetCf = buildPersonalConfigCustomId(
-      "spot-set-cf",
-      "en-US",
-      "123456789012345678",
-      24,
-      7,
-      0,
-      "3",
-      "a1b2c3d4",
-      "nonce123456",
-    );
+    const spotSetCf = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 24,
+      autoIdx: 7,
+      blockIdx: 0,
+      mask: "3",
+      fp: "a1b2c3d4",
+      nonce: "nonce123456",
+    });
     expect(parsePersonalConfigPanelRoute(requireRoute(spotSetCf))).toEqual({
       action: "spot-set-cf",
       locale: "en-US",
@@ -621,13 +648,18 @@ describe("personalConfigPanelCatalog", () => {
       nonce: "nonce123456",
     });
 
-    const spotRemOpen = buildPersonalConfigCustomId("spotlight-remove-open", "en-US");
+    const spotRemOpen = buildPersonalConfigRouteId({ action: "spotlight-remove-open", locale: "en-US" });
     expect(parsePersonalConfigPanelRoute(requireRoute(spotRemOpen))).toEqual({
       action: "spotlight-remove-open",
       locale: "en-US",
     });
 
-    const spotRemRange = buildPersonalConfigCustomId("spot-rem-range", "en-US", 50, "a1b2c3d4");
+    const spotRemRange = buildPersonalConfigRouteId({
+      action: "spot-rem-range",
+      locale: "en-US",
+      start: 50,
+      fp: "a1b2c3d4",
+    });
     expect(parsePersonalConfigPanelRoute(requireRoute(spotRemRange))).toEqual({
       action: "spot-rem-range",
       locale: "en-US",
@@ -635,13 +667,13 @@ describe("personalConfigPanelCatalog", () => {
       fp: "a1b2c3d4",
     });
 
-    const spotRemSubmit = buildPersonalConfigCustomId(
-      "spotlight-remove-submit",
-      "en-US",
-      50,
-      "a1b2c3d4",
-      "nonce123456",
-    );
+    const spotRemSubmit = buildPersonalConfigRouteId({
+      action: "spotlight-remove-submit",
+      locale: "en-US",
+      start: 50,
+      fp: "a1b2c3d4",
+      nonce: "nonce123456",
+    });
     expect(parsePersonalConfigPanelRoute(requireRoute(spotRemSubmit))).toEqual({
       action: "spotlight-remove-submit",
       locale: "en-US",
@@ -649,6 +681,637 @@ describe("personalConfigPanelCatalog", () => {
       fp: "a1b2c3d4",
       nonce: "nonce123456",
     });
+  });
+
+  // Pins the personal-config v2 wire contract: each literal custom ID and the exact route it must
+  // decode to. Encoding and decoding through one shared codec table cannot catch a field reordering,
+  // because both sides move together and a round-trip still succeeds; only literal bytes can. These
+  // strings were generated from the parser before the codec table existed, so they are the record of
+  // what already-open panels in a client will send. Regenerating them from the code under test would
+  // defeat the point.
+  const WIRE_CONTRACT_V2: ReadonlyArray<readonly [string, PersonalConfigPanelRoute]> = [
+    [
+      "personal-config:v2:category:en-US:profile:general",
+      { action: "category", locale: "en-US", category: "profile", page: "general" },
+    ],
+    [
+      "personal-config:v2:page:en-US:models:switch",
+      { action: "page", locale: "en-US", category: "models", page: "switch" },
+    ],
+    ["personal-config:v2:persona-select:en-US:7", { action: "persona-select", locale: "en-US", lineageId: 7 }],
+    ["personal-config:v2:trigger-mode-set:en-US:on", { action: "trigger-mode-set", locale: "en-US", mode: "on" }],
+    ["personal-config:v2:tool-mode-set:en-US:follow", { action: "tool-mode-set", locale: "en-US", mode: "follow" }],
+    ["personal-config:v2:language-open:en-US", { action: "language-open", locale: "en-US" }],
+    ["personal-config:v2:timezone-open:en-US", { action: "timezone-open", locale: "en-US" }],
+    ["personal-config:v2:timezone-server:en-US", { action: "timezone-server", locale: "en-US" }],
+    ["personal-config:v2:naming-open:en-US", { action: "naming-open", locale: "en-US" }],
+    ["personal-config:v2:about-open:en-US", { action: "about-open", locale: "en-US" }],
+    ["personal-config:v2:appearance-open:en-US", { action: "appearance-open", locale: "en-US" }],
+    ["personal-config:v2:privacy-level-open:en-US", { action: "privacy-level-open", locale: "en-US" }],
+    ["personal-config:v2:crossserver-toggle:en-US", { action: "crossserver-toggle", locale: "en-US" }],
+    ["personal-config:v2:quick-toggle-open:en-US", { action: "quick-toggle-open", locale: "en-US" }],
+    ["personal-config:v2:model-act-cancel:en-US", { action: "model-act-cancel", locale: "en-US" }],
+    ["personal-config:v2:parameters-provider-select:en-US", { action: "parameters-provider-select", locale: "en-US" }],
+    ["personal-config:v2:fallbacks-provider-select:en-US", { action: "fallbacks-provider-select", locale: "en-US" }],
+    ["personal-config:v2:impersonation-open:en-US", { action: "impersonation-open", locale: "en-US" }],
+    ["personal-config:v2:impersonation-clear-view:en-US", { action: "impersonation-clear-view", locale: "en-US" }],
+    ["personal-config:v2:impersonation-clear-cancel:en-US", { action: "impersonation-clear-cancel", locale: "en-US" }],
+    ["personal-config:v2:spotlight-set-open:en-US", { action: "spotlight-set-open", locale: "en-US" }],
+    ["personal-config:v2:spotlight-set-cancel:en-US", { action: "spotlight-set-cancel", locale: "en-US" }],
+    ["personal-config:v2:spotlight-remove-open:en-US", { action: "spotlight-remove-open", locale: "en-US" }],
+    ["personal-config:v2:spotlight-remove-cancel:en-US", { action: "spotlight-remove-cancel", locale: "en-US" }],
+    [
+      "personal-config:v2:language-submit:en-US:nonce1234567",
+      { action: "language-submit", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:timezone-submit:en-US:nonce1234567",
+      { action: "timezone-submit", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:naming-submit:en-US:nonce1234567",
+      { action: "naming-submit", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:about-submit:en-US:nonce1234567",
+      { action: "about-submit", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:appearance-submit:en-US:nonce1234567",
+      { action: "appearance-submit", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:privacy-level-submit:en-US:nonce1234567",
+      { action: "privacy-level-submit", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:quick-toggle-submit:en-US:nonce1234567",
+      { action: "quick-toggle-submit", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:impersonation-submit:en-US:nonce1234567",
+      { action: "impersonation-submit", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:impersonation-clear-confirm:en-US:nonce1234567",
+      { action: "impersonation-clear-confirm", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:s-step1:en-US:nonce1234567",
+      { action: "spotlight-set-step1", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:s-blk:en-US:123456789012345678:12:a1b2c3d4:1",
+      {
+        action: "spotlight-set-block",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        fp: "a1b2c3d4",
+        blockIdx: 1,
+      },
+    ],
+    [
+      "personal-config:v2:s-blk-p:en-US:123456789012345678:12:a1b2c3d4:1",
+      {
+        action: "spotlight-set-block-page",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        fp: "a1b2c3d4",
+        chooserPage: 1,
+      },
+    ],
+    [
+      "personal-config:v2:s-set-sub:en-US:123456789012345678:12:1:a1b2c3d4:nonce1234567",
+      {
+        action: "spotlight-set-submit",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        blockIdx: 1,
+        fp: "a1b2c3d4",
+        nonce: "nonce1234567",
+      },
+    ],
+    [
+      "personal-config:v2:s-cf:en-US:123456789012345678:12:3:1:b33j9ynrb3:a1b2c3d4:nonce1234567",
+      {
+        action: "spot-set-cf",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        autoIdx: 3,
+        blockIdx: 1,
+        mask: "b33j9ynrb3",
+        fp: "a1b2c3d4",
+        nonce: "nonce1234567",
+      },
+    ],
+    [
+      "personal-config:v2:s-auto:en-US:123456789012345678:12:1:b33j9ynrb3:a1b2c3d4:nonce1234567",
+      {
+        action: "spot-set-auto",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        blockIdx: 1,
+        mask: "b33j9ynrb3",
+        fp: "a1b2c3d4",
+        nonce: "nonce1234567",
+      },
+    ],
+    [
+      "personal-config:v2:s-asub:en-US:123456789012345678:12:1:b33j9ynrb3:a1b2c3d4:nonce1234567",
+      {
+        action: "spot-set-auto-sub",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        blockIdx: 1,
+        mask: "b33j9ynrb3",
+        fp: "a1b2c3d4",
+        nonce: "nonce1234567",
+      },
+    ],
+    [
+      "personal-config:v2:s-auto-r:en-US:123456789012345678:12:1:b33j9ynrb3:a1b2c3d4:25",
+      {
+        action: "spot-set-auto-range",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        blockIdx: 1,
+        mask: "b33j9ynrb3",
+        fp: "a1b2c3d4",
+        start: 25,
+      },
+    ],
+    [
+      "personal-config:v2:s-auto-p:en-US:123456789012345678:12:1:b33j9ynrb3:a1b2c3d4:2",
+      {
+        action: "spot-set-auto-page",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        blockIdx: 1,
+        mask: "b33j9ynrb3",
+        fp: "a1b2c3d4",
+        chooserPage: 2,
+      },
+    ],
+    [
+      "personal-config:v2:s-auto-c:en-US:123456789012345678:12:1:b33j9ynrb3:a1b2c3d4",
+      {
+        action: "spot-set-auto-cancel",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        blockIdx: 1,
+        mask: "b33j9ynrb3",
+        fp: "a1b2c3d4",
+      },
+    ],
+    [
+      "personal-config:v2:s-rem-r:en-US:50:a1b2c3d4",
+      { action: "spot-rem-range", locale: "en-US", start: 50, fp: "a1b2c3d4" },
+    ],
+    [
+      "personal-config:v2:s-rem-p:en-US:2:a1b2c3d4",
+      { action: "spotlight-remove-page", locale: "en-US", chooserPage: 2, fp: "a1b2c3d4" },
+    ],
+    [
+      "personal-config:v2:s-rem-sub:en-US:50:a1b2c3d4:nonce1234567",
+      { action: "spotlight-remove-submit", locale: "en-US", start: 50, fp: "a1b2c3d4", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:persona-naming-open:en-US:7",
+      { action: "persona-naming-open", locale: "en-US", lineageId: 7 },
+    ],
+    [
+      "personal-config:v2:persona-naming-submit:en-US:7:nonce1234567",
+      { action: "persona-naming-submit", locale: "en-US", lineageId: 7, nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:model-provider-select:en-US:text",
+      { action: "model-provider-select", locale: "en-US", capability: "text" },
+    ],
+    [
+      "personal-config:v2:model-provider-range-open:en-US:text:25",
+      { action: "model-provider-range-open", locale: "en-US", capability: "text", start: 25 },
+    ],
+    [
+      "personal-config:v2:model-provider-range-page:en-US:text:2",
+      { action: "model-provider-range-page", locale: "en-US", capability: "text", chooserPage: 2 },
+    ],
+    [
+      "personal-config:v2:model-range-open:en-US:text:openrouter:25",
+      { action: "model-range-open", locale: "en-US", capability: "text", provider: "openrouter", start: 25 },
+    ],
+    [
+      "personal-config:v2:model-range-page:en-US:text:openrouter:2",
+      { action: "model-range-page", locale: "en-US", capability: "text", provider: "openrouter", chooserPage: 2 },
+    ],
+    [
+      "personal-config:v2:model-modal-submit:en-US:text:openrouter:nonce1234567",
+      {
+        action: "model-modal-submit",
+        locale: "en-US",
+        capability: "text",
+        provider: "openrouter",
+        nonce: "nonce1234567",
+      },
+    ],
+    [
+      "personal-config:v2:parameters-1-open:en-US:openrouter",
+      { action: "parameters-1-open", locale: "en-US", provider: "openrouter" },
+    ],
+    [
+      "personal-config:v2:parameters-2-open:en-US:openrouter",
+      { action: "parameters-2-open", locale: "en-US", provider: "openrouter" },
+    ],
+    [
+      "personal-config:v2:fallbacks-open:en-US:openrouter",
+      { action: "fallbacks-open", locale: "en-US", provider: "openrouter" },
+    ],
+    [
+      "personal-config:v2:randomizer-toggle:en-US:openrouter",
+      { action: "randomizer-toggle", locale: "en-US", provider: "openrouter" },
+    ],
+    [
+      "personal-config:v2:fallbacks-range-open:en-US:openrouter:25",
+      { action: "fallbacks-range-open", locale: "en-US", provider: "openrouter", start: 25 },
+    ],
+    [
+      "personal-config:v2:fallbacks-range-page:en-US:openrouter:2",
+      { action: "fallbacks-range-page", locale: "en-US", provider: "openrouter", chooserPage: 2 },
+    ],
+    [
+      "personal-config:v2:parameters-1-submit:en-US:openrouter:nonce1234567",
+      { action: "parameters-1-submit", locale: "en-US", provider: "openrouter", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:parameters-2-submit:en-US:openrouter:nonce1234567",
+      { action: "parameters-2-submit", locale: "en-US", provider: "openrouter", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:fallbacks-submit:en-US:openrouter:nonce1234567",
+      { action: "fallbacks-submit", locale: "en-US", provider: "openrouter", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:retry:en-US:profile:general",
+      { action: "retry", locale: "en-US", category: "profile", page: "general" },
+    ],
+    [
+      "personal-config:v2:retry:en-US:profile:persona:7",
+      { action: "retry", locale: "en-US", category: "profile", page: "persona", lineageId: 7 },
+    ],
+    [
+      "personal-config:v2:refresh:en-US:models:switch",
+      { action: "refresh", locale: "en-US", category: "models", page: "switch" },
+    ],
+  ];
+
+  it("decodes every pinned personal-config v2 wire string to its exact route", () => {
+    for (const [customId, expected] of WIRE_CONTRACT_V2) {
+      expect(customId.length).toBeLessThanOrEqual(100);
+      expect(parsePersonalConfigPanelRoute(requireRoute(customId))).toEqual(expected);
+    }
+  });
+
+  it("covers every personal-config action in the pinned wire contract", () => {
+    const pinned = new Set(WIRE_CONTRACT_V2.map(([, route]) => route.action));
+    const source = readFileSync(
+      new URL("../../../src/utils/discord/personalConfigPanelCatalog.ts", import.meta.url),
+      "utf8",
+    );
+    const union = source.slice(
+      source.indexOf("export type PersonalConfigPanelRoute"),
+      source.indexOf("const WIRE_ACTION_TOKENS"),
+    );
+    const declared = new Set(
+      [...union.matchAll(/action: "([a-z0-9-]+)"(?:\s*\|\s*"([a-z0-9-]+)")?/g)].flatMap((m) =>
+        [m[1], m[2]].filter((v): v is string => Boolean(v)),
+      ),
+    );
+    expect(declared.size).toBeGreaterThan(0);
+    expect([...declared].filter((action) => !pinned.has(action))).toEqual([]);
+  });
+
+  it("round-trips retry and refresh routes and enforces exact arity", () => {
+    const retryFourSeg = buildPersonalConfigRouteId({
+      action: "retry",
+      locale: "en-US",
+      category: "profile",
+      page: "general",
+    });
+    const parsedRetryFour = parsePersonalConfigPanelRoute(requireRoute(retryFourSeg));
+    expect(parsedRetryFour).toEqual({
+      action: "retry",
+      locale: "en-US",
+      category: "profile",
+      page: "general",
+    });
+    expect("lineageId" in (parsedRetryFour ?? {})).toBe(false);
+    expect("capability" in (parsedRetryFour ?? {})).toBe(false);
+    expect("provider" in (parsedRetryFour ?? {})).toBe(false);
+
+    const retryFiveSeg = buildPersonalConfigRouteId({
+      action: "retry",
+      locale: "en-US",
+      category: "profile",
+      page: "persona",
+      lineageId: 10,
+    });
+    const parsedRetryFive = parsePersonalConfigPanelRoute(requireRoute(retryFiveSeg));
+    expect(parsedRetryFive).toEqual({
+      action: "retry",
+      locale: "en-US",
+      category: "profile",
+      page: "persona",
+      lineageId: 10,
+    });
+    expect("capability" in (parsedRetryFive ?? {})).toBe(false);
+    expect("provider" in (parsedRetryFive ?? {})).toBe(false);
+
+    const refreshFourSeg = buildPersonalConfigRouteId({
+      action: "refresh",
+      locale: "en-US",
+      category: "models",
+      page: "switch",
+    });
+    const parsedRefreshFour = parsePersonalConfigPanelRoute(requireRoute(refreshFourSeg));
+    expect(parsedRefreshFour).toEqual({
+      action: "refresh",
+      locale: "en-US",
+      category: "models",
+      page: "switch",
+    });
+    expect("lineageId" in (parsedRefreshFour ?? {})).toBe(false);
+    expect("capability" in (parsedRefreshFour ?? {})).toBe(false);
+    expect("provider" in (parsedRefreshFour ?? {})).toBe(false);
+
+    const refreshFiveSeg = buildPersonalConfigRouteId({
+      action: "refresh",
+      locale: "en-US",
+      category: "profile",
+      page: "persona",
+      lineageId: 42,
+    });
+    const parsedRefreshFive = parsePersonalConfigPanelRoute(requireRoute(refreshFiveSeg));
+    expect(parsedRefreshFive).toEqual({
+      action: "refresh",
+      locale: "en-US",
+      category: "profile",
+      page: "persona",
+      lineageId: 42,
+    });
+    expect("capability" in (parsedRefreshFive ?? {})).toBe(false);
+    expect("provider" in (parsedRefreshFive ?? {})).toBe(false);
+  });
+
+  function buildRoutesForAction(action: PersonalConfigAction, isWorstCase = false): PersonalConfigPanelRoute[] {
+    const locale = isWorstCase ? "zh-Hans" : "en-US";
+    const nonce = "nonce1234567";
+    const snowflake = isWorstCase ? "12345678901234567890" : "123456789012345678";
+    const hours = isWorstCase ? 999999 : 12;
+    const blockIdx = isWorstCase ? 999 : 1;
+    const chooserPage = isWorstCase ? 999 : 2;
+    const start = isWorstCase ? 99999 : 25;
+    const autoIdx = isWorstCase ? 50 : 3;
+    const mask = "b33j9ynrb3";
+    const fp = "a1b2c3d4";
+    const lineageId = isWorstCase ? 9999999 : 7;
+    const provider = isWorstCase ? "custom~endpoint~provider" : "openrouter";
+    const capability: PersonalConfigManagedCapability = isWorstCase ? "embedding" : "text";
+    const category: PersonalConfigCategory = isWorstCase ? "advanced" : "profile";
+    const page: PersonalConfigPage = isWorstCase ? "response-modes" : "general";
+    const mode = isWorstCase ? "follow" : "on";
+
+    switch (action) {
+      case "category":
+        return [{ action, locale, category, page }];
+      case "page":
+        return [{ action, locale, category, page }];
+      case "persona-select":
+        return [{ action, locale, lineageId }];
+      case "language-open":
+      case "timezone-open":
+      case "timezone-server":
+      case "naming-open":
+      case "about-open":
+      case "appearance-open":
+      case "privacy-level-open":
+      case "crossserver-toggle":
+      case "quick-toggle-open":
+      case "model-act-cancel":
+      case "parameters-provider-select":
+      case "fallbacks-provider-select":
+      case "impersonation-open":
+      case "impersonation-clear-view":
+      case "impersonation-clear-cancel":
+      case "spotlight-set-open":
+      case "spotlight-set-cancel":
+      case "spotlight-remove-open":
+      case "spotlight-remove-cancel":
+        return [{ action, locale }];
+      case "language-submit":
+      case "timezone-submit":
+      case "naming-submit":
+      case "about-submit":
+      case "appearance-submit":
+      case "privacy-level-submit":
+      case "quick-toggle-submit":
+      case "impersonation-submit":
+      case "impersonation-clear-confirm":
+      case "spotlight-set-step1":
+        return [{ action, locale, nonce }];
+      case "persona-naming-open":
+        return [{ action, locale, lineageId }];
+      case "persona-naming-submit":
+        return [{ action, locale, lineageId, nonce }];
+      case "model-provider-select":
+        return [{ action, locale, capability }];
+      case "model-provider-range-open":
+        return [{ action, locale, capability, start }];
+      case "model-provider-range-page":
+        return [{ action, locale, capability, chooserPage }];
+      case "model-range-open":
+        return [{ action, locale, capability, provider, start }];
+      case "model-range-page":
+        return [{ action, locale, capability, provider, chooserPage }];
+      case "model-modal-submit":
+        return [{ action, locale, capability, provider, nonce }];
+      case "parameters-1-open":
+      case "parameters-2-open":
+      case "fallbacks-open":
+      case "randomizer-toggle":
+        return [{ action, locale, provider }];
+      case "parameters-1-submit":
+      case "parameters-2-submit":
+      case "fallbacks-submit":
+        return [{ action, locale, provider, nonce }];
+      case "fallbacks-range-open":
+        return [{ action, locale, provider, start }];
+      case "fallbacks-range-page":
+        return [{ action, locale, provider, chooserPage }];
+      case "trigger-mode-set":
+      case "tool-mode-set":
+        return [{ action, locale, mode }];
+      case "spotlight-set-block":
+        return [{ action, locale, channelId: snowflake, hours, fp, blockIdx }];
+      case "spotlight-set-block-page":
+        return [{ action, locale, channelId: snowflake, hours, fp, chooserPage }];
+      case "spotlight-set-submit":
+        return [{ action, locale, channelId: snowflake, hours, blockIdx, fp, nonce }];
+      case "spot-set-cf":
+        return [{ action, locale, channelId: snowflake, hours, autoIdx, blockIdx, mask, fp, nonce }];
+      case "spot-set-auto":
+        return [{ action, locale, channelId: snowflake, hours, blockIdx, mask, fp, nonce }];
+      case "spot-set-auto-range":
+        return [{ action, locale, channelId: snowflake, hours, blockIdx, mask, fp, start }];
+      case "spot-set-auto-page":
+        return [{ action, locale, channelId: snowflake, hours, blockIdx, mask, fp, chooserPage }];
+      case "spot-set-auto-cancel":
+        return [{ action, locale, channelId: snowflake, hours, blockIdx, mask, fp }];
+      case "spot-set-auto-sub":
+        return [{ action, locale, channelId: snowflake, hours, blockIdx, mask, fp, nonce }];
+      case "spot-rem-range":
+        return [{ action, locale, start, fp }];
+      case "spotlight-remove-page":
+        return [{ action, locale, chooserPage, fp }];
+      case "spotlight-remove-submit":
+        return [{ action, locale, start, fp, nonce }];
+      case "retry":
+      case "refresh":
+        return isWorstCase
+          ? [{ action, locale, category, page, lineageId }]
+          : [
+              { action, locale, category: "profile", page: "general" },
+              { action, locale, category: "profile", page: "persona", lineageId },
+            ];
+    }
+  }
+
+  it("round-trips every action in the codec table", () => {
+    const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
+    expect(actions.length).toBe(65);
+
+    for (const action of actions) {
+      const routes = buildRoutesForAction(action, false);
+      for (const route of routes) {
+        const customId = buildPersonalConfigRouteId(route);
+        const parsed = parsePersonalConfigPanelRoute(requireRoute(customId));
+        expect(parsed).toEqual(route);
+        if (route.action === "retry" || route.action === "refresh") {
+          if (route.lineageId === undefined) {
+            expect("lineageId" in (parsed ?? {})).toBe(false);
+          }
+        }
+      }
+    }
+  });
+
+  it("keeps worst-case custom ID length at or below 100 characters for every action", () => {
+    // Realistic maxima justification:
+    // - locale: 7 characters ("zh-Hans") gives language expansion headroom for BCP-47 tags.
+    // - channelId: 20 digits covers the maximum unsigned 64-bit snowflake ID.
+    // - hours: 6 digits (999999) matches the max_length constraint of the duration modal text input.
+    // - blockIdx: 3 digits (999) covers up to 50,000 personas in 50-persona blocks.
+    // - chooserPage: 3 digits (999) covers up to 1,000 range pages.
+    // - start: 5 digits (99999) covers pagination offsets up to 100,000 rows.
+    // - autoIdx: 2 digits (50) is bounded by SPOTLIGHT_PERSONA_PAGE_SIZE (50).
+    // - mask: 10 characters ("b33j9ynrb3") is the full 50-bit base36 mask for a 50-persona block.
+    // - fp: 8 characters ("a1b2c3d4") produced by SHA-256 base64url fingerprint prefix.
+    // - nonce: 12 characters ("nonce1234567") produced by createNonce.
+    // - lineageId: 7 digits (9999999) covers auto-increment database primary keys.
+    // - provider: 24 characters ("custom~endpoint~provider") covers realistic custom provider identifiers.
+    // - capability: "embedding" (9 chars) is the longest PersonalConfigManagedCapability.
+    // - category: "advanced" (8 chars) is the longest PersonalConfigCategory.
+    // - page: "response-modes" (14 chars) is the longest PersonalConfigPage.
+    // - mode: "follow" (6 chars) is the longest deliberate trigger/tool mode.
+    const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
+    expect(actions.length).toBe(65);
+
+    for (const action of actions) {
+      const routes = buildRoutesForAction(action, true);
+      for (const route of routes) {
+        const customId = buildPersonalConfigRouteId(route);
+        expect(customId.length).toBeLessThanOrEqual(100);
+      }
+    }
+  });
+
+  it("proves table actions and handler comparisons in personalConfigRoutes agree", () => {
+    const catalogSource = readFileSync(
+      new URL("../../../src/utils/discord/personalConfigPanelCatalog.ts", import.meta.url),
+      "utf8",
+    );
+    const routesSource = readFileSync(
+      new URL("../../../src/utils/discord/interactions/personalConfigRoutes.ts", import.meta.url),
+      "utf8",
+    );
+
+    const tableBlock = catalogSource.slice(
+      catalogSource.indexOf("export const PERSONAL_CONFIG_ROUTE_CODECS"),
+      catalogSource.indexOf("const CODECS_BY_WIRE_TOKEN"),
+    );
+    const tableActions = new Set(
+      [...tableBlock.matchAll(/^\s*(?:"([a-z0-9-]+)"|([a-z0-9-]+)):\s*\{/gm)].map((m) => m[1] ?? m[2]),
+    );
+    const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
+
+    expect(tableActions.size).toBe(65);
+    expect(handlerActions.size).toBe(65);
+    expect([...tableActions].filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !tableActions.has(a))).toEqual([]);
+  });
+
+  it("fails closed when dropping or appending a segment for every action in the table", () => {
+    const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
+    expect(actions.length).toBe(65);
+
+    for (const action of actions) {
+      const routes = buildRoutesForAction(action, false);
+      for (const route of routes) {
+        const validId = buildPersonalConfigRouteId(route);
+        const validRoute = requireRoute(validId);
+        expect(parsePersonalConfigPanelRoute(validRoute)).not.toBeNull();
+
+        // Dropping one segment from the end
+        const segmentsDropped = validRoute.segments.slice(0, -1);
+        if (segmentsDropped.length >= 2) {
+          const droppedParsedRoute = {
+            namespace: validRoute.namespace,
+            version: validRoute.version,
+            segments: segmentsDropped,
+          };
+          if ((action === "retry" || action === "refresh") && route.lineageId !== undefined) {
+            expect(parsePersonalConfigPanelRoute(droppedParsedRoute)).not.toBeNull();
+          } else {
+            expect(parsePersonalConfigPanelRoute(droppedParsedRoute)).toBeNull();
+          }
+        }
+
+        // For 4-segment retry/refresh, dropping one segment drops to 3 segments which must fail closed
+        if ((action === "retry" || action === "refresh") && route.lineageId === undefined) {
+          const droppedTwice = {
+            namespace: validRoute.namespace,
+            version: validRoute.version,
+            segments: validRoute.segments.slice(0, -1),
+          };
+          expect(parsePersonalConfigPanelRoute(droppedTwice)).toBeNull();
+        }
+
+        // Appending one extra segment to the end
+        const appendedParsedRoute = {
+          namespace: validRoute.namespace,
+          version: validRoute.version,
+          segments: [...validRoute.segments, "extra"],
+        };
+        expect(parsePersonalConfigPanelRoute(appendedParsedRoute)).toBeNull();
+      }
+    }
   });
 
   it("rejects malformed routes", () => {
@@ -666,6 +1329,15 @@ describe("personalConfigPanelCatalog", () => {
         requireRoute("personal-config:v2:spot-set-cf:en-US:123456789012345678:0:0:1:a1b2c3d4:nonce123456"),
       ),
     ).toBeNull();
+    expect(
+      parsePersonalConfigPanelRoute(requireRoute("personal-config:v2:retry:en-US:profile:persona:10:extra")),
+    ).toBeNull();
+    expect(
+      parsePersonalConfigPanelRoute(requireRoute("personal-config:v2:retry:en-US:models:switch:openrouter")),
+    ).toBeNull();
+    expect(parsePersonalConfigPanelRoute(requireRoute("personal-config:v2:retry:en-US:models:switch:text"))).toBeNull();
+    expect(parsePersonalConfigPanelRoute(requireRoute("personal-config:v2:retry:en-US:profile:persona:0"))).toBeNull();
+    expect(parsePersonalConfigPanelRoute(requireRoute("personal-config:v2:retry:en-US:profile"))).toBeNull();
   });
 });
 
@@ -822,7 +1494,7 @@ describe("personalConfigRoutes interaction handling and telemetry", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("naming-submit", "en-US", "nonce123456");
+    const customId = buildPersonalConfigRouteId({ action: "naming-submit", locale: "en-US", nonce: "nonce123456" });
 
     let deferred = false;
     const replied = false;
@@ -862,7 +1534,7 @@ describe("personalConfigRoutes interaction handling and telemetry", () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("crossserver-toggle", "en-US");
+    const customId = buildPersonalConfigRouteId({ action: "crossserver-toggle", locale: "en-US" });
 
     let deferred = false;
     const interaction = {
@@ -931,7 +1603,7 @@ describe("naming modal empty fields mean inherit", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("naming-submit", "en-US", "nonce123456");
+    const customId = buildPersonalConfigRouteId({ action: "naming-submit", locale: "en-US", nonce: "nonce123456" });
 
     let deferred = false;
     const interaction = {
@@ -971,45 +1643,37 @@ describe("personalConfigPanelCatalog Models routes", () => {
     expect(decodeProviderParam("openrouter")).toBe("openrouter");
   });
 
-  it("builds custom IDs within 100 characters for all Models actions", () => {
-    const actions: Array<[string, ...unknown[]]> = [
-      ["quick-toggle-open", "en-US"],
-      ["quick-toggle-submit", "en-US", "nonce123456"],
-      ["model-provider-select", "en-US", "image_nai"],
-      ["model-provider-range-open", "en-US", "image_nai", 25],
-      ["model-provider-range-page", "en-US", "image_nai", 399],
-      ["model-modal-submit", "en-US", "image_nai", encodeProviderParam("custom:123456789"), "nonce123456"],
-      ["parameters-provider-select", "en-US"],
-      ["parameters-1-open", "en-US", encodeProviderParam("custom:123456789")],
-      ["parameters-1-submit", "en-US", encodeProviderParam("custom:123456789"), "nonce123456"],
-      ["parameters-2-open", "en-US", encodeProviderParam("custom:123456789")],
-      ["parameters-2-submit", "en-US", encodeProviderParam("custom:123456789"), "nonce123456"],
-      ["fallbacks-provider-select", "en-US"],
-      ["fallbacks-open", "en-US", encodeProviderParam("custom:123456789")],
-      ["fallbacks-submit", "en-US", encodeProviderParam("custom:123456789"), "nonce123456"],
-      ["randomizer-toggle", "en-US", encodeProviderParam("custom:123456789")],
-    ];
+  it("carries a colon-bearing provider through the codec without corrupting the segment grammar", () => {
+    // A colon is the segment separator, so an unencoded provider would make
+    // buildInteractionRouteId throw during panel render. The codec owns this encoding now, and the
+    // generated round-trip covers only colon-free providers, so this pins the composition rather
+    // than encodeProviderParam and the codec table separately.
+    const provider = "custom:123456789";
+    const customId = buildPersonalConfigRouteId({
+      action: "model-modal-submit",
+      locale: "en-US",
+      capability: "image_nai",
+      provider,
+      nonce: "nonce123456",
+    });
 
-    for (const [action, locale, ...args] of actions) {
-      const id = buildPersonalConfigCustomId(
-        action as Parameters<typeof buildPersonalConfigCustomId>[0],
-        locale as string,
-        ...(args as string[]),
-      );
-      expect(id.length).toBeLessThanOrEqual(100);
-      const parsed = parsePersonalConfigPanelRoute(requireRoute(id));
-      expect(parsed).toBeDefined();
-      expect(parsed?.action).toBe(action);
-    }
+    expect(customId.split(":")).toHaveLength(7);
+    expect(parsePersonalConfigPanelRoute(requireRoute(customId))).toEqual({
+      action: "model-modal-submit",
+      locale: "en-US",
+      capability: "image_nai",
+      provider,
+      nonce: "nonce123456",
+    });
   });
 
   it("refuses the Switch Models controls that the six capability selects replaced", () => {
-    // buildPersonalConfigCustomId takes a bare string action, so a retired control is only
-    // unreachable once the parser stops recognizing it.
+    // Raw wire strings represent what a stale Discord client could still send, so the parser
+    // must reject retired controls rather than route them.
     const retired = [
-      buildPersonalConfigCustomId("capability-select", "en-US"),
-      buildPersonalConfigCustomId("model-enable", "en-US", "text"),
-      buildPersonalConfigCustomId("model-default", "en-US", "text"),
+      "personal-config:v2:capability-select:en-US",
+      "personal-config:v2:model-enable:en-US:text",
+      "personal-config:v2:model-default:en-US:text",
     ];
 
     for (const customId of retired) {
@@ -1282,7 +1946,11 @@ describe("Models interaction routing and telemetry", () => {
       },
     };
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("quick-toggle-submit", "en-US", "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "quick-toggle-submit",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
 
     interaction = {
       id: "modal-1",
@@ -1315,7 +1983,11 @@ describe("Models interaction routing and telemetry", () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("randomizer-toggle", "en-US", encodeProviderParam("openrouter"));
+    const customId = buildPersonalConfigRouteId({
+      action: "randomizer-toggle",
+      locale: "en-US",
+      provider: "openrouter",
+    });
 
     let deferred = false;
     const interaction = {
@@ -1347,12 +2019,12 @@ describe("Models interaction routing and telemetry", () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId(
-      "parameters-1-submit",
-      "en-US",
-      encodeProviderParam("openrouter"),
-      "nonce123456",
-    );
+    const customId = buildPersonalConfigRouteId({
+      action: "parameters-1-submit",
+      locale: "en-US",
+      provider: "openrouter",
+      nonce: "nonce123456",
+    });
 
     let deferred = false;
     const interaction = {
@@ -1395,12 +2067,12 @@ describe("Models interaction routing and telemetry", () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId(
-      "fallbacks-submit",
-      "en-US",
-      encodeProviderParam("openrouter"),
-      "nonce123456",
-    );
+    const customId = buildPersonalConfigRouteId({
+      action: "fallbacks-submit",
+      locale: "en-US",
+      provider: "openrouter",
+      nonce: "nonce123456",
+    });
 
     let deferred = false;
     const interaction = {
@@ -1712,13 +2384,13 @@ describe("Model assignment writes on modal submit", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId(
-      "model-modal-submit",
-      "en-US",
-      "text",
-      encodeProviderParam("openrouter"),
-      "nonce123456",
-    );
+    const customId = buildPersonalConfigRouteId({
+      action: "model-modal-submit",
+      locale: "en-US",
+      capability: "text",
+      provider: "openrouter",
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       id: "modal-1",
@@ -1777,13 +2449,13 @@ describe("Model assignment writes on modal submit", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId(
-      "model-modal-submit",
-      "en-US",
-      "text",
-      encodeProviderParam("openrouter"),
-      "nonce123456",
-    );
+    const customId = buildPersonalConfigRouteId({
+      action: "model-modal-submit",
+      locale: "en-US",
+      capability: "text",
+      provider: "openrouter",
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       id: "modal-1",
@@ -1824,7 +2496,7 @@ describe("Model assignment writes on modal submit", () => {
     const { dependencies, telemetry } = makeDependencies(calls);
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("model-act-cancel", "en-US");
+    const customId = buildPersonalConfigRouteId({ action: "model-act-cancel", locale: "en-US" });
 
     const interaction = {
       isButton: () => true,
@@ -1857,13 +2529,13 @@ describe("Model assignment writes on modal submit", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId(
-      "model-modal-submit",
-      "en-US",
-      "text",
-      encodeProviderParam("openrouter"),
-      "nonce123456",
-    );
+    const customId = buildPersonalConfigRouteId({
+      action: "model-modal-submit",
+      locale: "en-US",
+      capability: "text",
+      provider: "openrouter",
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       id: "modal-1",
@@ -1910,7 +2582,11 @@ describe("Re-resolution and zero model guard", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("model-provider-select", "en-US", "text");
+    const customId = buildPersonalConfigRouteId({
+      action: "model-provider-select",
+      locale: "en-US",
+      capability: "text",
+    });
 
     const interaction = {
       isButton: () => false,
@@ -1941,7 +2617,11 @@ describe("Re-resolution and zero model guard", () => {
     const { dependencies, telemetry } = makeDependencies(calls);
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("model-provider-select", "en-US", "text");
+    const customId = buildPersonalConfigRouteId({
+      action: "model-provider-select",
+      locale: "en-US",
+      capability: "text",
+    });
 
     const interaction = {
       isButton: () => false,
@@ -1973,7 +2653,11 @@ describe("Re-resolution and zero model guard", () => {
       return { status: "no-changes" };
     };
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("model-provider-select", "en-US", "vision");
+    const customId = buildPersonalConfigRouteId({
+      action: "model-provider-select",
+      locale: "en-US",
+      capability: "vision",
+    });
     let repainted: unknown = null;
     const interaction = {
       isButton: () => false,
@@ -2021,7 +2705,11 @@ describe("Range pagination workflow", () => {
     };
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const overflowId = buildPersonalConfigCustomId("model-provider-select", "en-US", "text");
+    const overflowId = buildPersonalConfigRouteId({
+      action: "model-provider-select",
+      locale: "en-US",
+      capability: "text",
+    });
     let rangePayload: unknown = null;
     const overflowInteraction = {
       isButton: () => false,
@@ -2046,7 +2734,12 @@ describe("Range pagination workflow", () => {
     expect(JSON.stringify(rangePayload)).toContain("1-25");
     expect(JSON.stringify(rangePayload)).toContain("26-30");
 
-    const pageId = buildPersonalConfigCustomId("model-provider-range-open", "en-US", "text", 25);
+    const pageId = buildPersonalConfigRouteId({
+      action: "model-provider-range-open",
+      locale: "en-US",
+      capability: "text",
+      start: 25,
+    });
     let pagePayload: unknown = null;
     const pageInteraction = {
       isButton: () => true,
@@ -2092,7 +2785,12 @@ describe("Range pagination workflow", () => {
       };
     };
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("model-provider-range-open", "en-US", "text", 50);
+    const customId = buildPersonalConfigRouteId({
+      action: "model-provider-range-open",
+      locale: "en-US",
+      capability: "text",
+      start: 50,
+    });
     let repainted: unknown = null;
     const interaction = {
       isButton: () => true,
@@ -2133,7 +2831,11 @@ describe("Range pagination workflow", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("model-provider-select", "en-US", "text");
+    const customId = buildPersonalConfigRouteId({
+      action: "model-provider-select",
+      locale: "en-US",
+      capability: "text",
+    });
 
     const interaction = {
       isButton: () => false,
@@ -2176,13 +2878,13 @@ describe("Range pagination workflow", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId(
-      "model-range-open",
-      "en-US",
-      "text",
-      encodeProviderParam("openrouter"),
-      25,
-    );
+    const customId = buildPersonalConfigRouteId({
+      action: "model-range-open",
+      locale: "en-US",
+      capability: "text",
+      provider: "openrouter",
+      start: 25,
+    });
 
     const interaction = {
       isButton: () => true,
@@ -2530,7 +3232,11 @@ describe("Quick-Toggle modal structure and routing copy", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("quick-toggle-submit", "en-US", "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "quick-toggle-submit",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
     const interaction = {
       id: "modal-1",
       isButton: () => false,
@@ -2583,7 +3289,11 @@ describe("Quick-Toggle modal structure and routing copy", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("quick-toggle-submit", "en-US", "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "quick-toggle-submit",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
     const interaction = {
       id: "modal-1",
       isButton: () => false,
@@ -2686,7 +3396,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("trigger-mode-set", "en-US", "on");
+    const customId = buildPersonalConfigRouteId({ action: "trigger-mode-set", locale: "en-US", mode: "on" });
 
     let deferred = false;
     const interaction = {
@@ -2715,7 +3425,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("tool-mode-set", "en-US", "off");
+    const customId = buildPersonalConfigRouteId({ action: "tool-mode-set", locale: "en-US", mode: "off" });
 
     let deferred = false;
     const interaction = {
@@ -2750,7 +3460,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("impersonation-open", "en-US");
+    const customId = buildPersonalConfigRouteId({ action: "impersonation-open", locale: "en-US" });
 
     const interaction = {
       isButton: () => true,
@@ -2772,7 +3482,11 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("impersonation-submit", "en-US", "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "impersonation-submit",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
 
     let replyPayload: unknown;
     const interaction = {
@@ -2803,7 +3517,11 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("impersonation-submit", "en-US", "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "impersonation-submit",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       isButton: () => false,
@@ -2831,7 +3549,11 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     const { dependencies, user, telemetry } = makeDependencies(calls);
     user.impersonation_prompt = "Existing prompt";
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("impersonation-clear-confirm", "en-US", "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "impersonation-clear-confirm",
+      locale: "en-US",
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       isButton: () => true,
@@ -2868,7 +3590,7 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("spotlight-set-open", "en-US");
+    const customId = buildPersonalConfigRouteId({ action: "spotlight-set-open", locale: "en-US" });
 
     let replyPayload: unknown;
     const interaction = {
@@ -2894,17 +3616,17 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     const route = createPersonalConfigInteractionRoute(dependencies);
     const personas = [{ id: 1 }, { id: 2 }];
     const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-cf",
-      "en-US",
-      "123456789012345678",
-      12,
-      1,
-      0,
-      "1",
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 12,
+      autoIdx: 1,
+      blockIdx: 0,
+      mask: "1",
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       isButton: () => true,
@@ -2931,17 +3653,17 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     const route = createPersonalConfigInteractionRoute(dependencies);
     const personas = [{ id: 1 }, { id: 2 }];
     const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-cf",
-      "en-US",
-      "999999999999999999",
-      12,
-      1,
-      0,
-      "1",
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "999999999999999999",
+      hours: 12,
+      autoIdx: 1,
+      blockIdx: 0,
+      mask: "1",
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       isButton: () => true,
@@ -2976,7 +3698,13 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     });
     const route = createPersonalConfigInteractionRoute(dependencies);
     const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
-    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 50, fp, "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "spotlight-remove-submit",
+      locale: "en-US",
+      start: 50,
+      fp,
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       isButton: () => false,
@@ -3302,7 +4030,13 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     });
     const route = createPersonalConfigInteractionRoute(dependencies);
     const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
-    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, fp, "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "spotlight-remove-submit",
+      locale: "en-US",
+      start: 0,
+      fp,
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       isButton: () => false,
@@ -3330,17 +4064,17 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
     const calls: string[] = [];
     const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
     const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-cf",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
-      0,
-      "2",
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      autoIdx: 0,
+      blockIdx: 0,
+      mask: "2",
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
 
     const driftedPersonas = [
       makePersona(99, 99, "NewPersona"),
@@ -3380,17 +4114,17 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
     const calls: string[] = [];
     const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon"), makePersona(3, 30, "Soy")];
     const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-cf",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
-      0,
-      "4",
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      autoIdx: 0,
+      blockIdx: 0,
+      mask: "4",
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
 
     const driftedPersonas = [makePersona(2, 20, "Anon"), makePersona(3, 30, "Soy")];
 
@@ -3426,15 +4160,15 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
     const calls: string[] = [];
     const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
     const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
-    const customId = buildPersonalConfigCustomId(
-      "spotlight-set-submit",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
+    const customId = buildPersonalConfigRouteId({
+      action: "spotlight-set-submit",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      blockIdx: 0,
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
 
     const driftedPersonas = [makePersona(99, 99, "New"), makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
 
@@ -3477,16 +4211,16 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
   it("fails stale on spot-set-auto button click when personas drift", async () => {
     const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
     const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-auto",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
-      "3",
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-auto",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      blockIdx: 0,
+      mask: "3",
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
 
     let modalCalled = false;
     let replyPayload: unknown;
@@ -3519,16 +4253,16 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
   it("fails stale on spot-set-auto-sub modal submission when personas drift", async () => {
     const initialPersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
     const fp = computeSpotlightSetFingerprint("guild-123", "user-123", initialPersonas);
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-auto-sub",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
-      "3",
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-auto-sub",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      blockIdx: 0,
+      mask: "3",
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
 
     let editPayload: unknown;
     const { dependencies } = makeDependencies([], {
@@ -3578,7 +4312,13 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       },
     ];
     const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", initialSpotlights);
-    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, fp, "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "spotlight-remove-submit",
+      locale: "en-US",
+      start: 0,
+      fp,
+      nonce: "nonce123456",
+    });
 
     const insertedSpotlights = [
       ...initialSpotlights,
@@ -3658,7 +4398,7 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       },
     ];
     const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", initialSpotlights);
-    const customId = buildPersonalConfigCustomId("spot-rem-range", "en-US", 0, fp);
+    const customId = buildPersonalConfigRouteId({ action: "spot-rem-range", locale: "en-US", start: 0, fp });
 
     let modalCalled = false;
     let replyPayload: unknown;
@@ -3700,7 +4440,13 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       },
     ];
     const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
-    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, fp, "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "spotlight-remove-submit",
+      locale: "en-US",
+      start: 0,
+      fp,
+      nonce: "nonce123456",
+    });
 
     const { dependencies, telemetry } = makeDependencies(calls, {
       loadActiveSpotlights: async () => activeSpotlights,
@@ -3731,17 +4477,17 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
     const calls: string[] = [];
     const personas = [{ id: 1 }, { id: 2 }];
     const validFp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-cf",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
-      0,
-      "1",
-      validFp,
-      "nonce123456",
-    );
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      autoIdx: 0,
+      blockIdx: 0,
+      mask: "1",
+      fp: validFp,
+      nonce: "nonce123456",
+    });
 
     let editPayloadActor: unknown;
     const actorInteraction = {
@@ -3872,7 +4618,13 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       { channelDiscId: "ch-200", personaIds: [1], autoTriggerPersonaId: null, expiresAt: null, userDiscId: "user-123" },
     ];
     const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
-    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, fp, "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "spotlight-remove-submit",
+      locale: "en-US",
+      start: 0,
+      fp,
+      nonce: "nonce123456",
+    });
 
     let editPayload: unknown;
     const { dependencies, telemetry } = makeDependencies(calls, {
@@ -4270,17 +5022,17 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
     const calls: string[] = [];
     const personas = [{ id: 1 }, { id: 2 }];
     const setFp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
-    const setCustomId = buildPersonalConfigCustomId(
-      "spot-set-cf",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
-      0,
-      "1",
-      setFp,
-      "nonce123456",
-    );
+    const setCustomId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      autoIdx: 0,
+      blockIdx: 0,
+      mask: "1",
+      fp: setFp,
+      nonce: "nonce123456",
+    });
 
     let acknowledgedDuringSetWrite = false;
     let acknowledgedDuringRemoveWrite = false;
@@ -4331,7 +5083,13 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       },
     ];
     const remFp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
-    const remCustomId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, remFp, "nonce123456");
+    const remCustomId = buildPersonalConfigRouteId({
+      action: "spotlight-remove-submit",
+      locale: "en-US",
+      start: 0,
+      fp: remFp,
+      nonce: "nonce123456",
+    });
 
     let remDeferredState = false;
     let remInteraction: ModalSubmitInteraction;
@@ -4389,16 +5147,16 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-auto",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-auto",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      blockIdx: 0,
       mask,
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
 
     let deferred = false;
     const interaction = {
@@ -4448,16 +5206,16 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
 
     const route = createPersonalConfigInteractionRoute(dependencies);
 
-    const autoCustomId = buildPersonalConfigCustomId(
-      "spot-set-auto",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
+    const autoCustomId = buildPersonalConfigRouteId({
+      action: "spot-set-auto",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      blockIdx: 0,
       mask,
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
 
     let deferred = false;
     const autoInteraction = {
@@ -4485,16 +5243,16 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
     expect(json).toContain("1-24");
     expect(json).toContain("25-30");
 
-    const rangeCustomId = buildPersonalConfigCustomId(
-      "spot-set-auto-range",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
+    const rangeCustomId = buildPersonalConfigRouteId({
+      action: "spot-set-auto-range",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      blockIdx: 0,
       mask,
       fp,
-      24,
-    );
+      start: 24,
+    });
 
     const rangeInteraction = {
       isButton: () => true,
@@ -4527,13 +5285,13 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
 
     const route = createPersonalConfigInteractionRoute(dependencies);
 
-    const modelPageCustomId = buildPersonalConfigCustomId(
-      "model-range-page",
-      "en-US",
-      "text",
-      encodeProviderParam("openrouter"),
-      1,
-    );
+    const modelPageCustomId = buildPersonalConfigRouteId({
+      action: "model-range-page",
+      locale: "en-US",
+      capability: "text",
+      provider: "openrouter",
+      chooserPage: 1,
+    });
 
     const modelInteraction = {
       isButton: () => true,
@@ -4555,12 +5313,12 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
     expect(modelJson).toContain("Select Text Model Range");
     expect(modelJson).toContain("26-50");
 
-    const fallbackPageCustomId = buildPersonalConfigCustomId(
-      "fallbacks-range-page",
-      "en-US",
-      encodeProviderParam("openrouter"),
-      1,
-    );
+    const fallbackPageCustomId = buildPersonalConfigRouteId({
+      action: "fallbacks-range-page",
+      locale: "en-US",
+      provider: "openrouter",
+      chooserPage: 1,
+    });
 
     const fallbackInteraction = {
       isButton: () => true,
@@ -4598,7 +5356,12 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const removePageCustomId = buildPersonalConfigCustomId("spotlight-remove-page", "en-US", 5, fp);
+    const removePageCustomId = buildPersonalConfigRouteId({
+      action: "spotlight-remove-page",
+      locale: "en-US",
+      chooserPage: 5,
+      fp,
+    });
 
     const interaction = {
       isButton: () => true,
@@ -4653,7 +5416,17 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("spot-set-cf", "en-US", channelId, 0, 1, 0, "1", fp, "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId,
+      hours: 0,
+      autoIdx: 1,
+      blockIdx: 0,
+      mask: "1",
+      fp,
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       isButton: () => true,
@@ -4741,7 +5514,13 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
     });
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const customId = buildPersonalConfigCustomId("spotlight-remove-submit", "en-US", 0, fp, "nonce123456");
+    const customId = buildPersonalConfigRouteId({
+      action: "spotlight-remove-submit",
+      locale: "en-US",
+      start: 0,
+      fp,
+      nonce: "nonce123456",
+    });
 
     const interaction = {
       isButton: () => false,
@@ -4775,7 +5554,11 @@ describe("Wave 5 Phase 2b: persona reachability beyond one modal", () => {
     const personas = makeBlockPersonas(SPOTLIGHT_PERSONA_PAGE_SIZE + 10);
     const { dependencies } = makeDependencies([], { loadGuildPersonas: async () => personas });
     const nonce = "nonce123456";
-    const customId = buildPersonalConfigCustomId("spotlight-set-step1", "en-US", nonce);
+    const customId = buildPersonalConfigRouteId({
+      action: "spotlight-set-step1",
+      locale: "en-US",
+      nonce,
+    });
     const modalsModule = await import("@/utils/discord/ui/modals");
     const takeSpy = spyOn(modalsModule, "takeRawModalSelectValue").mockReturnValue("123456789012345678");
 
@@ -4814,17 +5597,17 @@ describe("Wave 5 Phase 2b: persona reachability beyond one modal", () => {
   });
 
   it("keeps a worst-case full-block spot-set-cf inside 100 characters", () => {
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-cf",
-      "en-US",
-      "12345678901234567890",
-      999999,
-      SPOTLIGHT_PERSONA_PAGE_SIZE,
-      999,
-      encodeSpotlightMask((1n << BigInt(SPOTLIGHT_PERSONA_PAGE_SIZE)) - 1n),
-      "a1b2c3d4",
-      "nonce1234567",
-    );
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "12345678901234567890",
+      hours: 999999,
+      autoIdx: SPOTLIGHT_PERSONA_PAGE_SIZE,
+      blockIdx: 999,
+      mask: encodeSpotlightMask((1n << BigInt(SPOTLIGHT_PERSONA_PAGE_SIZE)) - 1n),
+      fp: "a1b2c3d4",
+      nonce: "nonce1234567",
+    });
     expect(customId.length).toBeLessThanOrEqual(100);
     const parsed = parsePersonalConfigPanelRoute(requireRoute(customId));
     expect(parsed?.action).toBe("spot-set-cf");
@@ -4879,7 +5662,14 @@ describe("Wave 5 Phase 2b: persona reachability beyond one modal", () => {
       },
     });
 
-    const customId = buildPersonalConfigCustomId("spotlight-set-block", "en-US", "123456789012345678", 0, fp, 1);
+    const customId = buildPersonalConfigRouteId({
+      action: "spotlight-set-block",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      fp,
+      blockIdx: 1,
+    });
     const interaction = {
       isButton: () => true,
       isStringSelectMenu: () => false,
@@ -4918,17 +5708,17 @@ describe("Wave 5 Phase 2b: persona reachability beyond one modal", () => {
       },
     });
 
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-cf",
-      "en-US",
-      "123456789012345678",
-      0,
-      3,
-      1,
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      autoIdx: 3,
+      blockIdx: 1,
       mask,
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
     const interaction = {
       isButton: () => true,
       isStringSelectMenu: () => false,
@@ -4968,17 +5758,17 @@ describe("Wave 5 Phase 2b: persona reachability beyond one modal", () => {
       },
     });
 
-    const customId = buildPersonalConfigCustomId(
-      "spot-set-cf",
-      "en-US",
-      "123456789012345678",
-      0,
-      0,
-      1,
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 0,
+      autoIdx: 0,
+      blockIdx: 1,
       mask,
       fp,
-      "nonce123456",
-    );
+      nonce: "nonce123456",
+    });
     let repainted: unknown = null;
     const interaction = {
       isButton: () => true,
