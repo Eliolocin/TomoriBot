@@ -56,9 +56,9 @@ free credit — set a $5 usage limit in the Brave dashboard to avoid charges.
 `/providers` manages server credentials and model catalogs, while `/model` selects the shared
 defaults every member of this server uses. Both need the required server permission. Individual
 members manage their own credentials and catalogs with `/personal providers`, then select personal
-models with the `/personal provider model-*` commands. Personal settings follow them across every
-server where they use TomoriBot. See
-[Personalization](/features/knowledge/personalization/#your-own-providers) for that side.
+models in `/personal config`. Personal settings follow them across every server where they use
+TomoriBot. See [Personalization](/features/knowledge/personalization/#your-own-providers) for that
+side.
 
 The panels are titled **Server Providers** and **Personal Providers** so their ownership remains visible after
 the command interaction opens.

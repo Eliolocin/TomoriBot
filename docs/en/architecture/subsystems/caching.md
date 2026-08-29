@@ -332,10 +332,10 @@ The gate also avoids real database work, not just a `Map` write:
 `UserRepository.getPersonalSpotlightStatus` issues a `DELETE` for expired rows before its aggregate
 `SELECT`, so every miss was costing a write plus a `LEFT JOIN`.
 
-`invalidatePersonalSpotlightCache` drops the gate alongside matching triple keys. Both write paths
-(`commands/personal/spotlight/set.ts`, `commands/personal/spotlight/manage.ts`) already call it, so
-a server's first spotlight takes effect immediately rather than after the TTL. **Any new write path
-must call it too**, or the gate will keep answering "none" for up to the TTL.
+`invalidatePersonalSpotlightCache` drops the gate alongside matching triple keys. The spotlight
+write routes in `utils/discord/interactions/personalConfigRoutes.ts` already call it, so a server's
+first spotlight takes effect immediately rather than after the TTL. **Any new write path must call
+it too**, or the gate will keep answering "none" for up to the TTL.
 
 ## Cache Invalidation Rules (Critical)
 

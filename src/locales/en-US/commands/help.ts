@@ -287,11 +287,11 @@ Transcription supports ~100 languages (auto-detected).`,
       memory_title: `Memory & Personalization`,
       memory_description: `- I can remember personal facts about you and server-wide information, persisting across conversations
 - Personal memories persist across servers (try talking to me in another server!)
-- I also keep [STM (short-term memory)](https://docs.tomoribot.app/en/features/knowledge/memory/#short-term-memory-stm) of recent conversations for channel and server awareness (opt into cross-server sharing with \`/personal stm\`)
-- Change what I call you using \`/personal profile nickname\`
+- I also keep [STM (short-term memory)](https://docs.tomoribot.app/en/features/knowledge/memory/#short-term-memory-stm) of recent conversations for channel and server awareness (opt into cross-server sharing with \`/personal config\`)
+- Change what I call you using \`/personal config\`
 - Use \`/memory\` and \`/persona\` commands to manually add or remove memories and persona data
 - I can use server emojis and stickers more accurately after registration with \`/expressions initialize\`
-- Full invisibility is available via \`/personal privacy\` if you want to be completely unseen by me
+- Full invisibility is available via \`/personal config\` if you want to be completely unseen by me
 - Learn more on the **Persistent Memory** page in \`/help\``,
       time_title: `Time Awareness`,
       time_description: `- I know what time it currently is in the server (via \`/server timezone\`)
@@ -318,7 +318,7 @@ Transcription supports ~100 languages (auto-detected).`,
 - Remove uploaded or history-extracted documents with \`/memory document remove\` and \`/memory history remove\``,
       impersonation_title: `Impersonation & Tools`,
       impersonation_description: `- Use \`/impersonate\` to send messages as yourself, a persona, or inject system messages
-- Set a reusable user-impersonation prompt with \`/personal impersonate prompt\`
+- Set a reusable user-impersonation prompt with \`/personal config\`
 - \`/compact\` can summarize or roleplay-compress conversation history
 - \`/respond\` to trigger prefilled or guided messages from the bot`,
       imagegen_title: `Image Generation`,

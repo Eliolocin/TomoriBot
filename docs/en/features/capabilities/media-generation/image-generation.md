@@ -37,7 +37,7 @@ pre-filled with the current tags, so you edit in place:
 
 - **`/persona image-tags`** — the selected persona's **Physical Appearance** tags (how *she*
   looks). Requires the Manage Server permission.
-- **`/personal image-tags`** — *your own* appearance tags, applied when a generation
+- **`/personal config`** — *your own* appearance tags, applied when a generation
   references you. Follows you across every server (see
   [Personalization](/features/knowledge/personalization/)).
 - **`/config image-tags default-positive`** and **`/config image-tags default-negative`** —

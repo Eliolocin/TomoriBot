@@ -1604,7 +1604,7 @@ ${localizer(locale, "commands.personal.config.spotlight_review_prompt")}`,
           components: [
             {
               type: ComponentType.Button,
-              style: ButtonStyle.Success,
+              style: ButtonStyle.Secondary,
               customId: buildPersonalConfigRouteId({
                 action: "spot-set-cf",
                 locale,
@@ -1620,7 +1620,7 @@ ${localizer(locale, "commands.personal.config.spotlight_review_prompt")}`,
             },
             {
               type: ComponentType.Button,
-              style: ButtonStyle.Primary,
+              style: ButtonStyle.Secondary,
               customId: buildPersonalConfigRouteId({
                 action: "spot-set-auto",
                 locale,
@@ -1661,7 +1661,7 @@ ${localizer(locale, "commands.personal.config.spotlight_personas_desc")}`,
             components: [
               {
                 type: ComponentType.Button,
-                style: ButtonStyle.Primary,
+                style: ButtonStyle.Secondary,
                 customId: buildPersonalConfigRouteId({
                   action: "spotlight-set-block",
                   locale,
@@ -2250,7 +2250,7 @@ ${
         components: [
           {
             type: ComponentType.Button,
-            style: isCrossServerOn ? ButtonStyle.Secondary : ButtonStyle.Primary,
+            style: ButtonStyle.Secondary,
             customId: buildPersonalConfigRouteId({ action: "crossserver-toggle", locale }),
             label: isCrossServerOn
               ? localizer(locale, "commands.personal.config.disable_crossserver_button")
@@ -2306,7 +2306,7 @@ ${localizer(locale, "commands.personal.config.models_description")}`,
           components: [
             {
               type: ComponentType.Button,
-              style: ButtonStyle.Primary,
+              style: ButtonStyle.Secondary,
               customId: buildPersonalConfigRouteId({ action: "quick-toggle-open", locale }),
               label: localizer(locale, "commands.personal.config.quick_toggle_button"),
               disabled: writesDisabled,
@@ -2506,7 +2506,7 @@ ${withLinePrefix("> ", statusStr)}`,
             components: [
               {
                 type: ComponentType.Button,
-                style: isRandomizerOn ? ButtonStyle.Secondary : ButtonStyle.Primary,
+                style: ButtonStyle.Secondary,
                 customId: buildPersonalConfigRouteId({
                   action: "randomizer-toggle",
                   locale,
@@ -2590,7 +2590,7 @@ ${withLinePrefix("> ", statusStr)}`,
           components: [
             {
               type: ComponentType.Button,
-              style: dtmMode === "off" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              style: ButtonStyle.Secondary,
               customId: buildPersonalConfigRouteId({
                 action: "trigger-mode-set",
                 locale,
@@ -2601,7 +2601,7 @@ ${withLinePrefix("> ", statusStr)}`,
             },
             {
               type: ComponentType.Button,
-              style: dtmMode === "follow" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              style: ButtonStyle.Secondary,
               customId: buildPersonalConfigRouteId({
                 action: "trigger-mode-set",
                 locale,
@@ -2612,7 +2612,7 @@ ${withLinePrefix("> ", statusStr)}`,
             },
             {
               type: ComponentType.Button,
-              style: dtmMode === "on" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              style: ButtonStyle.Secondary,
               customId: buildPersonalConfigRouteId({
                 action: "trigger-mode-set",
                 locale,
@@ -2633,7 +2633,7 @@ ${withLinePrefix("> ", statusStr)}`,
           components: [
             {
               type: ComponentType.Button,
-              style: toolMode === "off" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              style: ButtonStyle.Secondary,
               customId: buildPersonalConfigRouteId({
                 action: "tool-mode-set",
                 locale,
@@ -2644,7 +2644,7 @@ ${withLinePrefix("> ", statusStr)}`,
             },
             {
               type: ComponentType.Button,
-              style: toolMode === "follow" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              style: ButtonStyle.Secondary,
               customId: buildPersonalConfigRouteId({
                 action: "tool-mode-set",
                 locale,
@@ -2655,7 +2655,7 @@ ${withLinePrefix("> ", statusStr)}`,
             },
             {
               type: ComponentType.Button,
-              style: toolMode === "on" ? ButtonStyle.Primary : ButtonStyle.Secondary,
+              style: ButtonStyle.Secondary,
               customId: buildPersonalConfigRouteId({
                 action: "tool-mode-set",
                 locale,
@@ -2687,7 +2687,7 @@ ${withLinePrefix("> ", statusStr)}`,
           components: [
             {
               type: ComponentType.Button,
-              style: ButtonStyle.Primary,
+              style: ButtonStyle.Secondary,
               customId: buildPersonalConfigRouteId({ action: "impersonation-open", locale }),
               label: localizer(locale, "commands.personal.config.impersonation_edit_button"),
               disabled: writesDisabled,
@@ -2747,7 +2747,7 @@ ${withLinePrefix("> ", statusStr)}`,
             components: [
               {
                 type: ComponentType.Button,
-                style: ButtonStyle.Primary,
+                style: ButtonStyle.Secondary,
                 customId: buildPersonalConfigRouteId({ action: "spotlight-set-open", locale }),
                 label: localizer(locale, "commands.personal.config.spotlight_set_button"),
                 disabled: writesDisabled,

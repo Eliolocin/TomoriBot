@@ -98,14 +98,6 @@
       "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
     },
     {
-      "path": "personal dtm",
-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
-    },
-    {
-      "path": "personal stm clear",
-      "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
-    },
-    {
       "path": "server autotrigger channels",
       "reason": "Stale documentation path with no decided replacement; owed a fix in the docs-accuracy burn-down."
     },

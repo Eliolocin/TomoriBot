@@ -50,10 +50,6 @@
       "reason": "Built-in LLM tool name cited in the privacy policy, not a Discord command."
     },
     {
-      "path": "personal provider model-",
-      "reason": "Deliberately truncated prefix naming the /personal provider model-* family rather than one path."
-    },
-    {
       "path": "prompt",
       "reason": "ComfyUI HTTP API route in the self-hosting help page, not a Discord command."
     },

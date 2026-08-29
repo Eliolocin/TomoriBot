@@ -61,12 +61,12 @@ Attach a previously exported file to restore it:
 
 These permanently remove or reset data — **they cannot be undone**:
 
-- `/memory personal remove`, `/memory server remove`
+- `/personal memories`, `/memory server remove`
 - `/server config remove` (reset server configuration)
 
 ## Opting Out
 
-- `/personal privacy` — control your visibility to her, up to full invisibility (opt out of
+- `/personal config` — control your visibility to her, up to full invisibility (opt out of
   memory features entirely).
 - `/capabilities` — server admins can turn off self-learning and other features.
 

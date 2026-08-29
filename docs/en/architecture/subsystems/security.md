@@ -101,14 +101,16 @@ credential and never reads or writes server rotation rows.
 ## Privacy Model
 
 Primary files:
-- `src/commands/personal/privacy.ts`
+- `src/commands/personal/config.ts`
+- `src/utils/discord/ui/personalConfigPanel.ts`
+- `src/utils/discord/interactions/personalConfigRoutes.ts`
 - `src/events/messageCreate/tomoriChat.ts`
 - `src/utils/text/contextBuilder.ts`
 - `src/utils/db/repositories/UserRepository.ts`
 - `src/utils/db/repositories/index.ts`
 - `src/db/schema.sql` (`users.privacy_level`, `personalization_blacklist`)
 
-### Global privacy levels (`/personal privacy`)
+### Global privacy levels (`/personal config`)
 
 `users.privacy_level` values:
 - `0` (`MINIMAL`): full personalization context (including status/roles/personal memories when allowed).
@@ -142,8 +144,9 @@ presence, roles, timezone, or physical appearance.
 
 Primary files:
 - `src/commands/memory/personal/export.ts`
-- `src/commands/memory/personal/remove.ts`
-- `src/commands/memory/personal/edit.ts`
+- `src/commands/personal/memories.ts`
+- `src/utils/discord/ui/personalMemoriesPanel.ts`
+- `src/utils/discord/interactions/personalMemoriesOperations.ts`
 - `src/commands/memory/server/export.ts`
 - `src/commands/memory/server/remove.ts`
 - `src/commands/memory/server/edit.ts`
@@ -163,7 +166,7 @@ Delete/reset remains type-scoped. Commands that currently require confirmation c
 - personal settings reset
 - server config reset
 
-Personal memory management remains type-scoped by persona/global scope, and server memory management remains type-scoped by persona scope. `/memory personal remove|edit` and `/memory server remove|edit` operate on one selected stored row per invocation rather than bulk-resetting a whole scope.
+Personal row management is through `/personal memories` (type-scoped by persona/global scope), and server memory management remains type-scoped by persona scope (`/memory server remove|edit`). Both operate on one selected stored row per invocation rather than bulk-resetting a whole scope.
 
 Important: the current reset/remove commands do not implement a blanket user-row/account hard delete path in these command implementations.
 

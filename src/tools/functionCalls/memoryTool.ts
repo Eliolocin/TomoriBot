@@ -409,7 +409,7 @@ export class MemoryTool extends BaseTool {
             data: {
               status: "memory_save_failed_privacy_restricted",
               scope: "target_user",
-              reason: `The user ${targetUserDisplayName} has chosen to restrict personal memory storage. I cannot save personal memories about them unless they change their privacy settings using '/personal privacy'.`,
+              reason: `The user ${targetUserDisplayName} has chosen to restrict personal memory storage. I cannot save personal memories about them unless they change their privacy settings using '/personal config'.`,
             },
           };
         }
@@ -430,7 +430,7 @@ export class MemoryTool extends BaseTool {
               target_user: targetUserDisplayName,
               current_count: personalLimitCheck.currentCount,
               max_allowed: personalLimitCheck.maxAllowed,
-              reason: `Personal memory limit of ${personalLimitCheck.maxAllowed} memories has been reached for this user. Please inform the user that they need to use '/memory personal remove' to remove some of their memories before I can learn new ones about them.`,
+              reason: `Personal memory limit of ${personalLimitCheck.maxAllowed} memories has been reached for this user. Please inform the user that they need to use '/personal memories' to remove some of their memories before I can learn new ones about them.`,
             },
           };
         }

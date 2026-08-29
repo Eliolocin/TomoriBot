@@ -14,7 +14,7 @@ The implementation lives primarily in `src/providers/novelai/novelaiStreamAdapte
 - `/model image` now also handles the dedicated NovelAI image slot when the selected provider is NovelAI.
 - `generate_image_nai` now resolves its sampler, steps, scale, noise schedule, and `cfg_rescale` from `server_novelai_imagegen_configs` first, falling back to the `NAI_IMAGE_*` / `NAI_CFG_RESCALE` env values when the server override is `NULL`.
 - `/novelai image params` is the admin-facing command for those parameter overrides.
-- Image tag profile commands are provider-neutral: `/persona image-tags`, `/personal image-tags`, `/config image-tags default-positive`, and `/config image-tags default-negative`.
+- Image tag profile commands are provider-neutral: `/persona image-tags`, `/personal config`, `/config image-tags default-positive`, and `/config image-tags default-negative`.
 - `/novelai image generate` is the slash-command image generation entrypoint for direct tag-based NAI image creation, and now opens a modal for prompt, extra negative tags, optional character reference, and orientation selection.
 - `/novelai character-reference` now persists persona/user reference images through `src/utils/storage/charrefStorage.ts`.
 - `generate_image_nai` now supports a structured `characters[]` array for V4 models.

@@ -56,7 +56,7 @@
         select_description: `Choose which personal memory to remove`,
         select_placeholder: `Select a memory...`,
         no_memories_title: `No Personal Memories`,
-        no_memories: `You don't have any personal memories stored. Add some with \`/memory personal add\`.`,
+        no_memories: `You don't have any personal memories stored. Add some with \`/personal memories\`.`,
         success_title: `Personal Memory Removed`,
         success_description: `Successfully removed the personal memory: "{memory}"`,
         warning_disabled_title: `Personalization Disabled`,

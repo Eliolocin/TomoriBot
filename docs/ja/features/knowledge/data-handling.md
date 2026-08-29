@@ -52,12 +52,12 @@ TomoriBotはデータに対して透明性を持つように設計されてい�
 
 これらはデータを完全に削除またはリセットします。**元に戻すことはできません**。
 
-- `/memory personal remove`, `/memory server remove`
+- `/personal memories`, `/memory server remove`
 - `/server config remove`（サーバー設定をリセット）
 
 ## オプトアウト
 
-- `/personal privacy`：完全に不可視にするなど、トモリに対するご自身の可視性を制御します（メモリー機能を完全にオプトアウトできます）。
+- `/personal config`：完全に不可視にするなど、トモリに対するご自身の可視性を制御します（メモリー機能を完全にオプトアウトできます）。
 - `/capabilities`：サーバー管理者は自己学習やその他の機能をオフにできます。
 
 日常的なメモリーの仕組みについては、[メモリー](/ja/features/knowledge/memory/)を参照してください。

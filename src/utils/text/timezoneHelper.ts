@@ -5,7 +5,7 @@
 
 /**
  * Valid UTC offset bounds (UTC-12 through UTC+14, matching real-world timezones
- * and the /server timezone and /personal timezone command ranges)
+ * and the /server timezone and /personal config command ranges)
  */
 export const UTC_OFFSET_MIN = -12;
 export const UTC_OFFSET_MAX = 14;

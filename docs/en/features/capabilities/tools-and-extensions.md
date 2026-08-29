@@ -146,7 +146,7 @@ prompt size and helps smaller/local models answer faster.
 ### Controls
 
 - `/server dtm` — server managers toggle it.
-- `/personal dtm` — users override it for themselves.
+- `/personal config` — users override it for themselves.
 - With a thought-log channel configured (`/server thought-logs`), successful deliberate-mode
   tool calls are logged there along with the trigger that exposed the tool.
 
@@ -197,5 +197,4 @@ appeared in it, while a pronoun or timezone edit does not restate a name nothing
 Every field is validated before one atomic write. Restrictive privacy blocks additions and
 changes but still permits clearing values. The tool cannot edit persona-wide address terms. The
 default-on User Info Updates switch in `/capabilities manage` controls both tool exposure and
-stale-invocation defense. Manual `/personal profile about` and `/personal profile nickname`
-remain available when it is off.
+stale-invocation defense. Manual `/personal config` remains available when it is off.

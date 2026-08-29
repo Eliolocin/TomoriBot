@@ -34,7 +34,7 @@ free-tier quotas, etc.).
 - **Persona Affinity** — a persona's stats on this server.
 - **Server Leaderboard** — server-wide standings.
 
-Fully-private users (`/personal privacy`) can't generate personal cards.
+Fully-private users (`/personal config`) can't generate personal cards.
 
 For how the cards are composed and rendered, see the architecture reference on the
 [stats infographic subsystem](/architecture/subsystems/stats-infographic/).

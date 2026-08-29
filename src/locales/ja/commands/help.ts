@@ -287,11 +287,11 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
       memory_title: `記憶＆パーソナライゼーション`,
       memory_description: `- ユーザーやサーバーに関する事実を記憶し、会話を跨いで保持します
 - 個人的な記憶は全サーバーで保持されます（他のサーバーでも私に話しかけてみて！）
-- 最近の会話は[STM（短期記憶）](https://docs.tomoribot.app/ja/features/knowledge/memory/#short-term-memory-stm)として保持し、チャンネルやサーバーをまたいで文脈を把握します（クロスサーバー共有は\`/personal stm\`でオプトインできます）
-- \`/personal profile nickname\`であなたを呼ぶ名前を変更できます
+- 最近の会話は[STM（短期記憶）](https://docs.tomoribot.app/ja/features/knowledge/memory/#short-term-memory-stm)として保持し、チャンネルやサーバーをまたいで文脈を把握します（クロスサーバー共有は\`/personal config\`でオプトインできます）
+- \`/personal config\`であなたを呼ぶ名前を変更できます
 - \`/memory\` と \`/persona\` コマンドで手動で記憶やペルソナ情報を追加・削除できます
 - \`/expressions initialize\`で絵文字やステッカーを登録すると、より適切な場面で使えるようになります
-- \`/personal privacy\`で完全に見えなくなるオプションが利用可能です
+- \`/personal config\`で完全に見えなくなるオプションが利用可能です
 - 詳しくは\`/help\`内の **永続メモリ** ページをご覧ください`,
       time_title: `時間認識`,
       time_description: `- サーバーの現在時刻を認識しています（\`/server timezone\`経由）
@@ -318,7 +318,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - \`/memory document remove\`と\`/memory history remove\`で保存済みドキュメントを削除できます`,
       impersonation_title: `なりきり＆ツール`,
       impersonation_description: `- \`/impersonate\`で自分自身、ペルソナ、またはシステムメッセージとしてメッセージを送信できます
-- \`/personal impersonate prompt\`でユーザーなりきり用の再利用プロンプトを設定できます
+- \`/personal config\`でユーザーなりきり用の再利用プロンプトを設定できます
 - \`/compact\`で会話履歴を要約したりロールプレイで圧縮できます
 - \`/respond\`でボットから定型文や案内付きメッセージを送信できます`,
       imagegen_title: `画像生成`,

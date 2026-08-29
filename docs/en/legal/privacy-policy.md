@@ -44,7 +44,7 @@ The following data is accessed temporarily during Trigger processing (as defined
 - We do not sell personal data. Sharing occurs only as necessary to operate the features you invoke or to comply with law.
 
 ## 4) Your Choices and Controls
-- Use `/personal privacy` to stop saving personal memories about you across servers.
+- Use `/personal config` to stop saving personal memories about you across servers.
 - Use `/data export` to retrieve personal or server data.
 - Use `/data delete personal` to remove your user record (cascades related personal data) or `/data delete server` to remove a server's TomoriBot data.
 - Server admins can disable features such as sample dialogue teaching, personal memories, web search, or other permissions using configuration commands.

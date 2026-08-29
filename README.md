@@ -263,7 +263,7 @@ See the full **[Maintenance Documentation](https://docs.tomoribot.app/en/feature
 
 - `/setup` - Initial bot setup for your server
 - `/config` - Multiple ways to tweak TomoriBot
-- `/memory personal add` / `/memory personal remove` - Add / remove your personal memories
+- `/personal memories` - Manage your personal memories
 - `/memory server add` / `/memory server remove` - Add / remove server-wide memories
 - `/moderation` - Manage member access, user blacklist, channel, persona, and role restrictions
 

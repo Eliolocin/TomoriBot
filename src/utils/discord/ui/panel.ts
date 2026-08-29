@@ -125,7 +125,7 @@ export function buildRangeChooserComponents(options: RangeChooserComponentsOptio
 
   const rangeButtons: ButtonComponentData[] = resolved.ranges.map((range) => ({
     type: ComponentType.Button,
-    style: ButtonStyle.Primary,
+    style: ButtonStyle.Secondary,
     customId: buildInteractionRouteId(
       options.namespace,
       options.version,

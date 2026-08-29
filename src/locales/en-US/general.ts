@@ -113,7 +113,7 @@
       personal_provider_required_title: `Personal Provider Required`,
       personal_provider_required_description: `This server is using member-provided AI access for user-triggered messages. Open \`/help\` to **Features**, then **Personal Providers**, and run \`/personal providers\` to set up your own provider.`,
       personal_provider_credentials_error_title: `Personal Provider Error`,
-      personal_provider_credentials_error_description: `Your enabled personal provider could not be used. Update it with \`/personal providers\` or select another model with \`/personal provider model-text\`.`,
+      personal_provider_credentials_error_description: `Your enabled personal provider could not be used. Update it with \`/personal providers\` or select another model with \`/personal config\`.`,
       context_error_title: `Context Building Error`,
       context_error_description: `I encountered an error while trying to understand the conversation context.`,
       critical_error_title: `Critical Error`,

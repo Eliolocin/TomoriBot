@@ -45,7 +45,7 @@ what was said. This context includes:
 - **Where she is** — the current server's name and description (or that it's a Direct
   Message), and the current channel.
 - **The current time** — the server's local time and rough time of day, based on
-  `/server timezone`, plus each person's own local time if they've set `/personal timezone`.
+  `/server timezone`, plus each person's own local time if they've set `/personal config`.
 - **Who's in the conversation** — participants' display names, how to mention them, any
   physical-appearance tags, and their pending reminders.
 - **What someone's up to (presence)** — a user's Discord activity: what they're **playing**,
@@ -53,7 +53,7 @@ what was said. This context includes:
   custom status.
 
 Presence is privacy-gated: it's only shared for users at the **Minimal** privacy level (the
-default — see `/personal privacy`) and only when the bot has Discord's *Guild Presences*
+default — see `/personal config`) and only when the bot has Discord's *Guild Presences*
 intent enabled. Users who raise their privacy, or self-hosts running without that intent,
 simply won't have their activity surfaced to her.
 
@@ -89,7 +89,7 @@ This forces deliberate invocation instead of accidental activation.
 ### Server and Personal Control
 
 - `/server dtm` — server admins toggle the server-wide behavior.
-- `/personal dtm` — each user overrides it for themselves, with three modes:
+- `/personal config` — each user overrides it for themselves, with three modes:
   - **off** — always allow plain trigger words
   - **follow** — use the server setting
   - **on** — always require deliberate invocation

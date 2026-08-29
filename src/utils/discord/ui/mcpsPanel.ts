@@ -240,7 +240,7 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
         components: [
           {
             type: ComponentType.Button,
-            style: row.is_enabled ? ButtonStyle.Secondary : ButtonStyle.Success,
+            style: ButtonStyle.Secondary,
             customId: buildMcpsCustomId("set-enabled", input.locale, rowId(row), row.is_enabled ? 0 : 1),
             label: localizer(input.locale, row.is_enabled ? "commands.mcps.disable" : "commands.mcps.enable"),
             disabled: writesDisabled,

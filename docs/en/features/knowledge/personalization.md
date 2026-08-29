@@ -15,13 +15,13 @@ is covered on the [Memory](/features/knowledge/memory/#personal-vs-server-memori
 
 ## Profile and Persona-Aware Names
 
-`/personal profile about` stores three independent, optional preferences: gender identity,
+`/personal config` stores three independent, optional preferences: gender identity,
 pronouns, and addressing style. TomoriBot never infers one from another. The addressing style
 selects a persona's masculine, feminine, or neutral naming variant, and Neutral is the
 preselected default. Blank fields are cleared and omitted from prompt context. Raw profile
 fields are exposed only at Minimal privacy.
 
-`/personal profile nickname` opens a naming modal for either global or persona scope. A persona-scoped
+`/personal config` opens a naming modal for either global or persona scope. A persona-scoped
 preference follows that persona's stable lineage across servers. Nicknames inherit from the
 persona preference to the global preference and then the live Discord display name. A blank
 global nickname keeps following Discord, including later display-name changes. Saving a global
@@ -35,9 +35,9 @@ Server managers can configure persona defaults with `/persona naming-habits`. A 
 address term such as `fam` is separate from the formatted name and is available only to
 persona-authored prompt text. The default-on User Info Updates capability allows a persona to
 apply explicit structured changes requested in conversation. Disabling it stops automatic
-tool updates but does not disable the two `/personal` commands.
+tool updates but does not disable `/personal config`.
 
-`/personal timezone` stores only a numeric UTC offset from -12 through +14. It does not store
+`/personal config` stores only a numeric UTC offset from -12 through +14. It does not store
 or infer a geographic location or IANA timezone.
 
 ## Your Own Providers
@@ -57,29 +57,26 @@ Two scopes are in play, and it's worth keeping them straight:
 
 1. `/personal providers` saves a provider (your key is encrypted). This also enables your
    personal **Text** override immediately, using that provider's default text model.
-2. `/personal provider model-text` is optional. Use it only if you want a different text model
-   than the default chosen in step 1. Picking a model here keeps Text enabled.
+2. `/personal config` allows selecting a different model for your personal text override.
+   Picking a model here keeps Text enabled.
 3. Return to `/personal providers` whenever you need to update credentials, manage custom
    endpoints, or add and edit personal model registrations.
 
-Selecting a model with any `/personal provider model-*` command activates that capability for
-your requests.
+Selecting a model with `/personal config` activates that capability for your requests.
 
 Because steps 1 and 2 switch you onto a cross-server override, TomoriBot asks you to confirm
 before saving whenever a capability moves from the server default to a personal one. Rotating
 the key on a provider that already answers your requests skips that confirmation, since the
 routing isn't changing.
 
-Thought logs attribute those turns to you, and you can tune them with `/personal parameters`
-and `/personal model fallback`. Both affect your requests everywhere and never touch this
-server's settings. You can also register personal custom endpoints with
-`/personal providers`; see
+Thought logs attribute those turns to you, and you can tune them with `/personal config`.
+This affects your requests everywhere and never touches this server's settings. You can
+also register personal custom endpoints with `/personal providers`; see
 [Custom Endpoints](/features/setup-administration/providers-and-models/#custom-endpoints).
 
 If a request fails while using your personal provider, the error's "What you can do" tips name
-the personal commands that can actually fix it (`/personal providers`,
-`/personal provider model-text`, `/personal model fallback`, `/personal parameters`) rather than
-the server-manager ones.
+the personal commands that can actually fix it (`/personal providers`, `/personal config`)
+rather than the server-manager ones.
 
 :::note[BYOK-required servers]
 A server can require member-provided providers with User BYOK mode
@@ -90,17 +87,17 @@ providers apply across every server you use her in.
 
 ## Other Personal Settings
 
-- `/personal profile nickname` — change what she calls you.
-- `/personal image-tags` — your own appearance tags (booru-style), used when an
+- `/personal config` — change what she calls you.
+- `/personal config` — your own appearance tags (booru-style), used when an
   [image generation](/features/capabilities/media-generation/image-generation/#tag-customization)
   references you. Submit an empty box to clear them.
-- `/personal privacy` — control your visibility to her, up to **full invisibility** (opt out
+- `/personal config` — control your visibility to her, up to **full invisibility** (opt out
   of memory features entirely).
-- `/personal dtm` — your personal override for
+- `/personal config` — your personal override for
   [Deliberate Trigger Mode](/features/chatting-personality/chatting-and-triggers/#deliberate-trigger-mode).
-- `/personal stm` — opt into cross-server short-term memory sharing;
-  `/personal stm clear` wipes your STM.
-- `/personal impersonate prompt` — set a reusable prompt for when she impersonates you via
+- `/personal config` — opt into cross-server short-term memory sharing;
+  `/personal memories` wipes your STM.
+- `/personal config` — set a reusable prompt for when she impersonates you via
   `/impersonate user`.
   
 ## Personal Spotlight
@@ -109,7 +106,7 @@ providers apply across every server you use her in.
 you can trigger in one channel — and optionally assign one to auto-trigger for your own
 messages there. It's scoped to **you + one channel** and doesn't affect anyone else.
 
-**Set one up** with `/personal spotlight set`, choosing:
+**Set one up** with `/personal config`, choosing:
 
 - a duration in hours (use **0** to keep it until you remove it manually),
 - the target channel,
@@ -127,5 +124,5 @@ target whichever persona you explicitly call. Press Finish to skip.
 - Proxy chains are blocked: if your spotlight only includes Alice, an Alice reply can't hand
   off to Bob for your message chain.
 
-Review or remove entries with `/personal spotlight manage` (uncheck to remove; timed
+Review or remove entries with `/personal config` (uncheck to remove; timed
 spotlights expire on their own). In `/help`, choose **Behavior**, then **Personal Spotlight**, for the Discord summary.

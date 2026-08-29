@@ -343,7 +343,7 @@ After this stage runs:
 | STM storage adapter (`shortTermMemoryCache.ts`, `ShortTermMemoryRepository.ts`) | Now DB-backed with write-through cache. Extension point is a custom storage adapter replacing the repository layer. |
 | Same-channel summary/category format | Coupled to `update_short_term_memory` tool output; changing the format changes both. |
 | Per-provider hint format | Nudge text is now server-configurable via overrides. Extension point shifts to per-provider hint formatting (e.g. different phrasing for different LLM providers). → plugin plan candidate. |
-| Cross-server opt-in policy | Coupled to `user_personalization_configs.shortterm_cache_crossserver_opt_in`; user-facing toggle is `/personal stm` (defined in `personal/cache.ts`). |
+| Cross-server opt-in policy | Coupled to `user_personalization_configs.shortterm_cache_crossserver_opt_in`; user-facing toggle is `/personal config` (defined in `personal/config.ts`). |
 | Provider-specific STM-tool availability | `llm_provider === "novelai"` hardcoded; a plugin adding a provider that doesn't support STM tools would extend this gate. AC-2 (name-switch purge) lists this as a violation to eliminate. → plugin plan candidate. |
 
 ## Related docs

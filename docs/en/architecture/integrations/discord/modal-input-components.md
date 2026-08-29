@@ -628,7 +628,7 @@ These modals use a String Select with a small, fixed, mutually exclusive option 
 | ------------------------- | ---------------------------- | ---------------------- | ------------- | ----------------------------------------- | --------------------------------------------------- |
 | `/config humanizer`       | `config/humanizer.ts`        | `humanizer_select`     | String Select | 4-5 (none/light/moderate/heavy; + inherit with `scope: Persona`) | Fixed set of mutually exclusive degrees             |
 | `/setup`           | `setup.ts`            | `humanizer_degree`     | String Select | 4 (none/light/default/heavy)              | Same fixed humanizer degree set as above            |
-| `/personal privacy`       | `personal/privacy.ts`        | `privacy_select`       | String Select | 3 (minimal/partial/full)                  | Fixed set of 3 mutually exclusive levels            |
+| `/personal config`       | `utils/discord/ui/personalConfigPanel.ts` | `privacy_select`       | String Select | 3 (minimal/partial/full)                  | Fixed set of 3 mutually exclusive levels            |
 | `/generate image`         | `generate/image.ts`          | `aspect_ratio_select`  | String Select | 10 (1:1, 2:3, 3:2, 3:4, 4:3, etc.)      | Fixed set of 10 aspect ratios — at the limit        |
 | `/mcps` Add form          | `discord/ui/mcpsPanel.ts`    | `server-type_{nonce}`  | Radio Group   | 3 (General Purpose/Web Search/URL Fetcher) | Already migrated: required routed field with General Purpose selected by default |
 | `/compact`           | `compact.ts`                 | `summary_type`         | String Select | 2 (conversation/roleplay)                 | Fixed binary mode selection                         |
@@ -680,7 +680,6 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | `/persona prompt set`            | `persona/prompt/set.ts`         | Components V2 persona workflow first, then a prefilled free-form prompt modal (up to 16000 chars, 4 fields) |
 | `/persona attribute add`         | `persona/attribute/add.ts`      | Dynamic persona list, uses pagination                     |
 | `/persona sample-dialogue add`   | `persona/sample-dialogue/add.ts`| Dynamic persona list, uses pagination                     |
-| `/memory personal add`           | `memory/personal/add.ts`        | Dynamic memory list                                       |
 | `/memory server add`             | `memory/server/add.ts`          | Dynamic memory list                                       |
 | `/persona image-tags`        | `persona/image-tags.ts`      | Components V2 persona workflow, then a prefilled free-form tag modal |
 | `/persona attribute remove`      | `persona/attribute/remove.ts`   | Dynamic attribute list, uses pagination                   |
@@ -696,7 +695,7 @@ These modals collect free-form text and have no structured option set:
 | `/config system-prompt set` | `config/system-prompt/set.ts`  | Free-form paragraph text (up to 16000 chars, 4 fields)  |
 | `/config random-trigger add`| `config/random-trigger/add.ts` | Free-form trigger word/phrase (text input portion stays) |
 | `/novelai attg`            | `novelai/attg.ts`             | 5 free-form text fields (author, title, tags, etc.)     |
-| `/personal image-tags`         | `personal/image-tags.ts`          | Free-form physical appearance image tag text            |
+| `/personal config`         | `utils/discord/ui/personalConfigPanel.ts` | Free-form physical appearance image tag text            |
 | `/config image-tags default-negative`   | `config/image-tags/default-negative.ts`    | Free-form default negative tag text                     |
 | `/config image-tags default-positive`      | `config/image-tags/default-positive.ts`       | Free-form default positive tag text                  |
 | `/persona create`          | `persona/create.ts`           | Free-form text fields + file upload                     |
@@ -714,7 +713,7 @@ When a flow needs both a selection modal and a later prefilled edit modal, use:
 2. confirmation embed with buttons
 3. `showModal()` from the confirm button interaction
 
-This is the pattern used by the `/memory personal edit`, `/memory server edit`, `/persona attribute edit`, and `/persona sample-dialogue edit` flows.
+This is the pattern used by the `/memory server edit`, `/persona attribute edit`, and `/persona sample-dialogue edit` flows.
 
 For persona-scoped flows that already have a persistent ephemeral picker message, prefer replacing that same message with the confirmation embed and later success state instead of spawning a second ephemeral thread.
 

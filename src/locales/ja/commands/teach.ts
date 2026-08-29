@@ -172,7 +172,7 @@
         duplicate_title: `重複した個人的な記憶`,
         duplicate_description: `この記憶 '{memory}' は既にあなたの個人的な記憶にあります。`,
         limit_exceeded_title: `個人的な記憶の上限に達しました`,
-        limit_exceeded_description: `あなたは個人的な記憶の上限 {max_allowed} 件に達しました（現在 {current_count} 件）。新しい記憶を追加する前に、\`/memory personal remove\`でいくつかの記憶を削除してください。`,
+        limit_exceeded_description: `あなたは個人的な記憶の上限 {max_allowed} 件に達しました（現在 {current_count} 件）。新しい記憶を追加する前に、\`/personal memories\`でいくつかの記憶を削除してください。`,
         batch_limit_exceeded_title: `一括インポートが上限超過`,
         batch_limit_exceeded_description: `インポートに {import_count} 枠必要ですが、上限 {max_allowed} / 現在 {current_count} です。{remove_count} 件削除してから再試行してください。`,
         content_too_long_title: `記憶の内容が長すぎます`,
@@ -194,7 +194,7 @@
 
 **警告:** あなたは現在、このサーバーのパーソナライズ機能のブラックリスト対象のため、これらの記憶はここでは使用されません。`,
         opted_out_error_title: `プライバシー保護が有効`,
-        opted_out_error_description: `あなたはプライバシー上の理由から個人記憶の保存をオプトアウトしています。再び個人記憶を許可したい場合は、\`/personal privacy\`を使用してオプトインしてください。`,
+        opted_out_error_description: `あなたはプライバシー上の理由から個人記憶の保存をオプトアウトしています。再び個人記憶を許可したい場合は、\`/personal config\`を使用してオプトインしてください。`,
       },
       server: {
         description: `私の知識ベースにサーバーの記憶を追加します。`,

@@ -5,7 +5,7 @@ export default {
     persona_success_description: `{persona}としてメッセージを送信しました。`,
     persona_impersonation_notice_description: `\`/config notice-embeds visibility\` でこの埋め込みを非表示にできます。`,
     persona_impersonation_notice_footer: `{user}によるなりすまし`,
-    user_impersonation_notice_description: `\`/config notice-embeds visibility\` でこの埋め込みを非表示にできます。あなたをどうなりすますか教えるには、\`/personal impersonate prompt\` を設定してください。`,
+    user_impersonation_notice_description: `\`/config notice-embeds visibility\` でこの埋め込みを非表示にできます。あなたをどうなりすますか教えるには、\`/personal config\` を設定してください。`,
     user_impersonation_notice_footer: `{user}が{target}のなりすましをトリガーしました`,
     me_success_title: `ユーザーなりすましが発動しました`,
     me_success_description: `{user}としてメッセージを生成できました.`,

@@ -31,7 +31,7 @@ model as the main prompt/context, in this order:
 | [**Server emojis**](/features/chatting-personality/behavior-tweaking/#capabilities-what-shes-allowed-to-do) | *(Optional)* | `/capabilities manage emojiusage` (toggle only), initialize with `/expressions initialize` | The custom emojis present in the server.|
 | [**Server stickers**](/features/chatting-personality/behavior-tweaking/#capabilities-what-shes-allowed-to-do) | *(Optional)* | `/capabilities manage stickerusage` (toggle only), initialize with `/expressions initialize` | The custom stickers present in the server. |
 | [**Persona sprites**](/features/chatting-personality/multiple-personas/#sprites-emotion-avatars) | *(Optional)* | `/persona sprites add` (also `edit`, `remove`) | Named expression sprites configured for the persona, if it has any. |
-| [**Conversation Participants**](/features/knowledge/memory/#personal-vs-server-memories) | *(Optional)* | `/memory personal add` (also `edit`, `remove`); gated by `/capabilities manage personalization` | The people in the conversation, their nicknames and mention handles, and the personal memories saved about each of them. Loaded when the person owns a message in context, or if their name/alias get mentioned. Also carries the current channel and local time as a footer, using `/server timezone`. |
+| [**Conversation Participants**](/features/knowledge/memory/#personal-vs-server-memories) | *(Optional)* | `/personal memories` (gated by `/capabilities manage personalization`) | The people in the conversation, their nicknames and mention handles, and the personal memories saved about each of them. Loaded when the person owns a message in context, or if their name/alias get mentioned. Also carries the current channel and local time as a footer, using `/server timezone`. |
 | [**Short-term memory**](/features/knowledge/memory/#short-term-memory-stm) | | `/persona stm edit` (also `view`); `/server stm manage` to clear entries; gated by `/capabilities manage shorttermmemory` | Contains summaries and recent messages of different channels |
 | [**Documents**](/features/knowledge/memory/#document-knowledge-base-rag) | *(Optional)* | `/memory document add` (also `remove`, `view`) | Relevant chunks pulled from the knowledge base using RAG. |
 | [**Conditioning**](/features/knowledge/memory/#conditioning) | *(Optional)* | `/reward <feed\|headpat\|hug\|kiss\|tickle>`, `/punish <bite\|bonk\|pinch\|spank\|squeeze>`, managed via `/conditioning manage` | Accumulated behavioral nudges for this persona in this server. |
@@ -76,5 +76,5 @@ If you want something to survive all of the above, it has to become a **long-ter
   in the bundle, close to the recent messages, she is more likely to act on it than on
   something in the system prompt. This is the best place to nudge her into saving memories
   more often.
-- `/memory personal add` and `/memory server add` write directly into **Server memories** and
+- `/personal memories` and `/memory server add` write directly into **Server memories** and
   **Conversation Participants**, which is one of the guaranteed ways to make knowledge permanent in TomoriBot's context.

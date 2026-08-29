@@ -24,7 +24,7 @@ Deferred candidates: video generation provider/model option tables, permission-s
 
 ## NovelAI Image Tags Decoupling
 
-Image tags moved out of `/novelai image-tags` into provider-neutral commands: `/persona image-tags`, `/personal image-tags`, and `/config image-tags default-positive/default-negative`. User and persona tags are rendered in context as public `Physical Appearance` lines. `generate_image` now receives default positive tag guidance, while default negative tags are consumed only by NovelAI or custom image endpoints with the `Negative Prompt` support checkbox enabled.
+Image tags moved out of `/novelai image-tags` into provider-neutral commands: `/persona image-tags`, `/personal config`, and `/config image-tags default-positive/default-negative`. User and persona tags are rendered in context as public `Physical Appearance` lines. `generate_image` now receives default positive tag guidance, while default negative tags are consumed only by NovelAI or custom image endpoints with the `Negative Prompt` support checkbox enabled.
 
 ---
 
@@ -324,7 +324,7 @@ Records where cache invalidation lives after the repository migration. All inval
 
 | Cache | Call sites | Reason |
 |---|---|---|
-| Personal spotlight | `src/commands/personal/spotlight/set.ts`, `manage.ts` | Dedicated personal-spotlight DB module; ownership stays here unless it later moves under a repository |
+| Personal spotlight | `src/utils/discord/interactions/personalConfigRoutes.ts` | Panel routes retain caller-owned writes and post-write invalidation unless they later move under a repository |
 | ST preset cache | `src/utils/db/stPresetDb.ts` (now `PresetRepository`) | Write-after-success placement preserved during fold |
 | Emoji/sticker cache | `src/events/guildEmojisUpdate/refreshEmojis.ts`, `guildStickersUpdate/refreshStickers.ts` | Event-driven cache; invalidation follows Discord events, not DB writes |
 | Matrix link cache | `src/commands/matrix/link.ts`, `unlink.ts` | Matrix bridge module - not part of the repository layer |

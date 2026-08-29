@@ -83,11 +83,13 @@ describe("Wave 4 provider panel registration", () => {
       ["custom-endpoint", "remove"],
       ["openrouter-model", "add"],
       ["openrouter-model", "remove"],
+      ["provider", "model-text"],
+      ["provider", "model-vision"],
+      ["provider", "model-image"],
+      ["provider", "model-video"],
+      ["provider", "model-embedding"],
     ]) {
       expect(hasCommandPath(personal, ...path)).toBe(false);
-    }
-    for (const modelLeaf of ["model-text", "model-vision", "model-image", "model-video", "model-embedding"]) {
-      expect(hasCommandPath(personal, "provider", modelLeaf)).toBe(true);
     }
   }, 30000);
 });

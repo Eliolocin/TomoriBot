@@ -57,13 +57,7 @@ export const MIGRATED_ANCHOR_CALLERS: readonly string[] = [
   "src/commands/model/video.ts",
   "src/commands/model/image.ts",
   "src/commands/model/embedding.ts",
-  "src/commands/personal/provider/model-text.ts",
-  "src/commands/personal/provider/model-vision.ts",
-  "src/commands/personal/provider/model-video.ts",
-  "src/commands/personal/provider/model-image.ts",
-  "src/commands/personal/provider/model-embedding.ts",
   "src/commands/model/fallback.ts",
-  "src/commands/personal/model/fallback.ts",
 ];
 
 /** Primitives a migrated caller must not reach for; see {@link MIGRATED_ANCHOR_CALLERS}. */

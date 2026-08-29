@@ -12,7 +12,7 @@ export default {
     persona_success_description: `Message sent successfully as {persona}.`,
     persona_impersonation_notice_description: `Hide this embed via \`/config notice-embeds visibility\`.`,
     persona_impersonation_notice_footer: `Impersonation by {user}`,
-    user_impersonation_notice_description: `Hide this embed via \`/config notice-embeds visibility\`. To teach me how to impersonate you, set \`/personal impersonate prompt\`.`,
+    user_impersonation_notice_description: `Hide this embed via \`/config notice-embeds visibility\`. To teach me how to impersonate you, set \`/personal config\`.`,
     user_impersonation_notice_footer: `{user} triggered a {target} impersonation`,
     me_success_title: `User Impersonation Triggered`,
     me_success_description: `Generated message as {user}.`,

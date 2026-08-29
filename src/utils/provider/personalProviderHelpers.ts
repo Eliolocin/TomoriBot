@@ -4,13 +4,8 @@ import type {
   UserSavedProviderConfigRow,
   UserSavedProviderConfigUpsert,
 } from "@/types/db/schema";
-import { llmModelRepo, llmProviderRepo } from "@/utils/db/repositories";
+import { llmProviderRepo } from "@/utils/db/repositories";
 import { prunePrimaryFallbackRefs } from "@/utils/provider/fallbackModelIdentity";
-
-export interface ProviderModelSelection {
-  model: string;
-  provider: string;
-}
 
 function sortProviderRows(rows: UserSavedProviderConfigRow[]): UserSavedProviderConfigRow[] {
   return [...rows].sort((left, right) => left.provider.localeCompare(right.provider));
@@ -82,11 +77,8 @@ export function getStoredPersonalProviderForCapability(
 
 /**
  * Whether writing a model for `capability` would newly move it off the server default and onto a
- * personal override.
- *
- * Only the legacy `/personal provider model-*` leaves still gate on this. `/personal config` writes
- * on modal submit, because the submit already is the decision. Switching models or providers inside
- * an override that is already active changes nothing about scope either way.
+ * personal override. Switching models or providers inside an override that is already active
+ * changes nothing about scope either way.
  */
 export function activatesNewPersonalOverride(
   rows: UserSavedProviderConfigRow[],
@@ -103,49 +95,11 @@ export function isPersonalTextCredentialRotation(rows: UserSavedProviderConfigRo
   return getActivePersonalProviderForCapability(rows, "text")?.provider.toLowerCase() === provider.toLowerCase();
 }
 
-/** Resolves the active personal model/provider pair(s) for a capability. */
-export async function resolveActivePersonalProviderModelSelections(
-  rows: UserSavedProviderConfigRow[],
-  capability: PersonalProviderCapability,
-): Promise<ProviderModelSelection[]> {
-  const row = getActivePersonalProviderForCapability(rows, capability);
-  if (!row) return [];
-
-  switch (capability) {
-    case "text": {
-      const model = row.llm_id ? await llmModelRepo.loadById(row.llm_id) : null;
-      return model ? [{ model: model.llm_codename, provider: row.provider }] : [];
-    }
-    case "embedding": {
-      const model = row.embedding_model_id ? await llmModelRepo.loadEmbeddingModelById(row.embedding_model_id) : null;
-      return model ? [{ model: model.codename, provider: row.provider }] : [];
-    }
-    case "image": {
-      const model = row.diffusion_model_id ? await llmModelRepo.loadDiffusionModelById(row.diffusion_model_id) : null;
-      return model ? [{ model: model.codename, provider: row.provider }] : [];
-    }
-    case "image_nai": {
-      const model = row.nai_diffusion_model_id
-        ? await llmModelRepo.loadDiffusionModelById(row.nai_diffusion_model_id)
-        : null;
-      return model ? [{ model: model.codename, provider: row.provider }] : [];
-    }
-    case "video": {
-      const model = row.video_model_id ? await llmModelRepo.loadVideoGenerationModelById(row.video_model_id) : null;
-      return model ? [{ model: model.codename, provider: row.provider }] : [];
-    }
-    case "vision": {
-      const model = row.vision_llm_id ? await llmModelRepo.loadById(row.vision_llm_id) : null;
-      return model ? [{ model: model.llm_codename, provider: row.provider }] : [];
-    }
-  }
-}
-
 /**
  * Builds the upsert payload that promotes a text model to personal primary.
  *
  * The promoted model is pruned from the saved fallback chain: a fallback identical to the primary
- * can never run, and leaving it there makes `/personal model fallback` reject every later edit,
+ * can never run, and leaving it there makes personal fallback configuration reject every later edit,
  * since untouched slots resubmit the stale ref.
  */
 export function withPersonalTextPrimary(
@@ -283,16 +237,4 @@ export async function setPersonalCapabilityEnabled(
   }
 
   return true;
-}
-
-export async function loadActivePersonalTextProvider(userId: number): Promise<UserSavedProviderConfigRow | null> {
-  const rows = await llmProviderRepo.loadUserSavedProviderConfigs(userId);
-  return getActivePersonalProviderForCapability(rows, "text");
-}
-
-export async function loadPersonalProviderOrNull(
-  userId: number,
-  provider: string,
-): Promise<UserSavedProviderConfigRow | null> {
-  return await llmProviderRepo.loadUserSavedProviderConfig(userId, provider);
 }

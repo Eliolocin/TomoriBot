@@ -172,7 +172,7 @@
         duplicate_title: `Duplicate Personal Memory`,
         duplicate_description: `This memory '{memory}' is already in your personal memories.`,
         limit_exceeded_title: `Personal Memory Limit Reached`,
-        limit_exceeded_description: `You have reached your personal memory limit of {max_allowed} memories (currently have {current_count}). Please remove some memories with \`/memory personal remove\` before adding new ones.`,
+        limit_exceeded_description: `You have reached your personal memory limit of {max_allowed} memories (currently have {current_count}). Please remove some memories with \`/personal memories\` before adding new ones.`,
         batch_limit_exceeded_title: `Batch Import Exceeds Limit`,
         batch_limit_exceeded_description: `Import needs {import_count} slots, but only {max_allowed} total ({current_count} used). Remove {remove_count} memories and try again.`,
         content_too_long_title: `Memory Content Too Long`,
@@ -194,7 +194,7 @@
 
 **Warning:** You are currently blacklisted from personalization features on this server, so these memories won't be used here. They will still be available on other servers where you are not blacklisted.`,
         opted_out_error_title: `Privacy Protection Active`,
-        opted_out_error_description: `You have opted out of personal memory storage for privacy reasons. If you'd like to allow personal memories again, use \`/personal privacy\` to opt back in.`,
+        opted_out_error_description: `You have opted out of personal memory storage for privacy reasons. If you'd like to allow personal memories again, use \`/personal config\` to opt back in.`,
       },
       server: {
         description: `Add a server memory to my knowledge base.`,

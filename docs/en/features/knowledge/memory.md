@@ -36,7 +36,7 @@ Long-term memories are the only thing she keeps permanently. They are not affect
 
 There are two kinds of long-term memory:
 
-- **Personal memories** (`/memory personal add`): facts about an individual user, e.g.
+- **Personal memories** (`/personal memories`): facts about an individual user, e.g.
   "Amaori loves cats", "prefers dark mode", "allergic to peanuts". These are tied to *you*
   and follow you **across every server**, but she only draws on them in conversations you're actively part of.
 - **Server memories** (`/memory server add`): information relevant to the whole server,
@@ -45,12 +45,12 @@ There are two kinds of long-term memory:
 
 **Memories are isolated per persona by default.** Each persona (including alters) keeps its
 own separate set of personal and server memories, so different personas means she can't recall
-what another persona learned. The one exception is a personal memory added with `scope: global`
-on `/memory personal add`, which then applies to every persona for you specifically. Server
+what another persona learned. The one exception is a personal memory added from the Global page
+on `/personal memories`, which then applies to every persona for you specifically. Server
 memories have no such option, each persona's server-memory set always stays separate, even
 within the same server.
 
-Remove them with `/memory personal remove` and `/memory server remove`. Memories persist
+Remove them with `/personal memories` and `/memory server remove`. Memories persist
 until you remove them.
 
 In new servers, non-manager member access to create, edit, or remove shared server memories is disabled by default. Members with `Manage Server` permission retain access at all times, and managers can opt other members in through `/moderation` Member Access.
@@ -60,7 +60,7 @@ In new servers, non-manager member access to create, edit, or remove shared serv
 
 There are exactly two ways a long-term memory is created:
 
-1. **You save it** with `/memory personal add` or `/memory server add`.
+1. **You save it** with `/personal memories` or `/memory server add`.
 2. **She saves it herself** when she decides something is worth keeping.
 
 When she saves one herself, she posts an embed saying she learned something. **That embed is
@@ -81,7 +81,7 @@ force:
   vary by provider, use the `{memory_tool}`
   [prompt macro](/features/capabilities/tools-and-extensions/#built-in-tools) instead, e.g.
   *"Use {memory_tool} whenever..."*.
-- Save it yourself with `/memory personal add`, which is a guaranteed method.
+- Save it yourself with `/personal memories`, which is a guaranteed method.
 
 Server admins can turn her self-saving off entirely with `/capabilities manage`.
 
@@ -185,7 +185,7 @@ TomoriBot can easily read messages from the current channel she's talking in, bu
 she replies, and at no other time, so a busy channel where nobody talks to her leaves no
 trace. 
 
-STM of each channel expires after 24 hours by default and if you've opted out with `/personal privacy`, your messages never go into it at all as well.
+STM of each channel expires after 24 hours by default and if you've opted out with `/personal config`, your messages never go into it at all as well.
 
 ### What she can and can't see
 
@@ -195,7 +195,7 @@ STM of each channel expires after 24 hours by default and if you've opted out wi
 | **In DMs** | Yours alone. |
 | **Other channels** | She can recall her recent conversations from a few other channels in the same server. |
 | **Private channels** | Anything set with `/server private-channels` stays there and won't surface elsewhere. |
-| **Other servers** | Never, unless you turn on `/personal stm` → `crossserver`. Even then only *your own* conversations follow you. |
+| **Other servers** | Never, unless you turn on `/personal config` → `crossserver`. Even then only *your own* conversations follow you. |
 | **Each persona** | Keeps her own separate memory, so switching persona switches memory. |
 
 Each channel's memory holds the last few messages plus a short summary she writes herself
@@ -207,7 +207,7 @@ and refreshes as the conversation moves along. It fades on its own after a few q
 |---|---|
 | `/persona stm view` | See the summary she's keeping for this channel |
 | `/persona stm edit` | Correct it or write it yourself |
-| `/personal stm` | Opt into cross-server recall, or wipe your own |
+| `/personal config` / `/personal memories` | Opt into cross-server recall, or wipe your own |
 | `/refresh` | Make her forget this channel right now |
 | `/server stm parameters` | How often she updates it, and how much detail she keeps |
 | `/server stm categories-edit` | Swap the summary for up to 5 labeled fields (*Current scene*, *Mood*, …) |
@@ -216,10 +216,10 @@ and refreshes as the conversation moves along. It fades on its own after a few q
 | `/server stm privacy-bypass` | Let private-channel memories surface elsewhere |
 | `/capabilities manage` | Turn the feature on or off (stored memories are kept either way) |
 
-Anyone can run `/persona stm view` and `/personal stm`. The rest need Manage Server.
+Anyone can run `/persona stm view`, `/personal config`, and `/personal memories`. The rest need Manage Server.
 
 :::tip
-These STM commands are for advanced users only, it is recommended to keep the default settings, unless you want to allow her to remember you across servers with `/personal stm`
+These STM commands are for advanced users only, it is recommended to keep the default settings, unless you want to allow her to remember you across servers with `/personal config`
 :::
 
 ---
@@ -227,4 +227,4 @@ These STM commands are for advanced users only, it is recommended to keep the de
 ## Privacy 
 For exactly what she stores and how to export or delete it, see
 [Data Handling](/features/knowledge/data-handling/) and `/legal privacy`. You can opt out of memory
-entirely with `/personal privacy`.
+entirely with `/personal config`.

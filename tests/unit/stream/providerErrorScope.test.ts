@@ -111,7 +111,7 @@ describe("provider error tips resolve against the credential source", () => {
   it("recommends personal commands when the user's own credentials failed", async () => {
     const tips = await renderTips(MODEL_ERROR, "personal");
 
-    expect(tips).toContain("/personal provider model-text");
+    expect(tips).toContain("/personal config");
     expect(tips).not.toContain("/model text");
   });
 
@@ -143,7 +143,7 @@ describe("provider error tips resolve against the credential source", () => {
     const personalTips = await renderTips(RATE_LIMIT_ERROR, "personal", { fallbackChain: [{ type: "llm", id: 1 }] });
 
     expect(serverTips).not.toContain("fallback");
-    expect(personalTips).toContain("/personal model fallback");
+    expect(personalTips).toContain("/personal config");
   });
 
   it("falls back to server-scoped tips when no credential source was recorded", async () => {

@@ -234,7 +234,7 @@ export default {
         group_label: `機能`,
         group_description: `チェックした機能は全サーバーで個人上書きになります。チェックを外した機能は各サーバーの既定に戻ります。`,
         provider_description: `割り当てプロバイダー: {provider}`,
-        none_set_description: `サーバー既定。\`/personal provider model-\` でモデルを選ぶと個人上書きが有効になります。`,
+        none_set_description: `サーバー既定。\`/personal config\` でモデルを選ぶと個人上書きが有効になります。`,
         missing_model_title: `モデルが必要です`,
         missing_model_description: `{capability} にはまだ個人モデルが設定されていません。`,
         success_title: `個人ルーティングを更新しました`,
@@ -250,7 +250,7 @@ export default {
       fallback: {
         description: `個人テキスト上書きのフォールバックモデルを設定し、なしで各スロットをクリアできます。`,
         no_provider_title: `有効な個人テキストプロバイダーがありません`,
-        no_provider_description: `先に \`/personal providers\` または \`/personal provider model-text\` で個人テキスト上書きを有効化してください。`,
+        no_provider_description: `先に \`/personal providers\` または \`/personal config\` で個人テキスト上書きを有効化してください。`,
         primary_conflict_title: `選択が無効です`,
         primary_conflict_description: `選択したフォールバックモデルの一つ以上が、このプロバイダーの個人プライマリモデル \`{model}\` と一致しています。別のモデルを選択してください。`,
         success_title: `個人フォールバックを更新しました`,
@@ -304,7 +304,7 @@ export default {
       success_title: `プライバシー設定が更新されました`,
       success_description: `プライバシーレベルが\`{previous_value}\`から\`{value}\`に変更されました。
 
-\`/personal privacy\`を使用していつでも変更できます。`,
+\`/personal config\`を使用していつでも変更できます。`,
       already_set_title: `変更はありません`,
       already_set_description: `プライバシーレベルは既に\`{value}\`に設定されています。`,
       invalid_value_description: `無効なプライバシーレベルが選択されました。もう一度お試しください。`,

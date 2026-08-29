@@ -83,8 +83,7 @@ Operational note:
   - `/moderation` Whitelist Personas
   - `/moderation` Whitelist Roles
 - Personal spotlight:
-  - `/personal spotlight set`
-  - `/personal spotlight manage`
+  - `/personal config`
 
 ## Cleanup
 

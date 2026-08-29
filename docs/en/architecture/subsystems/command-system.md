@@ -109,8 +109,8 @@ provider-selection embed. Model-selection callers pass the effective slot select
 the embed can show the active model codename and provider; channel and persona text
 commands resolve their scoped override before falling back to the server text model.
 
-The `/model *` and `/personal provider model-*` families no longer use that primitive.
-They render the provider picker, the `>25` range selector, the modal, and the terminal
+The live `/model *` family no longer uses that primitive.
+It renders the provider picker, the `>25` range selector, the modal, and the terminal
 result on one anchor ephemeral message through the shared helpers in
 `src/utils/discord/ui/anchorModelFlow.ts` (see the anchor message controller section
 below). `promptForSavedProvider()` is forbidden in those files, and the allow-list audit in
@@ -200,8 +200,8 @@ Key pattern:
 
 Example path:
 
-- file: `src/commands/memory/personal/remove.ts`
-- command path: `memory.personal.remove`
+- file: `src/commands/memory/server/remove.ts`
+- command path: `memory.server.remove`
 
 Root command example:
 
@@ -340,7 +340,7 @@ Use when a command needs one modal to collect a bulk selection, then a follow-up
 
 Example:
 
-- `/personal spotlight set`
+- `/personal config` (spotlight workflow)
 
 Rules:
 
@@ -864,8 +864,8 @@ An exception must never weaken the repository-wide scanner or add a directory-wi
 ### Pattern 4B: Anchor One-Shot Picker -> Modal
 
 Use for a config command shaped *pick a provider -> choose a value in a modal -> show the
-result*. The whole `/model *` family and its `/personal provider model-*` siblings are built
-this way, plus `/model fallback` and `/personal model fallback`.
+result*. The whole `/model *` family is built
+this way, plus `/model fallback`.
 
 The command expresses only business intent — which model table to read, which column to
 write, which terminal copy to show. All lifecycle branching lives in the shared helpers in

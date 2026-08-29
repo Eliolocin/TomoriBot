@@ -17,7 +17,7 @@ Use this page to verify:
 
 - `/model parameters thinking_level:<value>` — for a server saved provider (you pick which
   saved provider via the interactive picker after running the command)
-- `/personal parameters thinking_level:<value>` — for your personal saved provider
+- `/personal config` — for your personal saved provider
 
 Current values:
 

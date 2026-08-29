@@ -28,6 +28,6 @@ TomoriBotは利用状況をトラッキングし、誰が誰と話している�
 - **Persona Affinity**：このサーバーでのペルソナの統計です。
 - **Server Leaderboard**：サーバー全体のランキングです。
 
-完全にプライベートなユーザー（`/personal privacy`）は個人のカードを生成できません。
+完全にプライベートなユーザー（`/personal config`）は個人のカードを生成できません。
 
 カードの構成とレンダリングの仕組みについては、[統計インフォグラフィックサブシステム](/ja/architecture/subsystems/stats-infographic/)のアーキテクチャリファレンスをご覧ください。

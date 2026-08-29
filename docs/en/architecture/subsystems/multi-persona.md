@@ -176,12 +176,12 @@ Attribution, quota, self-reply bookkeeping, STM ownership, and reply routing rem
 
 ### Personal spotlight
 
-Users can add a channel-scoped personal persona filter with `/personal spotlight set`:
+Users can add a channel-scoped personal persona filter with `/personal config`:
 
 - The spotlight stores a per-user allowed persona set for one channel.
 - That set is intersected with the server whitelist result, so personal spotlight can only narrow access, never expand it.
 - If the spotlight also chooses an auto-trigger persona, that persona becomes the user+channel-scoped fallback for every qualifying message from that user in that channel.
-- `/personal spotlight manage` removes permanent or timed spotlight rows.
+- `/personal config` removes permanent or timed spotlight rows.
 
 ## Response Pipeline (Multi-Persona)
 

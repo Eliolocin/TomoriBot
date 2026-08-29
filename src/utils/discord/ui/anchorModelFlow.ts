@@ -23,10 +23,10 @@ import {
 
 /**
  * Shared delivery mechanics for the anchor one-message model-config commands
- * (`/model text|vision|video|image|embedding` and their personal-scope siblings).
+ * (`/model text|vision|video|image|embedding`).
  *
  * Each command owns its business logic: which model table, which config field, which
- * terminal copy, so and calls these helpers only for the lifecycle: render the provider
+ * terminal copy, and calls these helpers only for the lifecycle: render the provider
  * step on the anchor message, collect the opening button, and open the model modal
  * (routing `>25` options through the anchor range selector automatically). This is
  * what keeps "adding a picker→modal command touches one file": the lifecycle lives here,
@@ -45,9 +45,9 @@ export interface AnchorCurrentSelection {
 }
 
 /**
- * Which config surface a anchor model command writes to. Server-scope commands
- * (`/model *`) and personal-scope commands (`/personal provider model-*`) share every
- * lifecycle mechanic but differ in a few terminal copy strings and command mentions.
+ * Which config surface an anchor model command writes to. Server-scope commands
+ * (`/model *`) use this shared lifecycle mechanic and differ in terminal copy strings
+ * and command mentions.
  */
 export type AnchorModelScopeKind = "server" | "personal";
 
@@ -314,9 +314,9 @@ export async function acquireModelModalOpener(
  * The anchor engine's own bridge (see {@link openAnchorModal}) already does this for
  * the common case, but it slices exactly one select component and assumes every entry is a
  * real option. This helper exists for modals that neither assumption fits: `/model fallback`
- * and its personal sibling render **five** selects over one shared option list and reserve one
- * entry per page for an explicit "None" choice. They pick a range here first, then hand
- * {@link openAnchorModal} an already-sliced `<=25` list, which opens directly.
+ * renders **five** selects over one shared option list and reserves one entry per page for an
+ * explicit "None" choice. It picks a range here first, then hands {@link openAnchorModal} an
+ * already-sliced `<=25` list, which opens directly.
  *
  * @param optionCount - Total selectable options, excluding any reserved entries.
  * @returns The chosen range plus the button to open the modal from, or null.
@@ -380,74 +380,6 @@ export async function acquireModalOptionRange(
     const start = rangeIndex * pageSize;
     return { button: rangeButton, start, end: Math.min(start + pageSize, optionCount) };
   }
-}
-
-/**
- * Renders a two-button confirm step on the anchor message and returns the unacknowledged
- * Continue button, or null when the user declined or timed out (both rendered in place).
- *
- * Personal-scope model commands enable a cross-server override as a side effect of picking a
- * model, so a capability moving off the server default needs an explicit acknowledgement before
- * the write. The Continue button is deliberately left unacknowledged so the caller decides when
- * the three-second ack lands relative to its own database work.
- */
-export async function confirmPersonalOverrideActivation(
-  phase: AnchorPrivateWorkflowPhase,
-  modalPhase: PersonaWorkflowModalPhase,
-  userId: string,
-  locale: string,
-  details: { capability: string; provider: string; model: string },
-  idRoot: string,
-): Promise<ButtonInteraction | null> {
-  const prefix = `${idRoot}_activate`;
-  const container: ContainerComponentData<ComponentInContainerData> = {
-    type: ComponentType.Container,
-    accentColor: Number.parseInt(ColorCode.WARN.replace("#", ""), 16),
-    components: [
-      {
-        type: ComponentType.TextDisplay,
-        content: `### ${localizer(locale, "commands.personal.provider.activation_confirm_title")}`,
-      },
-      {
-        type: ComponentType.TextDisplay,
-        content: localizer(locale, "commands.personal.provider.activation_confirm_description", details),
-      },
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            customId: `${prefix}_yes`,
-            label: localizer(locale, "commands.personal.provider.activation_confirm_continue"),
-            style: ButtonStyle.Success,
-          },
-          {
-            type: ComponentType.Button,
-            customId: `${prefix}_no`,
-            label: localizer(locale, "commands.personal.provider.activation_confirm_cancel"),
-            style: ButtonStyle.Danger,
-          },
-        ],
-      } satisfies ActionRowData<ButtonComponentData>,
-    ],
-  };
-
-  await modalPhase.replace({ components: [container], flags: MessageFlags.IsComponentsV2 });
-
-  const button = await awaitAnchorButton(phase, userId, prefix, locale);
-  if (!button) return null;
-  if (button.customId === `${prefix}_no`) {
-    await phase.useButton(button).replace(
-      buildPersonaWorkflowNotice({
-        locale,
-        titleKey: "commands.personal.provider.activation_cancelled_title",
-        descriptionKey: "commands.personal.provider.activation_cancelled_description",
-        color: ColorCode.WARN,
-      }),
-    );
-    return null;
-  }
-  return button;
 }
 
 /**

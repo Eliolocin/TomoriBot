@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **40**. Runnable slash commands: **192**.
+Top-level command groups: **40**. Runnable slash commands: **170**.
 
 ## `/capabilities`
 
@@ -176,11 +176,8 @@ Manage stored memories and documents.
 | `/memory document remove` | Remove a document from memory. |
 | `/memory document view` | Browse a stored document chunk by chunk, allowing you to edit or delete each chunk as well. |
 | `/memory history remove` | Remove a history-extracted document from memory. |
-| `/memory personal add` | Add a personal memory. |
-| `/memory personal edit` | Edit a personal memory. |
 | `/memory personal export` | Export personal memories to JSON. |
 | `/memory personal import` | Import personal memories from JSON. |
-| `/memory personal remove` | Remove a personal memory. |
 | `/memory server add` | Add a server memory. |
 | `/memory server edit` | Edit a server memory. |
 | `/memory server export` | Export server memories to JSON. |
@@ -289,27 +286,8 @@ Manage your personal settings
 | Command | Summary |
 |---|---|
 | `/personal config` | Manage your personal preferences, privacy, models, and profile. |
-| `/personal deliberate-tool-mode` | Set your personal deliberate tool mode preference. |
-| `/personal deliberate-trigger-mode` | Set your personal deliberate trigger mode (DTM) preference. |
-| `/personal image-tags` | Set comma-separated image tags for your physical appearance to assist image generation. |
-| `/personal impersonate prompt` | Set a reusable prompt that tells me how to impersonate you. |
-| `/personal language` | Set your preferred language for my interface. |
 | `/personal memories` | Manage your personal long-term memories and short-term conversational context. |
-| `/personal model fallback` | Set fallback models for your personal text override, or clear slots with None. |
-| `/personal parameters` | Adjust sampler settings for your personal providers, not this server's. |
-| `/personal privacy` | Control personal memory storage and privacy settings |
-| `/personal profile about` | Set your optional profile details and preferred style of address. |
-| `/personal profile nickname` | Configure the nickname, prefix, and suffix a persona uses for you. |
-| `/personal provider model-embedding` | Select and enable your personal embedding model, used in every server. |
-| `/personal provider model-image` | Select and enable your personal image model, used in every server. |
-| `/personal provider model-text` | Select and enable your personal text model, used in every server. |
-| `/personal provider model-video` | Select and enable your personal video model, used in every server. |
-| `/personal provider model-vision` | Select and enable your personal vision model, used in every server. |
 | `/personal providers` | Manage your personal provider credentials, endpoints, and model catalogs. |
-| `/personal spotlight manage` | Remove your active personal spotlights. See Personal Spotlight in /help. |
-| `/personal spotlight set` | Set a personal persona spotlight for one channel. See Personal Spotlight in /help. |
-| `/personal stm` | Configure STM (short-term memory) settings |
-| `/personal timezone` | Set your personal timezone offset from UTC. |
 
 ## `/ping`
 

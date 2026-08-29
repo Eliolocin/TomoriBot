@@ -56,7 +56,7 @@
         select_description: `削除する個人的な記憶を選択してください`,
         select_placeholder: `記憶を選択...`,
         no_memories_title: `個人的な記憶がありません`,
-        no_memories: `あなたには個人的な記憶が保存されていません。\`/memory personal add\`で追加してください。`,
+        no_memories: `あなたには個人的な記憶が保存されていません。\`/personal memories\`で追加してください。`,
         success_title: `個人的な記憶が削除されました`,
         success_description: `個人的な記憶を正常に削除しました: "{memory}"`,
         warning_disabled_title: `パーソナライズが無効です`,
