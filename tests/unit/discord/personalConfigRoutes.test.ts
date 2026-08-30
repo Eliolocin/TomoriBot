@@ -59,6 +59,7 @@ const PERSONAL_CONFIG_HANDLER_SOURCES = [
   "src/utils/discord/interactions/personalConfigProfileRoutes.ts",
   "src/utils/discord/interactions/personalConfigModelRoutes.ts",
   "src/utils/discord/interactions/personalConfigResponseRoutes.ts",
+  "src/utils/discord/interactions/personalConfigSpotlightRoutes.ts",
 ] as const;
 
 function requireRoute(customId: string): ParsedInteractionRoute {
@@ -6547,5 +6548,120 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
     expect(renderedText).not.toContain(
       "> You can trigger me by saying my name\\n> (Follow Server, currently off here)",
     );
+  });
+
+  it("proves post-defer spotlight write repaints with refreshed scope and records telemetry", async () => {
+    const calls: string[] = [];
+    let resolveCount = 0;
+    let capturedPayload: unknown = null;
+    let recordedAction: string | null = null;
+    let writeUserId: number | null = null;
+    let writeUserDiscId: string | null = null;
+    let writeChannelId: string | null = null;
+    let activeSpotlightUserId: number | null = null;
+
+    const initialUser = makeUser({
+      user_id: 101,
+      user_disc_id: "user-101",
+      user_nickname: "InitialSpotlightUser",
+    });
+    const refreshedUser = makeUser({
+      user_id: 202,
+      user_disc_id: "user-202",
+      user_nickname: "RefreshedSpotlightUser",
+    });
+
+    const personas = [
+      { id: 1, name: "Tomori", isAlter: false },
+      { id: 2, name: "Anon", isAlter: false },
+    ];
+    const fp = computeSpotlightSetFingerprint("guild-123", "user-101", personas);
+
+    const { dependencies } = makeDependencies(calls, {
+      resolveScope: async (_interaction, forceRefresh) => {
+        resolveCount++;
+        const currentUser = forceRefresh ? refreshedUser : initialUser;
+        return {
+          userId: currentUser.user_id,
+          userDiscId: currentUser.user_disc_id,
+          guildId: "guild-123",
+          workspaceId: "guild-123",
+          internalServerId: 42,
+          user: currentUser,
+          resolvedNickname: currentUser.user_nickname ?? "LiveUser",
+          personas: [],
+          readStatus: "fresh",
+        };
+      },
+      loadGuildPersonas: async () => personas,
+      loadActiveSpotlights: async (_serverId, userId) => {
+        activeSpotlightUserId = userId;
+        return [];
+      },
+      operations: {
+        ...personalConfigOperations,
+        setSpotlight: async (input) => {
+          writeUserId = input.userId;
+          writeUserDiscId = input.userDiscId;
+          writeChannelId = input.channelId;
+          calls.push(`setSpotlight:${input.channelId}:${input.personaIds.join(",")}`);
+          return { status: "success" };
+        },
+      },
+      recordAction: (input) => {
+        recordedAction = input.action;
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigRouteId({
+      action: "spot-set-cf",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      hours: 12,
+      autoIdx: 1,
+      blockIdx: 0,
+      mask: "1",
+      fp,
+      nonce: "nonce123456",
+    });
+
+    let deferred = false;
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-101", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      guild: { channels: { cache: makeChannelCache(["123456789012345678"]) } },
+      get deferred() {
+        return deferred;
+      },
+      get replied() {
+        return false;
+      },
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async (payload: unknown) => {
+        capturedPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(writeUserId).toBe(101);
+    expect(writeUserDiscId).toBe("user-101");
+    expect(writeChannelId).toBe("123456789012345678");
+    expect(calls).toContain("setSpotlight:123456789012345678:1");
+    expect(resolveCount).toBeGreaterThanOrEqual(2);
+    expect(activeSpotlightUserId).toBe(202);
+    expect(recordedAction).toBe("personal-config.personal.spotlight.set");
+    expect(deferred).toBe(true);
+    expect(capturedPayload).not.toBeNull();
+    const renderedText = JSON.stringify(capturedPayload);
+    expect(renderedText).toContain("Personal Spotlight Saved");
+    expect(renderedText).toContain("Your personal spotlight has been saved for <#123456789012345678>.");
   });
 });
