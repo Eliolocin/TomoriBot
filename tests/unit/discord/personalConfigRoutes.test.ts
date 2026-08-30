@@ -2,10 +2,8 @@ import { beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { ButtonInteraction, Client, InteractionReplyOptions, ModalSubmitInteraction } from "discord.js";
 import { PrivacyLevel, type UserRow, type TomoriState } from "@/types/db/schema";
-import {
-  createPersonalConfigInteractionRoute,
-  type PersonalConfigRouteDependencies,
-} from "@/utils/discord/interactions/personalConfigRoutes";
+import { createPersonalConfigInteractionRoute } from "@/utils/discord/interactions/personalConfigRoutes";
+import type { PersonalConfigRouteDependencies } from "@/utils/discord/interactions/personalConfigRouteContext";
 import {
   personalConfigOperations,
   type PersonalConfigOperations,
@@ -54,7 +52,11 @@ function makeChannelCache(channelIds: string[]): Map<string, { type: number; nam
  * slice that moves handler branches into a new module adds its path here instead of editing the
  * assertion it would otherwise have to weaken.
  */
-const PERSONAL_CONFIG_HANDLER_SOURCES = ["src/utils/discord/interactions/personalConfigRoutes.ts"] as const;
+const PERSONAL_CONFIG_HANDLER_SOURCES = [
+  "src/utils/discord/interactions/personalConfigRoutes.ts",
+  "src/utils/discord/interactions/personalConfigModalOpenRoutes.ts",
+  "src/utils/discord/interactions/personalConfigNavigationRoutes.ts",
+] as const;
 
 function requireRoute(customId: string): ParsedInteractionRoute {
   const parsed = parseInteractionRoute(customId);
@@ -5973,6 +5975,272 @@ describe("Raw modal component types and their option bounds", () => {
         expect(size).toBeGreaterThanOrEqual(2);
         expect(size).toBeLessThanOrEqual(10);
       }
+    }
+  });
+});
+
+describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => {
+  it("model-provider-select with __server_default__ falls through to post-defer, while ordinary provider shows modal pre-defer without deferring", async () => {
+    let serverDefaultDeferred = false;
+    let setCapabilityCalled = false;
+    const { dependencies: serverDefaultDeps } = makeDependencies([], {
+      operations: {
+        ...personalConfigOperations,
+        setCapabilityEnabled: async (_input) => {
+          expect(serverDefaultDeferred).toBe(true);
+          setCapabilityCalled = true;
+          return { status: "success" };
+        },
+      },
+    });
+
+    const route1 = createPersonalConfigInteractionRoute(serverDefaultDeps);
+    const serverDefaultCustomId = buildPersonalConfigRouteId({
+      action: "model-provider-select",
+      locale: "en-US",
+      capability: "text",
+    });
+
+    const serverDefaultInteraction = {
+      isButton: () => false,
+      isStringSelectMenu: () => true,
+      isModalSubmit: () => false,
+      customId: serverDefaultCustomId,
+      values: ["__server_default__"],
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return serverDefaultDeferred;
+      },
+      replied: false,
+      deferUpdate: async () => {
+        serverDefaultDeferred = true;
+      },
+      editReply: async () => {},
+    } as unknown as StringSelectMenuInteraction;
+
+    await route1.execute({} as Client, serverDefaultInteraction, requireRoute(serverDefaultCustomId));
+    expect(serverDefaultDeferred).toBe(true);
+    expect(setCapabilityCalled).toBe(true);
+
+    let modalShown = false;
+    let acknowledgedInsideModal = true;
+    let ordinaryDeferred = false;
+    let ordinaryReplied = false;
+
+    const { dependencies: modalDeps } = makeDependencies([], {
+      loadAvailableModelsForCapability: async () => [
+        { id: 101, name: "Claude 3.5 Sonnet" },
+        { id: 102, name: "Claude 3 Opus" },
+      ],
+      showModelSelectModal: async () => {
+        modalShown = true;
+        acknowledgedInsideModal = ordinaryDeferred || ordinaryReplied;
+      },
+    });
+
+    const route2 = createPersonalConfigInteractionRoute(modalDeps);
+    const modalCustomId = buildPersonalConfigRouteId({
+      action: "model-provider-select",
+      locale: "en-US",
+      capability: "text",
+    });
+
+    const modalInteraction = {
+      isButton: () => false,
+      isStringSelectMenu: () => true,
+      isModalSubmit: () => false,
+      customId: modalCustomId,
+      values: ["openrouter"],
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return ordinaryDeferred;
+      },
+      get replied() {
+        return ordinaryReplied;
+      },
+      deferUpdate: async () => {
+        ordinaryDeferred = true;
+      },
+      reply: async () => {
+        ordinaryReplied = true;
+      },
+      editReply: async () => {},
+    } as unknown as StringSelectMenuInteraction;
+
+    await route2.execute({} as Client, modalInteraction, requireRoute(modalCustomId));
+    expect(modalShown).toBe(true);
+    expect(acknowledgedInsideModal).toBe(false);
+    expect(ordinaryDeferred).toBe(false);
+    expect(ordinaryReplied).toBe(false);
+  });
+
+  it("spotlight-remove-open with > SPOTLIGHT_REMOVE_PAGE_SIZE active spotlights falls through to post-defer range chooser, while <= limit shows removal modal pre-defer", async () => {
+    const active51 = Array.from({ length: 51 }, (_, i) => ({
+      channelDiscId: `channel-${i}`,
+      personaIds: [1],
+      autoTriggerPersonaId: null,
+      expiresAt: null,
+      userDiscId: "user-123",
+    }));
+
+    let overflowDeferred = false;
+    let repaintedPayload: unknown = null;
+    let modalCalledForOverflow = false;
+
+    const { dependencies: overflowDeps } = makeDependencies([], {
+      loadActiveSpotlights: async () => active51,
+      showSpotlightRemoveModal: async () => {
+        modalCalledForOverflow = true;
+      },
+    });
+
+    const route1 = createPersonalConfigInteractionRoute(overflowDeps);
+    const overflowCustomId = buildPersonalConfigRouteId({
+      action: "spotlight-remove-open",
+      locale: "en-US",
+    });
+
+    const overflowInteraction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: overflowCustomId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return overflowDeferred;
+      },
+      replied: false,
+      deferUpdate: async () => {
+        overflowDeferred = true;
+      },
+      editReply: async (payload: unknown) => {
+        repaintedPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route1.execute({} as Client, overflowInteraction, requireRoute(overflowCustomId));
+    expect(modalCalledForOverflow).toBe(false);
+    expect(overflowDeferred).toBe(true);
+    expect(repaintedPayload).not.toBeNull();
+    const payloadJson = JSON.stringify(repaintedPayload);
+    expect(payloadJson).toContain("Select Spotlight Range");
+    expect(payloadJson).toContain("s-rem-r");
+
+    const active5 = Array.from({ length: 5 }, (_, i) => ({
+      channelDiscId: `channel-${i}`,
+      personaIds: [1],
+      autoTriggerPersonaId: null,
+      expiresAt: null,
+      userDiscId: "user-123",
+    }));
+
+    let normalDeferred = false;
+    let normalReplied = false;
+    let modalCalledForNormal = false;
+    let acknowledgedInsideNormalModal = true;
+
+    const { dependencies: normalDeps } = makeDependencies([], {
+      loadActiveSpotlights: async () => active5,
+      showSpotlightRemoveModal: async () => {
+        modalCalledForNormal = true;
+        acknowledgedInsideNormalModal = normalDeferred || normalReplied;
+      },
+    });
+
+    const route2 = createPersonalConfigInteractionRoute(normalDeps);
+    const normalCustomId = buildPersonalConfigRouteId({
+      action: "spotlight-remove-open",
+      locale: "en-US",
+    });
+
+    const normalInteraction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId: normalCustomId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return normalDeferred;
+      },
+      get replied() {
+        return normalReplied;
+      },
+      deferUpdate: async () => {
+        normalDeferred = true;
+      },
+      reply: async () => {
+        normalReplied = true;
+      },
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await route2.execute({} as Client, normalInteraction, requireRoute(normalCustomId));
+    expect(modalCalledForNormal).toBe(true);
+    expect(acknowledgedInsideNormalModal).toBe(false);
+    expect(normalDeferred).toBe(false);
+    expect(normalReplied).toBe(false);
+  });
+
+  it("proves pre-defer modal actions do not acknowledge before opening their modal or direct reply", async () => {
+    const actionsToTest = [
+      { action: "language-open" as const, modalProp: "showLanguageModal" },
+      { action: "timezone-open" as const, modalProp: "showTimezoneModal" },
+      { action: "naming-open" as const, modalProp: "showNamingModal" },
+      { action: "about-open" as const, modalProp: "showAboutModal" },
+      { action: "appearance-open" as const, modalProp: "showAppearanceModal" },
+      { action: "privacy-level-open" as const, modalProp: "showPrivacyLevelModal" },
+      { action: "quick-toggle-open" as const, modalProp: "showQuickToggleModal" },
+      { action: "impersonation-open" as const, modalProp: "showImpersonationModal" },
+      { action: "spotlight-set-open" as const, modalProp: "showSpotlightStep1Modal" },
+    ];
+
+    for (const { action, modalProp } of actionsToTest) {
+      let modalCalled = false;
+      let acknowledgedInsideModal = true;
+      let deferred = false;
+      let replied = false;
+
+      const { dependencies } = makeDependencies([], {
+        [modalProp]: async () => {
+          modalCalled = true;
+          acknowledgedInsideModal = deferred || replied;
+        },
+      });
+
+      const route = createPersonalConfigInteractionRoute(dependencies);
+      const customId = buildPersonalConfigRouteId({ action, locale: "en-US" } as PersonalConfigPanelRoute);
+
+      const interaction = {
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        customId,
+        user: { id: "user-123", username: "tester", displayName: "Tester" },
+        guildId: "guild-123",
+        get deferred() {
+          return deferred;
+        },
+        get replied() {
+          return replied;
+        },
+        deferUpdate: async () => {
+          deferred = true;
+        },
+        reply: async () => {
+          replied = true;
+        },
+        editReply: async () => {},
+      } as unknown as ButtonInteraction;
+
+      await route.execute({} as Client, interaction, requireRoute(customId));
+      expect(modalCalled).toBe(true);
+      expect(acknowledgedInsideModal).toBe(false);
+      expect(deferred).toBe(false);
+      expect(replied).toBe(false);
     }
   });
 });
