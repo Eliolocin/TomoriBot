@@ -560,3 +560,149 @@ describe("OpenrouterStreamAdapter response body teardown", () => {
     expect(cancelled).toBe(false);
   });
 });
+
+describe("OpenrouterStreamAdapter strict chat-completion compatibility", () => {
+  it("leaves representative same-role history unchanged when strict alternation is off by default", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeSseResponse(["[DONE]"]);
+    }) as typeof fetch;
+
+    const context = makeStreamContext();
+    context.contextItems = [
+      { role: "user", parts: [{ type: "text", text: "First user message" }] },
+      { role: "user", parts: [{ type: "text", text: "Second user message" }] },
+      { role: "model", parts: [{ type: "text", text: "First model response" }] },
+      { role: "model", parts: [{ type: "text", text: "Second model response" }] },
+    ];
+
+    for await (const _chunk of new OpenrouterStreamAdapter().startStream(makeStreamConfig(), context)) {
+      // Drain stream to capture the request body.
+    }
+
+    const messages = requestBody?.messages as Array<Record<string, unknown>>;
+    expect(messages).toEqual([
+      { role: "user", content: "First user message" },
+      { role: "user", content: "Second user message" },
+      { role: "assistant", content: "First model response" },
+      { role: "assistant", content: "Second model response" },
+    ]);
+  });
+
+  it("merges ordinary same-role turns and inserts leading user turn while preserving tool-call/tool-result wiring", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeSseResponse(["[DONE]"]);
+    }) as typeof fetch;
+
+    const context = makeStreamContext();
+    context.tomoriState.llm = {
+      strict_role_alternation: true,
+    } as unknown as import("@/types/db/schema").LlmRow;
+    context.contextItems = [
+      { role: "model", parts: [{ type: "text", text: "Hello! How can I help?" }] },
+      { role: "user", parts: [{ type: "text", text: "Check this" }] },
+      { role: "user", parts: [{ type: "text", text: "And that" }] },
+    ];
+    context.functionInteractionHistory = [
+      {
+        functionCall: { name: "lookup_data", args: { key: "abc" } },
+        functionResponse: {
+          functionResponse: {
+            name: "lookup_data",
+            response: { result: "found" },
+          },
+        },
+      },
+    ];
+
+    for await (const _chunk of new OpenrouterStreamAdapter().startStream(makeStreamConfig(), context)) {
+      // Drain stream to capture the request body.
+    }
+
+    const messages = requestBody?.messages as Array<Record<string, unknown>>;
+    expect(messages[0]).toEqual({ role: "user", content: "[System: Conversation start]" });
+    expect(messages[1]).toEqual({ role: "assistant", content: "Hello! How can I help?" });
+    expect(messages[2]).toEqual({ role: "user", content: "Check this\nAnd that" });
+    expect(messages[3]?.role).toBe("assistant");
+    expect(Array.isArray(messages[3]?.tool_calls)).toBe(true);
+    expect(messages[4]?.role).toBe("tool");
+    expect(messages[4]?.tool_call_id).toBe((messages[3]?.tool_calls as Array<{ id: string }>)[0]?.id);
+    expect(messages).toHaveLength(5);
+  });
+
+  it("omits prefix when supports_prefix_completion is false and includes prefix only on matching trailing assistant prefill when true", async () => {
+    const drainAndCapture = async (
+      supportsPrefix: boolean,
+      currentTurnParts: Array<Record<string, unknown>>,
+      outputPrefill?: string,
+    ): Promise<Record<string, unknown> | undefined> => {
+      let capturedBody: Record<string, unknown> | undefined;
+      globalThis.fetch = (async (_input, init) => {
+        capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return makeSseResponse(["[DONE]"]);
+      }) as typeof fetch;
+
+      const context = makeStreamContext();
+      context.tomoriState.llm = {
+        supports_prefix_completion: supportsPrefix,
+      } as unknown as import("@/types/db/schema").LlmRow;
+      context.contextItems = [{ role: "user", parts: [{ type: "text", text: "Tell me a story" }] }];
+      context.currentTurnModelParts = currentTurnParts;
+      context.outputPrefill = outputPrefill;
+
+      for await (const _chunk of new OpenrouterStreamAdapter().startStream(makeStreamConfig(), context)) {
+        // Drain stream to capture the request body.
+      }
+      return capturedBody;
+    };
+
+    const bodyOff = await drainAndCapture(false, [{ text: "Once upon a time" }], "Once upon a time");
+    const messagesOff = bodyOff?.messages as Array<Record<string, unknown>>;
+    expect(messagesOff.at(-1)).toEqual({ role: "assistant", content: "Once upon a time" });
+    expect(messagesOff.at(-1)?.prefix).toBeUndefined();
+
+    const bodyMismatched = await drainAndCapture(true, [{ text: "Once upon a time" }], "Different prefill");
+    const messagesMismatched = bodyMismatched?.messages as Array<Record<string, unknown>>;
+    expect(messagesMismatched.at(-1)?.prefix).toBeUndefined();
+
+    const bodyOn = await drainAndCapture(true, [{ text: "Once upon a time" }], "Once upon a time");
+    const messagesOn = bodyOn?.messages as Array<Record<string, unknown>>;
+    expect(messagesOn.at(-1)).toEqual({ role: "assistant", content: "Once upon a time", prefix: true });
+  });
+
+  it("composes strict role alternation and assistant prefix completion", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeSseResponse(["[DONE]"]);
+    }) as typeof fetch;
+
+    const context = makeStreamContext();
+    context.tomoriState.llm = {
+      strict_role_alternation: true,
+      supports_prefix_completion: true,
+    } as unknown as import("@/types/db/schema").LlmRow;
+    context.contextItems = [
+      { role: "model", parts: [{ type: "text", text: "Opening line" }] },
+      { role: "user", parts: [{ type: "text", text: "First question" }] },
+      { role: "user", parts: [{ type: "text", text: "Second question" }] },
+    ];
+    context.currentTurnModelParts = [{ text: "Let me explain:" }];
+    context.outputPrefill = "Let me explain:";
+
+    for await (const _chunk of new OpenrouterStreamAdapter().startStream(makeStreamConfig(), context)) {
+      // Drain stream to capture the request body.
+    }
+
+    const messages = requestBody?.messages as Array<Record<string, unknown>>;
+    expect(messages).toEqual([
+      { role: "user", content: "[System: Conversation start]" },
+      { role: "assistant", content: "Opening line" },
+      { role: "user", content: "First question\nSecond question" },
+      { role: "assistant", content: "Let me explain:", prefix: true },
+    ]);
+  });
+});
