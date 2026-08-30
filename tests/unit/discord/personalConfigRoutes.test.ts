@@ -57,6 +57,7 @@ const PERSONAL_CONFIG_HANDLER_SOURCES = [
   "src/utils/discord/interactions/personalConfigModalOpenRoutes.ts",
   "src/utils/discord/interactions/personalConfigNavigationRoutes.ts",
   "src/utils/discord/interactions/personalConfigProfileRoutes.ts",
+  "src/utils/discord/interactions/personalConfigModelRoutes.ts",
 ] as const;
 
 function requireRoute(customId: string): ParsedInteractionRoute {
@@ -6322,5 +6323,130 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
     const renderedText = JSON.stringify(capturedPayload);
     expect(renderedText).toContain("RefreshedNick");
     expect(renderedText).not.toContain("InitialNick");
+  });
+
+  it("proves post-defer model parameter writes repaint with refreshed scope and record telemetry", async () => {
+    const calls: string[] = [];
+    let resolveCount = 0;
+    let capturedPayload: unknown = null;
+    let recordedAction: string | null = null;
+    let writeUserId: number | null = null;
+    let writeUserDiscId: string | null = null;
+    let repaintSavedProvidersUserId: number | null = null;
+    let repaintModelDisplayInfoUserId: number | null = null;
+
+    const initialUser = makeUser({ user_id: 101, user_disc_id: "user-101", user_nickname: "InitialUser" });
+    const refreshedUser = makeUser({ user_id: 202, user_disc_id: "user-202", user_nickname: "RefreshedUser" });
+
+    const baseDependencies = makeDependencies(calls).dependencies;
+    const { dependencies } = makeDependencies(calls, {
+      resolveScope: async (_interaction, forceRefresh) => {
+        resolveCount++;
+        const currentUser = forceRefresh ? refreshedUser : initialUser;
+        return {
+          userId: currentUser.user_id,
+          userDiscId: currentUser.user_disc_id,
+          guildId: "guild-123",
+          workspaceId: "guild-123",
+          internalServerId: 42,
+          user: currentUser,
+          resolvedNickname: currentUser.user_nickname ?? "LiveUser",
+          personas: [],
+          readStatus: {
+            is_active: true,
+            model_name: "test-model",
+            read_status_model_name: "test-model",
+            is_bot_blocked: false,
+          },
+        };
+      },
+      operations: {
+        ...personalConfigOperations,
+        setParameters: async (input) => {
+          writeUserId = input.userId;
+          writeUserDiscId = input.userDiscId;
+          calls.push(`setParameters:${input.userId}:${input.provider}:${input.patch.temperature}`);
+          return { status: "success" };
+        },
+      },
+      loadUserSavedProviders: async (userId) => {
+        repaintSavedProvidersUserId = userId;
+        calls.push(`loadUserSavedProviders:${userId}`);
+        return baseDependencies.loadUserSavedProviders(userId);
+      },
+      loadPersonalModelDisplayInfo: async (
+        userId,
+        savedProviders,
+        capability,
+        selectedParametersProvider,
+        selectedFallbacksProvider,
+      ) => {
+        repaintModelDisplayInfoUserId = userId;
+        calls.push(`loadPersonalModelDisplayInfo:${userId}`);
+        return baseDependencies.loadPersonalModelDisplayInfo(
+          userId,
+          savedProviders,
+          capability,
+          selectedParametersProvider,
+          selectedFallbacksProvider,
+        );
+      },
+      recordAction: (input) => {
+        recordedAction = input.action;
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigRouteId({
+      action: "parameters-1-submit",
+      locale: "en-US",
+      nonce: "nonce123456",
+      provider: "gemini",
+    });
+
+    let deferred = false;
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return deferred;
+      },
+      get replied() {
+        return false;
+      },
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async (payload: unknown) => {
+        capturedPayload = payload;
+      },
+      fields: {
+        getTextInputValue: (fieldId: string) => {
+          if (fieldId.startsWith("temperature_")) return "0.7";
+          return "";
+        },
+      },
+    } as unknown as ModalSubmitInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(writeUserId).toBe(101);
+    expect(writeUserDiscId).toBe("user-101");
+    expect(calls).toContain("setParameters:101:gemini:0.7");
+    expect(repaintSavedProvidersUserId).toBe(202);
+    expect(repaintModelDisplayInfoUserId).toBe(202);
+    expect(calls).toContain("loadUserSavedProviders:202");
+    expect(calls).toContain("loadPersonalModelDisplayInfo:202");
+    expect(resolveCount).toBeGreaterThanOrEqual(2);
+    expect(recordedAction).toBe("personal-config.personal.parameters.set");
+    expect(deferred).toBe(true);
+    expect(capturedPayload).not.toBeNull();
+    const renderedText = JSON.stringify(capturedPayload);
+    expect(renderedText).toContain("Personal Parameters Updated");
+    expect(renderedText).toContain("Updated sampler parameters for Google Gemini");
   });
 });
