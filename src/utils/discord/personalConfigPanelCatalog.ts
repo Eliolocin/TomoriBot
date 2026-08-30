@@ -45,6 +45,19 @@ export const QUICK_TOGGLE_CAPABILITIES: readonly PersonalProviderCapability[] = 
 ] as const;
 
 /**
+ * Literal locale key per routing capability. Keep these literal: `check-locales` only sees
+ * dot-notation string literals, so a composed key resolves to raw text with every gate green.
+ */
+export const ROUTING_CAPABILITY_LOCALE_KEYS: Record<PersonalProviderCapability, string> = {
+  text: "commands.personal.config.routing_text",
+  vision: "commands.personal.config.routing_vision",
+  embedding: "commands.personal.config.routing_embedding",
+  image: "commands.personal.config.routing_image_standard",
+  image_nai: "commands.personal.config.routing_image_nai",
+  video: "commands.personal.config.routing_video",
+};
+
+/**
  * Rows one Spotlight removal modal can present: Discord allows five components, each a ten-option
  * checkbox group. The renderer, the range chooser, and the submit handler must agree on it, because
  * unchecked-means-remove derives the removal set from the slice that was presented.

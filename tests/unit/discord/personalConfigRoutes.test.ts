@@ -27,14 +27,13 @@ import {
   SPOTLIGHT_PERSONA_PAGE_SIZE,
 } from "@/utils/discord/personalConfigPanelCatalog";
 import {
-  buildPersonalConfigPanelPayload,
   buildModelSelectModal,
   buildSpotlightAutoTriggerModal,
   buildSpotlightRemoveModal,
   buildSpotlightSetModal,
   buildSpotlightStep1Modal,
-  type PersonalConfigRoutingRow,
-} from "@/utils/discord/ui/personalConfigPanel";
+} from "@/utils/discord/ui/personalConfigModals";
+import { buildPersonalConfigPanelPayload, type PersonalConfigRoutingRow } from "@/utils/discord/ui/personalConfigPanel";
 import type { ThinkingLevelValue } from "@/constants/thinkingLevels";
 import type { PersonalConfigManagedCapability } from "@/utils/discord/personalConfigPanelCatalog";
 import { parseInteractionRoute, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
@@ -3228,7 +3227,7 @@ describe("Fallbacks submission re-resolution and invariants", () => {
 
 describe("Quick-Toggle modal structure and routing copy", () => {
   it("renders 6 checkbox options with type 22 and max_values 6 in canonical order", () => {
-    const { buildQuickToggleModal } = require("@/utils/discord/ui/personalConfigPanel");
+    const { buildQuickToggleModal } = require("@/utils/discord/ui/personalConfigModals");
     const modal = buildQuickToggleModal("en-US", "nonce123456", [
       {
         user_saved_config_id: 1,
@@ -3283,7 +3282,7 @@ describe("Quick-Toggle modal structure and routing copy", () => {
   });
 
   it("keeps naming the saved provider for a capability that is assigned but switched off", () => {
-    const { buildQuickToggleModal } = require("@/utils/discord/ui/personalConfigPanel");
+    const { buildQuickToggleModal } = require("@/utils/discord/ui/personalConfigModals");
     // Every model column must be present and null: an absent column reads as configured, which
     // would make the untouched capabilities report a provider they do not own.
     const modal = buildQuickToggleModal("en-US", "nonce123456", [

@@ -47,6 +47,7 @@ import {
   PERSONAL_PROVIDER_PAGE_SIZE,
   PERSONAL_PROVIDER_RANGE_VALUE,
   QUICK_TOGGLE_CAPABILITIES,
+  ROUTING_CAPABILITY_LOCALE_KEYS,
   SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE,
   SPOTLIGHT_PERSONA_PAGE_SIZE,
   SPOTLIGHT_REMOVE_PAGE_SIZE,
@@ -72,7 +73,6 @@ import {
   buildParameters2Modal,
   buildPersonaNamingModal,
   buildPersonalConfigModalFieldId,
-  buildPersonalConfigPanelPayload,
   buildPrivacyLevelModal,
   buildQuickToggleModal,
   buildSpotlightAutoTriggerModal,
@@ -80,9 +80,11 @@ import {
   buildSpotlightSetModal,
   buildSpotlightStep1Modal,
   buildTimezoneModal,
+} from "@/utils/discord/ui/personalConfigModals";
+import {
+  buildPersonalConfigPanelPayload,
   type PersonalConfigModelDisplayInfo,
   type PersonalConfigPanelView,
-  ROUTING_CAPABILITY_LOCALE_KEYS,
   type PersonalConfigSpotlightDisplayInfo,
 } from "@/utils/discord/ui/personalConfigPanel";
 import {
