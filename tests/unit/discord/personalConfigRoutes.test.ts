@@ -58,6 +58,7 @@ const PERSONAL_CONFIG_HANDLER_SOURCES = [
   "src/utils/discord/interactions/personalConfigNavigationRoutes.ts",
   "src/utils/discord/interactions/personalConfigProfileRoutes.ts",
   "src/utils/discord/interactions/personalConfigModelRoutes.ts",
+  "src/utils/discord/interactions/personalConfigResponseRoutes.ts",
 ] as const;
 
 function requireRoute(customId: string): ParsedInteractionRoute {
@@ -6448,5 +6449,103 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
     const renderedText = JSON.stringify(capturedPayload);
     expect(renderedText).toContain("Personal Parameters Updated");
     expect(renderedText).toContain("Updated sampler parameters for Google Gemini");
+  });
+
+  it("proves post-defer trigger mode write repaints with refreshed scope and records telemetry", async () => {
+    const calls: string[] = [];
+    let resolveCount = 0;
+    let capturedPayload: unknown = null;
+    let recordedAction: string | null = null;
+    let writeUserId: number | null = null;
+    let writeUserDiscId: string | null = null;
+
+    const initialUser = makeUser({
+      user_id: 101,
+      user_disc_id: "user-101",
+      user_nickname: "InitialUser",
+      personal_dtm: "follow",
+    });
+    const refreshedUser = makeUser({
+      user_id: 202,
+      user_disc_id: "user-202",
+      user_nickname: "RefreshedUser",
+      personal_dtm: "on",
+    });
+
+    const { dependencies } = makeDependencies(calls, {
+      resolveScope: async (_interaction, forceRefresh) => {
+        resolveCount++;
+        const currentUser = forceRefresh ? refreshedUser : initialUser;
+        return {
+          userId: currentUser.user_id,
+          userDiscId: currentUser.user_disc_id,
+          guildId: "guild-123",
+          workspaceId: "guild-123",
+          internalServerId: 42,
+          user: currentUser,
+          resolvedNickname: currentUser.user_nickname ?? "LiveUser",
+          personas: [],
+          readStatus: "fresh",
+        };
+      },
+      operations: {
+        ...personalConfigOperations,
+        setTriggerMode: async (input) => {
+          writeUserId = input.userId;
+          writeUserDiscId = input.userDiscId;
+          calls.push(`setTriggerMode:${input.userId}:${input.mode}`);
+          return { status: "success" };
+        },
+      },
+      recordAction: (input) => {
+        recordedAction = input.action;
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigRouteId({
+      action: "trigger-mode-set",
+      locale: "en-US",
+      mode: "on",
+    });
+
+    let deferred = false;
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return deferred;
+      },
+      get replied() {
+        return false;
+      },
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async (payload: unknown) => {
+        capturedPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(writeUserId).toBe(101);
+    expect(writeUserDiscId).toBe("user-101");
+    expect(calls).toContain("setTriggerMode:101:on");
+    expect(resolveCount).toBeGreaterThanOrEqual(2);
+    expect(recordedAction).toBe("personal-config.personal.trigger-mode.set");
+    expect(deferred).toBe(true);
+    expect(capturedPayload).not.toBeNull();
+    const renderedText = JSON.stringify(capturedPayload);
+    expect(renderedText).toContain("Response Mode Updated");
+    expect(renderedText).toContain("Your deliberate trigger mode preference has been set to On.");
+    expect(renderedText).toContain("> Only an @mention, a reply, or /respond reaches me\\n> (On)");
+    expect(renderedText).not.toContain(
+      "> You can trigger me by saying my name\\n> (Follow Server, currently off here)",
+    );
   });
 });
