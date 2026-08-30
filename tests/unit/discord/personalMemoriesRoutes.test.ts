@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it, spyOn } from "bun:test";
+import { readFileSync } from "node:fs";
 import type {
   ActionRowData,
   ButtonInteraction,
@@ -18,21 +19,96 @@ import {
 import { personalMemoryRepository, userRepository } from "@/utils/db/repositories";
 import type { APIAttachment } from "discord.js";
 import {
-  buildPersonalMemoriesCustomId,
+  buildPersonalMemoriesRouteId,
+  buildPersonalMemoriesRouteSegments,
+  listPersonalMemoriesPanelActions,
   parsePersonalMemoriesPanelRoute,
+  PERSONAL_MEMORIES_ROUTE_CODECS,
   PERSONAL_MEMORIES_ROUTE_NAMESPACE,
   PERSONAL_MEMORIES_ROUTE_VERSION,
+  type PersonalMemoriesPanelRoute,
 } from "@/utils/discord/personalMemoriesPanelCatalog";
-import { parseInteractionRoute, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import {
+  buildInteractionRouteId,
+  parseInteractionRoute,
+  type ParsedInteractionRoute,
+} from "@/utils/discord/interactions/routeRegistry";
 import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
 import {
   buildAddPersonalMemoryModal,
+  buildEditPersonalMemoryModal,
   buildPersonalMemoryModalFieldId,
   buildPersonalMemoriesPanelPayload,
 } from "@/utils/discord/ui/personalMemoriesPanel";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
+
+// These literal v1 bytes precede the exact-codec refactor and protect published field order.
+const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, PersonalMemoriesPanelRoute]> = [
+  ["personal-memories:v1:category:en-US:global", { action: "category", locale: "en-US", category: "global" }],
+  [
+    "personal-memories:v1:persona-select:en-US:persona:1",
+    { action: "persona-select", locale: "en-US", category: "persona", lineageId: 1 },
+  ],
+  [
+    "personal-memories:v1:select:en-US:global:0",
+    { action: "select", locale: "en-US", category: "global", lineageId: 0 },
+  ],
+  [
+    "personal-memories:v1:select:en-US:persona:1:0",
+    { action: "select", locale: "en-US", category: "persona", lineageId: 1, rangeIndex: 0 },
+  ],
+  [
+    "personal-memories:v1:range-open:en-US:global:0",
+    { action: "range-open", locale: "en-US", category: "global", lineageId: 0 },
+  ],
+  [
+    "personal-memories:v1:range:en-US:global:0:0",
+    { action: "range", locale: "en-US", category: "global", lineageId: 0, rangeIndex: 0 },
+  ],
+  [
+    "personal-memories:v1:range-page:en-US:global:0:0",
+    { action: "range-page", locale: "en-US", category: "global", lineageId: 0, chooserPage: 0 },
+  ],
+  [
+    "personal-memories:v1:range-cancel:en-US:global:0",
+    { action: "range-cancel", locale: "en-US", category: "global", lineageId: 0 },
+  ],
+  [
+    "personal-memories:v1:add-submit:en-US:global:0:12345678",
+    { action: "add-submit", locale: "en-US", category: "global", lineageId: 0, nonce: "12345678" },
+  ],
+  [
+    "personal-memories:v1:edit-open:en-US:global:0:1",
+    { action: "edit-open", locale: "en-US", category: "global", lineageId: 0, memoryId: 1 },
+  ],
+  [
+    "personal-memories:v1:edit-submit:en-US:global:0:1:12345678",
+    { action: "edit-submit", locale: "en-US", category: "global", lineageId: 0, memoryId: 1, nonce: "12345678" },
+  ],
+  [
+    "personal-memories:v1:remove-prompt:en-US:global:0:1",
+    { action: "remove-prompt", locale: "en-US", category: "global", lineageId: 0, memoryId: 1 },
+  ],
+  [
+    "personal-memories:v1:remove-confirm:en-US:global:0:1",
+    { action: "remove-confirm", locale: "en-US", category: "global", lineageId: 0, memoryId: 1 },
+  ],
+  [
+    "personal-memories:v1:remove-cancel:en-US:global:0:1",
+    { action: "remove-cancel", locale: "en-US", category: "global", lineageId: 0, memoryId: 1 },
+  ],
+  [
+    "personal-memories:v1:stm-clear:en-US:global:0",
+    { action: "stm-clear", locale: "en-US", category: "global", lineageId: 0 },
+  ],
+  ["personal-memories:v1:retry:en-US:global:0", { action: "retry", locale: "en-US", category: "global", lineageId: 0 }],
+  [
+    "personal-memories:v1:refresh:en-US:global:0",
+    { action: "refresh", locale: "en-US", category: "global", lineageId: 0 },
+  ],
+];
 
 function requireRoute(customId: string): ParsedInteractionRoute {
   const parsed = parseInteractionRoute(customId);
@@ -194,140 +270,743 @@ function makeDependencies(
 }
 
 describe("personal-memories panel route catalog", () => {
-  it("round trips valid state custom IDs", () => {
-    const parsedCategory = parsePersonalMemoriesPanelRoute({
-      namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-      version: PERSONAL_MEMORIES_ROUTE_VERSION,
-      segments: ["category", "en-US", "global"],
-    });
-    expect(parsedCategory).toEqual({ action: "category", locale: "en-US", category: "global" });
-
-    const parsedPersonaSelect = parsePersonalMemoriesPanelRoute({
-      namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-      version: PERSONAL_MEMORIES_ROUTE_VERSION,
-      segments: ["persona-select", "en-US", "persona", "10"],
-    });
-    expect(parsedPersonaSelect).toEqual({
-      action: "persona-select",
-      locale: "en-US",
-      category: "persona",
-      lineageId: 10,
-    });
-
-    const parsedSelect = parsePersonalMemoriesPanelRoute({
-      namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-      version: PERSONAL_MEMORIES_ROUTE_VERSION,
-      segments: ["select", "en-US", "global", "0", "1"],
-    });
-    expect(parsedSelect).toEqual({
-      action: "select",
-      locale: "en-US",
-      category: "global",
-      lineageId: 0,
-      rangeIndex: 1,
-    });
-
-    const parsedAddSubmit = parsePersonalMemoriesPanelRoute({
-      namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-      version: PERSONAL_MEMORIES_ROUTE_VERSION,
-      segments: ["add-submit", "en-US", "global", "0", "abcdef123456"],
-    });
-    expect(parsedAddSubmit).toEqual({
-      action: "add-submit",
-      locale: "en-US",
-      category: "global",
-      lineageId: 0,
-      nonce: "abcdef123456",
-    });
-
-    const parsedEditSubmit = parsePersonalMemoriesPanelRoute({
-      namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-      version: PERSONAL_MEMORIES_ROUTE_VERSION,
-      segments: ["edit-submit", "en-US", "persona", "10", "42", "abcdef123456"],
-    });
-    expect(parsedEditSubmit).toEqual({
-      action: "edit-submit",
-      locale: "en-US",
-      category: "persona",
-      lineageId: 10,
-      memoryId: 42,
-      nonce: "abcdef123456",
-    });
-
-    const parsedRemoveConfirm = parsePersonalMemoriesPanelRoute({
-      namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-      version: PERSONAL_MEMORIES_ROUTE_VERSION,
-      segments: ["remove-confirm", "en-US", "global", "0", "42"],
-    });
-    expect(parsedRemoveConfirm).toEqual({
-      action: "remove-confirm",
-      locale: "en-US",
-      category: "global",
-      lineageId: 0,
-      memoryId: 42,
-    });
-
-    const parsedStmClear = parsePersonalMemoriesPanelRoute({
-      namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-      version: PERSONAL_MEMORIES_ROUTE_VERSION,
-      segments: ["stm-clear", "en-US", "global", "0"],
-    });
-    expect(parsedStmClear).toEqual({
-      action: "stm-clear",
-      locale: "en-US",
-      category: "global",
-      lineageId: 0,
-    });
+  it("decodes every literal v1 wire string to its exact route", () => {
+    for (const [customId, expected] of WIRE_CONTRACT_V1) {
+      expect(parsePersonalMemoriesPanelRoute(requireRoute(customId))).toEqual(expected);
+    }
   });
 
-  it("rejects malformed custom IDs, missing segments, and invalid nonces", () => {
-    expect(
-      parsePersonalMemoriesPanelRoute({
-        namespace: "other",
-        version: "v1",
-        segments: ["stm-clear", "en-US", "global", "0"],
-      }),
-    ).toBeNull();
+  it("encodes every canonical typed route to exact literal wire bytes", () => {
+    for (const [customId, expected] of WIRE_CONTRACT_V1) {
+      expect(buildPersonalMemoriesRouteId(expected)).toBe(customId);
+      const expectedSegments = customId.split(":").slice(2);
+      expect(buildPersonalMemoriesRouteSegments(expected)).toEqual(expectedSegments);
+    }
+  });
 
+  it("round trips parse and build for all canonical actions", () => {
+    for (const [, expected] of WIRE_CONTRACT_V1) {
+      const builtId = buildPersonalMemoriesRouteId(expected);
+      const parts = builtId.split(":");
+      const parsedFromBuilt = parsePersonalMemoriesPanelRoute({
+        namespace: parts[0] as string,
+        version: parts[1] as string,
+        segments: parts.slice(2),
+      });
+      expect(parsedFromBuilt).toEqual(expected);
+    }
+  });
+
+  it("guarantees 16-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
+    const ACCEPTED_16_ACTIONS = [
+      "add-submit",
+      "category",
+      "edit-open",
+      "edit-submit",
+      "persona-select",
+      "range",
+      "range-cancel",
+      "range-open",
+      "range-page",
+      "refresh",
+      "remove-cancel",
+      "remove-confirm",
+      "remove-prompt",
+      "retry",
+      "select",
+      "stm-clear",
+    ].sort();
+
+    const catalogActions = listPersonalMemoriesPanelActions().sort();
+    const wireActions = [...new Set(WIRE_CONTRACT_V1.map(([, route]) => route.action))].sort();
+    const codecTableActions = Object.keys(PERSONAL_MEMORIES_ROUTE_CODECS).sort();
+
+    const routesSource = readFileSync(
+      new URL("../../../src/utils/discord/interactions/personalMemoriesRoutes.ts", import.meta.url),
+      "utf8",
+    );
+    const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
+
+    expect(catalogActions).toEqual(ACCEPTED_16_ACTIONS);
+    expect(wireActions).toEqual(ACCEPTED_16_ACTIONS);
+    expect(codecTableActions).toEqual(ACCEPTED_16_ACTIONS);
+
+    expect(handlerActions.size).toBe(16);
+    expect([...handlerActions].sort()).toEqual(ACCEPTED_16_ACTIONS);
+    expect(ACCEPTED_16_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !ACCEPTED_16_ACTIONS.includes(a))).toEqual([]);
+    expect(codecTableActions.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !codecTableActions.includes(a))).toEqual([]);
+  });
+
+  it("guarantees producer coverage against production UI and modal surfaces with explicit allowlist for producerless actions", () => {
+    const PRODUCERLESS_ACTIONS = ["refresh"] as const;
+    const ACCEPTED_16_ACTIONS = [
+      "add-submit",
+      "category",
+      "edit-open",
+      "edit-submit",
+      "persona-select",
+      "range",
+      "range-cancel",
+      "range-open",
+      "range-page",
+      "refresh",
+      "remove-cancel",
+      "remove-confirm",
+      "remove-prompt",
+      "retry",
+      "select",
+      "stm-clear",
+    ].sort();
+
+    const collectedCustomIds: string[] = [];
+
+    function harvestCustomIds(val: unknown): void {
+      if (Array.isArray(val)) {
+        for (const item of val) harvestCustomIds(item);
+        return;
+      }
+      if (!val || typeof val !== "object") return;
+      const obj = val as Record<string, unknown>;
+      if (typeof obj.customId === "string" && obj.customId.startsWith("personal-memories:")) {
+        collectedCustomIds.push(obj.customId);
+      }
+      if (typeof obj.custom_id === "string" && obj.custom_id.startsWith("personal-memories:")) {
+        collectedCustomIds.push(obj.custom_id);
+      }
+      for (const prop of Object.values(obj)) {
+        harvestCustomIds(prop);
+      }
+    }
+
+    const sampleMemories = [
+      makeMemory(1, { persona_lineage_id: 0, content: "Global memory 1" }),
+      makeMemory(2, { persona_lineage_id: 0, content: "Global memory 2" }),
+      makeMemory(3, { persona_lineage_id: 10, content: "Persona memory 1" }),
+    ];
+    const manyMemories = Array.from({ length: 30 }, (_, i) => makeMemory(i + 1, { persona_lineage_id: 0 }));
+    const multiPageChooserMemories = Array.from({ length: 300 }, (_, i) =>
+      makeMemory(i + 1, { persona_lineage_id: 0 }),
+    );
+    const samplePersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
+
+    // Global main with memories (produces category, select, edit-open, remove-prompt, stm-clear)
+    harvestCustomIds(
+      buildPersonalMemoriesPanelPayload({
+        locale: "en-US",
+        category: "global",
+        selectedLineageId: 0,
+        personas: samplePersonas,
+        memories: sampleMemories,
+        stmCount: 1,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "fresh",
+        page: { kind: "main" },
+      }),
+    );
+
+    // Global main with multi-page memories (produces range-open)
+    harvestCustomIds(
+      buildPersonalMemoriesPanelPayload({
+        locale: "en-US",
+        category: "global",
+        selectedLineageId: 0,
+        personas: samplePersonas,
+        memories: manyMemories,
+        stmCount: 1,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "fresh",
+        page: { kind: "main" },
+      }),
+    );
+
+    // Range chooser (produces range, range-page, range-cancel)
+    harvestCustomIds(
+      buildPersonalMemoriesPanelPayload({
+        locale: "en-US",
+        category: "global",
+        selectedLineageId: 0,
+        personas: samplePersonas,
+        memories: multiPageChooserMemories,
+        stmCount: 1,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "fresh",
+        page: { kind: "range-chooser", chooserPage: 0 },
+      }),
+    );
+
+    // Remove page (produces remove-confirm, remove-cancel)
+    harvestCustomIds(
+      buildPersonalMemoriesPanelPayload({
+        locale: "en-US",
+        category: "global",
+        selectedLineageId: 0,
+        personas: samplePersonas,
+        memories: sampleMemories,
+        stmCount: 1,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "fresh",
+        page: { kind: "remove", memoryId: 1 },
+      }),
+    );
+
+    // Persona main (produces persona-select, select, edit-open, remove-prompt)
+    harvestCustomIds(
+      buildPersonalMemoriesPanelPayload({
+        locale: "en-US",
+        category: "persona",
+        selectedLineageId: 10,
+        personas: samplePersonas,
+        memories: sampleMemories,
+        stmCount: 0,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "fresh",
+        page: { kind: "main" },
+      }),
+    );
+
+    // Persona multi-page (produces range-open)
+    harvestCustomIds(
+      buildPersonalMemoriesPanelPayload({
+        locale: "en-US",
+        category: "persona",
+        selectedLineageId: 10,
+        personas: samplePersonas,
+        memories: manyMemories,
+        stmCount: 0,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "fresh",
+        page: { kind: "main" },
+      }),
+    );
+
+    // Unavailable status (produces retry)
+    harvestCustomIds(
+      buildPersonalMemoriesPanelPayload({
+        locale: "en-US",
+        category: "global",
+        selectedLineageId: 0,
+        personas: samplePersonas,
+        memories: [],
+        stmCount: 0,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "unavailable",
+        page: { kind: "main" },
+      }),
+    );
+
+    // Stale status (produces retry)
+    harvestCustomIds(
+      buildPersonalMemoriesPanelPayload({
+        locale: "en-US",
+        category: "global",
+        selectedLineageId: 0,
+        personas: samplePersonas,
+        memories: sampleMemories,
+        stmCount: 1,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "stale",
+        page: { kind: "main" },
+      }),
+    );
+
+    // Add modal (produces add-submit)
+    harvestCustomIds(buildAddPersonalMemoryModal("en-US", "global", 0, "12345678"));
+
+    // Edit modal (produces edit-submit)
+    harvestCustomIds(buildEditPersonalMemoryModal("en-US", "global", 0, 1, "content", [], "12345678"));
+
+    const producedActions = new Set<string>();
+    for (const customId of collectedCustomIds) {
+      const parts = customId.split(":");
+      const parsed = parsePersonalMemoriesPanelRoute({
+        namespace: parts[0] as string,
+        version: parts[1] as string,
+        segments: parts.slice(2),
+      });
+      expect(parsed).not.toBeNull();
+      if (parsed) {
+        producedActions.add(parsed.action);
+      }
+    }
+
+    for (const action of PRODUCERLESS_ACTIONS) {
+      expect(producedActions.has(action)).toBe(false);
+    }
+
+    const unionedActions = [...new Set([...producedActions, ...PRODUCERLESS_ACTIONS])].sort();
+    expect(unionedActions).toEqual(ACCEPTED_16_ACTIONS);
+  });
+
+  it("distinguishes presence and absence of optional select.rangeIndex", () => {
+    const shortSelect = parsePersonalMemoriesPanelRoute({
+      namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+      version: PERSONAL_MEMORIES_ROUTE_VERSION,
+      segments: ["select", "en-US", "global", "0"],
+    });
+    expect(shortSelect).not.toBeNull();
+    if (shortSelect) {
+      expect("rangeIndex" in shortSelect).toBe(false);
+      expect(shortSelect).toEqual({ action: "select", locale: "en-US", category: "global", lineageId: 0 });
+      expect(buildPersonalMemoriesRouteId(shortSelect)).toBe("personal-memories:v1:select:en-US:global:0");
+    }
+
+    const longSelect = parsePersonalMemoriesPanelRoute({
+      namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+      version: PERSONAL_MEMORIES_ROUTE_VERSION,
+      segments: ["select", "en-US", "persona", "1", "0"],
+    });
+    expect(longSelect).not.toBeNull();
+    if (longSelect) {
+      expect("rangeIndex" in longSelect).toBe(true);
+      expect(longSelect).toEqual({
+        action: "select",
+        locale: "en-US",
+        category: "persona",
+        lineageId: 1,
+        rangeIndex: 0,
+      });
+      expect(buildPersonalMemoriesRouteId(longSelect)).toBe("personal-memories:v1:select:en-US:persona:1:0");
+    }
+  });
+
+  it("rejects unsupported locales, malformed segment counts, and invalid values", () => {
+    expect(
+      parsePersonalMemoriesPanelRoute({ namespace: "wrong", version: "v1", segments: ["category", "en-US", "global"] }),
+    ).toBeNull();
     expect(
       parsePersonalMemoriesPanelRoute({
         namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
         version: "v2",
-        segments: ["stm-clear", "en-US", "global", "0"],
+        segments: ["category", "en-US", "global"],
       }),
     ).toBeNull();
-
     expect(
       parsePersonalMemoriesPanelRoute({
         namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-        version: PERSONAL_MEMORIES_ROUTE_VERSION,
-        segments: ["add-submit", "en-US", "global", "0", "short"],
+        version: "v1",
+        segments: ["category", "fr-FR", "global"],
       }),
     ).toBeNull();
-
     expect(
       parsePersonalMemoriesPanelRoute({
         namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-        version: PERSONAL_MEMORIES_ROUTE_VERSION,
-        segments: ["remove-confirm", "en-US", "global", "0", "0"],
+        version: "v1",
+        segments: ["category", "", "global"],
       }),
     ).toBeNull();
-
     expect(
       parsePersonalMemoriesPanelRoute({
         namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-        version: PERSONAL_MEMORIES_ROUTE_VERSION,
-        segments: ["persona-select", "en-US", "persona", "0"],
-      }),
-    ).toBeNull();
-
-    expect(
-      parsePersonalMemoriesPanelRoute({
-        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-        version: PERSONAL_MEMORIES_ROUTE_VERSION,
+        version: "v1",
         segments: ["unknown", "en-US", "global", "0"],
       }),
     ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["category", "en-US", "invalid"],
+      }),
+    ).toBeNull();
+
+    // Segment count bounds
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["category", "en-US"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["category", "en-US", "global", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["persona-select", "en-US", "persona"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["persona-select", "en-US", "persona", "1", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["select", "en-US", "global"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["select", "en-US", "global", "0", "1", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["range", "en-US", "global", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["range", "en-US", "global", "0", "1", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["range-page", "en-US", "global", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["range-page", "en-US", "global", "0", "1", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["add-submit", "en-US", "global", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["add-submit", "en-US", "global", "0", "12345678", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["edit-open", "en-US", "global", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["edit-open", "en-US", "global", "0", "1", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["edit-submit", "en-US", "global", "0", "1"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["edit-submit", "en-US", "global", "0", "1", "12345678", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["remove-prompt", "en-US", "global", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["remove-prompt", "en-US", "global", "0", "1", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["remove-confirm", "en-US", "global", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["remove-confirm", "en-US", "global", "0", "1", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["remove-cancel", "en-US", "global", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["remove-cancel", "en-US", "global", "0", "1", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["stm-clear", "en-US", "global"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["stm-clear", "en-US", "global", "0", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["retry", "en-US", "global"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["retry", "en-US", "global", "0", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["refresh", "en-US", "global"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["refresh", "en-US", "global", "0", "extra"],
+      }),
+    ).toBeNull();
+
+    // Value validations
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["persona-select", "en-US", "global", "1"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["persona-select", "en-US", "persona", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["persona-select", "en-US", "persona", "-1"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["persona-select", "en-US", "persona", "abc"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["select", "en-US", "global", "-1"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["select", "en-US", "global", "0", "-1"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["select", "en-US", "global", "0", "abc"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["range", "en-US", "global", "0", "-1"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["range", "en-US", "global", "0", "abc"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["range-page", "en-US", "global", "0", "-1"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["range-page", "en-US", "global", "0", "abc"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["add-submit", "en-US", "global", "0", "short"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["add-submit", "en-US", "global", "0", "spaces in nonce"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["add-submit", "en-US", "global", "0", "a".repeat(33)],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["edit-open", "en-US", "global", "0", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["edit-open", "en-US", "global", "0", "-1"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["edit-open", "en-US", "global", "0", "abc"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["edit-submit", "en-US", "global", "0", "0", "12345678"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["edit-submit", "en-US", "global", "0", "1", "short"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["remove-prompt", "en-US", "global", "0", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["remove-confirm", "en-US", "global", "0", "0"],
+      }),
+    ).toBeNull();
+    expect(
+      parsePersonalMemoriesPanelRoute({
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: "v1",
+        segments: ["remove-cancel", "en-US", "global", "0", "0"],
+      }),
+    ).toBeNull();
+  });
+
+  it("asserts realistic maximum-length routes stay comfortably within Discord's 100-character custom ID ceiling", () => {
+    const maxLocale = "zh-Hans";
+    const maxNonce = "nonce1234567";
+    const maxId = 2147483647;
+
+    const maxRoutes: PersonalMemoriesPanelRoute[] = [
+      { action: "category", locale: maxLocale, category: "persona" },
+      { action: "persona-select", locale: maxLocale, category: "persona", lineageId: maxId },
+      { action: "select", locale: maxLocale, category: "persona", lineageId: maxId, rangeIndex: maxId },
+      { action: "range-open", locale: maxLocale, category: "persona", lineageId: maxId },
+      { action: "range", locale: maxLocale, category: "persona", lineageId: maxId, rangeIndex: maxId },
+      { action: "range-page", locale: maxLocale, category: "persona", lineageId: maxId, chooserPage: maxId },
+      { action: "range-cancel", locale: maxLocale, category: "persona", lineageId: maxId },
+      { action: "add-submit", locale: maxLocale, category: "persona", lineageId: maxId, nonce: maxNonce },
+      { action: "edit-open", locale: maxLocale, category: "persona", lineageId: maxId, memoryId: maxId },
+      {
+        action: "edit-submit",
+        locale: maxLocale,
+        category: "persona",
+        lineageId: maxId,
+        memoryId: maxId,
+        nonce: maxNonce,
+      },
+      { action: "remove-prompt", locale: maxLocale, category: "persona", lineageId: maxId, memoryId: maxId },
+      { action: "remove-confirm", locale: maxLocale, category: "persona", lineageId: maxId, memoryId: maxId },
+      { action: "remove-cancel", locale: maxLocale, category: "persona", lineageId: maxId, memoryId: maxId },
+      { action: "stm-clear", locale: maxLocale, category: "persona", lineageId: maxId },
+      { action: "retry", locale: maxLocale, category: "persona", lineageId: maxId },
+      { action: "refresh", locale: maxLocale, category: "persona", lineageId: maxId },
+    ];
+
+    for (const route of maxRoutes) {
+      const customId = buildPersonalMemoriesRouteId(route);
+      expect(customId.length).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("guards Discord's 100-character custom ID limit", () => {
+    expect(() =>
+      buildInteractionRouteId("personal-memories", "v1", "add-submit", "en-US", "global", "0", "x".repeat(90)),
+    ).toThrow("exceeds 100");
   });
 });
 
@@ -338,7 +1017,14 @@ describe("owner scoping invariant", () => {
     const route = createPersonalMemoriesInteractionRoute(dependencies);
 
     const nonce = "abcdef123456";
-    const customId = buildPersonalMemoriesCustomId("edit-submit", "en-US", "global", 0, 999, nonce);
+    const customId = buildPersonalMemoriesRouteId({
+      action: "edit-submit",
+      locale: "en-US",
+      category: "global",
+      lineageId: 0,
+      memoryId: 999,
+      nonce,
+    });
     const parsed = requireRoute(customId);
 
     let deferred = false;
@@ -378,7 +1064,13 @@ describe("owner scoping invariant", () => {
     const { dependencies, telemetry } = makeDependencies(calls);
     const route = createPersonalMemoriesInteractionRoute(dependencies);
 
-    const customId = buildPersonalMemoriesCustomId("remove-confirm", "en-US", "global", 0, 999);
+    const customId = buildPersonalMemoriesRouteId({
+      action: "remove-confirm",
+      locale: "en-US",
+      category: "global",
+      lineageId: 0,
+      memoryId: 999,
+    });
     const parsed = requireRoute(customId);
 
     let deferred = false;
@@ -427,7 +1119,7 @@ describe("privacy level asymmetry", () => {
     let addBlockedReply = false;
     const addSelectInteraction = {
       id: "int-add-select",
-      customId: buildPersonalMemoriesCustomId("select", "en-US", "global", 0),
+      customId: buildPersonalMemoriesRouteId({ action: "select", locale: "en-US", category: "global", lineageId: 0 }),
       user: { id: "123456789", username: "testuser" },
       values: ["action:add"],
       isButton: () => false,
@@ -446,7 +1138,13 @@ describe("privacy level asymmetry", () => {
     let editBlockedReply = false;
     const editOpenInteraction = {
       id: "int-edit-open",
-      customId: buildPersonalMemoriesCustomId("edit-open", "en-US", "global", 0, 1),
+      customId: buildPersonalMemoriesRouteId({
+        action: "edit-open",
+        locale: "en-US",
+        category: "global",
+        lineageId: 0,
+        memoryId: 1,
+      }),
       user: { id: "123456789", username: "testuser" },
       isButton: () => true,
       isStringSelectMenu: () => false,
@@ -464,7 +1162,13 @@ describe("privacy level asymmetry", () => {
     // Opting out of personalization must never strip the ability to delete data already stored.
     const removeInteraction = {
       id: "int-remove",
-      customId: buildPersonalMemoriesCustomId("remove-confirm", "en-US", "global", 0, 1),
+      customId: buildPersonalMemoriesRouteId({
+        action: "remove-confirm",
+        locale: "en-US",
+        category: "global",
+        lineageId: 0,
+        memoryId: 1,
+      }),
       user: { id: "123456789", username: "testuser" },
       isButton: () => true,
       isStringSelectMenu: () => false,
@@ -480,7 +1184,12 @@ describe("privacy level asymmetry", () => {
     // Clearing is a deletion too, so the privacy opt-out does not gate it either.
     const stmClearInteraction = {
       id: "int-stm-clear",
-      customId: buildPersonalMemoriesCustomId("stm-clear", "en-US", "global", 0),
+      customId: buildPersonalMemoriesRouteId({
+        action: "stm-clear",
+        locale: "en-US",
+        category: "global",
+        lineageId: 0,
+      }),
       user: { id: "123456789", username: "testuser" },
       isButton: () => true,
       isStringSelectMenu: () => false,
@@ -531,7 +1240,13 @@ describe("telemetry & acknowledgement invariants", () => {
     const nonce = "nonce1234567";
     const addInteraction = {
       id: "add-int",
-      customId: buildPersonalMemoriesCustomId("add-submit", "en-US", "global", 0, nonce),
+      customId: buildPersonalMemoriesRouteId({
+        action: "add-submit",
+        locale: "en-US",
+        category: "global",
+        lineageId: 0,
+        nonce,
+      }),
       user: { id: "123456789", username: "testuser" },
       fields: {
         getTextInputValue: (fieldId: string) => {
@@ -561,7 +1276,14 @@ describe("telemetry & acknowledgement invariants", () => {
     // Test edit-submit
     const editInteraction = {
       id: "edit-int",
-      customId: buildPersonalMemoriesCustomId("edit-submit", "en-US", "global", 0, 1, nonce),
+      customId: buildPersonalMemoriesRouteId({
+        action: "edit-submit",
+        locale: "en-US",
+        category: "global",
+        lineageId: 0,
+        memoryId: 1,
+        nonce,
+      }),
       user: { id: "123456789", username: "testuser" },
       fields: {
         getTextInputValue: (fieldId: string) => {
@@ -591,7 +1313,13 @@ describe("telemetry & acknowledgement invariants", () => {
     // Test remove-confirm
     const removeInteraction = {
       id: "remove-int",
-      customId: buildPersonalMemoriesCustomId("remove-confirm", "en-US", "global", 0, 1),
+      customId: buildPersonalMemoriesRouteId({
+        action: "remove-confirm",
+        locale: "en-US",
+        category: "global",
+        lineageId: 0,
+        memoryId: 1,
+      }),
       user: { id: "123456789", username: "testuser" },
       deferred: false,
       replied: false,
@@ -615,7 +1343,12 @@ describe("telemetry & acknowledgement invariants", () => {
     // Test stm-clear
     const stmInteraction = {
       id: "stm-int",
-      customId: buildPersonalMemoriesCustomId("stm-clear", "en-US", "global", 0),
+      customId: buildPersonalMemoriesRouteId({
+        action: "stm-clear",
+        locale: "en-US",
+        category: "global",
+        lineageId: 0,
+      }),
       user: { id: "123456789", username: "testuser" },
       deferred: false,
       replied: false,
@@ -901,7 +1634,13 @@ describe("Add Memory batch upload", () => {
   function makeAddInteraction(nonce: string, typedContent: string) {
     return {
       id: "batch-int",
-      customId: buildPersonalMemoriesCustomId("add-submit", "en-US", "global", 0, nonce),
+      customId: buildPersonalMemoriesRouteId({
+        action: "add-submit",
+        locale: "en-US",
+        category: "global",
+        lineageId: 0,
+        nonce,
+      }),
       user: { id: "123456789", username: "testuser" },
       fields: {
         getTextInputValue: (fieldId: string) => {

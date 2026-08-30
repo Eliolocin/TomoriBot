@@ -1,6 +1,16 @@
-import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
-import { parseLocale } from "@/utils/discord/panelRouteTokens";
 import type { CustomEndpointCapability } from "@/types/db/schema";
+import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import {
+  buildRouteSegments,
+  decodeRouteSegments,
+  indexCodecsByWireToken,
+  parseNonNegativeInt,
+  parseNonce,
+  parsePositiveId,
+  type RouteCodec,
+  type RouteFieldCodec,
+} from "@/utils/discord/panelRouteCodec";
+import { parseLocale } from "@/utils/discord/panelRouteTokens";
 
 export const PROVIDERS_ROUTE_NAMESPACE = "providers";
 export const PERSONAL_PROVIDERS_ROUTE_NAMESPACE = "personal-providers";
@@ -46,134 +56,232 @@ export type ProvidersPanelRoute =
   | { action: "add-submit"; locale: string; nonce: string }
   | { action: "endpoint-submit"; locale: string; nonce: string };
 
-export function buildProvidersCustomId(action: string, ...segments: Array<string | number>): string {
-  return buildProvidersCustomIdForNamespace(PROVIDERS_ROUTE_NAMESPACE, action, ...segments);
+export type ProvidersAction = ProvidersPanelRoute["action"];
+
+type ProvidersRouteForAction<A extends ProvidersAction> = ProvidersPanelRoute extends infer R
+  ? R extends { action: string }
+    ? A extends R["action"]
+      ? R & { action: A }
+      : never
+    : never
+  : never;
+
+export type ProvidersRouteCodecs = {
+  [A in ProvidersAction]: RouteCodec<ProvidersRouteForAction<A>>;
+};
+
+const rangeIndexField: RouteFieldCodec<"rangeIndex", number> = {
+  key: "rangeIndex",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const entryKindField: RouteFieldCodec<"entryKind", "provider" | "endpoint"> = {
+  key: "entryKind",
+  encode: (v) => String(v),
+  decode: (v) => (v === "provider" || v === "endpoint" ? v : null),
+};
+
+const entryKeyField: RouteFieldCodec<"entryKey", string> = {
+  key: "entryKey",
+  encode: (v) => String(v),
+  decode: (v, r) => {
+    if (r.entryKind === "provider") return /^[a-z0-9_-]{1,40}$/.test(v) ? v : null;
+    if (r.entryKind === "endpoint") return parsePositiveId(v) !== null ? v : null;
+    return null;
+  },
+};
+
+const removalEntryKindField: RouteFieldCodec<"entryKind", "provider" | "endpoint" | "brave"> = {
+  key: "entryKind",
+  encode: (v) => String(v),
+  decode: (v) => (v === "provider" || v === "endpoint" || v === "brave" ? v : null),
+};
+
+const removalEntryKeyField: RouteFieldCodec<"entryKey", string> = {
+  key: "entryKey",
+  encode: (v) => String(v),
+  decode: (v, r) => {
+    if (r.entryKind === "brave") return v === "brave" ? "brave" : null;
+    if (r.entryKind === "provider") return /^[a-z0-9_-]{1,40}$/.test(v) ? v : null;
+    if (r.entryKind === "endpoint") return parsePositiveId(v) !== null ? v : null;
+    return null;
+  },
+};
+
+const providerField: RouteFieldCodec<"provider", string> = {
+  key: "provider",
+  encode: (v) => String(v),
+  decode: (v) => (/^[a-z0-9_-]{1,40}$/.test(v) ? v : null),
+};
+
+const rotationKeyCountField: RouteFieldCodec<"rotationKeyCount", number> = {
+  key: "rotationKeyCount",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const connectionIdField: RouteFieldCodec<"connectionId", number> = {
+  key: "connectionId",
+  encode: (v) => String(v),
+  decode: (v) => parsePositiveId(v),
+};
+
+const capabilityField: RouteFieldCodec<"capability", CustomEndpointCapability> = {
+  key: "capability",
+  encode: (v) => String(v),
+  decode: (v) =>
+    ["text", "embedding", "image", "video", "speech", "transcription"].includes(v as CustomEndpointCapability)
+      ? (v as CustomEndpointCapability)
+      : null,
+};
+
+const editingModelIdField: RouteFieldCodec<"editingModelId", number | null> = {
+  key: "editingModelId",
+  encode: (v) => (v === null || v === 0 ? "0" : String(v)),
+  decode: (v) => (v === "0" ? 0 : parsePositiveId(v)),
+};
+
+const nonceField: RouteFieldCodec<"nonce", string> = {
+  key: "nonce",
+  encode: (v) => String(v),
+  decode: (v) => parseNonce(v),
+};
+
+/**
+ * Authoritative codec table for all provider routes across workspace and personal namespaces.
+ * Keyed by semantic action to guarantee compile-time exhaustiveness.
+ * Preserves the exact v1 wire format: wire token, locale, and ordered field serialization.
+ */
+export const PROVIDERS_ROUTE_CODECS: ProvidersRouteCodecs = {
+  "add-submit": {
+    wireToken: "add-submit",
+    fields: [nonceField],
+  },
+  "edit-endpoint-open": {
+    wireToken: "edit-endpoint-open",
+    fields: [connectionIdField],
+  },
+  "edit-endpoint-submit": {
+    wireToken: "edit-endpoint-submit",
+    fields: [connectionIdField, nonceField],
+  },
+  "edit-provider-open": {
+    wireToken: "edit-provider-open",
+    fields: [providerField, rotationKeyCountField],
+  },
+  "edit-provider-submit": {
+    wireToken: "edit-provider-submit",
+    fields: [providerField, nonceField],
+  },
+  "endpoint-submit": {
+    wireToken: "endpoint-submit",
+    fields: [nonceField],
+  },
+  "model-close": {
+    wireToken: "model-close",
+    fields: [entryKindField, entryKeyField],
+  },
+  "model-open": {
+    wireToken: "model-open",
+    fields: [entryKindField, entryKeyField],
+  },
+  "model-range": {
+    wireToken: "model-range",
+    fields: [entryKindField, entryKeyField, rangeIndexField],
+  },
+  "model-select": {
+    wireToken: "model-select",
+    fields: [entryKindField, entryKeyField],
+  },
+  "model-submit": {
+    wireToken: "model-submit",
+    fields: [entryKindField, entryKeyField, capabilityField, editingModelIdField, nonceField],
+  },
+  range: {
+    wireToken: "range",
+    fields: [rangeIndexField],
+  },
+  "range-cancel": {
+    wireToken: "range-cancel",
+    fields: [],
+  },
+  "range-open": {
+    wireToken: "range-open",
+    fields: [],
+  },
+  "range-page": {
+    wireToken: "range-page",
+    fields: [rangeIndexField],
+  },
+  "remove-cancel": {
+    wireToken: "remove-cancel",
+    fields: [removalEntryKindField, removalEntryKeyField],
+  },
+  "remove-confirm": {
+    wireToken: "remove-confirm",
+    fields: [removalEntryKindField, removalEntryKeyField],
+  },
+  "remove-prompt": {
+    wireToken: "remove-prompt",
+    fields: [removalEntryKindField, removalEntryKeyField],
+  },
+  retry: {
+    wireToken: "retry",
+    fields: [],
+  },
+  select: {
+    wireToken: "select",
+    fields: [],
+  },
+};
+
+const CODECS_BY_WIRE_TOKEN = indexCodecsByWireToken<ProvidersAction, ProvidersPanelRoute>(PROVIDERS_ROUTE_CODECS);
+
+export function listProvidersPanelActions(): ProvidersAction[] {
+  return Object.keys(PROVIDERS_ROUTE_CODECS) as ProvidersAction[];
 }
 
-export function buildProvidersCustomIdForNamespace(
-  namespace: ProvidersRouteNamespace,
-  action: string,
-  ...segments: Array<string | number>
-): string {
-  return buildInteractionRouteId(namespace, PROVIDERS_ROUTE_VERSION, action, ...segments.map(String));
+/**
+ * Encodes a typed route object through the authoritative codec table into route segments.
+ */
+export function buildProvidersRouteSegments(route: ProvidersPanelRoute): string[] {
+  return buildRouteSegments(PROVIDERS_ROUTE_CODECS[route.action], route);
 }
 
-function parseNonNegativeInteger(value: string | undefined): number | null {
-  if (!value || !/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-function parseEntry(
-  kind: string | undefined,
-  key: string | undefined,
-): {
-  entryKind: "provider" | "endpoint";
-  entryKey: string;
-} | null {
-  if (kind === "provider" && key && /^[a-z0-9_-]{1,40}$/.test(key)) {
-    return { entryKind: kind, entryKey: key };
-  }
-  if (kind === "endpoint" && key && parseNonNegativeInteger(key) !== null && key !== "0") {
-    return { entryKind: kind, entryKey: key };
-  }
-  return null;
-}
-
-function parseRemovalEntry(
-  kind: string | undefined,
-  key: string | undefined,
-): { entryKind: "provider" | "endpoint" | "brave"; entryKey: string } | null {
-  if (kind === "brave" && key === "brave") return { entryKind: kind, entryKey: key };
-  return parseEntry(kind, key);
+/**
+ * Builds a custom ID from a typed route object and target namespace using the authoritative codec table.
+ */
+export function buildProvidersRouteId(namespace: ProvidersRouteNamespace, route: ProvidersPanelRoute): string {
+  return buildInteractionRouteId(namespace, PROVIDERS_ROUTE_VERSION, ...buildProvidersRouteSegments(route));
 }
 
 export function parseProvidersPanelRoute(
   route: ParsedInteractionRoute,
   namespace: ProvidersRouteNamespace = PROVIDERS_ROUTE_NAMESPACE,
 ): ProvidersPanelRoute | null {
-  if (route.namespace !== namespace || route.version !== PROVIDERS_ROUTE_VERSION) return null;
+  if (route.namespace !== namespace || route.version !== PROVIDERS_ROUTE_VERSION) {
+    return null;
+  }
 
-  const [action, rawLocale, rawRange, rawNonce] = route.segments;
+  const [rawWireToken, rawLocale, ...tail] = route.segments;
+  if (!rawWireToken || !rawLocale) return null;
+
   const locale = parseLocale(rawLocale);
-  if (!locale || !action) return null;
+  if (!locale) return null;
 
-  if (
-    route.segments.length === 2 &&
-    (action === "select" || action === "retry" || action === "range-open" || action === "range-cancel")
-  ) {
-    return { action, locale };
-  }
-  if (route.segments.length === 3 && (action === "range" || action === "range-page")) {
-    const rangeIndex = parseNonNegativeInteger(rawRange);
-    return rangeIndex === null ? null : { action, locale, rangeIndex };
-  }
-  if (
-    route.segments.length === 4 &&
-    (action === "model-open" || action === "model-select" || action === "model-close")
-  ) {
-    const entry = parseEntry(rawRange, rawNonce);
-    return entry ? { action, locale, ...entry } : null;
-  }
-  if (
-    route.segments.length === 4 &&
-    (action === "remove-prompt" || action === "remove-cancel" || action === "remove-confirm")
-  ) {
-    const entry = parseRemovalEntry(rawRange, rawNonce);
-    return entry ? { action, locale, ...entry } : null;
-  }
-  if (route.segments.length === 5 && action === "model-range") {
-    const entry = parseEntry(rawRange, rawNonce);
-    const rangeIndex = parseNonNegativeInteger(route.segments[4]);
-    return entry && rangeIndex !== null ? { action, locale, ...entry, rangeIndex } : null;
-  }
-  if (route.segments.length === 7 && action === "model-submit") {
-    const entry = parseEntry(rawRange, rawNonce);
-    const capability = ["text", "embedding", "image", "video", "speech", "transcription"].find(
-      (value) => value === route.segments[4],
-    ) as CustomEndpointCapability | undefined;
-    const modelId = parseNonNegativeInteger(route.segments[5]);
-    const nonce = route.segments[6];
-    if (!entry || !capability || modelId === null || !nonce || !/^[A-Za-z0-9_-]{8,32}$/.test(nonce)) return null;
+  const entry = CODECS_BY_WIRE_TOKEN.get(rawWireToken);
+  if (!entry) return null;
+
+  const canonical = decodeRouteSegments<ProvidersPanelRoute>(entry.codec, entry.action, locale, tail);
+  if (!canonical) return null;
+
+  if (canonical.action === "model-submit") {
     return {
-      action,
-      locale,
-      ...entry,
-      capability,
-      editingModelId: modelId === 0 ? null : modelId,
-      nonce,
+      ...canonical,
+      editingModelId: canonical.editingModelId === 0 ? null : canonical.editingModelId,
     };
   }
-  if (route.segments.length === 3 && action === "add-submit") {
-    if (!rawRange || !/^[A-Za-z0-9_-]{8,32}$/.test(rawRange)) return null;
-    return { action, locale, nonce: rawRange };
-  }
-  if (route.segments.length === 4 && action === "edit-provider-open") {
-    const provider = rawRange;
-    const rotationKeyCount = parseNonNegativeInteger(rawNonce);
-    return provider && /^[a-z0-9_-]{1,40}$/.test(provider) && rotationKeyCount !== null
-      ? { action, locale, provider, rotationKeyCount }
-      : null;
-  }
-  if (route.segments.length === 4 && action === "edit-provider-submit") {
-    const provider = rawRange;
-    return provider && /^[a-z0-9_-]{1,40}$/.test(provider) && rawNonce && /^[A-Za-z0-9_-]{8,32}$/.test(rawNonce)
-      ? { action, locale, provider, nonce: rawNonce }
-      : null;
-  }
-  if (route.segments.length === 3 && action === "edit-endpoint-open") {
-    const connectionId = parseNonNegativeInteger(rawRange);
-    return connectionId && connectionId > 0 ? { action, locale, connectionId } : null;
-  }
-  if (route.segments.length === 4 && action === "edit-endpoint-submit") {
-    const connectionId = parseNonNegativeInteger(rawRange);
-    return connectionId && connectionId > 0 && rawNonce && /^[A-Za-z0-9_-]{8,32}$/.test(rawNonce)
-      ? { action, locale, connectionId, nonce: rawNonce }
-      : null;
-  }
-  if (route.segments.length === 3 && action === "endpoint-submit") {
-    if (!rawRange || !/^[A-Za-z0-9_-]{8,32}$/.test(rawRange)) return null;
-    return { action, locale, nonce: rawRange };
-  }
-  return null;
+
+  return canonical;
 }

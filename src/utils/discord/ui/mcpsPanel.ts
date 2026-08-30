@@ -12,7 +12,7 @@ import type { GuildMcpServerRow } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
-import { buildMcpsCustomId } from "@/utils/discord/mcpsPanelCatalog";
+import { buildMcpsRouteId } from "@/utils/discord/mcpsPanelCatalog";
 import { buildPanelContainer, buildPanelReceiptContainer, withLinePrefix } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { MAX_MCP_SERVERS_PER_WORKSPACE, safeMcpEndpoint } from "@/utils/mcp/mcpConfigOperations";
@@ -63,7 +63,7 @@ function buildRetryRow(locale: string, selectedId: number | "none"): ActionRowDa
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildMcpsCustomId("retry", locale, selectedId),
+        customId: buildMcpsRouteId({ action: "retry", locale, selectedId }),
         label: localizer(locale, "commands.mcps.retry"),
       },
     ],
@@ -80,7 +80,7 @@ function buildEmptyState(
     {
       type: ComponentType.Button,
       style: ButtonStyle.Secondary,
-      customId: buildMcpsCustomId("add-open", locale),
+      customId: buildMcpsRouteId({ action: "add-open", locale }),
       label: localizer(locale, "commands.mcps.add"),
       disabled: writesDisabled || configs.length >= MAX_MCP_SERVERS_PER_WORKSPACE,
     },
@@ -120,7 +120,7 @@ function buildAddArea(
     {
       type: ComponentType.Button,
       style: ButtonStyle.Secondary,
-      customId: buildMcpsCustomId("add-open", locale),
+      customId: buildMcpsRouteId({ action: "add-open", locale }),
       label: localizer(locale, "commands.mcps.add"),
       disabled: writesDisabled || overflow || configs.length >= MAX_MCP_SERVERS_PER_WORKSPACE,
     },
@@ -195,14 +195,22 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
           {
             type: ComponentType.Button,
             style: ButtonStyle.Danger,
-            customId: buildMcpsCustomId("remove-confirm", input.locale, removeTarget.guild_mcp_id),
+            customId: buildMcpsRouteId({
+              action: "remove-confirm",
+              locale: input.locale,
+              entityId: removeTarget.guild_mcp_id,
+            }),
             label: localizer(input.locale, "commands.mcps.remove_confirm"),
             disabled: writesDisabled,
           },
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildMcpsCustomId("remove-cancel", input.locale, removeTarget.guild_mcp_id),
+            customId: buildMcpsRouteId({
+              action: "remove-cancel",
+              locale: input.locale,
+              entityId: removeTarget.guild_mcp_id,
+            }),
             label: localizer(input.locale, "commands.mcps.cancel"),
           },
         ],
@@ -241,14 +249,23 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildMcpsCustomId("set-enabled", input.locale, rowId(row), row.is_enabled ? 0 : 1),
+            customId: buildMcpsRouteId({
+              action: "set-enabled",
+              locale: input.locale,
+              entityId: rowId(row),
+              enabled: !row.is_enabled,
+            }),
             label: localizer(input.locale, row.is_enabled ? "commands.mcps.disable" : "commands.mcps.enable"),
             disabled: writesDisabled,
           },
           {
             type: ComponentType.Button,
             style: ButtonStyle.Danger,
-            customId: buildMcpsCustomId("remove-prompt", input.locale, rowId(row)),
+            customId: buildMcpsRouteId({
+              action: "remove-prompt",
+              locale: input.locale,
+              entityId: rowId(row),
+            }),
             label: localizer(input.locale, "commands.mcps.remove"),
             disabled: writesDisabled,
           },
@@ -306,7 +323,7 @@ export function buildAddMcpModal(
   components: RawDiscordComponent[];
 } {
   return {
-    custom_id: buildMcpsCustomId("add-submit", locale, nonce),
+    custom_id: buildMcpsRouteId({ action: "add-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.mcps.add_modal_title"), 45),
     components: [
       textInput(locale, nonce, "name", {

@@ -23,7 +23,8 @@ import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { resolveRangeSelection } from "@/utils/discord/interactions/panelController";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import {
-  buildProvidersCustomIdForNamespace,
+  buildProvidersRouteId,
+  buildProvidersRouteSegments,
   PROVIDERS_ROUTE_NAMESPACE,
   PROVIDERS_ROUTE_VERSION,
   type ProvidersRouteNamespace,
@@ -77,7 +78,7 @@ export function buildAddProviderModal(
       };
     });
   return {
-    custom_id: buildProvidersCustomIdForNamespace(routeNamespace, "add-submit", locale, nonce),
+    custom_id: buildProvidersRouteId(routeNamespace, { action: "add-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.providers.add_provider_modal_title"), 45),
     components: [
       {
@@ -175,7 +176,7 @@ export function buildAddEndpointModal(
   routeNamespace: ProvidersRouteNamespace = PROVIDERS_ROUTE_NAMESPACE,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildProvidersCustomIdForNamespace(routeNamespace, "endpoint-submit", locale, nonce),
+    custom_id: buildProvidersRouteId(routeNamespace, { action: "endpoint-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.providers.add_endpoint_modal_title"), 45),
     components: [
       endpointTextInput(locale, nonce, "label", true),
@@ -230,7 +231,12 @@ export function buildEditProviderModal(
     },
   });
   return {
-    custom_id: buildProvidersCustomIdForNamespace(routeNamespace, "edit-provider-submit", locale, provider, nonce),
+    custom_id: buildProvidersRouteId(routeNamespace, {
+      action: "edit-provider-submit",
+      locale,
+      provider,
+      nonce,
+    }),
     title: safeSelectOptionText(localizer(locale, "commands.providers.edit_provider_modal_title"), 45),
     components:
       provider === "brave" || !allowRotation
@@ -334,13 +340,12 @@ export function buildEditEndpointModal(
     },
   });
   return {
-    custom_id: buildProvidersCustomIdForNamespace(
-      routeNamespace,
-      "edit-endpoint-submit",
+    custom_id: buildProvidersRouteId(routeNamespace, {
+      action: "edit-endpoint-submit",
       locale,
-      context.connectionId,
+      connectionId: context.connectionId,
       nonce,
-    ),
+    }),
     title: safeSelectOptionText(localizer(locale, "commands.providers.edit_endpoint_modal_title"), 45),
     components,
   };
@@ -441,16 +446,19 @@ export function buildProviderModelModalFieldId(field: ProviderModelModalField, n
   return `${field}_${nonce}`;
 }
 
-function entryRouteSegments(entry: ProviderPanelEntry): ["provider" | "endpoint", string] | null {
-  if (entry.kind === "provider") return ["provider", entry.provider];
-  if (entry.kind === "endpoint") return ["endpoint", String(entry.connectionIds[0])];
+function entryRouteFields(entry: ProviderPanelEntry): { entryKind: "provider" | "endpoint"; entryKey: string } | null {
+  if (entry.kind === "provider") return { entryKind: "provider", entryKey: entry.provider };
+  if (entry.kind === "endpoint") return { entryKind: "endpoint", entryKey: String(entry.connectionIds[0] ?? 0) };
   return null;
 }
 
-function removalRouteSegments(entry: ProviderPanelEntry): ["provider" | "endpoint" | "brave", string] {
-  if (entry.kind === "provider") return ["provider", entry.provider];
-  if (entry.kind === "endpoint") return ["endpoint", String(entry.connectionIds[0] ?? 0)];
-  return ["brave", "brave"];
+function removalRouteFields(entry: ProviderPanelEntry): {
+  entryKind: "provider" | "endpoint" | "brave";
+  entryKey: string;
+} {
+  if (entry.kind === "provider") return { entryKind: "provider", entryKey: entry.provider };
+  if (entry.kind === "endpoint") return { entryKind: "endpoint", entryKey: String(entry.connectionIds[0] ?? 0) };
+  return { entryKind: "brave", entryKey: "brave" };
 }
 
 export function buildProviderModelModal(
@@ -654,16 +662,15 @@ export function buildProviderModelModal(
     });
   }
   return {
-    custom_id: buildProvidersCustomIdForNamespace(
-      routeNamespace,
-      "model-submit",
+    custom_id: buildProvidersRouteId(routeNamespace, {
+      action: "model-submit",
       locale,
       entryKind,
       entryKey,
       capability,
-      editingModelId ?? 0,
+      editingModelId: editingModelId ?? null,
       nonce,
-    ),
+    }),
     title: safeSelectOptionText(
       localizer(
         locale,
@@ -700,7 +707,7 @@ function buildRetryRow(locale: string, routeNamespace: ProvidersRouteNamespace):
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildProvidersCustomIdForNamespace(routeNamespace, "retry", locale),
+        customId: buildProvidersRouteId(routeNamespace, { action: "retry", locale }),
         label: localizer(locale, "commands.providers.retry"),
       },
     ],
@@ -814,21 +821,24 @@ function buildEntryActions(
       style: ButtonStyle.Secondary,
       customId:
         entry.kind === "endpoint"
-          ? buildProvidersCustomIdForNamespace(
-              routeNamespace,
-              "edit-endpoint-open",
+          ? buildProvidersRouteId(routeNamespace, {
+              action: "edit-endpoint-open",
               locale,
-              entry.connectionIds[0] ?? 0,
-            )
+              connectionId: entry.connectionIds[0] ?? 0,
+            })
           : entry.kind === "provider"
-            ? buildProvidersCustomIdForNamespace(
-                routeNamespace,
-                "edit-provider-open",
+            ? buildProvidersRouteId(routeNamespace, {
+                action: "edit-provider-open",
                 locale,
-                entry.provider,
-                entry.rotationKeyCount,
-              )
-            : buildProvidersCustomIdForNamespace(routeNamespace, "edit-provider-open", locale, "brave", 0),
+                provider: entry.provider,
+                rotationKeyCount: entry.rotationKeyCount,
+              })
+            : buildProvidersRouteId(routeNamespace, {
+                action: "edit-provider-open",
+                locale,
+                provider: "brave",
+                rotationKeyCount: 0,
+              }),
       label:
         entry.kind === "endpoint"
           ? localizer(locale, "commands.providers.edit_endpoint")
@@ -838,12 +848,11 @@ function buildEntryActions(
     {
       type: ComponentType.Button,
       style: ButtonStyle.Danger,
-      customId: buildProvidersCustomIdForNamespace(
-        routeNamespace,
-        "remove-prompt",
+      customId: buildProvidersRouteId(routeNamespace, {
+        action: "remove-prompt",
         locale,
-        ...removalRouteSegments(entry),
-      ),
+        ...removalRouteFields(entry),
+      }),
       label: localizer(
         locale,
         entry.kind === "endpoint"
@@ -866,8 +875,8 @@ function buildEntryModelSelector(
   enabledActions: ProvidersPanelRenderInput["enabledActions"],
   routeNamespace: ProvidersRouteNamespace,
 ): ComponentInContainerData[] {
-  const routeSegments = entryRouteSegments(entry);
-  if (!routeSegments || entry.kind === "brave") return [];
+  const entryFields = entryRouteFields(entry);
+  if (!entryFields || entry.kind === "brave") return [];
   const customModels = entry.capabilities.flatMap((section) =>
     section.models
       .filter((model) => model.isCustomRegistration)
@@ -910,7 +919,11 @@ function buildEntryModelSelector(
       components: [
         {
           type: ComponentType.StringSelect,
-          customId: buildProvidersCustomIdForNamespace(routeNamespace, "model-select", locale, ...routeSegments),
+          customId: buildProvidersRouteId(routeNamespace, {
+            action: "model-select",
+            locale,
+            ...entryFields,
+          }),
           placeholder: localizer(locale, "commands.providers.manage_models_placeholder"),
           options,
           disabled: readStatus !== "fresh" || !enabledActions?.has("model"),
@@ -925,26 +938,24 @@ function buildEntryModelSelector(
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          customId: buildProvidersCustomIdForNamespace(
-            routeNamespace,
-            "model-range",
+          customId: buildProvidersRouteId(routeNamespace, {
+            action: "model-range",
             locale,
-            ...routeSegments,
-            Math.max(0, selection.rangeIndex - 1),
-          ),
+            ...entryFields,
+            rangeIndex: Math.max(0, selection.rangeIndex - 1),
+          }),
           label: localizer(locale, "general.pagination.previous"),
           disabled: selection.rangeIndex === 0,
         },
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          customId: buildProvidersCustomIdForNamespace(
-            routeNamespace,
-            "model-range",
+          customId: buildProvidersRouteId(routeNamespace, {
+            action: "model-range",
             locale,
-            ...routeSegments,
-            selection.rangeIndex + 1,
-          ),
+            ...entryFields,
+            rangeIndex: selection.rangeIndex + 1,
+          }),
           label: localizer(locale, "general.pagination.next"),
           disabled: selection.rangeIndex >= selection.rangeCount - 1,
         },
@@ -1012,7 +1023,7 @@ export function buildProvidersPanelPayload(input: ProvidersPanelRenderInput): Pr
     components: [
       {
         type: ComponentType.StringSelect,
-        customId: buildProvidersCustomIdForNamespace(routeNamespace, "select", locale),
+        customId: buildProvidersRouteId(routeNamespace, { action: "select", locale }),
         placeholder: localizer(locale, "commands.providers.select_placeholder"),
         options,
         disabled: readStatus !== "fresh",
@@ -1028,7 +1039,7 @@ export function buildProvidersPanelPayload(input: ProvidersPanelRenderInput): Pr
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          customId: buildProvidersCustomIdForNamespace(routeNamespace, "range-open", locale),
+          customId: buildProvidersRouteId(routeNamespace, { action: "range-open", locale }),
           label: localizer(locale, "general.pagination.select_page_title"),
         },
       ],
@@ -1046,10 +1057,11 @@ export function buildProvidersPanelPayload(input: ProvidersPanelRenderInput): Pr
         namespace: routeNamespace,
         version: PROVIDERS_ROUTE_VERSION,
         buildSegments: {
-          range: (rangeIndex) => ["range", locale, String(rangeIndex)],
-          previous: (targetPage) => ["range-page", locale, String(targetPage)],
-          next: (targetPage) => ["range-page", locale, String(targetPage)],
-          cancel: () => ["range-cancel", locale],
+          range: (rangeIndex) => buildProvidersRouteSegments({ action: "range", locale, rangeIndex }),
+          previous: (targetPage) =>
+            buildProvidersRouteSegments({ action: "range-page", locale, rangeIndex: targetPage }),
+          next: (targetPage) => buildProvidersRouteSegments({ action: "range-page", locale, rangeIndex: targetPage }),
+          cancel: () => buildProvidersRouteSegments({ action: "range-cancel", locale }),
         },
       }),
     );
@@ -1057,7 +1069,7 @@ export function buildProvidersPanelPayload(input: ProvidersPanelRenderInput): Pr
     const removalPage = input.page;
     const entry = entries.find((candidate) => candidate.id === removalPage.entryId);
     if (entry) {
-      const routeSegments = removalRouteSegments(entry);
+      const removalFields = removalRouteFields(entry);
       components.push(
         {
           type: ComponentType.TextDisplay,
@@ -1072,14 +1084,22 @@ ${localizer(locale, `commands.providers.remove_impact_${entry.kind}`, {
             {
               type: ComponentType.Button,
               style: ButtonStyle.Danger,
-              customId: buildProvidersCustomIdForNamespace(routeNamespace, "remove-confirm", locale, ...routeSegments),
+              customId: buildProvidersRouteId(routeNamespace, {
+                action: "remove-confirm",
+                locale,
+                ...removalFields,
+              }),
               label: localizer(locale, "commands.providers.remove_confirm"),
               disabled: readStatus !== "fresh",
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildProvidersCustomIdForNamespace(routeNamespace, "remove-cancel", locale, ...routeSegments),
+              customId: buildProvidersRouteId(routeNamespace, {
+                action: "remove-cancel",
+                locale,
+                ...removalFields,
+              }),
               label: localizer(locale, "commands.providers.cancel"),
             },
           ],

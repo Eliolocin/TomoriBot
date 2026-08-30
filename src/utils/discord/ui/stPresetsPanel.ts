@@ -16,7 +16,8 @@ import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import { resolveRangeSelection } from "@/utils/discord/interactions/panelController";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import {
-  buildStPresetsCustomId,
+  buildStPresetsRouteId,
+  buildStPresetsRouteSegments,
   ST_PRESETS_ROUTE_NAMESPACE,
   ST_PRESETS_ROUTE_VERSION,
 } from "@/utils/discord/stPresetsPanelCatalog";
@@ -72,7 +73,7 @@ function buildRetryRow(locale: string): ActionRowData<ButtonComponentData> {
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildStPresetsCustomId("retry", locale),
+        customId: buildStPresetsRouteId({ action: "retry", locale }),
         label: localizer(locale, "commands.st-presets.retry"),
       },
     ],
@@ -175,7 +176,7 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
     components: [
       {
         type: ComponentType.StringSelect,
-        customId: buildStPresetsCustomId("select", locale),
+        customId: buildStPresetsRouteId({ action: "select", locale }),
         placeholder: localizer(locale, "commands.st-presets.select_placeholder"),
         options: selectOptions,
         disabled: writesDisabled,
@@ -192,14 +193,22 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          customId: buildStPresetsCustomId("range", locale, Math.max(0, rangeSelection.rangeIndex - 1)),
+          customId: buildStPresetsRouteId({
+            action: "range",
+            locale,
+            rangeIndex: Math.max(0, rangeSelection.rangeIndex - 1),
+          }),
           label: localizer(locale, "commands.st-presets.range_previous"),
           disabled: rangeSelection.rangeIndex === 0,
         },
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          customId: buildStPresetsCustomId("range", locale, rangeSelection.rangeIndex + 1),
+          customId: buildStPresetsRouteId({
+            action: "range",
+            locale,
+            rangeIndex: rangeSelection.rangeIndex + 1,
+          }),
           label: localizer(locale, "commands.st-presets.range_next"),
           disabled: rangeSelection.rangeIndex >= rangeSelection.rangeCount - 1,
         },
@@ -253,14 +262,14 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildStPresetsCustomId("nodes-open", locale, targetPreset.preset_id),
+              customId: buildStPresetsRouteId({ action: "nodes-open", locale, presetId: targetPreset.preset_id }),
               label: localizer(locale, "commands.st-presets.toggle_nodes"),
               disabled: writesDisabled,
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Danger,
-              customId: buildStPresetsCustomId("delete-prompt", locale, targetPreset.preset_id),
+              customId: buildStPresetsRouteId({ action: "delete-prompt", locale, presetId: targetPreset.preset_id }),
               label: localizer(locale, "commands.st-presets.delete_preset"),
               disabled: writesDisabled,
             },
@@ -290,14 +299,14 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
           {
             type: ComponentType.Button,
             style: ButtonStyle.Danger,
-            customId: buildStPresetsCustomId("delete-confirm", locale, page.presetId),
+            customId: buildStPresetsRouteId({ action: "delete-confirm", locale, presetId: page.presetId }),
             label: localizer(locale, "commands.st-presets.delete_confirm"),
             disabled: writesDisabled,
           },
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildStPresetsCustomId("delete-cancel", locale, page.presetId),
+            customId: buildStPresetsRouteId({ action: "delete-cancel", locale, presetId: page.presetId }),
             label: localizer(locale, "commands.st-presets.cancel"),
           },
         ],
@@ -312,10 +321,23 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
       namespace: ST_PRESETS_ROUTE_NAMESPACE,
       version: ST_PRESETS_ROUTE_VERSION,
       buildSegments: {
-        range: (rangeIndex) => ["nodes-range", locale, String(page.presetId), String(rangeIndex)],
-        previous: (targetPage) => ["nodes-page", locale, String(page.presetId), String(targetPage)],
-        next: (targetPage) => ["nodes-page", locale, String(page.presetId), String(targetPage)],
-        cancel: () => ["retry", locale],
+        range: (rangeIndex) =>
+          buildStPresetsRouteSegments({ action: "nodes-range", locale, presetId: page.presetId, rangeIndex }),
+        previous: (targetPage) =>
+          buildStPresetsRouteSegments({
+            action: "nodes-page",
+            locale,
+            presetId: page.presetId,
+            chooserPage: targetPage,
+          }),
+        next: (targetPage) =>
+          buildStPresetsRouteSegments({
+            action: "nodes-page",
+            locale,
+            presetId: page.presetId,
+            chooserPage: targetPage,
+          }),
+        cancel: () => buildStPresetsRouteSegments({ action: "retry", locale }),
       },
     });
     components.push(...chooserComponents);
@@ -340,7 +362,7 @@ export function buildAddStPresetModal(
   components: RawDiscordComponent[];
 } {
   return {
-    custom_id: buildStPresetsCustomId("add-submit", locale, nonce),
+    custom_id: buildStPresetsRouteId({ action: "add-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.st-presets.add_modal_title"), 45),
     components: [
       {
@@ -433,7 +455,12 @@ export function buildNodesToggleModal(
   }
 
   return {
-    custom_id: buildStPresetsCustomId("nodes-submit", locale, preset.preset_id as number, nonce),
+    custom_id: buildStPresetsRouteId({
+      action: "nodes-submit",
+      locale,
+      presetId: preset.preset_id as number,
+      nonce,
+    }),
     title: safeSelectOptionText(preset.preset_name, 45),
     components: modalComponents,
   };

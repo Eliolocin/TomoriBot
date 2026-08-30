@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import type { ButtonInteraction, Client, ModalSubmitInteraction, StringSelectMenuInteraction } from "discord.js";
 import type { GuildMcpServerRow } from "@/types/db/schema";
 import {
@@ -6,11 +7,41 @@ import {
   mcpsInteractionRoute,
   type McpsRouteDependencies,
 } from "@/utils/discord/interactions/mcpsRoutes";
-import { buildInteractionRouteId } from "@/utils/discord/interactions/routeRegistry";
-import { parseMcpsPanelRoute } from "@/utils/discord/mcpsPanelCatalog";
+import { buildInteractionRouteId, parseInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import {
+  buildMcpsRouteId,
+  buildMcpsRouteSegments,
+  listMcpsPanelActions,
+  MCPS_ROUTE_CODECS,
+  parseMcpsPanelRoute,
+  type McpsPanelRoute,
+} from "@/utils/discord/mcpsPanelCatalog";
+import { buildAddMcpModal, buildMcpsPanelPayload } from "@/utils/discord/ui/mcpsPanel";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
+
+// These are emitted v1 bytes, independent of the codec Slice 2 will introduce.
+const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, McpsPanelRoute]> = [
+  ["mcps:v1:select:en-US:0", { action: "select", locale: "en-US", rangeIndex: 0 }],
+  ["mcps:v1:range:en-US:0", { action: "range", locale: "en-US", rangeIndex: 0 }],
+  ["mcps:v1:retry:en-US:none", { action: "retry", locale: "en-US", selectedId: "none" }],
+  ["mcps:v1:refresh:en-US:none", { action: "refresh", locale: "en-US", selectedId: "none" }],
+  ["mcps:v1:add-open:en-US", { action: "add-open", locale: "en-US" }],
+  ["mcps:v1:add-page:en-US:web_search", { action: "add-page", locale: "en-US", serverType: "web_search" }],
+  ["mcps:v1:add-type:en-US", { action: "add-type", locale: "en-US" }],
+  ["mcps:v1:add-submit:en-US:12345678", { action: "add-submit", locale: "en-US", nonce: "12345678" }],
+  ["mcps:v1:set-enabled:en-US:1:1", { action: "set-enabled", locale: "en-US", entityId: 1, enabled: true }],
+  ["mcps:v1:remove-prompt:en-US:1", { action: "remove-prompt", locale: "en-US", entityId: 1 }],
+  ["mcps:v1:remove-cancel:en-US:1", { action: "remove-cancel", locale: "en-US", entityId: 1 }],
+  ["mcps:v1:remove-confirm:en-US:1", { action: "remove-confirm", locale: "en-US", entityId: 1 }],
+  ["mcps:v1:add-open:en-US:web_search", { action: "add-open", locale: "en-US" }],
+  [
+    "mcps:v1:add-submit:en-US:web_search:12345678",
+    { action: "add-submit", locale: "en-US", nonce: "12345678", legacyServerType: "web_search" },
+  ],
+  ["mcps:v1:refresh:en-US:add", { action: "refresh", locale: "en-US", selectedId: "none" }],
+];
 
 function configuredRow(): GuildMcpServerRow {
   return {
@@ -59,47 +90,387 @@ function dependencies(calls: string[], overrides: Partial<McpsRouteDependencies>
 }
 
 describe("MCP panel routes", () => {
-  it("round trips valid state and rejects malformed stable IDs, types, and nonces", () => {
-    expect(
-      parseMcpsPanelRoute({
-        namespace: "mcps",
-        version: "v1",
-        segments: ["set-enabled", "en-US", "42", "1"],
+  it("decodes every literal v1 wire string to its exact route", () => {
+    for (const [customId, expected] of WIRE_CONTRACT_V1) {
+      const route = parseInteractionRoute(customId);
+      expect(route).not.toBeNull();
+      if (route) {
+        expect(parseMcpsPanelRoute(route)).toEqual(expected);
+      }
+    }
+  });
+
+  it("encodes every canonical typed route to exact literal wire bytes", () => {
+    const canonicalEntries = WIRE_CONTRACT_V1.slice(0, 12);
+    for (const [customId, expected] of canonicalEntries) {
+      expect(buildMcpsRouteId(expected)).toBe(customId);
+      const expectedSegments = customId.split(":").slice(2);
+      expect(buildMcpsRouteSegments(expected)).toEqual(expectedSegments);
+    }
+  });
+
+  it("round trips parse and build for all canonical actions", () => {
+    const canonicalEntries = WIRE_CONTRACT_V1.slice(0, 12);
+    for (const [, expected] of canonicalEntries) {
+      const builtId = buildMcpsRouteId(expected);
+      const parts = builtId.split(":");
+      const parsedFromBuilt = parseMcpsPanelRoute({
+        namespace: parts[0] as string,
+        version: parts[1] as string,
+        segments: parts.slice(2),
+      });
+      expect(parsedFromBuilt).toEqual(expected);
+    }
+  });
+
+  it("guarantees 12-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
+    const ACCEPTED_12_ACTIONS = [
+      "add-open",
+      "add-page",
+      "add-submit",
+      "add-type",
+      "range",
+      "refresh",
+      "remove-cancel",
+      "remove-confirm",
+      "remove-prompt",
+      "retry",
+      "select",
+      "set-enabled",
+    ].sort();
+
+    const catalogActions = listMcpsPanelActions().sort();
+    const wireActions = [...new Set(WIRE_CONTRACT_V1.map(([, route]) => route.action))].sort();
+    const codecTableActions = Object.keys(MCPS_ROUTE_CODECS).sort();
+
+    const routesSource = readFileSync(
+      new URL("../../../src/utils/discord/interactions/mcpsRoutes.ts", import.meta.url),
+      "utf8",
+    );
+    const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
+
+    expect(catalogActions).toEqual(ACCEPTED_12_ACTIONS);
+    expect(wireActions).toEqual(ACCEPTED_12_ACTIONS);
+    expect(codecTableActions).toEqual(ACCEPTED_12_ACTIONS);
+
+    expect(handlerActions.size).toBe(12);
+    expect([...handlerActions].sort()).toEqual(ACCEPTED_12_ACTIONS);
+    expect(ACCEPTED_12_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !ACCEPTED_12_ACTIONS.includes(a))).toEqual([]);
+    expect(codecTableActions.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !codecTableActions.includes(a))).toEqual([]);
+  });
+
+  it("guarantees producer coverage against production UI and modal surfaces with exactly five allowlisted compatibility-only actions", () => {
+    const COMPATIBILITY_ONLY_ACTIONS = ["add-page", "add-type", "range", "refresh", "select"] as const;
+    const ACCEPTED_12_ACTIONS = [
+      "add-open",
+      "add-page",
+      "add-submit",
+      "add-type",
+      "range",
+      "refresh",
+      "remove-cancel",
+      "remove-confirm",
+      "remove-prompt",
+      "retry",
+      "select",
+      "set-enabled",
+    ].sort();
+
+    const collectedCustomIds: string[] = [];
+
+    function harvestCustomIds(val: unknown): void {
+      if (Array.isArray(val)) {
+        for (const item of val) harvestCustomIds(item);
+        return;
+      }
+      if (!val || typeof val !== "object") return;
+      const obj = val as Record<string, unknown>;
+      if (typeof obj.customId === "string" && obj.customId.startsWith("mcps:")) {
+        collectedCustomIds.push(obj.customId);
+      }
+      if (typeof obj.custom_id === "string" && obj.custom_id.startsWith("mcps:")) {
+        collectedCustomIds.push(obj.custom_id);
+      }
+      for (const prop of Object.values(obj)) {
+        harvestCustomIds(prop);
+      }
+    }
+
+    harvestCustomIds(
+      buildMcpsPanelPayload({
+        locale: "en-US",
+        scope: "guild",
+        configs: [],
+        readStatus: "fresh",
+        page: { kind: "collection" },
       }),
-    ).toEqual({ action: "set-enabled", locale: "en-US", entityId: 42, enabled: true });
-    expect(
-      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["set-enabled", "en-US", "0", "1"] }),
-    ).toBeNull();
-    expect(
-      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-open", "en-US", "other"] }),
-    ).toBeNull();
-    expect(
-      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-submit", "en-US", "general", "x"] }),
-    ).toBeNull();
+    );
+
+    harvestCustomIds(
+      buildMcpsPanelPayload({
+        locale: "en-US",
+        scope: "dm",
+        configs: [configuredRow(), { ...configuredRow(), guild_mcp_id: 2, name: "second", is_enabled: false }],
+        readStatus: "fresh",
+        page: { kind: "collection" },
+      }),
+    );
+
+    harvestCustomIds(
+      buildMcpsPanelPayload({
+        locale: "en-US",
+        scope: "guild",
+        configs: [configuredRow()],
+        readStatus: "stale",
+        page: { kind: "collection" },
+      }),
+    );
+
+    harvestCustomIds(
+      buildMcpsPanelPayload({
+        locale: "en-US",
+        scope: "guild",
+        configs: [],
+        readStatus: "unavailable",
+        page: { kind: "collection" },
+      }),
+    );
+
+    harvestCustomIds(
+      buildMcpsPanelPayload({
+        locale: "en-US",
+        scope: "guild",
+        configs: [configuredRow()],
+        readStatus: "fresh",
+        page: { kind: "remove", entityId: 1 },
+      }),
+    );
+
+    harvestCustomIds(
+      buildMcpsPanelPayload({
+        locale: "en-US",
+        scope: "guild",
+        configs: Array.from({ length: 8 }, (_, i) => ({ ...configuredRow(), guild_mcp_id: i + 1 })),
+        readStatus: "fresh",
+        page: { kind: "collection" },
+      }),
+    );
+
+    harvestCustomIds(buildAddMcpModal("en-US", "12345678"));
+
+    const producedActions = new Set<string>();
+    for (const customId of collectedCustomIds) {
+      const parts = customId.split(":");
+      const parsed = parseMcpsPanelRoute({
+        namespace: parts[0] as string,
+        version: parts[1] as string,
+        segments: parts.slice(2),
+      });
+      expect(parsed).not.toBeNull();
+      if (parsed) {
+        producedActions.add(parsed.action);
+      }
+    }
+
+    for (const action of COMPATIBILITY_ONLY_ACTIONS) {
+      expect(producedActions.has(action)).toBe(false);
+    }
+
+    const unionedActions = [...new Set([...producedActions, ...COMPATIBILITY_ONLY_ACTIONS])].sort();
+    expect(unionedActions).toEqual(ACCEPTED_12_ACTIONS);
+  });
+
+  it("distinguishes presence and absence of optional legacyServerType", () => {
+    const canonicalSubmit = parseMcpsPanelRoute({
+      namespace: "mcps",
+      version: "v1",
+      segments: ["add-submit", "en-US", "12345678"],
+    });
+    expect(canonicalSubmit).not.toBeNull();
+    if (canonicalSubmit) {
+      expect("legacyServerType" in canonicalSubmit).toBe(false);
+      expect(canonicalSubmit).toEqual({ action: "add-submit", locale: "en-US", nonce: "12345678" });
+    }
+
+    const legacySubmit = parseMcpsPanelRoute({
+      namespace: "mcps",
+      version: "v1",
+      segments: ["add-submit", "en-US", "web_search", "12345678"],
+    });
+    expect(legacySubmit).not.toBeNull();
+    if (legacySubmit) {
+      expect("legacyServerType" in legacySubmit).toBe(true);
+      expect(legacySubmit).toEqual({
+        action: "add-submit",
+        locale: "en-US",
+        nonce: "12345678",
+        legacyServerType: "web_search",
+      });
+    }
+  });
+
+  it("rejects unsupported locales, malformed segment counts, and invalid values", () => {
+    expect(parseMcpsPanelRoute({ namespace: "wrong", version: "v1", segments: ["add-open", "en-US"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v2", segments: ["add-open", "en-US"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-open", "fr-FR"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-open", ""] })).toBeNull();
     expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["unknown", "en-US"] })).toBeNull();
-    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-type", "xx"] })).toBeNull();
+
     expect(
-      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["set-enabled", "en-US", "1", "2"] }),
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["select", "en-US", "0", "extra"] }),
     ).toBeNull();
-    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["range", "en-US", "-1"] })).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["range", "en-US", "0", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["retry", "en-US", "none", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["refresh", "en-US", "none", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-open", "en-US", "web_search", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-page", "en-US", "web_search", "extra"] }),
+    ).toBeNull();
     expect(
       parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-type", "en-US", "extra"] }),
     ).toBeNull();
     expect(
-      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-submit", "en-US", "12345678"] }),
-    ).toEqual({ action: "add-submit", locale: "en-US", nonce: "12345678" });
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-submit", "en-US", "12345678", "extra"] }),
+    ).toBeNull();
     expect(
       parseMcpsPanelRoute({
         namespace: "mcps",
         version: "v1",
-        segments: ["add-submit", "en-US", "web_search", "12345678"],
+        segments: ["add-submit", "en-US", "web_search", "12345678", "extra"],
       }),
-    ).toEqual({
-      action: "add-submit",
-      locale: "en-US",
-      nonce: "12345678",
-      legacyServerType: "web_search",
-    });
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["set-enabled", "en-US", "1", "1", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["remove-prompt", "en-US", "1", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["remove-cancel", "en-US", "1", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["remove-confirm", "en-US", "1", "extra"] }),
+    ).toBeNull();
+
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["select", "en-US"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["range", "en-US"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["retry", "en-US"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["refresh", "en-US"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-page", "en-US"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-submit", "en-US"] })).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["set-enabled", "en-US", "1"] }),
+    ).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["remove-prompt", "en-US"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["remove-cancel", "en-US"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["remove-confirm", "en-US"] })).toBeNull();
+
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["select", "en-US", "-1"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["select", "en-US", "abc"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["select", "en-US", "1.5"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["range", "en-US", "-1"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["range", "en-US", "abc"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["retry", "en-US", "0"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["retry", "en-US", "-5"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["retry", "en-US", "abc"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["retry", "en-US", "add"] })).toBeNull();
+    expect(parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["refresh", "en-US", "0"] })).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["refresh", "en-US", "invalid"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-open", "en-US", "invalid_type"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-page", "en-US", "invalid_type"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-submit", "en-US", "short"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-submit", "en-US", "spaces in nonce"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["add-submit", "en-US", "a".repeat(33)] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({
+        namespace: "mcps",
+        version: "v1",
+        segments: ["add-submit", "en-US", "web_search", "short"],
+      }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({
+        namespace: "mcps",
+        version: "v1",
+        segments: ["add-submit", "en-US", "invalid_type", "12345678"],
+      }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["set-enabled", "en-US", "0", "1"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["set-enabled", "en-US", "-1", "1"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["set-enabled", "en-US", "1", "2"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["set-enabled", "en-US", "1", "true"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["remove-prompt", "en-US", "0"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["remove-prompt", "en-US", "abc"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["remove-cancel", "en-US", "0"] }),
+    ).toBeNull();
+    expect(
+      parseMcpsPanelRoute({ namespace: "mcps", version: "v1", segments: ["remove-confirm", "en-US", "0"] }),
+    ).toBeNull();
+  });
+
+  it("asserts realistic maximum-length routes stay comfortably within Discord's 100-character custom ID ceiling", () => {
+    const maxLocale = "zh-Hans";
+    const maxNonce = "nonce12345678901234567890123456";
+    const maxEntityId = 2147483647;
+    const maxIndex = 2147483647;
+
+    const maxRoutes: McpsPanelRoute[] = [
+      { action: "select", locale: maxLocale, rangeIndex: maxIndex },
+      { action: "range", locale: maxLocale, rangeIndex: maxIndex },
+      { action: "retry", locale: maxLocale, selectedId: maxEntityId },
+      { action: "refresh", locale: maxLocale, selectedId: maxEntityId },
+      { action: "retry", locale: maxLocale, selectedId: "none" },
+      { action: "refresh", locale: maxLocale, selectedId: "none" },
+      { action: "add-open", locale: maxLocale },
+      { action: "add-page", locale: maxLocale, serverType: "web_search" },
+      { action: "add-type", locale: maxLocale },
+      { action: "add-submit", locale: maxLocale, nonce: maxNonce },
+      { action: "set-enabled", locale: maxLocale, entityId: maxEntityId, enabled: true },
+      { action: "set-enabled", locale: maxLocale, entityId: maxEntityId, enabled: false },
+      { action: "remove-prompt", locale: maxLocale, entityId: maxEntityId },
+      { action: "remove-cancel", locale: maxLocale, entityId: maxEntityId },
+      { action: "remove-confirm", locale: maxLocale, entityId: maxEntityId },
+    ];
+
+    for (const route of maxRoutes) {
+      const customId = buildMcpsRouteId(route);
+      expect(customId.length).toBeLessThanOrEqual(100);
+    }
   });
 
   it("guards Discord's 100-character custom ID limit", () => {

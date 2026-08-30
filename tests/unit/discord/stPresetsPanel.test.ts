@@ -1,8 +1,16 @@
 import { beforeAll, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import { ComponentType } from "discord.js";
 import type { StPresetNodeRow, StPresetRow } from "@/types/db/schema";
 import type { PanelReceipt } from "@/types/discord/panel";
-import { parseStPresetsPanelRoute } from "@/utils/discord/stPresetsPanelCatalog";
+import {
+  buildStPresetsRouteId,
+  buildStPresetsRouteSegments,
+  listStPresetsPanelActions,
+  parseStPresetsPanelRoute,
+  ST_PRESETS_ROUTE_CODECS,
+  type StPresetsPanelRoute,
+} from "@/utils/discord/stPresetsPanelCatalog";
 import {
   buildAddStPresetModal,
   buildNodesToggleModal,
@@ -62,61 +70,66 @@ function receipt(tone: PanelReceipt["tone"]): PanelReceipt {
 }
 
 describe("ST Presets route codec", () => {
-  it("round-trips all valid route actions", () => {
-    const cases = [
-      { action: "select", customId: "st-presets:v1:select:en-US", parsed: { action: "select", locale: "en-US" } },
-      { action: "retry", customId: "st-presets:v1:retry:en-US", parsed: { action: "retry", locale: "en-US" } },
-      { action: "none", customId: "st-presets:v1:none:en-US", parsed: { action: "none", locale: "en-US" } },
-      { action: "disable", customId: "st-presets:v1:disable:en-US", parsed: { action: "disable", locale: "en-US" } },
-      { action: "add-open", customId: "st-presets:v1:add-open:en-US", parsed: { action: "add-open", locale: "en-US" } },
-      {
-        action: "range",
-        customId: "st-presets:v1:range:en-US:2",
-        parsed: { action: "range", locale: "en-US", rangeIndex: 2 },
-      },
-      {
-        action: "add-submit",
-        customId: "st-presets:v1:add-submit:en-US:nonce123456",
-        parsed: { action: "add-submit", locale: "en-US", nonce: "nonce123456" },
-      },
-      {
-        action: "nodes-open",
-        customId: "st-presets:v1:nodes-open:en-US:42",
-        parsed: { action: "nodes-open", locale: "en-US", presetId: 42 },
-      },
-      {
-        action: "nodes-range",
-        customId: "st-presets:v1:nodes-range:en-US:42:1",
-        parsed: { action: "nodes-range", locale: "en-US", presetId: 42, rangeIndex: 1 },
-      },
-      {
-        action: "nodes-page",
-        customId: "st-presets:v1:nodes-page:en-US:42:3",
-        parsed: { action: "nodes-page", locale: "en-US", presetId: 42, chooserPage: 3 },
-      },
-      {
-        action: "nodes-submit",
-        customId: "st-presets:v1:nodes-submit:en-US:42:nonce123456",
-        parsed: { action: "nodes-submit", locale: "en-US", presetId: 42, nonce: "nonce123456" },
-      },
-      {
-        action: "delete-prompt",
-        customId: "st-presets:v1:delete-prompt:en-US:42",
-        parsed: { action: "delete-prompt", locale: "en-US", presetId: 42 },
-      },
-      {
-        action: "delete-cancel",
-        customId: "st-presets:v1:delete-cancel:en-US:42",
-        parsed: { action: "delete-cancel", locale: "en-US", presetId: 42 },
-      },
-      {
-        action: "delete-confirm",
-        customId: "st-presets:v1:delete-confirm:en-US:42",
-        parsed: { action: "delete-confirm", locale: "en-US", presetId: 42 },
-      },
-    ] as const;
+  // These literal IDs record the v1 bytes already-open Discord panels send. A shared codec can
+  // move encoder and decoder fields together while round trips stay green, so this fixture must
+  // remain independent of the builder it constrains.
+  const WIRE_CONTRACT_V1: ReadonlyArray<
+    readonly { action: StPresetsPanelRoute["action"]; customId: string; parsed: StPresetsPanelRoute }
+  > = [
+    { action: "select", customId: "st-presets:v1:select:en-US", parsed: { action: "select", locale: "en-US" } },
+    { action: "retry", customId: "st-presets:v1:retry:en-US", parsed: { action: "retry", locale: "en-US" } },
+    { action: "none", customId: "st-presets:v1:none:en-US", parsed: { action: "none", locale: "en-US" } },
+    { action: "disable", customId: "st-presets:v1:disable:en-US", parsed: { action: "disable", locale: "en-US" } },
+    { action: "add-open", customId: "st-presets:v1:add-open:en-US", parsed: { action: "add-open", locale: "en-US" } },
+    {
+      action: "range",
+      customId: "st-presets:v1:range:en-US:2",
+      parsed: { action: "range", locale: "en-US", rangeIndex: 2 },
+    },
+    {
+      action: "add-submit",
+      customId: "st-presets:v1:add-submit:en-US:nonce123456",
+      parsed: { action: "add-submit", locale: "en-US", nonce: "nonce123456" },
+    },
+    {
+      action: "nodes-open",
+      customId: "st-presets:v1:nodes-open:en-US:42",
+      parsed: { action: "nodes-open", locale: "en-US", presetId: 42 },
+    },
+    {
+      action: "nodes-range",
+      customId: "st-presets:v1:nodes-range:en-US:42:1",
+      parsed: { action: "nodes-range", locale: "en-US", presetId: 42, rangeIndex: 1 },
+    },
+    {
+      action: "nodes-page",
+      customId: "st-presets:v1:nodes-page:en-US:42:3",
+      parsed: { action: "nodes-page", locale: "en-US", presetId: 42, chooserPage: 3 },
+    },
+    {
+      action: "nodes-submit",
+      customId: "st-presets:v1:nodes-submit:en-US:42:nonce123456",
+      parsed: { action: "nodes-submit", locale: "en-US", presetId: 42, nonce: "nonce123456" },
+    },
+    {
+      action: "delete-prompt",
+      customId: "st-presets:v1:delete-prompt:en-US:42",
+      parsed: { action: "delete-prompt", locale: "en-US", presetId: 42 },
+    },
+    {
+      action: "delete-cancel",
+      customId: "st-presets:v1:delete-cancel:en-US:42",
+      parsed: { action: "delete-cancel", locale: "en-US", presetId: 42 },
+    },
+    {
+      action: "delete-confirm",
+      customId: "st-presets:v1:delete-confirm:en-US:42",
+      parsed: { action: "delete-confirm", locale: "en-US", presetId: 42 },
+    },
+  ];
 
-    for (const c of cases) {
+  it("decodes every literal v1 wire string to its exact route", () => {
+    for (const c of WIRE_CONTRACT_V1) {
       const parts = c.customId.split(":");
       const namespace = parts[0] as string;
       const version = parts[1] as string;
@@ -126,21 +139,298 @@ describe("ST Presets route codec", () => {
     }
   });
 
+  it("encodes every typed route to exact literal wire bytes", () => {
+    for (const c of WIRE_CONTRACT_V1) {
+      expect(buildStPresetsRouteId(c.parsed)).toBe(c.customId);
+      const expectedSegments = c.customId.split(":").slice(2);
+      expect(buildStPresetsRouteSegments(c.parsed)).toEqual(expectedSegments);
+    }
+  });
+
+  it("round trips parse and build for all canonical actions", () => {
+    for (const c of WIRE_CONTRACT_V1) {
+      const builtId = buildStPresetsRouteId(c.parsed);
+      const parts = builtId.split(":");
+      const parsedFromBuilt = parseStPresetsPanelRoute({
+        namespace: parts[0] as string,
+        version: parts[1] as string,
+        segments: parts.slice(2),
+      });
+      expect(parsedFromBuilt).toEqual(c.parsed);
+    }
+  });
+
+  it("guarantees 14-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
+    const ACCEPTED_14_ACTIONS = [
+      "add-open",
+      "add-submit",
+      "delete-cancel",
+      "delete-confirm",
+      "delete-prompt",
+      "disable",
+      "nodes-open",
+      "nodes-page",
+      "nodes-range",
+      "nodes-submit",
+      "none",
+      "range",
+      "retry",
+      "select",
+    ].sort();
+
+    const catalogActions = listStPresetsPanelActions().sort();
+    const wireActions = [...new Set(WIRE_CONTRACT_V1.map((c) => c.action))].sort();
+    const codecTableActions = Object.keys(ST_PRESETS_ROUTE_CODECS).sort();
+
+    const routesSource = readFileSync(
+      new URL("../../../src/utils/discord/interactions/stPresetsRoutes.ts", import.meta.url),
+      "utf8",
+    );
+    const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
+
+    expect(catalogActions).toEqual(ACCEPTED_14_ACTIONS);
+    expect(wireActions).toEqual(ACCEPTED_14_ACTIONS);
+    expect(codecTableActions).toEqual(ACCEPTED_14_ACTIONS);
+
+    expect(handlerActions.size).toBe(14);
+    expect([...handlerActions].sort()).toEqual(ACCEPTED_14_ACTIONS);
+    expect(ACCEPTED_14_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !ACCEPTED_14_ACTIONS.includes(a))).toEqual([]);
+    expect(codecTableActions.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !codecTableActions.includes(a))).toEqual([]);
+  });
+
+  it("guarantees producer coverage against production UI and modal surfaces with exactly three allowlisted producerless actions", () => {
+    const PRODUCERLESS_COMPATIBILITY_ACTIONS = ["add-open", "disable", "none"] as const;
+    const ACCEPTED_14_ACTIONS = [
+      "add-open",
+      "add-submit",
+      "delete-cancel",
+      "delete-confirm",
+      "delete-prompt",
+      "disable",
+      "nodes-open",
+      "nodes-page",
+      "nodes-range",
+      "nodes-submit",
+      "none",
+      "range",
+      "retry",
+      "select",
+    ].sort();
+
+    const collectedCustomIds: string[] = [];
+
+    function harvestCustomIds(val: unknown): void {
+      if (Array.isArray(val)) {
+        for (const item of val) harvestCustomIds(item);
+        return;
+      }
+      if (!val || typeof val !== "object") return;
+      const obj = val as Record<string, unknown>;
+      if (typeof obj.customId === "string" && obj.customId.startsWith("st-presets:")) {
+        collectedCustomIds.push(obj.customId);
+      }
+      if (typeof obj.custom_id === "string" && obj.custom_id.startsWith("st-presets:")) {
+        collectedCustomIds.push(obj.custom_id);
+      }
+      for (const prop of Object.values(obj)) {
+        harvestCustomIds(prop);
+      }
+    }
+
+    const nonePayload = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: [makePreset(1)],
+      activePresetId: null,
+      readStatus: "stale",
+      page: { kind: "none" },
+    });
+    harvestCustomIds(nonePayload);
+
+    const multiPagePayload = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: Array.from({ length: 24 }, (_, i) => makePreset(i + 1)),
+      activePresetId: 1,
+      readStatus: "fresh",
+      page: { kind: "preset", presetId: 1 },
+      rangeIndex: 1,
+    });
+    harvestCustomIds(multiPagePayload);
+
+    const presetPayload = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: [makePreset(1, { is_active: true })],
+      activePresetId: 1,
+      readStatus: "fresh",
+      page: { kind: "preset", presetId: 1 },
+    });
+    harvestCustomIds(presetPayload);
+
+    const deletePayload = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: [makePreset(1)],
+      activePresetId: 1,
+      readStatus: "fresh",
+      page: { kind: "delete", presetId: 1 },
+    });
+    harvestCustomIds(deletePayload);
+
+    const chooserPayload = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: [makePreset(1)],
+      activePresetId: 1,
+      readStatus: "fresh",
+      page: { kind: "nodes-chooser", presetId: 1, totalCount: 600, chooserPage: 1 },
+    });
+    harvestCustomIds(chooserPayload);
+
+    const addModal = buildAddStPresetModal("en-US", "nonce123456");
+    harvestCustomIds(addModal);
+
+    const nodesModal = buildNodesToggleModal("en-US", makePreset(1), [makeNode(1)], 0, "nonce123456");
+    harvestCustomIds(nodesModal);
+
+    const producedActions = new Set<string>();
+    for (const customId of collectedCustomIds) {
+      const parts = customId.split(":");
+      const parsed = parseStPresetsPanelRoute({
+        namespace: parts[0] as string,
+        version: parts[1] as string,
+        segments: parts.slice(2),
+      });
+      expect(parsed).not.toBeNull();
+      if (parsed) {
+        producedActions.add(parsed.action);
+      }
+    }
+
+    for (const action of PRODUCERLESS_COMPATIBILITY_ACTIONS) {
+      expect(producedActions.has(action)).toBe(false);
+    }
+
+    const unionedActions = [...new Set([...producedActions, ...PRODUCERLESS_COMPATIBILITY_ACTIONS])].sort();
+    expect(unionedActions).toEqual(ACCEPTED_14_ACTIONS);
+  });
+
   it("rejects unsupported locales and invalid segment counts", () => {
     expect(
       parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["select", "fr-FR"] }),
     ).toBeNull();
+    expect(parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["select", ""] })).toBeNull();
     expect(
       parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["select", "en-US", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["retry", "en-US", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["none", "en-US", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["disable", "en-US", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["add-open", "en-US", "extra"] }),
     ).toBeNull();
     expect(
       parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["range", "en-US"] }),
     ).toBeNull();
     expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["range", "en-US", "2", "extra"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["add-submit", "en-US"],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["add-submit", "en-US", "nonce123456", "extra"],
+      }),
+    ).toBeNull();
+    expect(
       parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-open", "en-US"] }),
     ).toBeNull();
     expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["nodes-open", "en-US", "42", "extra"],
+      }),
+    ).toBeNull();
+    expect(
       parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-range", "en-US", "42"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["nodes-range", "en-US", "42", "1", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-page", "en-US", "42"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["nodes-page", "en-US", "42", "3", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-submit", "en-US", "42"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["nodes-submit", "en-US", "42", "nonce123456", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["delete-prompt", "en-US"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["delete-prompt", "en-US", "42", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["delete-cancel", "en-US"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["delete-cancel", "en-US", "42", "extra"],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["delete-confirm", "en-US"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["delete-confirm", "en-US", "42", "extra"],
+      }),
+    ).toBeNull();
+    expect(parseStPresetsPanelRoute({ namespace: "wrong", version: "v1", segments: ["select", "en-US"] })).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v2", segments: ["select", "en-US"] }),
     ).toBeNull();
   });
 
@@ -156,6 +446,30 @@ describe("ST Presets route codec", () => {
     ).toBeNull();
     expect(
       parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["nodes-open", "en-US", "1.5"] }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["nodes-range", "en-US", "42", "-1"],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["nodes-range", "en-US", "42", "1.5"],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["nodes-page", "en-US", "42", "-1"],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({ namespace: "st-presets", version: "v1", segments: ["range", "en-US", "-1"] }),
     ).toBeNull();
   });
 
@@ -174,9 +488,52 @@ describe("ST Presets route codec", () => {
       parseStPresetsPanelRoute({
         namespace: "st-presets",
         version: "v1",
+        segments: ["add-submit", "en-US", "a".repeat(33)],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
+        segments: ["nodes-submit", "en-US", "42", "bad!nonce#"],
+      }),
+    ).toBeNull();
+    expect(
+      parseStPresetsPanelRoute({
+        namespace: "st-presets",
+        version: "v1",
         segments: ["nodes-open", "en-US", "Preset Name"],
       }),
     ).toBeNull();
+  });
+
+  it("asserts realistic maximum-length routes stay comfortably within Discord's 100-character custom ID ceiling", () => {
+    const maxLocale = "zh-Hans";
+    const maxNonce = "nonce1234567";
+    const maxPresetId = 2147483647;
+    const maxIndex = 2147483647;
+
+    const maxRoutes: StPresetsPanelRoute[] = [
+      { action: "select", locale: maxLocale },
+      { action: "retry", locale: maxLocale },
+      { action: "none", locale: maxLocale },
+      { action: "disable", locale: maxLocale },
+      { action: "add-open", locale: maxLocale },
+      { action: "range", locale: maxLocale, rangeIndex: maxIndex },
+      { action: "add-submit", locale: maxLocale, nonce: maxNonce },
+      { action: "nodes-open", locale: maxLocale, presetId: maxPresetId },
+      { action: "nodes-range", locale: maxLocale, presetId: maxPresetId, rangeIndex: maxIndex },
+      { action: "nodes-page", locale: maxLocale, presetId: maxPresetId, chooserPage: maxIndex },
+      { action: "nodes-submit", locale: maxLocale, presetId: maxPresetId, nonce: maxNonce },
+      { action: "delete-prompt", locale: maxLocale, presetId: maxPresetId },
+      { action: "delete-cancel", locale: maxLocale, presetId: maxPresetId },
+      { action: "delete-confirm", locale: maxLocale, presetId: maxPresetId },
+    ];
+
+    for (const route of maxRoutes) {
+      const customId = buildStPresetsRouteId(route);
+      expect(customId.length).toBeLessThanOrEqual(100);
+    }
   });
 });
 

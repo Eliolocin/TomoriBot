@@ -1,4 +1,15 @@
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import {
+  buildRouteSegments,
+  decodeRouteSegments,
+  indexCodecsByWireToken,
+  parseNonNegativeInt,
+  parseNonce,
+  parsePositiveId,
+  parseSnowflake,
+  type RouteCodec,
+  type RouteFieldCodec,
+} from "@/utils/discord/panelRouteCodec";
 import { parseLocale } from "@/utils/discord/panelRouteTokens";
 
 export const MODERATION_ROUTE_NAMESPACE = "moderation";
@@ -65,6 +76,25 @@ export type ModerationPanelRoute =
   | { action: "quota-edit-open"; locale: string; quotaType: QuotaType }
   | { action: "quota-edit-submit"; locale: string; quotaType: QuotaType; nonce: string };
 
+export type ModerationAction = ModerationPanelRoute["action"];
+
+type ModerationFixedAction = Exclude<
+  ModerationAction,
+  "user-blacklist-remove-prompt" | "user-blacklist-remove-confirm"
+>;
+
+type ModerationRouteForAction<A extends ModerationFixedAction> = ModerationPanelRoute extends infer R
+  ? R extends { action: string }
+    ? A extends R["action"]
+      ? R & { action: A }
+      : never
+    : never
+  : never;
+
+export type ModerationRouteCodecs = {
+  [A in ModerationFixedAction]: RouteCodec<ModerationRouteForAction<A>>;
+};
+
 export function buildQuotaModalFieldId(
   nonce: string,
   field: "daily_user_quota" | "serverwide_quota" | "serverwide_quota_resets_in",
@@ -100,10 +130,6 @@ export function buildPersonaChannelAddModalFieldId(nonce: string, field: "person
   return `persona_channel_add_${field}_${nonce}`;
 }
 
-export function buildModerationCustomId(action: string, ...segments: Array<string | number>): string {
-  return buildInteractionRouteId(MODERATION_ROUTE_NAMESPACE, MODERATION_ROUTE_VERSION, action, ...segments.map(String));
-}
-
 function parseCategory(value: string | undefined): ModerationCategory | null {
   return MODERATION_CATEGORIES.find((candidate) => candidate === value) ?? null;
 }
@@ -112,10 +138,289 @@ export function parseWhitelistPage(value: string | undefined): WhitelistPage | n
   return WHITELIST_PAGES.find((candidate) => candidate === value) ?? null;
 }
 
-function parseRange(value: string | undefined): number | null {
-  if (!value || !/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : null;
+const categoryField: RouteFieldCodec<"category", ModerationCategory> = {
+  key: "category",
+  encode: (v) => String(v),
+  decode: (v) => parseCategory(v),
+};
+
+const whitelistPageField: RouteFieldCodec<"page", WhitelistPage> = {
+  key: "page",
+  encode: (v) => String(v),
+  decode: (v) => parseWhitelistPage(v),
+};
+
+const pageField: RouteFieldCodec<"page", WhitelistPage | "none"> = {
+  key: "page",
+  encode: (v) => String(v),
+  decode: (v, r) => (r.category === "whitelist" ? parseWhitelistPage(v) : v === "none" ? "none" : null),
+};
+
+const rangeIndexField: RouteFieldCodec<"rangeIndex", number> = {
+  key: "rangeIndex",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const allowServerModelsField: RouteFieldCodec<"allowServerModels", boolean> = {
+  key: "allowServerModels",
+  encode: (v) => (v ? "allow" : "require-personal"),
+  decode: (v) => (v === "allow" ? true : v === "require-personal" ? false : null),
+};
+
+const nonceField: RouteFieldCodec<"nonce", string> = {
+  key: "nonce",
+  encode: (v) => String(v),
+  decode: (v) => parseNonce(v),
+};
+
+const channelIdField: RouteFieldCodec<"channelId", string> = {
+  key: "channelId",
+  encode: (v) => String(v),
+  decode: (v) => parseSnowflake(v),
+};
+
+const roleIdField: RouteFieldCodec<"roleId", string> = {
+  key: "roleId",
+  encode: (v) => String(v),
+  decode: (v) => parseSnowflake(v),
+};
+
+const quotaTypeField: RouteFieldCodec<"quotaType", QuotaType> = {
+  key: "quotaType",
+  encode: (v) => String(v),
+  decode: (v) => parseQuotaType(v),
+};
+
+/**
+ * Authoritative codec table for all moderation routes with fixed-width arguments.
+ * Keyed by semantic action to guarantee compile-time exhaustiveness.
+ * Preserves the exact v1 wire format: wire token, locale, and ordered field serialization.
+ */
+export const MODERATION_ROUTE_CODECS: ModerationRouteCodecs = {
+  category: {
+    wireToken: "category",
+    fields: [categoryField],
+  },
+  "select-page": {
+    wireToken: "select-page",
+    fields: [],
+  },
+  page: {
+    wireToken: "page",
+    fields: [whitelistPageField],
+  },
+  range: {
+    wireToken: "range",
+    fields: [categoryField, pageField, rangeIndexField],
+  },
+  retry: {
+    wireToken: "retry",
+    fields: [categoryField, pageField],
+  },
+  "member-access-open": {
+    wireToken: "member-access-open",
+    fields: [],
+  },
+  "member-access-submit": {
+    wireToken: "member-access-submit",
+    fields: [nonceField],
+  },
+  "model-access-set": {
+    wireToken: "model-access-set",
+    fields: [allowServerModelsField],
+  },
+  "user-blacklist-add-open": {
+    wireToken: "user-blacklist-add-open",
+    fields: [],
+  },
+  "user-blacklist-add-submit": {
+    wireToken: "user-blacklist-add-submit",
+    fields: [nonceField],
+  },
+  "user-blacklist-remove-open": {
+    wireToken: "user-blacklist-remove-open",
+    fields: [],
+  },
+  "user-blacklist-remove-submit": {
+    wireToken: "user-blacklist-remove-submit",
+    fields: [nonceField],
+  },
+  "user-blacklist-remove-cancel": {
+    wireToken: "user-blacklist-remove-cancel",
+    fields: [],
+  },
+  "whitelist-channel-add-open": {
+    wireToken: "whitelist-channel-add-open",
+    fields: [],
+  },
+  "whitelist-channel-add-submit": {
+    wireToken: "whitelist-channel-add-submit",
+    fields: [nonceField],
+  },
+  "whitelist-channel-remove-open": {
+    wireToken: "whitelist-channel-remove-open",
+    fields: [],
+  },
+  "whitelist-channel-remove-submit": {
+    wireToken: "whitelist-channel-remove-submit",
+    fields: [nonceField],
+  },
+  "whitelist-channel-remove-prompt": {
+    wireToken: "whitelist-channel-remove-prompt",
+    fields: [channelIdField],
+  },
+  "whitelist-channel-remove-confirm": {
+    wireToken: "whitelist-channel-remove-confirm",
+    fields: [channelIdField],
+  },
+  "whitelist-channel-remove-cancel": {
+    wireToken: "whitelist-channel-remove-cancel",
+    fields: [],
+  },
+  "whitelist-role-add-open": {
+    wireToken: "whitelist-role-add-open",
+    fields: [],
+  },
+  "whitelist-role-add-submit": {
+    wireToken: "whitelist-role-add-submit",
+    fields: [nonceField],
+  },
+  "whitelist-role-remove-open": {
+    wireToken: "whitelist-role-remove-open",
+    fields: [],
+  },
+  "whitelist-role-remove-submit": {
+    wireToken: "whitelist-role-remove-submit",
+    fields: [nonceField],
+  },
+  "whitelist-role-remove-prompt": {
+    wireToken: "whitelist-role-remove-prompt",
+    fields: [roleIdField],
+  },
+  "whitelist-role-remove-confirm": {
+    wireToken: "whitelist-role-remove-confirm",
+    fields: [roleIdField],
+  },
+  "whitelist-role-remove-cancel": {
+    wireToken: "whitelist-role-remove-cancel",
+    fields: [],
+  },
+  "persona-channel-add-open": {
+    wireToken: "persona-channel-add-open",
+    fields: [],
+  },
+  "persona-channel-add-submit": {
+    wireToken: "persona-channel-add-submit",
+    fields: [nonceField],
+  },
+  "persona-channel-remove-open": {
+    wireToken: "persona-channel-remove-open",
+    fields: [],
+  },
+  "persona-channel-remove-submit": {
+    wireToken: "persona-channel-remove-submit",
+    fields: [nonceField],
+  },
+  "quota-edit-open": {
+    wireToken: "quota-edit-open",
+    fields: [quotaTypeField],
+  },
+  "quota-edit-submit": {
+    wireToken: "quota-edit-submit",
+    fields: [quotaTypeField, nonceField],
+  },
+};
+
+export type ModerationFixedRoute = Extract<ModerationPanelRoute, { action: ModerationFixedAction }>;
+
+const CODECS_BY_WIRE_TOKEN = indexCodecsByWireToken<ModerationFixedAction, ModerationFixedRoute>(
+  MODERATION_ROUTE_CODECS,
+);
+
+const ACCEPTED_35_ACTIONS: readonly ModerationAction[] = [
+  "category",
+  "member-access-open",
+  "member-access-submit",
+  "model-access-set",
+  "page",
+  "persona-channel-add-open",
+  "persona-channel-add-submit",
+  "persona-channel-remove-open",
+  "persona-channel-remove-submit",
+  "quota-edit-open",
+  "quota-edit-submit",
+  "range",
+  "retry",
+  "select-page",
+  "user-blacklist-add-open",
+  "user-blacklist-add-submit",
+  "user-blacklist-remove-cancel",
+  "user-blacklist-remove-confirm",
+  "user-blacklist-remove-open",
+  "user-blacklist-remove-prompt",
+  "user-blacklist-remove-submit",
+  "whitelist-channel-add-open",
+  "whitelist-channel-add-submit",
+  "whitelist-channel-remove-cancel",
+  "whitelist-channel-remove-confirm",
+  "whitelist-channel-remove-open",
+  "whitelist-channel-remove-prompt",
+  "whitelist-channel-remove-submit",
+  "whitelist-role-add-open",
+  "whitelist-role-add-submit",
+  "whitelist-role-remove-cancel",
+  "whitelist-role-remove-confirm",
+  "whitelist-role-remove-open",
+  "whitelist-role-remove-prompt",
+  "whitelist-role-remove-submit",
+] as const;
+
+export function listModerationPanelActions(): ModerationAction[] {
+  return [...ACCEPTED_35_ACTIONS];
+}
+
+/**
+ * Encodes a typed route object through the authoritative codec table or target variant builder into route segments.
+ */
+export function buildModerationRouteSegments(route: ModerationPanelRoute): string[] {
+  if (route.action === "user-blacklist-remove-prompt" || route.action === "user-blacklist-remove-confirm") {
+    if (route.target.source === "personalization") {
+      return [route.action, route.locale, "personalization", route.target.userId];
+    }
+    return [route.action, route.locale, "persona-block", String(route.target.personaId), route.target.userId];
+  }
+  return buildRouteSegments(MODERATION_ROUTE_CODECS[route.action], route);
+}
+
+/**
+ * Builds a custom ID from a typed route object using the authoritative codec table and exact target variants.
+ */
+export function buildModerationRouteId(route: ModerationPanelRoute): string {
+  return buildInteractionRouteId(
+    MODERATION_ROUTE_NAMESPACE,
+    MODERATION_ROUTE_VERSION,
+    ...buildModerationRouteSegments(route),
+  );
+}
+
+function decodeUserBlacklistRemovalRoute(
+  action: "user-blacklist-remove-prompt" | "user-blacklist-remove-confirm",
+  locale: string,
+  tail: readonly string[],
+): ModerationPanelRoute | null {
+  if (tail.length === 2 && tail[0] === "personalization") {
+    const userId = parseSnowflake(tail[1]);
+    if (!userId) return null;
+    return { action, locale, target: { source: "personalization", userId } };
+  }
+  if (tail.length === 3 && tail[0] === "persona-block") {
+    const personaId = parsePositiveId(tail[1]);
+    const userId = parseSnowflake(tail[2]);
+    if (!personaId || !userId) return null;
+    return { action, locale, target: { source: "persona-block", personaId, userId } };
+  }
+  return null;
 }
 
 export function parseModerationPanelRoute(route: ParsedInteractionRoute): ModerationPanelRoute | null {
@@ -123,170 +428,18 @@ export function parseModerationPanelRoute(route: ParsedInteractionRoute): Modera
     return null;
   }
 
-  const [action, rawLocale, first, second, third] = route.segments;
+  const [rawWireToken, rawLocale, ...tail] = route.segments;
+  if (!rawWireToken || !rawLocale) return null;
+
   const locale = parseLocale(rawLocale);
-  if (!locale || !action) return null;
+  if (!locale) return null;
 
-  if (action === "category" && route.segments.length === 3) {
-    const category = parseCategory(first);
-    return category ? { action, locale, category } : null;
+  if (rawWireToken === "user-blacklist-remove-prompt" || rawWireToken === "user-blacklist-remove-confirm") {
+    return decodeUserBlacklistRemovalRoute(rawWireToken, locale, tail);
   }
 
-  if (action === "select-page" && route.segments.length === 2) {
-    return { action, locale };
-  }
+  const entry = CODECS_BY_WIRE_TOKEN.get(rawWireToken);
+  if (!entry) return null;
 
-  if (action === "page" && route.segments.length === 3) {
-    const page = parseWhitelistPage(first);
-    return page ? { action, locale, page } : null;
-  }
-
-  if (action === "range" && route.segments.length === 5) {
-    const category = parseCategory(first);
-    const page = first === "whitelist" ? parseWhitelistPage(second) : second === "none" ? "none" : null;
-    const rangeIndex = parseRange(third);
-    if (!category || !page || rangeIndex === null) return null;
-    return { action, locale, category, page, rangeIndex };
-  }
-
-  if (action === "retry" && route.segments.length === 4) {
-    const category = parseCategory(first);
-    const page = first === "whitelist" ? parseWhitelistPage(second) : second === "none" ? "none" : null;
-    if (!category || !page) return null;
-    return { action, locale, category, page };
-  }
-
-  if (action === "member-access-open" && route.segments.length === 2) {
-    return { action, locale };
-  }
-
-  if (action === "model-access-set" && route.segments.length === 3) {
-    const choice = route.segments[2];
-    if (choice !== "allow" && choice !== "require-personal") return null;
-    return { action, locale, allowServerModels: choice === "allow" };
-  }
-  if (action === "member-access-submit" && route.segments.length === 3) {
-    const nonce = first;
-    if (!nonce || !/^[a-zA-Z0-9_-]+$/.test(nonce)) return null;
-    return { action, locale, nonce };
-  }
-
-  if (action === "user-blacklist-add-open" && route.segments.length === 2) {
-    return { action, locale };
-  }
-
-  if (action === "user-blacklist-add-submit" && route.segments.length === 3) {
-    const nonce = first;
-    if (!nonce || !/^[a-zA-Z0-9_-]+$/.test(nonce)) return null;
-    return { action, locale, nonce };
-  }
-
-  if (action === "user-blacklist-remove-open" && route.segments.length === 2) return { action, locale };
-  if (action === "user-blacklist-remove-submit" && route.segments.length === 3) {
-    const nonce = first;
-    return nonce && /^[a-zA-Z0-9_-]+$/.test(nonce) ? { action, locale, nonce } : null;
-  }
-
-  if (action === "user-blacklist-remove-cancel" && route.segments.length === 2) {
-    return { action, locale };
-  }
-
-  if (action === "whitelist-channel-add-open" && route.segments.length === 2) {
-    return { action, locale };
-  }
-
-  if (action === "whitelist-channel-add-submit" && route.segments.length === 3) {
-    const nonce = first;
-    if (!nonce || !/^[a-zA-Z0-9_-]+$/.test(nonce)) return null;
-    return { action, locale, nonce };
-  }
-
-  if (action === "whitelist-channel-remove-open" && route.segments.length === 2) return { action, locale };
-  if (action === "whitelist-channel-remove-submit" && route.segments.length === 3) {
-    const nonce = first;
-    return nonce && /^[a-zA-Z0-9_-]+$/.test(nonce) ? { action, locale, nonce } : null;
-  }
-
-  if (action === "whitelist-channel-remove-cancel" && route.segments.length === 2) {
-    return { action, locale };
-  }
-
-  if (action === "whitelist-role-add-open" && route.segments.length === 2) {
-    return { action, locale };
-  }
-
-  if (action === "whitelist-role-add-submit" && route.segments.length === 3) {
-    const nonce = first;
-    if (!nonce || !/^[a-zA-Z0-9_-]+$/.test(nonce)) return null;
-    return { action, locale, nonce };
-  }
-
-  if (action === "whitelist-role-remove-open" && route.segments.length === 2) return { action, locale };
-  if (action === "whitelist-role-remove-submit" && route.segments.length === 3) {
-    const nonce = first;
-    return nonce && /^[a-zA-Z0-9_-]+$/.test(nonce) ? { action, locale, nonce } : null;
-  }
-
-  if (action === "whitelist-role-remove-cancel" && route.segments.length === 2) {
-    return { action, locale };
-  }
-
-  if (action === "persona-channel-add-open" && route.segments.length === 2) return { action, locale };
-  if (action === "persona-channel-remove-open" && route.segments.length === 2) return { action, locale };
-  if (
-    (action === "persona-channel-add-submit" || action === "persona-channel-remove-submit") &&
-    route.segments.length === 3
-  ) {
-    const nonce = first;
-    return nonce && /^[a-zA-Z0-9_-]+$/.test(nonce) ? { action, locale, nonce } : null;
-  }
-
-  if (action === "whitelist-role-remove-prompt" || action === "whitelist-role-remove-confirm") {
-    if (route.segments.length === 3) {
-      const roleId = first;
-      if (!roleId || !/^\d{17,20}$/.test(roleId)) return null;
-      return { action, locale, roleId };
-    }
-    return null;
-  }
-
-  if (action === "whitelist-channel-remove-prompt" || action === "whitelist-channel-remove-confirm") {
-    if (route.segments.length === 3) {
-      const channelId = first;
-      if (!channelId || !/^\d{17,20}$/.test(channelId)) return null;
-      return { action, locale, channelId };
-    }
-    return null;
-  }
-
-  if (action === "user-blacklist-remove-prompt" || action === "user-blacklist-remove-confirm") {
-    if (first === "personalization" && route.segments.length === 4) {
-      const userId = second;
-      if (!userId || !/^\d{17,20}$/.test(userId)) return null;
-      return { action, locale, target: { source: "personalization", userId } };
-    }
-    if (first === "persona-block" && route.segments.length === 5) {
-      if (!second || !/^\d+$/.test(second)) return null;
-      const personaId = Number(second);
-      const userId = third;
-      if (!Number.isSafeInteger(personaId) || personaId <= 0) return null;
-      if (!userId || !/^\d{17,20}$/.test(userId)) return null;
-      return { action, locale, target: { source: "persona-block", personaId, userId } };
-    }
-    return null;
-  }
-
-  if (action === "quota-edit-open" && route.segments.length === 3) {
-    const quotaType = parseQuotaType(first);
-    return quotaType ? { action, locale, quotaType } : null;
-  }
-
-  if (action === "quota-edit-submit" && route.segments.length === 4) {
-    const quotaType = parseQuotaType(first);
-    const nonce = second;
-    if (!quotaType || !nonce || !/^[a-zA-Z0-9_-]+$/.test(nonce)) return null;
-    return { action, locale, quotaType, nonce };
-  }
-
-  return null;
+  return decodeRouteSegments<ModerationPanelRoute>(entry.codec, entry.action, locale, tail);
 }

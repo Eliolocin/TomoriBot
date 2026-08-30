@@ -16,7 +16,8 @@ import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import { resolveRangeSelection } from "@/utils/discord/interactions/panelController";
 import {
-  buildPersonalMemoriesCustomId,
+  buildPersonalMemoriesRouteId,
+  buildPersonalMemoriesRouteSegments,
   PERSONAL_MEMORIES_ROUTE_NAMESPACE,
   PERSONAL_MEMORIES_ROUTE_VERSION,
   type PersonalMemoriesCategory,
@@ -135,7 +136,7 @@ export function buildAddPersonalMemoryModal(
   nonce: string,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalMemoriesCustomId("add-submit", locale, category, lineageId, nonce),
+    custom_id: buildPersonalMemoriesRouteId({ action: "add-submit", locale, category, lineageId, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.memories.add_modal_title"), 45),
     components: [
       {
@@ -203,7 +204,14 @@ export function buildEditPersonalMemoryModal(
   nonce: string,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildPersonalMemoriesCustomId("edit-submit", locale, category, lineageId, memoryId, nonce),
+    custom_id: buildPersonalMemoriesRouteId({
+      action: "edit-submit",
+      locale,
+      category,
+      lineageId,
+      memoryId,
+      nonce,
+    }),
     title: safeSelectOptionText(localizer(locale, "commands.personal.memories.edit_modal_title"), 45),
     components: [
       {
@@ -258,7 +266,7 @@ function buildRetryRow(
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildPersonalMemoriesCustomId("retry", locale, category, lineageId),
+        customId: buildPersonalMemoriesRouteId({ action: "retry", locale, category, lineageId }),
         label: localizer(locale, "commands.personal.memories.retry"),
       },
     ],
@@ -296,12 +304,12 @@ export function buildPersonalMemoriesPanelPayload(
       {
         id: "global",
         label: localizer(locale, "commands.personal.memories.category_global"),
-        customId: buildPersonalMemoriesCustomId("category", locale, "global"),
+        customId: buildPersonalMemoriesRouteId({ action: "category", locale, category: "global" }),
       },
       {
         id: "persona",
         label: localizer(locale, "commands.personal.memories.category_persona"),
-        customId: buildPersonalMemoriesCustomId("category", locale, "persona"),
+        customId: buildPersonalMemoriesRouteId({ action: "category", locale, category: "persona" }),
       },
     ],
     category,
@@ -341,26 +349,26 @@ ${localizer(locale, "commands.personal.memories.remove_confirm_description", {
             {
               type: ComponentType.Button,
               style: ButtonStyle.Danger,
-              customId: buildPersonalMemoriesCustomId(
-                "remove-confirm",
+              customId: buildPersonalMemoriesRouteId({
+                action: "remove-confirm",
                 locale,
                 category,
-                selectedLineageId,
-                targetMemory.personal_memory_id,
-              ),
+                lineageId: selectedLineageId,
+                memoryId: targetMemory.personal_memory_id,
+              }),
               label: localizer(locale, "commands.personal.memories.remove_confirm"),
               disabled: writesDisabled,
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildPersonalMemoriesCustomId(
-                "remove-cancel",
+              customId: buildPersonalMemoriesRouteId({
+                action: "remove-cancel",
                 locale,
                 category,
-                selectedLineageId,
-                targetMemory.personal_memory_id,
-              ),
+                lineageId: selectedLineageId,
+                memoryId: targetMemory.personal_memory_id,
+              }),
               label: localizer(locale, "commands.personal.memories.cancel"),
             },
           ],
@@ -380,10 +388,37 @@ ${localizer(locale, "commands.personal.memories.remove_confirm_description", {
         namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
         version: PERSONAL_MEMORIES_ROUTE_VERSION,
         buildSegments: {
-          range: (rangeIndex) => ["range", locale, category, String(selectedLineageId), String(rangeIndex)],
-          previous: (targetPage) => ["range-page", locale, category, String(selectedLineageId), String(targetPage)],
-          next: (targetPage) => ["range-page", locale, category, String(selectedLineageId), String(targetPage)],
-          cancel: () => ["range-cancel", locale, category, String(selectedLineageId)],
+          range: (rangeIndex) =>
+            buildPersonalMemoriesRouteSegments({
+              action: "range",
+              locale,
+              category,
+              lineageId: selectedLineageId,
+              rangeIndex,
+            }),
+          previous: (targetPage) =>
+            buildPersonalMemoriesRouteSegments({
+              action: "range-page",
+              locale,
+              category,
+              lineageId: selectedLineageId,
+              chooserPage: targetPage,
+            }),
+          next: (targetPage) =>
+            buildPersonalMemoriesRouteSegments({
+              action: "range-page",
+              locale,
+              category,
+              lineageId: selectedLineageId,
+              chooserPage: targetPage,
+            }),
+          cancel: () =>
+            buildPersonalMemoriesRouteSegments({
+              action: "range-cancel",
+              locale,
+              category,
+              lineageId: selectedLineageId,
+            }),
         },
       }),
     );
@@ -438,7 +473,13 @@ ${localizer(locale, "commands.personal.memories.selector_guidance")}`,
       components: [
         {
           type: ComponentType.StringSelect,
-          customId: buildPersonalMemoriesCustomId("select", locale, "global", 0, rangeSelection.rangeIndex),
+          customId: buildPersonalMemoriesRouteId({
+            action: "select",
+            locale,
+            category: "global",
+            lineageId: 0,
+            rangeIndex: rangeSelection.rangeIndex,
+          }),
           placeholder: localizer(locale, "commands.personal.memories.select_placeholder"),
           options: [addOption, ...memoryOptions],
           disabled: writesDisabled,
@@ -454,7 +495,7 @@ ${localizer(locale, "commands.personal.memories.selector_guidance")}`,
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildPersonalMemoriesCustomId("range-open", locale, "global", 0),
+            customId: buildPersonalMemoriesRouteId({ action: "range-open", locale, category: "global", lineageId: 0 }),
             label: localizer(locale, "general.pagination.select_page_title"),
           },
         ],
@@ -479,26 +520,26 @@ ${localizer(locale, "commands.personal.memories.selector_guidance")}`,
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          customId: buildPersonalMemoriesCustomId(
-            "edit-open",
+          customId: buildPersonalMemoriesRouteId({
+            action: "edit-open",
             locale,
-            "global",
-            0,
-            selectedMemory?.personal_memory_id ?? 0,
-          ),
+            category: "global",
+            lineageId: 0,
+            memoryId: selectedMemory?.personal_memory_id ?? 0,
+          }),
           label: localizer(locale, "commands.personal.memories.edit_button"),
           disabled: writesDisabled || !selectedMemory || isPrivacyFull,
         },
         {
           type: ComponentType.Button,
           style: ButtonStyle.Danger,
-          customId: buildPersonalMemoriesCustomId(
-            "remove-prompt",
+          customId: buildPersonalMemoriesRouteId({
+            action: "remove-prompt",
             locale,
-            "global",
-            0,
-            selectedMemory?.personal_memory_id ?? 0,
-          ),
+            category: "global",
+            lineageId: 0,
+            memoryId: selectedMemory?.personal_memory_id ?? 0,
+          }),
           label: localizer(locale, "commands.personal.memories.remove_button"),
           disabled: writesDisabled || !selectedMemory,
         },
@@ -518,7 +559,7 @@ ${localizer(locale, "commands.personal.memories.selector_guidance")}`,
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildPersonalMemoriesCustomId("stm-clear", locale, "global", 0),
+            customId: buildPersonalMemoriesRouteId({ action: "stm-clear", locale, category: "global", lineageId: 0 }),
             label: localizer(locale, "commands.personal.memories.stm_clear_button"),
             disabled: writesDisabled,
           },
@@ -599,7 +640,12 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
         components: [
           {
             type: ComponentType.StringSelect,
-            customId: buildPersonalMemoriesCustomId("persona-select", locale, "persona", selectedLineageId),
+            customId: buildPersonalMemoriesRouteId({
+              action: "persona-select",
+              locale,
+              category: "persona",
+              lineageId: selectedLineageId,
+            }),
             placeholder: localizer(locale, "commands.personal.memories.persona_select_placeholder"),
             options: personaOptions,
             disabled: writesDisabled,
@@ -643,13 +689,13 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
         components: [
           {
             type: ComponentType.StringSelect,
-            customId: buildPersonalMemoriesCustomId(
-              "select",
+            customId: buildPersonalMemoriesRouteId({
+              action: "select",
               locale,
-              "persona",
-              selectedLineageId,
-              rangeSelection.rangeIndex,
-            ),
+              category: "persona",
+              lineageId: selectedLineageId,
+              rangeIndex: rangeSelection.rangeIndex,
+            }),
             placeholder: localizer(locale, "commands.personal.memories.select_placeholder"),
             options: [addOption, ...memoryOptions],
             disabled: writesDisabled,
@@ -665,7 +711,12 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildPersonalMemoriesCustomId("range-open", locale, "persona", selectedLineageId),
+              customId: buildPersonalMemoriesRouteId({
+                action: "range-open",
+                locale,
+                category: "persona",
+                lineageId: selectedLineageId,
+              }),
               label: localizer(locale, "general.pagination.select_page_title"),
             },
           ],
@@ -702,26 +753,26 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildPersonalMemoriesCustomId(
-              "edit-open",
+            customId: buildPersonalMemoriesRouteId({
+              action: "edit-open",
               locale,
-              "persona",
-              selectedLineageId,
-              selectedMemory?.personal_memory_id ?? 0,
-            ),
+              category: "persona",
+              lineageId: selectedLineageId,
+              memoryId: selectedMemory?.personal_memory_id ?? 0,
+            }),
             label: localizer(locale, "commands.personal.memories.edit_button"),
             disabled: writesDisabled || !selectedMemory || isPrivacyFull,
           },
           {
             type: ComponentType.Button,
             style: ButtonStyle.Danger,
-            customId: buildPersonalMemoriesCustomId(
-              "remove-prompt",
+            customId: buildPersonalMemoriesRouteId({
+              action: "remove-prompt",
               locale,
-              "persona",
-              selectedLineageId,
-              selectedMemory?.personal_memory_id ?? 0,
-            ),
+              category: "persona",
+              lineageId: selectedLineageId,
+              memoryId: selectedMemory?.personal_memory_id ?? 0,
+            }),
             label: localizer(locale, "commands.personal.memories.remove_button"),
             disabled: writesDisabled || !selectedMemory,
           },

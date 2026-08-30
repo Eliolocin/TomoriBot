@@ -1,4 +1,14 @@
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import {
+  buildRouteSegments,
+  decodeRouteSegments,
+  indexCodecsByWireToken,
+  parseNonNegativeInt,
+  parseNonce,
+  parsePositiveId,
+  type RouteCodec,
+  type RouteFieldCodec,
+} from "@/utils/discord/panelRouteCodec";
 import { parseLocale } from "@/utils/discord/panelRouteTokens";
 import { MCP_SERVER_TYPES, type McpServerType } from "@/utils/mcp/mcpConfigOperations";
 
@@ -15,72 +25,167 @@ export type McpsPanelRoute =
   | { action: "set-enabled"; locale: string; entityId: number; enabled: boolean }
   | { action: "remove-prompt" | "remove-cancel" | "remove-confirm"; locale: string; entityId: number };
 
-export function buildMcpsCustomId(action: string, ...segments: Array<string | number>): string {
-  return buildInteractionRouteId(MCPS_ROUTE_NAMESPACE, MCPS_ROUTE_VERSION, action, ...segments.map(String));
-}
+export type McpsAction = McpsPanelRoute["action"];
 
-function parsePositiveId(value: string | undefined): number | null {
-  if (!value || !/^[1-9]\d*$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : null;
-}
+type McpsRouteForAction<A extends McpsAction> = McpsPanelRoute extends infer R
+  ? R extends { action: string }
+    ? A extends R["action"]
+      ? R & { action: A }
+      : never
+    : never
+  : never;
 
-function parseRange(value: string | undefined): number | null {
-  if (!value || !/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : null;
-}
+export type McpsRouteCodecs = {
+  [A in McpsAction]: RouteCodec<McpsRouteForAction<A>>;
+};
 
 function parseServerType(value: string | undefined): McpServerType | null {
   return MCP_SERVER_TYPES.find((candidate) => candidate === value) ?? null;
 }
 
-export function parseMcpsPanelRoute(route: ParsedInteractionRoute): McpsPanelRoute | null {
-  if (route.namespace !== MCPS_ROUTE_NAMESPACE || route.version !== MCPS_ROUTE_VERSION) return null;
-  const [action, rawLocale, first, second] = route.segments;
-  const locale = parseLocale(rawLocale);
-  if (!locale || !action) return null;
+const entityIdField: RouteFieldCodec<"entityId", number> = {
+  key: "entityId",
+  encode: (v) => String(v),
+  decode: (v) => parsePositiveId(v),
+};
 
-  if ((action === "select" || action === "range") && route.segments.length === 3) {
-    const rangeIndex = parseRange(first);
-    return rangeIndex === null ? null : { action, locale, rangeIndex };
+const rangeIndexField: RouteFieldCodec<"rangeIndex", number> = {
+  key: "rangeIndex",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const selectedIdField: RouteFieldCodec<"selectedId", number | "none"> = {
+  key: "selectedId",
+  encode: (v) => String(v),
+  decode: (v) => (v === "none" ? "none" : parsePositiveId(v)),
+};
+
+const serverTypeField: RouteFieldCodec<"serverType", McpServerType> = {
+  key: "serverType",
+  encode: (v) => String(v),
+  decode: (v) => parseServerType(v),
+};
+
+const nonceField: RouteFieldCodec<"nonce", string> = {
+  key: "nonce",
+  encode: (v) => String(v),
+  decode: (v) => parseNonce(v),
+};
+
+const enabledField: RouteFieldCodec<"enabled", boolean> = {
+  key: "enabled",
+  encode: (v) => (v ? "1" : "0"),
+  decode: (v) => (v === "1" ? true : v === "0" ? false : null),
+};
+
+/**
+ * Authoritative codec table for all mcps routes.
+ * Keyed by semantic action to guarantee compile-time exhaustiveness.
+ * Preserves the exact v1 wire format: wire token, locale, and ordered field serialization.
+ */
+export const MCPS_ROUTE_CODECS: McpsRouteCodecs = {
+  "add-open": {
+    wireToken: "add-open",
+    fields: [],
+  },
+  "add-page": {
+    wireToken: "add-page",
+    fields: [serverTypeField],
+  },
+  "add-submit": {
+    wireToken: "add-submit",
+    fields: [nonceField],
+  },
+  "add-type": {
+    wireToken: "add-type",
+    fields: [],
+  },
+  range: {
+    wireToken: "range",
+    fields: [rangeIndexField],
+  },
+  refresh: {
+    wireToken: "refresh",
+    fields: [selectedIdField],
+  },
+  "remove-cancel": {
+    wireToken: "remove-cancel",
+    fields: [entityIdField],
+  },
+  "remove-confirm": {
+    wireToken: "remove-confirm",
+    fields: [entityIdField],
+  },
+  "remove-prompt": {
+    wireToken: "remove-prompt",
+    fields: [entityIdField],
+  },
+  retry: {
+    wireToken: "retry",
+    fields: [selectedIdField],
+  },
+  select: {
+    wireToken: "select",
+    fields: [rangeIndexField],
+  },
+  "set-enabled": {
+    wireToken: "set-enabled",
+    fields: [entityIdField, enabledField],
+  },
+};
+
+const CODECS_BY_WIRE_TOKEN = indexCodecsByWireToken<McpsAction, McpsPanelRoute>(MCPS_ROUTE_CODECS);
+
+export function listMcpsPanelActions(): McpsAction[] {
+  return Object.keys(MCPS_ROUTE_CODECS) as McpsAction[];
+}
+
+/**
+ * Encodes a typed route object through the authoritative codec table into route segments.
+ */
+export function buildMcpsRouteSegments(route: McpsPanelRoute): string[] {
+  return buildRouteSegments(MCPS_ROUTE_CODECS[route.action], route);
+}
+
+/**
+ * Builds a custom ID from a typed route object using the authoritative codec table.
+ */
+export function buildMcpsRouteId(route: McpsPanelRoute): string {
+  return buildInteractionRouteId(MCPS_ROUTE_NAMESPACE, MCPS_ROUTE_VERSION, ...buildMcpsRouteSegments(route));
+}
+
+function decodeCompatibilityRoute(action: McpsAction, locale: string, tail: readonly string[]): McpsPanelRoute | null {
+  if (action === "add-open" && tail.length === 1) {
+    return parseServerType(tail[0]) ? { action: "add-open", locale } : null;
   }
-  if ((action === "retry" || action === "refresh") && route.segments.length === 3) {
-    if (first === "none" || (action === "refresh" && first === "add")) {
-      return { action, locale, selectedId: "none" };
-    }
-    const selectedId = parsePositiveId(first);
-    return selectedId === null ? null : { action, locale, selectedId };
+  if (action === "add-submit" && tail.length === 2) {
+    const serverType = parseServerType(tail[0]);
+    const nonce = parseNonce(tail[1]);
+    return serverType && nonce ? { action: "add-submit", locale, nonce, legacyServerType: serverType } : null;
   }
-  if (action === "add-open" && route.segments.length === 2) return { action, locale };
-  if (action === "add-open" && route.segments.length === 3) {
-    return parseServerType(first) ? { action, locale } : null;
-  }
-  if (action === "add-page" && route.segments.length === 3) {
-    const serverType = parseServerType(first);
-    return serverType ? { action, locale, serverType } : null;
-  }
-  if (action === "add-type" && route.segments.length === 2) return { action, locale };
-  if (action === "add-submit" && route.segments.length === 3) {
-    if (!first || !/^[A-Za-z0-9_-]{8,32}$/.test(first)) return null;
-    return { action, locale, nonce: first };
-  }
-  if (action === "add-submit" && route.segments.length === 4) {
-    const serverType = parseServerType(first);
-    if (!serverType || !second || !/^[A-Za-z0-9_-]{8,32}$/.test(second)) return null;
-    return { action, locale, nonce: second, legacyServerType: serverType };
-  }
-  if (action === "set-enabled" && route.segments.length === 4) {
-    const entityId = parsePositiveId(first);
-    if (entityId === null || (second !== "0" && second !== "1")) return null;
-    return { action, locale, entityId, enabled: second === "1" };
-  }
-  if (
-    (action === "remove-prompt" || action === "remove-cancel" || action === "remove-confirm") &&
-    route.segments.length === 3
-  ) {
-    const entityId = parsePositiveId(first);
-    return entityId === null ? null : { action, locale, entityId };
+  if (action === "refresh" && tail.length === 1 && tail[0] === "add") {
+    return { action: "refresh", locale, selectedId: "none" };
   }
   return null;
+}
+
+export function parseMcpsPanelRoute(route: ParsedInteractionRoute): McpsPanelRoute | null {
+  if (route.namespace !== MCPS_ROUTE_NAMESPACE || route.version !== MCPS_ROUTE_VERSION) {
+    return null;
+  }
+
+  const [rawWireToken, rawLocale, ...tail] = route.segments;
+  if (!rawWireToken || !rawLocale) return null;
+
+  const locale = parseLocale(rawLocale);
+  if (!locale) return null;
+
+  const entry = CODECS_BY_WIRE_TOKEN.get(rawWireToken);
+  if (!entry) return null;
+
+  const canonical = decodeRouteSegments<McpsPanelRoute>(entry.codec, entry.action, locale, tail);
+  if (canonical) return canonical;
+
+  return decodeCompatibilityRoute(entry.action, locale, tail);
 }

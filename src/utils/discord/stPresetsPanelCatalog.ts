@@ -1,4 +1,14 @@
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import {
+  buildRouteSegments,
+  decodeRouteSegments,
+  indexCodecsByWireToken,
+  parseNonNegativeInt,
+  parseNonce,
+  parsePositiveId,
+  type RouteCodec,
+  type RouteFieldCodec,
+} from "@/utils/discord/panelRouteCodec";
 import { parseLocale } from "@/utils/discord/panelRouteTokens";
 
 export const ST_PRESETS_ROUTE_NAMESPACE = "st-presets";
@@ -13,24 +23,130 @@ export type StPresetsPanelRoute =
   | { action: "nodes-page"; locale: string; presetId: number; chooserPage: number }
   | { action: "nodes-submit"; locale: string; presetId: number; nonce: string };
 
-export function buildStPresetsCustomId(action: string, ...segments: Array<string | number>): string {
-  return buildInteractionRouteId(ST_PRESETS_ROUTE_NAMESPACE, ST_PRESETS_ROUTE_VERSION, action, ...segments.map(String));
+export type StPresetsAction = StPresetsPanelRoute["action"];
+
+type StPresetsRouteForAction<A extends StPresetsAction> = StPresetsPanelRoute extends infer R
+  ? R extends { action: string }
+    ? A extends R["action"]
+      ? R & { action: A }
+      : never
+    : never
+  : never;
+
+export type StPresetsRouteCodecs = {
+  [A in StPresetsAction]: RouteCodec<StPresetsRouteForAction<A>>;
+};
+
+const presetIdField: RouteFieldCodec<"presetId", number> = {
+  key: "presetId",
+  encode: (v) => String(v),
+  decode: (v) => parsePositiveId(v),
+};
+
+const rangeIndexField: RouteFieldCodec<"rangeIndex", number> = {
+  key: "rangeIndex",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const chooserPageField: RouteFieldCodec<"chooserPage", number> = {
+  key: "chooserPage",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const nonceField: RouteFieldCodec<"nonce", string> = {
+  key: "nonce",
+  encode: (v) => String(v),
+  decode: (v) => parseNonce(v),
+};
+
+/**
+ * Authoritative codec table for all st-presets routes.
+ * Keyed by semantic action to guarantee compile-time exhaustiveness.
+ * Preserves the exact v1 wire format: wire token, locale, and ordered field serialization.
+ */
+export const ST_PRESETS_ROUTE_CODECS: StPresetsRouteCodecs = {
+  "add-open": {
+    wireToken: "add-open",
+    fields: [],
+  },
+  "add-submit": {
+    wireToken: "add-submit",
+    fields: [nonceField],
+  },
+  "delete-cancel": {
+    wireToken: "delete-cancel",
+    fields: [presetIdField],
+  },
+  "delete-confirm": {
+    wireToken: "delete-confirm",
+    fields: [presetIdField],
+  },
+  "delete-prompt": {
+    wireToken: "delete-prompt",
+    fields: [presetIdField],
+  },
+  disable: {
+    wireToken: "disable",
+    fields: [],
+  },
+  "nodes-open": {
+    wireToken: "nodes-open",
+    fields: [presetIdField],
+  },
+  "nodes-page": {
+    wireToken: "nodes-page",
+    fields: [presetIdField, chooserPageField],
+  },
+  "nodes-range": {
+    wireToken: "nodes-range",
+    fields: [presetIdField, rangeIndexField],
+  },
+  "nodes-submit": {
+    wireToken: "nodes-submit",
+    fields: [presetIdField, nonceField],
+  },
+  none: {
+    wireToken: "none",
+    fields: [],
+  },
+  range: {
+    wireToken: "range",
+    fields: [rangeIndexField],
+  },
+  retry: {
+    wireToken: "retry",
+    fields: [],
+  },
+  select: {
+    wireToken: "select",
+    fields: [],
+  },
+};
+
+const CODECS_BY_WIRE_TOKEN = indexCodecsByWireToken<StPresetsAction, StPresetsPanelRoute>(ST_PRESETS_ROUTE_CODECS);
+
+export function listStPresetsPanelActions(): StPresetsAction[] {
+  return Object.keys(ST_PRESETS_ROUTE_CODECS) as StPresetsAction[];
 }
 
-function parsePositiveId(value: string | undefined): number | null {
-  if (!value || !/^[1-9]\d*$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : null;
+/**
+ * Encodes a typed route object through the authoritative codec table into route segments.
+ */
+export function buildStPresetsRouteSegments(route: StPresetsPanelRoute): string[] {
+  return buildRouteSegments(ST_PRESETS_ROUTE_CODECS[route.action], route);
 }
 
-function parseNonNegativeInt(value: string | undefined): number | null {
-  if (!value || !/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-function parseNonce(value: string | undefined): string | null {
-  return value && /^[A-Za-z0-9_-]{8,32}$/.test(value) ? value : null;
+/**
+ * Builds a custom ID from a typed route object using the authoritative codec table.
+ */
+export function buildStPresetsRouteId(route: StPresetsPanelRoute): string {
+  return buildInteractionRouteId(
+    ST_PRESETS_ROUTE_NAMESPACE,
+    ST_PRESETS_ROUTE_VERSION,
+    ...buildStPresetsRouteSegments(route),
+  );
 }
 
 export function parseStPresetsPanelRoute(route: ParsedInteractionRoute): StPresetsPanelRoute | null {
@@ -38,62 +154,14 @@ export function parseStPresetsPanelRoute(route: ParsedInteractionRoute): StPrese
     return null;
   }
 
-  const [action, rawLocale, first, second] = route.segments;
+  const [rawWireToken, rawLocale, ...tail] = route.segments;
+  if (!rawWireToken || !rawLocale) return null;
+
   const locale = parseLocale(rawLocale);
-  if (!locale || !action) return null;
+  if (!locale) return null;
 
-  if (route.segments.length === 2) {
-    if (
-      action === "select" ||
-      action === "retry" ||
-      action === "none" ||
-      action === "disable" ||
-      action === "add-open"
-    ) {
-      return { action, locale };
-    }
-    return null;
-  }
+  const entry = CODECS_BY_WIRE_TOKEN.get(rawWireToken);
+  if (!entry) return null;
 
-  if (route.segments.length === 3) {
-    if (action === "range") {
-      const rangeIndex = parseNonNegativeInt(first);
-      return rangeIndex === null ? null : { action, locale, rangeIndex };
-    }
-    if (action === "add-submit") {
-      const nonce = parseNonce(first);
-      return nonce === null ? null : { action, locale, nonce };
-    }
-    if (
-      action === "nodes-open" ||
-      action === "delete-prompt" ||
-      action === "delete-cancel" ||
-      action === "delete-confirm"
-    ) {
-      const presetId = parsePositiveId(first);
-      return presetId === null ? null : { action, locale, presetId };
-    }
-    return null;
-  }
-
-  if (route.segments.length === 4) {
-    const presetId = parsePositiveId(first);
-    if (presetId === null) return null;
-
-    if (action === "nodes-range") {
-      const rangeIndex = parseNonNegativeInt(second);
-      return rangeIndex === null ? null : { action, locale, presetId, rangeIndex };
-    }
-    if (action === "nodes-page") {
-      const chooserPage = parseNonNegativeInt(second);
-      return chooserPage === null ? null : { action, locale, presetId, chooserPage };
-    }
-    if (action === "nodes-submit") {
-      const nonce = parseNonce(second);
-      return nonce === null ? null : { action, locale, presetId, nonce };
-    }
-    return null;
-  }
-
-  return null;
+  return decodeRouteSegments(entry.codec, entry.action, locale, tail);
 }

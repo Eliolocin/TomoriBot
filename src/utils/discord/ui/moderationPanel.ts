@@ -17,7 +17,7 @@ import { MODERATION_PANEL_RANGE_SIZE, resolveRangeSelection } from "@/utils/disc
 import {
   buildMemberAccessModalFieldId,
   buildModerationRemoveModalFieldId,
-  buildModerationCustomId,
+  buildModerationRouteId,
   buildPersonaChannelAddModalFieldId,
   buildQuotaModalFieldId,
   buildUserBlacklistAddModalFieldId,
@@ -112,14 +112,26 @@ function buildRangeButtons(
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildModerationCustomId("range", locale, category, page, Math.max(0, rangeIndex - 1)),
+        customId: buildModerationRouteId({
+          action: "range",
+          locale,
+          category,
+          page,
+          rangeIndex: Math.max(0, rangeIndex - 1),
+        }),
         label: localizer(locale, "commands.moderation.range_previous"),
         disabled: rangeIndex <= 0,
       },
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildModerationCustomId("range", locale, category, page, rangeIndex),
+        customId: buildModerationRouteId({
+          action: "range",
+          locale,
+          category,
+          page,
+          rangeIndex,
+        }),
         label: localizer(locale, "commands.moderation.range_indicator", {
           current: rangeIndex + 1,
           total: rangeCount,
@@ -129,7 +141,13 @@ function buildRangeButtons(
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildModerationCustomId("range", locale, category, page, Math.min(rangeCount - 1, rangeIndex + 1)),
+        customId: buildModerationRouteId({
+          action: "range",
+          locale,
+          category,
+          page,
+          rangeIndex: Math.min(rangeCount - 1, rangeIndex + 1),
+        }),
         label: localizer(locale, "commands.moderation.range_next"),
         disabled: rangeIndex >= rangeCount - 1,
       },
@@ -148,7 +166,12 @@ function buildRetryButtonRow(
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildModerationCustomId("retry", locale, category, category === "whitelist" ? whitelistPage : "none"),
+        customId: buildModerationRouteId({
+          action: "retry",
+          locale,
+          category,
+          page: category === "whitelist" ? whitelistPage : "none",
+        }),
         label: localizer(locale, "commands.moderation.retry"),
       },
     ],
@@ -163,22 +186,22 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
       {
         id: "member-access",
         label: localizer(locale, "commands.moderation.category_member_access"),
-        customId: buildModerationCustomId("category", locale, "member-access"),
+        customId: buildModerationRouteId({ action: "category", locale, category: "member-access" }),
       },
       {
         id: "user-blacklist",
         label: localizer(locale, "commands.moderation.category_user_blacklist"),
-        customId: buildModerationCustomId("category", locale, "user-blacklist"),
+        customId: buildModerationRouteId({ action: "category", locale, category: "user-blacklist" }),
       },
       {
         id: "whitelist",
         label: localizer(locale, "commands.moderation.category_whitelist"),
-        customId: buildModerationCustomId("category", locale, "whitelist"),
+        customId: buildModerationRouteId({ action: "category", locale, category: "whitelist" }),
       },
       {
         id: "quotas",
         label: localizer(locale, "commands.moderation.category_quotas"),
-        customId: buildModerationCustomId("category", locale, "quotas"),
+        customId: buildModerationRouteId({ action: "category", locale, category: "quotas" }),
       },
     ],
     category,
@@ -239,7 +262,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildModerationCustomId("member-access-open", locale),
+            customId: buildModerationRouteId({ action: "member-access-open", locale }),
             label: localizer(locale, "commands.moderation.edit_permissions"),
             disabled: data.readStatus !== "fresh",
           },
@@ -265,11 +288,11 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
             // names the change it performs rather than restating the state above it. The route
             // segment names the stored policy rather than the label, so already-open panels keep
             // resolving after copy changes.
-            customId: buildModerationCustomId(
-              "model-access-set",
+            customId: buildModerationRouteId({
+              action: "model-access-set",
               locale,
-              data.serverModelAccess.allowServerModels ? "require-personal" : "allow",
-            ),
+              allowServerModels: !data.serverModelAccess.allowServerModels,
+            }),
             label: localizer(
               locale,
               data.serverModelAccess.allowServerModels
@@ -302,19 +325,18 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
                 {
                   type: ComponentType.Button,
                   style: ButtonStyle.Danger,
-                  customId: buildModerationCustomId(
-                    "user-blacklist-remove-confirm",
+                  customId: buildModerationRouteId({
+                    action: "user-blacklist-remove-confirm",
                     locale,
-                    "personalization",
-                    target.userId,
-                  ),
+                    target: { source: "personalization", userId: target.userId },
+                  }),
                   label: localizer(locale, "commands.moderation.remove_confirm"),
                   disabled: data.readStatus !== "fresh",
                 },
                 {
                   type: ComponentType.Button,
                   style: ButtonStyle.Secondary,
-                  customId: buildModerationCustomId("user-blacklist-remove-cancel", locale),
+                  customId: buildModerationRouteId({ action: "user-blacklist-remove-cancel", locale }),
                   label: localizer(locale, "commands.moderation.cancel"),
                 },
               ],
@@ -360,20 +382,22 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
                 {
                   type: ComponentType.Button,
                   style: ButtonStyle.Danger,
-                  customId: buildModerationCustomId(
-                    "user-blacklist-remove-confirm",
+                  customId: buildModerationRouteId({
+                    action: "user-blacklist-remove-confirm",
                     locale,
-                    "persona-block",
-                    target.personaId,
-                    target.userId,
-                  ),
+                    target: {
+                      source: "persona-block",
+                      personaId: target.personaId,
+                      userId: target.userId,
+                    },
+                  }),
                   label: localizer(locale, "commands.moderation.remove_confirm"),
                   disabled: data.readStatus !== "fresh",
                 },
                 {
                   type: ComponentType.Button,
                   style: ButtonStyle.Secondary,
-                  customId: buildModerationCustomId("user-blacklist-remove-cancel", locale),
+                  customId: buildModerationRouteId({ action: "user-blacklist-remove-cancel", locale }),
                   label: localizer(locale, "commands.moderation.cancel"),
                 },
               ],
@@ -474,14 +498,14 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          customId: buildModerationCustomId("user-blacklist-add-open", locale),
+          customId: buildModerationRouteId({ action: "user-blacklist-add-open", locale }),
           label: localizer(locale, "commands.moderation.add_blacklist"),
           disabled: data.readStatus !== "fresh",
         },
         {
           type: ComponentType.Button,
           style: ButtonStyle.Danger,
-          customId: buildModerationCustomId("user-blacklist-remove-open", locale),
+          customId: buildModerationRouteId({ action: "user-blacklist-remove-open", locale }),
           label: localizer(locale, "commands.moderation.remove_blacklist"),
           disabled: data.readStatus !== "fresh" || totalCount === 0,
         },
@@ -493,7 +517,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
       components: [
         {
           type: ComponentType.StringSelect,
-          customId: buildModerationCustomId("select-page", locale),
+          customId: buildModerationRouteId({ action: "select-page", locale }),
           placeholder: localizer(locale, "commands.moderation.select_page_placeholder"),
           options: [
             {
@@ -541,18 +565,18 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Danger,
-                customId: buildModerationCustomId(
-                  "whitelist-channel-remove-confirm",
+                customId: buildModerationRouteId({
+                  action: "whitelist-channel-remove-confirm",
                   locale,
-                  input.channelRemoveTarget,
-                ),
+                  channelId: input.channelRemoveTarget,
+                }),
                 label: localizer(locale, "commands.moderation.remove_confirm"),
                 disabled: data.readStatus !== "fresh",
               },
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Secondary,
-                customId: buildModerationCustomId("whitelist-channel-remove-cancel", locale),
+                customId: buildModerationRouteId({ action: "whitelist-channel-remove-cancel", locale }),
                 label: localizer(locale, "commands.moderation.cancel"),
               },
             ],
@@ -602,14 +626,14 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildModerationCustomId("whitelist-channel-add-open", locale),
+              customId: buildModerationRouteId({ action: "whitelist-channel-add-open", locale }),
               label: localizer(locale, "commands.moderation.add_or_edit_channel"),
               disabled: data.readStatus !== "fresh",
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Danger,
-              customId: buildModerationCustomId("whitelist-channel-remove-open", locale),
+              customId: buildModerationRouteId({ action: "whitelist-channel-remove-open", locale }),
               label: localizer(locale, "commands.moderation.remove_channel"),
               disabled: data.readStatus !== "fresh" || channels.length === 0,
             },
@@ -676,14 +700,14 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildModerationCustomId("persona-channel-add-open", locale),
+            customId: buildModerationRouteId({ action: "persona-channel-add-open", locale }),
             label: localizer(locale, "commands.moderation.add_persona"),
             disabled: data.readStatus !== "fresh",
           },
           {
             type: ComponentType.Button,
             style: ButtonStyle.Danger,
-            customId: buildModerationCustomId("persona-channel-remove-open", locale),
+            customId: buildModerationRouteId({ action: "persona-channel-remove-open", locale }),
             label: localizer(locale, "commands.moderation.remove_persona"),
             disabled: data.readStatus !== "fresh" || personaChannels.length === 0,
           },
@@ -706,14 +730,18 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Danger,
-                customId: buildModerationCustomId("whitelist-role-remove-confirm", locale, input.roleRemoveTarget),
+                customId: buildModerationRouteId({
+                  action: "whitelist-role-remove-confirm",
+                  locale,
+                  roleId: input.roleRemoveTarget,
+                }),
                 label: localizer(locale, "commands.moderation.remove_confirm"),
                 disabled: data.readStatus !== "fresh",
               },
               {
                 type: ComponentType.Button,
                 style: ButtonStyle.Secondary,
-                customId: buildModerationCustomId("whitelist-role-remove-cancel", locale),
+                customId: buildModerationRouteId({ action: "whitelist-role-remove-cancel", locale }),
                 label: localizer(locale, "commands.moderation.cancel"),
               },
             ],
@@ -758,14 +786,14 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildModerationCustomId("whitelist-role-add-open", locale),
+              customId: buildModerationRouteId({ action: "whitelist-role-add-open", locale }),
               label: localizer(locale, "commands.moderation.add_role"),
               disabled: data.readStatus !== "fresh",
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Danger,
-              customId: buildModerationCustomId("whitelist-role-remove-open", locale),
+              customId: buildModerationRouteId({ action: "whitelist-role-remove-open", locale }),
               label: localizer(locale, "commands.moderation.remove_role"),
               disabled: data.readStatus !== "fresh" || roles.length === 0,
             },
@@ -824,7 +852,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
         (section): ButtonComponentData => ({
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          customId: buildModerationCustomId("quota-edit-open", locale, section.type),
+          customId: buildModerationRouteId({ action: "quota-edit-open", locale, quotaType: section.type }),
           label: localizer(locale, section.buttonKey),
           disabled: data.readStatus !== "fresh",
         }),
@@ -876,7 +904,7 @@ export function buildMemberAccessModal(
   }));
 
   return {
-    custom_id: buildModerationCustomId("member-access-submit", locale, nonce),
+    custom_id: buildModerationRouteId({ action: "member-access-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.server.member-permissions.select_embed_title"), 45),
     components: [
       {
@@ -906,7 +934,7 @@ export function buildUserBlacklistAddModal(
 } {
   const fieldId = buildUserBlacklistAddModalFieldId(nonce);
   return {
-    custom_id: buildModerationCustomId("user-blacklist-add-submit", locale, nonce),
+    custom_id: buildModerationRouteId({ action: "user-blacklist-add-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.moderation.user_blacklist_add_title"), 45),
     components: [
       {
@@ -934,7 +962,7 @@ export function buildWhitelistChannelAddModal(
   components: RawDiscordComponent[];
 } {
   return {
-    custom_id: buildModerationCustomId("whitelist-channel-add-submit", locale, nonce),
+    custom_id: buildModerationRouteId({ action: "whitelist-channel-add-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.moderation.whitelist_channel_add_title"), 45),
     components: [
       {
@@ -1007,7 +1035,7 @@ export function buildWhitelistRoleAddModal(
   nonce: string,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildModerationCustomId("whitelist-role-add-submit", locale, nonce),
+    custom_id: buildModerationRouteId({ action: "whitelist-role-add-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.moderation.whitelist_role_add_title"), 45),
     components: [
       {
@@ -1038,6 +1066,14 @@ export function buildModerationRemovalModal(
   action: "user-blacklist" | "whitelist-channel" | "whitelist-role" | "persona-channel",
   options: readonly ModerationRemovalOption[],
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
+  const removalSubmitActionMap = {
+    "user-blacklist": "user-blacklist-remove-submit",
+    "whitelist-channel": "whitelist-channel-remove-submit",
+    "whitelist-role": "whitelist-role-remove-submit",
+    "persona-channel": "persona-channel-remove-submit",
+  } as const;
+  const submitAction = removalSubmitActionMap[action];
+
   const titleKeys = {
     "user-blacklist": "commands.moderation.user_blacklist_bulk_remove_title",
     "whitelist-channel": "commands.moderation.whitelist_channel_bulk_remove_title",
@@ -1083,7 +1119,7 @@ export function buildModerationRemovalModal(
     });
   }
   return {
-    custom_id: buildModerationCustomId(`${action}-remove-submit`, locale, nonce),
+    custom_id: buildModerationRouteId({ action: submitAction, locale, nonce }),
     title: safeSelectOptionText(localizer(locale, titleKeys[action]), 45),
     components: groups,
   };
@@ -1095,7 +1131,7 @@ export function buildPersonaChannelAddModal(
   personas: ReadonlyMap<number, string>,
 ): { custom_id: string; title: string; components: RawDiscordComponent[] } {
   return {
-    custom_id: buildModerationCustomId("persona-channel-add-submit", locale, nonce),
+    custom_id: buildModerationRouteId({ action: "persona-channel-add-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.moderation.persona_channel_add_title"), 45),
     components: [
       {
@@ -1148,7 +1184,7 @@ export function buildQuotaEditModal(
   } as const;
 
   return {
-    custom_id: buildModerationCustomId("quota-edit-submit", locale, quotaType, nonce),
+    custom_id: buildModerationRouteId({ action: "quota-edit-submit", locale, quotaType, nonce }),
     title: safeSelectOptionText(localizer(locale, titleKeys[quotaType]), 45),
     components: [
       {

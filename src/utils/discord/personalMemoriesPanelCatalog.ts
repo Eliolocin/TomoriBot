@@ -1,4 +1,14 @@
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import {
+  buildRouteSegments,
+  decodeRouteSegments,
+  indexCodecsByWireToken,
+  parseNonNegativeInt,
+  parseNonce,
+  parsePositiveId,
+  type RouteCodec,
+  type RouteFieldCodec,
+} from "@/utils/discord/panelRouteCodec";
 import { parseLocale } from "@/utils/discord/panelRouteTokens";
 
 export const PERSONAL_MEMORIES_ROUTE_NAMESPACE = "personal-memories";
@@ -38,39 +48,176 @@ export type PersonalMemoriesPanelRoute =
   | { action: "stm-clear"; locale: string; category: PersonalMemoriesCategory; lineageId: number }
   | { action: "retry" | "refresh"; locale: string; category: PersonalMemoriesCategory; lineageId: number };
 
-export function buildPersonalMemoriesCustomId(
-  action: string,
-  locale: string,
-  ...segments: Array<string | number>
-): string {
-  return buildInteractionRouteId(
-    PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-    PERSONAL_MEMORIES_ROUTE_VERSION,
-    action,
-    locale,
-    ...segments.map(String),
-  );
-}
+export type PersonalMemoriesAction = PersonalMemoriesPanelRoute["action"];
+
+type PersonalMemoriesRouteForAction<A extends PersonalMemoriesAction> = PersonalMemoriesPanelRoute extends infer R
+  ? R extends { action: string }
+    ? A extends R["action"]
+      ? R & { action: A }
+      : never
+    : never
+  : never;
+
+export type PersonalMemoriesRouteCodecs = {
+  [A in PersonalMemoriesAction]: RouteCodec<PersonalMemoriesRouteForAction<A>>;
+};
 
 function parseCategory(value: string | undefined): PersonalMemoriesCategory | null {
   if (value === "global" || value === "persona") return value;
   return null;
 }
 
-function parseNonNegativeInt(value: string | undefined): number | null {
-  if (!value || !/^\d+$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : null;
+const categoryField: RouteFieldCodec<"category", PersonalMemoriesCategory> = {
+  key: "category",
+  encode: (v) => String(v),
+  decode: (v) => parseCategory(v),
+};
+
+const personaCategoryField: RouteFieldCodec<"category", "persona"> = {
+  key: "category",
+  encode: (v) => String(v),
+  decode: (v) => (v === "persona" ? "persona" : null),
+};
+
+const lineageIdField: RouteFieldCodec<"lineageId", number> = {
+  key: "lineageId",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const positiveLineageIdField: RouteFieldCodec<"lineageId", number> = {
+  key: "lineageId",
+  encode: (v) => String(v),
+  decode: (v) => parsePositiveId(v),
+};
+
+const optionalRangeIndexField: RouteFieldCodec<"rangeIndex", number> = {
+  key: "rangeIndex",
+  optional: true,
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const rangeIndexField: RouteFieldCodec<"rangeIndex", number> = {
+  key: "rangeIndex",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const chooserPageField: RouteFieldCodec<"chooserPage", number> = {
+  key: "chooserPage",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const memoryIdField: RouteFieldCodec<"memoryId", number> = {
+  key: "memoryId",
+  encode: (v) => String(v),
+  decode: (v) => parsePositiveId(v),
+};
+
+const nonceField: RouteFieldCodec<"nonce", string> = {
+  key: "nonce",
+  encode: (v) => String(v),
+  decode: (v) => parseNonce(v),
+};
+
+/**
+ * Authoritative codec table for all personal-memories routes.
+ * Keyed by semantic action to guarantee compile-time exhaustiveness.
+ * Preserves the exact v1 wire format: wire token, locale, and ordered field serialization.
+ */
+export const PERSONAL_MEMORIES_ROUTE_CODECS: PersonalMemoriesRouteCodecs = {
+  "add-submit": {
+    wireToken: "add-submit",
+    fields: [categoryField, lineageIdField, nonceField],
+  },
+  category: {
+    wireToken: "category",
+    fields: [categoryField],
+  },
+  "edit-open": {
+    wireToken: "edit-open",
+    fields: [categoryField, lineageIdField, memoryIdField],
+  },
+  "edit-submit": {
+    wireToken: "edit-submit",
+    fields: [categoryField, lineageIdField, memoryIdField, nonceField],
+  },
+  "persona-select": {
+    wireToken: "persona-select",
+    fields: [personaCategoryField, positiveLineageIdField],
+  },
+  range: {
+    wireToken: "range",
+    fields: [categoryField, lineageIdField, rangeIndexField],
+  },
+  "range-cancel": {
+    wireToken: "range-cancel",
+    fields: [categoryField, lineageIdField],
+  },
+  "range-open": {
+    wireToken: "range-open",
+    fields: [categoryField, lineageIdField],
+  },
+  "range-page": {
+    wireToken: "range-page",
+    fields: [categoryField, lineageIdField, chooserPageField],
+  },
+  refresh: {
+    wireToken: "refresh",
+    fields: [categoryField, lineageIdField],
+  },
+  "remove-cancel": {
+    wireToken: "remove-cancel",
+    fields: [categoryField, lineageIdField, memoryIdField],
+  },
+  "remove-confirm": {
+    wireToken: "remove-confirm",
+    fields: [categoryField, lineageIdField, memoryIdField],
+  },
+  "remove-prompt": {
+    wireToken: "remove-prompt",
+    fields: [categoryField, lineageIdField, memoryIdField],
+  },
+  retry: {
+    wireToken: "retry",
+    fields: [categoryField, lineageIdField],
+  },
+  select: {
+    wireToken: "select",
+    fields: [categoryField, lineageIdField, optionalRangeIndexField],
+  },
+  "stm-clear": {
+    wireToken: "stm-clear",
+    fields: [categoryField, lineageIdField],
+  },
+};
+
+const CODECS_BY_WIRE_TOKEN = indexCodecsByWireToken<PersonalMemoriesAction, PersonalMemoriesPanelRoute>(
+  PERSONAL_MEMORIES_ROUTE_CODECS,
+);
+
+export function listPersonalMemoriesPanelActions(): PersonalMemoriesAction[] {
+  return Object.keys(PERSONAL_MEMORIES_ROUTE_CODECS) as PersonalMemoriesAction[];
 }
 
-function parsePositiveId(value: string | undefined): number | null {
-  if (!value || !/^[1-9]\d*$/.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : null;
+/**
+ * Encodes a typed route object through the authoritative codec table into route segments.
+ */
+export function buildPersonalMemoriesRouteSegments(route: PersonalMemoriesPanelRoute): string[] {
+  return buildRouteSegments(PERSONAL_MEMORIES_ROUTE_CODECS[route.action], route);
 }
 
-function parseNonce(value: string | undefined): string | null {
-  return value && /^[A-Za-z0-9_-]{8,32}$/.test(value) ? value : null;
+/**
+ * Builds a custom ID from a typed route object using the authoritative codec table.
+ */
+export function buildPersonalMemoriesRouteId(route: PersonalMemoriesPanelRoute): string {
+  return buildInteractionRouteId(
+    PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+    PERSONAL_MEMORIES_ROUTE_VERSION,
+    ...buildPersonalMemoriesRouteSegments(route),
+  );
 }
 
 export function parsePersonalMemoriesPanelRoute(route: ParsedInteractionRoute): PersonalMemoriesPanelRoute | null {
@@ -78,79 +225,14 @@ export function parsePersonalMemoriesPanelRoute(route: ParsedInteractionRoute): 
     return null;
   }
 
-  const [action, rawLocale, rawCategory, first, second, third] = route.segments;
+  const [rawWireToken, rawLocale, ...tail] = route.segments;
+  if (!rawWireToken || !rawLocale) return null;
+
   const locale = parseLocale(rawLocale);
-  if (!locale || !action) return null;
+  if (!locale) return null;
 
-  const category = parseCategory(rawCategory);
-  if (!category) return null;
+  const entry = CODECS_BY_WIRE_TOKEN.get(rawWireToken);
+  if (!entry) return null;
 
-  if (action === "category" && route.segments.length === 3) {
-    return { action, locale, category };
-  }
-
-  const lineageId = parseNonNegativeInt(first);
-  if (lineageId === null) return null;
-
-  if (action === "persona-select" && route.segments.length === 4) {
-    if (category !== "persona" || lineageId === 0) return null;
-    return { action, locale, category, lineageId };
-  }
-
-  if (action === "select") {
-    if (route.segments.length === 4) {
-      return { action, locale, category, lineageId };
-    }
-    if (route.segments.length === 5) {
-      const rangeIndex = parseNonNegativeInt(second);
-      return rangeIndex === null ? null : { action, locale, category, lineageId, rangeIndex };
-    }
-    return null;
-  }
-
-  if ((action === "range-open" || action === "range-cancel") && route.segments.length === 4) {
-    return { action, locale, category, lineageId };
-  }
-
-  if (action === "range" && route.segments.length === 5) {
-    const rangeIndex = parseNonNegativeInt(second);
-    return rangeIndex === null ? null : { action, locale, category, lineageId, rangeIndex };
-  }
-
-  if (action === "range-page" && route.segments.length === 5) {
-    const chooserPage = parseNonNegativeInt(second);
-    return chooserPage === null ? null : { action, locale, category, lineageId, chooserPage };
-  }
-
-  if (action === "add-submit" && route.segments.length === 5) {
-    const nonce = parseNonce(second);
-    return nonce === null ? null : { action, locale, category, lineageId, nonce };
-  }
-
-  if (
-    (action === "edit-open" ||
-      action === "remove-prompt" ||
-      action === "remove-confirm" ||
-      action === "remove-cancel") &&
-    route.segments.length === 5
-  ) {
-    const memoryId = parsePositiveId(second);
-    return memoryId === null ? null : { action, locale, category, lineageId, memoryId };
-  }
-
-  if (action === "edit-submit" && route.segments.length === 6) {
-    const memoryId = parsePositiveId(second);
-    const nonce = parseNonce(third);
-    return memoryId === null || nonce === null ? null : { action, locale, category, lineageId, memoryId, nonce };
-  }
-
-  if (action === "stm-clear" && route.segments.length === 4) {
-    return { action, locale, category, lineageId };
-  }
-
-  if ((action === "retry" || action === "refresh") && route.segments.length === 4) {
-    return { action, locale, category, lineageId };
-  }
-
-  return null;
+  return decodeRouteSegments(entry.codec, entry.action, locale, tail);
 }

@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import {
   ChannelType,
   type ButtonInteraction,
@@ -14,8 +15,28 @@ import {
   executeModerationCommand,
   type ModerationRouteDependencies,
 } from "@/utils/discord/interactions/moderationRoutes";
-import { buildQuotaModalFieldId } from "@/utils/discord/moderationPanelCatalog";
+import {
+  MODERATION_ROUTE_CODECS,
+  buildModerationRouteId,
+  buildModerationRouteSegments,
+  buildQuotaModalFieldId,
+  listModerationPanelActions,
+  parseModerationPanelRoute,
+  type ModerationPanelRoute,
+} from "@/utils/discord/moderationPanelCatalog";
+import { parseInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
+import {
+  buildMemberAccessModal,
+  buildModerationPanelPayload,
+  buildModerationRemovalModal,
+  buildPersonaChannelAddModal,
+  buildQuotaEditModal,
+  buildUserBlacklistAddModal,
+  buildWhitelistChannelAddModal,
+  buildWhitelistRoleAddModal,
+  type ModerationPanelRenderInput,
+} from "@/utils/discord/ui/moderationPanel";
 import { moderationOperations, type ModerationScopeData } from "@/utils/moderation/moderationOperations";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
@@ -3865,7 +3886,7 @@ describe("moderation whitelist role routes", () => {
         isButton: () => false,
         isStringSelectMenu: () => false,
         isModalSubmit: () => true,
-        customId: "moderation:v1:quota-edit-submit:en-US:text:nonce2",
+        customId: "moderation:v1:quota-edit-submit:en-US:text:nonce1234",
         guildId: "guild-1",
         user: { id: "mod-1" },
         memberPermissions: { has: () => true },
@@ -3873,9 +3894,9 @@ describe("moderation whitelist role routes", () => {
         editReply: async () => {},
         fields: {
           getTextInputValue: (fieldId: string) => {
-            if (fieldId === buildQuotaModalFieldId("nonce2", "daily_user_quota")) return "20";
-            if (fieldId === buildQuotaModalFieldId("nonce2", "serverwide_quota")) return "500";
-            if (fieldId === buildQuotaModalFieldId("nonce2", "serverwide_quota_resets_in")) return "14";
+            if (fieldId === buildQuotaModalFieldId("nonce1234", "daily_user_quota")) return "20";
+            if (fieldId === buildQuotaModalFieldId("nonce1234", "serverwide_quota")) return "500";
+            if (fieldId === buildQuotaModalFieldId("nonce1234", "serverwide_quota_resets_in")) return "14";
             return "";
           },
         },
@@ -3883,9 +3904,557 @@ describe("moderation whitelist role routes", () => {
       await quotaRoute.execute({} as Client, quotaInteraction, {
         namespace: "moderation",
         version: "v1",
-        segments: ["quota-edit-submit", "en-US", "text", "nonce2"],
+        segments: ["quota-edit-submit", "en-US", "text", "nonce1234"],
       });
       expect(recorded).toContain("moderation.workspace.quota.set:55:mod-1");
     });
+  });
+});
+
+const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ModerationPanelRoute]> = [
+  ["moderation:v1:category:en-US:member-access", { action: "category", locale: "en-US", category: "member-access" }],
+  ["moderation:v1:select-page:en-US", { action: "select-page", locale: "en-US" }],
+  ["moderation:v1:page:en-US:channels", { action: "page", locale: "en-US", page: "channels" }],
+  [
+    "moderation:v1:range:en-US:whitelist:channels:2",
+    { action: "range", locale: "en-US", category: "whitelist", page: "channels", rangeIndex: 2 },
+  ],
+  [
+    "moderation:v1:retry:en-US:user-blacklist:none",
+    { action: "retry", locale: "en-US", category: "user-blacklist", page: "none" },
+  ],
+  ["moderation:v1:member-access-open:en-US", { action: "member-access-open", locale: "en-US" }],
+  [
+    "moderation:v1:member-access-submit:en-US:nonce12345678",
+    { action: "member-access-submit", locale: "en-US", nonce: "nonce12345678" },
+  ],
+  [
+    "moderation:v1:model-access-set:en-US:allow",
+    { action: "model-access-set", locale: "en-US", allowServerModels: true },
+  ],
+  [
+    "moderation:v1:model-access-set:en-US:require-personal",
+    { action: "model-access-set", locale: "en-US", allowServerModels: false },
+  ],
+  ["moderation:v1:user-blacklist-add-open:en-US", { action: "user-blacklist-add-open", locale: "en-US" }],
+  [
+    "moderation:v1:user-blacklist-add-submit:en-US:nonce12345678",
+    { action: "user-blacklist-add-submit", locale: "en-US", nonce: "nonce12345678" },
+  ],
+  ["moderation:v1:user-blacklist-remove-open:en-US", { action: "user-blacklist-remove-open", locale: "en-US" }],
+  [
+    "moderation:v1:user-blacklist-remove-submit:en-US:nonce12345678",
+    { action: "user-blacklist-remove-submit", locale: "en-US", nonce: "nonce12345678" },
+  ],
+  [
+    "moderation:v1:user-blacklist-remove-prompt:en-US:personalization:123456789012345678",
+    {
+      action: "user-blacklist-remove-prompt",
+      locale: "en-US",
+      target: { source: "personalization", userId: "123456789012345678" },
+    },
+  ],
+  [
+    "moderation:v1:user-blacklist-remove-prompt:en-US:persona-block:42:123456789012345678",
+    {
+      action: "user-blacklist-remove-prompt",
+      locale: "en-US",
+      target: { source: "persona-block", personaId: 42, userId: "123456789012345678" },
+    },
+  ],
+  [
+    "moderation:v1:user-blacklist-remove-confirm:en-US:personalization:123456789012345678",
+    {
+      action: "user-blacklist-remove-confirm",
+      locale: "en-US",
+      target: { source: "personalization", userId: "123456789012345678" },
+    },
+  ],
+  [
+    "moderation:v1:user-blacklist-remove-confirm:en-US:persona-block:42:123456789012345678",
+    {
+      action: "user-blacklist-remove-confirm",
+      locale: "en-US",
+      target: { source: "persona-block", personaId: 42, userId: "123456789012345678" },
+    },
+  ],
+  ["moderation:v1:user-blacklist-remove-cancel:en-US", { action: "user-blacklist-remove-cancel", locale: "en-US" }],
+  ["moderation:v1:whitelist-channel-add-open:en-US", { action: "whitelist-channel-add-open", locale: "en-US" }],
+  [
+    "moderation:v1:whitelist-channel-add-submit:en-US:nonce12345678",
+    { action: "whitelist-channel-add-submit", locale: "en-US", nonce: "nonce12345678" },
+  ],
+  ["moderation:v1:whitelist-channel-remove-open:en-US", { action: "whitelist-channel-remove-open", locale: "en-US" }],
+  [
+    "moderation:v1:whitelist-channel-remove-submit:en-US:nonce12345678",
+    { action: "whitelist-channel-remove-submit", locale: "en-US", nonce: "nonce12345678" },
+  ],
+  [
+    "moderation:v1:whitelist-channel-remove-prompt:en-US:123456789012345678",
+    { action: "whitelist-channel-remove-prompt", locale: "en-US", channelId: "123456789012345678" },
+  ],
+  [
+    "moderation:v1:whitelist-channel-remove-confirm:en-US:123456789012345678",
+    { action: "whitelist-channel-remove-confirm", locale: "en-US", channelId: "123456789012345678" },
+  ],
+  [
+    "moderation:v1:whitelist-channel-remove-cancel:en-US",
+    { action: "whitelist-channel-remove-cancel", locale: "en-US" },
+  ],
+  ["moderation:v1:whitelist-role-add-open:en-US", { action: "whitelist-role-add-open", locale: "en-US" }],
+  [
+    "moderation:v1:whitelist-role-add-submit:en-US:nonce12345678",
+    { action: "whitelist-role-add-submit", locale: "en-US", nonce: "nonce12345678" },
+  ],
+  ["moderation:v1:whitelist-role-remove-open:en-US", { action: "whitelist-role-remove-open", locale: "en-US" }],
+  [
+    "moderation:v1:whitelist-role-remove-submit:en-US:nonce12345678",
+    { action: "whitelist-role-remove-submit", locale: "en-US", nonce: "nonce12345678" },
+  ],
+  [
+    "moderation:v1:whitelist-role-remove-prompt:en-US:123456789012345678",
+    { action: "whitelist-role-remove-prompt", locale: "en-US", roleId: "123456789012345678" },
+  ],
+  [
+    "moderation:v1:whitelist-role-remove-confirm:en-US:123456789012345678",
+    { action: "whitelist-role-remove-confirm", locale: "en-US", roleId: "123456789012345678" },
+  ],
+  ["moderation:v1:whitelist-role-remove-cancel:en-US", { action: "whitelist-role-remove-cancel", locale: "en-US" }],
+  ["moderation:v1:persona-channel-add-open:en-US", { action: "persona-channel-add-open", locale: "en-US" }],
+  [
+    "moderation:v1:persona-channel-add-submit:en-US:nonce12345678",
+    { action: "persona-channel-add-submit", locale: "en-US", nonce: "nonce12345678" },
+  ],
+  ["moderation:v1:persona-channel-remove-open:en-US", { action: "persona-channel-remove-open", locale: "en-US" }],
+  [
+    "moderation:v1:persona-channel-remove-submit:en-US:nonce12345678",
+    { action: "persona-channel-remove-submit", locale: "en-US", nonce: "nonce12345678" },
+  ],
+  ["moderation:v1:quota-edit-open:en-US:image", { action: "quota-edit-open", locale: "en-US", quotaType: "image" }],
+  [
+    "moderation:v1:quota-edit-submit:en-US:text:nonce12345678",
+    { action: "quota-edit-submit", locale: "en-US", quotaType: "text", nonce: "nonce12345678" },
+  ],
+];
+
+function parsedRoute(customId: string) {
+  const route = parseInteractionRoute(customId);
+  if (!route) throw new Error(`Expected a parsed route for ${customId}`);
+  return route;
+}
+
+describe("moderation route codec wire contract, exhaustiveness, and producer coverage", () => {
+  it("decodes every literal v1 wire string to its exact route object", () => {
+    for (const [customId, expected] of WIRE_CONTRACT_V1) {
+      expect(parseModerationPanelRoute(parsedRoute(customId))).toEqual(expected);
+    }
+  });
+
+  it("encodes every canonical typed route to exact literal wire bytes", () => {
+    for (const [customId, expected] of WIRE_CONTRACT_V1) {
+      expect(buildModerationRouteId(expected)).toBe(customId);
+      const expectedSegments = customId.split(":").slice(2);
+      expect(buildModerationRouteSegments(expected)).toEqual(expectedSegments);
+    }
+  });
+
+  it("round trips parse and build for all canonical actions", () => {
+    for (const [, expected] of WIRE_CONTRACT_V1) {
+      const generatedId = buildModerationRouteId(expected);
+      const parsed = parseModerationPanelRoute(parsedRoute(generatedId));
+      expect(parsed).toEqual(expected);
+    }
+  });
+
+  it("guarantees 35-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
+    const ACCEPTED_35_ACTIONS: readonly ModerationAction[] = [
+      "category",
+      "member-access-open",
+      "member-access-submit",
+      "model-access-set",
+      "page",
+      "persona-channel-add-open",
+      "persona-channel-add-submit",
+      "persona-channel-remove-open",
+      "persona-channel-remove-submit",
+      "quota-edit-open",
+      "quota-edit-submit",
+      "range",
+      "retry",
+      "select-page",
+      "user-blacklist-add-open",
+      "user-blacklist-add-submit",
+      "user-blacklist-remove-cancel",
+      "user-blacklist-remove-confirm",
+      "user-blacklist-remove-open",
+      "user-blacklist-remove-prompt",
+      "user-blacklist-remove-submit",
+      "whitelist-channel-add-open",
+      "whitelist-channel-add-submit",
+      "whitelist-channel-remove-cancel",
+      "whitelist-channel-remove-confirm",
+      "whitelist-channel-remove-open",
+      "whitelist-channel-remove-prompt",
+      "whitelist-channel-remove-submit",
+      "whitelist-role-add-open",
+      "whitelist-role-add-submit",
+      "whitelist-role-remove-cancel",
+      "whitelist-role-remove-confirm",
+      "whitelist-role-remove-open",
+      "whitelist-role-remove-prompt",
+      "whitelist-role-remove-submit",
+    ];
+
+    const sortedAccepted = [...ACCEPTED_35_ACTIONS].sort();
+    const catalogActions = listModerationPanelActions().sort();
+    const wireActions = [...new Set(WIRE_CONTRACT_V1.map(([, route]) => route.action))].sort();
+
+    const fixedCodecActions = Object.keys(MODERATION_ROUTE_CODECS);
+    const allCodecActions = [
+      ...fixedCodecActions,
+      "user-blacklist-remove-prompt",
+      "user-blacklist-remove-confirm",
+    ].sort();
+
+    const routesSource = readFileSync(
+      new URL("../../../src/utils/discord/interactions/moderationRoutes.ts", import.meta.url),
+      "utf8",
+    );
+    const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
+
+    expect(catalogActions).toEqual(sortedAccepted);
+    expect(wireActions).toEqual(sortedAccepted);
+    expect(allCodecActions).toEqual(sortedAccepted);
+
+    expect(handlerActions.size).toBe(35);
+    expect([...handlerActions].sort()).toEqual(sortedAccepted);
+  });
+
+  it("guarantees producer coverage against production UI and modal surfaces with explicit allowlist for compatibility actions", () => {
+    const PRODUCERLESS_ACTIONS = [
+      "page",
+      "user-blacklist-remove-prompt",
+      "whitelist-channel-remove-prompt",
+      "whitelist-role-remove-prompt",
+    ] as const;
+
+    const ACCEPTED_35_ACTIONS = listModerationPanelActions().sort();
+
+    const customIds: string[] = [];
+
+    customIds.push(
+      buildMemberAccessModal(
+        "en-US",
+        {
+          serverMemteachingEnabled: true,
+          attributeMemteachingEnabled: false,
+          sampledialogueMemteachingEnabled: true,
+          promptSnapshotEnabled: false,
+        },
+        "nonce12345678",
+      ).custom_id,
+    );
+    customIds.push(buildUserBlacklistAddModal("en-US", "nonce12345678").custom_id);
+    customIds.push(buildWhitelistChannelAddModal("en-US", "nonce12345678").custom_id);
+    customIds.push(buildWhitelistRoleAddModal("en-US", "nonce12345678").custom_id);
+    customIds.push(
+      buildModerationRemovalModal("en-US", "nonce12345678", "user-blacklist", [{ value: "u1", label: "User 1" }])
+        .custom_id,
+    );
+    customIds.push(
+      buildModerationRemovalModal("en-US", "nonce12345678", "whitelist-channel", [{ value: "c1", label: "Channel 1" }])
+        .custom_id,
+    );
+    customIds.push(
+      buildModerationRemovalModal("en-US", "nonce12345678", "whitelist-role", [{ value: "r1", label: "Role 1" }])
+        .custom_id,
+    );
+    customIds.push(
+      buildModerationRemovalModal("en-US", "nonce12345678", "persona-channel", [{ value: "p1", label: "Persona 1" }])
+        .custom_id,
+    );
+    customIds.push(buildPersonaChannelAddModal("en-US", "nonce12345678", new Map([[1, "Tomori"]])).custom_id);
+    customIds.push(
+      buildQuotaEditModal(
+        "en-US",
+        "image",
+        { daily_user_quota: 5, serverwide_quota: 50, serverwide_quota_resets_in: 30 },
+        "nonce12345678",
+      ).custom_id,
+    );
+
+    const baseScope = createScopeData({
+      whitelist: {
+        channels: [
+          {
+            server_id: 1,
+            channel_disc_id: "123456789012345678",
+            cooldown_type: CooldownType.PER_USER,
+            cooldown_length: 10,
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        ],
+        personaChannels: [
+          {
+            server_id: 1,
+            persona_id: 1,
+            channel_disc_id: "123456789012345678",
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        ],
+        roles: [
+          {
+            server_id: 1,
+            role_disc_id: "123456789012345678",
+            created_at: new Date(),
+            updated_at: new Date(),
+          },
+        ],
+        personaNames: new Map([[1, "Tomori"]]),
+      },
+      userBlacklist: {
+        personalizationUserIds: ["123456789012345678"],
+        personaBlocks: [
+          {
+            server_id: 1,
+            persona_id: 1,
+            user_disc_id: "123456789012345678",
+            block_type: "mute",
+            reason: "spam",
+            expires_at: new Date(),
+            created_at: new Date(),
+            updated_at: new Date(),
+            persona_name: "Tomori",
+          },
+        ],
+        personalMemoriesEnabled: true,
+      },
+    });
+
+    const panelInputs: ModerationPanelRenderInput[] = [
+      {
+        locale: "en-US",
+        category: "member-access",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: baseScope,
+      },
+      {
+        locale: "en-US",
+        category: "user-blacklist",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: baseScope,
+      },
+      {
+        locale: "en-US",
+        category: "user-blacklist",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: baseScope,
+        removeTarget: { source: "personalization", userId: "123456789012345678" },
+      },
+      {
+        locale: "en-US",
+        category: "user-blacklist",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: baseScope,
+        removeTarget: { source: "persona-block", personaId: 1, userId: "123456789012345678" },
+      },
+      {
+        locale: "en-US",
+        category: "whitelist",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: baseScope,
+      },
+      {
+        locale: "en-US",
+        category: "whitelist",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: baseScope,
+        channelRemoveTarget: "123456789012345678",
+      },
+      {
+        locale: "en-US",
+        category: "whitelist",
+        whitelistPage: "persona-channels",
+        rangeIndex: 0,
+        data: baseScope,
+      },
+      {
+        locale: "en-US",
+        category: "whitelist",
+        whitelistPage: "roles",
+        rangeIndex: 0,
+        data: baseScope,
+      },
+      {
+        locale: "en-US",
+        category: "whitelist",
+        whitelistPage: "roles",
+        rangeIndex: 0,
+        data: baseScope,
+        roleRemoveTarget: "123456789012345678",
+      },
+      {
+        locale: "en-US",
+        category: "whitelist",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: createScopeData({
+          whitelist: {
+            channels: Array.from({ length: 15 }, (_, i) => ({
+              server_id: 1,
+              channel_disc_id: `1234567890123456${i.toString().padStart(2, "0")}`,
+              cooldown_type: CooldownType.PER_USER,
+              cooldown_length: 10,
+              created_at: new Date(),
+              updated_at: new Date(),
+            })),
+            personaChannels: [],
+            roles: [],
+            personaNames: new Map([[1, "Tomori"]]),
+          },
+        }),
+      },
+      {
+        locale: "en-US",
+        category: "quotas",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: baseScope,
+      },
+      {
+        locale: "en-US",
+        category: "quotas",
+        whitelistPage: "channels",
+        rangeIndex: 0,
+        data: createScopeData({ readStatus: "unavailable" }),
+      },
+    ];
+
+    for (const input of panelInputs) {
+      const payload = buildModerationPanelPayload(input);
+      const extractCustomIds = (obj: unknown): void => {
+        if (!obj || typeof obj !== "object") return;
+        if (Array.isArray(obj)) {
+          for (const item of obj) extractCustomIds(item);
+        } else {
+          const record = obj as Record<string, unknown>;
+          if (typeof record.customId === "string") customIds.push(record.customId);
+          if (typeof record.custom_id === "string") customIds.push(record.custom_id);
+          for (const val of Object.values(record)) extractCustomIds(val);
+        }
+      };
+      extractCustomIds(payload);
+    }
+
+    const producedActions = new Set<string>();
+    for (const id of customIds) {
+      const parsed = parseModerationPanelRoute(parsedRoute(id));
+      expect(parsed).not.toBeNull();
+      if (parsed) producedActions.add(parsed.action);
+    }
+
+    for (const producerless of PRODUCERLESS_ACTIONS) {
+      expect(producedActions.has(producerless)).toBe(false);
+    }
+
+    const unionedActions = [...new Set([...producedActions, ...PRODUCERLESS_ACTIONS])].sort();
+    expect(unionedActions).toEqual(ACCEPTED_35_ACTIONS);
+  });
+
+  it("enforces exact 97-character bound for the maximum persona-block removal route and all IDs under 100", () => {
+    const maxPersonaBlockRoute: ModerationPanelRoute = {
+      action: "user-blacklist-remove-confirm",
+      locale: "zh-Hans",
+      target: {
+        source: "persona-block",
+        personaId: 2147483647,
+        userId: "12345678901234567890",
+      },
+    };
+
+    const maxCustomId = buildModerationRouteId(maxPersonaBlockRoute);
+    expect(maxCustomId).toBe(
+      "moderation:v1:user-blacklist-remove-confirm:zh-Hans:persona-block:2147483647:12345678901234567890",
+    );
+    expect(maxCustomId.length).toBe(97);
+    expect(maxCustomId.length).toBeLessThanOrEqual(100);
+
+    const maxEnUsRoute: ModerationPanelRoute = {
+      ...maxPersonaBlockRoute,
+      locale: "en-US",
+    };
+    const maxEnUsCustomId = buildModerationRouteId(maxEnUsRoute);
+    const parsed = parseModerationPanelRoute(parsedRoute(maxEnUsCustomId));
+    expect(parsed).toEqual(maxEnUsRoute);
+
+    for (const [customId] of WIRE_CONTRACT_V1) {
+      expect(customId.length).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("rejects malformed, empty, wrong namespace/version, or invalid-enum route segments", () => {
+    expect(
+      parseModerationPanelRoute({
+        namespace: "wrong",
+        version: "v1",
+        segments: ["category", "en-US", "member-access"],
+      }),
+    ).toBeNull();
+    expect(
+      parseModerationPanelRoute({
+        namespace: "moderation",
+        version: "v2",
+        segments: ["category", "en-US", "member-access"],
+      }),
+    ).toBeNull();
+
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:category:invalid-locale:member-access"))).toBeNull();
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:unknown-action:en-US"))).toBeNull();
+
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:category:en-US:invalid-category"))).toBeNull();
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:page:en-US:invalid-page"))).toBeNull();
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:quota-edit-open:en-US:invalid-quota"))).toBeNull();
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:model-access-set:en-US:invalid-choice"))).toBeNull();
+
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:range:en-US:whitelist:channels:-1"))).toBeNull();
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:range:en-US:whitelist:channels:abc"))).toBeNull();
+
+    expect(
+      parseModerationPanelRoute(parsedRoute("moderation:v1:whitelist-channel-remove-confirm:en-US:not-a-snowflake")),
+    ).toBeNull();
+    expect(
+      parseModerationPanelRoute(parsedRoute("moderation:v1:whitelist-role-remove-confirm:en-US:short")),
+    ).toBeNull();
+
+    expect(
+      parseModerationPanelRoute(
+        parsedRoute("moderation:v1:user-blacklist-remove-prompt:en-US:unknown-source:123456789012345678"),
+      ),
+    ).toBeNull();
+    expect(
+      parseModerationPanelRoute(
+        parsedRoute("moderation:v1:user-blacklist-remove-prompt:en-US:persona-block:-1:123456789012345678"),
+      ),
+    ).toBeNull();
+    expect(
+      parseModerationPanelRoute(
+        parsedRoute("moderation:v1:user-blacklist-remove-prompt:en-US:persona-block:0:123456789012345678"),
+      ),
+    ).toBeNull();
+
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:member-access-submit:en-US:bad!nonce#"))).toBeNull();
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:user-blacklist-add-submit:en-US:short"))).toBeNull();
+
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:select-page:en-US:extra-segment"))).toBeNull();
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:member-access-open:en-US:extra"))).toBeNull();
+    expect(parseModerationPanelRoute(parsedRoute("moderation:v1:user-blacklist-remove-cancel:en-US:extra"))).toBeNull();
   });
 });

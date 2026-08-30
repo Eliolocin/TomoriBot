@@ -3,7 +3,7 @@ import { type ActionRowData, type ButtonComponentData, ButtonStyle, ChannelType,
 import { CooldownType } from "@/types/db/schema";
 import {
   buildMemberAccessModalFieldId,
-  buildModerationCustomId,
+  buildModerationRouteId,
   buildQuotaModalFieldId,
   buildUserBlacklistAddModalFieldId,
   buildWhitelistChannelAddModalFieldId,
@@ -59,7 +59,7 @@ function createScopeData(overrides: Partial<ModerationScopeData> = {}): Moderati
 
 describe("moderationPanelCatalog route codec", () => {
   it("encodes and decodes category switch routes", () => {
-    const customId = buildModerationCustomId("category", "en-US", "member-access");
+    const customId = buildModerationRouteId({ action: "category", locale: "en-US", category: "member-access" });
     expect(customId).toBe("moderation:v1:category:en-US:member-access");
     expect(customId.length).toBeLessThanOrEqual(100);
 
@@ -72,7 +72,7 @@ describe("moderationPanelCatalog route codec", () => {
   });
 
   it("encodes and decodes select-page routes", () => {
-    const customId = buildModerationCustomId("select-page", "en-US");
+    const customId = buildModerationRouteId({ action: "select-page", locale: "en-US" });
     expect(customId).toBe("moderation:v1:select-page:en-US");
 
     const parsed = parseModerationPanelRoute({
@@ -84,7 +84,7 @@ describe("moderationPanelCatalog route codec", () => {
   });
 
   it("encodes and decodes whitelist page routes", () => {
-    const customId = buildModerationCustomId("page", "en-US", "channels");
+    const customId = buildModerationRouteId({ action: "page", locale: "en-US", page: "channels" });
     expect(customId).toBe("moderation:v1:page:en-US:channels");
 
     const parsed = parseModerationPanelRoute({
@@ -96,7 +96,13 @@ describe("moderationPanelCatalog route codec", () => {
   });
 
   it("encodes and decodes range navigation routes", () => {
-    const customId = buildModerationCustomId("range", "en-US", "whitelist", "channels", 2);
+    const customId = buildModerationRouteId({
+      action: "range",
+      locale: "en-US",
+      category: "whitelist",
+      page: "channels",
+      rangeIndex: 2,
+    });
     expect(customId).toBe("moderation:v1:range:en-US:whitelist:channels:2");
 
     const parsed = parseModerationPanelRoute({
@@ -114,7 +120,12 @@ describe("moderationPanelCatalog route codec", () => {
   });
 
   it("encodes and decodes retry routes", () => {
-    const customId = buildModerationCustomId("retry", "en-US", "user-blacklist", "none");
+    const customId = buildModerationRouteId({
+      action: "retry",
+      locale: "en-US",
+      category: "user-blacklist",
+      page: "none",
+    });
     expect(customId).toBe("moderation:v1:retry:en-US:user-blacklist:none");
 
     const parsed = parseModerationPanelRoute({
@@ -131,7 +142,7 @@ describe("moderationPanelCatalog route codec", () => {
   });
 
   it("encodes and decodes member-access routes", () => {
-    const openId = buildModerationCustomId("member-access-open", "en-US");
+    const openId = buildModerationRouteId({ action: "member-access-open", locale: "en-US" });
     expect(openId).toBe("moderation:v1:member-access-open:en-US");
     expect(openId.length).toBeLessThanOrEqual(100);
 
@@ -142,7 +153,7 @@ describe("moderationPanelCatalog route codec", () => {
     });
     expect(parsedOpen).toEqual({ action: "member-access-open", locale: "en-US" });
 
-    const submitId = buildModerationCustomId("member-access-submit", "en-US", "nonce123");
+    const submitId = buildModerationRouteId({ action: "member-access-submit", locale: "en-US", nonce: "nonce123" });
     expect(submitId).toBe("moderation:v1:member-access-submit:en-US:nonce123");
     expect(submitId.length).toBeLessThanOrEqual(100);
 
@@ -155,7 +166,7 @@ describe("moderationPanelCatalog route codec", () => {
   });
 
   it("encodes and decodes user-blacklist-add routes", () => {
-    const openId = buildModerationCustomId("user-blacklist-add-open", "en-US");
+    const openId = buildModerationRouteId({ action: "user-blacklist-add-open", locale: "en-US" });
     expect(openId).toBe("moderation:v1:user-blacklist-add-open:en-US");
     expect(openId.length).toBeLessThanOrEqual(100);
 
@@ -166,7 +177,11 @@ describe("moderationPanelCatalog route codec", () => {
     });
     expect(parsedOpen).toEqual({ action: "user-blacklist-add-open", locale: "en-US" });
 
-    const submitId = buildModerationCustomId("user-blacklist-add-submit", "en-US", "nonce456");
+    const submitId = buildModerationRouteId({
+      action: "user-blacklist-add-submit",
+      locale: "en-US",
+      nonce: "nonce456",
+    });
     expect(submitId).toBe("moderation:v1:user-blacklist-add-submit:en-US:nonce456");
     expect(submitId.length).toBeLessThanOrEqual(100);
 
@@ -179,12 +194,11 @@ describe("moderationPanelCatalog route codec", () => {
   });
 
   it("encodes and decodes user-blacklist-remove routes", () => {
-    const promptPersId = buildModerationCustomId(
-      "user-blacklist-remove-prompt",
-      "en-US",
-      "personalization",
-      "123456789012345678",
-    );
+    const promptPersId = buildModerationRouteId({
+      action: "user-blacklist-remove-prompt",
+      locale: "en-US",
+      target: { source: "personalization", userId: "123456789012345678" },
+    });
     expect(promptPersId).toBe("moderation:v1:user-blacklist-remove-prompt:en-US:personalization:123456789012345678");
     expect(promptPersId.length).toBeLessThanOrEqual(100);
 
@@ -199,13 +213,11 @@ describe("moderationPanelCatalog route codec", () => {
       target: { source: "personalization", userId: "123456789012345678" },
     });
 
-    const promptBlockId = buildModerationCustomId(
-      "user-blacklist-remove-prompt",
-      "en-US",
-      "persona-block",
-      42,
-      "123456789012345678",
-    );
+    const promptBlockId = buildModerationRouteId({
+      action: "user-blacklist-remove-prompt",
+      locale: "en-US",
+      target: { source: "persona-block", personaId: 42, userId: "123456789012345678" },
+    });
     expect(promptBlockId).toBe("moderation:v1:user-blacklist-remove-prompt:en-US:persona-block:42:123456789012345678");
     expect(promptBlockId.length).toBeLessThanOrEqual(100);
 
@@ -220,12 +232,11 @@ describe("moderationPanelCatalog route codec", () => {
       target: { source: "persona-block", personaId: 42, userId: "123456789012345678" },
     });
 
-    const confirmId = buildModerationCustomId(
-      "user-blacklist-remove-confirm",
-      "en-US",
-      "personalization",
-      "123456789012345678",
-    );
+    const confirmId = buildModerationRouteId({
+      action: "user-blacklist-remove-confirm",
+      locale: "en-US",
+      target: { source: "personalization", userId: "123456789012345678" },
+    });
     expect(confirmId).toBe("moderation:v1:user-blacklist-remove-confirm:en-US:personalization:123456789012345678");
     expect(confirmId.length).toBeLessThanOrEqual(100);
 
@@ -240,7 +251,7 @@ describe("moderationPanelCatalog route codec", () => {
       target: { source: "personalization", userId: "123456789012345678" },
     });
 
-    const cancelId = buildModerationCustomId("user-blacklist-remove-cancel", "en-US");
+    const cancelId = buildModerationRouteId({ action: "user-blacklist-remove-cancel", locale: "en-US" });
     expect(cancelId).toBe("moderation:v1:user-blacklist-remove-cancel:en-US");
     expect(cancelId.length).toBeLessThanOrEqual(100);
 
@@ -281,7 +292,7 @@ describe("moderationPanelCatalog route codec", () => {
   });
 
   it("encodes and decodes whitelist-channel routes", () => {
-    const openId = buildModerationCustomId("whitelist-channel-add-open", "en-US");
+    const openId = buildModerationRouteId({ action: "whitelist-channel-add-open", locale: "en-US" });
     expect(openId).toBe("moderation:v1:whitelist-channel-add-open:en-US");
     expect(openId.length).toBeLessThanOrEqual(100);
 
@@ -292,7 +303,11 @@ describe("moderationPanelCatalog route codec", () => {
     });
     expect(parsedOpen).toEqual({ action: "whitelist-channel-add-open", locale: "en-US" });
 
-    const submitId = buildModerationCustomId("whitelist-channel-add-submit", "en-US", "nonce789");
+    const submitId = buildModerationRouteId({
+      action: "whitelist-channel-add-submit",
+      locale: "en-US",
+      nonce: "nonce789",
+    });
     expect(submitId).toBe("moderation:v1:whitelist-channel-add-submit:en-US:nonce789");
     expect(submitId.length).toBeLessThanOrEqual(100);
 
@@ -303,7 +318,11 @@ describe("moderationPanelCatalog route codec", () => {
     });
     expect(parsedSubmit).toEqual({ action: "whitelist-channel-add-submit", locale: "en-US", nonce: "nonce789" });
 
-    const promptId = buildModerationCustomId("whitelist-channel-remove-prompt", "en-US", "123456789012345678");
+    const promptId = buildModerationRouteId({
+      action: "whitelist-channel-remove-prompt",
+      locale: "en-US",
+      channelId: "123456789012345678",
+    });
     expect(promptId).toBe("moderation:v1:whitelist-channel-remove-prompt:en-US:123456789012345678");
     expect(promptId.length).toBeLessThanOrEqual(100);
 
@@ -318,7 +337,11 @@ describe("moderationPanelCatalog route codec", () => {
       channelId: "123456789012345678",
     });
 
-    const confirmId = buildModerationCustomId("whitelist-channel-remove-confirm", "en-US", "123456789012345678");
+    const confirmId = buildModerationRouteId({
+      action: "whitelist-channel-remove-confirm",
+      locale: "en-US",
+      channelId: "123456789012345678",
+    });
     expect(confirmId).toBe("moderation:v1:whitelist-channel-remove-confirm:en-US:123456789012345678");
     expect(confirmId.length).toBeLessThanOrEqual(100);
 
@@ -333,7 +356,7 @@ describe("moderationPanelCatalog route codec", () => {
       channelId: "123456789012345678",
     });
 
-    const cancelId = buildModerationCustomId("whitelist-channel-remove-cancel", "en-US");
+    const cancelId = buildModerationRouteId({ action: "whitelist-channel-remove-cancel", locale: "en-US" });
     expect(cancelId).toBe("moderation:v1:whitelist-channel-remove-cancel:en-US");
 
     const parsedCancel = parseModerationPanelRoute({
@@ -1922,7 +1945,7 @@ describe("moderation bulk and persona modals", () => {
 
 describe("moderationPanel Quotas surface and modals", () => {
   it("encodes and decodes quota-edit-open and quota-edit-submit routes", () => {
-    const openCustomId = buildModerationCustomId("quota-edit-open", "en-US", "image");
+    const openCustomId = buildModerationRouteId({ action: "quota-edit-open", locale: "en-US", quotaType: "image" });
     expect(openCustomId).toBe("moderation:v1:quota-edit-open:en-US:image");
     const openParsed = parseModerationPanelRoute({
       namespace: "moderation",
@@ -1931,7 +1954,12 @@ describe("moderationPanel Quotas surface and modals", () => {
     });
     expect(openParsed).toEqual({ action: "quota-edit-open", locale: "en-US", quotaType: "image" });
 
-    const submitCustomId = buildModerationCustomId("quota-edit-submit", "en-US", "text", "nonce_abc");
+    const submitCustomId = buildModerationRouteId({
+      action: "quota-edit-submit",
+      locale: "en-US",
+      quotaType: "text",
+      nonce: "nonce_abc",
+    });
     expect(submitCustomId).toBe("moderation:v1:quota-edit-submit:en-US:text:nonce_abc");
     const submitParsed = parseModerationPanelRoute({
       namespace: "moderation",

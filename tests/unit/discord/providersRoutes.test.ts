@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
 import type { LoadedProviderPanelScope } from "@/utils/provider/providerPanelOperations";
@@ -6,14 +7,103 @@ import { executeProvidersCommand } from "@/commands/providers";
 import { createProvidersInteractionRoute } from "@/utils/discord/interactions/providersRoutes";
 import { parseInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import {
-  buildProvidersCustomId,
-  buildProvidersCustomIdForNamespace,
+  buildProvidersRouteId,
+  buildProvidersRouteSegments,
+  listProvidersPanelActions,
   parseProvidersPanelRoute,
   PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
+  PROVIDERS_ROUTE_CODECS,
+  PROVIDERS_ROUTE_NAMESPACE,
+  type ProvidersPanelRoute,
 } from "@/utils/discord/providersPanelCatalog";
+import {
+  buildAddEndpointModal,
+  buildAddProviderModal,
+  buildEditEndpointModal,
+  buildEditProviderModal,
+  buildProviderModelModal,
+  buildProvidersPanelPayload,
+  type ProvidersPanelRenderInput,
+} from "@/utils/discord/ui/providersPanel";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
+
+const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ProvidersPanelRoute]> = [
+  ["providers:v1:select:en-US", { action: "select", locale: "en-US" }],
+  ["providers:v1:retry:en-US", { action: "retry", locale: "en-US" }],
+  ["providers:v1:range-open:en-US", { action: "range-open", locale: "en-US" }],
+  ["providers:v1:range-cancel:en-US", { action: "range-cancel", locale: "en-US" }],
+  ["providers:v1:range:en-US:2", { action: "range", locale: "en-US", rangeIndex: 2 }],
+  ["providers:v1:range-page:en-US:2", { action: "range-page", locale: "en-US", rangeIndex: 2 }],
+  [
+    "providers:v1:model-open:en-US:provider:google",
+    { action: "model-open", locale: "en-US", entryKind: "provider", entryKey: "google" },
+  ],
+  [
+    "providers:v1:model-select:en-US:endpoint:73",
+    { action: "model-select", locale: "en-US", entryKind: "endpoint", entryKey: "73" },
+  ],
+  [
+    "providers:v1:model-close:en-US:provider:google",
+    { action: "model-close", locale: "en-US", entryKind: "provider", entryKey: "google" },
+  ],
+  [
+    "providers:v1:model-range:en-US:provider:google:1",
+    { action: "model-range", locale: "en-US", entryKind: "provider", entryKey: "google", rangeIndex: 1 },
+  ],
+  [
+    "providers:v1:model-submit:en-US:endpoint:73:image:9:abcdefgh",
+    {
+      action: "model-submit",
+      locale: "en-US",
+      entryKind: "endpoint",
+      entryKey: "73",
+      capability: "image",
+      editingModelId: 9,
+      nonce: "abcdefgh",
+    },
+  ],
+  [
+    "providers:v1:model-submit:en-US:provider:google:text:0:abcdefgh",
+    {
+      action: "model-submit",
+      locale: "en-US",
+      entryKind: "provider",
+      entryKey: "google",
+      capability: "text",
+      editingModelId: null,
+      nonce: "abcdefgh",
+    },
+  ],
+  [
+    "providers:v1:edit-provider-open:en-US:google:2",
+    { action: "edit-provider-open", locale: "en-US", provider: "google", rotationKeyCount: 2 },
+  ],
+  [
+    "providers:v1:edit-provider-submit:en-US:google:abcdefgh",
+    { action: "edit-provider-submit", locale: "en-US", provider: "google", nonce: "abcdefgh" },
+  ],
+  ["providers:v1:edit-endpoint-open:en-US:73", { action: "edit-endpoint-open", locale: "en-US", connectionId: 73 }],
+  [
+    "providers:v1:edit-endpoint-submit:en-US:73:abcdefgh",
+    { action: "edit-endpoint-submit", locale: "en-US", connectionId: 73, nonce: "abcdefgh" },
+  ],
+  [
+    "providers:v1:remove-prompt:en-US:brave:brave",
+    { action: "remove-prompt", locale: "en-US", entryKind: "brave", entryKey: "brave" },
+  ],
+  [
+    "providers:v1:remove-cancel:en-US:endpoint:73",
+    { action: "remove-cancel", locale: "en-US", entryKind: "endpoint", entryKey: "73" },
+  ],
+  [
+    "providers:v1:remove-confirm:en-US:provider:google",
+    { action: "remove-confirm", locale: "en-US", entryKind: "provider", entryKey: "google" },
+  ],
+  ["providers:v1:add-submit:en-US:abcdefgh", { action: "add-submit", locale: "en-US", nonce: "abcdefgh" }],
+  ["providers:v1:endpoint-submit:en-US:abcdefgh", { action: "endpoint-submit", locale: "en-US", nonce: "abcdefgh" }],
+];
 
 const scope: LoadedProviderPanelScope = {
   state: { server_id: 42 } as TomoriState,
@@ -64,15 +154,302 @@ function parsed(customId: string) {
 }
 
 describe("providers routes", () => {
+  it("decodes every literal v1 wire string to its exact route", () => {
+    for (const [customId, expected] of WIRE_CONTRACT_V1) {
+      expect(parseProvidersPanelRoute(parsed(customId), PROVIDERS_ROUTE_NAMESPACE)).toEqual(expected);
+    }
+  });
+
+  it("encodes every canonical typed route to exact literal wire bytes", () => {
+    for (const [customId, expected] of WIRE_CONTRACT_V1) {
+      expect(buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, expected)).toBe(customId);
+      const expectedSegments = customId.split(":").slice(2);
+      expect(buildProvidersRouteSegments(expected)).toEqual(expectedSegments);
+    }
+  });
+
+  it("round trips parse and build for all canonical actions across both namespaces", () => {
+    for (const [, expected] of WIRE_CONTRACT_V1) {
+      const guildId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, expected);
+      const guildParsed = parseProvidersPanelRoute(parsed(guildId), PROVIDERS_ROUTE_NAMESPACE);
+      expect(guildParsed).toEqual(expected);
+
+      const personalId = buildProvidersRouteId(PERSONAL_PROVIDERS_ROUTE_NAMESPACE, expected);
+      const personalParsed = parseProvidersPanelRoute(parsed(personalId), PERSONAL_PROVIDERS_ROUTE_NAMESPACE);
+      expect(personalParsed).toEqual(expected);
+    }
+  });
+
+  it("guarantees 20-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
+    const ACCEPTED_20_ACTIONS = [
+      "add-submit",
+      "edit-endpoint-open",
+      "edit-endpoint-submit",
+      "edit-provider-open",
+      "edit-provider-submit",
+      "endpoint-submit",
+      "model-close",
+      "model-open",
+      "model-range",
+      "model-select",
+      "model-submit",
+      "range",
+      "range-cancel",
+      "range-open",
+      "range-page",
+      "remove-cancel",
+      "remove-confirm",
+      "remove-prompt",
+      "retry",
+      "select",
+    ].sort();
+
+    const catalogActions = listProvidersPanelActions().sort();
+    const wireActions = [...new Set(WIRE_CONTRACT_V1.map(([, route]) => route.action))].sort();
+    const codecTableActions = Object.keys(PROVIDERS_ROUTE_CODECS).sort();
+
+    const routesSource = readFileSync(
+      new URL("../../../src/utils/discord/interactions/providersRoutes.ts", import.meta.url),
+      "utf8",
+    );
+    const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
+
+    expect(catalogActions).toEqual(ACCEPTED_20_ACTIONS);
+    expect(wireActions).toEqual(ACCEPTED_20_ACTIONS);
+    expect(codecTableActions).toEqual(ACCEPTED_20_ACTIONS);
+
+    expect(handlerActions.size).toBe(20);
+    expect([...handlerActions].sort()).toEqual(ACCEPTED_20_ACTIONS);
+    expect(ACCEPTED_20_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !ACCEPTED_20_ACTIONS.includes(a))).toEqual([]);
+    expect(codecTableActions.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !codecTableActions.includes(a))).toEqual([]);
+  });
+
+  it("guarantees producer coverage against production UI and modal surfaces with explicit allowlist for producerless actions", () => {
+    const PRODUCERLESS_ACTIONS = ["model-open", "model-close"] as const;
+    const ACCEPTED_20_ACTIONS = [
+      "add-submit",
+      "edit-endpoint-open",
+      "edit-endpoint-submit",
+      "edit-provider-open",
+      "edit-provider-submit",
+      "endpoint-submit",
+      "model-close",
+      "model-open",
+      "model-range",
+      "model-select",
+      "model-submit",
+      "range",
+      "range-cancel",
+      "range-open",
+      "range-page",
+      "remove-cancel",
+      "remove-confirm",
+      "remove-prompt",
+      "retry",
+      "select",
+    ].sort();
+
+    const customIds: string[] = [];
+
+    customIds.push(buildAddProviderModal("en-US", "nonce1234567").custom_id);
+    customIds.push(buildAddEndpointModal("en-US", "nonce1234567").custom_id);
+    customIds.push(buildEditProviderModal("en-US", "google", 2, "nonce1234567").custom_id);
+    customIds.push(
+      buildEditEndpointModal(
+        "en-US",
+        {
+          connectionId: 73,
+          label: "ep",
+          endpointUrl: "https://example.com",
+          apiStyles: ["openai-compatible"],
+          isPreset: false,
+        },
+        "nonce1234567",
+      ).custom_id,
+    );
+    customIds.push(buildProviderModelModal("en-US", "provider", "google", "text", null, "nonce1234567").custom_id);
+
+    const panelInputs: ProvidersPanelRenderInput[] = [
+      {
+        locale: "en-US",
+        entries: scope.data.entries,
+        initialEntryId: "provider:google",
+        readStatus: "fresh",
+        page: { kind: "entry", entryId: "provider:google" },
+        enabledActions: new Set(["add-provider", "add-endpoint", "model", "edit", "remove"]),
+      },
+      {
+        locale: "en-US",
+        entries: [],
+        initialEntryId: null,
+        readStatus: "unavailable",
+        page: { kind: "entry" },
+      },
+      {
+        locale: "en-US",
+        entries: Array.from({ length: 600 }, (_, i) => ({
+          id: `provider:p${i}`,
+          kind: "provider",
+          provider: `p${i}`,
+          displayName: `P${i}`,
+          savedAt: null,
+          rotationKeyCount: 0,
+          capabilities: [],
+        })),
+        initialEntryId: "provider:p0",
+        readStatus: "fresh",
+        page: { kind: "entry-chooser", chooserPage: 0 },
+      },
+      {
+        locale: "en-US",
+        entries: scope.data.entries,
+        initialEntryId: "provider:google",
+        readStatus: "fresh",
+        page: { kind: "remove", entryId: "provider:google" },
+      },
+      {
+        locale: "en-US",
+        entries: [
+          {
+            id: "endpoint:73",
+            kind: "endpoint",
+            displayName: "EP",
+            savedAt: null,
+            connectionIds: [73],
+            capabilities: [
+              {
+                capability: "text",
+                availability: "available",
+                models: Array.from({ length: 30 }, (_, i) => ({
+                  id: 100 + i,
+                  codeName: `model-${i}`,
+                  isWorkspaceActive: false,
+                  isWorkspaceFallback: false,
+                  isProviderFallback: false,
+                  isCustomRegistration: true,
+                })),
+              },
+            ],
+          },
+        ],
+        initialEntryId: "endpoint:73",
+        readStatus: "fresh",
+        page: { kind: "entry", entryId: "endpoint:73", modelRangeIndex: 1 },
+        enabledActions: new Set(["model", "edit", "remove"]),
+      },
+    ];
+
+    for (const input of panelInputs) {
+      const payload = buildProvidersPanelPayload(input);
+      const extractCustomIds = (obj: unknown): void => {
+        if (!obj || typeof obj !== "object") return;
+        if (Array.isArray(obj)) {
+          for (const item of obj) extractCustomIds(item);
+        } else {
+          const record = obj as Record<string, unknown>;
+          if (typeof record.customId === "string") customIds.push(record.customId);
+          if (typeof record.custom_id === "string") customIds.push(record.custom_id);
+          for (const val of Object.values(record)) extractCustomIds(val);
+        }
+      };
+      extractCustomIds(payload);
+    }
+
+    const producedActions = new Set<string>();
+    for (const id of customIds) {
+      const parsedRoute = parseProvidersPanelRoute(
+        parsed(id),
+        id.startsWith("personal-providers") ? PERSONAL_PROVIDERS_ROUTE_NAMESPACE : PROVIDERS_ROUTE_NAMESPACE,
+      );
+      expect(parsedRoute).not.toBeNull();
+      if (parsedRoute) producedActions.add(parsedRoute.action);
+    }
+
+    for (const producerless of PRODUCERLESS_ACTIONS) {
+      expect(producedActions.has(producerless)).toBe(false);
+    }
+
+    const unionedActions = [...new Set([...producedActions, ...PRODUCERLESS_ACTIONS])].sort();
+    expect(unionedActions).toEqual(ACCEPTED_20_ACTIONS);
+  });
+
+  it("enforces exact 100-character bound for the maximum personal route and covers guild namespace", () => {
+    const maxPersonalRoute: ProvidersPanelRoute = {
+      action: "model-submit",
+      locale: "zh-Hans",
+      entryKind: "endpoint",
+      entryKey: "2147483647",
+      capability: "transcription",
+      editingModelId: 2147483647,
+      nonce: "nonce1234567",
+    };
+
+    const personalCustomId = buildProvidersRouteId(PERSONAL_PROVIDERS_ROUTE_NAMESPACE, maxPersonalRoute);
+    expect(personalCustomId).toBe(
+      "personal-providers:v1:model-submit:zh-Hans:endpoint:2147483647:transcription:2147483647:nonce1234567",
+    );
+    expect(personalCustomId.length).toBe(100);
+
+    const guildCustomId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, maxPersonalRoute);
+    expect(guildCustomId).toBe(
+      "providers:v1:model-submit:zh-Hans:endpoint:2147483647:transcription:2147483647:nonce1234567",
+    );
+    expect(guildCustomId.length).toBe(91);
+
+    const maxEnUsRoute: ProvidersPanelRoute = {
+      ...maxPersonalRoute,
+      locale: "en-US",
+    };
+    const enUsPersonalCustomId = buildProvidersRouteId(PERSONAL_PROVIDERS_ROUTE_NAMESPACE, maxEnUsRoute);
+    const parsedPersonal = parseProvidersPanelRoute(parsed(enUsPersonalCustomId), PERSONAL_PROVIDERS_ROUTE_NAMESPACE);
+    expect(parsedPersonal).toEqual(maxEnUsRoute);
+
+    const enUsGuildCustomId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, maxEnUsRoute);
+    const parsedGuild = parseProvidersPanelRoute(parsed(enUsGuildCustomId), PROVIDERS_ROUTE_NAMESPACE);
+    expect(parsedGuild).toEqual(maxEnUsRoute);
+  });
+
+  it("rejects malformed, empty, negative, or invalid-enum route segments", () => {
+    expect(parseProvidersPanelRoute({ namespace: "wrong", version: "v1", segments: ["select", "en-US"] })).toBeNull();
+    expect(
+      parseProvidersPanelRoute({ namespace: "providers", version: "v2", segments: ["select", "en-US"] }),
+    ).toBeNull();
+
+    expect(parseProvidersPanelRoute(parsed("providers:v1:select:invalid-locale"))).toBeNull();
+    expect(parseProvidersPanelRoute(parsed("providers:v1:unknown-action:en-US"))).toBeNull();
+
+    expect(parseProvidersPanelRoute(parsed("providers:v1:range:en-US"))).toBeNull();
+    expect(parseProvidersPanelRoute(parsed("providers:v1:edit-provider-open:en-US:google"))).toBeNull();
+    expect(parseProvidersPanelRoute(parsed("providers:v1:model-submit:en-US:provider:google:text:0"))).toBeNull();
+
+    expect(parseProvidersPanelRoute(parsed("providers:v1:select:en-US:extra"))).toBeNull();
+    expect(parseProvidersPanelRoute(parsed("providers:v1:range:en-US:1:extra"))).toBeNull();
+
+    expect(parseProvidersPanelRoute(parsed("providers:v1:range:en-US:-1"))).toBeNull();
+    expect(parseProvidersPanelRoute(parsed("providers:v1:edit-endpoint-open:en-US:-5"))).toBeNull();
+    expect(parseProvidersPanelRoute(parsed("providers:v1:edit-endpoint-open:en-US:0"))).toBeNull();
+
+    expect(parseProvidersPanelRoute(parsed("providers:v1:model-open:en-US:invalidkind:google"))).toBeNull();
+    expect(parseProvidersPanelRoute(parsed("providers:v1:model-open:en-US:brave:brave"))).toBeNull();
+
+    expect(
+      parseProvidersPanelRoute(parsed("providers:v1:model-submit:en-US:provider:google:invalidcap:0:abcdefgh")),
+    ).toBeNull();
+
+    expect(parseProvidersPanelRoute(parsed("providers:v1:add-submit:en-US:short"))).toBeNull();
+    expect(parseProvidersPanelRoute(parsed("providers:v1:add-submit:en-US:invalid!nonce#"))).toBeNull();
+  });
+
   it("keeps personal interactions unrestricted and marked as personal writes", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomIdForNamespace(
-      PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
-      "edit-provider-submit",
-      "en-US",
-      "google",
-      "abcdefgh",
-    );
+    const customId = buildProvidersRouteId(PERSONAL_PROVIDERS_ROUTE_NAMESPACE, {
+      action: "edit-provider-submit",
+      locale: "en-US",
+      provider: "google",
+      nonce: "abcdefgh",
+    });
     const personalScope: LoadedProviderPanelScope = {
       ...scope,
       scopeKind: "personal",
@@ -119,83 +496,14 @@ describe("providers routes", () => {
     expect(calls).toEqual(["deferUpdate", "write:personal:77:", "editReply"]);
   });
 
-  it("parses only supported locale, action, and range shapes", () => {
-    expect(parseProvidersPanelRoute(parsed(buildProvidersCustomId("select", "en-US")))).toEqual({
-      action: "select",
-      locale: "en-US",
-    });
-    expect(parseProvidersPanelRoute(parsed(buildProvidersCustomId("range", "en-US", 2)))).toEqual({
-      action: "range",
-      locale: "en-US",
-      rangeIndex: 2,
-    });
-    expect(parseProvidersPanelRoute(parsed(buildProvidersCustomId("range-open", "en-US")))).toEqual({
-      action: "range-open",
-      locale: "en-US",
-    });
-    expect(parseProvidersPanelRoute(parsed(buildProvidersCustomId("range-page", "en-US", 2)))).toEqual({
-      action: "range-page",
-      locale: "en-US",
-      rangeIndex: 2,
-    });
-    expect(parseProvidersPanelRoute(parsed(buildProvidersCustomId("range-cancel", "en-US")))).toEqual({
-      action: "range-cancel",
-      locale: "en-US",
-    });
-    expect(parseProvidersPanelRoute(parsed("providers:v1:range:en-US:-1"))).toBeNull();
-    expect(parseProvidersPanelRoute(parsed("providers:v1:select:xx"))).toBeNull();
-    expect(parseProvidersPanelRoute(parsed("providers:v1:unknown:en-US"))).toBeNull();
-    expect(parseProvidersPanelRoute(parsed(buildProvidersCustomId("add-submit", "en-US", "abcdefgh")))).toEqual({
-      action: "add-submit",
-      locale: "en-US",
-      nonce: "abcdefgh",
-    });
-    expect(parseProvidersPanelRoute(parsed(buildProvidersCustomId("endpoint-submit", "en-US", "abcdefgh")))).toEqual({
-      action: "endpoint-submit",
-      locale: "en-US",
-      nonce: "abcdefgh",
-    });
-    expect(
-      parseProvidersPanelRoute(parsed(buildProvidersCustomId("model-open", "en-US", "provider", "google"))),
-    ).toEqual({ action: "model-open", locale: "en-US", entryKind: "provider", entryKey: "google" });
-    expect(
-      parseProvidersPanelRoute(
-        parsed(buildProvidersCustomId("model-submit", "en-US", "endpoint", 73, "image", 9, "abcdefgh")),
-      ),
-    ).toEqual({
-      action: "model-submit",
-      locale: "en-US",
-      entryKind: "endpoint",
-      entryKey: "73",
-      capability: "image",
-      editingModelId: 9,
-      nonce: "abcdefgh",
-    });
-    expect(
-      parseProvidersPanelRoute(parsed(buildProvidersCustomId("edit-provider-open", "en-US", "google", 2))),
-    ).toEqual({ action: "edit-provider-open", locale: "en-US", provider: "google", rotationKeyCount: 2 });
-    expect(
-      parseProvidersPanelRoute(parsed(buildProvidersCustomId("edit-provider-submit", "en-US", "google", "abcdefgh"))),
-    ).toEqual({ action: "edit-provider-submit", locale: "en-US", provider: "google", nonce: "abcdefgh" });
-    expect(parseProvidersPanelRoute(parsed(buildProvidersCustomId("edit-endpoint-open", "en-US", 73)))).toEqual({
-      action: "edit-endpoint-open",
-      locale: "en-US",
-      connectionId: 73,
-    });
-    expect(
-      parseProvidersPanelRoute(parsed(buildProvidersCustomId("edit-endpoint-submit", "en-US", 73, "abcdefgh"))),
-    ).toEqual({ action: "edit-endpoint-submit", locale: "en-US", connectionId: 73, nonce: "abcdefgh" });
-    expect(
-      parseProvidersPanelRoute(parsed(buildProvidersCustomId("remove-confirm", "en-US", "provider", "google"))),
-    ).toEqual({ action: "remove-confirm", locale: "en-US", entryKind: "provider", entryKey: "google" });
-    expect(
-      parseProvidersPanelRoute(parsed(buildProvidersCustomId("remove-prompt", "en-US", "brave", "brave"))),
-    ).toEqual({ action: "remove-prompt", locale: "en-US", entryKind: "brave", entryKey: "brave" });
-  });
-
   it("opens Edit Provider directly with the provider-scoped rotation count", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomId("edit-provider-open", "en-US", "google", 2);
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "edit-provider-open",
+      locale: "en-US",
+      provider: "google",
+      rotationKeyCount: 2,
+    });
     const interaction = {
       customId,
       guildId: "123",
@@ -241,7 +549,11 @@ describe("providers routes", () => {
         ],
       },
     };
-    const customId = buildProvidersCustomId("edit-endpoint-open", "en-US", 73);
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "edit-endpoint-open",
+      locale: "en-US",
+      connectionId: 73,
+    });
     const interaction = {
       customId,
       guildId: "123",
@@ -268,7 +580,12 @@ describe("providers routes", () => {
 
   it("reauthorizes, writes, and reloads after Edit Provider submit", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomId("edit-provider-submit", "en-US", "google", "abcdefgh");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "edit-provider-submit",
+      locale: "en-US",
+      provider: "google",
+      nonce: "abcdefgh",
+    });
     const interaction = {
       id: "interaction",
       customId,
@@ -304,7 +621,12 @@ describe("providers routes", () => {
 
   it("reauthorizes and re-resolves the target after destructive confirmation", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomId("remove-confirm", "en-US", "provider", "google");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "remove-confirm",
+      locale: "en-US",
+      entryKind: "provider",
+      entryKey: "google",
+    });
     const interaction = {
       customId,
       guildId: "123",
@@ -336,7 +658,7 @@ describe("providers routes", () => {
   it("opens Add New Provider as the select acknowledgement without deferring", async () => {
     const calls: string[] = [];
     const interaction = {
-      customId: buildProvidersCustomId("select", "en-US"),
+      customId: buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, { action: "select", locale: "en-US" }),
       guildId: "123",
       user: { id: "456" },
       memberPermissions: { has: () => true },
@@ -362,7 +684,11 @@ describe("providers routes", () => {
 
   it("reauthorizes and auto-repaints after an Add Provider modal write", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomId("add-submit", "en-US", "abcdefgh");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "add-submit",
+      locale: "en-US",
+      nonce: "abcdefgh",
+    });
     const interaction = {
       id: "interaction",
       customId,
@@ -405,7 +731,7 @@ describe("providers routes", () => {
 
   it("opens Add New Custom Endpoint directly without deferring", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomId("select", "en-US");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, { action: "select", locale: "en-US" });
     const interaction = {
       customId,
       guildId: "123",
@@ -429,7 +755,12 @@ describe("providers routes", () => {
 
   it("opens a selected model modal as the interaction acknowledgement", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomId("model-select", "en-US", "provider", "google");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-select",
+      locale: "en-US",
+      entryKind: "provider",
+      entryKey: "google",
+    });
     const interaction = {
       customId,
       guildId: "123",
@@ -456,7 +787,6 @@ describe("providers routes", () => {
 
     await route.execute({} as Client, interaction as never, parsed(customId));
 
-    // The cached read precedes the modal, but the modal is still the acknowledgement: no deferral.
     expect(calls).toEqual(["load", "show:text:91"]);
     expect(openedWith).toEqual({
       codeName: "google/gemini-example",
@@ -473,7 +803,15 @@ describe("providers routes", () => {
 
   it("reloads scope before and after a model submit", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomId("model-submit", "en-US", "provider", "google", "text", 0, "abcdefgh");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-submit",
+      locale: "en-US",
+      entryKind: "provider",
+      entryKey: "google",
+      capability: "text",
+      editingModelId: null,
+      nonce: "abcdefgh",
+    });
     const interaction = {
       id: "interaction",
       customId,
@@ -516,7 +854,12 @@ describe("providers routes", () => {
 
   it("carries stored image capabilities into the edit modal it opens as the acknowledgement", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomId("model-select", "en-US", "endpoint", "73");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-select",
+      locale: "en-US",
+      entryKind: "endpoint",
+      entryKey: "73",
+    });
     const interaction = {
       customId,
       guildId: "123",
@@ -589,7 +932,15 @@ describe("providers routes", () => {
 
   it("passes submitted image capability values through to the model write", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomId("model-submit", "en-US", "endpoint", 73, "image", 0, "abcdefgh");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-submit",
+      locale: "en-US",
+      entryKind: "endpoint",
+      entryKey: "73",
+      capability: "image",
+      editingModelId: null,
+      nonce: "abcdefgh",
+    });
     const interaction = {
       id: "interaction",
       customId,
@@ -644,8 +995,9 @@ describe("providers routes", () => {
 
   it("acknowledges selection before loading and performs no write", async () => {
     const calls: string[] = [];
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, { action: "select", locale: "en-US" });
     const interaction = {
-      customId: buildProvidersCustomId("select", "en-US"),
+      customId,
       guildId: "123",
       user: { id: "456" },
       memberPermissions: { has: () => true },
@@ -709,7 +1061,15 @@ describe("providers routes", () => {
         initialEntryId: "provider:openrouter",
       },
     };
-    const customId = buildProvidersCustomId("model-submit", "en-US", "provider", "openrouter", "text", 91, "abcdefgh");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-submit",
+      locale: "en-US",
+      entryKind: "provider",
+      entryKey: "openrouter",
+      capability: "text",
+      editingModelId: 91,
+      nonce: "abcdefgh",
+    });
     const interaction = {
       id: "interaction",
       customId,
@@ -725,7 +1085,6 @@ describe("providers routes", () => {
     };
     const route = createProvidersInteractionRoute({
       takeModelFlags: () => ["tools"],
-      // OpenRouter never renders the compatibility group, so nothing is submitted for it.
       takeCompatFlags: () => undefined,
       takeWorkflow: () => undefined,
       resolveScope: async () => editedScope,
@@ -746,7 +1105,15 @@ describe("providers routes", () => {
 
   it("writes an offered compatibility flag exactly as the group was submitted", async () => {
     const written: Array<Record<string, unknown>> = [];
-    const customId = buildProvidersCustomId("model-submit", "en-US", "endpoint", 73, "text", 0, "abcdefgh");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-submit",
+      locale: "en-US",
+      entryKind: "endpoint",
+      entryKey: "73",
+      capability: "text",
+      editingModelId: null,
+      nonce: "abcdefgh",
+    });
     const interaction = {
       id: "interaction",
       customId,
@@ -806,7 +1173,12 @@ describe("providers routes", () => {
   it("prefills the speech modal from the stored endpoint settings it opens with", async () => {
     const calls: string[] = [];
     let openedWith: unknown;
-    const customId = buildProvidersCustomId("model-select", "en-US", "endpoint", "73");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-select",
+      locale: "en-US",
+      entryKind: "endpoint",
+      entryKey: "73",
+    });
     const interaction = {
       customId,
       guildId: "123",
@@ -883,7 +1255,15 @@ describe("providers routes", () => {
   it("carries the speech modal's stored behavior fields into the model write", async () => {
     const calls: string[] = [];
     let written: Record<string, unknown> | undefined;
-    const customId = buildProvidersCustomId("model-submit", "en-US", "endpoint", 73, "speech", 0, "abcdefgh");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-submit",
+      locale: "en-US",
+      entryKind: "endpoint",
+      entryKey: "73",
+      capability: "speech",
+      editingModelId: null,
+      nonce: "abcdefgh",
+    });
     const interaction = {
       id: "interaction",
       customId,
@@ -950,7 +1330,12 @@ describe("providers routes", () => {
 
   it("refuses a stale add option for a capability the entry no longer exposes", async () => {
     const calls: string[] = [];
-    const customId = buildProvidersCustomId("model-select", "en-US", "endpoint", "73");
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-select",
+      locale: "en-US",
+      entryKind: "endpoint",
+      entryKey: "73",
+    });
     const replies: unknown[] = [];
     const interaction = {
       customId,
@@ -1040,7 +1425,13 @@ describe("providers routes", () => {
       },
     };
     const payloads: unknown[] = [];
-    const customId = buildProvidersCustomId("model-range", "en-US", "provider", "google", 1);
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-range",
+      locale: "en-US",
+      entryKind: "provider",
+      entryKey: "google",
+      rangeIndex: 1,
+    });
     const interaction = {
       customId,
       guildId: "123",
@@ -1075,7 +1466,6 @@ describe("providers routes", () => {
     expect(rendered).toContain('"default":true');
     expect(rendered).toContain("edit:text:20");
     expect(rendered).not.toContain('edit:text:1"');
-    // The models live on the entry page now, so its own actions render alongside them.
     expect(rendered).toContain("Remove Provider");
   });
 
@@ -1106,8 +1496,12 @@ describe("providers routes", () => {
       editReply: async (payload: unknown) => payloads.push(payload),
     });
     const route = createProvidersInteractionRoute({ resolveScope: async () => oversizedScope });
-    const openId = buildProvidersCustomId("range-open", "en-US");
-    const selectId = buildProvidersCustomId("range", "en-US", 1);
+    const openId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, { action: "range-open", locale: "en-US" });
+    const selectId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "range",
+      locale: "en-US",
+      rangeIndex: 1,
+    });
 
     await route.execute({} as Client, interaction(openId) as never, parsed(openId));
     await route.execute({} as Client, interaction(selectId) as never, parsed(selectId));
@@ -1120,8 +1514,9 @@ describe("providers routes", () => {
 
   it("rechecks guild permission before loading current scope", async () => {
     const calls: string[] = [];
+    const customId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, { action: "retry", locale: "en-US" });
     const interaction = {
-      customId: buildProvidersCustomId("retry", "en-US"),
+      customId,
       guildId: "123",
       user: { id: "456" },
       memberPermissions: { has: () => false },
@@ -1162,7 +1557,11 @@ describe("providers routes", () => {
     };
 
     // Add provider (server scope)
-    const addCustomId = buildProvidersCustomId("add-submit", "en-US", "nonce-12345678");
+    const addCustomId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "add-submit",
+      locale: "en-US",
+      nonce: "nonce-12345678",
+    });
     const addInteraction = {
       id: "interaction-add",
       customId: addCustomId,
@@ -1194,13 +1593,12 @@ describe("providers routes", () => {
       ownerId: 77,
       routeNamespace: PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
     };
-    const removeCustomId = buildProvidersCustomIdForNamespace(
-      PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
-      "remove-confirm",
-      "en-US",
-      "provider",
-      "google",
-    );
+    const removeCustomId = buildProvidersRouteId(PERSONAL_PROVIDERS_ROUTE_NAMESPACE, {
+      action: "remove-confirm",
+      locale: "en-US",
+      entryKind: "provider",
+      entryKey: "google",
+    });
     const removeInteraction = {
       customId: removeCustomId,
       guildId: "123",
@@ -1231,7 +1629,11 @@ describe("providers routes", () => {
     expect(recorded).toContain("providers.personal.entry.remove:42:user-456");
 
     // Endpoint add (server scope)
-    const endpointAddCustomId = buildProvidersCustomId("endpoint-submit", "en-US", "nonce-12345678");
+    const endpointAddCustomId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "endpoint-submit",
+      locale: "en-US",
+      nonce: "nonce-12345678",
+    });
     const endpointAddInteraction = {
       id: "interaction-endpoint-add",
       customId: endpointAddCustomId,
@@ -1259,16 +1661,15 @@ describe("providers routes", () => {
     expect(recorded).toContain("providers.workspace.endpoint.add:42:user-456");
 
     // Model save (personal scope)
-    const modelSaveCustomId = buildProvidersCustomIdForNamespace(
-      PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
-      "model-submit",
-      "en-US",
-      "provider",
-      "google",
-      "text",
-      "0",
-      "nonce-12345678",
-    );
+    const modelSaveCustomId = buildProvidersRouteId(PERSONAL_PROVIDERS_ROUTE_NAMESPACE, {
+      action: "model-submit",
+      locale: "en-US",
+      entryKind: "provider",
+      entryKey: "google",
+      capability: "text",
+      editingModelId: null,
+      nonce: "nonce-12345678",
+    });
     const modelSaveInteraction = {
       id: "interaction-model-save",
       customId: modelSaveCustomId,
