@@ -4,10 +4,12 @@ import type { ButtonInteraction, Client, InteractionReplyOptions, ModalSubmitInt
 import { PrivacyLevel, type UserRow, type TomoriState } from "@/types/db/schema";
 import {
   createPersonalConfigInteractionRoute,
-  personalConfigOperations,
-  type PersonalConfigOperations,
   type PersonalConfigRouteDependencies,
 } from "@/utils/discord/interactions/personalConfigRoutes";
+import {
+  personalConfigOperations,
+  type PersonalConfigOperations,
+} from "@/utils/discord/interactions/personalConfigOperations";
 import { llmModelRepo, llmProviderRepo, userNamingRepository, userRepository } from "@/utils/db/repositories";
 import {
   buildPersonalConfigRouteId,
