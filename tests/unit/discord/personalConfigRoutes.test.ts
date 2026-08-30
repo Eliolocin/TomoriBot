@@ -48,6 +48,13 @@ function makeChannelCache(channelIds: string[]): Map<string, { type: number; nam
   return new Map(channelIds.map((id) => [id, { type: 0, name: `channel-${id.slice(-4)}` }]));
 }
 
+/**
+ * Every source file that compares `route.action`. The handler-parity gate unions their matches, so a
+ * slice that moves handler branches into a new module adds its path here instead of editing the
+ * assertion it would otherwise have to weaken.
+ */
+const PERSONAL_CONFIG_HANDLER_SOURCES = ["src/utils/discord/interactions/personalConfigRoutes.ts"] as const;
+
 function requireRoute(customId: string): ParsedInteractionRoute {
   const parsed = parseInteractionRoute(customId);
   if (!parsed) throw new Error(`Failed to parse route for customId: ${customId}`);
@@ -981,10 +988,13 @@ describe("personalConfigPanelCatalog", () => {
       new URL("../../../src/utils/discord/personalConfigPanelCatalog.ts", import.meta.url),
       "utf8",
     );
-    const union = source.slice(
-      source.indexOf("export type PersonalConfigPanelRoute"),
-      source.indexOf("const WIRE_ACTION_TOKENS"),
-    );
+    const unionStart = source.indexOf("export type PersonalConfigPanelRoute");
+    const unionEnd = source.indexOf("export type PersonalConfigAction");
+    // A missing anchor makes indexOf return -1, which slice() silently accepts as an offset from the
+    // end, so the gate would keep passing over the wrong span. Fail on the anchor instead.
+    expect(unionStart).toBeGreaterThanOrEqual(0);
+    expect(unionEnd).toBeGreaterThan(unionStart);
+    const union = source.slice(unionStart, unionEnd);
     const declared = new Set(
       [...union.matchAll(/action: "([a-z0-9-]+)"(?:\s*\|\s*"([a-z0-9-]+)")?/g)].flatMap((m) =>
         [m[1], m[2]].filter((v): v is string => Boolean(v)),
@@ -1242,19 +1252,25 @@ describe("personalConfigPanelCatalog", () => {
       new URL("../../../src/utils/discord/personalConfigPanelCatalog.ts", import.meta.url),
       "utf8",
     );
-    const routesSource = readFileSync(
-      new URL("../../../src/utils/discord/interactions/personalConfigRoutes.ts", import.meta.url),
-      "utf8",
-    );
+    const handlerSources = PERSONAL_CONFIG_HANDLER_SOURCES.map((relativePath) => {
+      const source = readFileSync(new URL(`../../../${relativePath}`, import.meta.url), "utf8");
+      expect(source.length).toBeGreaterThan(0);
+      return source;
+    });
 
-    const tableBlock = catalogSource.slice(
-      catalogSource.indexOf("export const PERSONAL_CONFIG_ROUTE_CODECS"),
-      catalogSource.indexOf("const CODECS_BY_WIRE_TOKEN"),
-    );
+    const tableStart = catalogSource.indexOf("export const PERSONAL_CONFIG_ROUTE_CODECS");
+    const tableEnd = catalogSource.indexOf("const CODECS_BY_WIRE_TOKEN");
+    // A missing anchor makes indexOf return -1, which slice() silently accepts as an offset from the
+    // end, so the gate would keep passing over the wrong span. Fail on the anchor instead.
+    expect(tableStart).toBeGreaterThanOrEqual(0);
+    expect(tableEnd).toBeGreaterThan(tableStart);
+    const tableBlock = catalogSource.slice(tableStart, tableEnd);
     const tableActions = new Set(
       [...tableBlock.matchAll(/^\s*(?:"([a-z0-9-]+)"|([a-z0-9-]+)):\s*\{/gm)].map((m) => m[1] ?? m[2]),
     );
-    const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
+    const handlerActions = new Set(
+      handlerSources.flatMap((source) => [...source.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1])),
+    );
 
     expect(tableActions.size).toBe(64);
     expect(handlerActions.size).toBe(64);
