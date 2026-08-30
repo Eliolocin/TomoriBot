@@ -103,7 +103,7 @@ credential and never reads or writes server rotation rows.
 Primary files:
 - `src/commands/personal/config.ts`
 - `src/utils/discord/ui/personalConfigPanel.ts`
-- `src/utils/discord/interactions/personalConfigRoutes.ts`
+- `src/utils/discord/interactions/personalConfigRoutes.ts` and its extracted handler modules
 - `src/events/messageCreate/tomoriChat.ts`
 - `src/utils/text/contextBuilder.ts`
 - `src/utils/db/repositories/UserRepository.ts`

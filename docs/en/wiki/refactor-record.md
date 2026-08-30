@@ -324,7 +324,7 @@ Records where cache invalidation lives after the repository migration. All inval
 
 | Cache | Call sites | Reason |
 |---|---|---|
-| Personal spotlight | `src/utils/discord/interactions/personalConfigRoutes.ts` | Panel routes retain caller-owned writes and post-write invalidation unless they later move under a repository |
+| Personal spotlight | `src/utils/discord/interactions/personalConfigSpotlightRoutes.ts` | Panel routes retain caller-owned writes and post-write invalidation unless they later move under a repository |
 | ST preset cache | `src/utils/db/stPresetDb.ts` (now `PresetRepository`) | Write-after-success placement preserved during fold |
 | Emoji/sticker cache | `src/events/guildEmojisUpdate/refreshEmojis.ts`, `guildStickersUpdate/refreshStickers.ts` | Event-driven cache; invalidation follows Discord events, not DB writes |
 | Matrix link cache | `src/commands/matrix/link.ts`, `unlink.ts` | Matrix bridge module - not part of the repository layer |

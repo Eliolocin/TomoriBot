@@ -333,7 +333,7 @@ The gate also avoids real database work, not just a `Map` write:
 `SELECT`, so every miss was costing a write plus a `LEFT JOIN`.
 
 `invalidatePersonalSpotlightCache` drops the gate alongside matching triple keys. The spotlight
-write routes in `utils/discord/interactions/personalConfigRoutes.ts` already call it, so a server's
+write routes in `utils/discord/interactions/personalConfigSpotlightRoutes.ts` already call it, so a server's
 first spotlight takes effect immediately rather than after the TTL. **Any new write path must call
 it too**, or the gate will keep answering "none" for up to the TTL.
 
