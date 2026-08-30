@@ -56,6 +56,7 @@ const PERSONAL_CONFIG_HANDLER_SOURCES = [
   "src/utils/discord/interactions/personalConfigRoutes.ts",
   "src/utils/discord/interactions/personalConfigModalOpenRoutes.ts",
   "src/utils/discord/interactions/personalConfigNavigationRoutes.ts",
+  "src/utils/discord/interactions/personalConfigProfileRoutes.ts",
 ] as const;
 
 function requireRoute(customId: string): ParsedInteractionRoute {
@@ -6242,5 +6243,84 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
       expect(deferred).toBe(false);
       expect(replied).toBe(false);
     }
+  });
+
+  it("proves post-defer write handlers repaint with refreshed scope after database writes", async () => {
+    const calls: string[] = [];
+    let resolveCount = 0;
+    let capturedPayload: unknown = null;
+
+    const initialUser = makeUser({ user_nickname: "InitialNick" });
+    const refreshedUser = makeUser({ user_nickname: "RefreshedNick" });
+
+    const { dependencies } = makeDependencies(calls, {
+      resolveScope: async (_interaction, forceRefresh) => {
+        resolveCount++;
+        const currentUser = forceRefresh ? refreshedUser : initialUser;
+        return {
+          userId: currentUser.user_id,
+          userDiscId: currentUser.user_disc_id,
+          guildId: "guild-123",
+          workspaceId: "guild-123",
+          internalServerId: 42,
+          user: currentUser,
+          resolvedNickname: currentUser.user_nickname ?? "LiveUser",
+          personas: [],
+          readStatus: {
+            is_active: true,
+            model_name: "test-model",
+            read_status_model_name: "test-model",
+            is_bot_blocked: false,
+          },
+        };
+      },
+      operations: {
+        ...personalConfigOperations,
+        setNaming: async (input) => {
+          calls.push(`setNaming:${input.nickname}`);
+          return { status: "success" };
+        },
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigRouteId({ action: "naming-submit", locale: "en-US", nonce: "nonce123456" });
+
+    let deferred = false;
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => true,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return deferred;
+      },
+      get replied() {
+        return false;
+      },
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async (payload: unknown) => {
+        capturedPayload = payload;
+      },
+      fields: {
+        getTextInputValue: (fieldId: string) => {
+          if (fieldId.startsWith("nickname_")) return "RefreshedNick";
+          return "";
+        },
+      },
+    } as unknown as ModalSubmitInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(calls).toContain("setNaming:RefreshedNick");
+    expect(resolveCount).toBeGreaterThanOrEqual(2);
+    expect(capturedPayload).not.toBeNull();
+    const renderedText = JSON.stringify(capturedPayload);
+    expect(renderedText).toContain("RefreshedNick");
+    expect(renderedText).not.toContain("InitialNick");
   });
 });
