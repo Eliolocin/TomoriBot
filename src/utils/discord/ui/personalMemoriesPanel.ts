@@ -26,26 +26,17 @@ import {
   buildCategoryButtonRow,
   buildPanelContainer,
   buildPanelReceiptContainer,
+  buildRangeNavigationRows,
   buildRangeChooserComponents,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
 import { localizer } from "@/utils/text/localizer";
+import { personaRepresentativeForLineage } from "@/utils/persona/lineage";
 
 const MAX_PERSONAL_MEMORY_PAGE_SIZE = 24;
 const PERSONA_SELECT_MAX_OPTIONS = 25;
-
-/**
- * The persona that stands for a whole lineage in the selector.
- *
- * Shared by the option label and the header thumbnail so the name and the face always describe
- * the same persona. A non-alter member wins because it is the one the lineage is named after.
- */
-export function personaRepresentativeForLineage(personas: TomoriState[], lineageId: number): TomoriState | null {
-  const sharing = personas.filter((persona) => persona.persona_lineage_id === lineageId);
-  return sharing.find((persona) => !persona.is_alter) ?? sharing[0] ?? null;
-}
 
 /**
  * Renders one memory as a fenced block so it reads as content rather than panel prose.
@@ -489,17 +480,37 @@ ${localizer(locale, "commands.personal.memories.selector_guidance")}`,
     components.push(selectRow);
 
     if (rangeSelection.rangeCount > 1) {
-      components.push({
-        type: ComponentType.ActionRow,
-        components: [
-          {
+      components.push(
+        ...buildRangeNavigationRows({
+          totalCount: memories.length,
+          pageSize: MAX_PERSONAL_MEMORY_PAGE_SIZE,
+          activeRangeIndex: rangeSelection.rangeIndex,
+          locale,
+          namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+          version: PERSONAL_MEMORIES_ROUTE_VERSION,
+          buildSegments: {
+            range: (rangeIndex) =>
+              buildPersonalMemoriesRouteSegments({
+                action: "range",
+                locale,
+                category: "global",
+                lineageId: 0,
+                rangeIndex,
+              }),
+          },
+          overflowButton: {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildPersonalMemoriesRouteId({ action: "range-open", locale, category: "global", lineageId: 0 }),
+            customId: buildPersonalMemoriesRouteId({
+              action: "range-open",
+              locale,
+              category: "global",
+              lineageId: 0,
+            }),
             label: localizer(locale, "general.pagination.select_page_title"),
           },
-        ],
-      });
+        }),
+      );
     }
 
     if (selectedMemory) {
@@ -705,10 +716,25 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
       components.push(selectRow);
 
       if (rangeSelection.rangeCount > 1) {
-        components.push({
-          type: ComponentType.ActionRow,
-          components: [
-            {
+        components.push(
+          ...buildRangeNavigationRows({
+            totalCount: memories.length,
+            pageSize: MAX_PERSONAL_MEMORY_PAGE_SIZE,
+            activeRangeIndex: rangeSelection.rangeIndex,
+            locale,
+            namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+            version: PERSONAL_MEMORIES_ROUTE_VERSION,
+            buildSegments: {
+              range: (rangeIndex) =>
+                buildPersonalMemoriesRouteSegments({
+                  action: "range",
+                  locale,
+                  category: "persona",
+                  lineageId: selectedLineageId,
+                  rangeIndex,
+                }),
+            },
+            overflowButton: {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
               customId: buildPersonalMemoriesRouteId({
@@ -719,8 +745,8 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
               }),
               label: localizer(locale, "general.pagination.select_page_title"),
             },
-          ],
-        });
+          }),
+        );
       }
 
       if (selectedMemory) {

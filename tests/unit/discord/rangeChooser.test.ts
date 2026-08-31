@@ -14,6 +14,7 @@ import {
   buildPanelContainer,
   buildPanelReceiptContainer,
   buildRangeChooserComponents,
+  buildRangeNavigationRows,
   type RangeChooserRouteSegments,
 } from "@/utils/discord/ui/panel";
 import { initializeLocalizer } from "@/utils/text/localizer";
@@ -199,6 +200,36 @@ describe("buildRangeChooserComponents rendering", () => {
     expect(prevOne.disabled).toBe(false);
     expect(cancelOne.label).toBe("Cancel");
     expect(nextOne.disabled).toBe(true);
+  });
+});
+
+describe("buildRangeNavigationRows rendering", () => {
+  const baseOptions = {
+    locale: "en-US",
+    pageSize: 24,
+    activeRangeIndex: 0,
+    namespace: "test",
+    version: "v1",
+    baseSegments: ["items"],
+    overflowButton: {
+      type: ComponentType.Button as const,
+      style: ButtonStyle.Secondary,
+      customId: "open-chooser",
+      label: "Select Page",
+    },
+  };
+
+  it("renders up to five ranges directly", () => {
+    const rows = buildRangeNavigationRows({ ...baseOptions, totalCount: 100 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.components.map((button) => button.label)).toEqual(["1-24", "25-48", "49-72", "73-96", "97-100"]);
+    expect(rows[0]?.components[0]?.disabled).toBe(true);
+  });
+
+  it("uses the chooser beyond five ranges", () => {
+    const rows = buildRangeNavigationRows({ ...baseOptions, totalCount: 121 });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.components).toEqual([baseOptions.overflowButton]);
   });
 });
 

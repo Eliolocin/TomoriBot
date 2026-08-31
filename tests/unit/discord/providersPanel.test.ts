@@ -332,7 +332,9 @@ describe("providers panel rendering", () => {
 
     expect((firstSelect?.options as unknown[])?.length).toBe(25);
     expect((secondSelect?.options as unknown[])?.length).toBe(3);
-    expect(JSON.stringify(firstPage)).toContain("providers:v1:range-open:en-US");
+    expect(JSON.stringify(firstPage)).toContain('"label":"1-23"');
+    expect(JSON.stringify(firstPage)).toContain('"label":"24-24"');
+    expect(JSON.stringify(firstPage)).not.toContain("providers:v1:range-open:en-US");
     expect(JSON.stringify(secondPage)).toContain("Provider 23");
 
     const chooser = buildProvidersPanelPayload({
@@ -347,6 +349,20 @@ describe("providers panel rendering", () => {
     expect(chooserJson).toContain('"label":"1-23"');
     expect(chooserJson).toContain('"label":"24-24"');
     expect(chooserJson).toContain("providers:v1:range-cancel:en-US");
+  });
+
+  it("retains the page chooser when saved entries need more than one button row", () => {
+    const entries = Array.from({ length: 116 }, (_, index) => providerEntry(`provider:p${index}`, `Provider ${index}`));
+    const payload = buildProvidersPanelPayload({
+      locale: "en-US",
+      entries,
+      initialEntryId: entries[0]?.id ?? null,
+      readStatus: "fresh",
+      page: { kind: "entry" },
+      rangeIndex: 0,
+    });
+
+    expect(JSON.stringify(payload)).toContain("providers:v1:range-open:en-US");
   });
 
   it("opens the selector range containing the initial active entry", () => {

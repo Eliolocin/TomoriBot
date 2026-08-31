@@ -6,7 +6,6 @@ import type { GlobalInteractionRoute } from "@/utils/discord/interactions/routeR
 import { beginPanelInteraction } from "@/utils/discord/interactions/panelController";
 import {
   getMemoryCount,
-  getPersonaAvatarUrl,
   getStmCount,
   loadAvailableModelsForCapability,
   loadPersonalModelDisplayInfo,
@@ -43,6 +42,7 @@ import {
 import { buildPersonalConfigPanelPayload } from "@/utils/discord/ui/personalConfigPanel";
 import { showRoutedRawModal } from "@/utils/discord/ui/modals";
 import { recordPanelActionStat } from "@/utils/stats/panelActionMetrics";
+import { resolvePersonaPanelAvatar, withPersonaPanelAvatar } from "@/utils/discord/personaPanelAvatar";
 import {
   terminalPayload,
   type PersonalConfigPostDeferContext,
@@ -58,7 +58,7 @@ import { handlePersonalConfigSpotlightRoutes } from "@/utils/discord/interaction
 const defaultDependencies: PersonalConfigRouteDependencies = {
   resolveScope,
   loadPersonaNamingPreference,
-  getPersonaAvatarUrl,
+  getPersonaAvatarData: resolvePersonaPanelAvatar,
   getMemoryCount,
   getStmCount,
   loadUserSavedProviders,
@@ -229,18 +229,20 @@ export async function buildInitialPersonalConfigPanel(
   if (!scope) {
     return terminalPayload(locale, "commands.personal.config.unavailable") as PersonalConfigPanelPayloadOrTerminal;
   }
-  return buildPersonalConfigPanelPayload({
-    locale,
-    category: "profile",
-    page: "general",
-    user: scope.user,
-    resolvedNickname: scope.resolvedNickname,
-    personas: scope.personas,
-    guildId: scope.guildId,
-    // Only the privacy page renders these, and the panel always opens on profile, so the counts are
-    // never read here. Changing the opening category means fetching them, as `repaint` does.
-    memoryCount: 0,
-    stmCount: 0,
-    readStatus: scope.readStatus,
-  });
+  return withPersonaPanelAvatar(
+    buildPersonalConfigPanelPayload({
+      locale,
+      category: "profile",
+      page: "general",
+      user: scope.user,
+      resolvedNickname: scope.resolvedNickname,
+      personas: scope.personas,
+      guildId: scope.guildId,
+      // Only the privacy page renders these, and the panel always opens on profile, so the counts are
+      // never read here. Changing the opening category means fetching them, as `repaint` does.
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: scope.readStatus,
+    }),
+  );
 }

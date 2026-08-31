@@ -28,8 +28,10 @@ import {
   type PersonalConfigPanelView,
   type PersonalConfigSpotlightDisplayInfo,
 } from "@/utils/discord/ui/personalConfigPanel";
+import { type PersonaPanelAvatarData, withPersonaPanelAvatar } from "@/utils/discord/personaPanelAvatar";
 import type { RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
+import { personaRepresentativeForLineage } from "@/utils/persona/lineage";
 
 export interface PersonalConfigRouteDependencies {
   resolveScope(
@@ -37,10 +39,10 @@ export interface PersonalConfigRouteDependencies {
     forceRefresh?: boolean,
   ): Promise<PersonalConfigScope | null>;
   loadPersonaNamingPreference(userId: number, lineageId: number): Promise<UserPersonaNamingPreference | null>;
-  getPersonaAvatarUrl(
+  getPersonaAvatarData(
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
     persona: TomoriState,
-  ): Promise<string | null>;
+  ): Promise<PersonaPanelAvatarData>;
   getMemoryCount(userId: number): Promise<number>;
   getStmCount(userDiscId: string): Promise<number>;
   loadUserSavedProviders(userId: number): Promise<UserSavedProviderConfigRow[]>;
@@ -197,6 +199,7 @@ export function terminalPayload(locale: string, key: string): InteractionEditRep
         },
       ]),
     ],
+    attachments: [],
     flags: MessageFlags.IsComponentsV2,
   };
 }
@@ -243,15 +246,14 @@ export async function repaint(
     view,
   } = options;
   let personaPref: UserPersonaNamingPreference | null = null;
-  let selectedPersonaAvatarUrl: string | null | undefined;
+  let selectedPersonaAvatar: PersonaPanelAvatarData | undefined;
   if (category === "profile" && page === "persona") {
     const currentLineage = selectedLineageId ?? scope.personas[0]?.persona_lineage_id;
     if (currentLineage) {
       personaPref = await dependencies.loadPersonaNamingPreference(scope.userId, currentLineage);
-      const sharing = scope.personas.filter((persona) => persona.persona_lineage_id === currentLineage);
-      const representative = sharing.find((persona) => !persona.is_alter) ?? sharing[0];
-      selectedPersonaAvatarUrl = representative
-        ? await dependencies.getPersonaAvatarUrl(interaction, representative)
+      const representative = personaRepresentativeForLineage(scope.personas, currentLineage);
+      selectedPersonaAvatar = representative
+        ? await dependencies.getPersonaAvatarData(interaction, representative)
         : undefined;
     }
   }
@@ -289,30 +291,33 @@ export async function repaint(
   }
 
   await interaction.editReply(
-    buildPersonalConfigPanelPayload({
-      locale,
-      category,
-      page,
-      user: scope.user,
-      resolvedNickname: scope.resolvedNickname,
-      personas: scope.personas,
-      guildId: scope.guildId,
-      selectedLineageId,
-      selectedPersonaAvatarUrl,
-      personaNamingPreference: personaPref,
-      memoryCount,
-      stmCount,
-      readStatus: scope.readStatus,
-      receipt: panelReceipt,
-      savedProviders,
-      selectedCapability,
-      selectedParametersProvider,
-      selectedFallbacksProvider,
-      modelDisplayInfo,
-      spotlightDisplayInfo,
-      serverTriggerBehavior,
-      view,
-    }),
+    withPersonaPanelAvatar(
+      buildPersonalConfigPanelPayload({
+        locale,
+        category,
+        page,
+        user: scope.user,
+        resolvedNickname: scope.resolvedNickname,
+        personas: scope.personas,
+        guildId: scope.guildId,
+        selectedLineageId,
+        selectedPersonaAvatarUrl: selectedPersonaAvatar?.url,
+        personaNamingPreference: personaPref,
+        memoryCount,
+        stmCount,
+        readStatus: scope.readStatus,
+        receipt: panelReceipt,
+        savedProviders,
+        selectedCapability,
+        selectedParametersProvider,
+        selectedFallbacksProvider,
+        modelDisplayInfo,
+        spotlightDisplayInfo,
+        serverTriggerBehavior,
+        view,
+      }),
+      selectedPersonaAvatar,
+    ),
   );
 }
 

@@ -32,9 +32,13 @@ import {
   buildPersonalMemoriesPanelPayload,
   buildPersonalMemoryModalFieldId,
   parsePersonalMemoryTags,
-  personaRepresentativeForLineage,
 } from "@/utils/discord/ui/personalMemoriesPanel";
-import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
+import { personaRepresentativeForLineage } from "@/utils/persona/lineage";
+import {
+  type PersonaPanelAvatarData,
+  resolvePersonaPanelAvatar,
+  withPersonaPanelAvatar,
+} from "@/utils/discord/personaPanelAvatar";
 import { showRoutedRawModal, takeRawModalFileUpload } from "@/utils/discord/ui/modals";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
 import { getMemoryLimits, validateMemoryContent } from "@/utils/misc/memoryLimits";
@@ -111,10 +115,10 @@ export interface PersonalMemoriesRouteDependencies {
   ): Promise<PersonalMemoriesScope | null>;
   loadMemories(userId: number, lineageId: number): Promise<PersonalMemoryRow[]>;
   getMemoryCountsByLineage(userId: number): Promise<Map<number, number>>;
-  getPersonaAvatarUrl(
+  getPersonaAvatarData(
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
     persona: TomoriState,
-  ): Promise<string | null>;
+  ): Promise<PersonaPanelAvatarData>;
   getStmCount(userDiscId: string): Promise<number>;
   operations: PersonalMemoriesOperations;
   recordAction(input: RecordPanelActionInput): void;
@@ -267,6 +271,7 @@ function terminalPayload(locale: string, key: string): InteractionEditReplyOptio
         },
       ]),
     ],
+    attachments: [],
     flags: MessageFlags.IsComponentsV2,
   };
 }
@@ -318,28 +323,6 @@ async function loadMemories(userId: number, lineageId: number): Promise<Personal
 
 function getMemoryCountsByLineage(userId: number): Promise<Map<number, number>> {
   return personalMemoryRepository.memoryCountsByLineage(userId);
-}
-
-/**
- * Avatar URL for one persona, or null when none is fetchable.
- *
- * A main persona has no stored avatar: it speaks as the bot, so its face is the bot's per-guild
- * member avatar, which only the client knows. A local-path alter avatar resolves to null rather
- * than a data URI, because a Components V2 Thumbnail can only load a URL Discord can fetch.
- */
-async function getPersonaAvatarUrl(
-  interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
-  persona: TomoriState,
-): Promise<string | null> {
-  if (persona.is_alter) {
-    return resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url);
-  }
-  const avatarOptions = { size: 256, extension: "png", forceStatic: true } as const;
-  return (
-    interaction.guild?.members.me?.displayAvatarURL(avatarOptions) ??
-    interaction.client.user?.displayAvatarURL(avatarOptions) ??
-    resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url)
-  );
 }
 
 async function getStmCount(userDiscId: string): Promise<number> {
@@ -404,24 +387,27 @@ async function repaint(
     category === "persona" ? await dependencies.getMemoryCountsByLineage(scope.userId) : undefined;
   const representative =
     category === "persona" ? personaRepresentativeForLineage(scope.personas, selectedLineageId) : null;
-  const selectedPersonaAvatarUrl = representative
-    ? await dependencies.getPersonaAvatarUrl(interaction, representative)
+  const selectedPersonaAvatar = representative
+    ? await dependencies.getPersonaAvatarData(interaction, representative)
     : undefined;
   await interaction.editReply(
-    buildPersonalMemoriesPanelPayload({
-      locale,
-      category,
-      selectedLineageId,
-      personas: scope.personas,
-      memories,
-      memoryCountsByLineage,
-      selectedPersonaAvatarUrl,
-      stmCount,
-      privacyLevel: scope.privacyLevel,
-      readStatus: scope.readStatus,
-      page,
-      receipt: panelReceipt,
-    }),
+    withPersonaPanelAvatar(
+      buildPersonalMemoriesPanelPayload({
+        locale,
+        category,
+        selectedLineageId,
+        personas: scope.personas,
+        memories,
+        memoryCountsByLineage,
+        selectedPersonaAvatarUrl: selectedPersonaAvatar?.url,
+        stmCount,
+        privacyLevel: scope.privacyLevel,
+        readStatus: scope.readStatus,
+        page,
+        receipt: panelReceipt,
+      }),
+      selectedPersonaAvatar,
+    ),
   );
 }
 
@@ -429,7 +415,7 @@ const defaultDependencies: PersonalMemoriesRouteDependencies = {
   resolveScope,
   loadMemories,
   getMemoryCountsByLineage,
-  getPersonaAvatarUrl,
+  getPersonaAvatarData: resolvePersonaPanelAvatar,
   getStmCount,
   operations: personalMemoriesOperations,
   recordAction: (input) => {
@@ -1074,15 +1060,17 @@ export async function buildInitialPersonalMemoriesPanel(
   }
   const memories = await dependencies.loadMemories(scope.userId, 0);
   const stmCount = await dependencies.getStmCount(scope.userDiscId);
-  return buildPersonalMemoriesPanelPayload({
-    locale,
-    category: "global",
-    selectedLineageId: 0,
-    personas: scope.personas,
-    memories,
-    stmCount,
-    privacyLevel: scope.privacyLevel,
-    readStatus: scope.readStatus,
-    page: { kind: "main" },
-  });
+  return withPersonaPanelAvatar(
+    buildPersonalMemoriesPanelPayload({
+      locale,
+      category: "global",
+      selectedLineageId: 0,
+      personas: scope.personas,
+      memories,
+      stmCount,
+      privacyLevel: scope.privacyLevel,
+      readStatus: scope.readStatus,
+      page: { kind: "main" },
+    }),
+  );
 }

@@ -89,7 +89,9 @@ what exposes the bug, so the two rules are always applied together.
 - Whole ```markdown``` code blocks for big dynamic content (like memories)
 - A persona-scoped page renders its page selector, a heading and description beside the selected
   persona's thumbnail, the persona selector, and then the selected entity's details. Omit the
-  thumbnail when no public avatar is available; do not reorder the remaining controls.
+  thumbnail only when neither a public URL nor a readable local avatar is available; do not reorder
+  the remaining controls. Local avatars use `attachment://` media and must be reattached while old
+  message attachments are cleared on every repaint.
 
 Prefer first-person `I` and `me` when the bot is the speaker.
 

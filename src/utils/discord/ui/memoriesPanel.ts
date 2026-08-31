@@ -28,13 +28,14 @@ import {
   buildCategoryButtonRow,
   buildPanelContainer,
   buildPanelReceiptContainer,
+  buildRangeNavigationRows,
   buildRangeChooserComponents,
-  RANGE_BUTTONS_PER_ROW,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
 import { localizer } from "@/utils/text/localizer";
+import { personaRepresentativeForLineage } from "@/utils/persona/lineage";
 
 const MAX_SERVER_MEMORY_PAGE_SIZE = 24;
 const MAX_DOCUMENT_PAGE_SIZE = 24;
@@ -400,17 +401,6 @@ export function buildEditServerMemoryModal(
       },
     ],
   };
-}
-
-/**
- * The persona that stands for a whole lineage in the selector.
- *
- * Shared by the option label and the header thumbnail so the name and the face always describe
- * the same persona. A non-alter member wins because it is the one the lineage is named after.
- */
-export function personaRepresentativeForLineage(personas: TomoriState[], lineageId: number): TomoriState | null {
-  const sharing = personas.filter((persona) => persona.persona_lineage_id === lineageId);
-  return sharing.find((persona) => !persona.is_alter) ?? sharing[0] ?? null;
 }
 
 /**
@@ -837,42 +827,28 @@ export function buildMemoriesPanelPayload(input: MemoriesPanelRenderInput): Memo
       components.push(selectRow);
 
       if (rangeSelection.rangeCount > 1) {
-        if (rangeSelection.rangeCount <= RANGE_BUTTONS_PER_ROW) {
-          const rangeButtons: ButtonComponentData[] = [];
-          for (let i = 0; i < rangeSelection.rangeCount; i++) {
-            const start = i * MAX_SERVER_MEMORY_PAGE_SIZE + 1;
-            const end = Math.min(start + MAX_SERVER_MEMORY_PAGE_SIZE - 1, memories.length);
-            rangeButtons.push({
+        components.push(
+          ...buildRangeNavigationRows({
+            totalCount: memories.length,
+            pageSize: MAX_SERVER_MEMORY_PAGE_SIZE,
+            activeRangeIndex: rangeSelection.rangeIndex,
+            disabled: writesDisabled,
+            locale,
+            namespace: MEMORIES_ROUTE_NAMESPACE,
+            version: MEMORIES_ROUTE_VERSION,
+            buildSegments: {
+              range: (rangeIndex) =>
+                buildMemoriesRouteSegments({ action: "range", locale, lineageId: selectedLineageId, rangeIndex }),
+            },
+            overflowButton: {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildMemoriesRouteId({
-                action: "range",
-                locale,
-                lineageId: selectedLineageId,
-                rangeIndex: i,
-              }),
-              label: `${start}-${end}`,
-              disabled: writesDisabled || i === rangeSelection.rangeIndex,
-            });
-          }
-          components.push({
-            type: ComponentType.ActionRow,
-            components: rangeButtons,
-          });
-        } else {
-          components.push({
-            type: ComponentType.ActionRow,
-            components: [
-              {
-                type: ComponentType.Button,
-                style: ButtonStyle.Secondary,
-                customId: buildMemoriesRouteId({ action: "range-open", locale, lineageId: selectedLineageId }),
-                label: localizer(locale, "general.pagination.select_page_title"),
-                disabled: writesDisabled,
-              },
-            ],
-          });
-        }
+              customId: buildMemoriesRouteId({ action: "range-open", locale, lineageId: selectedLineageId }),
+              label: localizer(locale, "general.pagination.select_page_title"),
+              disabled: writesDisabled,
+            },
+          }),
+        );
       }
 
       if (selectedMemory) {
@@ -1191,43 +1167,37 @@ ${localizer(locale, "commands.memories.documents_description")}`,
       ],
     });
     if (range.rangeCount > 1) {
-      if (range.rangeCount <= RANGE_BUTTONS_PER_ROW) {
-        const buttons: ButtonComponentData[] = [];
-        for (let index = 0; index < range.rangeCount; index++) {
-          const start = index * MAX_DOCUMENT_PAGE_SIZE + 1;
-          const end = Math.min(start + MAX_DOCUMENT_PAGE_SIZE - 1, documents.length);
-          buttons.push({
+      components.push(
+        ...buildRangeNavigationRows({
+          totalCount: documents.length,
+          pageSize: MAX_DOCUMENT_PAGE_SIZE,
+          activeRangeIndex: range.rangeIndex,
+          disabled: writesDisabled,
+          locale,
+          namespace: MEMORIES_ROUTE_NAMESPACE,
+          version: MEMORIES_ROUTE_VERSION,
+          buildSegments: {
+            range: (rangeIndex) =>
+              buildMemoriesRouteSegments({
+                action: "document-range",
+                locale,
+                personaId: selectedPersonaId,
+                rangeIndex,
+              }),
+          },
+          overflowButton: {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
             customId: buildMemoriesRouteId({
-              action: "document-range",
+              action: "document-range-open",
               locale,
               personaId: selectedPersonaId,
-              rangeIndex: index,
             }),
-            label: `${start}-${end}`,
-            disabled: writesDisabled || index === range.rangeIndex,
-          });
-        }
-        components.push({ type: ComponentType.ActionRow, components: buttons });
-      } else {
-        components.push({
-          type: ComponentType.ActionRow,
-          components: [
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Secondary,
-              customId: buildMemoriesRouteId({
-                action: "document-range-open",
-                locale,
-                personaId: selectedPersonaId,
-              }),
-              label: localizer(locale, "general.pagination.select_page_title"),
-              disabled: writesDisabled,
-            },
-          ],
-        });
-      }
+            label: localizer(locale, "general.pagination.select_page_title"),
+            disabled: writesDisabled,
+          },
+        }),
+      );
     }
 
     if (!selectedDocument) {

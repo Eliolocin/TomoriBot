@@ -48,6 +48,42 @@ export type RangeChooserComponentsOptions = RangeChooserComponentsBase &
     | { buildSegments: RangeChooserRouteSegments; baseSegments?: never }
   );
 
+type RangeNavigationRowsOptions = RangeChooserComponentsOptions & {
+  activeRangeIndex: number;
+  disabled?: boolean;
+  overflowButton: ButtonComponentData;
+};
+
+export function buildRangeNavigationRows(options: RangeNavigationRowsOptions): ActionRowData<ButtonComponentData>[] {
+  const resolved = resolveRangeChooser({
+    totalCount: options.totalCount,
+    pageSize: options.pageSize,
+  });
+  if (resolved.rangeCount <= 1) return [];
+  if (resolved.rangeCount > RANGE_BUTTONS_PER_ROW) {
+    return [{ type: ComponentType.ActionRow, components: [options.overflowButton] }];
+  }
+
+  return [
+    {
+      type: ComponentType.ActionRow,
+      components: resolved.ranges.map((range) => ({
+        type: ComponentType.Button,
+        style: ButtonStyle.Secondary,
+        customId: buildInteractionRouteId(
+          options.namespace,
+          options.version,
+          ...(options.buildSegments
+            ? options.buildSegments.range(range.rangeIndex)
+            : [...options.baseSegments, "range", String(range.rangeIndex)]),
+        ),
+        label: `${range.start}-${range.end}`,
+        disabled: options.disabled || range.rangeIndex === options.activeRangeIndex,
+      })),
+    },
+  ];
+}
+
 /**
  * Applies a Discord line marker to every line of `text`.
  *

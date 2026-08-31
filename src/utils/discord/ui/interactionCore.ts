@@ -36,10 +36,9 @@ import type {
 } from "@/types/discord/rawApiTypes";
 import type { TomoriState } from "@/types/db/schema";
 import {
-  resolvePersonaAvatarPublicUrl,
-  isLocalPersonaAvatarPath,
-  loadStoredPersonaAvatarBuffer,
-} from "@/utils/storage/avatarStorage";
+  resolveAlterPersonaAvatarAsset,
+  type PersonaAvatarAsset,
+} from "@/utils/discord/personaPanelAvatar";
 import { getLastDbError } from "@/utils/cache/tomoriStateCache";
 
 // Clean storage for select values (Discord.js will strip them, so we preserve them)
@@ -1886,7 +1885,7 @@ export async function acknowledgeModalSubmitForRefresh(interaction: ModalSubmitI
  * - `url`: a public HTTP(S) URL or the bot fallback, so no file attachment needed.
  * - `buffer`: raw image bytes for a local-disk avatar that must be attached to the Discord message.
  */
-export type AvatarCacheEntry = { type: "url"; url: string } | { type: "buffer"; buffer: Buffer };
+export type AvatarCacheEntry = PersonaAvatarAsset;
 
 /**
  * Session-scoped avatar cache keyed by absolute persona index (not page-local).
@@ -1943,23 +1942,18 @@ async function resolvePersonaPageAvatarData(
         return;
       }
 
-      const publicUrl = resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url);
-      if (publicUrl) {
-        sessionCache.set(absoluteIdx, { type: "url", url: publicUrl });
-        avatarUrls.set(idx, publicUrl);
+      const asset = await resolveAlterPersonaAvatarAsset(persona);
+      if (asset?.type === "url") {
+        sessionCache.set(absoluteIdx, asset);
+        avatarUrls.set(idx, asset.url);
         return;
       }
-
-      const avatarRef = persona.webhook_avatar_url;
-      if (avatarRef && isLocalPersonaAvatarPath(avatarRef)) {
-        const buffer = await loadStoredPersonaAvatarBuffer(avatarRef);
-        if (buffer) {
-          sessionCache.set(absoluteIdx, { type: "buffer", buffer });
-          const attachmentName = `avatar_${idx}.png`;
-          files.push(new AttachmentBuilder(buffer, { name: attachmentName }));
-          avatarUrls.set(idx, `attachment://${attachmentName}`);
-          return;
-        }
+      if (asset?.type === "buffer") {
+        sessionCache.set(absoluteIdx, asset);
+        const attachmentName = `avatar_${idx}.png`;
+        files.push(new AttachmentBuilder(asset.buffer, { name: attachmentName }));
+        avatarUrls.set(idx, `attachment://${attachmentName}`);
+        return;
       }
 
       // Nothing resolved, so use fallback

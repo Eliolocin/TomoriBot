@@ -414,9 +414,9 @@ describe("memories permissions and scoping", () => {
           [1880, 4],
         ]);
       },
-      getPersonaAvatarUrl: async (_interaction, persona) => {
-        calls.push(`getPersonaAvatarUrl:${persona.persona_id}`);
-        return `https://cdn.example.invalid/${persona.persona_id}.png`;
+      getPersonaAvatarData: async (_interaction, persona) => {
+        calls.push(`getPersonaAvatarData:${persona.persona_id}`);
+        return { url: `https://cdn.example.invalid/${persona.persona_id}.png`, files: [] };
       },
       loadDocuments: async (serverId, personaId) => {
         calls.push(`loadDocuments:${serverId}:${personaId ?? "serverwide"}`);

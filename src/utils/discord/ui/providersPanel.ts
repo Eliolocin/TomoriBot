@@ -32,6 +32,7 @@ import {
 import {
   buildPanelContainer,
   buildPanelReceiptContainer,
+  buildRangeNavigationRows,
   buildRangeChooserComponents,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
@@ -1033,17 +1034,25 @@ export function buildProvidersPanelPayload(input: ProvidersPanelRenderInput): Pr
   components.push(selectRow);
 
   if (selection.rangeCount > 1) {
-    components.push({
-      type: ComponentType.ActionRow,
-      components: [
-        {
+    components.push(
+      ...buildRangeNavigationRows({
+        totalCount: entries.length,
+        pageSize: PROVIDERS_ENTRIES_PER_SELECTOR_PAGE,
+        activeRangeIndex: selection.rangeIndex,
+        locale,
+        namespace: routeNamespace,
+        version: PROVIDERS_ROUTE_VERSION,
+        buildSegments: {
+          range: (rangeIndex) => buildProvidersRouteSegments({ action: "range", locale, rangeIndex }),
+        },
+        overflowButton: {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
           customId: buildProvidersRouteId(routeNamespace, { action: "range-open", locale }),
           label: localizer(locale, "general.pagination.select_page_title"),
         },
-      ],
-    });
+      }),
+    );
   }
 
   components.push({ type: ComponentType.Separator, divider: true, spacing: 1 });

@@ -45,6 +45,7 @@ Command files import Discord UI helpers from responsibility-owned modules:
 - `src/utils/discord/ui/embeds.ts` - info and summary embed replies
 - `src/utils/discord/ui/statusComponents.ts` - Components V2 status replies and status-page pagination
 - `src/utils/discord/ui/pagination.ts` - generic choice pagination
+- `src/utils/discord/ui/panel.ts` - shared Components V2 panel containers, receipts, and range navigation
 - `src/utils/discord/ui/personaWorkflow.ts` - command-facing persona picker lifecycle, acknowledgment phases, and anchor-message controller
 - `src/utils/discord/ui/helpDashboard.ts` - the persistent Components V2 `/help` dashboard and provider information modals
 
@@ -52,6 +53,11 @@ The low-level persona renderer remains private to `interactionCore.ts` and
 `personaWorkflow.ts`; it has no command-facing barrel or compatibility export.
 
 `src/utils/discord/interactionHelper.ts` remains only as the subsystem compatibility barrel. New command code should import from the owned module that matches the helper it uses.
+
+List panels use `buildRangeNavigationRows(...)` for selector pagination. Lists with two to five
+pages show their item ranges directly in one action row. Larger lists show a single Select Page
+button that opens `buildRangeChooserComponents(...)`; this keeps each row within Discord's
+five-button limit and gives every panel the same transition point.
 
 ### Globally routed persistent interactions
 

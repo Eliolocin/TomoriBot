@@ -265,7 +265,7 @@ function makeDependencies(
       readStatus: "fresh",
     }),
     loadPersonaNamingPreference: async (userId, lineageId) => personaPrefs.get(`${userId}:${lineageId}`) ?? null,
-    getPersonaAvatarUrl: async () => "https://cdn.example.invalid/persona.png",
+    getPersonaAvatarData: async () => ({ url: "https://cdn.example.invalid/persona.png", files: [] }),
     getMemoryCount: async () => 3,
     getStmCount: async () => 2,
     loadUserSavedProviders: async () => [

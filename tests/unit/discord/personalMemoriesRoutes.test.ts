@@ -9,6 +9,7 @@ import type {
   StringSelectMenuComponentData,
   StringSelectMenuInteraction,
 } from "discord.js";
+import { ComponentType } from "discord.js";
 import { PrivacyLevel, type PersonalMemoryRow, type TomoriState } from "@/types/db/schema";
 import {
   createPersonalMemoriesInteractionRoute,
@@ -241,9 +242,9 @@ function makeDependencies(
       }
       return counts;
     },
-    getPersonaAvatarUrl: async (_interaction, persona) => {
-      calls.push(`getPersonaAvatarUrl:${persona.persona_id}`);
-      return `https://cdn.example.invalid/${persona.persona_id}.png`;
+    getPersonaAvatarData: async (_interaction, persona) => {
+      calls.push(`getPersonaAvatarData:${persona.persona_id}`);
+      return { url: `https://cdn.example.invalid/${persona.persona_id}.png`, files: [] };
     },
     getStmCount: async (_userDiscId) => {
       calls.push("getStmCount");
@@ -385,7 +386,7 @@ describe("personal-memories panel route catalog", () => {
       makeMemory(2, { persona_lineage_id: 0, content: "Global memory 2" }),
       makeMemory(3, { persona_lineage_id: 10, content: "Persona memory 1" }),
     ];
-    const manyMemories = Array.from({ length: 30 }, (_, i) => makeMemory(i + 1, { persona_lineage_id: 0 }));
+    const manyMemories = Array.from({ length: 150 }, (_, i) => makeMemory(i + 1, { persona_lineage_id: 0 }));
     const multiPageChooserMemories = Array.from({ length: 300 }, (_, i) =>
       makeMemory(i + 1, { persona_lineage_id: 0 }),
     );
@@ -1401,6 +1402,35 @@ describe("memory selector pagination & 25-option ceiling", () => {
     expect(selectMenu?.options?.[0]?.value).toBe("action:add");
     expect(selectMenu?.options?.[1]?.value).toBe("1");
     expect(selectMenu?.options?.[24]?.value).toBe("24");
+
+    const rangeLabels = rootContainer.components
+      .filter((component) => component.type === ComponentType.ActionRow)
+      .flatMap((component) => component.components ?? [])
+      .filter((component) => component.type === ComponentType.Button)
+      .map((component) => component.label);
+    expect(rangeLabels).toEqual(expect.arrayContaining(["1-24", "25-48", "49-72", "73-96", "97-100"]));
+    expect(rangeLabels).not.toContain(localizer("en-US", "general.pagination.select_page_title"));
+
+    const personaPayload = buildPersonalMemoriesPanelPayload({
+      locale: "en-US",
+      category: "persona",
+      selectedLineageId: 10,
+      personas: [makePersona(1, 10, "Sparrow")],
+      memories: hundredMemories.map((memory) => ({ ...memory, persona_lineage_id: 10 })),
+      stmCount: 0,
+      privacyLevel: PrivacyLevel.MINIMAL,
+      readStatus: "fresh",
+      page: { kind: "main" },
+    });
+    const personaContainer = personaPayload.components[0] as unknown as {
+      components: ActionRowData<StringSelectMenuComponentData>[];
+    };
+    const personaRangeLabels = personaContainer.components
+      .filter((component) => component.type === ComponentType.ActionRow)
+      .flatMap((component) => component.components ?? [])
+      .filter((component) => component.type === ComponentType.Button)
+      .map((component) => component.label);
+    expect(personaRangeLabels).toEqual(expect.arrayContaining(["1-24", "25-48", "49-72", "73-96", "97-100"]));
   });
 });
 
