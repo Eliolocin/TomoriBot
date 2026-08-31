@@ -7,6 +7,7 @@ import {
   type ComponentInContainerData,
   type SelectMenuComponentOptionData,
   type StringSelectMenuComponentData,
+  type TextDisplayComponentData,
   type TopLevelComponentData,
 } from "discord.js";
 import { PrivacyLevel, type UserRow, type TomoriState, type UserSavedProviderConfigRow } from "@/types/db/schema";
@@ -160,6 +161,7 @@ export interface PersonalConfigPanelRenderInput {
   personas: TomoriState[];
   guildId: string | null;
   selectedLineageId?: number;
+  selectedPersonaAvatarUrl?: string | null;
   personaNamingPreference?: UserPersonaNamingPreference | null;
   memoryCount: number;
   stmCount: number;
@@ -961,11 +963,20 @@ ${localizer(locale, "commands.personal.config.about_description")}
         },
       );
     } else if (page === "persona") {
-      components.push({
+      const personaHeading: TextDisplayComponentData = {
         type: ComponentType.TextDisplay,
         content: `### ${localizer(locale, "commands.personal.config.persona_naming_title")}
 ${localizer(locale, "commands.personal.config.persona_naming_description")}`,
-      });
+      };
+      components.push(
+        input.selectedPersonaAvatarUrl
+          ? {
+              type: ComponentType.Section,
+              components: [personaHeading],
+              accessory: { type: ComponentType.Thumbnail, media: { url: input.selectedPersonaAvatarUrl } },
+            }
+          : personaHeading,
+      );
 
       if (personas.length === 0) {
         components.push({

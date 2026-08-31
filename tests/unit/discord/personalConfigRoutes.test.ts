@@ -265,6 +265,7 @@ function makeDependencies(
       readStatus: "fresh",
     }),
     loadPersonaNamingPreference: async (userId, lineageId) => personaPrefs.get(`${userId}:${lineageId}`) ?? null,
+    getPersonaAvatarUrl: async () => "https://cdn.example.invalid/persona.png",
     getMemoryCount: async () => 3,
     getStmCount: async () => 2,
     loadUserSavedProviders: async () => [
@@ -4046,9 +4047,11 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
       memoryCount: 0,
       stmCount: 0,
       readStatus: "fresh",
+      selectedPersonaAvatarUrl: "https://cdn.example.invalid/persona.png",
       personaNamingPreference: null,
     });
     const personaJson = JSON.stringify(personaPayload);
+    expect(personaJson).toContain("https://cdn.example.invalid/persona.png");
     expect(personaJson).toContain("> Nickname override: Global profile or persona default");
     expect(personaJson).toContain("> Prefix override: Global profile or persona default");
     expect(personaJson).toContain("> Suffix override: Global profile or persona default");

@@ -27,6 +27,7 @@ import {
   getStoredPersonalProviderForCapability,
 } from "@/utils/provider/personalProviderHelpers";
 import { loadUserSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
+import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 
 export interface PersonalConfigScope {
   userId: number;
@@ -102,6 +103,28 @@ export async function getMemoryCount(userId: number): Promise<number> {
 export async function getStmCount(userDiscId: string): Promise<number> {
   await preWarmUserStmEntries(userDiscId);
   return getShortTermMemoriesForUser(userDiscId).length;
+}
+
+/**
+ * Resolves the public face used beside a persona-scoped panel heading.
+ *
+ * Main personas speak as the bot, so their guild-specific member avatar is preferred. Alter
+ * personas use their stored public avatar. Local paths deliberately return null because Discord
+ * cannot fetch them for a Components V2 Thumbnail.
+ */
+export async function getPersonaAvatarUrl(
+  interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
+  persona: TomoriState,
+): Promise<string | null> {
+  if (persona.is_alter) {
+    return resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url);
+  }
+  const avatarOptions = { size: 256, extension: "png", forceStatic: true } as const;
+  return (
+    interaction.guild?.members.me?.displayAvatarURL(avatarOptions) ??
+    interaction.client.user?.displayAvatarURL(avatarOptions) ??
+    resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url)
+  );
 }
 
 export async function loadUserSavedProviders(userId: number): Promise<UserSavedProviderConfigRow[]> {

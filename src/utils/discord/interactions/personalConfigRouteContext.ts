@@ -37,6 +37,10 @@ export interface PersonalConfigRouteDependencies {
     forceRefresh?: boolean,
   ): Promise<PersonalConfigScope | null>;
   loadPersonaNamingPreference(userId: number, lineageId: number): Promise<UserPersonaNamingPreference | null>;
+  getPersonaAvatarUrl(
+    interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
+    persona: TomoriState,
+  ): Promise<string | null>;
   getMemoryCount(userId: number): Promise<number>;
   getStmCount(userDiscId: string): Promise<number>;
   loadUserSavedProviders(userId: number): Promise<UserSavedProviderConfigRow[]>;
@@ -239,10 +243,16 @@ export async function repaint(
     view,
   } = options;
   let personaPref: UserPersonaNamingPreference | null = null;
+  let selectedPersonaAvatarUrl: string | null | undefined;
   if (category === "profile" && page === "persona") {
     const currentLineage = selectedLineageId ?? scope.personas[0]?.persona_lineage_id;
     if (currentLineage) {
       personaPref = await dependencies.loadPersonaNamingPreference(scope.userId, currentLineage);
+      const sharing = scope.personas.filter((persona) => persona.persona_lineage_id === currentLineage);
+      const representative = sharing.find((persona) => !persona.is_alter) ?? sharing[0];
+      selectedPersonaAvatarUrl = representative
+        ? await dependencies.getPersonaAvatarUrl(interaction, representative)
+        : undefined;
     }
   }
 
@@ -288,6 +298,7 @@ export async function repaint(
       personas: scope.personas,
       guildId: scope.guildId,
       selectedLineageId,
+      selectedPersonaAvatarUrl,
       personaNamingPreference: personaPref,
       memoryCount,
       stmCount,

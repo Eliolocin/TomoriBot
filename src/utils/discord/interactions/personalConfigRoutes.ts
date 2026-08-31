@@ -6,6 +6,7 @@ import type { GlobalInteractionRoute } from "@/utils/discord/interactions/routeR
 import { beginPanelInteraction } from "@/utils/discord/interactions/panelController";
 import {
   getMemoryCount,
+  getPersonaAvatarUrl,
   getStmCount,
   loadAvailableModelsForCapability,
   loadPersonalModelDisplayInfo,
@@ -57,6 +58,7 @@ import { handlePersonalConfigSpotlightRoutes } from "@/utils/discord/interaction
 const defaultDependencies: PersonalConfigRouteDependencies = {
   resolveScope,
   loadPersonaNamingPreference,
+  getPersonaAvatarUrl,
   getMemoryCount,
   getStmCount,
   loadUserSavedProviders,

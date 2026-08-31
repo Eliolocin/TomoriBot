@@ -1,8 +1,9 @@
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { ComponentType } from "discord.js";
-import { PrivacyLevel, type TomoriState } from "@/types/db/schema";
+import { PrivacyLevel, type TomoriState, type UserRow } from "@/types/db/schema";
 import { buildMemoriesPanelPayload } from "@/utils/discord/ui/memoriesPanel";
+import { buildPersonalConfigPanelPayload } from "@/utils/discord/ui/personalConfigPanel";
 import { buildPersonalMemoriesPanelPayload } from "@/utils/discord/ui/personalMemoriesPanel";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
@@ -37,7 +38,11 @@ const MAX_PANEL_PROSE_LINE_BESIDE_THUMBNAIL = 40;
  * the heading is built as a variable first. Listing the files here is what makes that gap fail
  * loudly, because a panel that grows a thumbnail without render coverage breaks this test.
  */
-const THUMBNAIL_PANELS_WITH_RENDER_COVERAGE = new Set(["memoriesPanel.ts", "personalMemoriesPanel.ts"]);
+const THUMBNAIL_PANELS_WITH_RENDER_COVERAGE = new Set([
+  "memoriesPanel.ts",
+  "personalConfigPanel.ts",
+  "personalMemoriesPanel.ts",
+]);
 
 /**
  * Width as Discord draws it, not as the string is stored.
@@ -188,6 +193,41 @@ describe("panel prose width", () => {
         privacyLevel: PrivacyLevel.MINIMAL,
         readStatus: "fresh",
         page: { kind: "main" },
+      });
+
+    expect(collectProseWidthViolations(build("https://cdn.example.invalid/55.png"))).toEqual([]);
+    expect(collectProseWidthViolations(build(null))).toEqual([]);
+  });
+
+  it("holds persona naming to 40 characters beside its avatar", () => {
+    const user = {
+      user_id: 1,
+      user_disc_id: "user-123",
+      language_pref: "en-US",
+      privacy_level: PrivacyLevel.MINIMAL,
+    } as unknown as UserRow;
+    const personas = [
+      {
+        persona_id: 55,
+        persona_lineage_id: 1770,
+        persona_nickname: "Aphel",
+        is_alter: false,
+      } as unknown as TomoriState,
+    ];
+    const build = (selectedPersonaAvatarUrl: string | null) =>
+      buildPersonalConfigPanelPayload({
+        locale: "en-US",
+        category: "profile",
+        page: "persona",
+        user,
+        resolvedNickname: "Jordan",
+        personas,
+        guildId: "guild-123",
+        selectedLineageId: 1770,
+        selectedPersonaAvatarUrl,
+        memoryCount: 0,
+        stmCount: 0,
+        readStatus: "fresh",
       });
 
     expect(collectProseWidthViolations(build("https://cdn.example.invalid/55.png"))).toEqual([]);
