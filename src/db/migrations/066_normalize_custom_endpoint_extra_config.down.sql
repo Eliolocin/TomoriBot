@@ -1,0 +1,1 @@
+-- The normalized JSON object is the canonical representation; no downgrade is needed.

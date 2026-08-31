@@ -1,8 +1,8 @@
 /**
  * AI-Powered Preset Generation for TomoriBot
- * Uses a dual-agent approach: gemini-2.5-flash handles Google Search Grounding
- * when web search is requested, then the user's configured model generates the
- * structured persona JSON.
+ * Uses a dual-agent approach: the provider's configured default handles Google
+ * Search Grounding when web search is requested, then the user's configured model
+ * generates the structured persona JSON.
  */
 
 import { GoogleGenAI, type Content, type GenerateContentConfig } from "@google/genai";
@@ -52,6 +52,15 @@ function getErrorMessage(error: unknown): string {
     return error;
   }
   return "Unknown error";
+}
+
+function isGoogleModelUnavailableError(errorMessage: string): boolean {
+  const normalizedMessage = errorMessage.toLowerCase();
+  return (
+    normalizedMessage.includes("model not found") ||
+    normalizedMessage.includes("model_not_found") ||
+    normalizedMessage.includes("no longer available")
+  );
 }
 
 /**
@@ -326,7 +335,7 @@ IMPORTANT: In any dialogue examples, use "{user}" ONLY where you would write the
         };
       }
 
-      if (errorMessage.includes("model not found") || errorMessage.includes("MODEL_NOT_FOUND")) {
+      if (isGoogleModelUnavailableError(errorMessage)) {
         return {
           error: createGoogleErrorMessage("MODEL_ERROR", errorCode || 404, errorMessage, locale),
           errorType: "MODEL_ERROR",
@@ -366,6 +375,7 @@ export async function generatePresetFromPrompt(
   params: GeneratePresetParams,
   locale: string,
   client?: GoogleGenAI,
+  defaultSearchModelName?: string,
 ): Promise<PresetGenerationResult> {
   if (!client && (!apiKey || apiKey.trim().length < 10)) {
     return {
@@ -377,22 +387,25 @@ export async function generatePresetFromPrompt(
   try {
     const genAI = client ?? new GoogleGenAI({ apiKey });
 
-    const configuredModel = params.modelName || "gemini-2.5-flash";
+    const configuredModel = params.modelName || defaultSearchModelName;
+    if (!configuredModel) {
+      return {
+        error: createGoogleErrorMessage("MODEL_ERROR", 404, "No preset generation model is configured", locale),
+        errorType: "MODEL_ERROR",
+      };
+    }
 
-    // Run search sub-agent when web search is requested.
-    //    gemini-2.5-flash is hardcoded for the search step across all models because
-    //    it supports Google Search Grounding on the free AI Studio tier and is
-    //    fast enough that it doesn't meaningfully delay generation.
-    const SEARCH_AGENT_MODEL = "gemini-2.5-flash";
+    const searchAgentModel = defaultSearchModelName || configuredModel;
+
     let searchInfo: string | undefined;
     if (params.useWebSearch) {
-      log.info(`Running search sub-agent (${SEARCH_AGENT_MODEL}) for "${params.characterName}"`);
+      log.info(`Running search sub-agent (${searchAgentModel}) for "${params.characterName}"`);
 
       const searchResult = await searchCharacterInfo(
         apiKey,
         params.characterName,
         locale,
-        SEARCH_AGENT_MODEL,
+        searchAgentModel,
         {
           description: params.characterDescription,
           speechExamples: params.speechExamples,
@@ -766,7 +779,7 @@ ${params.existingPresetContext.trim()}`;
           return lastError;
         }
 
-        if (errorMessage.includes("model not found") || errorMessage.includes("MODEL_NOT_FOUND")) {
+        if (isGoogleModelUnavailableError(errorMessage)) {
           lastError = {
             error: createGoogleErrorMessage("MODEL_ERROR", errorCode || 404, errorMessage, locale),
             errorType: "MODEL_ERROR",

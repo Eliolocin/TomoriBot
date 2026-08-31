@@ -297,6 +297,8 @@ Examples:
 - a provider with embeddings also needs `embedding_models`
 
 Do not hardcode default models in provider code when the app already resolves them from the database/cache.
+Shared feature helpers must receive the invoking provider's resolved default explicitly, so providers with a
+common wire protocol do not silently inherit another provider's model inventory.
 
 ### Invariants (validated at startup and by `bun run check-seed-catalogs`)
 

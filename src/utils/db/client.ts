@@ -248,7 +248,7 @@ export const sql = new Proxy(
 /**
  * Codes Bun raises when the pool retires a connection out from under a live query.
  *
- * Bun's pool (through 1.3.14) fires its `idleTimeout`/`maxLifetime` timers without
+ * Bun's pool (through 1.4.0) fires its `idleTimeout`/`maxLifetime` timers without
  * draining first: it marks the connection failed and rejects every queued and in-flight
  * query on it, even though the query and the server are both healthy
  * (oven-sh/bun#30646, still open). Re-issuing succeeds because the pool has already

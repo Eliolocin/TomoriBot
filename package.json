@@ -1,9 +1,10 @@
 {
   "name": "tomoribot",
-  "version": "0.7.9.99997",
+  "version": "0.7.9.99998",
   "description": "Customizable AI Assistant Discord Bot",
   "main": "./src/index.ts",
   "type": "module",
+  "packageManager": "bun@1.4.0",
   "scripts": {
     "test": "bun run scripts/checks/runTests.ts",
     "build": "rm -rf dist && bun build ./src/index.ts --outdir dist --target bun",

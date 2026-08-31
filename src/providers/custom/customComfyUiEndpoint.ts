@@ -2701,7 +2701,10 @@ async function generateWithComfyUi(
   options: ComfyUiGenerationOptions,
 ): Promise<ComfyUiGenerationResponse> {
   const workflowPath = resolveComfyUiRuntimeWorkflowPath(endpoint);
-  const savedWorkflow = workflowPath ? loadComfyUiWorkflowFromPath(workflowPath) : endpoint.extra_config.workflow;
+  // A workflow uploaded with the endpoint is its configuration of record. Static paths remain
+  // available for legacy endpoints that have no uploaded workflow.
+  const savedWorkflow =
+    endpoint.extra_config.workflow ?? (workflowPath ? loadComfyUiWorkflowFromPath(workflowPath) : null);
   if (!savedWorkflow || typeof savedWorkflow !== "object") {
     throw new Error("ComfyUI workflow JSON is missing.");
   }

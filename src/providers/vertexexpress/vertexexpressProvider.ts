@@ -178,6 +178,7 @@ export class VertexexpressProvider
 
   async generatePreset(request: ProviderPresetGenerationRequest): Promise<PresetGenerationResult> {
     const client = this.buildClient(request.apiKey);
+    const defaultSearchModelName = request.params.useWebSearch ? await this.getDefaultModel() : undefined;
     return await generatePresetFromPrompt(
       request.apiKey,
       {
@@ -186,6 +187,7 @@ export class VertexexpressProvider
       },
       request.locale,
       client,
+      defaultSearchModelName,
     );
   }
 

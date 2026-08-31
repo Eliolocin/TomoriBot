@@ -318,6 +318,8 @@ export class GoogleProvider
   }
 
   async generatePreset(request: ProviderPresetGenerationRequest): Promise<PresetGenerationResult> {
+    const defaultSearchModelName = request.params.useWebSearch ? await this.getDefaultModel() : undefined;
+
     return await generatePresetFromPrompt(
       request.apiKey,
       {
@@ -325,6 +327,8 @@ export class GoogleProvider
         modelName: request.tomoriState.llm.llm_codename,
       },
       request.locale,
+      undefined,
+      defaultSearchModelName,
     );
   }
 
@@ -423,7 +427,7 @@ export class GoogleProvider
   }
 
   /**
-   * Uses the robust fallback chain: cache > database > env > hardcoded
+   * Uses the cached database default with database and available-model fallbacks.
    * @returns Promise<string> - The default model codename
    */
   async getDefaultModel(): Promise<string> {
