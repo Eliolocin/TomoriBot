@@ -1507,13 +1507,23 @@ describe("persona selector lineage identity", () => {
   it("pins the selected persona's avatar to the heading, and drops the Section when unfetchable", () => {
     const personas = [makePersona(51, 1770, "Timori", true), makePersona(55, 1770, "Aphel")];
 
-    const withAvatar = JSON.stringify(buildPersonaPage(personas, undefined, "https://cdn.example.invalid/55.png"));
+    const payload = buildPersonaPage(personas, undefined, "https://cdn.example.invalid/55.png");
+    const withAvatar = JSON.stringify(payload);
     // Type 9 is Section and 11 is Thumbnail: the heading has to become a Section to host one.
     expect(withAvatar).toContain('"type":9');
     expect(withAvatar).toContain('"type":11');
     expect(withAvatar).toContain("https://cdn.example.invalid/55.png");
 
-    // A local-path or data-URI avatar resolves to null, and a Thumbnail cannot load either.
+    const components = (JSON.parse(withAvatar).components[0].components ?? []) as unknown[];
+    const personaSelectorIndex = components.findIndex((component) =>
+      JSON.stringify(component).includes(":persona-select:"),
+    );
+    const personaHeadingIndex = components.findIndex((component) =>
+      JSON.stringify(component).includes("Persona-Scoped Personal Memories"),
+    );
+    expect(personaSelectorIndex).toBeLessThan(personaHeadingIndex);
+
+    // An unavailable avatar resolves to null, so the heading remains a plain TextDisplay.
     const withoutAvatar = JSON.stringify(buildPersonaPage(personas, undefined, null));
     expect(withoutAvatar).not.toContain('"type":11');
     expect(withoutAvatar).toContain("Persona-Scoped Personal Memories");

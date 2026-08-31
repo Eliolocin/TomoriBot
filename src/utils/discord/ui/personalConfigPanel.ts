@@ -37,6 +37,7 @@ import {
 } from "@/utils/discord/personalConfigPanelCatalog";
 import {
   buildCategoryButtonRow,
+  buildOptionalThumbnailSection,
   buildPanelContainer,
   buildPanelReceiptContainer,
   buildRangeChooserComponents,
@@ -968,18 +969,9 @@ ${localizer(locale, "commands.personal.config.about_description")}
         content: `### ${localizer(locale, "commands.personal.config.persona_naming_title")}
 ${localizer(locale, "commands.personal.config.persona_naming_description")}`,
       };
-      components.push(
-        input.selectedPersonaAvatarUrl
-          ? {
-              type: ComponentType.Section,
-              components: [personaHeading],
-              accessory: { type: ComponentType.Thumbnail, media: { url: input.selectedPersonaAvatarUrl } },
-            }
-          : personaHeading,
-      );
-
+      const personaHeadingSection = buildOptionalThumbnailSection(personaHeading, input.selectedPersonaAvatarUrl);
       if (personas.length === 0) {
-        components.push({
+        components.push(personaHeadingSection, {
           type: ComponentType.TextDisplay,
           content: localizer(locale, "commands.personal.config.no_personas"),
         });
@@ -1052,6 +1044,8 @@ ${localizer(locale, "commands.personal.config.persona_naming_description")}`,
             })}`,
           });
         }
+
+        components.push(personaHeadingSection);
 
         const nicknameOverrideLabel = personaNamingPreference?.nickname_override
           ? `\`${escapeDiscordMarkdown(personaNamingPreference.nickname_override)}\``

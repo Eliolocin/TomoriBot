@@ -26,6 +26,7 @@ import {
 import type { DocumentChunkRow, DocumentListRow } from "@/utils/discord/interactions/memoriesDocumentOperations";
 import {
   buildCategoryButtonRow,
+  buildOptionalThumbnailSection,
   buildPanelContainer,
   buildPanelReceiptContainer,
   buildRangeNavigationRows,
@@ -660,19 +661,10 @@ export function buildMemoriesPanelPayload(input: MemoriesPanelRenderInput): Memo
       type: ComponentType.TextDisplay,
       content: `### ${localizer(locale, "commands.memories.memories_title")}\n${localizer(locale, "commands.memories.memories_description")}`,
     };
-
-    components.push(
-      selectedPersonaAvatarUrl
-        ? {
-            type: ComponentType.Section,
-            components: [personaHeading],
-            accessory: { type: ComponentType.Thumbnail, media: { url: selectedPersonaAvatarUrl } },
-          }
-        : personaHeading,
-    );
+    const personaHeadingSection = buildOptionalThumbnailSection(personaHeading, selectedPersonaAvatarUrl);
 
     if (personas.length === 0) {
-      components.push({
+      components.push(personaHeadingSection, {
         type: ComponentType.TextDisplay,
         content: localizer(locale, "commands.memories.no_personas"),
       });
@@ -729,6 +721,8 @@ export function buildMemoriesPanelPayload(input: MemoriesPanelRenderInput): Memo
           ),
         });
       }
+
+      components.push(personaHeadingSection);
 
       // A non-manager's list and counts are already filtered to their own rows, and nothing on the
       // page said so, which reads as missing data rather than as scoping.
@@ -915,20 +909,8 @@ export function buildMemoriesPanelPayload(input: MemoriesPanelRenderInput): Memo
       content: `### ${localizer(locale, "commands.memories.documents_title")}
 ${localizer(locale, "commands.memories.documents_description")}`,
     };
-    // The thumbnail belongs to the persona scope only: serverwide documents have no persona whose
-    // face could stand for them. Only the heading shares the Section, so the rest of the page keeps
-    // the 65-character budget rather than the 40 that applies beside a Thumbnail.
-    components.push(
-      input.selectedDocumentPersonaId && selectedPersonaAvatarUrl
-        ? {
-            type: ComponentType.Section,
-            components: [documentsHeading],
-            accessory: { type: ComponentType.Thumbnail, media: { url: selectedPersonaAvatarUrl } },
-          }
-        : documentsHeading,
-    );
     if (memberTeachingBlocked) {
-      components.push({
+      components.push(documentsHeading, {
         type: ComponentType.TextDisplay,
         content: withLinePrefix("> ", localizer(locale, "commands.memories.documents_teaching_disabled")),
       });
@@ -1019,6 +1001,16 @@ ${localizer(locale, "commands.memories.documents_description")}`,
         });
       }
     }
+
+    // The thumbnail belongs to the persona scope only: serverwide documents have no persona whose
+    // face could stand for them. Only the heading shares the Section, so the rest of the page keeps
+    // the 65-character budget rather than the 40 that applies beside a Thumbnail.
+    components.push(
+      buildOptionalThumbnailSection(
+        documentsHeading,
+        input.selectedDocumentPersonaId ? selectedPersonaAvatarUrl : null,
+      ),
+    );
 
     components.push({
       type: ComponentType.TextDisplay,

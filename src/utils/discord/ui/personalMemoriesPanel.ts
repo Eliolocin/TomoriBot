@@ -24,6 +24,7 @@ import {
 } from "@/utils/discord/personalMemoriesPanelCatalog";
 import {
   buildCategoryButtonRow,
+  buildOptionalThumbnailSection,
   buildPanelContainer,
   buildPanelReceiptContainer,
   buildRangeNavigationRows,
@@ -588,27 +589,16 @@ ${localizer(locale, "commands.personal.memories.selector_guidance")}`,
       content: `### ${localizer(locale, "commands.personal.memories.persona_title")}
 ${localizer(locale, "commands.personal.memories.persona_description")}`,
     };
-
-    // A Thumbnail needs a URL Discord can fetch, so a persona whose avatar resolves only to a
-    // local path or a data URI renders the plain heading instead of a broken image.
-    components.push(
-      selectedPersonaAvatarUrl
-        ? {
-            type: ComponentType.Section,
-            components: [personaHeading],
-            accessory: { type: ComponentType.Thumbnail, media: { url: selectedPersonaAvatarUrl } },
-          }
-        : personaHeading,
-    );
-
-    if (isPrivacyFull) {
-      components.push({
-        type: ComponentType.TextDisplay,
-        content: withLinePrefix("> ", `⚠️ ${localizer(locale, "commands.personal.memories.privacy_full_warning")}`),
-      });
-    }
+    const personaHeadingSection = buildOptionalThumbnailSection(personaHeading, selectedPersonaAvatarUrl);
 
     if (personas.length === 0) {
+      components.push(personaHeadingSection);
+      if (isPrivacyFull) {
+        components.push({
+          type: ComponentType.TextDisplay,
+          content: withLinePrefix("> ", `⚠️ ${localizer(locale, "commands.personal.memories.privacy_full_warning")}`),
+        });
+      }
       components.push({
         type: ComponentType.TextDisplay,
         content: localizer(locale, "commands.personal.memories.no_personas"),
@@ -670,6 +660,15 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
           content: `-# ${localizer(locale, "commands.personal.memories.persona_select_truncated", {
             count: hiddenLineageCount,
           })}`,
+        });
+      }
+
+      components.push(personaHeadingSection);
+
+      if (isPrivacyFull) {
+        components.push({
+          type: ComponentType.TextDisplay,
+          content: withLinePrefix("> ", `⚠️ ${localizer(locale, "commands.personal.memories.privacy_full_warning")}`),
         });
       }
 

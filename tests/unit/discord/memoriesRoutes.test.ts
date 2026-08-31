@@ -732,6 +732,15 @@ describe("memories permissions and scoping", () => {
     expect(values).toEqual(["100", "200"]);
     // Option label uses the representative (main persona)
     expect(personaSelect?.options?.[0]?.label).toBe("Main Persona");
+
+    const components = (JSON.parse(JSON.stringify(payload)).components[0].components ?? []) as unknown[];
+    const personaSelectorIndex = components.findIndex((component) =>
+      JSON.stringify(component).includes(":persona-select:"),
+    );
+    const personaHeadingIndex = components.findIndex((component) =>
+      JSON.stringify(component).includes("Server Memories"),
+    );
+    expect(personaSelectorIndex).toBeLessThan(personaHeadingIndex);
   });
 
   it("renders inline range buttons when rangeCount <= 5 and chooser button when > 5", () => {
@@ -802,6 +811,15 @@ describe("memories permissions and scoping", () => {
       button.customId?.includes(":document-range-open:"),
     );
     expect(documentRangeOpen).toBeDefined();
+    const documentComponents = (JSON.parse(JSON.stringify(largeDocumentPayload)).components[0].components ??
+      []) as unknown[];
+    const documentPersonaSelectorIndex = documentComponents.findIndex((component) =>
+      JSON.stringify(component).includes(":document-persona-select:"),
+    );
+    const documentsHeadingIndex = documentComponents.findIndex((component) =>
+      JSON.stringify(component).includes("### [Documents]"),
+    );
+    expect(documentPersonaSelectorIndex).toBeLessThan(documentsHeadingIndex);
 
     const documentChooserPayload = buildMemoriesPanelPayload({
       locale: "en-US",

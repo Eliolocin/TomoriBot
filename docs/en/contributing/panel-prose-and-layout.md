@@ -87,11 +87,12 @@ what exposes the bug, so the two rules are always applied together.
 - A real Components V2 separator between the top category controls and the page body.
 - A populated list section explains what its entries mean before rendering rows.
 - Whole ```markdown``` code blocks for big dynamic content (like memories)
-- A persona-scoped page renders its page selector, a heading and description beside the selected
-  persona's thumbnail, the persona selector, and then the selected entity's details. Omit the
-  thumbnail only when neither a public URL nor a readable local avatar is available; do not reorder
-  the remaining controls. Local avatars use `attachment://` media and must be reattached while old
-  message attachments are cleared on every repaint.
+- A persona-scoped page places its persona selector before the heading, thumbnail, and details that
+  it controls. When only one page is persona-scoped, the order is category, page, persona, content.
+  When Persona is itself a category with nested pages, the order is category, persona, page,
+  content. Omit the thumbnail only when neither a public URL nor a readable local avatar is
+  available. Local avatars use `attachment://` media and must be reattached while old message
+  attachments are cleared on every repaint.
 
 Prefer first-person `I` and `me` when the bot is the speaker.
 

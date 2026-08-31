@@ -34,11 +34,7 @@ describe("persona panel avatars", () => {
   });
 
   it("attaches a local alter avatar and returns its attachment URL", async () => {
-    const avatar = await resolvePersonaPanelAvatar(
-      {} as ChatInputCommandInteraction,
-      makeAlter(),
-      localDependencies,
-    );
+    const avatar = await resolvePersonaPanelAvatar({} as ChatInputCommandInteraction, makeAlter(), localDependencies);
 
     expect(avatar.url).toBe("attachment://persona_avatar_42.png");
     expect(avatar.files).toHaveLength(1);

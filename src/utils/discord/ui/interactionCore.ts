@@ -35,10 +35,7 @@ import type {
   GlobalDiscordState,
 } from "@/types/discord/rawApiTypes";
 import type { TomoriState } from "@/types/db/schema";
-import {
-  resolveAlterPersonaAvatarAsset,
-  type PersonaAvatarAsset,
-} from "@/utils/discord/personaPanelAvatar";
+import { resolveAlterPersonaAvatarAsset, type PersonaAvatarAsset } from "@/utils/discord/personaPanelAvatar";
 import { getLastDbError } from "@/utils/cache/tomoriStateCache";
 
 // Clean storage for select values (Discord.js will strip them, so we preserve them)

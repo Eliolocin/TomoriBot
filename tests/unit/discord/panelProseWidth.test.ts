@@ -165,7 +165,10 @@ describe("panel prose width", () => {
   it("covers every panel that renders a Thumbnail with a payload walk", () => {
     const thumbnailPanels = readdirSync(PANEL_UI_DIR)
       .filter((name) => name.endsWith("Panel.ts"))
-      .filter((name) => readFileSync(`${PANEL_UI_DIR}/${name}`, "utf8").includes("ComponentType.Thumbnail"));
+      .filter((name) => {
+        const source = readFileSync(`${PANEL_UI_DIR}/${name}`, "utf8");
+        return source.includes("ComponentType.Thumbnail") || source.includes("buildOptionalThumbnailSection");
+      });
 
     // Fails closed: a panel that grows a thumbnail must gain a walk below, because the static
     // scan above would keep measuring its heading against the wider body budget.

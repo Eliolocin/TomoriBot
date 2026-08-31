@@ -4056,6 +4056,19 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     expect(personaJson).toContain("> Prefix override: Global profile or persona default");
     expect(personaJson).toContain("> Suffix override: Global profile or persona default");
     expect(personaJson).not.toContain("Inherited");
+
+    const personaComponents = (JSON.parse(personaJson).components[0].components ?? []) as unknown[];
+    const pageSelectorIndex = personaComponents.findIndex((component) =>
+      JSON.stringify(component).includes("personal-config:v2:page:"),
+    );
+    const personaSelectorIndex = personaComponents.findIndex((component) =>
+      JSON.stringify(component).includes("personal-config:v2:persona-select:"),
+    );
+    const personaHeadingIndex = personaComponents.findIndex((component) =>
+      JSON.stringify(component).includes("Persona Naming"),
+    );
+    expect(pageSelectorIndex).toBeLessThan(personaSelectorIndex);
+    expect(personaSelectorIndex).toBeLessThan(personaHeadingIndex);
   });
 
   it("renders Privacy with clean Your Data spacing and separated Cross-Server STM section", () => {

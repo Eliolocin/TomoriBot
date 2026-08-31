@@ -5,6 +5,7 @@ import {
   type ButtonComponentData,
   type ComponentInContainerData,
   type ContainerComponentData,
+  type TextDisplayComponentData,
 } from "discord.js";
 import type { PanelReceipt } from "@/types/discord/panel";
 import { resolveRangeChooser } from "@/utils/discord/interactions/panelController";
@@ -106,6 +107,19 @@ export function buildPanelContainer(
     accentColor: PANEL_ACCENT_BY_TONE.info,
     components,
   };
+}
+
+export function buildOptionalThumbnailSection(
+  heading: TextDisplayComponentData,
+  thumbnailUrl?: string | null,
+): ComponentInContainerData {
+  return thumbnailUrl
+    ? {
+        type: ComponentType.Section,
+        components: [heading],
+        accessory: { type: ComponentType.Thumbnail, media: { url: thumbnailUrl } },
+      }
+    : heading;
 }
 
 export function buildPanelReceiptContainer(receipt: PanelReceipt): ContainerComponentData<ComponentInContainerData> {
