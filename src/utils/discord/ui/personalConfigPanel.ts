@@ -23,8 +23,6 @@ import {
   PERSONAL_FALLBACK_PAGE_SIZE,
   PERSONAL_MODEL_PAGE_SIZE,
   PERSONAL_PROVIDER_DIRECT_LIMIT,
-  PERSONAL_PROVIDER_PAGE_SIZE,
-  PERSONAL_PROVIDER_RANGE_VALUE,
   QUICK_TOGGLE_CAPABILITIES,
   ROUTING_CAPABILITY_LOCALE_KEYS,
   SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE,
@@ -38,6 +36,7 @@ import {
 import {
   buildCategoryButtonRow,
   buildOptionalThumbnailSection,
+  buildPaginationRow,
   buildPanelContainer,
   buildPanelReceiptContainer,
   buildRangeChooserComponents,
@@ -61,30 +60,6 @@ export interface PersonalConfigPanelPayload {
 
 export type PersonalConfigPanelView =
   | { kind: "main" }
-  | {
-      kind: "model-range";
-      capability: PersonalConfigManagedCapability;
-      provider: string;
-      rangePage: number;
-      totalOptions: number;
-    }
-  | {
-      kind: "model-provider-range";
-      capability: PersonalConfigManagedCapability;
-      rangePage: number;
-      totalOptions: number;
-    }
-  | {
-      kind: "model-provider-page";
-      capability: PersonalConfigManagedCapability;
-      start: number;
-    }
-  | {
-      kind: "fallbacks-range";
-      provider: string;
-      rangePage: number;
-      totalOptions: number;
-    }
   | { kind: "impersonation-clear-confirm"; nonce: string }
   | {
       kind: "spotlight-set-review";
@@ -173,6 +148,12 @@ export interface PersonalConfigPanelRenderInput {
   selectedCapability?: PersonalConfigManagedCapability;
   selectedParametersProvider?: string;
   selectedFallbacksProvider?: string;
+  selectedModelProvider?: string;
+  providerStart?: number;
+  modelStart?: number;
+  modelTotalCount?: number;
+  fallbackStart?: number;
+  fallbackOptionCount?: number;
   modelDisplayInfo?: PersonalConfigModelDisplayInfo;
   spotlightDisplayInfo?: PersonalConfigSpotlightDisplayInfo;
   serverTriggerBehavior?: { deliberate_trigger_mode: boolean; deliberate_tool_mode: boolean } | null;
@@ -293,181 +274,6 @@ function renderPanelView(
 ): ComponentInContainerData[] {
   const locale = input.locale;
   switch (view.kind) {
-    case "model-range": {
-      const capName = localizer(locale, ROUTING_CAPABILITY_LOCALE_KEYS[view.capability]);
-      return [
-        {
-          type: ComponentType.TextDisplay,
-          content: `### ${localizer(locale, "commands.personal.config.model_range_title", { capability: capName })}
-${localizer(locale, "commands.personal.config.model_range_desc", { provider: getProviderDisplayName(view.provider) })}`,
-        },
-        ...buildRangeChooserComponents({
-          locale,
-          totalCount: view.totalOptions,
-          pageSize: PERSONAL_MODEL_PAGE_SIZE,
-          chooserPage: view.rangePage,
-          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
-          version: PERSONAL_CONFIG_ROUTE_VERSION,
-          buildSegments: {
-            range: (rangeIndex) =>
-              buildPersonalConfigRouteSegments({
-                action: "model-range-open",
-                locale,
-                capability: view.capability,
-                provider: view.provider,
-                start: rangeIndex * PERSONAL_MODEL_PAGE_SIZE,
-              }),
-            previous: (targetPage) =>
-              buildPersonalConfigRouteSegments({
-                action: "model-range-page",
-                locale,
-                capability: view.capability,
-                provider: view.provider,
-                chooserPage: targetPage,
-              }),
-            next: (targetPage) =>
-              buildPersonalConfigRouteSegments({
-                action: "model-range-page",
-                locale,
-                capability: view.capability,
-                provider: view.provider,
-                chooserPage: targetPage,
-              }),
-            cancel: () => buildPersonalConfigRouteSegments({ action: "model-act-cancel", locale }),
-          },
-        }),
-      ];
-    }
-    case "model-provider-range": {
-      const capName = localizer(locale, ROUTING_CAPABILITY_LOCALE_KEYS[view.capability]);
-      return [
-        {
-          type: ComponentType.TextDisplay,
-          content: `### ${localizer(locale, "general.pagination.select_page_title")}\n**${capName}**`,
-        },
-        ...buildRangeChooserComponents({
-          locale,
-          totalCount: view.totalOptions,
-          pageSize: PERSONAL_PROVIDER_PAGE_SIZE,
-          chooserPage: view.rangePage,
-          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
-          version: PERSONAL_CONFIG_ROUTE_VERSION,
-          buildSegments: {
-            range: (rangeIndex) =>
-              buildPersonalConfigRouteSegments({
-                action: "model-provider-range-open",
-                locale,
-                capability: view.capability,
-                start: rangeIndex * PERSONAL_PROVIDER_PAGE_SIZE,
-              }),
-            previous: (targetPage) =>
-              buildPersonalConfigRouteSegments({
-                action: "model-provider-range-page",
-                locale,
-                capability: view.capability,
-                chooserPage: targetPage,
-              }),
-            next: (targetPage) =>
-              buildPersonalConfigRouteSegments({
-                action: "model-provider-range-page",
-                locale,
-                capability: view.capability,
-                chooserPage: targetPage,
-              }),
-            cancel: () => buildPersonalConfigRouteSegments({ action: "model-act-cancel", locale }),
-          },
-        }),
-      ];
-    }
-    case "model-provider-page": {
-      const capName = localizer(locale, ROUTING_CAPABILITY_LOCALE_KEYS[view.capability]);
-      const providers =
-        input.modelDisplayInfo?.eligibleProvidersForCapability[view.capability].slice(
-          view.start,
-          view.start + PERSONAL_PROVIDER_PAGE_SIZE,
-        ) ?? [];
-      return [
-        {
-          type: ComponentType.TextDisplay,
-          content: `### ${localizer(locale, "commands.personal.config.manage_capability_heading", {
-            capability: capName,
-          })}`,
-        },
-        {
-          type: ComponentType.ActionRow,
-          components: [
-            {
-              type: ComponentType.StringSelect,
-              customId: buildPersonalConfigRouteId({
-                action: "model-provider-select",
-                locale,
-                capability: view.capability,
-              }),
-              placeholder: safeSelectOptionText(
-                localizer(locale, "commands.personal.config.choose_model_placeholder"),
-                150,
-              ),
-              options: providers.map((provider) => ({
-                value: encodeProviderParam(provider),
-                label: safeSelectOptionText(getProviderDisplayName(provider), 100),
-              })),
-            },
-          ],
-        },
-        {
-          type: ComponentType.ActionRow,
-          components: [
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Danger,
-              customId: buildPersonalConfigRouteId({ action: "model-act-cancel", locale }),
-              label: localizer(locale, "general.pagination.cancel"),
-            },
-          ],
-        },
-      ];
-    }
-    case "fallbacks-range": {
-      return [
-        {
-          type: ComponentType.TextDisplay,
-          content: `### ${localizer(locale, "commands.personal.config.fallbacks_range_title")}
-${localizer(locale, "commands.personal.config.fallbacks_range_desc", { provider: getProviderDisplayName(view.provider) })}`,
-        },
-        ...buildRangeChooserComponents({
-          locale,
-          totalCount: view.totalOptions,
-          pageSize: PERSONAL_FALLBACK_PAGE_SIZE,
-          chooserPage: view.rangePage,
-          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
-          version: PERSONAL_CONFIG_ROUTE_VERSION,
-          buildSegments: {
-            range: (rangeIndex) =>
-              buildPersonalConfigRouteSegments({
-                action: "fallbacks-range-open",
-                locale,
-                provider: view.provider,
-                start: rangeIndex * PERSONAL_FALLBACK_PAGE_SIZE,
-              }),
-            previous: (targetPage) =>
-              buildPersonalConfigRouteSegments({
-                action: "fallbacks-range-page",
-                locale,
-                provider: view.provider,
-                chooserPage: targetPage,
-              }),
-            next: (targetPage) =>
-              buildPersonalConfigRouteSegments({
-                action: "fallbacks-range-page",
-                locale,
-                provider: view.provider,
-                chooserPage: targetPage,
-              }),
-            cancel: () => buildPersonalConfigRouteSegments({ action: "model-act-cancel", locale }),
-          },
-        }),
-      ];
-    }
     case "impersonation-clear-confirm": {
       return [
         {
@@ -1214,12 +1020,24 @@ ${localizer(locale, "commands.personal.config.models_description")}`,
 
       for (const capability of QUICK_TOGGLE_CAPABILITIES) {
         const row = routing?.[capability];
+        const providers = info?.eligibleProvidersForCapability[capability] ?? [];
+        const providerStart = input.selectedCapability === capability ? (input.providerStart ?? 0) : 0;
+        const rangeCount = Math.ceil(providers.length / PERSONAL_PROVIDER_DIRECT_LIMIT);
+        const rangeIndex = Math.min(
+          Math.max(0, Math.floor(providerStart / PERSONAL_PROVIDER_DIRECT_LIMIT)),
+          Math.max(0, rangeCount - 1),
+        );
+        const slicedProviders = providers.slice(
+          rangeIndex * PERSONAL_PROVIDER_DIRECT_LIMIT,
+          rangeIndex * PERSONAL_PROVIDER_DIRECT_LIMIT + PERSONAL_PROVIDER_DIRECT_LIMIT,
+        );
+
         components.push(
           buildModelRoutingControl({
             capabilityLabel: localizer(locale, ROUTING_CAPABILITY_LOCALE_KEYS[capability]),
             activeModelName: row?.activeModelName ?? null,
             activeProvider: row?.storedProvider ?? null,
-            eligibleProviders: info?.eligibleProvidersForCapability[capability] ?? [],
+            eligibleProviders: slicedProviders,
             customId: buildPersonalConfigRouteId({
               action: "model-provider-select",
               locale,
@@ -1228,13 +1046,64 @@ ${localizer(locale, "commands.personal.config.models_description")}`,
             serverDefaultValue: "__server_default__",
             serverDefaultLabel: localizer(locale, "commands.personal.config.override_status_server_default"),
             serverDefaultDisplay: localizer(locale, "commands.personal.config.override_status_server_default"),
-            providerOverflowValue: PERSONAL_PROVIDER_RANGE_VALUE,
-            providerOverflowLabel: localizer(locale, "general.pagination.select_page_title"),
-            directProviderLimit: PERSONAL_PROVIDER_DIRECT_LIMIT,
             encodeProviderValue: encodeProviderParam,
             disabled: writesDisabled,
           }),
         );
+
+        const providerPaginationRow = buildPaginationRow({
+          locale,
+          rangeIndex,
+          rangeCount,
+          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
+          version: PERSONAL_CONFIG_ROUTE_VERSION,
+          buildSegments: {
+            page: (targetRangeIndex) =>
+              buildPersonalConfigRouteSegments({
+                action: "model-provider-range-open",
+                locale,
+                capability,
+                start: targetRangeIndex * PERSONAL_PROVIDER_DIRECT_LIMIT,
+              }),
+          },
+        });
+        if (providerPaginationRow) {
+          components.push(providerPaginationRow);
+        }
+
+        const selectedModelProvider = input.selectedModelProvider;
+        if (
+          input.selectedCapability === capability &&
+          selectedModelProvider &&
+          input.modelTotalCount &&
+          input.modelTotalCount > PERSONAL_MODEL_PAGE_SIZE
+        ) {
+          const modelRangeCount = Math.ceil(input.modelTotalCount / PERSONAL_MODEL_PAGE_SIZE);
+          const modelRangeIndex = Math.min(
+            Math.max(0, Math.floor((input.modelStart ?? 0) / PERSONAL_MODEL_PAGE_SIZE)),
+            modelRangeCount - 1,
+          );
+          const modelPaginationRow = buildPaginationRow({
+            locale,
+            rangeIndex: modelRangeIndex,
+            rangeCount: modelRangeCount,
+            namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
+            version: PERSONAL_CONFIG_ROUTE_VERSION,
+            buildSegments: {
+              page: (targetRangeIndex) =>
+                buildPersonalConfigRouteSegments({
+                  action: "model-range-open",
+                  locale,
+                  capability,
+                  provider: selectedModelProvider,
+                  start: targetRangeIndex * PERSONAL_MODEL_PAGE_SIZE,
+                }),
+            },
+          });
+          if (modelPaginationRow) {
+            components.push(modelPaginationRow);
+          }
+        }
       }
 
       components.push(
@@ -1427,8 +1296,35 @@ ${localizer(locale, "commands.personal.config.fallbacks_description")}`,
               },
             ],
           },
-          { type: ComponentType.Separator, divider: true, spacing: 1 },
         );
+
+        const fallbackOptionCount = input.fallbackOptionCount ?? 0;
+        const fallbackRangeCount = Math.ceil(fallbackOptionCount / PERSONAL_FALLBACK_PAGE_SIZE);
+        const fallbackRangeIndex = Math.min(
+          Math.max(0, Math.floor((input.fallbackStart ?? 0) / PERSONAL_FALLBACK_PAGE_SIZE)),
+          Math.max(0, fallbackRangeCount - 1),
+        );
+        const fallbackPaginationRow = buildPaginationRow({
+          locale,
+          rangeIndex: fallbackRangeIndex,
+          rangeCount: fallbackRangeCount,
+          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
+          version: PERSONAL_CONFIG_ROUTE_VERSION,
+          buildSegments: {
+            page: (targetRangeIndex) =>
+              buildPersonalConfigRouteSegments({
+                action: "fallbacks-range-open",
+                locale,
+                provider: selectedProvider,
+                start: targetRangeIndex * PERSONAL_FALLBACK_PAGE_SIZE,
+              }),
+          },
+        });
+        if (fallbackPaginationRow) {
+          components.push(fallbackPaginationRow);
+        }
+
+        components.push({ type: ComponentType.Separator, divider: true, spacing: 1 });
 
         const canEnableRandomizer = Boolean(input.modelDisplayInfo?.canEnableRandomizer);
         // Clearing every fallback slot leaves the stored flag on, so the selection tracks the stored

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   ButtonStyle,
   ComponentType,
+  MessageFlags,
   type ActionRowData,
   type ButtonComponentData,
   type ButtonInteraction,
@@ -31,7 +32,6 @@ import {
   PERSONAL_CONFIG_ROUTE_CODECS,
   type PersonalConfigAction,
   type PersonalConfigPanelRoute,
-  PERSONAL_PROVIDER_RANGE_VALUE,
   SPOTLIGHT_PERSONA_PAGE_SIZE,
 } from "@/utils/discord/personalConfigPanelCatalog";
 import {
@@ -82,6 +82,7 @@ interface ObservedComponent {
   type?: number;
   customId?: string;
   placeholder?: string;
+  label?: string;
   disabled?: boolean;
   options?: Array<{ value?: string; label?: string }>;
 }
@@ -98,6 +99,7 @@ function collectComponents(value: unknown): ObservedComponent[] {
             type: record.type,
             customId: typeof record.customId === "string" ? record.customId : undefined,
             placeholder: typeof record.placeholder === "string" ? record.placeholder : undefined,
+            label: typeof record.label === "string" ? record.label : undefined,
             disabled: typeof record.disabled === "boolean" ? record.disabled : undefined,
             options: Array.isArray(record.options)
               ? record.options.map((option) => {
@@ -2751,7 +2753,7 @@ describe("Re-resolution and zero model guard", () => {
 });
 
 describe("Range pagination workflow", () => {
-  it("routes provider overflow through the shared range chooser and opens the selected provider page", async () => {
+  it("paginates provider selector in place across page clicks on Switch Models", async () => {
     const providers = Array.from({ length: 30 }, (_, index) => `custom:${index + 1}`);
     const calls: string[] = [];
     const { dependencies, telemetry } = makeDependencies(calls);
@@ -2768,69 +2770,53 @@ describe("Range pagination workflow", () => {
     };
 
     const route = createPersonalConfigInteractionRoute(dependencies);
-    const overflowId = buildPersonalConfigRouteId({
-      action: "model-provider-select",
-      locale: "en-US",
-      capability: "text",
-    });
-    let rangePayload: unknown = null;
-    const overflowInteraction = {
-      isButton: () => false,
-      isStringSelectMenu: () => true,
-      isModalSubmit: () => false,
-      customId: overflowId,
-      values: [PERSONAL_PROVIDER_RANGE_VALUE],
-      user: { id: "user-123", username: "tester", displayName: "Tester" },
-      guildId: "guild-123",
-      deferred: false,
-      replied: false,
-      deferUpdate: async () => {},
-      editReply: async (payload: unknown) => {
-        rangePayload = payload;
-      },
-    } as unknown as StringSelectMenuInteraction;
 
-    await route.execute({} as Client, overflowInteraction, requireRoute(overflowId));
-
-    const rangeComponents = collectComponents(rangePayload);
-    expect(rangeComponents.some((component) => component.customId?.includes(":model-provider-range-open:"))).toBe(true);
-    expect(JSON.stringify(rangePayload)).toContain("1-25");
-    expect(JSON.stringify(rangePayload)).toContain("26-30");
-
-    const pageId = buildPersonalConfigRouteId({
+    const page1Id = buildPersonalConfigRouteId({
       action: "model-provider-range-open",
       locale: "en-US",
       capability: "text",
-      start: 25,
+      start: 24,
     });
-    let pagePayload: unknown = null;
-    const pageInteraction = {
+    let page1Payload: unknown = null;
+    const page1Interaction = {
       isButton: () => true,
       isStringSelectMenu: () => false,
       isModalSubmit: () => false,
-      customId: pageId,
+      customId: page1Id,
       user: { id: "user-123", username: "tester", displayName: "Tester" },
       guildId: "guild-123",
       deferred: false,
       replied: false,
       deferUpdate: async () => {},
       editReply: async (payload: unknown) => {
-        pagePayload = payload;
+        page1Payload = payload;
       },
     } as unknown as ButtonInteraction;
 
-    await route.execute({} as Client, pageInteraction, requireRoute(pageId));
+    await route.execute({} as Client, page1Interaction, requireRoute(page1Id));
 
-    const providerSelect = collectComponents(pagePayload).find((component) =>
+    const page1Components = collectComponents(page1Payload);
+    const providerSelect = page1Components.find((component) =>
       component.customId?.endsWith(":model-provider-select:en-US:text"),
     );
     expect(providerSelect?.options?.map((option) => option.value)).toEqual([
+      "__server_default__",
+      "custom~25",
       "custom~26",
       "custom~27",
       "custom~28",
       "custom~29",
       "custom~30",
     ]);
+
+    const prevBtn = page1Components.find((c) => c.customId?.includes(":model-provider-range-open:en-US:text:0"));
+    const pageInfoBtn = page1Components.find((c) => c.label === "Page 2 of 2" && c.disabled === true);
+    expect(prevBtn).toBeDefined();
+    expect(prevBtn?.disabled).toBe(false);
+    expect(pageInfoBtn).toBeDefined();
+
+    const json = JSON.stringify(page1Payload);
+    expect(json).toContain("Personal Model Routing");
     expect(calls).toEqual([]);
     expect(telemetry).toEqual([]);
   });
@@ -2877,9 +2863,68 @@ describe("Range pagination workflow", () => {
     expect(telemetry).toEqual([]);
   });
 
-  it("renders range view when available models exceed 25", async () => {
+  it("accepts retained literal :25 offset for model-provider-range-open without failing stale", async () => {
+    const providers = Array.from({ length: 30 }, (_, index) => `custom:${index + 1}`);
+    const calls: string[] = [];
+    const { dependencies, telemetry } = makeDependencies(calls);
+    const originalLoader = dependencies.loadPersonalModelDisplayInfo;
+    dependencies.loadPersonalModelDisplayInfo = async (...args) => {
+      const info = await originalLoader(...args);
+      return {
+        ...info,
+        eligibleProvidersForCapability: {
+          ...info.eligibleProvidersForCapability,
+          text: providers,
+        },
+      };
+    };
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+
+    // Literal WIRE_CONTRACT_V2 action ending in :25
+    const customId = "personal-config:v2:model-provider-range-open:en-US:text:25";
+    let repaintedPayload: unknown = null;
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repaintedPayload = payload;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    const components = collectComponents(repaintedPayload);
+    const providerSelect = components.find((c) => c.customId?.endsWith(":model-provider-select:en-US:text"));
+    expect(providerSelect?.options?.map((o) => o.value)).toEqual([
+      "__server_default__",
+      "custom~25",
+      "custom~26",
+      "custom~27",
+      "custom~28",
+      "custom~29",
+      "custom~30",
+    ]);
+
+    const pageInfoBtn = components.find((c) => c.label === "Page 2 of 2" && c.disabled === true);
+    expect(pageInfoBtn).toBeDefined();
+
+    expect(JSON.stringify(repaintedPayload)).not.toContain("Personal configuration is currently unavailable.");
+    expect(calls).toEqual([]);
+    expect(telemetry).toEqual([]);
+  });
+
+  it("defers and repaints Switch Models with in-place pagination row when model-provider-select has > 25 models", async () => {
     let modalShown = false;
-    let repaintedView: unknown = null;
+    let deferred = false;
+    let repaintedPayload: unknown = null;
 
     const thirtyModels = Array.from({ length: 30 }, (_, i) => ({
       id: 100 + i,
@@ -2910,22 +2955,76 @@ describe("Range pagination workflow", () => {
       guildId: "guild-123",
       deferred: false,
       replied: false,
-      deferUpdate: async () => {},
+      deferUpdate: async () => {
+        deferred = true;
+      },
       editReply: async (payload: unknown) => {
-        repaintedView = payload;
+        repaintedPayload = payload;
       },
     } as unknown as StringSelectMenuInteraction;
 
     await route.execute({} as Client, interaction, requireRoute(customId));
 
     expect(modalShown).toBe(false);
-    const json = JSON.stringify(repaintedView);
-    expect(json).toContain("Select Text Model Range");
-    expect(json).toContain("1-25");
-    expect(json).toContain("26-30");
+    expect(deferred).toBe(true);
+
+    const components = collectComponents(repaintedPayload);
+    const pageInfoBtn = components.find((c) => c.label === "Page 1 of 2" && c.disabled === true);
+    expect(pageInfoBtn).toBeDefined();
+    const nextBtn = components.find((c) => c.customId?.includes(":model-range-open:en-US:text:openrouter:25"));
+    expect(nextBtn).toBeDefined();
+    expect(nextBtn?.disabled).toBe(false);
+    expect(nextBtn?.label).toBe("Next →");
   });
 
-  it("opens modal with sliced models on model-range-open", async () => {
+  it("opens modal directly when model-provider-select has <= 25 models", async () => {
+    let modalShown = false;
+    let passedModels: Array<{ id: number; name: string }> = [];
+
+    const twentyModels = Array.from({ length: 20 }, (_, i) => ({
+      id: 100 + i,
+      name: `Model ${i + 1}`,
+    }));
+
+    const { dependencies } = makeDependencies([], {
+      loadAvailableModelsForCapability: async () => twentyModels,
+      showModelSelectModal: async (_interaction, _locale, _nonce, _cap, _prov, models) => {
+        modalShown = true;
+        passedModels = models;
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigRouteId({
+      action: "model-provider-select",
+      locale: "en-US",
+      capability: "text",
+    });
+
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => true,
+      isModalSubmit: () => false,
+      customId,
+      values: ["openrouter"],
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as StringSelectMenuInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(modalShown).toBe(true);
+    expect(passedModels).toHaveLength(20);
+    expect(passedModels[0].name).toBe("Model 1");
+    expect(passedModels[19].name).toBe("Model 20");
+  });
+
+  it("opens requested slice in modal on model-range-open button click", async () => {
+    let modalShown = false;
     let passedModels: Array<{ id: number; name: string }> = [];
 
     const thirtyModels = Array.from({ length: 30 }, (_, i) => ({
@@ -2936,6 +3035,7 @@ describe("Range pagination workflow", () => {
     const { dependencies } = makeDependencies([], {
       loadAvailableModelsForCapability: async () => thirtyModels,
       showModelSelectModal: async (_interaction, _locale, _nonce, _cap, _prov, models) => {
+        modalShown = true;
         passedModels = models;
       },
     });
@@ -2958,13 +3058,253 @@ describe("Range pagination workflow", () => {
       guildId: "guild-123",
       deferred: false,
       replied: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
     } as unknown as ButtonInteraction;
 
     await route.execute({} as Client, interaction, requireRoute(customId));
 
+    expect(modalShown).toBe(true);
     expect(passedModels).toHaveLength(5);
     expect(passedModels[0].name).toBe("Model 26");
     expect(passedModels[4].name).toBe("Model 30");
+  });
+
+  it("defers and repaints Fallbacks with in-place pagination row when fallbacks-provider-select has > 24 options", async () => {
+    let modalShown = false;
+    let deferred = false;
+    let repaintedPayload: unknown = null;
+    const fallbackOptions = Array.from({ length: 30 }, (_, i) => ({
+      refKey: `llm:${100 + i}`,
+      label: `Model ${i + 1}`,
+    }));
+
+    const loaders = await import("@/utils/discord/interactions/personalConfigLoaders");
+    const loadSpy = spyOn(loaders, "loadFallbackSelectionOptions").mockResolvedValue(fallbackOptions);
+    const savedConfig = await import("@/utils/provider/savedProviderConfig");
+    const eligibleSpy = spyOn(savedConfig, "loadUserSavedProvidersForCapability").mockResolvedValue([
+      { provider: "openrouter" } as unknown as UserSavedProviderConfigRow,
+    ]);
+
+    try {
+      const { dependencies } = makeDependencies([], {
+        showFallbacksModal: async () => {
+          modalShown = true;
+        },
+      });
+
+      const route = createPersonalConfigInteractionRoute(dependencies);
+      const customId = buildPersonalConfigRouteId({
+        action: "fallbacks-provider-select",
+        locale: "en-US",
+      });
+
+      const interaction = {
+        isButton: () => false,
+        isStringSelectMenu: () => true,
+        isModalSubmit: () => false,
+        customId,
+        values: ["openrouter"],
+        user: { id: "user-123", username: "tester", displayName: "Tester" },
+        guildId: "guild-123",
+        deferred: false,
+        replied: false,
+        deferUpdate: async () => {
+          deferred = true;
+        },
+        editReply: async (payload: unknown) => {
+          repaintedPayload = payload;
+        },
+      } as unknown as StringSelectMenuInteraction;
+
+      await route.execute({} as Client, interaction, requireRoute(customId));
+
+      expect(modalShown).toBe(false);
+      expect(deferred).toBe(true);
+
+      const components = collectComponents(repaintedPayload);
+      const pageInfoBtn = components.find((c) => c.label === "Page 1 of 2" && c.disabled === true);
+      expect(pageInfoBtn).toBeDefined();
+      const nextBtn = components.find((c) => c.customId?.includes(":fallbacks-range-open:en-US:openrouter:24"));
+      expect(nextBtn).toBeDefined();
+      expect(nextBtn?.disabled).toBe(false);
+      expect(nextBtn?.label).toBe("Next →");
+    } finally {
+      loadSpy.mockRestore();
+      eligibleSpy.mockRestore();
+    }
+  });
+
+  it("opens fallback modal directly when fallbacks-provider-select has <= 24 options", async () => {
+    let modalShown = false;
+    let passedOptions: Array<{ refKey: string; label: string }> = [];
+    const fallbackOptions = Array.from({ length: 20 }, (_, i) => ({
+      refKey: `llm:${100 + i}`,
+      label: `Model ${i + 1}`,
+    }));
+
+    const loaders = await import("@/utils/discord/interactions/personalConfigLoaders");
+    const loadSpy = spyOn(loaders, "loadFallbackSelectionOptions").mockResolvedValue(fallbackOptions);
+    const savedConfig = await import("@/utils/provider/savedProviderConfig");
+    const eligibleSpy = spyOn(savedConfig, "loadUserSavedProvidersForCapability").mockResolvedValue([
+      { provider: "openrouter" } as unknown as UserSavedProviderConfigRow,
+    ]);
+
+    try {
+      const { dependencies } = makeDependencies([], {
+        showFallbacksModal: async (_interaction, _locale, _nonce, _provider, options) => {
+          modalShown = true;
+          passedOptions = options;
+        },
+      });
+
+      const route = createPersonalConfigInteractionRoute(dependencies);
+      const customId = buildPersonalConfigRouteId({
+        action: "fallbacks-provider-select",
+        locale: "en-US",
+      });
+
+      const interaction = {
+        isButton: () => false,
+        isStringSelectMenu: () => true,
+        isModalSubmit: () => false,
+        customId,
+        values: ["openrouter"],
+        user: { id: "user-123", username: "tester", displayName: "Tester" },
+        guildId: "guild-123",
+        deferred: false,
+        replied: false,
+      } as unknown as StringSelectMenuInteraction;
+
+      await route.execute({} as Client, interaction, requireRoute(customId));
+
+      expect(modalShown).toBe(true);
+      expect(passedOptions).toHaveLength(20);
+      expect(passedOptions[0].label).toBe("Model 1");
+      expect(passedOptions[19].label).toBe("Model 20");
+    } finally {
+      loadSpy.mockRestore();
+      eligibleSpy.mockRestore();
+    }
+  });
+
+  it("opens requested slice in modal on fallbacks-range-open button click", async () => {
+    let modalShown = false;
+    let passedProvider = "";
+    let passedOptions: Array<{ refKey: string; label: string }> = [];
+    let passedFallbackRefs: Array<{ type: string; id: number }> = [];
+    const fallbackOptions = Array.from({ length: 30 }, (_, i) => ({
+      refKey: `llm:${100 + i}`,
+      label: `Model ${i + 1}`,
+    }));
+
+    const loaders = await import("@/utils/discord/interactions/personalConfigLoaders");
+    const loadSpy = spyOn(loaders, "loadFallbackSelectionOptions").mockResolvedValue(fallbackOptions);
+    const savedConfig = await import("@/utils/provider/savedProviderConfig");
+    const eligibleSpy = spyOn(savedConfig, "loadUserSavedProvidersForCapability").mockResolvedValue([
+      { provider: "openrouter" } as unknown as UserSavedProviderConfigRow,
+    ]);
+
+    try {
+      const { dependencies } = makeDependencies([], {
+        showFallbacksModal: async (_interaction, _locale, _nonce, provider, options, fallbackRefs) => {
+          modalShown = true;
+          passedProvider = provider;
+          passedOptions = options;
+          passedFallbackRefs = fallbackRefs;
+        },
+      });
+
+      const route = createPersonalConfigInteractionRoute(dependencies);
+      const customId = buildPersonalConfigRouteId({
+        action: "fallbacks-range-open",
+        locale: "en-US",
+        provider: "openrouter",
+        start: 24,
+      });
+
+      const interaction = {
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        customId,
+        user: { id: "user-123", username: "tester", displayName: "Tester" },
+        guildId: "guild-123",
+        deferred: false,
+        replied: false,
+        deferUpdate: async () => {},
+        editReply: async () => {},
+      } as unknown as ButtonInteraction;
+
+      await route.execute({} as Client, interaction, requireRoute(customId));
+
+      expect(modalShown).toBe(true);
+      expect(passedProvider).toBe("openrouter");
+      expect(passedOptions).toHaveLength(6);
+      expect(passedOptions[0].label).toBe("Model 25");
+      expect(passedOptions[5].label).toBe("Model 30");
+      expect(passedFallbackRefs).toEqual([{ type: "llm", id: 103 }]);
+    } finally {
+      loadSpy.mockRestore();
+      eligibleSpy.mockRestore();
+    }
+  });
+
+  it("rejects handcrafted :25 fallback button with unavailable reply and shows no modal", async () => {
+    let modalShown = false;
+    let replyPayload: InteractionReplyOptions | null = null;
+    const fallbackOptions = Array.from({ length: 30 }, (_, i) => ({
+      refKey: `llm:${100 + i}`,
+      label: `Model ${i + 1}`,
+    }));
+
+    const loaders = await import("@/utils/discord/interactions/personalConfigLoaders");
+    const loadSpy = spyOn(loaders, "loadFallbackSelectionOptions").mockResolvedValue(fallbackOptions);
+    const savedConfig = await import("@/utils/provider/savedProviderConfig");
+    const eligibleSpy = spyOn(savedConfig, "loadUserSavedProvidersForCapability").mockResolvedValue([
+      { provider: "openrouter" } as unknown as UserSavedProviderConfigRow,
+    ]);
+
+    try {
+      const calls: string[] = [];
+      const { dependencies, telemetry } = makeDependencies(calls, {
+        showFallbacksModal: async () => {
+          modalShown = true;
+        },
+      });
+
+      const route = createPersonalConfigInteractionRoute(dependencies);
+      const customId = "personal-config:v2:fallbacks-range-open:en-US:openrouter:25";
+
+      const interaction = {
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        customId,
+        user: { id: "user-123", username: "tester", displayName: "Tester" },
+        guildId: "guild-123",
+        deferred: false,
+        replied: false,
+        reply: async (payload: InteractionReplyOptions) => {
+          replyPayload = payload;
+        },
+        deferUpdate: async () => {},
+        editReply: async () => {},
+      } as unknown as ButtonInteraction;
+
+      await route.execute({} as Client, interaction, requireRoute(customId));
+
+      expect(modalShown).toBe(false);
+      expect(replyPayload).toEqual({
+        content: localizer("en-US", "commands.personal.config.unavailable"),
+        flags: MessageFlags.Ephemeral,
+      });
+      expect(calls).toEqual([]);
+      expect(telemetry).toEqual([]);
+    } finally {
+      loadSpy.mockRestore();
+      eligibleSpy.mockRestore();
+    }
   });
 });
 
@@ -5104,52 +5444,9 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
         totalOptions: 500,
       },
     });
-    const modelRangePayload = buildPersonalConfigPanelPayload({
-      locale,
-      category: "models",
-      page: "switch",
-      user: makeUser(),
-      resolvedNickname: "Tester",
-      personas: [],
-      guildId: snowflake,
-      memoryCount: 0,
-      stmCount: 0,
-      readStatus: "fresh",
-      view: {
-        kind: "model-range",
-        capability: "embedding",
-        provider: "fireworks",
-        rangePage: 399,
-        totalOptions: 100_000,
-      },
-    });
-    const fallbacksRangePayload = buildPersonalConfigPanelPayload({
-      locale,
-      category: "models",
-      page: "fallbacks",
-      user: makeUser(),
-      resolvedNickname: "Tester",
-      personas: [],
-      guildId: snowflake,
-      memoryCount: 0,
-      stmCount: 0,
-      readStatus: "fresh",
-      view: {
-        kind: "fallbacks-range",
-        provider: "openrouter",
-        rangePage: 399,
-        totalOptions: 100_000,
-      },
-    });
 
     const producedCustomIds = [
-      ...JSON.stringify([
-        reviewPayload,
-        rangePayload,
-        autoRangePayload,
-        modelRangePayload,
-        fallbacksRangePayload,
-      ]).matchAll(/"customId":"([^"]+)"/g),
+      ...JSON.stringify([reviewPayload, rangePayload, autoRangePayload]).matchAll(/"customId":"([^"]+)"/g),
     ].map((match) => match[1]);
 
     const producedRoute = (action: string) => {
@@ -5256,7 +5553,13 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
         },
       },
       {
-        customId: producedRoute("model-range-page"),
+        customId: buildPersonalConfigRouteId({
+          action: "model-range-page",
+          locale,
+          capability: "embedding",
+          provider: "fireworks",
+          chooserPage: 398,
+        }),
         expected: {
           action: "model-range-page",
           locale,
@@ -5266,7 +5569,12 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
         },
       },
       {
-        customId: producedRoute("fallbacks-range-page"),
+        customId: buildPersonalConfigRouteId({
+          action: "fallbacks-range-page",
+          locale,
+          provider: "openrouter",
+          chooserPage: 398,
+        }),
         expected: {
           action: "fallbacks-range-page",
           locale,
@@ -5547,11 +5855,17 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
       id: 200 + i,
       name: `Model ${i + 1}`,
     }));
+    const fallbackOptions = Array.from({ length: 150 }, (_, i) => ({
+      refKey: `llm:${200 + i}`,
+      label: `Model ${i + 1}`,
+    }));
     let repaintedPayload: unknown = null;
 
     const { dependencies } = makeDependencies([], {
       loadAvailableModelsForCapability: async () => models,
     });
+    const loaders = await import("@/utils/discord/interactions/personalConfigLoaders");
+    const fallbackLoaderSpy = spyOn(loaders, "loadFallbackSelectionOptions").mockResolvedValue(fallbackOptions);
 
     const route = createPersonalConfigInteractionRoute(dependencies);
 
@@ -5560,7 +5874,7 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
       locale: "en-US",
       capability: "text",
       provider: "openrouter",
-      chooserPage: 1,
+      chooserPage: 5,
     });
 
     const modelInteraction = {
@@ -5578,36 +5892,45 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
       },
     } as unknown as ButtonInteraction;
 
-    await route.execute({} as Client, modelInteraction, requireRoute(modelPageCustomId));
-    const modelJson = JSON.stringify(repaintedPayload);
-    expect(modelJson).toContain("Select Text Model Range");
-    expect(modelJson).toContain("26-50");
+    try {
+      await route.execute({} as Client, modelInteraction, requireRoute(modelPageCustomId));
+      const modelJson = JSON.stringify(repaintedPayload);
+      expect(modelJson).toContain("Personal Model Routing");
+      const modelComponents = collectComponents(repaintedPayload);
+      const modelPageBtn = modelComponents.find((c) => c.label === "Page 6 of 6" && c.disabled === true);
+      expect(modelPageBtn).toBeDefined();
 
-    const fallbackPageCustomId = buildPersonalConfigRouteId({
-      action: "fallbacks-range-page",
-      locale: "en-US",
-      provider: "openrouter",
-      chooserPage: 1,
-    });
+      const fallbackPageCustomId = buildPersonalConfigRouteId({
+        action: "fallbacks-range-page",
+        locale: "en-US",
+        provider: "openrouter",
+        chooserPage: 5,
+      });
 
-    const fallbackInteraction = {
-      isButton: () => true,
-      isStringSelectMenu: () => false,
-      isModalSubmit: () => false,
-      customId: fallbackPageCustomId,
-      user: { id: "user-123", username: "tester", displayName: "Tester" },
-      guildId: "guild-123",
-      deferred: false,
-      replied: false,
-      deferUpdate: async () => {},
-      editReply: async (payload: unknown) => {
-        repaintedPayload = payload;
-      },
-    } as unknown as ButtonInteraction;
+      const fallbackInteraction = {
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        customId: fallbackPageCustomId,
+        user: { id: "user-123", username: "tester", displayName: "Tester" },
+        guildId: "guild-123",
+        deferred: false,
+        replied: false,
+        deferUpdate: async () => {},
+        editReply: async (payload: unknown) => {
+          repaintedPayload = payload;
+        },
+      } as unknown as ButtonInteraction;
 
-    await route.execute({} as Client, fallbackInteraction, requireRoute(fallbackPageCustomId));
-    const fallbackJson = JSON.stringify(repaintedPayload);
-    expect(fallbackJson).toContain("Select Fallback Models Range");
+      await route.execute({} as Client, fallbackInteraction, requireRoute(fallbackPageCustomId));
+      const fallbackJson = JSON.stringify(repaintedPayload);
+      expect(fallbackJson).toContain("Personal Text Fallbacks");
+      const fallbackComponents = collectComponents(repaintedPayload);
+      const fallbackPageBtn = fallbackComponents.find((c) => c.label === "Page 6 of 7" && c.disabled === true);
+      expect(fallbackPageBtn).toBeDefined();
+    } finally {
+      fallbackLoaderSpy.mockRestore();
+    }
   });
 
   it("navigates spotlight remove range page past row 250", async () => {

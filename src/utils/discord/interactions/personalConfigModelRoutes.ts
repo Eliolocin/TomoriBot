@@ -5,6 +5,9 @@ import { performPanelAction } from "@/utils/discord/interactions/panelController
 import { loadFallbackSelectionOptions } from "@/utils/discord/interactions/personalConfigLoaders";
 import {
   decodeProviderParam,
+  PERSONAL_FALLBACK_PAGE_SIZE,
+  PERSONAL_MODEL_PAGE_SIZE,
+  PERSONAL_PROVIDER_DIRECT_LIMIT,
   PERSONAL_PROVIDER_PAGE_SIZE,
   QUICK_TOGGLE_CAPABILITIES,
   ROUTING_CAPABILITY_LOCALE_KEYS,
@@ -345,53 +348,21 @@ export async function handlePersonalConfigModelRoutes(context: PersonalConfigPos
       route.provider,
       route.capability,
     );
-    await repaint(interaction, {
-      locale: route.locale,
-      scope: context.scope,
-      category: "models",
-      page: "switch",
-      dependencies,
-      selectedCapability: route.capability,
-      view: {
-        kind: "model-range",
-        capability: route.capability,
-        provider: route.provider,
-        rangePage: route.chooserPage,
-        totalOptions: availableModels.length,
-      },
-    });
-    return true;
-  }
 
-  if (route.action === "model-provider-range-open" || route.action === "model-provider-range-page") {
-    const rows = await dependencies.loadUserSavedProviders(context.scope.userId);
-    const displayInfo = await dependencies.loadPersonalModelDisplayInfo(context.scope.userId, rows, route.capability);
-    const providers = displayInfo.eligibleProvidersForCapability[route.capability];
+    const start = route.chooserPage * PERSONAL_MODEL_PAGE_SIZE;
 
-    if (route.action === "model-provider-range-open") {
-      if (route.start % PERSONAL_PROVIDER_PAGE_SIZE !== 0 || route.start >= providers.length) {
-        await repaint(interaction, {
-          locale: route.locale,
-          scope: context.scope,
-          category: "models",
-          page: "switch",
-          panelReceipt: {
-            tone: "error",
-            heading: localizer(route.locale, "commands.personal.config.unavailable"),
-            detail: localizer(route.locale, "commands.personal.config.stale_warning"),
-          },
-          dependencies,
-        });
-        return true;
-      }
+    if (start % PERSONAL_MODEL_PAGE_SIZE !== 0 || (start >= availableModels.length && availableModels.length > 0)) {
       await repaint(interaction, {
         locale: route.locale,
         scope: context.scope,
         category: "models",
         page: "switch",
+        panelReceipt: {
+          tone: "error",
+          heading: localizer(route.locale, "commands.personal.config.unavailable"),
+          detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+        },
         dependencies,
-        selectedCapability: route.capability,
-        view: { kind: "model-provider-page", capability: route.capability, start: route.start },
       });
       return true;
     }
@@ -403,12 +374,47 @@ export async function handlePersonalConfigModelRoutes(context: PersonalConfigPos
       page: "switch",
       dependencies,
       selectedCapability: route.capability,
-      view: {
-        kind: "model-provider-range",
-        capability: route.capability,
-        rangePage: route.chooserPage,
-        totalOptions: providers.length,
-      },
+      selectedModelProvider: route.provider,
+      modelStart: start,
+      modelTotalCount: availableModels.length,
+    });
+    return true;
+  }
+
+  if (route.action === "model-provider-range-open" || route.action === "model-provider-range-page") {
+    const rows = await dependencies.loadUserSavedProviders(context.scope.userId);
+    const displayInfo = await dependencies.loadPersonalModelDisplayInfo(context.scope.userId, rows, route.capability);
+    const providers = displayInfo.eligibleProvidersForCapability[route.capability];
+
+    const start =
+      route.action === "model-provider-range-open" ? route.start : route.chooserPage * PERSONAL_PROVIDER_PAGE_SIZE;
+
+    const isValidStart = start % PERSONAL_PROVIDER_DIRECT_LIMIT === 0 || start % PERSONAL_PROVIDER_PAGE_SIZE === 0;
+
+    if (!isValidStart || (start >= providers.length && providers.length > 0)) {
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: context.scope,
+        category: "models",
+        page: "switch",
+        panelReceipt: {
+          tone: "error",
+          heading: localizer(route.locale, "commands.personal.config.unavailable"),
+          detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+        },
+        dependencies,
+      });
+      return true;
+    }
+
+    await repaint(interaction, {
+      locale: route.locale,
+      scope: context.scope,
+      category: "models",
+      page: "switch",
+      dependencies,
+      selectedCapability: route.capability,
+      providerStart: start,
     });
     return true;
   }
@@ -420,6 +426,27 @@ export async function handlePersonalConfigModelRoutes(context: PersonalConfigPos
     } catch (error) {
       log.warn("Failed to load available models for fallbacks modal", { provider: route.provider, error });
     }
+
+    const start = route.chooserPage * PERSONAL_FALLBACK_PAGE_SIZE;
+
+    const isValidStart = start % PERSONAL_FALLBACK_PAGE_SIZE === 0 || start % PERSONAL_PROVIDER_PAGE_SIZE === 0;
+
+    if (!isValidStart || (start >= availableOptions.length && availableOptions.length > 0)) {
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: context.scope,
+        category: "models",
+        page: "fallbacks",
+        panelReceipt: {
+          tone: "error",
+          heading: localizer(route.locale, "commands.personal.config.unavailable"),
+          detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+        },
+        dependencies,
+      });
+      return true;
+    }
+
     await repaint(interaction, {
       locale: route.locale,
       scope: context.scope,
@@ -427,12 +454,8 @@ export async function handlePersonalConfigModelRoutes(context: PersonalConfigPos
       page: "fallbacks",
       dependencies,
       selectedFallbacksProvider: route.provider,
-      view: {
-        kind: "fallbacks-range",
-        provider: route.provider,
-        rangePage: route.chooserPage,
-        totalOptions: availableOptions.length,
-      },
+      fallbackStart: start,
+      fallbackOptionCount: availableOptions.length,
     });
     return true;
   }

@@ -203,11 +203,6 @@ export default {
     remove_nothing_changed: `Nothing was removed`,
     remove_nothing_changed_detail: `All entries remained selected. No write was needed.`,
 
-    // Range navigation
-    range_previous: `← Previous`,
-    range_next: `Next →`,
-    range_indicator: `Page {current} of {total}`,
-
     // Quotas
     quotas_title: `Generation Quotas`,
     quotas_description: `Configure daily per-user limits and server-wide pooled\nquotas for AI generation.`,

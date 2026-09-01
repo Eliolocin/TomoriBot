@@ -19,13 +19,17 @@ const PANEL_ACCENT_BY_TONE = {
   info: 0x65c6c5,
 } as const;
 
-export const RANGE_BUTTONS_PER_ROW = 5;
+const RANGE_BUTTONS_PER_ROW = 5;
 
 export interface RangeChooserRouteSegments {
   range: (rangeIndex: number) => string[];
   previous?: (targetChooserPage: number) => string[];
   next?: (targetChooserPage: number) => string[];
   cancel?: () => string[];
+}
+
+export interface PaginationRouteSegments {
+  page: (rangeIndex: number) => string[];
 }
 
 interface RangeChooserComponentsBase {
@@ -177,6 +181,53 @@ export function buildStateControlRow<TValue>(
         disabled: writesDisabled || isSelected || !isAvailable,
       };
     }),
+  };
+}
+
+export interface PaginationRowOptions {
+  locale: string;
+  rangeIndex: number;
+  rangeCount: number;
+  namespace: string;
+  version: string;
+  buildSegments: PaginationRouteSegments;
+}
+
+export function buildPaginationRow(options: PaginationRowOptions): ActionRowData<ButtonComponentData> | null {
+  if (options.rangeCount <= 1) return null;
+
+  const rangeIndex = Math.min(Math.max(options.rangeIndex, 0), options.rangeCount - 1);
+  const buildCustomId = (targetRangeIndex: number) =>
+    buildInteractionRouteId(options.namespace, options.version, ...options.buildSegments.page(targetRangeIndex));
+
+  return {
+    type: ComponentType.ActionRow,
+    components: [
+      {
+        type: ComponentType.Button,
+        style: ButtonStyle.Secondary,
+        customId: buildCustomId(Math.max(0, rangeIndex - 1)),
+        label: localizer(options.locale, "general.pagination.previous"),
+        disabled: rangeIndex === 0,
+      },
+      {
+        type: ComponentType.Button,
+        style: ButtonStyle.Secondary,
+        customId: buildCustomId(rangeIndex),
+        label: localizer(options.locale, "general.pagination.page_info", {
+          current: rangeIndex + 1,
+          total: options.rangeCount,
+        }),
+        disabled: true,
+      },
+      {
+        type: ComponentType.Button,
+        style: ButtonStyle.Secondary,
+        customId: buildCustomId(Math.min(options.rangeCount - 1, rangeIndex + 1)),
+        label: localizer(options.locale, "general.pagination.next"),
+        disabled: rangeIndex === options.rangeCount - 1,
+      },
+    ],
   };
 }
 

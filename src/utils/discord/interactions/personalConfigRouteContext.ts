@@ -11,7 +11,10 @@ import type { PanelReceipt } from "@/types/discord/panel";
 import type { UserPersonaNamingPreference } from "@/types/personaNaming";
 import type { PersonalSpotlightStatus } from "@/utils/db/repositories/UserRepository";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
-import type { PersonalConfigScope } from "@/utils/discord/interactions/personalConfigLoaders";
+import {
+  loadFallbackSelectionOptions,
+  type PersonalConfigScope,
+} from "@/utils/discord/interactions/personalConfigLoaders";
 import type { PersonalConfigOperations } from "@/utils/discord/interactions/personalConfigOperations";
 import {
   type PersonalConfigCategory,
@@ -225,6 +228,12 @@ export interface PersonalConfigRepaintOptions {
   selectedCapability?: PersonalConfigManagedCapability;
   selectedParametersProvider?: string;
   selectedFallbacksProvider?: string;
+  selectedModelProvider?: string;
+  providerStart?: number;
+  modelStart?: number;
+  modelTotalCount?: number;
+  fallbackStart?: number;
+  fallbackOptionCount?: number;
   view?: PersonalConfigPanelView;
 }
 
@@ -243,6 +252,10 @@ export async function repaint(
     selectedCapability,
     selectedParametersProvider,
     selectedFallbacksProvider,
+    selectedModelProvider,
+    providerStart,
+    modelStart,
+    fallbackStart,
     view,
   } = options;
   let personaPref: UserPersonaNamingPreference | null = null;
@@ -272,6 +285,39 @@ export async function repaint(
       selectedParametersProvider,
       selectedFallbacksProvider,
     );
+  }
+
+  let fallbackOptionCount = options.fallbackOptionCount;
+  if (category === "models" && page === "fallbacks" && fallbackOptionCount === undefined) {
+    const activeFallbacksProvider = selectedFallbacksProvider ?? modelDisplayInfo?.fallbacksProviders[0];
+    if (activeFallbacksProvider) {
+      try {
+        const fallbackOptions = await loadFallbackSelectionOptions(scope.userId, activeFallbacksProvider);
+        fallbackOptionCount = fallbackOptions.length;
+      } catch {
+        fallbackOptionCount = 0;
+      }
+    }
+  }
+
+  let modelTotalCount = options.modelTotalCount;
+  if (
+    category === "models" &&
+    page === "switch" &&
+    modelTotalCount === undefined &&
+    selectedModelProvider &&
+    selectedCapability
+  ) {
+    try {
+      const models = await dependencies.loadAvailableModelsForCapability(
+        scope.userId,
+        selectedModelProvider,
+        selectedCapability,
+      );
+      modelTotalCount = models.length;
+    } catch {
+      modelTotalCount = 0;
+    }
   }
 
   let spotlightDisplayInfo: PersonalConfigSpotlightDisplayInfo | undefined;
@@ -311,6 +357,12 @@ export async function repaint(
         selectedCapability,
         selectedParametersProvider,
         selectedFallbacksProvider,
+        selectedModelProvider,
+        providerStart,
+        modelStart,
+        modelTotalCount,
+        fallbackStart,
+        fallbackOptionCount,
         modelDisplayInfo,
         spotlightDisplayInfo,
         serverTriggerBehavior,

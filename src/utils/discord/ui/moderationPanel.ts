@@ -18,11 +18,14 @@ import {
   buildMemberAccessModalFieldId,
   buildModerationRemoveModalFieldId,
   buildModerationRouteId,
+  buildModerationRouteSegments,
   buildPersonaChannelAddModalFieldId,
   buildQuotaModalFieldId,
   buildUserBlacklistAddModalFieldId,
   buildWhitelistChannelAddModalFieldId,
   buildWhitelistRoleAddModalFieldId,
+  MODERATION_ROUTE_NAMESPACE,
+  MODERATION_ROUTE_VERSION,
   type ModerationCategory,
   type QuotaType,
   type UserBlacklistRemovalTarget,
@@ -35,6 +38,7 @@ import {
 import { safeModalLocalizer, safeSelectOptionText } from "@/utils/discord/ui/modals";
 import {
   buildCategoryButtonRow,
+  buildPaginationRow,
   buildPanelContainer,
   buildPanelReceiptContainer,
   buildStateControlRow,
@@ -98,62 +102,6 @@ function formatChannelCooldown(
     type: typeName,
     length: cooldownLength.toString(),
   });
-}
-
-function buildRangeButtons(
-  locale: string,
-  category: ModerationCategory,
-  page: WhitelistPage | "none",
-  rangeIndex: number,
-  rangeCount: number,
-): ActionRowData<ButtonComponentData> {
-  return {
-    type: ComponentType.ActionRow,
-    components: [
-      {
-        type: ComponentType.Button,
-        style: ButtonStyle.Secondary,
-        customId: buildModerationRouteId({
-          action: "range",
-          locale,
-          category,
-          page,
-          rangeIndex: Math.max(0, rangeIndex - 1),
-        }),
-        label: localizer(locale, "commands.moderation.range_previous"),
-        disabled: rangeIndex <= 0,
-      },
-      {
-        type: ComponentType.Button,
-        style: ButtonStyle.Secondary,
-        customId: buildModerationRouteId({
-          action: "range",
-          locale,
-          category,
-          page,
-          rangeIndex,
-        }),
-        label: localizer(locale, "commands.moderation.range_indicator", {
-          current: rangeIndex + 1,
-          total: rangeCount,
-        }),
-        disabled: true,
-      },
-      {
-        type: ComponentType.Button,
-        style: ButtonStyle.Secondary,
-        customId: buildModerationRouteId({
-          action: "range",
-          locale,
-          category,
-          page,
-          rangeIndex: Math.min(rangeCount - 1, rangeIndex + 1),
-        }),
-        label: localizer(locale, "commands.moderation.range_next"),
-        disabled: rangeIndex >= rangeCount - 1,
-      },
-    ],
-  };
 }
 
 function buildRetryButtonRow(
@@ -491,9 +439,24 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
       }
     }
 
-    if (rangeCount > 1) {
-      components.push(buildRangeButtons(locale, "user-blacklist", "none", clampedRangeIndex, rangeCount));
-    }
+    const paginationRow = buildPaginationRow({
+      locale,
+      rangeIndex: clampedRangeIndex,
+      rangeCount,
+      namespace: MODERATION_ROUTE_NAMESPACE,
+      version: MODERATION_ROUTE_VERSION,
+      buildSegments: {
+        page: (targetRangeIndex) =>
+          buildModerationRouteSegments({
+            action: "range",
+            locale,
+            category: "user-blacklist",
+            page: "none",
+            rangeIndex: targetRangeIndex,
+          }),
+      },
+    });
+    if (paginationRow) components.push(paginationRow);
 
     components.push({
       type: ComponentType.ActionRow,
@@ -616,11 +579,24 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
             });
           }
 
-          if (selection.rangeCount > 1) {
-            components.push(
-              buildRangeButtons(locale, "whitelist", "channels", selection.rangeIndex, selection.rangeCount),
-            );
-          }
+          const paginationRow = buildPaginationRow({
+            locale,
+            rangeIndex: selection.rangeIndex,
+            rangeCount: selection.rangeCount,
+            namespace: MODERATION_ROUTE_NAMESPACE,
+            version: MODERATION_ROUTE_VERSION,
+            buildSegments: {
+              page: (targetRangeIndex) =>
+                buildModerationRouteSegments({
+                  action: "range",
+                  locale,
+                  category: "whitelist",
+                  page: "channels",
+                  rangeIndex: targetRangeIndex,
+                }),
+            },
+          });
+          if (paginationRow) components.push(paginationRow);
         }
 
         components.push({
@@ -690,11 +666,24 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
           content: lines.join("\n"),
         });
 
-        if (selection.rangeCount > 1) {
-          components.push(
-            buildRangeButtons(locale, "whitelist", "persona-channels", selection.rangeIndex, selection.rangeCount),
-          );
-        }
+        const paginationRow = buildPaginationRow({
+          locale,
+          rangeIndex: selection.rangeIndex,
+          rangeCount: selection.rangeCount,
+          namespace: MODERATION_ROUTE_NAMESPACE,
+          version: MODERATION_ROUTE_VERSION,
+          buildSegments: {
+            page: (targetRangeIndex) =>
+              buildModerationRouteSegments({
+                action: "range",
+                locale,
+                category: "whitelist",
+                page: "persona-channels",
+                rangeIndex: targetRangeIndex,
+              }),
+          },
+        });
+        if (paginationRow) components.push(paginationRow);
       }
 
       components.push({
@@ -776,11 +765,24 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
             components.push({ type: ComponentType.TextDisplay, content: `> <@&${role.role_disc_id}>` });
           }
 
-          if (selection.rangeCount > 1) {
-            components.push(
-              buildRangeButtons(locale, "whitelist", "roles", selection.rangeIndex, selection.rangeCount),
-            );
-          }
+          const paginationRow = buildPaginationRow({
+            locale,
+            rangeIndex: selection.rangeIndex,
+            rangeCount: selection.rangeCount,
+            namespace: MODERATION_ROUTE_NAMESPACE,
+            version: MODERATION_ROUTE_VERSION,
+            buildSegments: {
+              page: (targetRangeIndex) =>
+                buildModerationRouteSegments({
+                  action: "range",
+                  locale,
+                  category: "whitelist",
+                  page: "roles",
+                  rangeIndex: targetRangeIndex,
+                }),
+            },
+          });
+          if (paginationRow) components.push(paginationRow);
         }
 
         components.push({

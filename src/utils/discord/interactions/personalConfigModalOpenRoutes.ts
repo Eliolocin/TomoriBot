@@ -4,7 +4,6 @@ import { loadFallbackSelectionOptions } from "@/utils/discord/interactions/perso
 import {
   PERSONAL_FALLBACK_PAGE_SIZE,
   PERSONAL_MODEL_PAGE_SIZE,
-  PERSONAL_PROVIDER_DIRECT_LIMIT,
   PERSONAL_PROVIDER_RANGE_VALUE,
   SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE,
   SPOTLIGHT_PERSONA_PAGE_SIZE,
@@ -207,8 +206,8 @@ export async function handlePersonalConfigModalOpen(
     return "handled";
   }
 
-  // Choosing a provider opens its fallback modal directly. This select replaced a separate
-  // Edit button, so it is the only entry point and must not merely repaint.
+  // Choosing a provider opens its fallback modal directly when options fit in a single modal.
+  // When options exceed PERSONAL_FALLBACK_PAGE_SIZE, it defers and repaints with the in-place pagination row.
   if (route.action === "fallbacks-provider-select") {
     const selectMenu = interaction as StringSelectMenuInteraction;
     const chosenProvider = decodeProviderParam(selectMenu.values[0]);
@@ -259,12 +258,8 @@ export async function handlePersonalConfigModalOpen(
         page: "fallbacks",
         dependencies,
         selectedFallbacksProvider: chosenProvider,
-        view: {
-          kind: "fallbacks-range",
-          provider: chosenProvider,
-          rangePage: 0,
-          totalOptions: availableOptions.length,
-        },
+        fallbackStart: 0,
+        fallbackOptionCount: availableOptions.length,
       });
       return "handled";
     }
@@ -275,7 +270,7 @@ export async function handlePersonalConfigModalOpen(
       route.locale,
       nonce,
       chosenProvider,
-      availableOptions,
+      availableOptions.slice(0, PERSONAL_FALLBACK_PAGE_SIZE),
       config?.fallback_model_refs ?? [],
     );
     return "handled";
@@ -291,6 +286,7 @@ export async function handlePersonalConfigModalOpen(
       });
       return "handled";
     }
+
     const rows = await dependencies.loadUserSavedProviders(cachedScope.userId);
     const config = rows.find((r) => r.provider.toLowerCase() === route.provider.toLowerCase()) ?? null;
     const eligibleProviders = await loadUserSavedProvidersForCapability(cachedScope.userId, "text");
@@ -301,20 +297,28 @@ export async function handlePersonalConfigModalOpen(
       });
       return "handled";
     }
+
     let availableOptions: Array<{ refKey: string; label: string }> = [];
     try {
       availableOptions = await loadFallbackSelectionOptions(cachedScope.userId, route.provider);
     } catch (error) {
       log.warn("Failed to load available models for fallbacks modal", { provider: route.provider, error });
     }
-    if (route.start % 24 !== 0 || route.start >= availableOptions.length) {
+
+    const start = route.start;
+    if (
+      start % PERSONAL_FALLBACK_PAGE_SIZE !== 0 ||
+      (start >= availableOptions.length && availableOptions.length > 0) ||
+      availableOptions.length === 0
+    ) {
       await interaction.reply({
         content: localizer(route.locale, "commands.personal.config.unavailable"),
         flags: MessageFlags.Ephemeral,
       });
       return "handled";
     }
-    const slice = availableOptions.slice(route.start, route.start + PERSONAL_FALLBACK_PAGE_SIZE);
+
+    const slice = availableOptions.slice(start, start + PERSONAL_FALLBACK_PAGE_SIZE);
     const nonce = dependencies.createNonce();
     await dependencies.showFallbacksModal(
       interaction,
@@ -322,54 +326,7 @@ export async function handlePersonalConfigModalOpen(
       nonce,
       route.provider,
       slice,
-      config?.fallback_model_refs ?? [],
-    );
-    return "handled";
-  }
-
-  if (route.action === "model-range-open") {
-    if (!interaction.isButton()) throw new Error("model-range-open requires Button interaction");
-    const cachedScope = await dependencies.resolveScope(interaction, false);
-    if (!cachedScope) {
-      await interaction.reply({
-        content: localizer(route.locale, "commands.personal.config.unavailable"),
-        flags: MessageFlags.Ephemeral,
-      });
-      return "handled";
-    }
-    const availableModels = await dependencies.loadAvailableModelsForCapability(
-      cachedScope.userId,
-      route.provider,
-      route.capability,
-    );
-    if (route.start % PERSONAL_MODEL_PAGE_SIZE !== 0 || route.start >= availableModels.length) {
-      await interaction.reply({
-        content: localizer(route.locale, "commands.personal.config.unavailable"),
-        flags: MessageFlags.Ephemeral,
-      });
-      return "handled";
-    }
-    const rows = await dependencies.loadUserSavedProviders(cachedScope.userId);
-    const currentConfig = rows.find((r) => r.provider.toLowerCase() === route.provider.toLowerCase());
-    let currentModelId: number | null = null;
-    if (currentConfig) {
-      if (route.capability === "text") currentModelId = currentConfig.llm_id ?? null;
-      else if (route.capability === "vision") currentModelId = currentConfig.vision_llm_id ?? null;
-      else if (route.capability === "embedding") currentModelId = currentConfig.embedding_model_id ?? null;
-      else if (route.capability === "image") currentModelId = currentConfig.diffusion_model_id ?? null;
-      else if (route.capability === "image_nai") currentModelId = currentConfig.nai_diffusion_model_id ?? null;
-      else if (route.capability === "video") currentModelId = currentConfig.video_model_id ?? null;
-    }
-    const slice = availableModels.slice(route.start, route.start + PERSONAL_MODEL_PAGE_SIZE);
-    const nonce = dependencies.createNonce();
-    await dependencies.showModelSelectModal(
-      interaction,
-      route.locale,
-      nonce,
-      route.capability,
-      route.provider,
-      slice,
-      currentModelId,
+      config.fallback_model_refs ?? [],
     );
     return "handled";
   }
@@ -390,24 +347,6 @@ export async function handlePersonalConfigModalOpen(
         });
         return "handled";
       }
-      const rows = await dependencies.loadUserSavedProviders(cachedScope.userId);
-      const displayInfo = await dependencies.loadPersonalModelDisplayInfo(cachedScope.userId, rows, route.capability);
-      const providers = displayInfo.eligibleProvidersForCapability[route.capability];
-      if (providers.length <= PERSONAL_PROVIDER_DIRECT_LIMIT) {
-        await repaint(interaction, {
-          locale: route.locale,
-          scope: cachedScope,
-          category: "models",
-          page: "switch",
-          panelReceipt: {
-            tone: "error",
-            heading: localizer(route.locale, "commands.personal.config.unavailable"),
-            detail: localizer(route.locale, "commands.personal.config.stale_warning"),
-          },
-          dependencies,
-        });
-        return "handled";
-      }
       await repaint(interaction, {
         locale: route.locale,
         scope: cachedScope,
@@ -415,12 +354,7 @@ export async function handlePersonalConfigModalOpen(
         page: "switch",
         dependencies,
         selectedCapability: route.capability,
-        view: {
-          kind: "model-provider-range",
-          capability: route.capability,
-          rangePage: 0,
-          totalOptions: providers.length,
-        },
+        providerStart: 0,
       });
       return "handled";
     }
@@ -469,13 +403,9 @@ export async function handlePersonalConfigModalOpen(
           page: "switch",
           dependencies,
           selectedCapability: route.capability,
-          view: {
-            kind: "model-range",
-            capability: route.capability,
-            provider,
-            rangePage: 0,
-            totalOptions: availableModels.length,
-          },
+          selectedModelProvider: provider,
+          modelStart: 0,
+          modelTotalCount: availableModels.length,
         });
         return "handled";
       }
@@ -498,13 +428,66 @@ export async function handlePersonalConfigModalOpen(
         nonce,
         route.capability,
         provider,
-        availableModels,
+        availableModels.slice(0, PERSONAL_MODEL_PAGE_SIZE),
         currentModelId,
       );
       return "handled";
     }
     // When the selected value is __server_default__, control falls through to the post-defer
     // handler to acknowledge with deferUpdate and update provider assignment.
+  }
+
+  if (route.action === "model-range-open") {
+    if (!interaction.isButton()) throw new Error("model-range-open requires Button interaction");
+    const cachedScope = await dependencies.resolveScope(interaction, false);
+    if (!cachedScope) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.unavailable"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+    const availableModels = await dependencies.loadAvailableModelsForCapability(
+      cachedScope.userId,
+      route.provider,
+      route.capability,
+    );
+    const start = route.start;
+    if (
+      start % PERSONAL_MODEL_PAGE_SIZE !== 0 ||
+      (start >= availableModels.length && availableModels.length > 0) ||
+      availableModels.length === 0
+    ) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.unavailable"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+
+    const rows = await dependencies.loadUserSavedProviders(cachedScope.userId);
+    const currentConfig = rows.find((r) => r.provider.toLowerCase() === route.provider.toLowerCase());
+    let currentModelId: number | null = null;
+    if (currentConfig) {
+      if (route.capability === "text") currentModelId = currentConfig.llm_id ?? null;
+      else if (route.capability === "vision") currentModelId = currentConfig.vision_llm_id ?? null;
+      else if (route.capability === "embedding") currentModelId = currentConfig.embedding_model_id ?? null;
+      else if (route.capability === "image") currentModelId = currentConfig.diffusion_model_id ?? null;
+      else if (route.capability === "image_nai") currentModelId = currentConfig.nai_diffusion_model_id ?? null;
+      else if (route.capability === "video") currentModelId = currentConfig.video_model_id ?? null;
+    }
+
+    const nonce = dependencies.createNonce();
+    await dependencies.showModelSelectModal(
+      interaction,
+      route.locale,
+      nonce,
+      route.capability,
+      route.provider,
+      availableModels.slice(start, start + PERSONAL_MODEL_PAGE_SIZE),
+      currentModelId,
+    );
+    return "handled";
   }
 
   if (route.action === "impersonation-open") {

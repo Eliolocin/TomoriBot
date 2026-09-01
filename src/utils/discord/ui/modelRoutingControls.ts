@@ -16,9 +16,9 @@ export interface ModelRoutingControlInput {
   serverDefaultValue: string;
   serverDefaultLabel: string;
   serverDefaultDisplay: string;
-  providerOverflowValue: string;
-  providerOverflowLabel: string;
-  directProviderLimit: number;
+  providerOverflowValue?: string;
+  providerOverflowLabel?: string;
+  directProviderLimit?: number;
   encodeProviderValue(provider: string): string;
   disabled: boolean;
 }
@@ -36,18 +36,22 @@ export function buildModelRoutingControl(
     },
   ];
 
-  if (input.eligibleProviders.length <= input.directProviderLimit) {
+  if (
+    input.providerOverflowValue &&
+    input.directProviderLimit !== undefined &&
+    input.eligibleProviders.length > input.directProviderLimit
+  ) {
+    options.push({
+      value: input.providerOverflowValue,
+      label: safeSelectOptionText(input.providerOverflowLabel ?? "", 100),
+    });
+  } else {
     options.push(
       ...input.eligibleProviders.map((provider) => ({
         value: input.encodeProviderValue(provider),
         label: safeSelectOptionText(getProviderDisplayName(provider), 100),
       })),
     );
-  } else {
-    options.push({
-      value: input.providerOverflowValue,
-      label: safeSelectOptionText(input.providerOverflowLabel, 100),
-    });
   }
 
   return {
