@@ -548,6 +548,8 @@ export async function promptWithConfirmation(
     continueCustomId,
     cancelCustomId,
     timeout = PROMPT_TIMEOUT, // Default 15 seconds
+    continueStyle = ButtonStyle.Secondary,
+    cancelStyle = ButtonStyle.Secondary,
   } = options;
   const localizedDescription = localizeConfirmationDescription(locale, embedDescriptionKey, embedDescriptionVars);
 
@@ -559,12 +561,12 @@ export async function promptWithConfirmation(
   const continueButton = new ButtonBuilder()
     .setCustomId(continueCustomId)
     .setLabel(localizer(locale, continueLabelKey))
-    .setStyle(ButtonStyle.Success);
+    .setStyle(continueStyle);
 
   const cancelButton = new ButtonBuilder()
     .setCustomId(cancelCustomId)
     .setLabel(localizer(locale, cancelLabelKey))
-    .setStyle(ButtonStyle.Danger);
+    .setStyle(cancelStyle);
 
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(continueButton, cancelButton);
 
@@ -655,6 +657,8 @@ export async function promptWithUnacknowledgedConfirmation(
     continueCustomId,
     cancelCustomId,
     timeout = PROMPT_TIMEOUT,
+    continueStyle = ButtonStyle.Secondary,
+    cancelStyle = ButtonStyle.Secondary,
   } = options;
   const localizedDescription = localizeConfirmationDescription(locale, embedDescriptionKey, embedDescriptionVars);
 
@@ -667,12 +671,12 @@ export async function promptWithUnacknowledgedConfirmation(
   const continueButton = new ButtonBuilder()
     .setCustomId(continueCustomId)
     .setLabel(localizer(locale, continueLabelKey))
-    .setStyle(ButtonStyle.Success);
+    .setStyle(continueStyle);
 
   const cancelButton = new ButtonBuilder()
     .setCustomId(cancelCustomId)
     .setLabel(localizer(locale, cancelLabelKey))
-    .setStyle(ButtonStyle.Danger);
+    .setStyle(cancelStyle);
 
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(continueButton, cancelButton);
   const v2Components = useComponentsV2
@@ -685,6 +689,8 @@ export async function promptWithUnacknowledgedConfirmation(
         cancelLabelKey,
         continueCustomId,
         cancelCustomId,
+        continueStyle,
+        cancelStyle,
       )
     : null;
 
@@ -1338,19 +1344,21 @@ function buildV2ConfirmationComponents(
   cancelLabelKey: string,
   continueCustomId: string,
   cancelCustomId: string,
+  continueStyle: ButtonStyle.Secondary | ButtonStyle.Danger = ButtonStyle.Secondary,
+  cancelStyle: ButtonStyle.Secondary | ButtonStyle.Danger = ButtonStyle.Secondary,
 ): TopLevelComponentData[] {
   const actionRow: ActionRowData<ButtonComponentData> = {
     type: ComponentType.ActionRow,
     components: [
       {
         type: ComponentType.Button,
-        style: ButtonStyle.Success,
+        style: continueStyle,
         customId: continueCustomId,
         label: localizer(locale, continueLabelKey),
       },
       {
         type: ComponentType.Button,
-        style: ButtonStyle.Danger,
+        style: cancelStyle,
         customId: cancelCustomId,
         label: localizer(locale, cancelLabelKey),
       },
@@ -1386,8 +1394,8 @@ export interface NoticeContainerButtonOptions {
   customId: string;
   /** Locale key for the button label. */
   labelKey: string;
-  /** Button style (defaults to {@link ButtonStyle.Secondary}); excludes Link/Premium. */
-  style?: ButtonStyle.Primary | ButtonStyle.Secondary | ButtonStyle.Success | ButtonStyle.Danger;
+  /** Button style (defaults to {@link ButtonStyle.Secondary}); Success, Link, and Premium are excluded. */
+  style?: ButtonStyle.Primary | ButtonStyle.Secondary | ButtonStyle.Danger;
   /** Whether the button is disabled after its collector expires. */
   disabled?: boolean;
 }
@@ -1543,7 +1551,7 @@ export function buildRangeSelectorPayload(
     const end = Math.min(start + pageSize - 1, optionCount);
     rangeButtons.push({
       type: ComponentType.Button,
-      style: ButtonStyle.Primary,
+      style: ButtonStyle.Secondary,
       customId: `${customIdPrefix}_range_${rangeIndex}`,
       label: `${start}-${end}`,
     });
@@ -1565,7 +1573,7 @@ export function buildRangeSelectorPayload(
     },
     {
       type: ComponentType.Button,
-      style: ButtonStyle.Danger,
+      style: ButtonStyle.Secondary,
       customId: `${customIdPrefix}_cancel`,
       label: localizer(locale, "general.pagination.cancel"),
     },
@@ -1600,8 +1608,8 @@ export interface PersonaResultButtonOptions {
   customId: string;
   /** Locale key for the button label. */
   labelKey: string;
-  /** Button style (defaults to {@link ButtonStyle.Success}); excludes Link/Premium. */
-  style?: ButtonStyle.Primary | ButtonStyle.Secondary | ButtonStyle.Success | ButtonStyle.Danger;
+  /** Button style (defaults to {@link ButtonStyle.Secondary}); Success, Link, and Premium are excluded. */
+  style?: ButtonStyle.Primary | ButtonStyle.Secondary | ButtonStyle.Danger;
   /** Whether the button is disabled (e.g. after a successful import). */
   disabled?: boolean;
   /** Optional unicode emoji shown on the button. */
@@ -1749,7 +1757,7 @@ export function buildPersonaResultContainer(options: PersonaResultContainerOptio
   if (options.button) {
     const button: ButtonComponentData = {
       type: ComponentType.Button,
-      style: options.button.style ?? ButtonStyle.Success,
+      style: options.button.style ?? ButtonStyle.Secondary,
       customId: options.button.customId,
       label: localizer(locale, options.button.labelKey),
       disabled: options.button.disabled ?? false,
@@ -1999,7 +2007,7 @@ function buildPersonaPageComponents(
       ],
       accessory: {
         type: ComponentType.Button,
-        style: ButtonStyle.Danger,
+        style: ButtonStyle.Secondary,
         customId: PERSONA_CANCEL_CUSTOM_ID,
         emoji: { name: "✖️" },
       },
@@ -2067,7 +2075,7 @@ function buildPersonaPageComponents(
       ],
       accessory: {
         type: ComponentType.Button,
-        style: ButtonStyle.Primary,
+        style: ButtonStyle.Secondary,
         customId: `${PERSONA_SELECT_CUSTOM_ID_PREFIX}${idx}`,
         label: localizer(locale, "general.pagination.persona_select_button"),
       },
@@ -2185,7 +2193,7 @@ export async function replyPaginatedChoices(
         new ButtonBuilder()
           .setCustomId("cancel")
           .setLabel(localizer(locale, "general.pagination.cancel"))
-          .setStyle(ButtonStyle.Danger),
+          .setStyle(ButtonStyle.Secondary),
       );
 
       if (currentPage < totalPages) {
@@ -2201,7 +2209,7 @@ export async function replyPaginatedChoices(
       const selectionButtons: ButtonBuilder[] = [];
       currentPageItems.forEach((_, idx) => {
         selectionButtons.push(
-          new ButtonBuilder().setCustomId(`select_${idx}`).setStyle(ButtonStyle.Primary).setEmoji(NUMBER_EMOJIS[idx]), // Use the number emoji
+          new ButtonBuilder().setCustomId(`select_${idx}`).setStyle(ButtonStyle.Secondary).setEmoji(NUMBER_EMOJIS[idx]), // Use the number emoji
         );
       });
 
@@ -3371,7 +3379,9 @@ export async function promptWithPaginatedModal(
   const pageButtons: ButtonBuilder[] = [];
 
   for (let i = 1; i <= maxButtons; i++) {
-    pageButtons.push(new ButtonBuilder().setCustomId(`page_${i}`).setLabel(i.toString()).setStyle(ButtonStyle.Primary));
+    pageButtons.push(
+      new ButtonBuilder().setCustomId(`page_${i}`).setLabel(i.toString()).setStyle(ButtonStyle.Secondary),
+    );
   }
 
   const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...pageButtons);

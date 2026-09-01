@@ -493,38 +493,116 @@ describe("moderationPanel UI rendering", () => {
     expect(container.components[2].content).toBe("## Server Moderation");
   });
 
-  it("states server model access positively and makes only the inactive choice clickable", () => {
-    const allowed = JSON.stringify(
-      buildModerationPanelPayload({
-        locale: "en-US",
-        category: "member-access",
-        whitelistPage: "channels",
-        rangeIndex: 0,
-        data: createScopeData({ serverModelAccess: { allowServerModels: true } }),
-      }),
-    );
-    const required = JSON.stringify(
-      buildModerationPanelPayload({
-        locale: "en-US",
-        category: "member-access",
-        whitelistPage: "channels",
-        rangeIndex: 0,
-        data: createScopeData({ serverModelAccess: { allowServerModels: false } }),
-      }),
-    );
+  it("renders server model access as a two-choice state-control row with effective behavior below", () => {
+    const allowedPayload = buildModerationPanelPayload({
+      locale: "en-US",
+      category: "member-access",
+      whitelistPage: "channels",
+      rangeIndex: 0,
+      data: createScopeData({ serverModelAccess: { allowServerModels: true } }),
+    });
 
-    expect(allowed).toContain("Server model access");
-    // The status row matches its four Member Access siblings, emoji included.
-    expect(allowed).toContain("🟢 Server members may use this server's models.");
-    expect(required).toContain("🔴 Server members cannot use this server's models (personal providers are required).");
+    const allowedContainer = allowedPayload.components[0] as { components: unknown[] };
+    const allowedRow = allowedContainer.components.find(
+      (c): c is ActionRowData<ButtonComponentData> =>
+        typeof c === "object" &&
+        c !== null &&
+        "type" in c &&
+        (c as { type: number }).type === ComponentType.ActionRow &&
+        Array.isArray((c as { components: unknown[] }).components) &&
+        (c as { components: Array<{ customId?: string }> }).components.some((b) =>
+          b.customId?.includes("model-access-set"),
+        ),
+    );
+    expect(allowedRow).toBeDefined();
+    expect(allowedRow?.components).toHaveLength(2);
 
-    // Exactly one button, naming the transition away from the current policy.
-    expect(allowed).toContain('"customId":"moderation:v1:model-access-set:en-US:require-personal"');
-    expect(allowed).toContain('"label":"Disable Server Models"');
-    expect(allowed).not.toContain("model-access-set:en-US:allow");
-    expect(required).toContain('"customId":"moderation:v1:model-access-set:en-US:allow"');
-    expect(required).toContain('"label":"Allow Server Models"');
-    expect(required).not.toContain("model-access-set:en-US:require-personal");
+    const [allowedReqBtn, allowedAllowBtn] = allowedRow?.components ?? [];
+    expect(allowedReqBtn?.label).toBe("Personal Providers Required");
+    expect(allowedReqBtn?.style).toBe(ButtonStyle.Secondary);
+    expect(allowedReqBtn?.disabled).toBe(false);
+    expect(allowedReqBtn?.customId).toBe("moderation:v1:model-access-set:en-US:require-personal");
+
+    expect(allowedAllowBtn?.label).toBe("Server Models Allowed");
+    expect(allowedAllowBtn?.style).toBe(ButtonStyle.Primary);
+    expect(allowedAllowBtn?.disabled).toBe(true);
+    expect(allowedAllowBtn?.customId).toBe("moderation:v1:model-access-set:en-US:allow");
+
+    const decodedReq = parseModerationPanelRoute({
+      namespace: "moderation",
+      version: "v1",
+      segments: ["model-access-set", "en-US", "require-personal"],
+    });
+    expect(decodedReq).toEqual({ action: "model-access-set", locale: "en-US", allowServerModels: false });
+
+    const decodedAllow = parseModerationPanelRoute({
+      namespace: "moderation",
+      version: "v1",
+      segments: ["model-access-set", "en-US", "allow"],
+    });
+    expect(decodedAllow).toEqual({ action: "model-access-set", locale: "en-US", allowServerModels: true });
+
+    const allowedSerialized = JSON.stringify(allowedPayload);
+    expect(allowedSerialized).toContain("Server model access");
+    expect(allowedSerialized).toContain("Controls which models server members may use.");
+    expect(allowedSerialized).toContain("> Server members may use this server's models.");
+
+    const requiredPayload = buildModerationPanelPayload({
+      locale: "en-US",
+      category: "member-access",
+      whitelistPage: "channels",
+      rangeIndex: 0,
+      data: createScopeData({ serverModelAccess: { allowServerModels: false } }),
+    });
+
+    const requiredContainer = requiredPayload.components[0] as { components: unknown[] };
+    const requiredRow = requiredContainer.components.find(
+      (c): c is ActionRowData<ButtonComponentData> =>
+        typeof c === "object" &&
+        c !== null &&
+        "type" in c &&
+        (c as { type: number }).type === ComponentType.ActionRow &&
+        Array.isArray((c as { components: unknown[] }).components) &&
+        (c as { components: Array<{ customId?: string }> }).components.some((b) =>
+          b.customId?.includes("model-access-set"),
+        ),
+    );
+    expect(requiredRow).toBeDefined();
+    const [reqBtn, allowBtn] = requiredRow?.components ?? [];
+    expect(reqBtn?.style).toBe(ButtonStyle.Primary);
+    expect(reqBtn?.disabled).toBe(true);
+    expect(allowBtn?.style).toBe(ButtonStyle.Secondary);
+    expect(allowBtn?.disabled).toBe(false);
+
+    const requiredSerialized = JSON.stringify(requiredPayload);
+    expect(requiredSerialized).toContain("> Server members must use personal providers.");
+
+    const stalePayload = buildModerationPanelPayload({
+      locale: "en-US",
+      category: "member-access",
+      whitelistPage: "channels",
+      rangeIndex: 0,
+      data: createScopeData({
+        readStatus: "stale",
+        serverModelAccess: { allowServerModels: true },
+      }),
+    });
+    const staleContainer = stalePayload.components[0] as { components: unknown[] };
+    const staleRow = staleContainer.components.find(
+      (c): c is ActionRowData<ButtonComponentData> =>
+        typeof c === "object" &&
+        c !== null &&
+        "type" in c &&
+        (c as { type: number }).type === ComponentType.ActionRow &&
+        Array.isArray((c as { components: unknown[] }).components) &&
+        (c as { components: Array<{ customId?: string }> }).components.some((b) =>
+          b.customId?.includes("model-access-set"),
+        ),
+    );
+    expect(staleRow?.components[0].disabled).toBe(true);
+    expect(staleRow?.components[0].style).toBe(ButtonStyle.Secondary);
+    expect(staleRow?.components[1].disabled).toBe(true);
+    expect(staleRow?.components[1].style).toBe(ButtonStyle.Primary);
   });
 
   it("renders opposite member access status sentence variants across all four flags", () => {
@@ -1549,9 +1627,9 @@ describe("moderationPanel UI rendering", () => {
       expect(serialized).not.toContain("Saved data may be out of date");
 
       const lastComp = inner[inner.length - 1];
-      expect(lastComp.type).toBe(ComponentType.ActionRow);
-      // Member Access carries a second action row for server model access, so the page's own action
-      // is no longer guaranteed to sit in the last one.
+      // Member Access ends on the server-model-access behavior sentence, which the state-control
+      // contract places below its choice row rather than above it.
+      expect(lastComp.type).toBe(tc.category === "member-access" ? ComponentType.TextDisplay : ComponentType.ActionRow);
       const button = inner.flatMap((component) => component.components ?? []).find((b) => b.label === tc.actionLabel);
       expect(button).toBeDefined();
     }

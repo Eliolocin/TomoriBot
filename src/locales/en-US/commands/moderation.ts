@@ -29,10 +29,11 @@ export default {
     member_access_promptsnapshot_disabled: `🔴 Members cannot create prompt snapshots.`,
     edit_permissions: `Edit Permissions`,
     model_access_title: `Server model access`,
-    model_access_allowed: `🟢 Server members may use this server's models.`,
-    model_access_personal_required: `🔴 Server members cannot use this server's models (personal providers are required).`,
-    model_access_disable_button: `Disable Server Models`,
-    model_access_allow_button: `Allow Server Models`,
+    model_access_description: `Controls which models server members may use.`,
+    model_access_allowed: `Server members may use this server's models.`,
+    model_access_personal_required: `Server members must use personal providers.`,
+    model_access_personal_required_label: `Personal Providers Required`,
+    model_access_allowed_label: `Server Models Allowed`,
     model_access_updated: `Server model access updated`,
     model_access_updated_allowed: `Members can now use this server's saved models.`,
     model_access_updated_personal: `Members now need their own personal provider before I answer them.`,
@@ -203,8 +204,8 @@ export default {
     remove_nothing_changed_detail: `All entries remained selected. No write was needed.`,
 
     // Range navigation
-    range_previous: `< Previous`,
-    range_next: `Next >`,
+    range_previous: `← Previous`,
+    range_next: `Next →`,
     range_indicator: `Page {current} of {total}`,
 
     // Quotas

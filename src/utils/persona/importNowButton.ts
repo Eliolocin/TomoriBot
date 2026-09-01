@@ -12,6 +12,7 @@
 
 import {
   type ButtonInteraction,
+  ButtonStyle,
   type ChatInputCommandInteraction,
   type Client,
   ComponentType,
@@ -58,14 +59,14 @@ export function importNowButton(state: ImportNowButtonState): PersonaResultButto
     return {
       customId: IMPORT_NOW_CUSTOM_ID,
       labelKey: "commands.persona.import_now.imported",
-      style: 2, // Secondary
+      style: ButtonStyle.Secondary,
       disabled: true,
     };
   }
   return {
     customId: IMPORT_NOW_CUSTOM_ID,
     labelKey: "commands.persona.import_now.button",
-    style: state === "expired" ? 2 : 3, // Secondary when expired, Success when active
+    style: ButtonStyle.Secondary,
     disabled: state === "expired",
   };
 }

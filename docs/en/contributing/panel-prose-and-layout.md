@@ -83,10 +83,18 @@ what exposes the bug, so the two rules are always applied together.
 - **Bold** for a nested subsection label.
 - Plain text for short explanations and empty states.
 - Quote rows (`>`) for current values, statuses, and entities.
+- Give every settings subsection a short plain-text sentence that explains its purpose or
+  effect before its values or controls. A label alone should not require the reader to infer
+  what the setting changes.
+- Keep a quote row immediately adjacent to the explanation, label, or control it qualifies.
+  Do not insert a blank line between them. Use blank lines to separate sibling subsections.
 - Subdued `-#` lines for live cross-command directions and footer-like qualifications.
 - A real Components V2 separator between the top category controls and the page body.
 - A populated list section explains what its entries mean before rendering rows.
 - Whole ```markdown``` code blocks for big dynamic content (like memories)
+- A direct state control renders its heading and explanation first, its mutually exclusive
+  choice buttons second, and the selected choice's effective behavior in a quote row below.
+  The result then reads as belonging to the choice that produces it.
 - A persona-scoped page places its persona selector before the heading, thumbnail, and details that
   it controls. When only one page is persona-scoped, the order is category, page, persona, content.
   When Persona is itself a category with nested pages, the order is category, persona, page,
@@ -95,6 +103,17 @@ what exposes the bug, so the two rules are always applied together.
   attachments are cleared on every repaint.
 
 Prefer first-person `I` and `me` when the bot is the speaker.
+
+## Defaults and effective values
+
+**Put the authoritative current or effective value in the panel.** When a built-in,
+inherited, provider, or server default changes how that value should be understood, show the
+default and its source there too. Opening an editor must not be required just to discover the
+effective behavior.
+
+Prefill the stored value in a modal when Discord supports it. Modal field descriptions repeat
+only guidance needed while editing, such as the valid range and what clearing or resetting
+restores. They supplement the panel rather than becoming the only place a default is explained.
 
 ## Content blocks
 
@@ -128,20 +147,56 @@ A link inside a heading is fine: its URL costs no rendered width.
 - Option values must be unique. Discord rejects the entire payload with
   `COMPONENT_OPTION_VALUE_DUPLICATED`, and no static gate catches it, so deduplicate whenever
   the value is a key that several rows can share.
-- Cap options at 25 and say how many are hidden. An uncapped list fails at the API boundary
-  once real data grows.
+- Cap options at 25 and paginate the select in place when more records exist. Put a button row
+  immediately below it in this order: Previous, a disabled `Page <current> of <total>`
+  indicator, then Next. Disable Previous and Next at their respective boundaries.
+- Do not replace the panel body with a range chooser or merely report hidden selectable rows.
+  Keep the selected stable identity and the page body while moving between slices.
+- An add action inside a select is its first option on every page. It consumes one of Discord's
+  25 option slots, leaving 24 record options. Omit the pagination row when one page is enough.
+- **Pagination buttons carry a direction arrow: `← Previous` and `Next →`.** The arrow leads on the
+  way back and trails on the way forward, so the pair reads as a line the reader moves along. Use
+  `←` (U+2190) and `→` (U+2192), never `<`/`>`, which are comparison operators, and never `◀`/`▶`,
+  which have emoji presentations and can render as coloured emoji instead of text. The page
+  indicator between them stays plain: `Page 2 of 7`.
+
+## Naming a button
+
+A button names the object it acts on, not the internal category that object came from. `/memories`
+stores ordinary uploads and captured chat history in the same document table, and both render through
+the same panel row, so both remove buttons read `Remove Document`. The two removal routes still differ
+underneath, and the confirmation that follows can name the difference where it matters.
+
+The same rule rejects a label that names its own styling, such as `Danger: Remove`. Say what the
+button does; let colour, the confirmation, and the surrounding prose supply the rest.
 
 ## Button colour
 
-Colour carries one meaning per panel, so it stays reserved rather than decorative.
+Colour carries a small set of structural meanings rather than decorating important actions.
 
-- **Blue (`Primary`) belongs to the category row only.** It marks which category is open, and a
-  second blue elsewhere on the page competes with that signal.
-- **Everything else inside the panel is grey (`Secondary`) or red (`Danger`).** Red is for a
-  destructive action; grey is for everything else, including the primary action of a section.
-- **Do not use colour to show which option in a group is selected.** A segmented control that
-  paints the active choice blue reads as four call-to-action buttons. Put the state in the label
-  or in the prose above the row, where a screen reader also reaches it.
+- **Blue (`Primary`) marks the active category or the selected choice in a direct state-control
+  row.** A selected state button is disabled Primary. Available alternatives are enabled
+  Secondary, while an unavailable alternative is disabled Secondary.
+- **A state-control row contains mutually exclusive stored states or scopes.** Examples are
+  `[Off] [On]`, `[Off] [Follow Server] [On]`, and `[Server-wide] [Persona]`. Do not apply this
+  treatment to pagination, transient navigation, confirmation, or ordinary action rows.
+- **Place effective behavior below the state-control buttons.** Do not repeat the choice with an
+  `(On)` or `(Off)` suffix, a coloured-circle status, or a separate `State:` row. The button label,
+  disabled selection, and behavior sentence communicate the state without relying on colour alone.
+- **Grey (`Secondary`) is the default for actions and red (`Danger`) is destructive.** Green
+  (`Success`) is not a button style in this codebase. Coloured circles remain useful in compact
+  read-only summaries whose several statuses are edited together elsewhere, such as a modal.
+- **Red marks the destructive choice, never the safe one.** In a confirmation pair the action being
+  confirmed carries `Danger` where it destroys something, and Cancel stays `Secondary`. A grey
+  confirm beside a red Cancel reads as though backing out were the dangerous move.
+- **A label never names its own colour.** Write `Remove Prompt`, not `Danger: Remove Prompt`. The red
+  already carries the warning, and the label should spend its width on what the button does.
+
+These colour rules cover every Discord surface this bot renders, not only panels: the legacy
+confirmation and pagination helpers and the buttons built inline in `src/commands/` follow them too.
+`tests/unit/discord/panelButtonColour.test.ts` enforces them by scanning source text, so it reads
+style assignments and deliberately skips type annotations and comments. A property type that names a
+banned colour is a declaration, not a use; narrow such a union rather than widening it to pass.
 
 ## Localization
 

@@ -37,8 +37,8 @@
       page_select_placeholder: `Choose a page`,
       guide_select_placeholder: `Choose a guide`,
       provider_select_placeholder: `Choose Provider`,
-      previous_button: `< Previous`,
-      next_button: `Next >`,
+      previous_button: `← Previous`,
+      next_button: `Next →`,
       docs_link_label: `Read the Web Version`,
       support_link_label: `Get Technical Support`,
       variants: {

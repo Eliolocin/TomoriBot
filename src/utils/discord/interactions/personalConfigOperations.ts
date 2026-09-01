@@ -87,6 +87,11 @@ export interface PersonalConfigOperations {
   toggleCrossServerStm(input: {
     userDiscId: string;
   }): Promise<{ status: "success"; enabled: boolean } | { status: "write-failed" }>;
+  setCrossServerStm(input: {
+    userId: number;
+    userDiscId: string;
+    enabled: boolean;
+  }): Promise<{ status: "success"; enabled: boolean } | { status: "no-changes" } | { status: "write-failed" }>;
   setCapabilityModel(input: {
     userId: number;
     userDiscId: string;
@@ -273,6 +278,14 @@ export const personalConfigOperations: PersonalConfigOperations = {
     } catch {
       return { status: "write-failed" };
     }
+  },
+
+  async setCrossServerStm({ userId, userDiscId: _userDiscId, enabled }) {
+    const ok = await userRepository.update(userId, {
+      shortterm_cache_crossserver_opt_in: enabled,
+    });
+    if (!ok) return { status: "write-failed" };
+    return { status: "success", enabled };
   },
 
   async setCapabilityModel({ userId, userDiscId: _userDiscId, capability, provider, modelId }) {

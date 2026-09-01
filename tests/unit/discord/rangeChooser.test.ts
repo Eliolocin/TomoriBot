@@ -158,7 +158,9 @@ describe("buildRangeChooserComponents rendering", () => {
     expect(cancelRow.type).toBe(ComponentType.ActionRow);
     expect(cancelRow.components).toHaveLength(1);
     expect(cancelRow.components[0].label).toBe("Cancel");
-    expect(cancelRow.components[0].style).toBe(ButtonStyle.Danger);
+    // Cancel backs out of the chooser without destroying anything, so it is Secondary under the
+    // repo-wide colour convention: Danger marks the destructive choice, never the safe one.
+    expect(cancelRow.components[0].style).toBe(ButtonStyle.Secondary);
   });
 
   it("renders navigation row with bounded states when multiple chooser pages exist", () => {
@@ -177,11 +179,11 @@ describe("buildRangeChooserComponents rendering", () => {
     expect(navRowZero.components).toHaveLength(3);
 
     const [prevZero, cancelZero, nextZero] = navRowZero.components;
-    expect(prevZero.label).toBe("Previous");
+    expect(prevZero.label).toBe("← Previous");
     expect(prevZero.disabled).toBe(true);
     expect(cancelZero.label).toBe("Cancel");
-    expect(cancelZero.style).toBe(ButtonStyle.Danger);
-    expect(nextZero.label).toBe("Next");
+    expect(cancelZero.style).toBe(ButtonStyle.Secondary);
+    expect(nextZero.label).toBe("Next →");
     expect(nextZero.disabled).toBe(false);
 
     const pageOne = buildRangeChooserComponents({

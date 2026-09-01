@@ -63,8 +63,8 @@ describe("help dashboard", () => {
     expect(JSON.stringify(getContainer("en-US", "setup", "setup-step-4"))).toContain(
       "### Step 4: Customize TomoriBot (Optional)",
     );
-    expect(JSON.stringify(container)).toContain("< Previous");
-    expect(JSON.stringify(container)).toContain("Next >");
+    expect(JSON.stringify(container)).toContain("← Previous");
+    expect(JSON.stringify(container)).toContain("Next →");
   });
 
   it("renders documentation and support as link buttons below the container", () => {

@@ -340,7 +340,7 @@ function buildPageActionRows(
       new ButtonBuilder()
         .setCustomId(`${PAGE_BUTTON_PREFIX}${page}`)
         .setLabel(`${start}-${end}`)
-        .setStyle(ButtonStyle.Primary),
+        .setStyle(ButtonStyle.Secondary),
     );
   }
 

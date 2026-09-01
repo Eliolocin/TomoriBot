@@ -6,7 +6,11 @@ import { takeRawModalSelectValue } from "@/utils/discord/ui/modals";
 import { MAX_TAG_LENGTH, MAX_TAGS } from "@/utils/image/tagHelpers";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { localizer } from "@/utils/text/localizer";
-import { repaint, type PersonalConfigPostDeferContext } from "@/utils/discord/interactions/personalConfigRouteContext";
+import {
+  noChangesReceipt,
+  repaint,
+  type PersonalConfigPostDeferContext,
+} from "@/utils/discord/interactions/personalConfigRouteContext";
 
 export async function handlePersonalConfigProfileWrites(context: PersonalConfigPostDeferContext): Promise<boolean> {
   const { interaction, route, dependencies } = context;
@@ -526,6 +530,107 @@ export async function handlePersonalConfigProfileWrites(context: PersonalConfigP
           detail: localizer(route.locale, "commands.personal.config.privacy_updated_detail", {
             level: levelName,
           }),
+        },
+        dependencies,
+      });
+      return true;
+    }
+
+    await repaint(interaction, {
+      locale: route.locale,
+      scope: context.scope,
+      category: "privacy",
+      page: "controls",
+      panelReceipt: {
+        tone: "error",
+        heading: localizer(route.locale, "commands.personal.config.write_failed_heading"),
+        detail: localizer(route.locale, "commands.personal.config.write_failed_detail"),
+      },
+      dependencies,
+    });
+    return true;
+  }
+
+  if (route.action === "crossserver-set") {
+    if (context.scope.readStatus !== "fresh") {
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: context.scope,
+        category: "privacy",
+        page: "controls",
+        panelReceipt: {
+          tone: "error",
+          heading: localizer(route.locale, "commands.personal.config.unavailable"),
+          detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+        },
+        dependencies,
+      });
+      return true;
+    }
+    const currentOptIn = Boolean(context.scope.user.shortterm_cache_crossserver_opt_in);
+    if (currentOptIn === route.enabled) {
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: context.scope,
+        category: "privacy",
+        page: "controls",
+        panelReceipt: noChangesReceipt(route.locale),
+        dependencies,
+      });
+      return true;
+    }
+    const action = await performPanelAction(
+      () =>
+        dependencies.operations.setCrossServerStm({
+          userId: context.scope.userId,
+          userDiscId: context.scope.userDiscId,
+          enabled: route.enabled,
+        }),
+      () => dependencies.resolveScope(interaction, true),
+    );
+    const result = action.result;
+    context.scope = action.state ?? context.scope;
+
+    if (result.status === "no-changes") {
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: context.scope,
+        category: "privacy",
+        page: "controls",
+        panelReceipt: noChangesReceipt(route.locale),
+        dependencies,
+      });
+      return true;
+    }
+
+    if (result.status === "success") {
+      if (context.scope.internalServerId) {
+        dependencies.recordAction({
+          action: "personal-config.personal.crossserver-stm.set",
+          serverId: context.scope.internalServerId,
+          userDiscId: interaction.user.id,
+        });
+      }
+      const isEnabled = result.enabled;
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: context.scope,
+        category: "privacy",
+        page: "controls",
+        panelReceipt: {
+          tone: "success",
+          heading: localizer(
+            route.locale,
+            isEnabled
+              ? "commands.personal.config.crossserver_enabled_heading"
+              : "commands.personal.config.crossserver_disabled_heading",
+          ),
+          detail: localizer(
+            route.locale,
+            isEnabled
+              ? "commands.personal.config.crossserver_enabled_detail"
+              : "commands.personal.config.crossserver_disabled_detail",
+          ),
         },
         dependencies,
       });

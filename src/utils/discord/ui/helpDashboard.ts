@@ -70,7 +70,7 @@ function buildCategoryRow(locale: string, activeCategoryId: HelpCategoryId): Act
     type: ComponentType.ActionRow,
     components: HELP_CATEGORIES.map((category) => ({
       type: ComponentType.Button,
-      style: category.id === activeCategoryId ? ButtonStyle.Success : ButtonStyle.Secondary,
+      style: category.id === activeCategoryId ? ButtonStyle.Primary : ButtonStyle.Secondary,
       customId: buildHelpCustomId("category", locale, category.id),
       label: localizer(locale, category.labelKey),
       disabled: category.id === activeCategoryId,

@@ -12,6 +12,111 @@ import {
 export async function handlePersonalConfigResponseRoutes(context: PersonalConfigPostDeferContext): Promise<boolean> {
   const { interaction, route, dependencies } = context;
 
+  if (route.action === "randomizer-set") {
+    if (context.scope.readStatus !== "fresh") {
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: context.scope,
+        category: "models",
+        page: "fallbacks",
+        panelReceipt: {
+          tone: "error",
+          heading: localizer(route.locale, "commands.personal.config.unavailable"),
+          detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+        },
+        dependencies,
+        selectedFallbacksProvider: route.provider,
+      });
+      return true;
+    }
+
+    const action = await performPanelAction(
+      () =>
+        dependencies.operations.setRandomizer({
+          userId: context.scope.userId,
+          userDiscId: context.scope.userDiscId,
+          provider: route.provider,
+          enabled: route.enabled,
+        }),
+      () => dependencies.resolveScope(interaction, true),
+    );
+    const result = action.result;
+    context.scope = action.state ?? context.scope;
+
+    if (result.status === "no-changes") {
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: context.scope,
+        category: "models",
+        page: "fallbacks",
+        panelReceipt: noChangesReceipt(route.locale),
+        dependencies,
+        selectedFallbacksProvider: route.provider,
+      });
+      return true;
+    }
+
+    if (result.status === "success") {
+      if (context.scope.internalServerId) {
+        dependencies.recordAction({
+          action: "personal-config.personal.randomizer.set",
+          serverId: context.scope.internalServerId,
+          userDiscId: interaction.user.id,
+        });
+      }
+      const isEnabled = result.enabled;
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: context.scope,
+        category: "models",
+        page: "fallbacks",
+        panelReceipt: {
+          tone: "success",
+          heading: localizer(
+            route.locale,
+            isEnabled
+              ? "commands.personal.config.randomizer_enabled_heading"
+              : "commands.personal.config.randomizer_disabled_heading",
+          ),
+          detail: localizer(
+            route.locale,
+            isEnabled
+              ? "commands.personal.config.randomizer_enabled_detail"
+              : "commands.personal.config.randomizer_disabled_detail",
+            { provider: getProviderDisplayName(route.provider) },
+          ),
+        },
+        dependencies,
+        selectedFallbacksProvider: route.provider,
+      });
+      return true;
+    }
+
+    const isRequiresFallback = result.status === "requires-fallbacks";
+
+    await repaint(interaction, {
+      locale: route.locale,
+      scope: context.scope,
+      category: "models",
+      page: "fallbacks",
+      panelReceipt: {
+        tone: "error",
+        heading: localizer(
+          route.locale,
+          isRequiresFallback
+            ? "commands.personal.config.randomizer_requires_fallback_heading"
+            : "commands.personal.config.write_failed_heading",
+        ),
+        detail: isRequiresFallback
+          ? localizer(route.locale, "commands.personal.config.randomizer_requires_fallback_detail")
+          : localizer(route.locale, "commands.personal.config.write_failed_detail"),
+      },
+      dependencies,
+      selectedFallbacksProvider: route.provider,
+    });
+    return true;
+  }
+
   if (route.action === "randomizer-toggle") {
     const rows = await dependencies.loadUserSavedProviders(context.scope.userId);
     const config = rows.find((r) => r.provider.toLowerCase() === route.provider.toLowerCase());

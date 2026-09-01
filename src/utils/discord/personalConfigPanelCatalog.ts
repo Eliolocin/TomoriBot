@@ -162,6 +162,7 @@ export type PersonalConfigPanelRoute =
   | { action: "privacy-level-open"; locale: string }
   | { action: "privacy-level-submit"; locale: string; nonce: string }
   | { action: "crossserver-toggle"; locale: string }
+  | { action: "crossserver-set"; locale: string; enabled: boolean }
   // Models - Switch Models
   | { action: "quick-toggle-open"; locale: string }
   | { action: "quick-toggle-submit"; locale: string; nonce: string }
@@ -212,6 +213,7 @@ export type PersonalConfigPanelRoute =
   | { action: "fallbacks-range-page"; locale: string; provider: string; chooserPage: number }
   | { action: "fallbacks-submit"; locale: string; provider: string; nonce: string }
   | { action: "randomizer-toggle"; locale: string; provider: string }
+  | { action: "randomizer-set"; locale: string; provider: string; enabled: boolean }
   // Advanced - Response Modes
   | { action: "trigger-mode-set"; locale: string; mode: "off" | "follow" | "on" }
   | { action: "tool-mode-set"; locale: string; mode: "off" | "follow" | "on" }
@@ -383,6 +385,12 @@ function parseDtmMode(value: string | undefined): "off" | "follow" | "on" | null
   return null;
 }
 
+function parseEnabled(value: string | undefined): boolean | null {
+  if (value === "on") return true;
+  if (value === "off") return false;
+  return null;
+}
+
 function parseSpotlightMask(value: string | undefined): string | null {
   return decodeSpotlightMask(value) === null ? null : (value as string);
 }
@@ -492,6 +500,12 @@ const fpField: RouteFieldCodec<"fp", string> = {
   decode: (v) => parseFingerprint(v),
 };
 
+const enabledField: RouteFieldCodec<"enabled", boolean> = {
+  key: "enabled",
+  encode: (v) => (v ? "on" : "off"),
+  decode: (v) => parseEnabled(v),
+};
+
 /**
  * Authoritative codec table for all personal-config routes.
  * Keyed by semantic action to guarantee compile-time exhaustiveness.
@@ -574,6 +588,10 @@ export const PERSONAL_CONFIG_ROUTE_CODECS: PersonalConfigRouteCodecs = {
     wireToken: "crossserver-toggle",
     fields: [],
   },
+  "crossserver-set": {
+    wireToken: "crossserver-set",
+    fields: [enabledField],
+  },
   "quick-toggle-open": {
     wireToken: "quick-toggle-open",
     fields: [],
@@ -649,6 +667,10 @@ export const PERSONAL_CONFIG_ROUTE_CODECS: PersonalConfigRouteCodecs = {
   "randomizer-toggle": {
     wireToken: "randomizer-toggle",
     fields: [providerField],
+  },
+  "randomizer-set": {
+    wireToken: "randomizer-set",
+    fields: [providerField, enabledField],
   },
   "trigger-mode-set": {
     wireToken: "trigger-mode-set",

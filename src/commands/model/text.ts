@@ -103,7 +103,7 @@ function buildPersonaModelModalReady(locale: string, customId: string): PersonaW
             type: ComponentType.Button,
             customId,
             label: localizer(locale, "general.persona_workflow.open_modal_button"),
-            style: ButtonStyle.Primary,
+            style: ButtonStyle.Secondary,
           },
         ],
       } satisfies ActionRowData<ButtonComponentData>,

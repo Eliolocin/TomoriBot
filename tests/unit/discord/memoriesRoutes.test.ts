@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, spyOn } from "bun:test";
 import {
-  type ButtonStyle,
+  ButtonStyle,
   ComponentType,
   type ChatInputCommandInteraction,
   type Client,
@@ -844,6 +844,122 @@ describe("memories permissions and scoping", () => {
         button.customId?.includes(":document-range:en-US:1:5"),
       ),
     ).toBe(true);
+  });
+
+  it("renders document scope as a state-control row across serverwide, persona, and no-persona states", () => {
+    const personas = [makePersona(10, 100, "Tomori"), makePersona(20, 200, "Anon")];
+
+    // Serverwide scope selected (selectedDocumentPersonaId: 0)
+    const serverwidePayload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "documents",
+      selectedLineageId: 100,
+      selectedDocumentPersonaId: 0,
+      personas,
+      memories: [],
+      documents: [],
+      canManage: true,
+      memteachingEnabled: true,
+      readStatus: "fresh",
+      page: { kind: "documents" },
+    });
+
+    const serverwideButtons = collectButtons(serverwidePayload.components).filter((b) =>
+      b.customId?.includes(":document-scope:"),
+    );
+    expect(serverwideButtons).toHaveLength(2);
+    const [swBtn1, personaBtn1] = serverwideButtons;
+
+    expect(swBtn1.customId).toBe("memories:v1:document-scope:en-US:0");
+    expect(swBtn1.label).toBe("Serverwide Scope");
+    expect(swBtn1.style).toBe(ButtonStyle.Primary);
+    expect(swBtn1.disabled).toBe(true);
+
+    expect(personaBtn1.customId).toBe("memories:v1:document-scope:en-US:10");
+    expect(personaBtn1.label).toBe("Persona Scope");
+    expect(personaBtn1.style).toBe(ButtonStyle.Secondary);
+    expect(personaBtn1.disabled).toBe(false);
+
+    // Persona scope selected (selectedDocumentPersonaId: 10)
+    const personaPayload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "documents",
+      selectedLineageId: 100,
+      selectedDocumentPersonaId: 10,
+      personas,
+      memories: [],
+      documents: [],
+      canManage: true,
+      memteachingEnabled: true,
+      readStatus: "fresh",
+      page: { kind: "documents" },
+    });
+
+    const personaButtons = collectButtons(personaPayload.components).filter((b) =>
+      b.customId?.includes(":document-scope:"),
+    );
+    expect(personaButtons).toHaveLength(2);
+    const [swBtn2, personaBtn2] = personaButtons;
+
+    expect(swBtn2.style).toBe(ButtonStyle.Secondary);
+    expect(swBtn2.disabled).toBe(false);
+
+    expect(personaBtn2.style).toBe(ButtonStyle.Primary);
+    expect(personaBtn2.disabled).toBe(true);
+
+    // No persona carries a persona_id (firstPersonaId resolves to 0), so Persona choice is an unavailable alternative
+    const noPersonaPayload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "documents",
+      selectedLineageId: 0,
+      selectedDocumentPersonaId: 0,
+      personas: [{ persona_id: 0, persona_lineage_id: 0, persona_nickname: "None" } as unknown as TomoriState],
+      memories: [],
+      documents: [],
+      canManage: true,
+      memteachingEnabled: true,
+      readStatus: "fresh",
+      page: { kind: "documents" },
+    });
+
+    const noPersonaButtons = collectButtons(noPersonaPayload.components).filter((b) =>
+      b.customId?.includes(":document-scope:"),
+    );
+    expect(noPersonaButtons).toHaveLength(2);
+    const [swBtn3, personaBtn3] = noPersonaButtons;
+
+    expect(swBtn3.style).toBe(ButtonStyle.Primary);
+    expect(swBtn3.disabled).toBe(true);
+
+    expect(personaBtn3.style).toBe(ButtonStyle.Secondary);
+    expect(personaBtn3.disabled).toBe(true);
+
+    // Writes disabled (readStatus === "stale")
+    const stalePayload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "documents",
+      selectedLineageId: 100,
+      selectedDocumentPersonaId: 0,
+      personas,
+      memories: [],
+      documents: [],
+      canManage: true,
+      memteachingEnabled: true,
+      readStatus: "stale",
+      page: { kind: "documents" },
+    });
+
+    const staleButtons = collectButtons(stalePayload.components).filter((b) =>
+      b.customId?.includes(":document-scope:"),
+    );
+    expect(staleButtons).toHaveLength(2);
+    const [swBtn4, personaBtn4] = staleButtons;
+
+    expect(swBtn4.style).toBe(ButtonStyle.Primary);
+    expect(swBtn4.disabled).toBe(true);
+
+    expect(personaBtn4.style).toBe(ButtonStyle.Secondary);
+    expect(personaBtn4.disabled).toBe(true);
   });
 
   it("acknowledges via deferUpdate before executing write operations", async () => {

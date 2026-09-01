@@ -31,6 +31,7 @@ import {
   buildPanelReceiptContainer,
   buildRangeNavigationRows,
   buildRangeChooserComponents,
+  buildStateControlRow,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
@@ -922,25 +923,26 @@ ${localizer(locale, "commands.memories.documents_description")}`,
     const selectedPersonaId = input.selectedDocumentPersonaId ?? 0;
     const repositoryPersonaId = selectedPersonaId === 0 ? null : selectedPersonaId;
     const firstPersonaId = input.personas.find((persona) => persona.persona_id)?.persona_id ?? 0;
-    components.push({
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildMemoriesRouteId({ action: "document-scope", locale, personaId: 0 }),
-          label: localizer(locale, "commands.memories.document_scope_serverwide"),
-          disabled: writesDisabled || repositoryPersonaId === null,
-        },
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildMemoriesRouteId({ action: "document-scope", locale, personaId: firstPersonaId }),
-          label: localizer(locale, "commands.memories.document_scope_persona"),
-          disabled: writesDisabled || repositoryPersonaId !== null,
-        },
-      ],
-    });
+    const isPersonaScope = repositoryPersonaId !== null;
+    components.push(
+      buildStateControlRow(
+        [
+          {
+            value: "serverwide" as const,
+            label: localizer(locale, "commands.memories.document_scope_serverwide"),
+            customId: buildMemoriesRouteId({ action: "document-scope", locale, personaId: 0 }),
+          },
+          {
+            value: "persona" as const,
+            label: localizer(locale, "commands.memories.document_scope_persona"),
+            customId: buildMemoriesRouteId({ action: "document-scope", locale, personaId: firstPersonaId }),
+            available: firstPersonaId !== 0,
+          },
+        ],
+        isPersonaScope ? "persona" : "serverwide",
+        writesDisabled,
+      ),
+    );
 
     if (repositoryPersonaId !== null) {
       const personaOptions: SelectMenuComponentOptionData[] = input.personas
@@ -1287,12 +1289,9 @@ ${localizer(locale, "commands.memories.documents_description")}`,
           personaId: selectedPersonaId,
           documentId: selectedDocument.document_id,
         }),
-        label: localizer(
-          locale,
-          selectedDocument.isHistory
-            ? "commands.memories.history_remove_button"
-            : "commands.memories.document_remove_button",
-        ),
+        // A history document is still a document, so the button names the object rather than its
+        // source. The route below keeps the two apart because their removal flows differ.
+        label: localizer(locale, "commands.memories.document_remove_button"),
         disabled: writesDisabled,
       });
       components.push({ type: ComponentType.ActionRow, components: actionButtons });

@@ -1,4 +1,4 @@
-import { ButtonStyle } from "discord.js";
+import type { ButtonStyle } from "discord.js";
 import type { ButtonInteraction, ColorResolvable, EmbedBuilder, MessageFlags } from "discord.js";
 
 /**
@@ -50,6 +50,8 @@ export interface ConfirmationOptions {
   continueCustomId: string;
   cancelCustomId: string;
   timeout?: number;
+  continueStyle?: ButtonStyle.Secondary | ButtonStyle.Danger;
+  cancelStyle?: ButtonStyle.Secondary | ButtonStyle.Danger;
 }
 
 /**
@@ -75,14 +77,6 @@ export const TRANSLATOR_COLORS = {
   [TranslationProvider.GOOGLE]: "#DE3163", // Google red
   [TranslationProvider.BING]: "#7DDA58", // Bing green
 } as const satisfies Record<TranslationProvider, ColorResolvable>;
-
-/**
- * Discord button styles for translation providers
- */
-export const TRANSLATOR_STYLES = {
-  [TranslationProvider.GOOGLE]: ButtonStyle.Danger,
-  [TranslationProvider.BING]: ButtonStyle.Success,
-} as const satisfies Record<TranslationProvider, ButtonStyle>;
 
 export interface SummaryEmbedOptions extends StandardEmbedOptions {
   docsPath?: string;

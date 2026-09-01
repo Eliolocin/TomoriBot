@@ -160,7 +160,7 @@ export function buildOpenSelectorPayload(locale: string, openId: string): Person
     button: {
       customId: openId,
       labelKey: "general.persona_workflow.open_modal_button",
-      style: ButtonStyle.Primary,
+      style: ButtonStyle.Secondary,
     },
   });
 }

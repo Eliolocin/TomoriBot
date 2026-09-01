@@ -1,6 +1,16 @@
 import { beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { readFileSync } from "node:fs";
-import type { ButtonInteraction, Client, InteractionReplyOptions, ModalSubmitInteraction } from "discord.js";
+import {
+  ButtonStyle,
+  ComponentType,
+  type ActionRowData,
+  type ButtonComponentData,
+  type ButtonInteraction,
+  type Client,
+  type InteractionReplyOptions,
+  type ModalSubmitInteraction,
+  type TextDisplayComponentData,
+} from "discord.js";
 import { PrivacyLevel, type UserRow, type TomoriState } from "@/types/db/schema";
 import { createPersonalConfigInteractionRoute } from "@/utils/discord/interactions/personalConfigRoutes";
 import type { PersonalConfigRouteDependencies } from "@/utils/discord/interactions/personalConfigRouteContext";
@@ -202,6 +212,11 @@ function makeDependencies(
       calls.push("toggleCrossServerStm");
       user.shortterm_cache_crossserver_opt_in = !user.shortterm_cache_crossserver_opt_in;
       return { status: "success", enabled: user.shortterm_cache_crossserver_opt_in };
+    },
+    setCrossServerStm: async (input) => {
+      calls.push(`setCrossServerStm:${input.enabled}`);
+      user.shortterm_cache_crossserver_opt_in = input.enabled;
+      return { status: "success", enabled: input.enabled };
     },
     setCapabilityModel: async (input) => {
       calls.push(`setCapabilityModel:${input.capability}:${input.provider}:${input.modelId}`);
@@ -724,6 +739,7 @@ describe("personalConfigPanelCatalog", () => {
     ["personal-config:v2:appearance-open:en-US", { action: "appearance-open", locale: "en-US" }],
     ["personal-config:v2:privacy-level-open:en-US", { action: "privacy-level-open", locale: "en-US" }],
     ["personal-config:v2:crossserver-toggle:en-US", { action: "crossserver-toggle", locale: "en-US" }],
+    ["personal-config:v2:crossserver-set:en-US:on", { action: "crossserver-set", locale: "en-US", enabled: true }],
     ["personal-config:v2:quick-toggle-open:en-US", { action: "quick-toggle-open", locale: "en-US" }],
     ["personal-config:v2:model-act-cancel:en-US", { action: "model-act-cancel", locale: "en-US" }],
     ["personal-config:v2:parameters-provider-select:en-US", { action: "parameters-provider-select", locale: "en-US" }],
@@ -950,6 +966,10 @@ describe("personalConfigPanelCatalog", () => {
       { action: "randomizer-toggle", locale: "en-US", provider: "openrouter" },
     ],
     [
+      "personal-config:v2:randomizer-set:en-US:openrouter:on",
+      { action: "randomizer-set", locale: "en-US", provider: "openrouter", enabled: true },
+    ],
+    [
       "personal-config:v2:fallbacks-range-open:en-US:openrouter:25",
       { action: "fallbacks-range-open", locale: "en-US", provider: "openrouter", start: 25 },
     ],
@@ -1171,6 +1191,10 @@ describe("personalConfigPanelCatalog", () => {
       case "trigger-mode-set":
       case "tool-mode-set":
         return [{ action, locale, mode }];
+      case "crossserver-set":
+        return [{ action, locale, enabled: !isWorstCase }];
+      case "randomizer-set":
+        return [{ action, locale, provider, enabled: !isWorstCase }];
       case "spotlight-set-block":
         return [{ action, locale, channelId: snowflake, hours, fp, blockIdx }];
       case "spotlight-set-block-page":
@@ -1208,7 +1232,7 @@ describe("personalConfigPanelCatalog", () => {
 
   it("round-trips every action in the codec table", () => {
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(64);
+    expect(actions.length).toBe(66);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, false);
@@ -1244,7 +1268,7 @@ describe("personalConfigPanelCatalog", () => {
     // - page: "response-modes" (14 chars) is the longest PersonalConfigPage.
     // - mode: "follow" (6 chars) is the longest deliberate trigger/tool mode.
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(64);
+    expect(actions.length).toBe(66);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, true);
@@ -1280,15 +1304,15 @@ describe("personalConfigPanelCatalog", () => {
       handlerSources.flatMap((source) => [...source.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1])),
     );
 
-    expect(tableActions.size).toBe(64);
-    expect(handlerActions.size).toBe(64);
+    expect(tableActions.size).toBe(66);
+    expect(handlerActions.size).toBe(66);
     expect([...tableActions].filter((a) => !handlerActions.has(a))).toEqual([]);
     expect([...handlerActions].filter((a) => !tableActions.has(a))).toEqual([]);
   });
 
   it("fails closed when dropping or appending a segment for every action in the table", () => {
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(64);
+    expect(actions.length).toBe(66);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, false);
@@ -2381,7 +2405,8 @@ describe("Models panel rendering", () => {
     const payloadJson = JSON.stringify(payload);
     expect(payloadJson).toContain("Claude 3 Haiku");
     expect(payloadJson).toContain("Model Randomizer");
-    expect(payloadJson).toContain("Enable Randomizer");
+    expect(payloadJson).toContain("personal-config:v2:randomizer-set:en-US:openrouter:off");
+    expect(payloadJson).toContain("personal-config:v2:randomizer-set:en-US:openrouter:on");
 
     // The primary model is chosen on Switch Models, so the Fallbacks page deliberately no longer
     // restates it or the provider. A regression that reintroduces either belongs to this assertion.
@@ -2394,8 +2419,8 @@ describe("Models panel rendering", () => {
     expect(payloadJson).toContain("personal-config:v2:fallbacks-provider-select:en-US");
     expect(payloadJson).toContain("Choose provider for models");
 
-    // Status is a blockquote and sits directly under the prose with no blank line between them.
-    expect(payloadJson).toContain("it will randomly choose again.\\n> 🔴 Status: Disabled");
+    // Effective behavior quote sits directly under the buttons row.
+    expect(payloadJson).toContain("> I try the primary model first");
   });
 });
 
@@ -3932,87 +3957,200 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     }
   });
 
-  it("renders Response Modes with effect-first status, docs links, and parenthetical modes in guilds and DMs", () => {
-    const payloadGuildOff = buildPersonalConfigPanelPayload({
+  it("renders Deliberate Trigger Mode and Tool Mode as state-control rows with effective behavior below buttons", () => {
+    type ResponseModeChoice = "off" | "follow" | "on";
+    const modes: ResponseModeChoice[] = ["off", "follow", "on"];
+
+    for (const dtmMode of modes) {
+      for (const toolMode of modes) {
+        for (const isGuild of [true, false]) {
+          for (const serverFlag of isGuild ? [false, true] : [false]) {
+            const payload = buildPersonalConfigPanelPayload({
+              locale: "en-US",
+              category: "advanced",
+              page: "response-modes",
+              user: makeUser({ personal_dtm: dtmMode, personal_deliberate_tool_mode: toolMode }),
+              resolvedNickname: "Tester",
+              personas: [],
+              guildId: isGuild ? "guild-123" : null,
+              memoryCount: 0,
+              stmCount: 0,
+              readStatus: "fresh",
+              serverTriggerBehavior: isGuild
+                ? { deliberate_trigger_mode: serverFlag, deliberate_tool_mode: serverFlag }
+                : null,
+            });
+
+            const container = payload.components[0] as { components: unknown[] };
+            expect(container).toBeDefined();
+
+            // Find DTM action row and its surrounding text displays
+            const dtmRowIndex = container.components.findIndex(
+              (c) =>
+                typeof c === "object" &&
+                c !== null &&
+                "type" in c &&
+                (c as { type: number }).type === ComponentType.ActionRow &&
+                Array.isArray((c as { components: unknown[] }).components) &&
+                (c as { components: Array<{ customId?: string }> }).components.some((b) =>
+                  b.customId?.includes("trigger-mode-set"),
+                ),
+            );
+            expect(dtmRowIndex).toBeGreaterThan(0);
+
+            const dtmHeadingDisplay = container.components[dtmRowIndex - 1] as TextDisplayComponentData;
+            expect(dtmHeadingDisplay.type).toBe(ComponentType.TextDisplay);
+            expect(dtmHeadingDisplay.content).toContain(
+              "**[Deliberate Trigger Mode](https://docs.tomoribot.app/en/features/chatting-personality/chatting-and-triggers/#deliberate-trigger-mode)**",
+            );
+            expect(dtmHeadingDisplay.content).toContain("Controls when I reply without being\naddressed directly.");
+            expect(dtmHeadingDisplay.content).not.toContain(">");
+
+            const dtmEffectDisplay = container.components[dtmRowIndex + 1] as TextDisplayComponentData;
+            expect(dtmEffectDisplay.type).toBe(ComponentType.TextDisplay);
+
+            // Verify DTM effect sentence
+            if (!isGuild) {
+              expect(dtmEffectDisplay.content).toBe("> Deliberate Trigger Mode does not apply in direct messages");
+            } else {
+              const isDtmActive = dtmMode === "on" || (dtmMode === "follow" && serverFlag);
+              expect(dtmEffectDisplay.content).toBe(
+                isDtmActive
+                  ? "> Only an @mention, a reply, or /respond reaches me"
+                  : "> You can trigger me by saying my name",
+              );
+            }
+
+            // Verify DTM button styling and disabled states
+            const dtmRow = container.components[dtmRowIndex] as ActionRowData<ButtonComponentData>;
+            expect(dtmRow.components).toHaveLength(3);
+            const [dtmOff, dtmFollow, dtmOn] = dtmRow.components;
+
+            expect(dtmOff.customId).toBe("personal-config:v2:trigger-mode-set:en-US:off");
+            expect(dtmOff.label).toBe("Off");
+            expect(dtmOff.style).toBe(dtmMode === "off" ? ButtonStyle.Primary : ButtonStyle.Secondary);
+            expect(dtmOff.disabled).toBe(dtmMode === "off");
+
+            expect(dtmFollow.customId).toBe("personal-config:v2:trigger-mode-set:en-US:follow");
+            expect(dtmFollow.label).toBe("Follow Server");
+            expect(dtmFollow.style).toBe(dtmMode === "follow" ? ButtonStyle.Primary : ButtonStyle.Secondary);
+            expect(dtmFollow.disabled).toBe(dtmMode === "follow");
+
+            expect(dtmOn.customId).toBe("personal-config:v2:trigger-mode-set:en-US:on");
+            expect(dtmOn.label).toBe("On");
+            expect(dtmOn.style).toBe(dtmMode === "on" ? ButtonStyle.Primary : ButtonStyle.Secondary);
+            expect(dtmOn.disabled).toBe(dtmMode === "on");
+
+            // Find Tool Mode action row and its surrounding text displays
+            const toolRowIndex = container.components.findIndex(
+              (c) =>
+                typeof c === "object" &&
+                c !== null &&
+                "type" in c &&
+                (c as { type: number }).type === ComponentType.ActionRow &&
+                Array.isArray((c as { components: unknown[] }).components) &&
+                (c as { components: Array<{ customId?: string }> }).components.some((b) =>
+                  b.customId?.includes("tool-mode-set"),
+                ),
+            );
+            expect(toolRowIndex).toBeGreaterThan(dtmRowIndex);
+
+            const toolHeadingDisplay = container.components[toolRowIndex - 1] as TextDisplayComponentData;
+            expect(toolHeadingDisplay.type).toBe(ComponentType.TextDisplay);
+            expect(toolHeadingDisplay.content).toContain(
+              "**[Deliberate Tool Mode](https://docs.tomoribot.app/en/features/capabilities/tools-and-extensions/#deliberate-tool-mode)** (EXPERIMENTAL)",
+            );
+            expect(toolHeadingDisplay.content).toContain(
+              "Controls whether tools are offered for\nevery message or only when relevant.",
+            );
+            expect(toolHeadingDisplay.content).not.toContain(">");
+
+            const toolEffectDisplay = container.components[toolRowIndex + 1] as TextDisplayComponentData;
+            expect(toolEffectDisplay.type).toBe(ComponentType.TextDisplay);
+
+            // Verify Tool Mode effect sentence
+            const isToolActive = toolMode === "on" || (toolMode === "follow" && isGuild && serverFlag);
+            expect(toolEffectDisplay.content).toBe(
+              isToolActive
+                ? "> My tools are only offered when the conversation calls for them"
+                : "> All my tools are always available",
+            );
+
+            // Verify Tool Mode button styling and disabled states
+            const toolRow = container.components[toolRowIndex] as ActionRowData<ButtonComponentData>;
+            expect(toolRow.components).toHaveLength(3);
+            const [toolOff, toolFollow, toolOn] = toolRow.components;
+
+            expect(toolOff.customId).toBe("personal-config:v2:tool-mode-set:en-US:off");
+            expect(toolOff.label).toBe("Off");
+            expect(toolOff.style).toBe(toolMode === "off" ? ButtonStyle.Primary : ButtonStyle.Secondary);
+            expect(toolOff.disabled).toBe(toolMode === "off");
+
+            expect(toolFollow.customId).toBe("personal-config:v2:tool-mode-set:en-US:follow");
+            expect(toolFollow.label).toBe("Follow Server");
+            expect(toolFollow.style).toBe(toolMode === "follow" ? ButtonStyle.Primary : ButtonStyle.Secondary);
+            expect(toolFollow.disabled).toBe(toolMode === "follow");
+
+            expect(toolOn.customId).toBe("personal-config:v2:tool-mode-set:en-US:on");
+            expect(toolOn.label).toBe("On");
+            expect(toolOn.style).toBe(toolMode === "on" ? ButtonStyle.Primary : ButtonStyle.Secondary);
+            expect(toolOn.disabled).toBe(toolMode === "on");
+
+            // Ensure no retired status prose exists in the payload
+            const serialized = JSON.stringify(payload);
+            expect(serialized).not.toContain("(Off)");
+            expect(serialized).not.toContain("(On)");
+            expect(serialized).not.toContain("(Follow Server");
+          }
+        }
+      }
+    }
+  });
+
+  it("disables all Response Mode buttons when writes are disabled while preserving Primary selection", () => {
+    const payload = buildPersonalConfigPanelPayload({
       locale: "en-US",
       category: "advanced",
       page: "response-modes",
-      user: makeUser({ personal_dtm: "follow", personal_deliberate_tool_mode: "follow" }),
+      user: makeUser({ personal_dtm: "follow", personal_deliberate_tool_mode: "on" }),
       resolvedNickname: "Tester",
       personas: [],
       guildId: "guild-123",
       memoryCount: 0,
       stmCount: 0,
-      readStatus: "fresh",
+      readStatus: "stale",
       serverTriggerBehavior: { deliberate_trigger_mode: false, deliberate_tool_mode: false },
     });
-    const guildOffJson = JSON.stringify(payloadGuildOff);
-    expect(guildOffJson).toContain(
-      "**[Deliberate Trigger Mode](https://docs.tomoribot.app/en/features/chatting-personality/chatting-and-triggers/#deliberate-trigger-mode)**",
-    );
-    expect(guildOffJson).toContain(
-      "**[Deliberate Tool Mode](https://docs.tomoribot.app/en/features/capabilities/tools-and-extensions/#deliberate-tool-mode)** (EXPERIMENTAL)",
-    );
-    expect(guildOffJson).toContain("> You can trigger me by saying my name\\n> (Follow Server, currently off here)");
-    expect(guildOffJson).toContain("> All my tools are always available\\n> (Follow Server, currently off here)");
-    // No double blank line before quote rows (C1)
-    expect(guildOffJson).not.toContain("\\n\\n> You can trigger me");
-    expect(guildOffJson).not.toContain("\\n\\n> All my tools");
 
-    const payloadGuildOn = buildPersonalConfigPanelPayload({
-      locale: "en-US",
-      category: "advanced",
-      page: "response-modes",
-      user: makeUser({ personal_dtm: "follow", personal_deliberate_tool_mode: "follow" }),
-      resolvedNickname: "Tester",
-      personas: [],
-      guildId: "guild-123",
-      memoryCount: 0,
-      stmCount: 0,
-      readStatus: "fresh",
-      serverTriggerBehavior: { deliberate_trigger_mode: true, deliberate_tool_mode: true },
-    });
-    const guildOnJson = JSON.stringify(payloadGuildOn);
-    expect(guildOnJson).toContain(
-      "> Only an @mention, a reply, or /respond reaches me\\n> (Follow Server, currently on here)",
-    );
-    expect(guildOnJson).toContain(
-      "> My tools are only offered when the conversation calls for them\\n> (Follow Server, currently on here)",
+    const container = payload.components[0] as { components: unknown[] };
+    const rows = container.components.filter(
+      (c): c is ActionRowData<ButtonComponentData> =>
+        typeof c === "object" &&
+        c !== null &&
+        "type" in c &&
+        (c as { type: number }).type === ComponentType.ActionRow &&
+        Array.isArray((c as { components: unknown[] }).components) &&
+        (c as { components: Array<{ customId?: string }> }).components.some(
+          (b) => b.customId?.includes("trigger-mode-set") || b.customId?.includes("tool-mode-set"),
+        ),
     );
 
-    const payloadUserOn = buildPersonalConfigPanelPayload({
-      locale: "en-US",
-      category: "advanced",
-      page: "response-modes",
-      user: makeUser({ personal_dtm: "on", personal_deliberate_tool_mode: "on" }),
-      resolvedNickname: "Tester",
-      personas: [],
-      guildId: "guild-123",
-      memoryCount: 0,
-      stmCount: 0,
-      readStatus: "fresh",
-      serverTriggerBehavior: { deliberate_trigger_mode: false, deliberate_tool_mode: false },
-    });
-    const userOnJson = JSON.stringify(payloadUserOn);
-    expect(userOnJson).toContain("> Only an @mention, a reply, or /respond reaches me\\n> (On)");
-    expect(userOnJson).toContain("> My tools are only offered when the conversation calls for them\\n> (On)");
+    expect(rows).toHaveLength(2);
+    const [dtmRow, toolRow] = rows;
 
-    const payloadDm = buildPersonalConfigPanelPayload({
-      locale: "en-US",
-      category: "advanced",
-      page: "response-modes",
-      user: makeUser({ personal_dtm: "follow", personal_deliberate_tool_mode: "follow" }),
-      resolvedNickname: "Tester",
-      personas: [],
-      guildId: null,
-      memoryCount: 0,
-      stmCount: 0,
-      readStatus: "fresh",
-      serverTriggerBehavior: null,
-    });
-    const dmJson = JSON.stringify(payloadDm);
-    expect(dmJson).toContain("> Deliberate Trigger Mode does not apply in direct messages\\n> (Follow Server)");
-    expect(dmJson).toContain("> All my tools are always available\\n> (Follow Server)");
+    for (const btn of dtmRow.components) {
+      expect(btn.disabled).toBe(true);
+    }
+    expect(dtmRow.components[0].style).toBe(ButtonStyle.Secondary);
+    expect(dtmRow.components[1].style).toBe(ButtonStyle.Primary);
+    expect(dtmRow.components[2].style).toBe(ButtonStyle.Secondary);
+
+    for (const btn of toolRow.components) {
+      expect(btn.disabled).toBe(true);
+    }
+    expect(toolRow.components[0].style).toBe(ButtonStyle.Secondary);
+    expect(toolRow.components[1].style).toBe(ButtonStyle.Secondary);
+    expect(toolRow.components[2].style).toBe(ButtonStyle.Primary);
   });
 
   it("renders Profile General and Persona with section descriptions and precise fallback wording (never bare Inherited)", () => {
@@ -4090,8 +4228,10 @@ describe("personalConfigRoutes Advanced interactions and telemetry", () => {
     expect(privacyJson).toContain("**Cross-Server [STM](");
     // Cross-server STM section footer
     expect(privacyJson).toContain("-# `/personal memories` always persist across servers, but not STM");
-    // Button label
-    expect(privacyJson).toContain("Enable Cross-Server Sharing");
+    // State control buttons and effect quote
+    expect(privacyJson).toContain("personal-config:v2:crossserver-set:en-US:off");
+    expect(privacyJson).toContain("personal-config:v2:crossserver-set:en-US:on");
+    expect(privacyJson).toContain("> I cannot remember recent conversations with you");
   });
 
   it("keeps Server Default actionable when a capability has no eligible providers", () => {
@@ -6560,10 +6700,8 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
     const renderedText = JSON.stringify(capturedPayload);
     expect(renderedText).toContain("Response Mode Updated");
     expect(renderedText).toContain("Your deliberate trigger mode preference has been set to On.");
-    expect(renderedText).toContain("> Only an @mention, a reply, or /respond reaches me\\n> (On)");
-    expect(renderedText).not.toContain(
-      "> You can trigger me by saying my name\\n> (Follow Server, currently off here)",
-    );
+    expect(renderedText).toContain("> Only an @mention, a reply, or /respond reaches me");
+    expect(renderedText).not.toContain("> You can trigger me by saying my name");
   });
 
   it("proves post-defer spotlight write repaints with refreshed scope and records telemetry", async () => {
@@ -6679,5 +6817,688 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
     const renderedText = JSON.stringify(capturedPayload);
     expect(renderedText).toContain("Personal Spotlight Saved");
     expect(renderedText).toContain("Your personal spotlight has been saved for <#123456789012345678>.");
+  });
+
+  describe("Wave 6 Slice A3: Model Randomizer and Cross-Server STM state controls", () => {
+    describe("Cross-Server STM state control rendering and custom IDs", () => {
+      it("renders Off as disabled Primary and On as enabled Secondary when cross-server STM is off", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "privacy",
+          page: "privacy-controls",
+          user: makeUser({ shortterm_cache_crossserver_opt_in: false }),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "guild-123",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+        });
+
+        const container = (payload as { components: { components: unknown[] }[] }).components[0];
+        const rows = container.components;
+        const buttonRow = rows.find(
+          (
+            r,
+          ): r is {
+            type: number;
+            components: { customId: string; style: number; disabled: boolean; label: string }[];
+          } =>
+            (r as { type: number }).type === ComponentType.ActionRow &&
+            Boolean(
+              (r as { components?: { customId?: string }[] }).components?.some((c) =>
+                c.customId?.includes("crossserver-set"),
+              ),
+            ),
+        );
+
+        expect(buttonRow).toBeDefined();
+        const offButton = buttonRow?.components.find((b) => b.label === "Off");
+        const onButton = buttonRow?.components.find((b) => b.label === "On");
+
+        expect(offButton).toBeDefined();
+        expect(offButton?.style).toBe(ButtonStyle.Primary);
+        expect(offButton?.disabled).toBe(true);
+
+        expect(onButton).toBeDefined();
+        expect(onButton?.style).toBe(ButtonStyle.Secondary);
+        expect(onButton?.disabled).toBe(false);
+
+        // Custom IDs decode to their OWN target booleans (not the negation of current state)
+        const offRoute = parsePersonalConfigPanelRoute(requireRoute(offButton?.customId ?? ""));
+        expect(offRoute).toEqual({ action: "crossserver-set", locale: "en-US", enabled: false });
+
+        const onRoute = parsePersonalConfigPanelRoute(requireRoute(onButton?.customId ?? ""));
+        expect(onRoute).toEqual({ action: "crossserver-set", locale: "en-US", enabled: true });
+
+        // Effective behavior quote row below
+        const payloadJson = JSON.stringify(payload);
+        expect(payloadJson).toContain("> I cannot remember recent conversations with you");
+      });
+
+      it("renders Off as enabled Secondary and On as disabled Primary when cross-server STM is on", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "privacy",
+          page: "privacy-controls",
+          user: makeUser({ shortterm_cache_crossserver_opt_in: true }),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "guild-123",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+        });
+
+        const container = (payload as { components: { components: unknown[] }[] }).components[0];
+        const rows = container.components;
+        const buttonRow = rows.find(
+          (
+            r,
+          ): r is {
+            type: number;
+            components: { customId: string; style: number; disabled: boolean; label: string }[];
+          } =>
+            (r as { type: number }).type === ComponentType.ActionRow &&
+            Boolean(
+              (r as { components?: { customId?: string }[] }).components?.some((c) =>
+                c.customId?.includes("crossserver-set"),
+              ),
+            ),
+        );
+
+        expect(buttonRow).toBeDefined();
+        const offButton = buttonRow?.components.find((b) => b.label === "Off");
+        const onButton = buttonRow?.components.find((b) => b.label === "On");
+
+        expect(offButton).toBeDefined();
+        expect(offButton?.style).toBe(ButtonStyle.Secondary);
+        expect(offButton?.disabled).toBe(false);
+
+        expect(onButton).toBeDefined();
+        expect(onButton?.style).toBe(ButtonStyle.Primary);
+        expect(onButton?.disabled).toBe(true);
+
+        const offRoute = parsePersonalConfigPanelRoute(requireRoute(offButton?.customId ?? ""));
+        expect(offRoute).toEqual({ action: "crossserver-set", locale: "en-US", enabled: false });
+
+        const onRoute = parsePersonalConfigPanelRoute(requireRoute(onButton?.customId ?? ""));
+        expect(onRoute).toEqual({ action: "crossserver-set", locale: "en-US", enabled: true });
+
+        const payloadJson = JSON.stringify(payload);
+        expect(payloadJson).toContain("> I can carry recent conversation memory with you");
+      });
+    });
+
+    describe("Model Randomizer state control rendering and custom IDs", () => {
+      it("renders Off as disabled Primary and On as enabled Secondary when randomizer is off and canEnableRandomizer is true", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "models",
+          page: "fallbacks",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "guild-123",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          modelDisplayInfo: {
+            fallbacksProviders: ["openrouter"],
+            selectedProvider: "openrouter",
+            selectedFallbacksConfig: {
+              provider: "openrouter",
+              model_randomizer_enabled: false,
+            } as unknown as UserSavedProviderConfigRow,
+            fallbackSlots: [{ slot: 1, modelName: "Claude 3 Haiku" }],
+            randomizerEnabled: false,
+            canEnableRandomizer: true,
+          },
+        });
+
+        const container = (payload as { components: { components: unknown[] }[] }).components[0];
+        const rows = container.components;
+        const buttonRow = rows.find(
+          (
+            r,
+          ): r is {
+            type: number;
+            components: { customId: string; style: number; disabled: boolean; label: string }[];
+          } =>
+            (r as { type: number }).type === ComponentType.ActionRow &&
+            Boolean(
+              (r as { components?: { customId?: string }[] }).components?.some((c) =>
+                c.customId?.includes("randomizer-set"),
+              ),
+            ),
+        );
+
+        expect(buttonRow).toBeDefined();
+        const offButton = buttonRow?.components.find((b) => b.label === "Off");
+        const onButton = buttonRow?.components.find((b) => b.label === "On");
+
+        expect(offButton).toBeDefined();
+        expect(offButton?.style).toBe(ButtonStyle.Primary);
+        expect(offButton?.disabled).toBe(true);
+
+        expect(onButton).toBeDefined();
+        expect(onButton?.style).toBe(ButtonStyle.Secondary);
+        expect(onButton?.disabled).toBe(false);
+
+        const offRoute = parsePersonalConfigPanelRoute(requireRoute(offButton?.customId ?? ""));
+        expect(offRoute).toEqual({
+          action: "randomizer-set",
+          locale: "en-US",
+          provider: "openrouter",
+          enabled: false,
+        });
+
+        const onRoute = parsePersonalConfigPanelRoute(requireRoute(onButton?.customId ?? ""));
+        expect(onRoute).toEqual({
+          action: "randomizer-set",
+          locale: "en-US",
+          provider: "openrouter",
+          enabled: true,
+        });
+
+        const payloadJson = JSON.stringify(payload);
+        expect(payloadJson).toContain("> I try the primary model first");
+        expect(payloadJson).not.toContain("Model Randomizer requires at least one configured fallback model.");
+      });
+
+      it("renders Off as enabled Secondary and On as disabled Primary when randomizer is on and canEnableRandomizer is true", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "models",
+          page: "fallbacks",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "guild-123",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          modelDisplayInfo: {
+            fallbacksProviders: ["openrouter"],
+            selectedProvider: "openrouter",
+            selectedFallbacksConfig: {
+              provider: "openrouter",
+              model_randomizer_enabled: true,
+            } as unknown as UserSavedProviderConfigRow,
+            fallbackSlots: [{ slot: 1, modelName: "Claude 3 Haiku" }],
+            randomizerEnabled: true,
+            canEnableRandomizer: true,
+          },
+        });
+
+        const container = (payload as { components: { components: unknown[] }[] }).components[0];
+        const rows = container.components;
+        const buttonRow = rows.find(
+          (
+            r,
+          ): r is {
+            type: number;
+            components: { customId: string; style: number; disabled: boolean; label: string }[];
+          } =>
+            (r as { type: number }).type === ComponentType.ActionRow &&
+            Boolean(
+              (r as { components?: { customId?: string }[] }).components?.some((c) =>
+                c.customId?.includes("randomizer-set"),
+              ),
+            ),
+        );
+
+        expect(buttonRow).toBeDefined();
+        const offButton = buttonRow?.components.find((b) => b.label === "Off");
+        const onButton = buttonRow?.components.find((b) => b.label === "On");
+
+        expect(offButton).toBeDefined();
+        expect(offButton?.style).toBe(ButtonStyle.Secondary);
+        expect(offButton?.disabled).toBe(false);
+
+        expect(onButton).toBeDefined();
+        expect(onButton?.style).toBe(ButtonStyle.Primary);
+        expect(onButton?.disabled).toBe(true);
+
+        const payloadJson = JSON.stringify(payload);
+        expect(payloadJson).toContain("> I pick a random model from my primary and fallbacks first");
+      });
+
+      it("renders On as unavailable (disabled Secondary), Off as disabled Primary, and explains precondition in prose when canEnableRandomizer is false", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "models",
+          page: "fallbacks",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "guild-123",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          modelDisplayInfo: {
+            fallbacksProviders: ["openrouter"],
+            selectedProvider: "openrouter",
+            selectedFallbacksConfig: {
+              provider: "openrouter",
+              model_randomizer_enabled: false,
+            } as unknown as UserSavedProviderConfigRow,
+            fallbackSlots: [],
+            randomizerEnabled: false,
+            canEnableRandomizer: false,
+          },
+        });
+
+        const container = (payload as { components: { components: unknown[] }[] }).components[0];
+        const rows = container.components;
+        const buttonRow = rows.find(
+          (
+            r,
+          ): r is {
+            type: number;
+            components: { customId: string; style: number; disabled: boolean; label: string }[];
+          } =>
+            (r as { type: number }).type === ComponentType.ActionRow &&
+            Boolean(
+              (r as { components?: { customId?: string }[] }).components?.some((c) =>
+                c.customId?.includes("randomizer-set"),
+              ),
+            ),
+        );
+
+        expect(buttonRow).toBeDefined();
+        const offButton = buttonRow?.components.find((b) => b.label === "Off");
+        const onButton = buttonRow?.components.find((b) => b.label === "On");
+
+        // Off is the selection: disabled Primary
+        expect(offButton).toBeDefined();
+        expect(offButton?.style).toBe(ButtonStyle.Primary);
+        expect(offButton?.disabled).toBe(true);
+
+        // On is an unavailable alternative: disabled Secondary
+        expect(onButton).toBeDefined();
+        expect(onButton?.style).toBe(ButtonStyle.Secondary);
+        expect(onButton?.disabled).toBe(true);
+
+        const payloadJson = JSON.stringify(payload);
+        // Precondition explained in prose
+        expect(payloadJson).toContain("-# Model Randomizer requires at least one configured fallback model.");
+        // Effective behavior quote is Off
+        expect(payloadJson).toContain("> I try the primary model first");
+      });
+
+      it("keeps On selected from the stored flag when every fallback was cleared, while the behavior sentence reports the effective Off", () => {
+        // Clearing all five fallback slots leaves model_randomizer_enabled true, so this state is
+        // reachable. Showing Off here would deny a stored value that resumes the moment a fallback
+        // returns, so the selection tracks storage and the quote row tracks effect.
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "models",
+          page: "fallbacks",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "guild-123",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          modelDisplayInfo: {
+            fallbacksProviders: ["openrouter"],
+            selectedProvider: "openrouter",
+            selectedFallbacksConfig: {
+              provider: "openrouter",
+              model_randomizer_enabled: true,
+            } as unknown as UserSavedProviderConfigRow,
+            fallbackSlots: [],
+            randomizerEnabled: true,
+            canEnableRandomizer: false,
+          },
+        });
+
+        const container = (payload as { components: { components: unknown[] }[] }).components[0];
+        const buttonRow = container.components.find(
+          (
+            r,
+          ): r is {
+            type: number;
+            components: { customId: string; style: number; disabled: boolean; label: string }[];
+          } =>
+            (r as { type: number }).type === ComponentType.ActionRow &&
+            Boolean(
+              (r as { components?: { customId?: string }[] }).components?.some((c) =>
+                c.customId?.includes("randomizer-set"),
+              ),
+            ),
+        );
+
+        expect(buttonRow).toBeDefined();
+        const offButton = buttonRow?.components.find((b) => b.label === "Off");
+        const onButton = buttonRow?.components.find((b) => b.label === "On");
+
+        // On is the stored selection, so it stays disabled Primary rather than being rewritten to Off.
+        expect(onButton?.style).toBe(ButtonStyle.Primary);
+        expect(onButton?.disabled).toBe(true);
+
+        // Off stays reachable so the user can clear the stored flag without adding a fallback first.
+        expect(offButton?.style).toBe(ButtonStyle.Secondary);
+        expect(offButton?.disabled).toBe(false);
+
+        const payloadJson = JSON.stringify(payload);
+        expect(payloadJson).toContain("> I try the primary model first");
+        expect(payloadJson).not.toContain("> I pick a random model from my primary and fallbacks first");
+        expect(payloadJson).toContain("-# Model Randomizer requires at least one configured fallback model.");
+      });
+    });
+
+    describe("Execution of crossserver-set and crossserver-toggle", () => {
+      it("acknowledges interaction before database write and sets cross-server STM to on", async () => {
+        const calls: string[] = [];
+        let acknowledgedDuringWrite = false;
+        const { dependencies, telemetry, user } = makeDependencies(calls);
+        user.shortterm_cache_crossserver_opt_in = false;
+
+        dependencies.operations.setCrossServerStm = async (input) => {
+          acknowledgedDuringWrite = interaction.deferred || interaction.replied;
+          calls.push(`setCrossServerStm:${input.enabled}`);
+          user.shortterm_cache_crossserver_opt_in = input.enabled;
+          return { status: "success", enabled: input.enabled };
+        };
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = buildPersonalConfigRouteId({
+          action: "crossserver-set",
+          locale: "en-US",
+          enabled: true,
+        });
+
+        let deferred = false;
+        let capturedPayload: unknown = null;
+        const interaction = {
+          isButton: () => true,
+          isStringSelectMenu: () => false,
+          isModalSubmit: () => false,
+          customId,
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          get deferred() {
+            return deferred;
+          },
+          get replied() {
+            return false;
+          },
+          deferUpdate: async () => {
+            deferred = true;
+          },
+          editReply: async (payload: unknown) => {
+            capturedPayload = payload;
+          },
+        } as unknown as ButtonInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(acknowledgedDuringWrite).toBe(true);
+        expect(calls).toContain("setCrossServerStm:true");
+        expect(telemetry).toContain("personal-config.personal.crossserver-stm.set");
+        expect(capturedPayload).not.toBeNull();
+        const renderedText = JSON.stringify(capturedPayload);
+        expect(renderedText).toContain("Cross-Server STM Enabled");
+      });
+
+      it("performs no write when setting cross-server STM to already stored value", async () => {
+        const calls: string[] = [];
+        const { dependencies, user } = makeDependencies(calls);
+        user.shortterm_cache_crossserver_opt_in = true;
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = buildPersonalConfigRouteId({
+          action: "crossserver-set",
+          locale: "en-US",
+          enabled: true,
+        });
+
+        let deferred = false;
+        let capturedPayload: unknown = null;
+        const interaction = {
+          isButton: () => true,
+          isStringSelectMenu: () => false,
+          isModalSubmit: () => false,
+          customId,
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          get deferred() {
+            return deferred;
+          },
+          get replied() {
+            return false;
+          },
+          deferUpdate: async () => {
+            deferred = true;
+          },
+          editReply: async (payload: unknown) => {
+            capturedPayload = payload;
+          },
+        } as unknown as ButtonInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        // No DB write performed
+        expect(calls.filter((c) => c.startsWith("setCrossServerStm"))).toHaveLength(0);
+        // Still repaints from authoritative state with noChangesReceipt
+        expect(capturedPayload).not.toBeNull();
+        const renderedText = JSON.stringify(capturedPayload);
+        expect(renderedText).toContain("No Changes");
+      });
+
+      it("legacy crossserver-toggle action remains routable and flips the stored state", async () => {
+        const calls: string[] = [];
+        const { dependencies, telemetry, user } = makeDependencies(calls);
+        user.shortterm_cache_crossserver_opt_in = false;
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = "personal-config:v2:crossserver-toggle:en-US";
+
+        let deferred = false;
+        let capturedPayload: unknown = null;
+        const interaction = {
+          isButton: () => true,
+          isStringSelectMenu: () => false,
+          isModalSubmit: () => false,
+          customId,
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          get deferred() {
+            return deferred;
+          },
+          get replied() {
+            return false;
+          },
+          deferUpdate: async () => {
+            deferred = true;
+          },
+          editReply: async (payload: unknown) => {
+            capturedPayload = payload;
+          },
+        } as unknown as ButtonInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(calls).toContain("toggleCrossServerStm");
+        expect(user.shortterm_cache_crossserver_opt_in).toBe(true);
+        expect(telemetry).toContain("personal-config.personal.crossserver-stm.set");
+        expect(capturedPayload).not.toBeNull();
+        const renderedText = JSON.stringify(capturedPayload);
+        expect(renderedText).toContain("Cross-Server STM Enabled");
+      });
+    });
+
+    describe("Execution of randomizer-set and randomizer-toggle", () => {
+      it("acknowledges interaction before database write and sets randomizer to on", async () => {
+        const calls: string[] = [];
+        let acknowledgedDuringWrite = false;
+        const savedConfig = {
+          user_saved_config_id: 1,
+          user_id: 1,
+          provider: "openrouter",
+          model_randomizer_enabled: false,
+          fallback_model_refs: [{ type: "llm", id: 103 }],
+        } as unknown as UserSavedProviderConfigRow;
+
+        const { dependencies, telemetry } = makeDependencies(calls, {
+          loadUserSavedProviders: async () => [savedConfig],
+        });
+
+        dependencies.operations.setRandomizer = async (input) => {
+          acknowledgedDuringWrite = interaction.deferred || interaction.replied;
+          calls.push(`setRandomizer:${input.provider}:${input.enabled}`);
+          savedConfig.model_randomizer_enabled = input.enabled;
+          return { status: "success", enabled: input.enabled };
+        };
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = buildPersonalConfigRouteId({
+          action: "randomizer-set",
+          locale: "en-US",
+          provider: "openrouter",
+          enabled: true,
+        });
+
+        let deferred = false;
+        let capturedPayload: unknown = null;
+        const interaction = {
+          isButton: () => true,
+          isStringSelectMenu: () => false,
+          isModalSubmit: () => false,
+          customId,
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          get deferred() {
+            return deferred;
+          },
+          get replied() {
+            return false;
+          },
+          deferUpdate: async () => {
+            deferred = true;
+          },
+          editReply: async (payload: unknown) => {
+            capturedPayload = payload;
+          },
+        } as unknown as ButtonInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(acknowledgedDuringWrite).toBe(true);
+        expect(calls).toContain("setRandomizer:openrouter:true");
+        expect(telemetry).toContain("personal-config.personal.randomizer.set");
+        expect(capturedPayload).not.toBeNull();
+        const renderedText = JSON.stringify(capturedPayload);
+        expect(renderedText).toContain("Randomizer Enabled");
+      });
+
+      it("performs no write when setting randomizer to already stored value", async () => {
+        const calls: string[] = [];
+        const savedConfig = {
+          user_saved_config_id: 1,
+          user_id: 1,
+          provider: "openrouter",
+          model_randomizer_enabled: true,
+          fallback_model_refs: [{ type: "llm", id: 103 }],
+        } as unknown as UserSavedProviderConfigRow;
+
+        const { dependencies } = makeDependencies(calls, {
+          loadUserSavedProviders: async () => [savedConfig],
+        });
+
+        dependencies.operations.setRandomizer = async (_input) => {
+          return { status: "no-changes" };
+        };
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = buildPersonalConfigRouteId({
+          action: "randomizer-set",
+          locale: "en-US",
+          provider: "openrouter",
+          enabled: true,
+        });
+
+        let deferred = false;
+        let capturedPayload: unknown = null;
+        const interaction = {
+          isButton: () => true,
+          isStringSelectMenu: () => false,
+          isModalSubmit: () => false,
+          customId,
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          get deferred() {
+            return deferred;
+          },
+          get replied() {
+            return false;
+          },
+          deferUpdate: async () => {
+            deferred = true;
+          },
+          editReply: async (payload: unknown) => {
+            capturedPayload = payload;
+          },
+        } as unknown as ButtonInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(capturedPayload).not.toBeNull();
+        const renderedText = JSON.stringify(capturedPayload);
+        expect(renderedText).toContain("No Changes");
+      });
+
+      it("legacy randomizer-toggle action remains routable and flips the stored state", async () => {
+        const calls: string[] = [];
+        const savedConfig = {
+          user_saved_config_id: 1,
+          user_id: 1,
+          provider: "openrouter",
+          model_randomizer_enabled: false,
+          fallback_model_refs: [{ type: "llm", id: 103 }],
+        } as unknown as UserSavedProviderConfigRow;
+
+        const { dependencies, telemetry } = makeDependencies(calls, {
+          loadUserSavedProviders: async () => [savedConfig],
+        });
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = "personal-config:v2:randomizer-toggle:en-US:openrouter";
+
+        let deferred = false;
+        let capturedPayload: unknown = null;
+        const interaction = {
+          isButton: () => true,
+          isStringSelectMenu: () => false,
+          isModalSubmit: () => false,
+          customId,
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          get deferred() {
+            return deferred;
+          },
+          get replied() {
+            return false;
+          },
+          deferUpdate: async () => {
+            deferred = true;
+          },
+          editReply: async (payload: unknown) => {
+            capturedPayload = payload;
+          },
+        } as unknown as ButtonInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(calls).toContain("setRandomizer:openrouter:true");
+        expect(telemetry).toContain("personal-config.personal.randomizer.set");
+        expect(capturedPayload).not.toBeNull();
+        const renderedText = JSON.stringify(capturedPayload);
+        expect(renderedText).toContain("Randomizer Enabled");
+      });
+    });
   });
 });

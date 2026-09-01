@@ -195,7 +195,7 @@ export async function execute(
           new ButtonBuilder()
             .setCustomId(`config_logitbias_page_${page}`)
             .setLabel(`${startEntry}-${endEntry}`)
-            .setStyle(ButtonStyle.Primary),
+            .setStyle(ButtonStyle.Secondary),
         );
       }
 

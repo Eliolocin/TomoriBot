@@ -1,6 +1,7 @@
 import {
   ActionRowBuilder,
   ButtonBuilder,
+  ButtonStyle,
   ComponentType,
   EmbedBuilder,
   type ButtonInteraction,
@@ -18,7 +19,7 @@ import { ColorCode, log } from "../misc/logger";
 import { localizer } from "../text/localizer";
 import { sendWebhookMessageWithIdentity } from "./webhookManager";
 import type { StandardEmbedOptions, SummaryEmbedOptions, TranslationEmbedOptions } from "../../types/discord/embed";
-import { TRANSLATOR_COLORS, TRANSLATOR_STYLES, TranslationProvider } from "../../types/discord/embed";
+import { TRANSLATOR_COLORS, TranslationProvider } from "../../types/discord/embed";
 
 type Provider = keyof typeof TRANSLATOR_COLORS;
 
@@ -301,7 +302,7 @@ export async function sendTranslationEmbed(message: Message, options: Translatio
     const buttons = Object.values(TranslationProvider).map((provider) => {
       return new ButtonBuilder()
         .setLabel(provider.charAt(0).toUpperCase() + provider.slice(1))
-        .setStyle(TRANSLATOR_STYLES[provider])
+        .setStyle(provider === activeProvider ? ButtonStyle.Primary : ButtonStyle.Secondary)
         .setCustomId(`${provider}-trans`)
         .setDisabled(provider === activeProvider);
     });

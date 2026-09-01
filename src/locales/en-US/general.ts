@@ -54,8 +54,8 @@
     },
     pagination: {
       page_info: `Page {current} of {total}`,
-      previous: `Previous`,
-      next: `Next`,
+      previous: `← Previous`,
+      next: `Next →`,
       cancel: `Cancel`,
       no_items: `There are no items to display.`,
       cancelled: `Selection has been cancelled.`,

@@ -152,6 +152,34 @@ export function buildCategoryButtonRow<TCategory extends string>(
   };
 }
 
+export interface StateControlChoice<TValue> {
+  value: TValue;
+  label: string;
+  customId: string;
+  available?: boolean;
+}
+
+export function buildStateControlRow<TValue>(
+  choices: readonly StateControlChoice<TValue>[],
+  selectedValue: TValue,
+  writesDisabled = false,
+): ActionRowData<ButtonComponentData> {
+  return {
+    type: ComponentType.ActionRow,
+    components: choices.map((choice) => {
+      const isSelected = choice.value === selectedValue;
+      const isAvailable = choice.available !== false;
+      return {
+        type: ComponentType.Button,
+        style: isSelected ? ButtonStyle.Primary : ButtonStyle.Secondary,
+        customId: choice.customId,
+        label: choice.label,
+        disabled: writesDisabled || isSelected || !isAvailable,
+      };
+    }),
+  };
+}
+
 export function buildRangeChooserComponents(options: RangeChooserComponentsOptions): ComponentInContainerData[] {
   const resolved = resolveRangeChooser({
     totalCount: options.totalCount,
@@ -195,7 +223,7 @@ export function buildRangeChooserComponents(options: RangeChooserComponentsOptio
 
   const cancelButton: ButtonComponentData = {
     type: ComponentType.Button,
-    style: ButtonStyle.Danger,
+    style: ButtonStyle.Secondary,
     customId: buildInteractionRouteId(
       options.namespace,
       options.version,

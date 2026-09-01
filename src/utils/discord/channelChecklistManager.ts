@@ -114,7 +114,7 @@ export function buildChecklistPageActionRows(
       new ButtonBuilder()
         .setCustomId(`${pageButtonPrefix}${page}`)
         .setLabel(`${start}-${end}`)
-        .setStyle(ButtonStyle.Primary),
+        .setStyle(ButtonStyle.Secondary),
     );
   }
 

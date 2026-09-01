@@ -37,6 +37,7 @@ import {
   buildCategoryButtonRow,
   buildPanelContainer,
   buildPanelReceiptContainer,
+  buildStateControlRow,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import type {
@@ -270,38 +271,40 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
       },
       {
         type: ComponentType.TextDisplay,
-        content: `**${localizer(locale, "commands.moderation.model_access_title")}**
-> ${localizer(
+        content: `**${localizer(locale, "commands.moderation.model_access_title")}**\n${localizer(locale, "commands.moderation.model_access_description")}`,
+      },
+      buildStateControlRow(
+        [
+          {
+            value: false,
+            label: localizer(locale, "commands.moderation.model_access_personal_required_label"),
+            customId: buildModerationRouteId({
+              action: "model-access-set",
+              locale,
+              allowServerModels: false,
+            }),
+          },
+          {
+            value: true,
+            label: localizer(locale, "commands.moderation.model_access_allowed_label"),
+            customId: buildModerationRouteId({
+              action: "model-access-set",
+              locale,
+              allowServerModels: true,
+            }),
+          },
+        ],
+        data.serverModelAccess.allowServerModels,
+        data.readStatus !== "fresh",
+      ),
+      {
+        type: ComponentType.TextDisplay,
+        content: `> ${localizer(
           locale,
           data.serverModelAccess.allowServerModels
             ? "commands.moderation.model_access_allowed"
             : "commands.moderation.model_access_personal_required",
         )}`,
-      },
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            // Only the transition away from the current policy is offered, so the button always
-            // names the change it performs rather than restating the state above it. The route
-            // segment names the stored policy rather than the label, so already-open panels keep
-            // resolving after copy changes.
-            customId: buildModerationRouteId({
-              action: "model-access-set",
-              locale,
-              allowServerModels: !data.serverModelAccess.allowServerModels,
-            }),
-            label: localizer(
-              locale,
-              data.serverModelAccess.allowServerModels
-                ? "commands.moderation.model_access_disable_button"
-                : "commands.moderation.model_access_allow_button",
-            ),
-            disabled: data.readStatus !== "fresh",
-          },
-        ],
       },
     );
   } else if (category === "user-blacklist") {

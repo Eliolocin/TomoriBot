@@ -41,6 +41,7 @@ import {
   buildPanelContainer,
   buildPanelReceiptContainer,
   buildRangeChooserComponents,
+  buildStateControlRow,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
@@ -1164,26 +1165,40 @@ ${localizer(locale, "commands.personal.config.stm_count_label", { count: stmCoun
       {
         type: ComponentType.TextDisplay,
         content: `**${localizer(locale, "commands.personal.config.crossserver_section_title")}**
-${
-  isCrossServerOn
-    ? localizer(locale, "commands.personal.config.crossserver_stm_on")
-    : localizer(locale, "commands.personal.config.crossserver_stm_off")
-}
 -# ${localizer(locale, "commands.personal.config.crossserver_stm_footer")}`,
       },
-      {
-        type: ComponentType.ActionRow,
-        components: [
+      buildStateControlRow(
+        [
           {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            customId: buildPersonalConfigRouteId({ action: "crossserver-toggle", locale }),
-            label: isCrossServerOn
-              ? localizer(locale, "commands.personal.config.disable_crossserver_button")
-              : localizer(locale, "commands.personal.config.enable_crossserver_button"),
-            disabled: writesDisabled,
+            value: false,
+            label: localizer(locale, "commands.personal.config.mode_off"),
+            customId: buildPersonalConfigRouteId({
+              action: "crossserver-set",
+              locale,
+              enabled: false,
+            }),
+          },
+          {
+            value: true,
+            label: localizer(locale, "commands.personal.config.mode_on"),
+            customId: buildPersonalConfigRouteId({
+              action: "crossserver-set",
+              locale,
+              enabled: true,
+            }),
           },
         ],
+        isCrossServerOn,
+        writesDisabled,
+      ),
+      {
+        type: ComponentType.TextDisplay,
+        content: withLinePrefix(
+          "> ",
+          isCrossServerOn
+            ? localizer(locale, "commands.personal.config.crossserver_stm_on")
+            : localizer(locale, "commands.personal.config.crossserver_stm_off"),
+        ),
       },
     );
   } else if (category === "models") {
@@ -1415,35 +1430,54 @@ ${localizer(locale, "commands.personal.config.fallbacks_description")}`,
           { type: ComponentType.Separator, divider: true, spacing: 1 },
         );
 
+        const canEnableRandomizer = Boolean(input.modelDisplayInfo?.canEnableRandomizer);
+        // Clearing every fallback slot leaves the stored flag on, so the selection tracks the stored
+        // value while the behavior sentence below tracks the effective one. Collapsing the two here
+        // would show Off for a user whose randomizer resumes the moment they add a fallback back.
         const isRandomizerOn = Boolean(input.modelDisplayInfo?.randomizerEnabled);
-        const statusStr = isRandomizerOn
-          ? localizer(locale, "commands.personal.config.randomizer_status_enabled")
-          : localizer(locale, "commands.personal.config.randomizer_status_disabled");
+        const isRandomizerActive = isRandomizerOn && canEnableRandomizer;
+
+        const randomizerDesc = canEnableRandomizer
+          ? localizer(locale, "commands.personal.config.randomizer_section_desc")
+          : `${localizer(locale, "commands.personal.config.randomizer_section_desc")}\n-# ${localizer(locale, "commands.personal.config.randomizer_requires_fallback_detail")}`;
+
+        const randomizerChoices = [
+          {
+            value: false,
+            label: localizer(locale, "commands.personal.config.mode_off"),
+            customId: buildPersonalConfigRouteId({
+              action: "randomizer-set",
+              locale,
+              provider: selectedProvider,
+              enabled: false,
+            }),
+          },
+          {
+            value: true,
+            label: localizer(locale, "commands.personal.config.mode_on"),
+            customId: buildPersonalConfigRouteId({
+              action: "randomizer-set",
+              locale,
+              provider: selectedProvider,
+              enabled: true,
+            }),
+            available: canEnableRandomizer,
+          },
+        ] as const;
+
+        const randomizerEffect = isRandomizerActive
+          ? localizer(locale, "commands.personal.config.randomizer_effect_on")
+          : localizer(locale, "commands.personal.config.randomizer_effect_off");
 
         components.push(
           {
             type: ComponentType.TextDisplay,
-            content: `**${localizer(locale, "commands.personal.config.randomizer_section_title")}**
-${localizer(locale, "commands.personal.config.randomizer_section_desc")}
-${withLinePrefix("> ", statusStr)}`,
+            content: `**${localizer(locale, "commands.personal.config.randomizer_section_title")}**\n${randomizerDesc}`,
           },
+          buildStateControlRow(randomizerChoices, isRandomizerOn, writesDisabled),
           {
-            type: ComponentType.ActionRow,
-            components: [
-              {
-                type: ComponentType.Button,
-                style: ButtonStyle.Secondary,
-                customId: buildPersonalConfigRouteId({
-                  action: "randomizer-toggle",
-                  locale,
-                  provider: selectedProvider,
-                }),
-                label: isRandomizerOn
-                  ? localizer(locale, "commands.personal.config.disable_randomizer_button")
-                  : localizer(locale, "commands.personal.config.enable_randomizer_button"),
-                disabled: writesDisabled,
-              },
-            ],
+            type: ComponentType.TextDisplay,
+            content: `> ${randomizerEffect}`,
           },
         );
       }
@@ -1458,30 +1492,13 @@ ${withLinePrefix("> ", statusStr)}`,
       const serverToolMode = input.serverTriggerBehavior?.deliberate_tool_mode ?? false;
 
       let dtmEffectText: string;
-      let dtmStatusText: string;
       if (!isGuild) {
         dtmEffectText = localizer(locale, "commands.personal.config.dtm_effect_dm");
-        dtmStatusText =
-          dtmMode === "on"
-            ? localizer(locale, "commands.personal.config.mode_status_on")
-            : dtmMode === "off"
-              ? localizer(locale, "commands.personal.config.mode_status_off")
-              : localizer(locale, "commands.personal.config.mode_status_follow_dm");
       } else {
         const isDtmActive = dtmMode === "on" || (dtmMode === "follow" && serverDtm);
         dtmEffectText = isDtmActive
           ? localizer(locale, "commands.personal.config.dtm_effect_active")
           : localizer(locale, "commands.personal.config.dtm_effect_inactive");
-
-        if (dtmMode === "on") {
-          dtmStatusText = localizer(locale, "commands.personal.config.mode_status_on");
-        } else if (dtmMode === "off") {
-          dtmStatusText = localizer(locale, "commands.personal.config.mode_status_off");
-        } else {
-          dtmStatusText = serverDtm
-            ? localizer(locale, "commands.personal.config.mode_status_follow_server_on")
-            : localizer(locale, "commands.personal.config.mode_status_follow_server_off");
-        }
       }
 
       const isToolModeActive = toolMode === "on" || (toolMode === "follow" && (isGuild ? serverToolMode : false));
@@ -1489,18 +1506,65 @@ ${withLinePrefix("> ", statusStr)}`,
         ? localizer(locale, "commands.personal.config.tool_mode_effect_active")
         : localizer(locale, "commands.personal.config.tool_mode_effect_inactive");
 
-      let toolStatusText: string;
-      if (toolMode === "on") {
-        toolStatusText = localizer(locale, "commands.personal.config.mode_status_on");
-      } else if (toolMode === "off") {
-        toolStatusText = localizer(locale, "commands.personal.config.mode_status_off");
-      } else if (isGuild) {
-        toolStatusText = serverToolMode
-          ? localizer(locale, "commands.personal.config.mode_status_follow_server_on")
-          : localizer(locale, "commands.personal.config.mode_status_follow_server_off");
-      } else {
-        toolStatusText = localizer(locale, "commands.personal.config.mode_status_follow_dm");
-      }
+      const dtmChoices = [
+        {
+          value: "off" as const,
+          label: localizer(locale, "commands.personal.config.mode_off"),
+          customId: buildPersonalConfigRouteId({
+            action: "trigger-mode-set",
+            locale,
+            mode: "off",
+          }),
+        },
+        {
+          value: "follow" as const,
+          label: localizer(locale, "commands.personal.config.mode_follow"),
+          customId: buildPersonalConfigRouteId({
+            action: "trigger-mode-set",
+            locale,
+            mode: "follow",
+          }),
+        },
+        {
+          value: "on" as const,
+          label: localizer(locale, "commands.personal.config.mode_on"),
+          customId: buildPersonalConfigRouteId({
+            action: "trigger-mode-set",
+            locale,
+            mode: "on",
+          }),
+        },
+      ] as const;
+
+      const toolModeChoices = [
+        {
+          value: "off" as const,
+          label: localizer(locale, "commands.personal.config.mode_off"),
+          customId: buildPersonalConfigRouteId({
+            action: "tool-mode-set",
+            locale,
+            mode: "off",
+          }),
+        },
+        {
+          value: "follow" as const,
+          label: localizer(locale, "commands.personal.config.mode_follow"),
+          customId: buildPersonalConfigRouteId({
+            action: "tool-mode-set",
+            locale,
+            mode: "follow",
+          }),
+        },
+        {
+          value: "on" as const,
+          label: localizer(locale, "commands.personal.config.mode_on"),
+          customId: buildPersonalConfigRouteId({
+            action: "tool-mode-set",
+            locale,
+            mode: "on",
+          }),
+        },
+      ] as const;
 
       components.push(
         {
@@ -1509,88 +1573,22 @@ ${withLinePrefix("> ", statusStr)}`,
         },
         {
           type: ComponentType.TextDisplay,
-          content: `**[${localizer(locale, "commands.personal.config.dtm_section_title")}](https://docs.tomoribot.app/en/features/chatting-personality/chatting-and-triggers/#deliberate-trigger-mode)**\n${localizer(locale, "commands.personal.config.dtm_description")}\n> ${dtmEffectText}\n> ${dtmStatusText}`,
+          content: `**[${localizer(locale, "commands.personal.config.dtm_section_title")}](https://docs.tomoribot.app/en/features/chatting-personality/chatting-and-triggers/#deliberate-trigger-mode)**\n${localizer(locale, "commands.personal.config.dtm_description")}`,
         },
+        buildStateControlRow(dtmChoices, dtmMode, writesDisabled),
         {
-          type: ComponentType.ActionRow,
-          components: [
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigRouteId({
-                action: "trigger-mode-set",
-                locale,
-                mode: "off",
-              }),
-              label: localizer(locale, "commands.personal.config.mode_off"),
-              disabled: writesDisabled || dtmMode === "off",
-            },
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigRouteId({
-                action: "trigger-mode-set",
-                locale,
-                mode: "follow",
-              }),
-              label: localizer(locale, "commands.personal.config.mode_follow"),
-              disabled: writesDisabled || dtmMode === "follow",
-            },
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigRouteId({
-                action: "trigger-mode-set",
-                locale,
-                mode: "on",
-              }),
-              label: localizer(locale, "commands.personal.config.mode_on"),
-              disabled: writesDisabled || dtmMode === "on",
-            },
-          ],
+          type: ComponentType.TextDisplay,
+          content: `> ${dtmEffectText}`,
         },
         { type: ComponentType.Separator, divider: true, spacing: 1 },
         {
           type: ComponentType.TextDisplay,
-          content: `**[${localizer(locale, "commands.personal.config.tool_mode_section_title")}](https://docs.tomoribot.app/en/features/capabilities/tools-and-extensions/#deliberate-tool-mode)** (EXPERIMENTAL)\n${localizer(locale, "commands.personal.config.tool_mode_description")}\n> ${toolEffectText}\n> ${toolStatusText}`,
+          content: `**[${localizer(locale, "commands.personal.config.tool_mode_section_title")}](https://docs.tomoribot.app/en/features/capabilities/tools-and-extensions/#deliberate-tool-mode)** (EXPERIMENTAL)\n${localizer(locale, "commands.personal.config.tool_mode_description")}`,
         },
+        buildStateControlRow(toolModeChoices, toolMode, writesDisabled),
         {
-          type: ComponentType.ActionRow,
-          components: [
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigRouteId({
-                action: "tool-mode-set",
-                locale,
-                mode: "off",
-              }),
-              label: localizer(locale, "commands.personal.config.mode_off"),
-              disabled: writesDisabled || toolMode === "off",
-            },
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigRouteId({
-                action: "tool-mode-set",
-                locale,
-                mode: "follow",
-              }),
-              label: localizer(locale, "commands.personal.config.mode_follow"),
-              disabled: writesDisabled || toolMode === "follow",
-            },
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Secondary,
-              customId: buildPersonalConfigRouteId({
-                action: "tool-mode-set",
-                locale,
-                mode: "on",
-              }),
-              label: localizer(locale, "commands.personal.config.mode_on"),
-              disabled: writesDisabled || toolMode === "on",
-            },
-          ],
+          type: ComponentType.TextDisplay,
+          content: `> ${toolEffectText}`,
         },
       );
     } else if (page === "impersonation") {

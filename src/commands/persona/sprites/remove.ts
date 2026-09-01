@@ -413,7 +413,7 @@ function buildPageSelectorPayload(
     const rangeEnd = Math.min((pageIndex + 1) * pageSize, totalSprites);
     pageButtons.push({
       type: ComponentType.Button,
-      style: ButtonStyle.Primary,
+      style: ButtonStyle.Secondary,
       customId: `${PAGE_SELECT_ID_PREFIX}_${nonce}_${pageIndex}`,
       label: `${rangeStart}-${rangeEnd}`,
     });
@@ -486,7 +486,7 @@ function buildSinglePageLauncherPayload(nonce: string, locale: string): PersonaW
       components: [
         {
           type: ComponentType.Button,
-          style: ButtonStyle.Primary,
+          style: ButtonStyle.Secondary,
           customId: `${PAGE_SELECT_ID_PREFIX}_${nonce}_0`,
           label: localizer(locale, "general.persona_workflow.open_modal_button"),
         },

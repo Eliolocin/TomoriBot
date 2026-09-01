@@ -57,13 +57,13 @@ function buildConfirmationPayload(
     components: [
       {
         type: ComponentType.Button,
-        style: ButtonStyle.Success,
+        style: ButtonStyle.Secondary,
         customId: continueCustomId,
         label: localizer(locale, "general.confirm"),
       },
       {
         type: ComponentType.Button,
-        style: ButtonStyle.Danger,
+        style: ButtonStyle.Secondary,
         customId: cancelCustomId,
         label: localizer(locale, "general.pagination.cancel"),
       },

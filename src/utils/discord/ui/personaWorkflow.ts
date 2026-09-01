@@ -804,7 +804,7 @@ function buildModalReadyPayload(locale: string, customId: string): PersonaWorkfl
       button: {
         customId,
         labelKey: "general.persona_workflow.open_modal_button",
-        style: ButtonStyle.Primary,
+        style: ButtonStyle.Secondary,
       },
     }),
     flags: MessageFlags.IsComponentsV2,
