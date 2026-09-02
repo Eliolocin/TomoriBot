@@ -414,6 +414,55 @@ describe("panel prose width", () => {
     expect(collectProseWidthViolations(build(dmOwner, 55, null))).toEqual([]);
   });
 
+  /**
+   * The Sprites page is the only `/config` body whose detail lines interpolate stored values beside
+   * a Thumbnail, and the loop below renders it with no sprites at all. The widest legal sprite name
+   * and usage note are the inputs that decide whether those lines fit, so they are walked here.
+   */
+  it("holds /config Persona Sprites to 40 characters beside its sprite image", () => {
+    const personas = [
+      {
+        persona_id: 55,
+        server_id: 9,
+        persona_nickname: "Aphel",
+        is_alter: false,
+        trigger_words: [],
+        naming_config: { prefixes: {}, suffixes: {}, addressTerms: {} },
+      } as unknown as TomoriState,
+    ];
+    const widestSprite = {
+      sprite_id: 1,
+      persona_id: 55,
+      sprite_name: "s".repeat(64),
+      sprite_key: "s".repeat(64),
+      avatar_url: "https://cdn.example.invalid/sprites/happy.png",
+      usage_instructions: "u".repeat(300),
+      is_identity: true,
+    };
+    const build = (actor: ConfigActor, selectedPersonaAvatarUrl: string | null) =>
+      buildConfigPanelPayload({
+        locale: "en-US",
+        actor,
+        category: "persona",
+        page: "sprites",
+        personas,
+        selectedPersonaId: 55,
+        selectedPersonaAvatarUrl,
+        personaSprites: [widestSprite],
+        selectedSpriteIndex: 0,
+        readStatus: "fresh",
+      });
+
+    const guildManager: ConfigActor = { workspaceKind: "guild", isManager: true };
+    const guildMember: ConfigActor = { workspaceKind: "guild", isManager: false };
+    const dmOwner: ConfigActor = { workspaceKind: "dm", isManager: true };
+
+    expect(collectProseWidthViolations(build(guildManager, "https://cdn.example.invalid/55.png"))).toEqual([]);
+    expect(collectProseWidthViolations(build(guildManager, null))).toEqual([]);
+    expect(collectProseWidthViolations(build(guildMember, null))).toEqual([]);
+    expect(collectProseWidthViolations(build(dmOwner, null))).toEqual([]);
+  });
+
   it("holds every /config page placeholder and confirmation to 65 characters", () => {
     const personas = [
       {

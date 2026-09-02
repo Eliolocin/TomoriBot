@@ -1,5 +1,5 @@
 import { TextInputStyle } from "discord.js";
-import type { StmCategoryRow, TomoriState } from "@/types/db/schema";
+import type { PersonaSpriteRow, StmCategoryRow, TomoriState } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import type { ShortTermMemoryEntry } from "@/utils/cache/shortTermMemoryCache";
@@ -19,6 +19,7 @@ import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
 import { formatImageTagsForModalValue, TAGS_MODAL_MAX_LENGTH } from "@/utils/image/tagHelpers";
 import { CONTEXT_NOTE_MAX_LENGTH } from "@/utils/discord/contextNoteOptions";
+import { PERSONA_SPRITE_LIMITS } from "@/utils/persona/sprites";
 import { splitPromptIntoModalParts } from "@/utils/text/modalPromptParts";
 import { resolvePrefillPrompt } from "@/utils/text/personaPrompt";
 import { localizer } from "@/utils/text/localizer";
@@ -51,6 +52,12 @@ export const CONFIG_PERSONA_PROMPT_PART_FIELDS = [
   "persona_prompt_part4",
 ] as const;
 export const CONFIG_CHARACTER_REFERENCE_FILE_FIELD = "character_reference";
+export const CONFIG_SPRITE_NAME_FIELD = "sprite_name";
+export const CONFIG_SPRITE_IMAGE_FIELD = "sprite_image";
+export const CONFIG_SPRITE_INSTRUCTIONS_FIELD = "sprite_instructions";
+export const CONFIG_SPRITE_IDENTITY_FIELD = "sprite_identity";
+export const CONFIG_SPRITE_ARCHIVE_FIELD = "sprite_archive";
+export const CONFIG_SPRITE_IDENTITY_OPTION_VALUE = "identity";
 
 const MODAL_TITLE_MAX_LENGTH = 45;
 const MODAL_DESCRIPTION_MAX_LENGTH = 100;
@@ -135,6 +142,148 @@ export function buildPersonaCharacterReferenceModal(locale: string, personaId: n
           min_values: 0,
           max_values: 1,
           required: false,
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * The "Save as Identity" toggle, shaped like the attribute visibility group so an unchecked box and
+ * a submit that carried no checkbox evidence stay distinguishable.
+ */
+function buildSpriteIdentityCheckboxGroup(locale: string, nonce: string, isIdentity: boolean): RawDiscordComponent {
+  return {
+    type: 18,
+    label: modalLabel(locale, "commands.persona.sprites.add.identity_label"),
+    description: modalDescription(locale, "commands.persona.sprites.add.identity_description"),
+    component: {
+      // 22 is CheckboxGroup.
+      type: 22,
+      custom_id: buildConfigModalFieldId(CONFIG_SPRITE_IDENTITY_FIELD, nonce),
+      min_values: 0,
+      max_values: 1,
+      required: false,
+      options: [
+        {
+          label: modalLabel(locale, "commands.config.panel.sprite_identity_option"),
+          value: CONFIG_SPRITE_IDENTITY_OPTION_VALUE,
+          default: isIdentity,
+        },
+      ],
+    },
+  };
+}
+
+function buildSpriteNameField(locale: string, nonce: string, value?: string): RawDiscordComponent {
+  return {
+    type: 18,
+    label: modalLabel(locale, "commands.persona.sprites.add.sprite_name_label"),
+    description: modalDescription(locale, "commands.persona.sprites.add.sprite_name_description"),
+    component: {
+      type: 4,
+      custom_id: buildConfigModalFieldId(CONFIG_SPRITE_NAME_FIELD, nonce),
+      style: TextInputStyle.Short,
+      placeholder: safeSelectOptionText(
+        localizer(locale, "commands.persona.sprites.add.sprite_name_placeholder"),
+        MODAL_DESCRIPTION_MAX_LENGTH,
+      ),
+      min_length: 1,
+      max_length: PERSONA_SPRITE_LIMITS.MAX_NAME_LENGTH,
+      required: true,
+      value,
+    },
+  };
+}
+
+function buildSpriteInstructionsField(locale: string, nonce: string, value?: string): RawDiscordComponent {
+  return {
+    type: 18,
+    label: modalLabel(locale, "commands.persona.sprites.add.instructions_label"),
+    description: modalDescription(locale, "commands.persona.sprites.add.instructions_description"),
+    component: {
+      type: 4,
+      custom_id: buildConfigModalFieldId(CONFIG_SPRITE_INSTRUCTIONS_FIELD, nonce),
+      style: TextInputStyle.Paragraph,
+      placeholder: safeSelectOptionText(
+        localizer(locale, "commands.persona.sprites.add.instructions_placeholder"),
+        MODAL_DESCRIPTION_MAX_LENGTH,
+      ),
+      max_length: PERSONA_SPRITE_LIMITS.MAX_INSTRUCTIONS_LENGTH,
+      required: false,
+      value,
+    },
+  };
+}
+
+function buildSpriteImageField(locale: string, nonce: string, required: boolean): RawDiscordComponent {
+  return {
+    type: 18,
+    label: modalLabel(locale, "commands.persona.sprites.add.image_label"),
+    description: modalDescription(
+      locale,
+      required ? "commands.persona.sprites.add.image_description" : "commands.persona.sprites.edit.image_description",
+    ),
+    component: {
+      // 19 is FileUpload.
+      type: 19,
+      custom_id: buildConfigModalFieldId(CONFIG_SPRITE_IMAGE_FIELD, nonce),
+      min_values: required ? 1 : 0,
+      max_values: 1,
+      required,
+    },
+  };
+}
+
+export function buildPersonaSpriteAddModal(locale: string, personaId: number, nonce: string): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "sprite-add-submit", locale, personaId, nonce }),
+    title: modalTitle(locale, "commands.config.panel.sprite_add_modal_title"),
+    components: [
+      buildSpriteNameField(locale, nonce),
+      buildSpriteImageField(locale, nonce, true),
+      buildSpriteInstructionsField(locale, nonce),
+      buildSpriteIdentityCheckboxGroup(locale, nonce, false),
+    ],
+  };
+}
+
+export function buildPersonaSpriteEditModal(
+  locale: string,
+  personaId: number,
+  index: number,
+  fp: string,
+  nonce: string,
+  sprite: PersonaSpriteRow,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "sprite-edit-submit", locale, personaId, index, fp, nonce }),
+    title: modalTitle(locale, "commands.config.panel.sprite_edit_modal_title"),
+    components: [
+      buildSpriteNameField(locale, nonce, sprite.sprite_name),
+      buildSpriteImageField(locale, nonce, false),
+      buildSpriteInstructionsField(locale, nonce, sprite.usage_instructions.trim() || undefined),
+      buildSpriteIdentityCheckboxGroup(locale, nonce, sprite.is_identity),
+    ],
+  };
+}
+
+export function buildPersonaSpriteImportModal(locale: string, personaId: number, nonce: string): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "sprite-import-submit", locale, personaId, nonce }),
+    title: modalTitle(locale, "commands.config.panel.sprite_import_modal_title"),
+    components: [
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.persona.sprites.import.archive_label"),
+        description: modalDescription(locale, "commands.persona.sprites.import.archive_description"),
+        component: {
+          // 19 is FileUpload.
+          type: 19,
+          custom_id: buildConfigModalFieldId(CONFIG_SPRITE_ARCHIVE_FIELD, nonce),
+          min_values: 1,
+          max_values: 1,
+          required: true,
         },
       },
     ],

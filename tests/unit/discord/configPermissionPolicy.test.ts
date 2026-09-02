@@ -26,6 +26,7 @@ import {
   resolvePersonaAdvancedActionState,
   resolvePersonaGeneralActionState,
   resolvePersonaMemoriesActionState,
+  resolvePersonaSpritesActionState,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
@@ -214,6 +215,35 @@ describe("Persona Advanced action policy", () => {
   });
 });
 
+describe("Persona Sprites action policy", () => {
+  const mutations = ["add", "edit", "remove", "import"] as const;
+
+  it("allows every Sprites action for a guild manager", () => {
+    for (const action of [...mutations, "inspect", "export"] as const) {
+      expect(resolvePersonaSpritesActionState(action, GUILD_MANAGER)).toBe("enabled");
+    }
+  });
+
+  it("keeps inspection and Export available to a guild member while disabling every mutation", () => {
+    // `/persona sprites export` carries neither a guild nor a Manage Guild gate, so it survives on
+    // a page whose own state is read-only.
+    expect(resolveConfigPageState("persona", "sprites", GUILD_MEMBER)).toBe("read-only");
+    expect(resolvePersonaSpritesActionState("inspect", GUILD_MEMBER)).toBe("enabled");
+    expect(resolvePersonaSpritesActionState("export", GUILD_MEMBER)).toBe("enabled");
+    for (const action of mutations) {
+      expect(resolvePersonaSpritesActionState(action, GUILD_MEMBER)).toBe("disabled");
+    }
+  });
+
+  it("omits the guild-only mutations in a DM while inspection and Export remain", () => {
+    expect(resolvePersonaSpritesActionState("inspect", DM_OWNER)).toBe("enabled");
+    expect(resolvePersonaSpritesActionState("export", DM_OWNER)).toBe("enabled");
+    for (const action of mutations) {
+      expect(resolvePersonaSpritesActionState(action, DM_OWNER)).toBe("omitted");
+    }
+  });
+});
+
 describe("isConfigRouteAuthorized", () => {
   const personaWriteRoutes: ConfigPanelRoute[] = [
     { action: "avatar-open", locale: "en-US", personaId: 5 },
@@ -232,6 +262,46 @@ describe("isConfigRouteAuthorized", () => {
     { action: "trigger-remove-open", locale: "en-US", personaId: 5 },
     { action: "trigger-remove-submit", locale: "en-US", personaId: 5, fp: "abcd1234", nonce: "nonce1234567" },
   ];
+
+  const spriteMutationRoutes: ConfigPanelRoute[] = [
+    { action: "sprite-add-open", locale: "en-US", personaId: 5 },
+    { action: "sprite-add-submit", locale: "en-US", personaId: 5, nonce: "nonce1234567" },
+    { action: "sprite-edit-open", locale: "en-US", personaId: 5, index: 0, fp: "abcd1234" },
+    { action: "sprite-edit-submit", locale: "en-US", personaId: 5, index: 0, fp: "abcd1234", nonce: "nonce1234567" },
+    { action: "sprite-remove-view", locale: "en-US", personaId: 5, index: 0, fp: "abcd1234" },
+    {
+      action: "sprite-remove-confirm",
+      locale: "en-US",
+      personaId: 5,
+      index: 0,
+      fp: "abcd1234",
+      nonce: "nonce1234567",
+    },
+    { action: "sprite-import-open", locale: "en-US", personaId: 5 },
+    { action: "sprite-import-submit", locale: "en-US", personaId: 5, nonce: "nonce1234567" },
+  ];
+
+  const spriteReadRoutes: ConfigPanelRoute[] = [
+    { action: "sprite-select", locale: "en-US", personaId: 5 },
+    { action: "sprite-page", locale: "en-US", personaId: 5, start: 25 },
+    { action: "sprite-remove-cancel", locale: "en-US", personaId: 5 },
+    { action: "sprite-export", locale: "en-US", personaId: 5 },
+  ];
+
+  it("refuses a forged sprite mutation replayed by a member or in a DM while Export still lands", () => {
+    for (const route of [...spriteMutationRoutes, ...spriteReadRoutes]) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+    }
+    for (const route of spriteMutationRoutes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(false);
+    }
+    // The read-only page must not take Export down with the mutations it disables.
+    for (const route of spriteReadRoutes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
+    }
+  });
 
   it("authorizes every Persona General route for a guild manager", () => {
     for (const route of [...personaWriteRoutes, ...triggerRoutes]) {
@@ -338,6 +408,8 @@ describe("isConfigRouteAuthorized", () => {
       "text-override-model-select",
       "text-override-model-page",
       "text-override-clear",
+      ...spriteMutationRoutes.map((route) => route.action),
+      ...spriteReadRoutes.map((route) => route.action),
     ]);
 
     const unknownRoute = { action: "not-a-real-action", locale: "en-US" } as unknown as ConfigPanelRoute;

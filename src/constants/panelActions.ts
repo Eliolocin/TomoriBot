@@ -116,6 +116,11 @@ export const PANEL_ACTIONS = [
   "server-config.workspace.persona-humanizer.set",
   "server-config.workspace.persona-text-model.set",
   "server-config.workspace.persona-text-model.clear",
+  "server-config.workspace.persona-sprite.add",
+  "server-config.workspace.persona-sprite.edit",
+  "server-config.workspace.persona-sprite.remove",
+  "server-config.workspace.persona-sprite.import",
+  "server-config.workspace.persona-sprite.export",
   "personal-config.personal.character-reference.set",
 ] as const;
 

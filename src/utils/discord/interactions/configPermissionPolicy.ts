@@ -38,6 +38,7 @@ export type ConfigPersonaCollectionAction =
   | "dialogue-edit"
   | "dialogue-remove";
 export type ConfigPersonaMemoriesAction = "server-memory-open" | "personal-memory-open" | "stm-edit" | "conditioning";
+export type ConfigPersonaSpritesAction = "inspect" | "export" | "add" | "edit" | "remove" | "import";
 export type ConfigPersonaAdvancedAction =
   | "image-tags"
   | "character-reference"
@@ -213,6 +214,26 @@ export function resolvePersonaAdvancedActionState(
   return "omitted";
 }
 
+/**
+ * Per-action policy for Persona > Sprites, re-derived from the five commands these actions absorb.
+ * `/persona sprites export` carries neither a guild nor a Manage Guild gate and keys its workspace
+ * as `interaction.guild?.id ?? interaction.user.id`, so it stays available to a guild member and in
+ * a DM. `add`, `edit`, `import`, and `remove` all require a guild and Manage Guild.
+ *
+ * The page itself resolves to `read-only` for a guild member, so Export is authorized on a page
+ * whose state is not `enabled`. That is why the sprites branch of {@link isConfigRouteAuthorized}
+ * tests for `omitted` rather than copying the Persona General branch's `!== "enabled"` shape.
+ */
+export function resolvePersonaSpritesActionState(
+  action: ConfigPersonaSpritesAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (resolveConfigPageState("persona", "sprites", actor) === "omitted") return "omitted";
+  if (action === "inspect" || action === "export") return "enabled";
+  if (actor.workspaceKind === "dm") return "omitted";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
 const PERSONA_GENERAL_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPersonaGeneralAction>> = {
   "avatar-open": "avatar",
   "avatar-submit": "avatar",
@@ -280,6 +301,22 @@ export const PERSONA_ADVANCED_ACTION_BY_ROUTE: Partial<
   "text-override-clear": "text-override",
 };
 
+export const PERSONA_SPRITES_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPersonaSpritesAction>> =
+  {
+    "sprite-select": "inspect",
+    "sprite-page": "inspect",
+    "sprite-remove-cancel": "inspect",
+    "sprite-export": "export",
+    "sprite-add-open": "add",
+    "sprite-add-submit": "add",
+    "sprite-edit-open": "edit",
+    "sprite-edit-submit": "edit",
+    "sprite-remove-view": "remove",
+    "sprite-remove-confirm": "remove",
+    "sprite-import-open": "import",
+    "sprite-import-submit": "import",
+  };
+
 /**
  * The authorization gate every route and modal submit re-runs. Rendering a control is never the
  * gate: a custom ID that was legitimately issued to a manager can be replayed by any member who can
@@ -300,6 +337,11 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   const memoriesAction = PERSONA_MEMORIES_ACTION_BY_ROUTE[route.action];
   if (memoriesAction) {
     return resolvePersonaMemoriesActionState(memoriesAction, actor) === "enabled";
+  }
+
+  const spritesAction = PERSONA_SPRITES_ACTION_BY_ROUTE[route.action];
+  if (spritesAction) {
+    return resolvePersonaSpritesActionState(spritesAction, actor) === "enabled";
   }
 
   const advancedAction = PERSONA_ADVANCED_ACTION_BY_ROUTE[route.action];

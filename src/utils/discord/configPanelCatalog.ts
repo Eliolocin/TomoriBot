@@ -69,6 +69,13 @@ export const CONFIG_PERSONA_SELECT_PAGE_SIZE = 25;
 export const CONFIG_PERSONA_COLLECTION_PAGE_SIZE = 24;
 
 /**
+ * Sprites are addressed in a route by list position plus a fingerprint rather than by
+ * `sprite_key`. A key may be 64 characters, which pushes an edit route past the 100-character
+ * custom-ID limit `buildInteractionRouteId` throws on, and route segments cannot carry a colon.
+ */
+export const CONFIG_PERSONA_SPRITE_PAGE_SIZE = 25;
+
+/**
  * Trigger words one removal modal can present: five checkbox groups of ten is the whole modal.
  * Beyond this the modal presents the first fifty and the rest stay untouched, because a select-based
  * overflow cannot work here: a String Select caps at 25 options, which is fewer than the checkbox
@@ -120,6 +127,15 @@ export function computeAttributeFingerprint(
 
 export function computeDialogueFingerprint(personaId: number, index: number, input: string, output: string): string {
   return computePersonaRecordFingerprint(personaId, "dialogue", index, [input, output]);
+}
+
+/**
+ * Binds a sprite route to the exact key that sat at that list position when the control rendered,
+ * so a concurrent add, rename, or removal invalidates the continuation instead of resolving the
+ * position to a different sprite.
+ */
+export function computeSpriteFingerprint(personaId: number, index: number, spriteKey: string): string {
+  return computePersonaRecordFingerprint(personaId, "sprite", index, [spriteKey]);
 }
 
 /**
@@ -194,6 +210,25 @@ export type ConfigPanelRoute =
   | { action: "text-override-model-select"; locale: string; personaId: number; provider: string }
   | { action: "text-override-model-page"; locale: string; personaId: number; provider: string; start: number }
   | { action: "text-override-clear"; locale: string; personaId: number }
+  | { action: "sprite-select"; locale: string; personaId: number }
+  | { action: "sprite-page"; locale: string; personaId: number; start: number }
+  | { action: "sprite-add-open"; locale: string; personaId: number }
+  | { action: "sprite-add-submit"; locale: string; personaId: number; nonce: string }
+  | { action: "sprite-edit-open"; locale: string; personaId: number; index: number; fp: string }
+  | { action: "sprite-edit-submit"; locale: string; personaId: number; index: number; fp: string; nonce: string }
+  | { action: "sprite-remove-view"; locale: string; personaId: number; index: number; fp: string }
+  | {
+      action: "sprite-remove-confirm";
+      locale: string;
+      personaId: number;
+      index: number;
+      fp: string;
+      nonce: string;
+    }
+  | { action: "sprite-remove-cancel"; locale: string; personaId: number }
+  | { action: "sprite-import-open"; locale: string; personaId: number }
+  | { action: "sprite-import-submit"; locale: string; personaId: number; nonce: string }
+  | { action: "sprite-export"; locale: string; personaId: number }
   | {
       action: "retry" | "refresh";
       locale: string;
@@ -372,6 +407,24 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
     fields: [personaIdField, providerField, startField],
   },
   "text-override-clear": { wireToken: "text-override-clear", fields: [personaIdField] },
+  "sprite-select": { wireToken: "sprite-select", fields: [personaIdField] },
+  "sprite-page": { wireToken: "sprite-page", fields: [personaIdField, startField] },
+  "sprite-add-open": { wireToken: "sprite-add-open", fields: [personaIdField] },
+  "sprite-add-submit": { wireToken: "sprite-add-sub", fields: [personaIdField, nonceField] },
+  "sprite-edit-open": { wireToken: "sprite-edit-open", fields: [personaIdField, indexField, fpField] },
+  "sprite-edit-submit": {
+    wireToken: "sprite-edit-sub",
+    fields: [personaIdField, indexField, fpField, nonceField],
+  },
+  "sprite-remove-view": { wireToken: "sprite-rem-view", fields: [personaIdField, indexField, fpField] },
+  "sprite-remove-confirm": {
+    wireToken: "sprite-rem-confirm",
+    fields: [personaIdField, indexField, fpField, nonceField],
+  },
+  "sprite-remove-cancel": { wireToken: "sprite-rem-cancel", fields: [personaIdField] },
+  "sprite-import-open": { wireToken: "sprite-import-open", fields: [personaIdField] },
+  "sprite-import-submit": { wireToken: "sprite-import-sub", fields: [personaIdField, nonceField] },
+  "sprite-export": { wireToken: "sprite-export", fields: [personaIdField] },
   retry: { wireToken: "retry", fields: [categoryField, pageField, optionalPersonaIdField] },
   refresh: { wireToken: "refresh", fields: [categoryField, pageField, optionalPersonaIdField] },
 };

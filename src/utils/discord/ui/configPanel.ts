@@ -10,12 +10,13 @@ import {
   type TextDisplayComponentData,
   type TopLevelComponentData,
 } from "discord.js";
-import type { LlmRow, TomoriState } from "@/types/db/schema";
+import type { LlmRow, PersonaSpriteRow, TomoriState } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import {
   CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
   CONFIG_PERSONA_SELECT_PAGE_SIZE,
+  CONFIG_PERSONA_SPRITE_PAGE_SIZE,
   CONFIG_ROUTE_NAMESPACE,
   CONFIG_ROUTE_VERSION,
   DEFAULT_PAGE_FOR_CONFIG_CATEGORY,
@@ -23,6 +24,7 @@ import {
   buildConfigRouteSegments,
   computeAttributeFingerprint,
   computeDialogueFingerprint,
+  computeSpriteFingerprint,
   type ConfigCategory,
   type ConfigPage,
 } from "@/utils/discord/configPanelCatalog";
@@ -32,6 +34,7 @@ import {
   resolvePersonaMemoriesActionState,
   resolvePersonaCollectionActionState,
   resolvePersonaGeneralActionState,
+  resolvePersonaSpritesActionState,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
@@ -52,6 +55,7 @@ import {
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
+import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import { localizer } from "@/utils/text/localizer";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
@@ -67,6 +71,7 @@ export type ConfigPanelView =
   | { kind: "main" }
   | { kind: "promote-confirm"; personaId: number; nonce: string }
   | { kind: "character-reference-clear-confirm"; personaId: number; nonce: string }
+  | { kind: "sprite-remove-confirm"; personaId: number; index: number; fp: string; nonce: string }
   | { kind: "humanizer-editor"; personaId: number }
   | { kind: "text-override-provider"; personaId: number; providers: string[] }
   | {
@@ -151,6 +156,9 @@ export interface ConfigPanelRenderInput {
   view?: ConfigPanelView;
   personaMemoryView?: ConfigPersonaMemoryView;
   serverHumanizerDegree?: number | null;
+  personaSprites?: PersonaSpriteRow[];
+  spritePageStart?: number;
+  selectedSpriteIndex?: number;
 }
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): ConfigPanelPayload {
@@ -1139,6 +1147,266 @@ ${localizer(locale, "commands.config.panel.text_override_description")}
   return components;
 }
 
+/**
+ * Beside a Thumbnail the panel body wraps at 40 characters, which a stored sprite name (up to 64)
+ * or usage note can exceed on its own. Each detail line therefore clamps its value to what is left
+ * after its label. `tests/unit/discord/panelProseWidth.test.ts` owns the budget itself.
+ */
+const SPRITE_DETAIL_LINE_BUDGET = 40;
+
+function spriteDetailLine(label: string, value: string): string {
+  const prefix = `> ${label}: `;
+  return `${prefix}${safeSelectOptionText(value, Math.max(4, SPRITE_DETAIL_LINE_BUDGET - prefix.length))}`;
+}
+
+function spriteRangeIndex(
+  totalCount: number,
+  requestedStart: number | undefined,
+  selectedIndex: number | undefined,
+): { rangeCount: number; rangeIndex: number } {
+  const rangeCount = Math.max(1, Math.ceil(totalCount / CONFIG_PERSONA_SPRITE_PAGE_SIZE));
+  const defaultStart =
+    selectedIndex === undefined
+      ? 0
+      : Math.floor(selectedIndex / CONFIG_PERSONA_SPRITE_PAGE_SIZE) * CONFIG_PERSONA_SPRITE_PAGE_SIZE;
+  const requestedRange = Math.floor((requestedStart ?? defaultStart) / CONFIG_PERSONA_SPRITE_PAGE_SIZE);
+  return { rangeCount, rangeIndex: Math.min(Math.max(requestedRange, 0), rangeCount - 1) };
+}
+
+function buildPersonaSpriteRemoveConfirmBody(
+  input: ConfigPanelRenderInput,
+  view: Extract<ConfigPanelView, { kind: "sprite-remove-confirm" }>,
+): ComponentInContainerData[] {
+  const { locale } = input;
+  const sprite = input.personaSprites?.[view.index];
+  if (!sprite || resolvePersonaSpritesActionState("remove", input.actor) !== "enabled") return [];
+  return [
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.sprite_remove_title")}
+${localizer(locale, "commands.config.panel.sprite_remove_description", {
+  sprite: escapeDiscordMarkdown(sprite.sprite_name),
+})}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Danger,
+          customId: buildConfigRouteId({
+            action: "sprite-remove-confirm",
+            locale,
+            personaId: view.personaId,
+            index: view.index,
+            fp: view.fp,
+            nonce: view.nonce,
+          }),
+          label: localizer(locale, "commands.config.panel.sprite_remove_button"),
+          disabled: input.readStatus !== "fresh",
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "sprite-remove-cancel", locale, personaId: view.personaId }),
+          label: localizer(locale, "commands.config.panel.cancel_button"),
+        },
+      ],
+    },
+  ];
+}
+
+function buildPersonaSpritesBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor, personas, selectedPersonaId, readStatus } = input;
+  const heading = buildOptionalThumbnailSection(
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.sprites_title")}
+${localizer(locale, "commands.config.panel.sprites_description")}`,
+    },
+    input.selectedPersonaAvatarUrl,
+  );
+
+  const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
+  if (!persona) {
+    return [
+      heading,
+      { type: ComponentType.TextDisplay, content: localizer(locale, "commands.config.panel.no_personas") },
+    ];
+  }
+
+  const personaId = persona.persona_id as number;
+  const writesDisabled = readStatus !== "fresh";
+  const actionState = (action: Parameters<typeof resolvePersonaSpritesActionState>[0]) =>
+    resolvePersonaSpritesActionState(action, actor);
+  const sprites = input.personaSprites ?? [];
+  const selectedIndex =
+    input.selectedSpriteIndex !== undefined &&
+    input.selectedSpriteIndex >= 0 &&
+    input.selectedSpriteIndex < sprites.length
+      ? input.selectedSpriteIndex
+      : undefined;
+  const { rangeCount, rangeIndex } = spriteRangeIndex(sprites.length, input.spritePageStart, selectedIndex);
+  const start = rangeIndex * CONFIG_PERSONA_SPRITE_PAGE_SIZE;
+  const visibleSprites = sprites.slice(start, start + CONFIG_PERSONA_SPRITE_PAGE_SIZE);
+
+  const components: ComponentInContainerData[] = [heading];
+
+  if (sprites.length === 0) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: localizer(locale, "commands.config.panel.sprites_none"),
+    });
+  } else {
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: localizer(locale, "commands.config.panel.sprite_select_prompt"),
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.StringSelect,
+            customId: buildConfigRouteId({ action: "sprite-select", locale, personaId }),
+            placeholder: safeSelectOptionText(
+              localizer(locale, "commands.config.panel.sprite_select_placeholder"),
+              150,
+            ),
+            options: visibleSprites.map((sprite, offset) => ({
+              label: safeSelectOptionText(sprite.sprite_name, 100),
+              value: String(start + offset),
+              description: safeSelectOptionText(
+                sprite.usage_instructions.trim() || localizer(locale, "commands.config.panel.none_label"),
+                100,
+              ),
+              default: start + offset === selectedIndex,
+            })),
+            disabled: writesDisabled,
+          },
+        ],
+      },
+    );
+
+    const paginationRow = buildPaginationRow({
+      locale,
+      rangeIndex,
+      rangeCount,
+      namespace: CONFIG_ROUTE_NAMESPACE,
+      version: CONFIG_ROUTE_VERSION,
+      buildSegments: {
+        page: (targetRangeIndex) =>
+          buildConfigRouteSegments({
+            action: "sprite-page",
+            locale,
+            personaId,
+            start: targetRangeIndex * CONFIG_PERSONA_SPRITE_PAGE_SIZE,
+          }),
+      },
+      disabled: writesDisabled,
+    });
+    if (paginationRow) components.push(paginationRow);
+  }
+
+  const selectedSprite = selectedIndex === undefined ? undefined : sprites[selectedIndex];
+  if (selectedSprite !== undefined && selectedIndex !== undefined) {
+    const fp = computeSpriteFingerprint(personaId, selectedIndex, selectedSprite.sprite_key);
+    components.push(
+      buildOptionalThumbnailSection(
+        {
+          type: ComponentType.TextDisplay,
+          content: `**${localizer(locale, "commands.config.panel.selected_sprite_title")}**
+${localizer(locale, "commands.config.panel.selected_sprite_description")}
+${spriteDetailLine(localizer(locale, "commands.config.panel.sprite_name_label"), selectedSprite.sprite_name)}
+${spriteDetailLine(
+  localizer(locale, "commands.config.panel.sprite_usage_label"),
+  selectedSprite.usage_instructions.trim() || localizer(locale, "commands.config.panel.none_label"),
+)}
+${spriteDetailLine(
+  localizer(locale, "commands.config.panel.sprite_identity_label"),
+  localizer(
+    locale,
+    selectedSprite.is_identity
+      ? "commands.persona.sprites.edit.identity_status_on"
+      : "commands.persona.sprites.edit.identity_status_off",
+  ),
+)}`,
+        },
+        resolvePersonaAvatarPublicUrl(selectedSprite.avatar_url),
+      ),
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "sprite-edit-open", locale, personaId, index: selectedIndex, fp }),
+            label: localizer(locale, "commands.config.panel.sprite_edit_button"),
+            disabled: writesDisabled || actionState("edit") !== "enabled",
+          },
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Danger,
+            customId: buildConfigRouteId({ action: "sprite-remove-view", locale, personaId, index: selectedIndex, fp }),
+            label: localizer(locale, "commands.config.panel.sprite_remove_button"),
+            disabled: writesDisabled || actionState("remove") !== "enabled",
+          },
+        ],
+      },
+    );
+  }
+
+  const addState = actionState("add");
+  if (addState !== "omitted") {
+    components.push({
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "sprite-add-open", locale, personaId }),
+          label: localizer(locale, "commands.config.panel.sprite_add_button"),
+          disabled: writesDisabled || addState === "disabled",
+        },
+      ],
+    });
+  }
+
+  const importState = actionState("import");
+  const exportState = actionState("export");
+  const transferButtons: ButtonComponentData[] = [];
+  if (importState !== "omitted") {
+    transferButtons.push({
+      type: ComponentType.Button,
+      style: ButtonStyle.Secondary,
+      customId: buildConfigRouteId({ action: "sprite-import-open", locale, personaId }),
+      label: localizer(locale, "commands.config.panel.sprite_import_button"),
+      disabled: writesDisabled || importState === "disabled",
+    });
+  }
+  if (exportState !== "omitted") {
+    transferButtons.push({
+      type: ComponentType.Button,
+      style: ButtonStyle.Secondary,
+      customId: buildConfigRouteId({ action: "sprite-export", locale, personaId }),
+      label: localizer(locale, "commands.config.panel.sprite_export_button"),
+      disabled: writesDisabled || exportState === "disabled" || sprites.length === 0,
+    });
+  }
+  if (transferButtons.length > 0) {
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: `**${localizer(locale, "commands.config.panel.sprite_transfer_title")}**
+${localizer(locale, "commands.config.panel.sprite_transfer_description")}`,
+      },
+      { type: ComponentType.ActionRow, components: transferButtons },
+    );
+  }
+
+  return components;
+}
+
 function buildPersonaMemoriesBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
   const { locale, actor, personas, selectedPersonaId, readStatus } = input;
   const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
@@ -1408,6 +1676,11 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
     return buildPayload(components, receipt);
   }
 
+  if (input.view && input.view.kind === "sprite-remove-confirm") {
+    components.push(...buildPersonaSpriteRemoveConfirmBody(input, input.view));
+    return buildPayload(components, receipt);
+  }
+
   if (category === "persona" && page === "general") {
     components.push(...buildPersonaGeneralBody(input));
     return buildPayload(components, receipt);
@@ -1415,6 +1688,11 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "persona" && page === "memories") {
     components.push(...buildPersonaMemoriesBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "persona" && page === "sprites") {
+    components.push(...buildPersonaSpritesBody(input));
     return buildPayload(components, receipt);
   }
 

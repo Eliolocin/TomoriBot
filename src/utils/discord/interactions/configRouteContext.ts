@@ -6,7 +6,7 @@ import {
   type InteractionReplyOptions,
   type InteractionEditReplyOptions,
 } from "discord.js";
-import type { LlmRow, TomoriState } from "@/types/db/schema";
+import type { LlmRow, PersonaSpriteRow, TomoriState } from "@/types/db/schema";
 import type { StmCategoryRow } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
@@ -15,6 +15,7 @@ import type { ShortTermMemoryEntry } from "@/utils/cache/shortTermMemoryCache";
 import type { ConfigCategory, ConfigPage } from "@/utils/discord/configPanelCatalog";
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type { ConfigPersonaOperations, GuildIdentityPort } from "@/utils/discord/interactions/configPersonaOperations";
+import type { ConfigSpriteOperations } from "@/utils/discord/interactions/configSpriteOperations";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { type PersonaPanelAvatarData, withPersonaPanelAvatar } from "@/utils/discord/personaPanelAvatar";
 import { buildConfigPanelPayload, type ConfigPanelView } from "@/utils/discord/ui/configPanel";
@@ -59,6 +60,7 @@ export interface ConfigRouteDependencies {
     persona: TomoriState,
   ): Promise<ConfigPersonaMemoryView>;
   loadServerHumanizerDegree(serverId: number): Promise<number | null>;
+  loadPersonaSprites(personaId: number): Promise<PersonaSpriteRow[]>;
   loadSavedTextProviders(serverId: number): Promise<Array<{ provider: string }>>;
   loadPersonaTextModels(provider: string, serverId: number): Promise<LlmRow[]>;
   openServerMemoryPanel(
@@ -72,6 +74,7 @@ export interface ConfigRouteDependencies {
     lineageId: number,
   ): Promise<InteractionReplyOptions>;
   operations: ConfigPersonaOperations;
+  spriteOperations: ConfigSpriteOperations;
   createGuildIdentity(guildId: string, interaction: GlobalRoutableInteraction): GuildIdentityPort;
   recordAction(input: RecordPanelActionInput): void;
   createNonce(): string;
@@ -152,6 +155,9 @@ export interface ConfigRepaintOptions {
   view?: ConfigPanelView;
   personaMemoryView?: ConfigPersonaMemoryView;
   serverHumanizerDegree?: number | null;
+  personaSprites?: PersonaSpriteRow[];
+  spritePageStart?: number;
+  selectedSpriteIndex?: number;
   dependencies: ConfigRouteDependencies;
 }
 
@@ -164,6 +170,7 @@ export async function repaint(
   let avatar: PersonaPanelAvatarData | undefined;
   let personaMemoryView = options.personaMemoryView;
   let serverHumanizerDegree = options.serverHumanizerDegree;
+  let personaSprites = options.personaSprites;
   if (category === "persona") {
     const persona = scope.personas.find((candidate) => candidate.persona_id === selectedPersonaId);
     if (persona) {
@@ -173,6 +180,9 @@ export async function repaint(
       }
       if (page === "advanced" && serverHumanizerDegree === undefined) {
         serverHumanizerDegree = await dependencies.loadServerHumanizerDegree(persona.server_id);
+      }
+      if (page === "sprites" && personaSprites === undefined && persona.persona_id !== undefined) {
+        personaSprites = await dependencies.loadPersonaSprites(persona.persona_id);
       }
     }
   }
@@ -194,6 +204,9 @@ export async function repaint(
         selectedDialogueIndex: options.selectedDialogueIndex,
         personaMemoryView,
         serverHumanizerDegree,
+        personaSprites,
+        spritePageStart: options.spritePageStart,
+        selectedSpriteIndex: options.selectedSpriteIndex,
         attributeMemteachingEnabled: scope.personas[0]?.config?.attribute_memteaching_enabled === true,
         sampledialogueMemteachingEnabled: scope.personas[0]?.config?.sampledialogue_memteaching_enabled === true,
         namingStyle: options.namingStyle,

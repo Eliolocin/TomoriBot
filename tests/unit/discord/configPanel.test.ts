@@ -6,14 +6,16 @@
  * and a wrong one renders without throwing; only a literal assertion catches it.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
-import type { StmCategoryRow, TomoriState } from "@/types/db/schema";
+import type { PersonaSpriteRow, StmCategoryRow, TomoriState } from "@/types/db/schema";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import {
   CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
   CONFIG_PERSONA_SELECT_PAGE_SIZE,
+  CONFIG_PERSONA_SPRITE_PAGE_SIZE,
   buildConfigRouteId,
   computeAttributeFingerprint,
   computeDialogueFingerprint,
+  computeSpriteFingerprint,
 } from "@/utils/discord/configPanelCatalog";
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type { ConfigPersonaMemoryView } from "@/utils/discord/interactions/configRouteContext";
@@ -888,5 +890,158 @@ describe("config Persona Advanced body", () => {
     const payload = build(GUILD_MEMBER, { page: "advanced", personas: [advancedPersona] });
     expect(walk(payload).some((component) => component.content?.includes("Advanced Persona Settings"))).toBe(false);
     expect(buttonFor(payload, { action: "prompt-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+  });
+});
+
+describe("config Persona Sprites page", () => {
+  function makeSprite(overrides: Partial<PersonaSpriteRow> & { sprite_key: string }): PersonaSpriteRow {
+    return {
+      sprite_id: 1,
+      persona_id: 55,
+      sprite_name: overrides.sprite_key,
+      avatar_url: `personas/55/${overrides.sprite_key}.png`,
+      usage_instructions: "",
+      is_identity: false,
+      ...overrides,
+    };
+  }
+
+  const SPRITES: PersonaSpriteRow[] = [
+    makeSprite({ sprite_key: "happy", sprite_name: "Happy", usage_instructions: "When cheerful", is_identity: true }),
+    makeSprite({ sprite_key: "sad", sprite_name: "Sad", sprite_id: 2 }),
+  ];
+
+  const spritesPage = (actor: ConfigActor, overrides: Record<string, unknown> = {}) =>
+    build(actor, { page: "sprites", personaSprites: SPRITES, ...overrides });
+
+  it("renders the selector, the selected sprite, and both transfer actions for a manager", () => {
+    const payload = spritesPage(GUILD_MANAGER, { selectedSpriteIndex: 0 });
+    const seen = walk(payload);
+
+    const selector = seen.find(
+      (component) =>
+        component.type === STRING_SELECT &&
+        component.customId === buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 55 }),
+    );
+    expect(selector?.options?.map((option) => option.value)).toEqual(["0", "1"]);
+    expect(selector?.options?.[0]?.default).toBe(true);
+
+    const fp = computeSpriteFingerprint(55, 0, "happy");
+    expect(
+      buttonFor(payload, { action: "sprite-edit-open", locale: "en-US", personaId: 55, index: 0, fp })?.disabled,
+    ).toBe(false);
+    expect(
+      buttonFor(payload, { action: "sprite-remove-view", locale: "en-US", personaId: 55, index: 0, fp })?.style,
+    ).toBe(4);
+    expect(buttonFor(payload, { action: "sprite-add-open", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
+    expect(buttonFor(payload, { action: "sprite-import-open", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
+    expect(buttonFor(payload, { action: "sprite-export", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
+
+    // The selected-sprite block carries the stored name, usage note, and identity flag.
+    const detail = seen.find((component) => component.content?.includes("> Name: Happy"));
+    expect(detail?.content).toContain("> Usage: When cheerful");
+    expect(detail?.content).toContain("> Identity: Identity");
+  });
+
+  it("keeps Export live for a guild member while every mutation renders inert", () => {
+    const payload = spritesPage(GUILD_MEMBER, { selectedSpriteIndex: 0 });
+    const fp = computeSpriteFingerprint(55, 0, "happy");
+
+    expect(buttonFor(payload, { action: "sprite-export", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
+    expect(buttonFor(payload, { action: "sprite-add-open", locale: "en-US", personaId: 55 })?.disabled).toBe(true);
+    expect(buttonFor(payload, { action: "sprite-import-open", locale: "en-US", personaId: 55 })?.disabled).toBe(true);
+    expect(
+      buttonFor(payload, { action: "sprite-edit-open", locale: "en-US", personaId: 55, index: 0, fp })?.disabled,
+    ).toBe(true);
+    expect(
+      buttonFor(payload, { action: "sprite-remove-view", locale: "en-US", personaId: 55, index: 0, fp })?.disabled,
+    ).toBe(true);
+  });
+
+  it("omits the guild-only mutations in a DM while Export and the selector remain", () => {
+    const payload = spritesPage(DM_OWNER, { selectedSpriteIndex: 0 });
+    const fp = computeSpriteFingerprint(55, 0, "happy");
+
+    expect(buttonFor(payload, { action: "sprite-add-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+    expect(buttonFor(payload, { action: "sprite-import-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+    expect(buttonFor(payload, { action: "sprite-export", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
+    // Edit and Remove still render beside the inspected sprite, disabled rather than hidden, so the
+    // page does not silently lose its selection controls.
+    expect(
+      buttonFor(payload, { action: "sprite-edit-open", locale: "en-US", personaId: 55, index: 0, fp })?.disabled,
+    ).toBe(true);
+  });
+
+  it("disables Export when the persona has no sprites to bundle", () => {
+    const payload = build(GUILD_MANAGER, { page: "sprites", personaSprites: [] });
+    expect(buttonFor(payload, { action: "sprite-export", locale: "en-US", personaId: 55 })?.disabled).toBe(true);
+    expect(walk(payload).some((component) => component.customId?.includes("sprite-select"))).toBe(false);
+  });
+
+  it("pages a sprite set larger than one selector and keeps each option addressable", () => {
+    const many = Array.from({ length: CONFIG_PERSONA_SPRITE_PAGE_SIZE + 5 }, (_unused, index) =>
+      makeSprite({ sprite_key: `sprite${String(index).padStart(2, "0")}`, sprite_id: index + 1 }),
+    );
+    const payload = build(GUILD_MANAGER, {
+      page: "sprites",
+      personaSprites: many,
+      selectedSpriteIndex: CONFIG_PERSONA_SPRITE_PAGE_SIZE,
+    });
+    // Found by custom ID rather than by shape: the page selector is also a String Select carrying
+    // options, and it renders first.
+    const selector = walk(payload).find(
+      (component) =>
+        component.type === STRING_SELECT &&
+        component.customId === buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 55 }),
+    );
+
+    expect(selector?.options?.length).toBe(5);
+    expect(selector?.options?.[0]?.value).toBe(String(CONFIG_PERSONA_SPRITE_PAGE_SIZE));
+    expect(
+      walk(payload).some((component) =>
+        component.customId?.includes(
+          buildConfigRouteId({
+            action: "sprite-page",
+            locale: "en-US",
+            personaId: 55,
+            start: 0,
+          }),
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("names the sprite in its removal confirmation and keeps the Danger button", () => {
+    const fp = computeSpriteFingerprint(55, 0, "happy");
+    const payload = build(GUILD_MANAGER, {
+      page: "sprites",
+      personaSprites: SPRITES,
+      view: { kind: "sprite-remove-confirm", personaId: 55, index: 0, fp, nonce: "nonce1234567" },
+    });
+    const seen = walk(payload);
+
+    expect(seen.some((component) => component.content?.includes("Happy"))).toBe(true);
+    expect(
+      buttonFor(payload, {
+        action: "sprite-remove-confirm",
+        locale: "en-US",
+        personaId: 55,
+        index: 0,
+        fp,
+        nonce: "nonce1234567",
+      })?.style,
+    ).toBe(4);
+    expect(buttonFor(payload, { action: "sprite-remove-cancel", locale: "en-US", personaId: 55 })).toBeDefined();
+  });
+
+  it("shows no removal confirmation to an actor who may not remove", () => {
+    const fp = computeSpriteFingerprint(55, 0, "happy");
+    const payload = build(GUILD_MEMBER, {
+      page: "sprites",
+      personaSprites: SPRITES,
+      view: { kind: "sprite-remove-confirm", personaId: 55, index: 0, fp, nonce: "nonce1234567" },
+    });
+
+    expect(walk(payload).some((component) => component.customId?.includes("sprite-rem-confirm"))).toBe(false);
   });
 });

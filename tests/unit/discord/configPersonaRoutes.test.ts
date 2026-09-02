@@ -8,7 +8,7 @@
  */
 import { beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { MessageFlags, PermissionsBitField, type APIAttachment, type Client } from "discord.js";
-import type { StmCategoryRow, TomoriState } from "@/types/db/schema";
+import type { PersonaSpriteRow, StmCategoryRow, TomoriState } from "@/types/db/schema";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import { conditioningMemoryRepository } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import * as shortTermMemoryCache from "@/utils/cache/shortTermMemoryCache";
@@ -16,18 +16,23 @@ import {
   llmOverrideRepo,
   personalMemoryRepository,
   personaRepository,
+  personaSpriteRepository,
   serverMemoryRepository,
   userRepository,
 } from "@/utils/db/repositories";
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
 import { execute as executeConditioningManage } from "@/commands/conditioning/manage";
 import * as modalModule from "@/utils/discord/ui/modals";
+import * as avatarStorage from "@/utils/storage/avatarStorage";
+import * as imageProcessor from "@/utils/image/imageProcessor";
+import * as safeDownloadModule from "@/utils/security/safeDownload";
 import {
   CONFIG_ROUTE_CODECS,
   buildConfigRouteId,
   computeAttributeFingerprint,
   computeConditioningRemoveFingerprint,
   computeDialogueFingerprint,
+  computeSpriteFingerprint,
   computeTriggerRemoveFingerprint,
   parseConfigPanelRoute,
   type ConfigPanelRoute,
@@ -40,6 +45,7 @@ import {
   type ConfigScope,
 } from "@/utils/discord/interactions/configRouteContext";
 import { configPersonaOperations } from "@/utils/discord/interactions/configPersonaOperations";
+import { configSpriteOperations } from "@/utils/discord/interactions/configSpriteOperations";
 import {
   InteractionRouteRegistry,
   parseInteractionRoute,
@@ -50,9 +56,12 @@ import {
   buildConfigModalFieldId,
   buildTriggerRemoveCheckboxGroupId,
   CONFIG_PERSONA_PROMPT_PART_FIELDS,
+  CONFIG_SPRITE_IDENTITY_OPTION_VALUE,
+  CONFIG_SPRITE_INSTRUCTIONS_FIELD,
+  CONFIG_SPRITE_NAME_FIELD,
 } from "@/utils/discord/ui/configModals";
 import { loadCommandData } from "@/utils/discord/commandLoader";
-import { initializeLocalizer } from "@/utils/text/localizer";
+import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
 
@@ -143,6 +152,23 @@ function makeMemoryView(overrides: Partial<ConfigPersonaMemoryView> = {}): Confi
   };
 }
 
+function makeSprite(overrides: Partial<PersonaSpriteRow> & { sprite_key: string }): PersonaSpriteRow {
+  return {
+    sprite_id: 1,
+    persona_id: 55,
+    sprite_name: overrides.sprite_key,
+    avatar_url: `personas/55/${overrides.sprite_key}.png`,
+    usage_instructions: "",
+    is_identity: false,
+    ...overrides,
+  };
+}
+
+const SPRITES: PersonaSpriteRow[] = [
+  makeSprite({ sprite_key: "happy", sprite_name: "Happy", usage_instructions: "When cheerful" }),
+  makeSprite({ sprite_key: "sad", sprite_name: "Sad", sprite_id: 2 }),
+];
+
 interface HarnessOptions {
   isManager?: boolean;
   inGuild?: boolean;
@@ -150,6 +176,8 @@ interface HarnessOptions {
   refreshedPersonas?: TomoriState[];
   personaMemoryView?: ConfigPersonaMemoryView;
   operations?: Partial<ConfigRouteDependencies["operations"]>;
+  sprites?: PersonaSpriteRow[];
+  spriteOperations?: Partial<ConfigRouteDependencies["spriteOperations"]>;
 }
 
 interface Harness {
@@ -157,16 +185,20 @@ interface Harness {
   telemetry: string[];
   edits: unknown[];
   replies: unknown[];
+  followUps: unknown[];
   modals: unknown[];
   scopeLoads: boolean[];
+  spriteLoads: number[];
 }
 
 function makeHarness(options: HarnessOptions = {}): Harness {
   const telemetry: string[] = [];
   const edits: unknown[] = [];
   const replies: unknown[] = [];
+  const followUps: unknown[] = [];
   const modals: unknown[] = [];
   const scopeLoads: boolean[] = [];
+  const spriteLoads: number[] = [];
 
   const buildScope = (forceRefresh: boolean): ConfigScope => ({
     serverDiscId: options.inGuild === false ? "user-1" : "guild-1",
@@ -185,8 +217,10 @@ function makeHarness(options: HarnessOptions = {}): Harness {
     telemetry,
     edits,
     replies,
+    followUps,
     modals,
     scopeLoads,
+    spriteLoads,
     dependencies: {
       resolveScope: async (_interaction, forceRefresh = false) => {
         scopeLoads.push(forceRefresh);
@@ -211,6 +245,11 @@ function makeHarness(options: HarnessOptions = {}): Harness {
       takeAvatarUpload: () => undefined,
       takeCheckboxValues: () => [],
       operations: { ...configPersonaOperations, ...options.operations },
+      loadPersonaSprites: async (personaId) => {
+        spriteLoads.push(personaId);
+        return options.sprites ?? SPRITES;
+      },
+      spriteOperations: { ...configSpriteOperations, ...options.spriteOperations },
     },
   };
 }
@@ -265,7 +304,7 @@ function makeInteraction(options: FakeInteractionOptions) {
       return payload;
     },
     followUp: async (payload: unknown) => {
-      options.harness.replies.push(payload);
+      options.harness.followUps.push(payload);
       return payload;
     },
     fields: {
@@ -319,6 +358,43 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     "config:v1:image-tags-submit:en-US:55:nonce1234567",
     { action: "image-tags-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
+  ["config:v1:sprite-select:en-US:55", { action: "sprite-select", locale: "en-US", personaId: 55 }],
+  ["config:v1:sprite-page:en-US:55:25", { action: "sprite-page", locale: "en-US", personaId: 55, start: 25 }],
+  ["config:v1:sprite-add-open:en-US:55", { action: "sprite-add-open", locale: "en-US", personaId: 55 }],
+  [
+    "config:v1:sprite-add-sub:en-US:55:nonce1234567",
+    { action: "sprite-add-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+  ],
+  [
+    "config:v1:sprite-edit-open:en-US:55:0:abcd1234",
+    { action: "sprite-edit-open", locale: "en-US", personaId: 55, index: 0, fp: "abcd1234" },
+  ],
+  [
+    "config:v1:sprite-edit-sub:en-US:55:0:abcd1234:nonce1234567",
+    { action: "sprite-edit-submit", locale: "en-US", personaId: 55, index: 0, fp: "abcd1234", nonce: "nonce1234567" },
+  ],
+  [
+    "config:v1:sprite-rem-view:en-US:55:0:abcd1234",
+    { action: "sprite-remove-view", locale: "en-US", personaId: 55, index: 0, fp: "abcd1234" },
+  ],
+  [
+    "config:v1:sprite-rem-confirm:en-US:55:0:abcd1234:nonce1234567",
+    {
+      action: "sprite-remove-confirm",
+      locale: "en-US",
+      personaId: 55,
+      index: 0,
+      fp: "abcd1234",
+      nonce: "nonce1234567",
+    },
+  ],
+  ["config:v1:sprite-rem-cancel:en-US:55", { action: "sprite-remove-cancel", locale: "en-US", personaId: 55 }],
+  ["config:v1:sprite-import-open:en-US:55", { action: "sprite-import-open", locale: "en-US", personaId: 55 }],
+  [
+    "config:v1:sprite-import-sub:en-US:55:nonce1234567",
+    { action: "sprite-import-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+  ],
+  ["config:v1:sprite-export:en-US:55", { action: "sprite-export", locale: "en-US", personaId: 55 }],
   ["config:v1:char-ref-open:en-US:55", { action: "character-reference-open", locale: "en-US", personaId: 55 }],
   [
     "config:v1:char-ref-submit:en-US:55:nonce1234567",
@@ -1129,7 +1205,7 @@ describe("config Persona Memories routes", () => {
     );
 
     expect(selectedLineage).toBe(202);
-    expect(harness.replies).toHaveLength(1);
+    expect(harness.followUps).toHaveLength(1);
     expect(harness.edits).toHaveLength(0);
   });
 
@@ -2447,6 +2523,431 @@ describe("config Persona Advanced routes", () => {
     imageTagsSpy.mockRestore();
     charRefSpy.mockRestore();
     promptSpy.mockRestore();
+  });
+});
+
+describe("config Persona Sprites routes", () => {
+  const SPRITE_NONCE = "nonce1234567";
+  const spriteFields = (name: string, instructions = "") => ({
+    [buildConfigModalFieldId(CONFIG_SPRITE_NAME_FIELD, SPRITE_NONCE)]: name,
+    [buildConfigModalFieldId(CONFIG_SPRITE_INSTRUCTIONS_FIELD, SPRITE_NONCE)]: instructions,
+  });
+
+  it("keeps a member's Export working while every sprite mutation reaches no repository", async () => {
+    const upsertSpy = spyOn(personaSpriteRepository, "upsertSprite").mockResolvedValue(null);
+    const updateSpy = spyOn(personaSpriteRepository, "updateSpriteMetadata").mockResolvedValue(null);
+    const deleteSpy = spyOn(personaSpriteRepository, "deleteSpritesByKeys").mockResolvedValue([]);
+
+    const deniedRoutes: Array<{ route: ConfigPanelRoute; kind?: "modal" }> = [
+      {
+        route: { action: "sprite-add-submit", locale: "en-US", personaId: 55, nonce: SPRITE_NONCE },
+        kind: "modal",
+      },
+      {
+        route: {
+          action: "sprite-edit-submit",
+          locale: "en-US",
+          personaId: 55,
+          index: 0,
+          fp: computeSpriteFingerprint(55, 0, "happy"),
+          nonce: SPRITE_NONCE,
+        },
+        kind: "modal",
+      },
+      {
+        route: {
+          action: "sprite-remove-confirm",
+          locale: "en-US",
+          personaId: 55,
+          index: 0,
+          fp: computeSpriteFingerprint(55, 0, "happy"),
+          nonce: SPRITE_NONCE,
+        },
+      },
+      {
+        route: { action: "sprite-import-submit", locale: "en-US", personaId: 55, nonce: SPRITE_NONCE },
+        kind: "modal",
+      },
+    ];
+
+    for (const entry of deniedRoutes) {
+      const harness = makeHarness({ isManager: false, personas: [MAIN] });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId(entry.route),
+          kind: entry.kind,
+          fields: spriteFields("Happy"),
+          isManager: false,
+          harness,
+        }),
+      );
+    }
+
+    expect(upsertSpy).not.toHaveBeenCalled();
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(deleteSpy).not.toHaveBeenCalled();
+
+    // The denials above are only meaningful if the same read-only page still serves Export: a route
+    // layer that refused every sprite action for a member would satisfy them on its own.
+    let exported = false;
+    const exportHarness = makeHarness({
+      isManager: false,
+      personas: [MAIN],
+      spriteOperations: {
+        exportSprites: async () => {
+          exported = true;
+          return {
+            status: "success",
+            buffer: Buffer.from("zip"),
+            filename: "aphel-sprites.zip",
+            spriteCount: 2,
+            skippedCount: 0,
+          };
+        },
+      },
+    });
+    await dispatch(
+      exportHarness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "sprite-export", locale: "en-US", personaId: 55 }),
+        isManager: false,
+        harness: exportHarness,
+      }),
+    );
+
+    expect(exported).toBe(true);
+
+    upsertSpy.mockRestore();
+    updateSpy.mockRestore();
+    deleteSpy.mockRestore();
+  });
+
+  it("delivers the archive as a public follow-up rather than through the ephemeral panel", async () => {
+    const harness = makeHarness({
+      personas: [MAIN],
+      spriteOperations: {
+        exportSprites: async () => ({
+          status: "success",
+          buffer: Buffer.from("zip"),
+          filename: "aphel-sprites.zip",
+          spriteCount: 2,
+          skippedCount: 0,
+        }),
+      },
+    });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "sprite-export", locale: "en-US", personaId: 55 }),
+        harness,
+      }),
+    );
+
+    // The panel root defers ephemerally, so an `editReply` carrying the archive would silently make
+    // a public export private. The archive must arrive on its own message with no Ephemeral flag.
+    expect(harness.followUps).toHaveLength(1);
+    const followUp = harness.followUps[0] as { files?: unknown[]; flags?: number };
+    expect(followUp.files).toHaveLength(1);
+    expect(followUp.flags ?? 0).toBe(0);
+    // The panel still repaints in place beside it.
+    expect(harness.edits.length).toBeGreaterThan(0);
+    expect(harness.telemetry).toContain("server-config.workspace.persona-sprite.export");
+  });
+
+  it("refuses an edit whose fingerprint no longer matches the sprite at that position", async () => {
+    const updateSpy = spyOn(personaSpriteRepository, "updateSpriteMetadata").mockResolvedValue(null);
+    const harness = makeHarness({ personas: [MAIN] });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "sprite-edit-submit",
+          locale: "en-US",
+          personaId: 55,
+          index: 0,
+          // The fingerprint of the sprite that used to sit at position 0.
+          fp: computeSpriteFingerprint(55, 0, "angry"),
+          nonce: SPRITE_NONCE,
+        }),
+        kind: "modal",
+        fields: spriteFields("Renamed"),
+        harness,
+      }),
+    );
+
+    expect(updateSpy).not.toHaveBeenCalled();
+    updateSpy.mockRestore();
+  });
+
+  it("reports a concurrently removed sprite as stale instead of a successful removal of nothing", async () => {
+    const deleteSpy = spyOn(personaSpriteRepository, "deleteSpritesByKeys").mockResolvedValue([]);
+    const materializeSpy = spyOn(personaRepository, "materializeIfPointer").mockResolvedValue(true);
+    let removedName: string | undefined;
+    const harness = makeHarness({
+      personas: [MAIN],
+      spriteOperations: {
+        removeSprite: async (input) => {
+          const result = await configSpriteOperations.removeSprite(input);
+          if (result.status === "success") removedName = result.spriteName;
+          return result;
+        },
+      },
+    });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "sprite-remove-confirm",
+          locale: "en-US",
+          personaId: 55,
+          index: 0,
+          fp: computeSpriteFingerprint(55, 0, "happy"),
+          nonce: SPRITE_NONCE,
+        }),
+        harness,
+      }),
+    );
+
+    // The DELETE ran and matched nothing, so no receipt may claim a removal and no storage delete
+    // may follow from an empty result.
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(removedName).toBeUndefined();
+    expect(JSON.stringify(harness.edits)).toContain(localizer("en-US", "commands.config.panel.stale_heading"));
+
+    deleteSpy.mockRestore();
+    materializeSpy.mockRestore();
+  });
+
+  it("hands each removed sprite image to storage exactly once", async () => {
+    const removedRows: PersonaSpriteRow[] = [makeSprite({ sprite_key: "happy", avatar_url: "personas/55/happy.png" })];
+    const deleteSpy = spyOn(personaSpriteRepository, "deleteSpritesByKeys").mockResolvedValue(removedRows);
+    const materializeSpy = spyOn(personaRepository, "materializeIfPointer").mockResolvedValue(true);
+    const storageDeletes: string[] = [];
+    const storageSpy = spyOn(avatarStorage, "deletePersonaSpriteFromStorage").mockImplementation(async (reference) => {
+      storageDeletes.push(reference);
+      return true;
+    });
+
+    const result = await configSpriteOperations.removeSprite({
+      persona: MAIN,
+      serverDiscId: "guild-1",
+      spriteKey: "happy",
+    });
+
+    expect(result.status).toBe("success");
+    expect(deleteSpy).toHaveBeenCalledTimes(1);
+    expect(storageDeletes).toEqual(["personas/55/happy.png"]);
+
+    deleteSpy.mockRestore();
+    materializeSpy.mockRestore();
+    storageSpy.mockRestore();
+  });
+
+  it("pages a persona past twenty-five sprites and keeps a later page's selection addressable", async () => {
+    const many = Array.from({ length: 30 }, (_unused, index) =>
+      makeSprite({ sprite_key: `sprite${String(index).padStart(2, "0")}`, sprite_id: index + 1 }),
+    );
+    const harness = makeHarness({ personas: [MAIN], sprites: many });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 55 }),
+        kind: "select",
+        values: ["27"],
+        harness,
+      }),
+    );
+
+    const rendered = JSON.stringify(harness.edits);
+    // Selecting index 27 must move the selector onto its own page rather than leaving it on the
+    // first twenty-five, where the option would not exist.
+    expect(rendered).toContain('"value":"27"');
+    expect(rendered).not.toContain('"value":"0"');
+    expect(rendered).toContain(
+      buildConfigRouteId({
+        action: "sprite-edit-open",
+        locale: "en-US",
+        personaId: 55,
+        index: 27,
+        fp: computeSpriteFingerprint(55, 27, many[27].sprite_key),
+      }),
+    );
+  });
+
+  it("builds sprite modals from the raw component types Discord needs", async () => {
+    const harness = makeHarness({ personas: [MAIN] });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "sprite-add-open", locale: "en-US", personaId: 55 }),
+        harness,
+      }),
+    );
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "sprite-edit-open",
+          locale: "en-US",
+          personaId: 55,
+          index: 0,
+          fp: computeSpriteFingerprint(55, 0, "happy"),
+        }),
+        harness,
+      }),
+    );
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "sprite-import-open", locale: "en-US", personaId: 55 }),
+        harness,
+      }),
+    );
+
+    const componentTypes = (
+      harness.modals as Array<{ components: Array<{ type: number; component: { type: number } }> }>
+    ).map((modal) => modal.components.map((label) => label.component.type));
+    // 4 is TextInput, 19 is FileUpload, 22 is CheckboxGroup. Every component type is a bare number
+    // on the wire, so TypeScript accepts a wrong one and only a literal assertion catches it.
+    expect(componentTypes).toEqual([[4, 19, 4, 22], [4, 19, 4, 22], [19]]);
+    // The image is required on add and optional on edit, so an edit can change only the name.
+    const [addModal, editModal] = harness.modals as Array<{
+      components: Array<{ component: { type: number; required?: boolean; min_values?: number } }>;
+    }>;
+    expect(addModal.components[1].component.min_values).toBe(1);
+    expect(editModal.components[1].component.min_values).toBe(0);
+  });
+
+  it("refuses to open an edit modal whose fingerprint is stale", async () => {
+    const harness = makeHarness({ personas: [MAIN] });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "sprite-edit-open",
+          locale: "en-US",
+          personaId: 55,
+          index: 0,
+          fp: computeSpriteFingerprint(55, 0, "angry"),
+        }),
+        harness,
+      }),
+    );
+
+    expect(harness.modals).toEqual([]);
+    expect(harness.replies).toHaveLength(1);
+  });
+
+  it("round-trips a persona's sprites out through Export and back in through Import", async () => {
+    const stored: PersonaSpriteRow[] = [
+      makeSprite({ sprite_key: "happy", sprite_name: "Happy", usage_instructions: "When cheerful", is_identity: true }),
+      makeSprite({ sprite_key: "sad", sprite_name: "Sad", sprite_id: 2 }),
+    ];
+    const listSpy = spyOn(personaSpriteRepository, "listForPersona").mockResolvedValue(stored);
+    const loadSpy = spyOn(avatarStorage, "loadStoredPersonaAvatarBuffer").mockImplementation(async (reference) =>
+      Buffer.from(`bytes:${reference}`),
+    );
+    // The archive carries whatever bytes it is handed, so identity is what this asserts, not codec
+    // behavior: a real re-encode would make the two sides incomparable.
+    const pngSpy = spyOn(imageProcessor, "convertToPNG").mockImplementation(async (buffer: Buffer) => buffer);
+
+    const exported = await configSpriteOperations.exportSprites({ persona: MAIN });
+    expect(exported.status).toBe("success");
+    if (exported.status !== "success") return;
+    expect(exported.spriteCount).toBe(2);
+    expect(exported.skippedCount).toBe(0);
+
+    const materializeSpy = spyOn(personaRepository, "materializeIfPointer").mockResolvedValue(true);
+    const uploadSpy = spyOn(avatarStorage, "uploadPersonaSpriteToStorage").mockImplementation(
+      async ({ label }) => `personas/99/${label}.png`,
+    );
+    const upserts: Array<{ spriteKey: string; usageInstructions: string; isIdentity: boolean }> = [];
+    const upsertSpy = spyOn(personaSpriteRepository, "upsertSprite").mockImplementation(async (input) => {
+      upserts.push({
+        spriteKey: input.spriteKey,
+        usageInstructions: input.usageInstructions,
+        isIdentity: input.isIdentity,
+      });
+      return {
+        sprite: makeSprite({ sprite_key: input.spriteKey, sprite_name: input.spriteName }),
+        previousAvatarUrl: null,
+        replaced: false,
+      };
+    });
+    const downloadSpy = spyOn(safeDownloadModule, "safeDownload").mockResolvedValue({
+      success: true,
+      buffer: exported.buffer,
+    } as Awaited<ReturnType<typeof safeDownloadModule.safeDownload>>);
+    // The target persona starts empty, so every archive entry lands as a new sprite.
+    listSpy.mockResolvedValue([]);
+
+    const imported = await configSpriteOperations.importSprites({
+      persona: makePersona({ persona_id: 99 }),
+      serverDiscId: "guild-1",
+      quotaKey: "user-import-roundtrip",
+      attachment: {
+        id: "a1",
+        filename: "aphel-sprites.zip",
+        size: exported.buffer.byteLength,
+        url: "https://cdn.example.invalid/aphel-sprites.zip",
+        proxy_url: "https://cdn.example.invalid/aphel-sprites.zip",
+        content_type: "application/zip",
+      },
+    });
+
+    expect(imported).toMatchObject({ status: "success", created: 2, replaced: 0, failed: 0 });
+    expect(upserts.map((entry) => entry.spriteKey).sort()).toEqual(["happy", "sad"]);
+    // The identity flag and usage note survive the archive rather than resetting to their defaults.
+    expect(upserts.find((entry) => entry.spriteKey === "happy")).toMatchObject({
+      usageInstructions: "When cheerful",
+      isIdentity: true,
+    });
+    expect(upserts.find((entry) => entry.spriteKey === "sad")).toMatchObject({ isIdentity: false });
+
+    listSpy.mockRestore();
+    loadSpy.mockRestore();
+    pngSpy.mockRestore();
+    materializeSpy.mockRestore();
+    uploadSpy.mockRestore();
+    upsertSpy.mockRestore();
+    downloadSpy.mockRestore();
+  });
+
+  it("carries the identity checkbox into the write rather than dropping it", async () => {
+    let received: boolean | undefined;
+    const harness = makeHarness({
+      personas: [MAIN],
+      spriteOperations: {
+        addSprite: async (input) => {
+          received = input.isIdentity;
+          return { status: "success", spriteName: input.rawName, replaced: false };
+        },
+      },
+    });
+    harness.dependencies.takeCheckboxValues = () => [CONFIG_SPRITE_IDENTITY_OPTION_VALUE];
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "sprite-add-submit",
+          locale: "en-US",
+          personaId: 55,
+          nonce: SPRITE_NONCE,
+        }),
+        kind: "modal",
+        fields: spriteFields("Happy", "When cheerful"),
+        harness,
+      }),
+    );
+
+    expect(received).toBe(true);
+    expect(harness.telemetry).toContain("server-config.workspace.persona-sprite.add");
   });
 });
 

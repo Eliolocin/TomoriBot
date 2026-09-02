@@ -1,6 +1,6 @@
-import { MessageFlags, type ModalSubmitInteraction } from "discord.js";
+import { AttachmentBuilder, MessageFlags, type ModalSubmitInteraction } from "discord.js";
 import type { PanelAction } from "@/constants/panelActions";
-import type { TomoriState } from "@/types/db/schema";
+import type { PersonaSpriteRow, TomoriState } from "@/types/db/schema";
 import type { PanelReceipt, PanelReceiptTone } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
@@ -23,6 +23,7 @@ import {
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
 import {
   CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
+  CONFIG_PERSONA_SPRITE_PAGE_SIZE,
   CONFIG_ROUTE_NAMESPACE,
   CONFIG_ROUTE_VERSION,
   CONFIG_TRIGGER_CHECKBOX_CAPACITY,
@@ -33,6 +34,7 @@ import {
   computeTriggerRemoveFingerprint,
   computeAttributeFingerprint,
   computeDialogueFingerprint,
+  computeSpriteFingerprint,
   parseConfigPanelRoute,
   type ConfigCategory,
   type ConfigPage,
@@ -48,6 +50,7 @@ import {
   type ConfigActor,
 } from "@/utils/discord/interactions/configPermissionPolicy";
 import { configPersonaOperations, type GuildIdentityPort } from "@/utils/discord/interactions/configPersonaOperations";
+import { configSpriteOperations, loadPersonaSpriteList } from "@/utils/discord/interactions/configSpriteOperations";
 import {
   deniedReceipt,
   repaint,
@@ -60,6 +63,7 @@ import {
   type ConfigScope,
 } from "@/utils/discord/interactions/configRouteContext";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
+import type { ConfigPanelView } from "@/utils/discord/ui/configPanel";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import { resolvePersonaPanelAvatar } from "@/utils/discord/personaPanelAvatar";
 import {
@@ -76,6 +80,9 @@ import {
   buildPersonaNamingHabitsModal,
   buildPersonaPromptModal,
   buildPersonaRenameModal,
+  buildPersonaSpriteAddModal,
+  buildPersonaSpriteEditModal,
+  buildPersonaSpriteImportModal,
   buildPersonaConditioningRemoveModal,
   buildPersonaStmEditModal,
   buildTriggerAddModal,
@@ -91,6 +98,12 @@ import {
   CONFIG_DIALOGUE_BOT_INPUT_FIELD,
   CONFIG_DIALOGUE_FILE_FIELD,
   CONFIG_DIALOGUE_USER_INPUT_FIELD,
+  CONFIG_SPRITE_ARCHIVE_FIELD,
+  CONFIG_SPRITE_IDENTITY_FIELD,
+  CONFIG_SPRITE_IDENTITY_OPTION_VALUE,
+  CONFIG_SPRITE_IMAGE_FIELD,
+  CONFIG_SPRITE_INSTRUCTIONS_FIELD,
+  CONFIG_SPRITE_NAME_FIELD,
   CONFIG_STM_CATEGORY_INPUT_PREFIX,
 } from "@/utils/discord/ui/configModals";
 import { showRoutedRawModal, takeRawModalCheckboxGroupValues, takeRawModalFileUpload } from "@/utils/discord/ui/modals";
@@ -104,6 +117,8 @@ import {
 } from "@/utils/discord/humanizerOptions";
 import { hasPersonaPrompt } from "@/utils/discord/ui/personaEligibility";
 import { MAX_TAG_LENGTH, MAX_TAGS } from "@/utils/image/tagHelpers";
+import { PERSONA_SPRITE_LIMITS } from "@/utils/persona/sprites";
+import { IMPORT_LIMITS, PERSONA_LIMITS } from "@/utils/security/rateLimiter";
 import { log } from "@/utils/misc/logger";
 import { recordPanelActionStat } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
@@ -128,7 +143,46 @@ const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "character-reference-open",
   "prompt-open",
   "context-note-open",
+  "sprite-add-open",
+  "sprite-edit-open",
+  "sprite-import-open",
 ]);
+
+/** Sprite routes repaint their own page rather than the Persona General default. */
+const SPRITE_ACTIONS = new Set<ConfigPanelRoute["action"]>([
+  "sprite-select",
+  "sprite-page",
+  "sprite-add-open",
+  "sprite-add-submit",
+  "sprite-edit-open",
+  "sprite-edit-submit",
+  "sprite-remove-view",
+  "sprite-remove-confirm",
+  "sprite-remove-cancel",
+  "sprite-import-open",
+  "sprite-import-submit",
+  "sprite-export",
+]);
+
+/**
+ * Resolves the sprite a route's list position names, refusing when the fingerprint no longer
+ * matches.
+ *
+ * The route carries a position rather than a `sprite_key` because a key may be 64 characters and
+ * would push the custom ID past Discord's limit. The fingerprint is what makes the position safe: a
+ * concurrent add, rename, or removal changes it, so a replayed route reports staleness instead of
+ * resolving to whichever sprite now sits at that position.
+ */
+function resolveSpriteAtIndex(
+  sprites: readonly PersonaSpriteRow[],
+  personaId: number,
+  index: number,
+  fp: string,
+): PersonaSpriteRow | null {
+  const sprite = sprites[index];
+  if (!sprite) return null;
+  return computeSpriteFingerprint(personaId, index, sprite.sprite_key) === fp ? sprite : null;
+}
 
 function receipt(
   locale: string,
@@ -142,6 +196,62 @@ function receipt(
     heading: localizer(locale, headingKey),
     detail: localizer(locale, detailKey, vars),
   };
+}
+
+/**
+ * Maps the shared sprite failure statuses onto their receipts.
+ *
+ * Add, edit, and import fail through the same transfer statuses, so a single mapping keeps one
+ * wording per cause rather than three that drift apart.
+ */
+function spriteFailureReceipt(
+  locale: string,
+  result: { status: string; reason?: string; resetAt?: number | null },
+): PanelReceipt {
+  const key = (suffix: string) => `commands.config.panel.${suffix}`;
+  switch (result.status) {
+    case "invalid-name":
+      return receipt(locale, "error", key("sprite_invalid_name_heading"), key("sprite_invalid_name_detail"), {
+        max_length: PERSONA_SPRITE_LIMITS.MAX_NAME_LENGTH,
+      });
+    case "instructions-too-long":
+      return receipt(locale, "error", key("sprite_invalid_name_heading"), key("sprite_instructions_long_detail"), {
+        max_length: PERSONA_SPRITE_LIMITS.MAX_INSTRUCTIONS_LENGTH,
+      });
+    case "invalid-image":
+      return receipt(
+        locale,
+        "error",
+        key("sprite_invalid_image_heading"),
+        result.reason === "file_too_large" ? key("sprite_image_too_large_detail") : key("sprite_invalid_image_detail"),
+        { max_size: PERSONA_LIMITS.MAX_AVATAR_SIZE_MB },
+      );
+    case "memory-critical":
+      return receipt(
+        locale,
+        "error",
+        "rate_limit.error_memory_critical_title",
+        "rate_limit.error_memory_critical_description",
+      );
+    case "quota-exceeded":
+      return receipt(
+        locale,
+        "error",
+        "rate_limit.error_quota_exceeded_title",
+        "rate_limit.error_quota_exceeded_description",
+        {
+          reset_time: result.resetAt
+            ? new Date(result.resetAt).toLocaleString(locale)
+            : localizer(locale, "general.unknown"),
+        },
+      );
+    case "download-failed":
+      return receipt(locale, "error", key("sprite_invalid_image_heading"), key("sprite_download_failed_detail"));
+    case "conversion-failed":
+      return receipt(locale, "error", key("sprite_invalid_image_heading"), key("sprite_conversion_failed_detail"));
+    default:
+      return receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail"));
+  }
 }
 
 const PROMOTED_AVATAR_OPTIONS = { size: 1024, extension: "png", forceStatic: true } as const;
@@ -251,6 +361,7 @@ const defaultDependencies: ConfigRouteDependencies = {
   loadPersonaMemoryView: loadConfigPersonaMemoryView,
   loadServerHumanizerDegree: async (serverId) =>
     (await configRepository.getChatConfig(serverId))?.humanizer_degree ?? null,
+  loadPersonaSprites: loadPersonaSpriteList,
   loadSavedTextProviders: async (serverId) => loadSavedProvidersForCapability(serverId, "text"),
   loadPersonaTextModels: async (provider, serverId) =>
     (await llmModelRepo.loadAvailableModelsForProvider(provider, false, { kind: "server", ownerId: serverId })) ?? [],
@@ -263,6 +374,7 @@ const defaultDependencies: ConfigRouteDependencies = {
     return asEphemeralComponentsV2FollowUp(panel);
   },
   operations: configPersonaOperations,
+  spriteOperations: configSpriteOperations,
   createGuildIdentity: createGuildIdentityPort,
   recordAction: (input) => {
     void recordPanelActionStat(input);
@@ -500,6 +612,26 @@ async function handleModalOpen(
     case "avatar-open":
       await dependencies.showModal(interaction, buildPersonaAvatarModal(locale, persona.persona_id, nonce));
       return;
+    case "sprite-add-open":
+      await dependencies.showModal(interaction, buildPersonaSpriteAddModal(locale, persona.persona_id, nonce));
+      return;
+    case "sprite-import-open":
+      await dependencies.showModal(interaction, buildPersonaSpriteImportModal(locale, persona.persona_id, nonce));
+      return;
+    case "sprite-edit-open": {
+      const sprites = await dependencies.loadPersonaSprites(persona.persona_id);
+      const sprite = resolveSpriteAtIndex(sprites, persona.persona_id, route.index, route.fp);
+      if (!sprite) {
+        const stale = staleReceipt(locale);
+        await interaction.reply({ content: `${stale.heading}\n${stale.detail}`, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await dependencies.showModal(
+        interaction,
+        buildPersonaSpriteEditModal(locale, persona.persona_id, route.index, route.fp, nonce, sprite),
+      );
+      return;
+    }
     case "rename-open":
       await dependencies.showModal(
         interaction,
@@ -1116,6 +1248,184 @@ async function runPersonaWrite(
             telemetry: "server-config.workspace.persona-text-model.clear",
           }
         : { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
+    case "sprite-add-submit":
+    case "sprite-edit-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      const identityValues = dependencies.takeCheckboxValues(
+        modal.id,
+        buildConfigModalFieldId(CONFIG_SPRITE_IDENTITY_FIELD, route.nonce),
+      );
+      const common = {
+        persona,
+        serverDiscId: scope.serverDiscId,
+        rawName: modal.fields.getTextInputValue(buildConfigModalFieldId(CONFIG_SPRITE_NAME_FIELD, route.nonce)),
+        rawInstructions: modal.fields.getTextInputValue(
+          buildConfigModalFieldId(CONFIG_SPRITE_INSTRUCTIONS_FIELD, route.nonce),
+        ),
+        isIdentity: identityValues?.includes(CONFIG_SPRITE_IDENTITY_OPTION_VALUE) === true,
+        attachment:
+          dependencies.takeFileUpload(modal.id, buildConfigModalFieldId(CONFIG_SPRITE_IMAGE_FIELD, route.nonce)) ??
+          null,
+      };
+
+      if (route.action === "sprite-add-submit") {
+        const result = await dependencies.spriteOperations.addSprite(common);
+        if (result.status === "success") {
+          return {
+            receipt: receipt(
+              locale,
+              "success",
+              result.replaced ? key("sprite_replaced_heading") : key("sprite_added_heading"),
+              result.replaced ? key("sprite_replaced_detail") : key("sprite_added_detail"),
+              { persona: persona.persona_nickname, sprite: result.spriteName },
+            ),
+            telemetry: "server-config.workspace.persona-sprite.add",
+          };
+        }
+        if (result.status === "limit-reached") {
+          return {
+            receipt: receipt(locale, "warning", key("sprite_limit_heading"), key("sprite_limit_detail"), {
+              persona: persona.persona_nickname,
+              max_count: PERSONA_SPRITE_LIMITS.MAX_PER_PERSONA,
+            }),
+          };
+        }
+        return { receipt: spriteFailureReceipt(locale, result) };
+      }
+
+      const sprites = await dependencies.loadPersonaSprites(personaId);
+      const target = resolveSpriteAtIndex(sprites, personaId, route.index, route.fp);
+      if (!target) return { receipt: staleReceipt(locale) };
+
+      const result = await dependencies.spriteOperations.editSprite({
+        ...common,
+        currentSpriteKey: target.sprite_key,
+      });
+      if (result.status === "success") {
+        return {
+          receipt: receipt(locale, "success", key("sprite_edited_heading"), key("sprite_edited_detail"), {
+            persona: persona.persona_nickname,
+            sprite: result.spriteName,
+          }),
+          telemetry: "server-config.workspace.persona-sprite.edit",
+        };
+      }
+      if (result.status === "duplicate-name") {
+        return {
+          receipt: receipt(locale, "warning", key("sprite_duplicate_heading"), key("sprite_duplicate_detail"), {
+            sprite: result.spriteName,
+          }),
+        };
+      }
+      if (result.status === "no-changes") {
+        return { receipt: receipt(locale, "info", key("sprite_no_changes_heading"), key("sprite_no_changes_detail")) };
+      }
+      if (result.status === "not-found") return { receipt: staleReceipt(locale) };
+      return { receipt: spriteFailureReceipt(locale, result) };
+    }
+
+    case "sprite-remove-confirm": {
+      const sprites = await dependencies.loadPersonaSprites(personaId);
+      const target = resolveSpriteAtIndex(sprites, personaId, route.index, route.fp);
+      if (!target) return { receipt: staleReceipt(locale) };
+
+      const result = await dependencies.spriteOperations.removeSprite({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        spriteKey: target.sprite_key,
+      });
+      if (result.status === "success") {
+        return {
+          receipt: receipt(locale, "success", key("sprite_removed_heading"), key("sprite_removed_detail"), {
+            persona: persona.persona_nickname,
+            sprite: result.spriteName,
+          }),
+          telemetry: "server-config.workspace.persona-sprite.remove",
+        };
+      }
+      // A concurrent removal already deleted the row, so this is staleness rather than a failure.
+      if (result.status === "not-found") return { receipt: staleReceipt(locale) };
+      return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
+    case "sprite-import-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      const result = await dependencies.spriteOperations.importSprites({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        // Import quota is reserved per actor, matching `/persona sprites import`, while avatar
+        // quota is reserved per workspace.
+        quotaKey: interaction.user.id,
+        attachment:
+          dependencies.takeFileUpload(modal.id, buildConfigModalFieldId(CONFIG_SPRITE_ARCHIVE_FIELD, route.nonce)) ??
+          null,
+      });
+      if (result.status === "success") {
+        return {
+          receipt: receipt(
+            locale,
+            result.failed > 0 ? "warning" : "success",
+            key("sprite_imported_heading"),
+            key("sprite_imported_detail"),
+            {
+              persona: persona.persona_nickname,
+              created_count: result.created,
+              replaced_count: result.replaced,
+              failed_count: result.failed,
+            },
+          ),
+          telemetry: "server-config.workspace.persona-sprite.import",
+        };
+      }
+      if (result.status === "limit-reached") {
+        return {
+          receipt: receipt(locale, "warning", key("sprite_limit_heading"), key("sprite_import_limit_detail"), {
+            persona: persona.persona_nickname,
+            max_count: PERSONA_SPRITE_LIMITS.MAX_PER_PERSONA,
+            current_count: result.currentCount,
+            incoming_count: result.incomingCount,
+          }),
+        };
+      }
+      if (result.status === "invalid-entry-name" || result.status === "invalid-entry-image") {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            key("sprite_archive_invalid_heading"),
+            result.status === "invalid-entry-name"
+              ? key("sprite_archive_entry_name_detail")
+              : key("sprite_archive_entry_image_detail"),
+            { sprite: result.spriteName },
+          ),
+        };
+      }
+      if (result.status === "invalid-archive" || result.status === "invalid-file") {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            key("sprite_archive_invalid_heading"),
+            key("sprite_archive_invalid_detail"),
+          ),
+        };
+      }
+      if (result.status === "file-too-large") {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            key("sprite_archive_invalid_heading"),
+            key("sprite_archive_too_large_detail"),
+            {
+              max_size: IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB,
+            },
+          ),
+        };
+      }
+      return { receipt: spriteFailureReceipt(locale, result) };
     }
 
     case "stm-edit-submit": {
@@ -1889,6 +2199,141 @@ async function runPersonaWrite(
   return null;
 }
 
+/**
+ * Handles every sprite route that is not a repository write: selection, pagination, the removal
+ * confirmation, and Export.
+ *
+ * Export is the reason this cannot fall through to the generic repaint. The panel is deferred
+ * ephemerally like every panel root, so an `editReply` carrying the archive would silently make a
+ * public export private. The archive therefore arrives as its own non-ephemeral `followUp` while
+ * the panel repaints in place.
+ *
+ * @returns `handled` when the route is fully served here, `write` when it must continue to the
+ *   write path.
+ */
+async function handleSpriteNavigation(
+  interaction: GlobalRoutableInteraction,
+  route: ConfigPanelRoute,
+  scope: ConfigScope,
+  persona: TomoriState,
+  selectedPersonaId: number,
+  dependencies: ConfigRouteDependencies,
+  submittedValue: string | null,
+): Promise<"handled" | "write"> {
+  const locale = route.locale;
+  const repaintSprites = (options: {
+    receipt?: PanelReceipt;
+    view?: ConfigPanelView;
+    spritePageStart?: number;
+    selectedSpriteIndex?: number;
+    personaSprites?: PersonaSpriteRow[];
+  }) =>
+    repaint(interaction, {
+      locale,
+      scope,
+      category: "persona",
+      page: "sprites",
+      selectedPersonaId,
+      dependencies,
+      ...options,
+    });
+
+  switch (route.action) {
+    case "sprite-page":
+      await repaintSprites({ spritePageStart: route.start });
+      return "handled";
+
+    case "sprite-select": {
+      const sprites = await dependencies.loadPersonaSprites(selectedPersonaId);
+      const selectedIndex = Number(submittedValue);
+      const inRange = Number.isSafeInteger(selectedIndex) && selectedIndex >= 0 && selectedIndex < sprites.length;
+      await repaintSprites({
+        personaSprites: sprites,
+        selectedSpriteIndex: inRange ? selectedIndex : undefined,
+        spritePageStart: inRange
+          ? Math.floor(selectedIndex / CONFIG_PERSONA_SPRITE_PAGE_SIZE) * CONFIG_PERSONA_SPRITE_PAGE_SIZE
+          : undefined,
+      });
+      return "handled";
+    }
+
+    case "sprite-remove-cancel":
+      await repaintSprites({});
+      return "handled";
+
+    case "sprite-remove-view": {
+      const sprites = await dependencies.loadPersonaSprites(selectedPersonaId);
+      const target = resolveSpriteAtIndex(sprites, selectedPersonaId, route.index, route.fp);
+      if (!target) {
+        await repaintSprites({ personaSprites: sprites, receipt: staleReceipt(locale) });
+        return "handled";
+      }
+      await repaintSprites({
+        personaSprites: sprites,
+        selectedSpriteIndex: route.index,
+        view: {
+          kind: "sprite-remove-confirm",
+          personaId: selectedPersonaId,
+          index: route.index,
+          fp: route.fp,
+          nonce: dependencies.createNonce(),
+        },
+      });
+      return "handled";
+    }
+
+    case "sprite-export": {
+      const result = await dependencies.spriteOperations.exportSprites({ persona });
+      if (result.status !== "success") {
+        await repaintSprites({
+          receipt: receipt(
+            locale,
+            result.status === "memory-critical" ? "error" : "warning",
+            "commands.config.panel.sprite_export_failed_heading",
+            result.status === "no-sprites"
+              ? "commands.config.panel.sprite_export_none_detail"
+              : result.status === "all-images-failed"
+                ? "commands.config.panel.sprite_export_images_failed_detail"
+                : "rate_limit.error_memory_critical_description",
+            { persona: persona.persona_nickname },
+          ),
+        });
+        return "handled";
+      }
+
+      await interaction.followUp({
+        files: [new AttachmentBuilder(result.buffer, { name: result.filename })],
+      });
+      if (scope.internalServerId) {
+        dependencies.recordAction({
+          action: "server-config.workspace.persona-sprite.export",
+          serverId: scope.internalServerId,
+          userDiscId: interaction.user.id,
+        });
+      }
+      await repaintSprites({
+        receipt: receipt(
+          locale,
+          result.skippedCount > 0 ? "warning" : "success",
+          "commands.config.panel.sprite_export_heading",
+          result.skippedCount > 0
+            ? "commands.config.panel.sprite_export_partial_detail"
+            : "commands.config.panel.sprite_export_detail",
+          {
+            persona: persona.persona_nickname,
+            sprite_count: result.spriteCount,
+            skipped_count: result.skippedCount,
+          },
+        ),
+      });
+      return "handled";
+    }
+
+    default:
+      return "write";
+  }
+}
+
 export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDependencies> = {}): GlobalInteractionRoute {
   const dependencies: ConfigRouteDependencies = { ...defaultDependencies, ...overrides };
 
@@ -1907,7 +2352,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "dialogue-select" ||
         route.action === "humanizer-select" ||
         route.action === "text-override-provider-select" ||
-        route.action === "text-override-model-select";
+        route.action === "text-override-model-select" ||
+        route.action === "sprite-select";
       const expectsModal =
         route.action === "avatar-submit" ||
         route.action === "rename-submit" ||
@@ -1923,7 +2369,10 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "image-tags-submit" ||
         route.action === "character-reference-submit" ||
         route.action === "prompt-submit" ||
-        route.action === "context-note-submit";
+        route.action === "context-note-submit" ||
+        route.action === "sprite-add-submit" ||
+        route.action === "sprite-edit-submit" ||
+        route.action === "sprite-import-submit";
 
       if (expectsSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Config ${route.action} route requires a String Select interaction`);
@@ -2017,6 +2466,10 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         category = "persona";
         page = "memories";
       }
+      if (SPRITE_ACTIONS.has(route.action)) {
+        category = "persona";
+        page = "sprites";
+      }
       if (route.action === "page" && selectedValue) {
         const candidate = selectedValue as ConfigPage;
         if (visibleConfigPages(route.category, actor).includes(candidate)) page = candidate;
@@ -2054,6 +2507,19 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
           dependencies,
         });
         return;
+      }
+
+      if (SPRITE_ACTIONS.has(route.action) && persona && selectedPersonaId !== undefined) {
+        const spriteOutcome = await handleSpriteNavigation(
+          interaction,
+          route,
+          scope,
+          persona,
+          selectedPersonaId,
+          dependencies,
+          submittedValue,
+        );
+        if (spriteOutcome === "handled") return;
       }
 
       if (route.action === "humanizer-open" && persona && selectedPersonaId !== undefined) {
