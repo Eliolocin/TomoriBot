@@ -32,6 +32,12 @@ import {
   type PersonalConfigPostDeferContext,
 } from "@/utils/discord/interactions/personalConfigRouteContext";
 
+function readOptionalParameterNumber(modal: ModalSubmitInteraction, fieldId: string): number | null | undefined {
+  if (!modal.fields.fields.has(fieldId)) return undefined;
+  const raw = modal.fields.getTextInputValue(fieldId).trim();
+  return raw ? Number(raw) : null;
+}
+
 export async function handlePersonalConfigModelRoutes(context: PersonalConfigPostDeferContext): Promise<boolean> {
   const { interaction, route, dependencies } = context;
 
@@ -563,21 +569,20 @@ export async function handlePersonalConfigModelRoutes(context: PersonalConfigPos
 
   if (route.action === "parameters-1-submit") {
     const modal = interaction as ModalSubmitInteraction;
-    const tempRaw = modal.fields.getTextInputValue(buildPersonalConfigModalFieldId("temperature", route.nonce)).trim();
-    const minPRaw = modal.fields.getTextInputValue(buildPersonalConfigModalFieldId("min_p", route.nonce)).trim();
-    const topPRaw = modal.fields.getTextInputValue(buildPersonalConfigModalFieldId("top_p", route.nonce)).trim();
-    const topKRaw = modal.fields.getTextInputValue(buildPersonalConfigModalFieldId("top_k", route.nonce)).trim();
-    const freqRaw = modal.fields
-      .getTextInputValue(buildPersonalConfigModalFieldId("frequency_penalty", route.nonce))
-      .trim();
-
-    const patch: Partial<ModelParameterOptions> = {
-      temperature: tempRaw ? Number(tempRaw) : null,
-      min_p: minPRaw ? Number(minPRaw) : null,
-      top_p: topPRaw ? Number(topPRaw) : null,
-      top_k: topKRaw ? Number(topKRaw) : null,
-      frequency_penalty: freqRaw ? Number(freqRaw) : null,
-    };
+    const patch: Partial<ModelParameterOptions> = {};
+    const temperature = readOptionalParameterNumber(modal, buildPersonalConfigModalFieldId("temperature", route.nonce));
+    const minP = readOptionalParameterNumber(modal, buildPersonalConfigModalFieldId("min_p", route.nonce));
+    const topP = readOptionalParameterNumber(modal, buildPersonalConfigModalFieldId("top_p", route.nonce));
+    const topK = readOptionalParameterNumber(modal, buildPersonalConfigModalFieldId("top_k", route.nonce));
+    const frequency = readOptionalParameterNumber(
+      modal,
+      buildPersonalConfigModalFieldId("frequency_penalty", route.nonce),
+    );
+    if (temperature !== undefined) patch.temperature = temperature;
+    if (minP !== undefined) patch.min_p = minP;
+    if (topP !== undefined) patch.top_p = topP;
+    if (topK !== undefined) patch.top_k = topK;
+    if (frequency !== undefined) patch.frequency_penalty = frequency;
 
     const action = await performPanelAction(
       () =>
@@ -653,19 +658,26 @@ export async function handlePersonalConfigModelRoutes(context: PersonalConfigPos
 
   if (route.action === "parameters-2-submit") {
     const modal = interaction as ModalSubmitInteraction;
-    const presRaw = modal.fields
-      .getTextInputValue(buildPersonalConfigModalFieldId("presence_penalty", route.nonce))
-      .trim();
-    const maxTokRaw = modal.fields
-      .getTextInputValue(buildPersonalConfigModalFieldId("max_output_tokens", route.nonce))
-      .trim();
+    const frequency = readOptionalParameterNumber(
+      modal,
+      buildPersonalConfigModalFieldId("frequency_penalty", route.nonce),
+    );
+    const presence = readOptionalParameterNumber(
+      modal,
+      buildPersonalConfigModalFieldId("presence_penalty", route.nonce),
+    );
+    const maxOutput = readOptionalParameterNumber(
+      modal,
+      buildPersonalConfigModalFieldId("max_output_tokens", route.nonce),
+    );
     const thinkRaw = takeRawModalSelectValue(modal.id, buildPersonalConfigModalFieldId("thinking_level", route.nonce));
 
     const patch: Partial<ModelParameterOptions> = {
-      presence_penalty: presRaw ? Number(presRaw) : null,
-      max_output_tokens: maxTokRaw ? Number(maxTokRaw) : null,
       thinking_level: (thinkRaw as ThinkingLevelValue) ?? null,
     };
+    if (frequency !== undefined) patch.frequency_penalty = frequency;
+    if (presence !== undefined) patch.presence_penalty = presence;
+    if (maxOutput !== undefined) patch.max_output_tokens = maxOutput;
 
     const action = await performPanelAction(
       () =>

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { ComponentType } from "discord.js";
-import { PrivacyLevel, type TomoriState, type UserRow } from "@/types/db/schema";
+import { PrivacyLevel, type TomoriState, type UserRow, type UserSavedProviderConfigRow } from "@/types/db/schema";
 import { buildMemoriesPanelPayload } from "@/utils/discord/ui/memoriesPanel";
-import { buildPersonalConfigPanelPayload } from "@/utils/discord/ui/personalConfigPanel";
+import {
+  buildPersonalConfigPanelPayload,
+  type PersonalConfigModelDisplayInfo,
+} from "@/utils/discord/ui/personalConfigPanel";
 import { buildPersonalMemoriesPanelPayload } from "@/utils/discord/ui/personalMemoriesPanel";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
@@ -297,5 +300,68 @@ describe("panel prose width", () => {
 
     expect(collectProseWidthViolations(build(55, "https://cdn.example.invalid/55.png"))).toEqual([]);
     expect(collectProseWidthViolations(build(0, null))).toEqual([]);
+  });
+
+  /**
+   * The Models parameter summary composes each quote row at runtime from a label key and a stored
+   * value, so the static scan above measures the bare label and never the rendered line. This walk
+   * is the only thing holding those composed rows to the body budget, and it keeps covering them
+   * when the summary moves into a shared builder that the `*Panel.ts` scan cannot see.
+   *
+   * The sampler columns are Postgres `real`, so `Math.fround` reproduces what the driver returns
+   * rather than what someone typed. These are the values whose readback is widest inside each
+   * column's own bounds: 0.01 returns as 0.009999999776482582 and -0.03 as -0.029999999329447746,
+   * which put the Generation row at 78 characters if the values reach the panel unformatted. The
+   * two integer columns carry their widest in-range values instead, since they cannot pick up the
+   * artifact.
+   */
+  it("holds the Models parameter summary to 65 characters in every provider state", () => {
+    const user = {
+      user_id: 1,
+      user_disc_id: "user-123",
+      language_pref: "en-US",
+      privacy_level: PrivacyLevel.MINIMAL,
+    } as unknown as UserRow;
+
+    const widestConfig = {
+      provider: "vertexexpress",
+      llm_temperature: Math.fround(0.01),
+      llm_min_p: Math.fround(0.01),
+      llm_top_p: Math.fround(0.01),
+      llm_top_k: 256,
+      llm_frequency_penalty: Math.fround(-0.03),
+      llm_presence_penalty: Math.fround(-0.03),
+      llm_max_output_tokens: 131072,
+      thinking_level: "minimal",
+    } as unknown as UserSavedProviderConfigRow;
+
+    const build = (parametersProviders: string[]) =>
+      buildPersonalConfigPanelPayload({
+        locale: "en-US",
+        category: "models",
+        page: "parameters",
+        user,
+        resolvedNickname: "Jordan",
+        personas: [],
+        guildId: "guild-123",
+        memoryCount: 0,
+        stmCount: 0,
+        readStatus: "fresh",
+        selectedParametersProvider: parametersProviders[0],
+        modelDisplayInfo: {
+          parametersProviders,
+          selectedParametersConfig: parametersProviders.length > 0 ? widestConfig : undefined,
+          fallbacksProviders: [],
+          fallbackSlots: [],
+          randomizerEnabled: false,
+          canEnableRandomizer: false,
+        } as unknown as PersonalConfigModelDisplayInfo,
+      });
+
+    // Zero, one, and several saved providers are three different renderings of this page, and the
+    // longest provider display name is the one that can push a summary row over the budget.
+    expect(collectProseWidthViolations(build([]))).toEqual([]);
+    expect(collectProseWidthViolations(build(["vertexexpress"]))).toEqual([]);
+    expect(collectProseWidthViolations(build(["vertexexpress", "openrouter", "novelai"]))).toEqual([]);
   });
 });

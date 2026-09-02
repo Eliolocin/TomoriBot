@@ -46,6 +46,10 @@ import {
 } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { buildModelRoutingControl, buildProviderPageEntries } from "@/utils/discord/ui/modelRoutingControls";
+import {
+  buildProviderParameterBlock,
+  formatStoredParameterValue,
+} from "@/utils/discord/ui/personalConfigParameterControls";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { localizer } from "@/utils/text/localizer";
@@ -1245,8 +1249,9 @@ ${localizer(locale, "commands.personal.config.models_description")}`,
     } else if (page === "parameters") {
       const selectedProvider = input.selectedParametersProvider ?? input.modelDisplayInfo?.parametersProviders[0] ?? "";
       const config = input.modelDisplayInfo?.selectedParametersConfig;
+      const parameterProviders = input.modelDisplayInfo?.parametersProviders ?? [];
 
-      if (!selectedProvider || !config) {
+      if (parameterProviders.length === 0 || !selectedProvider || !config) {
         components.push({
           type: ComponentType.TextDisplay,
           content: `### ${localizer(locale, "commands.personal.config.parameters_title")}
@@ -1259,45 +1264,26 @@ ${localizer(locale, "commands.personal.config.no_text_providers")}`,
 ${localizer(locale, "commands.personal.config.parameters_description")}`,
         });
 
-        if (input.modelDisplayInfo && input.modelDisplayInfo.parametersProviders.length > 1) {
-          components.push({
-            type: ComponentType.ActionRow,
-            components: [
-              {
-                type: ComponentType.StringSelect,
-                customId: buildPersonalConfigRouteId({
-                  action: "parameters-provider-select",
-                  locale,
-                }),
-                placeholder: safeSelectOptionText(
-                  localizer(locale, "commands.personal.config.provider_select_placeholder"),
-                  100,
-                ),
-                options: input.modelDisplayInfo.parametersProviders.map((p) => ({
-                  value: encodeProviderParam(p),
-                  label: safeSelectOptionText(getProviderDisplayName(p), 100),
-                  default: p.toLowerCase() === selectedProvider.toLowerCase(),
-                })),
-                disabled: writesDisabled,
-              },
-            ],
-          });
-        }
-
         const tempStr =
           config.llm_temperature !== null && config.llm_temperature !== undefined
-            ? String(config.llm_temperature)
+            ? formatStoredParameterValue(config.llm_temperature)
             : "0.7";
-        const minPStr = config.llm_min_p !== null && config.llm_min_p !== undefined ? String(config.llm_min_p) : "0.05";
-        const topPStr = config.llm_top_p !== null && config.llm_top_p !== undefined ? String(config.llm_top_p) : "0.95";
+        const minPStr =
+          config.llm_min_p !== null && config.llm_min_p !== undefined
+            ? formatStoredParameterValue(config.llm_min_p)
+            : "0.05";
+        const topPStr =
+          config.llm_top_p !== null && config.llm_top_p !== undefined
+            ? formatStoredParameterValue(config.llm_top_p)
+            : "0.95";
         const topKStr = config.llm_top_k !== null && config.llm_top_k !== undefined ? String(config.llm_top_k) : "0";
         const freqStr =
           config.llm_frequency_penalty !== null && config.llm_frequency_penalty !== undefined
-            ? String(config.llm_frequency_penalty)
+            ? formatStoredParameterValue(config.llm_frequency_penalty)
             : "0";
         const presStr =
           config.llm_presence_penalty !== null && config.llm_presence_penalty !== undefined
-            ? String(config.llm_presence_penalty)
+            ? formatStoredParameterValue(config.llm_presence_penalty)
             : "0";
         const maxTokStr =
           config.llm_max_output_tokens !== null && config.llm_max_output_tokens !== undefined
@@ -1306,53 +1292,54 @@ ${localizer(locale, "commands.personal.config.parameters_description")}`,
         const thinkStr = config.thinking_level ?? "auto";
 
         components.push(
-          {
-            type: ComponentType.TextDisplay,
-            content: `> ${localizer(locale, "commands.personal.config.provider_label")}: \`${getProviderDisplayName(selectedProvider)}\`
-> ${localizer(locale, "commands.personal.config.param_temperature")}: \`${tempStr}\`
-> ${localizer(locale, "commands.personal.config.param_min_p")}: \`${minPStr}\`
-> ${localizer(locale, "commands.personal.config.param_top_p")}: \`${topPStr}\`
-> ${localizer(locale, "commands.personal.config.param_top_k")}: \`${topKStr}\`
-> ${localizer(locale, "commands.personal.config.param_frequency_penalty")}: \`${freqStr}\``,
-          },
-          {
-            type: ComponentType.ActionRow,
-            components: [
-              {
-                type: ComponentType.Button,
-                style: ButtonStyle.Secondary,
-                customId: buildPersonalConfigRouteId({
-                  action: "parameters-1-open",
-                  locale,
-                  provider: selectedProvider,
-                }),
-                label: localizer(locale, "commands.personal.config.edit_params_1_button"),
-                disabled: writesDisabled,
-              },
-            ],
-          },
-          {
-            type: ComponentType.TextDisplay,
-            content: `> ${localizer(locale, "commands.personal.config.param_presence_penalty")}: \`${presStr}\`
-> ${localizer(locale, "commands.personal.config.param_max_output_tokens")}: \`${maxTokStr}\`
-> ${localizer(locale, "commands.personal.config.param_thinking_level")}: \`${thinkStr}\``,
-          },
-          {
-            type: ComponentType.ActionRow,
-            components: [
-              {
-                type: ComponentType.Button,
-                style: ButtonStyle.Secondary,
-                customId: buildPersonalConfigRouteId({
-                  action: "parameters-2-open",
-                  locale,
-                  provider: selectedProvider,
-                }),
-                label: localizer(locale, "commands.personal.config.edit_params_2_button"),
-                disabled: writesDisabled,
-              },
-            ],
-          },
+          ...buildProviderParameterBlock({
+            providerOptions: parameterProviders.map((provider) => ({
+              value: encodeProviderParam(provider),
+              label: getProviderDisplayName(provider),
+              default: provider.toLowerCase() === selectedProvider.toLowerCase(),
+            })),
+            copy: {
+              providerLabel: localizer(locale, "commands.personal.config.provider_label"),
+              providerSelectPlaceholder: localizer(locale, "commands.personal.config.provider_select_placeholder"),
+              samplingLabel: localizer(locale, "commands.personal.config.sampling_label"),
+              temperatureLabel: localizer(locale, "commands.personal.config.param_temperature"),
+              minPLabel: localizer(locale, "commands.personal.config.param_min_p"),
+              topPLabel: localizer(locale, "commands.personal.config.param_top_p"),
+              topKLabel: localizer(locale, "commands.personal.config.param_top_k"),
+              generationLabel: localizer(locale, "commands.personal.config.generation_label"),
+              frequencyLabel: localizer(locale, "commands.personal.config.param_frequency_penalty"),
+              presenceLabel: localizer(locale, "commands.personal.config.param_presence_penalty"),
+              maxOutputLabel: localizer(locale, "commands.personal.config.param_max_output_tokens"),
+              thinkingLabel: localizer(locale, "commands.personal.config.param_thinking_level"),
+              editSamplingLabel: localizer(locale, "commands.personal.config.edit_params_1_button"),
+              editGenerationLabel: localizer(locale, "commands.personal.config.edit_params_2_button"),
+            },
+            values: {
+              providerDisplayName: getProviderDisplayName(selectedProvider),
+              temperature: tempStr,
+              minP: minPStr,
+              topP: topPStr,
+              topK: topKStr,
+              frequency: freqStr,
+              presence: presStr,
+              maxOutput: maxTokStr,
+              thinking: thinkStr,
+            },
+            routes: {
+              providerSelect: buildPersonalConfigRouteId({ action: "parameters-provider-select", locale }),
+              editSampling: buildPersonalConfigRouteId({
+                action: "parameters-1-open",
+                locale,
+                provider: selectedProvider,
+              }),
+              editGeneration: buildPersonalConfigRouteId({
+                action: "parameters-2-open",
+                locale,
+                provider: selectedProvider,
+              }),
+            },
+            writesDisabled,
+          }),
         );
       }
     } else if (page === "fallbacks") {

@@ -17,6 +17,7 @@ import {
   type PersonalConfigManagedCapability,
 } from "@/utils/discord/personalConfigPanelCatalog";
 import { safeModalLocalizer, safeSelectOptionText } from "@/utils/discord/ui/modals";
+import { formatStoredParameterValue } from "@/utils/discord/ui/personalConfigParameterControls";
 import { formatImageTagsForModalValue, TAGS_MODAL_MAX_LENGTH } from "@/utils/image/tagHelpers";
 import { localizer } from "@/utils/text/localizer";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
@@ -548,7 +549,7 @@ export function buildParameters1Modal(
           required: false,
           value:
             currentConfig?.llm_temperature !== null && currentConfig?.llm_temperature !== undefined
-              ? String(currentConfig.llm_temperature)
+              ? formatStoredParameterValue(currentConfig.llm_temperature)
               : "",
         },
       },
@@ -568,7 +569,7 @@ export function buildParameters1Modal(
           required: false,
           value:
             currentConfig?.llm_min_p !== null && currentConfig?.llm_min_p !== undefined
-              ? String(currentConfig.llm_min_p)
+              ? formatStoredParameterValue(currentConfig.llm_min_p)
               : "",
         },
       },
@@ -588,7 +589,7 @@ export function buildParameters1Modal(
           required: false,
           value:
             currentConfig?.llm_top_p !== null && currentConfig?.llm_top_p !== undefined
-              ? String(currentConfig.llm_top_p)
+              ? formatStoredParameterValue(currentConfig.llm_top_p)
               : "",
         },
       },
@@ -612,6 +613,22 @@ export function buildParameters1Modal(
               : "",
         },
       },
+    ],
+  };
+}
+
+export function buildParameters2Modal(
+  locale: string,
+  nonce: string,
+  provider: string,
+  currentConfig: UserSavedProviderConfigRow | null,
+): { custom_id: string; title: string; components: RawDiscordComponent[] } {
+  const currentThinking = currentConfig?.thinking_level ?? "auto";
+
+  return {
+    custom_id: buildPersonalConfigRouteId({ action: "parameters-2-submit", locale, provider, nonce }),
+    title: safeSelectOptionText(localizer(locale, "commands.personal.config.params_2_modal_title"), 45),
+    components: [
       {
         type: 18,
         label: safeSelectOptionText(
@@ -634,26 +651,10 @@ export function buildParameters1Modal(
           required: false,
           value:
             currentConfig?.llm_frequency_penalty !== null && currentConfig?.llm_frequency_penalty !== undefined
-              ? String(currentConfig.llm_frequency_penalty)
+              ? formatStoredParameterValue(currentConfig.llm_frequency_penalty)
               : "",
         },
       },
-    ],
-  };
-}
-
-export function buildParameters2Modal(
-  locale: string,
-  nonce: string,
-  provider: string,
-  currentConfig: UserSavedProviderConfigRow | null,
-): { custom_id: string; title: string; components: RawDiscordComponent[] } {
-  const currentThinking = currentConfig?.thinking_level ?? "auto";
-
-  return {
-    custom_id: buildPersonalConfigRouteId({ action: "parameters-2-submit", locale, provider, nonce }),
-    title: safeSelectOptionText(localizer(locale, "commands.personal.config.params_2_modal_title"), 45),
-    components: [
       {
         type: 18,
         label: safeSelectOptionText(
@@ -676,7 +677,7 @@ export function buildParameters2Modal(
           required: false,
           value:
             currentConfig?.llm_presence_penalty !== null && currentConfig?.llm_presence_penalty !== undefined
-              ? String(currentConfig.llm_presence_penalty)
+              ? formatStoredParameterValue(currentConfig.llm_presence_penalty)
               : "",
         },
       },

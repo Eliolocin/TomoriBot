@@ -12,7 +12,7 @@ import {
   type ModalSubmitInteraction,
   type TextDisplayComponentData,
 } from "discord.js";
-import { PrivacyLevel, type UserRow, type TomoriState } from "@/types/db/schema";
+import { PrivacyLevel, type UserRow, type TomoriState, type UserSavedProviderConfigRow } from "@/types/db/schema";
 import { createPersonalConfigInteractionRoute } from "@/utils/discord/interactions/personalConfigRoutes";
 import type { PersonalConfigRouteDependencies } from "@/utils/discord/interactions/personalConfigRouteContext";
 import {
@@ -36,13 +36,19 @@ import {
 } from "@/utils/discord/personalConfigPanelCatalog";
 import {
   buildModelSelectModal,
+  buildPersonalConfigModalFieldId,
   buildSpotlightAutoTriggerModal,
   buildSpotlightRemoveModal,
   buildSpotlightSetModal,
   buildSpotlightStep1Modal,
 } from "@/utils/discord/ui/personalConfigModals";
-import { buildPersonalConfigPanelPayload, type PersonalConfigRoutingRow } from "@/utils/discord/ui/personalConfigPanel";
+import {
+  buildPersonalConfigPanelPayload,
+  type PersonalConfigModelDisplayInfo,
+  type PersonalConfigRoutingRow,
+} from "@/utils/discord/ui/personalConfigPanel";
 import type { ThinkingLevelValue } from "@/constants/thinkingLevels";
+import type { ModelParameterOptions } from "@/utils/discord/modelParametersConfigMapping";
 import type { PersonalConfigManagedCapability } from "@/utils/discord/personalConfigPanelCatalog";
 import { parseInteractionRoute, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
@@ -84,7 +90,7 @@ interface ObservedComponent {
   placeholder?: string;
   label?: string;
   disabled?: boolean;
-  options?: Array<{ value?: string; label?: string }>;
+  options?: Array<{ value?: string; label?: string; default?: boolean }>;
 }
 
 function collectComponents(value: unknown): ObservedComponent[] {
@@ -107,6 +113,7 @@ function collectComponents(value: unknown): ObservedComponent[] {
                   return {
                     value: typeof entry.value === "string" ? entry.value : undefined,
                     label: typeof entry.label === "string" ? entry.label : undefined,
+                    default: typeof entry.default === "boolean" ? entry.default : undefined,
                   };
                 })
               : undefined,
@@ -114,6 +121,16 @@ function collectComponents(value: unknown): ObservedComponent[] {
         ]
       : [];
   return [...current, ...Object.values(record).flatMap(collectComponents)];
+}
+
+function makeModalFields(
+  getValue: (fieldId: string) => string,
+  isPresent: (fieldId: string) => boolean = () => true,
+): { fields: { has: (fieldId: string) => boolean }; getTextInputValue: (fieldId: string) => string } {
+  return {
+    fields: { has: isPresent },
+    getTextInputValue: getValue,
+  };
 }
 
 function makeUser(overrides: Partial<UserRow> = {}): UserRow {
@@ -146,6 +163,20 @@ function makePersona(id: number, lineageId: number, name: string): TomoriState {
     is_alter: false,
     is_active: true,
   } as unknown as TomoriState;
+}
+
+function makeParameterConfig(provider: string): UserSavedProviderConfigRow {
+  return {
+    provider,
+    llm_temperature: 0.7,
+    llm_min_p: 0.05,
+    llm_top_p: 0.95,
+    llm_top_k: 0,
+    llm_frequency_penalty: 0,
+    llm_presence_penalty: 0,
+    llm_max_output_tokens: 4096,
+    thinking_level: "auto",
+  } as unknown as UserSavedProviderConfigRow;
 }
 
 function makeDependencies(
@@ -2141,22 +2172,156 @@ describe("Models interaction routing and telemetry", () => {
         deferred = true;
       },
       editReply: async () => {},
-      fields: {
-        getTextInputValue: (fieldId: string) => {
-          if (fieldId.startsWith("temperature_")) return "0.8";
-          if (fieldId.startsWith("min_p_")) return "0.1";
-          if (fieldId.startsWith("top_p_")) return "0.9";
-          if (fieldId.startsWith("top_k_")) return "40";
-          if (fieldId.startsWith("frequency_penalty_")) return "0.2";
-          return "";
-        },
-      },
+      fields: makeModalFields((fieldId: string) => {
+        if (fieldId.startsWith("temperature_")) return "0.8";
+        if (fieldId.startsWith("min_p_")) return "0.1";
+        if (fieldId.startsWith("top_p_")) return "0.9";
+        if (fieldId.startsWith("top_k_")) return "40";
+        if (fieldId.startsWith("frequency_penalty_")) return "0.2";
+        return "";
+      }),
     } as unknown as ModalSubmitInteraction;
 
     await route.execute({} as Client, interaction, requireRoute(customId));
 
     expect(calls.some((c) => c.startsWith("setParameters:openrouter:"))).toBe(true);
     expect(telemetry).toContain("personal-config.personal.parameters.set");
+  });
+
+  it("accepts new and legacy parameter modal field groups through the real routes", async () => {
+    const patches: Partial<ModelParameterOptions>[] = [];
+    const { dependencies } = makeDependencies([], {
+      operations: {
+        ...personalConfigOperations,
+        setParameters: async (input) => {
+          patches.push(input.patch);
+          return { status: "success" };
+        },
+      },
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const nonce = "nonce123456";
+    const fieldId = (field: string) => buildPersonalConfigModalFieldId(field, nonce);
+    const modalModule = await import("@/utils/discord/ui/modals");
+    const thinkingSpy = spyOn(modalModule, "takeRawModalSelectValue").mockReturnValue("auto");
+
+    const submit = async (
+      action: "parameters-1-submit" | "parameters-2-submit",
+      id: string,
+      values: Record<string, string>,
+      presentFields: string[],
+    ) => {
+      const customId = buildPersonalConfigRouteId({ action, locale: "en-US", provider: "openrouter", nonce });
+      let deferred = false;
+      const interaction = {
+        id,
+        isButton: () => false,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => true,
+        customId,
+        user: { id: "user-123", username: "tester", displayName: "Tester" },
+        guildId: "guild-123",
+        get deferred() {
+          return deferred;
+        },
+        get replied() {
+          return false;
+        },
+        deferUpdate: async () => {
+          deferred = true;
+        },
+        editReply: async () => {},
+        fields: makeModalFields(
+          (submittedFieldId) => values[submittedFieldId] ?? "",
+          (submittedFieldId) => presentFields.includes(submittedFieldId),
+        ),
+      } as unknown as ModalSubmitInteraction;
+
+      await route.execute({} as Client, interaction, requireRoute(customId));
+      expect(deferred).toBe(true);
+    };
+
+    try {
+      await submit(
+        "parameters-1-submit",
+        "sampling-new",
+        {
+          [fieldId("temperature")]: "0.8",
+          [fieldId("min_p")]: "0.1",
+          [fieldId("top_p")]: "0.9",
+          [fieldId("top_k")]: "40",
+        },
+        [fieldId("temperature"), fieldId("min_p"), fieldId("top_p"), fieldId("top_k")],
+      );
+      expect(patches[0]).toEqual({ temperature: 0.8, min_p: 0.1, top_p: 0.9, top_k: 40 });
+
+      await submit(
+        "parameters-1-submit",
+        "sampling-legacy",
+        {
+          [fieldId("temperature")]: "0.8",
+          [fieldId("min_p")]: "0.1",
+          [fieldId("top_p")]: "0.9",
+          [fieldId("top_k")]: "40",
+          [fieldId("frequency_penalty")]: "0.2",
+        },
+        [fieldId("temperature"), fieldId("min_p"), fieldId("top_p"), fieldId("top_k"), fieldId("frequency_penalty")],
+      );
+      expect(patches[1]).toEqual({
+        temperature: 0.8,
+        min_p: 0.1,
+        top_p: 0.9,
+        top_k: 40,
+        frequency_penalty: 0.2,
+      });
+
+      await submit(
+        "parameters-2-submit",
+        "generation-new",
+        {
+          [fieldId("frequency_penalty")]: "0.4",
+          [fieldId("presence_penalty")]: "0.1",
+          [fieldId("max_output_tokens")]: "2048",
+        },
+        [fieldId("frequency_penalty"), fieldId("presence_penalty"), fieldId("max_output_tokens")],
+      );
+      expect(patches[2]).toEqual({
+        frequency_penalty: 0.4,
+        presence_penalty: 0.1,
+        max_output_tokens: 2048,
+        thinking_level: "auto",
+      });
+
+      await submit(
+        "parameters-2-submit",
+        "generation-legacy",
+        {
+          [fieldId("presence_penalty")]: "0.1",
+          [fieldId("max_output_tokens")]: "2048",
+        },
+        [fieldId("presence_penalty"), fieldId("max_output_tokens")],
+      );
+      expect(patches[3]).toEqual({ presence_penalty: 0.1, max_output_tokens: 2048, thinking_level: "auto" });
+
+      await submit(
+        "parameters-2-submit",
+        "generation-empty-frequency",
+        {
+          [fieldId("frequency_penalty")]: "",
+          [fieldId("presence_penalty")]: "0.1",
+          [fieldId("max_output_tokens")]: "2048",
+        },
+        [fieldId("frequency_penalty"), fieldId("presence_penalty"), fieldId("max_output_tokens")],
+      );
+      expect(patches[4]).toEqual({
+        frequency_penalty: null,
+        presence_penalty: 0.1,
+        max_output_tokens: 2048,
+        thinking_level: "auto",
+      });
+    } finally {
+      thinkingSpy.mockRestore();
+    }
   });
 
   it("fallbacks-submit records personal-config.personal.fallbacks.set telemetry", async () => {
@@ -2314,7 +2479,7 @@ describe("Models panel rendering", () => {
     expect(quickToggleAt).toBeGreaterThan(hintAt);
   });
 
-  it("renders Parameters page with 8 parameter rows and split 1-5 and 6-8 edit buttons", () => {
+  it("renders Parameters page with grouped summaries and semantic edit buttons", () => {
     const user = makeUser();
     const payload = buildPersonalConfigPanelPayload({
       locale: "en-US",
@@ -2376,12 +2541,89 @@ describe("Models panel rendering", () => {
     expect(payloadJson).toContain("Min P");
     expect(payloadJson).toContain("Top P");
     expect(payloadJson).toContain("Top K");
-    expect(payloadJson).toContain("Frequency penalty");
-    expect(payloadJson).toContain("Presence penalty");
-    expect(payloadJson).toContain("Maximum output tokens");
-    expect(payloadJson).toContain("Thinking level");
-    expect(payloadJson).toContain("Edit Parameters 1-5");
-    expect(payloadJson).toContain("Edit Parameters 6-8");
+    expect(payloadJson).toContain("Sampling: Temperature");
+    expect(payloadJson).toContain("Top P");
+    expect(payloadJson).toContain("Generation: Frequency");
+    expect(payloadJson).toContain("Presence");
+    expect(payloadJson).toContain("Max output");
+    expect(payloadJson).toContain("Thinking");
+    expect(payloadJson).toContain("Edit Sampling");
+    expect(payloadJson).toContain("Edit Generation");
+    expect(payloadJson).not.toContain("Edit Parameters 1-5");
+    expect(payloadJson).not.toContain("Edit Parameters 6-8");
+    expect(payloadJson).not.toContain("Stop Strings");
+    expect(payloadJson).not.toContain("Logit Bias");
+
+    const components = collectComponents(payload);
+    const editorButtons = components.filter(
+      (component) =>
+        component.customId?.includes(":parameters-1-open:") || component.customId?.includes(":parameters-2-open:"),
+    );
+    expect(editorButtons.map((component) => component.customId)).toEqual([
+      "personal-config:v2:parameters-1-open:en-US:openrouter",
+      "personal-config:v2:parameters-2-open:en-US:openrouter",
+    ]);
+  });
+
+  it("renders distinct zero, one, and several-provider parameter states", () => {
+    const build = (parametersProviders: string[], readStatus: "fresh" | "stale" = "fresh") =>
+      buildPersonalConfigPanelPayload({
+        locale: "en-US",
+        category: "models",
+        page: "parameters",
+        user: makeUser(),
+        resolvedNickname: "Tester",
+        personas: [],
+        guildId: "guild-123",
+        memoryCount: 0,
+        stmCount: 0,
+        readStatus,
+        selectedParametersProvider: parametersProviders[0],
+        modelDisplayInfo: {
+          parametersProviders,
+          selectedParametersConfig: parametersProviders[0] ? makeParameterConfig(parametersProviders[0]) : undefined,
+          fallbacksProviders: [],
+          fallbackSlots: [],
+          randomizerEnabled: false,
+          canEnableRandomizer: false,
+        } as unknown as PersonalConfigModelDisplayInfo,
+      });
+
+    const zeroPayload = build([]);
+    const zeroJson = JSON.stringify(zeroPayload);
+    expect(zeroJson).toContain("No saved personal text providers found.");
+    expect(zeroJson).not.toContain(":parameters-provider-select:");
+    expect(zeroJson).not.toContain(":parameters-1-open:");
+    expect(zeroJson).not.toContain(":parameters-2-open:");
+
+    const onePayload = build(["openrouter"]);
+    const oneJson = JSON.stringify(onePayload);
+    expect(oneJson).toContain("> Provider: `OpenRouter`");
+    expect(oneJson).not.toContain(":parameters-provider-select:");
+    expect(oneJson).toContain(":parameters-1-open:");
+    expect(oneJson).toContain(":parameters-2-open:");
+
+    const severalPayload = build(["openrouter", "novelai"]);
+    const severalComponents = collectComponents(severalPayload);
+    const severalJson = JSON.stringify(severalPayload);
+    const providerSelect = severalComponents.find((component) =>
+      component.customId?.includes(":parameters-provider-select:"),
+    );
+    expect(providerSelect?.options?.map((option) => option.value)).toEqual(["openrouter", "novelai"]);
+    expect(providerSelect?.options?.map((option) => option.default)).toEqual([true, false]);
+    expect(severalJson).not.toContain("> Provider: `OpenRouter`");
+
+    const staleComponents = collectComponents(build(["openrouter", "novelai"], "stale"));
+    const staleProviderSelect = staleComponents.find((component) =>
+      component.customId?.includes(":parameters-provider-select:"),
+    );
+    const staleEditors = staleComponents.filter(
+      (component) =>
+        component.customId?.includes(":parameters-1-open:") || component.customId?.includes(":parameters-2-open:"),
+    );
+    expect(staleProviderSelect?.disabled).toBe(true);
+    expect(staleEditors.map((component) => component.disabled)).toEqual([true, true]);
+    expect(JSON.stringify(build(["openrouter"], "stale"))).toContain("Max output");
   });
 
   it("renders Fallbacks page with primary model, 5 ordered slots, and Randomizer toggle button", () => {
@@ -7020,12 +7262,11 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
       editReply: async (payload: unknown) => {
         capturedPayload = payload;
       },
-      fields: {
-        getTextInputValue: (fieldId: string) => {
-          if (fieldId.startsWith("temperature_")) return "0.7";
-          return "";
-        },
-      },
+      fields: makeModalFields(
+        (fieldId: string) => (fieldId.startsWith("temperature_") ? "0.7" : ""),
+        (fieldId: string) =>
+          ["temperature_", "min_p_", "top_p_", "top_k_"].some((prefix) => fieldId.startsWith(prefix)),
+      ),
     } as unknown as ModalSubmitInteraction;
 
     await route.execute({} as Client, interaction, requireRoute(customId));
