@@ -38,6 +38,13 @@ export type ConfigPersonaCollectionAction =
   | "dialogue-edit"
   | "dialogue-remove";
 export type ConfigPersonaMemoriesAction = "server-memory-open" | "personal-memory-open" | "stm-edit" | "conditioning";
+export type ConfigPersonaAdvancedAction =
+  | "image-tags"
+  | "character-reference"
+  | "prompt"
+  | "context-note"
+  | "humanizer"
+  | "text-override";
 
 /**
  * Derives the acting workspace identity from the interaction alone.
@@ -187,6 +194,25 @@ export function resolvePersonaMemoriesActionState(
   return actor.workspaceKind === "guild" && actor.isManager ? "enabled" : "omitted";
 }
 
+/**
+ * Per-action policy for Persona > Advanced, re-derived from the four commands these actions absorb.
+ * The gates are not uniform: `/persona image-tags` and the `persona` target of
+ * `/novelai character-reference` require a guild, while `/persona prompt set|remove` gate on Manage
+ * Guild only inside `if (interaction.guild)`, so a DM workspace owner may write. `/config humanizer`,
+ * `/config context-note set`, and `/model text` carry no handler gate at all, so the route is their
+ * only gate once the bare root drops its registration default.
+ */
+export function resolvePersonaAdvancedActionState(
+  action: ConfigPersonaAdvancedAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") {
+    return action === "image-tags" || action === "character-reference" ? "omitted" : "enabled";
+  }
+  if (actor.isManager) return "enabled";
+  return "omitted";
+}
+
 const PERSONA_GENERAL_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPersonaGeneralAction>> = {
   "avatar-open": "avatar",
   "avatar-submit": "avatar",
@@ -230,6 +256,30 @@ const PERSONA_MEMORIES_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"
   "conditioning-submit": "conditioning",
 };
 
+export const PERSONA_ADVANCED_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigPersonaAdvancedAction>
+> = {
+  "image-tags-open": "image-tags",
+  "image-tags-submit": "image-tags",
+  "character-reference-open": "character-reference",
+  "character-reference-submit": "character-reference",
+  "character-reference-clear-view": "character-reference",
+  "character-reference-clear-confirm": "character-reference",
+  "character-reference-clear-cancel": "character-reference",
+  "prompt-open": "prompt",
+  "prompt-submit": "prompt",
+  "prompt-remove": "prompt",
+  "context-note-open": "context-note",
+  "context-note-submit": "context-note",
+  "humanizer-open": "humanizer",
+  "humanizer-select": "humanizer",
+  "text-override-open": "text-override",
+  "text-override-provider-select": "text-override",
+  "text-override-model-select": "text-override",
+  "text-override-model-page": "text-override",
+  "text-override-clear": "text-override",
+};
+
 /**
  * The authorization gate every route and modal submit re-runs. Rendering a control is never the
  * gate: a custom ID that was legitimately issued to a manager can be replayed by any member who can
@@ -250,6 +300,12 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   const memoriesAction = PERSONA_MEMORIES_ACTION_BY_ROUTE[route.action];
   if (memoriesAction) {
     return resolvePersonaMemoriesActionState(memoriesAction, actor) === "enabled";
+  }
+
+  const advancedAction = PERSONA_ADVANCED_ACTION_BY_ROUTE[route.action];
+  if (advancedAction) {
+    if (resolveConfigPageState("persona", "advanced", actor) === "omitted") return false;
+    return resolvePersonaAdvancedActionState(advancedAction, actor) === "enabled";
   }
 
   switch (route.action) {

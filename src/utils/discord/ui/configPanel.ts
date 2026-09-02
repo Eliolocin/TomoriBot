@@ -10,7 +10,7 @@ import {
   type TextDisplayComponentData,
   type TopLevelComponentData,
 } from "discord.js";
-import type { TomoriState } from "@/types/db/schema";
+import type { LlmRow, TomoriState } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import {
@@ -28,6 +28,7 @@ import {
 } from "@/utils/discord/configPanelCatalog";
 import {
   resolveConfigPageState,
+  resolvePersonaAdvancedActionState,
   resolvePersonaMemoriesActionState,
   resolvePersonaCollectionActionState,
   resolvePersonaGeneralActionState,
@@ -35,6 +36,12 @@ import {
   visibleConfigPages,
   type ConfigActor,
 } from "@/utils/discord/interactions/configPermissionPolicy";
+import {
+  createHumanizerOptions,
+  getHumanizerLabel,
+  HUMANIZER_DEFAULT,
+  HUMANIZER_INHERIT_VALUE,
+} from "@/utils/discord/humanizerOptions";
 import type { ConfigPersonaMemoryView } from "@/utils/discord/interactions/configRouteContext";
 import {
   buildCategoryButtonRow,
@@ -49,13 +56,26 @@ import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import { localizer } from "@/utils/text/localizer";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
 import { buildSlugMap } from "@/utils/text/slugifyLabel";
+import { buildTextPreview } from "@/utils/text/textPreview";
 
 export interface ConfigPanelPayload {
   components: TopLevelComponentData[];
   flags: MessageFlags.IsComponentsV2;
 }
 
-export type ConfigPanelView = { kind: "main" } | { kind: "promote-confirm"; personaId: number; nonce: string };
+export type ConfigPanelView =
+  | { kind: "main" }
+  | { kind: "promote-confirm"; personaId: number; nonce: string }
+  | { kind: "character-reference-clear-confirm"; personaId: number; nonce: string }
+  | { kind: "humanizer-editor"; personaId: number }
+  | { kind: "text-override-provider"; personaId: number; providers: string[] }
+  | {
+      kind: "text-override-model";
+      personaId: number;
+      provider: string;
+      models: LlmRow[];
+      start: number;
+    };
 
 const ADDRESSING_STYLES: readonly AddressingStyle[] = ["masculine", "feminine", "neutral"];
 
@@ -130,6 +150,7 @@ export interface ConfigPanelRenderInput {
   receipt?: PanelReceipt;
   view?: ConfigPanelView;
   personaMemoryView?: ConfigPersonaMemoryView;
+  serverHumanizerDegree?: number | null;
 }
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): ConfigPanelPayload {
@@ -750,6 +771,374 @@ ${withLinePrefix("> ", describeNamingStyle(locale, persona, namingStyle))}`,
   return components;
 }
 
+function buildPersonaCharacterReferenceClearBody(
+  input: ConfigPanelRenderInput,
+  view: Extract<ConfigPanelView, { kind: "character-reference-clear-confirm" }>,
+): ComponentInContainerData[] {
+  const persona = input.personas.find((candidate) => candidate.persona_id === view.personaId);
+  if (!persona || resolvePersonaAdvancedActionState("character-reference", input.actor) === "omitted") return [];
+  const writesDisabled = input.readStatus !== "fresh";
+  const actionDisabled = writesDisabled || !persona.nai_char_ref_url;
+  return [
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(input.locale, "commands.config.panel.character_reference_clear_title")}
+${localizer(input.locale, "commands.config.panel.character_reference_clear_description", {
+  persona: escapeDiscordMarkdown(persona.persona_nickname),
+})}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Danger,
+          customId: buildConfigRouteId({
+            action: "character-reference-clear-confirm",
+            locale: input.locale,
+            personaId: view.personaId,
+            nonce: view.nonce,
+          }),
+          label: localizer(input.locale, "commands.config.panel.clear_reference_button"),
+          disabled: actionDisabled,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({
+            action: "character-reference-clear-cancel",
+            locale: input.locale,
+            personaId: view.personaId,
+          }),
+          label: localizer(input.locale, "commands.config.panel.cancel_button"),
+        },
+      ],
+    },
+  ];
+}
+
+function renderHumanizerDegree(locale: string, value: number | null | undefined): string {
+  return getHumanizerLabel(locale, value ?? HUMANIZER_DEFAULT);
+}
+
+function buildPersonaAdvancedBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor, personas, selectedPersonaId, readStatus } = input;
+  const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
+  if (!persona) {
+    return [
+      buildOptionalThumbnailSection(
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.config.panel.advanced_title")}
+${localizer(locale, "commands.config.panel.advanced_description")}`,
+        },
+        input.selectedPersonaAvatarUrl,
+      ),
+      { type: ComponentType.TextDisplay, content: localizer(locale, "commands.config.panel.no_personas") },
+    ];
+  }
+
+  const writesDisabled = readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    buildOptionalThumbnailSection(
+      {
+        type: ComponentType.TextDisplay,
+        content: `### ${localizer(locale, "commands.config.panel.advanced_title")}
+${localizer(locale, "commands.config.panel.advanced_description")}`,
+      },
+      input.selectedPersonaAvatarUrl,
+    ),
+  ];
+  const personaId = persona.persona_id as number;
+  const actionState = (action: Parameters<typeof resolvePersonaAdvancedActionState>[0]) =>
+    resolvePersonaAdvancedActionState(action, actor);
+
+  const imageTagsState = actionState("image-tags");
+  if (imageTagsState !== "omitted") {
+    const tags = persona.physical_appearance_tags ?? [];
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: `**${localizer(locale, "commands.config.panel.image_tags_title")}**
+${localizer(locale, "commands.config.panel.image_tags_description")}
+${renderFencedCollectionContent(tags.length > 0 ? tags.join(", ") : localizer(locale, "commands.config.panel.none_label"))}`,
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "image-tags-open", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.edit_image_tags_button"),
+            disabled: writesDisabled || imageTagsState === "disabled",
+          },
+        ],
+      },
+    );
+  }
+
+  const characterReferenceState = actionState("character-reference");
+  if (characterReferenceState !== "omitted") {
+    const reference = persona.nai_char_ref_url
+      ? `\`${escapeDiscordMarkdown(persona.nai_char_ref_url)}\``
+      : localizer(locale, "commands.config.panel.none_label");
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: `**${localizer(locale, "commands.config.panel.character_reference_title")}**
+${localizer(locale, "commands.config.panel.character_reference_description")}
+> ${localizer(locale, "commands.config.panel.character_reference_image_label")}: ${reference}`,
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "character-reference-open", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.upload_reference_button"),
+            disabled: writesDisabled || characterReferenceState === "disabled",
+          },
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Danger,
+            customId: buildConfigRouteId({ action: "character-reference-clear-view", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.clear_reference_button"),
+            disabled: writesDisabled || characterReferenceState === "disabled" || !persona.nai_char_ref_url,
+          },
+        ],
+      },
+    );
+  }
+
+  const promptState = actionState("prompt");
+  if (promptState !== "omitted") {
+    const preview = buildTextPreview(persona.persona_prompt, 3000);
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: `**${localizer(locale, "commands.config.panel.persona_prompt_title")}**
+${localizer(locale, "commands.config.panel.persona_prompt_description")}
+${renderFencedCollectionContent(preview.text || localizer(locale, "commands.config.panel.none_label"))}`,
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "prompt-open", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.set_prompt_button"),
+            disabled: writesDisabled || promptState === "disabled",
+          },
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Danger,
+            customId: buildConfigRouteId({ action: "prompt-remove", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.remove_prompt_button"),
+            disabled: writesDisabled || promptState === "disabled" || !persona.persona_prompt?.trim(),
+          },
+        ],
+      },
+    );
+  }
+
+  const contextState = actionState("context-note");
+  if (contextState !== "omitted") {
+    const note = persona.context_note?.trim() ?? "";
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: `**${localizer(locale, "commands.config.panel.context_note_title")}**
+${localizer(locale, "commands.config.panel.context_note_description")}
+> ${localizer(locale, "commands.config.panel.context_note_depth", {
+          depth: persona.context_note_depth ?? 0,
+        })}
+${renderFencedCollectionContent(note || localizer(locale, "commands.config.panel.none_label"))}`,
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "context-note-open", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.edit_context_note_button"),
+            disabled: writesDisabled || contextState === "disabled",
+          },
+        ],
+      },
+    );
+  }
+
+  const humanizerState = actionState("humanizer");
+  if (humanizerState !== "omitted") {
+    const humanizerValue = persona.humanizer_degree_override ?? null;
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.response_style_title")}**
+${localizer(locale, "commands.config.panel.response_style_description")}
+> ${localizer(locale, "commands.config.panel.persona_override_label")}: ${getHumanizerLabel(locale, humanizerValue)}
+> ${localizer(locale, "commands.config.panel.server_default_label")}: ${renderHumanizerDegree(locale, input.serverHumanizerDegree)}`,
+    });
+    if (input.view?.kind === "humanizer-editor" && input.view.personaId === personaId) {
+      const options = createHumanizerOptions(
+        locale,
+        humanizerValue === null ? HUMANIZER_INHERIT_VALUE : String(humanizerValue),
+        true,
+      ).map((option) => ({
+        label: safeSelectOptionText(option.label, 100),
+        value: option.value,
+        description: safeSelectOptionText(option.description ?? "", 100),
+        default: option.default,
+      }));
+      components.push({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.StringSelect,
+            customId: buildConfigRouteId({ action: "humanizer-select", locale, personaId }),
+            placeholder: localizer(locale, "commands.config.panel.response_style_placeholder"),
+            options,
+            disabled: writesDisabled || humanizerState === "disabled",
+          },
+        ],
+      });
+    } else {
+      components.push({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "humanizer-open", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.edit_humanizer_button"),
+            disabled: writesDisabled || humanizerState === "disabled",
+          },
+        ],
+      });
+    }
+  }
+
+  const textState = actionState("text-override");
+  if (textState !== "omitted") {
+    const override = persona.persona_llm
+      ? `${persona.persona_llm.llm_provider} / ${persona.persona_llm.llm_codename}`
+      : localizer(locale, "commands.config.panel.none_label");
+    const serverModel = persona.llm
+      ? `${persona.llm.llm_provider} / ${persona.llm.llm_codename}`
+      : localizer(locale, "commands.config.panel.none_label");
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.text_override_title")}**
+${localizer(locale, "commands.config.panel.text_override_description")}
+> ${localizer(locale, "commands.config.panel.persona_override_label")}: ${override}
+> ${localizer(locale, "commands.config.panel.server_default_label")}: ${serverModel}`,
+    });
+
+    if (input.view?.kind === "text-override-provider" && input.view.personaId === personaId) {
+      components.push({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.StringSelect,
+            customId: buildConfigRouteId({ action: "text-override-provider-select", locale, personaId }),
+            placeholder: localizer(locale, "commands.config.panel.text_override_provider_placeholder"),
+            options: input.view.providers.map((provider) => ({
+              label: safeSelectOptionText(provider, 100),
+              value: provider,
+            })),
+            disabled: writesDisabled || textState === "disabled",
+          },
+        ],
+      });
+    } else if (input.view?.kind === "text-override-model" && input.view.personaId === personaId) {
+      const pageSize = 25;
+      const pageCount = Math.max(1, Math.ceil(input.view.models.length / pageSize));
+      const pageIndex = Math.min(Math.max(Math.floor(input.view.start / pageSize), 0), pageCount - 1);
+      const start = pageIndex * pageSize;
+      components.push({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.StringSelect,
+            customId: buildConfigRouteId({
+              action: "text-override-model-select",
+              locale,
+              personaId,
+              provider: input.view.provider,
+            }),
+            placeholder: localizer(locale, "commands.config.panel.text_override_model_placeholder"),
+            options: input.view.models.slice(start, start + pageSize).map((model) => ({
+              label: safeSelectOptionText(model.llm_codename, 100),
+              value: model.llm_codename,
+              description: model.llm_description ? safeSelectOptionText(model.llm_description, 100) : undefined,
+              default: model.llm_id === persona.persona_llm?.llm_id,
+            })),
+            disabled: writesDisabled || textState === "disabled",
+          },
+        ],
+      });
+      if (pageCount > 1) {
+        components.push({
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Secondary,
+              customId: buildConfigRouteId({
+                action: "text-override-model-page",
+                locale,
+                personaId,
+                provider: input.view.provider,
+                start: Math.max(0, start - pageSize),
+              }),
+              label: localizer(locale, "commands.config.panel.previous_page"),
+              disabled: writesDisabled || textState === "disabled" || pageIndex === 0,
+            },
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Secondary,
+              customId: buildConfigRouteId({
+                action: "text-override-model-page",
+                locale,
+                personaId,
+                provider: input.view.provider,
+                start: Math.min((pageCount - 1) * pageSize, start + pageSize),
+              }),
+              label: localizer(locale, "commands.config.panel.next_page"),
+              disabled: writesDisabled || textState === "disabled" || pageIndex >= pageCount - 1,
+            },
+          ],
+        });
+      }
+    } else {
+      components.push({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "text-override-open", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.change_override_button"),
+            disabled: writesDisabled || textState === "disabled",
+          },
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "text-override-clear", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.clear_override_button"),
+            disabled: writesDisabled || textState === "disabled" || !persona.persona_llm,
+          },
+        ],
+      });
+    }
+  }
+
+  return components;
+}
+
 function buildPersonaMemoriesBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
   const { locale, actor, personas, selectedPersonaId, readStatus } = input;
   const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
@@ -1014,6 +1403,11 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
     return buildPayload(components, receipt);
   }
 
+  if (input.view && input.view.kind === "character-reference-clear-confirm") {
+    components.push(...buildPersonaCharacterReferenceClearBody(input, input.view));
+    return buildPayload(components, receipt);
+  }
+
   if (category === "persona" && page === "general") {
     components.push(...buildPersonaGeneralBody(input));
     return buildPayload(components, receipt);
@@ -1021,6 +1415,13 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "persona" && page === "memories") {
     components.push(...buildPersonaMemoriesBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "persona" && page === "advanced") {
+    if (resolveConfigPageState(category, page, actor) !== "omitted") {
+      components.push(...buildPersonaAdvancedBody(input));
+    }
     return buildPayload(components, receipt);
   }
 

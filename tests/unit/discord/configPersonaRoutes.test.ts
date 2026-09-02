@@ -13,6 +13,7 @@ import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemo
 import { conditioningMemoryRepository } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import * as shortTermMemoryCache from "@/utils/cache/shortTermMemoryCache";
 import {
+  llmOverrideRepo,
   personalMemoryRepository,
   personaRepository,
   serverMemoryRepository,
@@ -48,6 +49,7 @@ import {
   buildConditioningCheckboxGroupId,
   buildConfigModalFieldId,
   buildTriggerRemoveCheckboxGroupId,
+  CONFIG_PERSONA_PROMPT_PART_FIELDS,
 } from "@/utils/discord/ui/configModals";
 import { loadCommandData } from "@/utils/discord/commandLoader";
 import { initializeLocalizer } from "@/utils/text/localizer";
@@ -312,6 +314,55 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       nonce: "nonce1234567",
     },
   ],
+  ["config:v1:image-tags-open:en-US:55", { action: "image-tags-open", locale: "en-US", personaId: 55 }],
+  [
+    "config:v1:image-tags-submit:en-US:55:nonce1234567",
+    { action: "image-tags-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+  ],
+  ["config:v1:char-ref-open:en-US:55", { action: "character-reference-open", locale: "en-US", personaId: 55 }],
+  [
+    "config:v1:char-ref-submit:en-US:55:nonce1234567",
+    { action: "character-reference-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+  ],
+  [
+    "config:v1:char-ref-clear-view:en-US:55",
+    { action: "character-reference-clear-view", locale: "en-US", personaId: 55 },
+  ],
+  [
+    "config:v1:char-ref-clear-confirm:en-US:55:nonce1234567",
+    { action: "character-reference-clear-confirm", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+  ],
+  [
+    "config:v1:char-ref-clear-cancel:en-US:55",
+    { action: "character-reference-clear-cancel", locale: "en-US", personaId: 55 },
+  ],
+  ["config:v1:prompt-open:en-US:55", { action: "prompt-open", locale: "en-US", personaId: 55 }],
+  [
+    "config:v1:prompt-submit:en-US:55:nonce1234567",
+    { action: "prompt-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+  ],
+  ["config:v1:prompt-remove:en-US:55", { action: "prompt-remove", locale: "en-US", personaId: 55 }],
+  ["config:v1:context-open:en-US:55", { action: "context-note-open", locale: "en-US", personaId: 55 }],
+  [
+    "config:v1:context-submit:en-US:55:nonce1234567",
+    { action: "context-note-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+  ],
+  ["config:v1:humanizer-open:en-US:55", { action: "humanizer-open", locale: "en-US", personaId: 55 }],
+  ["config:v1:humanizer-select:en-US:55", { action: "humanizer-select", locale: "en-US", personaId: 55 }],
+  ["config:v1:text-override-open:en-US:55", { action: "text-override-open", locale: "en-US", personaId: 55 }],
+  [
+    "config:v1:text-override-provider-select:en-US:55",
+    { action: "text-override-provider-select", locale: "en-US", personaId: 55 },
+  ],
+  [
+    "config:v1:text-override-model-select:en-US:55:openrouter",
+    { action: "text-override-model-select", locale: "en-US", personaId: 55, provider: "openrouter" },
+  ],
+  [
+    "config:v1:text-override-model-page:en-US:55:openrouter:25",
+    { action: "text-override-model-page", locale: "en-US", personaId: 55, provider: "openrouter", start: 25 },
+  ],
+  ["config:v1:text-override-clear:en-US:55", { action: "text-override-clear", locale: "en-US", personaId: 55 }],
   ["config:v1:avatar-open:en-US:55", { action: "avatar-open", locale: "en-US", personaId: 55 }],
   [
     "config:v1:avatar-submit:en-US:55:nonce1234567",
@@ -2085,6 +2136,317 @@ describe("config promotion", () => {
 
     expect(promoteCalls).toBe(0);
     expect(JSON.stringify(harness.edits.at(-1))).not.toContain("promote-confirm");
+  });
+});
+
+describe("config Persona Advanced routes", () => {
+  it("round-trips a prompt longer than 4000 characters through four modal parts", async () => {
+    const prompt = `${"a".repeat(4000)}${"b".repeat(4000)}${"c".repeat(4000)}${"d".repeat(25)}`;
+    const persona = makePersona({ persona_id: 55, persona_prompt: null });
+    let interaction: ReturnType<typeof makeInteraction>;
+    let acknowledged = false;
+    let persistedPrompt = "";
+    const harness = makeHarness({
+      personas: [persona],
+      operations: {
+        setPrompt: async (input) => {
+          acknowledged = interaction.deferred || interaction.replied;
+          persistedPrompt = input.prompt;
+          persona.persona_prompt = input.prompt;
+          return { status: "success" };
+        },
+      },
+    });
+    const fields = Object.fromEntries(
+      CONFIG_PERSONA_PROMPT_PART_FIELDS.map((field, index) => [
+        buildConfigModalFieldId(field, "nonce1234567"),
+        prompt.slice(index * 4000, (index + 1) * 4000),
+      ]),
+    );
+    interaction = makeInteraction({
+      customId: buildConfigRouteId({ action: "prompt-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" }),
+      kind: "modal",
+      fields,
+      harness,
+    });
+
+    await dispatch(harness, interaction);
+
+    expect(acknowledged).toBe(true);
+    expect(persistedPrompt).toBe(prompt);
+  });
+
+  it("rechecks prompt eligibility when the prompt vanishes before removal", async () => {
+    const persona = makePersona({ persona_id: 55, persona_prompt: "A prompt" });
+    let removeCalled = false;
+    const harness = makeHarness({
+      personas: [persona],
+      operations: {
+        removePrompt: async () => {
+          removeCalled = true;
+          return { status: "no-prompt" };
+        },
+      },
+    });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "prompt-remove", locale: "en-US", personaId: 55 }),
+        harness,
+      }),
+    );
+
+    expect(removeCalled).toBe(true);
+    expect(JSON.stringify(harness.edits.at(-1))).toContain("No Persona Prompt");
+  });
+
+  it("maps Humanizer Inherit to null and acknowledges before the write", async () => {
+    let interaction: ReturnType<typeof makeInteraction>;
+    let acknowledged = false;
+    let selectedValue: number | null | undefined;
+    const harness = makeHarness({
+      operations: {
+        setHumanizerOverride: async (input) => {
+          acknowledged = interaction.deferred || interaction.replied;
+          selectedValue = input.value;
+          return { status: "success" };
+        },
+      },
+    });
+    interaction = makeInteraction({
+      customId: buildConfigRouteId({ action: "humanizer-select", locale: "en-US", personaId: 55 }),
+      kind: "select",
+      values: ["inherit"],
+      harness,
+    });
+
+    await dispatch(harness, interaction);
+
+    expect(acknowledged).toBe(true);
+    expect(selectedValue).toBeNull();
+  });
+
+  it("reads the raw server humanizer row for the Advanced contrast line", async () => {
+    const persona = makePersona({ persona_id: 55, humanizer_degree_override: 2 });
+    const harness = makeHarness({
+      personas: [persona],
+    });
+    harness.dependencies.loadServerHumanizerDegree = async () => 0;
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "humanizer-open", locale: "en-US", personaId: 55 }),
+        harness,
+      }),
+    );
+
+    expect(JSON.stringify(harness.edits.at(-1))).toContain("> Server default: 0: None");
+    expect(JSON.stringify(harness.edits.at(-1))).toContain("> Persona override: 2: Medium");
+  });
+
+  it("does not write for the moved OpenRouter model and clears through the canonical override operation", async () => {
+    const movedModel = {
+      llm_id: 17,
+      llm_provider: "openrouter",
+      llm_codename: "other-model",
+    } as TomoriState["llm"];
+    let modelWrites = 0;
+    const noWriteHarness = makeHarness({
+      operations: {
+        setTextModelOverride: async () => {
+          modelWrites += 1;
+          return { status: "success" };
+        },
+      },
+    });
+    noWriteHarness.dependencies.loadPersonaTextModels = async () => [movedModel];
+    const interaction = makeInteraction({
+      customId: buildConfigRouteId({
+        action: "text-override-model-select",
+        locale: "en-US",
+        personaId: 55,
+        provider: "openrouter",
+      }),
+      kind: "select",
+      values: ["other-model"],
+      harness: noWriteHarness,
+    });
+
+    await dispatch(noWriteHarness, interaction);
+
+    expect(modelWrites).toBe(0);
+    expect(interaction.deferred).toBe(true);
+
+    let clearInput: unknown;
+    let clearAcknowledged = false;
+    const persona = makePersona({ persona_id: 55, persona_llm: movedModel });
+    const clearHarness = makeHarness({
+      personas: [persona],
+      operations: {
+        setTextModelOverride: async (input) => {
+          clearAcknowledged = clearInteraction.deferred || clearInteraction.replied;
+          clearInput = input;
+          return { status: "success" };
+        },
+      },
+    });
+    let clearInteraction: ReturnType<typeof makeInteraction>;
+    clearInteraction = makeInteraction({
+      customId: buildConfigRouteId({ action: "text-override-clear", locale: "en-US", personaId: 55 }),
+      harness: clearHarness,
+    });
+
+    await dispatch(clearHarness, clearInteraction);
+
+    expect(clearAcknowledged).toBe(true);
+    expect(clearInput).toEqual({ scope: "persona", personaId: 55, llmId: null, serverDiscId: "guild-1" });
+  });
+
+  it("denies every manager-only Advanced write before any repository write", async () => {
+    const imageTagsSpy = spyOn(personaRepository, "setPhysicalAppearanceTags").mockResolvedValue(true);
+    const promptSpy = spyOn(personaRepository, "setPrompt").mockResolvedValue(true);
+    const removePromptSpy = spyOn(personaRepository, "removePrompt").mockResolvedValue(true);
+    const contextSpy = spyOn(personaRepository, "setContextNote").mockResolvedValue(true);
+    const humanizerSpy = spyOn(personaRepository, "setHumanizerOverride").mockResolvedValue(true);
+    const charRefSpy = spyOn(personaRepository, "setNaiCharRef").mockResolvedValue(true);
+    const modelSpy = spyOn(llmOverrideRepo, "setPersonaLlmOverride").mockResolvedValue(true);
+
+    const cases: Array<{
+      route: ConfigPanelRoute;
+      kind?: "modal" | "select" | "button";
+      fields?: Record<string, string>;
+    }> = [
+      {
+        route: { action: "image-tags-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+        kind: "modal",
+        fields: { [buildConfigModalFieldId("image_tags", "nonce1234567")]: "tag" },
+      },
+      {
+        route: { action: "character-reference-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+        kind: "modal",
+      },
+      {
+        route: { action: "character-reference-clear-confirm", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+      },
+      {
+        route: { action: "prompt-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+        kind: "modal",
+        fields: Object.fromEntries(
+          CONFIG_PERSONA_PROMPT_PART_FIELDS.map((field) => [buildConfigModalFieldId(field, "nonce1234567"), "prompt"]),
+        ),
+      },
+      {
+        route: { action: "prompt-remove", locale: "en-US", personaId: 55 },
+      },
+      {
+        route: { action: "context-note-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+        kind: "modal",
+        fields: {
+          [buildConfigModalFieldId("context_note_text", "nonce1234567")]: "note",
+          [buildConfigModalFieldId("context_note_depth", "nonce1234567")]: "1",
+        },
+      },
+      { route: { action: "humanizer-select", locale: "en-US", personaId: 55 }, kind: "select", fields: undefined },
+      { route: { action: "text-override-clear", locale: "en-US", personaId: 55 } },
+    ];
+
+    for (const entry of cases) {
+      const harness = makeHarness({
+        isManager: false,
+        personas: [makePersona({ persona_id: 55, persona_prompt: "prompt" })],
+      });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId(entry.route),
+          kind: entry.kind,
+          fields: entry.fields,
+          isManager: false,
+          harness,
+        }),
+      );
+    }
+
+    expect(imageTagsSpy).not.toHaveBeenCalled();
+    expect(promptSpy).not.toHaveBeenCalled();
+    expect(removePromptSpy).not.toHaveBeenCalled();
+    expect(contextSpy).not.toHaveBeenCalled();
+    expect(humanizerSpy).not.toHaveBeenCalled();
+    expect(charRefSpy).not.toHaveBeenCalled();
+    expect(modelSpy).not.toHaveBeenCalled();
+
+    imageTagsSpy.mockRestore();
+    promptSpy.mockRestore();
+    removePromptSpy.mockRestore();
+    contextSpy.mockRestore();
+    humanizerSpy.mockRestore();
+    charRefSpy.mockRestore();
+    modelSpy.mockRestore();
+  });
+
+  it("denies the guild-only Advanced writes in a DM while the DM-capable ones still land", async () => {
+    const imageTagsSpy = spyOn(personaRepository, "setPhysicalAppearanceTags").mockResolvedValue(true);
+    const charRefSpy = spyOn(personaRepository, "setNaiCharRef").mockResolvedValue(true);
+    const promptSpy = spyOn(personaRepository, "setPrompt").mockResolvedValue(true);
+
+    const guildOnlyCases: Array<{
+      route: ConfigPanelRoute;
+      kind?: "modal" | "button";
+      fields?: Record<string, string>;
+    }> = [
+      {
+        route: { action: "image-tags-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+        kind: "modal",
+        fields: { [buildConfigModalFieldId("image_tags", "nonce1234567")]: "tag" },
+      },
+      {
+        route: { action: "character-reference-clear-confirm", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+      },
+    ];
+
+    for (const entry of guildOnlyCases) {
+      const harness = makeHarness({ inGuild: false, personas: [makePersona({ persona_id: 55 })] });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId(entry.route),
+          kind: entry.kind,
+          fields: entry.fields,
+          inGuild: false,
+          harness,
+        }),
+      );
+    }
+
+    expect(imageTagsSpy).not.toHaveBeenCalled();
+    expect(charRefSpy).not.toHaveBeenCalled();
+
+    // Asserting a write that must still land keeps the denials above meaningful: a route layer that
+    // refused every Advanced action in a DM would satisfy the two negatives on its own.
+    const allowedHarness = makeHarness({ inGuild: false, personas: [makePersona({ persona_id: 55 })] });
+    await dispatch(
+      allowedHarness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "prompt-submit",
+          locale: "en-US",
+          personaId: 55,
+          nonce: "nonce1234567",
+        }),
+        kind: "modal",
+        fields: Object.fromEntries(
+          CONFIG_PERSONA_PROMPT_PART_FIELDS.map((field) => [buildConfigModalFieldId(field, "nonce1234567"), "prompt"]),
+        ),
+        inGuild: false,
+        harness: allowedHarness,
+      }),
+    );
+
+    expect(promptSpy).toHaveBeenCalledTimes(1);
+
+    imageTagsSpy.mockRestore();
+    charRefSpy.mockRestore();
+    promptSpy.mockRestore();
   });
 });
 

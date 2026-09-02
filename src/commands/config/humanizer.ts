@@ -21,7 +21,6 @@ import type {
 } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
-import type { RadioGroupOption } from "@/types/discord/modal";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { configRepository, personaRepository } from "@/utils/db/repositories";
 import { localizer } from "@/utils/text/localizer";
@@ -33,58 +32,18 @@ import {
   runPersonaPickerWorkflow,
   type PersonaWorkflowMessageController,
 } from "@/utils/discord/ui/personaWorkflow";
-
-const HUMANIZER_MIN = 0;
-const HUMANIZER_MAX = 3;
-const HUMANIZER_DEFAULT = 1;
+import {
+  createHumanizerOptions,
+  HUMANIZER_DEFAULT,
+  HUMANIZER_INHERIT_VALUE,
+  HUMANIZER_MAX,
+  HUMANIZER_MIN,
+} from "@/utils/discord/humanizerOptions";
 
 const MODAL_CUSTOM_ID = "config_humanizer_modal";
 const HUMANIZER_SELECT_ID = "humanizer_select";
 
-// Sentinel radio value for the persona-scope "Inherit global" choice (clears the override)
-const INHERIT_VALUE = "inherit";
-
-/**
- * Creates humanizer degree options with localized descriptions.
- * The option matching `selectedValue` is pre-selected when the modal opens.
- * @param selectedValue - Radio value to pre-select ("0"-"3" or "inherit")
- * @param includeInherit - Whether to prepend the persona-scope "Inherit global" choice
- * @returns Array of RadioGroupOption with localized descriptions
- */
-function createHumanizerOptions(locale: string, selectedValue: string, includeInherit: boolean): RadioGroupOption[] {
-  const options: RadioGroupOption[] = [
-    {
-      label: localizer(locale, "commands.config.humanizer.choice_none"),
-      value: "0",
-      description: localizer(locale, "commands.config.humanizer.desc_none"),
-    },
-    {
-      label: localizer(locale, "commands.config.humanizer.choice_light"),
-      value: "1",
-      description: localizer(locale, "commands.config.humanizer.desc_light"),
-    },
-    {
-      label: localizer(locale, "commands.config.humanizer.choice_medium"),
-      value: "2",
-      description: localizer(locale, "commands.config.humanizer.desc_medium"),
-    },
-    {
-      label: localizer(locale, "commands.config.humanizer.choice_heavy"),
-      value: "3",
-      description: localizer(locale, "commands.config.humanizer.desc_heavy"),
-    },
-  ];
-
-  if (includeInherit) {
-    options.unshift({
-      label: localizer(locale, "commands.config.humanizer.choice_inherit"),
-      value: INHERIT_VALUE,
-      description: localizer(locale, "commands.config.humanizer.desc_inherit"),
-    });
-  }
-
-  return options.map((option) => ({ ...option, default: option.value === selectedValue }));
-}
+const INHERIT_VALUE = HUMANIZER_INHERIT_VALUE;
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand

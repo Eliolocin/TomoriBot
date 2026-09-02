@@ -23,6 +23,7 @@ import {
 import {
   buildAboutModal,
   buildAppearanceModal,
+  buildCharacterReferenceModal,
   buildFallbacksModal,
   buildImpersonationModal,
   buildLanguageModal,
@@ -110,6 +111,8 @@ const defaultDependencies: PersonalConfigRouteDependencies = {
     showRoutedRawModal(interaction, buildAboutModal(locale, nonce, current)),
   showAppearanceModal: (interaction, locale, nonce, currentTags) =>
     showRoutedRawModal(interaction, buildAppearanceModal(locale, nonce, currentTags)),
+  showCharacterReferenceModal: (interaction, locale, nonce) =>
+    showRoutedRawModal(interaction, buildCharacterReferenceModal(locale, nonce)),
   showPrivacyLevelModal: (interaction, locale, nonce, currentLevel) =>
     showRoutedRawModal(interaction, buildPrivacyLevelModal(locale, nonce, currentLevel)),
   showQuickToggleModal: (interaction, locale, nonce, savedProviders) =>

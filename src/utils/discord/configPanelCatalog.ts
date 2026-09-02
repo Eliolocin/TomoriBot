@@ -175,6 +175,25 @@ export type ConfigPanelRoute =
   | { action: "stm-edit-submit"; locale: string; personaId: number; nonce: string }
   | { action: "conditioning-open"; locale: string; personaId: number }
   | { action: "conditioning-submit"; locale: string; personaId: number; fp: string; nonce: string }
+  | { action: "image-tags-open"; locale: string; personaId: number }
+  | { action: "image-tags-submit"; locale: string; personaId: number; nonce: string }
+  | { action: "character-reference-open"; locale: string; personaId: number }
+  | { action: "character-reference-submit"; locale: string; personaId: number; nonce: string }
+  | { action: "character-reference-clear-view"; locale: string; personaId: number }
+  | { action: "character-reference-clear-confirm"; locale: string; personaId: number; nonce: string }
+  | { action: "character-reference-clear-cancel"; locale: string; personaId: number }
+  | { action: "prompt-open"; locale: string; personaId: number }
+  | { action: "prompt-submit"; locale: string; personaId: number; nonce: string }
+  | { action: "prompt-remove"; locale: string; personaId: number }
+  | { action: "context-note-open"; locale: string; personaId: number }
+  | { action: "context-note-submit"; locale: string; personaId: number; nonce: string }
+  | { action: "humanizer-open"; locale: string; personaId: number }
+  | { action: "humanizer-select"; locale: string; personaId: number }
+  | { action: "text-override-open"; locale: string; personaId: number }
+  | { action: "text-override-provider-select"; locale: string; personaId: number }
+  | { action: "text-override-model-select"; locale: string; personaId: number; provider: string }
+  | { action: "text-override-model-page"; locale: string; personaId: number; provider: string; start: number }
+  | { action: "text-override-clear"; locale: string; personaId: number }
   | {
       action: "retry" | "refresh";
       locale: string;
@@ -270,6 +289,12 @@ const nonceField: RouteFieldCodec<"nonce", string> = {
   decode: (v) => parseNonce(v),
 };
 
+const providerField: RouteFieldCodec<"provider", string> = {
+  key: "provider",
+  encode: (v) => String(v).replace(/:/g, "~"),
+  decode: (v) => (v ? v.replace(/~/g, ":") : null),
+};
+
 /**
  * Authoritative codec table for every `/config` panel route, keyed by semantic action so a new
  * action is a compile error until it has a wire token.
@@ -319,6 +344,34 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "stm-edit-submit": { wireToken: "stm-edit-submit", fields: [personaIdField, nonceField] },
   "conditioning-open": { wireToken: "conditioning-open", fields: [personaIdField] },
   "conditioning-submit": { wireToken: "conditioning-submit", fields: [personaIdField, fpField, nonceField] },
+  "image-tags-open": { wireToken: "image-tags-open", fields: [personaIdField] },
+  "image-tags-submit": { wireToken: "image-tags-submit", fields: [personaIdField, nonceField] },
+  "character-reference-open": { wireToken: "char-ref-open", fields: [personaIdField] },
+  "character-reference-submit": { wireToken: "char-ref-submit", fields: [personaIdField, nonceField] },
+  "character-reference-clear-view": { wireToken: "char-ref-clear-view", fields: [personaIdField] },
+  "character-reference-clear-confirm": {
+    wireToken: "char-ref-clear-confirm",
+    fields: [personaIdField, nonceField],
+  },
+  "character-reference-clear-cancel": { wireToken: "char-ref-clear-cancel", fields: [personaIdField] },
+  "prompt-open": { wireToken: "prompt-open", fields: [personaIdField] },
+  "prompt-submit": { wireToken: "prompt-submit", fields: [personaIdField, nonceField] },
+  "prompt-remove": { wireToken: "prompt-remove", fields: [personaIdField] },
+  "context-note-open": { wireToken: "context-open", fields: [personaIdField] },
+  "context-note-submit": { wireToken: "context-submit", fields: [personaIdField, nonceField] },
+  "humanizer-open": { wireToken: "humanizer-open", fields: [personaIdField] },
+  "humanizer-select": { wireToken: "humanizer-select", fields: [personaIdField] },
+  "text-override-open": { wireToken: "text-override-open", fields: [personaIdField] },
+  "text-override-provider-select": { wireToken: "text-override-provider-select", fields: [personaIdField] },
+  "text-override-model-select": {
+    wireToken: "text-override-model-select",
+    fields: [personaIdField, providerField],
+  },
+  "text-override-model-page": {
+    wireToken: "text-override-model-page",
+    fields: [personaIdField, providerField, startField],
+  },
+  "text-override-clear": { wireToken: "text-override-clear", fields: [personaIdField] },
   retry: { wireToken: "retry", fields: [categoryField, pageField, optionalPersonaIdField] },
   refresh: { wireToken: "refresh", fields: [categoryField, pageField, optionalPersonaIdField] },
 };

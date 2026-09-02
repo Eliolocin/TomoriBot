@@ -1,4 +1,5 @@
 import { DEFAULT_THINKING_LEVEL, isThinkingLevelValue } from "@/constants/thinkingLevels";
+import type { APIAttachment } from "discord.js";
 import {
   PrivacyLevel,
   type FallbackModelRef,
@@ -37,6 +38,7 @@ import {
   loadUserSavedProvidersForCapability,
   type SavedProviderCapability,
 } from "@/utils/provider/savedProviderConfig";
+import { prepareApiAttachmentForStorage, replaceStoredCharReference } from "@/utils/storage/charRefOperations";
 
 export interface PersonalConfigOperations {
   setLanguage(input: {
@@ -78,6 +80,16 @@ export interface PersonalConfigOperations {
   }): Promise<
     | { status: "success"; tags: string[] }
     | { status: "too-many-tags" | "tag-too-long" | "invalid-tags" | "write-failed" }
+  >;
+  replaceCharacterReference(input: {
+    userId: number;
+    userDiscId: string;
+    previousRef: string | null;
+    attachment: APIAttachment | null;
+  }): Promise<
+    | { status: "success"; cleared: boolean }
+    | { status: "invalid-image"; titleKey: string; descriptionKey: string }
+    | { status: "write-failed" }
   >;
   setPrivacyLevel(input: {
     userId: number;
@@ -260,6 +272,31 @@ export const personalConfigOperations: PersonalConfigOperations = {
     const ok = await userRepository.update(userId, { physical_appearance_tags: validation.tags });
     if (!ok) return { status: "write-failed" };
     return { status: "success", tags: validation.tags };
+  },
+
+  async replaceCharacterReference({ userId, userDiscId, previousRef, attachment }) {
+    let nextBuffer: Buffer | null = null;
+    if (attachment) {
+      const prepared = await prepareApiAttachmentForStorage(attachment);
+      if (!prepared.success) {
+        return {
+          status: "invalid-image",
+          titleKey: prepared.titleKey,
+          descriptionKey: prepared.descriptionKey,
+        };
+      }
+      nextBuffer = prepared.buffer;
+    }
+
+    const ok = await replaceStoredCharReference({
+      entityType: "users",
+      entityId: userDiscId,
+      previousRef,
+      nextBuffer,
+      persistNextRef: async (nextRef) => (await userRepository.update(userId, { nai_char_ref_url: nextRef })) !== null,
+      onPersistSuccess: () => undefined,
+    });
+    return ok ? { status: "success", cleared: !attachment } : { status: "write-failed" };
   },
 
   async setPrivacyLevel({ userId: _userId, userDiscId, level }) {

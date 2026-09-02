@@ -236,6 +236,11 @@ function makeDependencies(
       user.physical_appearance_tags = tags;
       return { status: "success", tags };
     },
+    replaceCharacterReference: async (input) => {
+      calls.push(`replaceCharacterReference:${input.attachment ? "set" : "clear"}`);
+      user.nai_char_ref_url = input.attachment ? "data:image/png;base64,stored" : null;
+      return { status: "success", cleared: !input.attachment };
+    },
     setPrivacyLevel: async (input) => {
       calls.push(`setPrivacyLevel:${input.level}`);
       user.privacy_level = input.level;
@@ -493,6 +498,7 @@ function makeDependencies(
     showPersonaNamingModal: async () => {},
     showAboutModal: async () => {},
     showAppearanceModal: async () => {},
+    showCharacterReferenceModal: async () => {},
     showPrivacyLevelModal: async () => {},
     showQuickToggleModal: async () => {},
     showModelSelectModal: async () => {},
@@ -770,6 +776,8 @@ describe("personalConfigPanelCatalog", () => {
     ["personal-config:v2:naming-open:en-US", { action: "naming-open", locale: "en-US" }],
     ["personal-config:v2:about-open:en-US", { action: "about-open", locale: "en-US" }],
     ["personal-config:v2:appearance-open:en-US", { action: "appearance-open", locale: "en-US" }],
+    ["personal-config:v2:character-reference-open:en-US", { action: "character-reference-open", locale: "en-US" }],
+    ["personal-config:v2:character-reference-clear:en-US", { action: "character-reference-clear", locale: "en-US" }],
     ["personal-config:v2:privacy-level-open:en-US", { action: "privacy-level-open", locale: "en-US" }],
     ["personal-config:v2:crossserver-toggle:en-US", { action: "crossserver-toggle", locale: "en-US" }],
     ["personal-config:v2:crossserver-set:en-US:on", { action: "crossserver-set", locale: "en-US", enabled: true }],
@@ -803,6 +811,10 @@ describe("personalConfigPanelCatalog", () => {
     [
       "personal-config:v2:appearance-submit:en-US:nonce1234567",
       { action: "appearance-submit", locale: "en-US", nonce: "nonce1234567" },
+    ],
+    [
+      "personal-config:v2:character-reference-submit:en-US:nonce1234567",
+      { action: "character-reference-submit", locale: "en-US", nonce: "nonce1234567" },
     ],
     [
       "personal-config:v2:privacy-level-submit:en-US:nonce1234567",
@@ -1202,6 +1214,8 @@ describe("personalConfigPanelCatalog", () => {
       case "naming-open":
       case "about-open":
       case "appearance-open":
+      case "character-reference-open":
+      case "character-reference-clear":
       case "privacy-level-open":
       case "crossserver-toggle":
       case "quick-toggle-open":
@@ -1221,6 +1235,7 @@ describe("personalConfigPanelCatalog", () => {
       case "naming-submit":
       case "about-submit":
       case "appearance-submit":
+      case "character-reference-submit":
       case "privacy-level-submit":
       case "quick-toggle-submit":
       case "impersonation-submit":
@@ -1308,7 +1323,7 @@ describe("personalConfigPanelCatalog", () => {
 
   it("round-trips every action in the codec table", () => {
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(71);
+    expect(actions.length).toBe(74);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, false);
@@ -1344,7 +1359,7 @@ describe("personalConfigPanelCatalog", () => {
     // - page: "response-modes" (14 chars) is the longest PersonalConfigPage.
     // - mode: "follow" (6 chars) is the longest deliberate trigger/tool mode.
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(71);
+    expect(actions.length).toBe(74);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, true);
@@ -1380,15 +1395,15 @@ describe("personalConfigPanelCatalog", () => {
       handlerSources.flatMap((source) => [...source.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1])),
     );
 
-    expect(tableActions.size).toBe(71);
-    expect(handlerActions.size).toBe(71);
+    expect(tableActions.size).toBe(74);
+    expect(handlerActions.size).toBe(74);
     expect([...tableActions].filter((a) => !handlerActions.has(a))).toEqual([]);
     expect([...handlerActions].filter((a) => !tableActions.has(a))).toEqual([]);
   });
 
   it("fails closed when dropping or appending a segment for every action in the table", () => {
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(71);
+    expect(actions.length).toBe(74);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, false);
@@ -2363,6 +2378,104 @@ describe("Models interaction routing and telemetry", () => {
 
     expect(calls.some((c) => c.startsWith("setFallbacks:openrouter:"))).toBe(true);
     expect(telemetry).toContain("personal-config.personal.fallbacks.set");
+  });
+});
+
+describe("personal config Appearance character reference", () => {
+  it("keeps Appearance Tags and adds the character-reference controls without changing their route literals", () => {
+    const payload = buildPersonalConfigPanelPayload({
+      locale: "en-US",
+      category: "profile",
+      page: "appearance",
+      user: makeUser({ nai_char_ref_url: "https://cdn.example.invalid/me.png" }),
+      resolvedNickname: "Tester",
+      personas: [],
+      guildId: "guild-123",
+      memoryCount: 0,
+      stmCount: 0,
+      readStatus: "fresh",
+    });
+
+    const json = JSON.stringify(payload);
+    expect(json).toContain("Edit Appearance Tags");
+    expect(json).toContain("NovelAI Character Reference");
+    expect(json).toContain("personal-config:v2:appearance-open:en-US");
+    expect(json).toContain("personal-config:v2:character-reference-open:en-US");
+    expect(json).toContain("personal-config:v2:character-reference-clear:en-US");
+  });
+
+  it("opens the Me character-reference modal before deferring", async () => {
+    let modalShown = false;
+    let deferred = false;
+    const { dependencies } = makeDependencies([], {
+      showCharacterReferenceModal: async () => {
+        modalShown = true;
+      },
+    });
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigRouteId({ action: "character-reference-open", locale: "en-US" });
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return deferred;
+      },
+      replied: false,
+      deferUpdate: async () => {
+        deferred = true;
+      },
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(modalShown).toBe(true);
+    expect(deferred).toBe(false);
+  });
+
+  it("clears the Me character reference through the receipt path after acknowledgement", async () => {
+    const calls: string[] = [];
+    let deferred = false;
+    let acknowledgedInsideWrite = false;
+    const { dependencies, user } = makeDependencies(calls, {
+      operations: {
+        ...personalConfigOperations,
+        replaceCharacterReference: async (input) => {
+          acknowledgedInsideWrite = deferred;
+          calls.push(`replaceCharacterReference:${input.attachment ? "set" : "clear"}`);
+          user.nai_char_ref_url = null;
+          return { status: "success", cleared: true };
+        },
+      },
+    });
+    user.nai_char_ref_url = "https://cdn.example.invalid/old.png";
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigRouteId({ action: "character-reference-clear", locale: "en-US" });
+    const interaction = {
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      customId,
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      get deferred() {
+        return deferred;
+      },
+      replied: false,
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async () => {},
+    } as unknown as ButtonInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(acknowledgedInsideWrite).toBe(true);
+    expect(calls).toContain("replaceCharacterReference:clear");
+    expect(user.nai_char_ref_url).toBeNull();
   });
 });
 

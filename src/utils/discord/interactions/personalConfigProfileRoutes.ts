@@ -2,7 +2,7 @@ import type { ModalSubmitInteraction } from "discord.js";
 import { PrivacyLevel } from "@/types/db/schema";
 import { performPanelAction } from "@/utils/discord/interactions/panelController";
 import { buildPersonalConfigModalFieldId } from "@/utils/discord/ui/personalConfigModals";
-import { takeRawModalSelectValue } from "@/utils/discord/ui/modals";
+import { takeRawModalFileUpload, takeRawModalSelectValue } from "@/utils/discord/ui/modals";
 import { MAX_TAG_LENGTH, MAX_TAGS } from "@/utils/image/tagHelpers";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { localizer } from "@/utils/text/localizer";
@@ -480,6 +480,82 @@ export async function handlePersonalConfigProfileWrites(context: PersonalConfigP
         tone,
         heading: localizer(route.locale, headingKey),
         detail: localizer(route.locale, detailKey, vars),
+      },
+      dependencies,
+    });
+    return true;
+  }
+
+  if (route.action === "character-reference-submit" || route.action === "character-reference-clear") {
+    const attachment =
+      route.action === "character-reference-submit"
+        ? (takeRawModalFileUpload(
+            (interaction as ModalSubmitInteraction).id,
+            buildPersonalConfigModalFieldId("character_reference", route.nonce),
+          ) ?? null)
+        : null;
+    const action = await performPanelAction(
+      () =>
+        dependencies.operations.replaceCharacterReference({
+          userId: context.scope.userId,
+          userDiscId: context.scope.userDiscId,
+          previousRef: context.scope.user.nai_char_ref_url ?? null,
+          attachment,
+        }),
+      () => dependencies.resolveScope(interaction, true),
+    );
+    const result = action.result;
+    context.scope = action.state ?? context.scope;
+
+    if (result.status === "success") {
+      if (context.scope.internalServerId) {
+        dependencies.recordAction({
+          action: "personal-config.personal.character-reference.set",
+          serverId: context.scope.internalServerId,
+          userDiscId: interaction.user.id,
+        });
+      }
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: context.scope,
+        category: "profile",
+        page: "appearance",
+        panelReceipt: {
+          tone: "success",
+          heading: localizer(
+            route.locale,
+            result.cleared
+              ? "commands.novelai.character-reference.cleared_title"
+              : "commands.novelai.character-reference.success_title",
+          ),
+          detail: localizer(
+            route.locale,
+            result.cleared
+              ? "commands.novelai.character-reference.cleared_me_description"
+              : "commands.novelai.character-reference.success_me_description",
+          ),
+        },
+        dependencies,
+      });
+      return true;
+    }
+
+    const invalidImage = result.status === "invalid-image";
+    await repaint(interaction, {
+      locale: route.locale,
+      scope: context.scope,
+      category: "profile",
+      page: "appearance",
+      panelReceipt: {
+        tone: "error",
+        heading: localizer(
+          route.locale,
+          invalidImage ? result.titleKey : "commands.personal.config.write_failed_heading",
+        ),
+        detail: localizer(
+          route.locale,
+          invalidImage ? result.descriptionKey : "commands.personal.config.write_failed_detail",
+        ),
       },
       dependencies,
     });

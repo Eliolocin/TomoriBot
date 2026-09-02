@@ -1,5 +1,5 @@
 import { TextInputStyle } from "discord.js";
-import type { StmCategoryRow } from "@/types/db/schema";
+import type { StmCategoryRow, TomoriState } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import type { ShortTermMemoryEntry } from "@/utils/cache/shortTermMemoryCache";
@@ -17,7 +17,10 @@ import {
 } from "@/utils/discord/interactions/configPersonaOperations";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
+import { formatImageTagsForModalValue, TAGS_MODAL_MAX_LENGTH } from "@/utils/image/tagHelpers";
+import { CONTEXT_NOTE_MAX_LENGTH } from "@/utils/discord/contextNoteOptions";
 import { splitPromptIntoModalParts } from "@/utils/text/modalPromptParts";
+import { resolvePrefillPrompt } from "@/utils/text/personaPrompt";
 import { localizer } from "@/utils/text/localizer";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
 import { buildSlugMap } from "@/utils/text/slugifyLabel";
@@ -39,6 +42,15 @@ export const CONFIG_DIALOGUE_USER_INPUT_FIELD = "user_input";
 export const CONFIG_DIALOGUE_BOT_INPUT_FIELD = "bot_input";
 export const CONFIG_DIALOGUE_FILE_FIELD = "sampledialogue_file";
 export const CONFIG_STM_CATEGORY_INPUT_PREFIX = "stm_cat_";
+export const CONFIG_CONTEXT_NOTE_DEPTH_FIELD = "context_note_depth";
+export const CONFIG_CONTEXT_NOTE_TEXT_FIELD = "context_note_text";
+export const CONFIG_PERSONA_PROMPT_PART_FIELDS = [
+  "persona_prompt_part1",
+  "persona_prompt_part2",
+  "persona_prompt_part3",
+  "persona_prompt_part4",
+] as const;
+export const CONFIG_CHARACTER_REFERENCE_FILE_FIELD = "character_reference";
 
 const MODAL_TITLE_MAX_LENGTH = 45;
 const MODAL_DESCRIPTION_MAX_LENGTH = 100;
@@ -72,6 +84,147 @@ export function buildPersonaAvatarModal(locale: string, personaId: number, nonce
           min_values: 0,
           max_values: 1,
           required: false,
+        },
+      },
+    ],
+  };
+}
+
+export function buildPersonaImageTagsModal(
+  locale: string,
+  personaId: number,
+  nonce: string,
+  currentTags: string[] | null | undefined,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "image-tags-submit", locale, personaId, nonce }),
+    title: modalTitle(locale, "commands.persona.image-tags.modal_title"),
+    components: [
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.persona.image-tags.tags_input_label"),
+        description: modalDescription(locale, "commands.persona.image-tags.tags_input_description"),
+        component: {
+          type: 4,
+          custom_id: buildConfigModalFieldId("image_tags", nonce),
+          style: TextInputStyle.Paragraph,
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.persona.image-tags.tags_input_placeholder"),
+            MODAL_DESCRIPTION_MAX_LENGTH,
+          ),
+          max_length: TAGS_MODAL_MAX_LENGTH,
+          required: false,
+          value: formatImageTagsForModalValue(currentTags),
+        },
+      },
+    ],
+  };
+}
+
+export function buildPersonaCharacterReferenceModal(locale: string, personaId: number, nonce: string): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "character-reference-submit", locale, personaId, nonce }),
+    title: modalTitle(locale, "commands.config.panel.character_reference_modal_title"),
+    components: [
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.novelai.character-reference.image_description"),
+        component: {
+          type: 19,
+          custom_id: buildConfigModalFieldId(CONFIG_CHARACTER_REFERENCE_FILE_FIELD, nonce),
+          min_values: 0,
+          max_values: 1,
+          required: false,
+        },
+      },
+    ],
+  };
+}
+
+export function buildPersonaPromptModal(locale: string, personaId: number, nonce: string, persona: TomoriState) {
+  const parts = splitPromptIntoModalParts(
+    resolvePrefillPrompt(persona),
+    CONFIG_PERSONA_PROMPT_PART_FIELDS.length,
+    4000,
+  );
+  const labels = [
+    "commands.teach.personaprompt.part1_label",
+    "commands.teach.personaprompt.part2_label",
+    "commands.teach.personaprompt.part3_label",
+    "commands.teach.personaprompt.part4_label",
+  ];
+  const placeholders = [
+    "commands.teach.personaprompt.part1_placeholder",
+    "commands.teach.personaprompt.part2_placeholder",
+    "commands.teach.personaprompt.part3_placeholder",
+    "commands.teach.personaprompt.part4_placeholder",
+  ];
+
+  return {
+    custom_id: buildConfigRouteId({ action: "prompt-submit", locale, personaId, nonce }),
+    title: modalTitle(locale, "commands.teach.personaprompt.modal_title"),
+    components: CONFIG_PERSONA_PROMPT_PART_FIELDS.map((field, index) => ({
+      type: 18 as const,
+      label: modalLabel(locale, labels[index] as string),
+      component: {
+        type: 4,
+        custom_id: buildConfigModalFieldId(field, nonce),
+        style: TextInputStyle.Paragraph,
+        placeholder: safeSelectOptionText(
+          localizer(locale, placeholders[index] as string),
+          MODAL_DESCRIPTION_MAX_LENGTH,
+        ),
+        max_length: 4000,
+        required: false,
+        value: parts[index] || undefined,
+      },
+    })),
+  } satisfies RawModalPayload;
+}
+
+export function buildPersonaContextNoteModal(
+  locale: string,
+  personaId: number,
+  nonce: string,
+  currentNote: string | null | undefined,
+  currentDepth: number | null | undefined,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "context-note-submit", locale, personaId, nonce }),
+    title: modalTitle(locale, "commands.config.context-note.set.modal_title"),
+    components: [
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.config.context-note.set.text_label"),
+        description: modalDescription(locale, "commands.config.context-note.set.text_placeholder"),
+        component: {
+          type: 4,
+          custom_id: buildConfigModalFieldId(CONFIG_CONTEXT_NOTE_TEXT_FIELD, nonce),
+          style: TextInputStyle.Paragraph,
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.config.context-note.set.text_placeholder"),
+            MODAL_DESCRIPTION_MAX_LENGTH,
+          ),
+          max_length: CONTEXT_NOTE_MAX_LENGTH,
+          required: false,
+          value: currentNote ?? undefined,
+        },
+      },
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.config.context-note.set.depth_label"),
+        description: modalDescription(locale, "commands.config.context-note.set.depth_placeholder"),
+        component: {
+          type: 4,
+          custom_id: buildConfigModalFieldId(CONFIG_CONTEXT_NOTE_DEPTH_FIELD, nonce),
+          style: TextInputStyle.Short,
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.config.context-note.set.depth_placeholder"),
+            MODAL_DESCRIPTION_MAX_LENGTH,
+          ),
+          max_length: 3,
+          required: true,
+          value: String(currentDepth ?? 0),
         },
       },
     ],

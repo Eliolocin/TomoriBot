@@ -1,0 +1,2 @@
+export const CONTEXT_NOTE_MAX_LENGTH = 2000;
+export const CONTEXT_NOTE_DEPTH_MAX = 100;

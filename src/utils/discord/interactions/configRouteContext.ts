@@ -6,7 +6,7 @@ import {
   type InteractionReplyOptions,
   type InteractionEditReplyOptions,
 } from "discord.js";
-import type { TomoriState } from "@/types/db/schema";
+import type { LlmRow, TomoriState } from "@/types/db/schema";
 import type { StmCategoryRow } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
@@ -58,6 +58,9 @@ export interface ConfigRouteDependencies {
     scope: ConfigScope,
     persona: TomoriState,
   ): Promise<ConfigPersonaMemoryView>;
+  loadServerHumanizerDegree(serverId: number): Promise<number | null>;
+  loadSavedTextProviders(serverId: number): Promise<Array<{ provider: string }>>;
+  loadPersonaTextModels(provider: string, serverId: number): Promise<LlmRow[]>;
   openServerMemoryPanel(
     interaction: GlobalRoutableInteraction,
     locale: string,
@@ -148,6 +151,7 @@ export interface ConfigRepaintOptions {
   receipt?: PanelReceipt;
   view?: ConfigPanelView;
   personaMemoryView?: ConfigPersonaMemoryView;
+  serverHumanizerDegree?: number | null;
   dependencies: ConfigRouteDependencies;
 }
 
@@ -159,12 +163,16 @@ export async function repaint(
 
   let avatar: PersonaPanelAvatarData | undefined;
   let personaMemoryView = options.personaMemoryView;
+  let serverHumanizerDegree = options.serverHumanizerDegree;
   if (category === "persona") {
     const persona = scope.personas.find((candidate) => candidate.persona_id === selectedPersonaId);
     if (persona) {
       avatar = await dependencies.getPersonaAvatarData(interaction, persona);
       if (page === "memories" && !personaMemoryView) {
         personaMemoryView = await dependencies.loadPersonaMemoryView(interaction, scope, persona);
+      }
+      if (page === "advanced" && serverHumanizerDegree === undefined) {
+        serverHumanizerDegree = await dependencies.loadServerHumanizerDegree(persona.server_id);
       }
     }
   }
@@ -185,6 +193,7 @@ export async function repaint(
         dialoguePageStart: options.dialoguePageStart,
         selectedDialogueIndex: options.selectedDialogueIndex,
         personaMemoryView,
+        serverHumanizerDegree,
         attributeMemteachingEnabled: scope.personas[0]?.config?.attribute_memteaching_enabled === true,
         sampledialogueMemteachingEnabled: scope.personas[0]?.config?.sampledialogue_memteaching_enabled === true,
         namingStyle: options.namingStyle,

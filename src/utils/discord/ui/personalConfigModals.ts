@@ -330,6 +330,33 @@ export function buildAppearanceModal(
   };
 }
 
+export function buildCharacterReferenceModal(
+  locale: string,
+  nonce: string,
+): { custom_id: string; title: string; components: RawDiscordComponent[] } {
+  return {
+    custom_id: buildPersonalConfigRouteId({ action: "character-reference-submit", locale, nonce }),
+    title: safeSelectOptionText(localizer(locale, "commands.personal.config.character_reference_modal_title"), 45),
+    components: [
+      {
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.personal.config.character_reference_label"), 45),
+        description: safeSelectOptionText(
+          localizer(locale, "commands.personal.config.character_reference_modal_description"),
+          100,
+        ),
+        component: {
+          type: 19,
+          custom_id: buildPersonalConfigModalFieldId("character_reference", nonce),
+          min_values: 0,
+          max_values: 1,
+          required: false,
+        },
+      },
+    ],
+  };
+}
+
 export function buildPrivacyLevelModal(
   locale: string,
   nonce: string,

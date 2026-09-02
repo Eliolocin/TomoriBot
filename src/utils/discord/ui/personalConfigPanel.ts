@@ -1041,6 +1041,30 @@ ${localizer(locale, "commands.personal.config.appearance_description")}
             },
           ],
         },
+        {
+          type: ComponentType.TextDisplay,
+          content: `**${localizer(locale, "commands.personal.config.character_reference_label")}**
+> ${localizer(locale, "commands.personal.config.character_reference_image_label")}: ${user.nai_char_ref_url ? `\`${escapeDiscordMarkdown(user.nai_char_ref_url)}\`` : localizer(locale, "commands.personal.config.not_set_label")}`,
+        },
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Secondary,
+              customId: buildPersonalConfigRouteId({ action: "character-reference-open", locale }),
+              label: localizer(locale, "commands.personal.config.upload_character_reference_button"),
+              disabled: writesDisabled,
+            },
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Secondary,
+              customId: buildPersonalConfigRouteId({ action: "character-reference-clear", locale }),
+              label: localizer(locale, "commands.personal.config.clear_character_reference_button"),
+              disabled: writesDisabled || !user.nai_char_ref_url,
+            },
+          ],
+        },
       );
     }
   } else if (category === "privacy") {

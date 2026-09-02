@@ -107,6 +107,7 @@ export interface PersonalConfigRouteDependencies {
     nonce: string,
     currentTags: string[],
   ): Promise<void>;
+  showCharacterReferenceModal(interaction: ButtonInteraction, locale: string, nonce: string): Promise<void>;
   showPrivacyLevelModal(
     interaction: ButtonInteraction,
     locale: string,

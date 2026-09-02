@@ -32,10 +32,9 @@ import {
   completePersonaWorkflow,
   runPersonaPickerWorkflow,
 } from "@/utils/discord/ui/personaWorkflow";
+import { CONTEXT_NOTE_DEPTH_MAX, CONTEXT_NOTE_MAX_LENGTH } from "@/utils/discord/contextNoteOptions";
 
 const MODAL_CUSTOM_ID = "config_context_note_modal";
-const CONTEXT_NOTE_MAX_LENGTH = 2000;
-const CONTEXT_NOTE_DEPTH_MAX = 100;
 
 /**
  * Configure the /config context-note set subcommand metadata.

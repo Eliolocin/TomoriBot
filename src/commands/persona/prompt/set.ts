@@ -1,6 +1,6 @@
 import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
-import type { UserRow, TomoriState } from "@/types/db/schema";
+import type { TomoriState, UserRow } from "@/types/db/schema";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import {
@@ -14,6 +14,7 @@ import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/
 import { personaRepository } from "@/utils/db/repositories";
 import { localizer } from "@/utils/text/localizer";
 import { combineModalPromptParts, splitPromptIntoModalParts } from "@/utils/text/modalPromptParts";
+import { resolvePrefillPrompt } from "@/utils/text/personaPrompt";
 
 const MODAL_CUSTOM_ID = "teach_personaprompt_modal";
 const PERSONA_PROMPT_INPUT_IDS = [
@@ -23,24 +24,6 @@ const PERSONA_PROMPT_INPUT_IDS = [
   "persona_prompt_part4",
 ] as const;
 const PERSONA_PROMPT_PART_MAX_LENGTH = 4000;
-const LEGACY_PERSONA_DESCRIPTION_PREFIX = "{bot}'s Description: ";
-
-function resolvePrefillPrompt(persona: TomoriState): string | null {
-  if (persona.persona_prompt?.trim()) {
-    return persona.persona_prompt.trim();
-  }
-
-  const legacyDescription = persona.attribute_list.find((attribute) =>
-    attribute.startsWith(LEGACY_PERSONA_DESCRIPTION_PREFIX),
-  );
-  if (!legacyDescription) {
-    return null;
-  }
-
-  const extractedDescription = legacyDescription.slice(LEGACY_PERSONA_DESCRIPTION_PREFIX.length).trim();
-  return extractedDescription.length > 0 ? extractedDescription : null;
-}
-
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("set").setDescription(localizer("en-US", "commands.persona.prompt.set.description"));
 

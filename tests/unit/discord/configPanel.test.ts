@@ -39,6 +39,7 @@ interface Observed {
   type: number;
   customId?: string;
   label?: string;
+  style?: number;
   placeholder?: string;
   disabled?: boolean;
   content?: string;
@@ -56,6 +57,7 @@ function walk(value: unknown): Observed[] {
             type: record.type,
             customId: typeof record.customId === "string" ? record.customId : undefined,
             label: typeof record.label === "string" ? record.label : undefined,
+            style: typeof record.style === "number" ? record.style : undefined,
             placeholder: typeof record.placeholder === "string" ? record.placeholder : undefined,
             disabled: typeof record.disabled === "boolean" ? record.disabled : undefined,
             content: typeof record.content === "string" ? record.content : undefined,
@@ -813,5 +815,78 @@ describe("config promote confirmation view", () => {
     ).toBeDefined();
     expect(buttonFor(payload, { action: "promote-cancel", locale: "en-US", personaId: 56 })).toBeDefined();
     expect(buttonFor(payload, { action: "rename-open", locale: "en-US", personaId: 56 })).toBeUndefined();
+  });
+});
+
+describe("config Persona Advanced body", () => {
+  const advancedPersona = makePersona({
+    persona_id: 55,
+    physical_appearance_tags: ["silver hair", "green eyes"],
+    nai_char_ref_url: "data/charreferences/personas/55/old.png",
+    persona_prompt: "A careful archivist.",
+    context_note: "Prefer concise answers.",
+    context_note_depth: 4,
+    humanizer_degree_override: 2,
+    llm: {
+      llm_id: 10,
+      llm_provider: "openrouter",
+      llm_codename: "server-model",
+    },
+    persona_llm: {
+      llm_id: 11,
+      llm_provider: "google",
+      llm_codename: "persona-model",
+    },
+  });
+
+  it("renders all six sections in wireframe order and uses the action routes", () => {
+    const payload = build(GUILD_MANAGER, {
+      page: "advanced",
+      personas: [advancedPersona],
+      selectedPersonaId: 55,
+      serverHumanizerDegree: 0,
+      view: { kind: "humanizer-editor", personaId: 55 },
+    });
+    const seen = walk(payload);
+    const sectionTitles = [
+      "Image Tags",
+      "NovelAI Character Reference",
+      "Persona Prompt",
+      "Context Note",
+      "Response Style",
+      "Text Model Override",
+    ];
+    const titlePositions = sectionTitles.map((title) =>
+      seen.findIndex((component) => component.content?.includes(`**${title}**`)),
+    );
+
+    expect(titlePositions.every((position) => position >= 0)).toBe(true);
+    expect(titlePositions).toEqual([...titlePositions].sort((left, right) => left - right));
+    expect(buttonFor(payload, { action: "image-tags-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(buttonFor(payload, { action: "character-reference-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(
+      buttonFor(payload, { action: "character-reference-clear-view", locale: "en-US", personaId: 55 })?.style,
+    ).toBe(4);
+    expect(buttonFor(payload, { action: "prompt-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(buttonFor(payload, { action: "context-note-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(walk(payload).some((component) => component.customId?.includes(":humanizer-select:"))).toBe(true);
+    expect(buttonFor(payload, { action: "text-override-clear", locale: "en-US", personaId: 55 })?.style).toBe(2);
+    expect(seen.some((component) => component.content?.includes("> Server default: 0: None"))).toBe(true);
+  });
+
+  it("omits guild-only Advanced actions in a DM while retaining the four allowed sections", () => {
+    const payload = build(DM_OWNER, { page: "advanced", personas: [advancedPersona] });
+    expect(buttonFor(payload, { action: "image-tags-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+    expect(buttonFor(payload, { action: "character-reference-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+    expect(buttonFor(payload, { action: "prompt-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(buttonFor(payload, { action: "context-note-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(buttonFor(payload, { action: "humanizer-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(buttonFor(payload, { action: "text-override-open", locale: "en-US", personaId: 55 })).toBeDefined();
+  });
+
+  it("omits the whole Advanced body for a guild member", () => {
+    const payload = build(GUILD_MEMBER, { page: "advanced", personas: [advancedPersona] });
+    expect(walk(payload).some((component) => component.content?.includes("Advanced Persona Settings"))).toBe(false);
+    expect(buttonFor(payload, { action: "prompt-open", locale: "en-US", personaId: 55 })).toBeUndefined();
   });
 });

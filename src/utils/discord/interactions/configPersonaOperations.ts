@@ -1,4 +1,4 @@
-import type { Attachment, APIAttachment } from "discord.js";
+import type { APIAttachment, Attachment } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import {
@@ -12,6 +12,9 @@ import { conditioningMemoryRepository } from "@/utils/db/repositories/Conditioni
 import { personaRepository } from "@/utils/db/repositories";
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
 import { convertToPNG } from "@/utils/image/imageProcessor";
+import { parseAndValidateImageTags } from "@/utils/image/tagHelpers";
+import { CONTEXT_NOTE_DEPTH_MAX } from "@/utils/discord/contextNoteOptions";
+import { HUMANIZER_MAX, HUMANIZER_MIN } from "@/utils/discord/humanizerOptions";
 import {
   getMemoryLimits,
   validateAttribute,
@@ -28,6 +31,12 @@ import {
 } from "@/utils/storage/avatarStorage";
 import { normalizeTriggerWord, parseTriggerWordListInput } from "@/utils/text/triggerWords";
 import { log } from "@/utils/misc/logger";
+import { prepareApiAttachmentForStorage, replaceStoredCharReference } from "@/utils/storage/charRefOperations";
+import { hasPersonaPrompt } from "@/utils/discord/ui/personaEligibility";
+import {
+  setTextModelOverride as persistTextModelOverride,
+  type TextModelOverrideInput,
+} from "@/utils/discord/interactions/textModelOverrideOperations";
 import {
   dedupeCaseInsensitive,
   dedupeSampleDialoguePairs,
@@ -175,6 +184,22 @@ export type ConfigDialogueRepairResult =
   | { status: "repaired"; inputs: string[]; outputs: string[] }
   | { status: "write-failed" };
 
+export type ConfigImageTagsResult =
+  | { status: "success"; tags: string[] }
+  | { status: "empty" | "too-many" | "tag-too-long" | "write-failed" };
+
+export type ConfigPromptSetResult = { status: "success" } | { status: "write-failed" };
+export type ConfigPromptRemoveResult = { status: "success" } | { status: "no-prompt" | "write-failed" };
+export type ConfigContextNoteResult = { status: "success" } | { status: "invalid-depth" | "write-failed" };
+export type ConfigHumanizerResult =
+  | { status: "success" }
+  | { status: "unchanged" }
+  | { status: "invalid-value" | "write-failed" };
+export type ConfigCharacterReferenceResult =
+  | { status: "success"; cleared: boolean }
+  | { status: "invalid-image"; titleKey: string; descriptionKey: string }
+  | { status: "write-failed" };
+
 export interface ConfigPersonaOperations {
   rename(input: {
     persona: TomoriState;
@@ -267,6 +292,26 @@ export interface ConfigPersonaOperations {
     personaLineageId: number;
     groups: Array<Pick<ConditioningGroup, "conditioningType" | "actionKey" | "reasonNormalized">>;
   }): Promise<ConfigConditioningRemoveResult>;
+  setImageTags(input: { persona: TomoriState; serverDiscId: string; rawTags: string }): Promise<ConfigImageTagsResult>;
+  setPrompt(input: { persona: TomoriState; serverDiscId: string; prompt: string }): Promise<ConfigPromptSetResult>;
+  removePrompt(input: { persona: TomoriState; serverDiscId: string }): Promise<ConfigPromptRemoveResult>;
+  setContextNote(input: {
+    persona: TomoriState;
+    serverDiscId: string;
+    rawNote: string;
+    rawDepth: string;
+  }): Promise<ConfigContextNoteResult>;
+  setHumanizerOverride(input: {
+    persona: TomoriState;
+    serverDiscId: string;
+    value: number | null;
+  }): Promise<ConfigHumanizerResult>;
+  replaceCharacterReference(input: {
+    persona: TomoriState;
+    serverDiscId: string;
+    attachment: APIAttachment | null;
+  }): Promise<ConfigCharacterReferenceResult>;
+  setTextModelOverride(input: TextModelOverrideInput): Promise<{ status: "success" | "write-failed" }>;
 }
 
 function updatedNamingMap(
@@ -307,6 +352,109 @@ function validateAvatarImage(
 }
 
 export const configPersonaOperations: ConfigPersonaOperations = {
+  async setImageTags({ persona, serverDiscId, rawTags }) {
+    const personaId = persona.persona_id;
+    if (!personaId) return { status: "write-failed" };
+
+    if (!rawTags.trim()) {
+      const ok = await personaRepository.setPhysicalAppearanceTags(personaId, []);
+      if (!ok) return { status: "write-failed" };
+      invalidateTomoriStateCache(serverDiscId);
+      return { status: "success", tags: [] };
+    }
+
+    const validation = parseAndValidateImageTags(rawTags);
+    if (!validation.isValid) {
+      if (validation.reason === "empty") return { status: "empty" };
+      if (validation.reason === "too_many") return { status: "too-many" };
+      return { status: "tag-too-long" };
+    }
+
+    const ok = await personaRepository.setPhysicalAppearanceTags(personaId, validation.tags);
+    if (!ok) return { status: "write-failed" };
+    invalidateTomoriStateCache(serverDiscId);
+    return { status: "success", tags: validation.tags };
+  },
+
+  async setPrompt({ persona, serverDiscId, prompt }) {
+    const personaId = persona.persona_id;
+    if (!personaId) return { status: "write-failed" };
+    const ok = await personaRepository.setPrompt(personaId, prompt);
+    if (!ok) return { status: "write-failed" };
+    invalidateTomoriStateCache(serverDiscId);
+    return { status: "success" };
+  },
+
+  async removePrompt({ persona, serverDiscId }) {
+    const personaId = persona.persona_id;
+    if (!personaId || !hasPersonaPrompt(persona)) return { status: "no-prompt" };
+    const ok = await personaRepository.removePrompt(personaId);
+    if (!ok) return { status: "write-failed" };
+    invalidateTomoriStateCache(serverDiscId);
+    return { status: "success" };
+  },
+
+  async setContextNote({ persona, serverDiscId, rawNote, rawDepth }) {
+    const personaId = persona.persona_id;
+    if (!personaId) return { status: "write-failed" };
+    const noteToStore = rawNote || null;
+    const parsedDepth = Number.parseInt(rawDepth, 10);
+    if (Number.isNaN(parsedDepth) || parsedDepth < 0 || parsedDepth > CONTEXT_NOTE_DEPTH_MAX) {
+      return { status: "invalid-depth" };
+    }
+    const depthToStore = rawNote ? parsedDepth : 0;
+    const ok = await personaRepository.setContextNote(personaId, noteToStore, depthToStore);
+    if (!ok) return { status: "write-failed" };
+    invalidateTomoriStateCache(serverDiscId);
+    return { status: "success" };
+  },
+
+  async setHumanizerOverride({ persona, serverDiscId, value }) {
+    const personaId = persona.persona_id;
+    if (!personaId) return { status: "write-failed" };
+    if (value !== null && (!Number.isInteger(value) || value < HUMANIZER_MIN || value > HUMANIZER_MAX)) {
+      return { status: "invalid-value" };
+    }
+    if ((persona.humanizer_degree_override ?? null) === value) return { status: "unchanged" };
+    const ok = await personaRepository.setHumanizerOverride(personaId, value);
+    if (!ok) return { status: "write-failed" };
+    invalidateTomoriStateCache(serverDiscId);
+    return { status: "success" };
+  },
+
+  async replaceCharacterReference({ persona, serverDiscId, attachment }) {
+    const personaId = persona.persona_id;
+    if (!personaId) return { status: "write-failed" };
+
+    let nextBuffer: Buffer | null = null;
+    if (attachment) {
+      const prepared = await prepareApiAttachmentForStorage(attachment);
+      if (!prepared.success) {
+        return {
+          status: "invalid-image",
+          titleKey: prepared.titleKey,
+          descriptionKey: prepared.descriptionKey,
+        };
+      }
+      nextBuffer = prepared.buffer;
+    }
+
+    const ok = await replaceStoredCharReference({
+      entityType: "personas",
+      entityId: personaId,
+      previousRef: persona.nai_char_ref_url ?? null,
+      nextBuffer,
+      persistNextRef: (nextRef) => personaRepository.setNaiCharRef(personaId, nextRef),
+      onPersistSuccess: () => invalidateTomoriStateCache(serverDiscId),
+    });
+    return ok ? { status: "success", cleared: !attachment } : { status: "write-failed" };
+  },
+
+  async setTextModelOverride(input) {
+    const ok = await persistTextModelOverride(input);
+    return ok ? { status: "success" } : { status: "write-failed" };
+  },
+
   async rename({ persona, serverDiscId, newNickname, guildIdentity }) {
     const personaId = persona.persona_id;
     if (!personaId) return { status: "write-failed" };

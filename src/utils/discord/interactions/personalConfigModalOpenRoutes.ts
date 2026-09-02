@@ -138,6 +138,21 @@ export async function handlePersonalConfigModalOpen(
     return "handled";
   }
 
+  if (route.action === "character-reference-open") {
+    if (!interaction.isButton()) throw new Error("character-reference-open requires Button interaction");
+    const cachedScope = await dependencies.resolveScope(interaction, false);
+    if (!cachedScope) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.unavailable"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+    const nonce = dependencies.createNonce();
+    await dependencies.showCharacterReferenceModal(interaction, route.locale, nonce);
+    return "handled";
+  }
+
   if (route.action === "privacy-level-open") {
     if (!interaction.isButton()) throw new Error("privacy-level-open requires Button interaction");
     const cachedScope = await dependencies.resolveScope(interaction, false);

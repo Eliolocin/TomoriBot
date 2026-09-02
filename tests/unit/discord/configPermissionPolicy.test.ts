@@ -23,6 +23,7 @@ import {
   resolveConfigCategoryState,
   resolveConfigLanding,
   resolveConfigPageState,
+  resolvePersonaAdvancedActionState,
   resolvePersonaGeneralActionState,
   resolvePersonaMemoriesActionState,
   visibleConfigCategories,
@@ -182,6 +183,37 @@ describe("Persona Memories action policy", () => {
   });
 });
 
+describe("Persona Advanced action policy", () => {
+  const allActions = [
+    "image-tags",
+    "character-reference",
+    "prompt",
+    "context-note",
+    "humanizer",
+    "text-override",
+  ] as const;
+
+  it("allows every Advanced action for a guild manager", () => {
+    for (const action of allActions) {
+      expect(resolvePersonaAdvancedActionState(action, GUILD_MANAGER)).toBe("enabled");
+    }
+  });
+
+  it("keeps prompt, context note, humanizer, and text override available in DMs", () => {
+    for (const action of ["prompt", "context-note", "humanizer", "text-override"] as const) {
+      expect(resolvePersonaAdvancedActionState(action, DM_OWNER)).toBe("enabled");
+    }
+    expect(resolvePersonaAdvancedActionState("image-tags", DM_OWNER)).toBe("omitted");
+    expect(resolvePersonaAdvancedActionState("character-reference", DM_OWNER)).toBe("omitted");
+  });
+
+  it("omits every Advanced action for a guild member", () => {
+    for (const action of allActions) {
+      expect(resolvePersonaAdvancedActionState(action, GUILD_MEMBER)).toBe("omitted");
+    }
+  });
+});
+
 describe("isConfigRouteAuthorized", () => {
   const personaWriteRoutes: ConfigPanelRoute[] = [
     { action: "avatar-open", locale: "en-US", personaId: 5 },
@@ -287,6 +319,25 @@ describe("isConfigRouteAuthorized", () => {
       "stm-edit-submit",
       "conditioning-open",
       "conditioning-submit",
+      "image-tags-open",
+      "image-tags-submit",
+      "character-reference-open",
+      "character-reference-submit",
+      "character-reference-clear-view",
+      "character-reference-clear-confirm",
+      "character-reference-clear-cancel",
+      "prompt-open",
+      "prompt-submit",
+      "prompt-remove",
+      "context-note-open",
+      "context-note-submit",
+      "humanizer-open",
+      "humanizer-select",
+      "text-override-open",
+      "text-override-provider-select",
+      "text-override-model-select",
+      "text-override-model-page",
+      "text-override-clear",
     ]);
 
     const unknownRoute = { action: "not-a-real-action", locale: "en-US" } as unknown as ConfigPanelRoute;

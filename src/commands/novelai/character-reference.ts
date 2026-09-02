@@ -15,24 +15,13 @@ import {
   runPersonaPickerWorkflow,
   type PersonaWorkflowMessageController,
 } from "@/utils/discord/ui/personaWorkflow";
-import { convertToPNG } from "@/utils/image/imageProcessor";
 import { ColorCode, log } from "@/utils/misc/logger";
-import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
-import { safeDownload } from "@/utils/security/safeDownload";
-import { deleteCharRef, uploadCharRef, type CharRefEntityType } from "@/utils/storage/charrefStorage";
+import { prepareAttachmentForStorage, replaceStoredCharReference } from "@/utils/storage/charRefOperations";
 import { localizer } from "@/utils/text/localizer";
 import type { TomoriState, UserRow } from "@/types/db/schema";
 
 const TARGET_ME = "me";
 const TARGET_PERSONA = "persona";
-
-type UploadPreparationResult =
-  | { success: true; buffer: Buffer }
-  | {
-      success: false;
-      titleKey: string;
-      descriptionKey: string;
-    };
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
@@ -51,94 +40,6 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
         .setDescription(localizer("en-US", "commands.novelai.character-reference.image_description"))
         .setRequired(false),
     );
-
-async function prepareAttachmentForStorage(attachment: Attachment): Promise<UploadPreparationResult> {
-  if (!attachment.contentType?.startsWith("image/")) {
-    return {
-      success: false,
-      titleKey: "commands.novelai.character-reference.invalid_image_title",
-      descriptionKey: "commands.novelai.character-reference.invalid_image_description",
-    };
-  }
-
-  let sourceBuffer: Buffer;
-  try {
-    const response = await safeDownload(attachment.url, {
-      maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
-      timeoutMs: 10_000,
-      knownSize: attachment.size,
-    });
-    if (!response.success || !response.buffer) {
-      return {
-        success: false,
-        titleKey: "commands.novelai.character-reference.download_failed_title",
-        descriptionKey: "commands.novelai.character-reference.download_failed_description",
-      };
-    }
-
-    sourceBuffer = response.buffer;
-  } catch (error) {
-    log.warn("Failed to download NovelAI character reference attachment", error);
-    return {
-      success: false,
-      titleKey: "commands.novelai.character-reference.download_failed_title",
-      descriptionKey: "commands.novelai.character-reference.download_failed_description",
-    };
-  }
-
-  try {
-    return {
-      success: true,
-      buffer: await convertToPNG(sourceBuffer),
-    };
-  } catch (error) {
-    log.warn("Failed to convert NovelAI character reference attachment to PNG", error);
-    return {
-      success: false,
-      titleKey: "commands.novelai.character-reference.conversion_failed_title",
-      descriptionKey: "commands.novelai.character-reference.conversion_failed_description",
-    };
-  }
-}
-
-async function replaceStoredCharReference(options: {
-  entityType: CharRefEntityType;
-  entityId: string | number;
-  previousRef: string | null;
-  nextBuffer: Buffer | null;
-  persistNextRef: (nextRef: string | null) => Promise<boolean>;
-  onPersistSuccess: () => void;
-}): Promise<boolean> {
-  let nextRef: string | null = null;
-
-  if (options.nextBuffer) {
-    nextRef = await uploadCharRef({
-      entityType: options.entityType,
-      entityId: options.entityId,
-      buffer: options.nextBuffer,
-    });
-
-    if (!nextRef) {
-      return false;
-    }
-  }
-
-  const persisted = await options.persistNextRef(nextRef);
-  if (!persisted) {
-    if (nextRef) {
-      await deleteCharRef(nextRef);
-    }
-    return false;
-  }
-
-  options.onPersistSuccess();
-
-  if (options.previousRef && options.previousRef !== nextRef) {
-    await deleteCharRef(options.previousRef);
-  }
-
-  return true;
-}
 
 async function handleUserTarget(
   interaction: ChatInputCommandInteraction,

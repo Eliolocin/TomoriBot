@@ -108,6 +108,15 @@ export const PANEL_ACTIONS = [
   "server-config.workspace.persona-dialogue.remove",
   "server-config.workspace.persona-stm.edit",
   "server-config.workspace.persona-conditioning.remove",
+  "server-config.workspace.persona-image-tags.set",
+  "server-config.workspace.persona-character-reference.set",
+  "server-config.workspace.persona-prompt.set",
+  "server-config.workspace.persona-prompt.remove",
+  "server-config.workspace.persona-context-note.set",
+  "server-config.workspace.persona-humanizer.set",
+  "server-config.workspace.persona-text-model.set",
+  "server-config.workspace.persona-text-model.clear",
+  "personal-config.personal.character-reference.set",
 ] as const;
 
 /** Union of all valid panel action metric keys. */

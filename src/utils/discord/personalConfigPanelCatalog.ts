@@ -190,6 +190,9 @@ export type PersonalConfigPanelRoute =
   | { action: "persona-naming-submit"; locale: string; lineageId: number; nonce: string }
   | { action: "appearance-open"; locale: string }
   | { action: "appearance-submit"; locale: string; nonce: string }
+  | { action: "character-reference-open"; locale: string }
+  | { action: "character-reference-submit"; locale: string; nonce: string }
+  | { action: "character-reference-clear"; locale: string }
   | { action: "privacy-level-open"; locale: string }
   | { action: "privacy-level-submit"; locale: string; nonce: string }
   | { action: "crossserver-toggle"; locale: string }
@@ -631,6 +634,18 @@ export const PERSONAL_CONFIG_ROUTE_CODECS: PersonalConfigRouteCodecs = {
   "appearance-submit": {
     wireToken: "appearance-submit",
     fields: [nonceField],
+  },
+  "character-reference-open": {
+    wireToken: "character-reference-open",
+    fields: [],
+  },
+  "character-reference-submit": {
+    wireToken: "character-reference-submit",
+    fields: [nonceField],
+  },
+  "character-reference-clear": {
+    wireToken: "character-reference-clear",
+    fields: [],
   },
   "privacy-level-open": {
     wireToken: "privacy-level-open",

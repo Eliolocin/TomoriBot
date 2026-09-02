@@ -13,7 +13,13 @@ import {
 import { getCachedUserRow } from "@/utils/cache/userCache";
 import { conditioningMemoryRepository } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import { personalMemoryRepository } from "@/utils/db/repositories/PersonalMemoryRepository";
-import { personaRepository, serverMemoryRepository, userRepository } from "@/utils/db/repositories";
+import {
+  configRepository,
+  llmModelRepo,
+  personaRepository,
+  serverMemoryRepository,
+  userRepository,
+} from "@/utils/db/repositories";
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
 import {
   CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
@@ -62,9 +68,13 @@ import {
   buildPersonaAttributeAddModal,
   buildPersonaAttributeEditModal,
   buildPersonaAvatarModal,
+  buildPersonaCharacterReferenceModal,
+  buildPersonaContextNoteModal,
   buildPersonaDialogueAddModal,
   buildPersonaDialogueEditModal,
+  buildPersonaImageTagsModal,
   buildPersonaNamingHabitsModal,
+  buildPersonaPromptModal,
   buildPersonaRenameModal,
   buildPersonaConditioningRemoveModal,
   buildPersonaStmEditModal,
@@ -74,6 +84,10 @@ import {
   CONFIG_ATTRIBUTE_FILE_FIELD,
   CONFIG_ATTRIBUTE_INPUT_FIELD,
   CONFIG_ATTRIBUTE_PUBLIC_FIELD,
+  CONFIG_CHARACTER_REFERENCE_FILE_FIELD,
+  CONFIG_CONTEXT_NOTE_DEPTH_FIELD,
+  CONFIG_CONTEXT_NOTE_TEXT_FIELD,
+  CONFIG_PERSONA_PROMPT_PART_FIELDS,
   CONFIG_DIALOGUE_BOT_INPUT_FIELD,
   CONFIG_DIALOGUE_FILE_FIELD,
   CONFIG_DIALOGUE_USER_INPUT_FIELD,
@@ -81,12 +95,22 @@ import {
 } from "@/utils/discord/ui/configModals";
 import { showRoutedRawModal, takeRawModalCheckboxGroupValues, takeRawModalFileUpload } from "@/utils/discord/ui/modals";
 import { combineModalPromptParts } from "@/utils/text/modalPromptParts";
+import { buildTextPreview, textPreviewFooterKey, textPreviewFooterVars } from "@/utils/text/textPreview";
+import {
+  getHumanizerLabel,
+  HUMANIZER_INHERIT_VALUE,
+  HUMANIZER_MAX,
+  HUMANIZER_MIN,
+} from "@/utils/discord/humanizerOptions";
+import { hasPersonaPrompt } from "@/utils/discord/ui/personaEligibility";
+import { MAX_TAG_LENGTH, MAX_TAGS } from "@/utils/image/tagHelpers";
 import { log } from "@/utils/misc/logger";
 import { recordPanelActionStat } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
 import { buildSlugMap } from "@/utils/text/slugifyLabel";
 import { buildInitialMemoriesPanel } from "@/utils/discord/interactions/memoriesRoutes";
 import { buildInitialPersonalMemoriesPanel } from "@/utils/discord/interactions/personalMemoriesRoutes";
+import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 
 const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "avatar-open",
@@ -100,6 +124,10 @@ const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "dialogue-edit-open",
   "stm-edit-open",
   "conditioning-open",
+  "image-tags-open",
+  "character-reference-open",
+  "prompt-open",
+  "context-note-open",
 ]);
 
 function receipt(
@@ -221,6 +249,11 @@ const defaultDependencies: ConfigRouteDependencies = {
   },
   getPersonaAvatarData: resolvePersonaPanelAvatar,
   loadPersonaMemoryView: loadConfigPersonaMemoryView,
+  loadServerHumanizerDegree: async (serverId) =>
+    (await configRepository.getChatConfig(serverId))?.humanizer_degree ?? null,
+  loadSavedTextProviders: async (serverId) => loadSavedProvidersForCapability(serverId, "text"),
+  loadPersonaTextModels: async (provider, serverId) =>
+    (await llmModelRepo.loadAvailableModelsForProvider(provider, false, { kind: "server", ownerId: serverId })) ?? [],
   openServerMemoryPanel: async (interaction, locale, lineageId) => {
     const panel = await buildInitialMemoriesPanel(interaction, locale, undefined, lineageId);
     return asEphemeralComponentsV2FollowUp(panel);
@@ -440,6 +473,30 @@ async function handleModalOpen(
       );
       return;
     }
+    case "image-tags-open":
+      await dependencies.showModal(
+        interaction,
+        buildPersonaImageTagsModal(locale, persona.persona_id, nonce, persona.physical_appearance_tags),
+      );
+      return;
+    case "character-reference-open":
+      await dependencies.showModal(interaction, buildPersonaCharacterReferenceModal(locale, persona.persona_id, nonce));
+      return;
+    case "prompt-open":
+      await dependencies.showModal(interaction, buildPersonaPromptModal(locale, persona.persona_id, nonce, persona));
+      return;
+    case "context-note-open":
+      await dependencies.showModal(
+        interaction,
+        buildPersonaContextNoteModal(
+          locale,
+          persona.persona_id,
+          nonce,
+          persona.context_note,
+          persona.context_note_depth,
+        ),
+      );
+      return;
     case "avatar-open":
       await dependencies.showModal(interaction, buildPersonaAvatarModal(locale, persona.persona_id, nonce));
       return;
@@ -581,6 +638,114 @@ async function handleCollectionAddSelection(
   );
 }
 
+async function handleTextOverrideChoice(
+  interaction: GlobalRoutableInteraction,
+  route: ConfigPanelRoute,
+  scope: ConfigScope,
+  persona: TomoriState,
+  dependencies: ConfigRouteDependencies,
+  submittedValue: string | null,
+): Promise<void> {
+  const personaId = persona.persona_id;
+  if (personaId === undefined) return;
+
+  const savedProviders = await dependencies.loadSavedTextProviders(persona.server_id);
+  if (savedProviders.length === 0) {
+    await repaint(interaction, {
+      locale: route.locale,
+      scope,
+      category: "persona",
+      page: "advanced",
+      selectedPersonaId: personaId,
+      receipt: receipt(
+        route.locale,
+        "error",
+        "commands.model.providerPicker.no_providers_title",
+        "commands.model.providerPicker.no_providers_description",
+      ),
+      dependencies,
+    });
+    return;
+  }
+
+  let provider: string | undefined;
+  if (route.action === "text-override-model-page") {
+    provider = savedProviders.find((saved) => saved.provider.toLowerCase() === route.provider.toLowerCase())?.provider;
+  } else {
+    if (route.action === "text-override-open") {
+      if (savedProviders.length > 1) {
+        await repaint(interaction, {
+          locale: route.locale,
+          scope,
+          category: "persona",
+          page: "advanced",
+          selectedPersonaId: personaId,
+          view: {
+            kind: "text-override-provider",
+            personaId,
+            providers: savedProviders.map((saved) => saved.provider),
+          },
+          dependencies,
+        });
+        return;
+      }
+      provider = savedProviders[0]?.provider;
+    } else {
+      provider = savedProviders.find(
+        (saved) => saved.provider.toLowerCase() === submittedValue?.toLowerCase(),
+      )?.provider;
+    }
+  }
+
+  if (!provider) {
+    await repaint(interaction, {
+      locale: route.locale,
+      scope,
+      category: "persona",
+      page: "advanced",
+      selectedPersonaId: personaId,
+      receipt: staleReceipt(route.locale),
+      dependencies,
+    });
+    return;
+  }
+
+  const models = await dependencies.loadPersonaTextModels(provider, persona.server_id);
+  if (models.length === 0) {
+    await repaint(interaction, {
+      locale: route.locale,
+      scope,
+      category: "persona",
+      page: "advanced",
+      selectedPersonaId: personaId,
+      receipt: receipt(
+        route.locale,
+        "error",
+        "commands.model.text.no_models_title",
+        "commands.model.text.no_models_description",
+      ),
+      dependencies,
+    });
+    return;
+  }
+
+  await repaint(interaction, {
+    locale: route.locale,
+    scope,
+    category: "persona",
+    page: "advanced",
+    selectedPersonaId: personaId,
+    view: {
+      kind: "text-override-model",
+      personaId,
+      provider,
+      models,
+      start: route.action === "text-override-model-page" ? route.start : 0,
+    },
+    dependencies,
+  });
+}
+
 interface WriteOutcome {
   receipt: PanelReceipt;
   telemetry?: PanelAction;
@@ -601,8 +766,358 @@ async function runPersonaWrite(
   const locale = route.locale;
   const key = (suffix: string) => `commands.config.panel.${suffix}`;
   const guildIdentity = scope.guildId ? dependencies.createGuildIdentity(scope.guildId, interaction) : null;
+  const personaId = persona.persona_id;
+  if (personaId === undefined) return null;
 
   switch (route.action) {
+    case "image-tags-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      const result = await dependencies.operations.setImageTags({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        rawTags: modal.fields.getTextInputValue(buildConfigModalFieldId("image_tags", route.nonce)),
+      });
+      if (result.status === "success") {
+        return {
+          receipt: receipt(
+            locale,
+            "success",
+            result.tags.length === 0
+              ? "commands.persona.image-tags.cleared_title"
+              : "commands.persona.image-tags.success_title",
+            result.tags.length === 0
+              ? "commands.persona.image-tags.cleared_description"
+              : "commands.persona.image-tags.success_description",
+            { persona_name: persona.persona_nickname, tag_list: result.tags.join(", ") },
+          ),
+          telemetry: "server-config.workspace.persona-image-tags.set",
+        };
+      }
+      if (result.status === "too-many") {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            "commands.persona.image-tags.too_many_tags_title",
+            "commands.persona.image-tags.too_many_tags_description",
+            { max_tags: MAX_TAGS },
+          ),
+        };
+      }
+      if (result.status === "tag-too-long") {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            "commands.persona.image-tags.tag_too_long_title",
+            "commands.persona.image-tags.tag_too_long_description",
+            { max_length: MAX_TAG_LENGTH },
+          ),
+        };
+      }
+      if (result.status === "empty") {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            "commands.persona.image-tags.no_tags_title",
+            "commands.persona.image-tags.no_tags_description",
+          ),
+        };
+      }
+      return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
+    case "character-reference-submit":
+    case "character-reference-clear-confirm": {
+      const attachment =
+        route.action === "character-reference-submit"
+          ? (dependencies.takeFileUpload(
+              (interaction as ModalSubmitInteraction).id,
+              buildConfigModalFieldId(CONFIG_CHARACTER_REFERENCE_FILE_FIELD, route.nonce),
+            ) ?? null)
+          : null;
+      const result = await dependencies.operations.replaceCharacterReference({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        attachment,
+      });
+      if (result.status === "success") {
+        return {
+          receipt: receipt(
+            locale,
+            "success",
+            result.cleared
+              ? "commands.novelai.character-reference.cleared_title"
+              : "commands.novelai.character-reference.success_title",
+            result.cleared
+              ? "commands.novelai.character-reference.cleared_persona_description"
+              : "commands.novelai.character-reference.success_persona_description",
+            { persona_name: persona.persona_nickname },
+          ),
+          telemetry: "server-config.workspace.persona-character-reference.set",
+        };
+      }
+      if (result.status === "invalid-image") {
+        return { receipt: receipt(locale, "error", result.titleKey, result.descriptionKey) };
+      }
+      return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
+    case "prompt-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      const prompt = combineModalPromptParts(
+        CONFIG_PERSONA_PROMPT_PART_FIELDS.map((field) =>
+          modal.fields.getTextInputValue(buildConfigModalFieldId(field, route.nonce)),
+        ),
+        4000,
+      );
+      const result = await dependencies.operations.setPrompt({ persona, serverDiscId: scope.serverDiscId, prompt });
+      return result.status === "success"
+        ? {
+            receipt: receipt(
+              locale,
+              "success",
+              "commands.teach.personaprompt.success_title",
+              "commands.teach.personaprompt.success_description",
+              { persona_name: persona.persona_nickname },
+            ),
+            telemetry: "server-config.workspace.persona-prompt.set",
+          }
+        : { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
+    case "prompt-remove": {
+      if (!hasPersonaPrompt(persona)) {
+        return {
+          receipt: receipt(
+            locale,
+            "warning",
+            "commands.forget.personaprompt.no_prompt_title",
+            "commands.forget.personaprompt.no_prompt_description",
+          ),
+        };
+      }
+      const preview = buildTextPreview(persona.persona_prompt);
+      const result = await dependencies.operations.removePrompt({ persona, serverDiscId: scope.serverDiscId });
+      if (result.status === "no-prompt") {
+        return {
+          receipt: receipt(
+            locale,
+            "warning",
+            "commands.forget.personaprompt.no_prompt_title",
+            "commands.forget.personaprompt.no_prompt_description",
+          ),
+        };
+      }
+      if (result.status !== "success") {
+        return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+      }
+      const detail = localizer(
+        locale,
+        preview.totalChars > 0
+          ? "commands.forget.personaprompt.success_description_with_prompt"
+          : "commands.forget.personaprompt.success_description",
+        {
+          persona_name: persona.persona_nickname,
+          removed_prompt: preview.text,
+        },
+      );
+      return {
+        receipt: {
+          tone: "success",
+          heading: localizer(locale, "commands.forget.personaprompt.success_title"),
+          detail: preview.truncated
+            ? `${detail}\n-# ${localizer(locale, textPreviewFooterKey(preview) as string, textPreviewFooterVars(preview))}`
+            : detail,
+        },
+        telemetry: "server-config.workspace.persona-prompt.remove",
+      };
+    }
+
+    case "context-note-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      const rawNote = modal.fields
+        .getTextInputValue(buildConfigModalFieldId(CONFIG_CONTEXT_NOTE_TEXT_FIELD, route.nonce))
+        .trim();
+      const rawDepth = modal.fields
+        .getTextInputValue(buildConfigModalFieldId(CONFIG_CONTEXT_NOTE_DEPTH_FIELD, route.nonce))
+        .trim();
+      const result = await dependencies.operations.setContextNote({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        rawNote,
+        rawDepth,
+      });
+      if (result.status === "invalid-depth") {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            "commands.config.context-note.set.invalid_depth_title",
+            "commands.config.context-note.set.invalid_depth_description",
+          ),
+        };
+      }
+      if (result.status !== "success") {
+        return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+      }
+      const note = rawNote || null;
+      const depth = note ? Number.parseInt(rawDepth, 10) : 0;
+      const preview = buildTextPreview(note);
+      return {
+        receipt: {
+          tone: "success",
+          heading: localizer(
+            locale,
+            note
+              ? "commands.config.context-note.set.success_set_title"
+              : "commands.config.context-note.set.success_removed_title",
+          ),
+          detail: localizer(
+            locale,
+            note
+              ? "commands.config.context-note.set.success_set_description"
+              : "commands.config.context-note.set.success_removed_description",
+            note
+              ? { scope: persona.persona_nickname, depth, preview: preview.text }
+              : { scope: persona.persona_nickname },
+          ),
+        },
+        telemetry: "server-config.workspace.persona-context-note.set",
+      };
+    }
+
+    case "humanizer-select": {
+      const selectedValue = interaction.isStringSelectMenu() ? (interaction.values[0] ?? "") : "";
+      const value = selectedValue === HUMANIZER_INHERIT_VALUE ? null : Number.parseInt(selectedValue, 10);
+      const result = await dependencies.operations.setHumanizerOverride({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        value,
+      });
+      if (result.status === "invalid-value") {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            key("invalid_input_heading"),
+            "commands.config.humanizer.invalid_value_description",
+            { min: HUMANIZER_MIN, max: HUMANIZER_MAX },
+          ),
+        };
+      }
+      if (result.status === "unchanged") {
+        return {
+          receipt: receipt(
+            locale,
+            "info",
+            "commands.config.humanizer.already_set_title",
+            "commands.config.humanizer.persona_already_set_description",
+            { persona: persona.persona_nickname, value: getHumanizerLabel(locale, value) },
+          ),
+        };
+      }
+      if (result.status !== "success") {
+        return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+      }
+      return {
+        receipt: receipt(
+          locale,
+          "success",
+          "commands.config.humanizer.persona_success_title",
+          "commands.config.humanizer.persona_success_description",
+          {
+            persona: persona.persona_nickname,
+            value: getHumanizerLabel(locale, value),
+            previous_value: getHumanizerLabel(locale, persona.humanizer_degree_override ?? null),
+          },
+        ),
+        telemetry: "server-config.workspace.persona-humanizer.set",
+      };
+    }
+
+    case "text-override-model-select": {
+      const selectedCodename = interaction.isStringSelectMenu() ? (interaction.values[0] ?? "") : "";
+      const savedProviders = await dependencies.loadSavedTextProviders(persona.server_id);
+      if (savedProviders.length === 0) {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            "commands.model.providerPicker.no_providers_title",
+            "commands.model.providerPicker.no_providers_description",
+          ),
+        };
+      }
+      const provider = savedProviders.find(
+        (saved) => saved.provider.toLowerCase() === route.provider.toLowerCase(),
+      )?.provider;
+      if (!provider) return { receipt: staleReceipt(locale) };
+
+      const availableModels = await dependencies.loadPersonaTextModels(provider, persona.server_id);
+      const selectedModel = availableModels.find((model) => model.llm_codename === selectedCodename) ?? null;
+      if (!selectedModel?.llm_id) {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            "commands.model.text.invalid_model_title",
+            "commands.model.text.invalid_model_description",
+          ),
+        };
+      }
+      if (selectedModel.llm_codename === "other-model") {
+        return {
+          receipt: receipt(
+            locale,
+            "info",
+            "general.openrouter_model_moved_title",
+            "general.openrouter_model_moved_description",
+          ),
+        };
+      }
+      const result = await dependencies.operations.setTextModelOverride({
+        scope: "persona",
+        personaId,
+        llmId: selectedModel.llm_id,
+        serverDiscId: scope.serverDiscId,
+      });
+      return result.status === "success"
+        ? {
+            receipt: receipt(
+              locale,
+              "success",
+              "commands.model.text.success_title",
+              "commands.model.text.scope_set_persona_success",
+              { persona: persona.persona_nickname, model: selectedModel.llm_codename },
+            ),
+            telemetry: "server-config.workspace.persona-text-model.set",
+          }
+        : { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
+    case "text-override-clear": {
+      const result = await dependencies.operations.setTextModelOverride({
+        scope: "persona",
+        personaId,
+        llmId: null,
+        serverDiscId: scope.serverDiscId,
+      });
+      return result.status === "success"
+        ? {
+            receipt: receipt(
+              locale,
+              "success",
+              "commands.config.panel.text_override_cleared_heading",
+              "commands.config.panel.text_override_cleared_detail",
+              { persona: persona.persona_nickname },
+            ),
+            telemetry: "server-config.workspace.persona-text-model.clear",
+          }
+        : { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
     case "stm-edit-submit": {
       const modal = interaction as ModalSubmitInteraction;
       const memoryView = await dependencies.loadPersonaMemoryView(interaction, scope, persona);
@@ -1389,7 +1904,10 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "persona-select" ||
         route.action === "naming-style-select" ||
         route.action === "attribute-select" ||
-        route.action === "dialogue-select";
+        route.action === "dialogue-select" ||
+        route.action === "humanizer-select" ||
+        route.action === "text-override-provider-select" ||
+        route.action === "text-override-model-select";
       const expectsModal =
         route.action === "avatar-submit" ||
         route.action === "rename-submit" ||
@@ -1401,7 +1919,11 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "dialogue-add-submit" ||
         route.action === "stm-edit-submit" ||
         route.action === "conditioning-submit" ||
-        route.action === "dialogue-edit-submit";
+        route.action === "dialogue-edit-submit" ||
+        route.action === "image-tags-submit" ||
+        route.action === "character-reference-submit" ||
+        route.action === "prompt-submit" ||
+        route.action === "context-note-submit";
 
       if (expectsSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Config ${route.action} route requires a String Select interaction`);
@@ -1515,6 +2037,47 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       }
 
       const persona = resolveSelectedPersona(scope.personas, requestedPersonaId);
+      const selectedPersonaId = persona?.persona_id;
+
+      if (route.action === "character-reference-clear-view" && persona && selectedPersonaId !== undefined) {
+        await repaint(interaction, {
+          locale: route.locale,
+          scope,
+          category: "persona",
+          page: "advanced",
+          selectedPersonaId,
+          view: {
+            kind: "character-reference-clear-confirm",
+            personaId: selectedPersonaId,
+            nonce: dependencies.createNonce(),
+          },
+          dependencies,
+        });
+        return;
+      }
+
+      if (route.action === "humanizer-open" && persona && selectedPersonaId !== undefined) {
+        await repaint(interaction, {
+          locale: route.locale,
+          scope,
+          category: "persona",
+          page: "advanced",
+          selectedPersonaId,
+          view: { kind: "humanizer-editor", personaId: selectedPersonaId },
+          dependencies,
+        });
+        return;
+      }
+
+      if (
+        (route.action === "text-override-open" ||
+          route.action === "text-override-provider-select" ||
+          route.action === "text-override-model-page") &&
+        persona
+      ) {
+        await handleTextOverrideChoice(interaction, route, scope, persona, dependencies, submittedValue);
+        return;
+      }
 
       let selectedAttributeIndex: number | undefined;
       let attributePageStart: number | undefined;

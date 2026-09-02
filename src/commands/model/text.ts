@@ -43,6 +43,7 @@ import { buildFallbackModelPersistence } from "@/utils/provider/fallbackModelIde
 import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolver";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
+import { setTextModelOverride } from "@/utils/discord/interactions/textModelOverrideOperations";
 
 const MODAL_CUSTOM_ID = "config_model_text_modal";
 const MODEL_SELECT_ID = "model_select";
@@ -290,12 +291,13 @@ export async function execute(
         return;
       }
 
-      const channelWriteOk = await llmOverrideRepo.setChannelLlmOverride(
-        tomoriState.server_id,
-        interaction.channelId,
-        selectedChannelModel.llm_id,
-        { serverDiscId: serverId },
-      );
+      const channelWriteOk = await setTextModelOverride({
+        scope: "channel",
+        serverId: tomoriState.server_id,
+        channelId: interaction.channelId,
+        llmId: selectedChannelModel.llm_id,
+        serverDiscId: serverId,
+      });
       if (!channelWriteOk) {
         await work.message.replace(
           buildPersonaWorkflowNotice({
@@ -526,7 +528,10 @@ export async function execute(
               return completePersonaWorkflow();
             }
 
-            const personaWriteOk = await llmOverrideRepo.setPersonaLlmOverride(personaId, selectedPersonaModel.llm_id, {
+            const personaWriteOk = await setTextModelOverride({
+              scope: "persona",
+              personaId,
+              llmId: selectedPersonaModel.llm_id,
               serverDiscId: serverId,
             });
             if (!personaWriteOk) {
