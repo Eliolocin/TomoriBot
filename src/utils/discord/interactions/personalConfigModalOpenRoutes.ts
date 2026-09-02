@@ -10,6 +10,8 @@ import {
   SPOTLIGHT_REMOVE_PAGE_SIZE,
   computeSpotlightRemoveFingerprint,
   computeSpotlightSetFingerprint,
+  ROUTING_CAPABILITY_LOCALE_KEYS,
+  decodeProviderPageValue,
   decodeProviderParam,
 } from "@/utils/discord/personalConfigPanelCatalog";
 import { localizer } from "@/utils/text/localizer";
@@ -207,10 +209,13 @@ export async function handlePersonalConfigModalOpen(
   }
 
   // Choosing a provider opens its fallback modal directly when options fit in a single modal.
-  // When options exceed PERSONAL_FALLBACK_PAGE_SIZE, it defers and repaints with the in-place pagination row.
+  // When options exceed PERSONAL_FALLBACK_PAGE_SIZE, it defers and repaints the selector with one
+  // entry per page of that provider's options.
   if (route.action === "fallbacks-provider-select") {
     const selectMenu = interaction as StringSelectMenuInteraction;
-    const chosenProvider = decodeProviderParam(selectMenu.values[0]);
+    const chosenValue = selectMenu.values[0];
+    const chosenPage = decodeProviderPageValue(chosenValue);
+    const chosenProvider = chosenPage?.provider ?? decodeProviderParam(chosenValue);
     // A modal is its own acknowledgement, so this branch must run before the panel controller
     // defers and must read a cached scope rather than forcing a refresh.
     const cachedScope = await dependencies.resolveScope(interaction, false);
@@ -249,7 +254,30 @@ export async function handlePersonalConfigModalOpen(
       log.warn("Failed to load available models for fallbacks modal", { provider: chosenProvider, error });
     }
 
-    if (availableOptions.length > PERSONAL_FALLBACK_PAGE_SIZE) {
+    if (!chosenPage && availableOptions.length > PERSONAL_FALLBACK_PAGE_SIZE) {
+      await interaction.deferUpdate();
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: cachedScope,
+        category: "models",
+        page: "fallbacks",
+        panelReceipt: {
+          tone: "info",
+          heading: localizer(route.locale, "commands.personal.config.fallbacks_paged_heading"),
+          detail: localizer(route.locale, "commands.personal.config.fallbacks_paged_detail", {
+            provider: getProviderDisplayName(chosenProvider),
+            count: availableOptions.length,
+          }),
+        },
+        dependencies,
+        selectedFallbacksProvider: chosenProvider,
+        fallbackOptionCount: availableOptions.length,
+      });
+      return "handled";
+    }
+
+    const optionStart = chosenPage?.start ?? 0;
+    if (optionStart % PERSONAL_FALLBACK_PAGE_SIZE !== 0 || optionStart >= availableOptions.length) {
       await interaction.deferUpdate();
       await repaint(interaction, {
         locale: route.locale,
@@ -258,8 +286,11 @@ export async function handlePersonalConfigModalOpen(
         page: "fallbacks",
         dependencies,
         selectedFallbacksProvider: chosenProvider,
-        fallbackStart: 0,
-        fallbackOptionCount: availableOptions.length,
+        panelReceipt: {
+          tone: "error",
+          heading: localizer(route.locale, "commands.personal.config.unavailable"),
+          detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+        },
       });
       return "handled";
     }
@@ -270,7 +301,7 @@ export async function handlePersonalConfigModalOpen(
       route.locale,
       nonce,
       chosenProvider,
-      availableOptions.slice(0, PERSONAL_FALLBACK_PAGE_SIZE),
+      availableOptions.slice(optionStart, optionStart + PERSONAL_FALLBACK_PAGE_SIZE),
       config?.fallback_model_refs ?? [],
     );
     return "handled";
@@ -359,7 +390,8 @@ export async function handlePersonalConfigModalOpen(
       return "handled";
     }
     if (chosen !== "__server_default__") {
-      const provider = decodeProviderParam(chosen);
+      const chosenPage = decodeProviderPageValue(chosen);
+      const provider = chosenPage?.provider ?? decodeProviderParam(chosen);
       const cachedScope = await dependencies.resolveScope(interaction, false);
       if (!cachedScope) {
         await interaction.reply({
@@ -394,18 +426,49 @@ export async function handlePersonalConfigModalOpen(
         return "handled";
       }
 
-      if (availableModels.length > PERSONAL_MODEL_PAGE_SIZE) {
+      // A page value is the reader picking a slice of an already expanded provider, so it opens the
+      // modal directly instead of expanding again.
+      if (!chosenPage && availableModels.length > PERSONAL_MODEL_PAGE_SIZE) {
         await interaction.deferUpdate();
         await repaint(interaction, {
           locale: route.locale,
           scope: cachedScope,
           category: "models",
           page: "switch",
+          // Expanding rewrites options inside a selector the reader has already closed, so without
+          // a receipt the selection reads as a no-op and gets repeated.
+          panelReceipt: {
+            tone: "info",
+            heading: localizer(route.locale, "commands.personal.config.provider_paged_heading"),
+            detail: localizer(route.locale, "commands.personal.config.provider_paged_detail", {
+              provider: getProviderDisplayName(provider),
+              count: availableModels.length,
+              capability: localizer(route.locale, ROUTING_CAPABILITY_LOCALE_KEYS[route.capability]),
+            }),
+          },
           dependencies,
           selectedCapability: route.capability,
           selectedModelProvider: provider,
-          modelStart: 0,
           modelTotalCount: availableModels.length,
+        });
+        return "handled";
+      }
+
+      const modelStart = chosenPage?.start ?? 0;
+      if (modelStart % PERSONAL_MODEL_PAGE_SIZE !== 0 || modelStart >= availableModels.length) {
+        await interaction.deferUpdate();
+        await repaint(interaction, {
+          locale: route.locale,
+          scope: cachedScope,
+          category: "models",
+          page: "switch",
+          panelReceipt: {
+            tone: "error",
+            heading: localizer(route.locale, "commands.personal.config.unavailable"),
+            detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+          },
+          dependencies,
+          selectedCapability: route.capability,
         });
         return "handled";
       }
@@ -428,7 +491,7 @@ export async function handlePersonalConfigModalOpen(
         nonce,
         route.capability,
         provider,
-        availableModels.slice(0, PERSONAL_MODEL_PAGE_SIZE),
+        availableModels.slice(modelStart, modelStart + PERSONAL_MODEL_PAGE_SIZE),
         currentModelId,
       );
       return "handled";
@@ -567,6 +630,69 @@ export async function handlePersonalConfigModalOpen(
       route.channelId,
       route.hours,
       route.blockIdx,
+      route.fp,
+      block,
+    );
+    return "handled";
+  }
+
+  if (route.action === "spotlight-set-block-select") {
+    if (!interaction.isStringSelectMenu()) {
+      throw new Error("spotlight-set-block-select requires StringSelectMenu interaction");
+    }
+    const selectMenu = interaction as StringSelectMenuInteraction;
+    const chosenValue = selectMenu.values[0];
+    const cachedScope = await dependencies.resolveScope(interaction, false);
+    if (!cachedScope?.guildId || !cachedScope.internalServerId) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+    const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
+    const expectedFp = computeSpotlightSetFingerprint(cachedScope.guildId, cachedScope.userDiscId, personas);
+    if (expectedFp !== route.fp) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.stale_warning"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+    const blockCount = Math.ceil(personas.length / SPOTLIGHT_PERSONA_PAGE_SIZE);
+    const requestedBlockIdx = Number.parseInt(chosenValue, 10);
+    if (!Number.isSafeInteger(requestedBlockIdx) || requestedBlockIdx < 0 || requestedBlockIdx >= blockCount) {
+      await interaction.deferUpdate();
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: cachedScope,
+        category: "advanced",
+        page: "spotlight",
+        dependencies,
+        panelReceipt: {
+          tone: "error",
+          heading: localizer(route.locale, "commands.personal.config.unavailable"),
+          detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+        },
+      });
+      return "handled";
+    }
+    const blockStart = requestedBlockIdx * SPOTLIGHT_PERSONA_PAGE_SIZE;
+    const block = personas.slice(blockStart, blockStart + SPOTLIGHT_PERSONA_PAGE_SIZE);
+    if (block.length === 0) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.stale_warning"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+    await dependencies.showSpotlightSetModal(
+      selectMenu,
+      route.locale,
+      dependencies.createNonce(),
+      route.channelId,
+      route.hours,
+      requestedBlockIdx,
       route.fp,
       block,
     );
@@ -714,6 +840,75 @@ export async function handlePersonalConfigModalOpen(
     return "handled";
   }
 
+  if (route.action === "spot-set-auto-select") {
+    if (!interaction.isStringSelectMenu()) {
+      throw new Error("spot-set-auto-select requires StringSelectMenu interaction");
+    }
+    const selectMenu = interaction as StringSelectMenuInteraction;
+    const chosenValue = selectMenu.values[0];
+    const cachedScope = await dependencies.resolveScope(interaction, false);
+    if (!cachedScope?.guildId || !cachedScope.internalServerId) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+    const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
+    const expectedFp = computeSpotlightSetFingerprint(cachedScope.guildId, cachedScope.userDiscId, personas);
+    if (expectedFp !== route.fp) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.stale_warning"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+    const resolvedRange = resolveSpotlightBlockSelection(personas, route.blockIdx, route.mask);
+    if (!resolvedRange) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.stale_warning"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+    const requestedStart = Number.parseInt(chosenValue, 10);
+    if (
+      !Number.isSafeInteger(requestedStart) ||
+      requestedStart < 0 ||
+      requestedStart >= resolvedRange.selected.length ||
+      requestedStart % SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE !== 0
+    ) {
+      await interaction.deferUpdate();
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: cachedScope,
+        category: "advanced",
+        page: "spotlight",
+        dependencies,
+        panelReceipt: {
+          tone: "error",
+          heading: localizer(route.locale, "commands.personal.config.unavailable"),
+          detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+        },
+      });
+      return "handled";
+    }
+    const slice = resolvedRange.selected.slice(requestedStart, requestedStart + SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE);
+    const nonce = dependencies.createNonce();
+    await dependencies.showSpotlightAutoTriggerModal(
+      selectMenu,
+      route.locale,
+      nonce,
+      route.channelId,
+      route.hours,
+      route.blockIdx,
+      route.mask,
+      route.fp,
+      slice,
+    );
+    return "handled";
+  }
+
   if (route.action === "spotlight-remove-open") {
     if (!interaction.isButton()) throw new Error("spotlight-remove-open requires Button interaction");
     const cachedScope = await dependencies.resolveScope(interaction, false);
@@ -780,6 +975,68 @@ export async function handlePersonalConfigModalOpen(
       route.locale,
       nonce,
       route.start,
+      route.fp,
+      slice,
+      personas,
+      guildChannels,
+    );
+    return "handled";
+  }
+
+  if (route.action === "spotlight-remove-select") {
+    if (!interaction.isStringSelectMenu()) {
+      throw new Error("spotlight-remove-select requires StringSelectMenu interaction");
+    }
+    const selectMenu = interaction as StringSelectMenuInteraction;
+    const chosenValue = selectMenu.values[0];
+    const cachedScope = await dependencies.resolveScope(interaction, false);
+    if (!cachedScope?.guildId || !cachedScope.internalServerId) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.spotlight_guild_only_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+    const allActive = await dependencies.loadActiveSpotlights(cachedScope.internalServerId, cachedScope.userId);
+    const expectedFp = computeSpotlightRemoveFingerprint(cachedScope.guildId, cachedScope.userDiscId, allActive);
+    if (expectedFp !== route.fp) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.personal.config.stale_warning"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return "handled";
+    }
+    const requestedStart = Number.parseInt(chosenValue, 10);
+    if (
+      !Number.isSafeInteger(requestedStart) ||
+      requestedStart < 0 ||
+      requestedStart >= allActive.length ||
+      requestedStart % SPOTLIGHT_REMOVE_PAGE_SIZE !== 0
+    ) {
+      await interaction.deferUpdate();
+      await repaint(interaction, {
+        locale: route.locale,
+        scope: cachedScope,
+        category: "advanced",
+        page: "spotlight",
+        dependencies,
+        panelReceipt: {
+          tone: "error",
+          heading: localizer(route.locale, "commands.personal.config.unavailable"),
+          detail: localizer(route.locale, "commands.personal.config.stale_warning"),
+        },
+      });
+      return "handled";
+    }
+    const slice = allActive.slice(requestedStart, requestedStart + SPOTLIGHT_REMOVE_PAGE_SIZE);
+    const personas = await dependencies.loadGuildPersonas(cachedScope.guildId);
+    const guildChannels = interaction.guild?.channels.cache;
+    const nonce = dependencies.createNonce();
+    await dependencies.showSpotlightRemoveModal(
+      selectMenu,
+      route.locale,
+      nonce,
+      requestedStart,
       route.fp,
       slice,
       personas,

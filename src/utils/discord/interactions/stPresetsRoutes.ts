@@ -15,6 +15,7 @@ import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/
 import { beginPanelInteraction, performPanelAction } from "@/utils/discord/interactions/panelController";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
+  MAX_NODES_PER_MODAL_PAGE,
   ST_PRESETS_ROUTE_NAMESPACE,
   ST_PRESETS_ROUTE_VERSION,
   parseStPresetsPanelRoute,
@@ -59,7 +60,7 @@ export interface StPresetsRouteDependencies {
     nonce: string,
   ): Promise<void>;
   showNodesModal(
-    interaction: ButtonInteraction,
+    interaction: ButtonInteraction | StringSelectMenuInteraction,
     locale: string,
     preset: StPresetRow,
     nodes: StPresetNodeRow[],
@@ -133,6 +134,18 @@ function changedStateReceipt(locale: string): PanelReceipt {
 
 function resolveActiveOrNonePage(data: StPresetScopeData): StPresetsPanelPage {
   return data.activePresetId !== null ? { kind: "preset", presetId: data.activePresetId } : { kind: "none" };
+}
+
+function resolveNodesPanelPage(presetId: number, totalCount: number, requestedRangeIndex: number): StPresetsPanelPage {
+  const rangeCount = Math.ceil(totalCount / MAX_NODES_PER_MODAL_PAGE);
+  const rangeIndex = Math.min(Math.max(requestedRangeIndex, 0), Math.max(0, rangeCount - 1));
+  return {
+    kind: "preset",
+    presetId,
+    nodeRangeIndex: rangeIndex,
+    nodeRangeCount: rangeCount,
+    nodeTotalCount: totalCount,
+  };
 }
 
 function importFailureReceipt(locale: string, status: string, maxSizeMB?: number): PanelReceipt {
@@ -236,7 +249,7 @@ export function createStPresetsInteractionRoute(
         throw new Error(`Malformed ST presets panel route: ${interaction.customId}`);
       }
 
-      const expectsSelect = route.action === "select";
+      const expectsSelect = route.action === "select" || route.action === "nodes-range-select";
       const expectsModal = route.action === "add-submit" || route.action === "nodes-submit";
 
       if (expectsSelect && !interaction.isStringSelectMenu()) {
@@ -479,16 +492,11 @@ export function createStPresetsInteractionRoute(
         }
 
         await interaction.deferUpdate();
-        await repaint(interaction, route.locale, scope, {
-          kind: "nodes-chooser",
-          presetId: route.presetId,
-          totalCount: nodes.length,
-          chooserPage: 0,
-        });
+        await repaint(interaction, route.locale, scope, resolveNodesPanelPage(route.presetId, nodes.length, 0));
         return;
       }
 
-      if (route.action === "nodes-range") {
+      if (route.action === "nodes-range" || route.action === "nodes-range-select") {
         if (!isAuthorized(interaction)) {
           await interaction.reply({
             content: localizer(route.locale, "general.errors.permission_denied_description"),
@@ -526,8 +534,41 @@ export function createStPresetsInteractionRoute(
         }
 
         const nodes = await dependencies.loadToggleableNodes(route.presetId);
-        const pageOffset = route.rangeIndex * 50;
-        const pageNodes = nodes.slice(pageOffset, pageOffset + 50);
+        if (nodes.length === 0) {
+          await interaction.deferUpdate();
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            { kind: "preset", presetId: route.presetId },
+            {
+              tone: "info",
+              heading: localizer(route.locale, "commands.st-presets.no_nodes"),
+              detail: localizer(route.locale, "commands.st-presets.no_nodes"),
+            },
+          );
+          return;
+        }
+
+        const rangeCount = Math.ceil(nodes.length / MAX_NODES_PER_MODAL_PAGE);
+        const requestedRangeIndex =
+          route.action === "nodes-range"
+            ? route.rangeIndex
+            : Number((interaction as StringSelectMenuInteraction).values[0]);
+        if (!Number.isSafeInteger(requestedRangeIndex) || requestedRangeIndex < 0) {
+          await interaction.deferUpdate();
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            resolveNodesPanelPage(route.presetId, nodes.length, 0),
+            changedStateReceipt(route.locale),
+          );
+          return;
+        }
+        const rangeIndex = Math.min(requestedRangeIndex, rangeCount - 1);
+        const pageOffset = rangeIndex * MAX_NODES_PER_MODAL_PAGE;
+        const pageNodes = nodes.slice(pageOffset, pageOffset + MAX_NODES_PER_MODAL_PAGE);
 
         const nonce = dependencies.createNonce();
         dependencies.storeNodeSnapshot(nonce, {
@@ -536,7 +577,9 @@ export function createStPresetsInteractionRoute(
         });
 
         await dependencies.showNodesModal(
-          requireButton(interaction, route.action),
+          route.action === "nodes-range"
+            ? requireButton(interaction, route.action)
+            : (interaction as StringSelectMenuInteraction),
           route.locale,
           targetPreset,
           pageNodes,
@@ -714,13 +757,30 @@ export function createStPresetsInteractionRoute(
       }
 
       if (route.action === "nodes-page") {
+        if (scope.data.readStatus !== "fresh") {
+          await repaint(interaction, route.locale, scope, { kind: "preset", presetId: route.presetId });
+          return;
+        }
+
+        const targetPreset = scope.data.presets.find((preset) => preset.preset_id === route.presetId);
+        if (!targetPreset?.is_active || scope.data.activePresetId !== route.presetId) {
+          await repaint(
+            interaction,
+            route.locale,
+            scope,
+            resolveActiveOrNonePage(scope.data),
+            changedStateReceipt(route.locale),
+          );
+          return;
+        }
+
         const nodes = await dependencies.loadToggleableNodes(route.presetId);
-        await repaint(interaction, route.locale, scope, {
-          kind: "nodes-chooser",
-          presetId: route.presetId,
-          totalCount: nodes.length,
-          chooserPage: route.chooserPage,
-        });
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          resolveNodesPanelPage(route.presetId, nodes.length, route.chooserPage),
+        );
         return;
       }
 

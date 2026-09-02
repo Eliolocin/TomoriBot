@@ -86,6 +86,11 @@ export const SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE = 24;
 export const SPOTLIGHT_PERSONA_PAGE_SIZE = 50;
 
 /**
+ * Range/block options one select menu can present: Discord allows at most 25 options.
+ */
+export const SPOTLIGHT_BLOCK_OPTIONS_PER_PAGE = 25;
+
+/**
  * Base36 rather than hex because the bitmask shares a 100-character custom ID with a snowflake, a
  * duration, a fingerprint, and a nonce. At the 50-bit bound a hex mask is 13 characters and lands
  * `spot-set-cf` on exactly 100 with no headroom; base36 is 10.
@@ -111,6 +116,32 @@ export function encodeProviderParam(provider: string): string {
 
 export function decodeProviderParam(encoded: string): string {
   return encoded.replace(/~/g, ":");
+}
+
+/**
+ * Marks a provider select value that also carries a page offset into that provider's option list.
+ * `!` survives the `:`/`~` swap {@link encodeProviderParam} performs, so a page value stays
+ * distinguishable from a bare provider value after decoding.
+ */
+const PROVIDER_PAGE_VALUE_PREFIX = "page!";
+
+export function encodeProviderPageValue(provider: string, start: number): string {
+  return `${PROVIDER_PAGE_VALUE_PREFIX}${start}!${encodeProviderParam(provider)}`;
+}
+
+/**
+ * Returns null for a bare provider value so callers can branch on shape rather than on a separate
+ * flag that could disagree with the value they actually received.
+ */
+export function decodeProviderPageValue(value: string): { provider: string; start: number } | null {
+  if (!value.startsWith(PROVIDER_PAGE_VALUE_PREFIX)) return null;
+  const rest = value.slice(PROVIDER_PAGE_VALUE_PREFIX.length);
+  const delimiter = rest.indexOf("!");
+  if (delimiter <= 0) return null;
+  const start = Number(rest.slice(0, delimiter));
+  if (!Number.isSafeInteger(start) || start < 0) return null;
+  const provider = decodeProviderParam(rest.slice(delimiter + 1));
+  return provider ? { provider, start } : null;
 }
 
 /**
@@ -168,6 +199,13 @@ export type PersonalConfigPanelRoute =
   | { action: "quick-toggle-submit"; locale: string; nonce: string }
   | { action: "model-provider-select"; locale: string; capability: PersonalConfigManagedCapability }
   | {
+      action: "model-provider-page";
+      locale: string;
+      capability: PersonalConfigManagedCapability;
+      provider: string;
+      start: number;
+    }
+  | {
       action: "model-provider-range-open";
       locale: string;
       capability: PersonalConfigManagedCapability;
@@ -209,6 +247,7 @@ export type PersonalConfigPanelRoute =
   | { action: "parameters-2-submit"; locale: string; provider: string; nonce: string }
   // Models - Fallbacks
   | { action: "fallbacks-provider-select"; locale: string }
+  | { action: "fallbacks-page"; locale: string; provider: string; start: number }
   | { action: "fallbacks-range-open"; locale: string; provider: string; start: number }
   | { action: "fallbacks-range-page"; locale: string; provider: string; chooserPage: number }
   | { action: "fallbacks-submit"; locale: string; provider: string; nonce: string }
@@ -305,9 +344,26 @@ export type PersonalConfigPanelRoute =
       nonce: string;
     }
   | { action: "spotlight-set-cancel"; locale: string }
+  | {
+      action: "spotlight-set-block-select";
+      locale: string;
+      channelId: string;
+      hours: number;
+      fp: string;
+    }
+  | {
+      action: "spot-set-auto-select";
+      locale: string;
+      channelId: string;
+      hours: number;
+      blockIdx: number;
+      mask: string;
+      fp: string;
+    }
   | { action: "spotlight-remove-open"; locale: string }
   | { action: "spot-rem-range"; locale: string; start: number; fp: string }
   | { action: "spotlight-remove-page"; locale: string; chooserPage: number; fp: string }
+  | { action: "spotlight-remove-select"; locale: string; fp: string }
   | { action: "spotlight-remove-submit"; locale: string; start: number; fp: string; nonce: string }
   | { action: "spotlight-remove-cancel"; locale: string }
   | {
@@ -604,6 +660,10 @@ export const PERSONAL_CONFIG_ROUTE_CODECS: PersonalConfigRouteCodecs = {
     wireToken: "model-provider-select",
     fields: [capabilityField],
   },
+  "model-provider-page": {
+    wireToken: "model-provider-page",
+    fields: [capabilityField, providerField, startField],
+  },
   "model-provider-range-open": {
     wireToken: "model-provider-range-open",
     fields: [capabilityField, startField],
@@ -651,6 +711,10 @@ export const PERSONAL_CONFIG_ROUTE_CODECS: PersonalConfigRouteCodecs = {
   "fallbacks-provider-select": {
     wireToken: "fallbacks-provider-select",
     fields: [],
+  },
+  "fallbacks-page": {
+    wireToken: "fallbacks-page",
+    fields: [providerField, startField],
   },
   "fallbacks-range-open": {
     wireToken: "fallbacks-range-open",
@@ -748,6 +812,14 @@ export const PERSONAL_CONFIG_ROUTE_CODECS: PersonalConfigRouteCodecs = {
     wireToken: "spotlight-set-cancel",
     fields: [],
   },
+  "spotlight-set-block-select": {
+    wireToken: "s-blk-s",
+    fields: [channelIdField, hoursField, fpField],
+  },
+  "spot-set-auto-select": {
+    wireToken: "s-auto-s",
+    fields: [channelIdField, hoursField, blockIdxField, maskField, fpField],
+  },
   "spotlight-remove-open": {
     wireToken: "spotlight-remove-open",
     fields: [],
@@ -759,6 +831,10 @@ export const PERSONAL_CONFIG_ROUTE_CODECS: PersonalConfigRouteCodecs = {
   "spotlight-remove-page": {
     wireToken: "s-rem-p",
     fields: [chooserPageField, fpField],
+  },
+  "spotlight-remove-select": {
+    wireToken: "s-rem-s",
+    fields: [fpField],
   },
   "spotlight-remove-submit": {
     wireToken: "s-rem-sub",

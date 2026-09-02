@@ -113,6 +113,10 @@ describe("memories panel route catalog", () => {
     ["memories:v1:category:en-US:documents", { action: "category", locale: "en-US", category: "documents" }],
     ["memories:v1:category:en-US:stm", { action: "category", locale: "en-US", category: "stm" }],
     ["memories:v1:persona-select:en-US:1770", { action: "persona-select", locale: "en-US", lineageId: 1770 }],
+    [
+      "memories:v1:persona-page:en-US:1770:1",
+      { action: "persona-page", locale: "en-US", lineageId: 1770, rangeIndex: 1 },
+    ],
     ["memories:v1:select:en-US:1770:1", { action: "select", locale: "en-US", lineageId: 1770, rangeIndex: 1 }],
     ["memories:v1:select:en-US:1770", { action: "select", locale: "en-US", lineageId: 1770 }],
     ["memories:v1:range:en-US:1770:2", { action: "range", locale: "en-US", lineageId: 1770, rangeIndex: 2 }],
@@ -167,6 +171,10 @@ describe("memories panel route catalog", () => {
     [
       "memories:v1:document-persona-select:en-US:10",
       { action: "document-persona-select", locale: "en-US", personaId: 10 },
+    ],
+    [
+      "memories:v1:document-persona-page:en-US:10:1",
+      { action: "document-persona-page", locale: "en-US", personaId: 10, rangeIndex: 1 },
     ],
     [
       "memories:v1:document-select:en-US:10:2",
@@ -743,10 +751,10 @@ describe("memories permissions and scoping", () => {
     expect(personaSelectorIndex).toBeLessThan(personaHeadingIndex);
   });
 
-  it("renders inline range buttons when rangeCount <= 5 and chooser button when > 5", () => {
+  it("renders the shared pagination row for memory and document selectors", () => {
     const personas = [makePersona(1, 100, "Main Persona", false)];
 
-    // 48 memories = 2 pages (page size 24) -> rangeCount = 2 <= 5 -> inline buttons
+    // 48 memories = 2 pages (page size 24) -> one pagination row.
     const smallMemories = Array.from({ length: 48 }, (_, i) =>
       makeMemory(i + 1, { persona_lineage_id: 100, content: `Memory ${i + 1}` }),
     );
@@ -763,12 +771,13 @@ describe("memories permissions and scoping", () => {
     });
 
     const smallButtons = collectButtons(smallPayload.components);
-    const rangeButtons = smallButtons.filter((b) => b.customId?.includes(":range:"));
-    expect(rangeButtons).toHaveLength(2);
-    expect(rangeButtons[0].label).toBe("1-24");
-    expect(rangeButtons[1].label).toBe("25-48");
+    const rangeButtons = smallButtons.filter(
+      (button) => button.label === "← Previous" || button.label?.startsWith("Page ") || button.label === "Next →",
+    );
+    expect(rangeButtons.map((button) => button.label)).toEqual(["← Previous", "Page 1 of 2", "Next →"]);
+    expect(rangeButtons.map((button) => button.disabled)).toEqual([true, true, false]);
 
-    // 150 memories = 7 pages (page size 24) -> rangeCount = 7 > 5 -> range-open chooser button
+    // 150 memories = 7 pages (page size 24) -> still one in-place pagination row.
     const largeMemories = Array.from({ length: 150 }, (_, i) =>
       makeMemory(i + 1, { persona_lineage_id: 100, content: `Memory ${i + 1}` }),
     );
@@ -785,9 +794,8 @@ describe("memories permissions and scoping", () => {
     });
 
     const largeButtons = collectButtons(largePayload.components);
-    const rangeOpenButton = largeButtons.find((b) => b.customId?.includes(":range-open:"));
-    expect(rangeOpenButton).toBeDefined();
-    expect(rangeOpenButton?.label).toBe(localizer("en-US", "general.pagination.select_page_title"));
+    expect(largeButtons.some((b) => b.customId?.includes(":range-open:"))).toBe(false);
+    expect(largeButtons.some((b) => b.label === "Page 1 of 7")).toBe(true);
 
     const largeDocumentPayload = buildMemoriesPanelPayload({
       locale: "en-US",
@@ -807,10 +815,9 @@ describe("memories permissions and scoping", () => {
       readStatus: "fresh",
       page: { kind: "documents" },
     });
-    const documentRangeOpen = collectButtons(largeDocumentPayload.components).find((button) =>
-      button.customId?.includes(":document-range-open:"),
-    );
-    expect(documentRangeOpen).toBeDefined();
+    const documentButtons = collectButtons(largeDocumentPayload.components);
+    expect(documentButtons.some((button) => button.customId?.includes(":document-range-open:"))).toBe(false);
+    expect(documentButtons.some((button) => button.label === "Page 1 of 7")).toBe(true);
     const documentComponents = (JSON.parse(JSON.stringify(largeDocumentPayload)).components[0].components ??
       []) as unknown[];
     const documentPersonaSelectorIndex = documentComponents.findIndex((component) =>
@@ -821,7 +828,7 @@ describe("memories permissions and scoping", () => {
     );
     expect(documentPersonaSelectorIndex).toBeLessThan(documentsHeadingIndex);
 
-    const documentChooserPayload = buildMemoriesPanelPayload({
+    const documentSecondPagePayload = buildMemoriesPanelPayload({
       locale: "en-US",
       category: "documents",
       selectedLineageId: 100,
@@ -837,13 +844,291 @@ describe("memories permissions and scoping", () => {
       canManage: true,
       memteachingEnabled: true,
       readStatus: "fresh",
-      page: { kind: "document-range-chooser", chooserPage: 0 },
+      page: { kind: "documents", rangeIndex: 1 },
     });
-    expect(
-      collectButtons(documentChooserPayload.components).some((button) =>
-        button.customId?.includes(":document-range:en-US:1:5"),
+    expect(collectButtons(documentSecondPagePayload.components)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ label: "Page 2 of 7", disabled: true })]),
+    );
+  });
+
+  it("disables every server pagination button while stale and keeps fresh forward navigation usable", () => {
+    const personas = Array.from({ length: 30 }, (_, index) =>
+      makePersona(index + 1, 100 + index, `Persona ${index + 1}`),
+    );
+    const memories = Array.from({ length: 50 }, (_, index) =>
+      makeMemory(index + 1, { persona_lineage_id: 100, content: `Memory ${index + 1}` }),
+    );
+    const documents = Array.from({ length: 50 }, (_, index) => ({
+      document_id: index + 1,
+      document_name: `Document ${index + 1}`,
+      first_chunk: null,
+      isHistory: false,
+    }));
+    const isPaginationButton = (button: { label?: string }) =>
+      button.label === "← Previous" || button.label === "Next →" || button.label?.startsWith("Page ") === true;
+
+    const staleMemoriesPayload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "memories",
+      selectedLineageId: 100,
+      personas,
+      memories,
+      canManage: true,
+      readStatus: "stale",
+      page: { kind: "main" },
+    });
+    const staleMemoryButtons = collectButtons(staleMemoriesPayload.components).filter(isPaginationButton);
+    expect(staleMemoryButtons).toHaveLength(6);
+    expect(staleMemoryButtons.every((button) => button.disabled === true)).toBe(true);
+
+    const freshMemoriesPayload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "memories",
+      selectedLineageId: 100,
+      personas,
+      memories,
+      canManage: true,
+      readStatus: "fresh",
+      page: { kind: "main" },
+    });
+    const freshMemoryNextButtons = collectButtons(freshMemoriesPayload.components).filter(
+      (button) => button.label === "Next →",
+    );
+    expect(freshMemoryNextButtons).toHaveLength(2);
+    expect(freshMemoryNextButtons.every((button) => button.disabled === false)).toBe(true);
+
+    const staleDocumentsPayload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "documents",
+      selectedLineageId: 100,
+      selectedDocumentPersonaId: 1,
+      personas,
+      memories: [],
+      documents,
+      canManage: true,
+      memteachingEnabled: true,
+      readStatus: "stale",
+      page: { kind: "documents" },
+    });
+    const staleDocumentButtons = collectButtons(staleDocumentsPayload.components).filter(isPaginationButton);
+    expect(staleDocumentButtons).toHaveLength(6);
+    expect(staleDocumentButtons.every((button) => button.disabled === true)).toBe(true);
+
+    const freshDocumentsPayload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "documents",
+      selectedLineageId: 100,
+      selectedDocumentPersonaId: 1,
+      personas,
+      memories: [],
+      documents,
+      canManage: true,
+      memteachingEnabled: true,
+      readStatus: "fresh",
+      page: { kind: "documents" },
+    });
+    const freshDocumentNextButtons = collectButtons(freshDocumentsPayload.components).filter(
+      (button) => button.label === "Next →",
+    );
+    expect(freshDocumentNextButtons).toHaveLength(2);
+    expect(freshDocumentNextButtons.every((button) => button.disabled === false)).toBe(true);
+  });
+
+  it("clamps a stale memory page after deletion instead of rendering an empty slice", () => {
+    const payload = buildMemoriesPanelPayload({
+      locale: "en-US",
+      category: "memories",
+      selectedLineageId: 100,
+      personas: [makePersona(1, 100, "Main Persona")],
+      memories: Array.from({ length: 25 }, (_, index) =>
+        makeMemory(index + 1, { persona_lineage_id: 100, content: `Memory ${index + 1}` }),
       ),
-    ).toBe(true);
+      canManage: true,
+      readStatus: "fresh",
+      page: { kind: "main", rangeIndex: 3 },
+    });
+    const serialized = JSON.stringify(payload);
+
+    expect(serialized).toContain("Page 2 of 2");
+    expect(serialized).toContain("Memory 25");
+    expect(serialized).not.toContain("No server memories taught for this persona yet.");
+  });
+
+  it("keeps the final server-memory page populated after the confirmed deletion", async () => {
+    const memories = Array.from({ length: 49 }, (_, index) =>
+      makeMemory(index + 1, { persona_lineage_id: 1770, content: `Memory ${index + 1}` }),
+    );
+    const { dependencies } = createTestDependencies({
+      loadMemories: async () => memories,
+      operations: {
+        ...serverMemoriesOperations,
+        remove: async ({ memoryId }) => {
+          const index = memories.findIndex((memory) => memory.server_memory_id === memoryId);
+          const row = index >= 0 ? memories.splice(index, 1)[0] : undefined;
+          return row ? { status: "success" as const, row } : { status: "not-found" as const };
+        },
+      },
+    });
+    const route = createMemoriesInteractionRoute(dependencies);
+    let payload: unknown;
+    let deferred = false;
+    const interaction = {
+      id: "remove-last-memory",
+      customId: "memories:v1:remove-confirm:en-US:1770:49",
+      user: { id: "user-42", username: "user42" },
+      guildId: "guild-123",
+      memberPermissions: { has: () => true },
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async (value: unknown) => {
+        payload = value;
+      },
+    };
+
+    await route.execute({} as Client, interaction as never, requireRoute(interaction.customId));
+
+    expect(deferred).toBe(true);
+    const serialized = JSON.stringify(payload);
+    expect(serialized).toContain("Page 2 of 2");
+    expect(serialized).toContain("Memory 48");
+    const memorySelect = collectSelects(payload).find((select) => select.customId?.includes(":select:"));
+    expect(memorySelect?.options?.some((option) => option.label === "Memory 49")).toBe(false);
+    expect(serialized).not.toContain("No server memories taught for this persona yet.");
+  });
+
+  it("keeps the final document page populated after the confirmed deletion", async () => {
+    const documents = Array.from({ length: 49 }, (_, index) => ({
+      document_id: index + 1,
+      document_name: `Document ${index + 1}`,
+      first_chunk: null,
+      isHistory: false,
+    }));
+    const { dependencies } = createTestDependencies({
+      loadDocuments: async () => documents,
+      getDocumentCounts: async () => ({ documents: documents.length, chunks: 0 }),
+      documentOperations: {
+        ...serverDocumentsOperations,
+        remove: async ({ documentId }) => {
+          const index = documents.findIndex((document) => document.document_id === documentId);
+          const row = index >= 0 ? documents.splice(index, 1)[0] : undefined;
+          return row
+            ? { status: "success" as const, documentName: row.document_name }
+            : { status: "not-found" as const };
+        },
+      },
+    });
+    const route = createMemoriesInteractionRoute(dependencies);
+    let payload: unknown;
+    let deferred = false;
+    const interaction = {
+      id: "remove-last-document",
+      customId: "memories:v1:document-remove-confirm:en-US:10:49",
+      user: { id: "user-42", username: "user42" },
+      guildId: "guild-123",
+      memberPermissions: { has: () => true },
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async (value: unknown) => {
+        payload = value;
+      },
+    };
+
+    await route.execute({} as Client, interaction as never, requireRoute(interaction.customId));
+
+    expect(deferred).toBe(true);
+    const serialized = JSON.stringify(payload);
+    expect(serialized).toContain("Page 2 of 2");
+    expect(serialized).toContain("Document 48");
+    const documentSelect = collectSelects(payload).find((select) => select.customId?.includes(":document-select:"));
+    expect(documentSelect?.options?.some((option) => option.label === "Document 49")).toBe(false);
+  });
+
+  it("routes memory, document, and persona page actions to their live slices", async () => {
+    const manyMemories = Array.from({ length: 50 }, (_, index) =>
+      makeMemory(index + 1, { persona_lineage_id: 1770, content: `Memory ${index + 1}` }),
+    );
+    const manyPersonas = Array.from({ length: 30 }, (_, index) =>
+      makePersona(index + 1, 1770 + index, `Persona ${index + 1}`),
+    );
+    const documents = Array.from({ length: 50 }, (_, index) => ({
+      document_id: index + 1,
+      document_name: `Document ${index + 1}`,
+      first_chunk: null,
+      isHistory: false,
+    }));
+    const { dependencies } = createTestDependencies({
+      resolveScope: async () => ({
+        serverId: 1,
+        workspaceId: "guild-123",
+        guildId: "guild-123",
+        userDiscId: "user-42",
+        userId: 42,
+        canManage: true,
+        isBlacklisted: false,
+        memteachingEnabled: true,
+        configuredEmbeddingModelId: null,
+        personas: manyPersonas,
+        readStatus: "fresh",
+      }),
+      loadMemories: async () => manyMemories,
+      loadDocuments: async () => documents,
+      getDocumentCounts: async () => ({ documents: documents.length, chunks: 0 }),
+      getDocumentCountsByPersona: async () => ({ byPersona: new Map(), serverwide: 0 }),
+    });
+    const route = createMemoriesInteractionRoute(dependencies);
+    const scenarios = [
+      {
+        customId: "memories:v1:range:en-US:1770:1",
+        expected: ["Memory 25", "Page 2 of 3"],
+      },
+      {
+        customId: "memories:v1:document-range:en-US:0:1",
+        expected: ["Document 25", "Page 2 of 3"],
+      },
+      {
+        customId: "memories:v1:persona-page:en-US:1770:1",
+        expected: ["Persona 26", "Page 2 of 2"],
+      },
+      {
+        customId: "memories:v1:document-persona-page:en-US:1:1",
+        expected: ["Persona 26", "Page 2 of 2"],
+      },
+    ];
+
+    for (const [index, scenario] of scenarios.entries()) {
+      let payload: unknown;
+      let deferred = false;
+      const interaction = {
+        id: `page-${index}`,
+        customId: scenario.customId,
+        user: { id: "user-42", username: "user42" },
+        guildId: "guild-123",
+        memberPermissions: { has: () => true },
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        deferUpdate: async () => {
+          deferred = true;
+        },
+        editReply: async (value: unknown) => {
+          payload = value;
+        },
+      };
+
+      await route.execute({} as Client, interaction as never, requireRoute(scenario.customId));
+
+      expect(deferred).toBe(true);
+      const serialized = JSON.stringify(payload);
+      for (const expected of scenario.expected) expect(serialized).toContain(expected);
+    }
   });
 
   it("renders document scope as a state-control row across serverwide, persona, and no-persona states", () => {

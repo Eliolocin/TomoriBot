@@ -13,7 +13,6 @@ export default {
     memories_description: `These memories apply across this\nserver whenever this persona is\nactive.`,
     persona_default_name: `Persona`,
     persona_select_placeholder: `Select a persona to view memories...`,
-    persona_select_truncated: `+{count} more personas not shown`,
     persona_memory_count: `{count} memories`,
     persona_memory_count_one: `1 memory`,
     persona_memory_count_shared: `{count} memories ({personas} personas share lineage)`,

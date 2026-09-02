@@ -53,6 +53,10 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, PersonalMemoriesPanelRou
     { action: "persona-select", locale: "en-US", category: "persona", lineageId: 1 },
   ],
   [
+    "personal-memories:v1:persona-page:en-US:persona:1:1",
+    { action: "persona-page", locale: "en-US", category: "persona", lineageId: 1, rangeIndex: 1 },
+  ],
+  [
     "personal-memories:v1:select:en-US:global:0",
     { action: "select", locale: "en-US", category: "global", lineageId: 0 },
   ],
@@ -298,12 +302,13 @@ describe("personal-memories panel route catalog", () => {
     }
   });
 
-  it("guarantees 16-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
-    const ACCEPTED_16_ACTIONS = [
+  it("guarantees 17-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
+    const ACCEPTED_17_ACTIONS = [
       "add-submit",
       "category",
       "edit-open",
       "edit-submit",
+      "persona-page",
       "persona-select",
       "range",
       "range-cancel",
@@ -328,25 +333,26 @@ describe("personal-memories panel route catalog", () => {
     );
     const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
 
-    expect(catalogActions).toEqual(ACCEPTED_16_ACTIONS);
-    expect(wireActions).toEqual(ACCEPTED_16_ACTIONS);
-    expect(codecTableActions).toEqual(ACCEPTED_16_ACTIONS);
+    expect(catalogActions).toEqual(ACCEPTED_17_ACTIONS);
+    expect(wireActions).toEqual(ACCEPTED_17_ACTIONS);
+    expect(codecTableActions).toEqual(ACCEPTED_17_ACTIONS);
 
-    expect(handlerActions.size).toBe(16);
-    expect([...handlerActions].sort()).toEqual(ACCEPTED_16_ACTIONS);
-    expect(ACCEPTED_16_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
-    expect([...handlerActions].filter((a) => !ACCEPTED_16_ACTIONS.includes(a))).toEqual([]);
+    expect(handlerActions.size).toBe(17);
+    expect([...handlerActions].sort()).toEqual(ACCEPTED_17_ACTIONS);
+    expect(ACCEPTED_17_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !ACCEPTED_17_ACTIONS.includes(a))).toEqual([]);
     expect(codecTableActions.filter((a) => !handlerActions.has(a))).toEqual([]);
     expect([...handlerActions].filter((a) => !codecTableActions.includes(a))).toEqual([]);
   });
 
   it("guarantees producer coverage against production UI and modal surfaces with explicit allowlist for producerless actions", () => {
-    const PRODUCERLESS_ACTIONS = ["refresh"] as const;
-    const ACCEPTED_16_ACTIONS = [
+    const PRODUCERLESS_ACTIONS = ["range-cancel", "range-open", "range-page", "refresh"] as const;
+    const ACCEPTED_17_ACTIONS = [
       "add-submit",
       "category",
       "edit-open",
       "edit-submit",
+      "persona-page",
       "persona-select",
       "range",
       "range-cancel",
@@ -391,6 +397,9 @@ describe("personal-memories panel route catalog", () => {
       makeMemory(i + 1, { persona_lineage_id: 0 }),
     );
     const samplePersonas = [makePersona(1, 10, "Tomori"), makePersona(2, 20, "Anon")];
+    const manyPersonas = Array.from({ length: 30 }, (_, index) =>
+      makePersona(index + 1, 1000 + index, `Persona ${index + 1}`),
+    );
 
     // Global main with memories (produces category, select, edit-open, remove-prompt, stm-clear)
     harvestCustomIds(
@@ -407,7 +416,22 @@ describe("personal-memories panel route catalog", () => {
       }),
     );
 
-    // Global main with multi-page memories (produces range-open)
+    // Persona selector overflow (produces the fresh persona-page action).
+    harvestCustomIds(
+      buildPersonalMemoriesPanelPayload({
+        locale: "en-US",
+        category: "persona",
+        selectedLineageId: 1000,
+        personas: manyPersonas,
+        memories: [makeMemory(1, { persona_lineage_id: 1000 })],
+        stmCount: 0,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        readStatus: "fresh",
+        page: { kind: "main" },
+      }),
+    );
+
+    // Global main with multi-page memories (produces the range row)
     harvestCustomIds(
       buildPersonalMemoriesPanelPayload({
         locale: "en-US",
@@ -422,7 +446,7 @@ describe("personal-memories panel route catalog", () => {
       }),
     );
 
-    // Range chooser (produces range, range-page, range-cancel)
+    // Retained chooser actions are producerless after the in-place migration.
     harvestCustomIds(
       buildPersonalMemoriesPanelPayload({
         locale: "en-US",
@@ -433,7 +457,7 @@ describe("personal-memories panel route catalog", () => {
         stmCount: 1,
         privacyLevel: PrivacyLevel.MINIMAL,
         readStatus: "fresh",
-        page: { kind: "range-chooser", chooserPage: 0 },
+        page: { kind: "main", rangeIndex: 1 },
       }),
     );
 
@@ -467,7 +491,7 @@ describe("personal-memories panel route catalog", () => {
       }),
     );
 
-    // Persona multi-page (produces range-open)
+    // Persona multi-page (produces the range row)
     harvestCustomIds(
       buildPersonalMemoriesPanelPayload({
         locale: "en-US",
@@ -537,7 +561,7 @@ describe("personal-memories panel route catalog", () => {
     }
 
     const unionedActions = [...new Set([...producedActions, ...PRODUCERLESS_ACTIONS])].sort();
-    expect(unionedActions).toEqual(ACCEPTED_16_ACTIONS);
+    expect(unionedActions).toEqual(ACCEPTED_17_ACTIONS);
   });
 
   it("distinguishes presence and absence of optional select.rangeIndex", () => {
@@ -1408,7 +1432,7 @@ describe("memory selector pagination & 25-option ceiling", () => {
       .flatMap((component) => component.components ?? [])
       .filter((component) => component.type === ComponentType.Button)
       .map((component) => component.label);
-    expect(rangeLabels).toEqual(expect.arrayContaining(["1-24", "25-48", "49-72", "73-96", "97-100"]));
+    expect(rangeLabels).toEqual(expect.arrayContaining(["← Previous", "Page 1 of 5", "Next →"]));
     expect(rangeLabels).not.toContain(localizer("en-US", "general.pagination.select_page_title"));
 
     const personaPayload = buildPersonalMemoriesPanelPayload({
@@ -1430,7 +1454,7 @@ describe("memory selector pagination & 25-option ceiling", () => {
       .flatMap((component) => component.components ?? [])
       .filter((component) => component.type === ComponentType.Button)
       .map((component) => component.label);
-    expect(personaRangeLabels).toEqual(expect.arrayContaining(["1-24", "25-48", "49-72", "73-96", "97-100"]));
+    expect(personaRangeLabels).toEqual(expect.arrayContaining(["← Previous", "Page 1 of 5", "Next →"]));
   });
 });
 
@@ -1529,13 +1553,149 @@ describe("persona selector lineage identity", () => {
     expect(withoutAvatar).toContain("Persona-Scoped Personal Memories");
   });
 
-  it("caps the selector at 25 lineages and says how many are hidden", () => {
+  it("paginates all lineages without hidden-entry notices", () => {
     const personas = Array.from({ length: 30 }, (_, index) => makePersona(index + 1, 20000 + index, `P${index}`));
     const payload = buildPersonaPage(personas);
 
     const select = personaSelect(payload);
     expect(select?.options).toHaveLength(25);
-    expect(JSON.stringify(payload)).toContain("5 more personas are not listed here.");
+    expect(JSON.stringify(payload)).not.toContain("more personas are not listed here");
+    expect(JSON.stringify(payload)).toContain("personal-memories:v1:persona-page:en-US:persona:20000:1");
+
+    const secondPage = buildPersonalMemoriesPanelPayload({
+      locale: "en-US",
+      category: "persona",
+      selectedLineageId: 20000,
+      personas,
+      memories: [],
+      stmCount: 0,
+      privacyLevel: PrivacyLevel.MINIMAL,
+      readStatus: "fresh",
+      page: { kind: "main", personaRangeIndex: 1 },
+    });
+    const secondSelect = personaSelect(secondPage);
+    expect(secondSelect?.options).toHaveLength(5);
+    expect(secondSelect?.options?.map((option) => option.value)).toEqual(["20025", "20026", "20027", "20028", "20029"]);
+  });
+
+  it("uses the routed page index for memory and persona slices while clamping stale pages", async () => {
+    const manyMemories = Array.from({ length: 25 }, (_, index) =>
+      makeMemory(index + 1, { persona_lineage_id: 10, content: `Memory ${index + 1}` }),
+    );
+    const manyPersonas = Array.from({ length: 30 }, (_, index) =>
+      makePersona(index + 1, 10 + index, `Persona ${index + 1}`),
+    );
+    const { dependencies } = makeDependencies([], {
+      resolveScope: async () => ({
+        userId: 1,
+        userDiscId: "123456789",
+        guildId: "987654321",
+        workspaceId: "987654321",
+        internalServerId: 42,
+        privacyLevel: PrivacyLevel.MINIMAL,
+        personas: manyPersonas,
+        readStatus: "fresh",
+      }),
+      loadMemories: async () => manyMemories,
+    });
+    const route = createPersonalMemoriesInteractionRoute(dependencies);
+    const scenarios = [
+      {
+        customId: "personal-memories:v1:range:en-US:global:0:1",
+        expected: ["Memory 25", "Page 2 of 2"],
+      },
+      {
+        customId: "personal-memories:v1:persona-page:en-US:persona:10:1",
+        expected: ["Persona 26", "Page 2 of 2"],
+      },
+    ];
+
+    for (const [index, scenario] of scenarios.entries()) {
+      let payload: unknown;
+      let deferred = false;
+      const interaction = {
+        id: `personal-page-${index}`,
+        customId: scenario.customId,
+        user: { id: "123456789" },
+        guildId: "987654321",
+        memberPermissions: { has: () => true },
+        isButton: () => true,
+        isStringSelectMenu: () => false,
+        isModalSubmit: () => false,
+        deferUpdate: async () => {
+          deferred = true;
+        },
+        editReply: async (value: unknown) => {
+          payload = value;
+        },
+      };
+
+      await route.execute({} as Client, interaction as never, requireRoute(scenario.customId));
+
+      expect(deferred).toBe(true);
+      const serialized = JSON.stringify(payload);
+      for (const expected of scenario.expected) expect(serialized).toContain(expected);
+    }
+
+    const stalePayload = buildPersonalMemoriesPanelPayload({
+      locale: "en-US",
+      category: "global",
+      selectedLineageId: 0,
+      personas: [],
+      memories: manyMemories,
+      stmCount: 0,
+      privacyLevel: PrivacyLevel.MINIMAL,
+      readStatus: "fresh",
+      page: { kind: "main", rangeIndex: 99 },
+    });
+    expect(JSON.stringify(stalePayload)).toContain("Page 2 of 2");
+    expect(JSON.stringify(stalePayload)).toContain("Memory 25");
+  });
+
+  it("keeps the final personal-memory page populated after the confirmed deletion", async () => {
+    const memories = Array.from({ length: 49 }, (_, index) =>
+      makeMemory(index + 1, { persona_lineage_id: 0, content: `Memory ${index + 1}` }),
+    );
+    const { dependencies } = makeDependencies([], {
+      loadMemories: async () => memories,
+      operations: {
+        ...personalMemoriesOperations,
+        remove: async ({ memoryId }) => {
+          const index = memories.findIndex((memory) => memory.personal_memory_id === memoryId);
+          const row = index >= 0 ? memories.splice(index, 1)[0] : undefined;
+          return row ? { status: "success" as const, row } : { status: "not-found" as const };
+        },
+      },
+    });
+    const route = createPersonalMemoriesInteractionRoute(dependencies);
+    let payload: unknown;
+    let deferred = false;
+    const interaction = {
+      id: "remove-last-personal-memory",
+      customId: "personal-memories:v1:remove-confirm:en-US:global:0:49",
+      user: { id: "123456789" },
+      guildId: "987654321",
+      memberPermissions: { has: () => true },
+      isButton: () => true,
+      isStringSelectMenu: () => false,
+      isModalSubmit: () => false,
+      deferUpdate: async () => {
+        deferred = true;
+      },
+      editReply: async (value: unknown) => {
+        payload = value;
+      },
+    };
+
+    await route.execute({} as Client, interaction as never, requireRoute(interaction.customId));
+
+    expect(deferred).toBe(true);
+    const serialized = JSON.stringify(payload);
+    expect(serialized).toContain("Page 2 of 2");
+    expect(serialized).toContain("Memory 48");
+    const memorySelect = collectSelects(payload).find((select) => select.customId?.includes(":select:"));
+    expect(memorySelect?.options?.some((option) => option.label === "Memory 49")).toBe(false);
+    expect(serialized).not.toContain("No memories saved yet.");
   });
 });
 

@@ -20,6 +20,13 @@ export type PersonalMemoriesPanelRoute =
   | { action: "category"; locale: string; category: PersonalMemoriesCategory }
   | { action: "persona-select"; locale: string; category: "persona"; lineageId: number }
   | {
+      action: "persona-page";
+      locale: string;
+      category: "persona";
+      lineageId: number;
+      rangeIndex: number;
+    }
+  | {
       action: "select";
       locale: string;
       category: PersonalMemoriesCategory;
@@ -147,6 +154,10 @@ export const PERSONAL_MEMORIES_ROUTE_CODECS: PersonalMemoriesRouteCodecs = {
   "persona-select": {
     wireToken: "persona-select",
     fields: [personaCategoryField, positiveLineageIdField],
+  },
+  "persona-page": {
+    wireToken: "persona-page",
+    fields: [personaCategoryField, positiveLineageIdField, rangeIndexField],
   },
   range: {
     wireToken: "range",

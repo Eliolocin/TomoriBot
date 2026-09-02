@@ -27,8 +27,7 @@ import {
   buildOptionalThumbnailSection,
   buildPanelContainer,
   buildPanelReceiptContainer,
-  buildRangeNavigationRows,
-  buildRangeChooserComponents,
+  buildPaginationRow,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
@@ -36,7 +35,7 @@ import { getMemoryLimits } from "@/utils/misc/memoryLimits";
 import { localizer } from "@/utils/text/localizer";
 import { personaRepresentativeForLineage } from "@/utils/persona/lineage";
 
-const MAX_PERSONAL_MEMORY_PAGE_SIZE = 24;
+export const MAX_PERSONAL_MEMORY_PAGE_SIZE = 24;
 const PERSONA_SELECT_MAX_OPTIONS = 25;
 
 /**
@@ -84,8 +83,7 @@ const MAX_PERSONAL_MEMORY_TAG_LENGTH = 32;
 const memoryLimits = getMemoryLimits();
 
 type PersonalMemoriesPanelPage =
-  | { kind: "main"; selectedMemoryId?: number; rangeIndex?: number }
-  | { kind: "range-chooser"; chooserPage?: number }
+  | { kind: "main"; selectedMemoryId?: number; rangeIndex?: number; personaRangeIndex?: number }
   | { kind: "remove"; memoryId: number };
 
 export interface PersonalMemoriesPanelPayload {
@@ -370,53 +368,6 @@ ${localizer(locale, "commands.personal.memories.remove_confirm_description", {
     }
   }
 
-  if (page.kind === "range-chooser") {
-    components.push(
-      ...buildRangeChooserComponents({
-        locale,
-        totalCount: memories.length,
-        pageSize: MAX_PERSONAL_MEMORY_PAGE_SIZE,
-        chooserPage: page.chooserPage,
-        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-        version: PERSONAL_MEMORIES_ROUTE_VERSION,
-        buildSegments: {
-          range: (rangeIndex) =>
-            buildPersonalMemoriesRouteSegments({
-              action: "range",
-              locale,
-              category,
-              lineageId: selectedLineageId,
-              rangeIndex,
-            }),
-          previous: (targetPage) =>
-            buildPersonalMemoriesRouteSegments({
-              action: "range-page",
-              locale,
-              category,
-              lineageId: selectedLineageId,
-              chooserPage: targetPage,
-            }),
-          next: (targetPage) =>
-            buildPersonalMemoriesRouteSegments({
-              action: "range-page",
-              locale,
-              category,
-              lineageId: selectedLineageId,
-              chooserPage: targetPage,
-            }),
-          cancel: () =>
-            buildPersonalMemoriesRouteSegments({
-              action: "range-cancel",
-              locale,
-              category,
-              lineageId: selectedLineageId,
-            }),
-        },
-      }),
-    );
-    return buildPayload(components, receipt);
-  }
-
   const rangeIndex = page.kind === "main" ? (page.rangeIndex ?? 0) : 0;
   const rangeSelection = resolveRangeSelection(memories, rangeIndex, MAX_PERSONAL_MEMORY_PAGE_SIZE);
 
@@ -480,38 +431,25 @@ ${localizer(locale, "commands.personal.memories.selector_guidance")}`,
     };
     components.push(selectRow);
 
-    if (rangeSelection.rangeCount > 1) {
-      components.push(
-        ...buildRangeNavigationRows({
-          totalCount: memories.length,
-          pageSize: MAX_PERSONAL_MEMORY_PAGE_SIZE,
-          activeRangeIndex: rangeSelection.rangeIndex,
-          locale,
-          namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-          version: PERSONAL_MEMORIES_ROUTE_VERSION,
-          buildSegments: {
-            range: (rangeIndex) =>
-              buildPersonalMemoriesRouteSegments({
-                action: "range",
-                locale,
-                category: "global",
-                lineageId: 0,
-                rangeIndex,
-              }),
-          },
-          overflowButton: {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            customId: buildPersonalMemoriesRouteId({
-              action: "range-open",
-              locale,
-              category: "global",
-              lineageId: 0,
-            }),
-            label: localizer(locale, "general.pagination.select_page_title"),
-          },
-        }),
-      );
+    const memoryPaginationRow = buildPaginationRow({
+      locale,
+      rangeIndex: rangeSelection.rangeIndex,
+      rangeCount: rangeSelection.rangeCount,
+      namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+      version: PERSONAL_MEMORIES_ROUTE_VERSION,
+      buildSegments: {
+        page: (rangeIndex) =>
+          buildPersonalMemoriesRouteSegments({
+            action: "range",
+            locale,
+            category: "global",
+            lineageId: 0,
+            rangeIndex,
+          }),
+      },
+    });
+    if (memoryPaginationRow) {
+      components.push(memoryPaginationRow);
     }
 
     if (selectedMemory) {
@@ -617,8 +555,17 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
       }
 
       const lineageEntries = [...personasByLineage.entries()];
-      const visibleLineages = lineageEntries.slice(0, PERSONA_SELECT_MAX_OPTIONS);
-      const hiddenLineageCount = lineageEntries.length - visibleLineages.length;
+      const selectedLineagePosition = lineageEntries.findIndex(([lineage]) => lineage === selectedLineageId);
+      const requestedPersonaRangeIndex = page.kind === "main" ? page.personaRangeIndex : undefined;
+      const personaRangeIndex =
+        requestedPersonaRangeIndex ??
+        (selectedLineagePosition >= 0 ? Math.floor(selectedLineagePosition / PERSONA_SELECT_MAX_OPTIONS) : 0);
+      const personaRangeSelection = resolveRangeSelection(
+        lineageEntries,
+        personaRangeIndex,
+        PERSONA_SELECT_MAX_OPTIONS,
+      );
+      const visibleLineages = personaRangeSelection.visibleItems;
 
       const personaOptions: SelectMenuComponentOptionData[] = visibleLineages.map(([lineage, sharing]) => {
         const representative = personaRepresentativeForLineage(sharing, lineage);
@@ -654,13 +601,25 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
         ],
       });
 
-      if (hiddenLineageCount > 0) {
-        components.push({
-          type: ComponentType.TextDisplay,
-          content: `-# ${localizer(locale, "commands.personal.memories.persona_select_truncated", {
-            count: hiddenLineageCount,
-          })}`,
-        });
+      const personaPaginationRow = buildPaginationRow({
+        locale,
+        rangeIndex: personaRangeSelection.rangeIndex,
+        rangeCount: personaRangeSelection.rangeCount,
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: PERSONAL_MEMORIES_ROUTE_VERSION,
+        buildSegments: {
+          page: (rangeIndex) =>
+            buildPersonalMemoriesRouteSegments({
+              action: "persona-page",
+              locale,
+              category: "persona",
+              lineageId: selectedLineageId,
+              rangeIndex,
+            }),
+        },
+      });
+      if (personaPaginationRow) {
+        components.push(personaPaginationRow);
       }
 
       components.push(personaHeadingSection);
@@ -714,38 +673,25 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
       };
       components.push(selectRow);
 
-      if (rangeSelection.rangeCount > 1) {
-        components.push(
-          ...buildRangeNavigationRows({
-            totalCount: memories.length,
-            pageSize: MAX_PERSONAL_MEMORY_PAGE_SIZE,
-            activeRangeIndex: rangeSelection.rangeIndex,
-            locale,
-            namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
-            version: PERSONAL_MEMORIES_ROUTE_VERSION,
-            buildSegments: {
-              range: (rangeIndex) =>
-                buildPersonalMemoriesRouteSegments({
-                  action: "range",
-                  locale,
-                  category: "persona",
-                  lineageId: selectedLineageId,
-                  rangeIndex,
-                }),
-            },
-            overflowButton: {
-              type: ComponentType.Button,
-              style: ButtonStyle.Secondary,
-              customId: buildPersonalMemoriesRouteId({
-                action: "range-open",
-                locale,
-                category: "persona",
-                lineageId: selectedLineageId,
-              }),
-              label: localizer(locale, "general.pagination.select_page_title"),
-            },
-          }),
-        );
+      const memoryPaginationRow = buildPaginationRow({
+        locale,
+        rangeIndex: rangeSelection.rangeIndex,
+        rangeCount: rangeSelection.rangeCount,
+        namespace: PERSONAL_MEMORIES_ROUTE_NAMESPACE,
+        version: PERSONAL_MEMORIES_ROUTE_VERSION,
+        buildSegments: {
+          page: (rangeIndex) =>
+            buildPersonalMemoriesRouteSegments({
+              action: "range",
+              locale,
+              category: "persona",
+              lineageId: selectedLineageId,
+              rangeIndex,
+            }),
+        },
+      });
+      if (memoryPaginationRow) {
+        components.push(memoryPaginationRow);
       }
 
       if (selectedMemory) {

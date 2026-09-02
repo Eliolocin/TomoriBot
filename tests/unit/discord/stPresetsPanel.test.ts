@@ -102,6 +102,11 @@ describe("ST Presets route codec", () => {
       parsed: { action: "nodes-range", locale: "en-US", presetId: 42, rangeIndex: 1 },
     },
     {
+      action: "nodes-range-select",
+      customId: "st-presets:v1:nodes-range-select:en-US:42",
+      parsed: { action: "nodes-range-select", locale: "en-US", presetId: 42 },
+    },
+    {
       action: "nodes-page",
       customId: "st-presets:v1:nodes-page:en-US:42:3",
       parsed: { action: "nodes-page", locale: "en-US", presetId: 42, chooserPage: 3 },
@@ -160,8 +165,8 @@ describe("ST Presets route codec", () => {
     }
   });
 
-  it("guarantees 14-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
-    const ACCEPTED_14_ACTIONS = [
+  it("guarantees 15-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
+    const ACCEPTED_15_ACTIONS = [
       "add-open",
       "add-submit",
       "delete-cancel",
@@ -171,6 +176,7 @@ describe("ST Presets route codec", () => {
       "nodes-open",
       "nodes-page",
       "nodes-range",
+      "nodes-range-select",
       "nodes-submit",
       "none",
       "range",
@@ -188,21 +194,21 @@ describe("ST Presets route codec", () => {
     );
     const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
 
-    expect(catalogActions).toEqual(ACCEPTED_14_ACTIONS);
-    expect(wireActions).toEqual(ACCEPTED_14_ACTIONS);
-    expect(codecTableActions).toEqual(ACCEPTED_14_ACTIONS);
+    expect(catalogActions).toEqual(ACCEPTED_15_ACTIONS);
+    expect(wireActions).toEqual(ACCEPTED_15_ACTIONS);
+    expect(codecTableActions).toEqual(ACCEPTED_15_ACTIONS);
 
-    expect(handlerActions.size).toBe(14);
-    expect([...handlerActions].sort()).toEqual(ACCEPTED_14_ACTIONS);
-    expect(ACCEPTED_14_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
-    expect([...handlerActions].filter((a) => !ACCEPTED_14_ACTIONS.includes(a))).toEqual([]);
+    expect(handlerActions.size).toBe(15);
+    expect([...handlerActions].sort()).toEqual(ACCEPTED_15_ACTIONS);
+    expect(ACCEPTED_15_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !ACCEPTED_15_ACTIONS.includes(a))).toEqual([]);
     expect(codecTableActions.filter((a) => !handlerActions.has(a))).toEqual([]);
     expect([...handlerActions].filter((a) => !codecTableActions.includes(a))).toEqual([]);
   });
 
-  it("guarantees producer coverage against production UI and modal surfaces with exactly three allowlisted producerless actions", () => {
-    const PRODUCERLESS_COMPATIBILITY_ACTIONS = ["add-open", "disable", "none"] as const;
-    const ACCEPTED_14_ACTIONS = [
+  it("guarantees producer coverage against production UI and modal surfaces with five allowlisted producerless actions", () => {
+    const PRODUCERLESS_COMPATIBILITY_ACTIONS = ["add-open", "disable", "none", "nodes-page", "nodes-range"] as const;
+    const ACCEPTED_15_ACTIONS = [
       "add-open",
       "add-submit",
       "delete-cancel",
@@ -212,6 +218,7 @@ describe("ST Presets route codec", () => {
       "nodes-open",
       "nodes-page",
       "nodes-range",
+      "nodes-range-select",
       "nodes-submit",
       "none",
       "range",
@@ -280,15 +287,15 @@ describe("ST Presets route codec", () => {
     });
     harvestCustomIds(deletePayload);
 
-    const chooserPayload = buildStPresetsPanelPayload({
+    const nodePaginationPayload = buildStPresetsPanelPayload({
       locale: "en-US",
       scope: "guild",
       presets: [makePreset(1)],
       activePresetId: 1,
       readStatus: "fresh",
-      page: { kind: "nodes-chooser", presetId: 1, totalCount: 600, chooserPage: 1 },
+      page: { kind: "preset", presetId: 1, nodeRangeIndex: 1, nodeRangeCount: 3 },
     });
-    harvestCustomIds(chooserPayload);
+    harvestCustomIds(nodePaginationPayload);
 
     const addModal = buildAddStPresetModal("en-US", "nonce123456");
     harvestCustomIds(addModal);
@@ -315,7 +322,7 @@ describe("ST Presets route codec", () => {
     }
 
     const unionedActions = [...new Set([...producedActions, ...PRODUCERLESS_COMPATIBILITY_ACTIONS])].sort();
-    expect(unionedActions).toEqual(ACCEPTED_14_ACTIONS);
+    expect(unionedActions).toEqual(ACCEPTED_15_ACTIONS);
   });
 
   it("rejects unsupported locales and invalid segment counts", () => {
@@ -594,6 +601,51 @@ describe("ST Presets panel rendering", () => {
     const serialized24 = JSON.stringify(payload24);
     expect(serialized24).toContain("st-presets:v1:range:en-US:1");
     expect(serialized24).toContain('"disabled":true'); // Previous disabled at page 0
+
+    const getPaginationButtons = (payload: ReturnType<typeof buildStPresetsPanelPayload>) => {
+      const container = payload.components.find((component) => component.type === ComponentType.Container) as {
+        components?: Array<{
+          type: number;
+          components?: Array<{ customId?: string; disabled?: boolean; label?: string }>;
+        }>;
+      };
+      return (
+        container.components?.find(
+          (component) => component.type === ComponentType.ActionRow && component.components?.length === 3,
+        )?.components ?? []
+      );
+    };
+
+    const firstPageButtons = getPaginationButtons(payload24);
+    expect(firstPageButtons.map((button) => button.label)).toEqual(["← Previous", "Page 1 of 2", "Next →"]);
+    expect(firstPageButtons.map((button) => button.disabled)).toEqual([true, true, false]);
+    expect(firstPageButtons[0]?.customId).toBe("st-presets:v1:range:en-US:0");
+    expect(firstPageButtons[2]?.customId).toBe("st-presets:v1:range:en-US:1");
+    expect(new Set(firstPageButtons.map((button) => button.customId)).size).toBe(3);
+
+    const secondPage = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: presets24,
+      activePresetId: 1,
+      readStatus: "fresh",
+      page: { kind: "preset", presetId: 1 },
+      rangeIndex: 1,
+    });
+    const secondPageButtons = getPaginationButtons(secondPage);
+    expect(secondPageButtons.map((button) => button.label)).toEqual(["← Previous", "Page 2 of 2", "Next →"]);
+    expect(secondPageButtons.map((button) => button.disabled)).toEqual([false, true, true]);
+
+    const stalePage = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: presets24,
+      activePresetId: 1,
+      readStatus: "stale",
+      page: { kind: "preset", presetId: 1 },
+      rangeIndex: 1,
+    });
+    expect(getPaginationButtons(stalePage).map((button) => button.disabled)).toEqual([true, true, true]);
   });
 
   it("renders selector and action buttons disabled on stale or unavailable reads", () => {
@@ -817,21 +869,83 @@ describe("ST Presets panel rendering", () => {
     expect(serialized).toContain("st-presets:v1:delete-cancel:en-US:1");
   });
 
-  it("hands off to range chooser when page is nodes-chooser", () => {
+  it("keeps the active preset body while exposing oversized node modal pages", () => {
     const payload = buildStPresetsPanelPayload({
       locale: "en-US",
       scope: "guild",
       presets: [makePreset(1)],
       activePresetId: 1,
       readStatus: "fresh",
-      page: { kind: "nodes-chooser", presetId: 1, totalCount: 120, chooserPage: 0 },
+      page: { kind: "preset", presetId: 1, nodeRangeIndex: 0, nodeRangeCount: 3 },
     });
     const serialized = JSON.stringify(payload);
-    expect(serialized).toContain("Select Page");
-    expect(serialized).toContain("1-50");
-    expect(serialized).toContain("51-100");
-    expect(serialized).toContain("101-120");
-    expect(serialized).toContain("st-presets:v1:nodes-range:en-US:1:0");
+    expect(serialized).not.toContain("Select Page");
+    expect(serialized).toContain("Currently active preset");
+    expect(serialized).toContain("st-presets:v1:nodes-range-select:en-US:1");
+    // Every range including the first is its own option, so no slice is stranded behind a
+    // disabled control.
+    expect(serialized).toContain('"value":"0","label":"Nodes 1-50"');
+    expect(serialized).toContain('"value":"1","label":"Nodes 51-100"');
+    expect(serialized).toContain('"value":"2","label":"Nodes 101-150"');
+    expect(serialized).not.toContain('"label":"Next →"');
+  });
+
+  it("keeps a second-page preset selected and on its own selector page after a repaint", () => {
+    const presets24 = Array.from({ length: 24 }, (_, i) => makePreset(i + 1));
+    // Preset 24 sits on selector page 2; a repaint that names it carries no rangeIndex.
+    const payload = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: presets24,
+      activePresetId: 24,
+      readStatus: "fresh",
+      page: { kind: "preset", presetId: 24 },
+    });
+    const serialized = JSON.stringify(payload);
+    expect(serialized).toContain('"label":"Page 2 of 2"');
+    expect(serialized).toContain('"value":"24","description":"Description for preset 24","default":true');
+    expect(serialized).not.toContain('"value":"1","description":"Description for preset 1"');
+  });
+
+  it("keeps a delete prompt on the selector page holding its target", () => {
+    const presets24 = Array.from({ length: 24 }, (_, i) => makePreset(i + 1));
+    const payload = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: presets24,
+      activePresetId: 1,
+      readStatus: "fresh",
+      page: { kind: "delete", presetId: 24 },
+    });
+    expect(JSON.stringify(payload)).toContain('"label":"Page 2 of 2"');
+  });
+
+  it("still honours an explicit selector page over the selection anchor", () => {
+    const presets24 = Array.from({ length: 24 }, (_, i) => makePreset(i + 1));
+    const payload = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: presets24,
+      activePresetId: 24,
+      readStatus: "fresh",
+      page: { kind: "preset", presetId: 24 },
+      rangeIndex: 0,
+    });
+    expect(JSON.stringify(payload)).toContain('"label":"Page 1 of 2"');
+  });
+
+  it("labels a partial final node range from the real node total", () => {
+    const payload = buildStPresetsPanelPayload({
+      locale: "en-US",
+      scope: "guild",
+      presets: [makePreset(1)],
+      activePresetId: 1,
+      readStatus: "fresh",
+      page: { kind: "preset", presetId: 1, nodeRangeIndex: 0, nodeRangeCount: 2, nodeTotalCount: 51 },
+    });
+    const serialized = JSON.stringify(payload);
+    expect(serialized).toContain('"value":"0","label":"Nodes 1-50"');
+    expect(serialized).toContain('"value":"1","label":"Nodes 51-51"');
   });
 
   it("stays within the 40-component ceiling on the heaviest realistic payload", () => {

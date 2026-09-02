@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   ButtonStyle,
   ComponentType,
@@ -8,7 +9,6 @@ import {
   type TextDisplayComponentData,
 } from "discord.js";
 import type { PanelReceipt } from "@/types/discord/panel";
-import { resolveRangeChooser } from "@/utils/discord/interactions/panelController";
 import { buildInteractionRouteId } from "@/utils/discord/interactions/routeRegistry";
 import { localizer } from "@/utils/text/localizer";
 
@@ -19,74 +19,8 @@ const PANEL_ACCENT_BY_TONE = {
   info: 0x65c6c5,
 } as const;
 
-const RANGE_BUTTONS_PER_ROW = 5;
-
-export interface RangeChooserRouteSegments {
-  range: (rangeIndex: number) => string[];
-  previous?: (targetChooserPage: number) => string[];
-  next?: (targetChooserPage: number) => string[];
-  cancel?: () => string[];
-}
-
 export interface PaginationRouteSegments {
   page: (rangeIndex: number) => string[];
-}
-
-interface RangeChooserComponentsBase {
-  locale: string;
-  totalCount: number;
-  pageSize: number;
-  chooserPage?: number;
-  namespace: string;
-  version: string;
-}
-
-/**
- * Route identity is required rather than optional: a chooser rendered without it emits IDs that
- * collide across every list in the same namespace. `baseSegments` covers the common
- * identity-then-action-then-value layout, while `buildSegments` exists because `/moderation` already
- * routes as `range:<locale>:<category>:...`, which that layout cannot express.
- */
-export type RangeChooserComponentsOptions = RangeChooserComponentsBase &
-  (
-    | { baseSegments: string[]; buildSegments?: never }
-    | { buildSegments: RangeChooserRouteSegments; baseSegments?: never }
-  );
-
-type RangeNavigationRowsOptions = RangeChooserComponentsOptions & {
-  activeRangeIndex: number;
-  disabled?: boolean;
-  overflowButton: ButtonComponentData;
-};
-
-export function buildRangeNavigationRows(options: RangeNavigationRowsOptions): ActionRowData<ButtonComponentData>[] {
-  const resolved = resolveRangeChooser({
-    totalCount: options.totalCount,
-    pageSize: options.pageSize,
-  });
-  if (resolved.rangeCount <= 1) return [];
-  if (resolved.rangeCount > RANGE_BUTTONS_PER_ROW) {
-    return [{ type: ComponentType.ActionRow, components: [options.overflowButton] }];
-  }
-
-  return [
-    {
-      type: ComponentType.ActionRow,
-      components: resolved.ranges.map((range) => ({
-        type: ComponentType.Button,
-        style: ButtonStyle.Secondary,
-        customId: buildInteractionRouteId(
-          options.namespace,
-          options.version,
-          ...(options.buildSegments
-            ? options.buildSegments.range(range.rangeIndex)
-            : [...options.baseSegments, "range", String(range.rangeIndex)]),
-        ),
-        label: `${range.start}-${range.end}`,
-        disabled: options.disabled || range.rangeIndex === options.activeRangeIndex,
-      })),
-    },
-  ];
 }
 
 /**
@@ -191,6 +125,12 @@ export interface PaginationRowOptions {
   namespace: string;
   version: string;
   buildSegments: PaginationRouteSegments;
+  disabled?: boolean;
+}
+
+function buildPaginationIndicatorId(pageRouteId: string): string {
+  const digest = createHash("sha256").update(`pagination-indicator:${pageRouteId}`).digest("base64url");
+  return `pagination-indicator-${digest}`;
 }
 
 export function buildPaginationRow(options: PaginationRowOptions): ActionRowData<ButtonComponentData> | null {
@@ -199,6 +139,7 @@ export function buildPaginationRow(options: PaginationRowOptions): ActionRowData
   const rangeIndex = Math.min(Math.max(options.rangeIndex, 0), options.rangeCount - 1);
   const buildCustomId = (targetRangeIndex: number) =>
     buildInteractionRouteId(options.namespace, options.version, ...options.buildSegments.page(targetRangeIndex));
+  const indicatorCustomId = buildPaginationIndicatorId(buildCustomId(rangeIndex));
 
   return {
     type: ComponentType.ActionRow,
@@ -208,12 +149,12 @@ export function buildPaginationRow(options: PaginationRowOptions): ActionRowData
         style: ButtonStyle.Secondary,
         customId: buildCustomId(Math.max(0, rangeIndex - 1)),
         label: localizer(options.locale, "general.pagination.previous"),
-        disabled: rangeIndex === 0,
+        disabled: options.disabled || rangeIndex === 0,
       },
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildCustomId(rangeIndex),
+        customId: indicatorCustomId,
         label: localizer(options.locale, "general.pagination.page_info", {
           current: rangeIndex + 1,
           total: options.rangeCount,
@@ -225,103 +166,8 @@ export function buildPaginationRow(options: PaginationRowOptions): ActionRowData
         style: ButtonStyle.Secondary,
         customId: buildCustomId(Math.min(options.rangeCount - 1, rangeIndex + 1)),
         label: localizer(options.locale, "general.pagination.next"),
-        disabled: rangeIndex === options.rangeCount - 1,
+        disabled: options.disabled || rangeIndex === options.rangeCount - 1,
       },
     ],
   };
-}
-
-export function buildRangeChooserComponents(options: RangeChooserComponentsOptions): ComponentInContainerData[] {
-  const resolved = resolveRangeChooser({
-    totalCount: options.totalCount,
-    pageSize: options.pageSize,
-    chooserPage: options.chooserPage,
-  });
-
-  const components: ComponentInContainerData[] = [
-    {
-      type: ComponentType.TextDisplay,
-      content: `### ${localizer(options.locale, "general.pagination.select_page_title")}`,
-    },
-    {
-      type: ComponentType.TextDisplay,
-      content: localizer(options.locale, "general.pagination.select_page_description", {
-        totalItems: options.totalCount,
-        totalPages: resolved.rangeCount,
-      }),
-    },
-  ];
-
-  const rangeButtons: ButtonComponentData[] = resolved.ranges.map((range) => ({
-    type: ComponentType.Button,
-    style: ButtonStyle.Secondary,
-    customId: buildInteractionRouteId(
-      options.namespace,
-      options.version,
-      ...(options.buildSegments?.range
-        ? options.buildSegments.range(range.rangeIndex)
-        : [...(options.baseSegments ?? []), "range", String(range.rangeIndex)]),
-    ),
-    label: `${range.start}-${range.end}`,
-  }));
-
-  for (let offset = 0; offset < rangeButtons.length; offset += RANGE_BUTTONS_PER_ROW) {
-    components.push({
-      type: ComponentType.ActionRow,
-      components: rangeButtons.slice(offset, offset + RANGE_BUTTONS_PER_ROW),
-    } satisfies ActionRowData<ButtonComponentData>);
-  }
-
-  const cancelButton: ButtonComponentData = {
-    type: ComponentType.Button,
-    style: ButtonStyle.Secondary,
-    customId: buildInteractionRouteId(
-      options.namespace,
-      options.version,
-      ...(options.buildSegments?.cancel ? options.buildSegments.cancel() : [...(options.baseSegments ?? []), "cancel"]),
-    ),
-    label: localizer(options.locale, "general.pagination.cancel"),
-  };
-
-  if (resolved.chooserPageCount > 1) {
-    components.push({
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildInteractionRouteId(
-            options.namespace,
-            options.version,
-            ...(options.buildSegments?.previous
-              ? options.buildSegments.previous(Math.max(0, resolved.chooserPage - 1))
-              : [...(options.baseSegments ?? []), "previous", String(Math.max(0, resolved.chooserPage - 1))]),
-          ),
-          label: localizer(options.locale, "general.pagination.previous"),
-          disabled: resolved.chooserPage === 0,
-        },
-        cancelButton,
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildInteractionRouteId(
-            options.namespace,
-            options.version,
-            ...(options.buildSegments?.next
-              ? options.buildSegments.next(resolved.chooserPage + 1)
-              : [...(options.baseSegments ?? []), "next", String(resolved.chooserPage + 1)]),
-          ),
-          label: localizer(options.locale, "general.pagination.next"),
-          disabled: resolved.chooserPage >= resolved.chooserPageCount - 1,
-        },
-      ],
-    } satisfies ActionRowData<ButtonComponentData>);
-  } else {
-    components.push({
-      type: ComponentType.ActionRow,
-      components: [cancelButton],
-    } satisfies ActionRowData<ButtonComponentData>);
-  }
-
-  return components;
 }

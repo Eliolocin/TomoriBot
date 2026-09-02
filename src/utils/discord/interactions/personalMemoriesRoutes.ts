@@ -31,6 +31,7 @@ import {
   buildEditPersonalMemoryModal,
   buildPersonalMemoriesPanelPayload,
   buildPersonalMemoryModalFieldId,
+  MAX_PERSONAL_MEMORY_PAGE_SIZE,
   parsePersonalMemoryTags,
 } from "@/utils/discord/ui/personalMemoriesPanel";
 import { personaRepresentativeForLineage } from "@/utils/persona/lineage";
@@ -53,6 +54,18 @@ import { recordPanelActionStat, type RecordPanelActionInput } from "@/utils/stat
 import { localizer } from "@/utils/text/localizer";
 
 const memoryLimits = getMemoryLimits();
+
+function rangeIndexAfterRemoval<T>(
+  records: readonly T[],
+  removedId: number,
+  getId: (record: T) => number,
+  remainingCount: number,
+  pageSize: number,
+): number | undefined {
+  const removedIndex = records.findIndex((record) => getId(record) === removedId);
+  if (removedIndex < 0) return undefined;
+  return Math.min(Math.floor(removedIndex / pageSize), Math.max(0, Math.ceil(remainingCount / pageSize) - 1));
+}
 
 interface PersonalMemoriesScope {
   userId: number;
@@ -566,6 +579,25 @@ export function createPersonalMemoriesInteractionRoute(
         return;
       }
 
+      if (route.action === "persona-page") {
+        const validLineage = scope.personas.some((persona) => persona.persona_lineage_id === route.lineageId)
+          ? route.lineageId
+          : (scope.personas[0]?.persona_lineage_id ?? 0);
+        const memories = await dependencies.loadMemories(scope.userId, validLineage);
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "persona",
+          validLineage,
+          memories,
+          { kind: "main", personaRangeIndex: route.rangeIndex },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
       if (route.action === "select") {
         const selectedValue = (interaction as StringSelectMenuInteraction).values[0];
         const memoryId = Number(selectedValue);
@@ -593,7 +625,7 @@ export function createPersonalMemoriesInteractionRoute(
           route.category,
           route.lineageId,
           memories,
-          { kind: "range-chooser", chooserPage: 0 },
+          { kind: "main", rangeIndex: 0 },
           undefined,
           dependencies,
         );
@@ -625,7 +657,7 @@ export function createPersonalMemoriesInteractionRoute(
           route.category,
           route.lineageId,
           memories,
-          { kind: "range-chooser", chooserPage: route.chooserPage },
+          { kind: "main", rangeIndex: route.chooserPage },
           undefined,
           dependencies,
         );
@@ -946,6 +978,7 @@ export function createPersonalMemoriesInteractionRoute(
       }
 
       if (route.action === "remove-confirm") {
+        const memoriesBeforeRemoval = [...(await dependencies.loadMemories(scope.userId, route.lineageId))];
         const action = await performPanelAction(
           () =>
             dependencies.operations.remove({
@@ -968,6 +1001,14 @@ export function createPersonalMemoriesInteractionRoute(
               userDiscId: interaction.user.id,
             });
           }
+          const rangeIndex =
+            rangeIndexAfterRemoval(
+              memoriesBeforeRemoval,
+              route.memoryId,
+              (memory) => memory.personal_memory_id ?? 0,
+              memories.length,
+              MAX_PERSONAL_MEMORY_PAGE_SIZE,
+            ) ?? 0;
           await repaint(
             interaction,
             route.locale,
@@ -975,7 +1016,7 @@ export function createPersonalMemoriesInteractionRoute(
             route.category,
             route.lineageId,
             memories,
-            { kind: "main" },
+            { kind: "main", rangeIndex },
             receipt(route.locale, "removed", { memory: result.row.content }),
             dependencies,
           );

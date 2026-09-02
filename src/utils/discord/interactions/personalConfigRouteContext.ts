@@ -160,7 +160,7 @@ export interface PersonalConfigRouteDependencies {
   ): Promise<void>;
   showSpotlightStep1Modal(interaction: ButtonInteraction, locale: string, nonce: string): Promise<void>;
   showSpotlightSetModal(
-    interaction: ButtonInteraction,
+    interaction: ButtonInteraction | StringSelectMenuInteraction,
     locale: string,
     nonce: string,
     channelId: string,
@@ -170,7 +170,7 @@ export interface PersonalConfigRouteDependencies {
     personas: Array<{ id: number; name: string; isAlter: boolean }>,
   ): Promise<void>;
   showSpotlightAutoTriggerModal(
-    interaction: ButtonInteraction,
+    interaction: ButtonInteraction | StringSelectMenuInteraction,
     locale: string,
     nonce: string,
     channelId: string,
@@ -181,7 +181,7 @@ export interface PersonalConfigRouteDependencies {
     selectedPersonas: Array<{ id: number; name: string; isAlter: boolean }>,
   ): Promise<void>;
   showSpotlightRemoveModal(
-    interaction: ButtonInteraction,
+    interaction: ButtonInteraction | StringSelectMenuInteraction,
     locale: string,
     nonce: string,
     start: number,
@@ -230,9 +230,8 @@ export interface PersonalConfigRepaintOptions {
   selectedFallbacksProvider?: string;
   selectedModelProvider?: string;
   providerStart?: number;
-  modelStart?: number;
   modelTotalCount?: number;
-  fallbackStart?: number;
+  fallbackEntryStart?: number;
   fallbackOptionCount?: number;
   view?: PersonalConfigPanelView;
 }
@@ -254,8 +253,7 @@ export async function repaint(
     selectedFallbacksProvider,
     selectedModelProvider,
     providerStart,
-    modelStart,
-    fallbackStart,
+    fallbackEntryStart,
     view,
   } = options;
   let personaPref: UserPersonaNamingPreference | null = null;
@@ -359,9 +357,8 @@ export async function repaint(
         selectedFallbacksProvider,
         selectedModelProvider,
         providerStart,
-        modelStart,
         modelTotalCount,
-        fallbackStart,
+        fallbackEntryStart,
         fallbackOptionCount,
         modelDisplayInfo,
         spotlightDisplayInfo,

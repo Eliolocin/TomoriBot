@@ -13,6 +13,8 @@ export default {
     currently_active: `Currently active preset`,
     currently_active_with_nodes: `This preset is selected and activated with {enabled} out of {total} nodes`,
     toggle_nodes: `Toggle Nodes`,
+    nodes_range_placeholder: `Choose a node range to toggle...`,
+    nodes_range_option: `Nodes {start}-{end}`,
     delete_preset: `Delete Preset`,
     delete_title: `Delete Preset`,
     delete_confirm: `Delete Preset`,
@@ -58,7 +60,5 @@ export default {
     changed_receipt_detail: `That preset no longer exists. The panel now shows current state.`,
     failed_receipt: `Action failed`,
     failed_receipt_detail: `The requested change could not be completed.`,
-    range_previous: `Previous`,
-    range_next: `Next`,
   },
 };

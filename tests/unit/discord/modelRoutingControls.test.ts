@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import { initializeLocalizer } from "@/utils/text/localizer";
-import { buildModelRoutingControl } from "@/utils/discord/ui/modelRoutingControls";
+import { buildModelRoutingControl, buildProviderPageEntries } from "@/utils/discord/ui/modelRoutingControls";
+import { decodeProviderPageValue, encodeProviderPageValue } from "@/utils/discord/personalConfigPanelCatalog";
 
 await initializeLocalizer();
 
@@ -50,5 +51,56 @@ describe("shared model routing controls", () => {
       "__server_default__",
       "__provider_range__",
     ]);
+  });
+});
+
+describe("provider page entries", () => {
+  const encodeProviderValue = (provider: string) => provider.replace(/:/g, "~");
+
+  it("expands only the provider whose options overflow one page", () => {
+    const { entries, expandedStartIndex } = buildProviderPageEntries({
+      providers: ["google", "openrouter", "custom:12"],
+      expandedProvider: "openrouter",
+      expandedOptionCount: 60,
+      pageSize: 25,
+      locale: "en-US",
+      encodeProviderValue,
+      encodePageValue: encodeProviderPageValue,
+    });
+
+    expect(entries.map((entry) => entry.value)).toEqual([
+      "google",
+      "page!0!openrouter",
+      "page!25!openrouter",
+      "page!50!openrouter",
+      "custom~12",
+    ]);
+    expect(entries[1].label).toBe("OpenRouter (page 1)");
+    expect(expandedStartIndex).toBe(1);
+  });
+
+  it("leaves a provider whole when its options fit one page", () => {
+    const { entries, expandedStartIndex } = buildProviderPageEntries({
+      providers: ["google", "openrouter"],
+      expandedProvider: "openrouter",
+      expandedOptionCount: 25,
+      pageSize: 25,
+      locale: "en-US",
+      encodeProviderValue,
+      encodePageValue: encodeProviderPageValue,
+    });
+
+    expect(entries.map((entry) => entry.value)).toEqual(["google", "openrouter"]);
+    expect(expandedStartIndex).toBe(0);
+  });
+
+  it("round-trips a page value and rejects a bare provider value", () => {
+    expect(decodeProviderPageValue(encodeProviderPageValue("custom:12", 50))).toEqual({
+      provider: "custom:12",
+      start: 50,
+    });
+    expect(decodeProviderPageValue("openrouter")).toBeNull();
+    expect(decodeProviderPageValue("page!x!openrouter")).toBeNull();
+    expect(decodeProviderPageValue("page!25!")).toBeNull();
   });
 });

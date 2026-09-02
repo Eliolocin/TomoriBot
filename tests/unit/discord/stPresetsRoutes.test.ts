@@ -407,6 +407,51 @@ describe("ST Presets interaction routes", () => {
     expect(calls).not.toContain("deactivateAll");
   });
 
+  it("keeps the active preset body while the top-level selector changes page", async () => {
+    const calls: string[] = [];
+    const manyPresets = Array.from({ length: 24 }, (_, index) => preset(index + 1, { is_active: index === 0 }));
+    let editReplyPayload: unknown;
+    const route = createStPresetsInteractionRoute(
+      makeDependencies(calls, {
+        resolveScope: async () => {
+          calls.push("resolveScope");
+          return {
+            discordId: "100",
+            kind: "guild",
+            state: { server_id: 1 } as never,
+            data: {
+              scopeDiscId: "100",
+              serverId: 1,
+              readStatus: "fresh",
+              presets: manyPresets,
+              activePresetId: 1,
+            },
+          };
+        },
+      }),
+    );
+    const interaction = makeButtonInteraction("st-presets:v1:range:en-US:1", calls, {
+      editReply: async (payload: unknown) => {
+        calls.push("editReply");
+        editReplyPayload = payload;
+      },
+    });
+
+    await route.execute({} as Client, interaction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["range", "en-US", "1"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "editReply"]);
+    const rendered = JSON.stringify(editReplyPayload);
+    expect(rendered).toContain('"label":"Page 2 of 2"');
+    expect(rendered).toContain("st-presets:v1:range:en-US:0");
+    expect(rendered).toContain("st-presets:v1:range:en-US:1");
+    expect(rendered).toContain("> Description 1");
+    expect(rendered).not.toContain("> Description 24");
+  });
+
   it("repaints vanished-preset state on active preset page when one is active and None page when none is", async () => {
     const calls: string[] = [];
     let editReplyPayload: unknown = null;
@@ -530,8 +575,9 @@ describe("ST Presets interaction routes", () => {
     ]);
   });
 
-  it("nodes-open with > 50 nodes navigates to range chooser", async () => {
+  it("nodes-open with > 50 nodes keeps the preset body and exposes modal pagination", async () => {
     const calls: string[] = [];
+    let editReplyPayload: unknown;
     const manyNodes = Array.from({ length: 60 }, (_, i) => node(i + 1));
     const route = createStPresetsInteractionRoute(
       makeDependencies(calls, {
@@ -542,7 +588,12 @@ describe("ST Presets interaction routes", () => {
       }),
     );
 
-    const buttonInteraction = makeButtonInteraction("st-presets:v1:nodes-open:en-US:1", calls);
+    const buttonInteraction = makeButtonInteraction("st-presets:v1:nodes-open:en-US:1", calls, {
+      editReply: async (payload: unknown) => {
+        calls.push("editReply");
+        editReplyPayload = payload;
+      },
+    });
 
     await route.execute({} as Client, buttonInteraction, {
       namespace: "st-presets",
@@ -551,6 +602,137 @@ describe("ST Presets interaction routes", () => {
     });
 
     expect(calls).toEqual(["resolveScope", "loadToggleableNodes:1", "deferUpdate", "editReply"]);
+    const rendered = JSON.stringify(editReplyPayload);
+    expect(rendered).toContain("Currently active preset");
+    expect(rendered).toContain("st-presets:v1:nodes-range-select:en-US:1");
+    expect(rendered).toContain('"value":"0","label":"Nodes 1-50"');
+    expect(rendered).toContain('"value":"1","label":"Nodes 51-60"');
+    expect(rendered).not.toContain("Select Page");
+  });
+
+  it("keeps legacy node-page routes routable without repainting a chooser", async () => {
+    const calls: string[] = [];
+    const manyNodes = Array.from({ length: 120 }, (_, i) => node(i + 1));
+    let editReplyPayload: unknown;
+    const route = createStPresetsInteractionRoute(
+      makeDependencies(calls, {
+        loadToggleableNodes: async (presetId) => {
+          calls.push(`loadToggleableNodes:${presetId}`);
+          return manyNodes;
+        },
+      }),
+    );
+    const customId = "st-presets:v1:nodes-page:en-US:1:2";
+    const buttonInteraction = makeButtonInteraction(customId, calls, {
+      editReply: async (payload: unknown) => {
+        calls.push("editReply");
+        editReplyPayload = payload;
+      },
+    });
+
+    await route.execute({} as Client, buttonInteraction, {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["nodes-page", "en-US", "1", "2"],
+    });
+
+    expect(calls).toEqual(["deferUpdate", "resolveScope", "loadToggleableNodes:1", "editReply"]);
+    const rendered = JSON.stringify(editReplyPayload);
+    // The legacy chooser page snaps to its block, so every range stays selectable.
+    expect(rendered).toContain('"value":"0","label":"Nodes 1-50"');
+    expect(rendered).toContain('"value":"2","label":"Nodes 101-120"');
+    expect(rendered).not.toContain("Select Page");
+  });
+
+  it("clamps oversized node modal routes to the last 50-node page", async () => {
+    const calls: string[] = [];
+    const manyNodes = Array.from({ length: 60 }, (_, i) => node(i + 1));
+    let openedOffset: number | undefined;
+    let openedCount: number | undefined;
+    const route = createStPresetsInteractionRoute(
+      makeDependencies(calls, {
+        loadToggleableNodes: async (presetId) => {
+          calls.push(`loadToggleableNodes:${presetId}`);
+          return manyNodes;
+        },
+        showNodesModal: async (_interaction, _locale, _preset, pageNodes, pageOffset) => {
+          openedOffset = pageOffset;
+          openedCount = pageNodes.length;
+          calls.push("showNodesModal");
+        },
+      }),
+    );
+    const customId = "st-presets:v1:nodes-range:en-US:1:99";
+
+    await route.execute({} as Client, makeButtonInteraction(customId, calls), {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["nodes-range", "en-US", "1", "99"],
+    });
+
+    expect(calls).toEqual([
+      "resolveScope",
+      "loadToggleableNodes:1",
+      "storeNodeSnapshot:fixed-nonce-123",
+      "showNodesModal",
+    ]);
+    expect(openedOffset).toBe(50);
+    expect(openedCount).toBe(10);
+  });
+
+  it("opens the first 50-node slice from the node range selector", async () => {
+    const calls: string[] = [];
+    const manyNodes = Array.from({ length: 60 }, (_, i) => node(i + 1));
+    let openedOffset: number | undefined;
+    let openedCount: number | undefined;
+    const route = createStPresetsInteractionRoute(
+      makeDependencies(calls, {
+        loadToggleableNodes: async (presetId) => {
+          calls.push(`loadToggleableNodes:${presetId}`);
+          return manyNodes;
+        },
+        showNodesModal: async (_interaction, _locale, _preset, pageNodes, pageOffset) => {
+          openedOffset = pageOffset;
+          openedCount = pageNodes.length;
+          calls.push("showNodesModal");
+        },
+      }),
+    );
+    const customId = "st-presets:v1:nodes-range-select:en-US:1";
+
+    await route.execute({} as Client, makeSelectInteraction(customId, ["0"], calls), {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["nodes-range-select", "en-US", "1"],
+    });
+
+    expect(calls).toContain("showNodesModal");
+    expect(openedOffset).toBe(0);
+    expect(openedCount).toBe(50);
+  });
+
+  it("repaints instead of opening a modal when the node range value is not a number", async () => {
+    const calls: string[] = [];
+    const manyNodes = Array.from({ length: 60 }, (_, i) => node(i + 1));
+    let modalShown = false;
+    const route = createStPresetsInteractionRoute(
+      makeDependencies(calls, {
+        loadToggleableNodes: async () => manyNodes,
+        showNodesModal: async () => {
+          modalShown = true;
+        },
+      }),
+    );
+    const customId = "st-presets:v1:nodes-range-select:en-US:1";
+
+    await route.execute({} as Client, makeSelectInteraction(customId, ["not-a-range"], calls), {
+      namespace: "st-presets",
+      version: "v1",
+      segments: ["nodes-range-select", "en-US", "1"],
+    });
+
+    expect(modalShown).toBe(false);
+    expect(calls).toContain("editReply");
   });
 
   it("nodes-submit updates enabled nodes and repaints with receipt", async () => {

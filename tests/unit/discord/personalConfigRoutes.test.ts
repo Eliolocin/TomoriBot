@@ -816,6 +816,16 @@ describe("personalConfigPanelCatalog", () => {
       },
     ],
     [
+      "personal-config:v2:s-blk-s:en-US:123456789012345678:12:a1b2c3d4",
+      {
+        action: "spotlight-set-block-select",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        fp: "a1b2c3d4",
+      },
+    ],
+    [
       "personal-config:v2:s-set-sub:en-US:123456789012345678:12:1:a1b2c3d4:nonce1234567",
       {
         action: "spotlight-set-submit",
@@ -894,6 +904,18 @@ describe("personalConfigPanelCatalog", () => {
       },
     ],
     [
+      "personal-config:v2:s-auto-s:en-US:123456789012345678:12:1:b33j9ynrb3:a1b2c3d4",
+      {
+        action: "spot-set-auto-select",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        hours: 12,
+        blockIdx: 1,
+        mask: "b33j9ynrb3",
+        fp: "a1b2c3d4",
+      },
+    ],
+    [
       "personal-config:v2:s-auto-c:en-US:123456789012345678:12:1:b33j9ynrb3:a1b2c3d4",
       {
         action: "spot-set-auto-cancel",
@@ -914,6 +936,10 @@ describe("personalConfigPanelCatalog", () => {
       { action: "spotlight-remove-page", locale: "en-US", chooserPage: 2, fp: "a1b2c3d4" },
     ],
     [
+      "personal-config:v2:s-rem-s:en-US:a1b2c3d4",
+      { action: "spotlight-remove-select", locale: "en-US", fp: "a1b2c3d4" },
+    ],
+    [
       "personal-config:v2:s-rem-sub:en-US:50:a1b2c3d4:nonce1234567",
       { action: "spotlight-remove-submit", locale: "en-US", start: 50, fp: "a1b2c3d4", nonce: "nonce1234567" },
     ],
@@ -928,6 +954,10 @@ describe("personalConfigPanelCatalog", () => {
     [
       "personal-config:v2:model-provider-select:en-US:text",
       { action: "model-provider-select", locale: "en-US", capability: "text" },
+    ],
+    [
+      "personal-config:v2:model-provider-page:en-US:text:openrouter:24",
+      { action: "model-provider-page", locale: "en-US", capability: "text", provider: "openrouter", start: 24 },
     ],
     [
       "personal-config:v2:model-provider-range-open:en-US:text:25",
@@ -970,6 +1000,10 @@ describe("personalConfigPanelCatalog", () => {
     [
       "personal-config:v2:randomizer-set:en-US:openrouter:on",
       { action: "randomizer-set", locale: "en-US", provider: "openrouter", enabled: true },
+    ],
+    [
+      "personal-config:v2:fallbacks-page:en-US:openrouter:24",
+      { action: "fallbacks-page", locale: "en-US", provider: "openrouter", start: 24 },
     ],
     [
       "personal-config:v2:fallbacks-range-open:en-US:openrouter:25",
@@ -1168,6 +1202,8 @@ describe("personalConfigPanelCatalog", () => {
         return [{ action, locale, lineageId, nonce }];
       case "model-provider-select":
         return [{ action, locale, capability }];
+      case "model-provider-page":
+        return [{ action, locale, capability, provider, start }];
       case "model-provider-range-open":
         return [{ action, locale, capability, start }];
       case "model-provider-range-page":
@@ -1186,6 +1222,7 @@ describe("personalConfigPanelCatalog", () => {
       case "parameters-2-submit":
       case "fallbacks-submit":
         return [{ action, locale, provider, nonce }];
+      case "fallbacks-page":
       case "fallbacks-range-open":
         return [{ action, locale, provider, start }];
       case "fallbacks-range-page":
@@ -1201,6 +1238,8 @@ describe("personalConfigPanelCatalog", () => {
         return [{ action, locale, channelId: snowflake, hours, fp, blockIdx }];
       case "spotlight-set-block-page":
         return [{ action, locale, channelId: snowflake, hours, fp, chooserPage }];
+      case "spotlight-set-block-select":
+        return [{ action, locale, channelId: snowflake, hours, fp }];
       case "spotlight-set-submit":
         return [{ action, locale, channelId: snowflake, hours, blockIdx, fp, nonce }];
       case "spot-set-cf":
@@ -1211,6 +1250,8 @@ describe("personalConfigPanelCatalog", () => {
         return [{ action, locale, channelId: snowflake, hours, blockIdx, mask, fp, start }];
       case "spot-set-auto-page":
         return [{ action, locale, channelId: snowflake, hours, blockIdx, mask, fp, chooserPage }];
+      case "spot-set-auto-select":
+        return [{ action, locale, channelId: snowflake, hours, blockIdx, mask, fp }];
       case "spot-set-auto-cancel":
         return [{ action, locale, channelId: snowflake, hours, blockIdx, mask, fp }];
       case "spot-set-auto-sub":
@@ -1219,6 +1260,8 @@ describe("personalConfigPanelCatalog", () => {
         return [{ action, locale, start, fp }];
       case "spotlight-remove-page":
         return [{ action, locale, chooserPage, fp }];
+      case "spotlight-remove-select":
+        return [{ action, locale, fp }];
       case "spotlight-remove-submit":
         return [{ action, locale, start, fp, nonce }];
       case "retry":
@@ -1234,7 +1277,7 @@ describe("personalConfigPanelCatalog", () => {
 
   it("round-trips every action in the codec table", () => {
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(66);
+    expect(actions.length).toBe(71);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, false);
@@ -1270,7 +1313,7 @@ describe("personalConfigPanelCatalog", () => {
     // - page: "response-modes" (14 chars) is the longest PersonalConfigPage.
     // - mode: "follow" (6 chars) is the longest deliberate trigger/tool mode.
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(66);
+    expect(actions.length).toBe(71);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, true);
@@ -1306,15 +1349,15 @@ describe("personalConfigPanelCatalog", () => {
       handlerSources.flatMap((source) => [...source.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1])),
     );
 
-    expect(tableActions.size).toBe(66);
-    expect(handlerActions.size).toBe(66);
+    expect(tableActions.size).toBe(71);
+    expect(handlerActions.size).toBe(71);
     expect([...tableActions].filter((a) => !handlerActions.has(a))).toEqual([]);
     expect([...handlerActions].filter((a) => !tableActions.has(a))).toEqual([]);
   });
 
   it("fails closed when dropping or appending a segment for every action in the table", () => {
     const actions = Object.keys(PERSONAL_CONFIG_ROUTE_CODECS) as PersonalConfigAction[];
-    expect(actions.length).toBe(66);
+    expect(actions.length).toBe(71);
 
     for (const action of actions) {
       const routes = buildRoutesForAction(action, false);
@@ -2921,18 +2964,22 @@ describe("Range pagination workflow", () => {
     expect(telemetry).toEqual([]);
   });
 
-  it("defers and repaints Switch Models with in-place pagination row when model-provider-select has > 25 models", async () => {
+  it("defers and repaints Switch Models with one selector entry per model page when model-provider-select has > 25 models", async () => {
     let modalShown = false;
     let deferred = false;
     let repaintedPayload: unknown = null;
 
-    const thirtyModels = Array.from({ length: 30 }, (_, i) => ({
+    const thirtyOpenRouterModels = Array.from({ length: 30 }, (_, i) => ({
       id: 100 + i,
       name: `Model ${i + 1}`,
     }));
 
     const { dependencies } = makeDependencies([], {
-      loadAvailableModelsForCapability: async () => thirtyModels,
+      loadAvailableModelsForCapability: async (_userId, provider, capability) => {
+        expect(provider).toBe("openrouter");
+        expect(capability).toBe("text");
+        return thirtyOpenRouterModels;
+      },
       showModelSelectModal: async () => {
         modalShown = true;
       },
@@ -2968,13 +3015,78 @@ describe("Range pagination workflow", () => {
     expect(modalShown).toBe(false);
     expect(deferred).toBe(true);
 
+    expect(repaintedPayload).not.toBeNull();
     const components = collectComponents(repaintedPayload);
-    const pageInfoBtn = components.find((c) => c.label === "Page 1 of 2" && c.disabled === true);
-    expect(pageInfoBtn).toBeDefined();
-    const nextBtn = components.find((c) => c.customId?.includes(":model-range-open:en-US:text:openrouter:25"));
-    expect(nextBtn).toBeDefined();
-    expect(nextBtn?.disabled).toBe(false);
-    expect(nextBtn?.label).toBe("Next →");
+    const customIds = components.flatMap((component) => (component.customId ? [component.customId] : []));
+    expect(new Set(customIds).size).toBe(customIds.length);
+
+    const textSelect = components.find((c) => c.customId?.includes(":model-provider-select:en-US:text"));
+    expect(textSelect?.options?.map((option) => option.value)).toEqual([
+      "__server_default__",
+      "page!0!openrouter",
+      "page!25!openrouter",
+    ]);
+    expect(textSelect?.options?.map((option) => option.label)).toEqual([
+      "Using Server Default",
+      "OpenRouter (page 1)",
+      "OpenRouter (page 2)",
+    ]);
+
+    // The first page must be selectable directly; a prev/next row would disable the page it sits on.
+    expect(components.some((c) => c.customId?.includes(":model-range-open:"))).toBe(false);
+
+    // Expanding rewrites a closed selector, so the repaint has to say what changed.
+    expect(textSelect?.placeholder).toBe("Text: choose a page of OpenRouter models");
+    const rendered = JSON.stringify(repaintedPayload);
+    expect(rendered).toContain("Choose a Model Page");
+    expect(rendered).toContain("OpenRouter has 30 models for Text");
+  });
+
+  it("opens the modal on the chosen slice when model-provider-select carries a page value", async () => {
+    let passedModels: Array<{ id: number; name: string }> = [];
+
+    const thirtyOpenRouterModels = Array.from({ length: 30 }, (_, i) => ({
+      id: 100 + i,
+      name: `Model ${i + 1}`,
+    }));
+
+    const { dependencies } = makeDependencies([], {
+      loadAvailableModelsForCapability: async () => thirtyOpenRouterModels,
+      showModelSelectModal: async (_interaction, _locale, _nonce, _cap, _prov, models) => {
+        passedModels = models;
+      },
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigRouteId({
+      action: "model-provider-select",
+      locale: "en-US",
+      capability: "text",
+    });
+
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => true,
+      isModalSubmit: () => false,
+      customId,
+      values: ["page!25!openrouter"],
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async () => {},
+    } as unknown as StringSelectMenuInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    expect(passedModels.map((model) => model.name)).toEqual([
+      "Model 26",
+      "Model 27",
+      "Model 28",
+      "Model 29",
+      "Model 30",
+    ]);
   });
 
   it("opens modal directly when model-provider-select has <= 25 models", async () => {
@@ -3070,7 +3182,7 @@ describe("Range pagination workflow", () => {
     expect(passedModels[4].name).toBe("Model 30");
   });
 
-  it("defers and repaints Fallbacks with in-place pagination row when fallbacks-provider-select has > 24 options", async () => {
+  it("defers and repaints Fallbacks with one selector entry per option page when fallbacks-provider-select has > 24 options", async () => {
     let modalShown = false;
     let deferred = false;
     let repaintedPayload: unknown = null;
@@ -3123,12 +3235,20 @@ describe("Range pagination workflow", () => {
       expect(deferred).toBe(true);
 
       const components = collectComponents(repaintedPayload);
-      const pageInfoBtn = components.find((c) => c.label === "Page 1 of 2" && c.disabled === true);
-      expect(pageInfoBtn).toBeDefined();
-      const nextBtn = components.find((c) => c.customId?.includes(":fallbacks-range-open:en-US:openrouter:24"));
-      expect(nextBtn).toBeDefined();
-      expect(nextBtn?.disabled).toBe(false);
-      expect(nextBtn?.label).toBe("Next →");
+      const providerSelect = components.find((c) => c.customId?.includes(":fallbacks-provider-select:en-US"));
+      expect(providerSelect?.options?.map((option) => option.value)).toEqual([
+        "page!0!openrouter",
+        "page!24!openrouter",
+      ]);
+      expect(providerSelect?.options?.map((option) => option.label)).toEqual([
+        "OpenRouter (page 1)",
+        "OpenRouter (page 2)",
+      ]);
+      expect(components.some((c) => c.customId?.includes(":fallbacks-range-open:"))).toBe(false);
+      expect(providerSelect?.placeholder).toBe("Choose a page of OpenRouter models");
+      const rendered = JSON.stringify(repaintedPayload);
+      expect(rendered).toContain("Choose a Fallback Page");
+      expect(rendered).toContain("OpenRouter has 30 fallback options");
     } finally {
       loadSpy.mockRestore();
       eligibleSpy.mockRestore();
@@ -5341,7 +5461,6 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
     const nonce = "nonce1234567";
     const fp = "a1b2c3d4";
     const mask = ((1n << BigInt(50)) - 1n).toString(36);
-    const rangePage = 3999;
     const removeStart = 999950;
 
     const setModal = buildSpotlightSetModal(locale, nonce, snowflake, hours, 999, fp, [
@@ -5413,7 +5532,7 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       },
       view: {
         kind: "spotlight-remove-range",
-        rangePage,
+        rangePage: 5,
         totalOptions: 2_000_000,
         fp,
       },
@@ -5441,7 +5560,7 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
         mask,
         fp,
         rangePage: 1,
-        totalOptions: 500,
+        totalOptions: 700,
       },
     });
 
@@ -5457,20 +5576,6 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       if (!customId) throw new Error(`Missing produced Spotlight route for ${action}`);
       return customId;
     };
-
-    const rangeCustomId = producedRoute("spot-rem-range");
-    const parsedRange = parsePersonalConfigPanelRoute(requireRoute(rangeCustomId));
-    if (!parsedRange || parsedRange.action !== "spot-rem-range") {
-      throw new Error("Produced Spotlight removal range did not parse");
-    }
-    const rangeStart = parsedRange.start;
-
-    const autoRangeCustomId = producedRoute("spot-set-auto-range");
-    const parsedAutoRange = parsePersonalConfigPanelRoute(requireRoute(autoRangeCustomId));
-    if (!parsedAutoRange || parsedAutoRange.action !== "spot-set-auto-range") {
-      throw new Error("Produced Spotlight auto range did not parse");
-    }
-    const autoRangeStart = parsedAutoRange.start;
 
     const testCases: Array<{
       customId: string;
@@ -5503,8 +5608,8 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
         expected: { action: "spot-set-auto-sub", locale, channelId: snowflake, hours, blockIdx: 999, mask, fp, nonce },
       },
       {
-        customId: rangeCustomId,
-        expected: { action: "spot-rem-range", locale, start: rangeStart, fp },
+        customId: producedRoute("spotlight-remove-select"),
+        expected: { action: "spotlight-remove-select", locale, fp },
       },
       {
         customId: removeModal.custom_id,
@@ -5512,19 +5617,18 @@ describe("Wave 5 Phase 1: Stable spotlight identity and destructive safety", () 
       },
       {
         customId: producedRoute("spotlight-remove-page"),
-        expected: { action: "spotlight-remove-page", locale, chooserPage: 3998, fp },
+        expected: { action: "spotlight-remove-page", locale, chooserPage: 4, fp },
       },
       {
-        customId: autoRangeCustomId,
+        customId: producedRoute("spot-set-auto-select"),
         expected: {
-          action: "spot-set-auto-range",
+          action: "spot-set-auto-select",
           locale,
           channelId: snowflake,
           hours,
           blockIdx: 999,
           mask,
           fp,
-          start: autoRangeStart,
         },
       },
       {
@@ -5850,7 +5954,7 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
     expect(modalOpenedWith[5].id).toBe(129);
   });
 
-  it("navigates model range page past model 125 and fallback range page past model 120", async () => {
+  it("lands the retained model and fallback chooser routes on the expanded page selector", async () => {
     const models = Array.from({ length: 150 }, (_, i) => ({
       id: 200 + i,
       name: `Model ${i + 1}`,
@@ -5897,8 +6001,16 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
       const modelJson = JSON.stringify(repaintedPayload);
       expect(modelJson).toContain("Personal Model Routing");
       const modelComponents = collectComponents(repaintedPayload);
-      const modelPageBtn = modelComponents.find((c) => c.label === "Page 6 of 6" && c.disabled === true);
-      expect(modelPageBtn).toBeDefined();
+      const modelSelect = modelComponents.find((c) => c.customId?.includes(":model-provider-select:en-US:text"));
+      expect(modelSelect?.options?.map((option) => option.label)).toEqual([
+        "Using Server Default",
+        "OpenRouter (page 1)",
+        "OpenRouter (page 2)",
+        "OpenRouter (page 3)",
+        "OpenRouter (page 4)",
+        "OpenRouter (page 5)",
+        "OpenRouter (page 6)",
+      ]);
 
       const fallbackPageCustomId = buildPersonalConfigRouteId({
         action: "fallbacks-range-page",
@@ -5926,16 +6038,17 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
       const fallbackJson = JSON.stringify(repaintedPayload);
       expect(fallbackJson).toContain("Personal Text Fallbacks");
       const fallbackComponents = collectComponents(repaintedPayload);
-      const fallbackPageBtn = fallbackComponents.find((c) => c.label === "Page 6 of 7" && c.disabled === true);
-      expect(fallbackPageBtn).toBeDefined();
+      const fallbackSelect = fallbackComponents.find((c) => c.customId?.includes(":fallbacks-provider-select:en-US"));
+      expect(fallbackSelect?.options).toHaveLength(7);
+      expect(fallbackSelect?.options?.at(-1)?.label).toBe("OpenRouter (page 7)");
     } finally {
       fallbackLoaderSpy.mockRestore();
     }
   });
 
-  it("navigates spotlight remove range page past row 250", async () => {
-    const activeSpotlights = Array.from({ length: 300 }, (_, i) => ({
-      channelDiscId: `1234567890123456${i.toString().padStart(2, "0")}`,
+  it("navigates spotlight remove range page past 25 blocks (1250 spotlights)", async () => {
+    const activeSpotlights = Array.from({ length: 1500 }, (_, i) => ({
+      channelDiscId: `1234567890123456${(i % 100).toString().padStart(2, "0")}`,
       personaIds: [1],
       autoTriggerPersonaId: null,
       expiresAt: null,
@@ -5952,7 +6065,7 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
     const removePageCustomId = buildPersonalConfigRouteId({
       action: "spotlight-remove-page",
       locale: "en-US",
-      chooserPage: 5,
+      chooserPage: 1,
       fp,
     });
 
@@ -5974,7 +6087,8 @@ describe("Personal Spotlight Auto-Trigger & Range Chooser Stabilization (Wave 5 
     await route.execute({} as Client, interaction, requireRoute(removePageCustomId));
     const json = JSON.stringify(repaintedPayload);
     expect(json).toContain("Select Spotlight Range");
-    expect(json).toContain("251-300");
+    expect(json).toContain("1251-1300");
+    expect(json).toContain("1451-1500");
   });
 
   it("routes a no-changes result to an info receipt without telemetry", async () => {
@@ -6177,8 +6291,8 @@ describe("Wave 5 Phase 2b: persona reachability beyond one modal", () => {
 
     takeSpy.mockRestore();
     const json = JSON.stringify(repainted);
-    // The block button must carry both, because the persona modal that follows cannot ask again.
-    expect(json).toContain("s-blk:en-US:123456789012345678:12:");
+    // The block select must carry both, because the persona modal that follows cannot ask again.
+    expect(json).toContain("s-blk-s:en-US:123456789012345678:12:");
   });
 
   it("round-trips a full-block base36 mask and refuses one bit past the bound", () => {
@@ -6233,10 +6347,11 @@ describe("Wave 5 Phase 2b: persona reachability beyond one modal", () => {
 
     const atBound = render(SPOTLIGHT_PERSONA_PAGE_SIZE);
     expect(atBound).toContain("s-blk:");
+    expect(atBound).not.toContain("s-blk-s:");
     expect(atBound).not.toContain("s-blk-p:");
 
     const aboveBound = render(SPOTLIGHT_PERSONA_PAGE_SIZE * 3);
-    expect(aboveBound).toContain("s-blk:");
+    expect(aboveBound).toContain("s-blk-s:");
     expect(aboveBound).toContain("1-50");
     expect(aboveBound).toContain("101-150");
   });
@@ -6610,7 +6725,7 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
     expect(repaintedPayload).not.toBeNull();
     const payloadJson = JSON.stringify(repaintedPayload);
     expect(payloadJson).toContain("Select Spotlight Range");
-    expect(payloadJson).toContain("s-rem-r");
+    expect(payloadJson).toContain("s-rem-s");
 
     const active5 = Array.from({ length: 5 }, (_, i) => ({
       channelDiscId: `channel-${i}`,
@@ -7821,6 +7936,542 @@ describe("Pre-defer dispatch, fall-throughs, and acknowledgement timing", () => 
         expect(capturedPayload).not.toBeNull();
         const renderedText = JSON.stringify(capturedPayload);
         expect(renderedText).toContain("Randomizer Enabled");
+      });
+    });
+  });
+
+  describe("Wave 6 Slice B5: Migrate Spotlight Overflow onto the Block Selector", () => {
+    const makeBlockPersonas = (count: number) =>
+      Array.from({ length: count }, (_, i) => ({ id: 100 + i, name: `Persona ${i + 1}`, isAlter: false }));
+
+    describe("Spotlight Persona Block Selector payload", () => {
+      it("renders StringSelect with one option per block bounded by real total when totalPersonas > 50", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "advanced",
+          page: "spotlight",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "123456789012345678",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          view: {
+            kind: "spotlight-persona-select",
+            channelId: "123456789012345678",
+            hours: 24,
+            fp: "a1b2c3d4",
+            totalPersonas: 137,
+            chooserPage: 0,
+          },
+        });
+
+        const components = collectComponents(payload);
+        const blockSelect = components.find((c) =>
+          c.customId?.includes(":s-blk-s:en-US:123456789012345678:24:a1b2c3d4"),
+        );
+        expect(blockSelect).toBeDefined();
+        expect(blockSelect?.placeholder).toBe("Choose a persona block...");
+        expect(blockSelect?.options).toEqual([
+          { value: "0", label: "Personas 1-50" },
+          { value: "1", label: "Personas 51-100" },
+          { value: "2", label: "Personas 101-137" },
+        ]);
+        expect(blockSelect?.disabled).toBe(false);
+
+        // Block count 3 <= 25, so no pagination row
+        const paginationButtons = components.filter((c) => c.customId?.includes(":s-blk-p:"));
+        expect(paginationButtons).toHaveLength(0);
+
+        const cancelButton = components.find((c) => c.customId === "personal-config:v2:spotlight-set-cancel:en-US");
+        expect(cancelButton).toBeDefined();
+      });
+
+      it("renders pagination row when block count > 25 (e.g. 1350 personas = 27 blocks)", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "advanced",
+          page: "spotlight",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "123456789012345678",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          view: {
+            kind: "spotlight-persona-select",
+            channelId: "123456789012345678",
+            hours: 24,
+            fp: "a1b2c3d4",
+            totalPersonas: 1350,
+            chooserPage: 0,
+          },
+        });
+
+        const components = collectComponents(payload);
+        const blockSelect = components.find((c) => c.customId?.includes(":s-blk-s:"));
+        expect(blockSelect).toBeDefined();
+        expect(blockSelect?.options).toHaveLength(25);
+        expect(blockSelect?.options?.[0]).toEqual({ value: "0", label: "Personas 1-50" });
+        expect(blockSelect?.options?.[24]).toEqual({ value: "24", label: "Personas 1201-1250" });
+
+        // Block count 27 > 25, pagination row must be present
+        const paginationButtons = components.filter((c) => c.customId?.includes(":s-blk-p:"));
+        expect(paginationButtons.length).toBeGreaterThan(0);
+      });
+
+      it("disables select when read status is stale", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "advanced",
+          page: "spotlight",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "123456789012345678",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "stale",
+          view: {
+            kind: "spotlight-persona-select",
+            channelId: "123456789012345678",
+            hours: 24,
+            fp: "a1b2c3d4",
+            totalPersonas: 137,
+            chooserPage: 0,
+          },
+        });
+
+        const components = collectComponents(payload);
+        const blockSelect = components.find((c) => c.customId?.includes(":s-blk-s:"));
+        expect(blockSelect?.disabled).toBe(true);
+      });
+    });
+
+    describe("Spotlight Auto-Trigger Block Selector payload", () => {
+      it("renders StringSelect with blocks of 24 bounded by real total", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "advanced",
+          page: "spotlight",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "123456789012345678",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          view: {
+            kind: "spotlight-auto-range",
+            channelId: "123456789012345678",
+            hours: 12,
+            blockIdx: 0,
+            mask: "fff",
+            fp: "a1b2c3d4",
+            rangePage: 0,
+            totalOptions: 55,
+          },
+        });
+
+        const components = collectComponents(payload);
+        const autoSelect = components.find((c) => c.customId?.includes(":s-auto-s:"));
+        expect(autoSelect).toBeDefined();
+        expect(autoSelect?.placeholder).toBe("Choose an auto-trigger block...");
+        expect(autoSelect?.options).toEqual([
+          { value: "0", label: "Personas 1-24" },
+          { value: "24", label: "Personas 25-48" },
+          { value: "48", label: "Personas 49-55" },
+        ]);
+
+        const cancelBtn = components.find((c) => c.customId?.includes(":s-auto-c:"));
+        expect(cancelBtn).toBeDefined();
+
+        // blockCount 3 <= 25, no pagination row
+        const paginationButtons = components.filter((c) => c.customId?.includes(":s-auto-p:"));
+        expect(paginationButtons).toHaveLength(0);
+      });
+
+      it("renders pagination row for auto-trigger when blocks > 25", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "advanced",
+          page: "spotlight",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "123456789012345678",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          view: {
+            kind: "spotlight-auto-range",
+            channelId: "123456789012345678",
+            hours: 12,
+            blockIdx: 0,
+            mask: "fff",
+            fp: "a1b2c3d4",
+            rangePage: 0,
+            totalOptions: 700,
+          },
+        });
+
+        const components = collectComponents(payload);
+        const paginationButtons = components.filter((c) => c.customId?.includes(":s-auto-p:"));
+        expect(paginationButtons.length).toBeGreaterThan(0);
+      });
+    });
+
+    describe("Spotlight Remove Block Selector payload", () => {
+      it("renders StringSelect with blocks of 50 bounded by real total", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "advanced",
+          page: "spotlight",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "123456789012345678",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          view: {
+            kind: "spotlight-remove-range",
+            rangePage: 0,
+            totalOptions: 125,
+            fp: "a1b2c3d4",
+          },
+        });
+
+        const components = collectComponents(payload);
+        const remSelect = components.find((c) => c.customId?.includes(":s-rem-s:"));
+        expect(remSelect).toBeDefined();
+        expect(remSelect?.placeholder).toBe("Choose a spotlight block to manage...");
+        expect(remSelect?.options).toEqual([
+          { value: "0", label: "Spotlights 1-50" },
+          { value: "50", label: "Spotlights 51-100" },
+          { value: "100", label: "Spotlights 101-125" },
+        ]);
+
+        const cancelBtn = components.find((c) => c.customId?.includes(":spotlight-remove-cancel:"));
+        expect(cancelBtn).toBeDefined();
+
+        // blockCount 3 <= 25, no pagination row
+        const paginationButtons = components.filter((c) => c.customId?.includes(":s-rem-p:"));
+        expect(paginationButtons).toHaveLength(0);
+      });
+
+      it("renders pagination row for remove when blocks > 25", () => {
+        const payload = buildPersonalConfigPanelPayload({
+          locale: "en-US",
+          category: "advanced",
+          page: "spotlight",
+          user: makeUser(),
+          resolvedNickname: "Tester",
+          personas: [],
+          guildId: "123456789012345678",
+          memoryCount: 0,
+          stmCount: 0,
+          readStatus: "fresh",
+          view: {
+            kind: "spotlight-remove-range",
+            rangePage: 0,
+            totalOptions: 1500,
+            fp: "a1b2c3d4",
+          },
+        });
+
+        const components = collectComponents(payload);
+        const paginationButtons = components.filter((c) => c.customId?.includes(":s-rem-p:"));
+        expect(paginationButtons.length).toBeGreaterThan(0);
+      });
+    });
+
+    describe("Interaction dispatch for spotlight-set-block-select", () => {
+      it("opens spotlight set modal on selecting valid block", async () => {
+        const personas = makeBlockPersonas(120);
+        const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
+        let openedWithBlockIdx = -1;
+        let openedPersonas: Array<{ id: number }> = [];
+
+        const { dependencies } = makeDependencies([], {
+          loadGuildPersonas: async () => personas,
+          showSpotlightSetModal: async (_i, _l, _n, _ch, _h, blockIdx, _fp, slice) => {
+            openedWithBlockIdx = blockIdx;
+            openedPersonas = slice;
+          },
+        });
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = buildPersonalConfigRouteId({
+          action: "spotlight-set-block-select",
+          locale: "en-US",
+          channelId: "123456789012345678",
+          hours: 12,
+          fp,
+        });
+
+        const interaction = {
+          isButton: () => false,
+          isStringSelectMenu: () => true,
+          isModalSubmit: () => false,
+          customId,
+          values: ["1"],
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          deferred: false,
+          replied: false,
+          reply: async () => {},
+          deferUpdate: async () => {},
+          editReply: async () => {},
+        } as unknown as StringSelectMenuInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(openedWithBlockIdx).toBe(1);
+        expect(openedPersonas).toHaveLength(50);
+        expect(openedPersonas[0].id).toBe(personas[50].id);
+      });
+
+      it("repaints with stale warning on non-numeric or out-of-range block selection", async () => {
+        const personas = makeBlockPersonas(120);
+        const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
+        let modalOpened = false;
+        let repaintedPayload: unknown = null;
+
+        const { dependencies } = makeDependencies([], {
+          loadGuildPersonas: async () => personas,
+          showSpotlightSetModal: async () => {
+            modalOpened = true;
+          },
+        });
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = buildPersonalConfigRouteId({
+          action: "spotlight-set-block-select",
+          locale: "en-US",
+          channelId: "123456789012345678",
+          hours: 12,
+          fp,
+        });
+
+        const interaction = {
+          isButton: () => false,
+          isStringSelectMenu: () => true,
+          isModalSubmit: () => false,
+          customId,
+          values: ["99"],
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          deferred: false,
+          replied: false,
+          deferUpdate: async () => {},
+          editReply: async (payload: unknown) => {
+            repaintedPayload = payload;
+          },
+        } as unknown as StringSelectMenuInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(modalOpened).toBe(false);
+        const json = JSON.stringify(repaintedPayload);
+        expect(json).toContain("This panel may be out of date");
+      });
+    });
+
+    describe("Interaction dispatch for spot-set-auto-select", () => {
+      it("opens auto-trigger modal on selecting valid block", async () => {
+        const personas = makeBlockPersonas(60);
+        const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
+        const mask = ((1n << 50n) - 1n).toString(36);
+        let openedSlice: Array<{ id: number }> = [];
+
+        const { dependencies } = makeDependencies([], {
+          loadGuildPersonas: async () => personas,
+          showSpotlightAutoTriggerModal: async (_i, _l, _n, _ch, _h, _blk, _m, _fp, slice) => {
+            openedSlice = slice;
+          },
+        });
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = buildPersonalConfigRouteId({
+          action: "spot-set-auto-select",
+          locale: "en-US",
+          channelId: "123456789012345678",
+          hours: 12,
+          blockIdx: 0,
+          mask,
+          fp,
+        });
+
+        const interaction = {
+          isButton: () => false,
+          isStringSelectMenu: () => true,
+          isModalSubmit: () => false,
+          customId,
+          values: ["24"],
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          deferred: false,
+          replied: false,
+          reply: async () => {},
+          deferUpdate: async () => {},
+          editReply: async () => {},
+        } as unknown as StringSelectMenuInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(openedSlice).toHaveLength(24);
+        expect(openedSlice[0].id).toBe(personas[24].id);
+      });
+
+      it("repaints with stale warning on out-of-bounds start value", async () => {
+        const personas = makeBlockPersonas(60);
+        const fp = computeSpotlightSetFingerprint("guild-123", "user-123", personas);
+        const mask = ((1n << 50n) - 1n).toString(36);
+        let modalOpened = false;
+        let repaintedPayload: unknown = null;
+
+        const { dependencies } = makeDependencies([], {
+          loadGuildPersonas: async () => personas,
+          showSpotlightAutoTriggerModal: async () => {
+            modalOpened = true;
+          },
+        });
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = buildPersonalConfigRouteId({
+          action: "spot-set-auto-select",
+          locale: "en-US",
+          channelId: "123456789012345678",
+          hours: 12,
+          blockIdx: 0,
+          mask,
+          fp,
+        });
+
+        const interaction = {
+          isButton: () => false,
+          isStringSelectMenu: () => true,
+          isModalSubmit: () => false,
+          customId,
+          values: ["100"],
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          deferred: false,
+          replied: false,
+          deferUpdate: async () => {},
+          editReply: async (payload: unknown) => {
+            repaintedPayload = payload;
+          },
+        } as unknown as StringSelectMenuInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(modalOpened).toBe(false);
+        const json = JSON.stringify(repaintedPayload);
+        expect(json).toContain("This panel may be out of date");
+      });
+    });
+
+    describe("Interaction dispatch for spotlight-remove-select", () => {
+      it("opens remove modal on selecting valid block", async () => {
+        const activeSpotlights = Array.from({ length: 120 }, (_, i) => ({
+          channelDiscId: `1234567890123456${(i % 100).toString().padStart(2, "0")}`,
+          personaIds: [1],
+          autoTriggerPersonaId: null,
+          expiresAt: null,
+          userDiscId: "user-123",
+        }));
+        const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
+        let openedStart = -1;
+        let openedSlice: PersonalSpotlightStatus[] = [];
+
+        const { dependencies } = makeDependencies([], {
+          loadActiveSpotlights: async () => activeSpotlights,
+          showSpotlightRemoveModal: async (_i, _l, _n, start, _fp, slice) => {
+            openedStart = start;
+            openedSlice = slice;
+          },
+        });
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = buildPersonalConfigRouteId({
+          action: "spotlight-remove-select",
+          locale: "en-US",
+          fp,
+        });
+
+        const interaction = {
+          isButton: () => false,
+          isStringSelectMenu: () => true,
+          isModalSubmit: () => false,
+          customId,
+          values: ["50"],
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          deferred: false,
+          replied: false,
+          reply: async () => {},
+          deferUpdate: async () => {},
+          editReply: async () => {},
+        } as unknown as StringSelectMenuInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(openedStart).toBe(50);
+        expect(openedSlice).toHaveLength(50);
+        expect(openedSlice[0].channelDiscId).toBe(activeSpotlights[50].channelDiscId);
+      });
+
+      it("repaints with stale warning on out-of-bounds start value", async () => {
+        const activeSpotlights = Array.from({ length: 120 }, (_, i) => ({
+          channelDiscId: `1234567890123456${(i % 100).toString().padStart(2, "0")}`,
+          personaIds: [1],
+          autoTriggerPersonaId: null,
+          expiresAt: null,
+          userDiscId: "user-123",
+        }));
+        const fp = computeSpotlightRemoveFingerprint("guild-123", "user-123", activeSpotlights);
+        let modalOpened = false;
+        let repaintedPayload: unknown = null;
+
+        const { dependencies } = makeDependencies([], {
+          loadActiveSpotlights: async () => activeSpotlights,
+          showSpotlightRemoveModal: async () => {
+            modalOpened = true;
+          },
+        });
+
+        const route = createPersonalConfigInteractionRoute(dependencies);
+        const customId = buildPersonalConfigRouteId({
+          action: "spotlight-remove-select",
+          locale: "en-US",
+          fp,
+        });
+
+        const interaction = {
+          isButton: () => false,
+          isStringSelectMenu: () => true,
+          isModalSubmit: () => false,
+          customId,
+          values: ["500"],
+          user: { id: "user-123", username: "tester", displayName: "Tester" },
+          guildId: "guild-123",
+          deferred: false,
+          replied: false,
+          deferUpdate: async () => {},
+          editReply: async (payload: unknown) => {
+            repaintedPayload = payload;
+          },
+        } as unknown as StringSelectMenuInteraction;
+
+        await route.execute({} as Client, interaction, requireRoute(customId));
+
+        expect(modalOpened).toBe(false);
+        const json = JSON.stringify(repaintedPayload);
+        expect(json).toContain("This panel may be out of date");
       });
     });
   });

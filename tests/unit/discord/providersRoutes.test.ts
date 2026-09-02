@@ -227,7 +227,7 @@ describe("providers routes", () => {
   });
 
   it("guarantees producer coverage against production UI and modal surfaces with explicit allowlist for producerless actions", () => {
-    const PRODUCERLESS_ACTIONS = ["model-open", "model-close"] as const;
+    const PRODUCERLESS_ACTIONS = ["model-open", "model-close", "range-cancel", "range-open", "range-page"] as const;
     const ACCEPTED_20_ACTIONS = [
       "add-submit",
       "edit-endpoint-open",
@@ -300,7 +300,7 @@ describe("providers routes", () => {
         })),
         initialEntryId: "provider:p0",
         readStatus: "fresh",
-        page: { kind: "entry-chooser", chooserPage: 0 },
+        page: { kind: "entry", entryId: "provider:p0", modelRangeIndex: 0 },
       },
       {
         locale: "en-US",
@@ -359,6 +359,7 @@ describe("providers routes", () => {
 
     const producedActions = new Set<string>();
     for (const id of customIds) {
+      if (id.startsWith("pagination-indicator-")) continue;
       const parsedRoute = parseProvidersPanelRoute(
         parsed(id),
         id.startsWith("personal-providers") ? PERSONAL_PROVIDERS_ROUTE_NAMESPACE : PROVIDERS_ROUTE_NAMESPACE,
@@ -1469,7 +1470,7 @@ describe("providers routes", () => {
     expect(rendered).toContain("Remove Provider");
   });
 
-  it("routes oversized collections through the shared range chooser", async () => {
+  it("routes oversized collections through the shared in-place row", async () => {
     const entries = Array.from({ length: 24 }, (_, index) => ({
       id: `provider:p${index}`,
       kind: "provider" as const,
@@ -1502,14 +1503,66 @@ describe("providers routes", () => {
       locale: "en-US",
       rangeIndex: 1,
     });
+    const pageId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "range-page",
+      locale: "en-US",
+      rangeIndex: 1,
+    });
+    const cancelId = buildProvidersRouteId(PROVIDERS_ROUTE_NAMESPACE, {
+      action: "range-cancel",
+      locale: "en-US",
+    });
 
     await route.execute({} as Client, interaction(openId) as never, parsed(openId));
     await route.execute({} as Client, interaction(selectId) as never, parsed(selectId));
+    await route.execute({} as Client, interaction(pageId) as never, parsed(pageId));
+    await route.execute({} as Client, interaction(cancelId) as never, parsed(cancelId));
 
-    expect(JSON.stringify(payloads[0])).toContain('"label":"24-24"');
+    expect(JSON.stringify(payloads[0])).toContain('"label":"Page 1 of 2"');
+    expect(JSON.stringify(payloads[0])).toContain('"label":"Next →"');
+    expect(JSON.stringify(payloads[0])).not.toContain("Select Page");
     expect(JSON.stringify(payloads[1])).toContain(
       '"value":"provider:p23","description":"Saved provider","default":true',
     );
+    expect(JSON.stringify(payloads[1])).toContain("No models are registered here yet.");
+    expect(JSON.stringify(payloads[1])).not.toContain("Select Page");
+    expect(JSON.stringify(payloads[2])).toContain('"label":"Page 2 of 2"');
+    expect(JSON.stringify(payloads[2])).not.toContain("Select Page");
+    expect(JSON.stringify(payloads[3])).toContain('"label":"Page 1 of 2"');
+    expect(JSON.stringify(payloads[3])).not.toContain("Select Page");
+
+    const personalPayloads: unknown[] = [];
+    const personalScope: LoadedProviderPanelScope = {
+      ...oversizedScope,
+      scopeKind: "personal",
+      ownerId: 456,
+      routeNamespace: PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
+    };
+    const personalRoute = createProvidersInteractionRoute(
+      { resolveScope: async () => personalScope },
+      {
+        namespace: PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
+        authorize: () => true,
+        includeBrave: false,
+        allowRotation: false,
+      },
+    );
+    const personalPageId = buildProvidersRouteId(PERSONAL_PROVIDERS_ROUTE_NAMESPACE, {
+      action: "range",
+      locale: "en-US",
+      rangeIndex: 1,
+    });
+    await personalRoute.execute(
+      {} as Client,
+      {
+        ...interaction(personalPageId),
+        editReply: async (payload: unknown) => personalPayloads.push(payload),
+      } as never,
+      parsed(personalPageId),
+    );
+    expect(JSON.stringify(personalPayloads[0])).toContain('"label":"Page 2 of 2"');
+    expect(JSON.stringify(personalPayloads[0])).toContain("personal-providers:v1:range:en-US:0");
+    expect(JSON.stringify(personalPayloads[0])).not.toContain("Select Page");
   });
 
   it("rechecks guild permission before loading current scope", async () => {

@@ -32,8 +32,7 @@ import {
 import {
   buildPanelContainer,
   buildPanelReceiptContainer,
-  buildRangeNavigationRows,
-  buildRangeChooserComponents,
+  buildPaginationRow,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
@@ -354,7 +353,6 @@ export function buildEditEndpointModal(
 
 export type ProvidersPanelPage =
   | { kind: "entry"; entryId?: string; modelRangeIndex?: number }
-  | { kind: "entry-chooser"; chooserPage?: number }
   | { kind: "add-provider" }
   | { kind: "remove"; entryId: string };
 
@@ -789,7 +787,8 @@ function buildEntryBody(locale: string, entry: ProviderPanelEntry, routeNamespac
  * Discord rejects a TextDisplay over 4000 characters, and the model list under each capability is
  * unbounded, so a catalog-sized provider made the whole panel fail with BASE_TYPE_BAD_LENGTH rather
  * than render. Trimming at a line boundary and stating the omitted count keeps the panel usable
- * without hiding models silently. The durable fix is the shared range chooser.
+ * without hiding models silently. Selector pagination keeps the panel usable while the body
+ * remains bounded to Discord's TextDisplay limit.
  */
 function capEntryBody(locale: string, body: string): string {
   if (body.length <= ENTRY_BODY_LIMIT) return body;
@@ -932,36 +931,25 @@ function buildEntryModelSelector(
       ],
     },
   ];
-  if (selection.rangeCount > 1) {
-    components.push({
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildProvidersRouteId(routeNamespace, {
-            action: "model-range",
-            locale,
-            ...entryFields,
-            rangeIndex: Math.max(0, selection.rangeIndex - 1),
-          }),
-          label: localizer(locale, "general.pagination.previous"),
-          disabled: selection.rangeIndex === 0,
-        },
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildProvidersRouteId(routeNamespace, {
-            action: "model-range",
-            locale,
-            ...entryFields,
-            rangeIndex: selection.rangeIndex + 1,
-          }),
-          label: localizer(locale, "general.pagination.next"),
-          disabled: selection.rangeIndex >= selection.rangeCount - 1,
-        },
-      ],
-    });
+  const modelPaginationRow = buildPaginationRow({
+    locale,
+    rangeIndex: selection.rangeIndex,
+    rangeCount: selection.rangeCount,
+    namespace: routeNamespace,
+    version: PROVIDERS_ROUTE_VERSION,
+    disabled: readStatus !== "fresh" || !enabledActions?.has("model"),
+    buildSegments: {
+      page: (rangeIndex) =>
+        buildProvidersRouteSegments({
+          action: "model-range",
+          locale,
+          ...entryFields,
+          rangeIndex,
+        }),
+    },
+  });
+  if (modelPaginationRow) {
+    components.push(modelPaginationRow);
   }
   return components;
 }
@@ -1033,48 +1021,23 @@ export function buildProvidersPanelPayload(input: ProvidersPanelRenderInput): Pr
   };
   components.push(selectRow);
 
-  if (selection.rangeCount > 1) {
-    components.push(
-      ...buildRangeNavigationRows({
-        totalCount: entries.length,
-        pageSize: PROVIDERS_ENTRIES_PER_SELECTOR_PAGE,
-        activeRangeIndex: selection.rangeIndex,
-        locale,
-        namespace: routeNamespace,
-        version: PROVIDERS_ROUTE_VERSION,
-        buildSegments: {
-          range: (rangeIndex) => buildProvidersRouteSegments({ action: "range", locale, rangeIndex }),
-        },
-        overflowButton: {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildProvidersRouteId(routeNamespace, { action: "range-open", locale }),
-          label: localizer(locale, "general.pagination.select_page_title"),
-        },
-      }),
-    );
+  const paginationRow = buildPaginationRow({
+    locale,
+    rangeIndex: selection.rangeIndex,
+    rangeCount: selection.rangeCount,
+    namespace: routeNamespace,
+    version: PROVIDERS_ROUTE_VERSION,
+    disabled: readStatus !== "fresh",
+    buildSegments: {
+      page: (rangeIndex) => buildProvidersRouteSegments({ action: "range", locale, rangeIndex }),
+    },
+  });
+  if (paginationRow) {
+    components.push(paginationRow);
   }
 
   components.push({ type: ComponentType.Separator, divider: true, spacing: 1 });
-  if (input.page.kind === "entry-chooser") {
-    components.push(
-      ...buildRangeChooserComponents({
-        locale,
-        totalCount: entries.length,
-        pageSize: PROVIDERS_ENTRIES_PER_SELECTOR_PAGE,
-        chooserPage: input.page.chooserPage,
-        namespace: routeNamespace,
-        version: PROVIDERS_ROUTE_VERSION,
-        buildSegments: {
-          range: (rangeIndex) => buildProvidersRouteSegments({ action: "range", locale, rangeIndex }),
-          previous: (targetPage) =>
-            buildProvidersRouteSegments({ action: "range-page", locale, rangeIndex: targetPage }),
-          next: (targetPage) => buildProvidersRouteSegments({ action: "range-page", locale, rangeIndex: targetPage }),
-          cancel: () => buildProvidersRouteSegments({ action: "range-cancel", locale }),
-        },
-      }),
-    );
-  } else if (input.page.kind === "remove") {
+  if (input.page.kind === "remove") {
     const removalPage = input.page;
     const entry = entries.find((candidate) => candidate.id === removalPage.entryId);
     if (entry) {

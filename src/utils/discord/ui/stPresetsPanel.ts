@@ -18,13 +18,15 @@ import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import {
   buildStPresetsRouteId,
   buildStPresetsRouteSegments,
+  MAX_NODES_PER_MODAL_PAGE,
+  NODE_RANGE_OPTIONS_PER_PAGE,
   ST_PRESETS_ROUTE_NAMESPACE,
   ST_PRESETS_ROUTE_VERSION,
 } from "@/utils/discord/stPresetsPanelCatalog";
 import {
   buildPanelContainer,
   buildPanelReceiptContainer,
-  buildRangeChooserComponents,
+  buildPaginationRow,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import { safeModalLocalizer, safeSelectOptionText } from "@/utils/discord/ui/modals";
@@ -34,10 +36,15 @@ const MAX_PRESETS_PER_SELECTOR_PAGE = 23;
 const MAX_NODE_OPTIONS_PER_GROUP = 10;
 
 export type StPresetsPanelPage =
-  | { kind: "preset"; presetId?: number }
+  | {
+      kind: "preset";
+      presetId?: number;
+      nodeRangeIndex?: number;
+      nodeRangeCount?: number;
+      nodeTotalCount?: number;
+    }
   | { kind: "none" }
-  | { kind: "delete"; presetId: number }
-  | { kind: "nodes-chooser"; presetId: number; totalCount: number; chooserPage: number };
+  | { kind: "delete"; presetId: number };
 
 export interface StPresetsPanelPayload {
   components: TopLevelComponentData[];
@@ -139,7 +146,18 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
   }
 
   // Preset Selector building
-  const rangeSelection = resolveRangeSelection(presets, input.rangeIndex ?? 0, MAX_PRESETS_PER_SELECTOR_PAGE);
+  // A repaint that names a preset has to land on the selector page holding it. Defaulting to the
+  // first page instead drops the reader back to page 1 after every action taken further in, and
+  // leaves the selection off-screen so no option carries the default marker.
+  const anchorPresetId =
+    page.kind === "delete" ? page.presetId : page.kind === "preset" ? (page.presetId ?? activePresetId) : null;
+  const anchorIndex = anchorPresetId == null ? -1 : presets.findIndex((p) => p.preset_id === anchorPresetId);
+  const anchorRangeIndex = anchorIndex < 0 ? 0 : Math.floor(anchorIndex / MAX_PRESETS_PER_SELECTOR_PAGE);
+  const rangeSelection = resolveRangeSelection(
+    presets,
+    input.rangeIndex ?? anchorRangeIndex,
+    MAX_PRESETS_PER_SELECTOR_PAGE,
+  );
   const visiblePresets = rangeSelection.visibleItems;
 
   const selectedValue: string =
@@ -187,33 +205,20 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
   components.push(selectRow);
 
   if (rangeSelection.rangeCount > 1) {
-    components.push({
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildStPresetsRouteId({
-            action: "range",
-            locale,
-            rangeIndex: Math.max(0, rangeSelection.rangeIndex - 1),
-          }),
-          label: localizer(locale, "commands.st-presets.range_previous"),
-          disabled: rangeSelection.rangeIndex === 0,
-        },
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildStPresetsRouteId({
-            action: "range",
-            locale,
-            rangeIndex: rangeSelection.rangeIndex + 1,
-          }),
-          label: localizer(locale, "commands.st-presets.range_next"),
-          disabled: rangeSelection.rangeIndex >= rangeSelection.rangeCount - 1,
-        },
-      ],
+    const paginationRow = buildPaginationRow({
+      locale,
+      rangeIndex: rangeSelection.rangeIndex,
+      rangeCount: rangeSelection.rangeCount,
+      namespace: ST_PRESETS_ROUTE_NAMESPACE,
+      version: ST_PRESETS_ROUTE_VERSION,
+      disabled: writesDisabled,
+      buildSegments: {
+        page: (rangeIndex) => buildStPresetsRouteSegments({ action: "range", locale, rangeIndex }),
+      },
     });
+    if (paginationRow) {
+      components.push(paginationRow);
+    }
   }
 
   components.push({ type: ComponentType.Separator, divider: true, spacing: 1 });
@@ -237,6 +242,7 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
       presets[0];
 
     if (targetPreset && targetPreset.preset_id !== undefined) {
+      const targetPresetId = targetPreset.preset_id;
       const isActive = targetPreset.preset_id === activePresetId;
       const activeLine =
         isActive && input.activeNodeCounts
@@ -262,20 +268,82 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildStPresetsRouteId({ action: "nodes-open", locale, presetId: targetPreset.preset_id }),
+              customId: buildStPresetsRouteId({ action: "nodes-open", locale, presetId: targetPresetId }),
               label: localizer(locale, "commands.st-presets.toggle_nodes"),
               disabled: writesDisabled,
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Danger,
-              customId: buildStPresetsRouteId({ action: "delete-prompt", locale, presetId: targetPreset.preset_id }),
+              customId: buildStPresetsRouteId({ action: "delete-prompt", locale, presetId: targetPresetId }),
               label: localizer(locale, "commands.st-presets.delete_preset"),
               disabled: writesDisabled,
             },
           ],
         },
       );
+      const nodeRangeCount = page.nodeRangeCount ?? 0;
+      if (nodeRangeCount > 1) {
+        const nodeTotalCount = page.nodeTotalCount ?? nodeRangeCount * MAX_NODES_PER_MODAL_PAGE;
+        // Every range is its own option because the modal is the only place nodes can be toggled:
+        // a prev/next row disables the position it sits on, so the range it is parked on could
+        // never be opened.
+        // nodeRangeIndex names a range that must stay visible, not the first option: snapping to its
+        // block keeps a full selector and lets a legacy node-page ID land on a complete list.
+        const visibleRange = Math.min(Math.max(0, page.nodeRangeIndex ?? 0), Math.max(0, nodeRangeCount - 1));
+        const blockStart = Math.floor(visibleRange / NODE_RANGE_OPTIONS_PER_PAGE) * NODE_RANGE_OPTIONS_PER_PAGE;
+        const visibleRanges = Math.min(NODE_RANGE_OPTIONS_PER_PAGE, nodeRangeCount - blockStart);
+        components.push({
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.StringSelect,
+              customId: buildStPresetsRouteId({
+                action: "nodes-range-select",
+                locale,
+                presetId: targetPresetId,
+              }),
+              placeholder: safeSelectOptionText(localizer(locale, "commands.st-presets.nodes_range_placeholder"), 150),
+              options: Array.from({ length: visibleRanges }, (_, offset) => {
+                const rangeIndex = blockStart + offset;
+                const first = rangeIndex * MAX_NODES_PER_MODAL_PAGE;
+                return {
+                  value: String(rangeIndex),
+                  label: safeSelectOptionText(
+                    localizer(locale, "commands.st-presets.nodes_range_option", {
+                      start: first + 1,
+                      end: Math.min(first + MAX_NODES_PER_MODAL_PAGE, nodeTotalCount),
+                    }),
+                    100,
+                  ),
+                } satisfies SelectMenuComponentOptionData;
+              }),
+              disabled: writesDisabled,
+            },
+          ],
+        } satisfies ActionRowData<StringSelectMenuComponentData>);
+
+        const nodeBlockRow = buildPaginationRow({
+          locale,
+          rangeIndex: Math.floor(blockStart / NODE_RANGE_OPTIONS_PER_PAGE),
+          rangeCount: Math.ceil(nodeRangeCount / NODE_RANGE_OPTIONS_PER_PAGE),
+          namespace: ST_PRESETS_ROUTE_NAMESPACE,
+          version: ST_PRESETS_ROUTE_VERSION,
+          disabled: writesDisabled,
+          buildSegments: {
+            page: (blockIndex) =>
+              buildStPresetsRouteSegments({
+                action: "nodes-page",
+                locale,
+                presetId: targetPresetId,
+                chooserPage: blockIndex * NODE_RANGE_OPTIONS_PER_PAGE,
+              }),
+          },
+        });
+        if (nodeBlockRow) {
+          components.push(nodeBlockRow);
+        }
+      }
     } else {
       components.push({
         type: ComponentType.TextDisplay,
@@ -312,35 +380,6 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
         ],
       },
     );
-  } else if (page.kind === "nodes-chooser") {
-    const chooserComponents = buildRangeChooserComponents({
-      locale,
-      totalCount: page.totalCount,
-      pageSize: 50,
-      chooserPage: page.chooserPage,
-      namespace: ST_PRESETS_ROUTE_NAMESPACE,
-      version: ST_PRESETS_ROUTE_VERSION,
-      buildSegments: {
-        range: (rangeIndex) =>
-          buildStPresetsRouteSegments({ action: "nodes-range", locale, presetId: page.presetId, rangeIndex }),
-        previous: (targetPage) =>
-          buildStPresetsRouteSegments({
-            action: "nodes-page",
-            locale,
-            presetId: page.presetId,
-            chooserPage: targetPage,
-          }),
-        next: (targetPage) =>
-          buildStPresetsRouteSegments({
-            action: "nodes-page",
-            locale,
-            presetId: page.presetId,
-            chooserPage: targetPage,
-          }),
-        cancel: () => buildStPresetsRouteSegments({ action: "retry", locale }),
-      },
-    });
-    components.push(...chooserComponents);
   }
 
   if (readStatus === "stale") {

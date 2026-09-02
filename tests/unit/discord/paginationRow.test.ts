@@ -62,13 +62,14 @@ function buildModerationRangeSegments(
   };
 }
 
-function buildRow(rangeIndex: number, rangeCount: number): ActionRowData<ButtonComponentData> | null {
+function buildRow(rangeIndex: number, rangeCount: number, disabled = false): ActionRowData<ButtonComponentData> | null {
   return buildPaginationRow({
     locale: "en-US",
     rangeIndex,
     rangeCount,
     namespace: MODERATION_ROUTE_NAMESPACE,
     version: MODERATION_ROUTE_VERSION,
+    disabled,
     buildSegments: buildModerationRangeSegments("whitelist", "channels"),
   });
 }
@@ -89,6 +90,12 @@ describe("buildPaginationRow", () => {
     expect(middleRow?.components.map((button) => button.disabled)).toEqual([false, true, false]);
     expect(lastRow?.components.map((button) => button.disabled)).toEqual([false, true, true]);
 
+    for (const row of [firstRow, middleRow, lastRow]) {
+      const ids = row?.components.map((button) => button.customId ?? "") ?? [];
+      expect(new Set(ids).size).toBe(3);
+    }
+    expect(parseInteractionRoute(firstRow?.components[1]?.customId ?? "")).toBeNull();
+
     const nextRoute = parseInteractionRoute(firstRow?.components[2]?.customId ?? "");
     expect(nextRoute).not.toBeNull();
     if (!nextRoute) throw new Error("Expected a pagination route");
@@ -99,6 +106,12 @@ describe("buildPaginationRow", () => {
       page: "channels",
       rangeIndex: 1,
     });
+  });
+
+  it("disables both directional buttons when the row is disabled", () => {
+    const row = buildRow(1, 3, true);
+
+    expect(row?.components.map((button) => button.disabled)).toEqual([true, true, true]);
   });
 });
 

@@ -31,6 +31,7 @@ export function computeServerStmFingerprint(
 type MemoriesAction =
   | "category"
   | "persona-select"
+  | "persona-page"
   | "select"
   | "range"
   | "range-open"
@@ -48,6 +49,7 @@ type MemoriesAction =
   | "vectorize-cancel"
   | "document-scope"
   | "document-persona-select"
+  | "document-persona-page"
   | "document-select"
   | "document-range"
   | "document-range-open"
@@ -76,6 +78,7 @@ type MemoriesAction =
 export type MemoriesPanelRoute =
   | { action: "category"; locale: string; category: MemoriesCategory }
   | { action: "persona-select"; locale: string; lineageId: number }
+  | { action: "persona-page"; locale: string; lineageId: number; rangeIndex: number }
   | { action: "select"; locale: string; lineageId: number; rangeIndex?: number }
   | { action: "range"; locale: string; lineageId: number; rangeIndex: number }
   | { action: "range-open" | "range-cancel"; locale: string; lineageId: number }
@@ -104,6 +107,7 @@ export type MemoriesPanelRoute =
       nonce: string;
     }
   | { action: "document-scope" | "document-persona-select"; locale: string; personaId: number }
+  | { action: "document-persona-page"; locale: string; personaId: number; rangeIndex: number }
   | { action: "document-select"; locale: string; personaId: number; rangeIndex?: number }
   | { action: "document-range"; locale: string; personaId: number; rangeIndex: number }
   | { action: "document-range-open" | "document-range-cancel"; locale: string; personaId: number }
@@ -233,6 +237,10 @@ const MEMORIES_ROUTE_CODECS: Record<
     wireToken: "persona-select",
     fields: [lineageIdField],
   },
+  "persona-page": {
+    wireToken: "persona-page",
+    fields: [lineageIdField, rangeIndexField],
+  },
   select: {
     wireToken: "select",
     fields: [lineageIdField, optionalRangeIndexField],
@@ -300,6 +308,10 @@ const MEMORIES_ROUTE_CODECS: Record<
   "document-persona-select": {
     wireToken: "document-persona-select",
     fields: [personaIdField],
+  },
+  "document-persona-page": {
+    wireToken: "document-persona-page",
+    fields: [personaIdField, rangeIndexField],
   },
   "document-select": {
     wireToken: "document-select",

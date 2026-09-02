@@ -991,7 +991,7 @@ export function createProvidersInteractionRoute(
             : (stored ?? false);
         const workflow = workflowAttachment ? await dependencies.loadWorkflow(workflowAttachment.url) : undefined;
         if (workflowAttachment && !workflow) {
-          await repaint(interaction, route.locale, scope, { kind: "entry", entryId }, 0, {
+          await repaint(interaction, route.locale, scope, { kind: "entry", entryId }, rangeForEntry(scope, entryId), {
             tone: "error",
             heading: localizer(route.locale, "commands.providers.model_save_failed"),
             detail: localizer(route.locale, "commands.providers.model_workflow_invalid"),
@@ -1052,10 +1052,18 @@ export function createProvidersInteractionRoute(
         return;
       }
       if (route.action === "range-open" || route.action === "range-page") {
-        await repaint(interaction, route.locale, scope, {
-          kind: "entry-chooser",
-          chooserPage: route.action === "range-page" ? route.rangeIndex : 0,
-        });
+        const rangeIndex = route.action === "range-page" ? route.rangeIndex : 0;
+        const entry = scope.data.entries[rangeIndex * PROVIDERS_ENTRIES_PER_SELECTOR_PAGE];
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          {
+            kind: "entry",
+            entryId: entry?.id,
+          },
+          rangeIndex,
+        );
         return;
       }
       if (route.action === "range-cancel") {

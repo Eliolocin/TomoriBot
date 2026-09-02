@@ -4356,6 +4356,7 @@ describe("moderation route codec wire contract, exhaustiveness, and producer cov
 
     const producedActions = new Set<string>();
     for (const id of customIds) {
+      if (id.startsWith("pagination-indicator-")) continue;
       const parsed = parseModerationPanelRoute(parsedRoute(id));
       expect(parsed).not.toBeNull();
       if (parsed) producedActions.add(parsed.action);

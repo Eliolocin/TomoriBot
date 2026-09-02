@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { ComponentType } from "discord.js";
 import type { ProviderPanelEntry } from "@/types/discord/providerPanel";
-import { PERSONAL_PROVIDERS_ROUTE_NAMESPACE } from "@/utils/discord/providersPanelCatalog";
+import { parseProvidersPanelRoute, PERSONAL_PROVIDERS_ROUTE_NAMESPACE } from "@/utils/discord/providersPanelCatalog";
+import { parseInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import {
   buildAddEndpointModal,
   buildAddProviderModal,
@@ -332,26 +333,97 @@ describe("providers panel rendering", () => {
 
     expect((firstSelect?.options as unknown[])?.length).toBe(25);
     expect((secondSelect?.options as unknown[])?.length).toBe(3);
-    expect(JSON.stringify(firstPage)).toContain('"label":"1-23"');
-    expect(JSON.stringify(firstPage)).toContain('"label":"24-24"');
+    expect(JSON.stringify(firstPage)).toContain('"label":"← Previous"');
+    expect(JSON.stringify(firstPage)).toContain('"label":"Page 1 of 2"');
+    expect(JSON.stringify(firstPage)).toContain('"label":"Next →"');
     expect(JSON.stringify(firstPage)).not.toContain("providers:v1:range-open:en-US");
     expect(JSON.stringify(secondPage)).toContain("Provider 23");
+  });
 
-    const chooser = buildProvidersPanelPayload({
+  it("renders one shared row directly below each provider select with stable entry bodies", () => {
+    const entries = Array.from({ length: 46 }, (_, index) => {
+      const entry = providerEntry(`provider:p${index}`, `Provider ${index}`);
+      if (entry.kind === "provider") {
+        const textCapability = entry.capabilities[0];
+        const model = textCapability?.models[0];
+        if (textCapability && model) textCapability.models[0] = { ...model, codeName: `custom/provider-${index}` };
+      }
+      return entry;
+    });
+
+    for (const routeNamespace of ["providers", PERSONAL_PROVIDERS_ROUTE_NAMESPACE] as const) {
+      const firstPage = buildProvidersPanelPayload({
+        locale: "en-US",
+        entries,
+        initialEntryId: entries[0]?.id ?? null,
+        readStatus: "fresh",
+        page: { kind: "entry", entryId: entries[0]?.id },
+        rangeIndex: 0,
+        routeNamespace,
+      });
+      const secondPage = buildProvidersPanelPayload({
+        locale: "en-US",
+        entries,
+        initialEntryId: entries[0]?.id ?? null,
+        readStatus: "fresh",
+        page: { kind: "entry", entryId: entries[23]?.id },
+        rangeIndex: 1,
+        routeNamespace,
+      });
+
+      const getRows = (payload: ReturnType<typeof buildProvidersPanelPayload>) => {
+        const container = payload.components.find((component) => component.type === ComponentType.Container) as {
+          components: Array<{ type: number; components?: Array<Record<string, unknown>> }>;
+        };
+        return container.components.filter((component) => component.type === ComponentType.ActionRow);
+      };
+      const firstRows = getRows(firstPage);
+      const secondRows = getRows(secondPage);
+      const firstPagination = firstRows[1]?.components ?? [];
+      const secondPagination = secondRows[1]?.components ?? [];
+
+      expect(firstRows[1]?.components).toHaveLength(3);
+      expect(firstPagination.map((button) => button.label)).toEqual(["← Previous", "Page 1 of 2", "Next →"]);
+      expect(firstPagination.map((button) => button.disabled)).toEqual([true, true, false]);
+      expect(secondPagination.map((button) => button.label)).toEqual(["← Previous", "Page 2 of 2", "Next →"]);
+      expect(secondPagination.map((button) => button.disabled)).toEqual([false, true, true]);
+      expect(firstRows[0]?.components?.[0]?.type).toBe(ComponentType.StringSelect);
+      expect(firstRows[1]?.components?.[0]?.customId).toBe(`${routeNamespace}:v1:range:en-US:0`);
+      expect(firstRows[1]?.components?.[2]?.customId).toBe(`${routeNamespace}:v1:range:en-US:1`);
+      expect(JSON.stringify(firstPage)).toContain("custom/provider-0");
+      expect(JSON.stringify(firstPage)).not.toContain("custom/provider-23");
+      expect(JSON.stringify(secondPage)).toContain("custom/provider-23");
+      expect(JSON.stringify(secondPage)).not.toContain("custom/provider-0");
+      expect(JSON.stringify(secondPage)).not.toContain("range-open");
+
+      const nextRoute = parseInteractionRoute(String(firstPagination[2]?.customId));
+      expect(nextRoute && parseProvidersPanelRoute(nextRoute, routeNamespace)).toEqual({
+        action: "range",
+        locale: "en-US",
+        rangeIndex: 1,
+      });
+    }
+  });
+
+  it("disables directional provider pagination controls on stale reads", () => {
+    const entries = Array.from({ length: 24 }, (_, index) => providerEntry(`provider:p${index}`, `Provider ${index}`));
+    const payload = buildProvidersPanelPayload({
       locale: "en-US",
       entries,
       initialEntryId: entries[0]?.id ?? null,
-      readStatus: "fresh",
-      page: { kind: "entry-chooser" },
+      readStatus: "stale",
+      page: { kind: "entry" },
     });
-    const chooserJson = JSON.stringify(chooser);
-    expect(chooserJson).toContain("Select Page");
-    expect(chooserJson).toContain('"label":"1-23"');
-    expect(chooserJson).toContain('"label":"24-24"');
-    expect(chooserJson).toContain("providers:v1:range-cancel:en-US");
+    const container = payload.components.find((component) => component.type === ComponentType.Container) as {
+      components: Array<{ type: number; components?: Array<{ disabled?: boolean }> }>;
+    };
+    const pagination = container.components.find(
+      (component) => component.type === ComponentType.ActionRow && component.components?.length === 3,
+    );
+    expect(pagination?.components?.map((button) => button.disabled)).toEqual([true, true, true]);
   });
 
-  it("retains the page chooser when saved entries need more than one button row", () => {
+  it("renders one shared pagination row for large saved-entry catalogs", () => {
     const entries = Array.from({ length: 116 }, (_, index) => providerEntry(`provider:p${index}`, `Provider ${index}`));
     const payload = buildProvidersPanelPayload({
       locale: "en-US",
@@ -362,7 +434,15 @@ describe("providers panel rendering", () => {
       rangeIndex: 0,
     });
 
-    expect(JSON.stringify(payload)).toContain("providers:v1:range-open:en-US");
+    const container = payload.components.find((component) => component.type === ComponentType.Container) as {
+      components: Array<{ type: number; components?: Array<{ label?: string; customId?: string }> }>;
+    };
+    const rows = container.components.filter((component) => component.type === ComponentType.ActionRow);
+    const pagination = rows[1]?.components ?? [];
+    expect(pagination.map((button) => button.label)).toEqual(["← Previous", "Page 1 of 6", "Next →"]);
+    expect(pagination[0]?.customId).toBe("providers:v1:range:en-US:0");
+    expect(pagination[2]?.customId).toBe("providers:v1:range:en-US:1");
+    expect(JSON.stringify(payload)).not.toContain("providers:v1:range-open:en-US");
   });
 
   it("opens the selector range containing the initial active entry", () => {

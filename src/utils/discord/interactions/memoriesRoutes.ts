@@ -41,6 +41,8 @@ import {
   buildVectorizeMemoryModal,
   MAX_STM_MANAGEABLE_ENTRIES,
   MAX_STM_OPTIONS_PER_GROUP,
+  MAX_DOCUMENT_PAGE_SIZE,
+  MAX_SERVER_MEMORY_PAGE_SIZE,
   parseServerMemoryTags,
   type MemoriesPanelPayload,
   type StmPanelEntry,
@@ -70,6 +72,18 @@ import {
   type DocumentListRow,
 } from "@/utils/discord/interactions/memoriesDocumentOperations";
 import { parseInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+
+function rangeIndexAfterRemoval<T>(
+  records: readonly T[],
+  removedId: number,
+  getId: (record: T) => number,
+  remainingCount: number,
+  pageSize: number,
+): number | undefined {
+  const removedIndex = records.findIndex((record) => getId(record) === removedId);
+  if (removedIndex < 0) return undefined;
+  return Math.min(Math.floor(removedIndex / pageSize), Math.max(0, Math.ceil(remainingCount / pageSize) - 1));
+}
 
 interface MemoriesScope {
   serverId: number;
@@ -1361,6 +1375,25 @@ export function createMemoriesInteractionRoute(
         return;
       }
 
+      if (route.action === "persona-page") {
+        const validLineage = scope.personas.some((persona) => persona.persona_lineage_id === route.lineageId)
+          ? route.lineageId
+          : (scope.personas[0]?.persona_lineage_id ?? 0);
+        const memories = validLineage ? await dependencies.loadMemories(scope.serverId, validLineage, ownerFilter) : [];
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "memories",
+          validLineage,
+          memories,
+          { kind: "main", personaRangeIndex: route.rangeIndex },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
       if (route.action === "select") {
         const memoryId = Number((interaction as StringSelectMenuInteraction).values[0]);
         const memories = await dependencies.loadMemories(scope.serverId, route.lineageId, ownerFilter);
@@ -1387,7 +1420,7 @@ export function createMemoriesInteractionRoute(
           "memories",
           route.lineageId,
           memories,
-          { kind: "range-chooser", chooserPage: 0 },
+          { kind: "main", rangeIndex: 0 },
           undefined,
           dependencies,
         );
@@ -1403,7 +1436,7 @@ export function createMemoriesInteractionRoute(
           "memories",
           route.lineageId,
           memories,
-          { kind: "range-chooser", chooserPage: route.chooserPage },
+          { kind: "main", rangeIndex: route.chooserPage },
           undefined,
           dependencies,
         );
@@ -1487,6 +1520,24 @@ export function createMemoriesInteractionRoute(
         return;
       }
 
+      if (route.action === "document-persona-page") {
+        const personaId = scope.personas.some((persona) => persona.persona_id === route.personaId)
+          ? route.personaId
+          : (scope.personas.find((persona) => persona.persona_id)?.persona_id ?? 0);
+        await repaint(
+          interaction,
+          route.locale,
+          scope,
+          "documents",
+          personaId,
+          [],
+          { kind: "documents", personaRangeIndex: route.rangeIndex },
+          undefined,
+          dependencies,
+        );
+        return;
+      }
+
       if (route.action === "document-range-open") {
         await repaint(
           interaction,
@@ -1495,7 +1546,7 @@ export function createMemoriesInteractionRoute(
           "documents",
           route.personaId,
           [],
-          { kind: "document-range-chooser", chooserPage: 0 },
+          { kind: "documents", rangeIndex: 0 },
           undefined,
           dependencies,
         );
@@ -1510,7 +1561,7 @@ export function createMemoriesInteractionRoute(
           "documents",
           route.personaId,
           [],
-          { kind: "document-range-chooser", chooserPage: route.chooserPage },
+          { kind: "documents", rangeIndex: route.chooserPage },
           undefined,
           dependencies,
         );
@@ -1770,11 +1821,13 @@ export function createMemoriesInteractionRoute(
       }
 
       if (route.action === "document-remove-confirm" || route.action === "history-remove-confirm") {
+        const personaId = route.personaId === 0 ? null : route.personaId;
+        const documentsBeforeRemoval = [...(await dependencies.loadDocuments(scope.serverId, personaId))];
         const action = await performPanelAction(
           () =>
             dependencies.documentOperations.remove({
               serverId: scope.serverId,
-              personaId: route.personaId === 0 ? null : route.personaId,
+              personaId,
               documentId: route.documentId,
               workspaceId: scope.workspaceId,
               canManage: scope.canManage,
@@ -1795,6 +1848,16 @@ export function createMemoriesInteractionRoute(
             userDiscId: scope.userDiscId,
           });
         }
+        const rangeIndex =
+          result.status === "success"
+            ? rangeIndexAfterRemoval(
+                documentsBeforeRemoval,
+                route.documentId,
+                (document) => document.document_id,
+                Math.max(0, documentsBeforeRemoval.length - 1),
+                MAX_DOCUMENT_PAGE_SIZE,
+              )
+            : undefined;
         await repaint(
           interaction,
           route.locale,
@@ -1802,7 +1865,7 @@ export function createMemoriesInteractionRoute(
           "documents",
           route.personaId,
           [],
-          { kind: "documents" },
+          rangeIndex === undefined ? { kind: "documents" } : { kind: "documents", rangeIndex },
           result.status === "success"
             ? receipt(route.locale, "document_removed", { name: result.documentName })
             : documentResultReceipt(route.locale, result.status),
@@ -1862,11 +1925,13 @@ export function createMemoriesInteractionRoute(
       }
 
       if (route.action === "document-chunk-remove-confirm") {
+        const personaId = route.personaId === 0 ? null : route.personaId;
+        const documentsBeforeRemoval = [...(await dependencies.loadDocuments(scope.serverId, personaId))];
         const action = await performPanelAction(
           () =>
             dependencies.documentOperations.removeChunk({
               serverId: scope.serverId,
-              personaId: route.personaId === 0 ? null : route.personaId,
+              personaId,
               documentId: route.documentId,
               chunkIdx: route.chunkIdx,
               workspaceId: scope.workspaceId,
@@ -1883,6 +1948,16 @@ export function createMemoriesInteractionRoute(
             userDiscId: scope.userDiscId,
           });
         }
+        const rangeIndex =
+          result.status === "success"
+            ? rangeIndexAfterRemoval(
+                documentsBeforeRemoval,
+                route.documentId,
+                (document) => document.document_id,
+                result.removedDocument ? Math.max(0, documentsBeforeRemoval.length - 1) : documentsBeforeRemoval.length,
+                MAX_DOCUMENT_PAGE_SIZE,
+              )
+            : undefined;
         await repaint(
           interaction,
           route.locale,
@@ -1891,8 +1966,12 @@ export function createMemoriesInteractionRoute(
           route.personaId,
           [],
           result.status === "success" && !result.removedDocument
-            ? { kind: "documents", selectedDocumentId: route.documentId }
-            : { kind: "documents" },
+            ? rangeIndex === undefined
+              ? { kind: "documents", selectedDocumentId: route.documentId }
+              : { kind: "documents", selectedDocumentId: route.documentId, rangeIndex }
+            : rangeIndex === undefined
+              ? { kind: "documents" }
+              : { kind: "documents", rangeIndex },
           result.status === "success"
             ? receipt(
                 route.locale,
@@ -2399,6 +2478,9 @@ export function createMemoriesInteractionRoute(
       }
 
       if (route.action === "remove-confirm") {
+        const memoriesBeforeRemoval = [
+          ...(await dependencies.loadMemories(scope.serverId, route.lineageId, ownerFilter)),
+        ];
         const action = await performPanelAction(
           () =>
             dependencies.operations.remove({
@@ -2424,6 +2506,14 @@ export function createMemoriesInteractionRoute(
             serverId: scope.serverId,
             userDiscId: interaction.user.id,
           });
+          const rangeIndex =
+            rangeIndexAfterRemoval(
+              memoriesBeforeRemoval,
+              route.memoryId,
+              (memory) => memory.server_memory_id ?? 0,
+              memories.length,
+              MAX_SERVER_MEMORY_PAGE_SIZE,
+            ) ?? 0;
           await repaint(
             interaction,
             route.locale,
@@ -2431,7 +2521,7 @@ export function createMemoriesInteractionRoute(
             "memories",
             route.lineageId,
             memories,
-            { kind: "main" },
+            { kind: "main", rangeIndex },
             receipt(route.locale, "removed", { memory: result.row.content }),
             dependencies,
           );
