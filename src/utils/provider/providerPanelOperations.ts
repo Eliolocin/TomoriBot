@@ -61,7 +61,7 @@ import {
   activatePersonalProviderTextModel,
   activateServerTextModelFromSavedConfig,
 } from "@/utils/provider/providerActivation";
-import { registerCustomEndpoint } from "@/utils/provider/customEndpointService";
+import { registerCustomEndpoint, setActiveCustomEndpoint } from "@/utils/provider/customEndpointService";
 import {
   normalizeCustomEndpointUrlForStorage,
   validateCustomEndpointReachability,
@@ -1512,6 +1512,68 @@ async function editServerEndpoint(input: EditEndpointInput): Promise<EditEndpoin
   return { status: "success", entryId: input.entryId, label: nextLabel };
 }
 
+export type ActivateWorkspaceEndpointResult =
+  | { status: "success"; identity: string; sourceChanged: boolean }
+  | { status: "already-active"; identity: string }
+  | { status: "not-found" }
+  | { status: "write-failed" };
+
+interface ActivateWorkspaceEndpointInput {
+  serverDiscId: string;
+  ownerId?: number;
+  scopeKind?: "server" | "personal";
+  state: TomoriState;
+  capability: "speech" | "transcription";
+  customEndpointId: number;
+}
+
+export interface ActivateWorkspaceEndpointDependencies {
+  loadEndpoints(serverId: number): Promise<CustomEndpointRow[]>;
+  setActive: typeof setActiveCustomEndpoint;
+  refresh(discordId: string): void | Promise<void>;
+}
+
+const defaultActivateEndpointDependencies: ActivateWorkspaceEndpointDependencies = {
+  loadEndpoints: (serverId) => llmProviderRepo.loadCustomEndpointsForServer(serverId),
+  setActive: setActiveCustomEndpoint,
+  refresh: (discordId) => invalidateTomoriStateCache(discordId),
+};
+
+/**
+ * Activates one speech or transcription endpoint for the workspace.
+ *
+ * The submitted id is never trusted: `loadEndpoints` is already scoped to this server, so an id
+ * belonging to another workspace or to a different capability simply is not in the list and answers
+ * `not-found` rather than reaching the write. A changed `api_style` means voices stored against the
+ * previous source no longer resolve, which is why the caller must say so in its receipt.
+ */
+async function activateWorkspaceEndpoint(
+  input: ActivateWorkspaceEndpointInput,
+  dependencies: ActivateWorkspaceEndpointDependencies = defaultActivateEndpointDependencies,
+): Promise<ActivateWorkspaceEndpointResult> {
+  if (personalOwnerId(input)) return { status: "not-found" };
+
+  const endpoints = (await dependencies.loadEndpoints(input.state.server_id)).filter(
+    (endpoint) => endpoint.capability === input.capability && endpoint.custom_endpoint_id !== undefined,
+  );
+  const target = endpoints.find((endpoint) => endpoint.custom_endpoint_id === input.customEndpointId);
+  if (!target?.custom_endpoint_id) return { status: "not-found" };
+
+  const identity = `${target.label} (${target.capability})`;
+  const previous = endpoints.find((endpoint) => endpoint.is_default) ?? null;
+  if (previous?.custom_endpoint_id === target.custom_endpoint_id) return { status: "already-active", identity };
+
+  const updated = await dependencies.setActive({
+    serverId: input.state.server_id,
+    capability: input.capability,
+    customEndpointId: target.custom_endpoint_id,
+  });
+  if (!updated) return { status: "write-failed" };
+
+  await dependencies.refresh(input.serverDiscId);
+  return { status: "success", identity, sourceChanged: previous !== null && previous.api_style !== target.api_style };
+}
+
 async function removeServerProviderEntry(input: RemoveProviderEntryInput): Promise<RemoveProviderEntryResult> {
   const userId = personalOwnerId(input);
   if (userId) {
@@ -1562,5 +1624,6 @@ export const providerPanelOperations = {
   saveProviderModel,
   editServerProvider,
   editServerEndpoint,
+  activateWorkspaceEndpoint,
   removeServerProviderEntry,
 };

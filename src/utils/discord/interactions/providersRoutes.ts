@@ -30,6 +30,7 @@ import {
   buildAddEndpointModalFieldId,
   buildProvidersPanelPayload,
   buildProviderModelModal,
+  parseEndpointActivationValue,
   buildProviderModelModalFieldId,
   buildEditProviderModal,
   buildEditProviderModalFieldId,
@@ -43,6 +44,7 @@ import {
   type ProvidersPanelPage,
 } from "@/utils/discord/ui/providersPanel";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { getDefaultImageEndpointSupports } from "@/utils/provider/customImageEndpointSupport";
 import { getDefaultSpeechEndpointSettings } from "@/utils/provider/customSpeechEndpointSettings";
 import { resolveCuratedImageSupports } from "@/utils/provider/providerImageCapabilities";
@@ -58,6 +60,7 @@ import {
   type AddCustomEndpointConnectionResult,
   type LoadedProviderPanelScope,
   type SaveProviderModelResult,
+  type ActivateWorkspaceEndpointResult,
   type EditProviderResult,
   type EditEndpointResult,
   type RemoveProviderEntryResult,
@@ -80,6 +83,7 @@ export interface ProvidersRouteDependencies {
     | "saveProviderModel"
     | "editServerProvider"
     | "editServerEndpoint"
+    | "activateWorkspaceEndpoint"
     | "removeServerProviderEntry"
   >;
   recordAction(input: RecordPanelActionInput): void;
@@ -127,9 +131,20 @@ export interface ProvidersRouteConfiguration {
   authorize(interaction: GlobalRoutableInteraction | ChatInputCommandInteraction): boolean;
   includeBrave: boolean;
   allowRotation: boolean;
+  allowEndpointActivation: boolean;
 }
 
-const enabledProviderActions = new Set<"model" | "edit" | "remove">(["model", "edit", "remove"]);
+const enabledProviderActions = new Set<"model" | "edit" | "activate" | "remove">([
+  "model",
+  "edit",
+  "activate",
+  "remove",
+]);
+const enabledPersonalProviderActions = new Set<"model" | "edit" | "activate" | "remove">(["model", "edit", "remove"]);
+
+function actionsForNamespace(namespace: ProvidersRouteNamespace | undefined) {
+  return namespace === PERSONAL_PROVIDERS_ROUTE_NAMESPACE ? enabledPersonalProviderActions : enabledProviderActions;
+}
 
 function isAuthorized(interaction: GlobalRoutableInteraction | ChatInputCommandInteraction): boolean {
   return !interaction.guildId || (interaction.memberPermissions?.has("ManageGuild") ?? false);
@@ -341,6 +356,43 @@ function endpointEditReceipt(locale: string, result: EditEndpointResult): PanelR
   };
 }
 
+function activateReceipt(
+  locale: string,
+  capability: "speech" | "transcription",
+  result: ActivateWorkspaceEndpointResult,
+): PanelReceipt {
+  if (result.status === "success") {
+    // Only speech binds a stored voice to its source, so only speech has anything to re-assign when
+    // the api style changes. `/model transcription` has never carried this variant.
+    const sourceChanged = result.sourceChanged && capability === "speech";
+    return {
+      tone: "success",
+      heading: localizer(locale, "commands.providers.endpoint_activated"),
+      detail: sourceChanged
+        ? localizer(locale, "commands.providers.endpoint_activated_source_changed_detail", {
+            endpoint: result.identity,
+            voice_assign_command: commandRegistry.getCommandMention("speech", "voice-assign"),
+          })
+        : localizer(locale, "commands.providers.endpoint_activated_detail", { endpoint: result.identity }),
+    };
+  }
+  if (result.status === "already-active") {
+    return {
+      tone: "info",
+      heading: localizer(locale, "commands.providers.endpoint_already_active"),
+      detail: localizer(locale, "commands.providers.endpoint_already_active_detail", { endpoint: result.identity }),
+    };
+  }
+  return {
+    tone: result.status === "not-found" ? "info" : "error",
+    heading: localizer(locale, "commands.providers.activate_failed"),
+    detail: localizer(
+      locale,
+      result.status === "not-found" ? "commands.providers.changed_receipt_detail" : "commands.providers.write_failed",
+    ),
+  };
+}
+
 /**
  * Chooses the image capability defaults a model modal opens with, or omits them entirely.
  *
@@ -450,7 +502,7 @@ function repaint(
       page,
       rangeIndex,
       receipt,
-      enabledActions: enabledProviderActions,
+      enabledActions: actionsForNamespace(scope.routeNamespace),
       routeNamespace: scope.routeNamespace,
       footerCommand: scope.footerCommand,
     }),
@@ -464,6 +516,7 @@ export function createProvidersInteractionRoute(
     authorize: isAuthorized,
     includeBrave: true,
     allowRotation: true,
+    allowEndpointActivation: true,
   },
 ): GlobalInteractionRoute {
   const dependencies: ProvidersRouteDependencies = {
@@ -539,7 +592,10 @@ export function createProvidersInteractionRoute(
       const route = parseProvidersPanelRoute(parsed, configuration.namespace);
       if (!route) throw new Error(`Malformed providers panel route: ${interaction.customId}`);
 
-      if ((route.action === "select" || route.action === "model-select") && !interaction.isStringSelectMenu()) {
+      if (
+        (route.action === "select" || route.action === "model-select" || route.action === "endpoint-activate") &&
+        !interaction.isStringSelectMenu()
+      ) {
         throw new Error("Providers select route requires a String Select interaction");
       }
       if (
@@ -555,6 +611,7 @@ export function createProvidersInteractionRoute(
       if (
         route.action !== "select" &&
         route.action !== "model-select" &&
+        route.action !== "endpoint-activate" &&
         route.action !== "add-submit" &&
         route.action !== "endpoint-submit" &&
         route.action !== "model-submit" &&
@@ -726,6 +783,7 @@ export function createProvidersInteractionRoute(
             interaction,
             route.action === "retry" ||
               route.action === "model-submit" ||
+              route.action === "endpoint-activate" ||
               route.action === "edit-provider-submit" ||
               route.action === "edit-endpoint-submit" ||
               route.action === "remove-confirm",
@@ -740,6 +798,7 @@ export function createProvidersInteractionRoute(
           route.action === "model-submit" ||
           route.action === "edit-provider-submit" ||
           route.action === "edit-endpoint-submit" ||
+          route.action === "endpoint-activate" ||
           route.action === "remove-confirm") &&
         scope.data.readStatus !== "fresh"
       ) {
@@ -749,9 +808,58 @@ export function createProvidersInteractionRoute(
           scope,
           route.action === "model-submit"
             ? { kind: "entry", entryId: `${route.entryKind}:${route.entryKey}` }
-            : { kind: "entry" },
+            : route.action === "endpoint-activate"
+              ? { kind: "entry", entryId: `endpoint:${route.connectionId}` }
+              : { kind: "entry" },
           0,
           readUnavailableReceipt(route.locale),
+        );
+        return;
+      }
+
+      if (route.action === "endpoint-activate") {
+        const entryId = `endpoint:${route.connectionId}`;
+        const selection = parseEndpointActivationValue((interaction as StringSelectMenuInteraction).values[0]);
+        if (!selection) {
+          throw new Error("Malformed provider endpoint activation selection");
+        }
+        const entry = scope.data.entries.find((candidate) => candidate.id === entryId);
+        // The personal panel never renders this select, so reaching it there means a workspace custom
+        // id was replayed against a personal panel; its scope owns no server-scoped endpoint rows.
+        if (!configuration.allowEndpointActivation || !entry || entry.kind !== "endpoint") {
+          await repaint(interaction, route.locale, scope, { kind: "entry" }, 0, changedReceipt(route.locale));
+          return;
+        }
+        const action = await performPanelAction(
+          () =>
+            dependencies.operations.activateWorkspaceEndpoint({
+              serverDiscId: interaction.guildId ?? interaction.user.id,
+              ownerId: scope.ownerId,
+              scopeKind: scope.scopeKind,
+              state: scope.state,
+              capability: selection.capability,
+              customEndpointId: selection.customEndpointId,
+            }),
+          () => dependencies.resolveScope(interaction, true),
+        );
+        const nextScope = action.state ?? unavailableScope(scope);
+        if (action.result.status === "success") {
+          dependencies.recordAction({
+            action:
+              selection.capability === "speech"
+                ? "providers.workspace.speech-endpoint.activate"
+                : "providers.workspace.transcription-endpoint.activate",
+            serverId: scope.state.server_id,
+            userDiscId: interaction.user?.id ?? "",
+          });
+        }
+        await repaint(
+          interaction,
+          route.locale,
+          nextScope,
+          { kind: "entry", entryId },
+          rangeForEntry(nextScope, entryId),
+          activateReceipt(route.locale, selection.capability, action.result),
         );
         return;
       }
@@ -1121,6 +1229,7 @@ export const personalProvidersInteractionRoute = createProvidersInteractionRoute
     authorize: () => true,
     includeBrave: false,
     allowRotation: false,
+    allowEndpointActivation: false,
   },
 );
 
@@ -1140,7 +1249,7 @@ export async function buildInitialProvidersPanel(
     initialEntryId: scope.data.initialEntryId,
     readStatus: scope.data.readStatus,
     page: { kind: "entry" },
-    enabledActions: enabledProviderActions,
+    enabledActions: actionsForNamespace(scope.routeNamespace),
     routeNamespace: scope.routeNamespace,
     footerCommand: scope.footerCommand,
   });
@@ -1159,7 +1268,7 @@ export async function buildInitialPersonalProvidersPanel(
     initialEntryId: scope.data.initialEntryId,
     readStatus: scope.data.readStatus,
     page: { kind: "entry" },
-    enabledActions: enabledProviderActions,
+    enabledActions: enabledPersonalProviderActions,
     routeNamespace: PERSONAL_PROVIDERS_ROUTE_NAMESPACE,
     footerCommand: scope.footerCommand,
   });

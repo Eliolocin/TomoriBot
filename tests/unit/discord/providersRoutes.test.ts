@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
+import type { ProviderPanelEntry } from "@/types/discord/providerPanel";
 import type { LoadedProviderPanelScope } from "@/utils/provider/providerPanelOperations";
 import { executeProvidersCommand } from "@/commands/providers";
 import { createProvidersInteractionRoute } from "@/utils/discord/interactions/providersRoutes";
@@ -101,6 +102,7 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ProvidersPanelRoute]> = 
     "providers:v1:remove-confirm:en-US:provider:google",
     { action: "remove-confirm", locale: "en-US", entryKind: "provider", entryKey: "google" },
   ],
+  ["providers:v1:endpoint-activate:en-US:73", { action: "endpoint-activate", locale: "en-US", connectionId: 73 }],
   ["providers:v1:add-submit:en-US:abcdefgh", { action: "add-submit", locale: "en-US", nonce: "abcdefgh" }],
   ["providers:v1:endpoint-submit:en-US:abcdefgh", { action: "endpoint-submit", locale: "en-US", nonce: "abcdefgh" }],
 ];
@@ -147,6 +149,59 @@ const scope: LoadedProviderPanelScope = {
   },
 };
 
+const voiceEndpointEntry: ProviderPanelEntry = {
+  id: "endpoint:88",
+  kind: "endpoint",
+  displayName: "voicebox",
+  savedAt: null,
+  connectionIds: [88, 89],
+  isPreset: false,
+  connectionDetails: [
+    { connectionId: 88, endpointUrl: "https://voice.example.invalid", apiStyle: "tts-clone" },
+    { connectionId: 89, endpointUrl: "https://voice.example.invalid", apiStyle: "openai-compatible-transcription" },
+  ],
+  capabilities: [
+    {
+      capability: "speech",
+      availability: "available",
+      apiStyle: "tts-clone",
+      models: [
+        {
+          id: 501,
+          codeName: "voicebox-alpha",
+          isWorkspaceActive: true,
+          isWorkspaceFallback: false,
+          isProviderFallback: false,
+          isCustomRegistration: true,
+        },
+        {
+          id: 502,
+          codeName: "voicebox-beta",
+          isWorkspaceActive: false,
+          isWorkspaceFallback: false,
+          isProviderFallback: false,
+          isCustomRegistration: true,
+        },
+      ],
+    },
+    {
+      capability: "transcription",
+      availability: "available",
+      apiStyle: "openai-compatible-transcription",
+      models: [
+        {
+          id: 601,
+          codeName: "voicebox-scribe",
+          isWorkspaceActive: false,
+          isWorkspaceFallback: false,
+          isProviderFallback: false,
+          isCustomRegistration: true,
+        },
+      ],
+    },
+  ],
+};
+
 function parsed(customId: string) {
   const route = parseInteractionRoute(customId);
   if (!route) throw new Error("Expected a parsed route");
@@ -180,13 +235,14 @@ describe("providers routes", () => {
     }
   });
 
-  it("guarantees 20-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
-    const ACCEPTED_20_ACTIONS = [
+  it("guarantees 21-action exhaustiveness across catalog, accepted actions, wire contract, and route handler comparisons", () => {
+    const ACCEPTED_21_ACTIONS = [
       "add-submit",
       "edit-endpoint-open",
       "edit-endpoint-submit",
       "edit-provider-open",
       "edit-provider-submit",
+      "endpoint-activate",
       "endpoint-submit",
       "model-close",
       "model-open",
@@ -214,26 +270,27 @@ describe("providers routes", () => {
     );
     const handlerActions = new Set([...routesSource.matchAll(/route\.action === "([a-z0-9-]+)"/g)].map((m) => m[1]));
 
-    expect(catalogActions).toEqual(ACCEPTED_20_ACTIONS);
-    expect(wireActions).toEqual(ACCEPTED_20_ACTIONS);
-    expect(codecTableActions).toEqual(ACCEPTED_20_ACTIONS);
+    expect(catalogActions).toEqual(ACCEPTED_21_ACTIONS);
+    expect(wireActions).toEqual(ACCEPTED_21_ACTIONS);
+    expect(codecTableActions).toEqual(ACCEPTED_21_ACTIONS);
 
-    expect(handlerActions.size).toBe(20);
-    expect([...handlerActions].sort()).toEqual(ACCEPTED_20_ACTIONS);
-    expect(ACCEPTED_20_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
-    expect([...handlerActions].filter((a) => !ACCEPTED_20_ACTIONS.includes(a))).toEqual([]);
+    expect(handlerActions.size).toBe(21);
+    expect([...handlerActions].sort()).toEqual(ACCEPTED_21_ACTIONS);
+    expect(ACCEPTED_21_ACTIONS.filter((a) => !handlerActions.has(a))).toEqual([]);
+    expect([...handlerActions].filter((a) => !ACCEPTED_21_ACTIONS.includes(a))).toEqual([]);
     expect(codecTableActions.filter((a) => !handlerActions.has(a))).toEqual([]);
     expect([...handlerActions].filter((a) => !codecTableActions.includes(a))).toEqual([]);
   });
 
   it("guarantees producer coverage against production UI and modal surfaces with explicit allowlist for producerless actions", () => {
     const PRODUCERLESS_ACTIONS = ["model-open", "model-close", "range-cancel", "range-open", "range-page"] as const;
-    const ACCEPTED_20_ACTIONS = [
+    const ACCEPTED_21_ACTIONS = [
       "add-submit",
       "edit-endpoint-open",
       "edit-endpoint-submit",
       "edit-provider-open",
       "edit-provider-submit",
+      "endpoint-activate",
       "endpoint-submit",
       "model-close",
       "model-open",
@@ -339,6 +396,14 @@ describe("providers routes", () => {
         page: { kind: "entry", entryId: "endpoint:73", modelRangeIndex: 1 },
         enabledActions: new Set(["model", "edit", "remove"]),
       },
+      {
+        locale: "en-US",
+        entries: [voiceEndpointEntry],
+        initialEntryId: "endpoint:88",
+        readStatus: "fresh",
+        page: { kind: "entry", entryId: "endpoint:88" },
+        enabledActions: new Set(["model", "edit", "activate", "remove"]),
+      },
     ];
 
     for (const input of panelInputs) {
@@ -373,7 +438,7 @@ describe("providers routes", () => {
     }
 
     const unionedActions = [...new Set([...producedActions, ...PRODUCERLESS_ACTIONS])].sort();
-    expect(unionedActions).toEqual(ACCEPTED_20_ACTIONS);
+    expect(unionedActions).toEqual(ACCEPTED_21_ACTIONS);
   });
 
   it("enforces exact 100-character bound for the maximum personal route and covers guild namespace", () => {
@@ -490,6 +555,7 @@ describe("providers routes", () => {
         authorize: () => true,
         includeBrave: false,
         allowRotation: false,
+        allowEndpointActivation: false,
       },
     );
 
@@ -1545,6 +1611,7 @@ describe("providers routes", () => {
         authorize: () => true,
         includeBrave: false,
         allowRotation: false,
+        allowEndpointActivation: false,
       },
     );
     const personalPageId = buildProvidersRouteId(PERSONAL_PROVIDERS_ROUTE_NAMESPACE, {
@@ -1676,6 +1743,7 @@ describe("providers routes", () => {
         authorize: () => true,
         includeBrave: false,
         allowRotation: false,
+        allowEndpointActivation: false,
       },
     );
     await removeRoute.execute({} as Client, removeInteraction as never, parsed(removeCustomId));
@@ -1751,6 +1819,7 @@ describe("providers routes", () => {
         authorize: () => true,
         includeBrave: false,
         allowRotation: false,
+        allowEndpointActivation: false,
       },
     );
     await modelSaveRoute.execute({} as Client, modelSaveInteraction as never, parsed(modelSaveCustomId));

@@ -441,6 +441,35 @@ export function parseModelSelectionValue(raw: string | undefined): ModelSelectio
   return { mode, capability, editingModelId };
 }
 
+/**
+ * Speech and transcription are the only capabilities whose active choice is a `custom_endpoints`
+ * row rather than a model column on the workspace config, so they are the only ones this panel can
+ * activate at all. Every other capability is owned by the routing editor.
+ */
+const ENDPOINT_ACTIVATION_CAPABILITIES = ["speech", "transcription"] as const;
+
+export type EndpointActivationCapability = (typeof ENDPOINT_ACTIVATION_CAPABILITIES)[number];
+
+export interface EndpointActivationValue {
+  capability: EndpointActivationCapability;
+  customEndpointId: number;
+}
+
+export function buildEndpointActivationValue(
+  capability: EndpointActivationCapability,
+  customEndpointId: number,
+): string {
+  return `${capability}:${customEndpointId}`;
+}
+
+export function parseEndpointActivationValue(raw: string | undefined): EndpointActivationValue | null {
+  const [capability, rawId] = raw?.split(":") ?? [];
+  if (!ENDPOINT_ACTIVATION_CAPABILITIES.includes(capability as EndpointActivationCapability)) return null;
+  const customEndpointId = Number(rawId);
+  if (!Number.isSafeInteger(customEndpointId) || customEndpointId <= 0) return null;
+  return { capability: capability as EndpointActivationCapability, customEndpointId };
+}
+
 export function buildProviderModelModalFieldId(field: ProviderModelModalField, nonce: string): string {
   return `${field}_${nonce}`;
 }
@@ -694,7 +723,7 @@ export interface ProvidersPanelRenderInput {
   page: ProvidersPanelPage;
   rangeIndex?: number;
   receipt?: PanelReceipt;
-  enabledActions?: ReadonlySet<"add-provider" | "add-endpoint" | "model" | "edit" | "remove">;
+  enabledActions?: ReadonlySet<"add-provider" | "add-endpoint" | "model" | "edit" | "activate" | "remove">;
   routeNamespace?: ProvidersRouteNamespace;
   footerCommand?: { root: string; subcommandGroup?: string; subcommand?: string };
 }
@@ -954,6 +983,73 @@ function buildEntryModelSelector(
   return components;
 }
 
+/**
+ * Activation is workspace-only: the personal panel assigns a capability to a provider through
+ * `assignPersonalCapabilityToProvider`, which is a different write against a different table, so
+ * offering this select there would send a personal actor at a server-scoped row.
+ */
+function buildEntryActivationSelector(
+  locale: string,
+  entry: ProviderPanelEntry,
+  readStatus: PanelReadStatus,
+  enabledActions: ProvidersPanelRenderInput["enabledActions"],
+  routeNamespace: ProvidersRouteNamespace,
+): ComponentInContainerData[] {
+  if (routeNamespace !== PROVIDERS_ROUTE_NAMESPACE || entry.kind !== "endpoint") return [];
+
+  const options: SelectMenuComponentOptionData[] = [];
+  for (const capability of ENDPOINT_ACTIVATION_CAPABILITIES) {
+    const section = entry.capabilities.find(
+      (candidate) => candidate.capability === capability && candidate.availability !== "unavailable",
+    );
+    for (const model of section?.models ?? []) {
+      options.push({
+        label: safeSelectOptionText(model.codeName, 100),
+        value: buildEndpointActivationValue(capability, model.id),
+        description: safeSelectOptionText(
+          model.isWorkspaceActive
+            ? localizer(locale, "commands.providers.activate_option_active_description", {
+                name: entry.displayName,
+                capability,
+              })
+            : localizer(locale, "commands.providers.activate_option_description", {
+                name: entry.displayName,
+                capability,
+              }),
+          100,
+        ),
+        default: model.isWorkspaceActive,
+      });
+    }
+  }
+  // Discord rejects a String Select with no options, so an endpoint hosting neither capability
+  // renders none.
+  if (options.length === 0) return [];
+
+  return [
+    {
+      type: ComponentType.TextDisplay,
+      content: localizer(locale, "commands.providers.activation_guidance"),
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.StringSelect,
+          customId: buildProvidersRouteId(routeNamespace, {
+            action: "endpoint-activate",
+            locale,
+            connectionId: entry.connectionIds[0] ?? 0,
+          }),
+          placeholder: localizer(locale, "commands.providers.activate_placeholder"),
+          options,
+          disabled: readStatus !== "fresh" || !enabledActions?.has("activate"),
+        },
+      ],
+    },
+  ];
+}
+
 function selectedEntryId(input: ProvidersPanelRenderInput): string | null {
   if (input.page.kind === "entry") return input.page.entryId ?? input.initialEntryId;
   if (input.page.kind === "remove") return input.page.entryId;
@@ -1112,6 +1208,7 @@ ${localizer(locale, `commands.providers.remove_impact_${entry.kind}`, {
               : body,
         },
         ...modelSelector,
+        ...buildEntryActivationSelector(locale, entry, readStatus, input.enabledActions, routeNamespace),
         buildEntryActions(locale, entry, readStatus, input.enabledActions, routeNamespace),
       );
     } else {
