@@ -7,7 +7,10 @@ async function main(): Promise<void> {
 
   if (current === expected) {
     console.log("Command reference OK");
-    return;
+    // Loading the command graph leaves an open handle, so a run that falls off the end of main() never
+    // exits. The stale branch already exits explicitly; the success branch must too, or a passing check
+    // hangs and its runner reports the kill as a failure.
+    process.exit(0);
   }
 
   console.error(

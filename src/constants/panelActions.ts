@@ -91,6 +91,15 @@ export const PANEL_ACTIONS = [
   "personal-config.personal.impersonation.set",
   "personal-config.personal.spotlight.set",
   "personal-config.personal.spotlight.remove",
+
+  // server config panel; the surface avoids a bare "config" prefix because `check-locales` treats
+  // that as a locale namespace root and would read these identifiers as missing locale keys
+  "server-config.workspace.persona-avatar.set",
+  "server-config.workspace.persona.rename",
+  "server-config.workspace.persona-naming.set",
+  "server-config.workspace.persona-trigger.add",
+  "server-config.workspace.persona-trigger.remove",
+  "server-config.workspace.persona.promote",
 ] as const;
 
 /** Union of all valid panel action metric keys. */

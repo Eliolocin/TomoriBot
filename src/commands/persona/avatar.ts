@@ -18,7 +18,8 @@ import { personaRepository } from "@/utils/db/repositories";
 import { convertToPNG } from "../../utils/image/imageProcessor";
 import { deletePersonaAvatarFromStorage, uploadPersonaAvatarToStorage } from "../../utils/storage/avatarStorage";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
-import { isAvatarUpdateRateLimited } from "../../utils/discord/avatarRateLimit";
+import { forkPointerForAvatarChange } from "@/utils/persona/pointerFork";
+import { setGuildBotAvatar } from "@/utils/discord/guildIdentity";
 
 const PERSONA_SELECT_MODAL_ID = "persona_avatar_persona_modal";
 const PERSONA_SELECT_ID = "persona_select";
@@ -26,19 +27,7 @@ const FILE_UPLOAD_ID = "avatar_image";
 
 type AvatarAttachment = Attachment | APIAttachment;
 
-export async function forkPointerForAvatarChange(
-  selectedPersona: Pick<TomoriState, "persona_id" | "is_pointer">,
-): Promise<boolean> {
-  if (!selectedPersona.persona_id) {
-    return false;
-  }
-
-  if (selectedPersona.is_pointer !== true) {
-    return true;
-  }
-
-  return await personaRepository.materializeIfPointer(selectedPersona.persona_id);
-}
+export { forkPointerForAvatarChange } from "@/utils/persona/pointerFork";
 
 /**
  * Configure the avatar subcommand
@@ -117,93 +106,6 @@ async function downloadAttachmentBuffer(attachment: AvatarAttachment): Promise<{
     success: true,
     buffer: downloadResult.buffer,
   };
-}
-
-/**
- * Updates the bot's guild avatar using Discord's raw API with timeout protection
- * @param guildId - Guild ID where to update the avatar
- * @param avatarDataUri - Base64 data URI of the avatar image, or null to remove
- * @returns Promise resolving to object with success status and optional error type
- */
-async function updateGuildAvatar(
-  guildId: string,
-  avatarDataUri: string | null,
-): Promise<{
-  success: boolean;
-  error?: "timeout" | "rate_limited" | "api_error";
-  details?: string;
-}> {
-  // Setup timeout controller (15s)
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-  try {
-    const endpoint = `https://discord.com/api/v10/guilds/${guildId}/members/@me`;
-
-    const payload = {
-      avatar: avatarDataUri,
-    };
-
-    const response = await fetch(endpoint, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bot ${process.env.DISCORD_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-
-      // Discord throttles guild avatar changes far below its documented buckets, so this is an
-      // expected outcome rather than a fault: keep it off the error sink the way every other
-      // avatar PATCH site does, and tell the user to wait instead of showing them raw API JSON.
-      if (isAvatarUpdateRateLimited(response.status, errorText)) {
-        log.warn(`Guild avatar update rate limited for guild ${guildId}: ${response.status}`);
-        return { success: false, error: "rate_limited" };
-      }
-
-      const context: ErrorContext = {
-        errorType: "DiscordApiError",
-        metadata: { guildId, httpStatus: response.status, body: errorText },
-      };
-      await log.error(`Failed to update guild avatar: ${response.status} ${response.statusText}`, undefined, context);
-      return {
-        success: false,
-        error: "api_error",
-        details: `${response.status} ${response.statusText}: ${errorText}`,
-      };
-    }
-
-    return { success: true };
-  } catch (error) {
-    clearTimeout(timeoutId);
-
-    if (error instanceof Error && error.name === "AbortError") {
-      log.warn("Discord API call timed out after 15s", {
-        metadata: { guildId },
-      });
-      return {
-        success: false,
-        error: "timeout",
-        details: "Discord API call timed out after 15s",
-      };
-    }
-
-    await log.error("Error updating guild avatar via Discord API", error, {
-      errorType: "DiscordApiError",
-      metadata: { guildId },
-    });
-    return {
-      success: false,
-      error: "api_error",
-      details: error instanceof Error ? error.message : String(error),
-    };
-  }
 }
 
 /**
@@ -360,7 +262,7 @@ export async function execute(
 
     if (!imageAttachment) {
       if (isMainPersona) {
-        const result = await updateGuildAvatar(interaction.guild.id, null);
+        const result = await setGuildBotAvatar(interaction.guild.id, null);
 
         if (result.success) {
           // Quota already reserved at step 6 - no increment needed
@@ -475,7 +377,7 @@ export async function execute(
       }
       const avatarDataUri = `data:image/png;base64,${pngBuffer.toString("base64")}`;
 
-      const updateResult = await updateGuildAvatar(interaction.guild.id, avatarDataUri);
+      const updateResult = await setGuildBotAvatar(interaction.guild.id, avatarDataUri);
 
       if (updateResult.success) {
         // Quota already reserved at step 6 - no increment needed

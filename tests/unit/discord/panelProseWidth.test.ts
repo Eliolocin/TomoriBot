@@ -2,6 +2,9 @@ import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { ComponentType } from "discord.js";
 import { PrivacyLevel, type TomoriState, type UserRow, type UserSavedProviderConfigRow } from "@/types/db/schema";
+import { buildConfigPanelPayload } from "@/utils/discord/ui/configPanel";
+import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
+import { CONFIG_PAGES_BY_CATEGORY, type ConfigCategory } from "@/utils/discord/configPanelCatalog";
 import { buildMemoriesPanelPayload } from "@/utils/discord/ui/memoriesPanel";
 import {
   buildPersonalConfigPanelPayload,
@@ -42,6 +45,7 @@ const MAX_PANEL_PROSE_LINE_BESIDE_THUMBNAIL = 40;
  * loudly, because a panel that grows a thumbnail without render coverage breaks this test.
  */
 const THUMBNAIL_PANELS_WITH_RENDER_COVERAGE = new Set([
+  "configPanel.ts",
   "memoriesPanel.ts",
   "personalConfigPanel.ts",
   "personalMemoriesPanel.ts",
@@ -363,5 +367,99 @@ describe("panel prose width", () => {
     expect(collectProseWidthViolations(build([]))).toEqual([]);
     expect(collectProseWidthViolations(build(["vertexexpress"]))).toEqual([]);
     expect(collectProseWidthViolations(build(["vertexexpress", "openrouter", "novelai"]))).toEqual([]);
+  });
+  /**
+   * `/config` filters its own body by actor, so a member and a DM owner render different pages
+   * behind the same thumbnail Section. Each is walked because a heading only one of them reaches
+   * would otherwise never be measured.
+   */
+  it("holds /config Persona General to 40 characters beside its avatar", () => {
+    const personas = [
+      {
+        persona_id: 55,
+        server_id: 9,
+        persona_nickname: "Aphel",
+        is_alter: false,
+        trigger_words: ["aphel"],
+        naming_config: { prefixes: {}, suffixes: {}, addressTerms: {} },
+      } as unknown as TomoriState,
+      {
+        persona_id: 56,
+        server_id: 9,
+        persona_nickname: "Wren",
+        is_alter: true,
+        trigger_words: [],
+        naming_config: { prefixes: {}, suffixes: {}, addressTerms: {} },
+      } as unknown as TomoriState,
+    ];
+    const build = (actor: ConfigActor, selectedPersonaId: number, avatarUrl: string | null) =>
+      buildConfigPanelPayload({
+        locale: "en-US",
+        actor,
+        category: "persona",
+        page: "general",
+        personas,
+        selectedPersonaId,
+        selectedPersonaAvatarUrl: avatarUrl,
+        readStatus: "fresh",
+      });
+
+    const guildManager: ConfigActor = { workspaceKind: "guild", isManager: true };
+    const guildMember: ConfigActor = { workspaceKind: "guild", isManager: false };
+    const dmOwner: ConfigActor = { workspaceKind: "dm", isManager: true };
+
+    expect(collectProseWidthViolations(build(guildManager, 55, "https://cdn.example.invalid/55.png"))).toEqual([]);
+    expect(collectProseWidthViolations(build(guildManager, 56, null))).toEqual([]);
+    expect(collectProseWidthViolations(build(guildMember, 55, null))).toEqual([]);
+    expect(collectProseWidthViolations(build(dmOwner, 55, null))).toEqual([]);
+  });
+
+  it("holds every /config page placeholder and confirmation to 65 characters", () => {
+    const personas = [
+      {
+        persona_id: 55,
+        server_id: 9,
+        persona_nickname: "Aphel",
+        is_alter: false,
+        trigger_words: [],
+        naming_config: { prefixes: {}, suffixes: {}, addressTerms: {} },
+      } as unknown as TomoriState,
+      {
+        persona_id: 56,
+        server_id: 9,
+        persona_nickname: "Wren",
+        is_alter: true,
+        trigger_words: [],
+        naming_config: { prefixes: {}, suffixes: {}, addressTerms: {} },
+      } as unknown as TomoriState,
+    ];
+    const actor: ConfigActor = { workspaceKind: "guild", isManager: true };
+
+    for (const [category, pages] of Object.entries(CONFIG_PAGES_BY_CATEGORY)) {
+      for (const page of pages) {
+        const payload = buildConfigPanelPayload({
+          locale: "en-US",
+          actor,
+          category: category as ConfigCategory,
+          page,
+          personas,
+          selectedPersonaId: 55,
+          readStatus: "fresh",
+        });
+        expect(collectProseWidthViolations(payload), `${category}/${page}`).toEqual([]);
+      }
+    }
+
+    const confirm = buildConfigPanelPayload({
+      locale: "en-US",
+      actor,
+      category: "persona",
+      page: "general",
+      personas,
+      selectedPersonaId: 56,
+      readStatus: "fresh",
+      view: { kind: "promote-confirm", personaId: 56, nonce: "nonce1234567" },
+    });
+    expect(collectProseWidthViolations(confirm)).toEqual([]);
   });
 });

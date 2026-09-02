@@ -1,4 +1,5 @@
 import { MessageFlags, type Client, type Interaction } from "discord.js";
+import { configInteractionRoute } from "@/utils/discord/interactions/configRoutes";
 import { helpInteractionRoute } from "@/utils/discord/interactions/helpRoutes";
 import { mcpsInteractionRoute } from "@/utils/discord/interactions/mcpsRoutes";
 import { memoriesInteractionRoute } from "@/utils/discord/interactions/memoriesRoutes";
@@ -15,6 +16,7 @@ import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
 const registry = new InteractionRouteRegistry([
+  configInteractionRoute,
   helpInteractionRoute,
   mcpsInteractionRoute,
   memoriesInteractionRoute,
@@ -40,21 +42,23 @@ export async function dispatchGlobalInteraction(
     if (result === "stale-version") {
       const namespace = interaction.customId.split(":", 1)[0] ?? "panel";
       const key =
-        namespace === "mcps"
-          ? "commands.mcps.outdated_panel"
-          : namespace === "memories"
-            ? "commands.memories.outdated_panel"
-            : namespace === "moderation"
-              ? "commands.moderation.outdated_panel"
-              : namespace === "st-presets"
-                ? "commands.st-presets.outdated_panel"
-                : namespace === "providers" || namespace === "personal-providers"
-                  ? "commands.providers.outdated_panel"
-                  : namespace === "personal-memories"
-                    ? "commands.personal.memories.outdated_panel"
-                    : namespace === "personal-config"
-                      ? "commands.personal.config.outdated_panel"
-                      : "general.errors.outdated_panel";
+        namespace === "config"
+          ? "commands.config.panel.outdated_panel"
+          : namespace === "mcps"
+            ? "commands.mcps.outdated_panel"
+            : namespace === "memories"
+              ? "commands.memories.outdated_panel"
+              : namespace === "moderation"
+                ? "commands.moderation.outdated_panel"
+                : namespace === "st-presets"
+                  ? "commands.st-presets.outdated_panel"
+                  : namespace === "providers" || namespace === "personal-providers"
+                    ? "commands.providers.outdated_panel"
+                    : namespace === "personal-memories"
+                      ? "commands.personal.memories.outdated_panel"
+                      : namespace === "personal-config"
+                        ? "commands.personal.config.outdated_panel"
+                        : "general.errors.outdated_panel";
       const command =
         namespace === "personal-providers"
           ? "/personal providers"
