@@ -3,11 +3,15 @@ import {
   MessageFlags,
   type APIAttachment,
   type ChatInputCommandInteraction,
+  type InteractionReplyOptions,
   type InteractionEditReplyOptions,
 } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
+import type { StmCategoryRow } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
+import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
+import type { ShortTermMemoryEntry } from "@/utils/cache/shortTermMemoryCache";
 import type { ConfigCategory, ConfigPage } from "@/utils/discord/configPanelCatalog";
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type { ConfigPersonaOperations, GuildIdentityPort } from "@/utils/discord/interactions/configPersonaOperations";
@@ -25,9 +29,19 @@ export interface ConfigScope {
   guildId: string | null;
   /** `servers` primary key, needed by telemetry and never the snowflake. */
   internalServerId: number | null;
+  userId: number;
   actor: ConfigActor;
   personas: TomoriState[];
   readStatus: PanelReadStatus;
+}
+
+export interface ConfigPersonaMemoryView {
+  serverMemoryCount: number;
+  personalMemoryCount: number;
+  channelId: string | null;
+  stmEntry?: ShortTermMemoryEntry;
+  stmCategories: StmCategoryRow[];
+  conditioningGroups: ConditioningGroup[];
 }
 
 export interface ConfigRouteDependencies {
@@ -39,13 +53,38 @@ export interface ConfigRouteDependencies {
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
     persona: TomoriState,
   ): Promise<PersonaPanelAvatarData>;
+  loadPersonaMemoryView(
+    interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
+    scope: ConfigScope,
+    persona: TomoriState,
+  ): Promise<ConfigPersonaMemoryView>;
+  openServerMemoryPanel(
+    interaction: GlobalRoutableInteraction,
+    locale: string,
+    lineageId: number,
+  ): Promise<InteractionReplyOptions>;
+  openPersonalMemoryPanel(
+    interaction: GlobalRoutableInteraction,
+    locale: string,
+    lineageId: number,
+  ): Promise<InteractionReplyOptions>;
   operations: ConfigPersonaOperations;
   createGuildIdentity(guildId: string, interaction: GlobalRoutableInteraction): GuildIdentityPort;
   recordAction(input: RecordPanelActionInput): void;
   createNonce(): string;
   showModal(interaction: GlobalRoutableInteraction, payload: RawModalPayload): Promise<void>;
+  takeFileUpload(interactionId: string, fieldId: string): APIAttachment | undefined;
   takeAvatarUpload(interactionId: string, nonce: string): APIAttachment | undefined;
   takeCheckboxValues(interactionId: string, fieldId: string): string[] | undefined;
+}
+
+export function asEphemeralComponentsV2FollowUp(
+  payload: InteractionReplyOptions | InteractionEditReplyOptions,
+): InteractionReplyOptions {
+  return {
+    ...payload,
+    flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+  } as InteractionReplyOptions;
 }
 
 export function terminalPayload(locale: string, key: string): InteractionEditReplyOptions {
@@ -101,9 +140,14 @@ export interface ConfigRepaintOptions {
   page: ConfigPage;
   selectedPersonaId: number | null;
   personaSelectStart?: number;
+  attributePageStart?: number;
+  selectedAttributeIndex?: number;
+  dialoguePageStart?: number;
+  selectedDialogueIndex?: number;
   namingStyle?: AddressingStyle;
   receipt?: PanelReceipt;
   view?: ConfigPanelView;
+  personaMemoryView?: ConfigPersonaMemoryView;
   dependencies: ConfigRouteDependencies;
 }
 
@@ -114,9 +158,15 @@ export async function repaint(
   const { locale, scope, category, page, selectedPersonaId, dependencies } = options;
 
   let avatar: PersonaPanelAvatarData | undefined;
+  let personaMemoryView = options.personaMemoryView;
   if (category === "persona") {
     const persona = scope.personas.find((candidate) => candidate.persona_id === selectedPersonaId);
-    if (persona) avatar = await dependencies.getPersonaAvatarData(interaction, persona);
+    if (persona) {
+      avatar = await dependencies.getPersonaAvatarData(interaction, persona);
+      if (page === "memories" && !personaMemoryView) {
+        personaMemoryView = await dependencies.loadPersonaMemoryView(interaction, scope, persona);
+      }
+    }
   }
 
   await interaction.editReply(
@@ -130,6 +180,13 @@ export async function repaint(
         selectedPersonaId,
         selectedPersonaAvatarUrl: avatar?.url,
         personaSelectStart: options.personaSelectStart,
+        attributePageStart: options.attributePageStart,
+        selectedAttributeIndex: options.selectedAttributeIndex,
+        dialoguePageStart: options.dialoguePageStart,
+        selectedDialogueIndex: options.selectedDialogueIndex,
+        personaMemoryView,
+        attributeMemteachingEnabled: scope.personas[0]?.config?.attribute_memteaching_enabled === true,
+        sampledialogueMemteachingEnabled: scope.personas[0]?.config?.sampledialogue_memteaching_enabled === true,
         namingStyle: options.namingStyle,
         readStatus: scope.readStatus,
         receipt: options.receipt,

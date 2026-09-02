@@ -100,6 +100,14 @@ export const PANEL_ACTIONS = [
   "server-config.workspace.persona-trigger.add",
   "server-config.workspace.persona-trigger.remove",
   "server-config.workspace.persona.promote",
+  "server-config.workspace.persona-attribute.add",
+  "server-config.workspace.persona-attribute.edit",
+  "server-config.workspace.persona-attribute.remove",
+  "server-config.workspace.persona-dialogue.add",
+  "server-config.workspace.persona-dialogue.edit",
+  "server-config.workspace.persona-dialogue.remove",
+  "server-config.workspace.persona-stm.edit",
+  "server-config.workspace.persona-conditioning.remove",
 ] as const;
 
 /** Union of all valid panel action metric keys. */

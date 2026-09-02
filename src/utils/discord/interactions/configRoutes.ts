@@ -4,14 +4,31 @@ import type { TomoriState } from "@/types/db/schema";
 import type { PanelReceipt, PanelReceiptTone } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
-import { personaRepository } from "@/utils/db/repositories";
 import {
+  getShortTermMemoryForServerChannel,
+  getShortTermMemoryForUserChannel,
+  preWarmStmEntry,
+  type ShortTermMemoryEntry,
+} from "@/utils/cache/shortTermMemoryCache";
+import { getCachedUserRow } from "@/utils/cache/userCache";
+import { conditioningMemoryRepository } from "@/utils/db/repositories/ConditioningMemoryRepository";
+import { personalMemoryRepository } from "@/utils/db/repositories/PersonalMemoryRepository";
+import { personaRepository, serverMemoryRepository, userRepository } from "@/utils/db/repositories";
+import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
+import {
+  CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
   CONFIG_ROUTE_NAMESPACE,
   CONFIG_ROUTE_VERSION,
   CONFIG_TRIGGER_CHECKBOX_CAPACITY,
   CONFIG_TRIGGER_CHECKBOX_GROUP_SIZE,
+  CONFIG_CONDITIONING_CHECKBOX_CAPACITY,
+  CONFIG_CONDITIONING_CHECKBOX_GROUP_SIZE,
+  computeConditioningRemoveFingerprint,
   computeTriggerRemoveFingerprint,
+  computeAttributeFingerprint,
+  computeDialogueFingerprint,
   parseConfigPanelRoute,
+  type ConfigCategory,
   type ConfigPage,
   type ConfigPanelRoute,
 } from "@/utils/discord/configPanelCatalog";
@@ -31,6 +48,8 @@ import {
   resolveSelectedPersona,
   staleReceipt,
   terminalPayload,
+  asEphemeralComponentsV2FollowUp,
+  type ConfigPersonaMemoryView,
   type ConfigRouteDependencies,
   type ConfigScope,
 } from "@/utils/discord/interactions/configRouteContext";
@@ -39,17 +58,35 @@ import { createNonce } from "@/utils/discord/panelRouteTokens";
 import { resolvePersonaPanelAvatar } from "@/utils/discord/personaPanelAvatar";
 import {
   buildConfigModalFieldId,
+  buildConditioningCheckboxGroupId,
+  buildPersonaAttributeAddModal,
+  buildPersonaAttributeEditModal,
   buildPersonaAvatarModal,
+  buildPersonaDialogueAddModal,
+  buildPersonaDialogueEditModal,
   buildPersonaNamingHabitsModal,
   buildPersonaRenameModal,
+  buildPersonaConditioningRemoveModal,
+  buildPersonaStmEditModal,
   buildTriggerAddModal,
   buildTriggerRemoveCheckboxGroupId,
   buildTriggerRemoveModal,
+  CONFIG_ATTRIBUTE_FILE_FIELD,
+  CONFIG_ATTRIBUTE_INPUT_FIELD,
+  CONFIG_ATTRIBUTE_PUBLIC_FIELD,
+  CONFIG_DIALOGUE_BOT_INPUT_FIELD,
+  CONFIG_DIALOGUE_FILE_FIELD,
+  CONFIG_DIALOGUE_USER_INPUT_FIELD,
+  CONFIG_STM_CATEGORY_INPUT_PREFIX,
 } from "@/utils/discord/ui/configModals";
 import { showRoutedRawModal, takeRawModalCheckboxGroupValues, takeRawModalFileUpload } from "@/utils/discord/ui/modals";
+import { combineModalPromptParts } from "@/utils/text/modalPromptParts";
 import { log } from "@/utils/misc/logger";
 import { recordPanelActionStat } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
+import { buildSlugMap } from "@/utils/text/slugifyLabel";
+import { buildInitialMemoriesPanel } from "@/utils/discord/interactions/memoriesRoutes";
+import { buildInitialPersonalMemoriesPanel } from "@/utils/discord/interactions/personalMemoriesRoutes";
 
 const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "avatar-open",
@@ -57,6 +94,12 @@ const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "naming-open",
   "trigger-add-open",
   "trigger-remove-open",
+  "attribute-add-open",
+  "attribute-edit-open",
+  "dialogue-add-open",
+  "dialogue-edit-open",
+  "stm-edit-open",
+  "conditioning-open",
 ]);
 
 function receipt(
@@ -107,6 +150,45 @@ async function loadWorkspacePersonas(serverDiscId: string, forceRefresh: boolean
   return personas.filter((persona) => typeof persona.persona_id === "number");
 }
 
+export async function loadConfigPersonaMemoryView(
+  interaction: GlobalRoutableInteraction,
+  scope: ConfigScope,
+  persona: TomoriState,
+): Promise<ConfigPersonaMemoryView> {
+  const personaId = persona.persona_id;
+  const lineageId = persona.persona_lineage_id ?? 0;
+  const ownerFilter = scope.actor.isManager ? undefined : scope.userId;
+  const [serverCounts, personalCounts, stmCategories, conditioningGroups] = await Promise.all([
+    serverMemoryRepository.memoryCountsByLineage(persona.server_id, ownerFilter),
+    personalMemoryRepository.memoryCountsByLineage(scope.userId),
+    shortTermMemoryRepository.getStmCategories(persona.server_id),
+    scope.guildId
+      ? conditioningMemoryRepository.loadGroupsForPersona(persona.server_id, lineageId)
+      : Promise.resolve([]),
+  ]);
+
+  let stmEntry: ShortTermMemoryEntry | undefined;
+  const channelId = interaction.channelId;
+  if (personaId && channelId) {
+    if (interaction.guildId) {
+      await preWarmStmEntry("server", interaction.guildId, channelId, personaId);
+      stmEntry = getShortTermMemoryForServerChannel(interaction.guildId, channelId, personaId);
+    } else {
+      await preWarmStmEntry("user", interaction.user.id, channelId, personaId);
+      stmEntry = getShortTermMemoryForUserChannel(interaction.user.id, channelId, personaId);
+    }
+  }
+
+  return {
+    serverMemoryCount: serverCounts.get(lineageId) ?? 0,
+    personalMemoryCount: personalCounts.get(lineageId) ?? 0,
+    channelId: channelId ?? null,
+    stmEntry,
+    stmCategories,
+    conditioningGroups: conditioningGroups.filter((group) => group.reasonText.trim().length > 0),
+  };
+}
+
 const defaultDependencies: ConfigRouteDependencies = {
   async resolveScope(interaction, forceRefresh = false) {
     const guildId = interaction.guildId ?? null;
@@ -116,10 +198,15 @@ const defaultDependencies: ConfigRouteDependencies = {
     try {
       const personas = await loadWorkspacePersonas(serverDiscId, forceRefresh);
       if (personas.length === 0) return null;
+      const user =
+        (await getCachedUserRow(interaction.user.id)) ??
+        (await userRepository.register(interaction.user.id, interaction.user.username));
+      if (!user || user.user_id === undefined) return null;
       return {
         serverDiscId,
         guildId,
         internalServerId: personas[0]?.server_id ?? null,
+        userId: user.user_id,
         actor: resolveConfigActor(interaction),
         personas,
         readStatus: "fresh",
@@ -133,6 +220,15 @@ const defaultDependencies: ConfigRouteDependencies = {
     }
   },
   getPersonaAvatarData: resolvePersonaPanelAvatar,
+  loadPersonaMemoryView: loadConfigPersonaMemoryView,
+  openServerMemoryPanel: async (interaction, locale, lineageId) => {
+    const panel = await buildInitialMemoriesPanel(interaction, locale, undefined, lineageId);
+    return asEphemeralComponentsV2FollowUp(panel);
+  },
+  openPersonalMemoryPanel: async (interaction, locale, lineageId) => {
+    const panel = await buildInitialPersonalMemoriesPanel(interaction, locale, undefined, lineageId);
+    return asEphemeralComponentsV2FollowUp(panel);
+  },
   operations: configPersonaOperations,
   createGuildIdentity: createGuildIdentityPort,
   recordAction: (input) => {
@@ -145,6 +241,7 @@ const defaultDependencies: ConfigRouteDependencies = {
   },
   takeAvatarUpload: (interactionId, nonce) =>
     takeRawModalFileUpload(interactionId, buildConfigModalFieldId("avatar", nonce)),
+  takeFileUpload: takeRawModalFileUpload,
   takeCheckboxValues: takeRawModalCheckboxGroupValues,
 };
 
@@ -162,6 +259,10 @@ function parseAddressingStyleValue(value: string | null): AddressingStyle | null
   return value === "masculine" || value === "feminine" || value === "neutral" ? value : null;
 }
 
+function hasManageableReason(group: { reasonText: string }): boolean {
+  return group.reasonText.trim().length > 0;
+}
+
 function personaLocation(route: ConfigPanelRoute): { personaId: number | null; explicitStart?: number } {
   if ("personaId" in route && route.personaId !== undefined) {
     return {
@@ -170,6 +271,87 @@ function personaLocation(route: ConfigPanelRoute): { personaId: number | null; e
     };
   }
   return { personaId: null };
+}
+
+type CollectionFamily = "attribute" | "dialogue";
+type CollectionOperation = "add" | "edit" | "remove";
+
+function collectionOperationForRoute(
+  route: ConfigPanelRoute,
+  selectedValue?: string | null,
+): { family: CollectionFamily; operation: CollectionOperation } | null {
+  switch (route.action) {
+    case "attribute-select":
+      return selectedValue === "add" ? { family: "attribute", operation: "add" } : null;
+    case "attribute-add-open":
+    case "attribute-add-submit":
+      return { family: "attribute", operation: "add" };
+    case "attribute-edit-open":
+    case "attribute-edit-submit":
+      return { family: "attribute", operation: "edit" };
+    case "attribute-remove":
+      return { family: "attribute", operation: "remove" };
+    case "dialogue-select":
+      return selectedValue === "add" ? { family: "dialogue", operation: "add" } : null;
+    case "dialogue-add-open":
+    case "dialogue-add-submit":
+      return { family: "dialogue", operation: "add" };
+    case "dialogue-edit-open":
+    case "dialogue-edit-submit":
+      return { family: "dialogue", operation: "edit" };
+    case "dialogue-remove":
+      return { family: "dialogue", operation: "remove" };
+    default:
+      return null;
+  }
+}
+
+async function authorizeCollectionOperation(
+  interaction: GlobalRoutableInteraction,
+  scope: ConfigScope,
+  operation: { family: CollectionFamily; operation: CollectionOperation } | null,
+): Promise<boolean> {
+  if (!operation) return true;
+
+  // DM owners are not guild managers. Their workspace still obeys the same teaching flag as the
+  // legacy commands even though the static actor policy marks the DM owner as the workspace owner.
+  if (scope.guildId && scope.actor.isManager) return true;
+
+  const config = scope.personas[0]?.config;
+  const teachingEnabled =
+    operation.family === "attribute"
+      ? config?.attribute_memteaching_enabled === true
+      : config?.sampledialogue_memteaching_enabled === true;
+  if (!teachingEnabled) return false;
+
+  if (scope.guildId && (operation.operation === "add" || operation.operation === "edit")) {
+    try {
+      if (await userRepository.isBlacklisted(scope.serverDiscId, interaction.user.id)) return false;
+    } catch (error) {
+      await log.error("Failed to resolve persona collection blacklist state", error, {
+        errorType: "InteractionRouteError",
+        metadata: { serverDiscId: scope.serverDiscId, userDiscordId: interaction.user.id },
+      });
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function repairDialogueState(
+  scope: ConfigScope,
+  persona: TomoriState,
+  dependencies: ConfigRouteDependencies,
+): Promise<boolean> {
+  const result = await dependencies.operations.repairSampleDialogues({
+    persona,
+    serverDiscId: scope.serverDiscId,
+  });
+  if (result.status === "write-failed") return false;
+  persona.sample_dialogues_in = result.inputs;
+  persona.sample_dialogues_out = result.outputs;
+  return true;
 }
 
 async function handleModalOpen(
@@ -205,10 +387,59 @@ async function handleModalOpen(
     return;
   }
 
-  const nonce = dependencies.createNonce();
   const locale = route.locale;
+  if (!(await authorizeCollectionOperation(interaction, scope, collectionOperationForRoute(route)))) {
+    const denied = deniedReceipt(locale);
+    await interaction.reply({
+      content: `${denied.heading}\n${denied.detail}`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const nonce = dependencies.createNonce();
 
   switch (route.action) {
+    case "stm-edit-open": {
+      const memoryView = await dependencies.loadPersonaMemoryView(interaction, scope, persona);
+      if (!memoryView.channelId) {
+        await interaction.reply({
+          content: localizer(locale, "commands.config.panel.stm_no_channel"),
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      await dependencies.showModal(
+        interaction,
+        buildPersonaStmEditModal(locale, persona.persona_id, nonce, memoryView.stmCategories, memoryView.stmEntry),
+      );
+      return;
+    }
+    case "conditioning-open": {
+      const memoryView = await dependencies.loadPersonaMemoryView(interaction, scope, persona);
+      const presentedGroups = memoryView.conditioningGroups
+        .filter(hasManageableReason)
+        .slice(0, CONFIG_CONDITIONING_CHECKBOX_CAPACITY);
+      if (presentedGroups.length === 0) {
+        await interaction.reply({
+          content: localizer(locale, "commands.config.panel.conditioning_no_groups_detail"),
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+      await dependencies.showModal(
+        interaction,
+        buildPersonaConditioningRemoveModal(
+          locale,
+          persona.persona_id,
+          computeConditioningRemoveFingerprint(persona.persona_id, presentedGroups),
+          nonce,
+          persona.persona_nickname,
+          presentedGroups,
+        ),
+      );
+      return;
+    }
     case "avatar-open":
       await dependencies.showModal(interaction, buildPersonaAvatarModal(locale, persona.persona_id, nonce));
       return;
@@ -252,12 +483,112 @@ async function handleModalOpen(
       );
       return;
     }
+    case "attribute-add-open":
+      await dependencies.showModal(interaction, buildPersonaAttributeAddModal(locale, persona.persona_id, nonce));
+      return;
+    case "attribute-edit-open": {
+      const attribute = persona.attribute_list?.[route.index];
+      const isPublic =
+        persona.persona_attributes?.find((candidate) => candidate.attribute_order === route.index + 1)?.is_public ??
+        false;
+      if (
+        attribute === undefined ||
+        computeAttributeFingerprint(persona.persona_id, route.index, attribute, isPublic) !== route.fp
+      ) {
+        const stale = staleReceipt(locale);
+        await interaction.reply({ content: `${stale.heading}\n${stale.detail}`, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await dependencies.showModal(
+        interaction,
+        buildPersonaAttributeEditModal(locale, persona.persona_id, route.index, route.fp, nonce, attribute, isPublic),
+      );
+      return;
+    }
+    case "dialogue-add-open":
+      await dependencies.showModal(interaction, buildPersonaDialogueAddModal(locale, persona.persona_id, nonce));
+      return;
+    case "dialogue-edit-open": {
+      if (!(await repairDialogueState(scope, persona, dependencies))) {
+        const stale = staleReceipt(locale);
+        await interaction.reply({ content: `${stale.heading}\n${stale.detail}`, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      const input = persona.sample_dialogues_in?.[route.index];
+      const output = persona.sample_dialogues_out?.[route.index];
+      if (
+        input === undefined ||
+        output === undefined ||
+        computeDialogueFingerprint(persona.persona_id, route.index, input, output) !== route.fp
+      ) {
+        const stale = staleReceipt(locale);
+        await interaction.reply({ content: `${stale.heading}\n${stale.detail}`, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      await dependencies.showModal(
+        interaction,
+        buildPersonaDialogueEditModal(locale, persona.persona_id, route.index, route.fp, nonce, input, output),
+      );
+      return;
+    }
   }
+}
+
+async function handleCollectionAddSelection(
+  interaction: GlobalRoutableInteraction,
+  route: ConfigPanelRoute,
+  dependencies: ConfigRouteDependencies,
+  actor: ConfigActor,
+): Promise<void> {
+  if (!isConfigRouteAuthorized(route, actor)) {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.config.panel.denied_detail"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const scope = await dependencies.resolveScope(interaction, false);
+  if (!scope) {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.config.panel.unavailable"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const operation = collectionOperationForRoute(route, "add");
+  if (!(await authorizeCollectionOperation(interaction, scope, operation))) {
+    const denied = deniedReceipt(route.locale);
+    await interaction.reply({ content: `${denied.heading}\n${denied.detail}`, flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const persona = findExactPersona(scope.personas, personaLocation(route).personaId);
+  if (!persona?.persona_id) {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.config.panel.unavailable"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const nonce = dependencies.createNonce();
+  await dependencies.showModal(
+    interaction,
+    route.action === "attribute-select"
+      ? buildPersonaAttributeAddModal(route.locale, persona.persona_id, nonce)
+      : buildPersonaDialogueAddModal(route.locale, persona.persona_id, nonce),
+  );
 }
 
 interface WriteOutcome {
   receipt: PanelReceipt;
   telemetry?: PanelAction;
+  collectionSelection?: {
+    family: "attribute" | "dialogue";
+    selectedIndex?: number;
+    pageStart?: number;
+  };
 }
 
 async function runPersonaWrite(
@@ -272,6 +603,509 @@ async function runPersonaWrite(
   const guildIdentity = scope.guildId ? dependencies.createGuildIdentity(scope.guildId, interaction) : null;
 
   switch (route.action) {
+    case "stm-edit-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      const memoryView = await dependencies.loadPersonaMemoryView(interaction, scope, persona);
+      if (!memoryView.channelId) return { receipt: staleReceipt(locale) };
+      const channel = interaction.channel;
+      const channelName = channel && "name" in channel && typeof channel.name === "string" ? channel.name : undefined;
+      const parentChannelId =
+        channel && "parentId" in channel && typeof channel.parentId === "string" ? channel.parentId : undefined;
+
+      const isCategoryMode = !(
+        memoryView.stmCategories.length === 1 && memoryView.stmCategories[0]?.label.toLowerCase() === "summary"
+      );
+      const slugMap = buildSlugMap(memoryView.stmCategories);
+      if (isCategoryMode) {
+        const categories: Record<string, string> = {};
+        for (const [slug] of Array.from(slugMap).slice(0, 5)) {
+          const value = modal.fields.getTextInputValue(
+            buildConfigModalFieldId(`${CONFIG_STM_CATEGORY_INPUT_PREFIX}${slug}`, route.nonce),
+          );
+          if (value.trim()) categories[slug] = value.trim().slice(0, 1500);
+        }
+        const result = await dependencies.operations.editStm({
+          userDiscId: interaction.user.id,
+          channelId: memoryView.channelId,
+          serverDiscId: scope.guildId ?? "DM",
+          serverName: interaction.guild?.name,
+          channelName,
+          parentChannelId,
+          personaId: persona.persona_id as number,
+          personaLineageId: persona.persona_lineage_id ?? 0,
+          mode: "categories",
+          categories,
+        });
+        return result.status === "success"
+          ? {
+              receipt: receipt(locale, "success", key("stm_success_heading"), key("stm_success_detail")),
+              telemetry: "server-config.workspace.persona-stm.edit",
+            }
+          : { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+      }
+
+      const summarySlug = Array.from(slugMap.keys())[0];
+      const summary = summarySlug
+        ? modal.fields.getTextInputValue(
+            buildConfigModalFieldId(`${CONFIG_STM_CATEGORY_INPUT_PREFIX}${summarySlug}`, route.nonce),
+          )
+        : "";
+      // Summary cache updates are synchronous, so their durable persist is intentionally not awaited before repaint.
+      const result = await dependencies.operations.editStm({
+        userDiscId: interaction.user.id,
+        channelId: memoryView.channelId,
+        serverDiscId: scope.guildId ?? "DM",
+        serverName: interaction.guild?.name,
+        channelName,
+        parentChannelId,
+        personaId: persona.persona_id as number,
+        personaLineageId: persona.persona_lineage_id ?? 0,
+        mode: "summary",
+        summary: summary.trim().slice(0, 1500),
+      });
+      return result.status === "success"
+        ? {
+            receipt: receipt(locale, "success", key("stm_success_heading"), key("stm_success_detail")),
+            telemetry: "server-config.workspace.persona-stm.edit",
+          }
+        : { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
+    case "conditioning-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      const memoryView = await dependencies.loadPersonaMemoryView(interaction, scope, persona);
+      const presentedGroups = memoryView.conditioningGroups
+        .filter(hasManageableReason)
+        .slice(0, CONFIG_CONDITIONING_CHECKBOX_CAPACITY);
+      if (computeConditioningRemoveFingerprint(persona.persona_id as number, presentedGroups) !== route.fp) {
+        return { receipt: staleReceipt(locale) };
+      }
+
+      const checked = new Set<number>();
+      const groupCount = Math.ceil(presentedGroups.length / CONFIG_CONDITIONING_CHECKBOX_GROUP_SIZE);
+      let hasCheckboxEvidence = false;
+      for (let groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+        const values = dependencies.takeCheckboxValues(
+          modal.id,
+          buildConditioningCheckboxGroupId(groupIndex, route.nonce),
+        );
+        if (values === undefined) continue;
+        hasCheckboxEvidence = true;
+        for (const value of values) {
+          const parsed = Number.parseInt(value, 10);
+          if (Number.isInteger(parsed)) checked.add(parsed);
+        }
+      }
+      if (!hasCheckboxEvidence) return { receipt: staleReceipt(locale) };
+
+      const groupsToDelete = presentedGroups
+        .filter((_group, index) => !checked.has(index))
+        .map(({ conditioningType, actionKey, reasonNormalized }) => ({
+          conditioningType,
+          actionKey,
+          reasonNormalized,
+        }));
+      const result = await dependencies.operations.removeConditioning({
+        serverId: persona.server_id,
+        personaLineageId: persona.persona_lineage_id ?? 0,
+        groups: groupsToDelete,
+      });
+      if (result.status === "success") {
+        return {
+          receipt: receipt(locale, "success", key("conditioning_success_heading"), key("conditioning_success_detail"), {
+            count: groupsToDelete.length,
+          }),
+          telemetry: "server-config.workspace.persona-conditioning.remove",
+        };
+      }
+      return {
+        receipt:
+          result.status === "no-removals"
+            ? receipt(locale, "info", key("conditioning_no_changes_heading"), key("conditioning_no_changes_detail"))
+            : receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")),
+      };
+    }
+
+    case "attribute-add-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      const checkboxValues = dependencies.takeCheckboxValues(
+        modal.id,
+        buildConfigModalFieldId(CONFIG_ATTRIBUTE_PUBLIC_FIELD, route.nonce),
+      );
+      const result = await dependencies.operations.addAttributes({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        typedAttribute: modal.fields.getTextInputValue(
+          buildConfigModalFieldId(CONFIG_ATTRIBUTE_INPUT_FIELD, route.nonce),
+        ),
+        uploadedFile: dependencies.takeFileUpload(
+          modal.id,
+          buildConfigModalFieldId(CONFIG_ATTRIBUTE_FILE_FIELD, route.nonce),
+        ),
+        isPublic: checkboxValues?.includes("public") === true || checkboxValues?.includes("true") === true,
+      });
+      switch (result.status) {
+        case "success":
+          return {
+            receipt: receipt(
+              locale,
+              "success",
+              key("attribute_add_success_heading"),
+              key("attribute_add_success_detail"),
+              { count: result.addedAttributes.length },
+            ),
+            telemetry: "server-config.workspace.persona-attribute.add",
+            collectionSelection: {
+              family: "attribute",
+              selectedIndex: result.selectedIndex,
+              pageStart:
+                Math.floor(result.selectedIndex / CONFIG_PERSONA_COLLECTION_PAGE_SIZE) *
+                CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
+            },
+          };
+        case "invalid-file":
+          return {
+            receipt: receipt(
+              locale,
+              "error",
+              key("invalid_input_heading"),
+              result.error === "invalid_format"
+                ? key("attribute_file_invalid_detail")
+                : result.error === "file_too_large"
+                  ? key("attribute_file_too_large_detail")
+                  : key("attribute_file_download_detail"),
+            ),
+          };
+        case "no-input":
+          return { receipt: receipt(locale, "error", key("invalid_input_heading"), key("attribute_no_input_detail")) };
+        case "content-too-long":
+          return {
+            receipt: receipt(locale, "error", key("invalid_input_heading"), key("attribute_too_long_detail"), {
+              max: result.maxAllowed,
+            }),
+          };
+        case "duplicate":
+          return { receipt: receipt(locale, "warning", key("no_changes_heading"), key("attribute_duplicate_detail")) };
+        case "limit-exceeded":
+          return {
+            receipt: receipt(
+              locale,
+              "error",
+              key("invalid_input_heading"),
+              result.batch ? key("attribute_batch_limit_detail") : key("attribute_limit_detail"),
+              result.batch
+                ? { available: Math.max(0, result.maxAllowed - result.currentCount) }
+                : { current: result.currentCount, max: result.maxAllowed },
+            ),
+          };
+        default:
+          return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+      }
+    }
+
+    case "attribute-edit-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      const attribute = persona.attribute_list?.[route.index];
+      const currentIsPublic =
+        persona.persona_attributes?.find((candidate) => candidate.attribute_order === route.index + 1)?.is_public ??
+        false;
+      if (
+        attribute === undefined ||
+        computeAttributeFingerprint(persona.persona_id as number, route.index, attribute, currentIsPublic) !== route.fp
+      ) {
+        return { receipt: staleReceipt(locale) };
+      }
+
+      const checkboxValues = dependencies.takeCheckboxValues(
+        modal.id,
+        buildConfigModalFieldId(CONFIG_ATTRIBUTE_PUBLIC_FIELD, route.nonce),
+      );
+      const editedAttribute = combineModalPromptParts(
+        [
+          modal.fields.getTextInputValue(buildConfigModalFieldId("attribute_part1", route.nonce)).trim(),
+          modal.fields.getTextInputValue(buildConfigModalFieldId("attribute_part2", route.nonce)).trim(),
+        ],
+        4000,
+      );
+      const result = await dependencies.operations.editAttribute({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        index: route.index,
+        newAttribute: editedAttribute,
+        isPublic:
+          checkboxValues === undefined
+            ? undefined
+            : checkboxValues.includes("public") || checkboxValues.includes("true"),
+      });
+      switch (result.status) {
+        case "success":
+          return {
+            receipt: receipt(
+              locale,
+              "success",
+              key("attribute_edit_success_heading"),
+              key("attribute_edit_success_detail"),
+            ),
+            telemetry: "server-config.workspace.persona-attribute.edit",
+            collectionSelection: {
+              family: "attribute",
+              selectedIndex: route.index,
+              pageStart:
+                Math.floor(route.index / CONFIG_PERSONA_COLLECTION_PAGE_SIZE) * CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
+            },
+          };
+        case "unchanged":
+          return { receipt: receipt(locale, "info", key("no_changes_heading"), key("attribute_edit_success_detail")) };
+        case "content-too-long":
+          return {
+            receipt: receipt(locale, "error", key("invalid_input_heading"), key("attribute_too_long_detail"), {
+              max: result.maxAllowed,
+            }),
+          };
+        case "duplicate":
+          return { receipt: receipt(locale, "warning", key("no_changes_heading"), key("attribute_duplicate_detail")) };
+        default:
+          return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+      }
+    }
+
+    case "attribute-remove": {
+      const attribute = persona.attribute_list?.[route.index];
+      const currentIsPublic =
+        persona.persona_attributes?.find((candidate) => candidate.attribute_order === route.index + 1)?.is_public ??
+        false;
+      if (
+        attribute === undefined ||
+        computeAttributeFingerprint(persona.persona_id as number, route.index, attribute, currentIsPublic) !== route.fp
+      ) {
+        return { receipt: staleReceipt(locale) };
+      }
+      const result = await dependencies.operations.removeAttribute({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        index: route.index,
+      });
+      if (result.status === "success") {
+        return {
+          receipt: receipt(
+            locale,
+            "success",
+            key("attribute_remove_success_heading"),
+            key("attribute_remove_success_detail"),
+          ),
+          telemetry: "server-config.workspace.persona-attribute.remove",
+          collectionSelection: {
+            family: "attribute",
+            pageStart:
+              Math.floor(route.index / CONFIG_PERSONA_COLLECTION_PAGE_SIZE) * CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
+          },
+        };
+      }
+      return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
+    case "dialogue-add-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      const result = await dependencies.operations.addSampleDialogues({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        typedUserInput: modal.fields.getTextInputValue(
+          buildConfigModalFieldId(CONFIG_DIALOGUE_USER_INPUT_FIELD, route.nonce),
+        ),
+        typedBotInput: modal.fields.getTextInputValue(
+          buildConfigModalFieldId(CONFIG_DIALOGUE_BOT_INPUT_FIELD, route.nonce),
+        ),
+        uploadedFile: dependencies.takeFileUpload(
+          modal.id,
+          buildConfigModalFieldId(CONFIG_DIALOGUE_FILE_FIELD, route.nonce),
+        ),
+      });
+      switch (result.status) {
+        case "success":
+          return {
+            receipt: receipt(
+              locale,
+              "success",
+              key("dialogue_add_success_heading"),
+              key("dialogue_add_success_detail"),
+              { count: result.addedDialogues.length },
+            ),
+            telemetry: "server-config.workspace.persona-dialogue.add",
+            collectionSelection: {
+              family: "dialogue",
+              selectedIndex: result.selectedIndex,
+              pageStart:
+                Math.floor(result.selectedIndex / CONFIG_PERSONA_COLLECTION_PAGE_SIZE) *
+                CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
+            },
+          };
+        case "invalid-file":
+          return {
+            receipt: receipt(
+              locale,
+              "error",
+              key("invalid_input_heading"),
+              result.error === "invalid_format"
+                ? key("dialogue_file_invalid_detail")
+                : result.error === "file_too_large"
+                  ? key("dialogue_file_too_large_detail")
+                  : key("dialogue_file_download_detail"),
+            ),
+          };
+        case "manual-pair-required":
+          return {
+            receipt: receipt(locale, "error", key("invalid_input_heading"), key("dialogue_manual_pair_detail")),
+          };
+        case "invalid-batch":
+          return {
+            receipt: receipt(locale, "error", key("invalid_input_heading"), key("dialogue_batch_invalid_detail"), {
+              line: result.lineNumber,
+              prefix: result.invalidBotPrefix ? "{bot}:" : "{user}:",
+            }),
+          };
+        case "no-input":
+          return { receipt: receipt(locale, "error", key("invalid_input_heading"), key("dialogue_no_input_detail")) };
+        case "user-too-long":
+          return {
+            receipt: receipt(locale, "error", key("invalid_input_heading"), key("dialogue_user_too_long_detail"), {
+              max: result.maxAllowed,
+            }),
+          };
+        case "bot-too-long":
+          return {
+            receipt: receipt(locale, "error", key("invalid_input_heading"), key("dialogue_bot_too_long_detail"), {
+              max: result.maxAllowed,
+            }),
+          };
+        case "duplicate":
+          return { receipt: receipt(locale, "warning", key("no_changes_heading"), key("dialogue_duplicate_detail")) };
+        case "limit-exceeded":
+          return {
+            receipt: receipt(
+              locale,
+              "error",
+              key("invalid_input_heading"),
+              result.batch ? key("dialogue_batch_limit_detail") : key("dialogue_limit_detail"),
+              result.batch
+                ? { available: Math.max(0, result.maxAllowed - result.currentCount) }
+                : { current: result.currentCount, max: result.maxAllowed },
+            ),
+          };
+        default:
+          return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+      }
+    }
+
+    case "dialogue-edit-submit": {
+      const modal = interaction as ModalSubmitInteraction;
+      if (!(await repairDialogueState(scope, persona, dependencies))) {
+        return { receipt: staleReceipt(locale) };
+      }
+      const input = persona.sample_dialogues_in?.[route.index];
+      const output = persona.sample_dialogues_out?.[route.index];
+      if (
+        input === undefined ||
+        output === undefined ||
+        computeDialogueFingerprint(persona.persona_id as number, route.index, input, output) !== route.fp
+      ) {
+        return { receipt: staleReceipt(locale) };
+      }
+      const editedInput = combineModalPromptParts(
+        [
+          modal.fields.getTextInputValue(buildConfigModalFieldId("user_input_part1", route.nonce)).trim(),
+          modal.fields.getTextInputValue(buildConfigModalFieldId("user_input_part2", route.nonce)).trim(),
+        ],
+        4000,
+      );
+      const editedOutput = combineModalPromptParts(
+        [
+          modal.fields.getTextInputValue(buildConfigModalFieldId("bot_input_part1", route.nonce)).trim(),
+          modal.fields.getTextInputValue(buildConfigModalFieldId("bot_input_part2", route.nonce)).trim(),
+        ],
+        4000,
+      );
+      const result = await dependencies.operations.editSampleDialogue({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        index: route.index,
+        newInput: editedInput,
+        newOutput: editedOutput,
+      });
+      switch (result.status) {
+        case "success":
+          return {
+            receipt: receipt(
+              locale,
+              "success",
+              key("dialogue_edit_success_heading"),
+              key("dialogue_edit_success_detail"),
+            ),
+            telemetry: "server-config.workspace.persona-dialogue.edit",
+            collectionSelection: {
+              family: "dialogue",
+              selectedIndex: route.index,
+              pageStart:
+                Math.floor(route.index / CONFIG_PERSONA_COLLECTION_PAGE_SIZE) * CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
+            },
+          };
+        case "unchanged":
+          return { receipt: receipt(locale, "info", key("no_changes_heading"), key("dialogue_edit_success_detail")) };
+        case "user-too-long":
+          return {
+            receipt: receipt(locale, "error", key("invalid_input_heading"), key("dialogue_user_too_long_detail"), {
+              max: result.maxAllowed,
+            }),
+          };
+        case "bot-too-long":
+          return {
+            receipt: receipt(locale, "error", key("invalid_input_heading"), key("dialogue_bot_too_long_detail"), {
+              max: result.maxAllowed,
+            }),
+          };
+        case "duplicate":
+          return { receipt: receipt(locale, "warning", key("no_changes_heading"), key("dialogue_duplicate_detail")) };
+        default:
+          return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+      }
+    }
+
+    case "dialogue-remove": {
+      if (!(await repairDialogueState(scope, persona, dependencies))) {
+        return { receipt: staleReceipt(locale) };
+      }
+      const input = persona.sample_dialogues_in?.[route.index];
+      const output = persona.sample_dialogues_out?.[route.index];
+      if (
+        input === undefined ||
+        output === undefined ||
+        computeDialogueFingerprint(persona.persona_id as number, route.index, input, output) !== route.fp
+      ) {
+        return { receipt: staleReceipt(locale) };
+      }
+      const result = await dependencies.operations.removeSampleDialogue({
+        persona,
+        serverDiscId: scope.serverDiscId,
+        index: route.index,
+      });
+      if (result.status === "success") {
+        return {
+          receipt: receipt(
+            locale,
+            "success",
+            key("dialogue_remove_success_heading"),
+            key("dialogue_remove_success_detail"),
+          ),
+          telemetry: "server-config.workspace.persona-dialogue.remove",
+          collectionSelection: {
+            family: "dialogue",
+            pageStart:
+              Math.floor(route.index / CONFIG_PERSONA_COLLECTION_PAGE_SIZE) * CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
+          },
+        };
+      }
+      return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
     case "rename-submit": {
       const modal = interaction as ModalSubmitInteraction;
       const newNickname = modal.fields.getTextInputValue(buildConfigModalFieldId("nickname", route.nonce));
@@ -551,13 +1385,23 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       if (!route) throw new Error(`Malformed config panel route: ${interaction.customId}`);
 
       const expectsSelect =
-        route.action === "page" || route.action === "persona-select" || route.action === "naming-style-select";
+        route.action === "page" ||
+        route.action === "persona-select" ||
+        route.action === "naming-style-select" ||
+        route.action === "attribute-select" ||
+        route.action === "dialogue-select";
       const expectsModal =
         route.action === "avatar-submit" ||
         route.action === "rename-submit" ||
         route.action === "naming-submit" ||
         route.action === "trigger-add-submit" ||
-        route.action === "trigger-remove-submit";
+        route.action === "trigger-remove-submit" ||
+        route.action === "attribute-add-submit" ||
+        route.action === "attribute-edit-submit" ||
+        route.action === "dialogue-add-submit" ||
+        route.action === "stm-edit-submit" ||
+        route.action === "conditioning-submit" ||
+        route.action === "dialogue-edit-submit";
 
       if (expectsSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Config ${route.action} route requires a String Select interaction`);
@@ -572,6 +1416,12 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       // The actor comes from the interaction rather than the workspace, so a forged custom ID is
       // rejected before any repository read.
       const actor = resolveConfigActor(interaction);
+
+      const submittedValue = interaction.isStringSelectMenu() ? (interaction.values[0] ?? null) : null;
+      if ((route.action === "attribute-select" || route.action === "dialogue-select") && submittedValue === "add") {
+        await handleCollectionAddSelection(interaction, route, dependencies, actor);
+        return;
+      }
 
       if (MODAL_OPEN_ACTIONS.has(route.action)) {
         await handleModalOpen(interaction, route, dependencies, actor);
@@ -603,13 +1453,48 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       });
       if (!scope) return;
 
+      if (route.action === "server-memory-open" || route.action === "personal-memory-open") {
+        const selectedPersona = resolveSelectedPersona(scope.personas, route.personaId);
+        const selectedLineageId = selectedPersona?.persona_lineage_id ?? 0;
+        if (route.action === "server-memory-open") {
+          await interaction.followUp(
+            await dependencies.openServerMemoryPanel(interaction, route.locale, selectedLineageId),
+          );
+        } else {
+          await interaction.followUp(
+            await dependencies.openPersonalMemoryPanel(interaction, route.locale, selectedLineageId),
+          );
+        }
+        return;
+      }
+
+      if (
+        !(await authorizeCollectionOperation(interaction, scope, collectionOperationForRoute(route, submittedValue)))
+      ) {
+        await repaint(interaction, {
+          locale: route.locale,
+          scope,
+          category: "persona",
+          page: "general",
+          selectedPersonaId:
+            resolveSelectedPersona(scope.personas, personaLocation(route).personaId)?.persona_id ?? null,
+          receipt: deniedReceipt(route.locale),
+          dependencies,
+        });
+        return;
+      }
+
       const { personaId, explicitStart } = personaLocation(route);
       // A String Select's custom ID names the selection that produced it; the new choice arrives in
       // the submitted values, so reading the route here would make every select a no-op.
-      const selectedValue = interaction.isStringSelectMenu() ? (interaction.values[0] ?? null) : null;
+      const selectedValue = submittedValue;
 
-      let category = "category" in route ? route.category : "persona";
+      let category: ConfigCategory = "category" in route ? route.category : "persona";
       let page: ConfigPage = "page" in route ? route.page : "general";
+      if (route.action === "stm-edit-submit" || route.action === "conditioning-submit") {
+        category = "persona";
+        page = "memories";
+      }
       if (route.action === "page" && selectedValue) {
         const candidate = selectedValue as ConfigPage;
         if (visibleConfigPages(route.category, actor).includes(candidate)) page = candidate;
@@ -630,6 +1515,69 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       }
 
       const persona = resolveSelectedPersona(scope.personas, requestedPersonaId);
+
+      let selectedAttributeIndex: number | undefined;
+      let attributePageStart: number | undefined;
+      let selectedDialogueIndex: number | undefined;
+      let dialoguePageStart: number | undefined;
+
+      if (route.action === "attribute-page") {
+        attributePageStart = route.start;
+      }
+      if (route.action === "dialogue-page") {
+        dialoguePageStart = route.start;
+      }
+      if (route.action === "attribute-select" && selectedValue) {
+        const target = findExactPersona(scope.personas, requestedPersonaId);
+        const selectedIndex = Number(selectedValue);
+        if (
+          target &&
+          Number.isSafeInteger(selectedIndex) &&
+          selectedIndex >= 0 &&
+          selectedIndex < (target.attribute_list?.length ?? 0)
+        ) {
+          selectedAttributeIndex = selectedIndex;
+          attributePageStart =
+            Math.floor(selectedIndex / CONFIG_PERSONA_COLLECTION_PAGE_SIZE) * CONFIG_PERSONA_COLLECTION_PAGE_SIZE;
+        }
+      }
+
+      if (route.action === "dialogue-select" && selectedValue) {
+        const target = findExactPersona(scope.personas, requestedPersonaId);
+        if (target && Number.isSafeInteger(Number(selectedValue))) {
+          const selectedIndex = Number(selectedValue);
+          const dialogueLengthsMatch =
+            (target.sample_dialogues_in?.length ?? 0) === (target.sample_dialogues_out?.length ?? 0);
+          if (
+            !dialogueLengthsMatch ||
+            (selectedIndex >= 0 &&
+              selectedIndex <
+                Math.min(target.sample_dialogues_in?.length ?? 0, target.sample_dialogues_out?.length ?? 0))
+          ) {
+            if (!(await repairDialogueState(scope, target, dependencies))) {
+              await repaint(interaction, {
+                locale: route.locale,
+                scope,
+                category: "persona",
+                page: "general",
+                selectedPersonaId: target.persona_id ?? null,
+                receipt: staleReceipt(route.locale),
+                dependencies,
+              });
+              return;
+            }
+            const repairedLength = Math.min(
+              target.sample_dialogues_in?.length ?? 0,
+              target.sample_dialogues_out?.length ?? 0,
+            );
+            if (selectedIndex >= 0 && selectedIndex < repairedLength) {
+              selectedDialogueIndex = selectedIndex;
+              dialoguePageStart =
+                Math.floor(selectedIndex / CONFIG_PERSONA_COLLECTION_PAGE_SIZE) * CONFIG_PERSONA_COLLECTION_PAGE_SIZE;
+            }
+          }
+        }
+      }
 
       if (route.action === "promote-view") {
         const target = findExactPersona(scope.personas, requestedPersonaId);
@@ -670,12 +1618,24 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
           await repaint(interaction, {
             locale: route.locale,
             scope: refreshed,
-            category: "persona",
-            page: "general",
+            category,
+            page,
             selectedPersonaId:
               resolveSelectedPersona(refreshed.personas, writeTarget.persona_id ?? null)?.persona_id ?? null,
             namingStyle,
             receipt: outcome.receipt,
+            selectedAttributeIndex:
+              outcome.collectionSelection?.family === "attribute"
+                ? outcome.collectionSelection.selectedIndex
+                : undefined,
+            attributePageStart:
+              outcome.collectionSelection?.family === "attribute" ? outcome.collectionSelection.pageStart : undefined,
+            selectedDialogueIndex:
+              outcome.collectionSelection?.family === "dialogue"
+                ? outcome.collectionSelection.selectedIndex
+                : undefined,
+            dialoguePageStart:
+              outcome.collectionSelection?.family === "dialogue" ? outcome.collectionSelection.pageStart : undefined,
             dependencies,
           });
           return;
@@ -690,6 +1650,10 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         selectedPersonaId: persona?.persona_id ?? null,
         personaSelectStart: explicitStart,
         namingStyle,
+        selectedAttributeIndex,
+        attributePageStart,
+        selectedDialogueIndex,
+        dialoguePageStart,
         dependencies,
       });
     },

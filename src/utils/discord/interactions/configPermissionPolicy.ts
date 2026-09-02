@@ -30,6 +30,14 @@ export type ConfigSurfaceState = "enabled" | "disabled" | "omitted";
 export type ConfigPageState = "enabled" | "read-only" | "omitted";
 
 export type ConfigPersonaGeneralAction = "avatar" | "rename" | "naming" | "trigger-add" | "trigger-remove" | "promote";
+export type ConfigPersonaCollectionAction =
+  | "attribute-add"
+  | "attribute-edit"
+  | "attribute-remove"
+  | "dialogue-add"
+  | "dialogue-edit"
+  | "dialogue-remove";
+export type ConfigPersonaMemoriesAction = "server-memory-open" | "personal-memory-open" | "stm-edit" | "conditioning";
 
 /**
  * Derives the acting workspace identity from the interaction alone.
@@ -151,6 +159,34 @@ export function resolvePersonaGeneralActionState(
   return action === "trigger-add" || action === "trigger-remove" ? "enabled" : "disabled";
 }
 
+/**
+ * Collection actions share the General page's static access. Teaching flags and blacklist state
+ * are workspace data, so the route layer applies those dynamic gates after it loads the scope.
+ */
+export function resolvePersonaCollectionActionState(
+  _action: ConfigPersonaCollectionAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  return resolveConfigPageState("persona", "general", actor) === "enabled" ? "enabled" : "omitted";
+}
+
+/**
+ * Long-term memory navigation and STM inspection are readable on the mixed-permission Memories page;
+ * STM editing remains a guild-manager action while the legacy command permits DM editing.
+ */
+export function resolvePersonaMemoriesActionState(
+  action: ConfigPersonaMemoriesAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (action === "server-memory-open" || action === "personal-memory-open") {
+    return resolveConfigPageState("persona", "memories", actor) === "omitted" ? "omitted" : "enabled";
+  }
+  if (action === "stm-edit") {
+    return actor.workspaceKind === "dm" || actor.isManager ? "enabled" : "disabled";
+  }
+  return actor.workspaceKind === "guild" && actor.isManager ? "enabled" : "omitted";
+}
+
 const PERSONA_GENERAL_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPersonaGeneralAction>> = {
   "avatar-open": "avatar",
   "avatar-submit": "avatar",
@@ -168,6 +204,32 @@ const PERSONA_GENERAL_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"]
   "promote-cancel": "promote",
 };
 
+const PERSONA_COLLECTION_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPersonaCollectionAction>> = {
+  "attribute-select": "attribute-edit",
+  "attribute-page": "attribute-edit",
+  "attribute-add-open": "attribute-add",
+  "attribute-add-submit": "attribute-add",
+  "attribute-edit-open": "attribute-edit",
+  "attribute-edit-submit": "attribute-edit",
+  "attribute-remove": "attribute-remove",
+  "dialogue-select": "dialogue-edit",
+  "dialogue-page": "dialogue-edit",
+  "dialogue-add-open": "dialogue-add",
+  "dialogue-add-submit": "dialogue-add",
+  "dialogue-edit-open": "dialogue-edit",
+  "dialogue-edit-submit": "dialogue-edit",
+  "dialogue-remove": "dialogue-remove",
+};
+
+const PERSONA_MEMORIES_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPersonaMemoriesAction>> = {
+  "server-memory-open": "server-memory-open",
+  "personal-memory-open": "personal-memory-open",
+  "stm-edit-open": "stm-edit",
+  "stm-edit-submit": "stm-edit",
+  "conditioning-open": "conditioning",
+  "conditioning-submit": "conditioning",
+};
+
 /**
  * The authorization gate every route and modal submit re-runs. Rendering a control is never the
  * gate: a custom ID that was legitimately issued to a manager can be replayed by any member who can
@@ -178,6 +240,16 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   if (personaAction) {
     if (resolveConfigPageState("persona", "general", actor) !== "enabled") return false;
     return resolvePersonaGeneralActionState(personaAction, actor) === "enabled";
+  }
+
+  const collectionAction = PERSONA_COLLECTION_ACTION_BY_ROUTE[route.action];
+  if (collectionAction) {
+    return resolvePersonaCollectionActionState(collectionAction, actor) === "enabled";
+  }
+
+  const memoriesAction = PERSONA_MEMORIES_ACTION_BY_ROUTE[route.action];
+  if (memoriesAction) {
+    return resolvePersonaMemoriesActionState(memoriesAction, actor) === "enabled";
   }
 
   switch (route.action) {

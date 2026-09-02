@@ -24,6 +24,7 @@ import {
   resolveConfigLanding,
   resolveConfigPageState,
   resolvePersonaGeneralActionState,
+  resolvePersonaMemoriesActionState,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
@@ -163,6 +164,24 @@ describe("Persona General action policy", () => {
   });
 });
 
+describe("Persona Memories action policy", () => {
+  it("allows memory reads for members and memory edits for managers or DM owners", () => {
+    for (const action of ["server-memory-open", "personal-memory-open"] as const) {
+      expect(resolvePersonaMemoriesActionState(action, GUILD_MEMBER)).toBe("enabled");
+      expect(resolvePersonaMemoriesActionState(action, DM_OWNER)).toBe("enabled");
+    }
+    expect(resolvePersonaMemoriesActionState("stm-edit", GUILD_MANAGER)).toBe("enabled");
+    expect(resolvePersonaMemoriesActionState("stm-edit", GUILD_MEMBER)).toBe("disabled");
+    expect(resolvePersonaMemoriesActionState("stm-edit", DM_OWNER)).toBe("enabled");
+  });
+
+  it("omits conditioning from DMs and keeps it manager-only in guilds", () => {
+    expect(resolvePersonaMemoriesActionState("conditioning", GUILD_MANAGER)).toBe("enabled");
+    expect(resolvePersonaMemoriesActionState("conditioning", GUILD_MEMBER)).toBe("omitted");
+    expect(resolvePersonaMemoriesActionState("conditioning", DM_OWNER)).toBe("omitted");
+  });
+});
+
 describe("isConfigRouteAuthorized", () => {
   const personaWriteRoutes: ConfigPanelRoute[] = [
     { action: "avatar-open", locale: "en-US", personaId: 5 },
@@ -240,6 +259,20 @@ describe("isConfigRouteAuthorized", () => {
     const covered = new Set<ConfigPanelRoute["action"]>([
       ...personaWriteRoutes.map((route) => route.action),
       ...triggerRoutes.map((route) => route.action),
+      "attribute-select",
+      "attribute-page",
+      "attribute-add-open",
+      "attribute-add-submit",
+      "attribute-edit-open",
+      "attribute-edit-submit",
+      "attribute-remove",
+      "dialogue-select",
+      "dialogue-page",
+      "dialogue-add-open",
+      "dialogue-add-submit",
+      "dialogue-edit-open",
+      "dialogue-edit-submit",
+      "dialogue-remove",
       "category",
       "page",
       "persona-select",
@@ -248,6 +281,12 @@ describe("isConfigRouteAuthorized", () => {
       "promote-cancel",
       "retry",
       "refresh",
+      "server-memory-open",
+      "personal-memory-open",
+      "stm-edit-open",
+      "stm-edit-submit",
+      "conditioning-open",
+      "conditioning-submit",
     ]);
 
     const unknownRoute = { action: "not-a-real-action", locale: "en-US" } as unknown as ConfigPanelRoute;

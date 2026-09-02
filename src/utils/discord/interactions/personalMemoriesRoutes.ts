@@ -1087,9 +1087,10 @@ export type PersonalMemoriesPanelPayloadOrTerminal =
   | InteractionEditReplyOptions;
 
 export async function buildInitialPersonalMemoriesPanel(
-  interaction: ChatInputCommandInteraction,
+  interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
   locale: string,
   dependenciesOverride?: Partial<PersonalMemoriesRouteDependencies>,
+  requestedLineageId?: number,
 ): Promise<PersonalMemoriesPanelPayloadOrTerminal> {
   const dependencies: PersonalMemoriesRouteDependencies = {
     ...defaultDependencies,
@@ -1099,19 +1100,32 @@ export async function buildInitialPersonalMemoriesPanel(
   if (!scope) {
     return terminalPayload(locale, "commands.personal.memories.unavailable") as PersonalMemoriesPanelPayloadOrTerminal;
   }
-  const memories = await dependencies.loadMemories(scope.userId, 0);
-  const stmCount = await dependencies.getStmCount(scope.userDiscId);
+  const selectedPersona =
+    requestedLineageId === undefined
+      ? undefined
+      : scope.personas.find((persona) => persona.persona_lineage_id === requestedLineageId);
+  const selectedLineageId = selectedPersona?.persona_lineage_id ?? 0;
+  const memories = await dependencies.loadMemories(scope.userId, selectedLineageId);
+  const stmCount = selectedLineageId === 0 ? await dependencies.getStmCount(scope.userDiscId) : 0;
+  const memoryCountsByLineage =
+    selectedLineageId === 0 ? undefined : await dependencies.getMemoryCountsByLineage(scope.userId);
+  const selectedPersonaAvatar = selectedPersona
+    ? await dependencies.getPersonaAvatarData(interaction, selectedPersona)
+    : undefined;
   return withPersonaPanelAvatar(
     buildPersonalMemoriesPanelPayload({
       locale,
-      category: "global",
-      selectedLineageId: 0,
+      category: selectedLineageId === 0 ? "global" : "persona",
+      selectedLineageId,
       personas: scope.personas,
       memories,
       stmCount,
+      memoryCountsByLineage,
+      selectedPersonaAvatarUrl: selectedPersonaAvatar?.url,
       privacyLevel: scope.privacyLevel,
       readStatus: scope.readStatus,
       page: { kind: "main" },
     }),
+    selectedPersonaAvatar,
   );
 }

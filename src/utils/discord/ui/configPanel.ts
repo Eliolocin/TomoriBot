@@ -14,22 +14,28 @@ import type { TomoriState } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import {
+  CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
   CONFIG_PERSONA_SELECT_PAGE_SIZE,
   CONFIG_ROUTE_NAMESPACE,
   CONFIG_ROUTE_VERSION,
   DEFAULT_PAGE_FOR_CONFIG_CATEGORY,
   buildConfigRouteId,
   buildConfigRouteSegments,
+  computeAttributeFingerprint,
+  computeDialogueFingerprint,
   type ConfigCategory,
   type ConfigPage,
 } from "@/utils/discord/configPanelCatalog";
 import {
   resolveConfigPageState,
+  resolvePersonaMemoriesActionState,
+  resolvePersonaCollectionActionState,
   resolvePersonaGeneralActionState,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
 } from "@/utils/discord/interactions/configPermissionPolicy";
+import type { ConfigPersonaMemoryView } from "@/utils/discord/interactions/configRouteContext";
 import {
   buildCategoryButtonRow,
   buildOptionalThumbnailSection,
@@ -42,6 +48,7 @@ import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import { localizer } from "@/utils/text/localizer";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
+import { buildSlugMap } from "@/utils/text/slugifyLabel";
 
 export interface ConfigPanelPayload {
   components: TopLevelComponentData[];
@@ -112,10 +119,17 @@ export interface ConfigPanelRenderInput {
   selectedPersonaId: number | null;
   selectedPersonaAvatarUrl?: string | null;
   personaSelectStart?: number;
+  attributePageStart?: number;
+  selectedAttributeIndex?: number;
+  dialoguePageStart?: number;
+  selectedDialogueIndex?: number;
+  attributeMemteachingEnabled?: boolean;
+  sampledialogueMemteachingEnabled?: boolean;
   namingStyle?: AddressingStyle;
   readStatus: PanelReadStatus;
   receipt?: PanelReceipt;
   view?: ConfigPanelView;
+  personaMemoryView?: ConfigPersonaMemoryView;
 }
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): ConfigPanelPayload {
@@ -260,6 +274,314 @@ function buildPersonaSelectorRows(input: ConfigPanelRenderInput): ComponentInCon
   return rows;
 }
 
+function renderFencedCollectionContent(content: string): string {
+  return ["```markdown", content.replaceAll("```", "`\u200b``"), "```"].join("\n");
+}
+
+function renderStmContent(locale: string, content: string, maxLength = 3800): string {
+  const safeContent = content.replaceAll("```", "`\u200b``");
+  const rendered = renderFencedCollectionContent(safeContent);
+  if (rendered.length <= maxLength) return rendered;
+  const truncatedNotice = `\n${localizer(locale, "commands.config.panel.stm_truncated")}`;
+  const fenceOverhead = renderFencedCollectionContent("").length;
+  const availableLength = Math.max(0, maxLength - fenceOverhead - truncatedNotice.length);
+  return renderFencedCollectionContent(`${safeContent.slice(0, availableLength)}${truncatedNotice}`);
+}
+
+function collectionRangeIndex(
+  totalCount: number,
+  requestedStart: number | undefined,
+  selectedIndex: number | undefined,
+): number {
+  const rangeCount = Math.max(1, Math.ceil(totalCount / CONFIG_PERSONA_COLLECTION_PAGE_SIZE));
+  const defaultStart =
+    selectedIndex === undefined
+      ? 0
+      : Math.floor(selectedIndex / CONFIG_PERSONA_COLLECTION_PAGE_SIZE) * CONFIG_PERSONA_COLLECTION_PAGE_SIZE;
+  const requestedRange = Math.floor((requestedStart ?? defaultStart) / CONFIG_PERSONA_COLLECTION_PAGE_SIZE);
+  return Math.min(Math.max(requestedRange, 0), rangeCount - 1);
+}
+
+function mayWritePersonaCollection(
+  input: ConfigPanelRenderInput,
+  action: "attribute-add" | "dialogue-add",
+  teachingEnabled: boolean | undefined,
+): boolean {
+  return (
+    resolvePersonaCollectionActionState(action, input.actor) === "enabled" &&
+    ((input.actor.isManager && input.actor.workspaceKind === "guild") || teachingEnabled === true)
+  );
+}
+
+function buildAttributeCollectionBody(input: ConfigPanelRenderInput, persona: TomoriState): ComponentInContainerData[] {
+  const { locale, readStatus } = input;
+  const mayWrite = mayWritePersonaCollection(input, "attribute-add", input.attributeMemteachingEnabled);
+  const attributes = persona.attribute_list ?? [];
+  const selectedIndex =
+    input.selectedAttributeIndex !== undefined &&
+    input.selectedAttributeIndex >= 0 &&
+    input.selectedAttributeIndex < attributes.length
+      ? input.selectedAttributeIndex
+      : undefined;
+  const rangeIndex = collectionRangeIndex(attributes.length, input.attributePageStart, selectedIndex);
+  const start = rangeIndex * CONFIG_PERSONA_COLLECTION_PAGE_SIZE;
+  const visibleAttributes = attributes.slice(start, start + CONFIG_PERSONA_COLLECTION_PAGE_SIZE);
+  const options: SelectMenuComponentOptionData[] = [
+    ...(mayWrite
+      ? [
+          {
+            label: safeSelectOptionText(localizer(locale, "commands.config.panel.attribute_add_option"), 100),
+            value: "add",
+          },
+        ]
+      : []),
+    ...visibleAttributes.map((attribute, offset) => ({
+      label: safeSelectOptionText(
+        `${localizer(locale, "commands.config.panel.attribute_option_prefix")} ${start + offset + 1}: ${attribute}`,
+        100,
+      ),
+      value: String(start + offset),
+      default: start + offset === selectedIndex,
+    })),
+  ];
+
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.TextDisplay,
+      content: `${localizer(locale, "commands.config.panel.attributes_title")}
+${localizer(locale, "commands.config.panel.attributes_description")}`,
+    },
+  ];
+
+  if (!mayWrite) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.collection_teaching_disabled")),
+    });
+  }
+
+  if (options.length > 0) {
+    components.push({
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.StringSelect,
+          customId: buildConfigRouteId({ action: "attribute-select", locale, personaId: persona.persona_id as number }),
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.config.panel.attribute_select_placeholder"),
+            150,
+          ),
+          options,
+          disabled: readStatus !== "fresh",
+        },
+      ],
+    });
+  }
+
+  if (options.length > 0) {
+    const paginationRow = buildPaginationRow({
+      locale,
+      rangeIndex,
+      rangeCount: Math.max(1, Math.ceil(attributes.length / CONFIG_PERSONA_COLLECTION_PAGE_SIZE)),
+      namespace: CONFIG_ROUTE_NAMESPACE,
+      version: CONFIG_ROUTE_VERSION,
+      buildSegments: {
+        page: (targetRangeIndex) =>
+          buildConfigRouteSegments({
+            action: "attribute-page",
+            locale,
+            personaId: persona.persona_id as number,
+            start: targetRangeIndex * CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
+          }),
+      },
+      disabled: readStatus !== "fresh",
+    });
+    if (paginationRow) components.push(paginationRow);
+  }
+
+  if (selectedIndex !== undefined) {
+    const selectedAttribute = attributes[selectedIndex];
+    const isPublic =
+      persona.persona_attributes?.find((attribute) => attribute.attribute_order === selectedIndex + 1)?.is_public ??
+      false;
+    const fp = computeAttributeFingerprint(persona.persona_id as number, selectedIndex, selectedAttribute, isPublic);
+    components.push(
+      { type: ComponentType.TextDisplay, content: renderFencedCollectionContent(selectedAttribute) },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({
+              action: "attribute-edit-open",
+              locale,
+              personaId: persona.persona_id as number,
+              index: selectedIndex,
+              fp,
+            }),
+            label: localizer(locale, "commands.config.panel.attribute_edit_button"),
+            disabled: readStatus !== "fresh" || !mayWrite,
+          },
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Danger,
+            customId: buildConfigRouteId({
+              action: "attribute-remove",
+              locale,
+              personaId: persona.persona_id as number,
+              index: selectedIndex,
+              fp,
+            }),
+            label: localizer(locale, "commands.config.panel.attribute_remove_button"),
+            disabled: readStatus !== "fresh" || !mayWrite,
+          },
+        ],
+      },
+    );
+  }
+
+  return components;
+}
+
+function buildDialogueCollectionBody(input: ConfigPanelRenderInput, persona: TomoriState): ComponentInContainerData[] {
+  const { locale, readStatus } = input;
+  const mayWrite = mayWritePersonaCollection(input, "dialogue-add", input.sampledialogueMemteachingEnabled);
+  const inputs = persona.sample_dialogues_in ?? [];
+  const outputs = persona.sample_dialogues_out ?? [];
+  const pairCount = Math.min(inputs.length, outputs.length);
+  const selectedIndex =
+    input.selectedDialogueIndex !== undefined &&
+    input.selectedDialogueIndex >= 0 &&
+    input.selectedDialogueIndex < pairCount
+      ? input.selectedDialogueIndex
+      : undefined;
+  const rangeIndex = collectionRangeIndex(pairCount, input.dialoguePageStart, selectedIndex);
+  const start = rangeIndex * CONFIG_PERSONA_COLLECTION_PAGE_SIZE;
+  const visibleInputs = inputs.slice(start, start + CONFIG_PERSONA_COLLECTION_PAGE_SIZE);
+  const options: SelectMenuComponentOptionData[] = [
+    ...(mayWrite
+      ? [
+          {
+            label: safeSelectOptionText(localizer(locale, "commands.config.panel.dialogue_add_option"), 100),
+            value: "add",
+          },
+        ]
+      : []),
+    ...visibleInputs.map((dialogue, offset) => ({
+      label: safeSelectOptionText(
+        `${localizer(locale, "commands.config.panel.dialogue_option_prefix")} ${start + offset + 1}: ${dialogue}`,
+        100,
+      ),
+      value: String(start + offset),
+      description: safeSelectOptionText(outputs[start + offset] ?? "", 100),
+      default: start + offset === selectedIndex,
+    })),
+  ];
+
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.TextDisplay,
+      content: `${localizer(locale, "commands.config.panel.dialogues_title")}
+${localizer(locale, "commands.config.panel.dialogues_description")}`,
+    },
+  ];
+
+  if (!mayWrite) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.collection_teaching_disabled")),
+    });
+  }
+
+  if (options.length > 0) {
+    components.push({
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.StringSelect,
+          customId: buildConfigRouteId({ action: "dialogue-select", locale, personaId: persona.persona_id as number }),
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.config.panel.dialogue_select_placeholder"),
+            150,
+          ),
+          options,
+          disabled: readStatus !== "fresh",
+        },
+      ],
+    });
+  }
+
+  if (options.length > 0) {
+    const paginationRow = buildPaginationRow({
+      locale,
+      rangeIndex,
+      rangeCount: Math.max(1, Math.ceil(pairCount / CONFIG_PERSONA_COLLECTION_PAGE_SIZE)),
+      namespace: CONFIG_ROUTE_NAMESPACE,
+      version: CONFIG_ROUTE_VERSION,
+      buildSegments: {
+        page: (targetRangeIndex) =>
+          buildConfigRouteSegments({
+            action: "dialogue-page",
+            locale,
+            personaId: persona.persona_id as number,
+            start: targetRangeIndex * CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
+          }),
+      },
+      disabled: readStatus !== "fresh",
+    });
+    if (paginationRow) components.push(paginationRow);
+  }
+
+  if (selectedIndex !== undefined) {
+    const selectedInput = inputs[selectedIndex];
+    const selectedOutput = outputs[selectedIndex];
+    const fp = computeDialogueFingerprint(persona.persona_id as number, selectedIndex, selectedInput, selectedOutput);
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: renderFencedCollectionContent(
+          `${localizer(locale, "commands.config.panel.dialogue_user_prefix")}: ${selectedInput}
+${localizer(locale, "commands.config.panel.dialogue_bot_prefix")}: ${selectedOutput}`,
+        ),
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({
+              action: "dialogue-edit-open",
+              locale,
+              personaId: persona.persona_id as number,
+              index: selectedIndex,
+              fp,
+            }),
+            label: localizer(locale, "commands.config.panel.dialogue_edit_button"),
+            disabled: readStatus !== "fresh" || !mayWrite,
+          },
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Danger,
+            customId: buildConfigRouteId({
+              action: "dialogue-remove",
+              locale,
+              personaId: persona.persona_id as number,
+              index: selectedIndex,
+              fp,
+            }),
+            label: localizer(locale, "commands.config.panel.dialogue_remove_button"),
+            disabled: readStatus !== "fresh" || !mayWrite,
+          },
+        ],
+      },
+    );
+  }
+
+  return components;
+}
+
 function buildPersonaGeneralBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
   const { locale, actor, personas, selectedPersonaId, readStatus } = input;
   const writesDisabled = readStatus !== "fresh";
@@ -326,6 +648,9 @@ ${localizer(locale, "commands.config.panel.general_description")}`,
   if (identityButtons.length > 0) {
     components.push({ type: ComponentType.ActionRow, components: identityButtons });
   }
+
+  components.push(...buildAttributeCollectionBody(input, persona));
+  components.push(...buildDialogueCollectionBody(input, persona));
 
   const triggerAddState = resolvePersonaGeneralActionState("trigger-add", actor);
   const triggerRemoveState = resolvePersonaGeneralActionState("trigger-remove", actor);
@@ -418,6 +743,151 @@ ${withLinePrefix("> ", describeNamingStyle(locale, persona, namingStyle))}`,
             disabled: writesDisabled || namingState === "disabled",
           },
         ],
+      },
+    );
+  }
+
+  return components;
+}
+
+function buildPersonaMemoriesBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor, personas, selectedPersonaId, readStatus } = input;
+  const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
+  const view = input.personaMemoryView;
+  const writesDisabled = readStatus !== "fresh";
+  const personaId = persona?.persona_id as number;
+  const serverMemoryState = resolvePersonaMemoriesActionState("server-memory-open", actor);
+  const personalMemoryState = resolvePersonaMemoriesActionState("personal-memory-open", actor);
+  const stmEditState = resolvePersonaMemoriesActionState("stm-edit", actor);
+  const conditioningState = resolvePersonaMemoriesActionState("conditioning", actor);
+
+  const heading: TextDisplayComponentData = {
+    type: ComponentType.TextDisplay,
+    content: `### ${localizer(locale, "commands.config.panel.memories_title")}
+${localizer(locale, "commands.config.panel.memories_description")}`,
+  };
+  const components: ComponentInContainerData[] = [
+    buildOptionalThumbnailSection(heading, input.selectedPersonaAvatarUrl),
+  ];
+
+  if (!persona) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: localizer(locale, "commands.config.panel.no_personas"),
+    });
+    return components;
+  }
+
+  const serverMemoryButton = {
+    type: ComponentType.Button,
+    style: ButtonStyle.Secondary,
+    customId: buildConfigRouteId({ action: "server-memory-open", locale, personaId }),
+    label: localizer(locale, "commands.config.panel.open_server_memories_button"),
+    disabled: writesDisabled || serverMemoryState !== "enabled" || !persona.persona_lineage_id,
+  } satisfies ButtonComponentData;
+  const personalMemoryButton = {
+    type: ComponentType.Button,
+    style: ButtonStyle.Secondary,
+    customId: buildConfigRouteId({ action: "personal-memory-open", locale, personaId }),
+    label: localizer(locale, "commands.config.panel.open_personal_memories_button"),
+    disabled: writesDisabled || personalMemoryState !== "enabled" || !persona.persona_lineage_id,
+  } satisfies ButtonComponentData;
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `${localizer(locale, "commands.config.panel.long_term_title")}
+${localizer(locale, "commands.config.panel.long_term_description")}
+${withLinePrefix(
+  "> ",
+  localizer(locale, "commands.config.panel.server_memory_count", {
+    count: String(view?.serverMemoryCount ?? 0),
+  }),
+)}
+${withLinePrefix(
+  "> ",
+  localizer(locale, "commands.config.panel.personal_memory_count", {
+    count: String(view?.personalMemoryCount ?? 0),
+  }),
+)}`,
+    },
+    { type: ComponentType.ActionRow, components: [serverMemoryButton, personalMemoryButton] },
+    {
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.long_term_footer")),
+    },
+  );
+
+  const categoryRows = view?.stmCategories ?? [];
+  const slugMap = buildSlugMap(categoryRows);
+  const isCategoryMode = !(categoryRows.length === 1 && categoryRows[0]?.label.toLowerCase() === "summary");
+  const entry = view?.stmEntry;
+  const stmSections: string[] = [];
+  if (isCategoryMode) {
+    for (const [slug, label] of slugMap) {
+      const value = entry?.categories?.[slug]?.trim();
+      if (value) stmSections.push(`**${label}:**\n${value}`);
+    }
+  } else if (entry?.summary?.trim()) {
+    stmSections.push(entry.summary.trim());
+  }
+  const channelText = view?.channelId
+    ? localizer(locale, "commands.config.panel.stm_active_channel", { channel: `<#${view.channelId}>` })
+    : localizer(locale, "commands.config.panel.stm_no_channel");
+  const stmHeader = `${localizer(locale, "commands.config.panel.stm_title")}
+${localizer(locale, "commands.config.panel.stm_description")}
+${withLinePrefix("> ", channelText)}
+`;
+  const stmContent =
+    stmSections.length > 0
+      ? renderStmContent(locale, stmSections.join("\n\n"), Math.max(0, 3800 - stmHeader.length))
+      : `> ${localizer(locale, "commands.config.panel.stm_empty")}`;
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `${stmHeader}${stmContent}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "stm-edit-open", locale, personaId }),
+          label: localizer(locale, "commands.config.panel.stm_edit_button"),
+          disabled: writesDisabled || stmEditState !== "enabled" || !view?.channelId,
+        },
+      ],
+    },
+  );
+
+  if (input.actor.workspaceKind === "guild") {
+    const conditioningGroups = (view?.conditioningGroups ?? []).filter((group) => group.reasonText.trim().length > 0);
+    const groupLines = conditioningGroups.map((group) => {
+      const actionLabel = localizer(locale, `commands.${group.conditioningType}.${group.actionKey}.history_label`);
+      return `> ${actionLabel}: ${escapeDiscordMarkdown(group.reasonText)} (${group.totalCount})`;
+    });
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: `${localizer(locale, "commands.config.panel.conditioning_title")}
+${localizer(locale, "commands.config.panel.conditioning_description")}
+${groupLines.length > 0 ? groupLines.join("\n") : `> ${localizer(locale, "commands.config.panel.conditioning_none")}`}`,
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "conditioning-open", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.conditioning_manage_button"),
+            disabled: writesDisabled || conditioningState !== "enabled" || conditioningGroups.length === 0,
+          },
+        ],
+      },
+      {
+        type: ComponentType.TextDisplay,
+        content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.conditioning_footer")),
       },
     );
   }
@@ -546,6 +1016,11 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "persona" && page === "general") {
     components.push(...buildPersonaGeneralBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "persona" && page === "memories") {
+    components.push(...buildPersonaMemoriesBody(input));
     return buildPayload(components, receipt);
   }
 

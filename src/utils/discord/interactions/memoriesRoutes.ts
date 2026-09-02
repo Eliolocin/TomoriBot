@@ -946,9 +946,10 @@ const defaultDependencies: MemoriesRouteDependencies = {
 };
 
 export async function buildInitialMemoriesPanel(
-  interaction: ChatInputCommandInteraction,
+  interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
   locale: string,
   dependencies: MemoriesRouteDependencies = defaultDependencies,
+  requestedLineageId?: number,
 ): Promise<MemoriesPanelPayload> {
   const scope = await dependencies.resolveScope(interaction);
   if (!scope) {
@@ -964,7 +965,11 @@ export async function buildInitialMemoriesPanel(
     });
   }
 
-  const selectedLineageId = scope.personas[0]?.persona_lineage_id ?? 0;
+  const requestedPersona =
+    requestedLineageId === undefined
+      ? undefined
+      : scope.personas.find((persona) => persona.persona_lineage_id === requestedLineageId);
+  const selectedLineageId = requestedPersona?.persona_lineage_id ?? scope.personas[0]?.persona_lineage_id ?? 0;
   const ownerFilter = scope.canManage ? undefined : scope.userId;
   const memories = selectedLineageId
     ? await dependencies.loadMemories(scope.serverId, selectedLineageId, ownerFilter)

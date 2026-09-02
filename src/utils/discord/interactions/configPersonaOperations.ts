@@ -1,5 +1,6 @@
 import type { Attachment, APIAttachment } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
+import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import {
   personaNamingConfigSchema,
   validatePersonaNamingAuthoring,
@@ -7,9 +8,16 @@ import {
   type PersonaNamingConfig,
 } from "@/types/personaNaming";
 import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { conditioningMemoryRepository } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import { personaRepository } from "@/utils/db/repositories";
+import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
 import { convertToPNG } from "@/utils/image/imageProcessor";
-import { getMemoryLimits, validateMemoryContent } from "@/utils/misc/memoryLimits";
+import {
+  getMemoryLimits,
+  validateAttribute,
+  validateMemoryContent,
+  validateSampleDialogue,
+} from "@/utils/misc/memoryLimits";
 import { forkPointerForAvatarChange } from "@/utils/persona/pointerFork";
 import { PERSONA_LIMITS, memoryGuard, reserveAvatarQuota } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
@@ -20,6 +28,13 @@ import {
 } from "@/utils/storage/avatarStorage";
 import { normalizeTriggerWord, parseTriggerWordListInput } from "@/utils/text/triggerWords";
 import { log } from "@/utils/misc/logger";
+import {
+  dedupeCaseInsensitive,
+  dedupeSampleDialoguePairs,
+  getNonEmptyNumberedLines,
+  parseSampleDialogueBatch,
+  readTxtUpload,
+} from "@/utils/teach/batchUploadUtils";
 
 export const PERSONA_NICKNAME_MIN_LENGTH = 2;
 export const PERSONA_NICKNAME_MAX_LENGTH = 32;
@@ -92,6 +107,74 @@ type ConfigPromoteResult =
   | { status: "no-main-persona" }
   | { status: "write-failed" };
 
+export type ConfigStmEditResult = { status: "success" } | { status: "write-failed" };
+
+export type ConfigConditioningRemoveResult =
+  | { status: "success"; deletedRows: number }
+  | { status: "no-removals" }
+  | { status: "write-failed" };
+
+export type ConfigAttributeAddResult =
+  | { status: "success"; addedAttributes: string[]; selectedIndex: number }
+  | { status: "invalid-file"; error: "invalid_format" | "file_too_large" | "download_failed" }
+  | { status: "no-input" }
+  | { status: "content-too-long"; currentLength: number; maxAllowed: number }
+  | { status: "duplicate"; attribute: string }
+  | {
+      status: "limit-exceeded";
+      currentCount: number;
+      maxAllowed: number;
+      importCount: number;
+      removeCount: number;
+      batch: boolean;
+    }
+  | { status: "write-failed" };
+
+export type ConfigAttributeEditResult =
+  | { status: "success" }
+  | { status: "unchanged" }
+  | { status: "content-too-long"; currentLength: number; maxAllowed: number }
+  | { status: "duplicate"; attribute: string }
+  | { status: "write-failed" };
+
+export type ConfigAttributeRemoveResult = { status: "success"; removedAttribute: string } | { status: "write-failed" };
+
+export type ConfigDialogueAddResult =
+  | { status: "success"; addedDialogues: Array<{ userInput: string; botInput: string }>; selectedIndex: number }
+  | { status: "invalid-file"; error: "invalid_format" | "file_too_large" | "download_failed" }
+  | { status: "manual-pair-required" }
+  | { status: "invalid-batch"; lineNumber: number; invalidBotPrefix: boolean }
+  | { status: "no-input" }
+  | { status: "user-too-long"; currentLength: number; maxAllowed: number }
+  | { status: "bot-too-long"; currentLength: number; maxAllowed: number }
+  | { status: "duplicate"; input: string }
+  | {
+      status: "limit-exceeded";
+      currentCount: number;
+      maxAllowed: number;
+      importCount: number;
+      removeCount: number;
+      batch: boolean;
+    }
+  | { status: "write-failed" };
+
+export type ConfigDialogueEditResult =
+  | { status: "success" }
+  | { status: "unchanged" }
+  | { status: "user-too-long"; currentLength: number; maxAllowed: number }
+  | { status: "bot-too-long"; currentLength: number; maxAllowed: number }
+  | { status: "duplicate"; input: string }
+  | { status: "write-failed" };
+
+export type ConfigDialogueRemoveResult =
+  | { status: "success"; removedInput: string; removedOutput: string }
+  | { status: "write-failed" };
+
+export type ConfigDialogueRepairResult =
+  | { status: "not-needed"; inputs: string[]; outputs: string[] }
+  | { status: "repaired"; inputs: string[]; outputs: string[] }
+  | { status: "write-failed" };
+
 export interface ConfigPersonaOperations {
   rename(input: {
     persona: TomoriState;
@@ -127,6 +210,63 @@ export interface ConfigPersonaOperations {
     guildId: string;
     guildIdentity: GuildIdentityPort;
   }): Promise<ConfigPromoteResult>;
+  addAttributes(input: {
+    persona: TomoriState;
+    serverDiscId: string;
+    typedAttribute: string;
+    uploadedFile?: APIAttachment;
+    isPublic: boolean;
+  }): Promise<ConfigAttributeAddResult>;
+  editAttribute(input: {
+    persona: TomoriState;
+    serverDiscId: string;
+    index: number;
+    newAttribute: string;
+    isPublic?: boolean;
+  }): Promise<ConfigAttributeEditResult>;
+  removeAttribute(input: {
+    persona: TomoriState;
+    serverDiscId: string;
+    index: number;
+  }): Promise<ConfigAttributeRemoveResult>;
+  addSampleDialogues(input: {
+    persona: TomoriState;
+    serverDiscId: string;
+    typedUserInput: string;
+    typedBotInput: string;
+    uploadedFile?: APIAttachment;
+  }): Promise<ConfigDialogueAddResult>;
+  editSampleDialogue(input: {
+    persona: TomoriState;
+    serverDiscId: string;
+    index: number;
+    newInput: string;
+    newOutput: string;
+  }): Promise<ConfigDialogueEditResult>;
+  removeSampleDialogue(input: {
+    persona: TomoriState;
+    serverDiscId: string;
+    index: number;
+  }): Promise<ConfigDialogueRemoveResult>;
+  repairSampleDialogues(input: { persona: TomoriState; serverDiscId: string }): Promise<ConfigDialogueRepairResult>;
+  editStm(input: {
+    userDiscId: string;
+    channelId: string;
+    serverDiscId: string;
+    serverName?: string;
+    channelName?: string;
+    parentChannelId?: string | null;
+    personaId: number;
+    personaLineageId: number;
+    mode: "summary" | "categories";
+    summary?: string;
+    categories?: Record<string, string>;
+  }): Promise<ConfigStmEditResult>;
+  removeConditioning(input: {
+    serverId: number;
+    personaLineageId: number;
+    groups: Array<Pick<ConditioningGroup, "conditioningType" | "actionKey" | "reasonNormalized">>;
+  }): Promise<ConfigConditioningRemoveResult>;
 }
 
 function updatedNamingMap(
@@ -302,6 +442,298 @@ export const configPersonaOperations: ConfigPersonaOperations = {
 
     invalidateTomoriStateCache(serverDiscId);
     return { status: "success", removedTriggers };
+  },
+
+  async addAttributes({ persona, serverDiscId, typedAttribute, uploadedFile, isPublic }) {
+    const personaId = persona.persona_id;
+    if (!personaId) return { status: "write-failed" };
+
+    const memoryLimits = getMemoryLimits();
+    const pendingAttributes: string[] = [];
+    const trimmedAttribute = typedAttribute.trim();
+    if (trimmedAttribute) pendingAttributes.push(trimmedAttribute);
+
+    if (uploadedFile) {
+      const uploadResult = await readTxtUpload(uploadedFile);
+      if (!uploadResult.isValid || !uploadResult.text) {
+        return { status: "invalid-file", error: uploadResult.error ?? "download_failed" };
+      }
+      pendingAttributes.push(...getNonEmptyNumberedLines(uploadResult.text).map((line) => line.content));
+    }
+
+    if (pendingAttributes.length === 0) return { status: "no-input" };
+
+    const dedupedAttributes = dedupeCaseInsensitive(pendingAttributes);
+    for (const attribute of dedupedAttributes) {
+      const validation = validateAttribute(attribute);
+      if (!validation.isValid) {
+        return {
+          status: "content-too-long",
+          currentLength: attribute.length,
+          maxAllowed: validation.maxAllowed || memoryLimits.maxAttributeLength,
+        };
+      }
+    }
+
+    const currentAttributes = persona.attribute_list ?? [];
+    const existingAttributes = new Set(currentAttributes.map((attribute) => attribute.trim().toLowerCase()));
+    const attributesToAdd = dedupedAttributes.filter((attribute) => !existingAttributes.has(attribute.toLowerCase()));
+    if (attributesToAdd.length === 0) {
+      return { status: "duplicate", attribute: dedupedAttributes[0] ?? trimmedAttribute };
+    }
+
+    const limit = await personaRepository.checkAttributeLimit(personaId);
+    const currentCount = limit.currentCount ?? currentAttributes.length;
+    const maxAllowed = limit.maxAllowed ?? memoryLimits.maxAttributes;
+    const availableSlots = Math.max(0, maxAllowed - currentCount);
+    if (attributesToAdd.length > availableSlots) {
+      return {
+        status: "limit-exceeded",
+        currentCount,
+        maxAllowed,
+        importCount: attributesToAdd.length,
+        removeCount: attributesToAdd.length - availableSlots,
+        batch: Boolean(uploadedFile),
+      };
+    }
+
+    if (!(await personaRepository.addAttributes(personaId, attributesToAdd, isPublic))) {
+      return { status: "write-failed" };
+    }
+
+    invalidateTomoriStateCache(serverDiscId);
+    return {
+      status: "success",
+      addedAttributes: attributesToAdd,
+      selectedIndex: currentAttributes.length + attributesToAdd.length - 1,
+    };
+  },
+
+  async editAttribute({ persona, serverDiscId, index, newAttribute, isPublic }) {
+    const personaId = persona.persona_id;
+    if (!personaId) return { status: "write-failed" };
+
+    const memoryLimits = getMemoryLimits();
+    const currentAttributes = persona.attribute_list ?? [];
+    const currentAttribute = currentAttributes[index];
+    if (currentAttribute === undefined) return { status: "write-failed" };
+
+    const currentIsPublic =
+      persona.persona_attributes?.find((attribute) => attribute.attribute_order === index + 1)?.is_public ?? false;
+    const validation = validateAttribute(newAttribute);
+    if (!validation.isValid) {
+      return {
+        status: "content-too-long",
+        currentLength: newAttribute.length,
+        maxAllowed: validation.maxAllowed || memoryLimits.maxAttributeLength,
+      };
+    }
+
+    const nextIsPublic = isPublic ?? currentIsPublic;
+    if (newAttribute === currentAttribute.trim() && nextIsPublic === currentIsPublic) {
+      return { status: "unchanged" };
+    }
+
+    const duplicateExists = currentAttributes.some(
+      (attribute, attributeIndex) =>
+        attributeIndex !== index && attribute.trim().toLowerCase() === newAttribute.toLowerCase(),
+    );
+    if (duplicateExists) return { status: "duplicate", attribute: newAttribute };
+
+    if (!(await personaRepository.editAttributeAt(personaId, index + 1, newAttribute, isPublic))) {
+      return { status: "write-failed" };
+    }
+
+    invalidateTomoriStateCache(serverDiscId);
+    return { status: "success" };
+  },
+
+  async removeAttribute({ persona, serverDiscId, index }) {
+    const personaId = persona.persona_id;
+    const attribute = persona.attribute_list?.[index];
+    if (!personaId || attribute === undefined) return { status: "write-failed" };
+
+    if (!(await personaRepository.removeAttributeAt(personaId, index + 1))) {
+      return { status: "write-failed" };
+    }
+
+    invalidateTomoriStateCache(serverDiscId);
+    return { status: "success", removedAttribute: attribute };
+  },
+
+  async addSampleDialogues({ persona, serverDiscId, typedUserInput, typedBotInput, uploadedFile }) {
+    const personaId = persona.persona_id;
+    if (!personaId) return { status: "write-failed" };
+
+    const memoryLimits = getMemoryLimits();
+    const pendingDialogues: Array<{ userInput: string; botInput: string }> = [];
+    const trimmedUserInput = typedUserInput.trim();
+    const trimmedBotInput = typedBotInput.trim();
+    if (trimmedUserInput || trimmedBotInput) {
+      if (!trimmedUserInput || !trimmedBotInput) return { status: "manual-pair-required" };
+      pendingDialogues.push({ userInput: trimmedUserInput, botInput: trimmedBotInput });
+    }
+
+    if (uploadedFile) {
+      const uploadResult = await readTxtUpload(uploadedFile);
+      if (!uploadResult.isValid || !uploadResult.text) {
+        return { status: "invalid-file", error: uploadResult.error ?? "download_failed" };
+      }
+      const parsedBatch = parseSampleDialogueBatch(uploadResult.text);
+      if (!parsedBatch.isValid) {
+        return {
+          status: "invalid-batch",
+          lineNumber: parsedBatch.error?.lineNumber ?? 1,
+          invalidBotPrefix: parsedBatch.error?.code === "invalid_bot_prefix",
+        };
+      }
+      pendingDialogues.push(...parsedBatch.pairs);
+    }
+
+    if (pendingDialogues.length === 0) return { status: "no-input" };
+
+    const dedupedDialogues = dedupeSampleDialoguePairs(pendingDialogues);
+    for (const dialogue of dedupedDialogues) {
+      const userValidation = validateSampleDialogue(dialogue.userInput);
+      if (!userValidation.isValid) {
+        return {
+          status: "user-too-long",
+          currentLength: dialogue.userInput.length,
+          maxAllowed: userValidation.maxAllowed || memoryLimits.maxSampleDialogueLength,
+        };
+      }
+      const botValidation = validateSampleDialogue(dialogue.botInput);
+      if (!botValidation.isValid) {
+        return {
+          status: "bot-too-long",
+          currentLength: dialogue.botInput.length,
+          maxAllowed: botValidation.maxAllowed || memoryLimits.maxSampleDialogueLength,
+        };
+      }
+    }
+
+    const currentInputs = persona.sample_dialogues_in ?? [];
+    const currentOutputs = persona.sample_dialogues_out ?? [];
+    const existingDialogues = new Set<string>();
+    const existingLength = Math.min(currentInputs.length, currentOutputs.length);
+    for (let index = 0; index < existingLength; index += 1) {
+      existingDialogues.add(
+        `${currentInputs[index]?.trim().toLowerCase()}|||${currentOutputs[index]?.trim().toLowerCase()}`,
+      );
+    }
+    const dialoguesToAdd = dedupedDialogues.filter(
+      (dialogue) => !existingDialogues.has(`${dialogue.userInput.toLowerCase()}|||${dialogue.botInput.toLowerCase()}`),
+    );
+    if (dialoguesToAdd.length === 0) {
+      return { status: "duplicate", input: dedupedDialogues[0]?.userInput ?? trimmedUserInput };
+    }
+
+    const limit = await personaRepository.checkSampleDialogueLimit(personaId);
+    const currentCount = limit.currentCount ?? currentInputs.length;
+    const maxAllowed = limit.maxAllowed ?? memoryLimits.maxSampleDialogues;
+    const availableSlots = Math.max(0, maxAllowed - currentCount);
+    if (dialoguesToAdd.length > availableSlots) {
+      return {
+        status: "limit-exceeded",
+        currentCount,
+        maxAllowed,
+        importCount: dialoguesToAdd.length,
+        removeCount: dialoguesToAdd.length - availableSlots,
+        batch: Boolean(uploadedFile),
+      };
+    }
+
+    if (
+      !(await personaRepository.addSampleDialoguePair(
+        personaId,
+        dialoguesToAdd.map((dialogue) => dialogue.userInput),
+        dialoguesToAdd.map((dialogue) => dialogue.botInput),
+      ))
+    ) {
+      return { status: "write-failed" };
+    }
+
+    invalidateTomoriStateCache(serverDiscId);
+    return {
+      status: "success",
+      addedDialogues: dialoguesToAdd,
+      selectedIndex: currentInputs.length + dialoguesToAdd.length - 1,
+    };
+  },
+
+  async editSampleDialogue({ persona, serverDiscId, index, newInput, newOutput }) {
+    const personaId = persona.persona_id;
+    const currentInput = persona.sample_dialogues_in?.[index];
+    const currentOutput = persona.sample_dialogues_out?.[index];
+    if (!personaId || currentInput === undefined || currentOutput === undefined) return { status: "write-failed" };
+
+    const memoryLimits = getMemoryLimits();
+    const inputValidation = validateSampleDialogue(newInput);
+    if (!inputValidation.isValid) {
+      return {
+        status: "user-too-long",
+        currentLength: newInput.length,
+        maxAllowed: inputValidation.maxAllowed || memoryLimits.maxSampleDialogueLength,
+      };
+    }
+    const outputValidation = validateSampleDialogue(newOutput);
+    if (!outputValidation.isValid) {
+      return {
+        status: "bot-too-long",
+        currentLength: newOutput.length,
+        maxAllowed: outputValidation.maxAllowed || memoryLimits.maxSampleDialogueLength,
+      };
+    }
+    if (newInput === currentInput.trim() && newOutput === currentOutput.trim()) return { status: "unchanged" };
+
+    const inputs = persona.sample_dialogues_in ?? [];
+    const outputs = persona.sample_dialogues_out ?? [];
+    const duplicateExists = inputs.some(
+      (input, inputIndex) =>
+        inputIndex !== index &&
+        `${input.trim().toLowerCase()}|||${outputs[inputIndex]?.trim().toLowerCase()}` ===
+          `${newInput.toLowerCase()}|||${newOutput.toLowerCase()}`,
+    );
+    if (duplicateExists) return { status: "duplicate", input: newInput };
+
+    if (!(await personaRepository.editSampleDialoguePairAt(personaId, index + 1, newInput, newOutput))) {
+      return { status: "write-failed" };
+    }
+
+    invalidateTomoriStateCache(serverDiscId);
+    return { status: "success" };
+  },
+
+  async removeSampleDialogue({ persona, serverDiscId, index }) {
+    const personaId = persona.persona_id;
+    const removedInput = persona.sample_dialogues_in?.[index];
+    const removedOutput = persona.sample_dialogues_out?.[index];
+    if (!personaId || removedInput === undefined || removedOutput === undefined) return { status: "write-failed" };
+
+    if (!(await personaRepository.removeSampleDialoguePairAt(personaId, index + 1))) {
+      return { status: "write-failed" };
+    }
+
+    invalidateTomoriStateCache(serverDiscId);
+    return { status: "success", removedInput, removedOutput };
+  },
+
+  async repairSampleDialogues({ persona, serverDiscId }) {
+    const personaId = persona.persona_id;
+    const inputs = [...(persona.sample_dialogues_in ?? [])];
+    const outputs = [...(persona.sample_dialogues_out ?? [])];
+    if (!personaId) return { status: "write-failed" };
+    if (inputs.length === outputs.length) return { status: "not-needed", inputs, outputs };
+
+    const safeLength = Math.min(inputs.length, outputs.length);
+    log.warn(
+      `Self-healing: truncating sample dialogues for persona ${personaId} from (in: ${inputs.length}, out: ${outputs.length}) to ${safeLength} pairs`,
+    );
+    const repaired = await personaRepository.repairSampleDialogues(personaId, safeLength);
+    if (!repaired) return { status: "write-failed" };
+
+    invalidateTomoriStateCache(serverDiscId);
+    return { status: "repaired", inputs: repaired.repairedIn, outputs: repaired.repairedOut };
   },
 
   async replaceAvatar({ persona, serverDiscId, guildId, attachment, guildIdentity }) {
@@ -488,5 +920,61 @@ export const configPersonaOperations: ConfigPersonaOperations = {
       avatarRateLimited,
       avatarAttempted,
     };
+  },
+
+  async editStm({
+    userDiscId,
+    channelId,
+    serverDiscId,
+    serverName,
+    channelName,
+    parentChannelId,
+    personaId,
+    personaLineageId,
+    mode,
+    summary,
+    categories,
+  }) {
+    if (mode === "categories") {
+      await shortTermMemoryRepository.updateCategories(
+        userDiscId,
+        channelId,
+        categories ?? {},
+        serverDiscId,
+        serverName,
+        channelName,
+        personaId,
+        personaLineageId,
+        parentChannelId,
+      );
+      return { status: "success" };
+    }
+
+    // Summary and clear update the cache synchronously and let their durable write float, while
+    // the categories writer is genuinely async. The panel repaints from that cache, so awaiting
+    // these two would buy nothing and would put the STM tool's hot path behind two database round
+    // trips, which is what the absorbed command already avoids.
+    if (summary?.trim()) {
+      shortTermMemoryRepository.updateSummary(
+        userDiscId,
+        channelId,
+        summary.trim(),
+        serverDiscId,
+        serverName,
+        channelName,
+        personaId,
+        personaLineageId,
+        parentChannelId,
+      );
+    } else {
+      shortTermMemoryRepository.clearSummary(userDiscId, channelId, personaId, serverDiscId);
+    }
+    return { status: "success" };
+  },
+
+  async removeConditioning({ serverId, personaLineageId, groups }) {
+    if (groups.length === 0) return { status: "no-removals" };
+    const deletedRows = await conditioningMemoryRepository.deleteGroupsForPersona(serverId, personaLineageId, groups);
+    return deletedRows > 0 ? { status: "success", deletedRows } : { status: "no-removals" };
   },
 };
