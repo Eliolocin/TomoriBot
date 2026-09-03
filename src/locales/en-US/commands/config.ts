@@ -612,6 +612,16 @@ channels.`,
       capability_image: `Standard Image`,
       capability_nai_image: `NovelAI Image`,
       capability_video: `Video`,
+      image_generation_enabled_direction: `Image generation is enabled.
+Manage it under Permissions > Bot Capabilities.`,
+      image_generation_disabled_direction: `Image generation is disabled.
+Enable it under Permissions > Bot Capabilities.`,
+      image_generation_missing_model: `No usable model is configured for Image generation.`,
+      video_generation_enabled_direction: `Video generation is enabled.
+Manage it under Permissions > Bot Capabilities.`,
+      video_generation_disabled_direction: `Video generation is disabled.
+Enable it under Permissions > Bot Capabilities.`,
+      video_generation_missing_model: `No usable model is configured for Video generation.`,
       no_providers_option: `No saved provider for this feature`,
       model_select_placeholder: `Choose a model...`,
       model_clear_option: `None (clear this slot)`,

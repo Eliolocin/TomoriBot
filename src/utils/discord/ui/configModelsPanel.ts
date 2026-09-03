@@ -56,6 +56,8 @@ export interface ConfigSwitchModelsView {
   slots: ConfigModelSlotView[];
   channelOverrideCount: number;
   personaOverrideCount: number;
+  imageGenerationEnabled: boolean;
+  videoGenerationEnabled: boolean;
 }
 
 export interface ConfigParametersView {
@@ -114,6 +116,56 @@ function heading(locale: string, titleKey: string, descriptionKey: string): Comp
     type: ComponentType.TextDisplay,
     content: `### ${localizer(locale, titleKey)}\n${localizer(locale, descriptionKey)}`,
   };
+}
+
+function hasUsableModel(slot: ConfigModelSlotView): boolean {
+  // A model row can outlive its saved provider, so both the assignment and provider eligibility
+  // are required before the slot can back a generation request.
+  return (
+    slot.currentModelName !== null &&
+    slot.currentProvider !== null &&
+    slot.eligibleProviders.includes(slot.currentProvider)
+  );
+}
+
+function appendCapabilityStatus(
+  components: ComponentInContainerData[],
+  locale: string,
+  view: ConfigSwitchModelsView,
+  capability: "image" | "video",
+): void {
+  const enabled = capability === "image" ? view.imageGenerationEnabled : view.videoGenerationEnabled;
+  // One Image flag enables either provider-specific image path, so one usable image slot is enough.
+  const hasModel =
+    capability === "image"
+      ? view.slots.some(
+          (slot) => (slot.capability === "image" || slot.capability === "nai-image") && hasUsableModel(slot),
+        )
+      : view.slots.some((slot) => slot.capability === "video" && hasUsableModel(slot));
+  const direction =
+    capability === "image"
+      ? enabled
+        ? localizer(locale, "commands.config.panel.image_generation_enabled_direction")
+        : localizer(locale, "commands.config.panel.image_generation_disabled_direction")
+      : enabled
+        ? localizer(locale, "commands.config.panel.video_generation_enabled_direction")
+        : localizer(locale, "commands.config.panel.video_generation_disabled_direction");
+  const missingModel =
+    capability === "image"
+      ? localizer(locale, "commands.config.panel.image_generation_missing_model")
+      : localizer(locale, "commands.config.panel.video_generation_missing_model");
+
+  components.push({
+    type: ComponentType.TextDisplay,
+    content: withLinePrefix("-# ", direction),
+  });
+
+  if (enabled && !hasModel) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", missingModel),
+    });
+  }
 }
 
 function buildModelListBody(input: ConfigModelsPageInput, view: ConfigModelListView): ComponentInContainerData[] {
@@ -295,6 +347,9 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
         ],
       } satisfies ActionRowData<ButtonComponentData>);
     }
+
+    if (capability === "nai-image") appendCapabilityStatus(components, locale, view, "image");
+    if (capability === "video") appendCapabilityStatus(components, locale, view, "video");
   }
 
   // Only Text carries narrower scopes, so the summary names those two editors rather than implying

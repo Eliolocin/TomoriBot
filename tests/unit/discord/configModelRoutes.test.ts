@@ -35,6 +35,7 @@ import type { ConfigRouteDependencies, ConfigScope } from "@/utils/discord/inter
 import { InteractionRouteRegistry } from "@/utils/discord/interactions/routeRegistry";
 import { buildConfigModalFieldId } from "@/utils/discord/ui/configModals";
 import { buildConfigFallbackSlotId } from "@/utils/discord/ui/configModelModals";
+import { buildConfigPanelPayload } from "@/utils/discord/ui/configPanel";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
@@ -62,6 +63,8 @@ function makeState(overrides: Record<string, unknown> = {}): TomoriState {
       diffusion_model_id: null,
       nai_diffusion_model_id: null,
       video_model_id: null,
+      imagegen_enabled: true,
+      videogen_enabled: false,
       llm_temperature: 1,
       llm_top_p: 0.95,
       llm_top_k: 0,
@@ -124,6 +127,7 @@ interface HarnessOptions {
   refreshedState?: TomoriState;
   switchProviders?: Record<string, string[]>;
   currentModels?: Partial<Record<ConfigModelCapability, string | null>>;
+  currentProviders?: Partial<Record<ConfigModelCapability, string | null>>;
   models?: Array<{ id: number; name: string; description: string | null }>;
   parametersProviders?: string[];
   selectedConfig?: SavedProviderConfigRow | null;
@@ -184,7 +188,7 @@ function makeHarness(options: HarnessOptions = {}): Harness {
       takeCheckboxValues: (_interactionId, fieldId) => checkboxValues[fieldId],
       takeSelectValue: (_interactionId, fieldId) => selectValues[fieldId],
       takeFileUpload: () => undefined,
-      loadSwitchModelsView: async (_state, providerPage) => ({
+      loadSwitchModelsView: async (state, providerPage) => ({
         slots: (["text", "vision", "embedding", "image", "nai-image", "video"] as ConfigModelCapability[]).map(
           (capability) => ({
             capability,
@@ -194,13 +198,20 @@ function makeHarness(options: HarnessOptions = {}): Harness {
                 : capability === "text"
                   ? "gemini-2.5-flash"
                   : null,
-            currentProvider: capability === "text" ? "google" : null,
+            currentProvider:
+              options.currentProviders?.[capability] !== undefined
+                ? options.currentProviders[capability]
+                : capability === "text"
+                  ? "google"
+                  : null,
             eligibleProviders: options.switchProviders?.[capability] ?? ["google"],
             providerPageStart: providerPage?.capability === capability ? providerPage.start : 0,
           }),
         ),
         channelOverrideCount: 3,
         personaOverrideCount: 2,
+        imageGenerationEnabled: state.config.imagegen_enabled,
+        videoGenerationEnabled: state.config.videogen_enabled,
       }),
       loadParametersView: async (_state, requestedProvider) => {
         const providers = options.parametersProviders ?? ["google"];
@@ -312,6 +323,15 @@ function renderedText(payload: unknown): string {
   return JSON.stringify(payload);
 }
 
+function textDisplayContents(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(textDisplayContents);
+  if (typeof value !== "object" || value === null) return [];
+
+  const record = value as Record<string, unknown>;
+  const content = record.type === 10 && typeof record.content === "string" ? [record.content] : [];
+  return [...content, ...Object.values(record).flatMap(textDisplayContents)];
+}
+
 /** Options of the model-catalog select, addressed by its route rather than by row position. */
 function modelSelectOptions(payload: unknown): Array<{ value: string }> {
   const parsed = JSON.parse(JSON.stringify(payload)) as {
@@ -409,6 +429,144 @@ describe("config models switch page", () => {
         buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "video" }),
     );
     expect(videoRow.components[0].disabled).toBe(true);
+  });
+
+  it("shows capability state and warns only when enabled generation lacks a usable model", async () => {
+    const missing = makeHarness({
+      state: makeState({ config: { imagegen_enabled: true, videogen_enabled: true } }),
+    });
+    await dispatch(
+      missing,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: missing,
+      }),
+    );
+
+    const missingContents = textDisplayContents(missing.edits.at(-1));
+    expect(missingContents.some((content) => content.includes("Image generation is enabled."))).toBe(true);
+    expect(missingContents.some((content) => content.includes("Manage it under Permissions > Bot Capabilities."))).toBe(
+      true,
+    );
+    expect(
+      missingContents.some((content) => content.includes("No usable model is configured for Image generation.")),
+    ).toBe(true);
+    expect(missingContents.some((content) => content.includes("Video generation is enabled."))).toBe(true);
+    expect(
+      missingContents.some((content) => content.includes("No usable model is configured for Video generation.")),
+    ).toBe(true);
+
+    const disabled = makeHarness({
+      state: makeState({ config: { imagegen_enabled: false, videogen_enabled: false } }),
+    });
+    await dispatch(
+      disabled,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: disabled,
+      }),
+    );
+
+    const disabledContents = textDisplayContents(disabled.edits.at(-1));
+    expect(disabledContents.some((content) => content.includes("Image generation is disabled."))).toBe(true);
+    expect(disabledContents.some((content) => content.includes("Video generation is disabled."))).toBe(true);
+    expect(
+      disabledContents.some((content) => content.includes("No usable model is configured for Image generation.")),
+    ).toBe(false);
+    expect(
+      disabledContents.some((content) => content.includes("No usable model is configured for Video generation.")),
+    ).toBe(false);
+
+    const healthy = makeHarness({
+      state: makeState({ config: { imagegen_enabled: true, videogen_enabled: true } }),
+      currentModels: { image: "imagen", video: "veo" },
+      currentProviders: { image: "google", video: "google" },
+    });
+    await dispatch(
+      healthy,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: healthy,
+      }),
+    );
+
+    const healthyContents = textDisplayContents(healthy.edits.at(-1));
+    expect(healthyContents.some((content) => content.includes("No usable model is configured"))).toBe(false);
+
+    const novelAiOnly = makeHarness({
+      state: makeState({ config: { imagegen_enabled: true, videogen_enabled: false } }),
+      switchProviders: { image: [], "nai-image": ["novelai"] },
+      currentModels: { "nai-image": "nai-diffusion" },
+      currentProviders: { "nai-image": "novelai" },
+    });
+    await dispatch(
+      novelAiOnly,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: novelAiOnly,
+      }),
+    );
+
+    const novelAiOnlyContents = textDisplayContents(novelAiOnly.edits.at(-1));
+    expect(
+      novelAiOnlyContents.some((content) => content.includes("No usable model is configured for Image generation.")),
+    ).toBe(false);
+  });
+
+  it("treats a populated slot with an ineligible provider as unusable", async () => {
+    const harness = makeHarness({
+      state: makeState({ config: { imagegen_enabled: true, videogen_enabled: false } }),
+      switchProviders: { image: [] },
+      currentModels: { image: "stale-imagen" },
+      currentProviders: { image: "google" },
+    });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness,
+      }),
+    );
+
+    expect(
+      textDisplayContents(harness.edits.at(-1)).some((content) =>
+        content.includes("No usable model is configured for Image generation."),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not query repositories while rendering capability status", async () => {
+    const diffusionLookup = spyOn(llmModelRepo, "loadDiffusionModelById").mockResolvedValue(null);
+    const videoLookup = spyOn(llmModelRepo, "loadVideoGenerationModelById").mockResolvedValue(null);
+    const harness = makeHarness({
+      state: makeState({ config: { imagegen_enabled: true, videogen_enabled: true } }),
+    });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness,
+      }),
+    );
+
+    expect(diffusionLookup).not.toHaveBeenCalled();
+    expect(videoLookup).not.toHaveBeenCalled();
+    diffusionLookup.mockRestore();
+    videoLookup.mockRestore();
   });
 
   it("renders provider-independent clear buttons only for populated image slots", async () => {
@@ -1424,6 +1582,22 @@ describe("config models view loaders", () => {
     expect(view.slots).toHaveLength(6);
     expect(view.channelOverrideCount).toBe(1);
     expect(view.personaOverrideCount).toBe(2);
+    expect(view.imageGenerationEnabled).toBe(true);
+    expect(view.videoGenerationEnabled).toBe(false);
+
+    const payload = buildConfigPanelPayload({
+      locale: "en-US",
+      actor: { workspaceKind: "guild", isManager: true },
+      category: "models",
+      page: "switch",
+      personas: [makeState()],
+      selectedPersonaId: 55,
+      readStatus: "fresh",
+      switchModelsView: view,
+    });
+    const contents = textDisplayContents(payload);
+    expect(contents.some((content) => content.includes("Image generation is enabled."))).toBe(true);
+    expect(contents.some((content) => content.includes("Video generation is disabled."))).toBe(true);
 
     providers.mockRestore();
     channelOverrides.mockRestore();

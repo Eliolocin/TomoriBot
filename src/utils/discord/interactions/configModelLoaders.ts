@@ -95,6 +95,8 @@ export async function loadConfigSwitchModelsView(
     slots,
     channelOverrideCount: channelOverrides.length,
     personaOverrideCount: personaOverrides.length,
+    imageGenerationEnabled: state.config.imagegen_enabled,
+    videoGenerationEnabled: state.config.videogen_enabled,
   };
 }
 
