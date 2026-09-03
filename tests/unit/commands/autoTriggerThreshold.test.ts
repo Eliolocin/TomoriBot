@@ -5,7 +5,7 @@ import {
   MIN_THRESHOLD,
   rollAutochatTarget,
   validateThresholdInput,
-} from "@/commands/server/auto-trigger/threshold";
+} from "@/utils/discord/autoTriggerThreshold";
 
 describe("/server auto-trigger threshold write plan", () => {
   describe("validateThresholdInput", () => {

@@ -1,9 +1,12 @@
 import {
   ButtonStyle,
+  ChannelType,
   ComponentType,
   MessageFlags,
+  SelectMenuDefaultValueType,
   type ActionRowData,
   type ButtonComponentData,
+  type ChannelSelectMenuComponentData,
   type ComponentInContainerData,
   type SelectMenuComponentOptionData,
   type StringSelectMenuComponentData,
@@ -20,10 +23,12 @@ import {
   CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
   CONFIG_ROUTE_NAMESPACE,
   CONFIG_ROUTE_VERSION,
+  CONFIG_MODEL_PAGE_SIZE,
   DEFAULT_PAGE_FOR_CONFIG_CATEGORY,
   buildConfigRouteId,
   buildConfigRouteSegments,
   computeAttributeFingerprint,
+  computeChannelOverridesFingerprint,
   computeDialogueFingerprint,
   computeSpriteFingerprint,
   type ConfigCategory,
@@ -37,12 +42,17 @@ import {
   resolvePersonaGeneralActionState,
   resolvePersonaSpritesActionState,
   resolveBehaviorGeneralActionState,
+  resolveChannelsDestinationsActionState,
+  resolveChannelsAutoTriggerActionState,
+  resolveChannelsRulesActionState,
+  resolveChannelsOverridesActionState,
   resolvePermissionsCapabilitiesActionState,
   resolvePermissionsPrivacyActionState,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
 } from "@/utils/discord/interactions/configPermissionPolicy";
+import { CHECKLIST_CHANNELS_PER_PAGE } from "@/utils/discord/channelChecklistManager";
 import {
   createHumanizerOptions,
   getHumanizerLabel,
@@ -50,6 +60,8 @@ import {
   HUMANIZER_INHERIT_VALUE,
 } from "@/utils/discord/humanizerOptions";
 import type {
+  ConfigChannelsView,
+  ConfigChannelsOverridesView,
   ConfigBehaviorView,
   ConfigPermissionsView,
   ConfigPersonaMemoryView,
@@ -85,6 +97,7 @@ import { buildTextPreview } from "@/utils/text/textPreview";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { getCapabilitiesManagePermissionDefinitions } from "@/utils/discord/manageConfigMapping";
+import { buildDocsUrl, DOCS_PATHS } from "@/utils/discord/docsLinks";
 
 const RANDOM_TRIGGER_PAGE_SIZE = CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY;
 
@@ -103,6 +116,20 @@ export type ConfigPanelView =
   | {
       kind: "text-override-model";
       personaId: number;
+      provider: string;
+      models: LlmRow[];
+      start: number;
+    }
+  | {
+      kind: "channel-text-override-provider";
+      channelId: string;
+      fp: string;
+      providers: string[];
+    }
+  | {
+      kind: "channel-text-override-model";
+      channelId: string;
+      fp: string;
       provider: string;
       models: LlmRow[];
       start: number;
@@ -193,6 +220,12 @@ export interface ConfigPanelRenderInput {
   randomTriggerPageStart?: number;
   behaviorView?: ConfigBehaviorView;
   permissionsView?: ConfigPermissionsView;
+  channelsView?: ConfigChannelsView;
+  channelsSelectedChannelId?: string | null;
+  channelsAutoTriggerRangeIndex?: number;
+  channelsPrivateRangeIndex?: number;
+  channelsRoleplayRangeIndex?: number;
+  channelsBlocklistRangeIndex?: number;
 }
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): ConfigPanelPayload {
@@ -2566,6 +2599,657 @@ ${localizer(locale, "commands.config.panel.permissions_privacy_bypass_descriptio
   return components;
 }
 
+export function buildChannelsDestinationsBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor } = input;
+  const view = input.channelsView?.destinations;
+  const writesDisabled = input.readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.channels_destinations_title")}
+${localizer(locale, "commands.config.panel.channels_destinations_description")}`,
+    },
+  ];
+
+  if (actor.workspaceKind === "guild" && !actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+    return components;
+  }
+  if (!view) return components;
+
+  const actionDisabled = writesDisabled || resolveChannelsDestinationsActionState("log", actor) !== "enabled";
+  const logChannelId = view.thoughtLogChannelId;
+  const welcomeChannelId = view.welcomeChannelId;
+  const welcomePersona =
+    view.welcomePersonaId === null
+      ? localizer(locale, "commands.config.panel.channels_welcome_random_label")
+      : (input.personas.find((persona) => persona.persona_id === view.welcomePersonaId)?.persona_nickname ??
+        localizer(locale, "commands.config.panel.none_label"));
+  const clearLogDisabled = actionDisabled || !logChannelId;
+  const clearWelcomeDisabled = actionDisabled || (!welcomeChannelId && !view.welcomePrompt);
+
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.channels_logs_title")}**
+${localizer(locale, "commands.config.panel.channels_logs_description")}
+> ${localizer(locale, "commands.config.panel.channels_destination_label")}: ${logChannelId ? `<#${logChannelId}>` : localizer(locale, "commands.config.panel.none_label")}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "channels-log-open", locale }),
+          label: localizer(locale, "commands.config.panel.channels_set_log_button"),
+          disabled: actionDisabled,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({
+            action: "channels-log-clear",
+            locale,
+            ...(logChannelId ? { channelId: logChannelId } : {}),
+          }),
+          label: localizer(locale, "commands.config.panel.channels_clear_log_button"),
+          disabled: clearLogDisabled,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.channels_welcome_title")}**
+${localizer(locale, "commands.config.panel.channels_welcome_description")}
+> ${localizer(locale, "commands.config.panel.channels_destination_label")}: ${welcomeChannelId ? `<#${welcomeChannelId}>` : localizer(locale, "commands.config.panel.none_label")}
+> ${localizer(locale, "commands.config.panel.channels_welcome_persona_value_label")}: ${welcomePersona}
+${localizer(locale, "commands.config.panel.channels_welcome_prompt_value_label")}:
+${renderFencedCollectionContent(view.welcomePrompt ?? localizer(locale, "commands.config.panel.none_label"))}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "channels-welcome-open", locale }),
+          label: localizer(locale, "commands.config.panel.channels_configure_welcome_button"),
+          disabled: actionDisabled,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({
+            action: "channels-welcome-clear",
+            locale,
+            ...(welcomeChannelId ? { channelId: welcomeChannelId } : {}),
+          }),
+          label: localizer(locale, "commands.config.panel.channels_clear_welcome_button"),
+          disabled: clearWelcomeDisabled,
+        },
+      ],
+    },
+  );
+  return components;
+}
+
+function autoTriggerPersonaName(
+  channelId: string,
+  overrides: ReadonlyMap<string, number>,
+  personas: readonly TomoriState[],
+  locale: string,
+): string {
+  const mainPersona = personas.find((persona) => !persona.is_alter) ?? personas[0];
+  const personaId = overrides.get(channelId) ?? mainPersona?.persona_id;
+  return (
+    escapeDiscordMarkdown(personas.find((persona) => persona.persona_id === personaId)?.persona_nickname ?? "") ||
+    localizer(locale, "commands.config.panel.none_label")
+  );
+}
+
+export function buildChannelsAutoTriggerBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor } = input;
+  const view = input.channelsView?.autoTrigger;
+  const writesDisabled = input.readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.channels_auto_trigger_title")}
+${localizer(locale, "commands.config.panel.channels_auto_trigger_description")}`,
+    },
+  ];
+
+  if (actor.workspaceKind === "guild" && !actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+    return components;
+  }
+  if (!view || !input.channelsView) return components;
+
+  const actionDisabled = writesDisabled || resolveChannelsAutoTriggerActionState("auto-trigger", actor) !== "enabled";
+  const rangeIndex = input.channelsAutoTriggerRangeIndex ?? 0;
+  const overrides = new Map(view.personaOverrides.map((override) => [override.channel_disc_id, override.persona_id]));
+  const enabledRows = view.enabledChannels.map(
+    (channel) => `<#${channel.id}>: ${autoTriggerPersonaName(channel.id, overrides, input.personas, locale)}`,
+  );
+  const threshold =
+    view.threshold === 0
+      ? localizer(locale, "commands.config.panel.channels_auto_trigger_every_message")
+      : view.maxThreshold > view.threshold
+        ? localizer(locale, "commands.config.panel.channels_auto_trigger_range_value", {
+            min: view.threshold,
+            max: view.maxThreshold,
+          })
+        : localizer(locale, "commands.config.panel.channels_auto_trigger_fixed_value", {
+            threshold: view.threshold,
+          });
+
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.channels_auto_trigger_enabled_title")}**
+${localizer(locale, "commands.config.panel.channels_auto_trigger_enabled_description")}
+${withLinePrefix("> ", enabledRows.join("\n") || localizer(locale, "commands.config.panel.channels_auto_trigger_none"))}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "channels-autoch-manage-open", locale, start: rangeIndex }),
+          label: localizer(locale, "commands.config.panel.channels_auto_trigger_manage_button"),
+          disabled: actionDisabled || input.channelsView.availableTextChannels.length === 0,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "channels-autoch-configure-open", locale }),
+          label: localizer(locale, "commands.config.panel.channels_auto_trigger_configure_button"),
+          disabled: actionDisabled || input.channelsView.availableTextChannels.length === 0,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.channels_auto_trigger_threshold_title")}**
+${localizer(locale, "commands.config.panel.channels_auto_trigger_threshold_description")}
+> ${localizer(locale, "commands.config.panel.channels_auto_trigger_threshold_value_label")}: ${threshold}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "channels-autoch-threshold-open", locale }),
+          label: localizer(locale, "commands.config.panel.channels_auto_trigger_edit_threshold_button"),
+          disabled: writesDisabled || resolveChannelsAutoTriggerActionState("threshold", actor) !== "enabled",
+        },
+      ],
+    },
+  );
+
+  const rangeCount = Math.max(
+    1,
+    Math.ceil(input.channelsView.availableTextChannels.length / CHECKLIST_CHANNELS_PER_PAGE),
+  );
+  const pagination = buildPaginationRow({
+    locale,
+    rangeIndex,
+    rangeCount,
+    namespace: CONFIG_ROUTE_NAMESPACE,
+    version: CONFIG_ROUTE_VERSION,
+    buildSegments: {
+      page: (start) => buildConfigRouteSegments({ action: "channels-autoch-page", locale, start }),
+    },
+    disabled: writesDisabled,
+  });
+  if (pagination) components.push(pagination);
+
+  return components;
+}
+
+function buildChannelRulesCollectionSection(options: {
+  locale: string;
+  title: string;
+  description: string;
+  members: string[];
+  manageCustomId: string;
+  manageLabel: string;
+  pagination: ActionRowData<ButtonComponentData> | null;
+  disabled: boolean;
+  noChannels: boolean;
+}): ComponentInContainerData[] {
+  return [
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${options.title}**
+${options.description}
+${withLinePrefix("> ", options.members.join("\n") || localizer(options.locale, "commands.config.panel.none_label"))}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: options.manageCustomId,
+          label: options.manageLabel,
+          disabled: options.disabled || options.noChannels,
+        },
+      ],
+    },
+    ...(options.pagination ? [options.pagination] : []),
+  ];
+}
+
+export function buildChannelsRulesBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor } = input;
+  const view = input.channelsView?.rules;
+  const writesDisabled = input.readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.channels_rules_title")}
+${localizer(locale, "commands.config.panel.channels_rules_description")}`,
+    },
+  ];
+
+  if (actor.workspaceKind === "guild" && !actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+    return components;
+  }
+  if (!view || !input.channelsView) return components;
+
+  const privateActionDisabled = writesDisabled || resolveChannelsRulesActionState("private", actor) !== "enabled";
+  const roleplayActionDisabled = writesDisabled || resolveChannelsRulesActionState("roleplay", actor) !== "enabled";
+  const blocklistActionDisabled = writesDisabled || resolveChannelsRulesActionState("blocklist", actor) !== "enabled";
+  const privateRangeCount = Math.max(
+    1,
+    Math.ceil(input.channelsView.availableTextChannels.length / CHECKLIST_CHANNELS_PER_PAGE),
+  );
+  const roleplayRangeCount = privateRangeCount;
+  const blocklistRangeCount = Math.max(
+    1,
+    Math.ceil(input.channelsView.availableBlocklistChannels.length / CHECKLIST_CHANNELS_PER_PAGE),
+  );
+
+  components.push(
+    ...buildChannelRulesCollectionSection({
+      locale,
+      title: localizer(locale, "commands.config.panel.channels_rules_private_title"),
+      description: localizer(locale, "commands.config.panel.channels_rules_private_description"),
+      members: view.privateChannels.map((channel) => `<#${channel.id}>`),
+      manageCustomId: buildConfigRouteId({
+        action: "channels-private-manage-open",
+        locale,
+        start: input.channelsPrivateRangeIndex ?? 0,
+      }),
+      manageLabel: localizer(locale, "commands.config.panel.channels_rules_private_manage_button"),
+      pagination: buildPaginationRow({
+        locale,
+        rangeIndex: input.channelsPrivateRangeIndex ?? 0,
+        rangeCount: privateRangeCount,
+        namespace: CONFIG_ROUTE_NAMESPACE,
+        version: CONFIG_ROUTE_VERSION,
+        buildSegments: {
+          page: (start) => buildConfigRouteSegments({ action: "channels-private-page", locale, start }),
+        },
+        disabled: writesDisabled,
+      }),
+      disabled: privateActionDisabled,
+      noChannels: input.channelsView.availableTextChannels.length === 0,
+    }),
+    ...buildChannelRulesCollectionSection({
+      locale,
+      title: `[${localizer(locale, "commands.config.panel.channels_rules_roleplay_title")}](${buildDocsUrl(DOCS_PATHS.ROLEPLAY_CHANNELS)})`,
+      description: localizer(locale, "commands.config.panel.channels_rules_roleplay_description"),
+      members: view.roleplayChannels.map((channel) => `<#${channel.id}>`),
+      manageCustomId: buildConfigRouteId({
+        action: "channels-rp-manage-open",
+        locale,
+        start: input.channelsRoleplayRangeIndex ?? 0,
+      }),
+      manageLabel: localizer(locale, "commands.config.panel.channels_rules_roleplay_manage_button"),
+      pagination: buildPaginationRow({
+        locale,
+        rangeIndex: input.channelsRoleplayRangeIndex ?? 0,
+        rangeCount: roleplayRangeCount,
+        namespace: CONFIG_ROUTE_NAMESPACE,
+        version: CONFIG_ROUTE_VERSION,
+        buildSegments: {
+          page: (start) => buildConfigRouteSegments({ action: "channels-rp-page", locale, start }),
+        },
+        disabled: writesDisabled,
+      }),
+      disabled: roleplayActionDisabled,
+      noChannels: input.channelsView.availableTextChannels.length === 0,
+    }),
+    ...buildChannelRulesCollectionSection({
+      locale,
+      title: localizer(locale, "commands.config.panel.channels_rules_blocklist_title"),
+      description: localizer(locale, "commands.config.panel.channels_rules_blocklist_description"),
+      members: view.crossChannelBlocklist.map((channel) => `<#${channel.id}>`),
+      manageCustomId: buildConfigRouteId({
+        action: "channels-blocklist-manage-open",
+        locale,
+        start: input.channelsBlocklistRangeIndex ?? 0,
+      }),
+      manageLabel: localizer(locale, "commands.config.panel.channels_rules_blocklist_manage_button"),
+      pagination: buildPaginationRow({
+        locale,
+        rangeIndex: input.channelsBlocklistRangeIndex ?? 0,
+        rangeCount: blocklistRangeCount,
+        namespace: CONFIG_ROUTE_NAMESPACE,
+        version: CONFIG_ROUTE_VERSION,
+        buildSegments: {
+          page: (start) => buildConfigRouteSegments({ action: "channels-blocklist-page", locale, start }),
+        },
+        disabled: writesDisabled,
+      }),
+      disabled: blocklistActionDisabled,
+      noChannels: input.channelsView.availableBlocklistChannels.length === 0,
+    }),
+  );
+
+  return components;
+}
+
+function channelOverrideModelLabel(locale: string, model: LlmRow | null): string {
+  return model
+    ? `${model.llm_provider} / ${model.llm_codename}`
+    : localizer(locale, "commands.config.panel.none_label");
+}
+
+function buildChannelsOverridesBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor } = input;
+  const channelsView = input.channelsView;
+  const overrides: ConfigChannelsOverridesView | undefined = channelsView?.overrides;
+  const selectedChannelId =
+    input.channelsSelectedChannelId !== undefined
+      ? input.channelsSelectedChannelId
+      : (overrides?.selectedChannelId ?? null);
+  const selectedChannel = channelsView?.availableOverrideChannels.find((channel) => channel.id === selectedChannelId);
+  const writesDisabled = input.readStatus !== "fresh";
+  const actionDisabled =
+    writesDisabled || resolveChannelsOverridesActionState("prompt", actor) !== "enabled" || !selectedChannel;
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.channels_overrides_title")}
+${localizer(locale, "commands.config.panel.channels_overrides_description")}`,
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: localizer(locale, "commands.config.panel.channels_overrides_select_description"),
+    },
+  ];
+
+  const channelSelector: ActionRowData<ChannelSelectMenuComponentData> = {
+    type: ComponentType.ActionRow,
+    components: [
+      {
+        type: ComponentType.ChannelSelect,
+        customId: buildConfigRouteId({ action: "channels-overrides-select", locale }),
+        placeholder: localizer(locale, "commands.config.panel.channels_overrides_select_placeholder"),
+        channelTypes: [
+          ChannelType.GuildText,
+          ChannelType.GuildAnnouncement,
+          ChannelType.PublicThread,
+          ChannelType.PrivateThread,
+          ChannelType.AnnouncementThread,
+        ],
+        minValues: 1,
+        maxValues: 1,
+        defaultValues: selectedChannelId ? [{ id: selectedChannelId, type: SelectMenuDefaultValueType.Channel }] : [],
+        disabled: writesDisabled || actor.workspaceKind === "dm" || !actor.isManager,
+      },
+    ],
+  };
+  components.push(channelSelector);
+
+  if (actor.workspaceKind === "guild" && !actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+  }
+
+  const none = localizer(locale, "commands.config.panel.none_label");
+  const prompt = overrides?.prompt;
+  const contextNote = overrides?.contextNote;
+  const textOverride = overrides?.textModelOverride ?? null;
+  const serverTextModel = input.personas[0]?.llm ?? null;
+
+  components.push({
+    type: ComponentType.TextDisplay,
+    content: `**${localizer(locale, "commands.config.panel.channels_overrides_prompt_title")}**
+${localizer(locale, "commands.config.panel.channels_overrides_prompt_description")}`,
+  });
+  if (selectedChannel) {
+    const promptMode = prompt
+      ? localizer(locale, `commands.config.panel.channels_overrides_prompt_mode_${prompt.mode}`)
+      : none;
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: `> ${localizer(locale, "commands.config.panel.channels_overrides_prompt_mode_label")}: ${promptMode}
+${renderFencedCollectionContent(prompt?.prompt ?? none)}`,
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({
+              action: "channels-overrides-prompt-open",
+              locale,
+              channelId: selectedChannel.id,
+            }),
+            label: localizer(locale, "commands.config.panel.channels_overrides_set_prompt_button"),
+            disabled: actionDisabled,
+          },
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({
+              action: "channels-overrides-prompt-clear",
+              locale,
+              channelId: selectedChannel.id,
+              fp: computeChannelOverridesFingerprintForView(input, selectedChannel.id),
+            }),
+            label: localizer(locale, "commands.config.panel.channels_overrides_clear_prompt_button"),
+            disabled: actionDisabled || !prompt,
+          },
+        ],
+      },
+    );
+  }
+
+  components.push({
+    type: ComponentType.TextDisplay,
+    content: `**${localizer(locale, "commands.config.panel.channels_overrides_context_note_title")}**
+${localizer(locale, "commands.config.panel.channels_overrides_context_note_description")}`,
+  });
+  if (selectedChannel) {
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: `> ${localizer(locale, "commands.config.panel.channels_overrides_context_note_depth_label")}: ${contextNote?.depth ?? none}
+${renderFencedCollectionContent(contextNote?.note ?? none)}`,
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({
+              action: "channels-overrides-context-note-open",
+              locale,
+              channelId: selectedChannel.id,
+            }),
+            label: localizer(locale, "commands.config.panel.channels_overrides_edit_context_note_button"),
+            disabled: actionDisabled,
+          },
+        ],
+      },
+    );
+  }
+
+  components.push({
+    type: ComponentType.TextDisplay,
+    content: `**${localizer(locale, "commands.config.panel.channels_overrides_text_model_title")}**
+${localizer(locale, "commands.config.panel.channels_overrides_text_model_description")}`,
+  });
+  if (selectedChannel) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: `> ${localizer(locale, "commands.config.panel.channels_overrides_channel_override_label")}: ${channelOverrideModelLabel(locale, textOverride)}
+> ${localizer(locale, "commands.config.panel.channels_overrides_server_default_label")}: ${channelOverrideModelLabel(locale, serverTextModel)}`,
+    });
+
+    const textView = input.view;
+    if (textView?.kind === "channel-text-override-provider" && textView.channelId === selectedChannel.id) {
+      components.push({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.StringSelect,
+            customId: buildConfigRouteId({
+              action: "channels-overrides-text-provider-select",
+              locale,
+              channelId: selectedChannel.id,
+              fp: textView.fp,
+            }),
+            placeholder: localizer(locale, "commands.config.panel.text_override_provider_placeholder"),
+            options: textView.providers.map((provider) => ({
+              label: safeSelectOptionText(provider, 100),
+              value: provider,
+            })),
+            disabled: actionDisabled,
+          },
+        ],
+      });
+    } else if (textView?.kind === "channel-text-override-model" && textView.channelId === selectedChannel.id) {
+      const pageCount = Math.max(1, Math.ceil(textView.models.length / CONFIG_MODEL_PAGE_SIZE));
+      const pageIndex = Math.min(Math.max(Math.floor(textView.start / CONFIG_MODEL_PAGE_SIZE), 0), pageCount - 1);
+      const start = pageIndex * CONFIG_MODEL_PAGE_SIZE;
+      components.push({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.StringSelect,
+            customId: buildConfigRouteId({
+              action: "channels-overrides-text-model-select",
+              locale,
+              channelId: selectedChannel.id,
+              provider: textView.provider,
+              fp: textView.fp,
+            }),
+            placeholder: localizer(locale, "commands.config.panel.text_override_model_placeholder"),
+            options: textView.models.slice(start, start + CONFIG_MODEL_PAGE_SIZE).map((model) => ({
+              label: safeSelectOptionText(model.llm_codename, 100),
+              value: model.llm_codename,
+              description: model.llm_description ? safeSelectOptionText(model.llm_description, 100) : undefined,
+              default: model.llm_id === textOverride?.llm_id,
+            })),
+            disabled: actionDisabled,
+          },
+        ],
+      });
+      if (pageCount > 1) {
+        components.push({
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Secondary,
+              customId: buildConfigRouteId({
+                action: "channels-overrides-text-model-page",
+                locale,
+                channelId: selectedChannel.id,
+                provider: textView.provider,
+                start: Math.max(0, start - CONFIG_MODEL_PAGE_SIZE),
+              }),
+              label: localizer(locale, "commands.config.panel.previous_page"),
+              disabled: actionDisabled || pageIndex === 0,
+            },
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Secondary,
+              customId: buildConfigRouteId({
+                action: "channels-overrides-text-model-page",
+                locale,
+                channelId: selectedChannel.id,
+                provider: textView.provider,
+                start: Math.min((pageCount - 1) * CONFIG_MODEL_PAGE_SIZE, start + CONFIG_MODEL_PAGE_SIZE),
+              }),
+              label: localizer(locale, "commands.config.panel.next_page"),
+              disabled: actionDisabled || pageIndex >= pageCount - 1,
+            },
+          ],
+        });
+      }
+    } else {
+      components.push({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({
+              action: "channels-overrides-text-open",
+              locale,
+              channelId: selectedChannel.id,
+            }),
+            label: localizer(locale, "commands.config.panel.change_override_button"),
+            disabled: actionDisabled,
+          },
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({
+              action: "channels-overrides-text-clear",
+              locale,
+              channelId: selectedChannel.id,
+              fp: computeChannelOverridesFingerprintForView(input, selectedChannel.id),
+            }),
+            label: localizer(locale, "commands.config.panel.clear_override_button"),
+            disabled: actionDisabled || !textOverride,
+          },
+        ],
+      });
+    }
+  }
+
+  return components;
+}
+
+function computeChannelOverridesFingerprintForView(input: ConfigPanelRenderInput, channelId: string): string {
+  const overrides = input.channelsView?.overrides;
+  const state = input.personas[0];
+  return computeChannelOverridesFingerprint(
+    state?.server_id ?? 0,
+    channelId,
+    overrides?.prompt ?? null,
+    overrides?.contextNote ?? null,
+    overrides?.textModelOverride?.llm_id ?? null,
+    state?.llm?.llm_id ?? null,
+  );
+}
+
 export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPanelPayload {
   const { locale, actor, category, page, readStatus, receipt } = input;
   const writesDisabled = readStatus !== "fresh";
@@ -2725,6 +3409,26 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "permissions" && page === "privacy") {
     components.push(...buildPermissionsPrivacyBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "channels" && page === "destinations") {
+    components.push(...buildChannelsDestinationsBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "channels" && page === "auto-trigger") {
+    components.push(...buildChannelsAutoTriggerBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "channels" && page === "rules") {
+    components.push(...buildChannelsRulesBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "channels" && page === "overrides") {
+    components.push(...buildChannelsOverridesBody(input));
     return buildPayload(components, receipt);
   }
 

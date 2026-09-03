@@ -36,6 +36,13 @@ messages:
 - Run `/expressions initialize` to register your server's emojis and stickers so she
   uses them accurately.
 
+## Roleplay Channels
+
+Roleplay channels suppress custom emoji and sticker use in her responses. People can also use
+`/tool delete turn` there to remove her latest turn without Manage Server permission.
+
+Configure the channels from the Channel Rules page in `/config`.
+
 ## Situational Awareness
 
 Beyond the message text, she's handed a snapshot of the Discord context every time she

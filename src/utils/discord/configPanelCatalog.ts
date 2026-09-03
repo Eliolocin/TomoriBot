@@ -7,6 +7,7 @@ import {
   parseNonNegativeInt,
   parseNonce,
   parsePositiveId,
+  parseSnowflake,
   type RouteCodec,
   type RouteFieldCodec,
 } from "@/utils/discord/panelRouteCodec";
@@ -132,6 +133,64 @@ export function computeRandomTriggerRemoveFingerprint(
   }));
   return createHash("sha256")
     .update(`config-random-trigger-remove:${serverId}:${JSON.stringify(fingerprintRows)}`)
+    .digest("base64url")
+    .slice(0, 8);
+}
+
+/** Binds an auto-trigger modal to the channel selection and persona assignments it rendered. */
+export function computeAutoTriggerFingerprint(
+  serverId: number,
+  availableChannelIds: readonly string[],
+  enabledChannelIds: readonly string[],
+  personaOverrides: readonly { channel_disc_id: string; persona_id: number }[],
+): string {
+  const orderedAvailableChannelIds = [...availableChannelIds];
+  const sortedEnabledChannelIds = [...enabledChannelIds].sort();
+  const sortedOverrides = [...personaOverrides]
+    .sort((left, right) => left.channel_disc_id.localeCompare(right.channel_disc_id))
+    .map((override) => [override.channel_disc_id, override.persona_id]);
+  return createHash("sha256")
+    .update(
+      `config-auto-trigger:${serverId}:${JSON.stringify(orderedAvailableChannelIds)}:${JSON.stringify(sortedEnabledChannelIds)}:${JSON.stringify(sortedOverrides)}`,
+    )
+    .digest("base64url")
+    .slice(0, 8);
+}
+
+export type ConfigChannelRulesCollection = "private" | "roleplay" | "blocklist";
+
+/** Binds a Rules modal to the channel universe and membership state it rendered. */
+export function computeChannelRulesFingerprint(
+  serverId: number,
+  collection: ConfigChannelRulesCollection,
+  availableChannelIds: readonly string[],
+  selectedChannelIds: readonly string[],
+): string {
+  return createHash("sha256")
+    .update(
+      `config-channel-rules:${collection}:${serverId}:${JSON.stringify([...availableChannelIds])}:${JSON.stringify([...selectedChannelIds].sort())}`,
+    )
+    .digest("base64url")
+    .slice(0, 8);
+}
+
+export function computeChannelOverridesFingerprint(
+  serverId: number,
+  channelId: string,
+  prompt: { prompt: string; mode: string } | null,
+  contextNote: { note: string; depth: number } | null,
+  channelTextModelId: number | null,
+  serverTextModelId: number | null,
+): string {
+  return createHash("sha256")
+    .update(
+      `config-channel-overrides:${serverId}:${channelId}:${JSON.stringify({
+        prompt,
+        contextNote,
+        channelTextModelId,
+        serverTextModelId,
+      })}`,
+    )
     .digest("base64url")
     .slice(0, 8);
 }
@@ -424,6 +483,57 @@ export type ConfigPanelRoute =
       nonce: string;
     }
   | { action: "permissions-privacy-bypass-set"; locale: string; enabled: boolean }
+  | { action: "channels-log-open"; locale: string }
+  | { action: "channels-log-submit"; locale: string; nonce: string }
+  | { action: "channels-log-clear"; locale: string; channelId?: string }
+  | { action: "channels-welcome-open"; locale: string }
+  | { action: "channels-welcome-submit"; locale: string; nonce: string }
+  | { action: "channels-welcome-clear"; locale: string; channelId?: string }
+  | { action: "channels-autoch-manage-open"; locale: string; start?: number }
+  | { action: "channels-autoch-submit"; locale: string; start: number; fp: string; nonce: string }
+  | { action: "channels-autoch-page"; locale: string; start: number }
+  | { action: "channels-autoch-configure-open"; locale: string }
+  | { action: "channels-autoch-configure-submit"; locale: string; fp: string; nonce: string }
+  | { action: "channels-autoch-threshold-open"; locale: string }
+  | { action: "channels-autoch-threshold-submit"; locale: string; fp: string; nonce: string }
+  | { action: "channels-private-manage-open"; locale: string; start?: number }
+  | { action: "channels-private-submit"; locale: string; start: number; fp: string; nonce: string }
+  | { action: "channels-private-page"; locale: string; start: number }
+  | { action: "channels-rp-manage-open"; locale: string; start?: number }
+  | { action: "channels-rp-submit"; locale: string; start: number; fp: string; nonce: string }
+  | { action: "channels-rp-page"; locale: string; start: number }
+  | { action: "channels-blocklist-manage-open"; locale: string; start?: number }
+  | { action: "channels-blocklist-submit"; locale: string; start: number; fp: string; nonce: string }
+  | { action: "channels-blocklist-page"; locale: string; start: number }
+  | { action: "channels-overrides-select"; locale: string }
+  | { action: "channels-overrides-prompt-open"; locale: string; channelId: string }
+  | { action: "channels-overrides-prompt-submit"; locale: string; channelId: string; fp: string; nonce: string }
+  | { action: "channels-overrides-prompt-clear"; locale: string; channelId: string; fp: string }
+  | { action: "channels-overrides-context-note-open"; locale: string; channelId: string }
+  | {
+      action: "channels-overrides-context-note-submit";
+      locale: string;
+      channelId: string;
+      fp: string;
+      nonce: string;
+    }
+  | { action: "channels-overrides-text-open"; locale: string; channelId: string }
+  | { action: "channels-overrides-text-provider-select"; locale: string; channelId: string; fp: string }
+  | {
+      action: "channels-overrides-text-model-select";
+      locale: string;
+      channelId: string;
+      provider: string;
+      fp: string;
+    }
+  | {
+      action: "channels-overrides-text-model-page";
+      locale: string;
+      channelId: string;
+      provider: string;
+      start: number;
+    }
+  | { action: "channels-overrides-text-clear"; locale: string; channelId: string; fp: string }
   | {
       action: "retry" | "refresh";
       locale: string;
@@ -570,6 +680,19 @@ const providerField: RouteFieldCodec<"provider", string> = {
   key: "provider",
   encode: (v) => String(v).replace(/:/g, "~"),
   decode: (v) => (v ? v.replace(/~/g, ":") : null),
+};
+
+const channelIdField: RouteFieldCodec<"channelId", string> = {
+  key: "channelId",
+  optional: true,
+  encode: (v) => String(v),
+  decode: (v) => parseSnowflake(v),
+};
+
+const requiredChannelIdField: RouteFieldCodec<"channelId", string> = {
+  key: "channelId",
+  encode: (v) => String(v),
+  decode: (v) => parseSnowflake(v),
 };
 
 /**
@@ -751,6 +874,60 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
     fields: [includeElevenLabsField, nonceField],
   },
   "permissions-privacy-bypass-set": { wireToken: "perm-privacy-set", fields: [enabledField] },
+  "channels-log-open": { wireToken: "channels-log-open", fields: [] },
+  "channels-log-submit": { wireToken: "channels-log-submit", fields: [nonceField] },
+  "channels-log-clear": { wireToken: "channels-log-clear", fields: [channelIdField] },
+  "channels-welcome-open": { wireToken: "channels-welcome-open", fields: [] },
+  "channels-welcome-submit": { wireToken: "channels-welcome-submit", fields: [nonceField] },
+  "channels-welcome-clear": { wireToken: "channels-welcome-clear", fields: [channelIdField] },
+  "channels-autoch-manage-open": { wireToken: "autoch-manage-open", fields: [optionalStartField] },
+  "channels-autoch-submit": { wireToken: "autoch-submit", fields: [startField, fpField, nonceField] },
+  "channels-autoch-page": { wireToken: "autoch-page", fields: [startField] },
+  "channels-autoch-configure-open": { wireToken: "autoch-config-open", fields: [] },
+  "channels-autoch-configure-submit": { wireToken: "autoch-config-submit", fields: [fpField, nonceField] },
+  "channels-autoch-threshold-open": { wireToken: "autoch-threshold-open", fields: [] },
+  "channels-autoch-threshold-submit": { wireToken: "autoch-threshold-submit", fields: [fpField, nonceField] },
+  "channels-private-manage-open": { wireToken: "private-manage-open", fields: [optionalStartField] },
+  "channels-private-submit": { wireToken: "private-submit", fields: [startField, fpField, nonceField] },
+  "channels-private-page": { wireToken: "private-page", fields: [startField] },
+  "channels-rp-manage-open": { wireToken: "rp-manage-open", fields: [optionalStartField] },
+  "channels-rp-submit": { wireToken: "rp-submit", fields: [startField, fpField, nonceField] },
+  "channels-rp-page": { wireToken: "rp-page", fields: [startField] },
+  "channels-blocklist-manage-open": { wireToken: "blocklist-manage-open", fields: [optionalStartField] },
+  "channels-blocklist-submit": { wireToken: "blocklist-submit", fields: [startField, fpField, nonceField] },
+  "channels-blocklist-page": { wireToken: "blocklist-page", fields: [startField] },
+  "channels-overrides-select": { wireToken: "ch-ov-select", fields: [] },
+  "channels-overrides-prompt-open": { wireToken: "ch-ov-p-open", fields: [requiredChannelIdField] },
+  "channels-overrides-prompt-submit": {
+    wireToken: "ch-ov-p-submit",
+    fields: [requiredChannelIdField, fpField, nonceField],
+  },
+  "channels-overrides-prompt-clear": {
+    wireToken: "ch-ov-p-clear",
+    fields: [requiredChannelIdField, fpField],
+  },
+  "channels-overrides-context-note-open": { wireToken: "ch-ov-c-open", fields: [requiredChannelIdField] },
+  "channels-overrides-context-note-submit": {
+    wireToken: "ch-ov-c-submit",
+    fields: [requiredChannelIdField, fpField, nonceField],
+  },
+  "channels-overrides-text-open": { wireToken: "ch-ov-t-open", fields: [requiredChannelIdField] },
+  "channels-overrides-text-provider-select": {
+    wireToken: "ch-ov-t-provider",
+    fields: [requiredChannelIdField, fpField],
+  },
+  "channels-overrides-text-model-select": {
+    wireToken: "ch-ov-t-model",
+    fields: [requiredChannelIdField, providerField, fpField],
+  },
+  "channels-overrides-text-model-page": {
+    wireToken: "ch-ov-t-page",
+    fields: [requiredChannelIdField, providerField, startField],
+  },
+  "channels-overrides-text-clear": {
+    wireToken: "ch-ov-t-clear",
+    fields: [requiredChannelIdField, fpField],
+  },
   retry: { wireToken: "retry", fields: [categoryField, pageField, optionalPersonaIdField] },
   refresh: { wireToken: "refresh", fields: [categoryField, pageField, optionalPersonaIdField] },
 };

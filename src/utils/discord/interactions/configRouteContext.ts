@@ -8,6 +8,7 @@ import {
 } from "discord.js";
 import type {
   LlmRow,
+  AutochatPersonaOverride,
   PersonaSpriteRow,
   RandomTriggerRow,
   ServerStmConfigRow,
@@ -22,6 +23,13 @@ import type { AddressingStyle } from "@/types/personaNaming";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import type { ShortTermMemoryEntry } from "@/utils/cache/shortTermMemoryCache";
 import type { ConfigCategory, ConfigModelCapability, ConfigPage } from "@/utils/discord/configPanelCatalog";
+import type {
+  BlocklistChannelTarget,
+  ChannelOverrideChannelTarget,
+  ChecklistChannelTarget,
+} from "@/utils/discord/channelChecklistManager";
+import type { ChannelContextNote } from "@/utils/cache/channelContextNoteCacheStore";
+import type { ChannelPromptOverride } from "@/utils/cache/channelPromptCacheStore";
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type { ConfigPersonaOperations, GuildIdentityPort } from "@/utils/discord/interactions/configPersonaOperations";
 import type { ConfigSpriteOperations } from "@/utils/discord/interactions/configSpriteOperations";
@@ -128,6 +136,43 @@ export interface ConfigPermissionsView {
   privacy: ConfigPermissionsPrivacyView;
 }
 
+export interface ConfigChannelsDestinationsView {
+  thoughtLogChannelId: string | null;
+  welcomeChannelId: string | null;
+  welcomePrompt: string | null;
+  welcomePersonaId: number | null;
+}
+
+export interface ConfigChannelsAutoTriggerView {
+  enabledChannels: ChecklistChannelTarget[];
+  personaOverrides: AutochatPersonaOverride[];
+  threshold: number;
+  maxThreshold: number;
+}
+
+export interface ConfigChannelsRulesView {
+  privateChannels: ChecklistChannelTarget[];
+  roleplayChannels: ChecklistChannelTarget[];
+  crossChannelBlocklist: BlocklistChannelTarget[];
+}
+
+export interface ConfigChannelsOverridesView {
+  selectedChannelId: string | null;
+  prompt: ChannelPromptOverride | null;
+  contextNote: ChannelContextNote | null;
+  textModelOverride: LlmRow | null;
+}
+
+export interface ConfigChannelsView {
+  destinations: ConfigChannelsDestinationsView;
+  autoTrigger: ConfigChannelsAutoTriggerView;
+  rules: ConfigChannelsRulesView;
+  availableTextChannels: ChecklistChannelTarget[];
+  availableBlocklistChannels: BlocklistChannelTarget[];
+  availableOverrideChannels: ChannelOverrideChannelTarget[];
+  overrides: ConfigChannelsOverridesView;
+}
+
 export interface ConfigRouteDependencies {
   resolveScope(
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
@@ -172,6 +217,10 @@ export interface ConfigRouteDependencies {
   loadImageGenerationView(state: TomoriState, locale: string): ConfigImageGenerationView;
   loadBehaviorView?(state: TomoriState): Promise<ConfigBehaviorView>;
   loadPermissionsView(state: TomoriState): Promise<ConfigPermissionsView>;
+  loadChannelsView(
+    interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
+    selectedChannelId?: string,
+  ): Promise<ConfigChannelsView>;
   loadModelListView(
     state: TomoriState,
     capability: ConfigModelCapability,
@@ -188,6 +237,7 @@ export interface ConfigRouteDependencies {
   takeAvatarUpload(interactionId: string, nonce: string): APIAttachment | undefined;
   takeCheckboxValues(interactionId: string, fieldId: string): string[] | undefined;
   takeSelectValue(interactionId: string, fieldId: string): string | undefined;
+  takeChannelSelectValue(interactionId: string, fieldId: string): string | undefined;
 }
 
 export function asEphemeralComponentsV2FollowUp(
@@ -268,6 +318,12 @@ export interface ConfigRepaintOptions {
   modelListView?: ConfigModelListView;
   behaviorView?: ConfigBehaviorView;
   permissionsView?: ConfigPermissionsView;
+  channelsView?: ConfigChannelsView;
+  channelsSelectedChannelId?: string | null;
+  channelsAutoTriggerRangeIndex?: number;
+  channelsPrivateRangeIndex?: number;
+  channelsRoleplayRangeIndex?: number;
+  channelsBlocklistRangeIndex?: number;
   randomTriggerPageStart?: number;
   parametersProvider?: string;
   logitBiasPageStart?: number;
@@ -337,6 +393,14 @@ export async function repaint(
     if (state) permissionsView = await dependencies.loadPermissionsView(state);
   }
 
+  let channelsView = options.channelsView;
+  if (category === "channels" && !channelsView) {
+    channelsView = await dependencies.loadChannelsView(
+      interaction,
+      page === "overrides" ? (options.channelsSelectedChannelId ?? undefined) : undefined,
+    );
+  }
+
   if (category === "behavior" && !behaviorView) {
     const state = scope.personas[0];
     if (state) {
@@ -397,6 +461,12 @@ export async function repaint(
         randomTriggerPageStart: options.randomTriggerPageStart,
         behaviorView,
         permissionsView,
+        channelsView,
+        channelsSelectedChannelId: options.channelsSelectedChannelId,
+        channelsAutoTriggerRangeIndex: options.channelsAutoTriggerRangeIndex,
+        channelsPrivateRangeIndex: options.channelsPrivateRangeIndex,
+        channelsRoleplayRangeIndex: options.channelsRoleplayRangeIndex,
+        channelsBlocklistRangeIndex: options.channelsBlocklistRangeIndex,
         modelListView: options.modelListView,
       }),
       avatar,

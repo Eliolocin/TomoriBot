@@ -32,6 +32,10 @@ import {
   resolveBehaviorTriggerActionState,
   resolvePermissionsCapabilitiesActionState,
   resolvePermissionsPrivacyActionState,
+  resolveChannelsDestinationsActionState,
+  resolveChannelsAutoTriggerActionState,
+  resolveChannelsRulesActionState,
+  resolveChannelsOverridesActionState,
   BEHAVIOR_GENERAL_ACTION_BY_ROUTE,
   BEHAVIOR_TRIGGER_ACTION_BY_ROUTE,
   BEHAVIOR_EXPERIMENTAL_ACTION_BY_ROUTE,
@@ -39,10 +43,18 @@ import {
   BEHAVIOR_MEMORY_ACTION_BY_ROUTE,
   PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE,
   PERMISSIONS_PRIVACY_ACTION_BY_ROUTE,
+  CHANNELS_DESTINATIONS_ACTION_BY_ROUTE,
+  CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE,
+  CHANNELS_RULES_ACTION_BY_ROUTE,
+  CHANNELS_OVERRIDES_ACTION_BY_ROUTE,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
   type ConfigPersonaGeneralAction,
+  type ConfigChannelsDestinationsAction,
+  type ConfigChannelsAutoTriggerAction,
+  type ConfigChannelsRulesAction,
+  type ConfigChannelsOverridesAction,
 } from "@/utils/discord/interactions/configPermissionPolicy";
 
 const GUILD_MANAGER: ConfigActor = { workspaceKind: "guild", isManager: true };
@@ -348,6 +360,182 @@ describe("Permissions action policy", () => {
   });
 });
 
+describe("Channels Destinations action policy", () => {
+  const allActions: ConfigChannelsDestinationsAction[] = ["log", "welcome"];
+
+  it("keeps every Destinations action manager-only and guild-only", () => {
+    for (const action of allActions) {
+      expect(resolveChannelsDestinationsActionState(action, GUILD_MANAGER)).toBe("enabled");
+      expect(resolveChannelsDestinationsActionState(action, GUILD_MEMBER)).toBe("disabled");
+      expect(resolveChannelsDestinationsActionState(action, DM_OWNER)).toBe("omitted");
+    }
+  });
+
+  it("authorizes every Destinations route only for a guild manager", () => {
+    const routes: ConfigPanelRoute[] = [
+      { action: "channels-log-open", locale: "en-US" },
+      { action: "channels-log-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "channels-log-clear", locale: "en-US", channelId: "123456789012345678" },
+      { action: "channels-welcome-open", locale: "en-US" },
+      { action: "channels-welcome-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "channels-welcome-clear", locale: "en-US", channelId: "123456789012345678" },
+    ];
+    for (const route of routes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(false);
+    }
+  });
+});
+
+describe("Channels Auto-Trigger action policy", () => {
+  const allActions: ConfigChannelsAutoTriggerAction[] = ["auto-trigger", "threshold"];
+
+  it("keeps every Auto-Trigger action manager-only and guild-only", () => {
+    for (const action of allActions) {
+      expect(resolveChannelsAutoTriggerActionState(action, GUILD_MANAGER)).toBe("enabled");
+      expect(resolveChannelsAutoTriggerActionState(action, GUILD_MEMBER)).toBe("disabled");
+      expect(resolveChannelsAutoTriggerActionState(action, DM_OWNER)).toBe("omitted");
+    }
+  });
+
+  it("authorizes every Auto-Trigger route only for a guild manager", () => {
+    const routes: ConfigPanelRoute[] = [
+      { action: "channels-autoch-manage-open", locale: "en-US", start: 0 },
+      { action: "channels-autoch-submit", locale: "en-US", start: 0, fp: "abcd1234", nonce: "nonce1234567" },
+      { action: "channels-autoch-page", locale: "en-US", start: 0 },
+      { action: "channels-autoch-configure-open", locale: "en-US" },
+      {
+        action: "channels-autoch-configure-submit",
+        locale: "en-US",
+        fp: "abcd1234",
+        nonce: "nonce1234567",
+      },
+      { action: "channels-autoch-threshold-open", locale: "en-US" },
+      {
+        action: "channels-autoch-threshold-submit",
+        locale: "en-US",
+        fp: "abcd1234",
+        nonce: "nonce1234567",
+      },
+    ];
+    for (const route of routes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(false);
+    }
+  });
+});
+
+describe("Channels Rules action policy", () => {
+  const allActions: ConfigChannelsRulesAction[] = ["private", "roleplay", "blocklist"];
+
+  it("keeps every Rules action manager-only and guild-only", () => {
+    for (const action of allActions) {
+      expect(resolveChannelsRulesActionState(action, GUILD_MANAGER)).toBe("enabled");
+      expect(resolveChannelsRulesActionState(action, GUILD_MEMBER)).toBe("disabled");
+      expect(resolveChannelsRulesActionState(action, DM_OWNER)).toBe("omitted");
+    }
+  });
+
+  it("authorizes every Rules route only for a guild manager", () => {
+    const routes: ConfigPanelRoute[] = [
+      { action: "channels-private-manage-open", locale: "en-US", start: 0 },
+      { action: "channels-private-submit", locale: "en-US", start: 0, fp: "abcd1234", nonce: "nonce1234567" },
+      { action: "channels-private-page", locale: "en-US", start: 0 },
+      { action: "channels-rp-manage-open", locale: "en-US", start: 0 },
+      { action: "channels-rp-submit", locale: "en-US", start: 0, fp: "abcd1234", nonce: "nonce1234567" },
+      { action: "channels-rp-page", locale: "en-US", start: 0 },
+      { action: "channels-blocklist-manage-open", locale: "en-US", start: 0 },
+      {
+        action: "channels-blocklist-submit",
+        locale: "en-US",
+        start: 0,
+        fp: "abcd1234",
+        nonce: "nonce1234567",
+      },
+      { action: "channels-blocklist-page", locale: "en-US", start: 0 },
+    ];
+    for (const route of routes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(false);
+    }
+  });
+});
+
+describe("Channels Overrides action policy", () => {
+  const allActions: ConfigChannelsOverridesAction[] = ["prompt", "context-note", "text-model"];
+
+  it("keeps every Overrides action manager-only and guild-only", () => {
+    for (const action of allActions) {
+      expect(resolveChannelsOverridesActionState(action, GUILD_MANAGER)).toBe("enabled");
+      expect(resolveChannelsOverridesActionState(action, GUILD_MEMBER)).toBe("disabled");
+      expect(resolveChannelsOverridesActionState(action, DM_OWNER)).toBe("omitted");
+    }
+  });
+
+  it("authorizes every Overrides route only for a guild manager", () => {
+    const routes: ConfigPanelRoute[] = [
+      { action: "channels-overrides-select", locale: "en-US" },
+      { action: "channels-overrides-prompt-open", locale: "en-US", channelId: "123456789012345678" },
+      {
+        action: "channels-overrides-prompt-submit",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        fp: "abcd1234",
+        nonce: "nonce1234567",
+      },
+      {
+        action: "channels-overrides-prompt-clear",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        fp: "abcd1234",
+      },
+      { action: "channels-overrides-context-note-open", locale: "en-US", channelId: "123456789012345678" },
+      {
+        action: "channels-overrides-context-note-submit",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        fp: "abcd1234",
+        nonce: "nonce1234567",
+      },
+      { action: "channels-overrides-text-open", locale: "en-US", channelId: "123456789012345678" },
+      {
+        action: "channels-overrides-text-provider-select",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        fp: "abcd1234",
+      },
+      {
+        action: "channels-overrides-text-model-select",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        provider: "openrouter",
+        fp: "abcd1234",
+      },
+      {
+        action: "channels-overrides-text-model-page",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        provider: "openrouter",
+        start: 0,
+      },
+      {
+        action: "channels-overrides-text-clear",
+        locale: "en-US",
+        channelId: "123456789012345678",
+        fp: "abcd1234",
+      },
+    ];
+    for (const route of routes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(false);
+    }
+  });
+});
+
 describe("isConfigRouteAuthorized", () => {
   const personaWriteRoutes: ConfigPanelRoute[] = [
     { action: "avatar-open", locale: "en-US", personaId: 5 },
@@ -532,6 +720,10 @@ describe("isConfigRouteAuthorized", () => {
       ...Object.keys(BEHAVIOR_MEMORY_ACTION_BY_ROUTE),
       ...Object.keys(PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE),
       ...Object.keys(PERMISSIONS_PRIVACY_ACTION_BY_ROUTE),
+      ...Object.keys(CHANNELS_DESTINATIONS_ACTION_BY_ROUTE),
+      ...Object.keys(CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE),
+      ...Object.keys(CHANNELS_RULES_ACTION_BY_ROUTE),
+      ...Object.keys(CHANNELS_OVERRIDES_ACTION_BY_ROUTE),
     ]);
 
     const unknownRoute = { action: "not-a-real-action", locale: "en-US" } as unknown as ConfigPanelRoute;

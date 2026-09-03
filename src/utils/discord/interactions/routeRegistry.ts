@@ -1,6 +1,16 @@
-import type { ButtonInteraction, Client, ModalSubmitInteraction, StringSelectMenuInteraction } from "discord.js";
+import type {
+  ButtonInteraction,
+  ChannelSelectMenuInteraction,
+  Client,
+  ModalSubmitInteraction,
+  StringSelectMenuInteraction,
+} from "discord.js";
 
-export type GlobalRoutableInteraction = ButtonInteraction | StringSelectMenuInteraction | ModalSubmitInteraction;
+export type GlobalRoutableInteraction =
+  | ButtonInteraction
+  | StringSelectMenuInteraction
+  | ChannelSelectMenuInteraction
+  | ModalSubmitInteraction;
 
 export interface ParsedInteractionRoute {
   namespace: string;

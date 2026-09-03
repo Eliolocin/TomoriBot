@@ -67,6 +67,10 @@ export type ConfigBehaviorNoticesAction = "notice-visibility" | "speech-transcri
 export type ConfigBehaviorMemoryAction = "memory-tagging" | "stm-parameters" | "stm-categories" | "stm-prompt";
 export type ConfigPermissionsCapabilitiesAction = "tool-use" | "manage";
 export type ConfigPermissionsPrivacyAction = "privacy-bypass";
+export type ConfigChannelsDestinationsAction = "log" | "welcome";
+export type ConfigChannelsAutoTriggerAction = "auto-trigger" | "threshold";
+export type ConfigChannelsRulesAction = "private" | "roleplay" | "blocklist";
+export type ConfigChannelsOverridesAction = "prompt" | "context-note" | "text-model";
 
 /**
  * Derives the acting workspace identity from the interaction alone.
@@ -420,6 +424,57 @@ export const PERMISSIONS_PRIVACY_ACTION_BY_ROUTE: Partial<
   "permissions-privacy-bypass-set": "privacy-bypass",
 };
 
+export const CHANNELS_DESTINATIONS_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigChannelsDestinationsAction>
+> = {
+  "channels-log-open": "log",
+  "channels-log-submit": "log",
+  "channels-log-clear": "log",
+  "channels-welcome-open": "welcome",
+  "channels-welcome-submit": "welcome",
+  "channels-welcome-clear": "welcome",
+};
+
+export const CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigChannelsAutoTriggerAction>
+> = {
+  "channels-autoch-manage-open": "auto-trigger",
+  "channels-autoch-submit": "auto-trigger",
+  "channels-autoch-page": "auto-trigger",
+  "channels-autoch-configure-open": "auto-trigger",
+  "channels-autoch-configure-submit": "auto-trigger",
+  "channels-autoch-threshold-open": "threshold",
+  "channels-autoch-threshold-submit": "threshold",
+};
+
+export const CHANNELS_RULES_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigChannelsRulesAction>> = {
+  "channels-private-manage-open": "private",
+  "channels-private-submit": "private",
+  "channels-private-page": "private",
+  "channels-rp-manage-open": "roleplay",
+  "channels-rp-submit": "roleplay",
+  "channels-rp-page": "roleplay",
+  "channels-blocklist-manage-open": "blocklist",
+  "channels-blocklist-submit": "blocklist",
+  "channels-blocklist-page": "blocklist",
+};
+
+export const CHANNELS_OVERRIDES_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigChannelsOverridesAction>
+> = {
+  "channels-overrides-select": "prompt",
+  "channels-overrides-prompt-open": "prompt",
+  "channels-overrides-prompt-submit": "prompt",
+  "channels-overrides-prompt-clear": "prompt",
+  "channels-overrides-context-note-open": "context-note",
+  "channels-overrides-context-note-submit": "context-note",
+  "channels-overrides-text-open": "text-model",
+  "channels-overrides-text-provider-select": "text-model",
+  "channels-overrides-text-model-select": "text-model",
+  "channels-overrides-text-model-page": "text-model",
+  "channels-overrides-text-clear": "text-model",
+};
+
 export function resolveBehaviorGeneralActionState(
   action: ConfigBehaviorGeneralAction,
   actor: ConfigActor,
@@ -474,6 +529,38 @@ export function resolvePermissionsCapabilitiesActionState(
 
 export function resolvePermissionsPrivacyActionState(
   _action: ConfigPermissionsPrivacyAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "omitted";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolveChannelsDestinationsActionState(
+  _action: ConfigChannelsDestinationsAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "omitted";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolveChannelsAutoTriggerActionState(
+  _action: ConfigChannelsAutoTriggerAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "omitted";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolveChannelsRulesActionState(
+  _action: ConfigChannelsRulesAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "omitted";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolveChannelsOverridesActionState(
+  _action: ConfigChannelsOverridesAction,
   actor: ConfigActor,
 ): ConfigSurfaceState {
   if (actor.workspaceKind === "dm") return "omitted";
@@ -602,6 +689,30 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   if (permissionsPrivacyAction) {
     if (resolveConfigPageState("permissions", "privacy", actor) === "omitted") return false;
     return resolvePermissionsPrivacyActionState(permissionsPrivacyAction, actor) === "enabled";
+  }
+
+  const channelsDestinationsAction = CHANNELS_DESTINATIONS_ACTION_BY_ROUTE[route.action];
+  if (channelsDestinationsAction) {
+    if (resolveConfigPageState("channels", "destinations", actor) === "omitted") return false;
+    return resolveChannelsDestinationsActionState(channelsDestinationsAction, actor) === "enabled";
+  }
+
+  const channelsAutoTriggerAction = CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE[route.action];
+  if (channelsAutoTriggerAction) {
+    if (resolveConfigPageState("channels", "auto-trigger", actor) === "omitted") return false;
+    return resolveChannelsAutoTriggerActionState(channelsAutoTriggerAction, actor) === "enabled";
+  }
+
+  const channelsRulesAction = CHANNELS_RULES_ACTION_BY_ROUTE[route.action];
+  if (channelsRulesAction) {
+    if (resolveConfigPageState("channels", "rules", actor) === "omitted") return false;
+    return resolveChannelsRulesActionState(channelsRulesAction, actor) === "enabled";
+  }
+
+  const channelsOverridesAction = CHANNELS_OVERRIDES_ACTION_BY_ROUTE[route.action];
+  if (channelsOverridesAction) {
+    if (resolveConfigPageState("channels", "overrides", actor) === "omitted") return false;
+    return resolveChannelsOverridesActionState(channelsOverridesAction, actor) === "enabled";
   }
 
   switch (route.action) {

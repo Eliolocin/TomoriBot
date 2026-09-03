@@ -15,6 +15,7 @@ import type {
   ActionRowData,
   ButtonInteraction,
   ButtonComponentData,
+  ChannelSelectMenuInteraction,
   ChatInputCommandInteraction,
   ComponentInContainerData,
   ContainerComponentData,
@@ -55,7 +56,7 @@ const modalResolvedAttachments = new Map<string, Record<string, APIAttachment>>(
  * Used to prevent "already acknowledged" errors when Discord.js state is out of sync
  */
 const rawModalAcknowledged = new WeakMap<
-  ChatInputCommandInteraction | ButtonInteraction | StringSelectMenuInteraction,
+  ChatInputCommandInteraction | ButtonInteraction | StringSelectMenuInteraction | ChannelSelectMenuInteraction,
   boolean
 >();
 
@@ -65,7 +66,11 @@ const rawModalAcknowledged = new WeakMap<
  * response, so workflow code must consult this state explicitly.
  */
 export function hasRawModalAcknowledgement(
-  interaction: ChatInputCommandInteraction | ButtonInteraction | StringSelectMenuInteraction,
+  interaction:
+    | ChatInputCommandInteraction
+    | ButtonInteraction
+    | StringSelectMenuInteraction
+    | ChannelSelectMenuInteraction,
 ): boolean {
   return rawModalAcknowledged.get(interaction) === true;
 }
@@ -379,7 +384,11 @@ function createRawModalRestError(response: Response, responseBody: string): Erro
 }
 
 export async function showRoutedRawModal(
-  interaction: ChatInputCommandInteraction | ButtonInteraction | StringSelectMenuInteraction,
+  interaction:
+    | ChatInputCommandInteraction
+    | ButtonInteraction
+    | StringSelectMenuInteraction
+    | ChannelSelectMenuInteraction,
   data: { custom_id: string; title: string; components: RawDiscordComponent[] },
 ): Promise<void> {
   setupWebSocketInterception(interaction.client);

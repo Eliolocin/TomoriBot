@@ -2,7 +2,6 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChannelType,
   MessageFlags,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
@@ -14,6 +13,11 @@ import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/disco
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { configRepository } from "@/utils/db/repositories";
+import {
+  formatGuildBlocklistChannelOptionLabel,
+  loadGuildBlocklistChannels,
+  type BlocklistChannelTarget,
+} from "@/utils/discord/channelChecklistManager";
 import { createStandardEmbed } from "@/utils/discord/embedHelper";
 import { promptWithRawModal, safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
@@ -30,15 +34,6 @@ const MAX_GROUPS_PER_MODAL = 5;
 const CHANNELS_PER_PAGE = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
 const PAGE_SELECT_TIMEOUT_MS = 300_000;
 const MAX_PAGE_BUTTONS = 24;
-
-type BlocklistChannelTarget = {
-  id: string;
-  name: string;
-  type: ChannelType.GuildText | ChannelType.GuildAnnouncement | ChannelType.GuildForum | ChannelType.GuildMedia;
-  parentName: string | null;
-  rawPosition: number;
-  parentRawPosition: number;
-};
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
@@ -71,7 +66,7 @@ export async function execute(
       return;
     }
 
-    const availableChannels = await loadBlocklistChannels(interaction.guild);
+    const availableChannels = await loadGuildBlocklistChannels(interaction.guild);
     if (availableChannels.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.server.crosschannel-blocklist.no_channels_title",
@@ -286,48 +281,6 @@ async function executeMultiPageBlocklist(
   }
 }
 
-async function loadBlocklistChannels(guild: ChatInputCommandInteraction["guild"]): Promise<BlocklistChannelTarget[]> {
-  if (!guild) {
-    return [];
-  }
-
-  await guild.channels.fetch();
-
-  const channels: BlocklistChannelTarget[] = [];
-
-  for (const channel of guild.channels.cache.values()) {
-    switch (channel.type) {
-      case ChannelType.GuildText:
-      case ChannelType.GuildAnnouncement:
-      case ChannelType.GuildForum:
-      case ChannelType.GuildMedia:
-        channels.push({
-          id: channel.id,
-          name: channel.name,
-          type: channel.type,
-          parentName: channel.parent?.name ?? null,
-          rawPosition: channel.rawPosition,
-          parentRawPosition: channel.parent?.rawPosition ?? -1,
-        });
-        break;
-      default:
-        break;
-    }
-  }
-
-  return channels.sort((a, b) => {
-    if (a.parentRawPosition !== b.parentRawPosition) {
-      return a.parentRawPosition - b.parentRawPosition;
-    }
-
-    if (a.rawPosition !== b.rawPosition) {
-      return a.rawPosition - b.rawPosition;
-    }
-
-    return a.name.localeCompare(b.name);
-  });
-}
-
 function buildCheckboxGroups(
   channels: BlocklistChannelTarget[],
   blockedIds: Set<string>,
@@ -339,7 +292,7 @@ function buildCheckboxGroups(
     const chunk = channels.slice(index, index + MAX_OPTIONS_PER_GROUP);
     const groupIndex = Math.floor(index / MAX_OPTIONS_PER_GROUP);
     const options: CheckboxGroupOption[] = chunk.map((channel) => ({
-      label: safeSelectOptionText(formatChannelOptionLabel(channel, locale)),
+      label: safeSelectOptionText(formatGuildBlocklistChannelOptionLabel(channel, locale)),
       value: channel.id,
       description: channel.parentName
         ? safeSelectOptionText(
@@ -367,21 +320,6 @@ function buildCheckboxGroups(
   }
 
   return checkboxGroups;
-}
-
-function formatChannelOptionLabel(channel: BlocklistChannelTarget, locale: string): string {
-  switch (channel.type) {
-    case ChannelType.GuildForum:
-      return localizer(locale, "commands.server.crosschannel-blocklist.channel_label_forum", {
-        channel_name: channel.name,
-      });
-    case ChannelType.GuildMedia:
-      return localizer(locale, "commands.server.crosschannel-blocklist.channel_label_media", {
-        channel_name: channel.name,
-      });
-    default:
-      return `#${channel.name}`;
-  }
 }
 
 function collectSelectedIds(multiValues: Record<string, string[]> | undefined, groupCount: number): Set<string> {

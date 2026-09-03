@@ -728,6 +728,172 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   ["config:v1:perm-privacy-set:en-US:0", { action: "permissions-privacy-bypass-set", locale: "en-US", enabled: false }],
+  ["config:v1:channels-log-open:en-US", { action: "channels-log-open", locale: "en-US" }],
+  [
+    "config:v1:channels-log-submit:en-US:nonce1234567",
+    { action: "channels-log-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  [
+    "config:v1:channels-log-clear:en-US:123456789012345678",
+    { action: "channels-log-clear", locale: "en-US", channelId: "123456789012345678" },
+  ],
+  ["config:v1:channels-welcome-open:en-US", { action: "channels-welcome-open", locale: "en-US" }],
+  [
+    "config:v1:channels-welcome-submit:en-US:nonce1234567",
+    { action: "channels-welcome-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  [
+    "config:v1:channels-welcome-clear:en-US:123456789012345678",
+    { action: "channels-welcome-clear", locale: "en-US", channelId: "123456789012345678" },
+  ],
+  ["config:v1:autoch-manage-open:en-US:0", { action: "channels-autoch-manage-open", locale: "en-US", start: 0 }],
+  [
+    "config:v1:autoch-submit:en-US:1:abcd1234:nonce1234567",
+    {
+      action: "channels-autoch-submit",
+      locale: "en-US",
+      start: 1,
+      fp: "abcd1234",
+      nonce: "nonce1234567",
+    },
+  ],
+  ["config:v1:autoch-page:en-US:1", { action: "channels-autoch-page", locale: "en-US", start: 1 }],
+  ["config:v1:autoch-config-open:en-US", { action: "channels-autoch-configure-open", locale: "en-US" }],
+  [
+    "config:v1:autoch-config-submit:en-US:abcd1234:nonce1234567",
+    {
+      action: "channels-autoch-configure-submit",
+      locale: "en-US",
+      fp: "abcd1234",
+      nonce: "nonce1234567",
+    },
+  ],
+  ["config:v1:autoch-threshold-open:en-US", { action: "channels-autoch-threshold-open", locale: "en-US" }],
+  [
+    "config:v1:autoch-threshold-submit:en-US:abcd1234:nonce1234567",
+    {
+      action: "channels-autoch-threshold-submit",
+      locale: "en-US",
+      fp: "abcd1234",
+      nonce: "nonce1234567",
+    },
+  ],
+  ["config:v1:private-manage-open:en-US:0", { action: "channels-private-manage-open", locale: "en-US", start: 0 }],
+  [
+    "config:v1:private-submit:en-US:1:abcd1234:nonce1234567",
+    {
+      action: "channels-private-submit",
+      locale: "en-US",
+      start: 1,
+      fp: "abcd1234",
+      nonce: "nonce1234567",
+    },
+  ],
+  ["config:v1:private-page:en-US:1", { action: "channels-private-page", locale: "en-US", start: 1 }],
+  ["config:v1:rp-manage-open:en-US:0", { action: "channels-rp-manage-open", locale: "en-US", start: 0 }],
+  [
+    "config:v1:rp-submit:en-US:1:abcd1234:nonce1234567",
+    {
+      action: "channels-rp-submit",
+      locale: "en-US",
+      start: 1,
+      fp: "abcd1234",
+      nonce: "nonce1234567",
+    },
+  ],
+  ["config:v1:rp-page:en-US:1", { action: "channels-rp-page", locale: "en-US", start: 1 }],
+  ["config:v1:blocklist-manage-open:en-US:0", { action: "channels-blocklist-manage-open", locale: "en-US", start: 0 }],
+  [
+    "config:v1:blocklist-submit:en-US:1:abcd1234:nonce1234567",
+    {
+      action: "channels-blocklist-submit",
+      locale: "en-US",
+      start: 1,
+      fp: "abcd1234",
+      nonce: "nonce1234567",
+    },
+  ],
+  ["config:v1:blocklist-page:en-US:1", { action: "channels-blocklist-page", locale: "en-US", start: 1 }],
+  ["config:v1:ch-ov-select:en-US", { action: "channels-overrides-select", locale: "en-US" }],
+  [
+    "config:v1:ch-ov-p-open:en-US:123456789012345678",
+    { action: "channels-overrides-prompt-open", locale: "en-US", channelId: "123456789012345678" },
+  ],
+  [
+    "config:v1:ch-ov-p-submit:en-US:123456789012345678:abcd1234:nonce1234567",
+    {
+      action: "channels-overrides-prompt-submit",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      fp: "abcd1234",
+      nonce: "nonce1234567",
+    },
+  ],
+  [
+    "config:v1:ch-ov-p-clear:en-US:123456789012345678:abcd1234",
+    {
+      action: "channels-overrides-prompt-clear",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      fp: "abcd1234",
+    },
+  ],
+  [
+    "config:v1:ch-ov-c-open:en-US:123456789012345678",
+    { action: "channels-overrides-context-note-open", locale: "en-US", channelId: "123456789012345678" },
+  ],
+  [
+    "config:v1:ch-ov-c-submit:en-US:123456789012345678:abcd1234:nonce1234567",
+    {
+      action: "channels-overrides-context-note-submit",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      fp: "abcd1234",
+      nonce: "nonce1234567",
+    },
+  ],
+  [
+    "config:v1:ch-ov-t-open:en-US:123456789012345678",
+    { action: "channels-overrides-text-open", locale: "en-US", channelId: "123456789012345678" },
+  ],
+  [
+    "config:v1:ch-ov-t-provider:en-US:123456789012345678:abcd1234",
+    {
+      action: "channels-overrides-text-provider-select",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      fp: "abcd1234",
+    },
+  ],
+  [
+    "config:v1:ch-ov-t-model:en-US:123456789012345678:openrouter:abcd1234",
+    {
+      action: "channels-overrides-text-model-select",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      provider: "openrouter",
+      fp: "abcd1234",
+    },
+  ],
+  [
+    "config:v1:ch-ov-t-page:en-US:123456789012345678:openrouter:25",
+    {
+      action: "channels-overrides-text-model-page",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      provider: "openrouter",
+      start: 25,
+    },
+  ],
+  [
+    "config:v1:ch-ov-t-clear:en-US:123456789012345678:abcd1234",
+    {
+      action: "channels-overrides-text-clear",
+      locale: "en-US",
+      channelId: "123456789012345678",
+      fp: "abcd1234",
+    },
+  ],
 ];
 
 describe("config route wire contract", () => {
@@ -747,6 +913,17 @@ describe("config route wire contract", () => {
   it("covers every declared action in the pinned wire contract", () => {
     const pinned = new Set(WIRE_CONTRACT_V1.map(([, route]) => route.action));
     expect([...pinned].sort()).toEqual(Object.keys(CONFIG_ROUTE_CODECS).sort());
+  });
+
+  it("keeps the longest channel Text model page route under Discord's limit", () => {
+    const customId = buildConfigRouteId({
+      action: "channels-overrides-text-model-page",
+      locale: "en-US",
+      channelId: "99999999999999999999",
+      provider: "openrouter",
+      start: 999999,
+    });
+    expect(customId.length).toBeLessThan(100);
   });
 
   it("rejects a malformed or out-of-range field rather than defaulting it", () => {

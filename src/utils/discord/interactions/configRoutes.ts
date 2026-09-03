@@ -1,10 +1,15 @@
-import { AttachmentBuilder, MessageFlags, type ModalSubmitInteraction } from "discord.js";
+import {
+  AttachmentBuilder,
+  MessageFlags,
+  type ChannelSelectMenuInteraction,
+  type ModalSubmitInteraction,
+} from "discord.js";
 import type { PanelAction } from "@/constants/panelActions";
 import type { PersonaSpriteRow, TomoriState } from "@/types/db/schema";
 import type { PanelReceipt, PanelReceiptTone } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import { isToolNoticeKey } from "@/constants/toolNotices";
-import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
+import { getCachedAllPersonas, getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import {
   getShortTermMemoryForServerChannel,
   getShortTermMemoryForUserChannel,
@@ -16,7 +21,10 @@ import { conditioningMemoryRepository } from "@/utils/db/repositories/Conditioni
 import { personalMemoryRepository } from "@/utils/db/repositories/PersonalMemoryRepository";
 import {
   configRepository,
+  channelContextNoteRepo,
+  channelPromptRepo,
   llmModelRepo,
+  llmOverrideRepo,
   personaRepository,
   serverMemoryRepository,
   serverScheduleRepository,
@@ -88,6 +96,17 @@ import {
   loadConfigPermissionsView,
 } from "@/utils/discord/interactions/configPermissionRoutes";
 import {
+  CONFIG_CHANNEL_MODAL_OPEN_ACTIONS,
+  CONFIG_CHANNEL_MODAL_SUBMIT_ACTIONS,
+  handleConfigChannelModalOpen,
+  handleConfigChannelRoutes,
+} from "@/utils/discord/interactions/configChannelRoutes";
+import {
+  loadCachedGuildBlocklistChannels,
+  loadCachedGuildChannelOverrideChannels,
+  loadCachedGuildTextChecklistChannels,
+} from "@/utils/discord/channelChecklistManager";
+import {
   deniedReceipt,
   repaint,
   resolveSelectedPersona,
@@ -100,6 +119,7 @@ import {
   type ConfigBehaviorNoticesView,
   type ConfigBehaviorTriggerView,
   type ConfigBehaviorView,
+  type ConfigChannelsView,
   type ConfigPersonaMemoryView,
   type ConfigRouteDependencies,
   type ConfigScope,
@@ -150,6 +170,7 @@ import {
 } from "@/utils/discord/ui/configModals";
 import {
   showRoutedRawModal,
+  takeRawModalChannelSelectValue,
   takeRawModalCheckboxGroupValues,
   takeRawModalFileUpload,
   takeRawModalSelectValue,
@@ -483,6 +504,56 @@ const defaultDependencies: ConfigRouteDependencies = {
     return view;
   },
   loadPermissionsView: loadConfigPermissionsView,
+  loadChannelsView: async (interaction, selectedChannelId): Promise<ConfigChannelsView> => {
+    const availableTextChannels = interaction.guild ? loadCachedGuildTextChecklistChannels(interaction.guild) : [];
+    const availableBlocklistChannels = interaction.guild ? loadCachedGuildBlocklistChannels(interaction.guild) : [];
+    const availableOverrideChannels = interaction.guild
+      ? loadCachedGuildChannelOverrideChannels(interaction.guild)
+      : [];
+    const state = interaction.guildId ? await getCachedTomoriState(interaction.guildId) : null;
+    const enabledChannelIds = new Set(state?.config.autoch_disc_ids ?? []);
+    const privateChannelIds = new Set(state?.config.private_channel_ids ?? []);
+    const roleplayChannelIds = new Set(state?.config.rp_channel_ids ?? []);
+    const blockedChannelIds = new Set(state?.config.crosschannel_blocklist_ids ?? []);
+    const selectedOverrideChannel = availableOverrideChannels.find((channel) => channel.id === selectedChannelId);
+    const selectedOverrideChannelId = selectedOverrideChannel?.id ?? null;
+    const [prompt, contextNote, textModelOverride] =
+      selectedOverrideChannelId && state
+        ? await Promise.all([
+            channelPromptRepo.getChannelPromptOverride(state.server_id, selectedOverrideChannelId),
+            channelContextNoteRepo.getChannelContextNote(state.server_id, selectedOverrideChannelId),
+            llmOverrideRepo.getChannelLlmOverride(state.server_id, selectedOverrideChannelId),
+          ])
+        : [null, null, null];
+    return {
+      destinations: {
+        thoughtLogChannelId: state?.config.thought_log_channel_disc_id ?? null,
+        welcomeChannelId: state?.config.welcome_channel_disc_id ?? null,
+        welcomePrompt: state?.config.welcome_prompt ?? null,
+        welcomePersonaId: state?.config.welcome_persona_id ?? null,
+      },
+      autoTrigger: {
+        enabledChannels: availableTextChannels.filter((channel) => enabledChannelIds.has(channel.id)),
+        personaOverrides: state?.config.autoch_persona_overrides ?? [],
+        threshold: state?.config.autoch_threshold ?? 0,
+        maxThreshold: state?.config.autoch_threshold_max ?? state?.config.autoch_threshold ?? 0,
+      },
+      rules: {
+        privateChannels: availableTextChannels.filter((channel) => privateChannelIds.has(channel.id)),
+        roleplayChannels: availableTextChannels.filter((channel) => roleplayChannelIds.has(channel.id)),
+        crossChannelBlocklist: availableBlocklistChannels.filter((channel) => blockedChannelIds.has(channel.id)),
+      },
+      availableTextChannels,
+      availableBlocklistChannels,
+      availableOverrideChannels,
+      overrides: {
+        selectedChannelId: selectedOverrideChannelId,
+        prompt,
+        contextNote,
+        textModelOverride,
+      },
+    };
+  },
   loadModelListView: async (state, capability, provider, start) => ({
     capability,
     provider,
@@ -505,6 +576,7 @@ const defaultDependencies: ConfigRouteDependencies = {
   takeFileUpload: takeRawModalFileUpload,
   takeCheckboxValues: takeRawModalCheckboxGroupValues,
   takeSelectValue: takeRawModalSelectValue,
+  takeChannelSelectValue: takeRawModalChannelSelectValue,
 };
 
 /**
@@ -2461,7 +2533,13 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       const route = parseConfigPanelRoute(parsed);
       if (!route) throw new Error(`Malformed config panel route: ${interaction.customId}`);
 
-      const expectsSelect =
+      // Route dispatch runs against hand-rolled interaction doubles in four sibling suites that
+      // predate channel selects, so probe for the guard before calling it.
+      const isChannelSelectMenu =
+        typeof (interaction as { isChannelSelectMenu?: unknown }).isChannelSelectMenu === "function" &&
+        (interaction as { isChannelSelectMenu: () => boolean }).isChannelSelectMenu();
+
+      const expectsStringSelect =
         route.action === "page" ||
         route.action === "persona-select" ||
         route.action === "naming-style-select" ||
@@ -2470,9 +2548,11 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "humanizer-select" ||
         route.action === "text-override-provider-select" ||
         route.action === "text-override-model-select" ||
+        route.action === "channels-overrides-text-model-select" ||
         route.action === "sprite-select" ||
         CONFIG_MODEL_SELECT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_SELECT_ACTIONS.has(route.action);
+      const expectsChannelSelect = route.action === "channels-overrides-select";
       const expectsModal =
         route.action === "avatar-submit" ||
         route.action === "rename-submit" ||
@@ -2495,15 +2575,19 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         CONFIG_MODEL_MODAL_SUBMIT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_MODAL_SUBMIT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_D10_MODAL_SUBMIT_ACTIONS.has(route.action) ||
-        CONFIG_PERMISSION_MODAL_SUBMIT_ACTIONS.has(route.action);
+        CONFIG_PERMISSION_MODAL_SUBMIT_ACTIONS.has(route.action) ||
+        CONFIG_CHANNEL_MODAL_SUBMIT_ACTIONS.has(route.action);
 
-      if (expectsSelect && !interaction.isStringSelectMenu()) {
+      if (expectsStringSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Config ${route.action} route requires a String Select interaction`);
+      }
+      if (expectsChannelSelect && !isChannelSelectMenu) {
+        throw new Error(`Config ${route.action} route requires a Channel Select interaction`);
       }
       if (expectsModal && !interaction.isModalSubmit()) {
         throw new Error(`Config ${route.action} route requires a modal submission`);
       }
-      if (!expectsSelect && !expectsModal && !interaction.isButton()) {
+      if (!expectsStringSelect && !expectsChannelSelect && !expectsModal && !interaction.isButton()) {
         throw new Error(`Config ${route.action} route requires a button interaction`);
       }
 
@@ -2511,7 +2595,11 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       // rejected before any repository read.
       const actor = resolveConfigActor(interaction);
 
-      const submittedValue = interaction.isStringSelectMenu() ? (interaction.values[0] ?? null) : null;
+      const submittedValue = interaction.isStringSelectMenu()
+        ? (interaction.values[0] ?? null)
+        : isChannelSelectMenu
+          ? ((interaction as ChannelSelectMenuInteraction).values[0] ?? null)
+          : null;
       if ((route.action === "attribute-select" || route.action === "dialogue-select") && submittedValue === "add") {
         await handleCollectionAddSelection(interaction, route, dependencies, actor);
         return;
@@ -2534,6 +2622,11 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
 
       if (CONFIG_PERMISSION_MODAL_OPEN_ACTIONS.has(route.action)) {
         await handleConfigPermissionModalOpen(interaction, route, dependencies, actor);
+        return;
+      }
+
+      if (CONFIG_CHANNEL_MODAL_OPEN_ACTIONS.has(route.action)) {
+        await handleConfigChannelModalOpen(interaction, route, dependencies, actor);
         return;
       }
 
@@ -2603,6 +2696,17 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
 
       if (
         await handleConfigPermissionRoutes({
+          interaction,
+          route,
+          scope,
+          dependencies,
+        })
+      ) {
+        return;
+      }
+
+      if (
+        await handleConfigChannelRoutes({
           interaction,
           route,
           scope,
