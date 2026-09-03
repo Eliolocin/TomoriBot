@@ -123,6 +123,18 @@ export const PANEL_ACTIONS = [
   "server-config.workspace.persona-sprite.remove",
   "server-config.workspace.persona-sprite.import",
   "server-config.workspace.persona-sprite.export",
+  "server-config.workspace.model.set",
+  "server-config.workspace.model.clear",
+  "server-config.workspace.parameters.set",
+  "server-config.workspace.stop-strings.add",
+  "server-config.workspace.stop-strings.manage",
+  "server-config.workspace.logit-bias.add",
+  "server-config.workspace.logit-bias.upload",
+  "server-config.workspace.logit-bias.remove",
+  "server-config.workspace.fallbacks.set",
+  "server-config.workspace.randomizer.set",
+  "server-config.workspace.image-tags.set",
+  "server-config.workspace.nai-parameters.set",
   "personal-config.personal.character-reference.set",
 ] as const;
 

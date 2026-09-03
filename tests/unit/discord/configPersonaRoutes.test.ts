@@ -534,6 +534,75 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     "config:v1:refresh:en-US:persona:general",
     { action: "refresh", locale: "en-US", category: "persona", page: "general" },
   ],
+  ["config:v1:model-prov-select:en-US:text", { action: "model-provider-select", locale: "en-US", capability: "text" }],
+  [
+    "config:v1:model-prov-page:en-US:vision:25",
+    { action: "model-provider-page", locale: "en-US", capability: "vision", start: 25 },
+  ],
+  [
+    "config:v1:model-select:en-US:embedding:google",
+    { action: "model-select", locale: "en-US", capability: "embedding", provider: "google" },
+  ],
+  [
+    "config:v1:model-select:en-US:video:custom~12",
+    { action: "model-select", locale: "en-US", capability: "video", provider: "custom:12" },
+  ],
+  [
+    "config:v1:model-page:en-US:image:google:24",
+    { action: "model-page", locale: "en-US", capability: "image", provider: "google", start: 24 },
+  ],
+  ["config:v1:model-cancel:en-US:nai-image", { action: "model-cancel", locale: "en-US", capability: "nai-image" }],
+  ["config:v1:param-prov-select:en-US", { action: "parameters-provider-select", locale: "en-US" }],
+  ["config:v1:sampling-open:en-US:google", { action: "sampling-open", locale: "en-US", provider: "google" }],
+  [
+    "config:v1:sampling-sub:en-US:google:nonce1234567",
+    { action: "sampling-submit", locale: "en-US", provider: "google", nonce: "nonce1234567" },
+  ],
+  ["config:v1:generation-open:en-US:google", { action: "generation-open", locale: "en-US", provider: "google" }],
+  [
+    "config:v1:generation-sub:en-US:google:nonce1234567",
+    { action: "generation-submit", locale: "en-US", provider: "google", nonce: "nonce1234567" },
+  ],
+  ["config:v1:stop-add-open:en-US", { action: "stop-add-open", locale: "en-US" }],
+  ["config:v1:stop-add-sub:en-US:nonce1234567", { action: "stop-add-submit", locale: "en-US", nonce: "nonce1234567" }],
+  ["config:v1:stop-man-open:en-US", { action: "stop-manage-open", locale: "en-US" }],
+  [
+    "config:v1:stop-man-sub:en-US:abcd1234:nonce1234567",
+    { action: "stop-manage-submit", locale: "en-US", fp: "abcd1234", nonce: "nonce1234567" },
+  ],
+  ["config:v1:logit-add-open:en-US", { action: "logit-add-open", locale: "en-US" }],
+  [
+    "config:v1:logit-add-sub:en-US:nonce1234567",
+    { action: "logit-add-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:logit-up-open:en-US", { action: "logit-upload-open", locale: "en-US" }],
+  [
+    "config:v1:logit-up-sub:en-US:nonce1234567",
+    { action: "logit-upload-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:logit-man-select:en-US", { action: "logit-manage-select", locale: "en-US" }],
+  ["config:v1:logit-man-open:en-US:0", { action: "logit-manage-open", locale: "en-US", start: 0 }],
+  [
+    "config:v1:logit-man-sub:en-US:50:abcd1234:nonce1234567",
+    { action: "logit-manage-submit", locale: "en-US", start: 50, fp: "abcd1234", nonce: "nonce1234567" },
+  ],
+  ["config:v1:fb-prov-select:en-US", { action: "fallback-provider-select", locale: "en-US" }],
+  [
+    "config:v1:fb-sub:en-US:google:24:nonce1234567",
+    { action: "fallback-submit", locale: "en-US", provider: "google", start: 24, nonce: "nonce1234567" },
+  ],
+  ["config:v1:randomizer-set:en-US:1", { action: "randomizer-set", locale: "en-US", enabled: true }],
+  ["config:v1:randomizer-set:en-US:0", { action: "randomizer-set", locale: "en-US", enabled: false }],
+  ["config:v1:img-tags-open:en-US:0", { action: "image-tags-default-open", locale: "en-US", negative: false }],
+  [
+    "config:v1:img-tags-sub:en-US:1:nonce1234567",
+    { action: "image-tags-default-submit", locale: "en-US", negative: true, nonce: "nonce1234567" },
+  ],
+  ["config:v1:nai-params-open:en-US", { action: "nai-parameters-open", locale: "en-US" }],
+  [
+    "config:v1:nai-params-sub:en-US:nonce1234567",
+    { action: "nai-parameters-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
 ];
 
 describe("config route wire contract", () => {

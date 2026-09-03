@@ -1,0 +1,1298 @@
+/**
+ * Route coverage for the `/config` Models surface.
+ *
+ * Drives the real registered route through the real policy, catalog, renderer, and canonical model
+ * operations. Writes are proved by spying on the repository each operation actually calls rather
+ * than by substituting an operations double, which would restate the expected answer instead of
+ * exercising the code under test.
+ */
+import { beforeAll, describe, expect, it, spyOn } from "bun:test";
+import { PermissionsBitField, type Client } from "discord.js";
+import type { SavedProviderConfigRow, TomoriState } from "@/types/db/schema";
+import { configRepository, llmModelRepo, llmOverrideRepo, llmProviderRepo } from "@/utils/db/repositories";
+import * as ragAvailability from "@/utils/db/ragAvailability";
+import { ragRepository, serverMemoryRepository } from "@/utils/db/repositories";
+import * as credentialResolver from "@/utils/provider/credentialResolver";
+import { buildConfigRouteId, type ConfigModelCapability } from "@/utils/discord/configPanelCatalog";
+import {
+  filterProvidersForCapability,
+  isNaiPipelineProvider,
+  configModelOperations,
+} from "@/utils/discord/interactions/configModelOperations";
+import {
+  decodeFallbackProviderValue,
+  encodeFallbackProviderValue,
+  loadConfigFallbacksView,
+  loadConfigImageGenerationView,
+  loadConfigModelListView,
+  loadConfigParametersView,
+  loadConfigSwitchModelsView,
+} from "@/utils/discord/interactions/configModelLoaders";
+import { createConfigInteractionRoute } from "@/utils/discord/interactions/configRoutes";
+import type { ConfigRouteDependencies, ConfigScope } from "@/utils/discord/interactions/configRouteContext";
+import { InteractionRouteRegistry } from "@/utils/discord/interactions/routeRegistry";
+import { buildConfigModalFieldId } from "@/utils/discord/ui/configModals";
+import { buildConfigFallbackSlotId } from "@/utils/discord/ui/configModelModals";
+import { initializeLocalizer } from "@/utils/text/localizer";
+
+beforeAll(async () => initializeLocalizer());
+
+const CLIENT = {} as Client;
+
+function makeState(overrides: Record<string, unknown> = {}): TomoriState {
+  return {
+    server_id: 9,
+    persona_id: 55,
+    persona_nickname: "Aphel",
+    is_alter: false,
+    trigger_words: [],
+    naming_config: { prefixes: {}, suffixes: {}, addressTerms: {} },
+    attribute_list: [],
+    sample_dialogues_in: [],
+    sample_dialogues_out: [],
+    llm: { llm_id: 1, llm_codename: "gemini-2.5-flash", llm_provider: "google", sees_images: true, has_tools: true },
+    vision_llm: null,
+    fallback_chain: [],
+    config: {
+      llm_id: 1,
+      vision_llm_id: null,
+      embedding_model_id: null,
+      diffusion_model_id: null,
+      nai_diffusion_model_id: null,
+      video_model_id: null,
+      llm_temperature: 1,
+      llm_top_p: 0.95,
+      llm_top_k: 0,
+      llm_frequency_penalty: 0,
+      llm_presence_penalty: 0,
+      llm_min_p: 0.05,
+      llm_max_output_tokens: null,
+      thinking_level: "auto",
+      llm_stop_strings: [],
+      llm_stop_speaker_pattern_enabled: false,
+      llm_logit_biases: [],
+      fallback_model_refs: [],
+      model_randomizer_enabled: false,
+      image_default_positive_tags: ["masterpiece"],
+      image_default_negative_tags: ["lowres"],
+      nai_sampler: null,
+      nai_steps: null,
+      nai_scale: null,
+      nai_noise_schedule: null,
+      nai_cfg_rescale: null,
+      ...((overrides.config as Record<string, unknown>) ?? {}),
+    },
+    ...overrides,
+  } as unknown as TomoriState;
+}
+
+function makeSavedProvider(provider: string, overrides: Record<string, unknown> = {}): SavedProviderConfigRow {
+  return {
+    server_id: 9,
+    provider,
+    api_key: "key",
+    key_version: 1,
+    llm_id: 1,
+    diffusion_model_id: null,
+    embedding_model_id: null,
+    nai_diffusion_model_id: null,
+    video_model_id: null,
+    vision_llm_id: null,
+    nai_preset_name: null,
+    llm_temperature: 1,
+    llm_top_p: 0.95,
+    llm_top_k: 0,
+    llm_frequency_penalty: 0,
+    llm_presence_penalty: 0,
+    llm_min_p: 0.05,
+    llm_max_output_tokens: null,
+    llm_disabled_params: [],
+    llm_logit_biases: [],
+    thinking_level: "auto",
+    fallback_model_refs: [],
+    ...overrides,
+  } as unknown as SavedProviderConfigRow;
+}
+
+interface HarnessOptions {
+  isManager?: boolean;
+  inGuild?: boolean;
+  state?: TomoriState;
+  refreshedState?: TomoriState;
+  switchProviders?: Record<string, string[]>;
+  models?: Array<{ id: number; name: string; description: string | null }>;
+  parametersProviders?: string[];
+  selectedConfig?: SavedProviderConfigRow | null;
+  fallbackProviderEntries?: Array<{ value: string; label: string }>;
+}
+
+interface Harness {
+  dependencies: Partial<ConfigRouteDependencies>;
+  telemetry: string[];
+  edits: unknown[];
+  replies: unknown[];
+  modals: unknown[];
+  checkboxValues: Record<string, string[] | undefined>;
+  selectValues: Record<string, string | undefined>;
+  deferredAtWrite: boolean[];
+}
+
+function makeHarness(options: HarnessOptions = {}): Harness {
+  const telemetry: string[] = [];
+  const edits: unknown[] = [];
+  const replies: unknown[] = [];
+  const modals: unknown[] = [];
+  const checkboxValues: Record<string, string[] | undefined> = {};
+  const selectValues: Record<string, string | undefined> = {};
+  const deferredAtWrite: boolean[] = [];
+
+  const buildScope = (forceRefresh: boolean): ConfigScope => ({
+    serverDiscId: options.inGuild === false ? "user-1" : "guild-1",
+    guildId: options.inGuild === false ? null : "guild-1",
+    internalServerId: 9,
+    userId: 1,
+    actor:
+      options.inGuild === false
+        ? { workspaceKind: "dm", isManager: true }
+        : { workspaceKind: "guild", isManager: options.isManager ?? true },
+    personas: [(forceRefresh ? (options.refreshedState ?? options.state) : options.state) ?? makeState()],
+    readStatus: "fresh",
+  });
+
+  return {
+    telemetry,
+    edits,
+    replies,
+    modals,
+    checkboxValues,
+    selectValues,
+    deferredAtWrite,
+    dependencies: {
+      resolveScope: async (_interaction, forceRefresh = false) => buildScope(forceRefresh),
+      getPersonaAvatarData: async () => ({ url: null, files: [] }),
+      recordAction: (input) => {
+        telemetry.push(input.action);
+      },
+      createNonce: () => "nonce1234567",
+      showModal: async (_interaction, payload) => {
+        modals.push(payload);
+      },
+      takeCheckboxValues: (_interactionId, fieldId) => checkboxValues[fieldId],
+      takeSelectValue: (_interactionId, fieldId) => selectValues[fieldId],
+      takeFileUpload: () => undefined,
+      loadSwitchModelsView: async (_state, providerPage) => ({
+        slots: (["text", "vision", "embedding", "image", "nai-image", "video"] as ConfigModelCapability[]).map(
+          (capability) => ({
+            capability,
+            currentModelName: capability === "text" ? "gemini-2.5-flash" : null,
+            currentProvider: capability === "text" ? "google" : null,
+            eligibleProviders: options.switchProviders?.[capability] ?? ["google"],
+            providerPageStart: providerPage?.capability === capability ? providerPage.start : 0,
+          }),
+        ),
+        channelOverrideCount: 3,
+        personaOverrideCount: 2,
+      }),
+      loadParametersView: async (_state, requestedProvider) => {
+        const providers = options.parametersProviders ?? ["google"];
+        const selected = providers.includes(requestedProvider ?? "") ? (requestedProvider as string) : providers[0];
+        return {
+          textProviders: providers,
+          selectedProvider: selected ?? null,
+          selectedConfig:
+            options.selectedConfig !== undefined ? options.selectedConfig : makeSavedProvider(selected ?? "google"),
+          stopStrings: options.state?.config.llm_stop_strings ?? [],
+          speakerPatternEnabled: options.state?.config.llm_stop_speaker_pattern_enabled ?? false,
+          logitBiasEntries: options.state?.config.llm_logit_biases ?? [],
+          logitBiasPageStart: 0,
+        };
+      },
+      loadFallbacksView: async () => ({
+        slots: [{ label: null }, { label: null }, { label: null }, { label: null }, { label: null }],
+        providerEntries: options.fallbackProviderEntries ?? [
+          { value: encodeFallbackProviderValue("google", 0), label: "Google" },
+        ],
+        randomizerEnabled: options.state?.config.model_randomizer_enabled ?? false,
+        hasFallbacks: (options.state?.config.fallback_model_refs ?? []).length > 0,
+      }),
+      loadImageGenerationView: () => ({
+        positiveTags: ["masterpiece"],
+        negativeTags: ["lowres"],
+        sampler: "k_euler_ancestral",
+        steps: "28",
+        scale: "5",
+        noiseSchedule: "karras",
+        cfgRescale: "0",
+      }),
+      loadModelListView: async (_state, capability, provider, start) => ({
+        capability,
+        provider,
+        models: options.models ?? [{ id: 7, name: "gemini-2.5-pro", description: "Pro" }],
+        start,
+        currentModelId: null,
+      }),
+      loadFallbackOptions: async () => [{ value: "gemini-2.5-pro", label: "gemini-2.5-pro" }],
+      loadModelProviders: async (_state, capability) => options.switchProviders?.[capability] ?? ["google"],
+    },
+  };
+}
+
+interface FakeInteractionOptions {
+  customId: string;
+  kind?: "button" | "select" | "modal";
+  values?: string[];
+  fields?: Record<string, string>;
+  isManager?: boolean;
+  inGuild?: boolean;
+  harness: Harness;
+}
+
+function makeInteraction(options: FakeInteractionOptions) {
+  let deferred = false;
+  const kind = options.kind ?? "button";
+
+  const interaction = {
+    id: "interaction-1",
+    customId: options.customId,
+    user: { id: "user-1", username: "Sparrow" },
+    channelId: "channel-1",
+    channel: { name: "lounge" },
+    guildId: options.inGuild === false ? null : "guild-1",
+    guild: options.inGuild === false ? null : { id: "guild-1" },
+    client: { user: null },
+    values: options.values ?? [],
+    memberPermissions: {
+      has: (flag: bigint) => (options.isManager ?? true) && flag === PermissionsBitField.Flags.ManageGuild,
+    },
+    isButton: () => kind === "button",
+    isStringSelectMenu: () => kind === "select",
+    isModalSubmit: () => kind === "modal",
+    get deferred() {
+      return deferred;
+    },
+    get replied() {
+      return false;
+    },
+    deferUpdate: async () => {
+      deferred = true;
+    },
+    editReply: async (payload: unknown) => {
+      options.harness.edits.push(payload);
+      return payload;
+    },
+    reply: async (payload: unknown) => {
+      options.harness.replies.push(payload);
+      return payload;
+    },
+    followUp: async (payload: unknown) => payload,
+    fields: {
+      fields: new Map(Object.entries(options.fields ?? {})),
+      getTextInputValue: (fieldId: string) => options.fields?.[fieldId] ?? "",
+    },
+  };
+
+  return interaction as unknown as Parameters<ReturnType<typeof createConfigInteractionRoute>["execute"]>[1];
+}
+
+async function dispatch(harness: Harness, interaction: ReturnType<typeof makeInteraction>): Promise<void> {
+  const registry = new InteractionRouteRegistry([createConfigInteractionRoute(harness.dependencies)]);
+  await registry.dispatch(CLIENT, interaction);
+}
+
+function renderedText(payload: unknown): string {
+  return JSON.stringify(payload);
+}
+
+/** Options of the model-catalog select, addressed by its route rather than by row position. */
+function modelSelectOptions(payload: unknown): Array<{ value: string }> {
+  const parsed = JSON.parse(JSON.stringify(payload)) as {
+    components: Array<{
+      components?: Array<{ components?: Array<{ customId?: string; options?: { value: string }[] }> }>;
+    }>;
+  };
+  // A receipt renders as its own container ahead of the panel, so every top-level container is
+  // scanned rather than only the first.
+  for (const container of parsed.components) {
+    for (const row of container.components ?? []) {
+      const control = row.components?.[0];
+      if (control?.customId?.includes(":model-select:")) return control.options ?? [];
+    }
+  }
+  return [];
+}
+
+describe("config models provider eligibility", () => {
+  it("routes a NovelAI-pipeline provider to the NovelAI slot and every other provider to Standard", () => {
+    const rows = [makeSavedProvider("novelai"), makeSavedProvider("google"), makeSavedProvider("custom:12")];
+    expect(filterProvidersForCapability("nai-image", rows).map((row) => row.provider)).toEqual(["novelai"]);
+    expect(filterProvidersForCapability("image", rows).map((row) => row.provider)).toEqual(["google", "custom:12"]);
+  });
+
+  it("treats a custom label as a standard-column provider whatever its connection points at", () => {
+    expect(isNaiPipelineProvider("custom:12")).toBe(false);
+    expect(isNaiPipelineProvider("novelai")).toBe(true);
+  });
+
+  it("passes every non-image capability through unfiltered", () => {
+    const rows = [makeSavedProvider("novelai"), makeSavedProvider("google")];
+    for (const capability of ["text", "vision", "embedding", "video"] as ConfigModelCapability[]) {
+      expect(filterProvidersForCapability(capability, rows).map((row) => row.provider)).toEqual(["novelai", "google"]);
+    }
+  });
+});
+
+describe("config models switch page", () => {
+  it("renders all six capability slots and the Text-override counts", async () => {
+    const harness = makeHarness();
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness,
+      }),
+    );
+
+    const rendered = renderedText(harness.edits.at(-1));
+    for (const capability of ["text", "vision", "embedding", "image", "nai-image", "video"] as const) {
+      expect(rendered).toContain(buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }));
+    }
+    expect(rendered).toContain("Channel overrides");
+    expect(rendered).toContain("Persona overrides");
+  });
+
+  it("renders an inert selector for a capability with no eligible provider", async () => {
+    const harness = makeHarness({ switchProviders: { video: [] } });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness,
+      }),
+    );
+
+    const payload = JSON.parse(renderedText(harness.edits.at(-1)));
+    const rows = payload.components[0].components;
+    const videoRow = rows.find(
+      (row: { components?: Array<{ customId?: string }> }) =>
+        row.components?.[0]?.customId ===
+        buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "video" }),
+    );
+    expect(videoRow.components[0].disabled).toBe(true);
+  });
+
+  it("offers a None entry only for the slots whose absorbed command can clear", async () => {
+    for (const capability of ["vision", "image", "nai-image"] as ConfigModelCapability[]) {
+      const harness = makeHarness();
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+          kind: "select",
+          values: ["google"],
+          harness,
+        }),
+      );
+      expect(renderedText(harness.edits.at(-1))).toContain("__clear__");
+    }
+
+    for (const capability of ["text", "embedding", "video"] as ConfigModelCapability[]) {
+      const harness = makeHarness();
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+          kind: "select",
+          values: ["google"],
+          harness,
+        }),
+      );
+      expect(renderedText(harness.edits.at(-1))).not.toContain("__clear__");
+    }
+  });
+
+  it("explains an empty catalog on a clearable slot while still offering its None entry", async () => {
+    const harness = makeHarness({ models: [] });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "vision" }),
+        kind: "select",
+        values: ["google"],
+        harness,
+      }),
+    );
+
+    const rendered = renderedText(harness.edits.at(-1));
+    expect(rendered).toContain("has no models for this feature");
+    expect(modelSelectOptions(harness.edits.at(-1)).map((option) => option.value)).toEqual(["__clear__"]);
+  });
+
+  it("refuses an empty catalog outright on a slot that cannot be cleared", async () => {
+    const harness = makeHarness({ models: [] });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "text" }),
+        kind: "select",
+        values: ["google"],
+        harness,
+      }),
+    );
+
+    expect(modelSelectOptions(harness.edits.at(-1))).toEqual([]);
+  });
+
+  it("reserves a page slot for the None entry so no model is unreachable on a clearable slot", async () => {
+    const models = Array.from({ length: 48 }, (_index, index) => ({
+      id: index + 1,
+      name: `model-${index + 1}`,
+      description: null,
+    }));
+    const harness = makeHarness({ models });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "vision" }),
+        kind: "select",
+        values: ["google"],
+        harness,
+      }),
+    );
+
+    const firstOptions = modelSelectOptions(harness.edits.at(-1));
+    expect(firstOptions).toHaveLength(25);
+    expect(firstOptions.at(-1)?.value).toBe("24");
+
+    const second = makeHarness({ models });
+    await dispatch(
+      second,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "model-page",
+          locale: "en-US",
+          capability: "vision",
+          provider: "google",
+          start: 24,
+        }),
+        harness: second,
+      }),
+    );
+    expect(modelSelectOptions(second.edits.at(-1)).map((option) => option.value)).toContain("25");
+  });
+});
+
+describe("config models capability writes", () => {
+  it("writes the vision column and invalidates the workspace cache after success", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const models = spyOn(llmModelRepo, "loadAvailableModelsForProvider").mockResolvedValue([
+      { llm_id: 7, llm_codename: "gemini-vision", llm_provider: "google", sees_images: true },
+    ] as never);
+    const update = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+
+    const state = makeState();
+    const result = await configModelOperations.setCapabilityModel({
+      tomoriState: state,
+      serverDiscId: "guild-1",
+      capability: "vision",
+      provider: "google",
+      modelId: 7,
+    });
+
+    expect(result.status).toBe("success");
+    expect(update).toHaveBeenCalledWith(9, { vision_llm_id: 7 });
+    providers.mockRestore();
+    models.mockRestore();
+    update.mockRestore();
+  });
+
+  it("sends a NovelAI image pick to the NovelAI column and a standard pick to the standard column", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("novelai", { diffusion_model_id: 4 }),
+      makeSavedProvider("google", { diffusion_model_id: 5 }),
+    ]);
+    const diffusion = spyOn(llmModelRepo, "loadAvailableDiffusionModels").mockImplementation(
+      async (provider: string) =>
+        provider === "novelai"
+          ? ([{ diffusion_model_id: 4, codename: "nai-diffusion-4", provider: "novelai" }] as never)
+          : ([{ diffusion_model_id: 5, codename: "imagen", provider: "google" }] as never),
+    );
+    const modelUpdate = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+    const naiUpdate = spyOn(configRepository, "updateNovelaiImagegenConfig").mockResolvedValue(true);
+
+    const state = makeState();
+    await configModelOperations.setCapabilityModel({
+      tomoriState: state,
+      serverDiscId: "guild-1",
+      capability: "nai-image",
+      provider: "novelai",
+      modelId: 4,
+    });
+    expect(naiUpdate).toHaveBeenCalledWith(9, { nai_diffusion_model_id: 4 });
+
+    await configModelOperations.setCapabilityModel({
+      tomoriState: state,
+      serverDiscId: "guild-1",
+      capability: "image",
+      provider: "google",
+      modelId: 5,
+    });
+    expect(modelUpdate).toHaveBeenCalledWith(9, { diffusion_model_id: 5 });
+
+    providers.mockRestore();
+    diffusion.mockRestore();
+    modelUpdate.mockRestore();
+    naiUpdate.mockRestore();
+  });
+
+  it("refuses a NovelAI provider offered under the Standard Image slot", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("novelai", { diffusion_model_id: 4 }),
+    ]);
+    const update = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+
+    const result = await configModelOperations.setCapabilityModel({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      capability: "image",
+      provider: "novelai",
+      modelId: 4,
+    });
+
+    expect(result.status).toBe("not-found");
+    expect(update).not.toHaveBeenCalled();
+    providers.mockRestore();
+    update.mockRestore();
+  });
+
+  it("re-embeds stored documents when the embedding family changes", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google", { embedding_model_id: 3 }),
+    ]);
+    const embeddings = spyOn(llmModelRepo, "loadAvailableEmbeddingModels").mockResolvedValue([
+      { embedding_model_id: 3, codename: "text-embedding-004", provider: "google", model_family: "gemini" },
+    ] as never);
+    const byId = spyOn(llmModelRepo, "loadEmbeddingModelById").mockImplementation(async (id: number) =>
+      id === 3
+        ? ({ embedding_model_id: 3, codename: "text-embedding-004", model_family: "gemini" } as never)
+        : ({ embedding_model_id: 2, codename: "old-model", model_family: "openai" } as never),
+    );
+    const update = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+    const ragAvailable = spyOn(ragAvailability, "isRagAvailable").mockReturnValue(true);
+    const countDocuments = spyOn(serverMemoryRepository, "countDocuments").mockResolvedValue(4);
+    const credentials = spyOn(credentialResolver, "resolveCapabilityCredentials").mockResolvedValue({
+      apiKey: "key",
+    } as never);
+    const reembed = spyOn(ragRepository, "reembedServerDocuments").mockResolvedValue(undefined as never);
+
+    const result = await configModelOperations.setCapabilityModel({
+      tomoriState: makeState({ config: { embedding_model_id: 2 } }),
+      serverDiscId: "guild-1",
+      capability: "embedding",
+      provider: "google",
+      modelId: 3,
+    });
+
+    expect(result).toMatchObject({ status: "success", reembedded: true });
+    expect(reembed).toHaveBeenCalledTimes(1);
+
+    for (const spy of [providers, embeddings, byId, update, ragAvailable, countDocuments, credentials, reembed]) {
+      spy.mockRestore();
+    }
+  });
+
+  it("refuses to clear a slot whose absorbed command has no clear path", async () => {
+    const update = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+    for (const capability of ["text", "embedding", "video"] as ConfigModelCapability[]) {
+      const result = await configModelOperations.clearCapabilityModel({
+        tomoriState: makeState(),
+        serverDiscId: "guild-1",
+        capability,
+      });
+      expect(result.status).toBe("not-clearable");
+    }
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+  });
+
+  it("reports an unchanged slot as no change rather than writing it again", async () => {
+    const update = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+    const result = await configModelOperations.clearCapabilityModel({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      capability: "vision",
+    });
+    expect(result.status).toBe("already-clear");
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+  });
+
+  it("acknowledges the interaction before the model write reaches the repository", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const models = spyOn(llmModelRepo, "loadAvailableModelsForProvider").mockResolvedValue([
+      { llm_id: 7, llm_codename: "gemini-vision", llm_provider: "google", sees_images: true },
+    ] as never);
+
+    let acknowledgedAtWrite: boolean | null = null;
+    const harness = makeHarness();
+    const interaction = makeInteraction({
+      customId: buildConfigRouteId({
+        action: "model-select",
+        locale: "en-US",
+        capability: "vision",
+        provider: "google",
+      }),
+      kind: "select",
+      values: ["7"],
+      harness,
+    });
+    const update = spyOn(configRepository, "updateModelConfig").mockImplementation(async () => {
+      acknowledgedAtWrite = (interaction as unknown as { deferred: boolean }).deferred;
+      return true;
+    });
+
+    await dispatch(harness, interaction);
+
+    expect(acknowledgedAtWrite).toBe(true);
+    expect(harness.telemetry).toContain("server-config.workspace.model.set");
+    providers.mockRestore();
+    models.mockRestore();
+    update.mockRestore();
+  });
+});
+
+describe("config models authorization", () => {
+  it("writes nothing when a guild member replays a manager-owned model select", async () => {
+    const update = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+    const naiUpdate = spyOn(configRepository, "updateNovelaiImagegenConfig").mockResolvedValue(true);
+    const harness = makeHarness({ isManager: false });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "model-select",
+          locale: "en-US",
+          capability: "vision",
+          provider: "google",
+        }),
+        kind: "select",
+        values: ["7"],
+        isManager: false,
+        harness,
+      }),
+    );
+
+    expect(update).not.toHaveBeenCalled();
+    expect(naiUpdate).not.toHaveBeenCalled();
+    expect(renderedText(harness.edits.at(-1))).toContain("Permission Required");
+    update.mockRestore();
+    naiUpdate.mockRestore();
+  });
+
+  it("writes nothing when a guild member replays a manager-owned randomizer toggle", async () => {
+    const update = spyOn(configRepository, "updateChatConfig").mockResolvedValue(true);
+    // The chain is non-empty so the operation's own precondition would let the write through: the
+    // route gate has to be the only thing stopping it, or this test would pass without one.
+    const harness = makeHarness({
+      isManager: false,
+      state: makeState({ config: { fallback_model_refs: [{ type: "llm", id: 7 }] } }),
+    });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "randomizer-set", locale: "en-US", enabled: true }),
+        isManager: false,
+        harness,
+      }),
+    );
+
+    expect(update).not.toHaveBeenCalled();
+    expect(renderedText(harness.edits.at(-1))).toContain("Permission Required");
+    update.mockRestore();
+  });
+
+  it("denies Image Generation to a DM workspace owner while allowing the other three pages", async () => {
+    const update = spyOn(configRepository, "updateNovelaiImagegenConfig").mockResolvedValue(true);
+    const harness = makeHarness({ inGuild: false });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "nai-parameters-open", locale: "en-US" }),
+        inGuild: false,
+        harness,
+      }),
+    );
+
+    expect(harness.modals).toHaveLength(0);
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+  });
+});
+
+describe("config models parameters page", () => {
+  it("builds the sampling modal with four Text Inputs and the generation modal with a String Select", async () => {
+    const harness = makeHarness();
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "sampling-open", locale: "en-US", provider: "google" }),
+        harness,
+      }),
+    );
+    const sampling = harness.modals.at(-1) as { components: Array<{ component: { type: number } }> };
+    expect(sampling.components).toHaveLength(4);
+    expect(sampling.components.map((field) => field.component.type)).toEqual([4, 4, 4, 4]);
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "generation-open", locale: "en-US", provider: "google" }),
+        harness,
+      }),
+    );
+    const generation = harness.modals.at(-1) as { components: Array<{ component: { type: number } }> };
+    expect(generation.components.map((field) => field.component.type)).toEqual([4, 4, 4, 3]);
+  });
+
+  it("refuses to prefill a sampling modal for a provider the workspace no longer has", async () => {
+    const harness = makeHarness({ parametersProviders: ["google"] });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "sampling-open", locale: "en-US", provider: "openrouter" }),
+        harness,
+      }),
+    );
+    expect(harness.modals).toHaveLength(0);
+    expect(harness.replies).toHaveLength(1);
+  });
+
+  it("rejects an out-of-range sampler value instead of storing it", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const upsert = spyOn(llmProviderRepo, "upsertSavedProviderConfig").mockResolvedValue(true);
+
+    const result = await configModelOperations.setProviderParameters({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      provider: "google",
+      patch: { temperature: 5 },
+    });
+
+    expect(result.status).toBe("invalid-value");
+    expect(upsert).not.toHaveBeenCalled();
+    providers.mockRestore();
+    upsert.mockRestore();
+  });
+
+  it("mirrors a saved parameter change into the split config tables for the active provider only", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+      makeSavedProvider("openrouter"),
+    ]);
+    const upsert = spyOn(llmProviderRepo, "upsertSavedProviderConfig").mockResolvedValue(true);
+    const modelUpdate = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+    const chatUpdate = spyOn(configRepository, "updateChatConfig").mockResolvedValue(true);
+
+    await configModelOperations.setProviderParameters({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      provider: "google",
+      patch: { temperature: 0.6 },
+    });
+    expect(modelUpdate).toHaveBeenCalledTimes(1);
+    expect(chatUpdate).toHaveBeenCalledTimes(1);
+
+    modelUpdate.mockClear();
+    chatUpdate.mockClear();
+    await configModelOperations.setProviderParameters({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      provider: "openrouter",
+      patch: { temperature: 0.6 },
+    });
+    expect(modelUpdate).not.toHaveBeenCalled();
+    expect(chatUpdate).not.toHaveBeenCalled();
+
+    providers.mockRestore();
+    upsert.mockRestore();
+    modelUpdate.mockRestore();
+    chatUpdate.mockRestore();
+  });
+});
+
+describe("config models stop strings", () => {
+  it("removes only the unchecked strings and keeps the speaker pattern the modal reported", async () => {
+    const update = spyOn(configRepository, "updateChatConfig").mockResolvedValue(true);
+    const result = await configModelOperations.manageStopStrings({
+      tomoriState: makeState({ config: { llm_stop_strings: ["User:", "Assistant:", "System:"] } }),
+      serverDiscId: "guild-1",
+      presentedStopStrings: ["User:", "Assistant:", "System:"],
+      keptIndices: [0, 2],
+      speakerPatternEnabled: true,
+    });
+
+    expect(result).toMatchObject({ status: "success", removedCount: 1 });
+    expect(update).toHaveBeenCalledWith(9, {
+      llm_stop_strings: ["User:", "System:"],
+      llm_stop_speaker_pattern_enabled: true,
+    });
+    update.mockRestore();
+  });
+
+  it("refuses a submission whose presented list no longer matches the stored list", async () => {
+    const update = spyOn(configRepository, "updateChatConfig").mockResolvedValue(true);
+    const result = await configModelOperations.manageStopStrings({
+      tomoriState: makeState({ config: { llm_stop_strings: ["User:", "Narrator:"] } }),
+      serverDiscId: "guild-1",
+      presentedStopStrings: ["User:", "Assistant:"],
+      keptIndices: [0],
+      speakerPatternEnabled: false,
+    });
+
+    expect(result.status).toBe("stale");
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+  });
+
+  it("treats a submit that carried no checkbox payload as stale rather than as removing everything", async () => {
+    const state = makeState({ config: { llm_stop_strings: ["User:", "Assistant:"] } });
+    const harness = makeHarness({ state });
+    const update = spyOn(configRepository, "updateChatConfig").mockResolvedValue(true);
+    const { computeStopStringFingerprint } = await import("@/utils/discord/configPanelCatalog");
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "stop-manage-submit",
+          locale: "en-US",
+          fp: computeStopStringFingerprint(9, ["User:", "Assistant:"]),
+          nonce: "nonce1234567",
+        }),
+        kind: "modal",
+        harness,
+      }),
+    );
+
+    expect(update).not.toHaveBeenCalled();
+    expect(renderedText(harness.edits.at(-1))).toContain("Panel Out Of Date");
+    update.mockRestore();
+  });
+});
+
+describe("config models logit bias", () => {
+  it("keeps the entries a checkbox group reported and removes the rest of that page", async () => {
+    const entries = [
+      { id: "a", text: "delve", value: -3, kind: "text", tokenizations: [] },
+      { id: "b", text: "moreover", value: -3, kind: "text", tokenizations: [] },
+    ];
+    const update = spyOn(configRepository, "updateChatConfig").mockResolvedValue(true);
+    const result = await configModelOperations.removeLogitBias({
+      tomoriState: makeState({ config: { llm_logit_biases: entries } }),
+      serverDiscId: "guild-1",
+      presentedIds: ["a", "b"],
+      keptIds: ["a"],
+    });
+
+    expect(result).toMatchObject({ status: "success", removedCount: 1 });
+    expect(update).toHaveBeenCalledWith(9, { llm_logit_biases: [entries[0]] });
+    update.mockRestore();
+  });
+
+  it("refuses a removal naming an entry the workspace no longer holds", async () => {
+    const update = spyOn(configRepository, "updateChatConfig").mockResolvedValue(true);
+    const result = await configModelOperations.removeLogitBias({
+      tomoriState: makeState({ config: { llm_logit_biases: [] } }),
+      serverDiscId: "guild-1",
+      presentedIds: ["a"],
+      keptIds: [],
+    });
+    expect(result.status).toBe("stale");
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+  });
+
+  it("rejects an uploaded list whose entries are not text and value pairs", async () => {
+    const update = spyOn(configRepository, "updateChatConfig").mockResolvedValue(true);
+    const result = await configModelOperations.uploadLogitBias({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      payload: [{ nope: 1 }],
+    });
+    expect(result.status).toBe("invalid-file");
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+  });
+});
+
+describe("config models fallbacks and randomizer", () => {
+  it("keeps an untouched slot and clears only the slot that asked to be cleared", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const endpoints = spyOn(llmProviderRepo, "loadCustomEndpointsForServer").mockResolvedValue([]);
+    const models = spyOn(llmModelRepo, "loadAvailableModelsForProvider").mockResolvedValue([
+      { llm_id: 7, llm_codename: "gemini-2.5-pro", llm_provider: "google" },
+    ] as never);
+    const write = spyOn(llmOverrideRepo, "setFallbackModelRefs").mockResolvedValue(true);
+
+    const result = await configModelOperations.setFallbackChain({
+      tomoriState: makeState({
+        config: {
+          llm_id: 1,
+          fallback_model_refs: [
+            { type: "llm", id: 7 },
+            { type: "llm", id: 8 },
+          ],
+        },
+      }),
+      serverDiscId: "guild-1",
+      provider: "google",
+      slotValues: ["", "__none__", "", "", ""],
+    });
+
+    expect(result).toMatchObject({ status: "success" });
+    expect(write).toHaveBeenCalledWith(9, [{ type: "llm", id: 7 }], { serverDiscId: "guild-1" });
+
+    providers.mockRestore();
+    endpoints.mockRestore();
+    models.mockRestore();
+    write.mockRestore();
+  });
+
+  it("drops only the slot whose pick no longer resolves and still writes the rest of the chain", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const endpoints = spyOn(llmProviderRepo, "loadCustomEndpointsForServer").mockResolvedValue([]);
+    const models = spyOn(llmModelRepo, "loadAvailableModelsForProvider").mockResolvedValue([
+      { llm_id: 7, llm_codename: "gemini-2.5-pro", llm_provider: "google" },
+    ] as never);
+    const write = spyOn(llmOverrideRepo, "setFallbackModelRefs").mockResolvedValue(true);
+
+    const result = await configModelOperations.setFallbackChain({
+      tomoriState: makeState({ config: { llm_id: 1, fallback_model_refs: [{ type: "llm", id: 9 }] } }),
+      serverDiscId: "guild-1",
+      provider: "google",
+      // Slot two names a model the catalog no longer offers, which is what the legacy command
+      // silently skips rather than treating as a failure of the whole submission.
+      slotValues: ["gemini-2.5-pro", "retired-model", "", "", ""],
+    });
+
+    expect(result).toMatchObject({ status: "success" });
+    expect(write).toHaveBeenCalledWith(9, [{ type: "llm", id: 7 }], { serverDiscId: "guild-1" });
+
+    providers.mockRestore();
+    endpoints.mockRestore();
+    models.mockRestore();
+    write.mockRestore();
+  });
+
+  it("drops a custom-endpoint pick the selected provider does not own instead of writing it", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const endpoints = spyOn(llmProviderRepo, "loadCustomEndpointsForServer").mockResolvedValue([
+      { custom_endpoint_id: 5, connection_id: 99, capability: "text", label: "other" },
+    ] as never);
+    const models = spyOn(llmModelRepo, "loadAvailableModelsForProvider").mockResolvedValue([] as never);
+    const write = spyOn(llmOverrideRepo, "setFallbackModelRefs").mockResolvedValue(true);
+
+    const result = await configModelOperations.setFallbackChain({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      provider: "google",
+      slotValues: ["ce:5", "", "", "", ""],
+    });
+
+    expect(result.status).toBe("no-changes");
+    expect(write).not.toHaveBeenCalled();
+
+    providers.mockRestore();
+    endpoints.mockRestore();
+    models.mockRestore();
+    write.mockRestore();
+  });
+
+  it("refuses a fallback pick that is already the primary model", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const endpoints = spyOn(llmProviderRepo, "loadCustomEndpointsForServer").mockResolvedValue([]);
+    const models = spyOn(llmModelRepo, "loadAvailableModelsForProvider").mockResolvedValue([
+      { llm_id: 1, llm_codename: "gemini-2.5-flash", llm_provider: "google" },
+    ] as never);
+    const write = spyOn(llmOverrideRepo, "setFallbackModelRefs").mockResolvedValue(true);
+
+    const result = await configModelOperations.setFallbackChain({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      provider: "google",
+      slotValues: ["gemini-2.5-flash", "", "", "", ""],
+    });
+
+    expect(result.status).toBe("primary-conflict");
+    expect(write).not.toHaveBeenCalled();
+
+    providers.mockRestore();
+    endpoints.mockRestore();
+    models.mockRestore();
+    write.mockRestore();
+  });
+
+  it("refuses to enable the randomizer while the fallback chain is empty", async () => {
+    const update = spyOn(configRepository, "updateChatConfig").mockResolvedValue(true);
+    const result = await configModelOperations.setModelRandomizer({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      enabled: true,
+    });
+    expect(result.status).toBe("requires-fallbacks");
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+  });
+
+  it("disables the randomizer On button while the precondition is unmet", async () => {
+    const harness = makeHarness();
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "fallbacks" }),
+        kind: "select",
+        values: ["fallbacks"],
+        harness,
+      }),
+    );
+
+    const payload = JSON.parse(renderedText(harness.edits.at(-1)));
+    const buttons = payload.components[0].components
+      .flatMap((row: { components?: Array<{ customId?: string; disabled?: boolean }> }) => row.components ?? [])
+      .filter((component: { customId?: string }) => component.customId?.includes("randomizer-set"));
+    const enableButton = buttons.find((button: { customId: string }) => button.customId.endsWith(":1"));
+    expect(enableButton.disabled).toBe(true);
+  });
+
+  it("opens the fallback modal on the option page the provider entry named", async () => {
+    const harness = makeHarness();
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "fallback-provider-select", locale: "en-US" }),
+        kind: "select",
+        values: [encodeFallbackProviderValue("google", 0)],
+        harness,
+      }),
+    );
+
+    const modal = harness.modals.at(-1) as { custom_id: string; components: unknown[] };
+    expect(modal.components).toHaveLength(5);
+    expect(modal.custom_id).toBe(
+      buildConfigRouteId({
+        action: "fallback-submit",
+        locale: "en-US",
+        provider: "google",
+        start: 0,
+        nonce: "nonce1234567",
+      }),
+    );
+  });
+
+  it("round-trips a fallback provider page value including a custom label", () => {
+    expect(decodeFallbackProviderValue(encodeFallbackProviderValue("custom:12", 48))).toEqual({
+      provider: "custom:12",
+      start: 48,
+    });
+    expect(decodeFallbackProviderValue("google")).toBeNull();
+  });
+
+  it("reads every fallback slot the modal submitted through its own field id", async () => {
+    const state = makeState();
+    const harness = makeHarness({ state });
+    for (let slot = 0; slot < 5; slot += 1) {
+      harness.selectValues[buildConfigFallbackSlotId(slot, "nonce1234567")] = slot === 0 ? "gemini-2.5-pro" : undefined;
+    }
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const endpoints = spyOn(llmProviderRepo, "loadCustomEndpointsForServer").mockResolvedValue([]);
+    const models = spyOn(llmModelRepo, "loadAvailableModelsForProvider").mockResolvedValue([
+      { llm_id: 7, llm_codename: "gemini-2.5-pro", llm_provider: "google" },
+    ] as never);
+    const write = spyOn(llmOverrideRepo, "setFallbackModelRefs").mockResolvedValue(true);
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "fallback-submit",
+          locale: "en-US",
+          provider: "google",
+          start: 0,
+          nonce: "nonce1234567",
+        }),
+        kind: "modal",
+        harness,
+      }),
+    );
+
+    expect(write).toHaveBeenCalledWith(9, [{ type: "llm", id: 7 }], { serverDiscId: "guild-1" });
+    expect(harness.telemetry).toContain("server-config.workspace.fallbacks.set");
+
+    providers.mockRestore();
+    endpoints.mockRestore();
+    models.mockRestore();
+    write.mockRestore();
+  });
+});
+
+describe("config models image generation", () => {
+  it("restores the built-in defaults when the tag modal is submitted empty", async () => {
+    const update = spyOn(configRepository, "updateNovelaiImagegenConfig").mockResolvedValue(true);
+    const result = await configModelOperations.setImageDefaultTags({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      negative: false,
+      rawInput: "   ",
+    });
+
+    expect(result).toMatchObject({ status: "success", reset: true });
+    expect(update).toHaveBeenCalledTimes(1);
+    update.mockRestore();
+  });
+
+  it("writes the negative list only when the route says the field was the negative one", async () => {
+    const update = spyOn(configRepository, "updateNovelaiImagegenConfig").mockResolvedValue(true);
+    await configModelOperations.setImageDefaultTags({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      negative: true,
+      rawInput: "lowres, blurry",
+    });
+    expect(update).toHaveBeenCalledWith(9, { image_default_negative_tags: ["lowres", "blurry"] });
+    update.mockRestore();
+  });
+
+  it("rejects a NovelAI step count outside the command's own bounds", async () => {
+    const update = spyOn(configRepository, "updateNovelaiImagegenConfig").mockResolvedValue(true);
+    const result = await configModelOperations.setNaiImageParameters({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      values: { sampler: null, steps: "99", scale: "", noiseSchedule: null, cfgRescale: "" },
+    });
+    expect(result.status).toBe("invalid-steps");
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+  });
+
+  it("stores an empty NovelAI field as null so the built-in default resolves at read time", async () => {
+    const update = spyOn(configRepository, "updateNovelaiImagegenConfig").mockResolvedValue(true);
+    await configModelOperations.setNaiImageParameters({
+      tomoriState: makeState(),
+      serverDiscId: "guild-1",
+      values: { sampler: "k_euler", steps: "", scale: "", noiseSchedule: "", cfgRescale: "" },
+    });
+    expect(update).toHaveBeenCalledWith(9, {
+      nai_sampler: "k_euler",
+      nai_steps: null,
+      nai_scale: null,
+      nai_noise_schedule: null,
+      nai_cfg_rescale: null,
+    });
+    update.mockRestore();
+  });
+});
+
+describe("config models view loaders", () => {
+  it("reports the eligible provider list and the two override counts for the Switch page", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const channelOverrides = spyOn(llmOverrideRepo, "getAllChannelLlmOverridesForServer").mockResolvedValue([
+      { channelDiscId: "c1", llm: {} },
+    ] as never);
+    const personaOverrides = spyOn(llmOverrideRepo, "loadPersonaLlmOverridesForServer").mockResolvedValue([
+      { persona_id: 55, llm_id: 7 },
+      { persona_id: 56, llm_id: 8 },
+    ]);
+
+    const view = await loadConfigSwitchModelsView(makeState(), undefined);
+    expect(view.slots).toHaveLength(6);
+    expect(view.channelOverrideCount).toBe(1);
+    expect(view.personaOverrideCount).toBe(2);
+
+    providers.mockRestore();
+    channelOverrides.mockRestore();
+    personaOverrides.mockRestore();
+  });
+
+  it("falls back to the active Text provider when the requested one is gone", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const view = await loadConfigParametersView(makeState(), "openrouter", 0);
+    expect(view.selectedProvider).toBe("google");
+    providers.mockRestore();
+  });
+
+  it("renders effective NovelAI values rather than the stored nulls", () => {
+    const view = loadConfigImageGenerationView(makeState(), "en-US");
+    expect(view.sampler.length).toBeGreaterThan(0);
+    expect(Number(view.steps)).toBeGreaterThan(0);
+  });
+
+  it("expands one provider into one entry per option page for the fallback selector", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const models = spyOn(llmModelRepo, "loadAvailableModelsForProvider").mockResolvedValue(
+      Array.from({ length: 50 }, (_entry, index) => ({
+        llm_id: index + 1,
+        llm_codename: `model-${index + 1}`,
+        llm_provider: "google",
+      })) as never,
+    );
+
+    const view = await loadConfigFallbacksView(makeState(), "en-US", "google");
+    expect(view.providerEntries.length).toBeGreaterThan(1);
+    expect(decodeFallbackProviderValue(view.providerEntries[1].value)?.start).toBe(24);
+
+    providers.mockRestore();
+    models.mockRestore();
+  });
+
+  it("reports the current assignment so the model select can mark it as the default option", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
+      makeSavedProvider("google"),
+    ]);
+    const models = spyOn(llmModelRepo, "loadAvailableModelsForProvider").mockResolvedValue([
+      { llm_id: 1, llm_codename: "gemini-2.5-flash", llm_provider: "google", sees_images: true },
+    ] as never);
+
+    const view = await loadConfigModelListView(makeState(), "text", "google", 0);
+    expect(view.currentModelId).toBe(1);
+    expect(view.models).toHaveLength(1);
+
+    providers.mockRestore();
+    models.mockRestore();
+  });
+});
+
+describe("config models modal field identity", () => {
+  it("names every sampling field with the nonce the route carries", () => {
+    for (const field of ["temperature", "min_p", "top_p", "top_k"]) {
+      expect(buildConfigModalFieldId(field, "nonce1234567")).toBe(`${field}_nonce1234567`);
+    }
+  });
+});

@@ -318,6 +318,46 @@ export const PERSONA_SPRITES_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["a
   };
 
 /**
+ * Every Models route resolves to the page that owns it.
+ *
+ * Models carries no per-action exception: re-derived from source, `/model text|vision|embedding|
+ * image|video`, `/model parameters|fallback|stop-strings|logit-bias`, `/config model-randomizer`,
+ * and `/config image-tags` carry no handler Manage Guild gate at all, so their whole protection was
+ * the registration default. The page state is therefore the entire gate, and it is what the route
+ * layer re-resolves on every interaction.
+ */
+export const MODELS_PAGE_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPage>> = {
+  "model-provider-select": "switch",
+  "model-provider-page": "switch",
+  "model-select": "switch",
+  "model-page": "switch",
+  "model-cancel": "switch",
+  "parameters-provider-select": "parameters",
+  "sampling-open": "parameters",
+  "sampling-submit": "parameters",
+  "generation-open": "parameters",
+  "generation-submit": "parameters",
+  "stop-add-open": "parameters",
+  "stop-add-submit": "parameters",
+  "stop-manage-open": "parameters",
+  "stop-manage-submit": "parameters",
+  "logit-add-open": "parameters",
+  "logit-add-submit": "parameters",
+  "logit-upload-open": "parameters",
+  "logit-upload-submit": "parameters",
+  "logit-manage-select": "parameters",
+  "logit-manage-open": "parameters",
+  "logit-manage-submit": "parameters",
+  "fallback-provider-select": "fallbacks",
+  "fallback-submit": "fallbacks",
+  "randomizer-set": "fallbacks",
+  "image-tags-default-open": "image",
+  "image-tags-default-submit": "image",
+  "nai-parameters-open": "image",
+  "nai-parameters-submit": "image",
+};
+
+/**
  * The authorization gate every route and modal submit re-runs. Rendering a control is never the
  * gate: a custom ID that was legitimately issued to a manager can be replayed by any member who can
  * read the message, so the answer must come from the actor resolved on this interaction.
@@ -342,6 +382,14 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   const spritesAction = PERSONA_SPRITES_ACTION_BY_ROUTE[route.action];
   if (spritesAction) {
     return resolvePersonaSpritesActionState(spritesAction, actor) === "enabled";
+  }
+
+  const modelsPage = MODELS_PAGE_BY_ROUTE[route.action];
+  if (modelsPage) {
+    return (
+      resolveConfigCategoryState("models", actor) === "enabled" &&
+      resolveConfigPageState("models", modelsPage, actor) === "enabled"
+    );
   }
 
   const advancedAction = PERSONA_ADVANCED_ACTION_BY_ROUTE[route.action];

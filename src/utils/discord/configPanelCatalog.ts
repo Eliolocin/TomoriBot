@@ -152,6 +152,83 @@ export function computeConditioningRemoveFingerprint(
     .slice(0, 8);
 }
 
+/**
+ * The six server-default model slots on Models > Switch Models.
+ *
+ * `image` and `nai-image` are two slots over one absorbed command: `/model image` picks its target
+ * column from the chosen provider's `featureSupport.imageGeneration`, so the panel has to carry the
+ * slot on the wire instead of re-deriving it, or a custom provider picked in the NovelAI slot would
+ * write the standard column.
+ */
+export type ConfigModelCapability = "text" | "vision" | "embedding" | "image" | "nai-image" | "video";
+
+export const CONFIG_MODEL_CAPABILITY_ORDER: readonly ConfigModelCapability[] = [
+  "text",
+  "vision",
+  "embedding",
+  "image",
+  "nai-image",
+  "video",
+];
+
+/**
+ * Slots whose absorbed command offers a clear path. `/model vision` carries a clear sentinel and
+ * `/model image` a clear option per column; `/model embedding`, `/model video`, and the Text
+ * primary have none, so offering one there would broaden the command surface.
+ */
+export const CONFIG_CLEARABLE_MODEL_CAPABILITIES: ReadonlySet<ConfigModelCapability> = new Set([
+  "vision",
+  "image",
+  "nai-image",
+]);
+
+/** Sentinel the model select carries for the clear path of a nullable slot. */
+export const CONFIG_MODEL_CLEAR_VALUE = "__clear__";
+
+/** Discord rejects a String Select carrying more than 25 options. */
+export const CONFIG_MODEL_PAGE_SIZE = 25;
+
+/**
+ * The fallback modal reserves one option for its clear entry, so a provider page holds 24 models.
+ * The five slot selects share one option list, which is why the range is chosen before the modal
+ * opens rather than paged inside it.
+ */
+export const CONFIG_FALLBACK_PAGE_SIZE = 24;
+
+export const CONFIG_FALLBACK_SLOT_COUNT = 5;
+
+/** Logit-bias entries one removal modal can present: five checkbox groups of ten. */
+export const CONFIG_LOGIT_BIAS_CHECKBOX_GROUP_SIZE = 10;
+const CONFIG_LOGIT_BIAS_CHECKBOX_GROUP_COUNT = 5;
+export const CONFIG_LOGIT_BIAS_PAGE_SIZE =
+  CONFIG_LOGIT_BIAS_CHECKBOX_GROUP_SIZE * CONFIG_LOGIT_BIAS_CHECKBOX_GROUP_COUNT;
+
+/** Stop strings one management modal can present beside its speaker-pattern checkbox. */
+export const CONFIG_STOP_STRING_CHECKBOX_GROUP_SIZE = 10;
+const CONFIG_STOP_STRING_CHECKBOX_GROUP_COUNT = 4;
+export const CONFIG_STOP_STRING_CAPACITY =
+  CONFIG_STOP_STRING_CHECKBOX_GROUP_SIZE * CONFIG_STOP_STRING_CHECKBOX_GROUP_COUNT;
+
+/**
+ * Binds a stop-string removal to the exact list its modal presented. Unchecked-means-remove derives
+ * the removal set from positions, so a concurrent add must invalidate the continuation rather than
+ * delete a different string.
+ */
+export function computeStopStringFingerprint(serverId: number, stopStrings: readonly string[]): string {
+  return createHash("sha256")
+    .update(`config-stop-strings:${serverId}:${JSON.stringify(stopStrings)}`)
+    .digest("base64url")
+    .slice(0, 8);
+}
+
+/** Binds a logit-bias removal to the exact page of entry ids its modal presented. */
+export function computeLogitBiasFingerprint(serverId: number, entryIds: readonly string[]): string {
+  return createHash("sha256")
+    .update(`config-logit-bias:${serverId}:${JSON.stringify(entryIds)}`)
+    .digest("base64url")
+    .slice(0, 8);
+}
+
 export type ConfigPanelRoute =
   | { action: "category"; locale: string; category: ConfigCategory; page: ConfigPage }
   | { action: "page"; locale: string; category: ConfigCategory; page: ConfigPage }
@@ -229,6 +306,34 @@ export type ConfigPanelRoute =
   | { action: "sprite-import-open"; locale: string; personaId: number }
   | { action: "sprite-import-submit"; locale: string; personaId: number; nonce: string }
   | { action: "sprite-export"; locale: string; personaId: number }
+  | { action: "model-provider-select"; locale: string; capability: ConfigModelCapability }
+  | { action: "model-provider-page"; locale: string; capability: ConfigModelCapability; start: number }
+  | { action: "model-select"; locale: string; capability: ConfigModelCapability; provider: string }
+  | { action: "model-page"; locale: string; capability: ConfigModelCapability; provider: string; start: number }
+  | { action: "model-cancel"; locale: string; capability: ConfigModelCapability }
+  | { action: "parameters-provider-select"; locale: string }
+  | { action: "sampling-open"; locale: string; provider: string }
+  | { action: "sampling-submit"; locale: string; provider: string; nonce: string }
+  | { action: "generation-open"; locale: string; provider: string }
+  | { action: "generation-submit"; locale: string; provider: string; nonce: string }
+  | { action: "stop-add-open"; locale: string }
+  | { action: "stop-add-submit"; locale: string; nonce: string }
+  | { action: "stop-manage-open"; locale: string }
+  | { action: "stop-manage-submit"; locale: string; fp: string; nonce: string }
+  | { action: "logit-add-open"; locale: string }
+  | { action: "logit-add-submit"; locale: string; nonce: string }
+  | { action: "logit-upload-open"; locale: string }
+  | { action: "logit-upload-submit"; locale: string; nonce: string }
+  | { action: "logit-manage-select"; locale: string }
+  | { action: "logit-manage-open"; locale: string; start: number }
+  | { action: "logit-manage-submit"; locale: string; start: number; fp: string; nonce: string }
+  | { action: "fallback-provider-select"; locale: string }
+  | { action: "fallback-submit"; locale: string; provider: string; start: number; nonce: string }
+  | { action: "randomizer-set"; locale: string; enabled: boolean }
+  | { action: "image-tags-default-open"; locale: string; negative: boolean }
+  | { action: "image-tags-default-submit"; locale: string; negative: boolean; nonce: string }
+  | { action: "nai-parameters-open"; locale: string }
+  | { action: "nai-parameters-submit"; locale: string; nonce: string }
   | {
       action: "retry" | "refresh";
       locale: string;
@@ -322,6 +427,30 @@ const nonceField: RouteFieldCodec<"nonce", string> = {
   key: "nonce",
   encode: (v) => String(v),
   decode: (v) => parseNonce(v),
+};
+
+function parseModelCapability(value: string | undefined): ConfigModelCapability | null {
+  return CONFIG_MODEL_CAPABILITY_ORDER.includes(value as ConfigModelCapability)
+    ? (value as ConfigModelCapability)
+    : null;
+}
+
+const capabilityField: RouteFieldCodec<"capability", ConfigModelCapability> = {
+  key: "capability",
+  encode: (v) => String(v),
+  decode: (v) => parseModelCapability(v),
+};
+
+const negativeField: RouteFieldCodec<"negative", boolean> = {
+  key: "negative",
+  encode: (v) => (v ? "1" : "0"),
+  decode: (v) => (v === "1" ? true : v === "0" ? false : null),
+};
+
+const enabledField: RouteFieldCodec<"enabled", boolean> = {
+  key: "enabled",
+  encode: (v) => (v ? "1" : "0"),
+  decode: (v) => (v === "1" ? true : v === "0" ? false : null),
 };
 
 const providerField: RouteFieldCodec<"provider", string> = {
@@ -425,6 +554,34 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "sprite-import-open": { wireToken: "sprite-import-open", fields: [personaIdField] },
   "sprite-import-submit": { wireToken: "sprite-import-sub", fields: [personaIdField, nonceField] },
   "sprite-export": { wireToken: "sprite-export", fields: [personaIdField] },
+  "model-provider-select": { wireToken: "model-prov-select", fields: [capabilityField] },
+  "model-provider-page": { wireToken: "model-prov-page", fields: [capabilityField, startField] },
+  "model-select": { wireToken: "model-select", fields: [capabilityField, providerField] },
+  "model-page": { wireToken: "model-page", fields: [capabilityField, providerField, startField] },
+  "model-cancel": { wireToken: "model-cancel", fields: [capabilityField] },
+  "parameters-provider-select": { wireToken: "param-prov-select", fields: [] },
+  "sampling-open": { wireToken: "sampling-open", fields: [providerField] },
+  "sampling-submit": { wireToken: "sampling-sub", fields: [providerField, nonceField] },
+  "generation-open": { wireToken: "generation-open", fields: [providerField] },
+  "generation-submit": { wireToken: "generation-sub", fields: [providerField, nonceField] },
+  "stop-add-open": { wireToken: "stop-add-open", fields: [] },
+  "stop-add-submit": { wireToken: "stop-add-sub", fields: [nonceField] },
+  "stop-manage-open": { wireToken: "stop-man-open", fields: [] },
+  "stop-manage-submit": { wireToken: "stop-man-sub", fields: [fpField, nonceField] },
+  "logit-add-open": { wireToken: "logit-add-open", fields: [] },
+  "logit-add-submit": { wireToken: "logit-add-sub", fields: [nonceField] },
+  "logit-upload-open": { wireToken: "logit-up-open", fields: [] },
+  "logit-upload-submit": { wireToken: "logit-up-sub", fields: [nonceField] },
+  "logit-manage-select": { wireToken: "logit-man-select", fields: [] },
+  "logit-manage-open": { wireToken: "logit-man-open", fields: [startField] },
+  "logit-manage-submit": { wireToken: "logit-man-sub", fields: [startField, fpField, nonceField] },
+  "fallback-provider-select": { wireToken: "fb-prov-select", fields: [] },
+  "fallback-submit": { wireToken: "fb-sub", fields: [providerField, startField, nonceField] },
+  "randomizer-set": { wireToken: "randomizer-set", fields: [enabledField] },
+  "image-tags-default-open": { wireToken: "img-tags-open", fields: [negativeField] },
+  "image-tags-default-submit": { wireToken: "img-tags-sub", fields: [negativeField, nonceField] },
+  "nai-parameters-open": { wireToken: "nai-params-open", fields: [] },
+  "nai-parameters-submit": { wireToken: "nai-params-sub", fields: [nonceField] },
   retry: { wireToken: "retry", fields: [categoryField, pageField, optionalPersonaIdField] },
   refresh: { wireToken: "refresh", fields: [categoryField, pageField, optionalPersonaIdField] },
 };

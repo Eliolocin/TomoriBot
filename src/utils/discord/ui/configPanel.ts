@@ -54,6 +54,14 @@ import {
   buildPanelReceiptContainer,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
+import {
+  buildConfigModelsBody,
+  type ConfigFallbacksView,
+  type ConfigImageGenerationView,
+  type ConfigModelListView,
+  type ConfigParametersView,
+  type ConfigSwitchModelsView,
+} from "@/utils/discord/ui/configModelsPanel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
@@ -159,6 +167,11 @@ export interface ConfigPanelRenderInput {
   personaSprites?: PersonaSpriteRow[];
   spritePageStart?: number;
   selectedSpriteIndex?: number;
+  switchModelsView?: ConfigSwitchModelsView;
+  modelParametersView?: ConfigParametersView;
+  modelFallbacksView?: ConfigFallbacksView;
+  imageGenerationView?: ConfigImageGenerationView;
+  modelListView?: ConfigModelListView;
 }
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): ConfigPanelPayload {
@@ -1699,6 +1712,24 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
   if (category === "persona" && page === "advanced") {
     if (resolveConfigPageState(category, page, actor) !== "omitted") {
       components.push(...buildPersonaAdvancedBody(input));
+    }
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "models") {
+    if (resolveConfigPageState(category, page, actor) !== "omitted") {
+      components.push(
+        ...buildConfigModelsBody({
+          locale,
+          page,
+          readStatus,
+          switchView: input.switchModelsView,
+          parametersView: input.modelParametersView,
+          fallbacksView: input.modelFallbacksView,
+          imageView: input.imageGenerationView,
+          modelListView: input.modelListView,
+        }),
+      );
     }
     return buildPayload(components, receipt);
   }

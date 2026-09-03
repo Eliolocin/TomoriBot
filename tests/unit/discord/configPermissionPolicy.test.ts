@@ -19,6 +19,7 @@ import {
 } from "@/utils/discord/configPanelCatalog";
 import {
   isConfigRouteAuthorized,
+  MODELS_PAGE_BY_ROUTE,
   resolveConfigActor,
   resolveConfigCategoryState,
   resolveConfigLanding,
@@ -410,6 +411,7 @@ describe("isConfigRouteAuthorized", () => {
       "text-override-clear",
       ...spriteMutationRoutes.map((route) => route.action),
       ...spriteReadRoutes.map((route) => route.action),
+      ...Object.keys(MODELS_PAGE_BY_ROUTE),
     ]);
 
     const unknownRoute = { action: "not-a-real-action", locale: "en-US" } as unknown as ConfigPanelRoute;

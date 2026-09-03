@@ -51,6 +51,22 @@ import {
 } from "@/utils/discord/interactions/configPermissionPolicy";
 import { configPersonaOperations, type GuildIdentityPort } from "@/utils/discord/interactions/configPersonaOperations";
 import { configSpriteOperations, loadPersonaSpriteList } from "@/utils/discord/interactions/configSpriteOperations";
+import { configModelOperations, loadConfigModelProviders } from "@/utils/discord/interactions/configModelOperations";
+import {
+  loadConfigFallbackOptions,
+  loadConfigFallbacksView,
+  loadConfigImageGenerationView,
+  loadConfigModelListView,
+  loadConfigParametersView,
+  loadConfigSwitchModelsView,
+} from "@/utils/discord/interactions/configModelLoaders";
+import {
+  CONFIG_MODEL_MODAL_OPEN_ACTIONS,
+  CONFIG_MODEL_MODAL_SUBMIT_ACTIONS,
+  CONFIG_MODEL_SELECT_ACTIONS,
+  handleConfigModelModalOpen,
+  handleConfigModelRoutes,
+} from "@/utils/discord/interactions/configModelRoutes";
 import {
   deniedReceipt,
   repaint,
@@ -106,7 +122,12 @@ import {
   CONFIG_SPRITE_NAME_FIELD,
   CONFIG_STM_CATEGORY_INPUT_PREFIX,
 } from "@/utils/discord/ui/configModals";
-import { showRoutedRawModal, takeRawModalCheckboxGroupValues, takeRawModalFileUpload } from "@/utils/discord/ui/modals";
+import {
+  showRoutedRawModal,
+  takeRawModalCheckboxGroupValues,
+  takeRawModalFileUpload,
+  takeRawModalSelectValue,
+} from "@/utils/discord/ui/modals";
 import { combineModalPromptParts } from "@/utils/text/modalPromptParts";
 import { buildTextPreview, textPreviewFooterKey, textPreviewFooterVars } from "@/utils/text/textPreview";
 import {
@@ -375,6 +396,19 @@ const defaultDependencies: ConfigRouteDependencies = {
   },
   operations: configPersonaOperations,
   spriteOperations: configSpriteOperations,
+  modelOperations: configModelOperations,
+  loadSwitchModelsView: loadConfigSwitchModelsView,
+  loadParametersView: loadConfigParametersView,
+  loadFallbacksView: loadConfigFallbacksView,
+  loadImageGenerationView: loadConfigImageGenerationView,
+  loadModelListView: async (state, capability, provider, start) => ({
+    capability,
+    provider,
+    ...(await loadConfigModelListView(state, capability, provider, start)),
+  }),
+  loadFallbackOptions: loadConfigFallbackOptions,
+  loadModelProviders: async (state, capability) =>
+    (await loadConfigModelProviders(state.server_id, capability)).map((row) => row.provider),
   createGuildIdentity: createGuildIdentityPort,
   recordAction: (input) => {
     void recordPanelActionStat(input);
@@ -388,6 +422,7 @@ const defaultDependencies: ConfigRouteDependencies = {
     takeRawModalFileUpload(interactionId, buildConfigModalFieldId("avatar", nonce)),
   takeFileUpload: takeRawModalFileUpload,
   takeCheckboxValues: takeRawModalCheckboxGroupValues,
+  takeSelectValue: takeRawModalSelectValue,
 };
 
 /**
@@ -2353,7 +2388,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "humanizer-select" ||
         route.action === "text-override-provider-select" ||
         route.action === "text-override-model-select" ||
-        route.action === "sprite-select";
+        route.action === "sprite-select" ||
+        CONFIG_MODEL_SELECT_ACTIONS.has(route.action);
       const expectsModal =
         route.action === "avatar-submit" ||
         route.action === "rename-submit" ||
@@ -2372,7 +2408,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "context-note-submit" ||
         route.action === "sprite-add-submit" ||
         route.action === "sprite-edit-submit" ||
-        route.action === "sprite-import-submit";
+        route.action === "sprite-import-submit" ||
+        CONFIG_MODEL_MODAL_SUBMIT_ACTIONS.has(route.action);
 
       if (expectsSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Config ${route.action} route requires a String Select interaction`);
@@ -2391,6 +2428,11 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       const submittedValue = interaction.isStringSelectMenu() ? (interaction.values[0] ?? null) : null;
       if ((route.action === "attribute-select" || route.action === "dialogue-select") && submittedValue === "add") {
         await handleCollectionAddSelection(interaction, route, dependencies, actor);
+        return;
+      }
+
+      if (CONFIG_MODEL_MODAL_OPEN_ACTIONS.has(route.action)) {
+        await handleConfigModelModalOpen(interaction, route, dependencies, actor);
         return;
       }
 
@@ -2423,6 +2465,18 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         onMissing: () => interaction.editReply(terminalPayload(route.locale, "commands.config.panel.unavailable")),
       });
       if (!scope) return;
+
+      if (
+        await handleConfigModelRoutes({
+          interaction,
+          route,
+          scope,
+          dependencies,
+          selectedValue: submittedValue,
+        })
+      ) {
+        return;
+      }
 
       if (route.action === "server-memory-open" || route.action === "personal-memory-open") {
         const selectedPersona = resolveSelectedPersona(scope.personas, route.personaId);

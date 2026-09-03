@@ -12,10 +12,19 @@ import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import type { ShortTermMemoryEntry } from "@/utils/cache/shortTermMemoryCache";
-import type { ConfigCategory, ConfigPage } from "@/utils/discord/configPanelCatalog";
+import type { ConfigCategory, ConfigModelCapability, ConfigPage } from "@/utils/discord/configPanelCatalog";
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type { ConfigPersonaOperations, GuildIdentityPort } from "@/utils/discord/interactions/configPersonaOperations";
 import type { ConfigSpriteOperations } from "@/utils/discord/interactions/configSpriteOperations";
+import type { ConfigModelOperations } from "@/utils/discord/interactions/configModelOperations";
+import type { ConfigFallbackOption } from "@/utils/discord/ui/configModelModals";
+import type {
+  ConfigFallbacksView,
+  ConfigImageGenerationView,
+  ConfigModelListView,
+  ConfigParametersView,
+  ConfigSwitchModelsView,
+} from "@/utils/discord/ui/configModelsPanel";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { type PersonaPanelAvatarData, withPersonaPanelAvatar } from "@/utils/discord/personaPanelAvatar";
 import { buildConfigPanelPayload, type ConfigPanelView } from "@/utils/discord/ui/configPanel";
@@ -75,6 +84,26 @@ export interface ConfigRouteDependencies {
   ): Promise<InteractionReplyOptions>;
   operations: ConfigPersonaOperations;
   spriteOperations: ConfigSpriteOperations;
+  modelOperations: ConfigModelOperations;
+  loadSwitchModelsView(
+    state: TomoriState,
+    providerPage: { capability: ConfigModelCapability; start: number } | undefined,
+  ): Promise<ConfigSwitchModelsView>;
+  loadParametersView(
+    state: TomoriState,
+    requestedProvider: string | undefined,
+    logitBiasPageStart: number,
+  ): Promise<ConfigParametersView>;
+  loadFallbacksView(state: TomoriState, locale: string, expandedProvider: string | null): Promise<ConfigFallbacksView>;
+  loadImageGenerationView(state: TomoriState, locale: string): ConfigImageGenerationView;
+  loadModelListView(
+    state: TomoriState,
+    capability: ConfigModelCapability,
+    provider: string,
+    start: number,
+  ): Promise<ConfigModelListView>;
+  loadFallbackOptions(state: TomoriState, provider: string): Promise<ConfigFallbackOption[]>;
+  loadModelProviders(state: TomoriState, capability: ConfigModelCapability): Promise<string[]>;
   createGuildIdentity(guildId: string, interaction: GlobalRoutableInteraction): GuildIdentityPort;
   recordAction(input: RecordPanelActionInput): void;
   createNonce(): string;
@@ -82,6 +111,7 @@ export interface ConfigRouteDependencies {
   takeFileUpload(interactionId: string, fieldId: string): APIAttachment | undefined;
   takeAvatarUpload(interactionId: string, nonce: string): APIAttachment | undefined;
   takeCheckboxValues(interactionId: string, fieldId: string): string[] | undefined;
+  takeSelectValue(interactionId: string, fieldId: string): string | undefined;
 }
 
 export function asEphemeralComponentsV2FollowUp(
@@ -158,6 +188,11 @@ export interface ConfigRepaintOptions {
   personaSprites?: PersonaSpriteRow[];
   spritePageStart?: number;
   selectedSpriteIndex?: number;
+  modelProviderPage?: { capability: ConfigModelCapability; start: number };
+  modelListView?: ConfigModelListView;
+  parametersProvider?: string;
+  logitBiasPageStart?: number;
+  fallbackExpandedProvider?: string | null;
   dependencies: ConfigRouteDependencies;
 }
 
@@ -183,6 +218,35 @@ export async function repaint(
       }
       if (page === "sprites" && personaSprites === undefined && persona.persona_id !== undefined) {
         personaSprites = await dependencies.loadPersonaSprites(persona.persona_id);
+      }
+    }
+  }
+
+  let switchModelsView: ConfigSwitchModelsView | undefined;
+  let modelParametersView: ConfigParametersView | undefined;
+  let modelFallbacksView: ConfigFallbacksView | undefined;
+  let imageGenerationView: ConfigImageGenerationView | undefined;
+  if (category === "models") {
+    // Server model state lives on the assembled workspace config every persona row carries, so any
+    // persona in the workspace is an equally authoritative source for it.
+    const state = scope.personas[0];
+    if (state) {
+      if (page === "switch") {
+        switchModelsView = await dependencies.loadSwitchModelsView(state, options.modelProviderPage);
+      } else if (page === "parameters") {
+        modelParametersView = await dependencies.loadParametersView(
+          state,
+          options.parametersProvider,
+          options.logitBiasPageStart ?? 0,
+        );
+      } else if (page === "fallbacks") {
+        modelFallbacksView = await dependencies.loadFallbacksView(
+          state,
+          locale,
+          options.fallbackExpandedProvider ?? null,
+        );
+      } else if (page === "image") {
+        imageGenerationView = dependencies.loadImageGenerationView(state, locale);
       }
     }
   }
@@ -213,6 +277,11 @@ export async function repaint(
         readStatus: scope.readStatus,
         receipt: options.receipt,
         view: options.view,
+        switchModelsView,
+        modelParametersView,
+        modelFallbacksView,
+        imageGenerationView,
+        modelListView: options.modelListView,
       }),
       avatar,
     ),
