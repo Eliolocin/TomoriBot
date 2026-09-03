@@ -1,7 +1,14 @@
 import { ChannelType, TextInputStyle } from "discord.js";
 import type { RandomTriggerRow, SystemPromptPresetRow, TomoriState } from "@/types/db/schema";
+import type { ServerStmConfigRow, StmCategoryRow } from "@/types/db/schema";
+import { TOOL_NOTICE_DEFINITIONS } from "@/constants/toolNotices";
+import { WORKAROUND_DEFINITIONS } from "@/utils/discord/workaroundConfigMapping";
+import { DELIBERATE_TOOL_TRIGGER_TARGETS } from "@/utils/tools/deliberateToolMode";
+import type { CheckboxGroupOption } from "@/types/discord/modal";
+import type { ToolNoticeKey } from "@/constants/toolNotices";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { SelectOption } from "@/types/discord/modal";
+import type { DeliberateToolTrigger, DeliberateToolTriggerMap } from "@/utils/tools/deliberateToolMode";
 import {
   buildConfigRouteId,
   CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
@@ -31,6 +38,24 @@ export const BEHAVIOR_RANDOM_PERSONA_FIELD = "behavior_random_persona";
 export const BEHAVIOR_RANDOM_SETTINGS_FIELD = "behavior_random_settings";
 export const BEHAVIOR_RANDOM_RESPOND_SELF_FIELD = "behavior_random_respond_self";
 export const BEHAVIOR_RANDOM_PROMPT_FIELD = "behavior_random_prompt";
+export const BEHAVIOR_TOOL_CONTEXT_FIELD = "behavior_tool_context";
+export const BEHAVIOR_TOOL_TRIGGER_TARGET_FIELD = "behavior_tool_trigger_target";
+export const BEHAVIOR_TOOL_TRIGGER_LITERAL_FIELD = "behavior_tool_trigger_literal";
+export const BEHAVIOR_TOOL_TRIGGER_REGEX_FIELD = "behavior_tool_trigger_regex";
+export const BEHAVIOR_TOOL_TRIGGER_REMOVE_GROUP_PREFIX = "behavior_tool_trigger_remove_group";
+export const BEHAVIOR_SEND_LIMIT_FIELD = "behavior_send_limit";
+export const BEHAVIOR_WORKAROUND_GROUP_FIELD = "behavior_workaround_group";
+export const BEHAVIOR_NOTICE_GROUP_PREFIX = "behavior_notice_group";
+export const BEHAVIOR_MEMORY_TAGGING_FIELD = "behavior_memory_tagging";
+export const BEHAVIOR_CHANNEL_MEMORY_FIELD = "behavior_channel_memory";
+export const BEHAVIOR_STM_REFRESH_CADENCE_FIELD = "behavior_stm_refresh_cadence";
+export const BEHAVIOR_STM_RENDER_MODE_FIELD = "behavior_stm_render_mode";
+export const BEHAVIOR_STM_CRUDE_MESSAGES_FIELD = "behavior_stm_crude_messages";
+export const BEHAVIOR_STM_NUDGE_DEPTH_FIELD = "behavior_stm_nudge_depth";
+export const BEHAVIOR_STM_CONTENT_DEPTH_FIELD = "behavior_stm_content_depth";
+export const BEHAVIOR_STM_CATEGORY_PREFIX = "behavior_stm_category_";
+export const BEHAVIOR_STM_TOOL_DESCRIPTION_FIELD = "behavior_stm_tool_description";
+export const BEHAVIOR_STM_UPDATE_NUDGE_FIELD = "behavior_stm_update_nudge";
 
 const LABEL = 18 as const;
 const TEXT_INPUT = 4 as const;
@@ -126,6 +151,397 @@ function radioField(
         default: option.default,
       })),
     },
+  };
+}
+
+function checkboxGroupField(
+  locale: string,
+  nonce: string,
+  field: string,
+  labelKey: string,
+  descriptionKey: string,
+  options: CheckboxGroupOption[],
+): RawDiscordComponent {
+  return {
+    type: LABEL,
+    label: label(locale, labelKey),
+    description: description(locale, descriptionKey),
+    component: {
+      type: CHECKBOX_GROUP,
+      custom_id: buildConfigModalFieldId(field, nonce),
+      min_values: 0,
+      max_values: options.length,
+      required: false,
+      options: options.map((option) => ({
+        value: safeSelectOptionText(option.value, 100),
+        label: safeSelectOptionText(option.label, 100),
+        description: option.description ? safeSelectOptionText(option.description, 100) : undefined,
+        default: option.default,
+      })),
+    },
+  };
+}
+
+export function buildBehaviorToolContextModal(locale: string, nonce: string, current: number): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-tool-context-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.edit_tool_context_button"),
+    components: [
+      textField(
+        locale,
+        nonce,
+        BEHAVIOR_TOOL_CONTEXT_FIELD,
+        "commands.config.panel.tool_context_label",
+        "commands.config.panel.tool_context_description",
+        TextInputStyle.Short,
+        true,
+        2,
+        String(current),
+      ),
+    ],
+  };
+}
+
+function formatTriggerForDisplay(trigger: DeliberateToolTrigger): string {
+  return typeof trigger === "string" ? trigger : `/${trigger.value}/`;
+}
+
+export function buildBehaviorToolTriggerAddModal(locale: string, nonce: string): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-tool-trigger-add-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.add_tool_trigger_button"),
+    components: [
+      selectField(
+        locale,
+        nonce,
+        BEHAVIOR_TOOL_TRIGGER_TARGET_FIELD,
+        "commands.config.panel.tool_trigger_target_label",
+        "commands.config.panel.tool_trigger_target_description",
+        "commands.config.panel.tool_trigger_target_placeholder",
+        DELIBERATE_TOOL_TRIGGER_TARGETS.map((target) => ({
+          label: localizer(locale, `commands.config.panel.tool_target_${target.value}`),
+          value: target.value,
+        })),
+      ),
+      textField(
+        locale,
+        nonce,
+        BEHAVIOR_TOOL_TRIGGER_LITERAL_FIELD,
+        "commands.config.panel.tool_trigger_literal_label",
+        "commands.config.panel.tool_trigger_literal_description",
+        TextInputStyle.Short,
+        false,
+        40,
+      ),
+      textField(
+        locale,
+        nonce,
+        BEHAVIOR_TOOL_TRIGGER_REGEX_FIELD,
+        "commands.config.panel.tool_trigger_regex_label",
+        "commands.config.panel.tool_trigger_regex_description",
+        TextInputStyle.Short,
+        false,
+        120,
+      ),
+    ],
+  };
+}
+
+export function buildBehaviorToolTriggerRemoveModal(
+  locale: string,
+  nonce: string,
+  triggerMap: DeliberateToolTriggerMap,
+): RawModalPayload {
+  const entries = Object.entries(triggerMap).flatMap(([target, triggers]) =>
+    triggers.map((trigger, index) => ({
+      id: `${target}_${index}`,
+      target,
+      trigger,
+    })),
+  );
+  const removalGroups = Array.from({ length: Math.ceil(entries.length / 10) }, (_unused, groupIndex) => {
+    const group = entries.slice(groupIndex * 10, groupIndex * 10 + 10);
+    return checkboxGroupField(
+      locale,
+      nonce,
+      `${BEHAVIOR_TOOL_TRIGGER_REMOVE_GROUP_PREFIX}_${groupIndex}`,
+      groupIndex === 0
+        ? "commands.config.panel.tool_trigger_remove_label"
+        : "commands.config.panel.tool_trigger_remove_label_continued",
+      "commands.config.panel.tool_trigger_remove_description",
+      group.map((entry) => ({
+        label: formatTriggerForDisplay(entry.trigger),
+        value: entry.id,
+        description: localizer(locale, `commands.config.panel.tool_target_${entry.target}`),
+        default: true,
+      })),
+    );
+  });
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-tool-trigger-remove-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.remove_tool_triggers_button"),
+    components: removalGroups,
+  };
+}
+
+export function buildBehaviorSendLimitModal(locale: string, nonce: string, current: number): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-send-limit-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.edit_send_limit_button"),
+    components: [
+      textField(
+        locale,
+        nonce,
+        BEHAVIOR_SEND_LIMIT_FIELD,
+        "commands.config.panel.send_limit_label",
+        "commands.config.panel.send_limit_description",
+        TextInputStyle.Short,
+        true,
+        2,
+        String(current),
+      ),
+    ],
+  };
+}
+
+export function buildBehaviorWorkaroundsModal(
+  locale: string,
+  nonce: string,
+  current: Record<string, boolean>,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-workarounds-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.edit_workarounds_button"),
+    components: [
+      checkboxGroupField(
+        locale,
+        nonce,
+        BEHAVIOR_WORKAROUND_GROUP_FIELD,
+        "commands.config.workarounds.checkbox_label",
+        "commands.config.workarounds.checkbox_description",
+        WORKAROUND_DEFINITIONS.map((definition) => ({
+          label: localizer(locale, definition.labelKey),
+          value: definition.value,
+          description: localizer(locale, definition.descKey),
+          default: current[definition.value] === true,
+        })),
+      ),
+    ],
+  };
+}
+
+export function buildBehaviorNoticeVisibilityModal(
+  locale: string,
+  nonce: string,
+  hiddenKeys: readonly ToolNoticeKey[],
+): RawModalPayload {
+  const hiddenSet = new Set(hiddenKeys);
+  const components: RawDiscordComponent[] = [];
+  for (let i = 0; i < TOOL_NOTICE_DEFINITIONS.length; i += 10) {
+    const group = TOOL_NOTICE_DEFINITIONS.slice(i, i + 10);
+    const groupIndex = Math.floor(i / 10);
+    components.push(
+      checkboxGroupField(
+        locale,
+        nonce,
+        `${BEHAVIOR_NOTICE_GROUP_PREFIX}_${groupIndex}`,
+        groupIndex === 0
+          ? "commands.config.notice-embeds.visibility.checkbox_label"
+          : "commands.config.notice-embeds.visibility.checkbox_label_continued",
+        "commands.config.notice-embeds.visibility.checkbox_description",
+        group.map((definition) => ({
+          label: localizer(locale, definition.labelKey),
+          value: definition.key,
+          description: localizer(locale, definition.descriptionKey),
+          default: !hiddenSet.has(definition.key),
+        })),
+      ),
+    );
+  }
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-notice-visibility-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.edit_notice_visibility_button"),
+    components,
+  };
+}
+
+export function buildBehaviorMemoryTaggingModal(
+  locale: string,
+  nonce: string,
+  memoryTaggingEnabled: boolean,
+  channelMemoryEnabled: boolean,
+): RawModalPayload {
+  const choices = (current: boolean) => [
+    { value: "true", label: localizer(locale, "commands.config.panel.enabled_option"), default: current },
+    { value: "false", label: localizer(locale, "commands.config.panel.disabled_option"), default: !current },
+  ];
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-memory-tagging-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.edit_memory_tagging_button"),
+    components: [
+      radioField(
+        locale,
+        nonce,
+        BEHAVIOR_MEMORY_TAGGING_FIELD,
+        "commands.config.panel.memory_tagging_label",
+        "commands.config.panel.memory_tagging_description",
+        choices(memoryTaggingEnabled),
+      ),
+      radioField(
+        locale,
+        nonce,
+        BEHAVIOR_CHANNEL_MEMORY_FIELD,
+        "commands.config.panel.channel_memory_label",
+        "commands.config.panel.channel_memory_description",
+        choices(channelMemoryEnabled),
+      ),
+    ],
+  };
+}
+
+export function buildBehaviorStmParametersModal(
+  locale: string,
+  nonce: string,
+  config: ServerStmConfigRow | null,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-stm-parameters-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.edit_stm_parameters_button"),
+    components: [
+      textField(
+        locale,
+        nonce,
+        BEHAVIOR_STM_REFRESH_CADENCE_FIELD,
+        "commands.config.panel.stm_refresh_cadence_label",
+        "commands.config.panel.stm_refresh_cadence_description",
+        TextInputStyle.Short,
+        true,
+        3,
+        String(config?.refresh_cadence ?? 5),
+      ),
+      radioField(
+        locale,
+        nonce,
+        BEHAVIOR_STM_RENDER_MODE_FIELD,
+        "commands.config.panel.stm_render_mode_label",
+        "commands.config.panel.stm_render_mode_description",
+        [
+          {
+            value: "supersede",
+            label: localizer(locale, "commands.server.stm.parameters.supersede_option"),
+            default: (config?.render_mode ?? "supersede") === "supersede",
+          },
+          {
+            value: "crude_summary",
+            label: localizer(locale, "commands.server.stm.parameters.crude_summary_option"),
+            default: config?.render_mode === "crude_summary",
+          },
+        ],
+      ),
+      textField(
+        locale,
+        nonce,
+        BEHAVIOR_STM_CRUDE_MESSAGES_FIELD,
+        "commands.config.panel.stm_crude_messages_label",
+        "commands.config.panel.stm_crude_messages_description",
+        TextInputStyle.Short,
+        true,
+        3,
+        String(config?.crude_message_count ?? 6),
+      ),
+      textField(
+        locale,
+        nonce,
+        BEHAVIOR_STM_NUDGE_DEPTH_FIELD,
+        "commands.config.panel.stm_nudge_depth_label",
+        "commands.config.panel.stm_nudge_depth_description",
+        TextInputStyle.Short,
+        true,
+        3,
+        String(config?.nudge_injection_depth ?? 2),
+      ),
+      textField(
+        locale,
+        nonce,
+        BEHAVIOR_STM_CONTENT_DEPTH_FIELD,
+        "commands.config.panel.stm_content_depth_label",
+        "commands.config.panel.stm_content_depth_description",
+        TextInputStyle.Short,
+        true,
+        3,
+        String(config?.content_injection_depth ?? -1),
+      ),
+    ],
+  };
+}
+
+export function buildBehaviorStmCategoriesModal(
+  locale: string,
+  nonce: string,
+  categories: readonly StmCategoryRow[],
+  options: { disclosure?: string } = {},
+): RawModalPayload {
+  const byPosition = new Map(categories.map((category) => [category.position, category]));
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-stm-categories-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.edit_stm_categories_button"),
+    components: Array.from({ length: 5 }, (_unused, index) => {
+      const category = byPosition.get(index);
+      const field = textField(
+        locale,
+        nonce,
+        `${BEHAVIOR_STM_CATEGORY_PREFIX}${index}`,
+        `commands.server.stm.categories-edit.slot_${index + 1}_label`,
+        "commands.server.stm.categories-edit.slot_instructions",
+        TextInputStyle.Paragraph,
+        false,
+        1000,
+        category ? `${category.label}: ${category.description}` : undefined,
+      );
+      if (index === 0 && options.disclosure) {
+        field.description = safeSelectOptionText(
+          `${options.disclosure} ${localizer(locale, "commands.server.stm.categories-edit.slot_instructions")}`,
+          100,
+        );
+      }
+      return field;
+    }),
+  };
+}
+
+export function buildBehaviorStmPromptModal(
+  locale: string,
+  nonce: string,
+  toolDescription: string,
+  updateNudge: string,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-stm-prompt-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.edit_stm_prompt_button"),
+    components: [
+      textField(
+        locale,
+        nonce,
+        BEHAVIOR_STM_TOOL_DESCRIPTION_FIELD,
+        "commands.server.stm.prompt-edit.tool_description_label",
+        "commands.server.stm.prompt-edit.tool_description_description",
+        TextInputStyle.Paragraph,
+        false,
+        4000,
+        toolDescription,
+      ),
+      textField(
+        locale,
+        nonce,
+        BEHAVIOR_STM_UPDATE_NUDGE_FIELD,
+        "commands.server.stm.prompt-edit.update_nudge_label",
+        "commands.server.stm.prompt-edit.update_nudge_description",
+        TextInputStyle.Paragraph,
+        false,
+        4000,
+        updateNudge,
+      ),
+    ],
   };
 }
 

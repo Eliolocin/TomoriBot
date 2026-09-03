@@ -47,11 +47,7 @@ import {
   HUMANIZER_DEFAULT,
   HUMANIZER_INHERIT_VALUE,
 } from "@/utils/discord/humanizerOptions";
-import type {
-  ConfigBehaviorGeneralView,
-  ConfigBehaviorTriggerView,
-  ConfigPersonaMemoryView,
-} from "@/utils/discord/interactions/configRouteContext";
+import type { ConfigBehaviorView, ConfigPersonaMemoryView } from "@/utils/discord/interactions/configRouteContext";
 import {
   buildCategoryButtonRow,
   buildOptionalThumbnailSection,
@@ -69,6 +65,10 @@ import {
   type ConfigParametersView,
   type ConfigSwitchModelsView,
 } from "@/utils/discord/ui/configModelsPanel";
+import { TOOL_NOTICE_DEFINITIONS } from "@/constants/toolNotices";
+import { WORKAROUND_DEFINITIONS } from "@/utils/discord/workaroundConfigMapping";
+import { DEFAULT_STM_TOOL_DESCRIPTION } from "@/tools/functionCalls/updateShortTermMemoryTool";
+import { SEED_CATEGORY_UPDATE_HINT, SEED_SUMMARY_UPDATE_HINT } from "@/utils/text/context/memories";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
@@ -184,7 +184,7 @@ export interface ConfigPanelRenderInput {
   imageGenerationView?: ConfigImageGenerationView;
   modelListView?: ConfigModelListView;
   randomTriggerPageStart?: number;
-  behaviorView?: { general: ConfigBehaviorGeneralView; trigger: ConfigBehaviorTriggerView };
+  behaviorView?: ConfigBehaviorView;
 }
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): ConfigPanelPayload {
@@ -2023,6 +2023,386 @@ function buildBehaviorTriggerBody(input: ConfigPanelRenderInput): ComponentInCon
   return components;
 }
 
+function buildBehaviorExperimentalBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale } = input;
+  const view = input.behaviorView?.experimental;
+  const writesDisabled = input.readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    behaviorHeading(
+      locale,
+      "commands.config.panel.behavior_experimental_title",
+      "commands.config.panel.behavior_experimental_description",
+    ),
+  ];
+  if (input.actor.workspaceKind === "guild" && !input.actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+    return components;
+  }
+  if (!view) return components;
+
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**[${localizer(locale, "commands.config.panel.deliberate_tool_mode_title")}](https://docs.tomoribot.app/en/features/capabilities/tools-and-extensions/#deliberate-tool-mode)**\n${localizer(locale, "commands.config.panel.deliberate_tool_mode_description")}`,
+    },
+    buildStateControlRow(
+      [
+        {
+          value: false,
+          label: localizer(locale, "commands.config.panel.off_button"),
+          customId: buildConfigRouteId({ action: "behavior-tool-mode-set", locale, enabled: false }),
+        },
+        {
+          value: true,
+          label: localizer(locale, "commands.config.panel.on_button"),
+          customId: buildConfigRouteId({ action: "behavior-tool-mode-set", locale, enabled: true }),
+        },
+      ],
+      view.deliberateToolMode,
+      writesDisabled,
+    ),
+    {
+      type: ComponentType.TextDisplay,
+      content: `> ${localizer(
+        locale,
+        view.deliberateToolMode
+          ? "commands.config.panel.deliberate_tool_mode_on"
+          : "commands.config.panel.deliberate_tool_mode_off",
+      )}`,
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.tool_context_title")}**\n${localizer(locale, "commands.config.panel.tool_context_description")}\n> ${localizer(
+        locale,
+        view.deliberateToolContextTurns === 0
+          ? "commands.config.panel.tool_context_zero"
+          : "commands.config.panel.tool_context_value",
+        { count: view.deliberateToolContextTurns },
+      )}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-tool-context-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_tool_context_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+  );
+
+  const triggerCount = Object.values(view.deliberateToolTriggers).reduce(
+    (count, triggers) => count + (Array.isArray(triggers) ? triggers.length : 0),
+    0,
+  );
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.custom_tool_triggers_title")}**\n${localizer(locale, "commands.config.panel.custom_tool_triggers_description")}\n> ${
+        triggerCount
+          ? localizer(locale, "commands.config.panel.custom_tool_triggers_value", { count: triggerCount })
+          : localizer(locale, "commands.choices.none")
+      }`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-tool-trigger-add-open", locale }),
+          label: localizer(locale, "commands.config.panel.add_tool_trigger_button"),
+          disabled: writesDisabled,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-tool-trigger-remove-open", locale }),
+          label: localizer(locale, "commands.config.panel.remove_tool_triggers_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.delivery_limits_title")}**\n${localizer(locale, "commands.config.panel.delivery_limits_description")}\n> ${
+        view.sendLimit > 0
+          ? localizer(locale, "commands.config.panel.delivery_limits_value", { count: view.sendLimit })
+          : localizer(locale, "commands.config.panel.delivery_limits_unlimited")
+      }`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-send-limit-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_send_limit_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.self_debug_title")}**\n${localizer(locale, "commands.config.panel.self_debug_description")}`,
+    },
+    buildStateControlRow(
+      [
+        {
+          value: false,
+          label: localizer(locale, "commands.config.panel.off_button"),
+          customId: buildConfigRouteId({ action: "behavior-self-debug-set", locale, enabled: false }),
+        },
+        {
+          value: true,
+          label: localizer(locale, "commands.config.panel.on_button"),
+          customId: buildConfigRouteId({ action: "behavior-self-debug-set", locale, enabled: true }),
+        },
+      ],
+      view.selfDebugEnabled,
+      writesDisabled,
+    ),
+    {
+      type: ComponentType.TextDisplay,
+      content: `> ${localizer(
+        locale,
+        view.selfDebugEnabled ? "commands.config.panel.self_debug_on" : "commands.config.panel.self_debug_off",
+      )}`,
+    },
+  );
+
+  const workaroundLines = WORKAROUND_DEFINITIONS.map((definition) => {
+    const enabled = definition.getState(view.workarounds);
+    const key =
+      definition.value === "verbatim_tool_calling"
+        ? enabled
+          ? "commands.config.workarounds.verbatim_tool_calling_enabled"
+          : "commands.config.workarounds.verbatim_tool_calling_disabled"
+        : definition.descKey;
+    return `> ${enabled ? "🟢" : "🔴"} ${localizer(locale, key)}`;
+  });
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.compatibility_title")}**\n${localizer(locale, "commands.config.panel.compatibility_description")}\n${workaroundLines.join("\n")}\n${withLinePrefix("-# ", localizer(locale, "commands.config.panel.custom_provider_limitation"))}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-workarounds-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_workarounds_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+  );
+  return components;
+}
+
+function buildBehaviorNoticesBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale } = input;
+  const view = input.behaviorView?.notices;
+  const writesDisabled = input.readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    behaviorHeading(
+      locale,
+      "commands.config.panel.behavior_notices_title",
+      "commands.config.panel.behavior_notices_description",
+    ),
+  ];
+  if (!view) return components;
+  if (input.actor.workspaceKind === "guild" && !input.actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+    return components;
+  }
+  const hiddenSet = new Set(view.hiddenNoticeKeys);
+  const visible = TOOL_NOTICE_DEFINITIONS.filter((definition) => !hiddenSet.has(definition.key)).map((definition) =>
+    localizer(locale, definition.labelKey),
+  );
+  const hidden = TOOL_NOTICE_DEFINITIONS.filter((definition) => hiddenSet.has(definition.key)).map((definition) =>
+    localizer(locale, definition.labelKey),
+  );
+  const visibleLines = visible.length
+    ? visible
+        .map((notice) => `> ${localizer(locale, "commands.config.panel.visible_notices_label")}: ${notice}`)
+        .join("\n")
+    : `> ${localizer(locale, "commands.config.panel.visible_notices_label")}: ${localizer(locale, "commands.choices.none")}`;
+  const hiddenLines = hidden.length
+    ? hidden
+        .map((notice) => `> ${localizer(locale, "commands.config.panel.hidden_notices_label")}: ${notice}`)
+        .join("\n")
+    : `> ${localizer(locale, "commands.config.panel.hidden_notices_label")}: ${localizer(locale, "commands.choices.none")}`;
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.notice_embeds_title")}**\n${localizer(locale, "commands.config.panel.notice_embeds_description")}\n${visibleLines}\n${hiddenLines}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-notice-visibility-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_notice_visibility_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.speech_transcripts_title")}**\n${localizer(locale, "commands.config.panel.speech_transcripts_description")}`,
+    },
+    buildStateControlRow(
+      [
+        {
+          value: false,
+          label: localizer(locale, "commands.config.panel.off_button"),
+          customId: buildConfigRouteId({ action: "behavior-speech-transcripts-set", locale, enabled: false }),
+        },
+        {
+          value: true,
+          label: localizer(locale, "commands.config.panel.on_button"),
+          customId: buildConfigRouteId({ action: "behavior-speech-transcripts-set", locale, enabled: true }),
+        },
+      ],
+      view.speechTranscriptsEnabled,
+      writesDisabled,
+    ),
+    {
+      type: ComponentType.TextDisplay,
+      content: `> ${localizer(locale, view.speechTranscriptsEnabled ? "commands.config.panel.speech_transcripts_on" : "commands.config.panel.speech_transcripts_off")}\n${withLinePrefix("-# ", localizer(locale, "commands.config.panel.speech_provider_direction"))}`,
+    },
+  );
+  return components;
+}
+
+function buildBehaviorMemoryBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale } = input;
+  const view = input.behaviorView?.memory;
+  const writesDisabled = input.readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    behaviorHeading(
+      locale,
+      "commands.config.panel.behavior_memory_title",
+      "commands.config.panel.behavior_memory_description",
+    ),
+    {
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.memory_direction")),
+    },
+  ];
+  if (input.actor.workspaceKind === "guild" && !input.actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+    return components;
+  }
+  if (!view) return components;
+  const categoryMode =
+    view.stmCategories.length > 1 ||
+    (view.stmCategories.length === 1 && view.stmCategories[0]?.label.toLowerCase() !== "summary");
+  const categoryLines = view.stmCategories.length
+    ? view.stmCategories
+        .map((category) => `> ${safeSelectOptionText(`${category.label}: ${category.description}`, 62)}`)
+        .join("\n")
+    : `> ${localizer(locale, "commands.choices.none")}`;
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**[${localizer(locale, "commands.config.panel.memory_tagging_title")}](https://docs.tomoribot.app/en/features/knowledge/memory/#controlling-when-memories-activate)**\n${localizer(locale, "commands.config.panel.memory_tagging_description")}`,
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `> ${localizer(locale, view.memoryTaggingEnabled ? "commands.config.panel.memory_tagging_on" : "commands.config.panel.memory_tagging_off")}\n> ${localizer(locale, "commands.config.panel.channel_memory_title")}: ${localizer(locale, view.channelMemoryEnabled ? "commands.config.panel.enabled_option" : "commands.config.panel.disabled_option")}`,
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.channel_memory_description")),
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-memory-tagging-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_memory_tagging_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**[${localizer(locale, "commands.config.panel.stm_parameters_title")}](https://docs.tomoribot.app/en/features/knowledge/memory/#stm-configuration)**\n${localizer(locale, "commands.config.panel.stm_parameters_description")}\n> ${localizer(locale, "commands.config.panel.stm_refresh_cadence_value", { count: view.stmConfig?.refresh_cadence ?? 5 })}\n> ${localizer(locale, "commands.config.panel.stm_render_mode_value", { mode: view.stmConfig?.render_mode ?? "supersede" })}\n> ${localizer(locale, "commands.config.panel.stm_crude_messages_value", { count: view.stmConfig?.crude_message_count ?? 6 })}\n> ${localizer(locale, "commands.config.panel.stm_nudge_depth_value", { count: view.stmConfig?.nudge_injection_depth ?? 2 })}\n> ${localizer(locale, "commands.config.panel.stm_content_depth_value", { count: view.stmConfig?.content_injection_depth ?? -1 })}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-stm-parameters-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_stm_parameters_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.stm_categories_title")}**\n${localizer(locale, "commands.config.panel.stm_categories_description")}\n${categoryLines}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-stm-categories-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_stm_categories_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+  );
+  const toolDescription = view.stmConfig?.tool_description_override ?? DEFAULT_STM_TOOL_DESCRIPTION;
+  const updateNudge =
+    view.stmConfig?.update_nudge_override ?? (categoryMode ? SEED_CATEGORY_UPDATE_HINT : SEED_SUMMARY_UPDATE_HINT);
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.stm_prompt_title")}**\n${localizer(locale, "commands.config.panel.stm_prompt_description")}\n${renderStmContent(locale, toolDescription)}\n${renderStmContent(locale, updateNudge)}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-stm-prompt-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_stm_prompt_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+  );
+  return components;
+}
+
 export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPanelPayload {
   const { locale, actor, category, page, readStatus, receipt } = input;
   const writesDisabled = readStatus !== "fresh";
@@ -2157,6 +2537,21 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "behavior" && page === "trigger") {
     components.push(...buildBehaviorTriggerBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "behavior" && page === "experimental") {
+    components.push(...buildBehaviorExperimentalBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "behavior" && page === "notices") {
+    components.push(...buildBehaviorNoticesBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "behavior" && page === "memory") {
+    components.push(...buildBehaviorMemoryBody(input));
     return buildPayload(components, receipt);
   }
 

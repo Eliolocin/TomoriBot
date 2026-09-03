@@ -1,6 +1,8 @@
 import { ChannelType, MessageFlags, type ModalSubmitInteraction } from "discord.js";
 import type { PanelAction } from "@/constants/panelActions";
 import { CooldownType, type RandomTriggerRow, type TomoriState } from "@/types/db/schema";
+import type { ServerStmConfigRow } from "@/types/db/schema";
+import { TOOL_NOTICE_DEFINITIONS, isToolNoticeKey, type ToolNoticeKey } from "@/constants/toolNotices";
 import {
   computeRandomTriggerRemoveFingerprint,
   CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
@@ -56,6 +58,52 @@ import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 import { combineModalPromptParts } from "@/utils/text/modalPromptParts";
 import { formatUTCOffset, UTC_OFFSET_MAX, UTC_OFFSET_MIN } from "@/utils/text/timezoneHelper";
 import { localizer } from "@/utils/text/localizer";
+import { getShortTermMemoriesForServer } from "@/utils/cache/shortTermMemoryCache";
+import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
+import { buildWorkaroundConfigWritePlan } from "@/utils/discord/workaroundConfigMapping";
+import {
+  DELIBERATE_TOOL_TRIGGER_TARGETS,
+  getToolNamesForDeliberateTriggerTarget,
+  normalizeDeliberateToolRegexTrigger,
+  normalizeDeliberateToolTrigger,
+  resolveDeliberateToolContextTurns,
+  type DeliberateToolTrigger,
+  type DeliberateToolTriggerMap,
+} from "@/utils/tools/deliberateToolMode";
+import { slugifyLabel } from "@/utils/text/slugifyLabel";
+import { MAX_MESSAGES_PER_CHANNEL } from "@/utils/cache/shortTermMemoryCache";
+import { DEFAULT_STM_TOOL_DESCRIPTION } from "@/tools/functionCalls/updateShortTermMemoryTool";
+import { SEED_CATEGORY_UPDATE_HINT, SEED_SUMMARY_UPDATE_HINT } from "@/utils/text/context/memories";
+import {
+  BEHAVIOR_CHANNEL_MEMORY_FIELD,
+  BEHAVIOR_MEMORY_TAGGING_FIELD,
+  BEHAVIOR_NOTICE_GROUP_PREFIX,
+  BEHAVIOR_SEND_LIMIT_FIELD,
+  BEHAVIOR_STM_CATEGORY_PREFIX,
+  BEHAVIOR_STM_CONTENT_DEPTH_FIELD,
+  BEHAVIOR_STM_CRUDE_MESSAGES_FIELD,
+  BEHAVIOR_STM_NUDGE_DEPTH_FIELD,
+  BEHAVIOR_STM_REFRESH_CADENCE_FIELD,
+  BEHAVIOR_STM_RENDER_MODE_FIELD,
+  BEHAVIOR_STM_TOOL_DESCRIPTION_FIELD,
+  BEHAVIOR_STM_UPDATE_NUDGE_FIELD,
+  BEHAVIOR_TOOL_CONTEXT_FIELD,
+  BEHAVIOR_TOOL_TRIGGER_LITERAL_FIELD,
+  BEHAVIOR_TOOL_TRIGGER_REMOVE_GROUP_PREFIX,
+  BEHAVIOR_TOOL_TRIGGER_REGEX_FIELD,
+  BEHAVIOR_TOOL_TRIGGER_TARGET_FIELD,
+  BEHAVIOR_WORKAROUND_GROUP_FIELD,
+  buildBehaviorMemoryTaggingModal,
+  buildBehaviorNoticeVisibilityModal,
+  buildBehaviorSendLimitModal,
+  buildBehaviorStmCategoriesModal,
+  buildBehaviorStmParametersModal,
+  buildBehaviorStmPromptModal,
+  buildBehaviorToolContextModal,
+  buildBehaviorToolTriggerAddModal,
+  buildBehaviorToolTriggerRemoveModal,
+  buildBehaviorWorkaroundsModal,
+} from "@/utils/discord/ui/configBehaviorModals";
 
 export const CONFIG_BEHAVIOR_MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "behavior-prompt-open",
@@ -716,6 +764,656 @@ async function runTriggerWrite(
     };
   }
   return null;
+}
+
+export const CONFIG_BEHAVIOR_D10_MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
+  "behavior-tool-context-open",
+  "behavior-tool-trigger-add-open",
+  "behavior-tool-trigger-remove-open",
+  "behavior-send-limit-open",
+  "behavior-workarounds-open",
+  "behavior-notice-visibility-open",
+  "behavior-memory-tagging-open",
+  "behavior-stm-parameters-open",
+  "behavior-stm-categories-open",
+  "behavior-stm-prompt-open",
+]);
+
+export const CONFIG_BEHAVIOR_D10_MODAL_SUBMIT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
+  "behavior-tool-context-submit",
+  "behavior-tool-trigger-add-submit",
+  "behavior-tool-trigger-remove-submit",
+  "behavior-send-limit-submit",
+  "behavior-workarounds-submit",
+  "behavior-notice-visibility-submit",
+  "behavior-memory-tagging-submit",
+  "behavior-stm-parameters-submit",
+  "behavior-stm-categories-submit",
+  "behavior-stm-prompt-submit",
+]);
+
+export const CONFIG_BEHAVIOR_D10_DIRECT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
+  "behavior-tool-mode-set",
+  "behavior-self-debug-set",
+  "behavior-speech-transcripts-set",
+]);
+
+const MAX_TOOL_TRIGGER_ENTRIES = 50;
+const MAX_NOTICE_ENTRIES = 50;
+
+function fallbackD10View(state: TomoriState) {
+  return {
+    experimental: {
+      deliberateToolMode: state.config.deliberate_tool_mode ?? false,
+      deliberateToolContextTurns: resolveDeliberateToolContextTurns(state.config.deliberate_tool_context_turns),
+      deliberateToolTriggers: state.config.deliberate_tool_triggers ?? {},
+      sendLimit: state.config.send_message_limit ?? 0,
+      selfDebugEnabled: state.config.self_debug_enabled ?? false,
+      workarounds: { verbatim_tool_calling_enabled: state.config.verbatim_tool_calling_enabled ?? false },
+    },
+    notices: {
+      hiddenNoticeKeys: (state.config.tool_notice_hidden_keys ?? []).filter(isToolNoticeKey),
+      speechTranscriptsEnabled: state.config.voice_transcript_chat_mode ?? true,
+    },
+    memory: {
+      memoryTaggingEnabled: state.config.memory_tagging_enabled ?? false,
+      channelMemoryEnabled: state.config.channel_memory_enabled ?? false,
+      stmConfig: null,
+      stmCategories: [],
+    },
+  };
+}
+
+async function d10View(state: TomoriState, dependencies: ConfigRouteDependencies) {
+  const loaded = dependencies.loadBehaviorView ? await dependencies.loadBehaviorView(state) : undefined;
+  const fallback = fallbackD10View(state);
+  return {
+    experimental: loaded?.experimental ?? fallback.experimental,
+    notices: loaded?.notices ?? fallback.notices,
+    memory: loaded?.memory ?? fallback.memory,
+  };
+}
+
+export async function handleConfigBehaviorD10ModalOpen(
+  interaction: GlobalRoutableInteraction,
+  route: ConfigPanelRoute,
+  dependencies: ConfigRouteDependencies,
+  actor: ConfigActor,
+): Promise<boolean> {
+  if (!CONFIG_BEHAVIOR_D10_MODAL_OPEN_ACTIONS.has(route.action)) return false;
+  if (!isConfigRouteAuthorized(route, actor)) {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.config.panel.denied_detail"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+  const scope = await dependencies.resolveScope(interaction, false);
+  const state = scope?.personas[0];
+  if (!scope || !state) {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.config.panel.unavailable"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return true;
+  }
+  const view = await d10View(state, dependencies);
+  const nonce = dependencies.createNonce();
+  switch (route.action) {
+    case "behavior-tool-context-open":
+      await dependencies.showModal(
+        interaction,
+        buildBehaviorToolContextModal(route.locale, nonce, view.experimental.deliberateToolContextTurns),
+      );
+      break;
+    case "behavior-tool-trigger-add-open":
+      await dependencies.showModal(interaction, buildBehaviorToolTriggerAddModal(route.locale, nonce));
+      break;
+    case "behavior-tool-trigger-remove-open": {
+      const entryCount = triggerEntries(view.experimental.deliberateToolTriggers).length;
+      if (entryCount === 0) {
+        await interaction.reply({
+          content: localizer(route.locale, "commands.config.panel.tool_trigger_none_detail"),
+          flags: MessageFlags.Ephemeral,
+        });
+        break;
+      }
+      if (entryCount > MAX_TOOL_TRIGGER_ENTRIES) {
+        await interaction.reply({
+          content: localizer(route.locale, "commands.config.panel.tool_trigger_over_capacity_detail", {
+            count: entryCount,
+            max: MAX_TOOL_TRIGGER_ENTRIES,
+          }),
+          flags: MessageFlags.Ephemeral,
+        });
+        break;
+      }
+      await dependencies.showModal(
+        interaction,
+        buildBehaviorToolTriggerRemoveModal(route.locale, nonce, view.experimental.deliberateToolTriggers),
+      );
+      break;
+    }
+    case "behavior-send-limit-open":
+      await dependencies.showModal(
+        interaction,
+        buildBehaviorSendLimitModal(route.locale, nonce, view.experimental.sendLimit),
+      );
+      break;
+    case "behavior-workarounds-open":
+      await dependencies.showModal(
+        interaction,
+        buildBehaviorWorkaroundsModal(route.locale, nonce, {
+          verbatim_tool_calling: view.experimental.workarounds.verbatim_tool_calling_enabled,
+        }),
+      );
+      break;
+    case "behavior-notice-visibility-open":
+      if (TOOL_NOTICE_DEFINITIONS.length > MAX_NOTICE_ENTRIES) {
+        await interaction.reply({
+          content: `${localizer(route.locale, "commands.config.notice-embeds.visibility.too_many_title")}\n${localizer(
+            route.locale,
+            "commands.config.notice-embeds.visibility.too_many_description",
+            {
+              count: TOOL_NOTICE_DEFINITIONS.length,
+              max_entries: MAX_NOTICE_ENTRIES,
+              max_groups: MAX_NOTICE_ENTRIES / 10,
+            },
+          )}`,
+          flags: MessageFlags.Ephemeral,
+        });
+        break;
+      }
+      await dependencies.showModal(
+        interaction,
+        buildBehaviorNoticeVisibilityModal(route.locale, nonce, view.notices.hiddenNoticeKeys),
+      );
+      break;
+    case "behavior-memory-tagging-open":
+      await dependencies.showModal(
+        interaction,
+        buildBehaviorMemoryTaggingModal(
+          route.locale,
+          nonce,
+          view.memory.memoryTaggingEnabled,
+          view.memory.channelMemoryEnabled,
+        ),
+      );
+      break;
+    case "behavior-stm-parameters-open": {
+      const stmConfig = await shortTermMemoryRepository.getStmConfig(state.server_id);
+      await dependencies.showModal(interaction, buildBehaviorStmParametersModal(route.locale, nonce, stmConfig));
+      break;
+    }
+    case "behavior-stm-categories-open": {
+      const categories = await shortTermMemoryRepository.getStmCategories(state.server_id);
+      const activeScopes = stmActiveScopes(scope.serverDiscId);
+      const affected = activeScopes.length
+        ? activeScopes.map((entry) => `<#${entry.channelId}>`).join(", ")
+        : localizer(route.locale, "commands.choices.none");
+      await dependencies.showModal(
+        interaction,
+        buildBehaviorStmCategoriesModal(route.locale, nonce, categories, {
+          disclosure: localizer(route.locale, "commands.config.panel.stm_categories_disclosure_modal", {
+            scope: affected,
+          }),
+        }),
+      );
+      break;
+    }
+    case "behavior-stm-prompt-open": {
+      const [stmConfig, categories] = await Promise.all([
+        shortTermMemoryRepository.getStmConfig(state.server_id),
+        shortTermMemoryRepository.getStmCategories(state.server_id),
+      ]);
+      const categoryMode =
+        categories.length > 1 || (categories.length === 1 && categories[0]?.label.toLowerCase() !== "summary");
+      await dependencies.showModal(
+        interaction,
+        buildBehaviorStmPromptModal(
+          route.locale,
+          nonce,
+          stmConfig?.tool_description_override ?? DEFAULT_STM_TOOL_DESCRIPTION,
+          stmConfig?.update_nudge_override ?? (categoryMode ? SEED_CATEGORY_UPDATE_HINT : SEED_SUMMARY_UPDATE_HINT),
+        ),
+      );
+      break;
+    }
+  }
+  return true;
+}
+
+function triggerStoredKey(trigger: DeliberateToolTrigger): string {
+  return typeof trigger === "string" ? `literal:${trigger}` : `${trigger.type}:${trigger.value}`;
+}
+
+function triggerMapFingerprint(triggerMap: DeliberateToolTriggerMap): string {
+  return Object.entries(triggerMap)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([target, triggers]) => `${target}:${triggers.map(triggerStoredKey).sort().join(",")}`)
+    .join("|");
+}
+
+function parseToolTriggerInput(
+  interaction: ModalSubmitInteraction,
+  route: Extract<ConfigPanelRoute, { action: "behavior-tool-trigger-add-submit" }>,
+  target: string | undefined,
+): { target: string; trigger: DeliberateToolTrigger } | null {
+  const literal = normalizeDeliberateToolTrigger(
+    interaction.fields.getTextInputValue(buildConfigModalFieldId(BEHAVIOR_TOOL_TRIGGER_LITERAL_FIELD, route.nonce)),
+  );
+  const regex = normalizeDeliberateToolRegexTrigger(
+    interaction.fields.getTextInputValue(buildConfigModalFieldId(BEHAVIOR_TOOL_TRIGGER_REGEX_FIELD, route.nonce)),
+  );
+  if (!target || !DELIBERATE_TOOL_TRIGGER_TARGETS.some((candidate) => candidate.value === target)) return null;
+  if ((literal && regex) || (!literal && !regex)) return null;
+  if (regex) {
+    try {
+      new RegExp(regex, "iu");
+    } catch {
+      return null;
+    }
+    return { target, trigger: { type: "regex", value: regex } };
+  }
+  return { target, trigger: literal };
+}
+
+function triggerEntries(triggerMap: DeliberateToolTriggerMap): Array<{
+  id: string;
+  target: string;
+  trigger: DeliberateToolTrigger;
+}> {
+  return Object.entries(triggerMap).flatMap(([target, triggers]) =>
+    triggers.map((trigger, index) => ({ id: `${target}_${index}`, target, trigger })),
+  );
+}
+
+function stmActiveScopes(serverDiscId: string): Array<{ channelId: string; personaId: number | null }> {
+  return Array.from(
+    new Map(
+      getShortTermMemoriesForServer(serverDiscId).map((entry) => [
+        `${entry.channelId}\0${entry.personaId ?? ""}`,
+        { channelId: entry.channelId, personaId: entry.personaId ?? null },
+      ]),
+    ).values(),
+  );
+}
+
+function parseStmCategoryInputs(interaction: ModalSubmitInteraction, nonce: string) {
+  const categories: Array<{ position: number; label: string; description: string }> = [];
+  const slugs = new Set<string>();
+  for (let index = 0; index < 5; index += 1) {
+    const raw = interaction.fields
+      .getTextInputValue(buildConfigModalFieldId(`${BEHAVIOR_STM_CATEGORY_PREFIX}${index}`, nonce))
+      .trim();
+    if (!raw) continue;
+    const colonIndex = raw.indexOf(":");
+    if (colonIndex < 0) return null;
+    const label = raw.slice(0, colonIndex).trim();
+    const description = raw.slice(colonIndex + 1).trim();
+    const slug = slugifyLabel(label);
+    if (!label || !description || !slug || slugs.has(slug)) return null;
+    slugs.add(slug);
+    categories.push({ position: categories.length, label, description });
+  }
+  if (categories.length === 0) {
+    categories.push({
+      position: 0,
+      label: "summary",
+      description: "A running summary of recent events, topics, and context from this conversation.",
+    });
+  }
+  return categories;
+}
+
+function stmCategoryFingerprint(
+  categories: readonly { position: number; label: string; description: string }[],
+): string {
+  return categories.map((category) => `${category.position}:${category.label}:${category.description}`).join("|");
+}
+
+async function runD10Write(
+  interaction: GlobalRoutableInteraction,
+  route: ConfigPanelRoute,
+  scope: ConfigScope,
+  dependencies: ConfigRouteDependencies,
+): Promise<BehaviorWriteOutcome | null> {
+  const state = stateFromScope(scope);
+  if (!state) return null;
+  const repositories = await import("@/utils/db/repositories");
+  const locale = route.locale;
+  if (
+    route.action === "behavior-tool-mode-set" ||
+    route.action === "behavior-self-debug-set" ||
+    route.action === "behavior-speech-transcripts-set"
+  ) {
+    const current =
+      route.action === "behavior-tool-mode-set"
+        ? (state.config.deliberate_tool_mode ?? false)
+        : route.action === "behavior-self-debug-set"
+          ? (state.config.self_debug_enabled ?? false)
+          : (state.config.voice_transcript_chat_mode ?? true);
+    if (current === route.enabled)
+      return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
+    const updated =
+      route.action === "behavior-tool-mode-set"
+        ? await repositories.configRepository.updateTriggerBehaviorConfig(state.server_id, {
+            deliberate_tool_mode: route.enabled,
+          })
+        : route.action === "behavior-self-debug-set"
+          ? await repositories.configRepository.updateChatConfig(state.server_id, { self_debug_enabled: route.enabled })
+          : await repositories.configRepository.updateSpeechConfig(state.server_id, {
+              voice_transcript_chat_mode: route.enabled,
+            });
+    if (!updated) return { receipt: writeFailed(locale) };
+    invalidateTomoriStateCache(scope.serverDiscId);
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry:
+        route.action === "behavior-tool-mode-set"
+          ? "server-config.workspace.deliberate-tool-mode.set"
+          : route.action === "behavior-self-debug-set"
+            ? "server-config.workspace.self-debug.set"
+            : "server-config.workspace.speech-transcripts.set",
+    };
+  }
+  if (!CONFIG_BEHAVIOR_D10_MODAL_SUBMIT_ACTIONS.has(route.action)) return null;
+  const submitted = modal(interaction);
+  if (route.action === "behavior-tool-context-submit") {
+    const value = parseInteger(getText(submitted, BEHAVIOR_TOOL_CONTEXT_FIELD, route.nonce), 0, 10);
+    if (value === null) return { receipt: invalid(locale, "tool_context_invalid_detail", { min: 0, max: 10 }) };
+    const current = resolveDeliberateToolContextTurns(state.config.deliberate_tool_context_turns);
+    if (value === current && state.config.deliberate_tool_context_turns !== null)
+      return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
+    const updated = await repositories.configRepository.updateTriggerBehaviorConfig(state.server_id, {
+      deliberate_tool_context_turns: value,
+    });
+    if (!updated) return { receipt: writeFailed(locale) };
+    invalidateTomoriStateCache(scope.serverDiscId);
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry: "server-config.workspace.deliberate-tool-context.set",
+    };
+  }
+  if (route.action === "behavior-send-limit-submit") {
+    const value = parseInteger(getText(submitted, BEHAVIOR_SEND_LIMIT_FIELD, route.nonce), 0, 40);
+    if (value === null) return { receipt: invalid(locale, "send_limit_invalid_detail", { min: 0, max: 40 }) };
+    const current = state.config.send_message_limit ?? 0;
+    if (value === current)
+      return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
+    const updated = await repositories.configRepository.updateChatConfig(state.server_id, {
+      send_message_limit: value,
+    });
+    if (!updated) return { receipt: writeFailed(locale) };
+    invalidateTomoriStateCache(scope.serverDiscId);
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry: "server-config.workspace.send-limit.set",
+    };
+  }
+  if (route.action === "behavior-workarounds-submit") {
+    const selected = dependencies.takeCheckboxValues(
+      submitted.id,
+      buildConfigModalFieldId(BEHAVIOR_WORKAROUND_GROUP_FIELD, route.nonce),
+    );
+    if (selected === undefined) return { receipt: staleReceipt(locale) };
+    const plan = buildWorkaroundConfigWritePlan(state.config, selected);
+    if (plan.changes.length === 0)
+      return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
+    const updated = await repositories.configRepository[plan.method](state.server_id, plan.patch);
+    if (!updated) return { receipt: writeFailed(locale) };
+    invalidateTomoriStateCache(scope.serverDiscId);
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry: "server-config.workspace.workarounds.set",
+    };
+  }
+  if (route.action === "behavior-notice-visibility-submit") {
+    const groupCount = Math.ceil(TOOL_NOTICE_DEFINITIONS.length / 10);
+    const checked = new Set<ToolNoticeKey>();
+    for (let groupIndex = 0; groupIndex < groupCount; groupIndex += 1) {
+      const values = dependencies.takeCheckboxValues(
+        submitted.id,
+        buildConfigModalFieldId(`${BEHAVIOR_NOTICE_GROUP_PREFIX}_${groupIndex}`, route.nonce),
+      );
+      if (values === undefined) return { receipt: staleReceipt(locale) };
+      for (const value of values) {
+        if (isToolNoticeKey(value)) checked.add(value);
+      }
+    }
+    const hidden = TOOL_NOTICE_DEFINITIONS.filter((definition) => !checked.has(definition.key)).map(
+      (definition) => definition.key,
+    );
+    const current = (state.config.tool_notice_hidden_keys ?? []).filter(isToolNoticeKey);
+    const currentSet = new Set(current);
+    if (hidden.length === currentSet.size && hidden.every((key) => currentSet.has(key)))
+      return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
+    const updated = await repositories.configRepository.updateNoticeEmbedsConfig(state.server_id, {
+      tool_notice_hidden_keys: hidden,
+    });
+    if (!updated) return { receipt: writeFailed(locale) };
+    invalidateTomoriStateCache(scope.serverDiscId);
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry: "server-config.workspace.notice-visibility.set",
+    };
+  }
+  if (route.action === "behavior-memory-tagging-submit") {
+    // The legacy command's blacklist branch only rejected non-managers. The D10 manager-only
+    // policy rejects those actors before this operation, while retaining the manager bypass.
+    const memoryValue = dependencies.takeSelectValue(
+      submitted.id,
+      buildConfigModalFieldId(BEHAVIOR_MEMORY_TAGGING_FIELD, route.nonce),
+    );
+    const channelValue = dependencies.takeSelectValue(
+      submitted.id,
+      buildConfigModalFieldId(BEHAVIOR_CHANNEL_MEMORY_FIELD, route.nonce),
+    );
+    if ((memoryValue !== "true" && memoryValue !== "false") || (channelValue !== "true" && channelValue !== "false"))
+      return { receipt: invalid(locale, "memory_tagging_invalid_detail") };
+    const memoryTaggingEnabled = memoryValue === "true";
+    const channelMemoryEnabled = channelValue === "true";
+    if (
+      memoryTaggingEnabled === (state.config.memory_tagging_enabled ?? false) &&
+      channelMemoryEnabled === (state.config.channel_memory_enabled ?? false)
+    )
+      return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
+    const updated = await repositories.configRepository.updateMemoryConfig(state.server_id, {
+      memory_tagging_enabled: memoryTaggingEnabled,
+      channel_memory_enabled: channelMemoryEnabled,
+    });
+    if (!updated) return { receipt: writeFailed(locale) };
+    invalidateTomoriStateCache(scope.serverDiscId);
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry: "server-config.workspace.memory-tagging.set",
+    };
+  }
+  if (route.action === "behavior-tool-trigger-add-submit") {
+    const triggerMap: DeliberateToolTriggerMap = Object.fromEntries(
+      Object.entries(state.config.deliberate_tool_triggers ?? {}).map(([key, values]) => [key, [...values]]),
+    );
+    if (Object.keys(triggerMap).some((target) => getToolNamesForDeliberateTriggerTarget(target).length === 0))
+      return { receipt: invalid(locale, "tool_trigger_invalid_detail") };
+    const parsed = parseToolTriggerInput(
+      submitted,
+      route,
+      dependencies.takeSelectValue(
+        submitted.id,
+        buildConfigModalFieldId(BEHAVIOR_TOOL_TRIGGER_TARGET_FIELD, route.nonce),
+      ),
+    );
+    if (!parsed) {
+      return { receipt: invalid(locale, "tool_trigger_invalid_detail") };
+    }
+    if (getToolNamesForDeliberateTriggerTarget(parsed.target).length === 0)
+      return { receipt: invalid(locale, "tool_trigger_invalid_detail") };
+    const current = triggerMap[parsed.target] ?? [];
+    if (current.some((candidate) => triggerStoredKey(candidate) === triggerStoredKey(parsed.trigger)))
+      return { receipt: invalid(locale, "tool_trigger_duplicate_detail") };
+    if (current.length >= 16) return { receipt: invalid(locale, "tool_trigger_limit_detail", { max: 16 }) };
+    triggerMap[parsed.target] = [...current, parsed.trigger].sort((left, right) =>
+      triggerStoredKey(left).localeCompare(triggerStoredKey(right)),
+    );
+    if (triggerMapFingerprint(triggerMap) === triggerMapFingerprint(state.config.deliberate_tool_triggers ?? {}))
+      return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
+    const updated = await repositories.configRepository.updateTriggerBehaviorConfig(state.server_id, {
+      deliberate_tool_triggers: triggerMap,
+    });
+    if (!updated) return { receipt: writeFailed(locale) };
+    invalidateTomoriStateCache(scope.serverDiscId);
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry: "server-config.workspace.deliberate-tool-trigger.set",
+    };
+  }
+  if (route.action === "behavior-tool-trigger-remove-submit") {
+    const triggerMap: DeliberateToolTriggerMap = Object.fromEntries(
+      Object.entries(state.config.deliberate_tool_triggers ?? {}).map(([key, values]) => [key, [...values]]),
+    );
+    const existingEntries = triggerEntries(triggerMap);
+    if (existingEntries.length === 0)
+      return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
+    if (existingEntries.length > MAX_TOOL_TRIGGER_ENTRIES)
+      return {
+        receipt: invalid(locale, "tool_trigger_over_capacity_detail", {
+          count: existingEntries.length,
+          max: MAX_TOOL_TRIGGER_ENTRIES,
+        }),
+      };
+    if (Object.keys(triggerMap).some((target) => getToolNamesForDeliberateTriggerTarget(target).length === 0))
+      return { receipt: invalid(locale, "tool_trigger_invalid_detail") };
+    const checked = new Set<string>();
+    for (let groupIndex = 0; groupIndex < Math.ceil(existingEntries.length / 10); groupIndex += 1) {
+      const values = dependencies.takeCheckboxValues(
+        submitted.id,
+        buildConfigModalFieldId(`${BEHAVIOR_TOOL_TRIGGER_REMOVE_GROUP_PREFIX}_${groupIndex}`, route.nonce),
+      );
+      if (values === undefined) return { receipt: staleReceipt(locale) };
+      for (const value of values) checked.add(value);
+    }
+    const entriesToRemove = existingEntries.filter((entry) => !checked.has(entry.id));
+    if (entriesToRemove.length === 0)
+      return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
+    for (const entry of entriesToRemove) {
+      const next = (triggerMap[entry.target] ?? []).filter(
+        (candidate) => triggerStoredKey(candidate) !== triggerStoredKey(entry.trigger),
+      );
+      if (next.length > 0) triggerMap[entry.target] = next;
+      else delete triggerMap[entry.target];
+    }
+    const updated = await repositories.configRepository.updateTriggerBehaviorConfig(state.server_id, {
+      deliberate_tool_triggers: triggerMap,
+    });
+    if (!updated) return { receipt: writeFailed(locale) };
+    invalidateTomoriStateCache(scope.serverDiscId);
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry: "server-config.workspace.deliberate-tool-trigger.set",
+    };
+  }
+  if (route.action === "behavior-stm-parameters-submit") {
+    const cadence = parseInteger(getText(submitted, BEHAVIOR_STM_REFRESH_CADENCE_FIELD, route.nonce), 1, 100);
+    const crude = parseInteger(
+      getText(submitted, BEHAVIOR_STM_CRUDE_MESSAGES_FIELD, route.nonce),
+      1,
+      MAX_MESSAGES_PER_CHANNEL,
+    );
+    const nudge = parseInteger(getText(submitted, BEHAVIOR_STM_NUDGE_DEPTH_FIELD, route.nonce), 0, 20);
+    const content = parseInteger(getText(submitted, BEHAVIOR_STM_CONTENT_DEPTH_FIELD, route.nonce), -1, 20);
+    const mode = dependencies.takeSelectValue(
+      submitted.id,
+      buildConfigModalFieldId(BEHAVIOR_STM_RENDER_MODE_FIELD, route.nonce),
+    );
+    if (
+      cadence === null ||
+      crude === null ||
+      nudge === null ||
+      content === null ||
+      (mode !== "supersede" && mode !== "crude_summary")
+    )
+      return { receipt: invalid(locale, "stm_parameters_invalid_detail") };
+    const updated = await shortTermMemoryRepository.upsertStmConfig(state.server_id, {
+      refresh_cadence: cadence,
+      render_mode: mode as ServerStmConfigRow["render_mode"],
+      crude_message_count: crude,
+      nudge_injection_depth: nudge,
+      content_injection_depth: content,
+    });
+    if (!updated) return { receipt: writeFailed(locale) };
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry: "server-config.workspace.stm-parameters.set",
+    };
+  }
+  if (route.action === "behavior-stm-prompt-submit") {
+    const toolDescription = getText(submitted, BEHAVIOR_STM_TOOL_DESCRIPTION_FIELD, route.nonce).trim() || null;
+    const updateNudge = getText(submitted, BEHAVIOR_STM_UPDATE_NUDGE_FIELD, route.nonce).trim() || null;
+    const updated = await shortTermMemoryRepository.upsertStmConfig(state.server_id, {
+      tool_description_override: toolDescription,
+      update_nudge_override: updateNudge,
+    });
+    if (!updated) return { receipt: writeFailed(locale) };
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry: "server-config.workspace.stm-prompt.set",
+    };
+  }
+  if (route.action === "behavior-stm-categories-submit") {
+    const categories = parseStmCategoryInputs(submitted, route.nonce);
+    if (!categories) return { receipt: invalid(locale, "stm_categories_invalid_detail") };
+    const currentCategories = await shortTermMemoryRepository.getStmCategories(state.server_id);
+    if (stmCategoryFingerprint(categories) === stmCategoryFingerprint(currentCategories))
+      return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
+    const activeScopes = stmActiveScopes(scope.serverDiscId);
+    const updated = await shortTermMemoryRepository.upsertStmCategories(state.server_id, categories);
+    if (!updated) return { receipt: writeFailed(locale) };
+    for (const entry of activeScopes) {
+      shortTermMemoryRepository.clearForServerChannel(scope.serverDiscId, entry.channelId, entry.personaId);
+    }
+    return {
+      receipt: receipt(locale, "success", "state_updated_heading", "state_updated_detail"),
+      telemetry: "server-config.workspace.stm-categories.set",
+    };
+  }
+  return null;
+}
+
+export async function handleConfigBehaviorD10Routes(context: ConfigBehaviorRouteContext): Promise<boolean> {
+  const { interaction, route, scope, dependencies } = context;
+  if (
+    !CONFIG_BEHAVIOR_D10_DIRECT_ACTIONS.has(route.action) &&
+    !CONFIG_BEHAVIOR_D10_MODAL_SUBMIT_ACTIONS.has(route.action)
+  )
+    return false;
+  const outcome = await runD10Write(interaction, route, scope, dependencies);
+  if (!outcome) return false;
+  const refreshed = (await dependencies.resolveScope(interaction, true)) ?? scope;
+  if (outcome.telemetry && refreshed.internalServerId) {
+    dependencies.recordAction({
+      action: outcome.telemetry,
+      serverId: refreshed.internalServerId,
+      userDiscId: interaction.user.id,
+    });
+  }
+  const page =
+    route.action.startsWith("behavior-stm-") ||
+    route.action === "behavior-memory-tagging-open" ||
+    route.action === "behavior-memory-tagging-submit"
+      ? "memory"
+      : route.action.startsWith("behavior-notice") || route.action.startsWith("behavior-speech")
+        ? "notices"
+        : "experimental";
+  await repaint(interaction, {
+    locale: route.locale,
+    scope: refreshed,
+    category: "behavior",
+    page,
+    selectedPersonaId: null,
+    receipt: outcome.receipt,
+    dependencies,
+  });
+  return true;
 }
 
 export interface ConfigBehaviorRouteContext {

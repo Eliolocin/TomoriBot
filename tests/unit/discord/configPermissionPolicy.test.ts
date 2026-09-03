@@ -32,6 +32,9 @@ import {
   resolveBehaviorTriggerActionState,
   BEHAVIOR_GENERAL_ACTION_BY_ROUTE,
   BEHAVIOR_TRIGGER_ACTION_BY_ROUTE,
+  BEHAVIOR_EXPERIMENTAL_ACTION_BY_ROUTE,
+  BEHAVIOR_NOTICES_ACTION_BY_ROUTE,
+  BEHAVIOR_MEMORY_ACTION_BY_ROUTE,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
@@ -73,9 +76,9 @@ describe("config category filtering", () => {
     expect(visibleConfigCategories(GUILD_MANAGER).every((entry) => !entry.disabled)).toBe(true);
   });
 
-  it("leaves manager-owned categories visible but inert for a guild member", () => {
+  it("leaves Persona visible but manager-owned categories inert for a guild member", () => {
     expect(resolveConfigCategoryState("persona", GUILD_MEMBER)).toBe("enabled");
-    expect(resolveConfigCategoryState("behavior", GUILD_MEMBER)).toBe("enabled");
+    expect(resolveConfigCategoryState("behavior", GUILD_MEMBER)).toBe("disabled");
     expect(resolveConfigCategoryState("channels", GUILD_MEMBER)).toBe("disabled");
     expect(resolveConfigCategoryState("permissions", GUILD_MEMBER)).toBe("disabled");
     expect(resolveConfigCategoryState("models", GUILD_MEMBER)).toBe("disabled");
@@ -114,10 +117,9 @@ describe("config page filtering", () => {
     expect(visibleConfigPages("persona", GUILD_MEMBER)).toEqual(["general", "memories", "sprites"]);
   });
 
-  it("keeps Notices writable for a guild member while its Behavior siblings stay read-only", () => {
-    expect(resolveConfigPageState("behavior", "notices", GUILD_MEMBER)).toBe("enabled");
-    for (const page of ["general", "trigger", "experimental", "memory"] as const) {
-      expect(resolveConfigPageState("behavior", page, GUILD_MEMBER)).toBe("read-only");
+  it("omits the manager-owned Behavior category for a guild member", () => {
+    for (const page of ["general", "trigger", "experimental", "notices", "memory"] as const) {
+      expect(resolveConfigPageState("behavior", page, GUILD_MEMBER)).toBe("omitted");
     }
   });
 
@@ -273,6 +275,41 @@ describe("Behavior action policy", () => {
       expect(resolveBehaviorTriggerActionState(action, GUILD_MANAGER)).toBe("enabled");
       expect(resolveBehaviorTriggerActionState(action, GUILD_MEMBER)).toBe("disabled");
       expect(resolveBehaviorTriggerActionState(action, DM_OWNER)).toBe("omitted");
+    }
+  });
+
+  it("covers every D10 action with manager, member, and DM policy decisions", () => {
+    const routes: ConfigPanelRoute[] = [
+      { action: "behavior-tool-mode-set", locale: "en-US", enabled: true },
+      { action: "behavior-tool-context-open", locale: "en-US" },
+      { action: "behavior-tool-context-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "behavior-tool-trigger-add-open", locale: "en-US" },
+      { action: "behavior-tool-trigger-add-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "behavior-tool-trigger-remove-open", locale: "en-US" },
+      { action: "behavior-tool-trigger-remove-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "behavior-send-limit-open", locale: "en-US" },
+      { action: "behavior-send-limit-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "behavior-self-debug-set", locale: "en-US", enabled: true },
+      { action: "behavior-workarounds-open", locale: "en-US" },
+      { action: "behavior-workarounds-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "behavior-notice-visibility-open", locale: "en-US" },
+      { action: "behavior-notice-visibility-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "behavior-speech-transcripts-set", locale: "en-US", enabled: true },
+      { action: "behavior-memory-tagging-open", locale: "en-US" },
+      { action: "behavior-memory-tagging-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "behavior-stm-parameters-open", locale: "en-US" },
+      { action: "behavior-stm-parameters-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "behavior-stm-categories-open", locale: "en-US" },
+      { action: "behavior-stm-categories-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "behavior-stm-prompt-open", locale: "en-US" },
+      { action: "behavior-stm-prompt-submit", locale: "en-US", nonce: "nonce1234567" },
+    ];
+    for (const route of routes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(
+        route.action.startsWith("behavior-notice") || route.action === "behavior-speech-transcripts-set",
+      );
     }
   });
 });
@@ -446,6 +483,9 @@ describe("isConfigRouteAuthorized", () => {
       ...Object.keys(MODELS_PAGE_BY_ROUTE),
       ...Object.keys(BEHAVIOR_GENERAL_ACTION_BY_ROUTE),
       ...Object.keys(BEHAVIOR_TRIGGER_ACTION_BY_ROUTE),
+      ...Object.keys(BEHAVIOR_EXPERIMENTAL_ACTION_BY_ROUTE),
+      ...Object.keys(BEHAVIOR_NOTICES_ACTION_BY_ROUTE),
+      ...Object.keys(BEHAVIOR_MEMORY_ACTION_BY_ROUTE),
     ]);
 
     const unknownRoute = { action: "not-a-real-action", locale: "en-US" } as unknown as ConfigPanelRoute;

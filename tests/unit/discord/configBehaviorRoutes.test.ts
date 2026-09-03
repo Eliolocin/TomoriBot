@@ -8,7 +8,9 @@
 import { beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { PermissionsBitField, type Client } from "discord.js";
 import type { RandomTriggerRow, TomoriState } from "@/types/db/schema";
+import * as shortTermMemoryCache from "@/utils/cache/shortTermMemoryCache";
 import { configRepository, serverScheduleRepository } from "@/utils/db/repositories";
+import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
 import {
   CONFIG_PERSONA_SELECT_PAGE_SIZE,
   CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
@@ -28,11 +30,19 @@ import {
   BEHAVIOR_RANDOM_PERSONA_FIELD,
   BEHAVIOR_RANDOM_PROMPT_FIELD,
   BEHAVIOR_RANDOM_SETTINGS_FIELD,
+  buildBehaviorMemoryTaggingModal,
+  buildBehaviorNoticeVisibilityModal,
+  buildBehaviorStmParametersModal,
+  BEHAVIOR_STM_CATEGORY_PREFIX,
+  buildBehaviorToolContextModal,
+  buildBehaviorToolTriggerAddModal,
+  buildBehaviorToolTriggerRemoveModal,
   buildBehaviorHumanizerModal,
   buildBehaviorRandomAddModal,
   buildBehaviorRandomRemoveModal,
 } from "@/utils/discord/ui/configBehaviorModals";
 import { initializeLocalizer } from "@/utils/text/localizer";
+import { TOOL_NOTICE_DEFINITIONS } from "@/constants/toolNotices";
 
 beforeAll(async () => initializeLocalizer());
 
@@ -91,6 +101,7 @@ interface Harness {
   replies: unknown[];
   modals: unknown[];
   deferredAtWrite: boolean[];
+  telemetry: string[];
 }
 
 function makeHarness(inGuild = true): Harness {
@@ -110,6 +121,7 @@ function makeHarness(inGuild = true): Harness {
     replies: [],
     modals: [],
     deferredAtWrite: [],
+    telemetry: [],
     dependencies: {
       resolveScope: async () => scope,
       getPersonaAvatarData: async () => ({ url: null, files: [] }),
@@ -121,7 +133,9 @@ function makeHarness(inGuild = true): Harness {
       takeAvatarUpload: () => undefined,
       takeCheckboxValues: () => [],
       takeSelectValue: () => undefined,
-      recordAction: () => undefined,
+      recordAction: ({ action }) => {
+        harness.telemetry.push(action);
+      },
       loadBehaviorView: async (current) => ({
         general: {
           systemPrompt: current.config.system_prompt ?? null,
@@ -155,6 +169,7 @@ function makeInteraction(
     values?: string[];
     isManager?: boolean;
     inGuild?: boolean;
+    onFollowUp?: () => void;
   } = {},
 ) {
   let deferred = false;
@@ -192,7 +207,10 @@ function makeInteraction(
       harness.replies.push(payload);
       return payload;
     },
-    followUp: async (payload: unknown) => payload,
+    followUp: async (payload: unknown) => {
+      options.onFollowUp?.();
+      return payload;
+    },
     fields: {
       fields: new Map(Object.entries(options.fields ?? {})),
       getTextInputValue: (fieldId: string) => options.fields?.[fieldId] ?? "",
@@ -313,6 +331,29 @@ describe("config Behavior routes", () => {
       "behavior-always-set": { wireToken: "beh-always-set", fields: ["enabled"] },
       "behavior-cooldown-open": { wireToken: "beh-cooldown-open", fields: [] },
       "behavior-cooldown-submit": { wireToken: "beh-cooldown-sub", fields: ["nonce"] },
+      "behavior-tool-mode-set": { wireToken: "beh-tool-mode-set", fields: ["enabled"] },
+      "behavior-tool-context-open": { wireToken: "beh-tool-context-open", fields: [] },
+      "behavior-tool-context-submit": { wireToken: "beh-tool-context-sub", fields: ["nonce"] },
+      "behavior-tool-trigger-add-open": { wireToken: "beh-tool-trigger-add-open", fields: [] },
+      "behavior-tool-trigger-add-submit": { wireToken: "beh-tool-trigger-add-sub", fields: ["nonce"] },
+      "behavior-tool-trigger-remove-open": { wireToken: "beh-tool-trigger-remove-open", fields: [] },
+      "behavior-tool-trigger-remove-submit": { wireToken: "beh-tool-trigger-remove-sub", fields: ["nonce"] },
+      "behavior-send-limit-open": { wireToken: "beh-send-limit-open", fields: [] },
+      "behavior-send-limit-submit": { wireToken: "beh-send-limit-sub", fields: ["nonce"] },
+      "behavior-self-debug-set": { wireToken: "beh-self-debug-set", fields: ["enabled"] },
+      "behavior-workarounds-open": { wireToken: "beh-workarounds-open", fields: [] },
+      "behavior-workarounds-submit": { wireToken: "beh-workarounds-sub", fields: ["nonce"] },
+      "behavior-notice-visibility-open": { wireToken: "beh-notices-open", fields: [] },
+      "behavior-notice-visibility-submit": { wireToken: "beh-notices-sub", fields: ["nonce"] },
+      "behavior-speech-transcripts-set": { wireToken: "beh-transcripts-set", fields: ["enabled"] },
+      "behavior-memory-tagging-open": { wireToken: "beh-memory-tag-open", fields: [] },
+      "behavior-memory-tagging-submit": { wireToken: "beh-memory-tag-sub", fields: ["nonce"] },
+      "behavior-stm-parameters-open": { wireToken: "beh-stm-params-open", fields: [] },
+      "behavior-stm-parameters-submit": { wireToken: "beh-stm-params-sub", fields: ["nonce"] },
+      "behavior-stm-categories-open": { wireToken: "beh-stm-categories-open", fields: [] },
+      "behavior-stm-categories-submit": { wireToken: "beh-stm-categories-sub", fields: ["nonce"] },
+      "behavior-stm-prompt-open": { wireToken: "beh-stm-prompt-open", fields: [] },
+      "behavior-stm-prompt-submit": { wireToken: "beh-stm-prompt-sub", fields: ["nonce"] },
     };
 
     expect(Object.keys(expected).sort()).toEqual(
@@ -327,13 +368,21 @@ describe("config Behavior routes", () => {
     }
   });
 
-  it("emits literal raw modal component types for D9 inputs", () => {
+  it("emits literal raw modal component types for Behavior inputs", () => {
     const addModal = buildBehaviorRandomAddModal("en-US", "nonce1234567", [makeState()]);
     const humanizerModal = buildBehaviorHumanizerModal("en-US", "nonce1234567", 1);
     const removeModal = buildBehaviorRandomRemoveModal("en-US", "nonce1234567", "abcd1234", 0, [makeRandomTrigger()]);
     const addTypes = collectRawComponentTypes(addModal);
     const humanizerTypes = collectRawComponentTypes(humanizerModal);
     const removeTypes = collectRawComponentTypes(removeModal);
+    const experimentalTypes = collectRawComponentTypes(buildBehaviorToolContextModal("en-US", "nonce1234567", 4));
+    const triggerTypes = collectRawComponentTypes(buildBehaviorToolTriggerAddModal("en-US", "nonce1234567"));
+    const triggerRemoveTypes = collectRawComponentTypes(
+      buildBehaviorToolTriggerRemoveModal("en-US", "nonce1234567", { image: ["draw it"] }),
+    );
+    const noticeTypes = collectRawComponentTypes(buildBehaviorNoticeVisibilityModal("en-US", "nonce1234567", []));
+    const memoryTypes = collectRawComponentTypes(buildBehaviorMemoryTaggingModal("en-US", "nonce1234567", false, true));
+    const stmTypes = collectRawComponentTypes(buildBehaviorStmParametersModal("en-US", "nonce1234567", null));
 
     expect(addTypes).toContain(18); // Label
     expect(addTypes).toContain(8); // Channel Select
@@ -343,6 +392,19 @@ describe("config Behavior routes", () => {
     expect(humanizerTypes).toContain(21); // Radio Group
     expect(removeTypes).toContain(18); // Label
     expect(removeTypes).toContain(22); // Checkbox Group
+    expect(experimentalTypes).toContain(4); // Text Input
+    expect(triggerTypes).toContain(3); // String Select
+    expect(triggerRemoveTypes).toContain(22); // Checkbox Group
+    expect(noticeTypes).toContain(22); // Checkbox Group
+    expect(memoryTypes).toContain(21); // Radio Group
+    expect(stmTypes).toContain(21); // Radio Group
+
+    const fiftyTriggerEntries = Object.fromEntries(
+      Array.from({ length: 50 }, (_unused, index) => [`target-${index}`, [`trigger-${index}`]]),
+    );
+    expect(buildBehaviorToolTriggerRemoveModal("en-US", "nonce1234567", fiftyTriggerEntries).components).toHaveLength(
+      5,
+    );
   });
 
   it("acknowledges before a permitted DM General write", async () => {
@@ -451,6 +513,222 @@ describe("config Behavior routes", () => {
     );
     expect(update).not.toHaveBeenCalled();
     update.mockRestore();
+  });
+
+  it("acknowledges before writing Deliberate Tool Mode", async () => {
+    const harness = makeHarness(true);
+    const interaction = makeInteraction(
+      harness,
+      buildConfigRouteId({ action: "behavior-tool-mode-set", locale: "en-US", enabled: true }),
+    );
+    const update = spyOn(configRepository, "updateTriggerBehaviorConfig").mockImplementation(
+      async (_serverId, patch) => {
+        harness.deferredAtWrite.push(interaction.deferred || interaction.replied);
+        expect(patch).toEqual({ deliberate_tool_mode: true });
+        return true;
+      },
+    );
+    await dispatch(harness, interaction);
+    expect(harness.deferredAtWrite).toEqual([true]);
+    update.mockRestore();
+  });
+
+  it("adds a normalized custom tool trigger through the dedicated add flow", async () => {
+    const harness = makeHarness(true);
+    const nonce = "nonce1234567";
+    harness.dependencies.takeSelectValue = (_interactionId, fieldId) =>
+      fieldId === buildConfigModalFieldId("behavior_tool_trigger_target", nonce) ? "image" : undefined;
+    const update = spyOn(configRepository, "updateTriggerBehaviorConfig").mockImplementation(
+      async (_serverId, patch) => {
+        harness.deferredAtWrite.push(true);
+        expect(patch).toEqual({ deliberate_tool_triggers: { image: ["draw it"] } });
+        return true;
+      },
+    );
+    await dispatch(
+      harness,
+      makeInteraction(
+        harness,
+        buildConfigRouteId({ action: "behavior-tool-trigger-add-submit", locale: "en-US", nonce }),
+        {
+          kind: "modal",
+          fields: {
+            [buildConfigModalFieldId("behavior_tool_trigger_literal", nonce)]: "  Draw   It  ",
+            [buildConfigModalFieldId("behavior_tool_trigger_regex", nonce)]: "",
+          },
+        },
+      ),
+    );
+    expect(harness.deferredAtWrite).toEqual([true]);
+    expect(update).toHaveBeenCalledTimes(1);
+    update.mockRestore();
+  });
+
+  it("keeps the explicit no-write result when removal exceeds fifty triggers", async () => {
+    const harness = makeHarness(true);
+    const state = harness.scope.personas[0];
+    if (!state) throw new Error("Test harness has no persona");
+    state.config.deliberate_tool_triggers = Object.fromEntries(
+      Array.from({ length: 51 }, (_unused, index) => [`target-${index}`, [`trigger-${index}`]]),
+    );
+    const update = spyOn(configRepository, "updateTriggerBehaviorConfig").mockResolvedValue(true);
+    await dispatch(
+      harness,
+      makeInteraction(harness, buildConfigRouteId({ action: "behavior-tool-trigger-remove-open", locale: "en-US" })),
+    );
+    expect(harness.modals).toHaveLength(0);
+    expect(harness.replies).toHaveLength(1);
+    expect(update).not.toHaveBeenCalled();
+    update.mockRestore();
+  });
+
+  it("does not record telemetry when a D10 write fails", async () => {
+    const harness = makeHarness(true);
+    const state = harness.scope.personas[0];
+    if (!state) throw new Error("Test harness has no persona");
+    state.config.send_message_limit = 4;
+    const update = spyOn(configRepository, "updateChatConfig").mockResolvedValue(false);
+    await dispatch(
+      harness,
+      makeInteraction(
+        harness,
+        buildConfigRouteId({ action: "behavior-send-limit-submit", locale: "en-US", nonce: "nonce1234567" }),
+        {
+          kind: "modal",
+          fields: { [buildConfigModalFieldId("behavior_send_limit", "nonce1234567")]: "8" },
+        },
+      ),
+    );
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(harness.telemetry).toEqual([]);
+    update.mockRestore();
+  });
+
+  it("denies both Notices writes to an ordinary guild member", async () => {
+    const harness = makeHarness(true);
+    const updateNotice = spyOn(configRepository, "updateNoticeEmbedsConfig").mockResolvedValue(true);
+    const updateSpeech = spyOn(configRepository, "updateSpeechConfig").mockResolvedValue(true);
+    await dispatch(
+      harness,
+      makeInteraction(harness, buildConfigRouteId({ action: "behavior-notice-visibility-open", locale: "en-US" }), {
+        isManager: false,
+      }),
+    );
+    await dispatch(
+      harness,
+      makeInteraction(
+        harness,
+        buildConfigRouteId({ action: "behavior-speech-transcripts-set", locale: "en-US", enabled: false }),
+        { isManager: false },
+      ),
+    );
+    expect(updateNotice).not.toHaveBeenCalled();
+    expect(updateSpeech).not.toHaveBeenCalled();
+    updateNotice.mockRestore();
+    updateSpeech.mockRestore();
+  });
+
+  it("treats unchecked custom tool triggers as removals", async () => {
+    const harness = makeHarness(true);
+    const state = harness.scope.personas[0];
+    if (!state) throw new Error("Test harness has no persona");
+    state.config.deliberate_tool_triggers = { image: ["draw it"] };
+    harness.dependencies.takeCheckboxValues = () => [];
+    const update = spyOn(configRepository, "updateTriggerBehaviorConfig").mockImplementation(
+      async (_serverId, patch) => {
+        harness.deferredAtWrite.push(true);
+        expect(patch).toEqual({ deliberate_tool_triggers: {} });
+        return true;
+      },
+    );
+    await dispatch(
+      harness,
+      makeInteraction(
+        harness,
+        buildConfigRouteId({ action: "behavior-tool-trigger-remove-submit", locale: "en-US", nonce: "nonce1234567" }),
+        { kind: "modal" },
+      ),
+    );
+    expect(update).toHaveBeenCalledTimes(1);
+    update.mockRestore();
+  });
+
+  it("persists the complement of unchecked notice choices", async () => {
+    const harness = makeHarness(true);
+    harness.dependencies.takeCheckboxValues = () => [];
+    const update = spyOn(configRepository, "updateNoticeEmbedsConfig").mockImplementation(async (_serverId, patch) => {
+      harness.deferredAtWrite.push(true);
+      expect(patch.tool_notice_hidden_keys).toHaveLength(TOOL_NOTICE_DEFINITIONS.length);
+      return true;
+    });
+    await dispatch(
+      harness,
+      makeInteraction(
+        harness,
+        buildConfigRouteId({ action: "behavior-notice-visibility-submit", locale: "en-US", nonce: "nonce1234567" }),
+        { kind: "modal" },
+      ),
+    );
+    expect(update).toHaveBeenCalledTimes(1);
+    update.mockRestore();
+  });
+
+  it("discloses active STM scopes before the category write and clears only those cache records", async () => {
+    const harness = makeHarness(true);
+    const nonce = "nonce1234567";
+    const events: string[] = [];
+    const categories = spyOn(shortTermMemoryRepository, "getStmCategories").mockResolvedValue([
+      {
+        server_id: 9,
+        position: 0,
+        label: "summary",
+        description: "A running summary of recent events, topics, and context from this conversation.",
+      },
+    ]);
+    const activeScopes = spyOn(shortTermMemoryCache, "getShortTermMemoriesForServer").mockReturnValue([
+      { serverId: "guild-1", channelId: "channel-a", personaId: 55, messages: [], lastUpdated: 1 },
+      { serverId: "guild-1", channelId: "channel-b", personaId: null, messages: [], lastUpdated: 2 },
+      { serverId: "guild-1", channelId: "channel-a", personaId: 55, messages: [], lastUpdated: 3 },
+    ]);
+    await dispatch(
+      harness,
+      makeInteraction(harness, buildConfigRouteId({ action: "behavior-stm-categories-open", locale: "en-US" })),
+    );
+    expect(JSON.stringify(harness.modals[0])).toContain("<#channel-a>, <#channel-b>");
+    const interaction = makeInteraction(
+      harness,
+      buildConfigRouteId({ action: "behavior-stm-categories-submit", locale: "en-US", nonce }),
+      {
+        kind: "modal",
+        fields: {
+          [buildConfigModalFieldId(`${BEHAVIOR_STM_CATEGORY_PREFIX}0`, nonce)]: "Topics: Recent conversation topics",
+        },
+      },
+    );
+    const upsert = spyOn(shortTermMemoryRepository, "upsertStmCategories").mockImplementation(
+      async (_serverId, value) => {
+        events.push("write");
+        expect(interaction.deferred || interaction.replied).toBe(true);
+        expect(value).toEqual([{ position: 0, label: "Topics", description: "Recent conversation topics" }]);
+        return true;
+      },
+    );
+    const clear = spyOn(shortTermMemoryRepository, "clearForServerChannel").mockImplementation(
+      (serverId, channelId, personaId) => {
+        events.push(`clear:${serverId}:${channelId}:${personaId ?? "none"}`);
+      },
+    );
+
+    await dispatch(harness, interaction);
+
+    expect(events).toEqual(["write", "clear:guild-1:channel-a:55", "clear:guild-1:channel-b:none"]);
+    expect(clear).toHaveBeenCalledTimes(2);
+    expect(clear).toHaveBeenNthCalledWith(1, "guild-1", "channel-a", 55);
+    expect(clear).toHaveBeenNthCalledWith(2, "guild-1", "channel-b", null);
+    categories.mockRestore();
+    activeScopes.mockRestore();
+    upsert.mockRestore();
+    clear.mockRestore();
   });
 
   it("preserves random-trigger fields while updating the existing persona/channel identity", async () => {

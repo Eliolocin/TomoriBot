@@ -3,6 +3,7 @@ import type { PanelAction } from "@/constants/panelActions";
 import type { PersonaSpriteRow, TomoriState } from "@/types/db/schema";
 import type { PanelReceipt, PanelReceiptTone } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
+import { isToolNoticeKey } from "@/constants/toolNotices";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import {
   getShortTermMemoryForServerChannel,
@@ -74,6 +75,10 @@ import {
   CONFIG_BEHAVIOR_SELECT_ACTIONS,
   handleConfigBehaviorModalOpen,
   handleConfigBehaviorRoutes,
+  CONFIG_BEHAVIOR_D10_MODAL_OPEN_ACTIONS,
+  CONFIG_BEHAVIOR_D10_MODAL_SUBMIT_ACTIONS,
+  handleConfigBehaviorD10Routes,
+  handleConfigBehaviorD10ModalOpen,
 } from "@/utils/discord/interactions/configBehaviorRoutes";
 import {
   deniedReceipt,
@@ -83,7 +88,11 @@ import {
   terminalPayload,
   asEphemeralComponentsV2FollowUp,
   type ConfigBehaviorGeneralView,
+  type ConfigBehaviorExperimentalView,
+  type ConfigBehaviorMemoryView,
+  type ConfigBehaviorNoticesView,
   type ConfigBehaviorTriggerView,
+  type ConfigBehaviorView,
   type ConfigPersonaMemoryView,
   type ConfigRouteDependencies,
   type ConfigScope,
@@ -159,6 +168,7 @@ import { buildSlugMap } from "@/utils/text/slugifyLabel";
 import { buildInitialMemoriesPanel } from "@/utils/discord/interactions/memoriesRoutes";
 import { buildInitialPersonalMemoriesPanel } from "@/utils/discord/interactions/personalMemoriesRoutes";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
+import { resolveDeliberateToolContextTurns } from "@/utils/tools/deliberateToolMode";
 
 const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "avatar-open",
@@ -415,6 +425,11 @@ const defaultDependencies: ConfigRouteDependencies = {
   loadImageGenerationView: loadConfigImageGenerationView,
   loadBehaviorView: async (state) => {
     const rawChatConfig = await configRepository.getChatConfig(state.server_id);
+    const [speechConfig, stmConfig, stmCategories] = await Promise.all([
+      configRepository.getSpeechConfig(state.server_id),
+      shortTermMemoryRepository.getStmConfig(state.server_id),
+      shortTermMemoryRepository.getStmCategories(state.server_id),
+    ]);
     const triggers = (await serverScheduleRepository.getServerTriggers(state.server_id)).filter(
       (trigger): trigger is typeof trigger & { trigger_id: number } => trigger.trigger_id !== undefined,
     );
@@ -438,7 +453,27 @@ const defaultDependencies: ConfigRouteDependencies = {
       cooldownType: state.config.cooldown_type ?? 0,
       cooldownLength: state.config.cooldown_length ?? 5,
     };
-    return { general, trigger };
+    const experimental: ConfigBehaviorExperimentalView = {
+      deliberateToolMode: state.config.deliberate_tool_mode ?? false,
+      deliberateToolContextTurns: resolveDeliberateToolContextTurns(state.config.deliberate_tool_context_turns),
+      deliberateToolTriggers: state.config.deliberate_tool_triggers ?? {},
+      sendLimit: rawChatConfig?.send_message_limit ?? state.config.send_message_limit ?? 0,
+      selfDebugEnabled: rawChatConfig?.self_debug_enabled ?? state.config.self_debug_enabled ?? false,
+      workarounds: { verbatim_tool_calling_enabled: state.config.verbatim_tool_calling_enabled ?? false },
+    };
+    const notices: ConfigBehaviorNoticesView = {
+      hiddenNoticeKeys: (state.config.tool_notice_hidden_keys ?? []).filter(isToolNoticeKey),
+      speechTranscriptsEnabled:
+        speechConfig?.voice_transcript_chat_mode ?? state.config.voice_transcript_chat_mode ?? true,
+    };
+    const memory: ConfigBehaviorMemoryView = {
+      memoryTaggingEnabled: state.config.memory_tagging_enabled ?? false,
+      channelMemoryEnabled: state.config.channel_memory_enabled ?? false,
+      stmConfig,
+      stmCategories,
+    };
+    const view: ConfigBehaviorView = { general, trigger, experimental, notices, memory };
+    return view;
   },
   loadModelListView: async (state, capability, provider, start) => ({
     capability,
@@ -2450,7 +2485,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "sprite-edit-submit" ||
         route.action === "sprite-import-submit" ||
         CONFIG_MODEL_MODAL_SUBMIT_ACTIONS.has(route.action) ||
-        CONFIG_BEHAVIOR_MODAL_SUBMIT_ACTIONS.has(route.action);
+        CONFIG_BEHAVIOR_MODAL_SUBMIT_ACTIONS.has(route.action) ||
+        CONFIG_BEHAVIOR_D10_MODAL_SUBMIT_ACTIONS.has(route.action);
 
       if (expectsSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Config ${route.action} route requires a String Select interaction`);
@@ -2479,6 +2515,11 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
 
       if (CONFIG_BEHAVIOR_MODAL_OPEN_ACTIONS.has(route.action)) {
         await handleConfigBehaviorModalOpen(interaction, route, dependencies, actor);
+        return;
+      }
+
+      if (CONFIG_BEHAVIOR_D10_MODAL_OPEN_ACTIONS.has(route.action)) {
+        await handleConfigBehaviorD10ModalOpen(interaction, route, dependencies, actor);
         return;
       }
 
@@ -2526,6 +2567,17 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
 
       if (
         await handleConfigBehaviorRoutes({
+          interaction,
+          route,
+          scope,
+          dependencies,
+        })
+      ) {
+        return;
+      }
+
+      if (
+        await handleConfigBehaviorD10Routes({
           interaction,
           route,
           scope,

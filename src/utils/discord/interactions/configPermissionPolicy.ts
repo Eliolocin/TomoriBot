@@ -56,6 +56,16 @@ export type ConfigBehaviorTriggerAction =
   | "always-reply"
   | "cooldown";
 
+export type ConfigBehaviorExperimentalAction =
+  | "tool-mode"
+  | "tool-context"
+  | "tool-trigger"
+  | "send-limit"
+  | "self-debug"
+  | "workarounds";
+export type ConfigBehaviorNoticesAction = "notice-visibility" | "speech-transcripts";
+export type ConfigBehaviorMemoryAction = "memory-tagging" | "stm-parameters" | "stm-categories" | "stm-prompt";
+
 /**
  * Derives the acting workspace identity from the interaction alone.
  *
@@ -81,16 +91,7 @@ export function resolveConfigCategoryState(category: ConfigCategory, actor: Conf
   }
   if (actor.isManager) return "enabled";
 
-  switch (category) {
-    case "persona":
-      return "enabled";
-    case "behavior":
-      // Speech Transcripts under Notices carries no Manage Guild gate today, so the category stays
-      // reachable for members rather than collapsing to the manager-only majority of its pages.
-      return "enabled";
-    default:
-      return "disabled";
-  }
+  return category === "persona" ? "enabled" : "disabled";
 }
 
 export function resolveConfigPageState(
@@ -366,6 +367,43 @@ export const BEHAVIOR_TRIGGER_ACTION_BY_ROUTE: Partial<
   "behavior-cooldown-submit": "cooldown",
 };
 
+export const BEHAVIOR_EXPERIMENTAL_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigBehaviorExperimentalAction>
+> = {
+  "behavior-tool-mode-set": "tool-mode",
+  "behavior-tool-context-open": "tool-context",
+  "behavior-tool-context-submit": "tool-context",
+  "behavior-tool-trigger-add-open": "tool-trigger",
+  "behavior-tool-trigger-add-submit": "tool-trigger",
+  "behavior-tool-trigger-remove-open": "tool-trigger",
+  "behavior-tool-trigger-remove-submit": "tool-trigger",
+  "behavior-send-limit-open": "send-limit",
+  "behavior-send-limit-submit": "send-limit",
+  "behavior-self-debug-set": "self-debug",
+  "behavior-workarounds-open": "workarounds",
+  "behavior-workarounds-submit": "workarounds",
+};
+
+export const BEHAVIOR_NOTICES_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigBehaviorNoticesAction>
+> = {
+  "behavior-notice-visibility-open": "notice-visibility",
+  "behavior-notice-visibility-submit": "notice-visibility",
+  "behavior-speech-transcripts-set": "speech-transcripts",
+};
+
+export const BEHAVIOR_MEMORY_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigBehaviorMemoryAction>> =
+  {
+    "behavior-memory-tagging-open": "memory-tagging",
+    "behavior-memory-tagging-submit": "memory-tagging",
+    "behavior-stm-parameters-open": "stm-parameters",
+    "behavior-stm-parameters-submit": "stm-parameters",
+    "behavior-stm-categories-open": "stm-categories",
+    "behavior-stm-categories-submit": "stm-categories",
+    "behavior-stm-prompt-open": "stm-prompt",
+    "behavior-stm-prompt-submit": "stm-prompt",
+  };
+
 export function resolveBehaviorGeneralActionState(
   action: ConfigBehaviorGeneralAction,
   actor: ConfigActor,
@@ -377,6 +415,33 @@ export function resolveBehaviorGeneralActionState(
 
 export function resolveBehaviorTriggerActionState(
   _action: ConfigBehaviorTriggerAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "omitted";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolveBehaviorExperimentalActionState(
+  _action: ConfigBehaviorExperimentalAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "omitted";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolveBehaviorNoticesActionState(
+  action: ConfigBehaviorNoticesAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "enabled";
+  if (action === "notice-visibility" || action === "speech-transcripts") {
+    return actor.isManager ? "enabled" : "disabled";
+  }
+  return "disabled";
+}
+
+export function resolveBehaviorMemoryActionState(
+  _action: ConfigBehaviorMemoryAction,
   actor: ConfigActor,
 ): ConfigSurfaceState {
   if (actor.workspaceKind === "dm") return "omitted";
@@ -474,6 +539,24 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   if (triggerBehaviorAction) {
     if (resolveConfigPageState("behavior", "trigger", actor) === "omitted") return false;
     return resolveBehaviorTriggerActionState(triggerBehaviorAction, actor) === "enabled";
+  }
+
+  const experimentalAction = BEHAVIOR_EXPERIMENTAL_ACTION_BY_ROUTE[route.action];
+  if (experimentalAction) {
+    if (resolveConfigPageState("behavior", "experimental", actor) === "omitted") return false;
+    return resolveBehaviorExperimentalActionState(experimentalAction, actor) === "enabled";
+  }
+
+  const noticesAction = BEHAVIOR_NOTICES_ACTION_BY_ROUTE[route.action];
+  if (noticesAction) {
+    if (resolveConfigPageState("behavior", "notices", actor) === "omitted") return false;
+    return resolveBehaviorNoticesActionState(noticesAction, actor) === "enabled";
+  }
+
+  const memoryAction = BEHAVIOR_MEMORY_ACTION_BY_ROUTE[route.action];
+  if (memoryAction) {
+    if (resolveConfigPageState("behavior", "memory", actor) === "omitted") return false;
+    return resolveBehaviorMemoryActionState(memoryAction, actor) === "enabled";
   }
 
   switch (route.action) {

@@ -6,8 +6,17 @@ import {
   type InteractionReplyOptions,
   type InteractionEditReplyOptions,
 } from "discord.js";
-import type { LlmRow, PersonaSpriteRow, RandomTriggerRow, TomoriState } from "@/types/db/schema";
-import type { StmCategoryRow } from "@/types/db/schema";
+import type {
+  LlmRow,
+  PersonaSpriteRow,
+  RandomTriggerRow,
+  ServerStmConfigRow,
+  StmCategoryRow,
+  TomoriState,
+} from "@/types/db/schema";
+import type { ToolNoticeKey } from "@/constants/toolNotices";
+import type { DeliberateToolTriggerMap } from "@/utils/tools/deliberateToolMode";
+import type { WorkaroundConfigState } from "@/utils/discord/workaroundConfigMapping";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
@@ -75,6 +84,35 @@ export interface ConfigBehaviorTriggerView {
   cooldownLength: number;
 }
 
+export interface ConfigBehaviorExperimentalView {
+  deliberateToolMode: boolean;
+  deliberateToolContextTurns: number;
+  deliberateToolTriggers: DeliberateToolTriggerMap;
+  sendLimit: number;
+  selfDebugEnabled: boolean;
+  workarounds: WorkaroundConfigState;
+}
+
+export interface ConfigBehaviorNoticesView {
+  hiddenNoticeKeys: ToolNoticeKey[];
+  speechTranscriptsEnabled: boolean;
+}
+
+export interface ConfigBehaviorMemoryView {
+  memoryTaggingEnabled: boolean;
+  channelMemoryEnabled: boolean;
+  stmConfig: ServerStmConfigRow | null;
+  stmCategories: StmCategoryRow[];
+}
+
+export interface ConfigBehaviorView {
+  general: ConfigBehaviorGeneralView;
+  trigger: ConfigBehaviorTriggerView;
+  experimental?: ConfigBehaviorExperimentalView;
+  notices?: ConfigBehaviorNoticesView;
+  memory?: ConfigBehaviorMemoryView;
+}
+
 export interface ConfigRouteDependencies {
   resolveScope(
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
@@ -117,10 +155,7 @@ export interface ConfigRouteDependencies {
   ): Promise<ConfigParametersView>;
   loadFallbacksView(state: TomoriState, locale: string, expandedProvider: string | null): Promise<ConfigFallbacksView>;
   loadImageGenerationView(state: TomoriState, locale: string): ConfigImageGenerationView;
-  loadBehaviorView?(state: TomoriState): Promise<{
-    general: ConfigBehaviorGeneralView;
-    trigger: ConfigBehaviorTriggerView;
-  }>;
+  loadBehaviorView?(state: TomoriState): Promise<ConfigBehaviorView>;
   loadModelListView(
     state: TomoriState,
     capability: ConfigModelCapability,
@@ -215,10 +250,7 @@ export interface ConfigRepaintOptions {
   selectedSpriteIndex?: number;
   modelProviderPage?: { capability: ConfigModelCapability; start: number };
   modelListView?: ConfigModelListView;
-  behaviorView?: {
-    general: ConfigBehaviorGeneralView;
-    trigger: ConfigBehaviorTriggerView;
-  };
+  behaviorView?: ConfigBehaviorView;
   randomTriggerPageStart?: number;
   parametersProvider?: string;
   logitBiasPageStart?: number;

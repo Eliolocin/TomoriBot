@@ -181,14 +181,14 @@ describe("config panel shell", () => {
     expect(categoryRow.map((button) => button.style)).toEqual([1, 2, 2, 2, 2]);
   });
 
-  it("keeps manager-owned categories visible but inert for a guild member", () => {
+  it("keeps Persona visible while manager-owned categories stay inert for a guild member", () => {
     const payload = build(GUILD_MEMBER);
     const row = payload.components[0] as unknown as { components: Array<{ components: Observed[] }> };
     const categoryRow = row.components[0].components;
 
     expect(categoryRow.map((button) => [button.label, button.disabled ?? false])).toEqual([
       ["Persona", false],
-      ["Behavior", false],
+      ["Behavior", true],
       ["Channels", true],
       ["Permissions", true],
       ["Models", true],
@@ -1127,6 +1127,53 @@ describe("config Behavior pages", () => {
     expect(walk(disabled).some((component) => component.content === "> You can trigger me by saying my name.")).toBe(
       true,
     );
+  });
+
+  it("renders D10 Behavior controls only on their authorized pages", () => {
+    const d10View = {
+      ...behaviorView,
+      experimental: {
+        deliberateToolMode: true,
+        deliberateToolContextTurns: 4,
+        deliberateToolTriggers: { image: ["draw it"] },
+        sendLimit: 3,
+        selfDebugEnabled: false,
+        workarounds: { verbatim_tool_calling_enabled: true },
+      },
+      notices: {
+        hiddenNoticeKeys: ["web_search" as const],
+        speechTranscriptsEnabled: true,
+      },
+      memory: {
+        memoryTaggingEnabled: true,
+        channelMemoryEnabled: false,
+        stmConfig: null,
+        stmCategories: MEMORY_CATEGORIES,
+      },
+    };
+    const experimental = build(GUILD_MANAGER, { category: "behavior", page: "experimental", behaviorView: d10View });
+    const notices = build(GUILD_MANAGER, { category: "behavior", page: "notices", behaviorView: d10View });
+    const memory = build(GUILD_MANAGER, { category: "behavior", page: "memory", behaviorView: d10View });
+    const dmNotices = build(DM_OWNER, { category: "behavior", page: "notices", behaviorView: d10View });
+
+    expect(buttonFor(experimental, { action: "behavior-tool-trigger-add-open", locale: "en-US" })?.disabled).toBe(
+      false,
+    );
+    expect(buttonFor(experimental, { action: "behavior-tool-trigger-remove-open", locale: "en-US" })?.disabled).toBe(
+      false,
+    );
+    expect(buttonFor(notices, { action: "behavior-notice-visibility-open", locale: "en-US" })?.disabled).toBe(false);
+    expect(
+      buttonFor(notices, { action: "behavior-speech-transcripts-set", locale: "en-US", enabled: true })?.disabled,
+    ).toBe(true);
+    expect(
+      buttonFor(notices, { action: "behavior-speech-transcripts-set", locale: "en-US", enabled: false })?.disabled,
+    ).toBe(false);
+    expect(
+      buttonFor(dmNotices, { action: "behavior-speech-transcripts-set", locale: "en-US", enabled: false }),
+    ).toBeDefined();
+    expect(buttonFor(memory, { action: "behavior-stm-categories-open", locale: "en-US" })?.disabled).toBe(false);
+    expect(walk(memory).some((component) => component.content?.includes("memory/#stm-configuration"))).toBe(true);
   });
 
   it("offers a page selector when random-trigger removal exceeds one modal", () => {

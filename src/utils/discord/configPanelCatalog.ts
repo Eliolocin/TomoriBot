@@ -391,6 +391,29 @@ export type ConfigPanelRoute =
   | { action: "behavior-always-set"; locale: string; enabled: boolean }
   | { action: "behavior-cooldown-open"; locale: string }
   | { action: "behavior-cooldown-submit"; locale: string; nonce: string }
+  | { action: "behavior-tool-mode-set"; locale: string; enabled: boolean }
+  | { action: "behavior-tool-context-open"; locale: string }
+  | { action: "behavior-tool-context-submit"; locale: string; nonce: string }
+  | { action: "behavior-tool-trigger-add-open"; locale: string }
+  | { action: "behavior-tool-trigger-add-submit"; locale: string; nonce: string }
+  | { action: "behavior-tool-trigger-remove-open"; locale: string }
+  | { action: "behavior-tool-trigger-remove-submit"; locale: string; nonce: string }
+  | { action: "behavior-send-limit-open"; locale: string }
+  | { action: "behavior-send-limit-submit"; locale: string; nonce: string }
+  | { action: "behavior-self-debug-set"; locale: string; enabled: boolean }
+  | { action: "behavior-workarounds-open"; locale: string }
+  | { action: "behavior-workarounds-submit"; locale: string; nonce: string }
+  | { action: "behavior-notice-visibility-open"; locale: string }
+  | { action: "behavior-notice-visibility-submit"; locale: string; nonce: string }
+  | { action: "behavior-speech-transcripts-set"; locale: string; enabled: boolean }
+  | { action: "behavior-memory-tagging-open"; locale: string }
+  | { action: "behavior-memory-tagging-submit"; locale: string; nonce: string }
+  | { action: "behavior-stm-parameters-open"; locale: string }
+  | { action: "behavior-stm-parameters-submit"; locale: string; nonce: string }
+  | { action: "behavior-stm-categories-open"; locale: string }
+  | { action: "behavior-stm-categories-submit"; locale: string; nonce: string }
+  | { action: "behavior-stm-prompt-open"; locale: string }
+  | { action: "behavior-stm-prompt-submit"; locale: string; nonce: string }
   | {
       action: "retry" | "refresh";
       locale: string;
@@ -671,6 +694,29 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "behavior-always-set": { wireToken: "beh-always-set", fields: [enabledField] },
   "behavior-cooldown-open": { wireToken: "beh-cooldown-open", fields: [] },
   "behavior-cooldown-submit": { wireToken: "beh-cooldown-sub", fields: [nonceField] },
+  "behavior-tool-mode-set": { wireToken: "beh-tool-mode-set", fields: [enabledField] },
+  "behavior-tool-context-open": { wireToken: "beh-tool-context-open", fields: [] },
+  "behavior-tool-context-submit": { wireToken: "beh-tool-context-sub", fields: [nonceField] },
+  "behavior-tool-trigger-add-open": { wireToken: "beh-tool-trigger-add-open", fields: [] },
+  "behavior-tool-trigger-add-submit": { wireToken: "beh-tool-trigger-add-sub", fields: [nonceField] },
+  "behavior-tool-trigger-remove-open": { wireToken: "beh-tool-trigger-remove-open", fields: [] },
+  "behavior-tool-trigger-remove-submit": { wireToken: "beh-tool-trigger-remove-sub", fields: [nonceField] },
+  "behavior-send-limit-open": { wireToken: "beh-send-limit-open", fields: [] },
+  "behavior-send-limit-submit": { wireToken: "beh-send-limit-sub", fields: [nonceField] },
+  "behavior-self-debug-set": { wireToken: "beh-self-debug-set", fields: [enabledField] },
+  "behavior-workarounds-open": { wireToken: "beh-workarounds-open", fields: [] },
+  "behavior-workarounds-submit": { wireToken: "beh-workarounds-sub", fields: [nonceField] },
+  "behavior-notice-visibility-open": { wireToken: "beh-notices-open", fields: [] },
+  "behavior-notice-visibility-submit": { wireToken: "beh-notices-sub", fields: [nonceField] },
+  "behavior-speech-transcripts-set": { wireToken: "beh-transcripts-set", fields: [enabledField] },
+  "behavior-memory-tagging-open": { wireToken: "beh-memory-tag-open", fields: [] },
+  "behavior-memory-tagging-submit": { wireToken: "beh-memory-tag-sub", fields: [nonceField] },
+  "behavior-stm-parameters-open": { wireToken: "beh-stm-params-open", fields: [] },
+  "behavior-stm-parameters-submit": { wireToken: "beh-stm-params-sub", fields: [nonceField] },
+  "behavior-stm-categories-open": { wireToken: "beh-stm-categories-open", fields: [] },
+  "behavior-stm-categories-submit": { wireToken: "beh-stm-categories-sub", fields: [nonceField] },
+  "behavior-stm-prompt-open": { wireToken: "beh-stm-prompt-open", fields: [] },
+  "behavior-stm-prompt-submit": { wireToken: "beh-stm-prompt-sub", fields: [nonceField] },
   retry: { wireToken: "retry", fields: [categoryField, pageField, optionalPersonaIdField] },
   refresh: { wireToken: "refresh", fields: [categoryField, pageField, optionalPersonaIdField] },
 };

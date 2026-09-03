@@ -149,6 +149,18 @@ export const PANEL_ACTIONS = [
   "server-config.workspace.random-trigger.add",
   "server-config.workspace.random-trigger.update",
   "server-config.workspace.random-trigger.remove",
+  "server-config.workspace.deliberate-tool-mode.set",
+  "server-config.workspace.deliberate-tool-context.set",
+  "server-config.workspace.deliberate-tool-trigger.set",
+  "server-config.workspace.send-limit.set",
+  "server-config.workspace.self-debug.set",
+  "server-config.workspace.workarounds.set",
+  "server-config.workspace.notice-visibility.set",
+  "server-config.workspace.speech-transcripts.set",
+  "server-config.workspace.memory-tagging.set",
+  "server-config.workspace.stm-parameters.set",
+  "server-config.workspace.stm-categories.set",
+  "server-config.workspace.stm-prompt.set",
   "personal-config.personal.character-reference.set",
 ] as const;
 
