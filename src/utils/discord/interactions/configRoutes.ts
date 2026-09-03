@@ -81,6 +81,13 @@ import {
   handleConfigBehaviorD10ModalOpen,
 } from "@/utils/discord/interactions/configBehaviorRoutes";
 import {
+  CONFIG_PERMISSION_MODAL_OPEN_ACTIONS,
+  CONFIG_PERMISSION_MODAL_SUBMIT_ACTIONS,
+  handleConfigPermissionModalOpen,
+  handleConfigPermissionRoutes,
+  loadConfigPermissionsView,
+} from "@/utils/discord/interactions/configPermissionRoutes";
+import {
   deniedReceipt,
   repaint,
   resolveSelectedPersona,
@@ -475,6 +482,7 @@ const defaultDependencies: ConfigRouteDependencies = {
     const view: ConfigBehaviorView = { general, trigger, experimental, notices, memory };
     return view;
   },
+  loadPermissionsView: loadConfigPermissionsView,
   loadModelListView: async (state, capability, provider, start) => ({
     capability,
     provider,
@@ -2486,7 +2494,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "sprite-import-submit" ||
         CONFIG_MODEL_MODAL_SUBMIT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_MODAL_SUBMIT_ACTIONS.has(route.action) ||
-        CONFIG_BEHAVIOR_D10_MODAL_SUBMIT_ACTIONS.has(route.action);
+        CONFIG_BEHAVIOR_D10_MODAL_SUBMIT_ACTIONS.has(route.action) ||
+        CONFIG_PERMISSION_MODAL_SUBMIT_ACTIONS.has(route.action);
 
       if (expectsSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Config ${route.action} route requires a String Select interaction`);
@@ -2520,6 +2529,11 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
 
       if (CONFIG_BEHAVIOR_D10_MODAL_OPEN_ACTIONS.has(route.action)) {
         await handleConfigBehaviorD10ModalOpen(interaction, route, dependencies, actor);
+        return;
+      }
+
+      if (CONFIG_PERMISSION_MODAL_OPEN_ACTIONS.has(route.action)) {
+        await handleConfigPermissionModalOpen(interaction, route, dependencies, actor);
         return;
       }
 
@@ -2578,6 +2592,17 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
 
       if (
         await handleConfigBehaviorD10Routes({
+          interaction,
+          route,
+          scope,
+          dependencies,
+        })
+      ) {
+        return;
+      }
+
+      if (
+        await handleConfigPermissionRoutes({
           interaction,
           route,
           scope,

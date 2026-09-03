@@ -414,6 +414,15 @@ export type ConfigPanelRoute =
   | { action: "behavior-stm-categories-submit"; locale: string; nonce: string }
   | { action: "behavior-stm-prompt-open"; locale: string }
   | { action: "behavior-stm-prompt-submit"; locale: string; nonce: string }
+  | { action: "permissions-tool-use-set"; locale: string; enabled: boolean }
+  | { action: "permissions-manage-open"; locale: string }
+  | {
+      action: "permissions-manage-submit";
+      locale: string;
+      includeElevenLabs: boolean;
+      nonce: string;
+    }
+  | { action: "permissions-privacy-bypass-set"; locale: string; enabled: boolean }
   | {
       action: "retry" | "refresh";
       locale: string;
@@ -536,6 +545,12 @@ const negativeField: RouteFieldCodec<"negative", boolean> = {
 
 const enabledField: RouteFieldCodec<"enabled", boolean> = {
   key: "enabled",
+  encode: (v) => (v ? "1" : "0"),
+  decode: (v) => (v === "1" ? true : v === "0" ? false : null),
+};
+
+const includeElevenLabsField: RouteFieldCodec<"includeElevenLabs", boolean> = {
+  key: "includeElevenLabs",
   encode: (v) => (v ? "1" : "0"),
   decode: (v) => (v === "1" ? true : v === "0" ? false : null),
 };
@@ -717,6 +732,13 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "behavior-stm-categories-submit": { wireToken: "beh-stm-categories-sub", fields: [nonceField] },
   "behavior-stm-prompt-open": { wireToken: "beh-stm-prompt-open", fields: [] },
   "behavior-stm-prompt-submit": { wireToken: "beh-stm-prompt-sub", fields: [nonceField] },
+  "permissions-tool-use-set": { wireToken: "perm-tool-use-set", fields: [enabledField] },
+  "permissions-manage-open": { wireToken: "perm-manage-open", fields: [] },
+  "permissions-manage-submit": {
+    wireToken: "perm-manage-submit",
+    fields: [includeElevenLabsField, nonceField],
+  },
+  "permissions-privacy-bypass-set": { wireToken: "perm-privacy-set", fields: [enabledField] },
   retry: { wireToken: "retry", fields: [categoryField, pageField, optionalPersonaIdField] },
   refresh: { wireToken: "refresh", fields: [categoryField, pageField, optionalPersonaIdField] },
 };

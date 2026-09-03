@@ -30,11 +30,15 @@ import {
   resolvePersonaSpritesActionState,
   resolveBehaviorGeneralActionState,
   resolveBehaviorTriggerActionState,
+  resolvePermissionsCapabilitiesActionState,
+  resolvePermissionsPrivacyActionState,
   BEHAVIOR_GENERAL_ACTION_BY_ROUTE,
   BEHAVIOR_TRIGGER_ACTION_BY_ROUTE,
   BEHAVIOR_EXPERIMENTAL_ACTION_BY_ROUTE,
   BEHAVIOR_NOTICES_ACTION_BY_ROUTE,
   BEHAVIOR_MEMORY_ACTION_BY_ROUTE,
+  PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE,
+  PERMISSIONS_PRIVACY_ACTION_BY_ROUTE,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
@@ -314,6 +318,36 @@ describe("Behavior action policy", () => {
   });
 });
 
+describe("Permissions action policy", () => {
+  it("keeps Bot Capabilities available to DMs and manager-only in guilds", () => {
+    for (const action of ["tool-use", "manage"] as const) {
+      expect(resolvePermissionsCapabilitiesActionState(action, GUILD_MANAGER)).toBe("enabled");
+      expect(resolvePermissionsCapabilitiesActionState(action, GUILD_MEMBER)).toBe("disabled");
+      expect(resolvePermissionsCapabilitiesActionState(action, DM_OWNER)).toBe("enabled");
+    }
+  });
+
+  it("keeps Memory Privacy guild-manager-only and omitted in DMs", () => {
+    expect(resolvePermissionsPrivacyActionState("privacy-bypass", GUILD_MANAGER)).toBe("enabled");
+    expect(resolvePermissionsPrivacyActionState("privacy-bypass", GUILD_MEMBER)).toBe("disabled");
+    expect(resolvePermissionsPrivacyActionState("privacy-bypass", DM_OWNER)).toBe("omitted");
+  });
+
+  it("authorizes every permissions route only for its permitted workspace", () => {
+    const routes: ConfigPanelRoute[] = [
+      { action: "permissions-tool-use-set", locale: "en-US", enabled: true },
+      { action: "permissions-manage-open", locale: "en-US" },
+      { action: "permissions-manage-submit", locale: "en-US", includeElevenLabs: true, nonce: "nonce1234567" },
+      { action: "permissions-privacy-bypass-set", locale: "en-US", enabled: true },
+    ];
+    for (const route of routes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(route.action !== "permissions-privacy-bypass-set");
+    }
+  });
+});
+
 describe("isConfigRouteAuthorized", () => {
   const personaWriteRoutes: ConfigPanelRoute[] = [
     { action: "avatar-open", locale: "en-US", personaId: 5 },
@@ -486,6 +520,8 @@ describe("isConfigRouteAuthorized", () => {
       ...Object.keys(BEHAVIOR_EXPERIMENTAL_ACTION_BY_ROUTE),
       ...Object.keys(BEHAVIOR_NOTICES_ACTION_BY_ROUTE),
       ...Object.keys(BEHAVIOR_MEMORY_ACTION_BY_ROUTE),
+      ...Object.keys(PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE),
+      ...Object.keys(PERMISSIONS_PRIVACY_ACTION_BY_ROUTE),
     ]);
 
     const unknownRoute = { action: "not-a-real-action", locale: "en-US" } as unknown as ConfigPanelRoute;

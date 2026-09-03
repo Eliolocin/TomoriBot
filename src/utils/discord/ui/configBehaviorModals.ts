@@ -10,6 +10,10 @@ import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { SelectOption } from "@/types/discord/modal";
 import type { DeliberateToolTrigger, DeliberateToolTriggerMap } from "@/utils/tools/deliberateToolMode";
 import {
+  getCapabilitiesManagePermissionDefinitions,
+  type CapabilitiesManageConfigState,
+} from "@/utils/discord/manageConfigMapping";
+import {
   buildConfigRouteId,
   CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
   CONFIG_RANDOM_TRIGGER_CHECKBOX_GROUP_SIZE,
@@ -56,6 +60,8 @@ export const BEHAVIOR_STM_CONTENT_DEPTH_FIELD = "behavior_stm_content_depth";
 export const BEHAVIOR_STM_CATEGORY_PREFIX = "behavior_stm_category_";
 export const BEHAVIOR_STM_TOOL_DESCRIPTION_FIELD = "behavior_stm_tool_description";
 export const BEHAVIOR_STM_UPDATE_NUDGE_FIELD = "behavior_stm_update_nudge";
+export const CONFIG_PERMISSIONS_CHECKBOX_GROUP_PREFIX = "permissions_capabilities_group";
+export const CONFIG_PERMISSIONS_CHECKBOX_GROUP_SIZE = 10;
 
 const LABEL = 18 as const;
 const TEXT_INPUT = 4 as const;
@@ -179,6 +185,50 @@ function checkboxGroupField(
         default: option.default,
       })),
     },
+  };
+}
+
+export function buildConfigPermissionsManageModal(
+  locale: string,
+  nonce: string,
+  includeElevenLabs: boolean,
+  config: CapabilitiesManageConfigState,
+): RawModalPayload {
+  const definitions = getCapabilitiesManagePermissionDefinitions({ includeElevenLabs });
+  const groups = Array.from(
+    { length: Math.ceil(definitions.length / CONFIG_PERMISSIONS_CHECKBOX_GROUP_SIZE) },
+    (_unused, groupIndex) => {
+      const definitionsInGroup = definitions.slice(
+        groupIndex * CONFIG_PERMISSIONS_CHECKBOX_GROUP_SIZE,
+        (groupIndex + 1) * CONFIG_PERMISSIONS_CHECKBOX_GROUP_SIZE,
+      );
+      return checkboxGroupField(
+        locale,
+        nonce,
+        `${CONFIG_PERMISSIONS_CHECKBOX_GROUP_PREFIX}_${groupIndex}`,
+        groupIndex === 0
+          ? "commands.config.panel.permissions_capabilities_group_label"
+          : "commands.config.panel.permissions_capabilities_group_label_continued",
+        "commands.config.panel.permissions_capabilities_group_description",
+        definitionsInGroup.map((definition) => ({
+          label: localizer(locale, definition.labelKey),
+          value: definition.value,
+          description: localizer(locale, definition.descKey),
+          default: definition.getState(config),
+        })),
+      );
+    },
+  );
+
+  return {
+    custom_id: buildConfigRouteId({
+      action: "permissions-manage-submit",
+      locale,
+      includeElevenLabs,
+      nonce,
+    }),
+    title: title(locale, "commands.config.panel.permissions_manage_title"),
+    components: groups,
   };
 }
 

@@ -113,6 +113,21 @@ export interface ConfigBehaviorView {
   memory?: ConfigBehaviorMemoryView;
 }
 
+export interface ConfigPermissionsCapabilitiesView {
+  toolUseEnabled: boolean;
+  includeElevenLabs: boolean;
+  definitionStates: Readonly<Record<string, boolean>>;
+}
+
+export interface ConfigPermissionsPrivacyView {
+  stmPrivacyBypass: boolean;
+}
+
+export interface ConfigPermissionsView {
+  capabilities: ConfigPermissionsCapabilitiesView;
+  privacy: ConfigPermissionsPrivacyView;
+}
+
 export interface ConfigRouteDependencies {
   resolveScope(
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
@@ -156,6 +171,7 @@ export interface ConfigRouteDependencies {
   loadFallbacksView(state: TomoriState, locale: string, expandedProvider: string | null): Promise<ConfigFallbacksView>;
   loadImageGenerationView(state: TomoriState, locale: string): ConfigImageGenerationView;
   loadBehaviorView?(state: TomoriState): Promise<ConfigBehaviorView>;
+  loadPermissionsView(state: TomoriState): Promise<ConfigPermissionsView>;
   loadModelListView(
     state: TomoriState,
     capability: ConfigModelCapability,
@@ -251,6 +267,7 @@ export interface ConfigRepaintOptions {
   modelProviderPage?: { capability: ConfigModelCapability; start: number };
   modelListView?: ConfigModelListView;
   behaviorView?: ConfigBehaviorView;
+  permissionsView?: ConfigPermissionsView;
   randomTriggerPageStart?: number;
   parametersProvider?: string;
   logitBiasPageStart?: number;
@@ -314,6 +331,12 @@ export async function repaint(
     }
   }
 
+  let permissionsView = options.permissionsView;
+  if (category === "permissions" && !permissionsView) {
+    const state = scope.personas[0];
+    if (state) permissionsView = await dependencies.loadPermissionsView(state);
+  }
+
   if (category === "behavior" && !behaviorView) {
     const state = scope.personas[0];
     if (state) {
@@ -373,6 +396,7 @@ export async function repaint(
         imageGenerationView,
         randomTriggerPageStart: options.randomTriggerPageStart,
         behaviorView,
+        permissionsView,
         modelListView: options.modelListView,
       }),
       avatar,

@@ -161,6 +161,9 @@ export const PANEL_ACTIONS = [
   "server-config.workspace.stm-parameters.set",
   "server-config.workspace.stm-categories.set",
   "server-config.workspace.stm-prompt.set",
+  "server-config.workspace.tool-use.set",
+  "server-config.workspace.capabilities.set",
+  "server-config.workspace.stm-privacy-bypass.set",
   "personal-config.personal.character-reference.set",
 ] as const;
 

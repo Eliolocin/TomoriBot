@@ -37,6 +37,8 @@ import {
   resolvePersonaGeneralActionState,
   resolvePersonaSpritesActionState,
   resolveBehaviorGeneralActionState,
+  resolvePermissionsCapabilitiesActionState,
+  resolvePermissionsPrivacyActionState,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
@@ -47,7 +49,11 @@ import {
   HUMANIZER_DEFAULT,
   HUMANIZER_INHERIT_VALUE,
 } from "@/utils/discord/humanizerOptions";
-import type { ConfigBehaviorView, ConfigPersonaMemoryView } from "@/utils/discord/interactions/configRouteContext";
+import type {
+  ConfigBehaviorView,
+  ConfigPermissionsView,
+  ConfigPersonaMemoryView,
+} from "@/utils/discord/interactions/configRouteContext";
 import {
   buildCategoryButtonRow,
   buildOptionalThumbnailSection,
@@ -78,6 +84,7 @@ import { buildSlugMap } from "@/utils/text/slugifyLabel";
 import { buildTextPreview } from "@/utils/text/textPreview";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
+import { getCapabilitiesManagePermissionDefinitions } from "@/utils/discord/manageConfigMapping";
 
 const RANDOM_TRIGGER_PAGE_SIZE = CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY;
 
@@ -185,6 +192,7 @@ export interface ConfigPanelRenderInput {
   modelListView?: ConfigModelListView;
   randomTriggerPageStart?: number;
   behaviorView?: ConfigBehaviorView;
+  permissionsView?: ConfigPermissionsView;
 }
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): ConfigPanelPayload {
@@ -2403,6 +2411,161 @@ function buildBehaviorMemoryBody(input: ConfigPanelRenderInput): ComponentInCont
   return components;
 }
 
+function buildPermissionsCapabilitiesBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor } = input;
+  const view = input.permissionsView?.capabilities;
+  const writesDisabled = input.readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.permissions_capabilities_title")}
+${localizer(locale, "commands.config.panel.permissions_capabilities_description")}`,
+    },
+  ];
+
+  if (actor.workspaceKind === "guild" && !actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+    return components;
+  }
+  if (!view) return components;
+
+  const actionDisabled = writesDisabled || resolvePermissionsCapabilitiesActionState("tool-use", actor) !== "enabled";
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.permissions_tool_use_title")}**
+${localizer(locale, "commands.config.panel.permissions_tool_use_description")}`,
+    },
+    buildStateControlRow(
+      [
+        {
+          value: false,
+          label: localizer(locale, "commands.config.panel.off_button"),
+          customId: buildConfigRouteId({ action: "permissions-tool-use-set", locale, enabled: false }),
+        },
+        {
+          value: true,
+          label: localizer(locale, "commands.config.panel.on_button"),
+          customId: buildConfigRouteId({ action: "permissions-tool-use-set", locale, enabled: true }),
+        },
+      ],
+      view.toolUseEnabled,
+      actionDisabled,
+    ),
+    {
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix(
+        "> ",
+        localizer(
+          locale,
+          view.toolUseEnabled
+            ? "commands.config.panel.permissions_tool_use_on"
+            : "commands.config.panel.permissions_tool_use_off",
+        ),
+      ),
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.permissions_capabilities_state_title")}**
+${localizer(locale, "commands.config.panel.permissions_capabilities_state_description")}
+${withLinePrefix(
+  "> ",
+  getCapabilitiesManagePermissionDefinitions({ includeElevenLabs: view.includeElevenLabs })
+    .map(
+      (definition) =>
+        `${localizer(locale, definition.labelKey)}: ${localizer(
+          locale,
+          view.definitionStates[definition.value]
+            ? "commands.config.panel.enabled_option"
+            : "commands.config.panel.disabled_option",
+        )}`,
+    )
+    .join("\n"),
+)}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "permissions-manage-open", locale }),
+          label: localizer(locale, "commands.config.panel.permissions_manage_button"),
+          disabled: writesDisabled || resolvePermissionsCapabilitiesActionState("manage", actor) !== "enabled",
+        },
+      ],
+    },
+  );
+  return components;
+}
+
+function buildPermissionsPrivacyBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor } = input;
+  const view = input.permissionsView?.privacy;
+  const writesDisabled = input.readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.permissions_privacy_title")}
+${localizer(locale, "commands.config.panel.permissions_privacy_description")}`,
+    },
+  ];
+
+  if (actor.workspaceKind === "guild" && !actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+    return components;
+  }
+  if (!view) return components;
+
+  const actionDisabled = writesDisabled || resolvePermissionsPrivacyActionState("privacy-bypass", actor) !== "enabled";
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.permissions_privacy_bypass_title")}**
+${localizer(locale, "commands.config.panel.permissions_privacy_bypass_description")}`,
+    },
+    buildStateControlRow(
+      [
+        {
+          value: false,
+          label: localizer(locale, "commands.config.panel.off_button"),
+          customId: buildConfigRouteId({ action: "permissions-privacy-bypass-set", locale, enabled: false }),
+        },
+        {
+          value: true,
+          label: localizer(locale, "commands.config.panel.on_button"),
+          customId: buildConfigRouteId({ action: "permissions-privacy-bypass-set", locale, enabled: true }),
+        },
+      ],
+      view.stmPrivacyBypass,
+      actionDisabled,
+    ),
+    {
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix(
+        "> ",
+        localizer(
+          locale,
+          view.stmPrivacyBypass
+            ? "commands.config.panel.permissions_privacy_on"
+            : "commands.config.panel.permissions_privacy_off",
+        ),
+      ),
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.permissions_privacy_direction")),
+    },
+  );
+  return components;
+}
+
 export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPanelPayload {
   const { locale, actor, category, page, readStatus, receipt } = input;
   const writesDisabled = readStatus !== "fresh";
@@ -2552,6 +2715,16 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "behavior" && page === "memory") {
     components.push(...buildBehaviorMemoryBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "permissions" && page === "capabilities") {
+    components.push(...buildPermissionsCapabilitiesBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "permissions" && page === "privacy") {
+    components.push(...buildPermissionsPrivacyBody(input));
     return buildPayload(components, receipt);
   }
 

@@ -65,6 +65,8 @@ export type ConfigBehaviorExperimentalAction =
   | "workarounds";
 export type ConfigBehaviorNoticesAction = "notice-visibility" | "speech-transcripts";
 export type ConfigBehaviorMemoryAction = "memory-tagging" | "stm-parameters" | "stm-categories" | "stm-prompt";
+export type ConfigPermissionsCapabilitiesAction = "tool-use" | "manage";
+export type ConfigPermissionsPrivacyAction = "privacy-bypass";
 
 /**
  * Derives the acting workspace identity from the interaction alone.
@@ -404,6 +406,20 @@ export const BEHAVIOR_MEMORY_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["a
     "behavior-stm-prompt-submit": "stm-prompt",
   };
 
+export const PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigPermissionsCapabilitiesAction>
+> = {
+  "permissions-tool-use-set": "tool-use",
+  "permissions-manage-open": "manage",
+  "permissions-manage-submit": "manage",
+};
+
+export const PERMISSIONS_PRIVACY_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigPermissionsPrivacyAction>
+> = {
+  "permissions-privacy-bypass-set": "privacy-bypass",
+};
+
 export function resolveBehaviorGeneralActionState(
   action: ConfigBehaviorGeneralAction,
   actor: ConfigActor,
@@ -442,6 +458,22 @@ export function resolveBehaviorNoticesActionState(
 
 export function resolveBehaviorMemoryActionState(
   _action: ConfigBehaviorMemoryAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "omitted";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolvePermissionsCapabilitiesActionState(
+  _action: ConfigPermissionsCapabilitiesAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "enabled";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolvePermissionsPrivacyActionState(
+  _action: ConfigPermissionsPrivacyAction,
   actor: ConfigActor,
 ): ConfigSurfaceState {
   if (actor.workspaceKind === "dm") return "omitted";
@@ -557,6 +589,18 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   if (memoryAction) {
     if (resolveConfigPageState("behavior", "memory", actor) === "omitted") return false;
     return resolveBehaviorMemoryActionState(memoryAction, actor) === "enabled";
+  }
+
+  const permissionsCapabilitiesAction = PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE[route.action];
+  if (permissionsCapabilitiesAction) {
+    if (resolveConfigPageState("permissions", "capabilities", actor) === "omitted") return false;
+    return resolvePermissionsCapabilitiesActionState(permissionsCapabilitiesAction, actor) === "enabled";
+  }
+
+  const permissionsPrivacyAction = PERMISSIONS_PRIVACY_ACTION_BY_ROUTE[route.action];
+  if (permissionsPrivacyAction) {
+    if (resolveConfigPageState("permissions", "privacy", actor) === "omitted") return false;
+    return resolvePermissionsPrivacyActionState(permissionsPrivacyAction, actor) === "enabled";
   }
 
   switch (route.action) {

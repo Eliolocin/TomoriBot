@@ -658,6 +658,74 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     "config:v1:beh-cooldown-sub:en-US:nonce1234567",
     { action: "behavior-cooldown-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
+  ["config:v1:beh-tool-mode-set:en-US:1", { action: "behavior-tool-mode-set", locale: "en-US", enabled: true }],
+  ["config:v1:beh-tool-context-open:en-US", { action: "behavior-tool-context-open", locale: "en-US" }],
+  [
+    "config:v1:beh-tool-context-sub:en-US:nonce1234567",
+    { action: "behavior-tool-context-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-tool-trigger-add-open:en-US", { action: "behavior-tool-trigger-add-open", locale: "en-US" }],
+  [
+    "config:v1:beh-tool-trigger-add-sub:en-US:nonce1234567",
+    { action: "behavior-tool-trigger-add-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-tool-trigger-remove-open:en-US", { action: "behavior-tool-trigger-remove-open", locale: "en-US" }],
+  [
+    "config:v1:beh-tool-trigger-remove-sub:en-US:nonce1234567",
+    { action: "behavior-tool-trigger-remove-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-send-limit-open:en-US", { action: "behavior-send-limit-open", locale: "en-US" }],
+  [
+    "config:v1:beh-send-limit-sub:en-US:nonce1234567",
+    { action: "behavior-send-limit-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-self-debug-set:en-US:1", { action: "behavior-self-debug-set", locale: "en-US", enabled: true }],
+  ["config:v1:beh-workarounds-open:en-US", { action: "behavior-workarounds-open", locale: "en-US" }],
+  [
+    "config:v1:beh-workarounds-sub:en-US:nonce1234567",
+    { action: "behavior-workarounds-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-notices-open:en-US", { action: "behavior-notice-visibility-open", locale: "en-US" }],
+  [
+    "config:v1:beh-notices-sub:en-US:nonce1234567",
+    { action: "behavior-notice-visibility-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  [
+    "config:v1:beh-transcripts-set:en-US:0",
+    { action: "behavior-speech-transcripts-set", locale: "en-US", enabled: false },
+  ],
+  ["config:v1:beh-memory-tag-open:en-US", { action: "behavior-memory-tagging-open", locale: "en-US" }],
+  [
+    "config:v1:beh-memory-tag-sub:en-US:nonce1234567",
+    { action: "behavior-memory-tagging-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-stm-params-open:en-US", { action: "behavior-stm-parameters-open", locale: "en-US" }],
+  [
+    "config:v1:beh-stm-params-sub:en-US:nonce1234567",
+    { action: "behavior-stm-parameters-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-stm-categories-open:en-US", { action: "behavior-stm-categories-open", locale: "en-US" }],
+  [
+    "config:v1:beh-stm-categories-sub:en-US:nonce1234567",
+    { action: "behavior-stm-categories-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-stm-prompt-open:en-US", { action: "behavior-stm-prompt-open", locale: "en-US" }],
+  [
+    "config:v1:beh-stm-prompt-sub:en-US:nonce1234567",
+    { action: "behavior-stm-prompt-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:perm-tool-use-set:en-US:1", { action: "permissions-tool-use-set", locale: "en-US", enabled: true }],
+  ["config:v1:perm-manage-open:en-US", { action: "permissions-manage-open", locale: "en-US" }],
+  [
+    "config:v1:perm-manage-submit:en-US:1:nonce1234567",
+    {
+      action: "permissions-manage-submit",
+      locale: "en-US",
+      includeElevenLabs: true,
+      nonce: "nonce1234567",
+    },
+  ],
+  ["config:v1:perm-privacy-set:en-US:0", { action: "permissions-privacy-bypass-set", locale: "en-US", enabled: false }],
 ];
 
 describe("config route wire contract", () => {
