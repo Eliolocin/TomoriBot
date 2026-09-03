@@ -341,6 +341,7 @@ export type ConfigPanelRoute =
   | { action: "model-provider-select"; locale: string; capability: ConfigModelCapability }
   | { action: "model-provider-page"; locale: string; capability: ConfigModelCapability; start: number }
   | { action: "model-select"; locale: string; capability: ConfigModelCapability; provider: string }
+  | { action: "model-clear"; locale: string; capability: "image" | "nai-image" }
   | { action: "model-page"; locale: string; capability: ConfigModelCapability; provider: string; start: number }
   | { action: "model-cancel"; locale: string; capability: ConfigModelCapability }
   | { action: "parameters-provider-select"; locale: string }
@@ -531,10 +532,20 @@ function parseModelCapability(value: string | undefined): ConfigModelCapability 
     : null;
 }
 
+function parseImageModelCapability(value: string | undefined): "image" | "nai-image" | null {
+  return value === "image" || value === "nai-image" ? value : null;
+}
+
 const capabilityField: RouteFieldCodec<"capability", ConfigModelCapability> = {
   key: "capability",
   encode: (v) => String(v),
   decode: (v) => parseModelCapability(v),
+};
+
+const imageCapabilityField: RouteFieldCodec<"capability", "image" | "nai-image"> = {
+  key: "capability",
+  encode: (v) => String(v),
+  decode: (v) => parseImageModelCapability(v),
 };
 
 const negativeField: RouteFieldCodec<"negative", boolean> = {
@@ -659,6 +670,7 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "model-provider-select": { wireToken: "model-prov-select", fields: [capabilityField] },
   "model-provider-page": { wireToken: "model-prov-page", fields: [capabilityField, startField] },
   "model-select": { wireToken: "model-select", fields: [capabilityField, providerField] },
+  "model-clear": { wireToken: "model-clear", fields: [imageCapabilityField] },
   "model-page": { wireToken: "model-page", fields: [capabilityField, providerField, startField] },
   "model-cancel": { wireToken: "model-cancel", fields: [capabilityField] },
   "parameters-provider-select": { wireToken: "param-prov-select", fields: [] },

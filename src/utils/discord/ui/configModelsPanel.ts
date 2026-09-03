@@ -280,6 +280,21 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
       disabled: writesDisabled,
     });
     if (paginationRow) components.push(paginationRow);
+
+    if ((capability === "image" || capability === "nai-image") && slot.currentModelName) {
+      components.push({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "model-clear", locale, capability }),
+            label: localizer(locale, "commands.config.panel.model_clear_button"),
+            disabled: writesDisabled,
+          },
+        ],
+      } satisfies ActionRowData<ButtonComponentData>);
+    }
   }
 
   // Only Text carries narrower scopes, so the summary names those two editors rather than implying

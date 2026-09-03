@@ -459,6 +459,16 @@ describe("isConfigRouteAuthorized", () => {
     ).toBe(true);
   });
 
+  it("authorizes provider-independent clear through the Models switch page", () => {
+    for (const capability of ["image", "nai-image"] as const) {
+      const route: ConfigPanelRoute = { action: "model-clear", locale: "en-US", capability };
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
+    }
+    expect(Object.keys(MODELS_PAGE_BY_ROUTE)).toContain("model-clear");
+  });
+
   it("covers every declared action, so a new route cannot default to authorized", () => {
     // A route added without a policy branch falls through to `false`; this pins that the suite
     // above actually names each action rather than leaving new ones silently denied and untested.

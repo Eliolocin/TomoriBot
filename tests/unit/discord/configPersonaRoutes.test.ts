@@ -547,6 +547,8 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     "config:v1:model-select:en-US:video:custom~12",
     { action: "model-select", locale: "en-US", capability: "video", provider: "custom:12" },
   ],
+  ["config:v1:model-clear:en-US:image", { action: "model-clear", locale: "en-US", capability: "image" }],
+  ["config:v1:model-clear:en-US:nai-image", { action: "model-clear", locale: "en-US", capability: "nai-image" }],
   [
     "config:v1:model-page:en-US:image:google:24",
     { action: "model-page", locale: "en-US", capability: "image", provider: "google", start: 24 },
@@ -753,6 +755,7 @@ describe("config route wire contract", () => {
     // `general` is a Behavior page too, so a page must decode against its own category.
     expect(parseConfigPanelRoute(requireRoute("config:v1:page:en-US:models:general"))).toBeNull();
     expect(parseConfigPanelRoute(requireRoute("config:v1:naming-open:en-US:55:androgynous"))).toBeNull();
+    expect(parseConfigPanelRoute(requireRoute("config:v1:model-clear:en-US:vision"))).toBeNull();
     expect(parseConfigPanelRoute(requireRoute("config:v1:not-a-token:en-US:55"))).toBeNull();
   });
 });

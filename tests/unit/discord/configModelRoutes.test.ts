@@ -9,6 +9,8 @@
 import { beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { PermissionsBitField, type Client } from "discord.js";
 import type { SavedProviderConfigRow, TomoriState } from "@/types/db/schema";
+import type { PanelReadStatus } from "@/types/discord/panel";
+import * as tomoriStateCache from "@/utils/cache/tomoriStateCache";
 import { configRepository, llmModelRepo, llmOverrideRepo, llmProviderRepo } from "@/utils/db/repositories";
 import * as ragAvailability from "@/utils/db/ragAvailability";
 import { ragRepository, serverMemoryRepository } from "@/utils/db/repositories";
@@ -117,9 +119,11 @@ function makeSavedProvider(provider: string, overrides: Record<string, unknown> 
 interface HarnessOptions {
   isManager?: boolean;
   inGuild?: boolean;
+  readStatus?: PanelReadStatus;
   state?: TomoriState;
   refreshedState?: TomoriState;
   switchProviders?: Record<string, string[]>;
+  currentModels?: Partial<Record<ConfigModelCapability, string | null>>;
   models?: Array<{ id: number; name: string; description: string | null }>;
   parametersProviders?: string[];
   selectedConfig?: SavedProviderConfigRow | null;
@@ -156,7 +160,7 @@ function makeHarness(options: HarnessOptions = {}): Harness {
         ? { workspaceKind: "dm", isManager: true }
         : { workspaceKind: "guild", isManager: options.isManager ?? true },
     personas: [(forceRefresh ? (options.refreshedState ?? options.state) : options.state) ?? makeState()],
-    readStatus: "fresh",
+    readStatus: options.readStatus ?? "fresh",
   });
 
   return {
@@ -184,7 +188,12 @@ function makeHarness(options: HarnessOptions = {}): Harness {
         slots: (["text", "vision", "embedding", "image", "nai-image", "video"] as ConfigModelCapability[]).map(
           (capability) => ({
             capability,
-            currentModelName: capability === "text" ? "gemini-2.5-flash" : null,
+            currentModelName:
+              options.currentModels?.[capability] !== undefined
+                ? options.currentModels[capability]
+                : capability === "text"
+                  ? "gemini-2.5-flash"
+                  : null,
             currentProvider: capability === "text" ? "google" : null,
             eligibleProviders: options.switchProviders?.[capability] ?? ["google"],
             providerPageStart: providerPage?.capability === capability ? providerPage.start : 0,
@@ -321,6 +330,24 @@ function modelSelectOptions(payload: unknown): Array<{ value: string }> {
   return [];
 }
 
+function findComponentByCustomId(value: unknown, customId: string): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const match = findComponentByCustomId(entry, customId);
+      if (match) return match;
+    }
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.customId === customId) return record;
+  for (const entry of Object.values(record)) {
+    const match = findComponentByCustomId(entry, customId);
+    if (match) return match;
+  }
+  return undefined;
+}
+
 describe("config models provider eligibility", () => {
   it("routes a NovelAI-pipeline provider to the NovelAI slot and every other provider to Standard", () => {
     const rows = [makeSavedProvider("novelai"), makeSavedProvider("google"), makeSavedProvider("custom:12")];
@@ -382,6 +409,146 @@ describe("config models switch page", () => {
         buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "video" }),
     );
     expect(videoRow.components[0].disabled).toBe(true);
+  });
+
+  it("renders provider-independent clear buttons only for populated image slots", async () => {
+    const populated = makeHarness({
+      currentModels: { vision: "vision-model", image: "standard-model", "nai-image": "nai-model" },
+    });
+    await dispatch(
+      populated,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: populated,
+      }),
+    );
+
+    expect(
+      findComponentByCustomId(
+        populated.edits.at(-1),
+        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "image" }),
+      ),
+    ).toBeDefined();
+    expect(
+      findComponentByCustomId(
+        populated.edits.at(-1),
+        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "nai-image" }),
+      ),
+    ).toBeDefined();
+    expect(renderedText(populated.edits.at(-1))).not.toContain("config:v1:model-clear:en-US:vision");
+
+    const empty = makeHarness({ currentModels: { image: null, "nai-image": null } });
+    await dispatch(
+      empty,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: empty,
+      }),
+    );
+
+    expect(
+      findComponentByCustomId(
+        empty.edits.at(-1),
+        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "image" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      findComponentByCustomId(
+        empty.edits.at(-1),
+        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "nai-image" }),
+      ),
+    ).toBeUndefined();
+
+    const stale = makeHarness({ readStatus: "stale", currentModels: { image: "standard-model" } });
+    await dispatch(
+      stale,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: stale,
+      }),
+    );
+
+    expect(
+      findComponentByCustomId(
+        stale.edits.at(-1),
+        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "image" }),
+      )?.disabled,
+    ).toBe(true);
+  });
+
+  it("clears each image column through the route when no provider is eligible", async () => {
+    const standardState = makeState({ config: { diffusion_model_id: 41, nai_diffusion_model_id: 42 } });
+    const standardRefreshed = makeState({ config: { diffusion_model_id: null, nai_diffusion_model_id: 42 } });
+    const standardHarness = makeHarness({
+      state: standardState,
+      refreshedState: standardRefreshed,
+      switchProviders: { image: [] },
+      currentModels: { image: "stale-standard-model", "nai-image": "stale-nai-model" },
+    });
+    const modelUpdate = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+    const naiUpdate = spyOn(configRepository, "updateNovelaiImagegenConfig").mockResolvedValue(true);
+    const invalidate = spyOn(tomoriStateCache, "invalidateTomoriStateCache").mockImplementation(() => undefined);
+
+    await dispatch(
+      standardHarness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: standardHarness,
+      }),
+    );
+    expect(
+      findComponentByCustomId(
+        standardHarness.edits.at(-1),
+        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "image" }),
+      ),
+    ).toBeDefined();
+
+    await dispatch(
+      standardHarness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "image" }),
+        harness: standardHarness,
+      }),
+    );
+
+    expect(modelUpdate).toHaveBeenCalledWith(9, { diffusion_model_id: null });
+    expect(naiUpdate).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledWith("guild-1");
+    expect(standardHarness.telemetry).toContain("server-config.workspace.model.clear");
+
+    modelUpdate.mockClear();
+    naiUpdate.mockClear();
+    invalidate.mockClear();
+    const naiHarness = makeHarness({
+      state: makeState({ config: { diffusion_model_id: 41, nai_diffusion_model_id: 42 } }),
+      refreshedState: makeState({ config: { diffusion_model_id: 41, nai_diffusion_model_id: null } }),
+      switchProviders: { "nai-image": [] },
+      currentModels: { image: "stale-standard-model", "nai-image": "stale-nai-model" },
+    });
+
+    await dispatch(
+      naiHarness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "nai-image" }),
+        harness: naiHarness,
+      }),
+    );
+
+    expect(modelUpdate).not.toHaveBeenCalled();
+    expect(naiUpdate).toHaveBeenCalledWith(9, { nai_diffusion_model_id: null });
+    expect(invalidate).toHaveBeenCalledWith("guild-1");
+
+    modelUpdate.mockRestore();
+    naiUpdate.mockRestore();
+    invalidate.mockRestore();
   });
 
   it("offers a None entry only for the slots whose absorbed command can clear", async () => {
@@ -694,6 +861,32 @@ describe("config models authorization", () => {
     expect(naiUpdate).not.toHaveBeenCalled();
     expect(renderedText(harness.edits.at(-1))).toContain("Permission Required");
     update.mockRestore();
+    naiUpdate.mockRestore();
+  });
+
+  it("writes nothing when a guild member replays provider-independent image clear", async () => {
+    const modelUpdate = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+    const naiUpdate = spyOn(configRepository, "updateNovelaiImagegenConfig").mockResolvedValue(true);
+    const harness = makeHarness({
+      isManager: false,
+      state: makeState({ config: { diffusion_model_id: 41, nai_diffusion_model_id: 42 } }),
+    });
+
+    for (const capability of ["image", "nai-image"] as const) {
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({ action: "model-clear", locale: "en-US", capability }),
+          isManager: false,
+          harness,
+        }),
+      );
+    }
+
+    expect(modelUpdate).not.toHaveBeenCalled();
+    expect(naiUpdate).not.toHaveBeenCalled();
+    expect(renderedText(harness.edits.at(-1))).toContain("Permission Required");
+    modelUpdate.mockRestore();
     naiUpdate.mockRestore();
   });
 

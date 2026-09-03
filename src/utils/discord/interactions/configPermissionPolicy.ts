@@ -493,6 +493,7 @@ export const MODELS_PAGE_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], Co
   "model-provider-select": "switch",
   "model-provider-page": "switch",
   "model-select": "switch",
+  "model-clear": "switch",
   "model-page": "switch",
   "model-cancel": "switch",
   "parameters-provider-select": "parameters",

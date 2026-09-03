@@ -444,10 +444,10 @@ async function handleSwitchModels(context: ConfigModelRouteContext): Promise<boo
     return true;
   }
 
-  if (route.action !== "model-select") return false;
+  if (route.action !== "model-select" && route.action !== "model-clear") return false;
 
   const capability: ConfigModelCapability = route.capability;
-  if (context.selectedValue === CONFIG_MODEL_CLEAR_VALUE) {
+  if (route.action === "model-clear" || context.selectedValue === CONFIG_MODEL_CLEAR_VALUE) {
     const action = await performPanelAction(
       () =>
         dependencies.modelOperations.clearCapabilityModel({
