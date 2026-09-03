@@ -10,13 +10,14 @@ import {
   type TextDisplayComponentData,
   type TopLevelComponentData,
 } from "discord.js";
-import type { LlmRow, PersonaSpriteRow, TomoriState } from "@/types/db/schema";
+import { CooldownType, type LlmRow, type PersonaSpriteRow, type TomoriState } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import {
   CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
   CONFIG_PERSONA_SELECT_PAGE_SIZE,
   CONFIG_PERSONA_SPRITE_PAGE_SIZE,
+  CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
   CONFIG_ROUTE_NAMESPACE,
   CONFIG_ROUTE_VERSION,
   DEFAULT_PAGE_FOR_CONFIG_CATEGORY,
@@ -35,6 +36,7 @@ import {
   resolvePersonaCollectionActionState,
   resolvePersonaGeneralActionState,
   resolvePersonaSpritesActionState,
+  resolveBehaviorGeneralActionState,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
@@ -45,11 +47,16 @@ import {
   HUMANIZER_DEFAULT,
   HUMANIZER_INHERIT_VALUE,
 } from "@/utils/discord/humanizerOptions";
-import type { ConfigPersonaMemoryView } from "@/utils/discord/interactions/configRouteContext";
+import type {
+  ConfigBehaviorGeneralView,
+  ConfigBehaviorTriggerView,
+  ConfigPersonaMemoryView,
+} from "@/utils/discord/interactions/configRouteContext";
 import {
   buildCategoryButtonRow,
   buildOptionalThumbnailSection,
   buildPaginationRow,
+  buildStateControlRow,
   buildPanelContainer,
   buildPanelReceiptContainer,
   withLinePrefix,
@@ -69,6 +76,10 @@ import { localizer } from "@/utils/text/localizer";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
 import { buildSlugMap } from "@/utils/text/slugifyLabel";
 import { buildTextPreview } from "@/utils/text/textPreview";
+import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
+import { formatUTCOffset } from "@/utils/text/timezoneHelper";
+
+const RANDOM_TRIGGER_PAGE_SIZE = CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY;
 
 export interface ConfigPanelPayload {
   components: TopLevelComponentData[];
@@ -172,6 +183,8 @@ export interface ConfigPanelRenderInput {
   modelFallbacksView?: ConfigFallbacksView;
   imageGenerationView?: ConfigImageGenerationView;
   modelListView?: ConfigModelListView;
+  randomTriggerPageStart?: number;
+  behaviorView?: { general: ConfigBehaviorGeneralView; trigger: ConfigBehaviorTriggerView };
 }
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): ConfigPanelPayload {
@@ -1607,6 +1620,409 @@ ${localizer(locale, "commands.config.panel.promote_confirm_description", {
   ];
 }
 
+function behaviorHeading(locale: string, titleKey: string, descriptionKey: string): ComponentInContainerData {
+  return {
+    type: ComponentType.TextDisplay,
+    content: `### ${localizer(locale, titleKey)}\n${localizer(locale, descriptionKey)}`,
+  };
+}
+
+function buildBehaviorGeneralBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale } = input;
+  const view = input.behaviorView?.general;
+  const writesDisabled = input.readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    behaviorHeading(
+      locale,
+      "commands.config.panel.behavior_general_title",
+      "commands.config.panel.behavior_general_description",
+    ),
+  ];
+
+  if (input.actor.workspaceKind === "guild" && !input.actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+    return components;
+  }
+  if (!view) return components;
+
+  const prompt = view.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT.trim();
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.system_prompt_title")}**\n${localizer(
+        locale,
+        "commands.config.panel.system_prompt_description",
+      )}\n${renderFencedCollectionContent(prompt)}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-prompt-open", locale }),
+          label: localizer(locale, "commands.config.panel.set_prompt_button"),
+          disabled: writesDisabled,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-preset-open", locale }),
+          label: localizer(locale, "commands.config.panel.apply_preset_button"),
+          disabled: writesDisabled,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Danger,
+          customId: buildConfigRouteId({ action: "behavior-prompt-remove", locale }),
+          label: localizer(locale, "commands.config.panel.remove_prompt_button"),
+          disabled: writesDisabled || !view.systemPrompt,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.context_note_title")}**\n${localizer(
+        locale,
+        "commands.config.panel.global_context_note_description",
+      )}\n${renderFencedCollectionContent(view.contextNote ?? localizer(locale, "commands.config.panel.none_label"))}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-context-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_context_note_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.response_style_title")}**\n${localizer(
+        locale,
+        "commands.config.panel.global_response_style_description",
+      )}\n> ${localizer(locale, "commands.config.panel.humanizer_label")}: ${getHumanizerLabel(
+        locale,
+        view.humanizerDegree,
+      )}\n> ${localizer(locale, "commands.config.panel.message_fetch_limit_label")}: ${view.messageFetchLimit}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-humanizer-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_humanizer_button"),
+          disabled: writesDisabled,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-fetch-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_fetch_limit_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+  );
+
+  if (input.actor.workspaceKind === "guild") {
+    components.push(
+      {
+        type: ComponentType.TextDisplay,
+        content: `**${localizer(locale, "commands.config.panel.server_timezone_title")}**\n${localizer(
+          locale,
+          "commands.config.panel.server_timezone_description",
+        )}\n> ${localizer(locale, "commands.config.panel.utc_offset_label")}: ${formatUTCOffset(view.timezoneOffset)}`,
+      },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "behavior-timezone-open", locale }),
+            label: localizer(locale, "commands.config.panel.change_timezone_button"),
+            disabled: writesDisabled || resolveBehaviorGeneralActionState("timezone", input.actor) !== "enabled",
+          },
+        ],
+      },
+    );
+  }
+  return components;
+}
+
+function cooldownLabel(locale: string, value: number): string {
+  const key =
+    value === CooldownType.PER_USER
+      ? "commands.config.panel.cooldown_per_user"
+      : value === CooldownType.PER_CHANNEL
+        ? "commands.config.panel.cooldown_per_channel"
+        : value === CooldownType.SERVER_WIDE
+          ? "commands.config.panel.cooldown_server_wide"
+          : "commands.config.panel.cooldown_off";
+  return localizer(locale, key);
+}
+
+function buildBehaviorTriggerBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale } = input;
+  const view = input.behaviorView?.trigger;
+  const writesDisabled = input.readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    behaviorHeading(
+      locale,
+      "commands.config.panel.behavior_trigger_title",
+      "commands.config.panel.behavior_trigger_description",
+    ),
+  ];
+  if (input.actor.workspaceKind === "guild" && !input.actor.isManager) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only")),
+    });
+    return components;
+  }
+  if (!view) return components;
+
+  const personaById = new Map(
+    input.personas.flatMap((persona) =>
+      persona.persona_id === undefined ? [] : [[persona.persona_id, persona.persona_nickname] as const],
+    ),
+  );
+  const triggerPageCount = Math.ceil(view.randomTriggers.length / RANDOM_TRIGGER_PAGE_SIZE);
+  const selectedTriggerPage = Math.min(
+    Math.max(Math.floor((input.randomTriggerPageStart ?? 0) / RANDOM_TRIGGER_PAGE_SIZE), 0),
+    Math.max(triggerPageCount - 1, 0),
+  );
+  const visibleTriggers = view.randomTriggers.slice(
+    selectedTriggerPage * RANDOM_TRIGGER_PAGE_SIZE,
+    (selectedTriggerPage + 1) * RANDOM_TRIGGER_PAGE_SIZE,
+  );
+  const remainingTriggerCount = Math.max(
+    0,
+    view.randomTriggers.length - (selectedTriggerPage + 1) * RANDOM_TRIGGER_PAGE_SIZE,
+  );
+  const triggerSummary = visibleTriggers.length
+    ? visibleTriggers
+        .map((trigger) => {
+          const persona =
+            trigger.persona_id === null || trigger.persona_id === undefined
+              ? localizer(locale, "commands.config.panel.random_persona_label")
+              : (personaById.get(trigger.persona_id) ?? localizer(locale, "general.unknown"));
+          return `> <#${trigger.channel_disc_id}> · ${persona} · ${trigger.timer_hours}h · ${trigger.chance_percent}%`;
+        })
+        .join("\n") +
+      (remainingTriggerCount > 0
+        ? `\n> ${localizer(locale, "commands.config.panel.random_trigger_more", {
+            count: remainingTriggerCount,
+          })}`
+        : "")
+    : `> ${localizer(locale, "commands.config.panel.none_label")}`;
+  const triggerPageNavigation: ComponentInContainerData[] = [];
+  if (triggerPageCount > 1) {
+    triggerPageNavigation.push({
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.StringSelect,
+          customId: buildConfigRouteId({ action: "behavior-random-remove-select", locale }),
+          placeholder: localizer(locale, "commands.config.panel.random_trigger_page_placeholder"),
+          options: Array.from(
+            {
+              length: Math.min(
+                triggerPageCount -
+                  Math.floor(selectedTriggerPage / CONFIG_PERSONA_SELECT_PAGE_SIZE) * CONFIG_PERSONA_SELECT_PAGE_SIZE,
+                CONFIG_PERSONA_SELECT_PAGE_SIZE,
+              ),
+            },
+            (_page, offset) => {
+              const page =
+                Math.floor(selectedTriggerPage / CONFIG_PERSONA_SELECT_PAGE_SIZE) * CONFIG_PERSONA_SELECT_PAGE_SIZE +
+                offset;
+              const start = page * RANDOM_TRIGGER_PAGE_SIZE;
+              const end = Math.min(start + RANDOM_TRIGGER_PAGE_SIZE, view.randomTriggers.length);
+              return {
+                label: safeSelectOptionText(
+                  localizer(locale, "commands.config.panel.random_trigger_page_option", {
+                    first: start + 1,
+                    last: end,
+                  }),
+                  100,
+                ),
+                value: String(start),
+                default: page === selectedTriggerPage,
+              };
+            },
+          ),
+          disabled: writesDisabled,
+        } satisfies StringSelectMenuComponentData,
+      ],
+    } satisfies ActionRowData<StringSelectMenuComponentData>);
+
+    const paginationRow = buildPaginationRow({
+      locale,
+      rangeIndex: Math.floor(selectedTriggerPage / CONFIG_PERSONA_SELECT_PAGE_SIZE),
+      rangeCount: Math.max(1, Math.ceil(triggerPageCount / CONFIG_PERSONA_SELECT_PAGE_SIZE)),
+      namespace: CONFIG_ROUTE_NAMESPACE,
+      version: CONFIG_ROUTE_VERSION,
+      buildSegments: {
+        page: (targetRangeIndex) =>
+          buildConfigRouteSegments({
+            action: "behavior-random-remove-page",
+            locale,
+            start: targetRangeIndex * CONFIG_PERSONA_SELECT_PAGE_SIZE * RANDOM_TRIGGER_PAGE_SIZE,
+          }),
+      },
+      disabled: writesDisabled,
+    });
+    if (paginationRow) triggerPageNavigation.push(paginationRow);
+  }
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.random_triggers_title")}**\n${localizer(
+        locale,
+        "commands.config.panel.random_triggers_description",
+      )}\n${triggerSummary}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-random-add-open", locale }),
+          label: localizer(locale, "commands.config.panel.add_random_trigger_button"),
+          disabled: writesDisabled,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Danger,
+          customId: buildConfigRouteId({
+            action: "behavior-random-remove-open",
+            locale,
+            ...(selectedTriggerPage > 0 ? { start: selectedTriggerPage * RANDOM_TRIGGER_PAGE_SIZE } : {}),
+          }),
+          label: localizer(locale, "commands.config.panel.remove_random_trigger_button"),
+          disabled: writesDisabled || view.randomTriggers.length === 0,
+        },
+      ],
+    },
+    ...triggerPageNavigation,
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.trigger_matching_title")}**\n${localizer(
+        locale,
+        "commands.config.panel.trigger_matching_description",
+      )}\n> ${localizer(locale, "commands.config.panel.cascade_limit_label")}: ${view.cascadeLimit}\n> ${localizer(
+        locale,
+        "commands.config.panel.match_limit_label",
+      )}: ${view.matchLimit}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-limits-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_matching_limits_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.deliberate_trigger_mode_title")}**\n${localizer(
+        locale,
+        "commands.config.panel.deliberate_trigger_mode_description",
+      )}`,
+    },
+    buildStateControlRow(
+      [
+        {
+          value: false,
+          label: localizer(locale, "commands.config.panel.off_button"),
+          customId: buildConfigRouteId({ action: "behavior-dtm-set", locale, enabled: false }),
+        },
+        {
+          value: true,
+          label: localizer(locale, "commands.config.panel.on_button"),
+          customId: buildConfigRouteId({ action: "behavior-dtm-set", locale, enabled: true }),
+        },
+      ],
+      view.deliberateTriggerMode,
+      writesDisabled,
+    ),
+    {
+      type: ComponentType.TextDisplay,
+      content: `> ${localizer(
+        locale,
+        view.deliberateTriggerMode
+          ? "commands.config.panel.deliberate_trigger_mode_on"
+          : "commands.config.panel.deliberate_trigger_mode_off",
+      )}`,
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.always_reply_title")}**\n${localizer(
+        locale,
+        "commands.config.panel.always_reply_description",
+      )}`,
+    },
+    buildStateControlRow(
+      [
+        {
+          value: false,
+          label: localizer(locale, "commands.config.panel.off_button"),
+          customId: buildConfigRouteId({ action: "behavior-always-set", locale, enabled: false }),
+        },
+        {
+          value: true,
+          label: localizer(locale, "commands.config.panel.on_button"),
+          customId: buildConfigRouteId({ action: "behavior-always-set", locale, enabled: true }),
+        },
+      ],
+      view.alwaysReplyEnabled,
+      writesDisabled,
+    ),
+    {
+      type: ComponentType.TextDisplay,
+      content: `> ${localizer(
+        locale,
+        view.alwaysReplyEnabled ? "commands.config.panel.always_reply_on" : "commands.config.panel.always_reply_off",
+      )}`,
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.trigger_cooldown_title")}**\n${localizer(
+        locale,
+        "commands.config.panel.trigger_cooldown_description",
+      )}\n> ${cooldownLabel(locale, view.cooldownType)} · ${view.cooldownLength}s`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-cooldown-open", locale }),
+          label: localizer(locale, "commands.config.panel.edit_cooldown_button"),
+          disabled: writesDisabled,
+        },
+      ],
+    },
+  );
+  return components;
+}
+
 export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPanelPayload {
   const { locale, actor, category, page, readStatus, receipt } = input;
   const writesDisabled = readStatus !== "fresh";
@@ -1731,6 +2147,16 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
         }),
       );
     }
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "behavior" && page === "general") {
+    components.push(...buildBehaviorGeneralBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "behavior" && page === "trigger") {
+    components.push(...buildBehaviorTriggerBody(input));
     return buildPayload(components, receipt);
   }
 

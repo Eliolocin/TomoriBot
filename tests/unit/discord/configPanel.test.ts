@@ -12,6 +12,7 @@ import {
   CONFIG_PERSONA_COLLECTION_PAGE_SIZE,
   CONFIG_PERSONA_SELECT_PAGE_SIZE,
   CONFIG_PERSONA_SPRITE_PAGE_SIZE,
+  CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
   buildConfigRouteId,
   computeAttributeFingerprint,
   computeDialogueFingerprint,
@@ -1043,5 +1044,162 @@ describe("config Persona Sprites page", () => {
     });
 
     expect(walk(payload).some((component) => component.customId?.includes("sprite-rem-confirm"))).toBe(false);
+  });
+});
+
+describe("config Behavior pages", () => {
+  const behaviorView = {
+    general: {
+      systemPrompt: "Keep replies concise.",
+      contextNote: "Stay on topic.",
+      contextNoteDepth: 2,
+      humanizerDegree: 2,
+      messageFetchLimit: 60,
+      timezoneOffset: 8,
+    },
+    trigger: {
+      randomTriggers: [
+        {
+          trigger_id: 9,
+          server_id: 9,
+          channel_disc_id: "channel-1",
+          persona_id: 55,
+          timer_hours: 2,
+          random_offset_range: 1,
+          chance_percent: 40,
+          silence_threshold_hours: null,
+          respond_to_self: false,
+          custom_prompt: null,
+          failure_threshold: null,
+          next_trigger_at: new Date("2026-01-01T00:00:00Z"),
+        },
+      ],
+      cascadeLimit: 3,
+      matchLimit: 2,
+      deliberateTriggerMode: true,
+      alwaysReplyEnabled: false,
+      cooldownType: 1,
+      cooldownLength: 5,
+    },
+  };
+
+  it("renders General's stored prompt and note in markdown fences and omits Timezone in DMs", () => {
+    const payload = build(DM_OWNER, { category: "behavior", page: "general", behaviorView });
+    const seen = walk(payload);
+    expect(seen.some((component) => component.content?.includes("```markdown\nKeep replies concise."))).toBe(true);
+    expect(seen.some((component) => component.content?.includes("```markdown\nStay on topic."))).toBe(true);
+    expect(buttonFor(payload, { action: "behavior-context-open", locale: "en-US" })).toBeDefined();
+    expect(buttonFor(payload, { action: "behavior-timezone-open", locale: "en-US" })).toBeUndefined();
+  });
+
+  it("renders Trigger as direct Off/On state controls and no live values for a member", () => {
+    const manager = build(GUILD_MANAGER, { category: "behavior", page: "trigger", behaviorView });
+    const controls = walk(manager).filter((component) => component.label === "Off" || component.label === "On");
+    expect(controls.map((component) => component.style)).toEqual([2, 1, 1, 2]);
+    expect(walk(manager).some((component) => component.content?.includes("<#channel-1>"))).toBe(true);
+
+    const member = build(GUILD_MEMBER, { category: "behavior", page: "trigger", behaviorView });
+    expect(walk(member).some((component) => component.content?.includes("Cascade limit: 3"))).toBe(false);
+    expect(buttonFor(member, { action: "behavior-dtm-set", locale: "en-US", enabled: true })).toBeUndefined();
+  });
+
+  it("describes deliberate trigger mode with the effective behavior for both selected states", () => {
+    const enabled = build(GUILD_MANAGER, {
+      category: "behavior",
+      page: "trigger",
+      behaviorView: {
+        ...behaviorView,
+        trigger: { ...behaviorView.trigger, deliberateTriggerMode: true },
+      },
+    });
+    const disabled = build(GUILD_MANAGER, {
+      category: "behavior",
+      page: "trigger",
+      behaviorView: {
+        ...behaviorView,
+        trigger: { ...behaviorView.trigger, deliberateTriggerMode: false },
+      },
+    });
+
+    expect(
+      walk(enabled).some((component) => component.content === "> Only an @mention, a reply, or /respond reaches me."),
+    ).toBe(true);
+    expect(walk(disabled).some((component) => component.content === "> You can trigger me by saying my name.")).toBe(
+      true,
+    );
+  });
+
+  it("offers a page selector when random-trigger removal exceeds one modal", () => {
+    const first = behaviorView.trigger.randomTriggers[0];
+    const overflowingView = {
+      ...behaviorView,
+      trigger: {
+        ...behaviorView.trigger,
+        randomTriggers: Array.from({ length: 51 }, (_entry, index) => ({
+          ...first,
+          trigger_id: index + 1,
+        })),
+      },
+    };
+    const payload = build(GUILD_MANAGER, { category: "behavior", page: "trigger", behaviorView: overflowingView });
+    expect(buttonFor(payload, { action: "behavior-random-remove-open", locale: "en-US" })).toMatchObject({
+      disabled: false,
+    });
+    expect(buttonFor(payload, { action: "behavior-random-remove-select", locale: "en-US" })).toBeDefined();
+    expect(walk(payload).some((component) => component.options?.some((option) => option.value === "50"))).toBe(true);
+  });
+
+  it("reaches random-trigger page ranges beyond the 25-option selector limit", () => {
+    const first = behaviorView.trigger.randomTriggers[0];
+    const triggers = Array.from({ length: 1300 }, (_entry, index) => ({ ...first, trigger_id: index + 1 }));
+    const triggerView = {
+      ...behaviorView,
+      trigger: { ...behaviorView.trigger, randomTriggers: triggers },
+    };
+    const firstGroup = build(GUILD_MANAGER, {
+      category: "behavior",
+      page: "trigger",
+      behaviorView: triggerView,
+    });
+    const firstSelector = walk(firstGroup).find(
+      (component) =>
+        component.type === STRING_SELECT &&
+        component.customId === buildConfigRouteId({ action: "behavior-random-remove-select", locale: "en-US" }),
+    );
+    expect(firstSelector?.options).toHaveLength(CONFIG_PERSONA_SELECT_PAGE_SIZE);
+    expect(firstSelector?.options?.at(-1)?.value).toBe(
+      String((CONFIG_PERSONA_SELECT_PAGE_SIZE - 1) * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY),
+    );
+
+    const nextGroupButton = walk(firstGroup).find((component) => component.label === "Next →");
+    expect(nextGroupButton?.customId).toBe(
+      buildConfigRouteId({
+        action: "behavior-random-remove-page",
+        locale: "en-US",
+        start: CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
+      }),
+    );
+
+    const secondGroup = build(GUILD_MANAGER, {
+      category: "behavior",
+      page: "trigger",
+      behaviorView: triggerView,
+      randomTriggerPageStart: CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
+    });
+    const secondSelector = walk(secondGroup).find(
+      (component) =>
+        component.type === STRING_SELECT &&
+        component.customId === buildConfigRouteId({ action: "behavior-random-remove-select", locale: "en-US" }),
+    );
+    expect(secondSelector?.options?.map((option) => option.value)).toEqual([
+      String(CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY),
+    ]);
+    expect(
+      buttonFor(secondGroup, {
+        action: "behavior-random-remove-open",
+        locale: "en-US",
+        start: CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
+      })?.disabled,
+    ).toBe(false);
   });
 });

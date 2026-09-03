@@ -603,6 +603,61 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     "config:v1:nai-params-sub:en-US:nonce1234567",
     { action: "nai-parameters-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
+  ["config:v1:beh-prompt-open:en-US", { action: "behavior-prompt-open", locale: "en-US" }],
+  [
+    "config:v1:beh-prompt-sub:en-US:nonce1234567",
+    { action: "behavior-prompt-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-preset-open:en-US", { action: "behavior-preset-open", locale: "en-US" }],
+  [
+    "config:v1:beh-preset-sub:en-US:nonce1234567",
+    { action: "behavior-preset-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-prompt-remove:en-US", { action: "behavior-prompt-remove", locale: "en-US" }],
+  ["config:v1:beh-context-open:en-US", { action: "behavior-context-open", locale: "en-US" }],
+  [
+    "config:v1:beh-context-sub:en-US:nonce1234567",
+    { action: "behavior-context-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-humanizer-open:en-US", { action: "behavior-humanizer-open", locale: "en-US" }],
+  [
+    "config:v1:beh-humanizer-sub:en-US:nonce1234567",
+    { action: "behavior-humanizer-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-fetch-open:en-US", { action: "behavior-fetch-open", locale: "en-US" }],
+  [
+    "config:v1:beh-fetch-sub:en-US:nonce1234567",
+    { action: "behavior-fetch-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-timezone-open:en-US", { action: "behavior-timezone-open", locale: "en-US" }],
+  [
+    "config:v1:beh-timezone-sub:en-US:nonce1234567",
+    { action: "behavior-timezone-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-random-add-open:en-US", { action: "behavior-random-add-open", locale: "en-US" }],
+  [
+    "config:v1:beh-random-add-sub:en-US:nonce1234567",
+    { action: "behavior-random-add-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-random-rem-open:en-US", { action: "behavior-random-remove-open", locale: "en-US" }],
+  ["config:v1:beh-random-rem-select:en-US", { action: "behavior-random-remove-select", locale: "en-US" }],
+  ["config:v1:beh-random-rem-page:en-US:1250", { action: "behavior-random-remove-page", locale: "en-US", start: 1250 }],
+  [
+    "config:v1:beh-random-rem-sub:en-US:50:abcd1234:nonce1234567",
+    { action: "behavior-random-remove-submit", locale: "en-US", start: 50, fp: "abcd1234", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-limits-open:en-US", { action: "behavior-limits-open", locale: "en-US" }],
+  [
+    "config:v1:beh-limits-sub:en-US:nonce1234567",
+    { action: "behavior-limits-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:beh-dtm-set:en-US:1", { action: "behavior-dtm-set", locale: "en-US", enabled: true }],
+  ["config:v1:beh-always-set:en-US:0", { action: "behavior-always-set", locale: "en-US", enabled: false }],
+  ["config:v1:beh-cooldown-open:en-US", { action: "behavior-cooldown-open", locale: "en-US" }],
+  [
+    "config:v1:beh-cooldown-sub:en-US:nonce1234567",
+    { action: "behavior-cooldown-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
 ];
 
 describe("config route wire contract", () => {

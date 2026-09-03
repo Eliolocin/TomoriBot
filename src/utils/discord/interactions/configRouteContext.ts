@@ -6,7 +6,7 @@ import {
   type InteractionReplyOptions,
   type InteractionEditReplyOptions,
 } from "discord.js";
-import type { LlmRow, PersonaSpriteRow, TomoriState } from "@/types/db/schema";
+import type { LlmRow, PersonaSpriteRow, RandomTriggerRow, TomoriState } from "@/types/db/schema";
 import type { StmCategoryRow } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
@@ -32,6 +32,8 @@ import type { RawModalPayload } from "@/utils/discord/ui/configModals";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
 import type { RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
+import { HUMANIZER_DEFAULT } from "@/utils/discord/humanizerOptions";
+import { DEFAULT_MESSAGE_FETCH_LIMIT } from "@/utils/discord/messageFetchLimit";
 
 export interface ConfigScope {
   /** Guild snowflake in a guild, DM recipient snowflake otherwise: the workspace key every absorbed command already uses. */
@@ -52,6 +54,25 @@ export interface ConfigPersonaMemoryView {
   stmEntry?: ShortTermMemoryEntry;
   stmCategories: StmCategoryRow[];
   conditioningGroups: ConditioningGroup[];
+}
+
+export interface ConfigBehaviorGeneralView {
+  systemPrompt: string | null;
+  contextNote: string | null;
+  contextNoteDepth: number;
+  humanizerDegree: number;
+  messageFetchLimit: number;
+  timezoneOffset: number;
+}
+
+export interface ConfigBehaviorTriggerView {
+  randomTriggers: Array<RandomTriggerRow & { trigger_id: number }>;
+  cascadeLimit: number;
+  matchLimit: number;
+  deliberateTriggerMode: boolean;
+  alwaysReplyEnabled: boolean;
+  cooldownType: number;
+  cooldownLength: number;
 }
 
 export interface ConfigRouteDependencies {
@@ -96,6 +117,10 @@ export interface ConfigRouteDependencies {
   ): Promise<ConfigParametersView>;
   loadFallbacksView(state: TomoriState, locale: string, expandedProvider: string | null): Promise<ConfigFallbacksView>;
   loadImageGenerationView(state: TomoriState, locale: string): ConfigImageGenerationView;
+  loadBehaviorView?(state: TomoriState): Promise<{
+    general: ConfigBehaviorGeneralView;
+    trigger: ConfigBehaviorTriggerView;
+  }>;
   loadModelListView(
     state: TomoriState,
     capability: ConfigModelCapability,
@@ -190,6 +215,11 @@ export interface ConfigRepaintOptions {
   selectedSpriteIndex?: number;
   modelProviderPage?: { capability: ConfigModelCapability; start: number };
   modelListView?: ConfigModelListView;
+  behaviorView?: {
+    general: ConfigBehaviorGeneralView;
+    trigger: ConfigBehaviorTriggerView;
+  };
+  randomTriggerPageStart?: number;
   parametersProvider?: string;
   logitBiasPageStart?: number;
   fallbackExpandedProvider?: string | null;
@@ -226,6 +256,7 @@ export async function repaint(
   let modelParametersView: ConfigParametersView | undefined;
   let modelFallbacksView: ConfigFallbacksView | undefined;
   let imageGenerationView: ConfigImageGenerationView | undefined;
+  let behaviorView = options.behaviorView;
   if (category === "models") {
     // Server model state lives on the assembled workspace config every persona row carries, so any
     // persona in the workspace is an equally authoritative source for it.
@@ -248,6 +279,33 @@ export async function repaint(
       } else if (page === "image") {
         imageGenerationView = dependencies.loadImageGenerationView(state, locale);
       }
+    }
+  }
+
+  if (category === "behavior" && !behaviorView) {
+    const state = scope.personas[0];
+    if (state) {
+      behaviorView = dependencies.loadBehaviorView
+        ? await dependencies.loadBehaviorView(state)
+        : {
+            general: {
+              systemPrompt: state.config.system_prompt ?? null,
+              contextNote: state.config.context_note ?? null,
+              contextNoteDepth: state.config.context_note_depth ?? 0,
+              humanizerDegree: state.config.humanizer_degree ?? HUMANIZER_DEFAULT,
+              messageFetchLimit: state.config.message_fetch_limit ?? DEFAULT_MESSAGE_FETCH_LIMIT,
+              timezoneOffset: state.config.timezone_offset ?? 0,
+            },
+            trigger: {
+              randomTriggers: [],
+              cascadeLimit: state.config.cascade_limit ?? 3,
+              matchLimit: state.config.match_limit ?? 3,
+              deliberateTriggerMode: state.config.deliberate_trigger_mode ?? false,
+              alwaysReplyEnabled: state.config.always_reply_enabled ?? false,
+              cooldownType: state.config.cooldown_type ?? 0,
+              cooldownLength: state.config.cooldown_length ?? 5,
+            },
+          };
     }
   }
 
@@ -281,6 +339,8 @@ export async function repaint(
         modelParametersView,
         modelFallbacksView,
         imageGenerationView,
+        randomTriggerPageStart: options.randomTriggerPageStart,
+        behaviorView,
         modelListView: options.modelListView,
       }),
       avatar,

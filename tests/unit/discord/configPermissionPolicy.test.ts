@@ -28,6 +28,10 @@ import {
   resolvePersonaGeneralActionState,
   resolvePersonaMemoriesActionState,
   resolvePersonaSpritesActionState,
+  resolveBehaviorGeneralActionState,
+  resolveBehaviorTriggerActionState,
+  BEHAVIOR_GENERAL_ACTION_BY_ROUTE,
+  BEHAVIOR_TRIGGER_ACTION_BY_ROUTE,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
@@ -245,6 +249,34 @@ describe("Persona Sprites action policy", () => {
   });
 });
 
+describe("Behavior action policy", () => {
+  it("allows global General writes in DMs but omits Timezone", () => {
+    for (const action of ["prompt", "context-note", "humanizer", "fetch-limit"] as const) {
+      expect(resolveBehaviorGeneralActionState(action, DM_OWNER)).toBe("enabled");
+    }
+    expect(resolveBehaviorGeneralActionState("timezone", DM_OWNER)).toBe("omitted");
+  });
+
+  it("keeps General and Trigger writes manager-only in guilds", () => {
+    for (const action of ["prompt", "context-note", "humanizer", "fetch-limit", "timezone"] as const) {
+      expect(resolveBehaviorGeneralActionState(action, GUILD_MANAGER)).toBe("enabled");
+      expect(resolveBehaviorGeneralActionState(action, GUILD_MEMBER)).toBe("disabled");
+    }
+    for (const action of [
+      "random-add",
+      "random-remove",
+      "matching-limits",
+      "deliberate-trigger-mode",
+      "always-reply",
+      "cooldown",
+    ] as const) {
+      expect(resolveBehaviorTriggerActionState(action, GUILD_MANAGER)).toBe("enabled");
+      expect(resolveBehaviorTriggerActionState(action, GUILD_MEMBER)).toBe("disabled");
+      expect(resolveBehaviorTriggerActionState(action, DM_OWNER)).toBe("omitted");
+    }
+  });
+});
+
 describe("isConfigRouteAuthorized", () => {
   const personaWriteRoutes: ConfigPanelRoute[] = [
     { action: "avatar-open", locale: "en-US", personaId: 5 },
@@ -412,6 +444,8 @@ describe("isConfigRouteAuthorized", () => {
       ...spriteMutationRoutes.map((route) => route.action),
       ...spriteReadRoutes.map((route) => route.action),
       ...Object.keys(MODELS_PAGE_BY_ROUTE),
+      ...Object.keys(BEHAVIOR_GENERAL_ACTION_BY_ROUTE),
+      ...Object.keys(BEHAVIOR_TRIGGER_ACTION_BY_ROUTE),
     ]);
 
     const unknownRoute = { action: "not-a-real-action", locale: "en-US" } as unknown as ConfigPanelRoute;

@@ -18,6 +18,7 @@ import {
   llmModelRepo,
   personaRepository,
   serverMemoryRepository,
+  serverScheduleRepository,
   userRepository,
 } from "@/utils/db/repositories";
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
@@ -68,12 +69,21 @@ import {
   handleConfigModelRoutes,
 } from "@/utils/discord/interactions/configModelRoutes";
 import {
+  CONFIG_BEHAVIOR_MODAL_OPEN_ACTIONS,
+  CONFIG_BEHAVIOR_MODAL_SUBMIT_ACTIONS,
+  CONFIG_BEHAVIOR_SELECT_ACTIONS,
+  handleConfigBehaviorModalOpen,
+  handleConfigBehaviorRoutes,
+} from "@/utils/discord/interactions/configBehaviorRoutes";
+import {
   deniedReceipt,
   repaint,
   resolveSelectedPersona,
   staleReceipt,
   terminalPayload,
   asEphemeralComponentsV2FollowUp,
+  type ConfigBehaviorGeneralView,
+  type ConfigBehaviorTriggerView,
   type ConfigPersonaMemoryView,
   type ConfigRouteDependencies,
   type ConfigScope,
@@ -132,10 +142,12 @@ import { combineModalPromptParts } from "@/utils/text/modalPromptParts";
 import { buildTextPreview, textPreviewFooterKey, textPreviewFooterVars } from "@/utils/text/textPreview";
 import {
   getHumanizerLabel,
+  HUMANIZER_DEFAULT,
   HUMANIZER_INHERIT_VALUE,
   HUMANIZER_MAX,
   HUMANIZER_MIN,
 } from "@/utils/discord/humanizerOptions";
+import { DEFAULT_MESSAGE_FETCH_LIMIT } from "@/utils/discord/messageFetchLimit";
 import { hasPersonaPrompt } from "@/utils/discord/ui/personaEligibility";
 import { MAX_TAG_LENGTH, MAX_TAGS } from "@/utils/image/tagHelpers";
 import { PERSONA_SPRITE_LIMITS } from "@/utils/persona/sprites";
@@ -401,6 +413,33 @@ const defaultDependencies: ConfigRouteDependencies = {
   loadParametersView: loadConfigParametersView,
   loadFallbacksView: loadConfigFallbacksView,
   loadImageGenerationView: loadConfigImageGenerationView,
+  loadBehaviorView: async (state) => {
+    const rawChatConfig = await configRepository.getChatConfig(state.server_id);
+    const triggers = (await serverScheduleRepository.getServerTriggers(state.server_id)).filter(
+      (trigger): trigger is typeof trigger & { trigger_id: number } => trigger.trigger_id !== undefined,
+    );
+    const general: ConfigBehaviorGeneralView = {
+      systemPrompt: rawChatConfig?.system_prompt ?? state.config.system_prompt ?? null,
+      contextNote: rawChatConfig?.context_note ?? state.config.context_note ?? null,
+      contextNoteDepth: rawChatConfig?.context_note_depth ?? state.config.context_note_depth ?? 0,
+      // The assembled state may overlay a persona-specific degree; the General page is the raw
+      // workspace setting and must not mistake that overlay for its global value.
+      humanizerDegree: rawChatConfig?.humanizer_degree ?? HUMANIZER_DEFAULT,
+      messageFetchLimit:
+        rawChatConfig?.message_fetch_limit ?? state.config.message_fetch_limit ?? DEFAULT_MESSAGE_FETCH_LIMIT,
+      timezoneOffset: rawChatConfig?.timezone_offset ?? state.config.timezone_offset ?? 0,
+    };
+    const trigger: ConfigBehaviorTriggerView = {
+      randomTriggers: triggers,
+      cascadeLimit: state.config.cascade_limit ?? 3,
+      matchLimit: state.config.match_limit ?? 3,
+      deliberateTriggerMode: state.config.deliberate_trigger_mode ?? false,
+      alwaysReplyEnabled: state.config.always_reply_enabled ?? false,
+      cooldownType: state.config.cooldown_type ?? 0,
+      cooldownLength: state.config.cooldown_length ?? 5,
+    };
+    return { general, trigger };
+  },
   loadModelListView: async (state, capability, provider, start) => ({
     capability,
     provider,
@@ -2389,7 +2428,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "text-override-provider-select" ||
         route.action === "text-override-model-select" ||
         route.action === "sprite-select" ||
-        CONFIG_MODEL_SELECT_ACTIONS.has(route.action);
+        CONFIG_MODEL_SELECT_ACTIONS.has(route.action) ||
+        CONFIG_BEHAVIOR_SELECT_ACTIONS.has(route.action);
       const expectsModal =
         route.action === "avatar-submit" ||
         route.action === "rename-submit" ||
@@ -2409,7 +2449,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "sprite-add-submit" ||
         route.action === "sprite-edit-submit" ||
         route.action === "sprite-import-submit" ||
-        CONFIG_MODEL_MODAL_SUBMIT_ACTIONS.has(route.action);
+        CONFIG_MODEL_MODAL_SUBMIT_ACTIONS.has(route.action) ||
+        CONFIG_BEHAVIOR_MODAL_SUBMIT_ACTIONS.has(route.action);
 
       if (expectsSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Config ${route.action} route requires a String Select interaction`);
@@ -2433,6 +2474,11 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
 
       if (CONFIG_MODEL_MODAL_OPEN_ACTIONS.has(route.action)) {
         await handleConfigModelModalOpen(interaction, route, dependencies, actor);
+        return;
+      }
+
+      if (CONFIG_BEHAVIOR_MODAL_OPEN_ACTIONS.has(route.action)) {
+        await handleConfigBehaviorModalOpen(interaction, route, dependencies, actor);
         return;
       }
 
@@ -2473,6 +2519,17 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
           scope,
           dependencies,
           selectedValue: submittedValue,
+        })
+      ) {
+        return;
+      }
+
+      if (
+        await handleConfigBehaviorRoutes({
+          interaction,
+          route,
+          scope,
+          dependencies,
         })
       ) {
         return;

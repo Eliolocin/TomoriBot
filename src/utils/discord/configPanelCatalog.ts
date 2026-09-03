@@ -12,6 +12,7 @@ import {
 } from "@/utils/discord/panelRouteCodec";
 import { parseLocale } from "@/utils/discord/panelRouteTokens";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
+import type { RandomTriggerRow } from "@/types/db/schema";
 import type { AddressingStyle } from "@/types/personaNaming";
 
 export const CONFIG_ROUTE_NAMESPACE = "config";
@@ -91,6 +92,11 @@ const CONFIG_CONDITIONING_CHECKBOX_GROUP_COUNT = 5;
 export const CONFIG_CONDITIONING_CHECKBOX_CAPACITY =
   CONFIG_CONDITIONING_CHECKBOX_GROUP_SIZE * CONFIG_CONDITIONING_CHECKBOX_GROUP_COUNT;
 
+export const CONFIG_RANDOM_TRIGGER_CHECKBOX_GROUP_SIZE = 10;
+const CONFIG_RANDOM_TRIGGER_CHECKBOX_GROUP_COUNT = 5;
+export const CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY =
+  CONFIG_RANDOM_TRIGGER_CHECKBOX_GROUP_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_GROUP_COUNT;
+
 /**
  * Binds a trigger removal to the exact list presented when the modal opened. Unchecked-means-remove
  * derives the removal set from positions in that list, so a concurrent add or remove must invalidate
@@ -100,6 +106,32 @@ export function computeTriggerRemoveFingerprint(personaId: number, triggerWords:
   const normalized = triggerWords.map((word) => normalizeTriggerWord(word)).join("\u0000");
   return createHash("sha256")
     .update(`config-trigger-remove:${personaId}:${normalized}`)
+    .digest("base64url")
+    .slice(0, 8);
+}
+
+/**
+ * Binds random-trigger removal to the exact rows shown in its modal. Trigger IDs identify the
+ * delete targets while the other persisted fields detect an edit that reused an existing ID.
+ */
+export function computeRandomTriggerRemoveFingerprint(
+  serverId: number,
+  triggers: readonly (RandomTriggerRow & { trigger_id: number })[],
+): string {
+  const fingerprintRows = triggers.map((trigger) => ({
+    triggerId: trigger.trigger_id,
+    channelDiscId: trigger.channel_disc_id,
+    personaId: trigger.persona_id ?? null,
+    timerHours: trigger.timer_hours,
+    randomOffsetRange: trigger.random_offset_range ?? null,
+    chancePercent: trigger.chance_percent,
+    silenceThresholdHours: trigger.silence_threshold_hours ?? null,
+    respondToSelf: trigger.respond_to_self,
+    customPrompt: trigger.custom_prompt ?? null,
+    failureThreshold: trigger.failure_threshold ?? null,
+  }));
+  return createHash("sha256")
+    .update(`config-random-trigger-remove:${serverId}:${JSON.stringify(fingerprintRows)}`)
     .digest("base64url")
     .slice(0, 8);
 }
@@ -334,6 +366,31 @@ export type ConfigPanelRoute =
   | { action: "image-tags-default-submit"; locale: string; negative: boolean; nonce: string }
   | { action: "nai-parameters-open"; locale: string }
   | { action: "nai-parameters-submit"; locale: string; nonce: string }
+  | { action: "behavior-prompt-open"; locale: string }
+  | { action: "behavior-prompt-submit"; locale: string; nonce: string }
+  | { action: "behavior-preset-open"; locale: string }
+  | { action: "behavior-preset-submit"; locale: string; nonce: string }
+  | { action: "behavior-prompt-remove"; locale: string }
+  | { action: "behavior-context-open"; locale: string }
+  | { action: "behavior-context-submit"; locale: string; nonce: string }
+  | { action: "behavior-humanizer-open"; locale: string }
+  | { action: "behavior-humanizer-submit"; locale: string; nonce: string }
+  | { action: "behavior-fetch-open"; locale: string }
+  | { action: "behavior-fetch-submit"; locale: string; nonce: string }
+  | { action: "behavior-timezone-open"; locale: string }
+  | { action: "behavior-timezone-submit"; locale: string; nonce: string }
+  | { action: "behavior-random-add-open"; locale: string }
+  | { action: "behavior-random-add-submit"; locale: string; nonce: string }
+  | { action: "behavior-random-remove-open"; locale: string; start?: number }
+  | { action: "behavior-random-remove-select"; locale: string }
+  | { action: "behavior-random-remove-page"; locale: string; start: number }
+  | { action: "behavior-random-remove-submit"; locale: string; start: number; fp: string; nonce: string }
+  | { action: "behavior-limits-open"; locale: string }
+  | { action: "behavior-limits-submit"; locale: string; nonce: string }
+  | { action: "behavior-dtm-set"; locale: string; enabled: boolean }
+  | { action: "behavior-always-set"; locale: string; enabled: boolean }
+  | { action: "behavior-cooldown-open"; locale: string }
+  | { action: "behavior-cooldown-submit"; locale: string; nonce: string }
   | {
       action: "retry" | "refresh";
       locale: string;
@@ -401,6 +458,13 @@ const optionalPersonaIdField: RouteFieldCodec<"personaId", number> = {
 
 const startField: RouteFieldCodec<"start", number> = {
   key: "start",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const optionalStartField: RouteFieldCodec<"start", number> = {
+  key: "start",
+  optional: true,
   encode: (v) => String(v),
   decode: (v) => parseNonNegativeInt(v),
 };
@@ -582,6 +646,31 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "image-tags-default-submit": { wireToken: "img-tags-sub", fields: [negativeField, nonceField] },
   "nai-parameters-open": { wireToken: "nai-params-open", fields: [] },
   "nai-parameters-submit": { wireToken: "nai-params-sub", fields: [nonceField] },
+  "behavior-prompt-open": { wireToken: "beh-prompt-open", fields: [] },
+  "behavior-prompt-submit": { wireToken: "beh-prompt-sub", fields: [nonceField] },
+  "behavior-preset-open": { wireToken: "beh-preset-open", fields: [] },
+  "behavior-preset-submit": { wireToken: "beh-preset-sub", fields: [nonceField] },
+  "behavior-prompt-remove": { wireToken: "beh-prompt-remove", fields: [] },
+  "behavior-context-open": { wireToken: "beh-context-open", fields: [] },
+  "behavior-context-submit": { wireToken: "beh-context-sub", fields: [nonceField] },
+  "behavior-humanizer-open": { wireToken: "beh-humanizer-open", fields: [] },
+  "behavior-humanizer-submit": { wireToken: "beh-humanizer-sub", fields: [nonceField] },
+  "behavior-fetch-open": { wireToken: "beh-fetch-open", fields: [] },
+  "behavior-fetch-submit": { wireToken: "beh-fetch-sub", fields: [nonceField] },
+  "behavior-timezone-open": { wireToken: "beh-timezone-open", fields: [] },
+  "behavior-timezone-submit": { wireToken: "beh-timezone-sub", fields: [nonceField] },
+  "behavior-random-add-open": { wireToken: "beh-random-add-open", fields: [] },
+  "behavior-random-add-submit": { wireToken: "beh-random-add-sub", fields: [nonceField] },
+  "behavior-random-remove-open": { wireToken: "beh-random-rem-open", fields: [optionalStartField] },
+  "behavior-random-remove-select": { wireToken: "beh-random-rem-select", fields: [] },
+  "behavior-random-remove-page": { wireToken: "beh-random-rem-page", fields: [startField] },
+  "behavior-random-remove-submit": { wireToken: "beh-random-rem-sub", fields: [startField, fpField, nonceField] },
+  "behavior-limits-open": { wireToken: "beh-limits-open", fields: [] },
+  "behavior-limits-submit": { wireToken: "beh-limits-sub", fields: [nonceField] },
+  "behavior-dtm-set": { wireToken: "beh-dtm-set", fields: [enabledField] },
+  "behavior-always-set": { wireToken: "beh-always-set", fields: [enabledField] },
+  "behavior-cooldown-open": { wireToken: "beh-cooldown-open", fields: [] },
+  "behavior-cooldown-submit": { wireToken: "beh-cooldown-sub", fields: [nonceField] },
   retry: { wireToken: "retry", fields: [categoryField, pageField, optionalPersonaIdField] },
   refresh: { wireToken: "refresh", fields: [categoryField, pageField, optionalPersonaIdField] },
 };

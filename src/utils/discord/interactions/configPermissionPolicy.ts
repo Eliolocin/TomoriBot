@@ -47,6 +47,15 @@ export type ConfigPersonaAdvancedAction =
   | "humanizer"
   | "text-override";
 
+export type ConfigBehaviorGeneralAction = "prompt" | "context-note" | "humanizer" | "fetch-limit" | "timezone";
+export type ConfigBehaviorTriggerAction =
+  | "random-add"
+  | "random-remove"
+  | "matching-limits"
+  | "deliberate-trigger-mode"
+  | "always-reply"
+  | "cooldown";
+
 /**
  * Derives the acting workspace identity from the interaction alone.
  *
@@ -318,6 +327,63 @@ export const PERSONA_SPRITES_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["a
   };
 
 /**
+ * Behavior General keeps the DM-capable global settings from their legacy commands. Timezone is
+ * the one exception because its source command requires a guild interaction.
+ */
+export const BEHAVIOR_GENERAL_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigBehaviorGeneralAction>
+> = {
+  "behavior-prompt-open": "prompt",
+  "behavior-prompt-submit": "prompt",
+  "behavior-preset-open": "prompt",
+  "behavior-preset-submit": "prompt",
+  "behavior-prompt-remove": "prompt",
+  "behavior-context-open": "context-note",
+  "behavior-context-submit": "context-note",
+  "behavior-humanizer-open": "humanizer",
+  "behavior-humanizer-submit": "humanizer",
+  "behavior-fetch-open": "fetch-limit",
+  "behavior-fetch-submit": "fetch-limit",
+  "behavior-timezone-open": "timezone",
+  "behavior-timezone-submit": "timezone",
+};
+
+/** All Trigger writes are guild-manager operations; Trigger itself is omitted in DMs. */
+export const BEHAVIOR_TRIGGER_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigBehaviorTriggerAction>
+> = {
+  "behavior-random-add-open": "random-add",
+  "behavior-random-add-submit": "random-add",
+  "behavior-random-remove-open": "random-remove",
+  "behavior-random-remove-select": "random-remove",
+  "behavior-random-remove-page": "random-remove",
+  "behavior-random-remove-submit": "random-remove",
+  "behavior-limits-open": "matching-limits",
+  "behavior-limits-submit": "matching-limits",
+  "behavior-dtm-set": "deliberate-trigger-mode",
+  "behavior-always-set": "always-reply",
+  "behavior-cooldown-open": "cooldown",
+  "behavior-cooldown-submit": "cooldown",
+};
+
+export function resolveBehaviorGeneralActionState(
+  action: ConfigBehaviorGeneralAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (action === "timezone" && actor.workspaceKind === "dm") return "omitted";
+  if (actor.workspaceKind === "dm") return "enabled";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolveBehaviorTriggerActionState(
+  _action: ConfigBehaviorTriggerAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "omitted";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+/**
  * Every Models route resolves to the page that owns it.
  *
  * Models carries no per-action exception: re-derived from source, `/model text|vision|embedding|
@@ -396,6 +462,18 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   if (advancedAction) {
     if (resolveConfigPageState("persona", "advanced", actor) === "omitted") return false;
     return resolvePersonaAdvancedActionState(advancedAction, actor) === "enabled";
+  }
+
+  const generalBehaviorAction = BEHAVIOR_GENERAL_ACTION_BY_ROUTE[route.action];
+  if (generalBehaviorAction) {
+    if (resolveConfigPageState("behavior", "general", actor) === "omitted") return false;
+    return resolveBehaviorGeneralActionState(generalBehaviorAction, actor) === "enabled";
+  }
+
+  const triggerBehaviorAction = BEHAVIOR_TRIGGER_ACTION_BY_ROUTE[route.action];
+  if (triggerBehaviorAction) {
+    if (resolveConfigPageState("behavior", "trigger", actor) === "omitted") return false;
+    return resolveBehaviorTriggerActionState(triggerBehaviorAction, actor) === "enabled";
   }
 
   switch (route.action) {
