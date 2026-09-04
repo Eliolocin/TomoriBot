@@ -60,7 +60,7 @@ import { formatUTCOffset, UTC_OFFSET_MAX, UTC_OFFSET_MIN } from "@/utils/text/ti
 import { localizer } from "@/utils/text/localizer";
 import { getShortTermMemoriesForServer } from "@/utils/cache/shortTermMemoryCache";
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
-import { buildWorkaroundConfigWritePlan } from "@/utils/discord/workaroundConfigMapping";
+import { buildWorkaroundConfigWritePlan, WORKAROUND_DEFINITIONS } from "@/utils/discord/workaroundConfigMapping";
 import {
   DELIBERATE_TOOL_TRIGGER_TARGETS,
   getToolNamesForDeliberateTriggerTarget,
@@ -92,7 +92,7 @@ import {
   BEHAVIOR_TOOL_TRIGGER_REMOVE_GROUP_PREFIX,
   BEHAVIOR_TOOL_TRIGGER_REGEX_FIELD,
   BEHAVIOR_TOOL_TRIGGER_TARGET_FIELD,
-  BEHAVIOR_WORKAROUND_GROUP_FIELD,
+  BEHAVIOR_WORKAROUND_GROUP_PREFIX,
   buildBehaviorMemoryTaggingModal,
   buildBehaviorNoticeVisibilityModal,
   buildBehaviorSendLimitModal,
@@ -800,6 +800,7 @@ export const CONFIG_BEHAVIOR_D10_DIRECT_ACTIONS = new Set<ConfigPanelRoute["acti
 
 const MAX_TOOL_TRIGGER_ENTRIES = 50;
 const MAX_NOTICE_ENTRIES = 50;
+export const MAX_WORKAROUND_ENTRIES = 50;
 
 function fallbackD10View(state: TomoriState) {
   return {
@@ -901,6 +902,21 @@ export async function handleConfigBehaviorD10ModalOpen(
       );
       break;
     case "behavior-workarounds-open":
+      if (WORKAROUND_DEFINITIONS.length > MAX_WORKAROUND_ENTRIES) {
+        await interaction.reply({
+          content: `${localizer(route.locale, "commands.config.workarounds.too_many_title")}\n${localizer(
+            route.locale,
+            "commands.config.workarounds.too_many_description",
+            {
+              count: WORKAROUND_DEFINITIONS.length,
+              max_entries: MAX_WORKAROUND_ENTRIES,
+              max_groups: MAX_WORKAROUND_ENTRIES / 10,
+            },
+          )}`,
+          flags: MessageFlags.Ephemeral,
+        });
+        break;
+      }
       await dependencies.showModal(
         interaction,
         buildBehaviorWorkaroundsModal(route.locale, nonce, {
@@ -1152,11 +1168,16 @@ async function runD10Write(
     };
   }
   if (route.action === "behavior-workarounds-submit") {
-    const selected = dependencies.takeCheckboxValues(
-      submitted.id,
-      buildConfigModalFieldId(BEHAVIOR_WORKAROUND_GROUP_FIELD, route.nonce),
-    );
-    if (selected === undefined) return { receipt: staleReceipt(locale) };
+    const groupCount = Math.ceil(WORKAROUND_DEFINITIONS.length / 10);
+    const selected = new Set<string>();
+    for (let groupIndex = 0; groupIndex < groupCount; groupIndex += 1) {
+      const values = dependencies.takeCheckboxValues(
+        submitted.id,
+        buildConfigModalFieldId(`${BEHAVIOR_WORKAROUND_GROUP_PREFIX}_${groupIndex}`, route.nonce),
+      );
+      if (values === undefined) return { receipt: staleReceipt(locale) };
+      for (const value of values) selected.add(value);
+    }
     const plan = buildWorkaroundConfigWritePlan(state.config, selected);
     if (plan.changes.length === 0)
       return { receipt: receipt(locale, "info", "state_no_changes_heading", "state_no_changes_detail") };

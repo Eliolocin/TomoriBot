@@ -2,7 +2,7 @@ import { ChannelType, TextInputStyle } from "discord.js";
 import type { RandomTriggerRow, SystemPromptPresetRow, TomoriState } from "@/types/db/schema";
 import type { ServerStmConfigRow, StmCategoryRow } from "@/types/db/schema";
 import { TOOL_NOTICE_DEFINITIONS } from "@/constants/toolNotices";
-import { WORKAROUND_DEFINITIONS } from "@/utils/discord/workaroundConfigMapping";
+import { WORKAROUND_DEFINITIONS, type WorkaroundDefinition } from "@/utils/discord/workaroundConfigMapping";
 import { DELIBERATE_TOOL_TRIGGER_TARGETS } from "@/utils/tools/deliberateToolMode";
 import type { CheckboxGroupOption } from "@/types/discord/modal";
 import type { ToolNoticeKey } from "@/constants/toolNotices";
@@ -48,7 +48,7 @@ export const BEHAVIOR_TOOL_TRIGGER_LITERAL_FIELD = "behavior_tool_trigger_litera
 export const BEHAVIOR_TOOL_TRIGGER_REGEX_FIELD = "behavior_tool_trigger_regex";
 export const BEHAVIOR_TOOL_TRIGGER_REMOVE_GROUP_PREFIX = "behavior_tool_trigger_remove_group";
 export const BEHAVIOR_SEND_LIMIT_FIELD = "behavior_send_limit";
-export const BEHAVIOR_WORKAROUND_GROUP_FIELD = "behavior_workaround_group";
+export const BEHAVIOR_WORKAROUND_GROUP_PREFIX = "behavior_workaround_group";
 export const BEHAVIOR_NOTICE_GROUP_PREFIX = "behavior_notice_group";
 export const BEHAVIOR_MEMORY_TAGGING_FIELD = "behavior_memory_tagging";
 export const BEHAVIOR_CHANNEL_MEMORY_FIELD = "behavior_channel_memory";
@@ -358,25 +358,34 @@ export function buildBehaviorWorkaroundsModal(
   locale: string,
   nonce: string,
   current: Record<string, boolean>,
+  definitions: readonly WorkaroundDefinition[] = WORKAROUND_DEFINITIONS,
 ): RawModalPayload {
-  return {
-    custom_id: buildConfigRouteId({ action: "behavior-workarounds-submit", locale, nonce }),
-    title: title(locale, "commands.config.panel.edit_workarounds_button"),
-    components: [
+  const components: RawDiscordComponent[] = [];
+  for (let i = 0; i < definitions.length; i += 10) {
+    const group = definitions.slice(i, i + 10);
+    const groupIndex = Math.floor(i / 10);
+    components.push(
       checkboxGroupField(
         locale,
         nonce,
-        BEHAVIOR_WORKAROUND_GROUP_FIELD,
-        "commands.config.workarounds.checkbox_label",
+        `${BEHAVIOR_WORKAROUND_GROUP_PREFIX}_${groupIndex}`,
+        groupIndex === 0
+          ? "commands.config.workarounds.checkbox_label"
+          : "commands.config.workarounds.checkbox_label_continued",
         "commands.config.workarounds.checkbox_description",
-        WORKAROUND_DEFINITIONS.map((definition) => ({
+        group.map((definition) => ({
           label: localizer(locale, definition.labelKey),
           value: definition.value,
           description: localizer(locale, definition.descKey),
           default: current[definition.value] === true,
         })),
       ),
-    ],
+    );
+  }
+  return {
+    custom_id: buildConfigRouteId({ action: "behavior-workarounds-submit", locale, nonce }),
+    title: title(locale, "commands.config.panel.edit_workarounds_button"),
+    components,
   };
 }
 

@@ -41,6 +41,7 @@ import type {
 import type { TomoriState } from "@/types/db/schema";
 import { resolveAlterPersonaAvatarAsset, type PersonaAvatarAsset } from "@/utils/discord/personaPanelAvatar";
 import { getLastDbError } from "@/utils/cache/tomoriStateCache";
+import { truncateDiscordText } from "./componentsV2Limits";
 
 // Clean storage for select values (Discord.js will strip them, so we preserve them)
 const modalSelectValues = new Map<string, Record<string, string>>();
@@ -543,14 +544,12 @@ function localizeConfirmationDescription(
 }
 
 /**
- * Safely truncates text for select option labels and values with "..." suffix
+ * Safely truncates text for select option labels and values with "..." suffix,
+ * delegating to the Unicode-safe truncation primitive.
  * @param maxLength Maximum allowed length (100 for select options)
  */
 export function safeSelectOptionText(text: string, maxLength = 100): string {
-  if (text.length > maxLength) {
-    return `${text.substring(0, maxLength - 3)}...`;
-  }
-  return text;
+  return truncateDiscordText(text, maxLength, "...");
 }
 
 /**
