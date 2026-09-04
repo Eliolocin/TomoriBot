@@ -4,7 +4,6 @@ import {
   type ActionRowData,
   type ButtonComponentData,
   type ComponentInContainerData,
-  type SelectMenuComponentOptionData,
   type StringSelectMenuComponentData,
 } from "discord.js";
 import type { LogitBiasEntry } from "@/types/provider/logitBias";
@@ -16,6 +15,7 @@ import {
   CONFIG_MODEL_CAPABILITY_ORDER,
   CONFIG_MODEL_CLEAR_VALUE,
   CONFIG_MODEL_PAGE_SIZE,
+  CONFIG_MODEL_PROVIDER_DIRECT_LIMIT,
   CONFIG_ROUTE_NAMESPACE,
   CONFIG_ROUTE_VERSION,
   buildConfigRouteId,
@@ -23,7 +23,15 @@ import {
   type ConfigModelCapability,
   type ConfigPage,
 } from "@/utils/discord/configPanelCatalog";
-import type { ConfigModelChoice } from "@/utils/discord/interactions/configModelOperations";
+import {
+  encodeConfigProviderPageValue,
+  encodeConfigProviderRangeValue,
+} from "@/utils/discord/interactions/configModelLoaders";
+import {
+  buildModelRoutingControl,
+  buildProviderPageEntries,
+  type ProviderSelectEntry,
+} from "@/utils/discord/ui/modelRoutingControls";
 import { buildPaginationRow, buildStateControlRow, withLinePrefix } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import {
@@ -35,7 +43,7 @@ import { formatStopStringForDisplay } from "@/utils/provider/stopStringConfig";
 import { neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { localizer } from "@/utils/text/localizer";
 
-const MODEL_CAPABILITY_LOCALE_KEYS: Record<ConfigModelCapability, string> = {
+export const CONFIG_MODEL_CAPABILITY_LOCALE_KEYS: Record<ConfigModelCapability, string> = {
   text: "commands.config.panel.capability_text",
   vision: "commands.config.panel.capability_vision",
   embedding: "commands.config.panel.capability_embedding",
@@ -60,7 +68,18 @@ interface ConfigModelSlotView {
   currentModelName: string | null;
   currentProvider: string | null;
   eligibleProviders: string[];
+  /** Offset into the provider entry list the select is scrolled to. */
   providerPageStart: number;
+  /** Provider whose catalog is spread across page entries, or null while none is expanded. */
+  expandedProvider: string | null;
+  expandedOptionCount: number;
+}
+
+/** Which capability's provider selector is expanded, and where its entry list is scrolled. */
+export interface ConfigSwitchModelsProviderPage {
+  capability: ConfigModelCapability;
+  provider?: string;
+  start: number;
 }
 
 export interface ConfigSwitchModelsView {
@@ -88,6 +107,10 @@ interface ConfigFallbackSlotView {
 export interface ConfigFallbacksView {
   slots: ConfigFallbackSlotView[];
   providerEntries: Array<{ value: string; label: string }>;
+  /** Provider whose option list is spread across page entries, or null while none is expanded. */
+  expandedProvider: string | null;
+  /** Offset into the entry list the select is scrolled to. */
+  entryStart: number;
   randomizerEnabled: boolean;
   hasFallbacks: boolean;
 }
@@ -102,28 +125,6 @@ export interface ConfigImageGenerationView {
   cfgRescale: string;
 }
 
-/** Drilldown state for one capability's model catalog, mirroring the Persona Text-override shape. */
-export interface ConfigModelCatalogListView {
-  kind?: "models";
-  capability: ConfigModelCapability;
-  provider: string;
-  models: ConfigModelChoice[];
-  start: number;
-  currentModelId: number | null;
-}
-
-/** One capability's provider catalog, which keeps provider pagination out of the six-slot overview. */
-export interface ConfigModelProviderListView {
-  kind: "providers";
-  capability: ConfigModelCapability;
-  providers: string[];
-  start: number;
-  currentModelName?: string | null;
-  currentProvider?: string | null;
-}
-
-export type ConfigModelListView = ConfigModelCatalogListView | ConfigModelProviderListView;
-
 export interface ConfigModelsPageInput {
   locale: string;
   page: ConfigPage;
@@ -132,7 +133,6 @@ export interface ConfigModelsPageInput {
   parametersView?: ConfigParametersView;
   fallbacksView?: ConfigFallbacksView;
   imageView?: ConfigImageGenerationView;
-  modelListView?: ConfigModelListView;
 }
 
 function heading(locale: string, titleKey: string, descriptionKey: string): ComponentInContainerData {
@@ -192,196 +192,35 @@ function appendCapabilityStatus(
   }
 }
 
-function buildModelListBody(
-  input: ConfigModelsPageInput,
-  view: ConfigModelCatalogListView,
-): ComponentInContainerData[] {
-  const { locale } = input;
-  const writesDisabled = input.readStatus !== "fresh";
-  const capabilityLabel = localizer(locale, MODEL_CAPABILITY_LOCALE_KEYS[view.capability]);
-  const clearable = CONFIG_CLEARABLE_MODEL_CAPABILITIES.has(view.capability);
-  // A clearable slot spends one of Discord's 25 option slots on its None entry, and that entry is
-  // re-prepended to every page, so its page size has to shrink or the last model of each page would
-  // be sliced away with no page able to reach it.
-  const pageSize = CONFIG_MODEL_PAGE_SIZE - (clearable ? 1 : 0);
-  const pageCount = Math.max(1, Math.ceil(view.models.length / pageSize));
-  const rangeIndex = Math.min(Math.max(Math.floor(view.start / pageSize), 0), pageCount - 1);
-  const start = rangeIndex * pageSize;
-
-  const options: SelectMenuComponentOptionData[] = [];
-  if (clearable) {
-    options.push({
-      label: safeSelectOptionText(localizer(locale, "commands.config.panel.model_clear_option"), 100),
-      value: CONFIG_MODEL_CLEAR_VALUE,
-    });
-  }
-  options.push(
-    ...view.models.slice(start, start + pageSize).map((model) => ({
-      label: safeSelectOptionText(model.name, 100),
-      value: String(model.id),
-      description: model.description ? safeSelectOptionText(model.description, 100) : undefined,
-      default: model.id === view.currentModelId,
-    })),
-  );
-
-  const components: ComponentInContainerData[] = [
-    {
-      type: ComponentType.TextDisplay,
-      content: `**${capabilityLabel}**\n${localizer(locale, "commands.config.panel.model_pick_description", {
-        provider: getProviderDisplayName(view.provider),
-      })}`,
-    },
-    {
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.StringSelect,
-          customId: buildConfigRouteId({
-            action: "model-select",
-            locale,
-            capability: view.capability,
-            provider: view.provider,
-          }),
-          placeholder: localizer(locale, "commands.config.panel.model_select_placeholder"),
-          options,
-          disabled: writesDisabled,
-        },
-      ],
-    },
-  ];
-
-  const paginationRow = buildPaginationRow({
-    locale,
-    rangeIndex,
-    rangeCount: pageCount,
-    namespace: CONFIG_ROUTE_NAMESPACE,
-    version: CONFIG_ROUTE_VERSION,
-    buildSegments: {
-      page: (targetRangeIndex) =>
-        buildConfigRouteSegments({
-          action: "model-page",
-          locale,
-          capability: view.capability,
-          provider: view.provider,
-          start: targetRangeIndex * pageSize,
-        }),
-    },
-    disabled: writesDisabled,
-  });
-  if (paginationRow) components.push(paginationRow);
-
-  components.push({
-    type: ComponentType.ActionRow,
-    components: [
-      {
-        type: ComponentType.Button,
-        style: ButtonStyle.Secondary,
-        customId: buildConfigRouteId({ action: "model-cancel", locale, capability: view.capability }),
-        label: localizer(locale, "commands.config.panel.cancel_button"),
-      },
-    ],
-  } satisfies ActionRowData<ButtonComponentData>);
-
-  return components;
+interface SwitchProviderOptionsInput {
+  locale: string;
+  capabilityLabel: string;
+  visibleEntries: readonly ProviderSelectEntry[];
+  showClear: boolean;
+  overflows: boolean;
+  rangeIndex: number;
+  rangeCount: number;
+  windowSize: number;
+  expandedProvider: string | null;
 }
 
-function buildProviderListBody(
-  input: ConfigModelsPageInput,
-  view: ConfigModelProviderListView,
-): ComponentInContainerData[] {
-  const { locale } = input;
-  const writesDisabled = input.readStatus !== "fresh";
-  const capabilityLabel = localizer(locale, MODEL_CAPABILITY_LOCALE_KEYS[view.capability]);
-  const slot = input.switchView?.slots.find((candidate) => candidate.capability === view.capability);
-  const currentModelName = slot ? slot.currentModelName : (view.currentModelName ?? null);
-  const currentProvider = slot ? slot.currentProvider : (view.currentProvider ?? null);
-  const clearDescriptionKey =
-    currentModelName === null ? undefined : MODEL_CLEAR_DESCRIPTION_LOCALE_KEYS[view.capability];
-  const showClear = clearDescriptionKey !== undefined;
-  // A clearable slot spends one of Discord's 25 option slots on its None entry, and that entry is
-  // re-prepended to every page, so its page size has to shrink or the last provider of each page would
-  // be sliced away with no page able to reach it.
-  const pageSize = CONFIG_MODEL_PAGE_SIZE - (showClear ? 1 : 0);
-  const pageCount = Math.max(1, Math.ceil(view.providers.length / pageSize));
-  const rangeIndex = Math.min(Math.max(Math.floor(view.start / pageSize), 0), pageCount - 1);
-  const start = rangeIndex * pageSize;
-  const visibleProviders = view.providers.slice(start, start + pageSize);
-  const current = currentModelName
-    ? `${currentModelName}${currentProvider ? ` (${getProviderDisplayName(currentProvider)})` : ""}`
-    : localizer(locale, "commands.config.panel.none_label");
-
-  const options: SelectMenuComponentOptionData[] = [];
-  if (clearDescriptionKey !== undefined) {
+function buildSwitchProviderOptions(input: SwitchProviderOptionsInput): ProviderSelectEntry[] {
+  const options = [...input.visibleEntries];
+  if (input.overflows) {
+    // Wrapping past the last window is what keeps every entry reachable from any window without a
+    // second control: advancing repeatedly always returns to the first.
+    const nextRangeIndex = (input.rangeIndex + 1) % input.rangeCount;
     options.push({
-      label: safeSelectOptionText(localizer(locale, "commands.config.panel.model_no_model_option"), 100),
-      description: safeSelectOptionText(localizer(locale, clearDescriptionKey), 100),
-      value: CONFIG_MODEL_CLEAR_VALUE,
+      value: encodeConfigProviderRangeValue(nextRangeIndex * input.windowSize, input.expandedProvider),
+      label: localizer(input.locale, "commands.config.panel.model_provider_more_option", {
+        capability: input.capabilityLabel,
+        page: nextRangeIndex + 1,
+        total: input.rangeCount,
+      }),
     });
   }
-  if (visibleProviders.length > 0) {
-    options.push(
-      ...visibleProviders.map((provider) => ({
-        label: safeSelectOptionText(getProviderDisplayName(provider), 100),
-        value: provider,
-      })),
-    );
-  } else if (!showClear) {
-    options.push({
-      label: safeSelectOptionText(localizer(locale, "commands.config.panel.no_providers_option"), 100),
-      value: "none",
-    });
-  }
-
-  const components: ComponentInContainerData[] = [
-    {
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.StringSelect,
-          customId: buildConfigRouteId({ action: "model-provider-select", locale, capability: view.capability }),
-          placeholder: safeSelectOptionText(`${capabilityLabel}: ${current}`, 150),
-          options,
-          // A model assignment can outlive the provider it came from, so the clear entry keeps the
-          // select live even with nothing eligible left to pick; without it the select is inert
-          // rather than absent, and the placeholder is what keeps the assignment readable.
-          disabled: writesDisabled || (visibleProviders.length === 0 && !showClear),
-        },
-      ],
-    },
-  ];
-
-  const paginationRow = buildPaginationRow({
-    locale,
-    rangeIndex,
-    rangeCount: pageCount,
-    namespace: CONFIG_ROUTE_NAMESPACE,
-    version: CONFIG_ROUTE_VERSION,
-    buildSegments: {
-      page: (targetRangeIndex) =>
-        buildConfigRouteSegments({
-          action: "model-provider-page",
-          locale,
-          capability: view.capability,
-          start: targetRangeIndex * pageSize,
-        }),
-    },
-    disabled: writesDisabled,
-  });
-  if (paginationRow) components.push(paginationRow);
-
-  components.push({
-    type: ComponentType.ActionRow,
-    components: [
-      {
-        type: ComponentType.Button,
-        style: ButtonStyle.Secondary,
-        customId: buildConfigRouteId({ action: "model-cancel", locale, capability: view.capability }),
-        label: localizer(locale, "commands.config.panel.cancel_button"),
-      },
-    ],
-  } satisfies ActionRowData<ButtonComponentData>);
-
-  return components;
+  if (options.length > 0 || input.showClear) return options;
+  return [{ value: "none", label: localizer(input.locale, "commands.config.panel.no_providers_option") }];
 }
 
 function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContainerData[] {
@@ -393,89 +232,80 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
   ];
   if (!view) return components;
 
-  if (input.modelListView) {
-    components.push(
-      ...(input.modelListView.kind === "providers"
-        ? buildProviderListBody(input, input.modelListView)
-        : buildModelListBody(input, input.modelListView)),
-    );
-    return components;
-  }
-
   for (const capability of CONFIG_MODEL_CAPABILITY_ORDER) {
     const slot = view.slots.find((candidate) => candidate.capability === capability);
     if (!slot) continue;
-    const capabilityLabel = localizer(locale, MODEL_CAPABILITY_LOCALE_KEYS[capability]);
-    const current = slot.currentModelName
-      ? `${slot.currentModelName}${slot.currentProvider ? ` (${getProviderDisplayName(slot.currentProvider)})` : ""}`
-      : localizer(locale, "commands.config.panel.none_label");
+    const capabilityLabel = localizer(locale, CONFIG_MODEL_CAPABILITY_LOCALE_KEYS[capability]);
 
     // The clear entry is re-prepended to every provider page, so it costs one option slot per
-    // page: the page size has to shrink or the last provider of each page would be sliced away
+    // page: the direct limit has to shrink or the last provider of each page would be sliced away
     // with no page able to reach it.
-    const clearDescriptionKey =
-      slot.currentModelName === null ? undefined : MODEL_CLEAR_DESCRIPTION_LOCALE_KEYS[capability];
-    const showClear = clearDescriptionKey !== undefined;
-    const providerPageSize = CONFIG_MODEL_PAGE_SIZE - (showClear ? 1 : 0);
-    const pageCount = Math.max(1, Math.ceil(slot.eligibleProviders.length / providerPageSize));
-    const visibleProviders = slot.eligibleProviders.slice(0, providerPageSize);
+    const showClear = slot.currentModelName !== null && CONFIG_CLEARABLE_MODEL_CAPABILITIES.has(capability);
+    const clearDescriptionKey = showClear ? MODEL_CLEAR_DESCRIPTION_LOCALE_KEYS[capability] : undefined;
+    const directLimit = CONFIG_MODEL_PROVIDER_DIRECT_LIMIT - (showClear ? 1 : 0);
 
-    const options: SelectMenuComponentOptionData[] = [];
-    if (clearDescriptionKey !== undefined) {
-      options.push({
-        label: safeSelectOptionText(localizer(locale, "commands.config.panel.model_no_model_option"), 100),
-        description: safeSelectOptionText(localizer(locale, clearDescriptionKey), 100),
-        value: CONFIG_MODEL_CLEAR_VALUE,
-      });
-    }
-    if (visibleProviders.length > 0) {
-      options.push(
-        ...visibleProviders.map((provider) => ({
-          label: safeSelectOptionText(getProviderDisplayName(provider), 100),
-          value: provider,
-        })),
-      );
-    } else if (!showClear) {
-      options.push({
-        label: safeSelectOptionText(localizer(locale, "commands.config.panel.no_providers_option"), 100),
-        value: "none",
-      });
-    }
-
-    components.push({
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.StringSelect,
-          customId: buildConfigRouteId({ action: "model-provider-select", locale, capability }),
-          placeholder: safeSelectOptionText(`${capabilityLabel}: ${current}`, 150),
-          options,
-          // A model assignment can outlive the provider it came from, so the clear entry keeps the
-          // select live even with nothing eligible left to pick; without it the select is inert
-          // rather than absent, and the placeholder is what keeps the assignment readable.
-          disabled: writesDisabled || (visibleProviders.length === 0 && !showClear),
-        },
-      ],
+    const { entries, expandedStartIndex, expandedPageCount } = buildProviderPageEntries({
+      providers: slot.eligibleProviders,
+      expandedProvider: slot.expandedProvider,
+      expandedOptionCount: slot.expandedOptionCount,
+      pageSize: CONFIG_MODEL_PAGE_SIZE,
+      locale,
+      pageLabelKey: "commands.config.panel.provider_page_label",
+      // A whole provider carries its bare name while a slice carries an offset, so the handler can
+      // tell "open this provider" from "open its first page" and expand only the former.
+      encodeProviderValue: (provider) => provider,
+      encodePageValue: (provider, start) => encodeConfigProviderPageValue(provider, start),
     });
 
-    if (pageCount > 1) {
-      components.push({
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            customId: buildConfigRouteId({ action: "model-provider-page", locale, capability, start: 0 }),
-            // Every overflowing capability emits one of these, so the label has to name its own
-            // capability: six buttons reading only "Provider" are indistinguishable in the client.
-            label: localizer(locale, "commands.config.panel.model_browse_providers_button", {
-              capability: capabilityLabel,
-            }),
-            disabled: writesDisabled,
-          },
-        ],
-      } satisfies ActionRowData<ButtonComponentData>);
-    }
+    // Defaulting to the expansion's own offset keeps a freshly expanded provider on screen; a
+    // stored start means the reader paged deliberately and outranks it.
+    const entryStart = slot.expandedProvider ? slot.providerPageStart || expandedStartIndex : slot.providerPageStart;
+    // A window that does not hold every entry spends one option slot on its own advance entry, so
+    // the window shrinks by one rather than leaving the last entry of each window unreachable.
+    const overflows = entries.length > directLimit;
+    const windowSize = overflows ? directLimit - 1 : directLimit;
+    const rangeCount = Math.max(1, Math.ceil(entries.length / windowSize));
+    const rangeIndex = Math.min(Math.max(0, Math.floor(entryStart / windowSize)), rangeCount - 1);
+    const visibleEntries = entries.slice(rangeIndex * windowSize, rangeIndex * windowSize + windowSize);
+
+    components.push(
+      buildModelRoutingControl({
+        capabilityLabel,
+        activeModelName: slot.currentModelName,
+        activeProvider: slot.currentProvider,
+        providerEntries: buildSwitchProviderOptions({
+          locale,
+          capabilityLabel,
+          visibleEntries,
+          showClear,
+          overflows,
+          rangeIndex,
+          rangeCount,
+          windowSize,
+          expandedProvider: slot.expandedProvider,
+        }),
+        customId: buildConfigRouteId({ action: "model-provider-select", locale, capability }),
+        // A server has nothing to inherit from, so the leading entry is a clear rather than a
+        // server default, and only the slots whose absorbed command offered one carry it.
+        serverDefaultValue: showClear ? CONFIG_MODEL_CLEAR_VALUE : undefined,
+        serverDefaultLabel: showClear ? localizer(locale, "commands.config.panel.model_no_model_option") : undefined,
+        serverDefaultDescription: clearDescriptionKey ? localizer(locale, clearDescriptionKey) : undefined,
+        serverDefaultDisplay: localizer(locale, "commands.config.panel.none_label"),
+        // While expanded the active model is the least useful thing the placeholder could say: the
+        // reader has already chosen a provider and is looking for its pages.
+        placeholderOverride:
+          expandedPageCount > 0 && slot.expandedProvider
+            ? localizer(locale, "commands.config.panel.model_provider_page_placeholder", {
+                capability: capabilityLabel,
+                provider: getProviderDisplayName(slot.expandedProvider),
+              })
+            : undefined,
+        // A model assignment can outlive the provider it came from, so the clear entry keeps the
+        // select live even with nothing eligible left to pick; without it the select is inert
+        // rather than absent, and the placeholder is what keeps the assignment readable.
+        disabled: writesDisabled || (entries.length === 0 && !showClear),
+      }),
+    );
 
     if (capability === "nai-image") appendCapabilityStatus(components, locale, view, "image");
     if (capability === "video") appendCapabilityStatus(components, locale, view, "video");
@@ -695,18 +525,40 @@ function buildFallbacksBody(input: ConfigModelsPageInput): ComponentInContainerD
     content: `${localizer(locale, "commands.config.panel.fallback_order_description")}\n${slotLines}`,
   });
 
+  // One expanded provider contributes an entry per option page, so the entry list outgrows a single
+  // select long before the provider list does; slicing it and paging the rest is what keeps the
+  // payload under Discord's 25-option ceiling.
+  const rangeCount = Math.max(1, Math.ceil(view.providerEntries.length / CONFIG_MODEL_PROVIDER_DIRECT_LIMIT));
+  const rangeIndex = Math.min(
+    Math.max(0, Math.floor(view.entryStart / CONFIG_MODEL_PROVIDER_DIRECT_LIMIT)),
+    rangeCount - 1,
+  );
+  const visibleEntries = view.providerEntries.slice(
+    rangeIndex * CONFIG_MODEL_PROVIDER_DIRECT_LIMIT,
+    rangeIndex * CONFIG_MODEL_PROVIDER_DIRECT_LIMIT + CONFIG_MODEL_PROVIDER_DIRECT_LIMIT,
+  );
+  const expandedEntryValue = view.expandedProvider ? encodeConfigProviderPageValue(view.expandedProvider, 0) : null;
+
   const providerSelectRow: ActionRowData<StringSelectMenuComponentData> = {
     type: ComponentType.ActionRow,
     components: [
       {
         type: ComponentType.StringSelect,
         customId: buildConfigRouteId({ action: "fallback-provider-select", locale }),
-        placeholder: localizer(locale, "commands.config.panel.fallback_provider_placeholder"),
+        placeholder: safeSelectOptionText(
+          view.expandedProvider
+            ? localizer(locale, "commands.config.panel.fallback_provider_page_placeholder", {
+                provider: getProviderDisplayName(view.expandedProvider),
+              })
+            : localizer(locale, "commands.config.panel.fallback_provider_placeholder"),
+          150,
+        ),
         options:
-          view.providerEntries.length > 0
-            ? view.providerEntries.map((entry) => ({
+          visibleEntries.length > 0
+            ? visibleEntries.map((entry) => ({
                 label: safeSelectOptionText(entry.label, 100),
                 value: entry.value,
+                default: entry.value === expandedEntryValue,
               }))
             : [
                 {
@@ -720,20 +572,41 @@ function buildFallbacksBody(input: ConfigModelsPageInput): ComponentInContainerD
   };
   components.push(providerSelectRow);
 
+  const fallbackPaginationRow = buildPaginationRow({
+    locale,
+    rangeIndex,
+    rangeCount,
+    namespace: CONFIG_ROUTE_NAMESPACE,
+    version: CONFIG_ROUTE_VERSION,
+    buildSegments: {
+      // The expansion has to ride along, or the next page rebuilds a shorter entry list and the
+      // offset it was given now points outside it.
+      page: (targetRangeIndex) =>
+        view.expandedProvider
+          ? buildConfigRouteSegments({
+              action: "fallback-provider-page",
+              locale,
+              provider: view.expandedProvider,
+              start: targetRangeIndex * CONFIG_MODEL_PROVIDER_DIRECT_LIMIT,
+            })
+          : buildConfigRouteSegments({
+              action: "fallback-provider-range",
+              locale,
+              start: targetRangeIndex * CONFIG_MODEL_PROVIDER_DIRECT_LIMIT,
+            }),
+    },
+    disabled: writesDisabled,
+  });
+  if (fallbackPaginationRow) components.push(fallbackPaginationRow);
+
   components.push({
     type: ComponentType.TextDisplay,
     content: `**${localizer(locale, "commands.config.panel.randomizer_title")}**
-${localizer(locale, "commands.config.panel.randomizer_description")}
-> ${localizer(
-      locale,
-      view.randomizerEnabled
-        ? "commands.config.panel.randomizer_state_on"
-        : "commands.config.panel.randomizer_state_off",
-    )}${
-      view.hasFallbacks
-        ? ""
-        : `\n${withLinePrefix("-# ", localizer(locale, "commands.config.panel.randomizer_requires_fallback"))}`
-    }`,
+${localizer(locale, "commands.config.panel.randomizer_description")}${
+  view.hasFallbacks
+    ? ""
+    : `\n${withLinePrefix("-# ", localizer(locale, "commands.config.panel.randomizer_requires_fallback"))}`
+}`,
   });
 
   components.push(
@@ -756,6 +629,18 @@ ${localizer(locale, "commands.config.panel.randomizer_description")}
       view.randomizerEnabled,
       writesDisabled,
     ),
+    {
+      type: ComponentType.TextDisplay,
+      // Clearing every fallback slot leaves the stored flag on, so the selection above tracks the
+      // stored value while this sentence tracks the effective one. Collapsing the two would report
+      // a randomizer as running for a workspace whose chain is empty.
+      content: `> ${localizer(
+        locale,
+        view.randomizerEnabled && view.hasFallbacks
+          ? "commands.config.panel.randomizer_state_on"
+          : "commands.config.panel.randomizer_state_off",
+      )}`,
+    },
   );
 
   return components;

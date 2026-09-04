@@ -4,7 +4,6 @@ import type { ThinkingLevelValue } from "@/constants/thinkingLevels";
 import type { PanelReceipt, PanelReceiptTone } from "@/types/discord/panel";
 import type { TomoriState } from "@/types/db/schema";
 import {
-  CONFIG_CLEARABLE_MODEL_CAPABILITIES,
   CONFIG_LOGIT_BIAS_PAGE_SIZE,
   CONFIG_MODEL_CLEAR_VALUE,
   CONFIG_STOP_STRING_CAPACITY,
@@ -13,12 +12,19 @@ import {
   CONFIG_FALLBACK_SLOT_COUNT,
   computeLogitBiasFingerprint,
   computeStopStringFingerprint,
+  CONFIG_MODEL_PAGE_SIZE,
   type ConfigModelCapability,
   type ConfigPage,
   type ConfigPanelRoute,
 } from "@/utils/discord/configPanelCatalog";
-import { decodeFallbackProviderValue } from "@/utils/discord/interactions/configModelLoaders";
-import type { ConfigParameterPatch } from "@/utils/discord/interactions/configModelOperations";
+import {
+  decodeConfigProviderPageValue,
+  decodeConfigProviderRangeValue,
+} from "@/utils/discord/interactions/configModelLoaders";
+import {
+  currentModelIdForCapability,
+  type ConfigParameterPatch,
+} from "@/utils/discord/interactions/configModelOperations";
 import {
   isConfigRouteAuthorized,
   MODELS_PAGE_BY_ROUTE,
@@ -57,9 +63,10 @@ import {
   CONFIG_NAI_SAMPLER_FIELD,
   CONFIG_NAI_SCALE_FIELD,
   CONFIG_NAI_STEPS_FIELD,
+  CONFIG_MODEL_SELECT_FIELD,
   CONFIG_STOP_SPEAKER_PATTERN_FIELD,
+  buildConfigModelSelectModal,
 } from "@/utils/discord/ui/configModelModals";
-import type { ConfigModelProviderListView } from "@/utils/discord/ui/configModelsPanel";
 import { NAI_IMAGE_NOISE_SCHEDULES, NAI_IMAGE_SAMPLERS } from "@/utils/image/naiImageParams";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { log } from "@/utils/misc/logger";
@@ -77,13 +84,13 @@ export const CONFIG_MODEL_MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"
   "logit-manage-open",
   "logit-manage-select",
   "fallback-provider-select",
+  "model-provider-select",
   "image-tags-default-open",
   "nai-parameters-open",
 ]);
 
 export const CONFIG_MODEL_SELECT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "model-provider-select",
-  "model-select",
   "parameters-provider-select",
   "fallback-provider-select",
   "logit-manage-select",
@@ -98,6 +105,7 @@ export const CONFIG_MODEL_MODAL_SUBMIT_ACTIONS = new Set<ConfigPanelRoute["actio
   "logit-upload-submit",
   "logit-manage-submit",
   "fallback-submit",
+  "model-modal-submit",
   "image-tags-default-submit",
   "nai-parameters-submit",
 ]);
@@ -184,6 +192,17 @@ export async function handleConfigModelModalOpen(
   actor: ConfigActor,
 ): Promise<boolean> {
   if (!CONFIG_MODEL_MODAL_OPEN_ACTIONS.has(route.action)) return false;
+
+  // Clearing is a write rather than a modal, and it rides the provider select alongside the entries
+  // that do open one. Declining before the gate below routes it through the deferred path, which
+  // owns both the acknowledgement a write needs and the denial repaint an unauthorized replay gets.
+  if (
+    route.action === "model-provider-select" &&
+    interaction.isStringSelectMenu() &&
+    interaction.values[0] === CONFIG_MODEL_CLEAR_VALUE
+  ) {
+    return false;
+  }
 
   const locale = route.locale;
   if (!isConfigRouteAuthorized(route, actor)) {
@@ -334,10 +353,105 @@ export async function handleConfigModelModalOpen(
     return true;
   }
 
+  if (route.action === "model-provider-select") {
+    const selected = interaction.isStringSelectMenu() ? (interaction.values[0] ?? null) : null;
+
+    // The advance entry rides the select too, because six selectors cannot each afford a
+    // prev/next row under the forty-component budget.
+    const range = selected ? decodeConfigProviderRangeValue(selected) : null;
+    if (range) {
+      await interaction.deferUpdate();
+      await repaint(interaction, {
+        locale,
+        scope,
+        category: "models",
+        page: "switch",
+        selectedPersonaId: null,
+        modelProviderPage: {
+          capability: route.capability,
+          provider: range.expandedProvider ?? undefined,
+          start: range.start,
+        },
+        dependencies,
+      });
+      return true;
+    }
+
+    const chosenSlice = selected ? decodeConfigProviderPageValue(selected) : null;
+    const chosenProvider = chosenSlice?.provider ?? selected;
+    const providers = await dependencies.loadModelProviders(state, route.capability);
+    const provider = providers.find((candidate) => candidate.toLowerCase() === chosenProvider?.toLowerCase());
+    if (!provider) {
+      await interaction.reply({
+        content: localizer(locale, "commands.config.panel.stale_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const models = await dependencies.loadModelChoices(state, route.capability, provider);
+    if (models.length === 0) {
+      await interaction.reply({
+        content: localizer(locale, "commands.model.text.no_models_description", {
+          provider: getProviderDisplayName(provider),
+        }),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    // A slice value is the reader picking part of an already expanded provider, so it opens the
+    // modal directly instead of expanding again.
+    if (!chosenSlice && models.length > CONFIG_MODEL_PAGE_SIZE) {
+      await interaction.deferUpdate();
+      await repaint(interaction, {
+        locale,
+        scope,
+        category: "models",
+        page: "switch",
+        selectedPersonaId: null,
+        modelProviderPage: { capability: route.capability, provider, start: 0 },
+        // Expanding rewrites options inside a selector the reader has already closed, so without a
+        // receipt the selection reads as a no-op and gets repeated.
+        receipt: receipt(
+          locale,
+          "info",
+          "commands.config.panel.model_provider_paged_heading",
+          "commands.config.panel.model_provider_paged_detail",
+          { provider: getProviderDisplayName(provider), count: models.length },
+        ),
+        dependencies,
+      });
+      return true;
+    }
+
+    const sliceStart = chosenSlice?.start ?? 0;
+    if (sliceStart % CONFIG_MODEL_PAGE_SIZE !== 0 || sliceStart >= models.length) {
+      await interaction.reply({
+        content: localizer(locale, "commands.config.panel.stale_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    await dependencies.showModal(
+      interaction,
+      buildConfigModelSelectModal(
+        locale,
+        route.capability,
+        provider,
+        nonce,
+        models.slice(sliceStart, sliceStart + CONFIG_MODEL_PAGE_SIZE),
+        currentModelIdForCapability(state, route.capability),
+      ),
+    );
+    return true;
+  }
+
   // The fallback provider select opens its modal directly: one option per option-page, so the
   // range is already chosen by the time the five slot selects are built.
   const chosen = interaction.isStringSelectMenu() ? (interaction.values[0] ?? null) : null;
-  const decoded = chosen ? decodeFallbackProviderValue(chosen) : null;
+  const decoded = chosen ? decodeConfigProviderPageValue(chosen) : null;
   if (!decoded) {
     await interaction.reply({
       content: localizer(locale, "commands.config.panel.stale_detail"),
@@ -391,21 +505,6 @@ function recordModelAction(context: ConfigModelRouteContext, action: PanelAction
   });
 }
 
-async function loadModelProviderListView(
-  state: TomoriState,
-  capability: ConfigModelCapability,
-  start: number,
-  dependencies: ConfigRouteDependencies,
-): Promise<ConfigModelProviderListView> {
-  const providers = await dependencies.loadModelProviders(state, capability);
-  return {
-    kind: "providers",
-    capability,
-    providers,
-    start,
-  };
-}
-
 async function clearSwitchModel(context: ConfigModelRouteContext, capability: ConfigModelCapability): Promise<boolean> {
   const { dependencies, route } = context;
   const locale = route.locale;
@@ -446,64 +545,25 @@ async function handleSwitchModels(context: ConfigModelRouteContext): Promise<boo
   const state = serverStateFromScope(context.scope);
   if (!state) return false;
 
-  if (route.action === "model-provider-page") {
-    const modelProviderListView = await loadModelProviderListView(state, route.capability, route.start, dependencies);
-    await baseRepaint(context, "switch", {
-      modelListView: modelProviderListView,
-    });
-    return true;
-  }
-
-  if (route.action === "model-cancel") {
-    await baseRepaint(context, "switch");
-    return true;
-  }
-
+  // The clearable slots fold their clear into the provider select, which the modal-open handler
+  // declines so the write lands here with the interaction already deferred.
   if (route.action === "model-provider-select") {
-    // The image slots fold their clear into this select, so the sentinel has to be answered before
-    // the value is looked up as a provider name.
-    if (context.selectedValue === CONFIG_MODEL_CLEAR_VALUE) return await clearSwitchModel(context, route.capability);
-    const providers = await dependencies.loadModelProviders(state, route.capability);
-    const provider = providers.find((candidate) => candidate.toLowerCase() === context.selectedValue?.toLowerCase());
-    if (!provider) {
+    if (context.selectedValue !== CONFIG_MODEL_CLEAR_VALUE) {
       await baseRepaint(context, "switch", { receipt: staleReceipt(locale) });
       return true;
     }
-    const listView = await dependencies.loadModelListView(state, route.capability, provider, 0);
-    if (listView.models.length === 0) {
-      // A clearable slot still opens its list, because its None entry is the one thing left to pick
-      // there; the receipt is what stops the near-empty selector from reading as a broken page.
-      const clearable = CONFIG_CLEARABLE_MODEL_CAPABILITIES.has(route.capability);
-      await baseRepaint(context, "switch", {
-        ...(clearable ? { modelListView: listView } : {}),
-        receipt: receipt(
-          locale,
-          clearable ? "warning" : "error",
-          "commands.model.text.no_models_title",
-          clearable
-            ? "commands.config.panel.model_no_models_clear_detail"
-            : "commands.model.text.no_models_description",
-          { provider: getProviderDisplayName(provider) },
-        ),
-      });
-      return true;
-    }
-    await baseRepaint(context, "switch", { modelListView: listView });
-    return true;
+    return await clearSwitchModel(context, route.capability);
   }
 
-  if (route.action === "model-page") {
-    const listView = await dependencies.loadModelListView(state, route.capability, route.provider, route.start);
-    await baseRepaint(context, "switch", { modelListView: listView });
-    return true;
-  }
-
-  if (route.action !== "model-select") return false;
+  if (route.action !== "model-modal-submit") return false;
 
   const capability: ConfigModelCapability = route.capability;
-  if (context.selectedValue === CONFIG_MODEL_CLEAR_VALUE) return await clearSwitchModel(context, capability);
-
-  const modelId = Number(context.selectedValue);
+  const modelId = Number(
+    dependencies.takeSelectValue(
+      context.interaction.id,
+      buildConfigModalFieldId(CONFIG_MODEL_SELECT_FIELD, route.nonce),
+    ),
+  );
   if (!Number.isSafeInteger(modelId)) {
     await baseRepaint(context, "switch", { receipt: staleReceipt(locale) });
     return true;
@@ -969,6 +1029,14 @@ async function handleFallbacks(context: ConfigModelRouteContext): Promise<boolea
   const locale = route.locale;
   const state = serverStateFromScope(context.scope);
   if (!state) return false;
+
+  if (route.action === "fallback-provider-range" || route.action === "fallback-provider-page") {
+    await baseRepaint(context, "fallbacks", {
+      fallbackExpandedProvider: route.action === "fallback-provider-page" ? route.provider : null,
+      fallbackEntryStart: route.start,
+    });
+    return true;
+  }
 
   if (route.action === "randomizer-set") {
     const action = await performPanelAction(

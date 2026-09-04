@@ -19,7 +19,7 @@ can't do it, no matter what a user asks.
 
 ## Generation Tuning
 
-- `/config` > Models > Samplers & Parameters — sampling parameters (temperature, top-p, …): creativity/randomness.
+- `/config` > Models > Text Samplers & Parameters — sampling parameters (temperature, top-p, …): creativity/randomness.
   Higher temperature is more varied.
 - `/config` > Engine > General — how human-like her responses read. The optional `scope` option
   applies the degree server-wide (`Global`, the default) or to a single persona

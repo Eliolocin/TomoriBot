@@ -406,6 +406,7 @@ export async function handlePersonalConfigModelRoutes(context: PersonalConfigPos
       expandedOptionCount: availableModels.length,
       pageSize: PERSONAL_MODEL_PAGE_SIZE,
       locale: route.locale,
+      pageLabelKey: "commands.personal.config.provider_page_label",
       encodeProviderValue: encodeProviderParam,
       encodePageValue: encodeProviderPageValue,
     });
@@ -494,6 +495,7 @@ export async function handlePersonalConfigModelRoutes(context: PersonalConfigPos
       expandedOptionCount: availableOptions.length,
       pageSize: PERSONAL_FALLBACK_PAGE_SIZE,
       locale: route.locale,
+      pageLabelKey: "commands.personal.config.provider_page_label",
       encodeProviderValue: encodeProviderParam,
       encodePageValue: encodeProviderPageValue,
     });

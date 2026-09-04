@@ -582,10 +582,7 @@ export function resolveChannelsOverridesActionState(
  */
 export const MODELS_PAGE_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPage>> = {
   "model-provider-select": "switch",
-  "model-provider-page": "switch",
-  "model-select": "switch",
-  "model-page": "switch",
-  "model-cancel": "switch",
+  "model-modal-submit": "switch",
   "parameters-provider-select": "parameters",
   "sampling-open": "parameters",
   "sampling-submit": "parameters",
@@ -603,6 +600,8 @@ export const MODELS_PAGE_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], Co
   "logit-manage-open": "parameters",
   "logit-manage-submit": "parameters",
   "fallback-provider-select": "fallbacks",
+  "fallback-provider-range": "fallbacks",
+  "fallback-provider-page": "fallbacks",
   "fallback-submit": "fallbacks",
   "randomizer-set": "fallbacks",
   "image-tags-default-open": "image",

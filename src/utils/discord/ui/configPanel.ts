@@ -86,7 +86,6 @@ import {
   buildConfigModelsBody,
   type ConfigFallbacksView,
   type ConfigImageGenerationView,
-  type ConfigModelListView,
   type ConfigParametersView,
   type ConfigSwitchModelsView,
 } from "@/utils/discord/ui/configModelsPanel";
@@ -238,7 +237,6 @@ export interface ConfigPanelRenderInput {
   modelParametersView?: ConfigParametersView;
   modelFallbacksView?: ConfigFallbacksView;
   imageGenerationView?: ConfigImageGenerationView;
-  modelListView?: ConfigModelListView;
   randomTriggerPageStart?: number;
   behaviorView?: ConfigBehaviorView;
   permissionsView?: ConfigPermissionsView;
@@ -4108,7 +4106,6 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
           parametersView: input.modelParametersView,
           fallbacksView: input.modelFallbacksView,
           imageView: input.imageGenerationView,
-          modelListView: input.modelListView,
         }),
       );
     }

@@ -17,7 +17,6 @@ import { ragRepository, serverMemoryRepository } from "@/utils/db/repositories";
 import * as credentialResolver from "@/utils/provider/credentialResolver";
 import {
   buildConfigRouteId,
-  CONFIG_CLEARABLE_MODEL_CAPABILITIES,
   CONFIG_MODEL_CLEAR_VALUE,
   CONFIG_MODEL_PAGE_SIZE,
   type ConfigModelCapability,
@@ -29,11 +28,11 @@ import {
   type ConfigModelOperations,
 } from "@/utils/discord/interactions/configModelOperations";
 import {
-  decodeFallbackProviderValue,
-  encodeFallbackProviderValue,
+  decodeConfigProviderPageValue,
+  decodeConfigProviderRangeValue,
+  encodeConfigProviderPageValue,
   loadConfigFallbacksView,
   loadConfigImageGenerationView,
-  loadConfigModelListView,
   loadConfigParametersView,
   loadConfigSwitchModelsView,
 } from "@/utils/discord/interactions/configModelLoaders";
@@ -223,6 +222,9 @@ function makeHarness(options: HarnessOptions = {}): Harness {
                   : null,
             eligibleProviders: options.switchProviders?.[capability] ?? ["google"],
             providerPageStart: providerPage?.capability === capability ? providerPage.start : 0,
+            expandedProvider: providerPage?.capability === capability ? (providerPage.provider ?? null) : null,
+            expandedOptionCount:
+              providerPage?.capability === capability && providerPage.provider ? (options.models?.length ?? 1) : 0,
           }),
         ),
         channelOverrideCount: 3,
@@ -247,8 +249,10 @@ function makeHarness(options: HarnessOptions = {}): Harness {
       loadFallbacksView: async () => ({
         slots: [{ label: null }, { label: null }, { label: null }, { label: null }, { label: null }],
         providerEntries: options.fallbackProviderEntries ?? [
-          { value: encodeFallbackProviderValue("google", 0), label: "Google" },
+          { value: encodeConfigProviderPageValue("google", 0), label: "Google" },
         ],
+        expandedProvider: null,
+        entryStart: 0,
         randomizerEnabled: options.state?.config.model_randomizer_enabled ?? false,
         hasFallbacks: (options.state?.config.fallback_model_refs ?? []).length > 0,
       }),
@@ -261,13 +265,7 @@ function makeHarness(options: HarnessOptions = {}): Harness {
         noiseSchedule: "karras",
         cfgRescale: "0",
       }),
-      loadModelListView: async (_state, capability, provider, start) => ({
-        capability,
-        provider,
-        models: options.models ?? [{ id: 7, name: "gemini-2.5-pro", description: "Pro" }],
-        start,
-        currentModelId: null,
-      }),
+      loadModelChoices: async () => options.models ?? [{ id: 7, name: "gemini-2.5-pro", description: "Pro" }],
       loadFallbackOptions: async () => [{ value: "gemini-2.5-pro", label: "gemini-2.5-pro" }],
       loadModelProviders: async (_state, capability) => options.switchProviders?.[capability] ?? ["google"],
     },
@@ -349,22 +347,10 @@ function textDisplayContents(value: unknown): string[] {
   return [...content, ...Object.values(record).flatMap(textDisplayContents)];
 }
 
-/** Options of the model-catalog select, addressed by its route rather than by row position. */
-function modelSelectOptions(payload: unknown): Array<{ value: string }> {
-  const parsed = JSON.parse(JSON.stringify(payload)) as {
-    components: Array<{
-      components?: Array<{ components?: Array<{ customId?: string; options?: { value: string }[] }> }>;
-    }>;
-  };
-  // A receipt renders as its own container ahead of the panel, so every top-level container is
-  // scanned rather than only the first.
-  for (const container of parsed.components) {
-    for (const row of container.components ?? []) {
-      const control = row.components?.[0];
-      if (control?.customId?.includes(":model-select:")) return control.options ?? [];
-    }
-  }
-  return [];
+/** Options of the model select inside a raw model-picker modal payload. */
+function modelModalOptions(payload: unknown): Array<{ value: string }> {
+  const parsed = payload as { components?: Array<{ component?: { options?: Array<{ value: string }> } }> } | undefined;
+  return parsed?.components?.[0]?.component?.options ?? [];
 }
 
 function findComponentByCustomId(value: unknown, customId: string): Record<string, unknown> | undefined {
@@ -767,120 +753,13 @@ describe("config models switch page", () => {
   });
 
   it("offers a None entry only for the slots whose absorbed command can clear", async () => {
+    // The clear entry only appears on a slot that has something to clear, so each capability is
+    // given an assignment first.
     for (const capability of ["vision", "image", "nai-image"] as ConfigModelCapability[]) {
-      const harness = makeHarness();
-      await dispatch(
-        harness,
-        makeInteraction({
-          customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
-          kind: "select",
-          values: ["google"],
-          harness,
-        }),
-      );
-      expect(renderedText(harness.edits.at(-1))).toContain("__clear__");
-    }
-
-    for (const capability of ["text", "embedding", "video"] as ConfigModelCapability[]) {
-      const harness = makeHarness();
-      await dispatch(
-        harness,
-        makeInteraction({
-          customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
-          kind: "select",
-          values: ["google"],
-          harness,
-        }),
-      );
-      expect(renderedText(harness.edits.at(-1))).not.toContain("__clear__");
-    }
-  });
-
-  it("explains an empty catalog on a clearable slot while still offering its None entry", async () => {
-    const harness = makeHarness({ models: [] });
-    await dispatch(
-      harness,
-      makeInteraction({
-        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "vision" }),
-        kind: "select",
-        values: ["google"],
-        harness,
-      }),
-    );
-
-    const rendered = renderedText(harness.edits.at(-1));
-    expect(rendered).toContain("has no models for this feature");
-    expect(modelSelectOptions(harness.edits.at(-1)).map((option) => option.value)).toEqual(["__clear__"]);
-  });
-
-  it("refuses an empty catalog outright on a slot that cannot be cleared", async () => {
-    const harness = makeHarness({ models: [] });
-    await dispatch(
-      harness,
-      makeInteraction({
-        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "text" }),
-        kind: "select",
-        values: ["google"],
-        harness,
-      }),
-    );
-
-    expect(modelSelectOptions(harness.edits.at(-1))).toEqual([]);
-  });
-
-  it("reserves a page slot for the None entry so no model is unreachable on a clearable slot", async () => {
-    const models = Array.from({ length: 48 }, (_index, index) => ({
-      id: index + 1,
-      name: `model-${index + 1}`,
-      description: null,
-    }));
-    const harness = makeHarness({ models });
-    await dispatch(
-      harness,
-      makeInteraction({
-        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "vision" }),
-        kind: "select",
-        values: ["google"],
-        harness,
-      }),
-    );
-
-    const firstOptions = modelSelectOptions(harness.edits.at(-1));
-    expect(firstOptions).toHaveLength(25);
-    expect(firstOptions.at(-1)?.value).toBe("24");
-
-    const second = makeHarness({ models });
-    await dispatch(
-      second,
-      makeInteraction({
-        customId: buildConfigRouteId({
-          action: "model-page",
-          locale: "en-US",
-          capability: "vision",
-          provider: "google",
-          start: 24,
-        }),
-        harness: second,
-      }),
-    );
-    expect(modelSelectOptions(second.edits.at(-1)).map((option) => option.value)).toContain("25");
-  });
-
-  it("keeps every eligible provider reachable for zero through sixty providers", async () => {
-    const capabilities = ["text", "vision", "embedding", "image", "nai-image", "video"] as const;
-    const counts = [0, 1, 25, 26, 60];
-    expect(buildConfigRouteId({ action: "model-provider-page", locale: "en-US", capability: "text", start: 0 })).toBe(
-      "config:v1:model-prov-page:en-US:text:0",
-    );
-
-    for (const count of counts) {
-      const providersByCapability = Object.fromEntries(
-        capabilities.map((capability) => [
-          capability,
-          Array.from({ length: count }, (_unused, index) => `${capability}-provider-${index + 1}`),
-        ]),
-      ) as Record<ConfigModelCapability, string[]>;
-      const harness = makeHarness({ switchProviders: providersByCapability });
+      const harness = makeHarness({
+        currentModels: { [capability]: "assigned-model" },
+        currentProviders: { [capability]: "google" },
+      });
       await dispatch(
         harness,
         makeInteraction({
@@ -890,134 +769,37 @@ describe("config models switch page", () => {
           harness,
         }),
       );
-
-      const overview = harness.edits.at(-1);
-      expectValidComponentsV2Payload(overview);
-      for (const capability of capabilities) {
-        const eligible = providersByCapability[capability];
-        const reachable = new Set(
-          selectOptionValues(
-            overview,
-            buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
-          ).filter((value) => value !== CONFIG_MODEL_CLEAR_VALUE && value !== "none"),
-        );
-        let detail = overview;
-        const pageSize = CONFIG_MODEL_PAGE_SIZE;
-        for (let start = 0; start < eligible.length; start += pageSize) {
-          const pageRoute = buildConfigRouteId({
-            action: "model-provider-page",
-            locale: "en-US",
-            capability,
-            start,
-          });
-          if (start > 0) {
-            expect(findComponentByCustomId(detail, pageRoute)).toBeDefined();
-          } else if (eligible.length > pageSize) {
-            expect(findComponentByCustomId(overview, pageRoute)?.disabled).toBe(false);
-          }
-
-          await dispatch(harness, makeInteraction({ customId: pageRoute, harness }));
-          detail = harness.edits.at(-1);
-          expectValidComponentsV2Payload(detail);
-          for (const value of selectOptionValues(
-            detail,
-            buildConfigRouteId({
-              action: "model-provider-select",
-              locale: "en-US",
-              capability,
-            }),
-          )) {
-            if (value !== CONFIG_MODEL_CLEAR_VALUE && value !== "none") reachable.add(value);
-          }
-        }
-
-        expect([...reachable].sort()).toEqual(eligible.sort());
-      }
-    }
-  });
-
-  it("keeps all six overflowing provider catalogs reachable with a later current provider", async () => {
-    const capabilities = ["text", "vision", "embedding", "image", "nai-image", "video"] as const;
-    const providersByCapability = Object.fromEntries(
-      capabilities.map((capability) => [
-        capability,
-        Array.from({ length: 60 }, (_unused, index) => `${capability}-provider-${index + 1}`),
-      ]),
-    ) as Record<ConfigModelCapability, string[]>;
-    const currentModels = Object.fromEntries(
-      capabilities.map((capability) => [capability, "current-model"]),
-    ) as Partial<Record<ConfigModelCapability, string | null>>;
-    const currentProviders = Object.fromEntries(
-      capabilities.map((capability) => [capability, `${capability}-provider-60`]),
-    ) as Partial<Record<ConfigModelCapability, string | null>>;
-    const harness = makeHarness({ switchProviders: providersByCapability, currentModels, currentProviders });
-
-    await dispatch(
-      harness,
-      makeInteraction({
-        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
-        kind: "select",
-        values: ["switch"],
-        harness,
-      }),
-    );
-
-    const overview = harness.edits.at(-1);
-    expectValidComponentsV2Payload(overview);
-    for (const capability of capabilities) {
-      const topSelect = findComponentByCustomId(
-        overview,
-        buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
-      );
-      expect(String(topSelect?.placeholder)).toContain(`${capability}-provider-60`);
-
-      const reachable = new Set(
+      expect(
         selectOptionValues(
-          overview,
+          harness.edits.at(-1),
           buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
-        ).filter((value) => value !== CONFIG_MODEL_CLEAR_VALUE && value !== "none"),
+        ),
+      ).toContain(CONFIG_MODEL_CLEAR_VALUE);
+    }
+
+    for (const capability of ["text", "embedding", "video"] as ConfigModelCapability[]) {
+      const harness = makeHarness({ currentModels: { [capability]: null } });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+          kind: "select",
+          values: ["switch"],
+          harness,
+        }),
       );
-      const pageSize = CONFIG_MODEL_PAGE_SIZE - (CONFIG_CLEARABLE_MODEL_CAPABILITIES.has(capability) ? 1 : 0);
-      let detail: unknown = overview;
-      for (let start = 0; start < providersByCapability[capability].length; start += pageSize) {
-        const pageRoute = buildConfigRouteId({
-          action: "model-provider-page",
-          locale: "en-US",
-          capability,
-          start,
-        });
-        if (start > 0) expect(findComponentByCustomId(detail, pageRoute)).toBeDefined();
-        else expect(findComponentByCustomId(overview, pageRoute)?.disabled).toBe(false);
-
-        await dispatch(harness, makeInteraction({ customId: pageRoute, harness }));
-        detail = harness.edits.at(-1);
-        expectValidComponentsV2Payload(detail);
-        for (const value of selectOptionValues(
-          detail,
-          buildConfigRouteId({
-            action: "model-provider-select",
-            locale: "en-US",
-            capability,
-          }),
-        )) {
-          if (value !== CONFIG_MODEL_CLEAR_VALUE && value !== "none") reachable.add(value);
-        }
-      }
-
-      expect([...reachable].sort()).toEqual(providersByCapability[capability].sort());
+      expect(
+        selectOptionValues(
+          harness.edits.at(-1),
+          buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+        ),
+      ).not.toContain(CONFIG_MODEL_CLEAR_VALUE);
     }
   });
 
-  it("keeps every model reachable across the clear-aware model detail pages", async () => {
-    const capabilities = ["text", "vision", "embedding", "image", "nai-image", "video"] as const;
-    const models = Array.from({ length: 60 }, (_unused, index) => ({
-      id: index + 1,
-      name: `model-${index + 1}`,
-      description: null,
-    }));
-
-    for (const capability of capabilities) {
-      const harness = makeHarness({ models });
+  it("refuses an empty catalog rather than opening an empty picker", async () => {
+    for (const capability of ["vision", "text"] as ConfigModelCapability[]) {
+      const harness = makeHarness({ models: [] });
       await dispatch(
         harness,
         makeInteraction({
@@ -1027,40 +809,138 @@ describe("config models switch page", () => {
           harness,
         }),
       );
+      expect(harness.modals).toHaveLength(0);
+      expect(harness.replies.at(-1)).toBeDefined();
+    }
+  });
 
-      const modelRoute = buildConfigRouteId({
-        action: "model-select",
-        locale: "en-US",
-        capability,
-        provider: "google",
-      });
-      let detail: unknown = harness.edits.at(-1);
-      expectValidComponentsV2Payload(detail);
-      const reachable = new Set(
-        modelSelectOptions(detail)
-          .map((option) => option.value)
-          .filter((value) => value !== CONFIG_MODEL_CLEAR_VALUE),
-      );
-      const pageSize = CONFIG_MODEL_PAGE_SIZE - (CONFIG_CLEARABLE_MODEL_CAPABILITIES.has(capability) ? 1 : 0);
-      for (let start = pageSize; start < models.length; start += pageSize) {
-        const pageRoute = buildConfigRouteId({
-          action: "model-page",
-          locale: "en-US",
+  it("opens the picker with one page of models rather than a second panel page", async () => {
+    const harness = makeHarness({ models: [{ id: 7, name: "gemini-2.5-pro", description: "Pro" }] });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "vision" }),
+        kind: "select",
+        values: [encodeConfigProviderPageValue("google", 0)],
+        harness,
+      }),
+    );
+
+    expect(harness.edits).toHaveLength(0);
+    const modal = harness.modals.at(-1) as { custom_id: string };
+    expect(modal.custom_id).toContain(":model-modal:");
+    expect(modelModalOptions(modal).map((option) => option.value)).toEqual(["7"]);
+  });
+
+  it("keeps every eligible provider reachable for zero through sixty providers", async () => {
+    const capabilities = ["text", "vision", "embedding", "image", "nai-image", "video"] as const;
+    const counts = [0, 1, 25, 26, 60];
+
+    for (const count of counts) {
+      const providersByCapability = Object.fromEntries(
+        capabilities.map((capability) => [
           capability,
-          provider: "google",
-          start,
-        });
-        expect(findComponentByCustomId(detail, pageRoute)).toBeDefined();
-        await dispatch(harness, makeInteraction({ customId: pageRoute, harness }));
-        detail = harness.edits.at(-1);
-        expectValidComponentsV2Payload(detail);
-        for (const option of modelSelectOptions(detail)) {
-          if (option.value !== CONFIG_MODEL_CLEAR_VALUE) reachable.add(option.value);
-        }
+          Array.from({ length: count }, (_unused, index) => `${capability}-provider-${index + 1}`),
+        ]),
+      ) as Record<ConfigModelCapability, string[]>;
+
+      for (const capability of capabilities) {
+        const harness = makeHarness({ switchProviders: providersByCapability });
+        await dispatch(
+          harness,
+          makeInteraction({
+            customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+            kind: "select",
+            values: ["switch"],
+            harness,
+          }),
+        );
+
+        const eligible = providersByCapability[capability];
+        const reachable = new Set<string>();
+        const selectRoute = buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability });
+        const seenWindows = new Set<string>();
+        let advance: string | null = null;
+
+        // Advancing wraps, so the walk stops when it returns to a window it has already read.
+        do {
+          const panel = harness.edits.at(-1);
+          expectValidComponentsV2Payload(panel);
+          const values = selectOptionValues(panel, selectRoute);
+          const windowKey = values.join("|");
+          if (seenWindows.has(windowKey)) break;
+          seenWindows.add(windowKey);
+
+          advance = null;
+          for (const value of values) {
+            const decodedRange = decodeConfigProviderRangeValue(value);
+            if (decodedRange) {
+              advance = value;
+              continue;
+            }
+            if (value !== CONFIG_MODEL_CLEAR_VALUE && value !== "none") reachable.add(value);
+          }
+
+          if (advance) {
+            await dispatch(
+              harness,
+              makeInteraction({ customId: selectRoute, kind: "select", values: [advance], harness }),
+            );
+          }
+        } while (advance);
+
+        expect([...reachable].sort()).toEqual([...eligible].sort());
+      }
+    }
+  });
+
+  it("keeps every model reachable across the expanded provider page entries", async () => {
+    const capabilities = ["text", "vision", "embedding", "image", "nai-image", "video"] as const;
+    const models = Array.from({ length: 60 }, (_unused, index) => ({
+      id: index + 1,
+      name: `model-${index + 1}`,
+      description: null,
+    }));
+
+    for (const capability of capabilities) {
+      const harness = makeHarness({ models });
+      // A provider whose catalog overflows one modal page expands in place rather than opening a
+      // picker that could only ever present its first 25 models.
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+          kind: "select",
+          values: ["google"],
+          harness,
+        }),
+      );
+      expect(harness.modals).toHaveLength(0);
+      const expanded = harness.edits.at(-1);
+      expectValidComponentsV2Payload(expanded);
+
+      const pageValues = selectOptionValues(
+        expanded,
+        buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+      ).filter((value) => decodeConfigProviderPageValue(value) !== null);
+      expect(pageValues).toHaveLength(Math.ceil(models.length / CONFIG_MODEL_PAGE_SIZE));
+
+      const reachable = new Set<string>();
+      for (const value of pageValues) {
+        const pageHarness = makeHarness({ models });
+        await dispatch(
+          pageHarness,
+          makeInteraction({
+            customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+            kind: "select",
+            values: [value],
+            harness: pageHarness,
+          }),
+        );
+        for (const option of modelModalOptions(pageHarness.modals.at(-1))) reachable.add(option.value);
       }
 
       expect([...reachable].sort()).toEqual(models.map((model) => String(model.id)).sort());
-      expect(findComponentByCustomId(detail, modelRoute)).toBeDefined();
     }
   });
 
@@ -1087,7 +967,10 @@ describe("config models switch page", () => {
         harness: stale,
       }),
     );
-    expectValidComponentsV2Payload(stale.edits.at(-1));
+    // A retired provider is refused before the panel is touched, so it answers ephemerally rather
+    // than repainting a page whose selector never changed.
+    expect(stale.edits).toHaveLength(0);
+    expect(stale.replies.at(-1)).toBeDefined();
 
     const staleRead = makeHarness({ readStatus: "stale" });
     await dispatch(
@@ -1139,17 +1022,18 @@ describe("config models switch page", () => {
           setCapabilityModel: async () => result,
         },
       });
+      harness.selectValues[buildConfigModalFieldId("model_choice", "nonce1234567")] = "7";
       await dispatch(
         harness,
         makeInteraction({
           customId: buildConfigRouteId({
-            action: "model-select",
+            action: "model-modal-submit",
             locale: "en-US",
             capability: "vision",
             provider: "google",
+            nonce: "nonce1234567",
           }),
-          kind: "select",
-          values: ["7"],
+          kind: "modal",
           harness,
         }),
       );
@@ -1315,15 +1199,16 @@ describe("config models capability writes", () => {
 
     let acknowledgedAtWrite: boolean | null = null;
     const harness = makeHarness();
+    harness.selectValues[buildConfigModalFieldId("model_choice", "nonce1234567")] = "7";
     const interaction = makeInteraction({
       customId: buildConfigRouteId({
-        action: "model-select",
+        action: "model-modal-submit",
         locale: "en-US",
         capability: "vision",
         provider: "google",
+        nonce: "nonce1234567",
       }),
-      kind: "select",
-      values: ["7"],
+      kind: "modal",
       harness,
     });
     const update = spyOn(configRepository, "updateModelConfig").mockImplementation(async () => {
@@ -1351,13 +1236,13 @@ describe("config models authorization", () => {
       harness,
       makeInteraction({
         customId: buildConfigRouteId({
-          action: "model-select",
+          action: "model-modal-submit",
           locale: "en-US",
           capability: "vision",
           provider: "google",
+          nonce: "nonce1234567",
         }),
-        kind: "select",
-        values: ["7"],
+        kind: "modal",
         isManager: false,
         harness,
       }),
@@ -1792,7 +1677,7 @@ describe("config models fallbacks and randomizer", () => {
       makeInteraction({
         customId: buildConfigRouteId({ action: "fallback-provider-select", locale: "en-US" }),
         kind: "select",
-        values: [encodeFallbackProviderValue("google", 0)],
+        values: [encodeConfigProviderPageValue("google", 0)],
         harness,
       }),
     );
@@ -1811,11 +1696,11 @@ describe("config models fallbacks and randomizer", () => {
   });
 
   it("round-trips a fallback provider page value including a custom label", () => {
-    expect(decodeFallbackProviderValue(encodeFallbackProviderValue("custom:12", 48))).toEqual({
+    expect(decodeConfigProviderPageValue(encodeConfigProviderPageValue("custom:12", 48))).toEqual({
       provider: "custom:12",
       start: 48,
     });
-    expect(decodeFallbackProviderValue("google")).toBeNull();
+    expect(decodeConfigProviderPageValue("google")).toBeNull();
   });
 
   it("reads every fallback slot the modal submitted through its own field id", async () => {
@@ -1983,26 +1868,27 @@ describe("config models view loaders", () => {
 
     const view = await loadConfigFallbacksView(makeState(), "en-US", "google");
     expect(view.providerEntries.length).toBeGreaterThan(1);
-    expect(decodeFallbackProviderValue(view.providerEntries[1].value)?.start).toBe(24);
+    expect(decodeConfigProviderPageValue(view.providerEntries[1].value)?.start).toBe(24);
 
     providers.mockRestore();
     models.mockRestore();
   });
 
-  it("reports the current assignment so the model select can mark it as the default option", async () => {
-    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
-      makeSavedProvider("google"),
-    ]);
-    const models = spyOn(llmModelRepo, "loadAvailableModelsForProvider").mockResolvedValue([
-      { llm_id: 1, llm_codename: "gemini-2.5-flash", llm_provider: "google", sees_images: true },
-    ] as never);
+  it("marks the current assignment as the picker default", async () => {
+    const harness = makeHarness({ models: [{ id: 1, name: "gemini-2.5-flash", description: null }] });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "text" }),
+        kind: "select",
+        values: ["google"],
+        harness,
+      }),
+    );
 
-    const view = await loadConfigModelListView(makeState(), "text", "google", 0);
-    expect(view.currentModelId).toBe(1);
-    expect(view.models).toHaveLength(1);
-
-    providers.mockRestore();
-    models.mockRestore();
+    const options = modelModalOptions(harness.modals.at(-1)) as Array<{ value: string; default?: boolean }>;
+    expect(options).toHaveLength(1);
+    expect(options[0]?.default).toBe(true);
   });
 });
 

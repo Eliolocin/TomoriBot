@@ -6,10 +6,17 @@ import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import {
   CONFIG_LOGIT_BIAS_CHECKBOX_GROUP_SIZE,
   CONFIG_FALLBACK_SLOT_COUNT,
+  CONFIG_MODEL_PAGE_SIZE,
   CONFIG_STOP_STRING_CHECKBOX_GROUP_SIZE,
   buildConfigRouteId,
+  type ConfigModelCapability,
 } from "@/utils/discord/configPanelCatalog";
-import { CONFIG_FALLBACK_CLEAR_VALUE } from "@/utils/discord/interactions/configModelOperations";
+import {
+  CONFIG_FALLBACK_CLEAR_VALUE,
+  type ConfigModelChoice,
+} from "@/utils/discord/interactions/configModelOperations";
+import { CONFIG_MODEL_CAPABILITY_LOCALE_KEYS } from "@/utils/discord/ui/configModelsPanel";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { buildConfigModalFieldId, type RawModalPayload } from "@/utils/discord/ui/configModals";
 import { formatStoredParameterValue } from "@/utils/discord/ui/personalConfigParameterControls";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
@@ -36,6 +43,7 @@ export const CONFIG_NAI_STEPS_FIELD = "nai_steps";
 export const CONFIG_NAI_SCALE_FIELD = "nai_scale";
 export const CONFIG_NAI_NOISE_FIELD = "nai_noise_schedule";
 export const CONFIG_NAI_RESCALE_FIELD = "nai_cfg_rescale";
+export const CONFIG_MODEL_SELECT_FIELD = "model_choice";
 
 export function buildConfigStopStringGroupId(groupIndex: number, nonce: string): string {
   return buildConfigModalFieldId(`${CONFIG_STOP_STRINGS_GROUP_PREFIX}${groupIndex}`, nonce);
@@ -415,6 +423,59 @@ export interface ConfigFallbackOption {
  * replacement of the chain. That is also why the options are sliced before the modal opens: the
  * five selects share one list, so the modal's own overflow bridge would page only the first.
  */
+/**
+ * Model picker for one Switch Models slot.
+ *
+ * The panel select already resolved which provider and which page of its catalog, so this modal
+ * receives at most one select page and never needs to page inside itself.
+ */
+export function buildConfigModelSelectModal(
+  locale: string,
+  capability: ConfigModelCapability,
+  provider: string,
+  nonce: string,
+  models: readonly ConfigModelChoice[],
+  currentModelId: number | null,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "model-modal-submit", locale, capability, provider, nonce }),
+    title: safeSelectOptionText(
+      localizer(locale, "commands.config.panel.model_modal_title", {
+        capability: localizer(locale, CONFIG_MODEL_CAPABILITY_LOCALE_KEYS[capability]),
+      }),
+      MODAL_TITLE_MAX_LENGTH,
+    ),
+    components: [
+      {
+        type: 18,
+        label: safeSelectOptionText(
+          localizer(locale, "commands.config.panel.model_modal_select_label"),
+          MODAL_TITLE_MAX_LENGTH,
+        ),
+        description: safeSelectOptionText(
+          localizer(locale, "commands.config.panel.model_modal_select_description", {
+            provider: getProviderDisplayName(provider),
+          }),
+          MODAL_DESCRIPTION_MAX_LENGTH,
+        ),
+        component: {
+          type: 3,
+          custom_id: buildConfigModalFieldId(CONFIG_MODEL_SELECT_FIELD, nonce),
+          required: true,
+          min_values: 1,
+          max_values: 1,
+          options: models.slice(0, CONFIG_MODEL_PAGE_SIZE).map((model) => ({
+            value: String(model.id),
+            label: safeSelectOptionText(model.name, 100),
+            description: model.description ? safeSelectOptionText(model.description, 100) : undefined,
+            default: model.id === currentModelId,
+          })),
+        },
+      },
+    ],
+  };
+}
+
 export function buildConfigFallbackModal(
   locale: string,
   provider: string,

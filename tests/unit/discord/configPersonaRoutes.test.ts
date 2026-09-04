@@ -551,22 +551,15 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
   ],
   ["config:v1:model-prov-select:en-US:text", { action: "model-provider-select", locale: "en-US", capability: "text" }],
   [
-    "config:v1:model-prov-page:en-US:vision:25",
-    { action: "model-provider-page", locale: "en-US", capability: "vision", start: 25 },
+    "config:v1:model-modal:en-US:video:custom~12:nonce1234567",
+    {
+      action: "model-modal-submit",
+      locale: "en-US",
+      capability: "video",
+      provider: "custom:12",
+      nonce: "nonce1234567",
+    },
   ],
-  [
-    "config:v1:model-select:en-US:embedding:google",
-    { action: "model-select", locale: "en-US", capability: "embedding", provider: "google" },
-  ],
-  [
-    "config:v1:model-select:en-US:video:custom~12",
-    { action: "model-select", locale: "en-US", capability: "video", provider: "custom:12" },
-  ],
-  [
-    "config:v1:model-page:en-US:image:google:24",
-    { action: "model-page", locale: "en-US", capability: "image", provider: "google", start: 24 },
-  ],
-  ["config:v1:model-cancel:en-US:nai-image", { action: "model-cancel", locale: "en-US", capability: "nai-image" }],
   ["config:v1:param-prov-select:en-US", { action: "parameters-provider-select", locale: "en-US" }],
   ["config:v1:sampling-open:en-US:google", { action: "sampling-open", locale: "en-US", provider: "google" }],
   [
@@ -602,6 +595,11 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     { action: "logit-manage-submit", locale: "en-US", start: 50, fp: "abcd1234", nonce: "nonce1234567" },
   ],
   ["config:v1:fb-prov-select:en-US", { action: "fallback-provider-select", locale: "en-US" }],
+  ["config:v1:fb-prov-rng:en-US:24", { action: "fallback-provider-range", locale: "en-US", start: 24 }],
+  [
+    "config:v1:fb-prov-page:en-US:openrouter:48",
+    { action: "fallback-provider-page", locale: "en-US", provider: "openrouter", start: 48 },
+  ],
   [
     "config:v1:fb-sub:en-US:google:24:nonce1234567",
     { action: "fallback-submit", locale: "en-US", provider: "google", start: 24, nonce: "nonce1234567" },

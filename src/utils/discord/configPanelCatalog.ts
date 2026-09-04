@@ -39,7 +39,7 @@ export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPag
   behavior: ["general", "trigger", "notices", "experimental", "memory"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   permissions: ["capabilities", "privacy"],
-  models: ["switch", "parameters", "fallbacks", "image"],
+  models: ["switch", "parameters", "image", "fallbacks"],
 };
 
 export const CONFIG_CATEGORY_ORDER: readonly ConfigCategory[] = [
@@ -281,6 +281,13 @@ export const CONFIG_MODEL_CLEAR_VALUE = "__clear__";
 export const CONFIG_MODEL_PAGE_SIZE = 25;
 
 /**
+ * Provider entries one Switch Models select renders directly. A clearable slot spends one of
+ * Discord's 25 option slots on its None entry, so the renderer subtracts that before slicing and
+ * the pagination row beneath reaches the rest.
+ */
+export const CONFIG_MODEL_PROVIDER_DIRECT_LIMIT = 25;
+
+/**
  * The fallback modal reserves one option for its clear entry, so a provider page holds 24 models.
  * The five slot selects share one option list, which is why the range is chosen before the modal
  * opens rather than paged inside it.
@@ -401,10 +408,13 @@ export type ConfigPanelRoute =
   | { action: "sprite-import-submit"; locale: string; personaId: number; nonce: string }
   | { action: "sprite-export"; locale: string; personaId: number }
   | { action: "model-provider-select"; locale: string; capability: ConfigModelCapability }
-  | { action: "model-provider-page"; locale: string; capability: ConfigModelCapability; start: number }
-  | { action: "model-select"; locale: string; capability: ConfigModelCapability; provider: string }
-  | { action: "model-page"; locale: string; capability: ConfigModelCapability; provider: string; start: number }
-  | { action: "model-cancel"; locale: string; capability: ConfigModelCapability }
+  | {
+      action: "model-modal-submit";
+      locale: string;
+      capability: ConfigModelCapability;
+      provider: string;
+      nonce: string;
+    }
   | { action: "parameters-provider-select"; locale: string }
   | { action: "sampling-open"; locale: string; provider: string }
   | { action: "sampling-submit"; locale: string; provider: string; nonce: string }
@@ -422,6 +432,8 @@ export type ConfigPanelRoute =
   | { action: "logit-manage-open"; locale: string; start: number }
   | { action: "logit-manage-submit"; locale: string; start: number; fp: string; nonce: string }
   | { action: "fallback-provider-select"; locale: string }
+  | { action: "fallback-provider-page"; locale: string; provider: string; start: number }
+  | { action: "fallback-provider-range"; locale: string; start: number }
   | { action: "fallback-submit"; locale: string; provider: string; start: number; nonce: string }
   | { action: "randomizer-set"; locale: string; enabled: boolean }
   | { action: "image-tags-default-open"; locale: string; negative: boolean }
@@ -790,10 +802,7 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "sprite-import-submit": { wireToken: "sprite-import-sub", fields: [personaIdField, nonceField] },
   "sprite-export": { wireToken: "sprite-export", fields: [personaIdField] },
   "model-provider-select": { wireToken: "model-prov-select", fields: [capabilityField] },
-  "model-provider-page": { wireToken: "model-prov-page", fields: [capabilityField, startField] },
-  "model-select": { wireToken: "model-select", fields: [capabilityField, providerField] },
-  "model-page": { wireToken: "model-page", fields: [capabilityField, providerField, startField] },
-  "model-cancel": { wireToken: "model-cancel", fields: [capabilityField] },
+  "model-modal-submit": { wireToken: "model-modal", fields: [capabilityField, providerField, nonceField] },
   "parameters-provider-select": { wireToken: "param-prov-select", fields: [] },
   "sampling-open": { wireToken: "sampling-open", fields: [providerField] },
   "sampling-submit": { wireToken: "sampling-sub", fields: [providerField, nonceField] },
@@ -811,6 +820,8 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "logit-manage-open": { wireToken: "logit-man-open", fields: [startField] },
   "logit-manage-submit": { wireToken: "logit-man-sub", fields: [startField, fpField, nonceField] },
   "fallback-provider-select": { wireToken: "fb-prov-select", fields: [] },
+  "fallback-provider-page": { wireToken: "fb-prov-page", fields: [providerField, startField] },
+  "fallback-provider-range": { wireToken: "fb-prov-rng", fields: [startField] },
   "fallback-submit": { wireToken: "fb-sub", fields: [providerField, startField, nonceField] },
   "randomizer-set": { wireToken: "randomizer-set", fields: [enabledField] },
   "image-tags-default-open": { wireToken: "img-tags-open", fields: [negativeField] },

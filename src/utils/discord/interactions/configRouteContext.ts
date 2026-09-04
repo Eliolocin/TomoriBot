@@ -36,12 +36,12 @@ import type { ConfigSpriteOperations } from "@/utils/discord/interactions/config
 import type { ConfigModelOperations } from "@/utils/discord/interactions/configModelOperations";
 import { deliverGuardedPanel, validateAndFallbackPanelPayload } from "@/utils/discord/interactions/panelController";
 import type { ConfigFallbackOption } from "@/utils/discord/ui/configModelModals";
+import type { ConfigModelChoice } from "@/utils/discord/interactions/configModelOperations";
 import type {
   ConfigFallbacksView,
   ConfigImageGenerationView,
-  ConfigModelCatalogListView,
-  ConfigModelListView,
   ConfigParametersView,
+  ConfigSwitchModelsProviderPage,
   ConfigSwitchModelsView,
 } from "@/utils/discord/ui/configModelsPanel";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
@@ -216,7 +216,12 @@ export interface ConfigRouteDependencies {
     requestedProvider: string | undefined,
     logitBiasPageStart: number,
   ): Promise<ConfigParametersView>;
-  loadFallbacksView(state: TomoriState, locale: string, expandedProvider: string | null): Promise<ConfigFallbacksView>;
+  loadFallbacksView(
+    state: TomoriState,
+    locale: string,
+    expandedProvider: string | null,
+    entryStart: number,
+  ): Promise<ConfigFallbacksView>;
   loadImageGenerationView(state: TomoriState, locale: string): ConfigImageGenerationView;
   loadBehaviorView?(state: TomoriState): Promise<ConfigBehaviorView>;
   loadPermissionsView(state: TomoriState): Promise<ConfigPermissionsView>;
@@ -224,12 +229,11 @@ export interface ConfigRouteDependencies {
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
     selectedChannelId?: string,
   ): Promise<ConfigChannelsView>;
-  loadModelListView(
+  loadModelChoices(
     state: TomoriState,
     capability: ConfigModelCapability,
     provider: string,
-    start: number,
-  ): Promise<ConfigModelCatalogListView>;
+  ): Promise<ConfigModelChoice[]>;
   loadFallbackOptions(state: TomoriState, provider: string): Promise<ConfigFallbackOption[]>;
   loadModelProviders(state: TomoriState, capability: ConfigModelCapability): Promise<string[]>;
   createGuildIdentity(guildId: string, interaction: GlobalRoutableInteraction): GuildIdentityPort;
@@ -320,8 +324,7 @@ export interface ConfigRepaintOptions {
   personaSprites?: PersonaSpriteRow[];
   spritePageStart?: number;
   selectedSpriteIndex?: number;
-  modelProviderPage?: { capability: ConfigModelCapability; start: number };
-  modelListView?: ConfigModelListView;
+  modelProviderPage?: ConfigSwitchModelsProviderPage;
   behaviorView?: ConfigBehaviorView;
   permissionsView?: ConfigPermissionsView;
   channelsView?: ConfigChannelsView;
@@ -334,6 +337,7 @@ export interface ConfigRepaintOptions {
   parametersProvider?: string;
   logitBiasPageStart?: number;
   fallbackExpandedProvider?: string | null;
+  fallbackEntryStart?: number;
   dependencies: ConfigRouteDependencies;
 }
 
@@ -398,6 +402,7 @@ export async function repaint(
           state,
           locale,
           options.fallbackExpandedProvider ?? null,
+          options.fallbackEntryStart ?? 0,
         );
       } else if (page === "image") {
         imageGenerationView = dependencies.loadImageGenerationView(state, locale);
@@ -487,7 +492,6 @@ export async function repaint(
         channelsPrivateRangeIndex: options.channelsPrivateRangeIndex,
         channelsRoleplayRangeIndex: options.channelsRoleplayRangeIndex,
         channelsBlocklistRangeIndex: options.channelsBlocklistRangeIndex,
-        modelListView: options.modelListView,
       }),
       [avatar, spriteAvatar].filter((item): item is PersonaPanelAvatarData => item !== undefined),
     ),

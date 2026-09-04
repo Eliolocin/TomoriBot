@@ -24,7 +24,7 @@ Deferred candidates: video generation provider/model option tables, permission-s
 
 ## NovelAI Image Tags Decoupling
 
-Image tags moved out of `/novelai image-tags` into provider-neutral commands: `/config` > Persona > Appearance, `/personal config`, and the default tag fields on `/config` > Models > Image Generation. User and persona tags are rendered in context as public `Physical Appearance` lines. `generate_image` now receives default positive tag guidance, while default negative tags are consumed only by NovelAI or custom image endpoints with the `Negative Prompt` support checkbox enabled.
+Image tags moved out of `/novelai image-tags` into provider-neutral commands: `/config` > Persona > Appearance, `/personal config`, and the default tag fields on `/config` > Models > ImageGen Defaults. User and persona tags are rendered in context as public `Physical Appearance` lines. `generate_image` now receives default positive tag guidance, while default negative tags are consumed only by NovelAI or custom image endpoints with the `Negative Prompt` support checkbox enabled.
 
 ---
 

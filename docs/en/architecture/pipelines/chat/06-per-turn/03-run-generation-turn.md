@@ -93,7 +93,7 @@ a non-error result *and* the loop falls through (rare; defensive).
 - Applies provider-specific token-limit truncation
   (`truncateDialogueHistory`) for Gemini, OpenRouter, NovelAI. The reserved
   output budget is resolved by `resolveMaxOutputTokens` so it matches what the
-  request builder actually sends: the server's `/config` > Models > Samplers & Parameters override
+  request builder actually sends: the server's `/config` > Models > Text Samplers & Parameters override
   (`config.llm_max_output_tokens`) wins, then the provider env cap
   (`OPENROUTER_MAX_OUTPUT_TOKENS` / `GOOGLE_MAX_OUTPUT_TOKENS`), then a
   per-provider fallback (flat 8192 for OpenRouter and Gemini, the model-reported
@@ -211,8 +211,8 @@ The stage is a coordinator over several plugin-relevant subsystems:
 |---|---|---|
 | `OPENROUTER_APP_ATTRIBUTION_ENABLED` | `true` | Sends TomoriBot app attribution headers to OpenRouter for app rankings and aggregated usage analytics. Set to `false` to omit them. |
 | `OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS` | `2` | Per-retry history-pair drop count when OpenRouter returns empty/length |
-| `OPENROUTER_MAX_OUTPUT_TOKENS` | `8192` | OpenRouter truncation/request output-token cap (overridden by `/config` > Models > Samplers & Parameters) |
-| `GOOGLE_MAX_OUTPUT_TOKENS` | `8192` | Gemini truncation/request output-token cap (overridden by `/config` > Models > Samplers & Parameters) |
+| `OPENROUTER_MAX_OUTPUT_TOKENS` | `8192` | OpenRouter truncation/request output-token cap (overridden by `/config` > Models > Text Samplers & Parameters) |
+| `GOOGLE_MAX_OUTPUT_TOKENS` | `8192` | Gemini truncation/request output-token cap (overridden by `/config` > Models > Text Samplers & Parameters) |
 | `STREAM_ABANDONED_SETTLE_TIMEOUT_MS` | `5000` | Max wait (ms) for an SDK-timeout-aborted stream to settle so its in-flight sends are recorded before superseded-message cleanup. `0` disables the wait. Defined in `toolLoop.ts`. |
 
 Plus `MAX_KEY_ATTEMPTS` from `keyRotation.ts`.

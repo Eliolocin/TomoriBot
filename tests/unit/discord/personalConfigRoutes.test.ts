@@ -2565,11 +2565,11 @@ describe("Models panel rendering", () => {
       "video",
     ]);
     expect(routingControls.map((component) => component.placeholder)).toEqual([
-      "Text: ~Claude 3.5 Sonnet (OpenRouter)",
+      "Text: Claude 3.5 Sonnet (OpenRouter)",
       "Vision: Using Server Default",
-      "Embedding: ~text-embedding-3 (OpenRouter)",
-      "Standard Image: ~Flux.1 Schnell (OpenRouter)",
-      "NovelAI Image: ~NAI Diffusion V3 (NovelAI)",
+      "Embedding: text-embedding-3 (OpenRouter)",
+      "Standard Image: Flux.1 Schnell (OpenRouter)",
+      "NovelAI Image: NAI Diffusion V3 (NovelAI)",
       "Video: Using Server Default",
     ]);
     expect(routingControls.every((component) => component.placeholder && component.placeholder.length <= 150)).toBe(

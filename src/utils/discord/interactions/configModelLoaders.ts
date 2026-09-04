@@ -8,7 +8,6 @@ import {
 } from "@/utils/discord/configPanelCatalog";
 import {
   CONFIG_FALLBACK_ENDPOINT_PREFIX,
-  currentModelIdForCapability,
   loadConfigModelChoices,
   loadConfigModelProviders,
 } from "@/utils/discord/interactions/configModelOperations";
@@ -17,6 +16,7 @@ import type {
   ConfigFallbacksView,
   ConfigImageGenerationView,
   ConfigParametersView,
+  ConfigSwitchModelsProviderPage,
   ConfigSwitchModelsView,
 } from "@/utils/discord/ui/configModelsPanel";
 import { buildProviderPageEntries } from "@/utils/discord/ui/modelRoutingControls";
@@ -68,13 +68,18 @@ async function resolveSlotAssignment(
 
 export async function loadConfigSwitchModelsView(
   state: TomoriState,
-  providerPage: { capability: ConfigModelCapability; start: number } | undefined,
+  providerPage: ConfigSwitchModelsProviderPage | undefined,
 ): Promise<ConfigSwitchModelsView> {
   const slots = await Promise.all(
     CONFIG_MODEL_CAPABILITY_ORDER.map(async (capability) => {
-      const [assignment, providers] = await Promise.all([
+      const expanded = providerPage?.capability === capability ? (providerPage.provider ?? null) : null;
+      const [assignment, providers, expandedOptionCount] = await Promise.all([
         resolveSlotAssignment(state, capability),
         loadConfigModelProviders(state.server_id, capability),
+        // Only the expanded provider's catalog is measured: the renderer needs the count to decide
+        // how many page entries it contributes, and loading all six catalogs to fill a field five
+        // of them never read would put the whole model table behind every repaint.
+        expanded ? loadConfigModelChoices(state.server_id, capability, expanded).then((rows) => rows.length) : 0,
       ]);
       return {
         capability,
@@ -82,6 +87,8 @@ export async function loadConfigSwitchModelsView(
         currentProvider: assignment.provider,
         eligibleProviders: providers.map((row) => row.provider),
         providerPageStart: providerPage?.capability === capability ? providerPage.start : 0,
+        expandedProvider: expanded,
+        expandedOptionCount,
       };
     }),
   );
@@ -142,18 +149,17 @@ function describeFallbackEntry(
 }
 
 /**
- * Value a fallback provider option carries: the provider plus the option-page offset the modal
- * should open on.
+ * Value a provider option carries on Switch Models and Fallbacks: the provider plus the option-page
+ * offset the modal should open on.
  *
- * The five slot selects share one option list, so the modal cannot page inside itself; the range is
- * chosen here, as one select option per page, rather than by a prev/next row that would strand the
- * page it is parked on.
+ * A modal select holds 25 options and cannot page inside itself, so the range is chosen here, as one
+ * select option per page, rather than by a prev/next row that would strand the page it is parked on.
  */
-export function encodeFallbackProviderValue(provider: string, start: number): string {
+export function encodeConfigProviderPageValue(provider: string, start: number): string {
   return `${start}|${provider}`;
 }
 
-export function decodeFallbackProviderValue(value: string): { provider: string; start: number } | null {
+export function decodeConfigProviderPageValue(value: string): { provider: string; start: number } | null {
   const separator = value.indexOf("|");
   if (separator < 0) return null;
   const start = Number.parseInt(value.slice(0, separator), 10);
@@ -162,24 +168,49 @@ export function decodeFallbackProviderValue(value: string): { provider: string; 
   return { provider, start };
 }
 
+/**
+ * Value the Switch Models provider select carries to scroll its own entry list.
+ *
+ * Six selectors share one page, so a prev/next row per capability costs eighteen components the
+ * forty-component budget does not have. Riding the select instead costs none, and the expanded
+ * provider has to ride along or the next window rebuilds a shorter entry list and the offset it
+ * was given now points outside it.
+ */
+export function encodeConfigProviderRangeValue(start: number, expandedProvider: string | null): string {
+  return `more|${start}|${expandedProvider ?? ""}`;
+}
+
+export function decodeConfigProviderRangeValue(
+  value: string,
+): { start: number; expandedProvider: string | null } | null {
+  if (!value.startsWith("more|")) return null;
+  const separator = value.indexOf("|", 5);
+  if (separator < 0) return null;
+  const start = Number.parseInt(value.slice(5, separator), 10);
+  if (!Number.isInteger(start) || start < 0) return null;
+  return { start, expandedProvider: value.slice(separator + 1) || null };
+}
+
 export async function loadConfigFallbacksView(
   state: TomoriState,
   locale: string,
   expandedProvider: string | null,
+  entryStart = 0,
 ): Promise<ConfigFallbacksView> {
   const providers = await loadSavedProvidersForCapability(state.server_id, "text");
   const refs = state.config.fallback_model_refs ?? [];
   const chain = state.fallback_chain ?? [];
 
   const expandedOptionCount = expandedProvider ? (await loadConfigFallbackOptions(state, expandedProvider)).length : 0;
-  const { entries } = buildProviderPageEntries({
+  const { entries, expandedStartIndex } = buildProviderPageEntries({
     providers: providers.map((row) => row.provider),
     expandedProvider,
     expandedOptionCount,
     pageSize: CONFIG_FALLBACK_PAGE_SIZE,
     locale,
-    encodeProviderValue: (provider) => encodeFallbackProviderValue(provider, 0),
-    encodePageValue: (provider, start) => encodeFallbackProviderValue(provider, start),
+    pageLabelKey: "commands.config.panel.provider_page_label",
+    encodeProviderValue: (provider) => encodeConfigProviderPageValue(provider, 0),
+    encodePageValue: (provider, start) => encodeConfigProviderPageValue(provider, start),
   });
 
   return {
@@ -187,6 +218,10 @@ export async function loadConfigFallbacksView(
       label: describeFallbackEntry(locale, chain[index] ?? null, refs[index] ?? null),
     })),
     providerEntries: entries,
+    expandedProvider,
+    // Defaulting to the expansion's own offset keeps a freshly expanded provider on screen; a
+    // stored start means the reader paged deliberately and outranks it.
+    entryStart: entryStart || expandedStartIndex,
     randomizerEnabled: state.config.model_randomizer_enabled ?? false,
     hasFallbacks: refs.length > 0,
   };
@@ -247,18 +282,4 @@ export function loadConfigImageGenerationView(state: TomoriState, locale: string
     noiseSchedule: effective.noiseSchedule || noneLabel,
     cfgRescale: String(effective.cfgRescale),
   };
-}
-
-export async function loadConfigModelListView(
-  state: TomoriState,
-  capability: ConfigModelCapability,
-  provider: string,
-  start: number,
-): Promise<{
-  models: Awaited<ReturnType<typeof loadConfigModelChoices>>;
-  currentModelId: number | null;
-  start: number;
-}> {
-  const models = await loadConfigModelChoices(state.server_id, capability, provider);
-  return { models, currentModelId: currentModelIdForCapability(state, capability), start };
 }

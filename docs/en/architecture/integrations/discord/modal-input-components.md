@@ -693,14 +693,42 @@ These modals collect free-form text and have no structured option set:
 | `/config` > Engine > Trigger| `config/random-trigger/add.ts` | Free-form trigger word/phrase (text input portion stays) |
 | `/novelai attg`            | `novelai/attg.ts`             | 5 free-form text fields (author, title, tags, etc.)     |
 | `/personal config`         | `utils/discord/ui/personalConfigPanel.ts` | Free-form physical appearance image tag text            |
-| `/config` > Models > Image Generation   | `config/image-tags/default-negative.ts`    | Free-form default negative tag text                     |
-| `/config` > Models > Image Generation      | `config/image-tags/default-positive.ts`       | Free-form default positive tag text                  |
+| `/config` > Models > ImageGen Defaults   | `config/image-tags/default-negative.ts`    | Free-form default negative tag text                     |
+| `/config` > Models > ImageGen Defaults      | `config/image-tags/default-positive.ts`       | Free-form default positive tag text                  |
 | `/persona create`          | `persona/create.ts`           | Free-form text fields + file upload                     |
 | `/persona generate`        | `persona/generate.ts`         | Free-form name + file upload                            |
 | `/server trigger add`      | `server/trigger/add.ts`       | Free-form text fields (word, response, cooldown)        |
 | `/server avatar`           | `server/avatar.ts`            | Persona select + optional file upload                   |
 | `/comment`                 | `comment.ts`                  | Free-form paragraph text                                |
 | `/memory personal import`  | `memory/personal/import.ts`   | File upload only                                        |
+
+### Provider Select To Model Modal
+
+`/config` > Models > Switch Models and `/personal config` > Models > Switch Models share one shape,
+built from `buildModelRoutingControl` and `buildProviderPageEntries` in
+`src/utils/discord/ui/modelRoutingControls.ts`:
+
+1. One String Select per capability, whose options are the eligible providers.
+2. Choosing a provider whose catalog fits a modal page opens a modal holding the model select.
+3. Choosing a provider whose catalog does not fit expands it in place into one option per page
+   (`Google (page 2)`), and choosing a page opens the modal on that slice.
+
+Two constraints force this shape rather than a second panel page. A modal select holds 25 options
+and cannot page inside itself, and a prev/next row cannot open the page it is parked on, so the
+range has to be chosen before the modal opens. Meanwhile a modal's components do not count against
+the forty-component panel budget, so moving the catalog there is what lets six capability selectors
+share one page.
+
+The two surfaces differ only where the domain differs. A user inherits from the server, so the
+leading option is `Using Server Default` on every capability; a server has nothing to inherit from,
+so the leading option is a clear, present only on the slots whose absorbed command offered one
+(`CONFIG_CLEARABLE_MODEL_CAPABILITIES`) and only while something is assigned.
+
+Range navigation also differs by budget. `/personal config` renders a prev/next pagination row
+beneath each selector. `/config` cannot: six selectors would spend eighteen components on
+navigation alone, so its provider entries carry their own advance option
+(`encodeConfigProviderRangeValue`) which wraps at the last window. Fallbacks keeps the pagination
+row, because that page has one selector and the room for it.
 
 ### Split-Prompt Field Labelling
 

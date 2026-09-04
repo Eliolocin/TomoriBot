@@ -19,6 +19,8 @@ export interface ProviderPageEntriesInput {
   expandedOptionCount: number;
   pageSize: number;
   locale: string;
+  /** Locale key for one page entry's label. Each surface owns its own, so neither borrows the other's. */
+  pageLabelKey: string;
   encodeProviderValue(provider: string): string;
   encodePageValue(provider: string, start: number): string;
 }
@@ -54,7 +56,7 @@ export function buildProviderPageEntries(input: ProviderPageEntriesInput): Provi
         entries.push({
           value: input.encodePageValue(provider, page * input.pageSize),
           label: safeSelectOptionText(
-            localizer(input.locale, "commands.personal.config.provider_page_label", {
+            localizer(input.locale, input.pageLabelKey, {
               provider: getProviderDisplayName(provider),
               page: page + 1,
             }),
@@ -82,8 +84,11 @@ export interface ModelRoutingControlInput {
   /** Pre-built provider options, letting one provider contribute a page entry per option slice. */
   providerEntries?: readonly ProviderSelectEntry[];
   customId: string;
-  serverDefaultValue: string;
-  serverDefaultLabel: string;
+  /** Omit both value and label on a surface with nothing to inherit from, such as a server. */
+  serverDefaultValue?: string;
+  serverDefaultLabel?: string;
+  /** Description for the leading entry, for a clear whose consequence the label cannot carry. */
+  serverDefaultDescription?: string;
   serverDefaultDisplay: string;
   /** Replaces the current-value placeholder, for a state the active model alone cannot describe. */
   placeholderOverride?: string;
@@ -98,14 +103,18 @@ export function buildModelRoutingControl(
   input: ModelRoutingControlInput,
 ): ActionRowData<StringSelectMenuComponentData> {
   const activeModel = input.activeModelName
-    ? `~${input.activeModelName}${input.activeProvider ? ` (${getProviderDisplayName(input.activeProvider)})` : ""}`
+    ? `${input.activeModelName}${input.activeProvider ? ` (${getProviderDisplayName(input.activeProvider)})` : ""}`
     : input.serverDefaultDisplay;
-  const options: SelectMenuComponentOptionData[] = [
-    {
+  const options: SelectMenuComponentOptionData[] = [];
+  if (input.serverDefaultValue !== undefined && input.serverDefaultLabel !== undefined) {
+    options.push({
       value: input.serverDefaultValue,
       label: safeSelectOptionText(input.serverDefaultLabel, 100),
-    },
-  ];
+      description: input.serverDefaultDescription
+        ? safeSelectOptionText(input.serverDefaultDescription, 100)
+        : undefined,
+    });
+  }
 
   if (
     input.providerOverflowValue &&

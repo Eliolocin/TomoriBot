@@ -64,12 +64,15 @@ import {
 } from "@/utils/discord/interactions/configPermissionPolicy";
 import { configPersonaOperations, type GuildIdentityPort } from "@/utils/discord/interactions/configPersonaOperations";
 import { configSpriteOperations, loadPersonaSpriteList } from "@/utils/discord/interactions/configSpriteOperations";
-import { configModelOperations, loadConfigModelProviders } from "@/utils/discord/interactions/configModelOperations";
+import {
+  configModelOperations,
+  loadConfigModelChoices,
+  loadConfigModelProviders,
+} from "@/utils/discord/interactions/configModelOperations";
 import {
   loadConfigFallbackOptions,
   loadConfigFallbacksView,
   loadConfigImageGenerationView,
-  loadConfigModelListView,
   loadConfigParametersView,
   loadConfigSwitchModelsView,
 } from "@/utils/discord/interactions/configModelLoaders";
@@ -567,11 +570,7 @@ const defaultDependencies: ConfigRouteDependencies = {
       },
     };
   },
-  loadModelListView: async (state, capability, provider, start) => ({
-    capability,
-    provider,
-    ...(await loadConfigModelListView(state, capability, provider, start)),
-  }),
+  loadModelChoices: (state, capability, provider) => loadConfigModelChoices(state.server_id, capability, provider),
   loadFallbackOptions: loadConfigFallbackOptions,
   loadModelProviders: async (state, capability) =>
     (await loadConfigModelProviders(state.server_id, capability)).map((row) => row.provider),
@@ -2785,8 +2784,9 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       }
 
       if (CONFIG_MODEL_MODAL_OPEN_ACTIONS.has(route.action)) {
-        await handleConfigModelModalOpen(interaction, route, dependencies, actor);
-        return;
+        // A clearable slot's None entry rides the same select as its provider entries, and clearing
+        // is a write rather than a modal, so an unhandled return continues to the deferred path.
+        if (await handleConfigModelModalOpen(interaction, route, dependencies, actor)) return;
       }
 
       if (CONFIG_BEHAVIOR_MODAL_OPEN_ACTIONS.has(route.action)) {
