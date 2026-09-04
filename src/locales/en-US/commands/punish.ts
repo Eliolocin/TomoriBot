@@ -8,6 +8,7 @@ export default {
       embed_title: `🖐️ Spank Time!`,
       embed_description: `{user} just spanked {bot}.`,
       history_label: `Spank`,
+      history_label_plural: `Spanks`,
     },
     pinch: {
       description: `Give me a pinch!`,
@@ -16,6 +17,7 @@ export default {
       embed_title: `🤏 Pinch Time!`,
       embed_description: `{user} just pinched {bot}.`,
       history_label: `Pinch`,
+      history_label_plural: `Pinches`,
     },
     bite: {
       description: `Give me a playful bite!`,
@@ -24,6 +26,7 @@ export default {
       embed_title: `🦷 Snack Time!`,
       embed_description: `{user} just bit {bot}.`,
       history_label: `Bite`,
+      history_label_plural: `Bites`,
     },
     bonk: {
       description: `Give me a bonk on the head!`,
@@ -32,6 +35,7 @@ export default {
       embed_title: `🔨 Bonk!`,
       embed_description: `{user} just bonked {bot}.`,
       history_label: `Bonk`,
+      history_label_plural: `Bonks`,
     },
     squeeze: {
       description: `Give me a squeeze!`,
@@ -40,6 +44,7 @@ export default {
       embed_title: `👐 Squishy squishy!`,
       embed_description: `{user} just squeezed {bot}.`,
       history_label: `Squeeze`,
+      history_label_plural: `Squeezes`,
     },
   },
 };

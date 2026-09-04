@@ -292,8 +292,7 @@ export function createStPresetsInteractionRoute(
           return;
         }
 
-        const initialScope = await beginPanelInteraction({
-          acknowledge: () => interaction.deferUpdate(),
+        const initialScope = await beginPanelInteraction(interaction, {
           authorize: () => isAuthorized(interaction),
           onDenied: () =>
             interaction.editReply(terminalPayload(route.locale, "general.errors.permission_denied_description")),
@@ -590,8 +589,7 @@ export function createStPresetsInteractionRoute(
       }
 
       // Remaining button/modal actions that acknowledge via deferUpdate
-      const initialScope = await beginPanelInteraction({
-        acknowledge: () => interaction.deferUpdate(),
+      const initialScope = await beginPanelInteraction(interaction, {
         authorize: () => isAuthorized(interaction),
         onDenied: () => {
           if (route.action === "add-submit") dependencies.takeFileUpload(interaction.id, route.nonce);

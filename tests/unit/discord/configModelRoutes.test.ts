@@ -15,7 +15,11 @@ import { configRepository, llmModelRepo, llmOverrideRepo, llmProviderRepo } from
 import * as ragAvailability from "@/utils/db/ragAvailability";
 import { ragRepository, serverMemoryRepository } from "@/utils/db/repositories";
 import * as credentialResolver from "@/utils/provider/credentialResolver";
-import { buildConfigRouteId, type ConfigModelCapability } from "@/utils/discord/configPanelCatalog";
+import {
+  buildConfigRouteId,
+  CONFIG_MODEL_CLEAR_VALUE,
+  type ConfigModelCapability,
+} from "@/utils/discord/configPanelCatalog";
 import {
   filterProvidersForCapability,
   isNaiPipelineProvider,
@@ -569,7 +573,16 @@ describe("config models switch page", () => {
     videoLookup.mockRestore();
   });
 
-  it("renders provider-independent clear buttons only for populated image slots", async () => {
+  it("offers the provider-independent clear entry only for populated image slots", async () => {
+    const clearValues = (payload: unknown, capability: ConfigModelCapability): string[] => {
+      const select = findComponentByCustomId(
+        payload,
+        buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+      );
+      const options = (select?.options ?? []) as Array<{ value: string }>;
+      return options.filter((option) => option.value === CONFIG_MODEL_CLEAR_VALUE).map((option) => option.value);
+    };
+
     const populated = makeHarness({
       currentModels: { vision: "vision-model", image: "standard-model", "nai-image": "nai-model" },
     });
@@ -583,21 +596,15 @@ describe("config models switch page", () => {
       }),
     );
 
-    expect(
-      findComponentByCustomId(
-        populated.edits.at(-1),
-        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "image" }),
-      ),
-    ).toBeDefined();
-    expect(
-      findComponentByCustomId(
-        populated.edits.at(-1),
-        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "nai-image" }),
-      ),
-    ).toBeDefined();
-    expect(renderedText(populated.edits.at(-1))).not.toContain("config:v1:model-clear:en-US:vision");
+    expect(clearValues(populated.edits.at(-1), "image")).toHaveLength(1);
+    expect(clearValues(populated.edits.at(-1), "nai-image")).toHaveLength(1);
+    expect(clearValues(populated.edits.at(-1), "vision")).toHaveLength(1);
+    // Text has no clear path at all, so its select must never grow one.
+    expect(clearValues(populated.edits.at(-1), "text")).toHaveLength(0);
+    expect(clearValues(populated.edits.at(-1), "embedding")).toHaveLength(0);
+    expect(clearValues(populated.edits.at(-1), "video")).toHaveLength(0);
 
-    const empty = makeHarness({ currentModels: { image: null, "nai-image": null } });
+    const empty = makeHarness({ currentModels: { vision: null, image: null, "nai-image": null } });
     await dispatch(
       empty,
       makeInteraction({
@@ -608,18 +615,9 @@ describe("config models switch page", () => {
       }),
     );
 
-    expect(
-      findComponentByCustomId(
-        empty.edits.at(-1),
-        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "image" }),
-      ),
-    ).toBeUndefined();
-    expect(
-      findComponentByCustomId(
-        empty.edits.at(-1),
-        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "nai-image" }),
-      ),
-    ).toBeUndefined();
+    expect(clearValues(empty.edits.at(-1), "vision")).toHaveLength(0);
+    expect(clearValues(empty.edits.at(-1), "image")).toHaveLength(0);
+    expect(clearValues(empty.edits.at(-1), "nai-image")).toHaveLength(0);
 
     const stale = makeHarness({ readStatus: "stale", currentModels: { image: "standard-model" } });
     await dispatch(
@@ -635,7 +633,7 @@ describe("config models switch page", () => {
     expect(
       findComponentByCustomId(
         stale.edits.at(-1),
-        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "image" }),
+        buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "image" }),
       )?.disabled,
     ).toBe(true);
   });
@@ -662,17 +660,20 @@ describe("config models switch page", () => {
         harness: standardHarness,
       }),
     );
+    // The provider list is empty, so the clear entry is the only thing keeping this select live.
     expect(
       findComponentByCustomId(
         standardHarness.edits.at(-1),
-        buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "image" }),
-      ),
-    ).toBeDefined();
+        buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "image" }),
+      )?.disabled,
+    ).toBe(false);
 
     await dispatch(
       standardHarness,
       makeInteraction({
-        customId: buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "image" }),
+        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "image" }),
+        kind: "select",
+        values: [CONFIG_MODEL_CLEAR_VALUE],
         harness: standardHarness,
       }),
     );
@@ -695,7 +696,9 @@ describe("config models switch page", () => {
     await dispatch(
       naiHarness,
       makeInteraction({
-        customId: buildConfigRouteId({ action: "model-clear", locale: "en-US", capability: "nai-image" }),
+        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "nai-image" }),
+        kind: "select",
+        values: [CONFIG_MODEL_CLEAR_VALUE],
         harness: naiHarness,
       }),
     );
@@ -706,6 +709,33 @@ describe("config models switch page", () => {
 
     modelUpdate.mockRestore();
     naiUpdate.mockRestore();
+    invalidate.mockRestore();
+  });
+
+  it("clears the vision slot from its top-level select", async () => {
+    const harness = makeHarness({
+      state: makeState({ config: { vision_llm_id: 31 } }),
+      refreshedState: makeState({ config: { vision_llm_id: null } }),
+      currentModels: { vision: "vision-model" },
+    });
+    const modelUpdate = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+    const invalidate = spyOn(tomoriStateCache, "invalidateTomoriStateCache").mockImplementation(() => undefined);
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "vision" }),
+        kind: "select",
+        values: [CONFIG_MODEL_CLEAR_VALUE],
+        harness,
+      }),
+    );
+
+    expect(modelUpdate).toHaveBeenCalledWith(9, { vision_llm_id: null });
+    expect(invalidate).toHaveBeenCalledWith("guild-1");
+    expect(harness.telemetry).toContain("server-config.workspace.model.clear");
+
+    modelUpdate.mockRestore();
     invalidate.mockRestore();
   });
 
@@ -1034,7 +1064,9 @@ describe("config models authorization", () => {
       await dispatch(
         harness,
         makeInteraction({
-          customId: buildConfigRouteId({ action: "model-clear", locale: "en-US", capability }),
+          customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+          kind: "select",
+          values: [CONFIG_MODEL_CLEAR_VALUE],
           isManager: false,
           harness,
         }),

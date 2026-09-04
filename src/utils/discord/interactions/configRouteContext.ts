@@ -182,6 +182,7 @@ export interface ConfigRouteDependencies {
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
     persona: TomoriState,
   ): Promise<PersonaPanelAvatarData>;
+  getPersonaAvatarReferenceData(reference: string, attachmentName: string): Promise<PersonaPanelAvatarData>;
   loadPersonaMemoryView(
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
     scope: ConfigScope,
@@ -338,21 +339,33 @@ export async function repaint(
   const { locale, scope, category, page, selectedPersonaId, dependencies } = options;
 
   let avatar: PersonaPanelAvatarData | undefined;
+  let spriteAvatar: PersonaPanelAvatarData | undefined;
   let personaMemoryView = options.personaMemoryView;
   let serverHumanizerDegree = options.serverHumanizerDegree;
   let personaSprites = options.personaSprites;
   if (category === "persona") {
     const persona = scope.personas.find((candidate) => candidate.persona_id === selectedPersonaId);
     if (persona) {
-      avatar = await dependencies.getPersonaAvatarData(interaction, persona);
-      if (page === "memories" && !personaMemoryView) {
-        personaMemoryView = await dependencies.loadPersonaMemoryView(interaction, scope, persona);
-      }
-      if (page === "advanced" && serverHumanizerDegree === undefined) {
-        serverHumanizerDegree = await dependencies.loadServerHumanizerDegree(persona.server_id);
-      }
-      if (page === "sprites" && personaSprites === undefined && persona.persona_id !== undefined) {
-        personaSprites = await dependencies.loadPersonaSprites(persona.persona_id);
+      [avatar, personaMemoryView, serverHumanizerDegree, personaSprites] = await Promise.all([
+        dependencies.getPersonaAvatarData(interaction, persona),
+        page === "memories" && !personaMemoryView
+          ? dependencies.loadPersonaMemoryView(interaction, scope, persona)
+          : Promise.resolve(personaMemoryView),
+        page === "advanced" && serverHumanizerDegree === undefined
+          ? dependencies.loadServerHumanizerDegree(persona.server_id)
+          : Promise.resolve(serverHumanizerDegree),
+        page === "sprites" && personaSprites === undefined && persona.persona_id !== undefined
+          ? dependencies.loadPersonaSprites(persona.persona_id)
+          : Promise.resolve(personaSprites),
+      ]);
+      if (page === "sprites" && options.selectedSpriteIndex !== undefined) {
+        const sprite = personaSprites?.[options.selectedSpriteIndex];
+        if (sprite) {
+          spriteAvatar = await dependencies.getPersonaAvatarReferenceData(
+            sprite.avatar_url,
+            `persona_sprite_${persona.persona_id}_${sprite.sprite_id ?? options.selectedSpriteIndex}.png`,
+          );
+        }
       }
     }
   }
@@ -438,6 +451,7 @@ export async function repaint(
         personas: scope.personas,
         selectedPersonaId,
         selectedPersonaAvatarUrl: avatar?.url,
+        selectedSpriteAvatarUrl: spriteAvatar?.url,
         personaSelectStart: options.personaSelectStart,
         attributePageStart: options.attributePageStart,
         selectedAttributeIndex: options.selectedAttributeIndex,
@@ -469,7 +483,7 @@ export async function repaint(
         channelsBlocklistRangeIndex: options.channelsBlocklistRangeIndex,
         modelListView: options.modelListView,
       }),
-      avatar,
+      [avatar, spriteAvatar].filter((item): item is PersonaPanelAvatarData => item !== undefined),
     ),
   );
 }

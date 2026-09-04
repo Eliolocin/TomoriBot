@@ -193,8 +193,7 @@ export function createMcpsInteractionRoute(overrides: Partial<McpsRouteDependenc
         return;
       }
 
-      const initialScope = await beginPanelInteraction({
-        acknowledge: () => interaction.deferUpdate(),
+      const initialScope = await beginPanelInteraction(interaction, {
         authorize: () => isAuthorized(interaction),
         onDenied: () => {
           if (route.action === "add-submit") dependencies.takeServerType(interaction.id, route.nonce);

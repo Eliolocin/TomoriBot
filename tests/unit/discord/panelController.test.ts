@@ -4,10 +4,12 @@ import { beginPanelInteraction, performPanelAction } from "@/utils/discord/inter
 describe("panel controller lifecycle", () => {
   it("acknowledges before authorization and state loading", async () => {
     const calls: string[] = [];
-    const state = await beginPanelInteraction({
-      acknowledge: async () => {
+    const interaction = {
+      deferUpdate: async () => {
         calls.push("acknowledge");
       },
+    };
+    const state = await beginPanelInteraction(interaction, {
       authorize: () => {
         calls.push("authorize");
         return true;
@@ -29,11 +31,13 @@ describe("panel controller lifecycle", () => {
 
   it("stops after denial and preserves an explicit reload failure", async () => {
     const denied: string[] = [];
+    const interaction = {
+      deferUpdate: async () => {
+        denied.push("acknowledge");
+      },
+    };
     expect(
-      await beginPanelInteraction({
-        acknowledge: async () => {
-          denied.push("acknowledge");
-        },
+      await beginPanelInteraction(interaction, {
         authorize: () => false,
         onDenied: async () => {
           denied.push("denied");

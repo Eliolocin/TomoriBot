@@ -29,7 +29,7 @@ const registry = new InteractionRouteRegistry([
 ]);
 
 export function isGlobalRoutableInteraction(interaction: Interaction): interaction is GlobalRoutableInteraction {
-  return interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit();
+  return interaction.isMessageComponent() || interaction.isModalSubmit();
 }
 
 export async function dispatchGlobalInteraction(

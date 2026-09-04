@@ -71,11 +71,17 @@ import {
   buildCategoryButtonRow,
   buildOptionalThumbnailSection,
   buildPaginationRow,
+  buildRangeSelectOptions,
   buildStateControlRow,
   buildPanelContainer,
   buildPanelReceiptContainer,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
+import {
+  AUTO_TRIGGER_PERSONA_PAGE_SIZE,
+  selectablePersonas,
+  WELCOME_PERSONA_PAGE_SIZE,
+} from "@/utils/discord/ui/configChannelModals";
 import {
   buildConfigModelsBody,
   type ConfigFallbacksView,
@@ -89,7 +95,6 @@ import { WORKAROUND_DEFINITIONS } from "@/utils/discord/workaroundConfigMapping"
 import { DEFAULT_STM_TOOL_DESCRIPTION } from "@/tools/functionCalls/updateShortTermMemoryTool";
 import { SEED_CATEGORY_UPDATE_HINT, SEED_SUMMARY_UPDATE_HINT } from "@/utils/text/context/memories";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
-import { resolvePersonaAvatarPublicUrl } from "@/utils/storage/avatarStorage";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import { localizer } from "@/utils/text/localizer";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
@@ -205,6 +210,7 @@ export interface ConfigPanelRenderInput {
   personas: TomoriState[];
   selectedPersonaId: number | null;
   selectedPersonaAvatarUrl?: string | null;
+  selectedSpriteAvatarUrl?: string | null;
   personaSelectStart?: number;
   attributePageStart?: number;
   selectedAttributeIndex?: number;
@@ -242,6 +248,17 @@ function buildPayload(components: ComponentInContainerData[], receipt?: PanelRec
     components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
     flags: MessageFlags.IsComponentsV2,
   };
+}
+
+function appendPersonaCreateHint(components: ComponentInContainerData[], locale: string): void {
+  const content = withLinePrefix("-# ", localizer(locale, "commands.config.panel.persona_create_hint"));
+  const lastComponent = components.at(-1);
+  if (lastComponent?.type === ComponentType.TextDisplay) {
+    const textDisplay = lastComponent as TextDisplayComponentData;
+    textDisplay.content = `${textDisplay.content}\n\n${content}`;
+    return;
+  }
+  components.push({ type: ComponentType.TextDisplay, content });
 }
 
 function buildRetryRow(
@@ -711,6 +728,13 @@ ${localizer(locale, "commands.config.panel.general_description")}`,
     return components;
   }
 
+  heading.content += `
+> ${localizer(locale, "commands.config.panel.name_label")}: ${escapeDiscordMarkdown(persona.persona_nickname)}
+> ${localizer(locale, "commands.config.panel.role_label")}: ${localizer(
+    locale,
+    persona.is_alter ? "commands.config.panel.role_alter" : "commands.config.panel.role_main",
+  )}`;
+
   const avatarState = resolvePersonaGeneralActionState("avatar", actor);
   const renameState = resolvePersonaGeneralActionState("rename", actor);
   const promoteState = resolvePersonaGeneralActionState("promote", actor);
@@ -743,14 +767,6 @@ ${localizer(locale, "commands.config.panel.general_description")}`,
     });
   }
 
-  components.push({
-    type: ComponentType.TextDisplay,
-    content: `> ${localizer(locale, "commands.config.panel.name_label")}: ${escapeDiscordMarkdown(persona.persona_nickname)}
-> ${localizer(locale, "commands.config.panel.role_label")}: ${localizer(
-      locale,
-      persona.is_alter ? "commands.config.panel.role_alter" : "commands.config.panel.role_main",
-    )}`,
-  });
   if (identityButtons.length > 0) {
     components.push({ type: ComponentType.ActionRow, components: identityButtons });
   }
@@ -762,10 +778,26 @@ ${localizer(locale, "commands.config.panel.general_description")}`,
   if (namingState !== "omitted") {
     components.push(
       {
-        type: ComponentType.TextDisplay,
-        content: `**${localizer(locale, NAMING_STYLE_LOCALE_KEYS[namingStyle])} ${localizer(locale, "commands.config.panel.naming_title")}**
-${localizer(locale, NAMING_STYLE_DESCRIPTION_LOCALE_KEYS[namingStyle])}
-${withLinePrefix("> ", describeNamingStyle(locale, persona, namingStyle))}`,
+        type: ComponentType.Section,
+        components: [
+          {
+            type: ComponentType.TextDisplay,
+            content: `**${localizer(locale, NAMING_STYLE_LOCALE_KEYS[namingStyle])} ${localizer(locale, "commands.config.panel.naming_title")}**
+${localizer(locale, NAMING_STYLE_DESCRIPTION_LOCALE_KEYS[namingStyle])}`,
+          },
+        ],
+        accessory: {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({
+            action: "naming-open",
+            locale,
+            personaId: persona.persona_id as number,
+            style: namingStyle,
+          }),
+          label: localizer(locale, "commands.config.panel.edit_naming_button"),
+          disabled: writesDisabled || namingState === "disabled",
+        },
       },
       {
         type: ComponentType.ActionRow,
@@ -788,21 +820,8 @@ ${withLinePrefix("> ", describeNamingStyle(locale, persona, namingStyle))}`,
         ],
       },
       {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            customId: buildConfigRouteId({
-              action: "naming-open",
-              locale,
-              personaId: persona.persona_id as number,
-              style: namingStyle,
-            }),
-            label: localizer(locale, "commands.config.panel.edit_naming_button"),
-            disabled: writesDisabled || namingState === "disabled",
-          },
-        ],
+        type: ComponentType.TextDisplay,
+        content: withLinePrefix("> ", describeNamingStyle(locale, persona, namingStyle)),
       },
     );
   }
@@ -1469,7 +1488,7 @@ ${spriteDetailLine(
   ),
 )}`,
         },
-        resolvePersonaAvatarPublicUrl(selectedSprite.avatar_url),
+        input.selectedSpriteAvatarUrl,
       ),
       {
         type: ComponentType.ActionRow,
@@ -1640,16 +1659,35 @@ ${withLinePrefix("> ", channelText)}
 
   if (input.actor.workspaceKind === "guild") {
     const conditioningGroups = (view?.conditioningGroups ?? []).filter((group) => group.reasonText.trim().length > 0);
-    const groupLines = conditioningGroups.map((group) => {
-      const actionLabel = localizer(locale, `commands.${group.conditioningType}.${group.actionKey}.history_label`);
-      return `> ${actionLabel}: ${escapeDiscordMarkdown(group.reasonText)} (${group.totalCount})`;
+    const conditioningLines = CONDITIONING_TYPE_ORDER.flatMap((conditioningType) => {
+      const groups = conditioningGroups.filter((group) => group.conditioningType === conditioningType);
+      const total = groups.reduce((sum, group) => sum + group.totalCount, 0);
+      const summaryKeys = CONDITIONING_SUMMARY_LOCALE_KEYS[conditioningType];
+      const headingKey = total === 0 ? summaryKeys.none : total === 1 ? summaryKeys.one : summaryKeys.many;
+      const marker = localizer(locale, CONDITIONING_MARKER_LOCALE_KEYS[conditioningType]);
+      const summaryLines = [`> ${marker} ${localizer(locale, headingKey, { count: total })}`];
+
+      // Groups split on reason as well as action, so one action can own several rows and its
+      // total has to be summed rather than read off whichever row happens to come first.
+      const perAction = new Map<string, number>();
+      for (const group of groups) {
+        perAction.set(group.actionKey, (perAction.get(group.actionKey) ?? 0) + group.totalCount);
+      }
+      const ranked = [...perAction.entries()].sort(
+        ([leftKey, leftCount], [rightKey, rightCount]) => rightCount - leftCount || leftKey.localeCompare(rightKey),
+      );
+      for (const [actionKey, count] of ranked) {
+        const labelKey = count === 1 ? "history_label" : "history_label_plural";
+        summaryLines.push(`> ${count} ${localizer(locale, `commands.${conditioningType}.${actionKey}.${labelKey}`)}`);
+      }
+      return summaryLines;
     });
     components.push(
       {
         type: ComponentType.TextDisplay,
         content: `${localizer(locale, "commands.config.panel.conditioning_title")}
 ${localizer(locale, "commands.config.panel.conditioning_description")}
-${groupLines.length > 0 ? groupLines.join("\n") : `> ${localizer(locale, "commands.config.panel.conditioning_none")}`}`,
+${conditioningLines.join("\n")}`,
       },
       {
         type: ComponentType.ActionRow,
@@ -1672,6 +1710,34 @@ ${groupLines.length > 0 ? groupLines.join("\n") : `> ${localizer(locale, "comman
 
   return components;
 }
+
+/** Reward before punish, matching the order the two conditioning command families are listed in. */
+const CONDITIONING_TYPE_ORDER = ["reward", "punish"] as const;
+
+/**
+ * Literal locale keys per conditioning type. `check-locales` only sees literal strings, so a key
+ * assembled from the type at the call site would drop out of its parity check.
+ */
+const CONDITIONING_MARKER_LOCALE_KEYS: Record<(typeof CONDITIONING_TYPE_ORDER)[number], string> = {
+  reward: "commands.conditioning.manage.marker_reward",
+  punish: "commands.conditioning.manage.marker_punish",
+};
+
+const CONDITIONING_SUMMARY_LOCALE_KEYS: Record<
+  (typeof CONDITIONING_TYPE_ORDER)[number],
+  { none: string; one: string; many: string }
+> = {
+  reward: {
+    none: "commands.config.panel.conditioning_reward_none",
+    one: "commands.config.panel.conditioning_reward_summary_one",
+    many: "commands.config.panel.conditioning_reward_summary",
+  },
+  punish: {
+    none: "commands.config.panel.conditioning_punish_none",
+    one: "commands.config.panel.conditioning_punish_summary_one",
+    many: "commands.config.panel.conditioning_punish_summary",
+  },
+};
 
 function buildPromoteConfirmBody(
   input: ConfigPanelRenderInput,
@@ -2325,7 +2391,7 @@ function buildBehaviorNoticesBody(input: ConfigPanelRenderInput): ComponentInCon
   }
   const hiddenSet = new Set(view.hiddenNoticeKeys);
   const noticeLines = TOOL_NOTICE_DEFINITIONS.map(
-    (definition) => `> ${hiddenSet.has(definition.key) ? "🔴" : "🟢"}: ${localizer(locale, definition.labelKey)}`,
+    (definition) => `> ${hiddenSet.has(definition.key) ? "🔴" : "🟢"} ${localizer(locale, definition.labelKey)}`,
   ).join("\n");
   components.push(
     {
@@ -2640,7 +2706,96 @@ ${localizer(locale, "commands.config.panel.permissions_privacy_bypass_descriptio
   return components;
 }
 
-export function buildChannelsDestinationsBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+export interface PersonaRangeEntryInput {
+  locale: string;
+  personas: readonly TomoriState[];
+  pageSize: number;
+  selectedPersonaId: number | null;
+  disabled: boolean;
+  buttonCustomId: string;
+  buttonLabelKey: string;
+  selectCustomId: string;
+  selectPlaceholderKey: string;
+  /** Buttons sharing the entry point's row while it is a button, and their own row once it is not. */
+  siblingButtons?: ButtonComponentData[];
+  /** Places the siblings ahead of the entry point rather than after it, in both layouts. */
+  siblingsFirst?: boolean;
+}
+
+/**
+ * Renders the entry point for a modal whose persona select cannot hold the whole roster.
+ *
+ * Within one page the plain button is kept, because a select carrying a single range would be the
+ * inert one-option selector the shell already avoids. Past that the button becomes a range select,
+ * so every persona is reachable through the page that holds it.
+ */
+function buildPersonaRangeEntry(input: PersonaRangeEntryInput): ComponentInContainerData[] {
+  const roster = selectablePersonas(input.personas);
+  const siblings = input.siblingButtons ?? [];
+
+  if (roster.length <= input.pageSize) {
+    const entryButton: ButtonComponentData = {
+      type: ComponentType.Button,
+      style: ButtonStyle.Secondary,
+      customId: input.buttonCustomId,
+      label: localizer(input.locale, input.buttonLabelKey),
+      disabled: input.disabled,
+    };
+    return [
+      {
+        type: ComponentType.ActionRow,
+        components: input.siblingsFirst ? [...siblings, entryButton] : [entryButton, ...siblings],
+      } satisfies ActionRowData<ButtonComponentData>,
+    ];
+  }
+
+  const selectedIndex = roster.findIndex((persona) => persona.persona_id === input.selectedPersonaId);
+  const rows: ComponentInContainerData[] = [
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.StringSelect,
+          customId: input.selectCustomId,
+          placeholder: localizer(input.locale, input.selectPlaceholderKey),
+          options: buildRangeSelectOptions({
+            totalCount: roster.length,
+            pageSize: input.pageSize,
+            selectedIndex: selectedIndex >= 0 ? selectedIndex : null,
+            describe: (start, end) => ({
+              label: safeSelectOptionText(
+                localizer(input.locale, "commands.config.panel.channels_persona_range_label", {
+                  start: start + 1,
+                  end,
+                }),
+                100,
+              ),
+              description: safeSelectOptionText(
+                localizer(input.locale, "commands.config.panel.channels_persona_range_description", {
+                  first: roster[start]?.persona_nickname ?? "",
+                  last: roster[end - 1]?.persona_nickname ?? "",
+                }),
+                100,
+              ),
+            }),
+          }),
+          disabled: input.disabled,
+        },
+      ],
+    } satisfies ActionRowData<StringSelectMenuComponentData>,
+  ];
+  if (siblings.length > 0) {
+    const siblingRow = {
+      type: ComponentType.ActionRow,
+      components: siblings,
+    } satisfies ActionRowData<ButtonComponentData>;
+    if (input.siblingsFirst) rows.unshift(siblingRow);
+    else rows.push(siblingRow);
+  }
+  return rows;
+}
+
+function buildChannelsDestinationsBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
   const { locale, actor } = input;
   const view = input.channelsView?.destinations;
   const writesDisabled = input.readStatus !== "fresh";
@@ -2711,16 +2866,17 @@ ${localizer(locale, "commands.config.panel.channels_welcome_description")}
 ${localizer(locale, "commands.config.panel.channels_welcome_prompt_value_label")}:
 ${renderFencedCollectionContent(view.welcomePrompt ?? localizer(locale, "commands.config.panel.none_label"))}`,
     },
-    {
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildConfigRouteId({ action: "channels-welcome-open", locale }),
-          label: localizer(locale, "commands.config.panel.channels_configure_welcome_button"),
-          disabled: actionDisabled,
-        },
+    ...buildPersonaRangeEntry({
+      locale,
+      personas: input.personas,
+      pageSize: WELCOME_PERSONA_PAGE_SIZE,
+      selectedPersonaId: view.welcomePersonaId,
+      disabled: actionDisabled,
+      buttonCustomId: buildConfigRouteId({ action: "channels-welcome-open", locale }),
+      buttonLabelKey: "commands.config.panel.channels_configure_welcome_button",
+      selectCustomId: buildConfigRouteId({ action: "channels-welcome-range-select", locale }),
+      selectPlaceholderKey: "commands.config.panel.channels_welcome_range_placeholder",
+      siblingButtons: [
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
@@ -2733,7 +2889,7 @@ ${renderFencedCollectionContent(view.welcomePrompt ?? localizer(locale, "command
           disabled: clearWelcomeDisabled,
         },
       ],
-    },
+    }),
   );
   return components;
 }
@@ -2798,9 +2954,12 @@ ${localizer(locale, "commands.config.panel.channels_auto_trigger_description")}`
 ${localizer(locale, "commands.config.panel.channels_auto_trigger_enabled_description")}
 ${withLinePrefix("> ", enabledRows.join("\n") || localizer(locale, "commands.config.panel.channels_auto_trigger_none"))}`,
     },
-    {
-      type: ComponentType.ActionRow,
-      components: [
+    ...buildPersonaRangeEntry({
+      locale,
+      personas: input.personas,
+      pageSize: AUTO_TRIGGER_PERSONA_PAGE_SIZE,
+      siblingsFirst: true,
+      siblingButtons: [
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
@@ -2808,15 +2967,15 @@ ${withLinePrefix("> ", enabledRows.join("\n") || localizer(locale, "commands.con
           label: localizer(locale, "commands.config.panel.channels_auto_trigger_manage_button"),
           disabled: actionDisabled || input.channelsView.availableTextChannels.length === 0,
         },
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildConfigRouteId({ action: "channels-autoch-configure-open", locale }),
-          label: localizer(locale, "commands.config.panel.channels_auto_trigger_configure_button"),
-          disabled: actionDisabled || input.channelsView.availableTextChannels.length === 0,
-        },
       ],
-    },
+      // Auto-Trigger assigns a persona per channel, so no single stored value can be marked here.
+      selectedPersonaId: null,
+      disabled: actionDisabled || input.channelsView.availableTextChannels.length === 0,
+      buttonCustomId: buildConfigRouteId({ action: "channels-autoch-configure-open", locale }),
+      buttonLabelKey: "commands.config.panel.channels_auto_trigger_configure_button",
+      selectCustomId: buildConfigRouteId({ action: "channels-autoch-range-select", locale }),
+      selectPlaceholderKey: "commands.config.panel.channels_auto_trigger_range_placeholder",
+    }),
     {
       type: ComponentType.TextDisplay,
       content: `**${localizer(locale, "commands.config.panel.channels_auto_trigger_threshold_title")}**
@@ -3380,21 +3539,25 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "persona" && page === "general") {
     components.push(...buildPersonaGeneralBody(input));
+    appendPersonaCreateHint(components, locale);
     return buildPayload(components, receipt);
   }
 
   if (category === "persona" && page === "triggers") {
     components.push(...buildPersonaTriggersBody(input));
+    appendPersonaCreateHint(components, locale);
     return buildPayload(components, receipt);
   }
 
   if (category === "persona" && page === "memories") {
     components.push(...buildPersonaMemoriesBody(input));
+    appendPersonaCreateHint(components, locale);
     return buildPayload(components, receipt);
   }
 
   if (category === "persona" && page === "sprites") {
     components.push(...buildPersonaSpritesBody(input));
+    appendPersonaCreateHint(components, locale);
     return buildPayload(components, receipt);
   }
 
@@ -3402,6 +3565,7 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
     if (resolveConfigPageState(category, page, actor) !== "omitted") {
       components.push(...buildPersonaAppearanceBody(input));
     }
+    appendPersonaCreateHint(components, locale);
     return buildPayload(components, receipt);
   }
 
@@ -3409,6 +3573,7 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
     if (resolveConfigPageState(category, page, actor) !== "omitted") {
       components.push(...buildPersonaAdvancedBody(input));
     }
+    appendPersonaCreateHint(components, locale);
     return buildPayload(components, receipt);
   }
 

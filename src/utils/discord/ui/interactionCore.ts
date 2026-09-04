@@ -23,9 +23,12 @@ import type {
   MessageActionRowComponentBuilder,
   ModalSubmitInteraction,
   InteractionReplyOptions,
+  MentionableSelectMenuInteraction,
+  RoleSelectMenuInteraction,
   APIAttachment,
   StringSelectMenuInteraction,
   TopLevelComponentData,
+  UserSelectMenuInteraction,
 } from "discord.js";
 import { localizer } from "../../text/localizer";
 import { log, ColorCode } from "../../misc/logger";
@@ -56,7 +59,13 @@ const modalResolvedAttachments = new Map<string, Record<string, APIAttachment>>(
  * Used to prevent "already acknowledged" errors when Discord.js state is out of sync
  */
 const rawModalAcknowledged = new WeakMap<
-  ChatInputCommandInteraction | ButtonInteraction | StringSelectMenuInteraction | ChannelSelectMenuInteraction,
+  | ChatInputCommandInteraction
+  | ButtonInteraction
+  | StringSelectMenuInteraction
+  | ChannelSelectMenuInteraction
+  | UserSelectMenuInteraction
+  | RoleSelectMenuInteraction
+  | MentionableSelectMenuInteraction,
   boolean
 >();
 
@@ -70,7 +79,10 @@ export function hasRawModalAcknowledgement(
     | ChatInputCommandInteraction
     | ButtonInteraction
     | StringSelectMenuInteraction
-    | ChannelSelectMenuInteraction,
+    | ChannelSelectMenuInteraction
+    | UserSelectMenuInteraction
+    | RoleSelectMenuInteraction
+    | MentionableSelectMenuInteraction,
 ): boolean {
   return rawModalAcknowledged.get(interaction) === true;
 }
@@ -388,7 +400,10 @@ export async function showRoutedRawModal(
     | ChatInputCommandInteraction
     | ButtonInteraction
     | StringSelectMenuInteraction
-    | ChannelSelectMenuInteraction,
+    | ChannelSelectMenuInteraction
+    | UserSelectMenuInteraction
+    | RoleSelectMenuInteraction
+    | MentionableSelectMenuInteraction,
   data: { custom_id: string; title: string; components: RawDiscordComponent[] },
 ): Promise<void> {
   setupWebSocketInterception(interaction.client);

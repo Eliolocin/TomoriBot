@@ -773,8 +773,7 @@ export function createProvidersInteractionRoute(
           ? dependencies.takeDeleteRotation(interaction.id, route.nonce) === "delete"
           : false;
 
-      const scope = await beginPanelInteraction({
-        acknowledge: () => interaction.deferUpdate(),
+      const scope = await beginPanelInteraction(interaction, {
         authorize: () => configuration.authorize(interaction),
         onDenied: () =>
           interaction.editReply(terminalPayload(route.locale, "general.errors.permission_denied_description")),

@@ -643,13 +643,14 @@ describe("isConfigRouteAuthorized", () => {
   });
 
   it("authorizes provider-independent clear through the Models switch page", () => {
+    // The clear rides the switch page's provider select now, so that route carries its gate.
     for (const capability of ["image", "nai-image"] as const) {
-      const route: ConfigPanelRoute = { action: "model-clear", locale: "en-US", capability };
+      const route: ConfigPanelRoute = { action: "model-provider-select", locale: "en-US", capability };
       expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
       expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
       expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
     }
-    expect(Object.keys(MODELS_PAGE_BY_ROUTE)).toContain("model-clear");
+    expect(Object.keys(MODELS_PAGE_BY_ROUTE)).toContain("model-provider-select");
   });
 
   it("covers every declared action, so a new route cannot default to authorized", () => {

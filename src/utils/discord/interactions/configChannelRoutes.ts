@@ -64,14 +64,26 @@ import { CONTEXT_NOTE_DEPTH_MAX, CONTEXT_NOTE_MAX_LENGTH } from "@/utils/discord
 export const CONFIG_CHANNEL_MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "channels-log-open",
   "channels-welcome-open",
+  "channels-welcome-range-select",
   "channels-autoch-manage-open",
   "channels-autoch-configure-open",
+  "channels-autoch-range-select",
   "channels-autoch-threshold-open",
   "channels-private-manage-open",
   "channels-rp-manage-open",
   "channels-blocklist-manage-open",
   "channels-overrides-prompt-open",
   "channels-overrides-context-note-open",
+]);
+
+/**
+ * Range entries that open a modal on a chosen page. They are selects rather than buttons because
+ * the page index rides the option value, which is what keeps one route id under Discord's limit
+ * no matter how large the roster grows.
+ */
+export const CONFIG_CHANNEL_SELECT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
+  "channels-welcome-range-select",
+  "channels-autoch-range-select",
 ]);
 
 export const CONFIG_CHANNEL_MODAL_SUBMIT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
@@ -127,6 +139,19 @@ const CONTEXT_NOTE_CHANNEL_TYPES = new Set<ChannelOverrideChannelTarget["type"]>
   ChannelType.PublicThread,
   ChannelType.PrivateThread,
 ]);
+
+/**
+ * Reads the persona page a range select was opened on.
+ *
+ * The range entry carries its own start rather than the route id, mirroring how the Fallbacks
+ * provider select carries `start|provider`: the button that opens page one and the select that
+ * opens the rest then share one handler and one modal builder.
+ */
+function personaRangeStart(interaction: GlobalRoutableInteraction): number {
+  if (!interaction.isStringSelectMenu()) return 0;
+  const start = Number.parseInt(interaction.values[0] ?? "", 10);
+  return Number.isInteger(start) && start >= 0 ? start : 0;
+}
 
 function modal(interaction: GlobalRoutableInteraction): ModalSubmitInteraction {
   return interaction as ModalSubmitInteraction;
@@ -1380,7 +1405,7 @@ export async function handleConfigChannelModalOpen(
     }
   } else if (route.action === "channels-log-open") {
     await dependencies.showModal(interaction, buildConfigLogChannelModal(route.locale, nonce));
-  } else if (route.action === "channels-welcome-open") {
+  } else if (route.action === "channels-welcome-open" || route.action === "channels-welcome-range-select") {
     await dependencies.showModal(
       interaction,
       buildConfigWelcomeModal(
@@ -1389,6 +1414,7 @@ export async function handleConfigChannelModalOpen(
         scope.personas,
         state.config.welcome_prompt ?? null,
         state.config.welcome_persona_id ?? null,
+        personaRangeStart(interaction),
       ),
     );
   } else if (route.action === "channels-autoch-manage-open") {
@@ -1418,11 +1444,20 @@ export async function handleConfigChannelModalOpen(
         selectedIds,
       ),
     );
-  } else if (route.action === "channels-autoch-configure-open") {
+  } else if (route.action === "channels-autoch-configure-open" || route.action === "channels-autoch-range-select") {
     const channelsView = await dependencies.loadChannelsView(interaction);
     if (channelsView.availableTextChannels.length === 0) {
       await interaction.reply({
         content: localizer(route.locale, "commands.config.panel.channels_auto_trigger_no_channels"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+    // Its persona select carries no Random entry, so an empty roster would build a zero-option
+    // select and Discord would reject the whole modal rather than the one control.
+    if (scope.personas.length === 0) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.config.panel.no_personas"),
         flags: MessageFlags.Ephemeral,
       });
       return true;
@@ -1434,6 +1469,10 @@ export async function handleConfigChannelModalOpen(
         nonce,
         autoTriggerFingerprint(state, channelsView.availableTextChannels),
         scope.personas,
+        null,
+        false,
+        null,
+        personaRangeStart(interaction),
       ),
     );
   } else if (route.action === "channels-autoch-threshold-open") {

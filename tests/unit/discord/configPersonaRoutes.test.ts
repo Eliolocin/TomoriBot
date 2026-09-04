@@ -7,7 +7,7 @@
  * expected answer instead of exercising the guard.
  */
 import { beforeAll, describe, expect, it, spyOn } from "bun:test";
-import { MessageFlags, PermissionsBitField, type APIAttachment, type Client } from "discord.js";
+import { AttachmentBuilder, MessageFlags, PermissionsBitField, type APIAttachment, type Client } from "discord.js";
 import type { PersonaSpriteRow, StmCategoryRow, TomoriState } from "@/types/db/schema";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import { conditioningMemoryRepository } from "@/utils/db/repositories/ConditioningMemoryRepository";
@@ -177,6 +177,7 @@ interface HarnessOptions {
   operations?: Partial<ConfigRouteDependencies["operations"]>;
   sprites?: PersonaSpriteRow[];
   spriteOperations?: Partial<ConfigRouteDependencies["spriteOperations"]>;
+  getPersonaAvatarReferenceData?: ConfigRouteDependencies["getPersonaAvatarReferenceData"];
 }
 
 interface Harness {
@@ -226,6 +227,7 @@ function makeHarness(options: HarnessOptions = {}): Harness {
         return buildScope(forceRefresh);
       },
       getPersonaAvatarData: async () => ({ url: null, files: [] }),
+      getPersonaAvatarReferenceData: options.getPersonaAvatarReferenceData ?? (async () => ({ url: null, files: [] })),
       loadPersonaMemoryView: async () => options.personaMemoryView ?? makeMemoryView(),
       openServerMemoryPanel: async () => ({ components: [], flags: 32768 }),
       openPersonalMemoryPanel: async () => ({ components: [], flags: 32768 }),
@@ -560,8 +562,6 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     "config:v1:model-select:en-US:video:custom~12",
     { action: "model-select", locale: "en-US", capability: "video", provider: "custom:12" },
   ],
-  ["config:v1:model-clear:en-US:image", { action: "model-clear", locale: "en-US", capability: "image" }],
-  ["config:v1:model-clear:en-US:nai-image", { action: "model-clear", locale: "en-US", capability: "nai-image" }],
   [
     "config:v1:model-page:en-US:image:google:24",
     { action: "model-page", locale: "en-US", capability: "image", provider: "google", start: 24 },
@@ -751,6 +751,7 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     { action: "channels-log-clear", locale: "en-US", channelId: "123456789012345678" },
   ],
   ["config:v1:channels-welcome-open:en-US", { action: "channels-welcome-open", locale: "en-US" }],
+  ["config:v1:welcome-range-select:en-US", { action: "channels-welcome-range-select", locale: "en-US" }],
   [
     "config:v1:channels-welcome-submit:en-US:nonce1234567",
     { action: "channels-welcome-submit", locale: "en-US", nonce: "nonce1234567" },
@@ -772,6 +773,7 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
   ],
   ["config:v1:autoch-page:en-US:1", { action: "channels-autoch-page", locale: "en-US", start: 1 }],
   ["config:v1:autoch-config-open:en-US", { action: "channels-autoch-configure-open", locale: "en-US" }],
+  ["config:v1:autoch-range-select:en-US", { action: "channels-autoch-range-select", locale: "en-US" }],
   [
     "config:v1:autoch-config-submit:en-US:abcd1234:nonce1234567",
     {
@@ -945,7 +947,6 @@ describe("config route wire contract", () => {
     // `general` is a Behavior page too, so a page must decode against its own category.
     expect(parseConfigPanelRoute(requireRoute("config:v1:page:en-US:models:general"))).toBeNull();
     expect(parseConfigPanelRoute(requireRoute("config:v1:naming-open:en-US:55:androgynous"))).toBeNull();
-    expect(parseConfigPanelRoute(requireRoute("config:v1:model-clear:en-US:vision"))).toBeNull();
     expect(parseConfigPanelRoute(requireRoute("config:v1:not-a-token:en-US:55"))).toBeNull();
   });
 });
@@ -3329,6 +3330,31 @@ describe("config Persona Sprites routes", () => {
         fp: computeSpriteFingerprint(55, 27, many[27].sprite_key),
       }),
     );
+  });
+
+  it("attaches a selected local sprite before repainting its thumbnail", async () => {
+    const spriteFile = new AttachmentBuilder(Buffer.from("sprite"), { name: "persona_sprite_55_1.png" });
+    const harness = makeHarness({
+      personas: [MAIN],
+      getPersonaAvatarReferenceData: async () => ({
+        url: "attachment://persona_sprite_55_1.png",
+        files: [spriteFile],
+      }),
+    });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 55 }),
+        kind: "select",
+        values: ["0"],
+        harness,
+      }),
+    );
+
+    const payload = harness.edits.at(-1) as { files?: AttachmentBuilder[] };
+    expect(payload.files).toEqual([spriteFile]);
+    expect(JSON.stringify(payload)).toContain("attachment://persona_sprite_55_1.png");
   });
 
   it("builds sprite modals from the raw component types Discord needs", async () => {

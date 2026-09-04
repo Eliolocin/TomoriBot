@@ -19,6 +19,50 @@ const CHANNEL_SELECT = 8 as const;
 const STRING_SELECT = 3 as const;
 const TEXT_INPUT = 4 as const;
 
+/**
+ * Discord rejects a String Select carrying fewer than 1 or more than 25 options, and a modal has
+ * no pagination row to spend the overflow on, so a workspace with many personas has to be trimmed
+ * before the payload is built.
+ */
+const SELECT_OPTION_LIMIT = 25;
+
+/**
+ * Personas one Welcome modal page carries. Its Random entry is repeated on every page, so it
+ * spends one of the 25 slots and the roster gets the rest.
+ */
+export const WELCOME_PERSONA_PAGE_SIZE = SELECT_OPTION_LIMIT - 1;
+
+/** Personas one Auto-Trigger configure page carries; it reserves no fixed entry. */
+export const AUTO_TRIGGER_PERSONA_PAGE_SIZE = SELECT_OPTION_LIMIT;
+
+/** Personas that can back a select option at all, in the order every page slices them. */
+export function selectablePersonas(personas: readonly TomoriState[]): readonly TomoriState[] {
+  return personas.filter((persona) => persona.persona_id !== undefined);
+}
+
+/**
+ * Maps one page of personas onto select options.
+ *
+ * Callers page the roster rather than trimming it, because a persona left out of every page could
+ * never be assigned. Only the page holding the stored persona marks a `default`: the panel prints
+ * the stored value beside the control, so an unmarked page reads as "not on this page" rather than
+ * as "nothing is set".
+ */
+function buildPersonaSelectOptions(
+  personas: readonly TomoriState[],
+  selectedPersonaId: number | null,
+  start: number,
+  pageSize: number,
+): Array<{ label: string; value: string; default: boolean }> {
+  return selectablePersonas(personas)
+    .slice(start, start + pageSize)
+    .map((persona) => ({
+      label: safeSelectOptionText(persona.persona_nickname, 100),
+      value: String(persona.persona_id),
+      default: persona.persona_id === selectedPersonaId,
+    }));
+}
+
 export const CONFIG_CHANNEL_LOG_FIELD = "channels_log_channel";
 export const CONFIG_CHANNEL_WELCOME_FIELD = "channels_welcome_channel";
 export const CONFIG_CHANNEL_WELCOME_PERSONA_FIELD = "channels_welcome_persona";
@@ -94,6 +138,7 @@ export function buildConfigWelcomeModal(
   personas: readonly TomoriState[],
   currentPrompt: string | null,
   currentPersonaId: number | null,
+  start = 0,
 ): RawModalPayload {
   const personaOptions = [
     {
@@ -101,17 +146,7 @@ export function buildConfigWelcomeModal(
       value: "random",
       default: currentPersonaId === null,
     },
-    ...personas.flatMap((persona) =>
-      persona.persona_id === undefined
-        ? []
-        : [
-            {
-              label: safeSelectOptionText(persona.persona_nickname, 100),
-              value: String(persona.persona_id),
-              default: persona.persona_id === currentPersonaId,
-            },
-          ],
-    ),
+    ...buildPersonaSelectOptions(personas, currentPersonaId, start, WELCOME_PERSONA_PAGE_SIZE),
   ];
 
   return {
@@ -213,20 +248,11 @@ export function buildConfigAutoTriggerConfigureModal(
   currentChannelId: string | null = null,
   currentEnabled = false,
   currentPersonaId: number | null = null,
+  start = 0,
 ): RawModalPayload {
   const mainPersona = personas.find((persona) => !persona.is_alter) ?? personas[0];
   const selectedPersonaId = currentPersonaId ?? mainPersona?.persona_id ?? null;
-  const personaOptions = personas.flatMap((persona) =>
-    persona.persona_id === undefined
-      ? []
-      : [
-          {
-            label: safeSelectOptionText(persona.persona_nickname, 100),
-            value: String(persona.persona_id),
-            default: persona.persona_id === selectedPersonaId,
-          },
-        ],
-  );
+  const personaOptions = buildPersonaSelectOptions(personas, selectedPersonaId, start, AUTO_TRIGGER_PERSONA_PAGE_SIZE);
 
   return {
     custom_id: buildConfigRouteId({ action: "channels-autoch-configure-submit", locale, fp, nonce }),

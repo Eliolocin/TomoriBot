@@ -6,6 +6,7 @@ import {
   type ButtonComponentData,
   type ComponentInContainerData,
   type ContainerComponentData,
+  type SelectMenuComponentOptionData,
   type TextDisplayComponentData,
 } from "discord.js";
 import type { PanelReceipt } from "@/types/discord/panel";
@@ -116,6 +117,43 @@ export function buildStateControlRow<TValue>(
       };
     }),
   };
+}
+
+export interface RangeSelectOptionsInput {
+  /** Total entries the modal has to cover across all of its pages. */
+  totalCount: number;
+  /** Entries one modal page holds, after any fixed entry the modal reserves for itself. */
+  pageSize: number;
+  /** Entry index whose range should open marked as current, or null when nothing is stored. */
+  selectedIndex?: number | null;
+  /** Renders one range's option text from the half-open entry range it covers. */
+  describe(startIndex: number, endIndexExclusive: number): { label: string; description?: string };
+}
+
+/**
+ * Builds one select option per page of a collection a modal has to present in slices.
+ *
+ * A modal carries no pagination row of its own, and {@link buildPaginationRow} disables the
+ * position it is parked on, so a row driving a modal directly can never reopen its own page and
+ * those entries stay unreachable. Naming each range as its own option is what keeps every entry
+ * selectable. Each option's value is the entry index its page starts at.
+ */
+export function buildRangeSelectOptions(input: RangeSelectOptionsInput): SelectMenuComponentOptionData[] {
+  const pageCount = Math.max(1, Math.ceil(input.totalCount / input.pageSize));
+  return Array.from({ length: pageCount }, (_unused, pageIndex) => {
+    const start = pageIndex * input.pageSize;
+    const end = Math.min(start + input.pageSize, input.totalCount);
+    const { label, description } = input.describe(start, end);
+    return {
+      label,
+      value: String(start),
+      description,
+      default:
+        input.selectedIndex !== null && input.selectedIndex !== undefined
+          ? input.selectedIndex >= start && input.selectedIndex < end
+          : false,
+    };
+  });
 }
 
 export interface PaginationRowOptions {

@@ -7,6 +7,7 @@ export default {
       embed_title: `🫳 ヘッドパット・タイム！`,
       embed_description: `{user}は現在{bot}をなでています。`,
       history_label: `ヘッドパット`,
+      history_label_plural: `ヘッドパット`,
     },
     hug: {
       description: `ハグして応答をトリガーします。`,
@@ -14,6 +15,7 @@ export default {
       embed_title: `🤗 ハグ・タイム！`,
       embed_description: `{user}は{bot}をぎゅっと抱きしめています。`,
       history_label: `ハグ`,
+      history_label_plural: `ハグ`,
     },
     kiss: {
       description: `キスして応答をトリガーします。`,
@@ -21,6 +23,7 @@ export default {
       embed_title: `💋 キス・タイム！`,
       embed_description: `{user}は{bot}にキスしました。`,
       history_label: `キス`,
+      history_label_plural: `キス`,
     },
     tickle: {
       description: `くすぐって応答をトリガーします。`,
@@ -28,6 +31,7 @@ export default {
       embed_title: `🤭 くすぐり・タイム！`,
       embed_description: `{user}は{bot}をくすぐっています。`,
       history_label: `くすぐり`,
+      history_label_plural: `くすぐり`,
     },
     feed: {
       description: `美味しいものを食べさせて応答をトリガーします。`,
@@ -36,6 +40,7 @@ export default {
       embed_title: `🍴 スナック・タイム！`,
       embed_description: `{user}は{bot}に{food_text}を与えました。`,
       history_label: `食べさせる`,
+      history_label_plural: `食べさせる`,
     },
   },
 };

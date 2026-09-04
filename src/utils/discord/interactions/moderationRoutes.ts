@@ -2384,8 +2384,7 @@ export function createModerationInteractionRoute(
         return;
       }
 
-      const scope = await beginPanelInteraction({
-        acknowledge: () => interaction.deferUpdate(),
+      const scope = await beginPanelInteraction(interaction, {
         authorize: () => isAuthorized(interaction),
         onDenied: () => interaction.editReply(terminalPayload(route.locale, "commands.moderation.permission_denied")),
         load: () => dependencies.resolveScope(interaction, route.action === "retry"),

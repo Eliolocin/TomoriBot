@@ -7,6 +7,7 @@ export default {
       embed_title: `🖐️ スパンク・タイム！`,
       embed_description: `{user}は{bot}をぺしっとしました。`,
       history_label: `スパンク`,
+      history_label_plural: `スパンク`,
     },
     pinch: {
       description: `つねって応答をトリガーします。`,
@@ -14,6 +15,7 @@ export default {
       embed_title: `🤏 ピンチ・タイム！`,
       embed_description: `{user}は{bot}をつねりました。`,
       history_label: `つねり`,
+      history_label_plural: `つねり`,
     },
     bite: {
       description: `甘噛みして応答をトリガーします。`,
@@ -21,6 +23,7 @@ export default {
       embed_title: `🦷 バイト・タイム！`,
       embed_description: `{user}は{bot}を甘噛みしました。`,
       history_label: `甘噛み`,
+      history_label_plural: `甘噛み`,
     },
     bonk: {
       description: `ポカッとして応答をトリガーします。`,
@@ -28,6 +31,7 @@ export default {
       embed_title: `🔨 ボンク！`,
       embed_description: `{user}は{bot}をポカッと叩きました。`,
       history_label: `ポカッ`,
+      history_label_plural: `ポカッ`,
     },
     squeeze: {
       description: `ぎゅっとして応答をトリガーします。`,
@@ -35,6 +39,7 @@ export default {
       embed_title: `👐 スクイーズ・タイム！`,
       embed_description: `{user}は{bot}をぎゅっと握りました。`,
       history_label: `スクイーズ`,
+      history_label_plural: `スクイーズ`,
     },
   },
 };

@@ -3,15 +3,21 @@ import type { ResolvedRangeSelection } from "@/types/discord/panel";
 export const MODERATION_PANEL_RANGE_SIZE = 10;
 
 export interface PanelInteractionStart<T> {
-  acknowledge(): Promise<unknown>;
   authorize(): boolean | Promise<boolean>;
   onDenied(): Promise<unknown>;
   load(): Promise<T | null>;
   onMissing(): Promise<unknown>;
 }
 
-export async function beginPanelInteraction<T>(steps: PanelInteractionStart<T>): Promise<T | null> {
-  await steps.acknowledge();
+export interface DeferredPanelInteraction {
+  deferUpdate(): Promise<unknown>;
+}
+
+export async function beginPanelInteraction<T>(
+  interaction: DeferredPanelInteraction,
+  steps: PanelInteractionStart<T>,
+): Promise<T | null> {
+  await interaction.deferUpdate();
   if (!(await steps.authorize())) {
     await steps.onDenied();
     return null;

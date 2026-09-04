@@ -168,8 +168,7 @@ export function createPersonalConfigInteractionRoute(
       });
       if (handled === "handled") return;
 
-      const initialScope = await beginPanelInteraction({
-        acknowledge: () => interaction.deferUpdate(),
+      const initialScope = await beginPanelInteraction(interaction, {
         authorize: () => true,
         onDenied: () => Promise.resolve(),
         load: () => dependencies.resolveScope(interaction, route.action === "retry" || route.action === "refresh"),

@@ -390,6 +390,40 @@ function recordModelAction(context: ConfigModelRouteContext, action: PanelAction
   });
 }
 
+async function clearSwitchModel(context: ConfigModelRouteContext, capability: ConfigModelCapability): Promise<boolean> {
+  const { dependencies, route } = context;
+  const locale = route.locale;
+  const state = serverStateFromScope(context.scope);
+  if (!state) return false;
+
+  const action = await performPanelAction(
+    () =>
+      dependencies.modelOperations.clearCapabilityModel({
+        tomoriState: state,
+        serverDiscId: context.scope.serverDiscId,
+        capability,
+      }),
+    () => dependencies.resolveScope(context.interaction, true),
+  );
+  context.scope = action.state ?? context.scope;
+  const result = action.result;
+  if (result.status === "success") recordModelAction(context, "server-config.workspace.model.clear");
+  await baseRepaint(context, "switch", {
+    receipt:
+      result.status === "success"
+        ? receipt(
+            locale,
+            "success",
+            "commands.config.panel.model_cleared_heading",
+            "commands.config.panel.model_cleared_detail",
+          )
+        : result.status === "already-clear"
+          ? noChangesReceipt(locale, "commands.config.panel.model_already_clear_detail")
+          : writeFailedReceipt(locale),
+  });
+  return true;
+}
+
 async function handleSwitchModels(context: ConfigModelRouteContext): Promise<boolean> {
   const { route, dependencies } = context;
   const locale = route.locale;
@@ -409,6 +443,9 @@ async function handleSwitchModels(context: ConfigModelRouteContext): Promise<boo
   }
 
   if (route.action === "model-provider-select") {
+    // The image slots fold their clear into this select, so the sentinel has to be answered before
+    // the value is looked up as a provider name.
+    if (context.selectedValue === CONFIG_MODEL_CLEAR_VALUE) return await clearSwitchModel(context, route.capability);
     const providers = await dependencies.loadModelProviders(state, route.capability);
     const provider = providers.find((candidate) => candidate.toLowerCase() === context.selectedValue?.toLowerCase());
     if (!provider) {
@@ -444,37 +481,10 @@ async function handleSwitchModels(context: ConfigModelRouteContext): Promise<boo
     return true;
   }
 
-  if (route.action !== "model-select" && route.action !== "model-clear") return false;
+  if (route.action !== "model-select") return false;
 
   const capability: ConfigModelCapability = route.capability;
-  if (route.action === "model-clear" || context.selectedValue === CONFIG_MODEL_CLEAR_VALUE) {
-    const action = await performPanelAction(
-      () =>
-        dependencies.modelOperations.clearCapabilityModel({
-          tomoriState: state,
-          serverDiscId: context.scope.serverDiscId,
-          capability,
-        }),
-      () => dependencies.resolveScope(context.interaction, true),
-    );
-    context.scope = action.state ?? context.scope;
-    const result = action.result;
-    if (result.status === "success") recordModelAction(context, "server-config.workspace.model.clear");
-    await baseRepaint(context, "switch", {
-      receipt:
-        result.status === "success"
-          ? receipt(
-              locale,
-              "success",
-              "commands.config.panel.model_cleared_heading",
-              "commands.config.panel.model_cleared_detail",
-            )
-          : result.status === "already-clear"
-            ? noChangesReceipt(locale, "commands.config.panel.model_already_clear_detail")
-            : writeFailedReceipt(locale),
-    });
-    return true;
-  }
+  if (context.selectedValue === CONFIG_MODEL_CLEAR_VALUE) return await clearSwitchModel(context, capability);
 
   const modelId = Number(context.selectedValue);
   if (!Number.isSafeInteger(modelId)) {

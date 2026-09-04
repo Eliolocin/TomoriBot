@@ -2,14 +2,20 @@ import type {
   ButtonInteraction,
   ChannelSelectMenuInteraction,
   Client,
+  MentionableSelectMenuInteraction,
   ModalSubmitInteraction,
+  RoleSelectMenuInteraction,
   StringSelectMenuInteraction,
+  UserSelectMenuInteraction,
 } from "discord.js";
 
 export type GlobalRoutableInteraction =
   | ButtonInteraction
   | StringSelectMenuInteraction
   | ChannelSelectMenuInteraction
+  | UserSelectMenuInteraction
+  | RoleSelectMenuInteraction
+  | MentionableSelectMenuInteraction
   | ModalSubmitInteraction;
 
 export interface ParsedInteractionRoute {

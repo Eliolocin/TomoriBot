@@ -101,6 +101,7 @@ import {
 import {
   CONFIG_CHANNEL_MODAL_OPEN_ACTIONS,
   CONFIG_CHANNEL_MODAL_SUBMIT_ACTIONS,
+  CONFIG_CHANNEL_SELECT_ACTIONS,
   handleConfigChannelModalOpen,
   handleConfigChannelRoutes,
 } from "@/utils/discord/interactions/configChannelRoutes";
@@ -130,7 +131,7 @@ import {
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import type { ConfigPanelView } from "@/utils/discord/ui/configPanel";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
-import { resolvePersonaPanelAvatar } from "@/utils/discord/personaPanelAvatar";
+import { resolvePersonaPanelAvatar, resolvePersonaPanelAvatarReference } from "@/utils/discord/personaPanelAvatar";
 import {
   buildConfigModalFieldId,
   buildConditioningCheckboxGroupId,
@@ -437,6 +438,7 @@ const defaultDependencies: ConfigRouteDependencies = {
     }
   },
   getPersonaAvatarData: resolvePersonaPanelAvatar,
+  getPersonaAvatarReferenceData: resolvePersonaPanelAvatarReference,
   loadPersonaMemoryView: loadConfigPersonaMemoryView,
   loadServerHumanizerDegree: async (serverId) =>
     (await configRepository.getChatConfig(serverId))?.humanizer_degree ?? null,
@@ -2714,6 +2716,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "channels-overrides-text-model-select" ||
         route.action === "sprite-select" ||
         CONFIG_MODEL_SELECT_ACTIONS.has(route.action) ||
+        CONFIG_CHANNEL_SELECT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_SELECT_ACTIONS.has(route.action);
       const expectsChannelSelect = route.action === "channels-overrides-select";
       const expectsModal =
@@ -2808,8 +2811,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         return;
       }
 
-      const scope = await beginPanelInteraction({
-        acknowledge: () => interaction.deferUpdate(),
+      const scope = await beginPanelInteraction(interaction, {
         authorize: () => isConfigRouteAuthorized(route, actor),
         onDenied: async () => {
           const landing = resolveConfigLanding(actor);

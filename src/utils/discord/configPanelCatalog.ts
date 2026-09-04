@@ -35,8 +35,8 @@ export type ConfigPage = PersonaPage | BehaviorPage | ChannelsPage | Permissions
  * custom ID, which is why the category field must stay ahead of the page field in every codec.
  */
 export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPage[]> = {
-  persona: ["general", "triggers", "memories", "appearance", "sprites", "advanced"],
-  behavior: ["general", "trigger", "memory", "notices", "experimental"],
+  persona: ["general", "triggers", "memories", "sprites", "appearance", "advanced"],
+  behavior: ["general", "trigger", "notices", "experimental", "memory"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   permissions: ["capabilities", "privacy"],
   models: ["switch", "parameters", "fallbacks", "image"],
@@ -403,7 +403,6 @@ export type ConfigPanelRoute =
   | { action: "model-provider-select"; locale: string; capability: ConfigModelCapability }
   | { action: "model-provider-page"; locale: string; capability: ConfigModelCapability; start: number }
   | { action: "model-select"; locale: string; capability: ConfigModelCapability; provider: string }
-  | { action: "model-clear"; locale: string; capability: "image" | "nai-image" }
   | { action: "model-page"; locale: string; capability: ConfigModelCapability; provider: string; start: number }
   | { action: "model-cancel"; locale: string; capability: ConfigModelCapability }
   | { action: "parameters-provider-select"; locale: string }
@@ -490,12 +489,14 @@ export type ConfigPanelRoute =
   | { action: "channels-log-submit"; locale: string; nonce: string }
   | { action: "channels-log-clear"; locale: string; channelId?: string }
   | { action: "channels-welcome-open"; locale: string }
+  | { action: "channels-welcome-range-select"; locale: string }
   | { action: "channels-welcome-submit"; locale: string; nonce: string }
   | { action: "channels-welcome-clear"; locale: string; channelId?: string }
   | { action: "channels-autoch-manage-open"; locale: string; start?: number }
   | { action: "channels-autoch-submit"; locale: string; start: number; fp: string; nonce: string }
   | { action: "channels-autoch-page"; locale: string; start: number }
   | { action: "channels-autoch-configure-open"; locale: string }
+  | { action: "channels-autoch-range-select"; locale: string }
   | { action: "channels-autoch-configure-submit"; locale: string; fp: string; nonce: string }
   | { action: "channels-autoch-threshold-open"; locale: string }
   | { action: "channels-autoch-threshold-submit"; locale: string; fp: string; nonce: string }
@@ -645,20 +646,10 @@ function parseModelCapability(value: string | undefined): ConfigModelCapability 
     : null;
 }
 
-function parseImageModelCapability(value: string | undefined): "image" | "nai-image" | null {
-  return value === "image" || value === "nai-image" ? value : null;
-}
-
 const capabilityField: RouteFieldCodec<"capability", ConfigModelCapability> = {
   key: "capability",
   encode: (v) => String(v),
   decode: (v) => parseModelCapability(v),
-};
-
-const imageCapabilityField: RouteFieldCodec<"capability", "image" | "nai-image"> = {
-  key: "capability",
-  encode: (v) => String(v),
-  decode: (v) => parseImageModelCapability(v),
 };
 
 const negativeField: RouteFieldCodec<"negative", boolean> = {
@@ -801,7 +792,6 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "model-provider-select": { wireToken: "model-prov-select", fields: [capabilityField] },
   "model-provider-page": { wireToken: "model-prov-page", fields: [capabilityField, startField] },
   "model-select": { wireToken: "model-select", fields: [capabilityField, providerField] },
-  "model-clear": { wireToken: "model-clear", fields: [imageCapabilityField] },
   "model-page": { wireToken: "model-page", fields: [capabilityField, providerField, startField] },
   "model-cancel": { wireToken: "model-cancel", fields: [capabilityField] },
   "parameters-provider-select": { wireToken: "param-prov-select", fields: [] },
@@ -886,12 +876,14 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "channels-log-submit": { wireToken: "channels-log-submit", fields: [nonceField] },
   "channels-log-clear": { wireToken: "channels-log-clear", fields: [channelIdField] },
   "channels-welcome-open": { wireToken: "channels-welcome-open", fields: [] },
+  "channels-welcome-range-select": { wireToken: "welcome-range-select", fields: [] },
   "channels-welcome-submit": { wireToken: "channels-welcome-submit", fields: [nonceField] },
   "channels-welcome-clear": { wireToken: "channels-welcome-clear", fields: [channelIdField] },
   "channels-autoch-manage-open": { wireToken: "autoch-manage-open", fields: [optionalStartField] },
   "channels-autoch-submit": { wireToken: "autoch-submit", fields: [startField, fpField, nonceField] },
   "channels-autoch-page": { wireToken: "autoch-page", fields: [startField] },
   "channels-autoch-configure-open": { wireToken: "autoch-config-open", fields: [] },
+  "channels-autoch-range-select": { wireToken: "autoch-range-select", fields: [] },
   "channels-autoch-configure-submit": { wireToken: "autoch-config-submit", fields: [fpField, nonceField] },
   "channels-autoch-threshold-open": { wireToken: "autoch-threshold-open", fields: [] },
   "channels-autoch-threshold-submit": { wireToken: "autoch-threshold-submit", fields: [fpField, nonceField] },

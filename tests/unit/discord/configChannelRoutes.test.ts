@@ -51,6 +51,7 @@ import {
   CONFIG_CHANNEL_OVERRIDE_CONTEXT_NOTE_TEXT_FIELD,
   CONFIG_CHANNEL_OVERRIDE_MODE_FIELD,
   CONFIG_CHANNEL_OVERRIDE_PROMPT_PART_FIELDS,
+  WELCOME_PERSONA_PAGE_SIZE,
 } from "@/utils/discord/ui/configChannelModals";
 import { buildConfigModalFieldId } from "@/utils/discord/ui/configModals";
 import { buildConfigPanelPayload } from "@/utils/discord/ui/configPanel";
@@ -468,6 +469,69 @@ describe("Channels Destinations routes", () => {
     expect(welcomeModal?.components[2]?.component?.value).toBe("Welcome aboard.");
   });
 
+  it("opens the Welcome modal on the persona page its range entry names", async () => {
+    // A roster past one page is reachable only through the range select, so the start the option
+    // carries has to reach the builder: otherwise every range would reopen page one.
+    // The server state is the roster's first entry, so the stored welcome persona lives there.
+    const personas = Array.from({ length: 60 }, (_unused, index) =>
+      makePersona({
+        persona_id: index + 1,
+        persona_nickname: `Persona ${index + 1}`,
+        ...(index === 0 ? { config: { welcome_persona_id: 47 } as TomoriState["config"] } : {}),
+      }),
+    );
+    const shownModals: RawModalPayload[] = [];
+    const harness = makeHarness({
+      state: personas[0] as TomoriState,
+      personas,
+      showModal: async (_interaction, payload) => {
+        shownModals.push(payload);
+      },
+    });
+
+    await harness.dispatch(
+      makeInteraction({
+        route: { action: "channels-welcome-range-select", locale: "en-US" },
+        kind: "string-select",
+        selectedValue: "24",
+      }),
+    );
+
+    const options = shownModals[0]?.components[1]?.component?.options ?? [];
+    expect(options).toContainEqual(expect.objectContaining({ value: "47", default: true }));
+    expect(options).not.toContainEqual(expect.objectContaining({ value: "1" }));
+    // Random is repeated on every page, which is why a page holds 24 personas rather than 25.
+    expect(options[0]?.value).toBe("random");
+    expect(options).toHaveLength(25);
+  });
+
+  it("opens the Auto-Trigger configure modal on the persona page its range entry names", async () => {
+    const personas = Array.from({ length: 60 }, (_unused, index) =>
+      makePersona({ persona_id: index + 1, persona_nickname: `Persona ${index + 1}` }),
+    );
+    const shownModals: RawModalPayload[] = [];
+    const harness = makeHarness({
+      state: personas[0] as TomoriState,
+      personas,
+      showModal: async (_interaction, payload) => {
+        shownModals.push(payload);
+      },
+    });
+
+    await harness.dispatch(
+      makeInteraction({
+        route: { action: "channels-autoch-range-select", locale: "en-US" },
+        kind: "string-select",
+        selectedValue: "25",
+      }),
+    );
+
+    const options = shownModals[0]?.components[2]?.component?.options ?? [];
+    expect(options.map((option) => option.value)).toEqual(
+      Array.from({ length: 25 }, (_unused, index) => String(index + 26)),
+    );
+  });
+
   it("does not clear Logs when Set receives the already configured channel", async () => {
     const nonce = "nonce1234567";
     const state = makePersona({ config: { thought_log_channel_disc_id: CHANNEL_ONE } as TomoriState["config"] });
@@ -760,6 +824,43 @@ describe("Channels Destinations panel", () => {
     expect(serialized).toContain("Reasoning, tool activity, attribution, and diagnostics are");
     expect(serialized).toContain("Welcome aboard.");
     expect(serialized).toContain('"disabled":true');
+  });
+
+  it("swaps the Welcome and Auto-Trigger entry points for range selects past one page", () => {
+    // Within one page a range select would be the inert one-option selector the shell avoids, so
+    // the plain button has to survive the common case and only give way once paging is real.
+    const renderDestinations = (personaCount: number): string => {
+      const personas = Array.from({ length: personaCount }, (_unused, index) =>
+        makePersona({
+          persona_id: index + 1,
+          persona_nickname: `Persona ${index + 1}`,
+          ...(index === 0 ? { config: { welcome_persona_id: 47 } as TomoriState["config"] } : {}),
+        }),
+      );
+      return JSON.stringify(
+        buildConfigPanelPayload({
+          locale: "en-US",
+          actor: { workspaceKind: "guild", isManager: true },
+          category: "channels",
+          page: "destinations",
+          personas,
+          selectedPersonaId: null,
+          readStatus: "fresh",
+          channelsView: makeChannelsView(personas[0] as TomoriState),
+        }),
+      );
+    };
+
+    const fits = renderDestinations(WELCOME_PERSONA_PAGE_SIZE);
+    expect(fits).toContain("config:v1:channels-welcome-open:en-US");
+    expect(fits).not.toContain("config:v1:welcome-range-select:en-US");
+
+    const overflows = renderDestinations(WELCOME_PERSONA_PAGE_SIZE + 1);
+    expect(overflows).toContain("config:v1:welcome-range-select:en-US");
+    expect(overflows).not.toContain("config:v1:channels-welcome-open:en-US");
+    expect(overflows).toContain("Personas 1-24");
+    // The range holding the stored persona opens marked, so the reader knows where to look.
+    expect(overflows).toContain("Persona 1 through Persona 24");
   });
 
   it("renders only the Destinations heading when its view is absent", () => {

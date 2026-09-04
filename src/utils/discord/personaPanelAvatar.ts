@@ -26,6 +26,25 @@ const defaultDependencies: PersonaPanelAvatarDependencies = {
   loadStoredAvatarBuffer: loadStoredPersonaAvatarBuffer,
 };
 
+/** Resolves a stored avatar reference for use in a Components V2 thumbnail. */
+export async function resolvePersonaPanelAvatarReference(
+  reference: string | null | undefined,
+  attachmentName: string,
+  dependencies: PersonaPanelAvatarDependencies = defaultDependencies,
+): Promise<PersonaPanelAvatarData> {
+  const publicUrl = dependencies.resolvePublicAvatarUrl(reference);
+  if (publicUrl) return { url: publicUrl, files: [] };
+  if (!reference || !dependencies.isLocalAvatarPath(reference)) return { url: null, files: [] };
+
+  const buffer = await dependencies.loadStoredAvatarBuffer(reference);
+  return buffer
+    ? {
+        url: `attachment://${attachmentName}`,
+        files: [new AttachmentBuilder(buffer, { name: attachmentName })],
+      }
+    : { url: null, files: [] };
+}
+
 /** Resolves a stored alter avatar into the transport Discord can consume. */
 export async function resolveAlterPersonaAvatarAsset(
   persona: TomoriState,
@@ -68,20 +87,11 @@ export async function resolvePersonaPanelAvatar(
     };
   }
 
-  const asset = await resolveAlterPersonaAvatarAsset(persona, dependencies);
-  if (!asset) {
-    return { url: null, files: [] };
-  }
-
-  if (asset.type === "url") {
-    return { url: asset.url, files: [] };
-  }
-
-  const attachmentName = `persona_avatar_${persona.persona_id ?? "selected"}.png`;
-  return {
-    url: `attachment://${attachmentName}`,
-    files: [new AttachmentBuilder(asset.buffer, { name: attachmentName })],
-  };
+  return resolvePersonaPanelAvatarReference(
+    persona.webhook_avatar_url,
+    `persona_avatar_${persona.persona_id ?? "selected"}.png`,
+    dependencies,
+  );
 }
 
 /**
@@ -90,11 +100,12 @@ export async function resolvePersonaPanelAvatar(
  */
 export function withPersonaPanelAvatar<T extends InteractionEditReplyOptions>(
   payload: T,
-  avatar?: PersonaPanelAvatarData,
+  avatar?: PersonaPanelAvatarData | readonly PersonaPanelAvatarData[],
 ): T & Pick<InteractionEditReplyOptions, "attachments" | "files"> {
+  const avatars = avatar ? (Array.isArray(avatar) ? avatar : [avatar]) : [];
   return {
     ...payload,
     attachments: [],
-    files: avatar?.files ?? [],
+    files: avatars.flatMap((item) => item.files),
   };
 }

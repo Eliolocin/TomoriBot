@@ -43,6 +43,16 @@ const MODEL_CAPABILITY_LOCALE_KEYS: Record<ConfigModelCapability, string> = {
   video: "commands.config.panel.capability_video",
 };
 
+/**
+ * Clearing Vision disables the image-understanding tools outright, while either image slot only
+ * contributes to one shared flag, so the two consequences cannot share one description.
+ */
+const MODEL_CLEAR_DESCRIPTION_LOCALE_KEYS: Partial<Record<ConfigModelCapability, string>> = {
+  vision: "commands.config.panel.model_no_model_vision_description",
+  image: "commands.config.panel.model_no_model_image_description",
+  "nai-image": "commands.config.panel.model_no_model_image_description",
+};
+
 /** One server-default slot as the panel renders it. */
 interface ConfigModelSlotView {
   capability: ConfigModelCapability;
@@ -280,13 +290,39 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
       ? `${slot.currentModelName}${slot.currentProvider ? ` (${getProviderDisplayName(slot.currentProvider)})` : ""}`
       : localizer(locale, "commands.config.panel.none_label");
 
-    const pageCount = Math.max(1, Math.ceil(slot.eligibleProviders.length / CONFIG_MODEL_PAGE_SIZE));
-    const rangeIndex = Math.min(
-      Math.max(Math.floor(slot.providerPageStart / CONFIG_MODEL_PAGE_SIZE), 0),
-      pageCount - 1,
-    );
-    const start = rangeIndex * CONFIG_MODEL_PAGE_SIZE;
-    const visibleProviders = slot.eligibleProviders.slice(start, start + CONFIG_MODEL_PAGE_SIZE);
+    // The clear entry is re-prepended to every provider page, so it costs one option slot per
+    // page: the page size has to shrink or the last provider of each page would be sliced away
+    // with no page able to reach it.
+    const clearDescriptionKey =
+      slot.currentModelName === null ? undefined : MODEL_CLEAR_DESCRIPTION_LOCALE_KEYS[capability];
+    const showClear = clearDescriptionKey !== undefined;
+    const providerPageSize = CONFIG_MODEL_PAGE_SIZE - (showClear ? 1 : 0);
+    const pageCount = Math.max(1, Math.ceil(slot.eligibleProviders.length / providerPageSize));
+    const rangeIndex = Math.min(Math.max(Math.floor(slot.providerPageStart / providerPageSize), 0), pageCount - 1);
+    const start = rangeIndex * providerPageSize;
+    const visibleProviders = slot.eligibleProviders.slice(start, start + providerPageSize);
+
+    const options: SelectMenuComponentOptionData[] = [];
+    if (clearDescriptionKey !== undefined) {
+      options.push({
+        label: safeSelectOptionText(localizer(locale, "commands.config.panel.model_no_model_option"), 100),
+        description: safeSelectOptionText(localizer(locale, clearDescriptionKey), 100),
+        value: CONFIG_MODEL_CLEAR_VALUE,
+      });
+    }
+    if (visibleProviders.length > 0) {
+      options.push(
+        ...visibleProviders.map((provider) => ({
+          label: safeSelectOptionText(getProviderDisplayName(provider), 100),
+          value: provider,
+        })),
+      );
+    } else if (!showClear) {
+      options.push({
+        label: safeSelectOptionText(localizer(locale, "commands.config.panel.no_providers_option"), 100),
+        value: "none",
+      });
+    }
 
     components.push({
       type: ComponentType.ActionRow,
@@ -295,21 +331,11 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
           type: ComponentType.StringSelect,
           customId: buildConfigRouteId({ action: "model-provider-select", locale, capability }),
           placeholder: safeSelectOptionText(`${capabilityLabel}: ${current}`, 150),
-          options:
-            visibleProviders.length > 0
-              ? visibleProviders.map((provider) => ({
-                  label: safeSelectOptionText(getProviderDisplayName(provider), 100),
-                  value: provider,
-                }))
-              : [
-                  {
-                    label: safeSelectOptionText(localizer(locale, "commands.config.panel.no_providers_option"), 100),
-                    value: "none",
-                  },
-                ],
-          // A slot with no eligible provider has nothing to pick, so its select is inert rather
-          // than absent: the placeholder is what keeps the current assignment readable.
-          disabled: writesDisabled || visibleProviders.length === 0,
+          options,
+          // A model assignment can outlive the provider it came from, so the clear entry keeps the
+          // select live even with nothing eligible left to pick; without it the select is inert
+          // rather than absent, and the placeholder is what keeps the assignment readable.
+          disabled: writesDisabled || (visibleProviders.length === 0 && !showClear),
         },
       ],
     });
@@ -326,27 +352,12 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
             action: "model-provider-page",
             locale,
             capability,
-            start: targetRangeIndex * CONFIG_MODEL_PAGE_SIZE,
+            start: targetRangeIndex * providerPageSize,
           }),
       },
       disabled: writesDisabled,
     });
     if (paginationRow) components.push(paginationRow);
-
-    if ((capability === "image" || capability === "nai-image") && slot.currentModelName) {
-      components.push({
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            customId: buildConfigRouteId({ action: "model-clear", locale, capability }),
-            label: localizer(locale, "commands.config.panel.model_clear_button"),
-            disabled: writesDisabled,
-          },
-        ],
-      } satisfies ActionRowData<ButtonComponentData>);
-    }
 
     if (capability === "nai-image") appendCapabilityStatus(components, locale, view, "image");
     if (capability === "video") appendCapabilityStatus(components, locale, view, "video");

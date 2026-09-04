@@ -8,6 +8,7 @@ export default {
       embed_title: `🫳 Headpat Time!`,
       embed_description: `{user} is currently headpatting {bot}.`,
       history_label: `Headpat`,
+      history_label_plural: `Headpats`,
     },
     hug: {
       description: `Give me a hug!`,
@@ -16,6 +17,7 @@ export default {
       embed_title: `🤗 Hug Time!`,
       embed_description: `{user} is giving {bot} a warm hug.`,
       history_label: `Hug`,
+      history_label_plural: `Hugs`,
     },
     kiss: {
       description: `Give me a kiss!`,
@@ -24,6 +26,7 @@ export default {
       embed_title: `💋 Kiss Time!`,
       embed_description: `{user} just kissed {bot}.`,
       history_label: `Kiss`,
+      history_label_plural: `Kisses`,
     },
     tickle: {
       description: `Tickle me!`,
@@ -32,6 +35,7 @@ export default {
       embed_title: `🤭 Tickle Time!`,
       embed_description: `{user} is tickling {bot}.`,
       history_label: `Tickle`,
+      history_label_plural: `Tickles`,
     },
     feed: {
       description: `Feed me a delicious snack!`,
@@ -41,6 +45,7 @@ export default {
       embed_title: `🍴 Snack Time!`,
       embed_description: `{user} just fed {bot}{food_text}.`,
       history_label: `Feed`,
+      history_label_plural: `Feedings`,
     },
   },
 };

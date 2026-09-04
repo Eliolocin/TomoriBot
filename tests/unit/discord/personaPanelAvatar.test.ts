@@ -4,6 +4,7 @@ import type { TomoriState } from "@/types/db/schema";
 import {
   resolveAlterPersonaAvatarAsset,
   resolvePersonaPanelAvatar,
+  resolvePersonaPanelAvatarReference,
   withPersonaPanelAvatar,
 } from "@/utils/discord/personaPanelAvatar";
 
@@ -41,6 +42,17 @@ describe("persona panel avatars", () => {
     expect(avatar.files[0]?.name).toBe("persona_avatar_42.png");
   });
 
+  it("attaches a local sprite reference with its caller-provided name", async () => {
+    const avatar = await resolvePersonaPanelAvatarReference(
+      "data/avatars/servers/test/personas/42/sprites/happy.png",
+      "persona_sprite_42_7.png",
+      localDependencies,
+    );
+
+    expect(avatar.url).toBe("attachment://persona_sprite_42_7.png");
+    expect(avatar.files[0]?.name).toBe("persona_sprite_42_7.png");
+  });
+
   it("clears old attachments and includes the selected avatar file", () => {
     const payload: InteractionEditReplyOptions = { content: "panel" };
     const avatarFile = new AttachmentBuilder(Buffer.from("avatar"), { name: "persona_avatar_42.png" });
@@ -51,5 +63,16 @@ describe("persona panel avatars", () => {
 
     expect(result.attachments).toEqual([]);
     expect(result.files).toEqual([avatarFile]);
+  });
+
+  it("includes persona and sprite files in the same repaint", () => {
+    const personaFile = new AttachmentBuilder(Buffer.from("persona"), { name: "persona.png" });
+    const spriteFile = new AttachmentBuilder(Buffer.from("sprite"), { name: "sprite.png" });
+    const result = withPersonaPanelAvatar({ content: "panel" }, [
+      { url: "attachment://persona.png", files: [personaFile] },
+      { url: "attachment://sprite.png", files: [spriteFile] },
+    ]);
+
+    expect(result.files).toEqual([personaFile, spriteFile]);
   });
 });

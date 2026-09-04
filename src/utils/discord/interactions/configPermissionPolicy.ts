@@ -433,6 +433,7 @@ export const CHANNELS_DESTINATIONS_ACTION_BY_ROUTE: Partial<
   "channels-log-submit": "log",
   "channels-log-clear": "log",
   "channels-welcome-open": "welcome",
+  "channels-welcome-range-select": "welcome",
   "channels-welcome-submit": "welcome",
   "channels-welcome-clear": "welcome",
 };
@@ -444,6 +445,7 @@ export const CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE: Partial<
   "channels-autoch-submit": "auto-trigger",
   "channels-autoch-page": "auto-trigger",
   "channels-autoch-configure-open": "auto-trigger",
+  "channels-autoch-range-select": "auto-trigger",
   "channels-autoch-configure-submit": "auto-trigger",
   "channels-autoch-threshold-open": "threshold",
   "channels-autoch-threshold-submit": "threshold",
@@ -582,7 +584,6 @@ export const MODELS_PAGE_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], Co
   "model-provider-select": "switch",
   "model-provider-page": "switch",
   "model-select": "switch",
-  "model-clear": "switch",
   "model-page": "switch",
   "model-cancel": "switch",
   "parameters-provider-select": "parameters",

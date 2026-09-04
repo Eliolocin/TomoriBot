@@ -72,7 +72,20 @@ The reusable global path is intentionally small:
 - `src/utils/discord/interactions/router.ts` owns the registered route list and defensive error response.
 - Feature routes, such as `src/utils/discord/interactions/helpRoutes.ts`, validate their own action and state segments.
 
-Only IDs registered in this path are consumed. Unmatched component interactions return to the existing collector-owned behavior unchanged. Custom IDs must include a namespace and version, such as `help:v2:page:en-US:memory`, so incompatible future state can use a new version without silently changing old messages. Persistent help IDs also carry the panel locale so later interactions preserve the language selected by the slash-command dispatcher without another database read before `showModal()`.
+Only IDs registered in this path are consumed. Every Discord message component type and modal
+submission can enter the global route registry. This uses Discord's common message-component guard
+instead of enumerating button and select variants, so a new native selector cannot be filtered out
+before its route acknowledges it. Unmatched component interactions return to the existing
+collector-owned behavior unchanged. Custom IDs must include a namespace and version, such as
+`help:v2:page:en-US:memory`, so incompatible future state can use a new version without silently
+changing old messages. Persistent help IDs also carry the panel locale so later interactions
+preserve the language selected by the slash-command dispatcher without another database read before
+`showModal()`.
+
+Deferred panel branches call `beginPanelInteraction(...)`. The helper owns `deferUpdate()` and runs
+it before authorization or state loading, so its callers cannot accidentally move asynchronous
+work ahead of acknowledgement. A branch that opens a modal stays outside this helper because
+`showModal()` must be that interaction's acknowledgement.
 
 Multi-step modal continuations and collection-derived operations (such as personal spotlight configuration and removal in `/personal config`) bind state to a deterministic actor- and workspace-scoped collection fingerprint in the custom ID instead of process-local memory. If the underlying collection drifts (for example, personas or active spotlight rows are added, removed, or reordered between render and submit), fingerprint verification fails closed and surfaces a localized stale-panel notice: drift prevents the requested identity-sensitive mutation, its success telemetry, and its success receipt or cache effects, while repository-owned read cleanup may still prune expired or orphaned records.
 
@@ -1025,8 +1038,11 @@ for the whole batch, overwrites on name conflicts, and rejects the entire import
 `src/utils/persona/spriteArchive.ts`. See [multi-persona](multi-persona) for the format details.
 
 The sprite selector reserves its first option for `+ Add Sprite`, leaving 24 stored sprites per
-page. Selecting a stored sprite shows its image as a thumbnail beside its details. The add option
-is absent for actors who cannot mutate sprites because Discord cannot disable one select option.
+page. Selecting a stored sprite shows its image as a thumbnail beside its details. Public image
+URLs render directly, while local storage references are attached to the ephemeral panel and use an
+`attachment://` thumbnail URL. Persona avatar resolution and sprite-list loading run concurrently
+after the component interaction has been acknowledged. The add option is absent for actors who
+cannot mutate sprites because Discord cannot disable one select option.
 
 `/config` > Persona > Triggers keeps trigger-word controls separate from Identity & Personality so
 collection selections and write receipts remain below Discord's 40-component message limit.

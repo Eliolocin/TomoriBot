@@ -46,6 +46,7 @@ interface Observed {
   placeholder?: string;
   disabled?: boolean;
   content?: string;
+  media?: { url?: string };
   options?: Array<{ value?: string; label?: string; default?: boolean }>;
 }
 
@@ -64,6 +65,15 @@ function walk(value: unknown): Observed[] {
             placeholder: typeof record.placeholder === "string" ? record.placeholder : undefined,
             disabled: typeof record.disabled === "boolean" ? record.disabled : undefined,
             content: typeof record.content === "string" ? record.content : undefined,
+            media:
+              typeof record.media === "object" && record.media !== null
+                ? {
+                    url:
+                      typeof (record.media as Record<string, unknown>).url === "string"
+                        ? ((record.media as Record<string, unknown>).url as string)
+                        : undefined,
+                  }
+                : undefined,
             options: Array.isArray(record.options)
               ? record.options.map((option) => {
                   const entry = option as Record<string, unknown>;
@@ -229,6 +239,20 @@ describe("config panel shell", () => {
     );
     expect(pageSelect?.options?.map((option) => option.value)).toEqual(["general", "triggers", "memories", "sprites"]);
   });
+
+  it("keeps Advanced Memory last in the Behavior page selector", () => {
+    const payload = build(GUILD_MANAGER, { category: "behavior", page: "general" });
+    const pageSelect = walk(payload).find(
+      (component) => component.type === STRING_SELECT && component.placeholder === "Choose a page...",
+    );
+    expect(pageSelect?.options?.map((option) => option.value)).toEqual([
+      "general",
+      "trigger",
+      "notices",
+      "experimental",
+      "memory",
+    ]);
+  });
 });
 
 describe("config persona selector", () => {
@@ -295,12 +319,12 @@ describe("config Persona General body", () => {
   it("renders the name above the role of the selected persona", () => {
     expect(
       walk(build(GUILD_MANAGER, { selectedPersonaId: 55 })).some(
-        (c) => c.content === "> Name: Aphel\n> Role: Main persona",
+        (c) => c.content?.includes("> Name: Aphel\n> Role: Main persona") === true,
       ),
     ).toBe(true);
     expect(
       walk(build(GUILD_MANAGER, { selectedPersonaId: 56 })).some(
-        (c) => c.content === "> Name: Wren\n> Role: Alter persona",
+        (c) => c.content?.includes("> Name: Wren\n> Role: Alter persona") === true,
       ),
     ).toBe(true);
   });
@@ -765,6 +789,13 @@ describe("config Persona General collections", () => {
         ),
       ),
     ).toBe(true);
+    const components = walk(payload);
+    const styleSelectIndex = components.findIndex(
+      (component) => component.type === STRING_SELECT && component.placeholder === "Choose an addressing style...",
+    );
+    const namingValuesIndex = components.findIndex((component) => component.content?.includes("> Prefix: `Miss`"));
+    expect(namingValuesIndex).toBeGreaterThan(styleSelectIndex);
+    expect(components[namingValuesIndex]?.content).toContain("Add a new persona with `/persona create`");
   });
 
   it("renders the Lilya preset's neutral suffix", () => {
@@ -798,13 +829,44 @@ describe("config Persona General collections", () => {
 });
 
 describe("config Persona Memories body", () => {
+  it("sums conditioning per action and names each total in its own number", () => {
+    // Groups key on reason as well as action, so two Headpat rows with different reasons are one
+    // Headpat total to the reader; the singular label only survives on a count of exactly one.
+    const group = (
+      overrides: Partial<ConditioningGroup> & Pick<ConditioningGroup, "conditioningType" | "actionKey" | "totalCount">,
+    ): ConditioningGroup => ({ ...MEMORY_CONDITIONING, ...overrides });
+    const payload = build(GUILD_MANAGER, {
+      page: "memories",
+      personaMemoryView: {
+        ...MEMORY_VIEW,
+        conditioningGroups: [
+          group({ conditioningType: "reward", actionKey: "headpat", totalCount: 3 }),
+          group({ conditioningType: "reward", actionKey: "headpat", totalCount: 2, reasonText: "another reason" }),
+          group({ conditioningType: "reward", actionKey: "kiss", totalCount: 18 }),
+          group({ conditioningType: "punish", actionKey: "bonk", totalCount: 1 }),
+        ],
+      },
+    });
+    const text = walk(payload)
+      .map((component) => component.content ?? "")
+      .join("\n");
+
+    expect(text).toContain("Rewarded 23 times:");
+    // Ranked by count, so the larger total leads regardless of the order the rows arrived in.
+    expect(text.indexOf("18 Kisses")).toBeLessThan(text.indexOf("5 Headpats"));
+    expect(text).toContain("Punished once:");
+    expect(text).toContain("1 Bonk");
+  });
+
   it("renders long-term counts, selected-persona STM, conditioning, and route buttons", () => {
     const payload = build(GUILD_MANAGER, { page: "memories", personaMemoryView: MEMORY_VIEW });
     const seen = walk(payload);
 
     expect(seen.some((component) => component.content?.includes("Server memories: 4"))).toBe(true);
     expect(seen.some((component) => component.content?.includes("A stored scene"))).toBe(true);
-    expect(seen.some((component) => component.content?.includes("Helped with the scene"))).toBe(true);
+    expect(seen.some((component) => component.content?.includes("Rewarded once:"))).toBe(true);
+    expect(seen.some((component) => component.content?.includes("1 Headpat"))).toBe(true);
+    expect(seen.some((component) => component.content?.includes("Punished 0 times"))).toBe(true);
     expect(buttonFor(payload, { action: "server-memory-open", locale: "en-US", personaId: 55 })).toBeDefined();
     expect(buttonFor(payload, { action: "personal-memory-open", locale: "en-US", personaId: 55 })).toBeDefined();
     expect(buttonFor(payload, { action: "stm-edit-open", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
@@ -977,7 +1039,10 @@ describe("config Persona Sprites page", () => {
     build(actor, { page: "sprites", personaSprites: SPRITES, ...overrides });
 
   it("renders the selector, the selected sprite, and both transfer actions for a manager", () => {
-    const payload = spritesPage(GUILD_MANAGER, { selectedSpriteIndex: 0 });
+    const payload = spritesPage(GUILD_MANAGER, {
+      selectedSpriteIndex: 0,
+      selectedSpriteAvatarUrl: "attachment://persona_sprite_55_1.png",
+    });
     const seen = walk(payload);
 
     const selector = seen.find(
@@ -1003,6 +1068,11 @@ describe("config Persona Sprites page", () => {
     const detail = seen.find((component) => component.content?.includes("> Name: Happy"));
     expect(detail?.content).toContain("> Usage: When cheerful");
     expect(detail?.content).toContain("> Identity: Identity");
+    expect(
+      seen.some(
+        (component) => component.type === THUMBNAIL && component.media?.url === "attachment://persona_sprite_55_1.png",
+      ),
+    ).toBe(true);
   });
 
   it("keeps Export live for a guild member while every mutation renders inert", () => {
@@ -1239,7 +1309,7 @@ describe("config Behavior pages", () => {
       false,
     );
     expect(buttonFor(notices, { action: "behavior-notice-visibility-open", locale: "en-US" })?.disabled).toBe(false);
-    expect(walk(notices).some((component) => component.content?.includes("🔴: Web Search"))).toBe(true);
+    expect(walk(notices).some((component) => component.content?.includes("🔴 Web Search"))).toBe(true);
     expect(
       walk(notices).some((component) =>
         component.content?.includes("All disabled notice embeds will be posted in the Logs channel\n-# instead."),
