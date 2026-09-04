@@ -227,7 +227,7 @@ describe("config panel shell", () => {
     const pageSelect = walk(payload).find(
       (component) => component.type === STRING_SELECT && component.placeholder === "Choose a page...",
     );
-    expect(pageSelect?.options?.map((option) => option.value)).toEqual(["general", "memories", "sprites"]);
+    expect(pageSelect?.options?.map((option) => option.value)).toEqual(["general", "triggers", "memories", "sprites"]);
   });
 });
 
@@ -292,12 +292,16 @@ describe("config Persona General body", () => {
     expect(walk(withoutAvatar).some((component) => component.type === THUMBNAIL)).toBe(false);
   });
 
-  it("renders the role of the selected persona", () => {
+  it("renders the name above the role of the selected persona", () => {
     expect(
-      walk(build(GUILD_MANAGER, { selectedPersonaId: 55 })).some((c) => c.content === "> Role: Main persona"),
+      walk(build(GUILD_MANAGER, { selectedPersonaId: 55 })).some(
+        (c) => c.content === "> Name: Aphel\n> Role: Main persona",
+      ),
     ).toBe(true);
     expect(
-      walk(build(GUILD_MANAGER, { selectedPersonaId: 56 })).some((c) => c.content === "> Role: Alter persona"),
+      walk(build(GUILD_MANAGER, { selectedPersonaId: 56 })).some(
+        (c) => c.content === "> Name: Wren\n> Role: Alter persona",
+      ),
     ).toBe(true);
   });
 
@@ -322,8 +326,6 @@ describe("config Persona General body", () => {
     const payload = build(GUILD_MEMBER);
     expect(buttonFor(payload, { action: "avatar-open", locale: "en-US", personaId: 55 })?.disabled).toBe(true);
     expect(buttonFor(payload, { action: "rename-open", locale: "en-US", personaId: 55 })?.disabled).toBe(true);
-    expect(buttonFor(payload, { action: "trigger-add-open", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
-    expect(buttonFor(payload, { action: "trigger-remove-open", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
   });
 
   it("omits guild-only identity actions in a DM workspace", () => {
@@ -338,16 +340,41 @@ describe("config Persona General body", () => {
     ).toBe(false);
   });
 
+  it("keeps a receipt-bearing collection view within Discord's component ceiling", () => {
+    const persona = makePersona({
+      persona_id: 55,
+      attribute_list: ["Likes tea"],
+      sample_dialogues_in: ["Hello"],
+      sample_dialogues_out: ["Hi"],
+    });
+    const payload = build(GUILD_MANAGER, {
+      personas: [persona],
+      selectedAttributeIndex: 0,
+      selectedDialogueIndex: 0,
+      selectedPersonaAvatarUrl: "https://cdn.example.invalid/55.png",
+      receipt: { tone: "success", heading: "Saved", detail: "The change was saved." },
+    });
+    expect(walk(payload)).toHaveLength(40);
+  });
+});
+
+describe("config Persona Triggers body", () => {
+  it("disables both trigger actions for an ordinary guild member", () => {
+    const payload = build(GUILD_MEMBER, { page: "triggers" });
+    expect(buttonFor(payload, { action: "trigger-add-open", locale: "en-US", personaId: 55 })?.disabled).toBe(true);
+    expect(buttonFor(payload, { action: "trigger-remove-open", locale: "en-US", personaId: 55 })?.disabled).toBe(true);
+  });
+
   it("disables Remove Trigger when the persona has no trigger words", () => {
     expect(
-      buttonFor(build(GUILD_MANAGER, { selectedPersonaId: 56 }), {
+      buttonFor(build(GUILD_MANAGER, { page: "triggers", selectedPersonaId: 56 }), {
         action: "trigger-remove-open",
         locale: "en-US",
         personaId: 56,
       })?.disabled,
     ).toBe(true);
     expect(
-      buttonFor(build(GUILD_MANAGER, { selectedPersonaId: 55 }), {
+      buttonFor(build(GUILD_MANAGER, { page: "triggers", selectedPersonaId: 55 }), {
         action: "trigger-remove-open",
         locale: "en-US",
         personaId: 55,
@@ -356,12 +383,27 @@ describe("config Persona General body", () => {
   });
 
   it("renders stored trigger words, and None when there are none", () => {
-    expect(walk(build(GUILD_MANAGER, { selectedPersonaId: 55 })).some((c) => c.content?.includes("`aphel`"))).toBe(
-      true,
-    );
-    expect(walk(build(GUILD_MANAGER, { selectedPersonaId: 56 })).some((c) => c.content?.includes("> None"))).toBe(true);
+    expect(
+      walk(build(GUILD_MANAGER, { page: "triggers", selectedPersonaId: 55 })).some((c) =>
+        c.content?.includes("`aphel`"),
+      ),
+    ).toBe(true);
+    expect(
+      walk(build(GUILD_MANAGER, { page: "triggers", selectedPersonaId: 56 })).some((c) =>
+        c.content?.includes("> None"),
+      ),
+    ).toBe(true);
   });
 
+  it("omits the guild-only trigger page from a DM workspace", () => {
+    const pageSelect = walk(build(DM_OWNER)).find(
+      (component) => component.type === STRING_SELECT && component.placeholder === "Choose a page...",
+    );
+    expect(pageSelect?.options?.some((option) => option.value === "triggers")).toBe(false);
+  });
+});
+
+describe("config Persona General collections", () => {
   it("renders add-first collection selectors and selected fence-safe content", () => {
     const persona = makePersona({
       persona_id: 55,
@@ -716,6 +758,23 @@ describe("config Persona General body", () => {
     expect(
       buttonFor(payload, { action: "naming-open", locale: "en-US", personaId: 55, style: "feminine" }),
     ).toBeDefined();
+    expect(
+      walk(payload).some((component) =>
+        component.content?.includes(
+          "Feminine Naming Habits**\nControls how this persona addresses people\nwho identify as feminine.",
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  it("renders the Lilya preset's neutral suffix", () => {
+    const lilya = makePersona({
+      persona_id: 55,
+      persona_nickname: "Lilya",
+      naming_config: { prefixes: {}, suffixes: { neutral: "-senpai" }, addressTerms: {} },
+    });
+    const payload = build(GUILD_MANAGER, { personas: [lilya], selectedPersonaId: 55 });
+    expect(walk(payload).some((component) => component.content?.includes("Suffix: `-senpai`"))).toBe(true);
   });
 
   it("disables every control while the panel state is stale", () => {
@@ -821,7 +880,7 @@ describe("config promote confirmation view", () => {
   });
 });
 
-describe("config Persona Advanced body", () => {
+describe("config Persona Appearance and Advanced bodies", () => {
   const advancedPersona = makePersona({
     persona_id: 55,
     physical_appearance_tags: ["silver hair", "green eyes"],
@@ -842,37 +901,39 @@ describe("config Persona Advanced body", () => {
     },
   });
 
-  it("renders all six sections in wireframe order and uses the action routes", () => {
+  it("renders visual settings on Appearance without exposing the saved reference path", () => {
+    const payload = build(GUILD_MANAGER, {
+      page: "appearance",
+      personas: [advancedPersona],
+      selectedPersonaId: 55,
+    });
+    expect(buttonFor(payload, { action: "image-tags-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(buttonFor(payload, { action: "character-reference-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(
+      buttonFor(payload, { action: "character-reference-clear-view", locale: "en-US", personaId: 55 })?.style,
+    ).toBe(4);
+    expect(JSON.stringify(payload)).toContain("Uploaded and Saved");
+    expect(JSON.stringify(payload)).not.toContain("data/charreferences");
+  });
+
+  it("renders the four Advanced sections in wireframe order and uses modal action routes", () => {
     const payload = build(GUILD_MANAGER, {
       page: "advanced",
       personas: [advancedPersona],
       selectedPersonaId: 55,
       serverHumanizerDegree: 0,
-      view: { kind: "humanizer-editor", personaId: 55 },
     });
     const seen = walk(payload);
-    const sectionTitles = [
-      "Image Tags",
-      "NovelAI Character Reference",
-      "Persona Prompt",
-      "Context Note",
-      "Response Style",
-      "Text Model Override",
-    ];
+    const sectionTitles = ["Persona Prompt", "Context Note", "Response Style", "Text Model Override"];
     const titlePositions = sectionTitles.map((title) =>
       seen.findIndex((component) => component.content?.includes(`**${title}**`)),
     );
 
     expect(titlePositions.every((position) => position >= 0)).toBe(true);
     expect(titlePositions).toEqual([...titlePositions].sort((left, right) => left - right));
-    expect(buttonFor(payload, { action: "image-tags-open", locale: "en-US", personaId: 55 })).toBeDefined();
-    expect(buttonFor(payload, { action: "character-reference-open", locale: "en-US", personaId: 55 })).toBeDefined();
-    expect(
-      buttonFor(payload, { action: "character-reference-clear-view", locale: "en-US", personaId: 55 })?.style,
-    ).toBe(4);
     expect(buttonFor(payload, { action: "prompt-open", locale: "en-US", personaId: 55 })).toBeDefined();
     expect(buttonFor(payload, { action: "context-note-open", locale: "en-US", personaId: 55 })).toBeDefined();
-    expect(walk(payload).some((component) => component.customId?.includes(":humanizer-select:"))).toBe(true);
+    expect(buttonFor(payload, { action: "humanizer-open", locale: "en-US", personaId: 55 })).toBeDefined();
     expect(buttonFor(payload, { action: "text-override-clear", locale: "en-US", personaId: 55 })?.style).toBe(2);
     expect(seen.some((component) => component.content?.includes("> Server default: 0: None"))).toBe(true);
   });
@@ -924,8 +985,8 @@ describe("config Persona Sprites page", () => {
         component.type === STRING_SELECT &&
         component.customId === buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 55 }),
     );
-    expect(selector?.options?.map((option) => option.value)).toEqual(["0", "1"]);
-    expect(selector?.options?.[0]?.default).toBe(true);
+    expect(selector?.options?.map((option) => option.value)).toEqual(["add", "0", "1"]);
+    expect(selector?.options?.[1]?.default).toBe(true);
 
     const fp = computeSpriteFingerprint(55, 0, "happy");
     expect(
@@ -934,7 +995,7 @@ describe("config Persona Sprites page", () => {
     expect(
       buttonFor(payload, { action: "sprite-remove-view", locale: "en-US", personaId: 55, index: 0, fp })?.style,
     ).toBe(4);
-    expect(buttonFor(payload, { action: "sprite-add-open", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
+    expect(selector?.options?.[0]?.label).toBe("+ Add Sprite");
     expect(buttonFor(payload, { action: "sprite-import-open", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
     expect(buttonFor(payload, { action: "sprite-export", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
 
@@ -949,7 +1010,7 @@ describe("config Persona Sprites page", () => {
     const fp = computeSpriteFingerprint(55, 0, "happy");
 
     expect(buttonFor(payload, { action: "sprite-export", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
-    expect(buttonFor(payload, { action: "sprite-add-open", locale: "en-US", personaId: 55 })?.disabled).toBe(true);
+    expect(walk(payload).some((component) => component.options?.some((option) => option.value === "add"))).toBe(false);
     expect(buttonFor(payload, { action: "sprite-import-open", locale: "en-US", personaId: 55 })?.disabled).toBe(true);
     expect(
       buttonFor(payload, { action: "sprite-edit-open", locale: "en-US", personaId: 55, index: 0, fp })?.disabled,
@@ -976,7 +1037,8 @@ describe("config Persona Sprites page", () => {
   it("disables Export when the persona has no sprites to bundle", () => {
     const payload = build(GUILD_MANAGER, { page: "sprites", personaSprites: [] });
     expect(buttonFor(payload, { action: "sprite-export", locale: "en-US", personaId: 55 })?.disabled).toBe(true);
-    expect(walk(payload).some((component) => component.customId?.includes("sprite-select"))).toBe(false);
+    expect(walk(payload).some((component) => component.customId?.includes("sprite-select"))).toBe(true);
+    expect(walk(payload).some((component) => component.options?.[0]?.value === "add")).toBe(true);
   });
 
   it("pages a sprite set larger than one selector and keeps each option addressable", () => {
@@ -996,8 +1058,8 @@ describe("config Persona Sprites page", () => {
         component.customId === buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 55 }),
     );
 
-    expect(selector?.options?.length).toBe(5);
-    expect(selector?.options?.[0]?.value).toBe(String(CONFIG_PERSONA_SPRITE_PAGE_SIZE));
+    expect(selector?.options?.length).toBe(6);
+    expect(selector?.options?.[1]?.value).toBe(String(CONFIG_PERSONA_SPRITE_PAGE_SIZE));
     expect(
       walk(payload).some((component) =>
         component.customId?.includes(
@@ -1129,6 +1191,20 @@ describe("config Behavior pages", () => {
     );
   });
 
+  it("hides the irrelevant cooldown duration while trigger cooldown is off", () => {
+    const payload = build(GUILD_MANAGER, {
+      category: "behavior",
+      page: "trigger",
+      behaviorView: {
+        ...behaviorView,
+        trigger: { ...behaviorView.trigger, cooldownType: 0, cooldownLength: 5 },
+      },
+    });
+    const cooldown = walk(payload).find((component) => component.content?.includes("**Trigger Cooldown**"));
+    expect(cooldown?.content).toContain("> Off");
+    expect(cooldown?.content).not.toContain("5s");
+  });
+
   it("renders D10 Behavior controls only on their authorized pages", () => {
     const d10View = {
       ...behaviorView,
@@ -1163,6 +1239,12 @@ describe("config Behavior pages", () => {
       false,
     );
     expect(buttonFor(notices, { action: "behavior-notice-visibility-open", locale: "en-US" })?.disabled).toBe(false);
+    expect(walk(notices).some((component) => component.content?.includes("🔴: Web Search"))).toBe(true);
+    expect(
+      walk(notices).some((component) =>
+        component.content?.includes("All disabled notice embeds will be posted in the Logs channel\n-# instead."),
+      ),
+    ).toBe(true);
     expect(
       buttonFor(notices, { action: "behavior-speech-transcripts-set", locale: "en-US", enabled: true })?.disabled,
     ).toBe(true);

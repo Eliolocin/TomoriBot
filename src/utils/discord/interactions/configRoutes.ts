@@ -2,6 +2,7 @@ import {
   AttachmentBuilder,
   MessageFlags,
   type ChannelSelectMenuInteraction,
+  type ChatInputCommandInteraction,
   type ModalSubmitInteraction,
 } from "discord.js";
 import type { PanelAction } from "@/constants/panelActions";
@@ -54,8 +55,10 @@ import { setGuildBotAvatar, setGuildBotNickname } from "@/utils/discord/guildIde
 import { beginPanelInteraction } from "@/utils/discord/interactions/panelController";
 import {
   isConfigRouteAuthorized,
+  PERSONA_ADVANCED_ACTION_BY_ROUTE,
   resolveConfigActor,
   resolveConfigLanding,
+  resolvePersonaSpritesActionState,
   visibleConfigPages,
   type ConfigActor,
 } from "@/utils/discord/interactions/configPermissionPolicy";
@@ -139,6 +142,7 @@ import {
   buildPersonaDialogueAddModal,
   buildPersonaDialogueEditModal,
   buildPersonaImageTagsModal,
+  buildPersonaHumanizerModal,
   buildPersonaNamingHabitsModal,
   buildPersonaPromptModal,
   buildPersonaRenameModal,
@@ -147,6 +151,7 @@ import {
   buildPersonaSpriteImportModal,
   buildPersonaConditioningRemoveModal,
   buildPersonaStmEditModal,
+  buildPersonaTextOverrideModelModal,
   buildTriggerAddModal,
   buildTriggerRemoveCheckboxGroupId,
   buildTriggerRemoveModal,
@@ -154,6 +159,7 @@ import {
   CONFIG_ATTRIBUTE_INPUT_FIELD,
   CONFIG_ATTRIBUTE_PUBLIC_FIELD,
   CONFIG_CHARACTER_REFERENCE_FILE_FIELD,
+  CONFIG_HUMANIZER_FIELD,
   CONFIG_CONTEXT_NOTE_DEPTH_FIELD,
   CONFIG_CONTEXT_NOTE_TEXT_FIELD,
   CONFIG_PERSONA_PROMPT_PART_FIELDS,
@@ -167,6 +173,7 @@ import {
   CONFIG_SPRITE_INSTRUCTIONS_FIELD,
   CONFIG_SPRITE_NAME_FIELD,
   CONFIG_STM_CATEGORY_INPUT_PREFIX,
+  CONFIG_TEXT_OVERRIDE_MODEL_FIELD,
 } from "@/utils/discord/ui/configModals";
 import {
   showRoutedRawModal,
@@ -214,6 +221,7 @@ const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "character-reference-open",
   "prompt-open",
   "context-note-open",
+  "humanizer-open",
   "sprite-add-open",
   "sprite-edit-open",
   "sprite-import-open",
@@ -798,6 +806,12 @@ async function handleModalOpen(
         ),
       );
       return;
+    case "humanizer-open":
+      await dependencies.showModal(
+        interaction,
+        buildPersonaHumanizerModal(locale, persona.persona_id, nonce, persona.humanizer_degree_override),
+      );
+      return;
     case "avatar-open":
       await dependencies.showModal(interaction, buildPersonaAvatarModal(locale, persona.persona_id, nonce));
       return;
@@ -959,6 +973,36 @@ async function handleCollectionAddSelection(
   );
 }
 
+async function handleSpriteAddSelection(
+  interaction: GlobalRoutableInteraction,
+  route: ConfigPanelRoute,
+  dependencies: ConfigRouteDependencies,
+  actor: ConfigActor,
+): Promise<void> {
+  if (resolvePersonaSpritesActionState("add", actor) !== "enabled") {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.config.panel.denied_detail"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const scope = await dependencies.resolveScope(interaction, false);
+  const persona = scope ? findExactPersona(scope.personas, personaLocation(route).personaId) : null;
+  if (!persona?.persona_id) {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.config.panel.unavailable"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  await dependencies.showModal(
+    interaction,
+    buildPersonaSpriteAddModal(route.locale, persona.persona_id, dependencies.createNonce()),
+  );
+}
+
 async function handleTextOverrideChoice(
   interaction: GlobalRoutableInteraction,
   route: ConfigPanelRoute,
@@ -1067,6 +1111,97 @@ async function handleTextOverrideChoice(
   });
 }
 
+async function handleTextOverrideModelModalOpen(
+  interaction: GlobalRoutableInteraction,
+  route: Extract<ConfigPanelRoute, { action: "text-override-open" | "text-override-provider-select" }>,
+  dependencies: ConfigRouteDependencies,
+  actor: ConfigActor,
+): Promise<void> {
+  if (!isConfigRouteAuthorized(route, actor)) {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.config.panel.denied_detail"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const scope = await dependencies.resolveScope(interaction, false);
+  const persona = scope ? findExactPersona(scope.personas, route.personaId) : null;
+  if (!scope || !persona?.persona_id) {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.config.panel.unavailable"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const savedProviders = await dependencies.loadSavedTextProviders(persona.server_id);
+  if (route.action === "text-override-open" && savedProviders.length > 1) {
+    await interaction.deferUpdate();
+    await repaint(interaction, {
+      locale: route.locale,
+      scope,
+      category: "persona",
+      page: "advanced",
+      selectedPersonaId: persona.persona_id,
+      view: {
+        kind: "text-override-provider",
+        personaId: persona.persona_id,
+        providers: savedProviders.map((saved) => saved.provider),
+      },
+      dependencies,
+    });
+    return;
+  }
+
+  const selectedProvider = interaction.isStringSelectMenu() ? interaction.values[0] : savedProviders[0]?.provider;
+  const provider = savedProviders.find(
+    (saved) => saved.provider.toLowerCase() === selectedProvider?.toLowerCase(),
+  )?.provider;
+  if (!provider) {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.config.panel.stale_detail"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const models = await dependencies.loadPersonaTextModels(provider, persona.server_id);
+  if (models.length === 0) {
+    await interaction.reply({
+      content: localizer(route.locale, "commands.model.text.no_models_description"),
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (models.length > 25) {
+    await interaction.deferUpdate();
+    await repaint(interaction, {
+      locale: route.locale,
+      scope,
+      category: "persona",
+      page: "advanced",
+      selectedPersonaId: persona.persona_id,
+      view: { kind: "text-override-model", personaId: persona.persona_id, provider, models, start: 0 },
+      dependencies,
+    });
+    return;
+  }
+
+  await dependencies.showModal(
+    interaction,
+    buildPersonaTextOverrideModelModal(
+      route.locale,
+      persona.persona_id,
+      provider,
+      dependencies.createNonce(),
+      models,
+      persona.persona_llm?.llm_id,
+    ),
+  );
+}
+
 interface WriteOutcome {
   receipt: PanelReceipt;
   telemetry?: PanelAction;
@@ -1158,6 +1293,16 @@ async function runPersonaWrite(
               buildConfigModalFieldId(CONFIG_CHARACTER_REFERENCE_FILE_FIELD, route.nonce),
             ) ?? null)
           : null;
+      if (route.action === "character-reference-submit" && !attachment) {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            "commands.novelai.character-reference.invalid_image_title",
+            "commands.novelai.character-reference.invalid_image_description",
+          ),
+        };
+      }
       const result = await dependencies.operations.replaceCharacterReference({
         persona,
         serverDiscId: scope.serverDiscId,
@@ -1309,8 +1454,17 @@ async function runPersonaWrite(
       };
     }
 
-    case "humanizer-select": {
-      const selectedValue = interaction.isStringSelectMenu() ? (interaction.values[0] ?? "") : "";
+    case "humanizer-select":
+    case "humanizer-submit": {
+      const selectedValue =
+        route.action === "humanizer-submit"
+          ? (dependencies.takeSelectValue(
+              (interaction as ModalSubmitInteraction).id,
+              buildConfigModalFieldId(CONFIG_HUMANIZER_FIELD, route.nonce),
+            ) ?? "")
+          : interaction.isStringSelectMenu()
+            ? (interaction.values[0] ?? "")
+            : "";
       const value = selectedValue === HUMANIZER_INHERIT_VALUE ? null : Number.parseInt(selectedValue, 10);
       const result = await dependencies.operations.setHumanizerOverride({
         persona,
@@ -1358,8 +1512,17 @@ async function runPersonaWrite(
       };
     }
 
-    case "text-override-model-select": {
-      const selectedCodename = interaction.isStringSelectMenu() ? (interaction.values[0] ?? "") : "";
+    case "text-override-model-select":
+    case "text-override-model-submit": {
+      const selectedCodename =
+        route.action === "text-override-model-submit"
+          ? (dependencies.takeSelectValue(
+              (interaction as ModalSubmitInteraction).id,
+              buildConfigModalFieldId(CONFIG_TEXT_OVERRIDE_MODEL_FIELD, route.nonce),
+            ) ?? "")
+          : interaction.isStringSelectMenu()
+            ? (interaction.values[0] ?? "")
+            : "";
       const savedProviders = await dependencies.loadSavedTextProviders(persona.server_id);
       if (savedProviders.length === 0) {
         return {
@@ -2569,6 +2732,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "character-reference-submit" ||
         route.action === "prompt-submit" ||
         route.action === "context-note-submit" ||
+        route.action === "humanizer-submit" ||
+        route.action === "text-override-model-submit" ||
         route.action === "sprite-add-submit" ||
         route.action === "sprite-edit-submit" ||
         route.action === "sprite-import-submit" ||
@@ -2602,6 +2767,14 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
           : null;
       if ((route.action === "attribute-select" || route.action === "dialogue-select") && submittedValue === "add") {
         await handleCollectionAddSelection(interaction, route, dependencies, actor);
+        return;
+      }
+      if (route.action === "sprite-select" && submittedValue === "add") {
+        await handleSpriteAddSelection(interaction, route, dependencies, actor);
+        return;
+      }
+      if (route.action === "text-override-open" || route.action === "text-override-provider-select") {
+        await handleTextOverrideModelModalOpen(interaction, route, dependencies, actor);
         return;
       }
 
@@ -2758,6 +2931,23 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         category = "persona";
         page = "memories";
       }
+      if (route.action === "trigger-add-submit" || route.action === "trigger-remove-submit") {
+        category = "persona";
+        page = "triggers";
+      }
+      if (
+        route.action === "image-tags-submit" ||
+        route.action === "character-reference-submit" ||
+        route.action === "character-reference-clear-view" ||
+        route.action === "character-reference-clear-confirm" ||
+        route.action === "character-reference-clear-cancel"
+      ) {
+        category = "persona";
+        page = "appearance";
+      } else if (PERSONA_ADVANCED_ACTION_BY_ROUTE[route.action]) {
+        category = "persona";
+        page = "advanced";
+      }
       if (SPRITE_ACTIONS.has(route.action)) {
         category = "persona";
         page = "sprites";
@@ -2789,7 +2979,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
           locale: route.locale,
           scope,
           category: "persona",
-          page: "advanced",
+          page: "appearance",
           selectedPersonaId,
           view: {
             kind: "character-reference-clear-confirm",
@@ -2814,25 +3004,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         if (spriteOutcome === "handled") return;
       }
 
-      if (route.action === "humanizer-open" && persona && selectedPersonaId !== undefined) {
-        await repaint(interaction, {
-          locale: route.locale,
-          scope,
-          category: "persona",
-          page: "advanced",
-          selectedPersonaId,
-          view: { kind: "humanizer-editor", personaId: selectedPersonaId },
-          dependencies,
-        });
-        return;
-      }
-
-      if (
-        (route.action === "text-override-open" ||
-          route.action === "text-override-provider-select" ||
-          route.action === "text-override-model-page") &&
-        persona
-      ) {
+      if (route.action === "text-override-model-page" && persona) {
         await handleTextOverrideChoice(interaction, route, scope, persona, dependencies, submittedValue);
         return;
       }
@@ -2982,3 +3154,34 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
 }
 
 export const configInteractionRoute = createConfigInteractionRoute();
+
+/**
+ * Opens the panel from the bare `/config` root.
+ *
+ * The opening destination comes from `resolveConfigLanding` rather than the landing constants, so the
+ * page the panel opens on is always one this actor may also navigate back to after a denial.
+ */
+export async function executeConfigCommand(
+  interaction: ChatInputCommandInteraction,
+  locale: string,
+  dependenciesOverride: Partial<ConfigRouteDependencies> = {},
+): Promise<void> {
+  const dependencies: ConfigRouteDependencies = { ...defaultDependencies, ...dependenciesOverride };
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const scope = await dependencies.resolveScope(interaction, false);
+  if (!scope) {
+    await interaction.editReply(terminalPayload(locale, "commands.config.panel.unavailable"));
+    return;
+  }
+
+  const landing = resolveConfigLanding(scope.actor);
+  await repaint(interaction, {
+    locale,
+    scope,
+    category: landing.category,
+    page: landing.page,
+    selectedPersonaId: resolveSelectedPersona(scope.personas, null)?.persona_id ?? null,
+    dependencies,
+  });
+}

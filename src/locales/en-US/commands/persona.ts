@@ -74,7 +74,7 @@ export default {
         persona_select_title: `Select Persona`,
         no_sprites_title: `🟡 No Sprites`,
         no_sprites_description: `**{persona_name}** does not have any sprites to edit.`,
-        no_eligible_sprites_description: `No persona has any sprites to edit yet. Add some with \`/persona sprites add\`.`,
+        no_eligible_sprites_description: `No persona has any sprites to edit yet. Add some with \`/config\` > Persona > Sprites.`,
         select_modal_title: `Select Sprite`,
         select_label: `Sprite to Edit`,
         select_description: `Choose which sprite to edit.`,
@@ -104,7 +104,7 @@ Click **Confirm** to edit it.`,
         persona_select_title: `Select Persona`,
         no_sprites_title: `🟡 No Sprites`,
         no_sprites_description: `**{persona_name}** does not have any sprites to remove.`,
-        no_eligible_sprites_description: `No persona has any sprites to remove yet. Add some with \`/persona sprites add\`.`,
+        no_eligible_sprites_description: `No persona has any sprites to remove yet. Add some with \`/config\` > Persona > Sprites.`,
         modal_title: `Remove Persona Sprites`,
         checkbox_label: `Sprites to Keep`,
         checkbox_label_continued: `More Sprites to Keep`,
@@ -134,7 +134,7 @@ Click **Confirm** to edit it.`,
         failed_title: `🔴 Export Failed`,
         all_images_failed_description: `None of **{persona_name}**'s sprite images could be loaded, so there was nothing to export.`,
         success_title: `🟢 Sprites Exported`,
-        success_description: `Exported {sprite_count} sprite(s) for **{persona_name}**. Share this .zip and import it with \`/persona sprites import\`.`,
+        success_description: `Exported {sprite_count} sprite(s) for **{persona_name}**. Share this .zip and import it with \`/config\` > Persona > Sprites.`,
         success_partial_description: `Exported {sprite_count} sprite(s) for **{persona_name}**. {skipped_count} sprite(s) were skipped because their images could not be loaded.`,
       },
       import: {
@@ -150,7 +150,7 @@ Click **Confirm** to edit it.`,
         archive_label: `Sprite Archive`,
         archive_description: `Upload a .zip created by /persona sprites export.`,
         invalid_file_title: `🔴 Invalid Archive`,
-        invalid_file_description: `Please upload a valid sprite .zip created by \`/persona sprites export\`.`,
+        invalid_file_description: `Please upload a valid sprite .zip created by \`/config\` > Persona > Sprites.`,
         file_too_large_title: `🔴 Archive Too Large`,
         file_too_large_description: `The sprite archive is too large. Maximum file size is {max_size}MB.`,
         download_failed_title: `🔴 Download Failed`,
@@ -331,11 +331,11 @@ Triggers: {triggers}
 
 This persona will respond when these triggers appear in messages.`,
       alter_success_confirmation: `Successfully imported alter persona **{nickname}** with {trigger_count} unique trigger words! The detailed import information has been posted in the channel.`,
-      alter_avatar_fallback_main: `🟡 This import did not include an avatar image, so this alter is using **{nickname}**'s current main persona avatar as a fallback. You can use \`/persona avatar\` to change it.`,
+      alter_avatar_fallback_main: `🟡 This import did not include an avatar image, so this alter is using **{nickname}**'s current main persona avatar as a fallback. You can use \`/config\` > Persona > General to change it.`,
       alter_avatar_warning: `⚠️ Do not delete the avatar image embed above, or the alter persona avatar will be lost.`,
       alter_dm_not_allowed_title: `🔴 Alter Personas Not Allowed in DMs`,
       alter_dm_not_allowed_description: `Alter personas can only be imported in servers, not in Direct Messages. Please run this command in a server.`,
-      alter_no_triggers_warning: `⚠️ This persona has no trigger words. It won't respond to any messages until you add triggers using \`/persona trigger add\`.`,
+      alter_no_triggers_warning: `⚠️ This persona has no trigger words. It won't respond to any messages until you add triggers using \`/config\` > Persona > General.`,
       alter_name_conflict_title: `🔴 Persona Name Already Exists`,
       alter_name_conflict_description: `A persona with the name **{name}** already exists on this server. Each persona must have a unique name.
 
@@ -462,32 +462,32 @@ Trigger Words ({trigger_word_count}): {triggers}`,
       field_web_search: `Search the Web?`,
       field_additional_inst: `Additional Instructions`,
       wrong_provider_title: `🔴 Incompatible Provider`,
-      wrong_provider_description: `Preset generation requires a compatible provider. Your current provider is **{current_provider}**. Use \`/model text\` to switch to a supported provider.`,
+      wrong_provider_description: `Preset generation requires a compatible provider. Your current provider is **{current_provider}**. Use \`/config\` > Models > Switch Models to switch to a supported provider.`,
       no_api_key_title: `🔴 No API Key`,
       no_api_key_description: `No active provider is configured. Use \`/setup\` (first time) or \`/providers\` to register one.`,
       model_incompatible_title: `Incompatible Model`,
       model_incompatible_description: `Your current model (**{model_name}**) does not support **STRUCTURED OUTPUT**, which is required for persona generation.
 
 **Next steps:**
-Use \`/model text\` to switch to a model that supports structured output (e.g., models with "STRUCT" capability).`,
+Use \`/config\` > Models > Switch Models to switch to a model that supports structured output (e.g., models with "STRUCT" capability).`,
       image_vision_required_title: `🔴 Image Vision Required`,
       image_vision_required_description: `You uploaded an image, but your current model (**{model_name}**) does not support **IMAGE VISION** and no vision model is configured.
 
 **Next steps:**
-1. Use \`/model vision\` to set a dedicated vision model, OR
-2. Use \`/model text\` to switch to a vision-capable model, OR
+1. Use \`/config\` > Models > Switch Models to set a dedicated vision model, OR
+2. Use \`/config\` > Models > Switch Models to switch to a vision-capable model, OR
 3. Remove the image and regenerate without it`,
       vision_model_provider_unsupported_title: `🔴 Vision Model Provider Unsupported`,
       vision_model_provider_unsupported_description: `Your vision model (**{vision_model_name}**) is on provider **{vision_provider}**, which does not support persona preset generation.
 
 **Next steps:**
-1. Use \`/model vision\` to set a vision model from a supported provider (Google, OpenRouter, DeepSeek, Z.ai, Custom, NVIDIA NIM), OR
-2. Use \`/model text\` to switch your primary model to one that supports both vision and preset generation`,
+1. Use \`/config\` > Models > Switch Models to set a vision model from a supported provider (Google, OpenRouter, DeepSeek, Z.ai, Custom, NVIDIA NIM), OR
+2. Use \`/config\` > Models > Switch Models to switch your primary model to one that supports both vision and preset generation`,
       web_search_tools_required_title: `🔴 Web Search Unavailable`,
       web_search_tools_required_description: `You selected web search, but the current model (**{model_name}**) does not support **TOOLS**.
 
 **Next steps:**
-1. Use \`/model text\` to switch to a tool-enabled model, OR
+1. Use \`/config\` > Models > Switch Models to switch to a tool-enabled model, OR
 2. Regenerate without web search (choose "No" when asked)`,
       api_key_decrypt_failed_title: `🔴 API Key Error`,
       api_key_decrypt_failed_description: `Failed to decrypt the active provider credentials. Please reconfigure them using \`/providers\`.`,
@@ -660,14 +660,14 @@ Or press the Import button`,
         already_exists_description: `The word \`{word}\` is already in the trigger list.`,
         already_exists_multiple_description: `These trigger words already exist: {words}.`,
         limit_exceeded_title: `Trigger Word Limit Exceeded`,
-        limit_exceeded_description: `This server can have up to {max_allowed} trigger words (currently has {current_count}). Please remove some trigger words with \`/persona trigger remove\` before adding new ones.`,
+        limit_exceeded_description: `This server can have up to {max_allowed} trigger words (currently has {current_count}). Please remove some trigger words with \`/config\` > Persona > General before adding new ones.`,
         success_title: `Trigger Word Added`,
         success_description: `Added {added_count} trigger word(s) to {persona_name}: {added_words}. There are now {word_count} trigger words.`,
       },
       remove: {
         description: `Remove a word that makes me respond when mentioned.`,
         no_triggers_title: `No Trigger Words`,
-        no_triggers_description: `There are no custom trigger words set to remove. Add some with \`/persona trigger add\`.`,
+        no_triggers_description: `There are no custom trigger words set to remove. Add some with \`/config\` > Persona > General.`,
         select_description: `Select the trigger word you want to remove`,
         modal_title: `Remove Trigger Words`,
         checkbox_label: `Trigger Words`,

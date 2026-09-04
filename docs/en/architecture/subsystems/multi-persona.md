@@ -44,7 +44,7 @@ Key columns:
 
 Per-persona configuration (one row per persona in `personas`):
 - `trigger_words`: trigger words for this persona — **all personas use this column** (Phase 6 F1 merged the former `personas.alter_triggers` column here; the old `is_alter ? alter_triggers : trigger_words` ternary is gone).
-- `humanizer_degree` (nullable, migration `047`): per-persona humanizer override set via `/config humanizer` with `scope: Persona`. NULL inherits the server-wide `server_chat_configs.humanizer_degree`. When set, persona state loading overlays the value onto that persona's assembled `config.humanizer_degree`, so providers, the stream buffer, and HEAVY-degree context transforms all see the persona-scoped degree with no call-site awareness. Like the persona LLM override (and unlike content edits), setting it does **not** materialize a preset-pointer persona.
+- `humanizer_degree` (nullable, migration `047`): per-persona humanizer override set via `/config` > Behavior > General with `scope: Persona`. NULL inherits the server-wide `server_chat_configs.humanizer_degree`. When set, persona state loading overlays the value onto that persona's assembled `config.humanizer_degree`, so providers, the stream buffer, and HEAVY-degree context transforms all see the persona-scoped degree with no call-site awareness. Like the persona LLM override (and unlike content edits), setting it does **not** materialize a preset-pointer persona.
 
 ### `persona_sprites`
 
@@ -56,17 +56,17 @@ Default (preset-pointer) personas can ship with an **official sprite set** that 
 - `sprite_key`: normalized lookup key for case/spacing-insensitive matching.
 - `avatar_url`: production public object URL, or a non-production local path under `data/avatars/servers/{serverDiscId}/personas/{personaId}/sprites/{assetId}.png`.
 - `usage_instructions`: short guidance injected into the active persona's prompt so the model knows when the sprite should be used.
-- `is_identity`: when `true`, the sprite renders its **decorated** `sprite_name (SourcePersona)` name directly in Discord (DID alter / "system member" style) instead of the clean persona name. Set via the **Save as Identity** checkbox on `/persona sprites add` or `/persona sprites edit` (default unchecked on add). The checkbox is authoritative on every save — saving an existing sprite with the box unchecked demotes it back to an ordinary sprite.
+- `is_identity`: when `true`, the sprite renders its **decorated** `sprite_name (SourcePersona)` name directly in Discord (DID alter / "system member" style) instead of the clean persona name. Set via the **Save as Identity** checkbox on the Add and Edit modals of `/config` > Persona > Sprites (default unchecked on add). The checkbox is authoritative on every save — saving an existing sprite with the box unchecked demotes it back to an ordinary sprite.
 
-Sprite rows are managed by `/persona sprites add`, `/persona sprites edit`, and `/persona sprites remove`. Reusing a sprite name on `add` replaces the existing row and image. `edit` changes a sprite's name, optional replacement image, usage instructions, and `is_identity` flag in place; image replacements consume the same shared avatar quota as `add`, while metadata-only edits stay quota-free. Renaming updates `sprite_key` and is rejected if it would collide with another sprite on the same persona. The default per-persona limit is 50 (`PERSONA_SPRITE_MAX_PER_PERSONA`), and the prompt only lists the first 20 by default (`PERSONA_SPRITE_PROMPT_MAX_COUNT`). Identity status is not surfaced to the model — invocation syntax is identical for both kinds, so only the rendered webhook name differs.
+Sprite rows are managed by the add, edit, and remove actions on `/config` > Persona > Sprites. Reusing a sprite name on `add` replaces the existing row and image. `edit` changes a sprite's name, optional replacement image, usage instructions, and `is_identity` flag in place; image replacements consume the same shared avatar quota as `add`, while metadata-only edits stay quota-free. Renaming updates `sprite_key` and is rejected if it would collide with another sprite on the same persona. The default per-persona limit is 50 (`PERSONA_SPRITE_MAX_PER_PERSONA`), and the prompt only lists the first 20 by default (`PERSONA_SPRITE_PROMPT_MAX_COUNT`). Identity status is not surfaced to the model — invocation syntax is identical for both kinds, so only the rendered webhook name differs.
 
 #### Sprite export / import (`.zip`)
 
-A persona's whole sprite set can be shared as a `.zip` via `/persona sprites export` and `/persona sprites import`. This is kept separate from `/persona export` (which carries only the persona card) so sprite images do not balloon the card file. The archive format lives in `src/utils/persona/spriteArchive.ts`:
+A persona's whole sprite set can be shared as a `.zip` via the export and import actions on `/config` > Persona > Sprites. This is kept separate from `/persona export` (which carries only the persona card) so sprite images do not balloon the card file. The archive format lives in `src/utils/persona/spriteArchive.ts`:
 
 - **Layout:** `manifest.json` (format `version`, `source_persona` info, and a per-sprite list of `sprite_name` / `sprite_key` / `usage_instructions` / `is_identity` / `file`) plus the images under `sprites/NN-{key}.png`. Storage references and DB ids are deliberately excluded — they are meaningless on another server.
 - **Export** (`export.ts`): a persona-select modal; the command loads each sprite's stored image, normalizes it to PNG, and bundles them. Sprites whose image can no longer be loaded are skipped and the result is reported as partial. The reply is public (for sharing), like `/persona export`.
-- **Import** (`import.ts`): a single modal — persona string-select plus a `.zip` file-upload field — mirroring `/persona sprites add`. Requires a guild and Manage Server. The whole batch reserves **one** import-operation quota slot (not one avatar-quota slot per sprite). Names are re-validated and every image is re-converted to PNG **before** any storage/DB write, so a bad entry aborts cleanly. Name conflicts **overwrite** the existing sprite (old image is deleted from storage). If the archive would push the persona past `PERSONA_SPRITE_MAX_PER_PERSONA`, the **entire import is rejected** (all-or-nothing) — only new keys count toward the cap, since same-key entries are overwrites. Untrusted archives are guarded against ZIP bombs by entry-count, per-file, and total-decompressed caps.
+- **Import** (`import.ts`): a single modal — persona string-select plus a `.zip` file-upload field — mirroring `/config` > Persona > Sprites. Requires a guild and Manage Server. The whole batch reserves **one** import-operation quota slot (not one avatar-quota slot per sprite). Names are re-validated and every image is re-converted to PNG **before** any storage/DB write, so a bad entry aborts cleanly. Name conflicts **overwrite** the existing sprite (old image is deleted from storage). If the archive would push the persona past `PERSONA_SPRITE_MAX_PER_PERSONA`, the **entire import is rejected** (all-or-nothing) — only new keys count toward the cap, since same-key entries are overwrites. Untrusted archives are guarded against ZIP bombs by entry-count, per-file, and total-decompressed caps.
 
 ### `reminders`
 
@@ -93,7 +93,7 @@ Reminders are tied to a persona to preserve the identity that set them:
 
 Each persona checks its own trigger list in `persona_configs.trigger_words`. The former split (`tomori_configs.trigger_words` for main, `personas.alter_triggers` for alters) was unified in Phase 6 F1.
 
-If multiple personas match, they respond in deterministic order based on where their trigger first appears in the message. The per-message count is capped by `/config trigger-match-limit`.
+If multiple personas match, they respond in deterministic order based on where their trigger first appears in the message. The per-message count is capped by `/config` > Behavior > Trigger.
 
 #### Single-owner trigger resolution
 
@@ -132,16 +132,16 @@ Manual triggers can specify `selectedPersonaId`. In that case, **only that perso
 `/respond` resolves its implicit persona from recent channel history before falling back:
 1. the last known Tomori persona that spoke in the channel;
 2. the user's personal spotlight auto-trigger persona, if configured and allowed;
-3. the channel's `/server auto-trigger channels` persona assignment, if configured;
+3. the channel's `/config` > Channels > Auto-Trigger persona assignment, if configured;
 4. the main persona.
 
 Configured join welcomes also use the manual-trigger path:
-- `/server welcome-channel set` stores a selected persona or `Random`.
+- `/config` > Channels > Destinations stores a selected persona or `Random`.
 - On `guildMemberAdd`, the welcome event resolves that persona and calls `tomoriChat(..., isManuallyTriggered = true, selectedPersonaId = ...)`.
 - If `welcome_persona_id` is `NULL`, one persona is chosen uniformly from the server's available personas for that join.
 
 Configured auto-trigger channels can also pin a single persona per channel:
-- `/server auto-trigger channels` can enable/disable channels in bulk, or target one channel and choose which persona should answer there.
+- `/config` > Channels > Auto-Trigger can enable/disable channels in bulk, or target one channel and choose which persona should answer there.
 - The per-channel assignment is stored in `server_auto_trigger_persona_overrides`; the assembled config still exposes it as `autoch_persona_overrides`.
 - If a channel has no explicit assignment, auto-trigger falls back to the main persona.
 
@@ -217,7 +217,7 @@ To prevent infinite loops and unbounded persona activations, TomoriBot implement
 
 ### Overview
 
-- **Default limit**: 3 (configurable via `/config trigger-cascade-limit`, max 10)
+- **Default limit**: 3 (configurable via `/config` > Behavior > Trigger, max 10)
 - **Scope**: Per-channel (shared across all personas)
 - **Purpose**: Limit the total number of persona activations after the first trigger in a session
 - **Origin tracking**: each trigger session keeps the originating user identity so downstream persona self-messages still respect that user’s server whitelist and personal spotlight restrictions
@@ -302,14 +302,14 @@ Proxy-trigger note: if user A is restricted to persona Alice by either server wh
 - 0 = Only the first triggered persona responds, no additional triggers allowed
 - N = N additional triggers allowed after the first (N+1 total per session)
 
-**Command:** `/config trigger-cascade-limit`
+**Command:** `/config` > Behavior > Trigger
 
 **Database:** `server_chat_configs.match_limit`
 - Default: 3
 - Range: 1 to 10
 - Caps how many personas one message can trigger
 
-**Command:** `/config trigger-match-limit`
+**Command:** `/config` > Behavior > Trigger
 
 ### Example Flow
 
@@ -357,7 +357,7 @@ Trigger 4: C: "Maybe @E?"
 - Check if cascade trigger limit is reached
 - Look for log: `Self-reply trigger limit reached (X)`
 - Have a user send a message to reset the session
-- Increase limit with `/config trigger-cascade-limit` (max 10)
+- Increase limit with `/config` > Behavior > Trigger (max 10)
 
 **Want to allow only the first persona to respond?**
 - Set limit to 0: `/config trigger-cascade-limit limit:0`
@@ -552,7 +552,7 @@ Behavior:
 - `/persona sample-dialogue add|edit|remove` manages the paired `sample_dialogues_in/out` arrays for a selected persona.
 - Edit flows reuse the existing persona picker and item selector, then show a confirmation button before opening a prefilled edit modal.
 
-### `/persona swap`
+### `/config` > Persona > Identity & Personality
 
 - Promotes an alter to main.
 - Updates `persona_configs.trigger_words` for both personas (all trigger words unified in `persona_configs.trigger_words` after Phase 6 F1).
@@ -622,7 +622,7 @@ In-memory caches:
 2. **Check cascade trigger limit:**
    - Look for log: `Self-reply trigger limit reached (X)`
    - Have a user send a message to reset the session
-   - Increase limit with `/config trigger-cascade-limit` if needed
+   - Increase limit with `/config` > Behavior > Trigger if needed
 
 3. **Check webhook permissions:**
    - Verify bot has `MANAGE_WEBHOOKS` permission in channel
@@ -652,12 +652,12 @@ In-memory caches:
 **Personas stop responding after several triggers:**
 - Trigger limit reached (default: 3 additional after first)
 - User message resets the trigger session
-- Check current limit: `/config trigger-cascade-limit`
+- Check current limit: `/config` > Behavior > Trigger
 - Increase limit (max 10) or set to 0 for first-trigger-only
 
 **Personas triggering infinite loops:**
 - Limit is too high
-- Reduce limit with `/config trigger-cascade-limit`
+- Reduce limit with `/config` > Behavior > Trigger
 - Check persona personalities (may be too eager to mention each other)
 
 ## Test Checklist (Recommended)

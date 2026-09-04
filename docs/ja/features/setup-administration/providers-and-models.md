@@ -41,12 +41,12 @@ Brave SearchはAIプロバイダーとは別であり、ウェブ検索を強化
 
 プロバイダーを設定した後、このサーバーの各機能で使用するモデルを選択します。
 
-- `/model text`：メインのチャットモデル
-- `/model vision`：ビジョンモデル（チャットモデルが画像を読み取れない場合に画像を読み取るため）
-- `/model image`：画像生成（[画像生成](/ja/features/capabilities/media-generation/image-generation/)を参照）
-- `/model video`：動画生成
-- `/model embedding`：[ドキュメントナレッジベース](/ja/features/knowledge/memory/#document-knowledge-base-rag)用の埋め込み（embeddings）
-- `/model speech` / `/model transcription`：[音声](/ja/features/capabilities/media-generation/tts-and-stt/)
+- `/config` > Models > Switch Models：メインのチャットモデル
+- `/config` > Models > Switch Models：ビジョンモデル（チャットモデルが画像を読み取れない場合に画像を読み取るため）
+- `/config` > Models > Switch Models：画像生成（[画像生成](/ja/features/capabilities/media-generation/image-generation/)を参照）
+- `/config` > Models > Switch Models：動画生成
+- `/config` > Models > Switch Models：[ドキュメントナレッジベース](/ja/features/knowledge/memory/#document-knowledge-base-rag)用の埋め込み（embeddings）
+- `/providers` / `/providers`：[音声](/ja/features/capabilities/media-generation/tts-and-stt/)
 
 また、`/providers`を使用して、このサーバーの自動フェイルオーバーと負荷分散用のバックアップキーを管理することもできます。
 

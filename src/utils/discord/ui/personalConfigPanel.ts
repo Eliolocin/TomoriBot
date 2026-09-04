@@ -1044,7 +1044,7 @@ ${localizer(locale, "commands.personal.config.appearance_description")}
         {
           type: ComponentType.TextDisplay,
           content: `**${localizer(locale, "commands.personal.config.character_reference_label")}**
-> ${localizer(locale, "commands.personal.config.character_reference_image_label")}: ${user.nai_char_ref_url ? `\`${escapeDiscordMarkdown(user.nai_char_ref_url)}\`` : localizer(locale, "commands.personal.config.not_set_label")}`,
+> ${localizer(locale, "commands.personal.config.character_reference_image_label")}: ${user.nai_char_ref_url ? localizer(locale, "commands.personal.config.character_reference_uploaded") : localizer(locale, "commands.personal.config.not_set_label")}`,
         },
         {
           type: ComponentType.ActionRow,

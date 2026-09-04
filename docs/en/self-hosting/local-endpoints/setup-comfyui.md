@@ -105,7 +105,7 @@ Tomori offers the tool only the modes you declare. Inpainting appears for ComfyU
 only, since no other API compatibility accepts a mask. Editing the model later reopens the form
 with your current selection, so changing a code name will not clear it.
 
-Adding the model makes it the active `image`/`video` model automatically. Trigger generation by asking Tomori directly in chat. If it isn't active for some reason, run `/model image` (or `/model video`)
+Adding the model makes it the active `image`/`video` model automatically. Trigger generation by asking Tomori directly in chat. If it isn't active for some reason, run `/config` > Models > Switch Models
 and select your registered ComfyUI endpoint.
 
 ## Troubleshooting

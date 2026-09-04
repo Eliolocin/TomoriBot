@@ -104,7 +104,7 @@ describe("provider error tips resolve against the credential source", () => {
   it("keeps recommending server commands when the server's credentials failed", async () => {
     const tips = await renderTips(MODEL_ERROR, "server");
 
-    expect(tips).toContain("/model text");
+    expect(tips).toContain("/config");
     expect(tips).not.toContain("/personal");
   });
 
@@ -112,7 +112,8 @@ describe("provider error tips resolve against the credential source", () => {
     const tips = await renderTips(MODEL_ERROR, "personal");
 
     expect(tips).toContain("/personal config");
-    expect(tips).not.toContain("/model text");
+    // "/personal config" does not contain "/config", so this still discriminates the two scopes.
+    expect(tips).not.toContain("/config");
   });
 
   it("offers the personal provider panel recovery path on personal failures", async () => {
@@ -149,7 +150,7 @@ describe("provider error tips resolve against the credential source", () => {
   it("falls back to server-scoped tips when no credential source was recorded", async () => {
     const tips = await renderTips(MODEL_ERROR, undefined);
 
-    expect(tips).toContain("/model text");
+    expect(tips).toContain("/config");
     expect(tips).not.toContain("/personal");
   });
 });

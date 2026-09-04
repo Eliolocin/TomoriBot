@@ -49,7 +49,7 @@ describe("Wave 5 /memories registration restrictions", () => {
     expect([...(executionMap.get("memories")?.keys() ?? [])]).toEqual([ROOT_COMMAND_EXECUTION_KEY]);
   }, 30000);
 
-  it("dissolves legacy workspace memory leaves while retaining transfer, tagging, and stm configuration", async () => {
+  it("dissolves legacy workspace memory leaves while retaining the transfer leaves", async () => {
     const { executionMap } = await loadCommandData();
     const memory = executionMap.get("memory");
     const server = executionMap.get("server");
@@ -66,12 +66,12 @@ describe("Wave 5 /memories registration restrictions", () => {
     }
     expect(server.has("stm.manage")).toBe(false);
 
-    for (const key of ["personal.export", "personal.import", "server.export", "server.import", "tagging.set"]) {
+    for (const key of ["personal.export", "personal.import", "server.export", "server.import"]) {
       expect(memory.has(key)).toBe(true);
     }
-    for (const key of ["stm.parameters", "stm.categories-edit", "stm.prompt-edit", "stm.privacy-bypass"]) {
-      expect(server.has(key)).toBe(true);
-    }
+    // `memory tagging set` and the four `server stm` leaves were absorbed into the `/config` panel by
+    // the Wave 6 cutover. Their dissolution is asserted in configRegistration.test.ts, which owns
+    // loader topology, so this Wave 5 file no longer claims they are retained.
   }, 30000);
 });
 

@@ -99,7 +99,7 @@ If you want to save and activate an additional provider afterward:
 /providers
 ```
 
-Then use `/model text` whenever you want to switch to another saved provider or model later.
+Then use `/config` > Models > Switch Models whenever you want to switch to another saved provider or model later.
 
 Common saved providers:
 

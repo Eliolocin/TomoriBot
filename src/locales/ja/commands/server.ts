@@ -252,7 +252,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         description: `メンバーをパーソナライズのブラックリストに追加します。`,
         member_description: `ブラックリストに追加するメンバー。`,
         personalization_disabled_title: `パーソナライズが無効です`,
-        personalization_disabled_description: `現在、サーバー全体でパーソナライズが無効になっています。まず \`/capabilities manage\` で有効にしてください。`,
+        personalization_disabled_description: `現在、サーバー全体でパーソナライズが無効になっています。まず \`/config\` > Permissions で有効にしてください。`,
         already_blacklisted_title: `既にブラックリストに登録されています`,
         already_blacklisted_description: `\`{user_name}\` は既にパーソナライズのブラックリストに登録されています。`,
         cannot_blacklist_bot_title: `ボットをブラックリスト登録できません`,

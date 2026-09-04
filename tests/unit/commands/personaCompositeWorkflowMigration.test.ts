@@ -36,29 +36,10 @@ describe("composite persona workflow migrations", () => {
     expect(callback).not.toContain("deferReply(");
   });
 
-  it("acknowledges sprite selection before loading sprites and uses nested page buttons", () => {
-    const source = readSource("src/commands/persona/sprites/remove.ts");
-    const callback = selectedCallback(source);
-    const acknowledgeIndex = callback.indexOf("selection.beginInPlaceWork()");
-    const spriteLoadIndex = callback.indexOf("personaSpriteRepository.listForPersona");
-    const nestedButtonIndex = source.indexOf("selection.useButton(buttonInteraction)");
-    const nestedModalIndex = source.indexOf("nested.openModal");
-
-    expect(acknowledgeIndex).toBeGreaterThanOrEqual(0);
-    expect(spriteLoadIndex).toBeGreaterThan(acknowledgeIndex);
-    expect(nestedButtonIndex).toBeGreaterThanOrEqual(0);
-    expect(nestedModalIndex).toBeGreaterThan(nestedButtonIndex);
-    expect(source).toContain("flags: MessageFlags.IsComponentsV2");
-    expect(callback).not.toContain("replyInfoEmbed(");
-    expect(callback).not.toContain("deferReply(");
-  });
-
   it("contains none of the retired low-level picker boilerplate", () => {
-    for (const relativePath of ["src/commands/learn/history.ts", "src/commands/persona/sprites/remove.ts"]) {
-      const source = readSource(relativePath);
-      expect(source).not.toContain("replyPaginatedPersonaChoicesV2");
-      expect(source).not.toContain("preserveSelectedInteraction: true");
-      expect(source).not.toMatch(/onSelect:\s*async\s*\(\)\s*=>\s*\{\s*\}/);
-    }
+    const source = readSource("src/commands/learn/history.ts");
+    expect(source).not.toContain("replyPaginatedPersonaChoicesV2");
+    expect(source).not.toContain("preserveSelectedInteraction: true");
+    expect(source).not.toMatch(/onSelect:\s*async\s*\(\)\s*=>\s*\{\s*\}/);
   });
 });

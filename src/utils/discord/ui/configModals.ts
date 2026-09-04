@@ -1,5 +1,5 @@
 import { TextInputStyle } from "discord.js";
-import type { PersonaSpriteRow, StmCategoryRow, TomoriState } from "@/types/db/schema";
+import type { LlmRow, PersonaSpriteRow, StmCategoryRow, TomoriState } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import type { ShortTermMemoryEntry } from "@/utils/cache/shortTermMemoryCache";
@@ -25,6 +25,7 @@ import { resolvePrefillPrompt } from "@/utils/text/personaPrompt";
 import { localizer } from "@/utils/text/localizer";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
 import { buildSlugMap } from "@/utils/text/slugifyLabel";
+import { createHumanizerOptions, HUMANIZER_INHERIT_VALUE } from "@/utils/discord/humanizerOptions";
 
 export interface RawModalPayload {
   custom_id: string;
@@ -52,6 +53,8 @@ export const CONFIG_PERSONA_PROMPT_PART_FIELDS = [
   "persona_prompt_part4",
 ] as const;
 export const CONFIG_CHARACTER_REFERENCE_FILE_FIELD = "character_reference";
+export const CONFIG_HUMANIZER_FIELD = "humanizer";
+export const CONFIG_TEXT_OVERRIDE_MODEL_FIELD = "text_override_model";
 export const CONFIG_SPRITE_NAME_FIELD = "sprite_name";
 export const CONFIG_SPRITE_IMAGE_FIELD = "sprite_image";
 export const CONFIG_SPRITE_INSTRUCTIONS_FIELD = "sprite_instructions";
@@ -61,6 +64,12 @@ export const CONFIG_SPRITE_IDENTITY_OPTION_VALUE = "identity";
 
 const MODAL_TITLE_MAX_LENGTH = 45;
 const MODAL_DESCRIPTION_MAX_LENGTH = 100;
+
+const NAMING_MODAL_TITLE_KEYS: Record<AddressingStyle, string> = {
+  masculine: "commands.config.panel.naming_modal_title_masculine",
+  feminine: "commands.config.panel.naming_modal_title_feminine",
+  neutral: "commands.config.panel.naming_modal_title_neutral",
+};
 
 function modalTitle(locale: string, key: string): string {
   return safeSelectOptionText(localizer(locale, key), MODAL_TITLE_MAX_LENGTH);
@@ -135,13 +144,83 @@ export function buildPersonaCharacterReferenceModal(locale: string, personaId: n
     components: [
       {
         type: 18,
-        label: modalLabel(locale, "commands.novelai.character-reference.image_description"),
+        label: modalLabel(locale, "commands.config.panel.character_reference_image_label"),
+        description: modalDescription(locale, "commands.config.panel.character_reference_upload_description"),
         component: {
           type: 19,
           custom_id: buildConfigModalFieldId(CONFIG_CHARACTER_REFERENCE_FILE_FIELD, nonce),
-          min_values: 0,
+          min_values: 1,
           max_values: 1,
-          required: false,
+          required: true,
+        },
+      },
+    ],
+  };
+}
+
+export function buildPersonaHumanizerModal(
+  locale: string,
+  personaId: number,
+  nonce: string,
+  currentValue: number | null | undefined,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "humanizer-submit", locale, personaId, nonce }),
+    title: modalTitle(locale, "commands.config.panel.edit_humanizer_button"),
+    components: [
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.config.panel.response_style_title"),
+        description: modalDescription(locale, "commands.config.panel.response_style_description"),
+        component: {
+          type: 3,
+          custom_id: buildConfigModalFieldId(CONFIG_HUMANIZER_FIELD, nonce),
+          min_values: 1,
+          max_values: 1,
+          required: true,
+          options: createHumanizerOptions(
+            locale,
+            currentValue === null || currentValue === undefined ? HUMANIZER_INHERIT_VALUE : String(currentValue),
+            true,
+          ).map((option) => ({
+            label: safeSelectOptionText(option.label, 100),
+            value: option.value,
+            description: option.description ? safeSelectOptionText(option.description, 100) : undefined,
+            default: option.default,
+          })),
+        },
+      },
+    ],
+  };
+}
+
+export function buildPersonaTextOverrideModelModal(
+  locale: string,
+  personaId: number,
+  provider: string,
+  nonce: string,
+  models: readonly LlmRow[],
+  currentModelId: number | null | undefined,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "text-override-model-submit", locale, personaId, provider, nonce }),
+    title: modalTitle(locale, "commands.config.panel.change_override_button"),
+    components: [
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.config.panel.text_override_model_placeholder"),
+        component: {
+          type: 3,
+          custom_id: buildConfigModalFieldId(CONFIG_TEXT_OVERRIDE_MODEL_FIELD, nonce),
+          min_values: 1,
+          max_values: 1,
+          required: true,
+          options: models.map((model) => ({
+            label: safeSelectOptionText(model.llm_codename, 100),
+            value: model.llm_codename,
+            description: model.llm_description ? safeSelectOptionText(model.llm_description, 100) : undefined,
+            default: model.llm_id === currentModelId,
+          })),
         },
       },
     ],
@@ -431,7 +510,7 @@ export function buildPersonaNamingHabitsModal(
 
   return {
     custom_id: buildConfigRouteId({ action: "naming-submit", locale, personaId, style, nonce }),
-    title: modalTitle(locale, "commands.config.panel.naming_modal_title"),
+    title: modalTitle(locale, NAMING_MODAL_TITLE_KEYS[style]),
     components: [
       field(
         "prefix",

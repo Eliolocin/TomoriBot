@@ -427,6 +427,7 @@ These samplers apply to your own requests in every server. This server's sampler
       edit_appearance_button: `Edit Appearance Tags`,
       character_reference_modal_title: `NovelAI Character Reference`,
       character_reference_label: `NovelAI Character Reference`,
+      character_reference_uploaded: `Uploaded and Saved`,
       character_reference_image_label: `Image`,
       character_reference_modal_description: `Upload an image to use as your NovelAI character reference.`,
       upload_character_reference_button: `Upload Reference`,

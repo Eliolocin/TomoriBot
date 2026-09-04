@@ -60,7 +60,6 @@ import {
   CONFIG_SPRITE_INSTRUCTIONS_FIELD,
   CONFIG_SPRITE_NAME_FIELD,
 } from "@/utils/discord/ui/configModals";
-import { loadCommandData } from "@/utils/discord/commandLoader";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
@@ -425,6 +424,10 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
   ],
   ["config:v1:humanizer-open:en-US:55", { action: "humanizer-open", locale: "en-US", personaId: 55 }],
   ["config:v1:humanizer-select:en-US:55", { action: "humanizer-select", locale: "en-US", personaId: 55 }],
+  [
+    "config:v1:humanizer-submit:en-US:55:nonce1234567",
+    { action: "humanizer-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+  ],
   ["config:v1:text-override-open:en-US:55", { action: "text-override-open", locale: "en-US", personaId: 55 }],
   [
     "config:v1:text-override-provider-select:en-US:55",
@@ -433,6 +436,16 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
   [
     "config:v1:text-override-model-select:en-US:55:openrouter",
     { action: "text-override-model-select", locale: "en-US", personaId: 55, provider: "openrouter" },
+  ],
+  [
+    "config:v1:text-model-submit:en-US:55:openrouter:nonce1234567",
+    {
+      action: "text-override-model-submit",
+      locale: "en-US",
+      personaId: 55,
+      provider: "openrouter",
+      nonce: "nonce1234567",
+    },
   ],
   [
     "config:v1:text-override-model-page:en-US:55:openrouter:25",
@@ -1012,6 +1025,30 @@ describe("config route authorization", () => {
         customId,
         kind: "modal",
         inGuild: false,
+        harness,
+        fields: { [buildConfigModalFieldId("triggers", "nonce1234567")]: "wren" },
+      }),
+    );
+
+    expect(addSpy).not.toHaveBeenCalled();
+    expect(harness.telemetry).toEqual([]);
+    addSpy.mockRestore();
+  });
+
+  it("writes nothing when a guild member replays a manager trigger control", async () => {
+    const addSpy = spyOn(personaRepository, "addTrigger");
+    const harness = makeHarness({ isManager: false });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "trigger-add-submit",
+          locale: "en-US",
+          personaId: 55,
+          nonce: "nonce1234567",
+        }),
+        kind: "modal",
+        isManager: false,
         harness,
         fields: { [buildConfigModalFieldId("triggers", "nonce1234567")]: "wren" },
       }),
@@ -2390,6 +2427,24 @@ describe("config persona collections", () => {
       components: Array<{ type: number; component?: { type: number } }>;
     };
     expect(dialogueModal.components.map((component) => component.component?.type)).toContain(19);
+
+    const spriteHarness = makeHarness();
+    const spriteInteraction = makeInteraction({
+      customId: buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 55 }),
+      kind: "select",
+      values: ["add"],
+      harness: spriteHarness,
+    });
+    await dispatch(spriteHarness, spriteInteraction);
+    expect(spriteInteraction.deferred).toBe(false);
+    expect(spriteHarness.modals[0]).toMatchObject({
+      custom_id: buildConfigRouteId({
+        action: "sprite-add-submit",
+        locale: "en-US",
+        personaId: 55,
+        nonce: "nonce1234567",
+      }),
+    });
   });
 
   it("gates teaching-disabled members, lets managers bypass, and keeps DM blacklist reads absent", async () => {
@@ -2588,6 +2643,38 @@ describe("config promotion", () => {
 });
 
 describe("config Persona Advanced routes", () => {
+  it("does not clear a saved character reference when an upload is missing", async () => {
+    let writes = 0;
+    const persona = makePersona({ persona_id: 55, nai_char_ref_url: "saved/reference.png" });
+    const harness = makeHarness({
+      personas: [persona],
+      operations: {
+        replaceCharacterReference: async () => {
+          writes += 1;
+          return { status: "success", cleared: true };
+        },
+      },
+    });
+    harness.dependencies.takeFileUpload = () => undefined;
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "character-reference-submit",
+          locale: "en-US",
+          personaId: 55,
+          nonce: "nonce1234567",
+        }),
+        kind: "modal",
+        harness,
+      }),
+    );
+
+    expect(writes).toBe(0);
+    expect(JSON.stringify(harness.edits.at(-1))).toContain("Please upload an image attachment");
+  });
+
   it("round-trips a prompt longer than 4000 characters through four modal parts", async () => {
     const prompt = `${"a".repeat(4000)}${"b".repeat(4000)}${"c".repeat(4000)}${"d".repeat(25)}`;
     const persona = makePersona({ persona_id: 55, persona_prompt: null });
@@ -2674,12 +2761,11 @@ describe("config Persona Advanced routes", () => {
     expect(selectedValue).toBeNull();
   });
 
-  it("reads the raw server humanizer row for the Advanced contrast line", async () => {
+  it("opens Humanizer as a modal with the persona override selected", async () => {
     const persona = makePersona({ persona_id: 55, humanizer_degree_override: 2 });
     const harness = makeHarness({
       personas: [persona],
     });
-    harness.dependencies.loadServerHumanizerDegree = async () => 0;
     await dispatch(
       harness,
       makeInteraction({
@@ -2688,8 +2774,102 @@ describe("config Persona Advanced routes", () => {
       }),
     );
 
-    expect(JSON.stringify(harness.edits.at(-1))).toContain("> Server default: 0: None");
-    expect(JSON.stringify(harness.edits.at(-1))).toContain("> Persona override: 2: Medium");
+    const modal = JSON.stringify(harness.modals.at(-1));
+    expect(modal).toContain("config:v1:humanizer-submit");
+    expect(modal).toContain('"value":"2"');
+    expect(modal).toContain('"default":true');
+  });
+
+  it("opens the selected provider's model choices in a modal", async () => {
+    const harness = makeHarness();
+    harness.dependencies.loadSavedTextProviders = async () => [{ provider: "openrouter" }];
+    harness.dependencies.loadPersonaTextModels = async () => [
+      {
+        llm_id: 17,
+        llm_provider: "openrouter",
+        llm_codename: "example-model",
+        llm_description: "Example model",
+      } as TomoriState["llm"],
+    ];
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "text-override-provider-select",
+          locale: "en-US",
+          personaId: 55,
+        }),
+        kind: "select",
+        values: ["openrouter"],
+        harness,
+      }),
+    );
+
+    const modal = JSON.stringify(harness.modals.at(-1));
+    expect(modal).toContain("config:v1:text-model-submit");
+    expect(modal).toContain('"value":"example-model"');
+  });
+
+  it("submits Humanizer and text override modal selections through their routed writes", async () => {
+    let humanizerValue: number | null | undefined;
+    const humanizerHarness = makeHarness({
+      operations: {
+        setHumanizerOverride: async (input) => {
+          humanizerValue = input.value;
+          return { status: "success" };
+        },
+      },
+    });
+    humanizerHarness.dependencies.takeSelectValue = () => "inherit";
+    await dispatch(
+      humanizerHarness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "humanizer-submit",
+          locale: "en-US",
+          personaId: 55,
+          nonce: "nonce1234567",
+        }),
+        kind: "modal",
+        harness: humanizerHarness,
+      }),
+    );
+    expect(humanizerValue).toBeNull();
+
+    let selectedModelId: number | null | undefined;
+    const textHarness = makeHarness({
+      operations: {
+        setTextModelOverride: async (input) => {
+          selectedModelId = input.llmId;
+          return { status: "success" };
+        },
+      },
+    });
+    textHarness.dependencies.takeSelectValue = () => "example-model";
+    textHarness.dependencies.loadSavedTextProviders = async () => [{ provider: "openrouter" }];
+    textHarness.dependencies.loadPersonaTextModels = async () => [
+      {
+        llm_id: 17,
+        llm_provider: "openrouter",
+        llm_codename: "example-model",
+      } as TomoriState["llm"],
+    ];
+    await dispatch(
+      textHarness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "text-override-model-submit",
+          locale: "en-US",
+          personaId: 55,
+          provider: "openrouter",
+          nonce: "nonce1234567",
+        }),
+        kind: "modal",
+        harness: textHarness,
+      }),
+    );
+    expect(selectedModelId).toBe(17);
   });
 
   it("does not write for the moved OpenRouter model and clears through the canonical override operation", async () => {
@@ -3359,6 +3539,24 @@ describe("config modal opening", () => {
     expect(JSON.stringify(harness.modals[0])).toContain('"value":"Aphel"');
   });
 
+  it("names the naming modal for the selected addressing style", async () => {
+    const harness = makeHarness();
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "naming-open",
+          locale: "en-US",
+          personaId: 55,
+          style: "feminine",
+        }),
+        harness,
+      }),
+    );
+
+    expect(harness.modals[0]).toMatchObject({ title: "Edit Feminine Naming Habits" });
+  });
+
   it("does not open a modal for a persona absent from the workspace", async () => {
     const harness = makeHarness({ personas: [MAIN] });
 
@@ -3403,30 +3601,5 @@ describe("config modal opening", () => {
     // which would make unchecked-means-remove delete every presented word.
     expect(modal.components.every((label) => label.type === 18)).toBe(true);
     expect(modal.components.map((label) => label.component.type)).toEqual([22]);
-  });
-});
-
-describe("config registration is unchanged by this slice", () => {
-  it("leaves /config as the manager-defaulted subcommand tree until the cutover slice", async () => {
-    const { registrationData } = await loadCommandData();
-    const configCommands = registrationData.filter((command) => command.name === "config") as unknown as Array<{
-      default_member_permissions?: string;
-      contexts?: number[];
-      options?: Array<{ type: number; name: string }>;
-    }>;
-
-    expect(configCommands).toHaveLength(1);
-    const configCommand = configCommands[0];
-
-    // "32" is ManageGuild, applied by MANAGER_ONLY_CATEGORIES rather than a module export. The
-    // cutover slice removes both this default and the subcommand tree; the panel must not.
-    expect(configCommand.default_member_permissions).toBe("32");
-    // Undefined contexts keeps the command DM-capable.
-    expect(configCommand.contexts).toBeUndefined();
-    // Subcommand (1) and subcommand-group (2) options prove it is still directory-backed, so no bare
-    // executable root has appeared. A topological assertion rather than a whole-tree command count,
-    // which would fail on every unrelated wave.
-    expect((configCommand.options ?? []).length).toBeGreaterThan(0);
-    expect((configCommand.options ?? []).every((option) => option.type === 1 || option.type === 2)).toBe(true);
   });
 });

@@ -50,10 +50,10 @@ The snapshot mirrors the real `messageCreate → tomoriChat` pipeline as closely
 Flat-text, annotation-heavy. Each context block is prefixed with a locator header so a human reader can see which config command governs it:
 
 ```
-=== Persona Attributes (`/persona attribute`) ===
+=== Persona Attributes (`/config` > Persona > Identity & Personality) ===
 ...attribute list...
 
-=== Channel Prompt (`/server channel-prompt`) ===
+=== Channel Prompt (`/config` > Channels > Channel Overrides) ===
 ...per-channel append-mode prompt (only present when an append override applies to this channel)...
 
 === Server Memories (`/memory server`) ===

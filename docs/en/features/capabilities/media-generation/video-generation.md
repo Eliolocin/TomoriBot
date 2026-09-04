@@ -26,8 +26,8 @@ clips can take a while.
 
 ## Setup
 
-1. Configure a video model with `/model video`.
-2. Ensure image/media generation is permitted via `/capabilities`.
+1. Configure a video model with `/config` > Models > Switch Models.
+2. Ensure image/media generation is permitted via `/config` > Permissions.
 3. Ask her to generate, or run `/generate video`.
 
 ## Provider Support

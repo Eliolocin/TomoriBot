@@ -253,7 +253,7 @@ Disabled auto-trigger on **{disabled_count}** channel(s): {disabled_channels}
         description: `Add a member to the personalization blacklist.`,
         member_description: `The member to add to the blacklist.`,
         personalization_disabled_title: `Personalization Disabled`,
-        personalization_disabled_description: `Personalization is currently disabled server-wide. Enable it first with \`/capabilities manage\`.`,
+        personalization_disabled_description: `Personalization is currently disabled server-wide. Enable it first with \`/config\` > Permissions.`,
         already_blacklisted_title: `Already Blacklisted`,
         already_blacklisted_description: `\`{user_name}\` is already on the personalization blacklist.`,
         cannot_blacklist_bot_title: `Cannot Blacklist Bots`,

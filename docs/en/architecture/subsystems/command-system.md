@@ -108,7 +108,7 @@ Root command modules export:
 
 Grouped commands are represented by folders:
 
-- `src/commands/model/text.ts` -> `/model text`
+- `src/commands/server/config/export.ts` -> `/server config export`
 
 Model and provider flows that still call `promptForSavedProvider()` use one shared initial
 provider-selection embed. Model-selection callers pass the effective slot selection so
@@ -307,10 +307,9 @@ Examples:
 
 - `/moderation` User Blacklist and Whitelist removal actions
 - `/config remove modeloverride` (channels + personas together)
-- `/config workarounds` (experimental server-scoped workaround toggles)
+- `/config` > Behavior > Experimental (experimental server-scoped workaround toggles)
 - `/memories` Short-Term category (active server-shared STM entries)
-- `/server private-channels`
-- `/server rp-channels`
+- `/config` > Channels > Channel Rules (private, roleplay, and cross-channel blocklist sets)
 
 Rules:
 
@@ -328,7 +327,7 @@ Use when one command owns the full enabled-set of a durable setting rather than 
 
 Example:
 
-- `/server crosschannel-blocklist`
+- `/config` > Channels > Channel Rules
 - `/moderation` Personas (each write preserves the persona's complete enabled channel set)
 
 Rules:
@@ -871,7 +870,7 @@ An exception must never weaken the repository-wide scanner or add a directory-wi
 
 Use for a config command shaped *pick a provider -> choose a value in a modal -> show the
 result*. The whole `/model *` family is built
-this way, plus `/model fallback`.
+this way, plus `/config` > Models > Fallbacks & Randomizer.
 
 The command expresses only business intent — which model table to read, which column to
 write, which terminal copy to show. All lifecycle branching lives in the shared helpers in
@@ -915,7 +914,7 @@ Rules:
   an interaction the controller owns, so the slash command cannot open it directly.
 
 **When the bridge does not fit.** The bridge slices exactly one select component and assumes
-every entry is a selectable option. `/model fallback` violates both — five selects over one
+every entry is a selectable option. `/config` > Models > Fallbacks & Randomizer violates both — five selects over one
 shared option list, with one entry per page reserved for an explicit "None" choice. Such a
 command picks its range on the anchor message first via `acquireModalOptionRange(...)`
 (passing a `pageSize` below 25 to reserve entries), then hands `openAnchorModal` an
@@ -1010,11 +1009,44 @@ Bare `/mcps` is the only registered MCP path; the legacy `mcp` subcommand tree n
 
 `/stats` is a guild-only category that reads the `stat_counters` telemetry table (see [database-schema](database-schema)). Each subcommand (`personal`, `persona`, `server`) takes an **optional** `timeframe` choice (`Today` / `Last 7 Days` / `Last 30 Days` / `Last Year` / `All-Time`), defaulting to **All-Time** when omitted; `personal` adds a required `scope` choice (`This Server` / `All Servers`) — declared before `timeframe` because Discord rejects a required option after an optional one. The result is a **public, invoker-controlled tabbed dashboard** (`src/utils/stats/statsDashboard.ts`) built on **Components V2**: each tab is a single container (H3 title, separator-divided stat sections, and the tab buttons living inside the card). A row of named tab buttons swaps which container is shown (a tabbed view, not item pagination). Only the invoker can operate the tabs; the buttons are stripped on collector timeout (`STATS_DASHBOARD_TIMEOUT_MS`, default 5 min). The renderer uses a single **persistent** `createMessageComponentCollector` (not a one-shot `awaitMessageComponent` loop) so rapid tab switching can't land in a no-collector gap, and wraps each `button.update` in try/catch so a stale/expired interaction (DiscordAPIError 10062) can never tear down the dashboard. Dashboard and infographic entry points drain the in-memory stat buffer before querying, so their snapshots include all successfully buffered work from the current process. **Timeframe gating:** rewards/punishments and memories are all-time-only; daily telemetry, including generation totals, works for every timeframe. Span metrics (streaks, most-active hour/day) are hidden under the single-day `Today` view. `/stats persona` uses `runPersonaPickerWorkflow(...)` and its explicit `separate-public` phase: the selected button compacts the private picker, then exactly one public follow-up becomes the dashboard. Token and cost figures prefer provider-reported usage and fall back to character estimates when unavailable; they remain estimates because pricing can be incomplete or provider-dependent. Timeframe windows use the daily-bucket floor, so `Today` is the current UTC day, not a rolling 24h.
 
-`/server auto-trigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. The cycle only advances on qualifying real user-like messages; TomoriBot and alter webhook self-messages do not advance or consume the auto-trigger counter. Removing a channel disables auto-trigger behavior for that channel. `/server auto-trigger channels` can also target a single channel and assign one persona to that room's auto-trigger fallback instead of always using the main persona.
+`/config` > Channels > Auto-Trigger is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. The cycle only advances on qualifying real user-like messages; TomoriBot and alter webhook self-messages do not advance or consume the auto-trigger counter. Removing a channel disables auto-trigger behavior for that channel. The page can also target a single channel and assign one persona to that room's auto-trigger fallback instead of always using the main persona.
 
-`/server channel-prompt` is a flat, modal-driven command that scopes a system prompt to one channel. It takes a required `channel` option, then opens a prefilled 4-part modal (up to 16000 chars, part 1 optional) plus a Radio Group for Prompt Mode (`Append` / `Replace`). `Append` injects the channel prompt as a distinct `SYSTEM_CHANNEL_PROMPT` block after the server system prompt; `Replace` substitutes the channel prompt for the server system prompt's slot — persona prompt and persona attributes are never affected. Submitting with all prompt parts empty removes the channel's override. State lives in the standalone `channel_prompt_overrides` table (per-channel, never exported) and is resolved per request via `getCachedChannelPrompt`. The override surfaces in `/tool prompt snapshot` under the `Channel Prompt` header.
+`/config` > Channels > Channel Overrides scopes a system prompt to one channel. It selects the channel, then opens a prefilled 4-part modal (up to 16000 chars, part 1 optional) plus a Radio Group for Prompt Mode (`Append` / `Replace`). `Append` injects the channel prompt as a distinct `SYSTEM_CHANNEL_PROMPT` block after the server system prompt; `Replace` substitutes the channel prompt for the server system prompt's slot — persona prompt and persona attributes are never affected. Submitting with all prompt parts empty removes the channel's override. State lives in the standalone `channel_prompt_overrides` table (per-channel, never exported) and is resolved per request via `getCachedChannelPrompt`. The override surfaces in `/tool prompt snapshot` under the `Channel Prompt` header.
 
-`/persona sprites add` is a one-modal Manage Server flow that selects a persona, validates a sprite label, uploads an image, converts it to PNG, and upserts a `persona_sprites` row. Reusing a normalized label replaces the existing sprite. `/persona sprites edit` uses the persona workflow, sprite picker, and confirmation bridge before opening a prefilled modal for name, optional replacement image, usage instructions, and identity status; replacement images consume the shared avatar quota, while metadata-only edits do not. `/persona sprites remove` starts from `runPersonaPickerWorkflow(...)`, then uses its in-place modal bridge for checkbox groups where checked sprites are kept and unchecked sprites are deleted. When a persona has more than 25 modal options, the workflow shows localized range buttons on the anchor message before opening the selected checkbox slice. `/persona sprites export` selects a persona and bundles its sprites into a shareable `.zip` through the explicit public-result phase. `/persona sprites import` opens a single modal with a persona select plus a `.zip` file-upload field; it validates and converts every image up front, reserves one import-quota slot for the whole batch, overwrites on name conflicts, and rejects the entire import if it would exceed `PERSONA_SPRITE_MAX_PER_PERSONA`. The archive format (manifest + `sprites/` images) and its ZIP-bomb guards live in `src/utils/persona/spriteArchive.ts`. See [multi-persona](multi-persona) for the format details.
+`/config` > Persona > Sprites carries every sprite action for the selected persona. Add validates a
+sprite label, uploads an image, converts it to PNG, and upserts a `persona_sprites` row. Reusing a
+normalized label replaces the existing sprite. Edit opens a prefilled modal for name, optional
+replacement image, usage instructions, and identity status. A replacement image consumes the
+shared avatar quota, while a metadata-only edit does not. Remove uses a fingerprinted confirmation
+for the selected sprite. Export bundles the persona's sprites into a shareable `.zip`. Import takes
+a `.zip` file upload, validates and converts every image up front, reserves one import-quota slot
+for the whole batch, overwrites on name conflicts, and rejects the entire import if it would exceed
+`PERSONA_SPRITE_MAX_PER_PERSONA`. The archive format and its ZIP-bomb guards live in
+`src/utils/persona/spriteArchive.ts`. See [multi-persona](multi-persona) for the format details.
+
+The sprite selector reserves its first option for `+ Add Sprite`, leaving 24 stored sprites per
+page. Selecting a stored sprite shows its image as a thumbnail beside its details. The add option
+is absent for actors who cannot mutate sprites because Discord cannot disable one select option.
+
+`/config` > Persona > Triggers keeps trigger-word controls separate from Identity & Personality so
+collection selections and write receipts remain below Discord's 40-component message limit.
+Ordinary members may inspect trigger words, but both mutation buttons and their replayed routes
+require Manage Server.
+
+`/config` > Persona > Appearance owns per-persona image tags and the NovelAI character reference.
+The panel reports only whether a reference is saved and never renders its storage URL or path.
+Uploading a reference is required in the upload modal; clearing uses a separate confirmation.
+Appearance follows Memories in the page selector, while Advanced is last. Advanced Humanizer
+opens a modal select directly. Text model overrides use a provider picker followed by a modal model
+picker when the provider has at most 25 models; larger catalogs retain the paginated picker because
+Discord limits one select to 25 options.
+
+Behavior pages place Advanced Memory before Notice Behavior and keep Experimental Behavior last.
+Trigger cooldown omits its stored duration while disabled. Notice Behavior marks each notice with
+a green or red status icon and explains that disabled notice embeds are redirected to Logs.
+
+`/conditioning manage` uses one persistent page-button collector. Each page press owns its modal
+wait independently, so dismissing one modal does not strand the still-visible page selector.
 
 `/tool visualize` is a modal-driven, fire-and-forget scene snapshot command. It plans against the current channel context with the active text provider, preparing its simplified-history participants through the same API as live chat, then renders with either the current provider's native image path or NovelAI's tag-based image tool when a NovelAI backend is available. Personal provider overlays apply before the hidden turn is built so personal text/image routing is respected.
 
@@ -1022,9 +1054,9 @@ Bare `/mcps` is the only registered MCP path; the legacy `mcp` subcommand tree n
 
 `/generate video` is a modal-driven async generation command. It validates `videogen_enabled`, provider capability, API key, configured `video_model_id`, and server quota before polling the selected provider until the MP4 result is ready.
 
-`/config model-randomizer` is a server-level toggle (mirrors `/config self-debug`) for the per-turn text model randomizer. When enabled, each generation turn randomly promotes one model from the pool (primary model + configured fallbacks) to lead the attempt chain, breaking the bot out of any single model's repetitive phrasing while keeping the rest as failover. It enforces a **block-until-fallbacks** precondition: enabling is refused with a localized warning embed unless the server has ≥1 fallback configured via `/model fallback`, guaranteeing the pool always has ≥2 members so the toggle is never a silent no-op. The flag lives in `server_chat_configs.model_randomizer_enabled` and is consumed by `buildGenerationAttempts` — see the [generation-turn pipeline](../pipelines/chat/06-per-turn/03-run-generation-turn).
+The randomizer on `/config` > Models > Fallbacks & Randomizer is a server-level toggle for the per-turn text model randomizer. When enabled, each generation turn randomly promotes one model from the pool (primary model + configured fallbacks) to lead the attempt chain, breaking the bot out of any single model's repetitive phrasing while keeping the rest as failover. It enforces a **block-until-fallbacks** precondition: enabling is refused with a localized warning embed unless the server has ≥1 fallback configured on that same page, guaranteeing the pool always has ≥2 members so the toggle is never a silent no-op. The flag lives in `server_chat_configs.model_randomizer_enabled` and is consumed by `buildGenerationAttempts` — see the [generation-turn pipeline](../pipelines/chat/06-per-turn/03-run-generation-turn).
 
-`/config workarounds` is a checkbox-group modal for experimental compatibility patches. V1 exposes `Verbatim Tool-Calling`, a default-off server flag stored in `server_capabilities_configs.verbatim_tool_calling_enabled`. The command uses `promptWithRawModal(..., MessageFlags.Ephemeral)` as the first acknowledgement, writes only changed columns through `ConfigRepository.updateCapabilitiesConfig`, and invalidates TomoriState cache after a successful DB write.
+The Compatibility section of `/config` > Behavior > Experimental is a checkbox-group modal for experimental compatibility patches. V1 exposes `Verbatim Tool-Calling`, a default-off server flag stored in `server_capabilities_configs.verbatim_tool_calling_enabled`. It writes only changed columns through `ConfigRepository.updateCapabilitiesConfig` and invalidates TomoriState cache after a successful DB write.
 
 ### Personal-provider (BYOK) routing in commands
 
@@ -1032,7 +1064,7 @@ Any command that performs AI work the invoking user triggers must honor that use
 
 In contrast, `/memories` resolves the invoking user's embedding credentials directly through the credential resolver via `resolveCapabilityCredentials(serverId, "embedding", { userId })` during document addition and memory vectorization operations.
 
-The one deliberate exception is `/model embedding`, which re-embeds **server-wide** documents under server credentials (`resolveCapabilityCredentials(serverId, "embedding")` with no `userId`). This is bulk maintenance of a pre-existing server resource rather than a fresh user action, so it intentionally stays on server credentials.
+The one deliberate exception is `/config` > Models > Switch Models, which re-embeds **server-wide** documents under server credentials (`resolveCapabilityCredentials(serverId, "embedding")` with no `userId`). This is bulk maintenance of a pre-existing server resource rather than a fresh user action, so it intentionally stays on server credentials.
 
 Forward-looking command rewrite guidance (naming conventions, checklist-style settings pattern, migration map) is now part of `docs/en/contributing/adding-slash-command.md`. The runtime loader and current implementation still use the existing `src/commands/` structure.
 

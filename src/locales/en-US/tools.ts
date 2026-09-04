@@ -22,7 +22,7 @@ export default {
     },
     generate_image_nai: {
       no_google_api_key: `Inpainting requires saved Google provider credentials for image segmentation. Add them with \`/providers\`, or switch to the Google provider.`,
-      model_not_configured: `NovelAI image generation is disabled right now. Select a NovelAI image model with \`/model image\` first.`,
+      model_not_configured: `NovelAI image generation is disabled right now. Select a NovelAI image model with \`/config\` > Models > Switch Models first.`,
       provider_quota_exceeded: `NovelAI image generation quota is exhausted for this account. Recharge Anlas or wait for the quota to refresh, then try again.`,
       characters_require_v4: `Character positioning requires a NovelAI V4 diffusion model or newer.`,
       character_requires_id_or_tags: `Character entry #{index} must include either an id or tags.`,
@@ -54,8 +54,8 @@ export default {
       tool_invoke_no_params: `No parameters.`,
     },
     tool_notice: {
-      hide_footer: `Hide this using \`/config notice-embeds visibility\``,
-      hide_footer_with_kill: `Hide this using \`/config notice-embeds visibility\` · Use \`/kill\` if you think I'm stuck`,
+      hide_footer: `Hide this using \`/config\` > Behavior > Notices`,
+      hide_footer_with_kill: `Hide this using \`/config\` > Behavior > Notices · Use \`/kill\` if you think I'm stuck`,
     },
     user_block: {
       type_mute: `mute`,
@@ -146,7 +146,7 @@ export default {
     },
     vision: {
       analyzing_title: `🖼️  Analyzing Image...`,
-      analyzing_description: `Current model is non-vision; using configured \`/model vision\` ({model}) to analyze images.`,
+      analyzing_description: `Current model is non-vision; using the vision model configured on \`/config\` > Models > Switch Models ({model}) to analyze images.`,
       analyzing_footer: `This may take a moment depending on image count`,
     },
     gif: {

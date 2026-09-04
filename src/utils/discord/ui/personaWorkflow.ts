@@ -41,33 +41,6 @@ export const PERSONA_WORKFLOW_COMPONENT_TIMEOUT_MS =
     ? configuredWorkflowTimeout
     : DEFAULT_WORKFLOW_COMPONENT_TIMEOUT_MS;
 
-/**
- * Command files built on the anchor one-message workflow. The lock-down audit
- * (`tests/unit/commands/anchorMigrationLockdown.test.ts`) forbids every file listed here
- * from calling the pre-anchor picker/modal primitives (`promptForSavedProvider`,
- * `promptWithPaginatedModal`, `replaceProviderPickerWithInfo`, `promptWithRawModal`). Their
- * absence transitively guarantees the only modal path is the anchor controller, so no
- * post-modal terminal can escape it via `replyInfoEmbed`/`followUp`.
- *
- * Add a file here only once every one of its terminals renders on the anchor message.
- */
-export const MIGRATED_ANCHOR_CALLERS: readonly string[] = [
-  "src/commands/model/text.ts",
-  "src/commands/model/vision.ts",
-  "src/commands/model/video.ts",
-  "src/commands/model/image.ts",
-  "src/commands/model/embedding.ts",
-  "src/commands/model/fallback.ts",
-];
-
-/** Primitives a migrated caller must not reach for; see {@link MIGRATED_ANCHOR_CALLERS}. */
-export const PRE_ANCHOR_PRIMITIVES: readonly string[] = [
-  "promptForSavedProvider",
-  "promptWithPaginatedModal",
-  "replaceProviderPickerWithInfo",
-  "promptWithRawModal",
-];
-
 type PersonaWorkflowRootInteraction = ChatInputCommandInteraction | ButtonInteraction;
 type PersonaWorkflowMessageInteraction = ButtonInteraction | ModalMessageModalSubmitInteraction;
 

@@ -2,6 +2,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ComponentType,
   MessageFlags,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
@@ -190,56 +191,26 @@ async function executeMultiPage(
   });
 
   const pageMessage = await interaction.fetchReply();
+  const collector = pageMessage.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    filter: (buttonInteraction) =>
+      buttonInteraction.user.id === interaction.user.id &&
+      (buttonInteraction.customId.startsWith(PAGE_BUTTON_PREFIX) || buttonInteraction.customId === DONE_BUTTON_ID),
+    time: PAGE_SELECT_TIMEOUT_MS,
+  });
 
-  while (true) {
-    let pageButtonInteraction: ButtonInteraction;
-    try {
-      pageButtonInteraction = (await pageMessage.awaitMessageComponent({
-        filter: (buttonInteraction) =>
-          buttonInteraction.user.id === interaction.user.id &&
-          (buttonInteraction.customId.startsWith(PAGE_BUTTON_PREFIX) || buttonInteraction.customId === DONE_BUTTON_ID),
-        time: PAGE_SELECT_TIMEOUT_MS,
-      })) as ButtonInteraction;
-    } catch {
-      log.info("[Conditioning Manage] Page selection timed out");
-      break;
-    }
-
+  collector.on("collect", (pageButtonInteraction) => {
     if (pageButtonInteraction.customId === DONE_BUTTON_ID) {
-      await pageButtonInteraction.deferUpdate();
-      break;
+      void pageButtonInteraction.deferUpdate().finally(() => collector.stop("done"));
+      return;
     }
 
-    const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace(PAGE_BUTTON_PREFIX, ""), 10);
-    const startIndex = (selectedPage - 1) * ENTRIES_PER_PAGE;
-    const pageEntries = entries.slice(startIndex, startIndex + ENTRIES_PER_PAGE);
-    const checkboxGroups = buildCheckboxGroups(pageEntries, locale);
+    void handlePageSelection(pageButtonInteraction, interaction.id, locale, entries).catch((error) => {
+      log.error("Conditioning manage page failed", error);
+    });
+  });
 
-    const modalResult = await promptWithRawModal(
-      pageButtonInteraction,
-      locale,
-      {
-        modalCustomId: `conditioning_manage_${interaction.id}`,
-        modalTitleKey: "commands.conditioning.manage.modal_title",
-        components: checkboxGroups,
-      },
-      MessageFlags.Ephemeral,
-    );
-
-    if (modalResult.outcome === "submit" && modalResult.interaction) {
-      const selectedIndexes = collectSelectedIndexes(modalResult.multiValues, checkboxGroups.length);
-      await persistUpdate(modalResult.interaction, locale, pageEntries, selectedIndexes);
-    }
-
-    try {
-      await interaction.editReply({
-        embeds: [buildPageSelectEmbed(locale, entries.length, totalPages)],
-        components: buildPageActionRows(totalPages, entries.length, locale),
-      });
-    } catch {
-      break;
-    }
-  }
+  await new Promise<void>((resolve) => collector.once("end", () => resolve()));
 
   try {
     await interaction.editReply({
@@ -247,6 +218,33 @@ async function executeMultiPage(
       components: [],
     });
   } catch {}
+}
+
+async function handlePageSelection(
+  pageButtonInteraction: ButtonInteraction,
+  commandInteractionId: string,
+  locale: string,
+  entries: ConditioningManageEntry[],
+): Promise<void> {
+  const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace(PAGE_BUTTON_PREFIX, ""), 10);
+  const startIndex = (selectedPage - 1) * ENTRIES_PER_PAGE;
+  const pageEntries = entries.slice(startIndex, startIndex + ENTRIES_PER_PAGE);
+  const checkboxGroups = buildCheckboxGroups(pageEntries, locale);
+  const modalResult = await promptWithRawModal(
+    pageButtonInteraction,
+    locale,
+    {
+      modalCustomId: `conditioning_manage_${commandInteractionId}`,
+      modalTitleKey: "commands.conditioning.manage.modal_title",
+      components: checkboxGroups,
+    },
+    MessageFlags.Ephemeral,
+  );
+
+  if (modalResult.outcome === "submit" && modalResult.interaction) {
+    const selectedIndexes = collectSelectedIndexes(modalResult.multiValues, checkboxGroups.length);
+    await persistUpdate(modalResult.interaction, locale, pageEntries, selectedIndexes);
+  }
 }
 
 function buildCheckboxGroups(entries: ConditioningManageEntry[], locale: string): ModalCheckboxGroupField[] {

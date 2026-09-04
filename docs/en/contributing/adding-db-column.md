@@ -29,7 +29,7 @@ This guide walks through adding a new column to an existing TomoriBot database t
    `.default(...)`, a column that's missing from the SELECT is **silently filled with its
    default** instead of erroring — so a runtime gate like `config.flag === false` will never
    fire and the feature appears not to work, with no type or test failure to flag it.
-   Adding the column to the Zod schema and the `/capabilities` write path is NOT enough.
+   Adding the column to the Zod schema and the `/config` > Permissions write path is NOT enough.
 
 4. Invalidate any affected caches **after** successful writes — never before, never on failure.
    Keep the invalidation call in the same code path as the write:

@@ -43,11 +43,10 @@ describe("/setup registration", () => {
     expect(configCommand).toBeDefined();
     if (!configCommand) return;
 
-    const hasSetupOption = configCommand.options?.some((opt) => opt.name === "setup");
-    expect(hasSetupOption).toBe(false);
+    // The bare root carries no options at all after the cutover, so the extraction holds a fortiori.
+    expect(configCommand.options?.some((opt) => opt.name === "setup") ?? false).toBe(false);
     expect(executionMap.get("config")?.has("setup")).toBe(false);
     expect(configCommand.contexts).toBeUndefined();
-    expect(configCommand.default_member_permissions).toBe("32");
   });
 
   it("resolves the description correctly in both locales, not as a nested path", () => {

@@ -40,7 +40,7 @@ Alter personas let multiple characters coexist in one server:
 
 - Each alter has its own personality, trigger words, and **webhook avatar** — so different
   characters appear with different names and pictures in the same channel.
-- Multiple alters can respond to a single message, up to the `/config trigger-match-limit`
+- Multiple alters can respond to a single message, up to the `/config` > Behavior > Trigger
   limit.
 - **Replying to a webhook message** continues the conversation as that persona.
 - Add alters via `/persona import` (alter option); manage them with `/persona` and
@@ -56,13 +56,13 @@ Two commands do most of the work of teaching her how to talk and act:
 
 ### Attributes
 
-`/persona attribute add` adds personality traits or physical characteristics — for example
+`/config` > Persona > Identity & Personality adds personality traits or physical characteristics, for example
 `friendly`, `red hair`, or `ends sentences with *Nya~*`. Remove them with
-`/persona attribute remove`.
+`/config` > Persona > Identity & Personality.
 
 ### Sample Dialogues
 
-`/persona sample-dialogue add` teaches her *how she speaks* by example. Use the `{user}` and
+`/config` > Persona > Identity & Personality teaches her *how she speaks* by example. Use the `{user}` and
 `{bot}` placeholders so dialogues work for everyone (and when you share the persona):
 
 - `{user}` — replaced with the actual user's name/nickname
@@ -79,14 +79,14 @@ Tips for effective sample dialogues:
 - Bake in the attributes and traits you want her to exhibit.
 - Demonstrate the tone you're after, and add variety so she generalizes.
 
-Remove examples with `/persona sample-dialogue remove`.
+Remove examples with `/config` > Persona > Identity & Personality.
 
 ### Name and Avatar
 
-- `/persona rename` — set what she calls herself.
-- `/persona avatar` (or `/server avatar`) — set her profile picture for this server.
+- `/config` > Persona > Identity & Personality: set what she calls herself.
+- `/config` > Persona > Identity & Personality: set her profile picture for this server.
 
-You can also set a custom system prompt with `/config system-prompt set` to further shape
+You can also set a custom system prompt with `/config` > Behavior > General to further shape
 behavior — see [Behavior Tweaking](/features/chatting-personality/behavior-tweaking/).
 
 ## Sprites (Emotion Avatars)
@@ -100,17 +100,17 @@ How she uses them: the available sprites and their usage notes are given to the 
 turn. To show one, she starts a reply line with `PersonaName (label):`; that line is then
 delivered with the matching sprite image. If no sprite fits, she replies normally.
 
-Manage a persona's sprites with the `/persona sprites` command group (adding and removing
+Manage a persona's sprites on `/config` > Persona > Sprites (adding and removing
 require the **Manage Server** permission):
 
-- `/persona sprites add` — add or replace a sprite: pick the persona, give it a **label**,
+- `/config` > Persona > Sprites — add or replace a sprite: pick the persona, give it a **label**,
   upload the **image** (PNG, JPG, or GIF), and optionally add **usage instructions** telling
   her when to use it. Reusing a label replaces that sprite. Each persona has a maximum sprite
   count.
-- `/persona sprites edit` — change an existing sprite's name, image, instructions, or
+- `/config` > Persona > Sprites — change an existing sprite's name, image, instructions, or
   identity toggle.
-- `/persona sprites remove` — delete sprites from a persona.
-- `/persona sprites import` / `/persona sprites export` — back up or share a persona's whole
+- `/config` > Persona > Sprites — delete sprites from a persona.
+- Export and import on `/config` > Persona > Sprites — back up or share a persona's whole
   sprite set as a file.
 
 The **identity** toggle decorates the message name as `Label (Persona)` in Discord, which is
@@ -124,7 +124,7 @@ server-wide setup? That's Personal Spotlight — see
 
 ## Persona-specific ways of addressing people
 
-Server managers can use `/persona naming-habits` to give each persona independent masculine,
+Server managers can use `/config` > Persona > Identity & Personality to give each persona independent masculine,
 feminine, and neutral prefixes, suffixes, and standalone address terms. A user's own
 persona-scoped override is keyed by stable persona lineage, so two personas may call Sparrow
 different names in the same multi-persona response while both still target the same Discord

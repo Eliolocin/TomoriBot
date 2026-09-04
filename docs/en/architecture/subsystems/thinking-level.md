@@ -257,7 +257,7 @@ When a tool call immediately follows the thinking block, KoboldCPP does not spli
 
 **Thought log suppression:**
 
-Thought logs are suppressed for private channels (channels listed under `/server private-channels`) regardless of model or provider. Test thought log routing in a non-private channel.
+Thought logs are suppressed for private channels (channels listed under `/config` > Channels > Channel Rules) regardless of model or provider. Test thought log routing in a non-private channel.
 
 ### NovelAI GLM
 

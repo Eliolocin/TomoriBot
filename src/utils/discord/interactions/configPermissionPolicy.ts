@@ -108,6 +108,7 @@ export function resolveConfigPageState(
   if (resolveConfigCategoryState(category, actor) !== "enabled") return "omitted";
 
   if (actor.workspaceKind === "dm") {
+    if (category === "persona" && page === "triggers") return "omitted";
     if (category === "behavior") return page === "trigger" || page === "memory" ? "omitted" : "enabled";
     if (category === "permissions") return page === "privacy" ? "omitted" : "enabled";
     if (category === "models") return page === "image" ? "omitted" : "enabled";
@@ -117,8 +118,8 @@ export function resolveConfigPageState(
   if (actor.isManager) return "enabled";
 
   if (category === "persona") {
-    // Advanced holds prompt, note, image, and routing state that is manager-owned in full.
-    if (page === "advanced") return "omitted";
+    // Appearance and Advanced hold manager-owned image, prompt, note, and routing state.
+    if (page === "appearance" || page === "advanced") return "omitted";
     return page === "general" ? "enabled" : "read-only";
   }
 
@@ -168,9 +169,8 @@ export function resolveConfigLanding(actor: ConfigActor): { category: ConfigCate
 
 /**
  * Per-action policy for Persona > General, re-derived from the commands these actions absorb.
- * `/persona avatar`, `rename`, `naming-habits`, and `swap` gate on Manage Guild in a guild;
- * `avatar`, both `trigger` leaves, and `swap` are guild-only; the trigger leaves carry no manager
- * gate at all.
+ * Identity, naming, trigger, and promotion mutations are manager-owned in a guild. Rename and
+ * naming remain available in a DM workspace because the actor owns that workspace.
  */
 export function resolvePersonaGeneralActionState(
   action: ConfigPersonaGeneralAction,
@@ -180,7 +180,7 @@ export function resolvePersonaGeneralActionState(
     return action === "rename" || action === "naming" ? "enabled" : "omitted";
   }
   if (actor.isManager) return "enabled";
-  return action === "trigger-add" || action === "trigger-remove" ? "enabled" : "disabled";
+  return "disabled";
 }
 
 /**
@@ -310,9 +310,11 @@ export const PERSONA_ADVANCED_ACTION_BY_ROUTE: Partial<
   "context-note-submit": "context-note",
   "humanizer-open": "humanizer",
   "humanizer-select": "humanizer",
+  "humanizer-submit": "humanizer",
   "text-override-open": "text-override",
   "text-override-provider-select": "text-override",
   "text-override-model-select": "text-override",
+  "text-override-model-submit": "text-override",
   "text-override-model-page": "text-override",
   "text-override-clear": "text-override",
 };
@@ -616,7 +618,8 @@ export const MODELS_PAGE_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], Co
 export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigActor): boolean {
   const personaAction = PERSONA_GENERAL_ACTION_BY_ROUTE[route.action];
   if (personaAction) {
-    if (resolveConfigPageState("persona", "general", actor) !== "enabled") return false;
+    const page = personaAction === "trigger-add" || personaAction === "trigger-remove" ? "triggers" : "general";
+    if (resolveConfigPageState("persona", page, actor) === "omitted") return false;
     return resolvePersonaGeneralActionState(personaAction, actor) === "enabled";
   }
 

@@ -65,12 +65,12 @@ the command interaction opens.
 
 After a provider is set, pick which model each capability uses for this server:
 
-- `/model text` — the main chat model
-- `/model vision` — a vision model (for reading images when the chat model can't)
-- `/model image` — image generation (see [Image Generation](/features/capabilities/media-generation/image-generation/))
-- `/model video` — video generation
-- `/model embedding` — embeddings for the [document knowledge base](/features/knowledge/memory/#document-knowledge-base-rag)
-- `/model speech` / `/model transcription` — [voice](/features/capabilities/media-generation/tts-and-stt/)
+- `/config` > Models > Switch Models — the main chat model
+- `/config` > Models > Switch Models — a vision model (for reading images when the chat model can't)
+- `/config` > Models > Switch Models — image generation (see [Image Generation](/features/capabilities/media-generation/image-generation/))
+- `/config` > Models > Switch Models — video generation
+- `/config` > Models > Switch Models — embeddings for the [document knowledge base](/features/knowledge/memory/#document-knowledge-base-rag)
+- `/providers` / `/providers` — [voice](/features/capabilities/media-generation/tts-and-stt/)
 
 You can also manage this server's backup keys for automatic failover and load balancing with
 `/providers`.

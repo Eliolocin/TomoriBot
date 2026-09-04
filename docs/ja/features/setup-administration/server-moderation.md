@@ -29,7 +29,7 @@ TomoriBotは、`/server`コマンドを通じて、サーバー内でのトモ�
 - `/moderation`：特定のペルソナがトリガーできるチャンネルを制限します。
 - `/moderation`：特定のロールのみがトリガーできるように制限します。
 - `/moderation`：ホワイトリストのエントリーを削除します。
-- `/server cooldown`（または`/config cooldown`）：応答間のグローバルなクールダウンを設定します。
+- `/config` > Behavior > Trigger（または`/config cooldown`）：応答間のグローバルなクールダウンを設定します。
 
 ホワイトリストに登録されたチャンネルは、チャンネルごとの上書きを設定しない限り、グローバルなクールダウンを継承します。
 
@@ -37,7 +37,7 @@ TomoriBotは、`/server`コマンドを通じて、サーバー内でのトモ�
 
 - `/server memberpermissions`：トモリに物事を教えることができるメンバーを制御します。
 - `/server blacklist`：トモリが特定のユーザーから学習したり、特定のユーザーに関するメモリーを使用したりするのを防ぎます。
-- `/server private-channels`：短期メモリーが分離され、思考ログが抑制されるチャンネルをマークします。
+- `/config` > Channels > Channel Rules：短期メモリーが分離され、思考ログが抑制されるチャンネルをマークします。
 
 ## 透明性：思考ログ
 
@@ -45,7 +45,7 @@ TomoriBotは、`/server`コマンドを通じて、サーバー内でのトモ�
 
 ## 歓迎の挨拶
 
-`/server welcome-channel set`は、選択したチャンネルで新しいメンバーに対する自動の挨拶を設定します。サーバーのオンボーディングが完了するよう、デフォルトでは挨拶まで1分間待機します。インスタンスの運用者は`WELCOME_DELAY_MS`でこの猶予時間を調整できます。`/server welcome-channel remove`を使用すると挨拶が停止します。
+`/config` > Channels > Destinationsは、選択したチャンネルで新しいメンバーに対する自動の挨拶を設定します。サーバーのオンボーディングが完了するよう、デフォルトでは挨拶まで1分間待機します。インスタンスの運用者は`WELCOME_DELAY_MS`でこの猶予時間を調整できます。`/config` > Channels > Destinations の **Clear Welcome** を使用すると挨拶が停止します。
 
 ## 表現（Expressions）
 

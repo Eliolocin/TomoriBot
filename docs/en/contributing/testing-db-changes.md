@@ -135,7 +135,7 @@ If the function belongs to a new repository not yet covered, add a new `*.regres
 
 ## Command config mapping contracts
 
-Split-config commands should also have pure unit coverage when they translate UI choices into repository write patches. Use `tests/unit/commands/configCommandMappings.test.ts` for checkbox or dynamic mapping contracts such as `/capabilities manage` and `/moderation` Member Access.
+Split-config commands should also have pure unit coverage when they translate UI choices into repository write patches. Use `tests/unit/commands/configCommandMappings.test.ts` for checkbox or dynamic mapping contracts such as `/config` > Permissions and `/moderation` Member Access.
 
 Prefer extracting a typed write-plan helper from the command module over mocking Discord interactions. The unit test should assert both the repository method target and the table-owned patch shape, then DB regression tests should cover any mixed-table repository write that needs transaction protection.
 

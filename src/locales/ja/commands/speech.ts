@@ -53,7 +53,7 @@ Exaggeration: **{exaggeration}**`,
       already_enabled_description: `このサーバーでは表示用字幕投稿が既に有効です。`,
       already_disabled_description: `このサーバーでは表示用字幕投稿が既に無効です。`,
       success_title: `表示用字幕モードを更新しました`,
-      enabled_success: `表示用字幕投稿を**有効**にしました。ボイスメッセージは文字起こしされ、Webhook経由でチャットに投稿されます。内部理解用の背景STTは \`/model transcription\` で別途設定します。`,
+      enabled_success: `表示用字幕投稿を**有効**にしました。ボイスメッセージは文字起こしされ、Webhook経由でチャットに投稿されます。内部理解用の背景STTは \`/providers\` で別途設定します。`,
       disabled_success: `表示用字幕投稿を**無効**にしました。文字起こしエンドポイントが設定されている場合、内部理解用の背景STTは引き続き利用できます。`,
     },
     voice_add: {

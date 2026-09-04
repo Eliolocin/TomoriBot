@@ -31,7 +31,7 @@ one collision policy and primary-name tie-break behavior.
 
 ## Persona User Blocking
 
-`block_user` and `unblock_user` are built-in Discord tools gated by `user_blocking_enabled` in `/capabilities manage`. They write to `persona_user_blocks`, scoped to the active persona rather than the whole server.
+`block_user` and `unblock_user` are built-in Discord tools gated by `user_blocking_enabled` in `/config` > Permissions. They write to `persona_user_blocks`, scoped to the active persona rather than the whole server.
 
 `mute` blocks only trigger eligibility for that persona. `block` replaces the target user's recent live dialogue-history turns and direct media during context building with a single `[System: ... sent a message but is currently blocked by you for N more hour(s). Use \`unblock_user\` to unblock if needed]` notice (consecutive messages from the same blocked user collapse into one notice), and suppresses reply annotations that would quote those messages. The notice is an LLM-facing system injection (English, not localized), mirroring reminder/join injections. `block` does not remove memories, reminders, documents, short-term memory summaries, or generic references from other users.
 

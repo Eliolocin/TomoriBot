@@ -101,11 +101,11 @@ usual cause is a `localhost`/Docker mismatch or a missing/extra `/v1` (see
 [gotchas](#notes--gotchas)).
 
 Adding the model makes it the active `text` model automatically — start chatting to try it. If
-it isn't active for some reason, run `/model text` and select your newly registered model.
+it isn't active for some reason, run `/config` > Models > Switch Models and select your newly registered model.
 
 Registering never changes any model other than `text`. If you ticked **Image Understanding**
 so this endpoint can act as the vision helper for an image-blind chat model, select it
-explicitly with `/model vision`; every text endpoint you registered with that toggle on shows
+explicitly with `/config` > Models > Switch Models; every text endpoint you registered with that toggle on shows
 up there. Note the vision model is only consulted when the chat model cannot see images, so
 setting one behind a vision-capable chat model has no effect until you switch.
 

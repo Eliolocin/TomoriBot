@@ -65,7 +65,7 @@ Command names should read like user-facing product language, not internal implem
 - When a command edits a stored set, name it after the setting, not an action pair.
 - Avoid shorthand that needs project context to decode.
 
-When a command opens a modal showing the full saved set, name it after the setting itself (e.g. `/server crosschannel-blocklist`). This fits better than separate `add` and `remove` flows because the user is managing one persisted list, not issuing a one-off mutation.
+When a command opens a modal showing the full saved set, name it after the setting itself (e.g. `/config` > Channels > Channel Rules). This fits better than separate `add` and `remove` flows because the user is managing one persisted list, not issuing a one-off mutation.
 
 ## Persistent Checklist Pattern
 
@@ -85,7 +85,7 @@ Use this pattern for durable settings where the best UX is "show me the whole se
 
 **Status rule:** If the command changes durable config, add that state to `/tool status` so the current configuration is visible without reopening the command.
 
-**Reference commands:** `/server crosschannel-blocklist`, `/server private-channels`, `/server rp-channels`.
+**Reference surface:** the roleplay, private, and cross-channel blocklist checklists on `/config` > Channels > Channel Rules.
 
 ## Migration Reference
 
@@ -93,9 +93,9 @@ Current commands that define or inspire the v2 design direction:
 
 | Command | Pattern | Notes |
 |---|---|---|
-| `/server crosschannel-blocklist` | Checklist-setting template | Single persistent command, hyphenated flat name, saved state mirrored in `/tool status`. Blocking a forum/media parent also blocks tool-driven visits into threads under it. |
-| `/server private-channels` | Checklist-setting for a durable channel set | Single persistent command with saved-state preload and paginated fallback. |
-| `/server rp-channels` | Checklist-setting for a durable channel set | Companion example alongside `private-channels`. |
+| `/config` > Channels > Channel Rules | Checklist-setting template | Single persistent command, hyphenated flat name, saved state mirrored in `/tool status`. Blocking a forum/media parent also blocks tool-driven visits into threads under it. |
+| `/config` > Channels > Channel Rules | Checklist-setting for a durable channel set | Single persistent command with saved-state preload and paginated fallback. |
+| `/config` > Channels > Channel Rules | Checklist-setting for a durable channel set | Companion example alongside `private-channels`. |
 
 ## Related Docs
 

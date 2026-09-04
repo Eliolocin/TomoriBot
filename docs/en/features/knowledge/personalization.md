@@ -31,7 +31,7 @@ can combine values from different levels without changing the underlying Discord
 target. To drop a title a persona supplies on its own, ask the persona directly ("stop calling
 me Master"); that suppresses it for that persona while leaving your other personas alone.
 
-Server managers can configure persona defaults with `/persona naming-habits`. A standalone
+Server managers can configure persona defaults with `/config` > Persona > Identity & Personality. A standalone
 address term such as `fam` is separate from the formatted name and is available only to
 persona-authored prompt text. The default-on User Info Updates capability allows a persona to
 apply explicit structured changes requested in conversation. Disabling it stops automatic

@@ -53,7 +53,7 @@ Exaggeration: **{exaggeration}**`,
       already_enabled_description: `Visible transcript posting is already enabled for this server.`,
       already_disabled_description: `Visible transcript posting is already disabled for this server.`,
       success_title: `Visible Transcript Mode Updated`,
-      enabled_success: `Visible transcript posting is now **enabled**. Voice messages will be transcribed and posted as chat messages via webhook. Background STT for my internal understanding is configured separately with \`/model transcription\`.`,
+      enabled_success: `Visible transcript posting is now **enabled**. Voice messages will be transcribed and posted as chat messages via webhook. Background STT for my internal understanding is configured separately with \`/providers\`.`,
       disabled_success: `Visible transcript posting is now **disabled**. Background STT can still run for my internal understanding when a transcription endpoint is configured.`,
     },
     voice_add: {

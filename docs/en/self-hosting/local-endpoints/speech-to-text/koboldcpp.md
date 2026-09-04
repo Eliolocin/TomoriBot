@@ -25,8 +25,8 @@ Run `/providers`, choose **Add New Custom Endpoint**, and use the transcription 
 After saving the connection, select it and use its model dropdown to add the model name your
 server reports as a Transcription model.
 
-Adding the model makes the endpoint active immediately. Use `/model transcription` later only when switching endpoints.
+Adding the model makes the endpoint active immediately. Use `/providers` later only when switching endpoints.
 
 ## Use Transcripts
 
-After registration, TomoriBot transcribes audio attachments in the background and adds the text to chat context. Use `/speech transcripts` only if you also want transcripts posted visibly in chat.
+After registration, TomoriBot transcribes audio attachments in the background and adds the text to chat context. Use `/config` > Behavior > Notices only if you also want transcripts posted visibly in chat.

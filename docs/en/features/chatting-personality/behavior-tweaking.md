@@ -5,13 +5,13 @@ sidebar:
 ---
 
 TomoriBot's behavior — **what she's allowed to do and how she generates** — is controlled by
-`/capabilities` and `/config`, beyond personality ([Multiple Personas](/features/chatting-personality/multiple-personas/))
+`/config` > Permissions and `/config`, beyond personality ([Multiple Personas](/features/chatting-personality/multiple-personas/))
 and knowledge ([Memory](/features/knowledge/memory/)). This page is a curated set of the high-value
 knobs — every command is in the [Command Reference](/features/command-reference/).
 
 ## Capabilities: What She's Allowed to Do
 
-`/capabilities` toggles her features on and off — image generation, sticker usage, thread
+`/config` > Permissions toggles her features on and off — image generation, sticker usage, thread
 creation, message management, user blocking, self-teaching, voice messages, and more. Each
 toggle is the feature flag that gates the matching tool (see
 [Tools & Extensions](/features/capabilities/tools-and-extensions/)). Turn something off and she simply
@@ -19,21 +19,21 @@ can't do it, no matter what a user asks.
 
 ## Generation Tuning
 
-- `/model parameters` — sampling parameters (temperature, top-p, …): creativity/randomness.
+- `/config` > Models > Samplers & Parameters — sampling parameters (temperature, top-p, …): creativity/randomness.
   Higher temperature is more varied.
-- `/config humanizer` — how human-like her responses read. The optional `scope` option
+- `/config` > Behavior > General — how human-like her responses read. The optional `scope` option
   applies the degree server-wide (`Global`, the default) or to a single persona
   (`Persona`), handy when one persona should text casually at degree 3 while another texts like a novel. A persona's "Inherit" choice clears its override.
-- `/config message-fetch-limit` — how many recent messages she pulls as context per trigger.
+- `/config` > Behavior > General — how many recent messages she pulls as context per trigger.
   A useful lever: raise it for more conversational awareness, lower it to cut token cost.
 
 ## System Prompt
 
 The system prompt sits above the persona and shapes overall behavior:
 
-- `/config system-prompt set` — set a custom system instruction (up to 16,000 characters).
-- `/config system-prompt preset` — choose from preset system prompts.
-- `/config system-prompt remove` — reset to the default. The confirmation shows the prompt it just
+- `/config` > Behavior > General — set a custom system instruction (up to 16,000 characters).
+- `/config` > Behavior > General — choose from preset system prompts.
+- `/config` > Behavior > General — reset to the default. The confirmation shows the prompt it just
   removed, so you can copy it back out if you cleared it by accident.
 
 When a [SillyTavern preset](/features/integrations/sillytavern-support/) is active, the built-in fallback
@@ -62,8 +62,8 @@ age-restricted — see
 
 ## Appearance & Time
 
-- `/persona rename` — what she calls herself.
-- `/server timezone` — the server timezone, used for time-aware replies and reminders.
+- `/config` > Persona > Identity & Personality: what she calls herself.
+- `/config` > Behavior > General — the server timezone, used for time-aware replies and reminders.
 
 ---
 

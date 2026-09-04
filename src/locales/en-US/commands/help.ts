@@ -81,8 +81,8 @@
       personal_field: `Personal Scope`,
       personal_value: `Open {add_command}, choose **Add New Custom Endpoint**, and select the saved entry when you need to edit or remove it.`,
       selection_field: `Selecting Them`,
-      selection_value: `After saving a connection, select it and use its model dropdown to register the exact model code. Adding a model activates it. Later, choose the label from {text_command}, {image_command}, or {video_command}; if the label has several models for that capability, a picker lets you choose one. Vision-capable text endpoints also appear in \`/model vision\`.`,
-      selection_summary_value: `After registration, choose the label from {text_command}, {image_command}, or {video_command}. If that label has several models for the same capability, TomoriBot will ask which one to use.`,
+      selection_value: `After saving a connection, select it and use its model dropdown to register the exact model code. Adding a model activates it. Later, choose the label on {text_command} for the text, image, or video slot; if the label has several models for that capability, a picker lets you choose one. Vision-capable text endpoints also appear there.`,
+      selection_summary_value: `After registration, choose the label on {text_command} for the text, image, or video slot. If that label has several models for the same capability, TomoriBot will ask which one to use.`,
       labels_field: `Labels And Removal`,
       labels_value: `A label groups every capability under one custom provider bundle. Select the entry in {server_remove_command} or {personal_remove_command}, then choose **Remove** to review the impact and delete the whole labeled bundle.`,
       comfyui_page1_title: `ComfyUI Setup`,
@@ -121,7 +121,7 @@
       comfyui_page4_metadata_value: `TomoriBot also sends resolved values in \`extra_pnginfo\`, including prompt, model, mode, aspect ratio, width, height, size, reference-image count, and video-specific duration/resolution/audio fields. That is useful if you prefer a custom ComfyUI node that reads execution metadata instead of JSON placeholders.`,
       comfyui_summary_description: `ComfyUI custom endpoints let TomoriBot queue your saved image or video workflow and return the first saved output. The full setup guide covers workflow export, placeholders, reference images, polling, and output rules.`,
       comfyui_summary_register_field: `Register And Activate`,
-      comfyui_summary_register_value: `Register the connection and its model with {server_add_command} or {personal_add_command}, then select its label from {image_command} or {video_command}. Use the docs button for the full ComfyUI workflow setup.`,
+      comfyui_summary_register_value: `Register the connection and its model with {server_add_command} or {personal_add_command}, then select its label on {image_command} for the image or video slot. Use the docs button for the full ComfyUI workflow setup.`,
     },
     speech: {
       description: `Learn how speech generation works.`,
@@ -278,11 +278,11 @@ Transcription supports ~100 languages (auto-detected).`,
 - I can also do image, video, and news search (via \`/providers\`)
 - I can fetch and read content from URLs`,
       personality_title: `Personality & Customization`,
-      personality_description: `- I can change my name and avatar using \`/persona rename\` and \`/persona avatar\`
+      personality_description: `- I can change my name and avatar on \`/config\` > Persona > General
 - I can switch between different personas using \`/persona\` (you can also share and save personas using \`/persona export\`!)
 - Multiple characters can coexist as alter personas, each with their own triggers and webhook avatar
-- My behavior and tone can be tweaked with \`/persona attribute add\`, \`/persona sample-dialogue add\`, and \`/persona prompt set\`
-- A custom system prompt can be set with \`/config system-prompt\` to further shape my behavior
+- My behavior and tone can be tweaked on \`/config\` > Persona > General and \`/config\` > Persona > Advanced
+- A custom system prompt can be set with \`/config\` > Behavior > General to further shape my behavior
 - Learn more on the **Customization** page in \`/help\``,
       memory_title: `Memory & Personalization`,
       memory_description: `- I can remember personal facts about you and server-wide information, persisting across conversations
@@ -294,14 +294,14 @@ Transcription supports ~100 languages (auto-detected).`,
 - Full invisibility is available via \`/personal config\` if you want to be completely unseen by me
 - Learn more on the **Persistent Memory** page in \`/help\``,
       time_title: `Time Awareness`,
-      time_description: `- I know what time it currently is in the server (via \`/server timezone\`)
+      time_description: `- I know what time it currently is in the server (via \`/config\` > Behavior > General)
 - I can set up reminders for you (try asking me to remind you about something!)
 - Recurrent reminders and tasks are supported and are persona-specific, just tell me to do something`,
       alter_title: `Alter Personas`,
       alter_description: `- Multiple characters can coexist in one server via alter personas
 - Each alter has its own personality and is triggered by specific keywords
 - Alter personas use webhooks for distinct avatars
-- Multiple alters can respond to a single message (up to the \`/config trigger-match-limit\` limit)
+- Multiple alters can respond to a single message (up to the \`/config\` > Behavior > Trigger limit)
 - Replying to a webhook message continues the conversation as that persona
 - Manage alters with \`/persona import\` (alter option) and \`/persona remove\``,
       expressions_title: `Expressions & Reactions`,
@@ -314,7 +314,7 @@ Transcription supports ~100 languages (auto-detected).`,
 - Extract channel history into searchable knowledge with \`/learn history\`
 - I retrieve and reference relevant document content when answering questions
 - I can also read file attachments shared directly in chat (PDF, source code, markdown, JSON, YAML, and more): just ask me to read it!
-- Requires an embedding model (configure with \`/model embedding\`)
+- Requires an embedding model (configure with \`/config\` > Models > Switch Models)
 - Remove uploaded or history-extracted documents with \`/memories\``,
       impersonation_title: `Impersonation & Tools`,
       impersonation_description: `- Use \`/impersonate\` to send messages as yourself, a persona, or inject system messages
@@ -326,13 +326,13 @@ Transcription supports ~100 languages (auto-detected).`,
 - Supports Text2Image and Image2Image with customizable aspect ratios
 - Use \`/generate image\` or just ask me to generate an image
 - Reference images can come from message attachments, stickers, emojis, or user avatars
- - Available on Google, Vertex AI, Vertex AI Express, OpenRouter, Z.ai, and NVIDIA NIM providers (configure with \`/model image\`)`,
+ - Available on Google, Vertex AI, Vertex AI Express, OpenRouter, Z.ai, and NVIDIA NIM providers (configure with \`/config\` > Models > Switch Models)`,
       videogen_title: `Video Generation`,
       videogen_description: `- I can generate short videos from text prompts or by animating reference images
 - Supports Text2Video and Image2Video with customizable aspect ratios
 - Use \`/generate video\` or just ask me to generate a video
 - Reference images can come from message attachments or user avatars
-- Available on Google, OpenRouter, and Z.ai providers (configure with \`/model video\`)`,
+- Available on Google, OpenRouter, and Z.ai providers (configure with \`/config\` > Models > Switch Models)`,
       footer: `Not all features are available for all AI providers. Recommended: Google Gemini. You can also just ask me what I can do!`,
     },
     setup: {
@@ -448,7 +448,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - Post-history / depth injection nodes
 - Which imported nodes start enabled or disabled`,
       embed1_still_sent_title: `What It Does Not Fully Replace`,
-      embed1_still_sent_description: `- The current system/persona blocks still exist: {configSystemPromptSet}, {personaPromptSet}, {personaAttributeAdd}, and {personaSampleDialogueAdd}
+      embed1_still_sent_description: `- The current system/persona blocks still exist: {configSystemPromptSet}, {personaPromptSet}, and the attributes and sample dialogues on {personaAttributeAdd}
 - Live chat history and retrieved document context still exist too
 - Automatic Tomori-only context still exists too: server memory, emoji/sticker context, users-in-conversation, STM, conditioning, and similar blocks`,
       embed1_mapping_title: `How Native Blocks Usually Map`,
@@ -716,7 +716,7 @@ Enter \`{project_id}::{location}\` using {configSetup} or {configApikeySet}
 - Documents are chunked and stored as searchable embeddings
 - I automatically retrieve relevant content based on the conversation
 - Use \`/memories\` to remove stored documents
-- Requires an embedding model configured via \`/model embedding\``,
+- Requires an embedding model configured via \`/config\` > Models > Switch Models`,
       shortterm_title: `Short-Term Memory`,
       shortterm_description: `In addition to persistent memories, I keep [STM (short-term memory)](https://docs.tomoribot.app/en/features/knowledge/memory/#short-term-memory-stm) of recent conversations:
 - Recent messages are cached per channel, and each persona carries the latest STM across channels within the same server
@@ -834,9 +834,9 @@ This means users must invoke personas more deliberately instead of accidentally 
       embed1_title: `Customizing TomoriBot`,
       embed1_description: `TomoriBot is highly customizable! This is about **how I behave** (personality, tone, settings). For **what I remember** (facts, memories), see {helpMemory} instead!`,
       summary_personas_title: `Personas`,
-      summary_personas_description: `Use {personaCreate} or {personaGenerate} to create a persona, then refine it with {personaAttributeAdd} and {personaSampleDialogueAdd}. Personas can be switched, exported, imported, and used as separate alter identities.`,
+      summary_personas_description: `Use {personaCreate} or {personaGenerate} to create a persona, then refine its attributes and sample dialogues on {personaAttributeAdd}. Personas can be switched, exported, imported, and used as separate alter identities.`,
       summary_behavior_title: `Behavior Settings`,
-      summary_behavior_description: `Use {configModel}, {configHumanizer}, {configSystemPromptSet}, and {capabilitiesManage} for model selection, humanlike delivery, system instructions, and feature access.`,
+      summary_behavior_description: `Use {configModel} for model selection, {configHumanizer} for humanlike delivery and system instructions, and {capabilitiesManage} for feature access.`,
       summary_server_title: `Server Boundaries`,
       summary_server_description: `Admins can combine persona limits, whitelisted channels such as {serverWhitelistChannel}, auto-trigger settings, cooldowns, and role permissions to control where and how TomoriBot responds.`,
       embed1_personas_title: `Personality Personas`,
@@ -951,7 +951,7 @@ Document Knowledge Base:
       embed4_footer: `If you have any more questions, join the support server with /support discord`,
       embed5_title: `Pro Tips`,
       embed5_description: `- Start with a persona (default or generated) as a foundation
-- Use \`/persona attribute add\` for quick personality tweaks
+- Use \`/config\` > Persona > General for quick personality tweaks
 - For Sample Dialogues, using examples that exhibit their attributes and traits as well is effective:
 \`\`\`
 User message: {user}: What's your favorite hobby?

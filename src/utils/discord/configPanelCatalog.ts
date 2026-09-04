@@ -21,7 +21,7 @@ export const CONFIG_ROUTE_VERSION = "v1";
 
 export type ConfigCategory = "persona" | "behavior" | "channels" | "permissions" | "models";
 
-type PersonaPage = "general" | "memories" | "advanced" | "sprites";
+type PersonaPage = "general" | "triggers" | "memories" | "appearance" | "sprites" | "advanced";
 type BehaviorPage = "general" | "trigger" | "experimental" | "notices" | "memory";
 type ChannelsPage = "destinations" | "auto-trigger" | "rules" | "overrides";
 type PermissionsPage = "capabilities" | "privacy";
@@ -35,8 +35,8 @@ export type ConfigPage = PersonaPage | BehaviorPage | ChannelsPage | Permissions
  * custom ID, which is why the category field must stay ahead of the page field in every codec.
  */
 export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPage[]> = {
-  persona: ["general", "memories", "advanced", "sprites"],
-  behavior: ["general", "trigger", "experimental", "notices", "memory"],
+  persona: ["general", "triggers", "memories", "appearance", "sprites", "advanced"],
+  behavior: ["general", "trigger", "memory", "notices", "experimental"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   permissions: ["capabilities", "privacy"],
   models: ["switch", "parameters", "fallbacks", "image"],
@@ -74,8 +74,9 @@ export const CONFIG_PERSONA_COLLECTION_PAGE_SIZE = 24;
  * Sprites are addressed in a route by list position plus a fingerprint rather than by
  * `sprite_key`. A key may be 64 characters, which pushes an edit route past the 100-character
  * custom-ID limit `buildInteractionRouteId` throws on, and route segments cannot carry a colon.
+ * One select option is reserved for adding a sprite.
  */
-export const CONFIG_PERSONA_SPRITE_PAGE_SIZE = 25;
+export const CONFIG_PERSONA_SPRITE_PAGE_SIZE = 24;
 
 /**
  * Trigger words one removal modal can present: five checkbox groups of ten is the whole modal.
@@ -373,9 +374,11 @@ export type ConfigPanelRoute =
   | { action: "context-note-submit"; locale: string; personaId: number; nonce: string }
   | { action: "humanizer-open"; locale: string; personaId: number }
   | { action: "humanizer-select"; locale: string; personaId: number }
+  | { action: "humanizer-submit"; locale: string; personaId: number; nonce: string }
   | { action: "text-override-open"; locale: string; personaId: number }
   | { action: "text-override-provider-select"; locale: string; personaId: number }
   | { action: "text-override-model-select"; locale: string; personaId: number; provider: string }
+  | { action: "text-override-model-submit"; locale: string; personaId: number; provider: string; nonce: string }
   | { action: "text-override-model-page"; locale: string; personaId: number; provider: string; start: number }
   | { action: "text-override-clear"; locale: string; personaId: number }
   | { action: "sprite-select"; locale: string; personaId: number }
@@ -761,11 +764,16 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "context-note-submit": { wireToken: "context-submit", fields: [personaIdField, nonceField] },
   "humanizer-open": { wireToken: "humanizer-open", fields: [personaIdField] },
   "humanizer-select": { wireToken: "humanizer-select", fields: [personaIdField] },
+  "humanizer-submit": { wireToken: "humanizer-submit", fields: [personaIdField, nonceField] },
   "text-override-open": { wireToken: "text-override-open", fields: [personaIdField] },
   "text-override-provider-select": { wireToken: "text-override-provider-select", fields: [personaIdField] },
   "text-override-model-select": {
     wireToken: "text-override-model-select",
     fields: [personaIdField, providerField],
+  },
+  "text-override-model-submit": {
+    wireToken: "text-model-submit",
+    fields: [personaIdField, providerField, nonceField],
   },
   "text-override-model-page": {
     wireToken: "text-override-model-page",

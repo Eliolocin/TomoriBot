@@ -66,7 +66,7 @@ Enum in `src/types/db/schema.ts`:
 
 Operational note:
 
-- `/server cooldown triggers` currently allows selecting types `0..3`.
+- `/config` > Behavior > Trigger currently allows selecting types `0..3`.
 - Type 4 remains in enum/runtime support for legacy rows.
 
 ### Manager exemption
@@ -77,7 +77,7 @@ Operational note:
 
 ## Configuration Commands
 
-- Global trigger cooldown: `/server cooldown triggers`
+- Global trigger cooldown: `/config` > Behavior > Trigger
 - Trigger whitelist:
   - `/moderation` Whitelist Channels (leave cooldown options empty to inherit the global cooldown)
   - `/moderation` Whitelist Personas

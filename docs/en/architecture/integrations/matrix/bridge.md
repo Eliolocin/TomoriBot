@@ -282,7 +282,7 @@ On first use per bot session, the virtual user is:
 2. Given the persona's display name
 3. Given the persona's avatar (downloaded from Discord CDN, uploaded to the homeserver)
 
-An in-memory cache (`provisionedIntents`) prevents redundant provisioning API calls within a session. If the avatar URL changes (e.g., after `/persona swap`), the cache entry is invalidated on next restart.
+An in-memory cache (`provisionedIntents`) prevents redundant provisioning API calls within a session. If the avatar URL changes (for example, after `/config` > Persona > Identity & Personality), the cache entry is invalidated on next restart.
 
 ---
 

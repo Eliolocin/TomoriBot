@@ -272,6 +272,7 @@ export default {
 これらのサンプラーは全サーバーであなた自身のリクエストにのみ適用されます。このサーバーの設定は変更されていません。`,
     },
     config: {
+      character_reference_uploaded: `アップロードして保存済み`,
       description: `個人設定データを管理します。`,
       export: {
         description: `個人設定をエクスポートします（サーバー設定、ペルソナ、記憶を除く）。`,

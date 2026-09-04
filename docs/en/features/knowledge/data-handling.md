@@ -68,6 +68,6 @@ These permanently remove or reset data — **they cannot be undone**:
 
 - `/personal config` — control your visibility to her, up to full invisibility (opt out of
   memory features entirely).
-- `/capabilities` — server admins can turn off self-learning and other features.
+- `/config` > Permissions — server admins can turn off self-learning and other features.
 
 See [Memory](/features/knowledge/memory/) for how memories work day to day.

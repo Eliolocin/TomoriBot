@@ -12,7 +12,7 @@ her with MCP servers, and how to keep tool declarations lean with Deliberate Too
 ## Built-In Tools
 
 Tools depend on the active provider/model supporting tool calling, and many are gated behind
-a feature flag (a `/capabilities` toggle), a Discord permission, a model capability, or
+a feature flag (a `/config` > Permissions toggle), a Discord permission, a model capability, or
 an optional API key.
 
 | Tool | Prompt macro | Requires | What it does |
@@ -196,5 +196,5 @@ appeared in it, while a pronoun or timezone edit does not restate a name nothing
 
 Every field is validated before one atomic write. Restrictive privacy blocks additions and
 changes but still permits clearing values. The tool cannot edit persona-wide address terms. The
-default-on User Info Updates switch in `/capabilities manage` controls both tool exposure and
+default-on User Info Updates switch in `/config` > Permissions controls both tool exposure and
 stale-invocation defense. Manual `/personal config` remains available when it is off.

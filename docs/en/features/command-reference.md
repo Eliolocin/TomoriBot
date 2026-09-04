@@ -11,16 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **41**. Runnable slash commands: **162**.
-
-## `/capabilities`
-
-Manage tool use and specific features.
-
-| Command | Summary |
-|---|---|
-| `/capabilities manage` | Configure which specific tools I can use on this server. |
-| `/capabilities toggle` | Toggle whether I can use tools and function calls. |
+Top-level command groups: **40**. Runnable slash commands: **84**.
 
 ## `/comment`
 
@@ -48,27 +39,11 @@ Manage persistent reward and punishment conditioning memories.
 
 ## `/config`
 
-Configure TomoriBot's models, behavior, and server settings.
+Configure persona, behavior, channel, permission, and model settings.
 
 | Command | Summary |
 |---|---|
-| `/config context-note set` | Set a short reminder injected at a specific depth in conversation history |
-| `/config humanizer` | Set how 'human-like' my responses should be. For custom prompts, use /config system-prompt set. |
-| `/config image-tags default-negative` | Set default negative image tags for unwanted appearance details and artifacts. |
-| `/config image-tags default-positive` | Set default positive appearance/style image tags added to image generation prompts. |
-| `/config message-fetch-limit` | Set recent messages fetched for context (20-100, default: 80). |
-| `/config model-randomizer` | Toggle randomly picking which model leads each reply (anti-repetition). |
-| `/config notice-embeds visibility` | Choose which notice embeds remain visible in chat. |
-| `/config random-trigger add` | Add a probabilistic timer-based auto-trigger for a channel. |
-| `/config random-trigger remove` | Remove an existing random trigger from this server. |
-| `/config self-debug` | Toggle whether I load my own diagnostic embeds into context. |
-| `/config send-limit` | Limit the number of messages I send per response (default: 0 = unlimited). |
-| `/config system-prompt preset` | Apply a preset system prompt |
-| `/config system-prompt remove` | Remove the custom system prompt and use the default prompt |
-| `/config system-prompt set` | Set a custom system prompt to guide my behavior |
-| `/config trigger-cascade-limit` | Manage how many additional persona triggers are allowed after the first (default: 3). |
-| `/config trigger-match-limit` | Manage how many personas can match a single message (default: 3). |
-| `/config workarounds` | Configure experimental compatibility workarounds. |
+| `/config` | Configure persona, behavior, channel, permission, and model settings. |
 
 ## `/contribute`
 
@@ -184,7 +159,6 @@ Manage stored memories and documents.
 | `/memory personal import` | Import personal memories from JSON. |
 | `/memory server export` | Export server memories to JSON. |
 | `/memory server import` | Import server memories from JSON. |
-| `/memory tagging set` | Switch to tagged memory mode |
 
 ## `/model`
 
@@ -192,21 +166,7 @@ Manage this server's default AI models.
 
 | Command | Summary |
 |---|---|
-| `/model embedding` | Change this server's embedding model used for document retrieval. |
-| `/model fallback` | Set this server's backup text models, or clear slots with None. |
-| `/model image` | Change this server's image generation model. |
-| `/model logit-bias add` | Add comma-separated logit bias entries with one shared bias value. |
-| `/model logit-bias remove` | Remove saved logit bias entries. |
-| `/model logit-bias upload` | Upload SillyTavern-style logit bias JSON entries. |
 | `/model override remove` | Remove channel and persona model overrides. |
-| `/model parameters` | Update this server's saved sampler settings for a provider. |
-| `/model speech` | Choose this server's active speech endpoint. |
-| `/model stop-strings add` | Add server-wide stop strings. |
-| `/model stop-strings manage` | Manage server-wide stop strings and the speaker-pattern stop behavior. |
-| `/model text` | Change this server's default text model. |
-| `/model transcription` | Choose this server's active transcription endpoint. |
-| `/model video` | Change this server's video generation model. |
-| `/model vision` | Set this server's vision model for when its chat model can't see images. |
 
 ## `/moderation`
 
@@ -223,9 +183,7 @@ Configure NovelAI text and image generation for this server.
 | Command | Summary |
 |---|---|
 | `/novelai attg` | Configure Author/Title/Tags/Genre/Stars metadata for NovelAI Kayra and Erato prompts. |
-| `/novelai character-reference` | Upload or clear a NovelAI character reference image for yourself or a persona. |
 | `/novelai image generate` | Generate a NovelAI image using imageboard-style tags and an optional character reference. |
-| `/novelai image parameters` | Override NovelAI image generation sampler and quality settings for this server. |
 | `/novelai preset text` | Apply a NovelAI sampling preset to this server's text generation settings. |
 
 ## `/nsfw`
@@ -250,34 +208,12 @@ Manage personality presets
 
 | Command | Summary |
 |---|---|
-| `/persona attribute add` | Add an attribute to a persona. |
-| `/persona attribute edit` | Edit an attribute on a persona. |
-| `/persona attribute remove` | Remove an attribute from a persona. |
-| `/persona avatar` | Set or remove avatar for a selected persona on this server. |
 | `/persona create` | Create a simple personality preset manually |
 | `/persona default` | Apply a preset personality configuration |
 | `/persona export` | Export current personality as a shareable PNG file |
 | `/persona generate` | AI-powered personality generation (requires a compatible provider) |
-| `/persona image-tags` | Set comma-separated image tags for a persona's physical appearance to assist image generation. |
 | `/persona import` | Import a persona from a PNG or JSON file |
-| `/persona naming-habits` | Configure how a persona formats and addresses user names. |
-| `/persona prompt remove` | Remove a persona prompt. |
-| `/persona prompt set` | Set a persona prompt. |
 | `/persona remove` | Remove an alter persona from the server |
-| `/persona rename` | Change my name on this server. |
-| `/persona sample-dialogue add` | Add a sample user/bot dialogue pair to as an example for how I should respond. |
-| `/persona sample-dialogue edit` | Edit a sample user/bot dialogue pair. |
-| `/persona sample-dialogue remove` | Remove a sample user/bot dialogue pair from my memory. |
-| `/persona sprites add` | Add or replace a persona sprite avatar. |
-| `/persona sprites edit` | Edit a persona sprite's name, image, instructions, or identity. |
-| `/persona sprites export` | Export a persona's sprites as a shareable .zip file. |
-| `/persona sprites import` | Import a persona's sprites from a .zip file. |
-| `/persona sprites remove` | Remove persona sprite avatars. |
-| `/persona stm edit` | Hand-edit a persona's short-term memory for this channel. |
-| `/persona stm view` | View a persona's short-term memory for this channel (read-only). |
-| `/persona swap` | Swap the main persona with an alter persona |
-| `/persona trigger add` | Add trigger words for a persona. |
-| `/persona trigger remove` | Remove a word that makes me respond when mentioned. |
 
 ## `/personal`
 
@@ -369,29 +305,9 @@ Manage server-wide settings, channels, permissions, and integrations.
 
 | Command | Summary |
 |---|---|
-| `/server always-reply` | Toggle always-reply mode for the main persona. |
-| `/server auto-trigger channels` | Manage auto-trigger channels and optional per-channel persona assignment. |
-| `/server auto-trigger threshold` | Set the shared auto-chat range for configured auto-chat channels. |
-| `/server channel-prompt` | Set a system prompt scoped to one channel (appends to or replaces the server prompt there). |
 | `/server config export` | Export this server's settings, excluding memories, personas, and personal settings. |
 | `/server config import` | Import server settings. Does not import memories, personas, or personal settings. |
 | `/server config remove` | Reset this server's configuration. |
-| `/server cooldown triggers` | Set cooldown type and duration for triggers and manual commands (defaults: off, 5s). |
-| `/server crosschannel-blocklist` | Manage the channel blocklist for tool-driven cross-channel messages |
-| `/server deliberate-tool-context` | Set how many following turns keep recently used tools available. |
-| `/server deliberate-tool-mode` | Toggle deliberate tool mode for this server. |
-| `/server deliberate-tool-trigger` | Manage custom trigger phrases for deliberate tool mode. |
-| `/server deliberate-trigger-mode` | Toggle deliberate trigger mode (DTM) for this server. |
-| `/server private-channels` | Manage private channels where STMs are isolated and thought logs are suppressed |
-| `/server rp-channels` | Manage channels where emojis and stickers are always suppressed and `/tool delete turn` is available |
-| `/server stm categories-edit` | Define up to 5 labeled STM categories the bot fills via tool calls. |
-| `/server stm parameters` | Tune the STM refresh cadence, render mode, crude-message count, nudge depth, and content depth. |
-| `/server stm privacy-bypass` | Toggle whether private-channel STMs can leak into non-private channels. |
-| `/server stm prompt-edit` | Customize the STM tool description and the unified refresh nudge. |
-| `/server thought-logs-channel` | Set or clear the server's thought-log channel. |
-| `/server timezone` | Set your server's timezone offset from UTC (default: 0 / UTC). |
-| `/server welcome-channel remove` | Remove the configured welcome channel and stop automated greetings. |
-| `/server welcome-channel set` | Set the channel used for automated welcome greetings. |
 
 ## `/setup`
 
@@ -408,7 +324,6 @@ Manage speech voices and samples.
 | Command | Summary |
 |---|---|
 | `/speech chatterbox parameters` | Tune Chatterbox Turbo and standard-model speech generation. |
-| `/speech transcripts` | Toggle visible transcript posting for voice messages. |
 | `/speech voice-add` | Upload a local TTS reference voice sample. |
 | `/speech voice-assign` | Assign a speech voice to a persona. |
 | `/speech voice-design remove` | Remove a persona's voice design prompt. |

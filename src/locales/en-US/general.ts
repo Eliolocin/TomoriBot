@@ -6,7 +6,7 @@
     unknown: `Unknown`,
     scoped_openrouter_model_description: `Added via /providers`,
     openrouter_model_moved_title: `Functionality Moved`,
-    openrouter_model_moved_description: `\`other-model\` selection has been moved to {add_command}. After using it, use \`/model text\` again to select it.`,
+    openrouter_model_moved_description: `\`other-model\` selection has been moved to {add_command}. After using it, use \`/config\` > Models > Switch Models again to select it.`,
     defaults: {
       bot_name: `Tomori`,
     },

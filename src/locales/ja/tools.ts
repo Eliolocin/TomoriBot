@@ -22,7 +22,7 @@ export default {
     },
     generate_image_nai: {
       no_google_api_key: `インペインティングには画像セグメンテーション用のGoogleプロバイダー認証情報が必要です。\`/providers\` で追加するか、Googleプロバイダーに切り替えてください。`,
-      model_not_configured: `現在、NovelAI画像生成は無効です。まず \`/model image\` でNovelAI画像モデルを選択してください。`,
+      model_not_configured: `現在、NovelAI画像生成は無効です。まず \`/config\` > Models > Switch Models でNovelAI画像モデルを選択してください。`,
       provider_quota_exceeded: `このアカウントではNovelAI画像生成クォータを使い切っています。Anlasを補充するか、クォータのリフレッシュ後に再試行してください。`,
       characters_require_v4: `キャラクター配置にはNovelAI V4以降の拡散モデルが必要です。`,
       character_requires_id_or_tags: `キャラクター項目 #{index} には id か tags のどちらかが必要です。`,
@@ -54,8 +54,8 @@ export default {
       tool_invoke_no_params: `パラメーターなし。`,
     },
     tool_notice: {
-      hide_footer: `\`/config notice-embeds visibility\` で非表示にできます`,
-      hide_footer_with_kill: `\`/config notice-embeds visibility\` で非表示にできます · 止まっていると思ったら \`/kill\` を使用してください`,
+      hide_footer: `\`/config\` > Behavior > Notices で非表示にできます`,
+      hide_footer_with_kill: `\`/config\` > Behavior > Notices で非表示にできます · 止まっていると思ったら \`/kill\` を使用してください`,
     },
     user_block: {
       type_mute: `ミュート`,
@@ -146,7 +146,7 @@ export default {
     },
     vision: {
       analyzing_title: `🖼️ 画像を解析中...`,
-      analyzing_description: `現在のモデルはビジョン非対応です。設定された \`/model vision\`（{model}）を使用して画像を解析しています。`,
+      analyzing_description: `現在のモデルはビジョン非対応です。設定された \`/config\` > Models > Switch Models（{model}）を使用して画像を解析しています。`,
       analyzing_footer: `画像の数によって少し時間がかかる場合があります`,
     },
     gif: {

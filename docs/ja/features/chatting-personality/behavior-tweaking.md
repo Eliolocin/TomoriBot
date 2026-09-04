@@ -4,24 +4,24 @@ sidebar:
   order: 3
 ---
 
-性格（[マルチペルソナ](/ja/features/chatting-personality/multiple-personas/)）や知識（[メモリー](/ja/features/knowledge/memory/)）の枠を超え、トモリの振る舞い（**許可する操作や生成方法**）は`/capabilities`と`/config`によって制御されます。このページでは重要度の高い設定を厳選して紹介します。すべてのコマンドは[コマンドリファレンス](/ja/features/command-reference/)に記載されています。
+性格（[マルチペルソナ](/ja/features/chatting-personality/multiple-personas/)）や知識（[メモリー](/ja/features/knowledge/memory/)）の枠を超え、トモリの振る舞い（**許可する操作や生成方法**）は`/config` > Permissionsと`/config`によって制御されます。このページでは重要度の高い設定を厳選して紹介します。すべてのコマンドは[コマンドリファレンス](/ja/features/command-reference/)に記載されています。
 
 ## 機能の有効化：許可する操作
 
-`/capabilities`は機能のオン・オフを切り替えます。画像生成、ステッカーの使用、スレッド作成、メッセージ管理、ユーザーのブロック、自己学習、音声メッセージなどが含まれます。各項目は、対応するツールを制御する機能フラグです（[ツールと拡張機能](/ja/features/capabilities/tools-and-extensions/)を参照）。機能をオフにすると、ユーザーから依頼されてもトモリは一切実行できなくなります。
+`/config` > Permissionsは機能のオン・オフを切り替えます。画像生成、ステッカーの使用、スレッド作成、メッセージ管理、ユーザーのブロック、自己学習、音声メッセージなどが含まれます。各項目は、対応するツールを制御する機能フラグです（[ツールと拡張機能](/ja/features/capabilities/tools-and-extensions/)を参照）。機能をオフにすると、ユーザーから依頼されてもトモリは一切実行できなくなります。
 ## 生成の調整
 
-- `/model parameters`：サンプリングパラメータ（temperature、top-pなど）を設定し、創造性やランダム性を調整します。temperatureを高くすると、より多様な返答になります。
-- `/config humanizer`：応答がどれくらい人間らしくなるかを調整します。オプションの`scope`で、サーバー全体（`Global`、デフォルト）または特定のペルソナ（`Persona`）に適用範囲を指定できます。あるペルソナはレベル3でカジュアルに、別のペルソナはレベル0のまま、といった使い分けが可能です。ペルソナの「継承」を選ぶと個別設定が解除されます。
-- `/config message-fetch-limit`：1回のトリガーでコンテキストとして取得する最近のメッセージ数を設定します。会話の認識力を高める場合は増やし、トークンコストを削減する場合は減らすといった調整に便利です。
+- `/config` > Models > Samplers & Parameters：サンプリングパラメータ（temperature、top-pなど）を設定し、創造性やランダム性を調整します。temperatureを高くすると、より多様な返答になります。
+- `/config` > Behavior > General：応答がどれくらい人間らしくなるかを調整します。オプションの`scope`で、サーバー全体（`Global`、デフォルト）または特定のペルソナ（`Persona`）に適用範囲を指定できます。あるペルソナはレベル3でカジュアルに、別のペルソナはレベル0のまま、といった使い分けが可能です。ペルソナの「継承」を選ぶと個別設定が解除されます。
+- `/config` > Behavior > General：1回のトリガーでコンテキストとして取得する最近のメッセージ数を設定します。会話の認識力を高める場合は増やし、トークンコストを削減する場合は減らすといった調整に便利です。
 
 ## システムプロンプト
 
 システムプロンプトはペルソナの基盤となり、全体的な振る舞いを決定づけます。
 
-- `/config system-prompt set`：カスタムのシステム指示を設定します（最大16,000文字）。
-- `/config system-prompt preset`：用意されたシステムプロンプトのプリセットから選択します。
-- `/config system-prompt remove`：デフォルトにリセットします。確認メッセージには削除されたプロンプトが表示されるため、誤ってクリアした場合でもコピーして復元できます。
+- `/config` > Behavior > General：カスタムのシステム指示を設定します（最大16,000文字）。
+- `/config` > Behavior > General：用意されたシステムプロンプトのプリセットから選択します。
+- `/config` > Behavior > General：デフォルトにリセットします。確認メッセージには削除されたプロンプトが表示されるため、誤ってクリアした場合でもコピーして復元できます。
 
 [SillyTavernサポート](/ja/features/integrations/sillytavern-support/)のプリセットが有効な場合、内蔵のフォールバックシステムプロンプトは置き換えられますが、ここで設定したカスタムプロンプトは引き続き送信されます。
 
@@ -39,8 +39,8 @@ TomoriBotには**独自のコンテンツフィルターはありません**。�
 
 ## 外見と時間
 
-- `/persona rename`：自分の呼び方を設定します。
-- `/server timezone`：サーバーのタイムゾーンを設定します。時間に応じた返信やリマインダーに使用されます。
+- `/config` > Persona > Identity & Personality：自分の呼び方を設定します。
+- `/config` > Behavior > General：サーバーのタイムゾーンを設定します。時間に応じた返信やリマインダーに使用されます。
 
 ---
 

@@ -2,6 +2,7 @@ import {
   ButtonStyle,
   ChannelType,
   ComponentType,
+  inlineCode,
   MessageFlags,
   SelectMenuDefaultValueType,
   type ActionRowData,
@@ -145,7 +146,9 @@ const ADDRESSING_STYLES: readonly AddressingStyle[] = ["masculine", "feminine", 
 const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
   persona: {
     general: "commands.config.panel.page_persona_general",
+    triggers: "commands.config.panel.page_persona_triggers",
     memories: "commands.config.panel.page_persona_memories",
+    appearance: "commands.config.panel.page_persona_appearance",
     advanced: "commands.config.panel.page_persona_advanced",
     sprites: "commands.config.panel.page_persona_sprites",
   },
@@ -186,6 +189,12 @@ const NAMING_STYLE_LOCALE_KEYS: Record<AddressingStyle, string> = {
   masculine: "commands.config.panel.style_masculine",
   feminine: "commands.config.panel.style_feminine",
   neutral: "commands.config.panel.style_neutral",
+};
+
+const NAMING_STYLE_DESCRIPTION_LOCALE_KEYS: Record<AddressingStyle, string> = {
+  masculine: "commands.config.panel.naming_description_masculine",
+  feminine: "commands.config.panel.naming_description_feminine",
+  neutral: "commands.config.panel.naming_description_neutral",
 };
 
 export interface ConfigPanelRenderInput {
@@ -276,9 +285,9 @@ function describeNamingStyle(locale: string, persona: TomoriState | null, style:
   const suffix = persona?.naming_config.suffixes[style];
   const term = persona?.naming_config.addressTerms[style];
   return [
-    `${localizer(locale, "commands.config.panel.naming_prefix_label")}: ${prefix ? `\`${escapeDiscordMarkdown(prefix)}\`` : none}`,
-    `${localizer(locale, "commands.config.panel.naming_suffix_label")}: ${suffix ? `\`${escapeDiscordMarkdown(suffix)}\`` : none}`,
-    `${localizer(locale, "commands.config.panel.naming_term_label")}: ${term ? `\`${escapeDiscordMarkdown(term)}\`` : none}`,
+    `${localizer(locale, "commands.config.panel.naming_prefix_label")}: ${prefix ? inlineCode(prefix) : none}`,
+    `${localizer(locale, "commands.config.panel.naming_suffix_label")}: ${suffix ? inlineCode(suffix) : none}`,
+    `${localizer(locale, "commands.config.panel.naming_term_label")}: ${term ? inlineCode(term) : none}`,
   ].join("\n");
 }
 
@@ -736,7 +745,8 @@ ${localizer(locale, "commands.config.panel.general_description")}`,
 
   components.push({
     type: ComponentType.TextDisplay,
-    content: `> ${localizer(locale, "commands.config.panel.role_label")}: ${localizer(
+    content: `> ${localizer(locale, "commands.config.panel.name_label")}: ${escapeDiscordMarkdown(persona.persona_nickname)}
+> ${localizer(locale, "commands.config.panel.role_label")}: ${localizer(
       locale,
       persona.is_alter ? "commands.config.panel.role_alter" : "commands.config.panel.role_main",
     )}`,
@@ -748,59 +758,13 @@ ${localizer(locale, "commands.config.panel.general_description")}`,
   components.push(...buildAttributeCollectionBody(input, persona));
   components.push(...buildDialogueCollectionBody(input, persona));
 
-  const triggerAddState = resolvePersonaGeneralActionState("trigger-add", actor);
-  const triggerRemoveState = resolvePersonaGeneralActionState("trigger-remove", actor);
-  if (triggerAddState !== "omitted" || triggerRemoveState !== "omitted") {
-    const triggerWords = persona.trigger_words ?? [];
-    components.push({
-      type: ComponentType.TextDisplay,
-      content: `${localizer(locale, "commands.config.panel.triggers_title")}
-${localizer(locale, "commands.config.panel.triggers_description")}
-> ${
-        triggerWords.length > 0
-          ? formatTriggerWords(triggerWords)
-          : localizer(locale, "commands.config.panel.triggers_none")
-      }`,
-    });
-    const triggerButtons: ButtonComponentData[] = [];
-    if (triggerAddState !== "omitted") {
-      triggerButtons.push({
-        type: ComponentType.Button,
-        style: ButtonStyle.Secondary,
-        customId: buildConfigRouteId({ action: "trigger-add-open", locale, personaId: persona.persona_id as number }),
-        label: localizer(locale, "commands.config.panel.add_trigger_button"),
-        disabled: writesDisabled || triggerAddState === "disabled",
-      });
-    }
-    if (triggerRemoveState !== "omitted") {
-      triggerButtons.push({
-        type: ComponentType.Button,
-        style: ButtonStyle.Secondary,
-        customId: buildConfigRouteId({
-          action: "trigger-remove-open",
-          locale,
-          personaId: persona.persona_id as number,
-        }),
-        label: localizer(locale, "commands.config.panel.remove_trigger_button"),
-        disabled: writesDisabled || triggerRemoveState === "disabled" || triggerWords.length === 0,
-      });
-    }
-    components.push(
-      { type: ComponentType.ActionRow, components: triggerButtons },
-      {
-        type: ComponentType.TextDisplay,
-        content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.triggers_footer")),
-      },
-    );
-  }
-
   const namingState = resolvePersonaGeneralActionState("naming", actor);
   if (namingState !== "omitted") {
     components.push(
       {
         type: ComponentType.TextDisplay,
-        content: `${localizer(locale, "commands.config.panel.naming_title")}
-${localizer(locale, "commands.config.panel.naming_description")}
+        content: `**${localizer(locale, NAMING_STYLE_LOCALE_KEYS[namingStyle])} ${localizer(locale, "commands.config.panel.naming_title")}**
+${localizer(locale, NAMING_STYLE_DESCRIPTION_LOCALE_KEYS[namingStyle])}
 ${withLinePrefix("> ", describeNamingStyle(locale, persona, namingStyle))}`,
       },
       {
@@ -844,6 +808,65 @@ ${withLinePrefix("> ", describeNamingStyle(locale, persona, namingStyle))}`,
   }
 
   return components;
+}
+
+function buildPersonaTriggersBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor, personas, selectedPersonaId, readStatus } = input;
+  const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
+  const heading = buildOptionalThumbnailSection(
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.triggers_page_title")}
+${localizer(locale, "commands.config.panel.triggers_page_description")}`,
+    },
+    input.selectedPersonaAvatarUrl,
+  );
+  if (!persona) {
+    return [
+      heading,
+      { type: ComponentType.TextDisplay, content: localizer(locale, "commands.config.panel.no_personas") },
+    ];
+  }
+
+  const triggerWords = persona.trigger_words ?? [];
+  const triggerAddState = resolvePersonaGeneralActionState("trigger-add", actor);
+  const triggerRemoveState = resolvePersonaGeneralActionState("trigger-remove", actor);
+  return [
+    heading,
+    {
+      type: ComponentType.TextDisplay,
+      content: `${localizer(locale, "commands.config.panel.triggers_title")}
+${localizer(locale, "commands.config.panel.triggers_description")}
+> ${triggerWords.length > 0 ? formatTriggerWords(triggerWords) : localizer(locale, "commands.config.panel.triggers_none")}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "trigger-add-open", locale, personaId: persona.persona_id as number }),
+          label: localizer(locale, "commands.config.panel.add_trigger_button"),
+          disabled: readStatus !== "fresh" || triggerAddState !== "enabled",
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({
+            action: "trigger-remove-open",
+            locale,
+            personaId: persona.persona_id as number,
+          }),
+          label: localizer(locale, "commands.config.panel.remove_trigger_button"),
+          disabled: readStatus !== "fresh" || triggerRemoveState !== "enabled" || triggerWords.length === 0,
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.triggers_footer")),
+    },
+  ];
 }
 
 function buildPersonaCharacterReferenceClearBody(
@@ -896,7 +919,7 @@ function renderHumanizerDegree(locale: string, value: number | null | undefined)
   return getHumanizerLabel(locale, value ?? HUMANIZER_DEFAULT);
 }
 
-function buildPersonaAdvancedBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+function buildPersonaAppearanceBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
   const { locale, actor, personas, selectedPersonaId, readStatus } = input;
   const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
   if (!persona) {
@@ -904,8 +927,8 @@ function buildPersonaAdvancedBody(input: ConfigPanelRenderInput): ComponentInCon
       buildOptionalThumbnailSection(
         {
           type: ComponentType.TextDisplay,
-          content: `### ${localizer(locale, "commands.config.panel.advanced_title")}
-${localizer(locale, "commands.config.panel.advanced_description")}`,
+          content: `### ${localizer(locale, "commands.config.panel.appearance_title")}
+${localizer(locale, "commands.config.panel.appearance_description")}`,
         },
         input.selectedPersonaAvatarUrl,
       ),
@@ -918,8 +941,8 @@ ${localizer(locale, "commands.config.panel.advanced_description")}`,
     buildOptionalThumbnailSection(
       {
         type: ComponentType.TextDisplay,
-        content: `### ${localizer(locale, "commands.config.panel.advanced_title")}
-${localizer(locale, "commands.config.panel.advanced_description")}`,
+        content: `### ${localizer(locale, "commands.config.panel.appearance_title")}
+${localizer(locale, "commands.config.panel.appearance_description")}`,
       },
       input.selectedPersonaAvatarUrl,
     ),
@@ -956,7 +979,7 @@ ${renderFencedCollectionContent(tags.length > 0 ? tags.join(", ") : localizer(lo
   const characterReferenceState = actionState("character-reference");
   if (characterReferenceState !== "omitted") {
     const reference = persona.nai_char_ref_url
-      ? `\`${escapeDiscordMarkdown(persona.nai_char_ref_url)}\``
+      ? localizer(locale, "commands.config.panel.character_reference_uploaded")
       : localizer(locale, "commands.config.panel.none_label");
     components.push(
       {
@@ -986,6 +1009,41 @@ ${localizer(locale, "commands.config.panel.character_reference_description")}
       },
     );
   }
+
+  return components;
+}
+
+function buildPersonaAdvancedBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor, personas, selectedPersonaId, readStatus } = input;
+  const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
+  if (!persona) {
+    return [
+      buildOptionalThumbnailSection(
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.config.panel.advanced_title")}
+${localizer(locale, "commands.config.panel.advanced_description")}`,
+        },
+        input.selectedPersonaAvatarUrl,
+      ),
+      { type: ComponentType.TextDisplay, content: localizer(locale, "commands.config.panel.no_personas") },
+    ];
+  }
+
+  const writesDisabled = readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    buildOptionalThumbnailSection(
+      {
+        type: ComponentType.TextDisplay,
+        content: `### ${localizer(locale, "commands.config.panel.advanced_title")}
+${localizer(locale, "commands.config.panel.advanced_description")}`,
+      },
+      input.selectedPersonaAvatarUrl,
+    ),
+  ];
+  const personaId = persona.persona_id as number;
+  const actionState = (action: Parameters<typeof resolvePersonaAdvancedActionState>[0]) =>
+    resolvePersonaAdvancedActionState(action, actor);
 
   const promptState = actionState("prompt");
   if (promptState !== "omitted") {
@@ -1319,12 +1377,14 @@ ${localizer(locale, "commands.config.panel.sprites_description")}`,
 
   const components: ComponentInContainerData[] = [heading];
 
+  const addState = actionState("add");
   if (sprites.length === 0) {
     components.push({
       type: ComponentType.TextDisplay,
       content: localizer(locale, "commands.config.panel.sprites_none"),
     });
-  } else {
+  }
+  if (sprites.length > 0 || addState === "enabled") {
     components.push(
       {
         type: ComponentType.TextDisplay,
@@ -1340,16 +1400,26 @@ ${localizer(locale, "commands.config.panel.sprites_description")}`,
               localizer(locale, "commands.config.panel.sprite_select_placeholder"),
               150,
             ),
-            options: visibleSprites.map((sprite, offset) => ({
-              label: safeSelectOptionText(sprite.sprite_name, 100),
-              value: String(start + offset),
-              description: safeSelectOptionText(
-                sprite.usage_instructions.trim() || localizer(locale, "commands.config.panel.none_label"),
-                100,
-              ),
-              default: start + offset === selectedIndex,
-            })),
-            disabled: writesDisabled,
+            options: [
+              ...(addState === "enabled"
+                ? [
+                    {
+                      label: safeSelectOptionText(localizer(locale, "commands.config.panel.sprite_add_option"), 100),
+                      value: "add",
+                    },
+                  ]
+                : []),
+              ...visibleSprites.map((sprite, offset) => ({
+                label: safeSelectOptionText(sprite.sprite_name, 100),
+                value: String(start + offset),
+                description: safeSelectOptionText(
+                  sprite.usage_instructions.trim() || localizer(locale, "commands.config.panel.none_label"),
+                  100,
+                ),
+                default: start + offset === selectedIndex,
+              })),
+            ],
+            disabled: writesDisabled || (sprites.length === 0 && addState !== "enabled"),
           },
         ],
       },
@@ -1421,22 +1491,6 @@ ${spriteDetailLine(
         ],
       },
     );
-  }
-
-  const addState = actionState("add");
-  if (addState !== "omitted") {
-    components.push({
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildConfigRouteId({ action: "sprite-add-open", locale, personaId }),
-          label: localizer(locale, "commands.config.panel.sprite_add_button"),
-          disabled: writesDisabled || addState === "disabled",
-        },
-      ],
-    });
   }
 
   const importState = actionState("import");
@@ -2046,7 +2100,7 @@ function buildBehaviorTriggerBody(input: ConfigPanelRenderInput): ComponentInCon
       content: `**${localizer(locale, "commands.config.panel.trigger_cooldown_title")}**\n${localizer(
         locale,
         "commands.config.panel.trigger_cooldown_description",
-      )}\n> ${cooldownLabel(locale, view.cooldownType)} · ${view.cooldownLength}s`,
+      )}\n> ${cooldownLabel(locale, view.cooldownType)}${view.cooldownType === CooldownType.OFF ? "" : ` · ${view.cooldownLength}s`}`,
     },
     {
       type: ComponentType.ActionRow,
@@ -2270,26 +2324,13 @@ function buildBehaviorNoticesBody(input: ConfigPanelRenderInput): ComponentInCon
     return components;
   }
   const hiddenSet = new Set(view.hiddenNoticeKeys);
-  const visible = TOOL_NOTICE_DEFINITIONS.filter((definition) => !hiddenSet.has(definition.key)).map((definition) =>
-    localizer(locale, definition.labelKey),
-  );
-  const hidden = TOOL_NOTICE_DEFINITIONS.filter((definition) => hiddenSet.has(definition.key)).map((definition) =>
-    localizer(locale, definition.labelKey),
-  );
-  const visibleLines = visible.length
-    ? visible
-        .map((notice) => `> ${localizer(locale, "commands.config.panel.visible_notices_label")}: ${notice}`)
-        .join("\n")
-    : `> ${localizer(locale, "commands.config.panel.visible_notices_label")}: ${localizer(locale, "commands.choices.none")}`;
-  const hiddenLines = hidden.length
-    ? hidden
-        .map((notice) => `> ${localizer(locale, "commands.config.panel.hidden_notices_label")}: ${notice}`)
-        .join("\n")
-    : `> ${localizer(locale, "commands.config.panel.hidden_notices_label")}: ${localizer(locale, "commands.choices.none")}`;
+  const noticeLines = TOOL_NOTICE_DEFINITIONS.map(
+    (definition) => `> ${hiddenSet.has(definition.key) ? "🔴" : "🟢"}: ${localizer(locale, definition.labelKey)}`,
+  ).join("\n");
   components.push(
     {
       type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.notice_embeds_title")}**\n${localizer(locale, "commands.config.panel.notice_embeds_description")}\n${visibleLines}\n${hiddenLines}`,
+      content: `**${localizer(locale, "commands.config.panel.notice_embeds_title")}**\n${localizer(locale, "commands.config.panel.notice_embeds_description")}\n${noticeLines}\n${withLinePrefix("-# ", localizer(locale, "commands.config.panel.disabled_notices_log_hint"))}`,
     },
     {
       type: ComponentType.ActionRow,
@@ -3342,6 +3383,11 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
     return buildPayload(components, receipt);
   }
 
+  if (category === "persona" && page === "triggers") {
+    components.push(...buildPersonaTriggersBody(input));
+    return buildPayload(components, receipt);
+  }
+
   if (category === "persona" && page === "memories") {
     components.push(...buildPersonaMemoriesBody(input));
     return buildPayload(components, receipt);
@@ -3349,6 +3395,13 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "persona" && page === "sprites") {
     components.push(...buildPersonaSpritesBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "persona" && page === "appearance") {
+    if (resolveConfigPageState(category, page, actor) !== "omitted") {
+      components.push(...buildPersonaAppearanceBody(input));
+    }
     return buildPayload(components, receipt);
   }
 

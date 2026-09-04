@@ -74,7 +74,7 @@ export default {
         persona_select_title: `ペルソナを選択`,
         no_sprites_title: `🟡 スプライトがありません`,
         no_sprites_description: `**{persona_name}** には編集できるスプライトがありません。`,
-        no_eligible_sprites_description: `編集できるスプライトを持つペルソナがまだありません。\`/persona sprites add\` で追加できます。`,
+        no_eligible_sprites_description: `編集できるスプライトを持つペルソナがまだありません。\`/config\` > Persona > Sprites で追加できます。`,
         select_modal_title: `スプライトを選択`,
         select_label: `編集するスプライト`,
         select_description: `編集するスプライトを選択してください。`,
@@ -104,7 +104,7 @@ export default {
         persona_select_title: `ペルソナを選択`,
         no_sprites_title: `🟡 スプライトがありません`,
         no_sprites_description: `**{persona_name}** には削除できるスプライトがありません。`,
-        no_eligible_sprites_description: `削除できるスプライトを持つペルソナがまだありません。\`/persona sprites add\` で追加できます。`,
+        no_eligible_sprites_description: `削除できるスプライトを持つペルソナがまだありません。\`/config\` > Persona > Sprites で追加できます。`,
         modal_title: `ペルソナスプライトを削除`,
         checkbox_label: `残すスプライト`,
         checkbox_label_continued: `残すスプライト（続き）`,
@@ -134,7 +134,7 @@ export default {
         failed_title: `🔴 エクスポート失敗`,
         all_images_failed_description: `**{persona_name}** のスプライト画像をどれも読み込めなかったため、エクスポートする内容がありませんでした。`,
         success_title: `🟢 スプライトをエクスポートしました`,
-        success_description: `**{persona_name}** のスプライトを{sprite_count}個エクスポートしました。この.zipを共有し、\`/persona sprites import\` でインポートできます。`,
+        success_description: `**{persona_name}** のスプライトを{sprite_count}個エクスポートしました。この.zipを共有し、\`/config\` > Persona > Sprites でインポートできます。`,
         success_partial_description: `**{persona_name}** のスプライトを{sprite_count}個エクスポートしました。画像を読み込めなかった{skipped_count}個のスプライトはスキップされました。`,
       },
       import: {
@@ -150,7 +150,7 @@ export default {
         archive_label: `スプライトアーカイブ`,
         archive_description: `/persona sprites export で作成した.zipをアップロードしてください。`,
         invalid_file_title: `🔴 無効なアーカイブ`,
-        invalid_file_description: `\`/persona sprites export\` で作成した有効なスプライト.zipをアップロードしてください。`,
+        invalid_file_description: `\`/config\` > Persona > Sprites で作成した有効なスプライト.zipをアップロードしてください。`,
         file_too_large_title: `🔴 アーカイブが大きすぎます`,
         file_too_large_description: `スプライトアーカイブが大きすぎます。最大ファイルサイズは{max_size}MBです。`,
         download_failed_title: `🔴 ダウンロード失敗`,
@@ -331,11 +331,11 @@ export default {
 
 これらのトリガーがメッセージに含まれると、このペルソナが応答します。`,
       alter_success_confirmation: `オルタペルソナ **{nickname}** が {trigger_count} 個の固有トリガーワードで正常にインポートされました！詳細なインポート情報がチャンネルに投稿されました。`,
-      alter_avatar_fallback_main: `🟡 このインポートにはアバター画像が含まれていなかったため、このオルタはフォールバックとして **{nickname}** の現在のメインペルソナアバターを使用します。変更したい場合は \`/persona avatar\` を使用できます。`,
+      alter_avatar_fallback_main: `🟡 このインポートにはアバター画像が含まれていなかったため、このオルタはフォールバックとして **{nickname}** の現在のメインペルソナアバターを使用します。変更したい場合は \`/config\` > Persona > General を使用できます。`,
       alter_avatar_warning: `⚠️ 上記のアバター画像埋め込みを削除しないでください。削除するとオルタペルソナのアバターが失われます。`,
       alter_dm_not_allowed_title: `🔴 DMではオルタペルソナは許可されていません`,
       alter_dm_not_allowed_description: `オルタペルソナはサーバーでのみインポートできます。ダイレクトメッセージではインポートできません。サーバーでこのコマンドを実行してください。`,
-      alter_no_triggers_warning: `⚠️ このペルソナにはトリガーワードがありません。\`/persona trigger add\`を使用してトリガーを追加するまで、メッセージに応答しません。`,
+      alter_no_triggers_warning: `⚠️ このペルソナにはトリガーワードがありません。\`/config\` > Persona > Generalを使用してトリガーを追加するまで、メッセージに応答しません。`,
       alter_name_conflict_title: `🔴 ペルソナ名が既に存在します`,
       alter_name_conflict_description: `**{name}** という名前のペルソナは既にこのサーバーに存在します。各ペルソナには固有の名前が必要です。
 
@@ -462,32 +462,32 @@ export default {
       field_web_search: `ウェブ検索を使用しますか？`,
       field_additional_inst: `追加の指示`,
       wrong_provider_title: `🔴 互換性のないプロバイダー`,
-      wrong_provider_description: `ペルソナ生成には対応プロバイダーが必要です。現在のプロバイダーは **{current_provider}** です。\`/model text\`で対応プロバイダーに切り替えてください。`,
+      wrong_provider_description: `ペルソナ生成には対応プロバイダーが必要です。現在のプロバイダーは **{current_provider}** です。\`/config\` > Models > Switch Modelsで対応プロバイダーに切り替えてください。`,
       no_api_key_title: `🔴 APIキーがありません`,
       no_api_key_description: `有効なプロバイダーが設定されていません。\`/setup\`（初回）または\`/providers\`で登録してください。`,
       model_incompatible_title: `互換性のないモデル`,
       model_incompatible_description: `現在のモデル（**{model_name}**）は、ペルソナ生成に必要な**構造化出力**をサポートしていません。
 
 **次のステップ:**
-\`/model text\`を使用して、構造化出力をサポートするモデル（例：「STRUCT」機能を持つモデル）に切り替えてください。`,
+\`/config\` > Models > Switch Modelsを使用して、構造化出力をサポートするモデル（例：「STRUCT」機能を持つモデル）に切り替えてください。`,
       image_vision_required_title: `🔴 画像ビジョンが必要`,
       image_vision_required_description: `画像がアップロードされましたが、現在のモデル（**{model_name}**）は**画像ビジョン**をサポートしておらず、ビジョンモデルも設定されていません。
 
 **次のステップ:**
-1. \`/model vision\`を使用して専用ビジョンモデルを設定する、または
-2. \`/model text\`を使用してビジョン対応モデルに切り替える、または
+1. \`/config\` > Models > Switch Modelsを使用して専用ビジョンモデルを設定する、または
+2. \`/config\` > Models > Switch Modelsを使用してビジョン対応モデルに切り替える、または
 3. 画像を削除して画像なしで再生成する`,
       vision_model_provider_unsupported_title: `🔴 ビジョンモデルのプロバイダー非対応`,
       vision_model_provider_unsupported_description: `ビジョンモデル（**{vision_model_name}**）はプロバイダー **{vision_provider}** に設定されていますが、このプロバイダーはペルソナプリセット生成に対応していません。
 
 **次のステップ:**
-1. \`/model vision\`を使用して対応プロバイダー（Google、OpenRouter、DeepSeek、Z.ai、Custom、NVIDIA NIM）のビジョンモデルを設定する、または
-2. \`/model text\`を使用してビジョンとプリセット生成の両方に対応したプライマリモデルに切り替える`,
+1. \`/config\` > Models > Switch Modelsを使用して対応プロバイダー（Google、OpenRouter、DeepSeek、Z.ai、Custom、NVIDIA NIM）のビジョンモデルを設定する、または
+2. \`/config\` > Models > Switch Modelsを使用してビジョンとプリセット生成の両方に対応したプライマリモデルに切り替える`,
       web_search_tools_required_title: `🔴 ウェブ検索を利用できません`,
       web_search_tools_required_description: `ウェブ検索が選択されましたが、現在のモデル（**{model_name}**）は**ツール**に対応していません。
 
 **次のステップ:**
-1. \`/model text\`を使用してツール対応モデルに切り替える、または
+1. \`/config\` > Models > Switch Modelsを使用してツール対応モデルに切り替える、または
 2. ウェブ検索なしで再生成する（質問されたら「いいえ」を選択）`,
       api_key_decrypt_failed_title: `🔴 APIキーエラー`,
       api_key_decrypt_failed_description: `有効なプロバイダー認証情報の復号化に失敗しました。\`/providers\`で再設定してください。`,
@@ -662,14 +662,14 @@ export default {
         already_exists_description: `単語 \`{word}\` は既にトリガーリストにあります。`,
         already_exists_multiple_description: `これらのトリガーワードは既に存在します: {words}。`,
         limit_exceeded_title: `トリガーワード上限に達しました`,
-        limit_exceeded_description: `このサーバーはトリガーワードを最大 {max_allowed} 個まで設定できます（現在 {current_count} 個）。新しいものを追加する前に、\`/persona trigger remove\`でいくつかのトリガーワードを削除してください。`,
+        limit_exceeded_description: `このサーバーはトリガーワードを最大 {max_allowed} 個まで設定できます（現在 {current_count} 個）。新しいものを追加する前に、\`/config\` > Persona > Generalでいくつかのトリガーワードを削除してください。`,
         success_title: `トリガーワードが追加されました`,
         success_description: `{persona_name} に {added_count} 個のトリガーワードを追加しました: {added_words}。現在 {word_count} 個のトリガーワードがあります。`,
       },
       remove: {
         description: `言及されたときに私が応答する単語を削除します。`,
         no_triggers_title: `トリガーワードがありません`,
-        no_triggers_description: `削除するカスタムトリガーワードが設定されていません。\`/persona trigger add\`で追加してください。`,
+        no_triggers_description: `削除するカスタムトリガーワードが設定されていません。\`/config\` > Persona > Generalで追加してください。`,
         select_description: `削除したいトリガーワードを選択してください`,
         modal_title: `トリガーワードの削除`,
         checkbox_label: `トリガーワード`,

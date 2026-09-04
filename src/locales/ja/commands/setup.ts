@@ -58,7 +58,7 @@ export default {
     learn_more_value: `[公式Wiki](https://docs.tomoribot.app/ja/features/)を読むか、{helpFeatures} を使って、私にできることをもっと知ってください！\n- [マルチペルソナ](https://docs.tomoribot.app/ja/features/chatting-personality/multiple-personas/) = 見た目・話し方・トリガーを自由に設定\n- [チャットとトリガー](https://docs.tomoribot.app/ja/features/chatting-personality/chatting-and-triggers/) = いつ・どう会話に入るかを制御\n- [メモリー](https://docs.tomoribot.app/ja/features/knowledge/memory/) = 人・事実・文脈を覚えます\n- [パーソナライゼーション](https://docs.tomoribot.app/ja/features/knowledge/personalization/) = あなたのことを教えると、あなたの望む形で接します\n- [メディア生成](https://docs.tomoribot.app/ja/features/capabilities/media-generation/) = 画像・動画・音声を作れます\n- [ツールと拡張](https://docs.tomoribot.app/ja/features/capabilities/tools-and-extensions/) = ウェブ検索・リンク読み取り・カスタムツール`,
     heads_up_title: `⚠️ いくつかの注意点`,
     novelai_expressions_warning_field: `表現機能の無効化`,
-    novelai_expressions_warning_value: `NovelAIのコンテキストを安定させるため、絵文字とスタンプの使用が自動的に無効化されました。\`/capabilities manage\` でいつでも再有効化できます。`,
+    novelai_expressions_warning_value: `NovelAIのコンテキストを安定させるため、絵文字とスタンプの使用が自動的に無効化されました。\`/config\` > Permissions でいつでも再有効化できます。`,
     zai_tos_warning_field: `Z.ai利用規約について`,
     zai_tos_warning_value: `Z.aiの利用規約が更新され、コーディング/エージェントのユースケースのみが許可されるようになりました。Z.aiを一般チャットに使用する場合は自己責任となり、規約に違反する可能性があります。`,
     custom_bearer_hint_field: `Bearerトークン`,

@@ -15,7 +15,7 @@ the tomori-attributes block (the personality bullets). For impersonation turns,
 emits a single impersonated-user prompt instead. Other personas' public profile
 data belongs to stage 06 participants, not this prompt-item stage.
 
-### Per-channel prompt override (`/server channel-prompt`)
+### Per-channel prompt override (`/config` > Channels > Channel Overrides)
 
 When `channelPromptOverride` is set for the active channel, it modifies only the
 system-prompt slot — persona prompt and attributes are never affected:
@@ -97,7 +97,7 @@ After this stage runs:
 | Source | Field | Effect |
 |---|---|---|
 | `tomoriConfig` | `system_prompt` | Overrides `DEFAULT_SYSTEM_PROMPT` when present |
-| `channelPromptOverride` | `{ prompt, mode }` | `append` adds a `SYSTEM_CHANNEL_PROMPT` block after the system prompt; `replace` substitutes the system-prompt slot content. Set per channel via `/server channel-prompt`. |
+| `channelPromptOverride` | `{ prompt, mode }` | `append` adds a `SYSTEM_CHANNEL_PROMPT` block after the system prompt; `replace` substitutes the system-prompt slot content. Set per channel via `/config` > Channels > Channel Overrides. |
 | `tomoriConfig` | `personal_memories_enabled` | Passed to `convertMentions` for blacklist/privacy behavior |
 | `tomoriConfig` capability flags | `*_enabled` fields exposed through stable prompt names | Resolve `capability:` predicates without exposing database column names |
 | `BuildContextParams` | `deliberateToolAllowedNames` | Narrows `tool:` predicates to the current Deliberate Tool Mode scope |

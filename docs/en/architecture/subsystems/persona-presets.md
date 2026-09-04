@@ -57,7 +57,7 @@ Sprites — unlike avatars — **do** fan out to pointer personas. A sprite imag
 
 `preset_sprites` holds the official sprite set keyed by `(preset_lineage_id, preset_language, sprite_key)`. Each image is uploaded **once** to the immutable shared `presets/{lineage}/{language}/sprites/{key}-{hash}.png` storage prefix (content-addressed filename), so N servers cost one stored copy. The catalog authors sprites via the optional `PersonaInput.sprites` array (image files live under the persona's `avatarPath` directory); `seedPersonaSpritesFromCatalog()` uploads each once (idempotent: same content → same filename → skipped) and reconciles removed sprites. See [adding-persona-preset](../../contributing/adding-persona-preset).
 
-Resolution is centralized in `PersonaSpriteRepository.listForPersona()`: for a pointer persona it returns the shared `preset_sprites` set (shaped as `PersonaSpriteRow`); for a materialized persona it returns the persona's own `persona_sprites` rows. Every downstream consumer (prompt context builder, render-modifier resolver, `/persona sprites export`) reads through that one method, so they are pointer-agnostic. Editing the catalog sprite set fans out to all still-pointer personas on the next boot.
+Resolution is centralized in `PersonaSpriteRepository.listForPersona()`: for a pointer persona it returns the shared `preset_sprites` set (shaped as `PersonaSpriteRow`); for a materialized persona it returns the persona's own `persona_sprites` rows. Every downstream consumer (prompt context builder, render-modifier resolver, `/config` > Persona > Sprites) reads through that one method, so they are pointer-agnostic. Editing the catalog sprite set fans out to all still-pointer personas on the next boot.
 
 The shared `presets/` images are **immutable and never deleted** by per-persona paths — `deletePersonaAvatarFromStorage` refuses any reference under that prefix (`isSharedPresetAssetReference`), so one server replacing/removing a sprite, or re-running `/persona default`, can never delete art other servers rely on. The guard covers both shared asset layouts: sprites (`presets/{lineage}/{language}/sprites/...`) and avatars (`presets/{lineage}/{language}/avatar-{hash}.png`).
 
@@ -152,7 +152,8 @@ masculine, feminine, and neutral addressing styles. Empty maps are explicit and 
 gendered address term requires a neutral fallback, and authored `{user_term}` content also
 requires a neutral term. `{user_formatted}` is used for user-vocative names in samples.
 
-Pointer personas read `preset_naming_config` live. `/persona naming-habits` materializes a
-pointer before saving a custom `persona_naming_configs` row, so other servers remain on the
-shared preset. Export emits the naming map; older imports default it to empty. Official-preset
-matching includes the map, preventing a customized persona from collapsing back into a pointer.
+Pointer personas read `preset_naming_config` live. `/config` > Persona > Identity & Personality
+materializes a pointer before saving a custom `persona_naming_configs` row, so other servers remain
+on the shared preset. Export emits the naming map; older imports default it to empty.
+Official-preset matching includes the map, preventing a customized persona from collapsing back
+into a pointer.

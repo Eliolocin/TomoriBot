@@ -92,7 +92,7 @@ runToolLoop(ToolLoopParams)
 
 ### Verbatim Tool-Calling Workaround
 
-`/config workarounds` can enable `verbatim_tool_calling_enabled` for Custom
+`/config` > Behavior > Experimental can enable `verbatim_tool_calling_enabled` for Custom
 OpenAI-compatible endpoints that stream only assistant text. The fallback parser
 lives in `CustomStreamAdapter`, not in `toolLoop.ts`: it anchors on a known tool
 name and converts a bare, code-span, or fenced tool call — even one preceded by

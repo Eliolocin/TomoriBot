@@ -81,8 +81,8 @@
       personal_field: `個人登録`,
       personal_value: `{add_command} で自分専用のラベル付きエンドポイントを登録し、{remove_command} で選んだ機能だけ削除できます。`,
       selection_field: `使い方`,
-      selection_value: `登録後は {text_command}、{image_command}、{video_command} からラベルを選択してください。そのラベルに同じ機能のモデルが複数ある場合は、選択メニューから1つ選べます。画像理解対応のテキストエンドポイントは \`/model vision\` にも表示されます。同じラベル・同じ機能で別のモデル名を指定して追加コマンドを再実行すると、その接続にモデルを追加登録できます（エンドポイントURLとAPIスタイルは引き継がれます）。`,
-      selection_summary_value: `登録後は {text_command}、{image_command}、{video_command} からラベルを選択します。同じラベルに同一機能のモデルが複数ある場合は、TomoriBot が使用するモデルを確認します。`,
+      selection_value: `登録後は {text_command} からラベルを選択してください。そのラベルに同じ機能のモデルが複数ある場合は、選択メニューから1つ選べます。画像理解対応のテキストエンドポイントは \`/config\` > Models > Switch Models にも表示されます。同じラベル・同じ機能で別のモデル名を指定して追加コマンドを再実行すると、その接続にモデルを追加登録できます（エンドポイントURLとAPIスタイルは引き継がれます）。`,
+      selection_summary_value: `登録後は {text_command} からラベルを選択します。同じラベルに同一機能のモデルが複数ある場合は、TomoriBot が使用するモデルを確認します。`,
       labels_field: `ラベルと削除`,
       labels_value: `1つのラベルは対応する全機能をまとめたカスタムプロバイダーバンドルです。{server_remove_command} と {personal_remove_command} はチェックを外した機能だけ削除します。{server_provider_remove_command} と {personal_provider_remove_command} はそのラベル全体を削除します。`,
       comfyui_page1_title: `ComfyUI セットアップ`,
@@ -121,7 +121,7 @@
       comfyui_page4_metadata_value: `TomoriBot は、解決済みの値を \`extra_pnginfo\` にも入れます。そこには prompt、model、mode、aspect ratio、width、height、size、参照画像数、さらに動画用の duration・resolution・audio フラグも含まれます。JSON プレースホルダーの代わりに ComfyUI メタデータを読むカスタムノードを使いたい場合に有用です。`,
       comfyui_summary_description: `ComfyUI カスタムエンドポイントでは、保存済みの画像/動画ワークフローを TomoriBot がキューに送り、最初に保存された出力を返します。詳しい手順は、ワークフロー書き出し、プレースホルダー、参照画像、ポーリング、出力ルールを含むドキュメントを確認してください。`,
       comfyui_summary_register_field: `登録して有効化`,
-      comfyui_summary_register_value: `{server_add_command} または {personal_add_command} でエンドポイントを登録し、{image_command} または {video_command} でそのラベルを選択します。ComfyUI ワークフロー設定の詳細はドキュメントボタンから確認してください。`,
+      comfyui_summary_register_value: `{server_add_command} または {personal_add_command} でエンドポイントを登録し、{image_command} でそのラベルを選択します。ComfyUI ワークフロー設定の詳細はドキュメントボタンから確認してください。`,
     },
     speech: {
       description: `音声生成の設定方法を確認します。`,
@@ -278,11 +278,11 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - 画像、動画、ニュース検索も可能です（\`/providers\`経由）
 - URLからコンテンツを取得して読むことができます`,
       personality_title: `パーソナリティ＆カスタマイズ`,
-      personality_description: `- \`/persona rename\`と\`/persona avatar\`で名前とアバターを変更できます
+      personality_description: `- \`/config\` > Persona > Generalで名前とアバターを変更できます
 - \`/persona\`で異なるペルソナに切り替えられます（\`/persona export\`でペルソナを共有・保存もできます！）
 - アルターペルソナとして複数のキャラクターが同一サーバーで共存し、それぞれ独自のトリガーとウェブフックアバターを持てます
-- \`/persona attribute add\`、\`/persona sample-dialogue add\`、\`/persona prompt set\`で行動やトーンを調整できます
-- \`/config system-prompt\`でカスタムシステムプロンプトを設定し、行動をさらに形張ることができます
+- \`/config\` > Persona > Generalと\`/config\` > Persona > Advancedで行動やトーンを調整できます
+- \`/config\` > Behavior > Generalでカスタムシステムプロンプトを設定し、行動をさらに形張ることができます
 - 詳しくは\`/help\`内の **カスタマイズ** ページをご覧ください`,
       memory_title: `記憶＆パーソナライゼーション`,
       memory_description: `- ユーザーやサーバーに関する事実を記憶し、会話を跨いで保持します
@@ -294,14 +294,14 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - \`/personal config\`で完全に見えなくなるオプションが利用可能です
 - 詳しくは\`/help\`内の **永続メモリ** ページをご覧ください`,
       time_title: `時間認識`,
-      time_description: `- サーバーの現在時刻を認識しています（\`/server timezone\`経由）
+      time_description: `- サーバーの現在時刻を認識しています（\`/config\` > Behavior > General経由）
 - リマインダーを設定できます（何かを思い出させるように頼んでみて！）
 - 繰り返しリマインダーもサポートされており、ペルソナ固有です`,
       alter_title: `アルターペルソナ`,
       alter_description: `- アルターペルソナを使って、一つのサーバーに複数のキャラクターが共存できます
 - それぞれのアルターは独自のパーソナリティを持ち、特定のキーワードでトリガーされます
 - アルターペルソナは異なるアバターのためにウェブフックを使用します
-- 一つのメッセージで複数のアルターを同時にマッチできます（\`/config trigger-match-limit\`の上限まで）
+- 一つのメッセージで複数のアルターを同時にマッチできます（\`/config\` > Behavior > Triggerの上限まで）
 - ウェブフックメッセージに返信すると、そのペルソナとして会話が続きます
 - \`/persona import\`（アルターオプション）と\`/persona remove\`でアルターを管理できます`,
       expressions_title: `表情＆リアクション`,
@@ -314,7 +314,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - \`/learn history\`でチャンネル履歴を検索可能な知識として抽出できます
 - 質問に答える際に、私は関連するドキュメント内容を取得して参照します
 - チャットで共有されたファイル添付（PDF、ソースコード、Markdown、JSON、YAMLなど）も直接読み取れます、読んでと頼むだけ！
-- 埋め込みモデルが必要です（\`/model embedding\`で設定）
+- 埋め込みモデルが必要です（\`/config\` > Models > Switch Modelsで設定）
 - \`/memories\`と\`/memories\`で保存済みドキュメントを削除できます`,
       impersonation_title: `なりきり＆ツール`,
       impersonation_description: `- \`/impersonate\`で自分自身、ペルソナ、またはシステムメッセージとしてメッセージを送信できます
@@ -326,13 +326,13 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - Text2ImageとImage2Imageをカスタマイズタブルなアスペクト比で対応
 - \`/generate image\`を使うか、画像を生成してほしいと頼むだけで動作します
 - 参照画像としてメッセージの添付ファイル、ステッカー、絵文字、ユーザーアバターを使えます
- - Google、Vertex AI、Vertex AI Express、OpenRouter、Z.ai、NVIDIA NIMプロバイダーで利用可能（\`/model image\`で設定）`,
+ - Google、Vertex AI、Vertex AI Express、OpenRouter、Z.ai、NVIDIA NIMプロバイダーで利用可能（\`/config\` > Models > Switch Modelsで設定）`,
       videogen_title: `動画生成`,
       videogen_description: `- テキストプロンプトから短い動画を生成し、参照画像をアニメーション化することもできます
 - Text2VideoとImage2Videoをカスタマイズ可能なアスペクト比で対応
 - \`/generate video\`を使うか、動画を生成してほしいと頼むだけで動作します
 - 参照画像としてメッセージの添付ファイルやユーザーアバターを使えます
-- Google、OpenRouter、Z.aiプロバイダーで利用可能（\`/model video\`で設定）`,
+- Google、OpenRouter、Z.aiプロバイダーで利用可能（\`/config\` > Models > Switch Modelsで設定）`,
       footer: `すべての機能がすべてのAIプロバイダーで利用できるわけではありません。推奨：Google Gemini。私に直接何ができるか聞いてみることもできます！`,
     },
     setup: {
@@ -448,7 +448,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - post-history / depth injection ノード
 - インポート時に有効・無効で始まるノード`,
       embed1_still_sent_title: `それでも完全には置き換えないもの`,
-      embed1_still_sent_description: `- 現在の system/persona 系ブロックは残ります: {configSystemPromptSet}、{personaPromptSet}、{personaAttributeAdd}、{personaSampleDialogueAdd}
+      embed1_still_sent_description: `- 現在の system/persona 系ブロックは残ります: {configSystemPromptSet}、{personaPromptSet}、{personaAttributeAdd}
 - ライブ会話履歴と取得済み文書コンテキストも残ります
 - Tomori専用の自動コンテキストも残ります: サーバーメモリ、絵文字/ステッカー文脈、会話参加者一覧、STM、conditioning など`,
       embed1_mapping_title: `ネイティブブロックの対応関係`,
@@ -720,7 +720,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - ドキュメントは検索可能な埋め込みとして分割して保存されます
 - 会話に基づいて私は自動的に関連する内容を取得します
 - \`/memories\`または\`/memories\`で保存済みドキュメントを削除
-- \`/model embedding\`で埋め込みモデルの設定が必要`,
+- \`/config\` > Models > Switch Modelsで埋め込みモデルの設定が必要`,
       shortterm_title: `短期記憶`,
       shortterm_description: `永続的な記憶に加え、最近の会話は[STM（短期記憶）](https://docs.tomoribot.app/ja/features/knowledge/memory/#short-term-memory-stm)として保持しています：
 - 最近のメッセージはチャンネルごとにキャッシュされ、各ペルソナは同じサーバー内の他チャンネルにも最新のSTMを持ち越します
@@ -838,9 +838,9 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       embed1_title: `TomoriBotのカスタマイズ`,
       embed1_description: `TomoriBotは高度にカスタマイズ可能です！私を本当にあなたのものにするために設定できるすべてがここにあります。これは**私がどう振る舞うか**（パーソナリティ、トーン、設定）についてです。**私が記憶していること**（事実、記憶）については、代わりに{helpMemory}をご覧ください！`,
       summary_personas_title: `ペルソナ`,
-      summary_personas_description: `{personaCreate} または {personaGenerate} でペルソナを作り、{personaAttributeAdd} と {personaSampleDialogueAdd} で調整できます。ペルソナは切り替え、エクスポート、インポート、別々のアルターIDとして使用できます。`,
+      summary_personas_description: `{personaCreate} または {personaGenerate} でペルソナを作り、{personaAttributeAdd} で調整できます。ペルソナは切り替え、エクスポート、インポート、別々のアルターIDとして使用できます。`,
       summary_behavior_title: `動作設定`,
-      summary_behavior_description: `{configModel}、{configHumanizer}、{configSystemPromptSet}、{capabilitiesManage} で、モデル選択、人間らしさ、システム指示、機能アクセスを調整できます。`,
+      summary_behavior_description: `{configModel}、{configHumanizer}、{capabilitiesManage} で、モデル選択、人間らしさ、システム指示、機能アクセスを調整できます。`,
       summary_server_title: `サーバー側の制御`,
       summary_server_description: `管理者は、ペルソナ制限、{serverWhitelistChannel} などのホワイトリストチャンネル、自動トリガー、クールダウン、ロール権限を組み合わせて、TomoriBot がどこでどう応答するかを制御できます。`,
       embed1_personas_title: `パーソナリティペルソナ`,
@@ -964,7 +964,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
       embed4_footer: `他に質問があれば、\`/support discord\`でサポートサーバーに参加してください`,
       embed5_title: `プロのヒント`,
       embed5_description: `- ペルソナ（デフォルトまたは生成）を基盤として始める
-- 素早くパーソナリティを調整するには\`/persona attribute add\`を使用
+- 素早くパーソナリティを調整するには\`/config\` > Persona > Generalを使用
 - サンプル対話では、属性や特性も示す例を使用すると効果的：
 \`\`\`
 ユーザーメッセージ：{user}：お気に入りの趣味は？

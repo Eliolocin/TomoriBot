@@ -19,8 +19,8 @@ TomoriBotは、テキストプロンプトから短い動画を生成したり�
 
 ## セットアップ
 
-1. `/model video`で動画モデルを設定します。
-2. `/capabilities`で画像/メディアの生成が許可されていることを確認します。
+1. `/config` > Models > Switch Modelsで動画モデルを設定します。
+2. `/config` > Permissionsで画像/メディアの生成が許可されていることを確認します。
 3. トモリに生成を頼むか、`/generate video`を実行します。
 
 ## プロバイダーのサポート

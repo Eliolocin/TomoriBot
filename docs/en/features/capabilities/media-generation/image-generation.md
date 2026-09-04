@@ -35,21 +35,21 @@ users or personas.
 Every tag source above is editable, each at a different scope. All of these open a modal
 pre-filled with the current tags, so you edit in place:
 
-- **`/persona image-tags`** — the selected persona's **Physical Appearance** tags (how *she*
+- **`/config` > Persona > Appearance** — the selected persona's **Physical Appearance** tags (how *she*
   looks). Requires the Manage Server permission.
 - **`/personal config`** — *your own* appearance tags, applied when a generation
   references you. Follows you across every server (see
   [Personalization](/features/knowledge/personalization/)).
-- **`/config image-tags default-positive`** and **`/config image-tags default-negative`** —
+- **Default positive and negative tags** on **`/config` > Models > Image Generation** —
   the server-wide default tags added to (or steered away from) every generation. Negative
   tags only take effect where the backend supports negative prompts. Submitting the modal with
   an empty box resets that list to the built-in defaults.
 
 ## Setup
 
-1. Configure an image model with `/model image`.
+1. Configure an image model with `/config` > Models > Switch Models.
 2. Make sure image generation is allowed — it's gated by the `imagegen_enabled` capability
-   (`/capabilities`).
+   (`/config` > Permissions).
 3. Ask her to generate, or run `/generate image`.
 
 ## Provider Support

@@ -80,6 +80,15 @@ function mention(command: string, subcommandOrGroup?: string, subcommand?: strin
   return commandRegistry.getCommandMention(command, subcommandOrGroup, subcommand);
 }
 
+/**
+ * Every dissolved leaf now reaches its destination through the same bare `/config` mention, so a
+ * sentence naming several of them would repeat an identical token with nothing to tell the pages
+ * apart. The breadcrumb carries the distinction the subcommand name used to.
+ */
+function configPage(breadcrumb: string): string {
+  return `${mention("config")} > ${breadcrumb}`;
+}
+
 const setupPages: readonly HelpPageDefinition[] = [
   {
     id: "setup-step-1",
@@ -116,9 +125,9 @@ const setupPages: readonly HelpPageDefinition[] = [
     sections: [],
     titleHeadingLevel: 3,
     variables: () => ({
-      personaTrigger: mention("persona", "trigger"),
-      configPermissions: mention("capabilities", "manage"),
-      serverAutotrigger: mention("server", "auto-trigger", "channels"),
+      personaTrigger: configPage("Persona > General"),
+      configPermissions: configPage("Permissions"),
+      serverAutotrigger: configPage("Channels > Auto-Trigger"),
     }),
   },
   {
@@ -180,16 +189,16 @@ function customEndpointVariables(): HelpVariables {
     remove_command: mention("providers"),
     server_add_command: mention("providers"),
     personal_add_command: mention("personal", "providers"),
-    text_command: mention("model", "text"),
-    image_command: mention("model", "image"),
-    video_command: mention("model", "video"),
+    text_command: configPage("Models > Switch Models"),
+    image_command: configPage("Models > Switch Models"),
+    video_command: configPage("Models > Switch Models"),
   };
 }
 
 function speechVariables(locale: string): HelpVariables {
   return {
     custom_endpoint_add: mention("providers"),
-    model_speech: mention("model", "speech"),
+    model_speech: mention("providers"),
     voice_add: mention("speech", "voice-add"),
     voice_assign: mention("speech", "voice-assign"),
     voice_design_set: mention("speech", "voice-design", "set"),
@@ -213,9 +222,9 @@ function speechVariant(id: string, labelKey: string): HelpVariantDefinition {
 function transcriptionVariables(locale: string): HelpVariables {
   return {
     custom_endpoint_add: mention("providers"),
-    model_transcription: mention("model", "transcription"),
+    model_transcription: mention("providers"),
     elevenlabs: mention("providers"),
-    speech_transcripts: mention("speech", "transcripts"),
+    speech_transcripts: configPage("Behavior > Notices"),
     help_speech: buildHelpPageReference(locale, "commands.help.dashboard.pages.speech"),
   };
 }
@@ -410,12 +419,12 @@ const memoryPages: readonly HelpPageDefinition[] = [
     ],
     variables: (locale) => ({
       helpMemory: buildHelpPageReference(locale, "commands.help.dashboard.pages.persistent_memory"),
-      stmParameters: mention("server", "stm", "parameters"),
-      stmPromptEdit: mention("server", "stm", "prompt-edit"),
-      stmCategoriesEdit: mention("server", "stm", "categories-edit"),
+      stmParameters: configPage("Behavior > Memory & STM"),
+      stmPromptEdit: configPage("Behavior > Memory & STM"),
+      stmCategoriesEdit: configPage("Behavior > Memory & STM"),
       stmManage: mention("memories"),
-      stmPrivacyBypass: mention("server", "stm", "privacy-bypass"),
-      personaStmEdit: mention("persona", "stm", "edit"),
+      stmPrivacyBypass: configPage("Permissions > Memory Privacy"),
+      personaStmEdit: configPage("Persona > Memories"),
     }),
   },
   {
@@ -435,7 +444,7 @@ const memoryPages: readonly HelpPageDefinition[] = [
       },
     ],
     variables: () => ({
-      memoryTaggingSet: mention("memory", "tagging", "set"),
+      memoryTaggingSet: configPage("Behavior > Memory & STM"),
       toolPromptSnapshot: mention("tool", "prompt", "snapshot"),
     }),
   },
@@ -466,12 +475,12 @@ const behaviorPages: readonly HelpPageDefinition[] = [
       helpMemory: buildHelpPageReference(locale, "commands.help.dashboard.pages.persistent_memory"),
       personaCreate: mention("persona", "create"),
       personaGenerate: mention("persona", "generate"),
-      personaAttributeAdd: mention("persona", "attribute", "add"),
-      personaSampleDialogueAdd: mention("persona", "sample-dialogue", "add"),
-      configModel: mention("model", "text"),
-      configHumanizer: mention("config", "humanizer"),
-      configSystemPromptSet: mention("config", "system-prompt", "set"),
-      capabilitiesManage: mention("capabilities", "manage"),
+      personaAttributeAdd: configPage("Persona > General"),
+      personaSampleDialogueAdd: configPage("Persona > General"),
+      configModel: configPage("Models > Switch Models"),
+      configHumanizer: configPage("Behavior > General"),
+      configSystemPromptSet: configPage("Behavior > General"),
+      capabilitiesManage: configPage("Permissions"),
       serverWhitelistChannel: mention("moderation"),
     }),
   },
@@ -520,7 +529,7 @@ const behaviorPages: readonly HelpPageDefinition[] = [
     ],
     footerKey: "commands.help.deliberate-trigger-mode.footer",
     variables: () => ({
-      serverDtm: mention("server", "deliberate-trigger-mode"),
+      serverDtm: configPage("Behavior > Trigger"),
       personalDtm: mention("personal", "config"),
       respondCommand: mention("respond"),
     }),
@@ -551,10 +560,10 @@ const behaviorPages: readonly HelpPageDefinition[] = [
     ],
     footerKey: "commands.help.deliberate-tool-mode.footer",
     variables: () => ({
-      serverDtm: mention("server", "deliberate-tool-mode"),
+      serverDtm: configPage("Behavior > Experimental"),
       personalDtm: mention("personal", "config"),
-      triggerCommand: mention("server", "deliberate-tool-trigger"),
-      thoughtLogs: mention("server", "thought-logs-channel"),
+      triggerCommand: configPage("Behavior > Experimental"),
+      thoughtLogs: configPage("Channels > Destinations"),
     }),
   },
   {
@@ -631,10 +640,10 @@ const integrationPages: readonly HelpPageDefinition[] = [
       stPresetImport: mention("st-presets"),
       stPresetToggle: mention("st-presets"),
       stPresetRemove: mention("st-presets"),
-      configSystemPromptSet: mention("config", "system-prompt", "set"),
-      personaPromptSet: mention("persona", "prompt", "set"),
-      personaAttributeAdd: mention("persona", "attribute", "add"),
-      personaSampleDialogueAdd: mention("persona", "sample-dialogue", "add"),
+      configSystemPromptSet: configPage("Behavior > General"),
+      personaPromptSet: configPage("Persona > Advanced"),
+      personaAttributeAdd: configPage("Persona > General"),
+      personaSampleDialogueAdd: configPage("Persona > General"),
     }),
   },
 ] as const;

@@ -130,8 +130,8 @@ describe("openAI-compatible provider error formatting", () => {
     );
 
     expect(description).toContain("NVIDIA rejected one or more request parameters");
-    expect(description).toContain("set them to `0` with `/model parameters`");
-    expect(description).toContain("`/model logit-bias remove`");
+    expect(description).toContain("set them to `0` with `/config` > Models > Samplers & Parameters");
+    expect(description).toContain("clear saved entries with `/config` > Models > Samplers & Parameters");
     expect(description).toContain("**Details:**");
     expect(description).toContain("min_p and logit_bias");
   });
@@ -154,8 +154,8 @@ describe("openAI-compatible provider error formatting", () => {
       },
     );
 
-    expect(description).not.toContain("`/model parameters`");
-    expect(description).not.toContain("`/model logit-bias remove`");
+    expect(description).not.toContain("set them to `0` with");
+    expect(description).not.toContain("clear saved entries with");
     expect(description).toContain("The NVIDIA backend serving this model failed");
     expect(description).toContain("**Details:**");
     expect(description).toContain("internal_server_error");

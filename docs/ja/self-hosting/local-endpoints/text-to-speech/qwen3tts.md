@@ -50,7 +50,7 @@ python servers\tts\qwen3tts\server.py --mode auto
 - `Voice Source Mode`: `Auto`
 - `Script Markup Style`: `Plain`
 
-登録すると、エンドポイントはすぐに有効になります。今後、speechエンドポイントを切り替える場合にのみ`/model speech`を使用します。
+登録すると、エンドポイントはすぐに有効になります。今後、speechエンドポイントを切り替える場合にのみ`/providers`を使用します。
 
 ## ペルソナ音声のセットアップ
 

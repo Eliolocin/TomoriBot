@@ -17,7 +17,7 @@ From most permanent to most fleeting
 |---|---|---|
 | **Long-term memory (LTM)** | Saved facts about a user or a server, uploaded documents, and conditioning | Forever, until someone removes it. Survives `/refresh`, restarts, everything |
 | **Short-term memory (STM)** | A summary she writes for a channel, plus a few recent messages | 24 hours. Can reach across channels |
-| **Chat history** | The recent messages in the channel she's replying in | Only this channel, only until they scroll out of `/config message-fetch-limit` range (defaults to latest 80 messages). `/refresh` cuts it off immediately |
+| **Chat history** | The recent messages in the channel she's replying in | Only this channel, only until they scroll out of `/config` > Behavior > General range (defaults to latest 80 messages). `/refresh` cuts it off immediately |
 
 Almost everything she appears to "know" in a conversation is just recent chat history, which is why
 she seems to forget a message once the conversation becomes too long. **Only long-term memory is
@@ -73,9 +73,9 @@ If she is not saving things you want kept, you have three options, in increasing
 force:
 
 - Ask her directly to remember it.
-- Add a nudge with `/config context-note set`, or with any of the other prompt-carrying
-  commands from [Inside The Prompt](/features/knowledge/inside-the-prompt/) (`/persona prompt set`,
-  `/config system-prompt set`, `/server channel-prompt`). A context note in particular sits low
+- Add a nudge with `/config` > Behavior > General, or with any of the other prompt-carrying
+  commands from [Inside The Prompt](/features/knowledge/inside-the-prompt/) (`/config` > Persona > Advanced,
+  `/config` > Behavior > General, `/config` > Channels > Channel Overrides). A context note in particular sits low
   in her prompt, which makes it more likely to be acted on. Something as simple as *"It is
   encouraged to create long-term memories for information that is worth remembering"* is usually
   enough. To reference the actual save-memory tool by name without hardcoding something that can
@@ -84,7 +84,7 @@ force:
   *"Use {memory_tool} whenever..."*.
 - Save it yourself with `/personal memories`, which is a guaranteed method.
 
-Server admins can turn her self-saving off entirely with `/capabilities manage`.
+Server admins can turn her self-saving off entirely with `/config` > Permissions.
 
 ### How Many Memories 
 
@@ -102,7 +102,7 @@ memories count against every persona's personal allowance.
 Server admins can give her documents to reference using RAG. Documents are chunked and stored as searchable embeddings; she automatically retrieves
   relevant content when answering. In new servers, document management is similarly restricted to members with `Manage Server` by default; managers can grant member access through `/moderation` Member Access.
 
-**Requires an embedding model**, configured with `/model embedding`. See
+**Requires an embedding model**, configured with `/config` > Models > Switch Models. See
 [Providers & Models](/features/setup-administration/providers-and-models/). The
 Documents page in `/memories` provides persona and server-wide scopes, live document
 and chunk counts, uploads, document browsing, and removal:
@@ -155,7 +155,7 @@ Scope narrows things before anything else does: a server memory only ever reache
 in its own server, a personal memory only when that user is visible in the conversation,
 and both only for the persona that owns them. Within that scope, **every memory is sent
 with every prompt** by default. Tagging narrows it further, so a memory activates only on
-a keyword or only in one channel. Turn it on with `/memory tagging set`.
+a keyword or only in one channel. Turn it on with `/config` > Behavior > Memory & STM.
 
 ### Keyword Tags
 
@@ -192,7 +192,7 @@ STM of each channel expires after 24 hours by default and if you've opted out wi
 | **In a server** | One shared memory per channel, not one per person. She isn't keeping notes on you individually. |
 | **In DMs** | Yours alone. |
 | **Other channels** | She can recall her recent conversations from a few other channels in the same server. |
-| **Private channels** | Anything set with `/server private-channels` stays there and won't surface elsewhere. |
+| **Private channels** | Anything set with `/config` > Channels > Channel Rules stays there and won't surface elsewhere. |
 | **Other servers** | Never, unless you turn on `/personal config` → `crossserver`. Even then only *your own* conversations follow you. |
 | **Each persona** | Keeps her own separate memory, so switching persona switches memory. |
 
@@ -203,18 +203,18 @@ and refreshes as the conversation moves along. It fades on its own after a few q
 
 | Command | What it does |
 |---|---|
-| `/persona stm view` | See the summary she's keeping for this channel |
-| `/persona stm edit` | Correct it or write it yourself |
+| `/config` > Persona > Memories | See the summary she's keeping for this channel |
+| `/config` > Persona > Memories | Correct it or write it yourself |
 | `/personal config` / `/personal memories` | Opt into cross-server recall, or wipe your own |
 | `/refresh` | Make her forget this channel right now |
-| `/server stm parameters` | How often she updates it, and how much detail she keeps |
-| `/server stm categories-edit` | Swap the summary for up to 5 labeled fields (*Current scene*, *Mood*, …) |
-| `/server stm prompt-edit` | Reword how she's asked to keep it |
+| `/config` > Behavior > Memory & STM | How often she updates it, and how much detail she keeps |
+| `/config` > Behavior > Memory & STM | Swap the summary for up to 5 labeled fields (*Current scene*, *Mood*, …) |
+| `/config` > Behavior > Memory & STM | Reword how she's asked to keep it |
 | `/memories` | Review and selectively clear active server entries from one manager panel |
-| `/server stm privacy-bypass` | Let private-channel memories surface elsewhere |
-| `/capabilities manage` | Turn the feature on or off (stored memories are kept either way) |
+| `/config` > Permissions | Let private-channel memories surface elsewhere |
+| `/config` > Permissions | Turn the feature on or off (stored memories are kept either way) |
 
-Anyone can run `/persona stm view`, `/personal config`, and `/personal memories`. The rest need Manage Server.
+Anyone can run `/config` > Persona > Memories, `/personal config`, and `/personal memories`. The rest need Manage Server.
 
 ### STM Configuration
 

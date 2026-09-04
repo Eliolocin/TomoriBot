@@ -43,7 +43,7 @@ In `/help`, choose **Features**, then **Speech**, for the same walkthrough in Di
 
 On a self-hosted instance you can run a local voice-clone server instead. The general flow is:
 start the wrapper server, register its connection and model with `/providers`, select it with
-`/model speech`, upload a sample with `/speech voice-add`, then assign it with
+`/providers`, upload a sample with `/speech voice-add`, then assign it with
 `/speech voice-assign`. Any audio format is accepted (auto-converted to mono WAV); 10–20
 second clips with no background music work best.
 
@@ -62,12 +62,12 @@ See the [Text-to-Speech](/self-hosting/local-endpoints/text-to-speech/) hub for 
 
 Transcription endpoints turn user audio attachments into text for background conversation
 context. Whether transcripts are **visibly posted** in chat is controlled separately by
-`/speech transcripts`.
+`/config` > Behavior > Notices.
 
 ### ElevenLabs (cloud)
 
 Already covered above — adding ElevenLabs from `/providers` registers the transcription endpoint alongside
-speech. Use `/model transcription` to pick between transcription endpoints.
+speech. Use `/providers` to pick between transcription endpoints.
 
 ### Local engines (self-hosted)
 

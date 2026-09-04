@@ -96,7 +96,7 @@ export async function execute(
         //    than the commands that actually require a healthy state.
         if (existingTomoriState) {
           const providerAddMention = commandRegistry.getCommandMention("providers");
-          const modelTextMention = commandRegistry.getCommandMention("model", "text");
+          const modelTextMention = commandRegistry.getCommandMention("config");
           const userByokToggleMention = commandRegistry.getCommandMention("moderation");
           const helpPersonalProviderMention = commandRegistry.getCommandMention("help");
           const currentModelValue =
@@ -153,7 +153,7 @@ export async function execute(
         log.warn(
           `[Setup] Server ${serverId} has a main persona row but state validation failed — surfacing repair guidance`,
         );
-        const modelTextMention = commandRegistry.getCommandMention("model", "text");
+        const modelTextMention = commandRegistry.getCommandMention("config");
         const providerAddMention = commandRegistry.getCommandMention("providers");
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.setup.broken_state_title",
@@ -708,7 +708,7 @@ export async function execute(
 
       if (isCustomEndpointSetup) {
         const customModelsAddMention = commandRegistry.getCommandMention("providers");
-        const modelTextMention = commandRegistry.getCommandMention("model", "text");
+        const modelTextMention = commandRegistry.getCommandMention("config");
         const helpCustomModelsMention = commandRegistry.getCommandMention("help");
         const helpSpeechMention = commandRegistry.getCommandMention("help");
         const helpTranscriptionMention = commandRegistry.getCommandMention("help");

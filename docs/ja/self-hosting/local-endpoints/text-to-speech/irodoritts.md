@@ -70,7 +70,7 @@ TomoriBotがIrodoriTTSを使用している間は、そのターミナルを開�
 - `Voice Source Mode`: `Clone`
 - `Script Markup Style`: `Emoji`
 
-登録すると、エンドポイントはすぐに有効になります。今後、speechエンドポイントを切り替える場合にのみ`/model speech`を使用します。
+登録すると、エンドポイントはすぐに有効になります。今後、speechエンドポイントを切り替える場合にのみ`/providers`を使用します。
 
 ## ペルソナ音声のセットアップ
 

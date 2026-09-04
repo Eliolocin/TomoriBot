@@ -602,16 +602,16 @@ When a modal is editing an existing list of configured items, prefer Checkbox Gr
 Implemented examples:
 
 - `/moderation` manages blacklist, channel, persona, and role removals through domain-specific checklist modals.
-- `/server private-channels` manages the full saved private-channel set in one modal, with paginated fallback beyond 50 channels.
-- `/server rp-channels` manages the full saved RP-channel set in one modal, with paginated fallback beyond 50 channels.
-- `/server crosschannel-blocklist` manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.
-- `/config notice-embeds visibility` manages visible notice embed types in one modal.
+- `/config` > Channels > Channel Rules manages the full saved private-channel set in one modal, with paginated fallback beyond 50 channels.
+- `/config` > Channels > Channel Rules manages the full saved RP-channel set in one modal, with paginated fallback beyond 50 channels.
+- `/config` > Channels > Channel Rules manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.
+- `/config` > Behavior > Notices manages visible notice embed types in one modal.
 - `/config remove modeloverride` manages channel and persona overrides together in one modal.
 - MCP registrations are deliberately excluded from this pattern: the `/mcps` panel removes one
   registration at a time behind an explicit confirmation, so selection never becomes destructive
   consent.
-- `/model fallback` manages the fallback chain in one modal, and each slot can be cleared directly with the built-in `None` option.
-- `/config random-trigger remove` manages random triggers in one modal when the set fits, with paginated fallback beyond modal limits.
+- `/config` > Models > Fallbacks & Randomizer manages the fallback chain in one modal, and each slot can be cleared directly with the built-in `None` option.
+- `/config` > Behavior > Trigger manages random triggers in one modal when the set fits, with paginated fallback beyond modal limits.
 - `/server trigger remove` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
 
 ---
@@ -626,7 +626,7 @@ These modals use a String Select with a small, fixed, mutually exclusive option 
 
 | Command                   | File                         | Custom ID              | Current Input | Options                                   | Why Radio Group                                     |
 | ------------------------- | ---------------------------- | ---------------------- | ------------- | ----------------------------------------- | --------------------------------------------------- |
-| `/config humanizer`       | `config/humanizer.ts`        | `humanizer_select`     | String Select | 4-5 (none/light/moderate/heavy; + inherit with `scope: Persona`) | Fixed set of mutually exclusive degrees             |
+| `/config` > Behavior > General       | `config/humanizer.ts`        | `humanizer_select`     | String Select | 4-5 (none/light/moderate/heavy; + inherit with `scope: Persona`) | Fixed set of mutually exclusive degrees             |
 | `/setup`           | `setup.ts`            | `humanizer_degree`     | String Select | 4 (none/light/default/heavy)              | Same fixed humanizer degree set as above            |
 | `/personal config`       | `utils/discord/ui/personalConfigPanel.ts` | `privacy_select`       | String Select | 3 (minimal/partial/full)                  | Fixed set of 3 mutually exclusive levels            |
 | `/generate image`         | `generate/image.ts`          | `aspect_ratio_select`  | String Select | 10 (1:1, 2:3, 3:2, 3:4, 4:3, etc.)      | Fixed set of 10 aspect ratios — at the limit        |
@@ -639,7 +639,7 @@ These modals currently use a 2-option String Select (yes/no, true/false, enable/
 
 | Command                    | File                            | Custom ID              | Current Options          | Required | Migration Target                               |
 | -------------------------- | ------------------------------- | ---------------------- | ------------------------ | -------- | ---------------------------------------------- |
-| `/config random-trigger add`| `config/randomtrigger/add.ts`  | `respond_to_self`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
+| `/config` > Behavior > Trigger| `config/randomtrigger/add.ts`  | `respond_to_self`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/compact`            | `compact.ts`                   | `refresh_context`      | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/compact`            | `compact.ts`                   | `analyze_images`       | Yes / No                 | Yes      | **Checkbox Group** (1 option, required)        |
 | `/config provider switch`  | `config/provider/switch.ts`    | `save_current_select`  | Yes / No (default: Yes)  | No       | **Checkbox** (default: true, rarely unchecked) |
@@ -656,9 +656,9 @@ These commands still remove one dynamic item at a time, but the data shape is a 
 
 | Command                    | File                               | Current Input         | Why Checkbox Groups Fit                                                   | Notes                                                                 |
 | -------------------------- | ---------------------------------- | --------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `/persona attribute remove` | `persona/attribute/remove.ts`      | Persona picker + single paginated select | Personality attributes are usually reviewed and pruned in batches        | Needs index-safe array rewrite if duplicate attributes must be preserved |
+| `/config` > Persona > Identity & Personality | `persona/attribute/remove.ts`      | Persona picker + single paginated select | Personality attributes are usually reviewed and pruned in batches        | Needs index-safe array rewrite if duplicate attributes must be preserved |
 | `/scheduled-task remove` | `scheduled-task/remove.ts`      | Persona picker + single paginated select | Reminder cleanup is often batch-oriented, especially for stale schedules | Manager-only reminder views may need concise descriptions              |
-| `/persona sample-dialogue remove` | `persona/sample-dialogue/remove.ts` | Persona picker + single paginated select | Dialogue cleanup is often batch-oriented and already has index-safe removal | Good fit for index-valued checkbox groups                              |
+| `/config` > Persona > Identity & Personality | `persona/sample-dialogue/remove.ts` | Persona picker + single paginated select | Dialogue cleanup is often batch-oriented and already has index-safe removal | Good fit for index-valued checkbox groups                              |
 | `/persona remove`          | `persona/remove.ts`                | Single paginated select | Alter persona cleanup could be batch-managed                             | Should pair the bulk UI with stronger destructive-action messaging     |
 
 ### Not Candidates — Keep String Select
@@ -668,20 +668,20 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | Command                          | File                             | Reason                                                    |
 | -------------------------------- | -------------------------------- | --------------------------------------------------------- |
 | `/config provider switch`        | `config/provider/switch.ts`      | Provider list is dynamic (DB via `loadUniqueProviders()`) |
-| `/model text`             | `config/model/text.ts`           | Dynamic model list, often 25+, uses pagination            |
-| `/model image`            | `config/model/image.ts`          | Dynamic model list, uses pagination                       |
-| `/model vision`           | `config/model/vision.ts`         | Dynamic model list, uses pagination                       |
-| `/model embedding`        | `config/model/embedding.ts`      | Dynamic model list, uses pagination                       |
-| `/model fallback`         | `config/model/fallback.ts`       | Dynamic model list, uses pagination                       |
-| `/config system-prompt preset`       | `config/system-prompt/preset.ts`     | Dynamic preset list from DB                               |
+| `/config` > Models > Switch Models             | `config/model/text.ts`           | Dynamic model list, often 25+, uses pagination            |
+| `/config` > Models > Switch Models            | `config/model/image.ts`          | Dynamic model list, uses pagination                       |
+| `/config` > Models > Switch Models           | `config/model/vision.ts`         | Dynamic model list, uses pagination                       |
+| `/config` > Models > Switch Models        | `config/model/embedding.ts`      | Dynamic model list, uses pagination                       |
+| `/config` > Models > Fallbacks & Randomizer         | `config/model/fallback.ts`       | Dynamic model list, uses pagination                       |
+| `/config` > Behavior > General       | `config/system-prompt/preset.ts`     | Dynamic preset list from DB                               |
 | `/config provider add`            | `config/provider/add.ts`          | Provider select + text input combo; list may grow         |
-| `/persona prompt set`            | `persona/prompt/set.ts`         | Components V2 persona workflow first, then a prefilled free-form prompt modal (up to 16000 chars, 4 fields) |
-| `/persona attribute add`         | `persona/attribute/add.ts`      | Dynamic persona list, uses pagination                     |
-| `/persona sample-dialogue add`   | `persona/sample-dialogue/add.ts`| Dynamic persona list, uses pagination                     |
-| `/persona image-tags`        | `persona/image-tags.ts`      | Components V2 persona workflow, then a prefilled free-form tag modal |
-| `/persona attribute remove`      | `persona/attribute/remove.ts`   | Dynamic attribute list, uses pagination                   |
+| `/config` > Persona > Advanced            | `persona/prompt/set.ts`         | Components V2 persona workflow first, then a prefilled free-form prompt modal (up to 16000 chars, 4 fields) |
+| `/config` > Persona > Identity & Personality | `persona/attribute/add.ts`      | Dynamic persona list, uses pagination                     |
+| `/config` > Persona > Identity & Personality | `persona/sample-dialogue/add.ts`| Dynamic persona list, uses pagination                     |
+| `/config` > Persona > Appearance      | `persona/image-tags.ts`      | Components V2 persona workflow, then a prefilled free-form tag modal |
+| `/config` > Persona > Identity & Personality | `persona/attribute/remove.ts`   | Dynamic attribute list, uses pagination                   |
 | `/scheduled-task remove`      | `scheduled-task/remove.ts`   | Dynamic reminder list                                     |
-| `/server welcome-channel set`    | `server/welcome-channel/set.ts`  | Channel option + dynamic persona list                     |
+| `/config` > Channels > Destinations    | `server/welcome-channel/set.ts`  | Channel option + dynamic persona list                     |
 
 ### Not Candidates — Keep Text Input
 
@@ -689,12 +689,12 @@ These modals collect free-form text and have no structured option set:
 
 | Command                    | File                          | Reason                                                  |
 | -------------------------- | ----------------------------- | ------------------------------------------------------- |
-| `/config system-prompt set` | `config/system-prompt/set.ts`  | Free-form paragraph text (up to 16000 chars, 4 fields)  |
-| `/config random-trigger add`| `config/random-trigger/add.ts` | Free-form trigger word/phrase (text input portion stays) |
+| `/config` > Behavior > General | `config/system-prompt/set.ts`  | Free-form paragraph text (up to 16000 chars, 4 fields)  |
+| `/config` > Behavior > Trigger| `config/random-trigger/add.ts` | Free-form trigger word/phrase (text input portion stays) |
 | `/novelai attg`            | `novelai/attg.ts`             | 5 free-form text fields (author, title, tags, etc.)     |
 | `/personal config`         | `utils/discord/ui/personalConfigPanel.ts` | Free-form physical appearance image tag text            |
-| `/config image-tags default-negative`   | `config/image-tags/default-negative.ts`    | Free-form default negative tag text                     |
-| `/config image-tags default-positive`      | `config/image-tags/default-positive.ts`       | Free-form default positive tag text                  |
+| `/config` > Models > Image Generation   | `config/image-tags/default-negative.ts`    | Free-form default negative tag text                     |
+| `/config` > Models > Image Generation      | `config/image-tags/default-positive.ts`       | Free-form default positive tag text                  |
 | `/persona create`          | `persona/create.ts`           | Free-form text fields + file upload                     |
 | `/persona generate`        | `persona/generate.ts`         | Free-form name + file upload                            |
 | `/server trigger add`      | `server/trigger/add.ts`       | Free-form text fields (word, response, cooldown)        |
@@ -710,7 +710,7 @@ When a flow needs both a selection modal and a later prefilled edit modal, use:
 2. confirmation embed with buttons
 3. `showModal()` from the confirm button interaction
 
-This is the pattern used by the `/persona attribute edit` and `/persona sample-dialogue edit` flows.
+This is the pattern used by the attribute and sample-dialogue edit flows on `/config` > Persona > Identity & Personality.
 
 For persona-scoped flows that already have a persistent ephemeral picker message, prefer replacing that same message with the confirmation embed and later success state instead of spawning a second ephemeral thread.
 

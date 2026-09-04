@@ -125,12 +125,13 @@ describe("config page filtering", () => {
     expect(visibleConfigPages("models", DM_OWNER)).toEqual(["switch", "parameters", "fallbacks"]);
   });
 
-  it("omits Persona Advanced from a guild member and leaves its siblings readable", () => {
+  it("omits Persona Appearance and Advanced from a guild member and leaves its siblings readable", () => {
+    expect(resolveConfigPageState("persona", "appearance", GUILD_MEMBER)).toBe("omitted");
     expect(resolveConfigPageState("persona", "advanced", GUILD_MEMBER)).toBe("omitted");
     expect(resolveConfigPageState("persona", "general", GUILD_MEMBER)).toBe("enabled");
     expect(resolveConfigPageState("persona", "memories", GUILD_MEMBER)).toBe("read-only");
     expect(resolveConfigPageState("persona", "sprites", GUILD_MEMBER)).toBe("read-only");
-    expect(visibleConfigPages("persona", GUILD_MEMBER)).toEqual(["general", "memories", "sprites"]);
+    expect(visibleConfigPages("persona", GUILD_MEMBER)).toEqual(["general", "triggers", "memories", "sprites"]);
   });
 
   it("omits the manager-owned Behavior category for a guild member", () => {
@@ -169,12 +170,8 @@ describe("Persona General action policy", () => {
     }
   });
 
-  it("keeps trigger actions member-accessible and disables the manager-owned identity actions", () => {
-    // `/persona trigger add|remove` carry no Manage Guild gate today, while `/persona avatar`,
-    // `rename`, `naming-habits`, and `swap` all do.
-    expect(resolvePersonaGeneralActionState("trigger-add", GUILD_MEMBER)).toBe("enabled");
-    expect(resolvePersonaGeneralActionState("trigger-remove", GUILD_MEMBER)).toBe("enabled");
-    for (const action of ["avatar", "rename", "naming", "promote"] as const) {
+  it("disables trigger and identity actions for an ordinary guild member", () => {
+    for (const action of ["avatar", "rename", "naming", "trigger-add", "trigger-remove", "promote"] as const) {
       expect(resolvePersonaGeneralActionState(action, GUILD_MEMBER)).toBe("disabled");
     }
   });
@@ -605,9 +602,7 @@ describe("isConfigRouteAuthorized", () => {
     for (const route of personaWriteRoutes) {
       expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
     }
-    for (const route of triggerRoutes) {
-      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(true);
-    }
+    for (const route of triggerRoutes) expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
   });
 
   it("refuses guild-only routes replayed inside a DM workspace", () => {
@@ -705,9 +700,11 @@ describe("isConfigRouteAuthorized", () => {
       "context-note-submit",
       "humanizer-open",
       "humanizer-select",
+      "humanizer-submit",
       "text-override-open",
       "text-override-provider-select",
       "text-override-model-select",
+      "text-override-model-submit",
       "text-override-model-page",
       "text-override-clear",
       ...spriteMutationRoutes.map((route) => route.action),
