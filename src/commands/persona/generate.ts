@@ -8,6 +8,7 @@ import type {
   Client,
   ComponentInContainerData,
   ContainerComponentData,
+  InteractionEditReplyOptions,
   ModalSubmitInteraction,
   SlashCommandSubcommandBuilder,
   TopLevelComponentData,
@@ -19,6 +20,7 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
 import { buildPersonaResultContainer, type PersonaResultContainerOptions } from "@/utils/discord/ui/statusComponents";
 import { attachImportNowCollector, importNowButton } from "@/utils/persona/importNowButton";
+import { validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
 import type { UserRow } from "../../types/db/schema";
 import { personaRepository } from "@/utils/db/repositories";
 import { decryptApiKey } from "../../utils/security/crypto";
@@ -187,6 +189,20 @@ function buildGenerateStatusComponents(options: {
   return [container];
 }
 
+function buildGenerateResultPayload(
+  options: PersonaResultContainerOptions,
+  attachment: AttachmentBuilder,
+): InteractionEditReplyOptions {
+  return validateAndFallbackPanelPayload(
+    {
+      components: buildPersonaResultContainer(options),
+      files: [attachment],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    options.locale,
+  );
+}
+
 async function editGenerateStatusReply(
   interaction: ChatInputCommandInteraction | ModalSubmitInteraction,
   options: {
@@ -199,19 +215,24 @@ async function editGenerateStatusReply(
     inputAttachment?: AttachmentBuilder;
   },
 ): Promise<void> {
-  await interaction.editReply({
-    components: buildGenerateStatusComponents({
-      locale: options.locale,
-      titleKey: options.titleKey,
-      descriptionKey: options.descriptionKey,
-      color: options.color,
-      descriptionVars: options.descriptionVars,
-      details: options.details,
-      showInputAttachment: Boolean(options.inputAttachment),
-    }),
-    ...(options.inputAttachment ? { files: [options.inputAttachment] } : {}),
-    flags: MessageFlags.IsComponentsV2,
-  });
+  await interaction.editReply(
+    validateAndFallbackPanelPayload(
+      {
+        components: buildGenerateStatusComponents({
+          locale: options.locale,
+          titleKey: options.titleKey,
+          descriptionKey: options.descriptionKey,
+          color: options.color,
+          descriptionVars: options.descriptionVars,
+          details: options.details,
+          showInputAttachment: Boolean(options.inputAttachment),
+        }),
+        ...(options.inputAttachment ? { files: [options.inputAttachment] } : {}),
+        flags: MessageFlags.IsComponentsV2,
+      },
+      options.locale,
+    ),
+  );
 }
 
 type ToolContextChannel = ToolContext["channel"];
@@ -893,20 +914,17 @@ export async function execute(
     //     so the persona can be imported as an alter without re-uploading the PNG.
     //     Alter import is guild-only, so DMs get the container without the button.
     if (isDM || !interaction.guild) {
-      await modalSubmitInteraction.editReply({
-        components: buildPersonaResultContainer(successContainerOptions),
-        files: [attachment],
-        flags: MessageFlags.IsComponentsV2,
-      });
+      await modalSubmitInteraction.editReply(buildGenerateResultPayload(successContainerOptions, attachment));
     } else {
-      await modalSubmitInteraction.editReply({
-        components: buildPersonaResultContainer({
-          ...successContainerOptions,
-          button: importNowButton("active"),
-        }),
-        files: [attachment],
-        flags: MessageFlags.IsComponentsV2,
-      });
+      await modalSubmitInteraction.editReply(
+        buildGenerateResultPayload(
+          {
+            ...successContainerOptions,
+            button: importNowButton("active"),
+          },
+          attachment,
+        ),
+      );
 
       const sentMessage = await modalSubmitInteraction.fetchReply();
       attachImportNowCollector({

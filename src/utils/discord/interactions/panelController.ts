@@ -1,5 +1,16 @@
 import type { ResolvedRangeSelection } from "@/types/discord/panel";
 
+export {
+  ComponentsV2LimitError,
+  deliverGuardedPanel,
+  buildPanelFallbackPayload,
+  isProductionEnvironment,
+  validateAndFallbackPanelPayload,
+  type GuardedPanelDeliveryTarget,
+  type GuardedPanelDeliveryMethod,
+  type GuardedPanelDeliveryOptions,
+} from "@/utils/discord/ui/interactionCore";
+
 export const MODERATION_PANEL_RANGE_SIZE = 10;
 
 export interface PanelInteractionStart<T> {

@@ -1,5 +1,6 @@
 import { MessageFlags, type ChatInputCommandInteraction, type Client, type SlashCommandBuilder } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
+import { deliverGuardedPanel } from "@/utils/discord/interactions/panelController";
 import { buildHelpDashboardPayload } from "@/utils/discord/ui/helpDashboard";
 import { localizer } from "@/utils/text/localizer";
 
@@ -13,8 +14,9 @@ export async function execute(
   locale: string,
 ): Promise<void> {
   const payload = buildHelpDashboardPayload(locale);
-  await interaction.reply({
-    ...payload,
+  await deliverGuardedPanel(interaction, payload, {
+    method: "reply",
+    locale,
     flags: payload.flags | MessageFlags.Ephemeral,
   });
 }

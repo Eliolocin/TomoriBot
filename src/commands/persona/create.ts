@@ -6,6 +6,7 @@
 import type {
   ChatInputCommandInteraction,
   Client,
+  InteractionEditReplyOptions,
   ModalSubmitInteraction,
   SlashCommandSubcommandBuilder,
 } from "discord.js";
@@ -20,6 +21,7 @@ import {
   type PersonaResultContainerOptions,
 } from "@/utils/discord/ui/statusComponents";
 import { attachImportNowCollector, importNowButton } from "@/utils/persona/importNowButton";
+import { validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
 import type { UserRow } from "../../types/db/schema";
 import { memoryGuard, PERSONA_LIMITS, reservePersonaQuota } from "../../utils/security/rateLimiter";
 import { getMemoryLimits, validateAttribute, validateSampleDialogue } from "@/utils/misc/memoryLimits";
@@ -48,6 +50,20 @@ const FILE_UPLOAD_ID = "avatar_image";
 
 function parsePersonaNameInput(input: string): string[] {
   return dedupeTriggerWords(input.split(/[,\u3001]/), { lowercase: false });
+}
+
+function buildCreateResultPayload(
+  options: PersonaResultContainerOptions,
+  attachment: AttachmentBuilder,
+): InteractionEditReplyOptions {
+  return validateAndFallbackPanelPayload(
+    {
+      components: buildPersonaResultContainer(options),
+      files: [attachment],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    options.locale,
+  );
 }
 
 /**
@@ -499,21 +515,18 @@ export async function execute(
     // Send the result. Create is guild-only, so attach the manager-only
     //     "Import Now" button to import the new persona as an alter in place.
     if (!interaction.guild) {
-      await modalSubmitInteraction.editReply({
-        components: buildPersonaResultContainer(successContainerOptions),
-        files: [attachment],
-        flags: MessageFlags.IsComponentsV2,
-      });
+      await modalSubmitInteraction.editReply(buildCreateResultPayload(successContainerOptions, attachment));
       replyUsesComponentsV2 = true;
     } else {
-      await modalSubmitInteraction.editReply({
-        components: buildPersonaResultContainer({
-          ...successContainerOptions,
-          button: importNowButton("active"),
-        }),
-        files: [attachment],
-        flags: MessageFlags.IsComponentsV2,
-      });
+      await modalSubmitInteraction.editReply(
+        buildCreateResultPayload(
+          {
+            ...successContainerOptions,
+            button: importNowButton("active"),
+          },
+          attachment,
+        ),
+      );
       replyUsesComponentsV2 = true;
 
       const sentMessage = await modalSubmitInteraction.fetchReply();

@@ -30,9 +30,15 @@ import {
   buildPaginationRow,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
+import {
+  DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX,
+  measureComponentTextLength,
+} from "@/utils/discord/ui/componentsV2Limits";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
+import { getDiscordTextLength, neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { localizer } from "@/utils/text/localizer";
+import { buildTextPreview, textPreviewFooterKey, textPreviewFooterVars } from "@/utils/text/textPreview";
 import { personaRepresentativeForLineage } from "@/utils/persona/lineage";
 
 export const MAX_PERSONAL_MEMORY_PAGE_SIZE = 24;
@@ -41,14 +47,28 @@ const PERSONA_SELECT_MAX_OPTIONS = 25;
 /**
  * Renders one memory as a fenced block so it reads as content rather than panel prose.
  *
- * The fence is why the text is not markdown-escaped: escapes render literally inside a code block.
- * A memory holding its own triple backtick would close the fence early and spill the rest of the
- * panel into the block, so the sequence is broken with a zero-width space, which Discord renders as
- * nothing and does not treat as a fence.
+ * Stored content is guarded via {@link neutralizeFenceRuns} so runs of backticks cannot close the
+ * markdown fence early. Rendered text is bounded to `availableBudget` (including fence syntax overhead
+ * and the footer line) using {@link buildTextPreview}, appending an honest hidden-character notice
+ * when truncation occurs. The footer reserve is measured dynamically from the preview.
  */
-function renderMemoryBlock(content: string): string {
-  const fenceSafe = content.replaceAll("```", "`\u200b``");
-  return ["```markdown", fenceSafe, "```"].join("\n");
+function renderMemoryBlock(locale: string, content: string, availableBudget: number): string {
+  const fenceOverhead = getDiscordTextLength("```markdown\n\n```");
+  const rawBudget = Math.max(0, availableBudget - fenceOverhead);
+  const initialPreview = buildTextPreview(content, rawBudget);
+  if (!initialPreview.truncated) {
+    return ["```markdown", initialPreview.text, "```"].join("\n");
+  }
+  const footerKey = textPreviewFooterKey(initialPreview);
+  const footerVars = textPreviewFooterVars(initialPreview);
+  const initialFooter = footerKey ? `\n-# ${localizer(locale, footerKey, footerVars)}` : "";
+  const footerReserve = getDiscordTextLength(initialFooter);
+  const refinedBudget = Math.max(0, availableBudget - fenceOverhead - footerReserve);
+  const preview = buildTextPreview(content, refinedBudget);
+  const finalFooterKey = textPreviewFooterKey(preview);
+  const finalFooterVars = textPreviewFooterVars(preview);
+  const finalFooter = finalFooterKey ? `\n-# ${localizer(locale, finalFooterKey, finalFooterVars)}` : "";
+  return ["```markdown", preview.text, "```"].join("\n") + finalFooter;
 }
 
 /**
@@ -270,6 +290,11 @@ function buildPayload(components: ComponentInContainerData[], receipt?: PanelRec
   };
 }
 
+function measureReceiptTextLength(receipt?: PanelReceipt): number {
+  if (!receipt) return 0;
+  return measureComponentTextLength(buildPanelReceiptContainer(receipt));
+}
+
 export function buildPersonalMemoriesPanelPayload(
   input: PersonalMemoriesPanelRenderInput,
 ): PersonalMemoriesPanelPayload {
@@ -325,12 +350,20 @@ export function buildPersonalMemoriesPanelPayload(
   if (page.kind === "remove") {
     const targetMemory = memories.find((m) => m.personal_memory_id === page.memoryId);
     if (targetMemory?.personal_memory_id) {
+      const descriptionTemplate = localizer(locale, "commands.personal.memories.remove_confirm_description", {
+        memory: "",
+      });
+      const titleText = `### ${localizer(locale, "commands.personal.memories.remove_title")}\n${descriptionTemplate}`;
+      const fixedTextLength =
+        measureReceiptTextLength(receipt) + measureComponentTextLength(components) + getDiscordTextLength(titleText);
+      const availableBudget = Math.max(0, DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - fixedTextLength);
+
       components.push(
         {
           type: ComponentType.TextDisplay,
           content: `### ${localizer(locale, "commands.personal.memories.remove_title")}
 ${localizer(locale, "commands.personal.memories.remove_confirm_description", {
-  memory: renderMemoryBlock(targetMemory.content),
+  memory: renderMemoryBlock(locale, targetMemory.content, availableBudget),
 })}`,
         },
         {
@@ -453,9 +486,49 @@ ${localizer(locale, "commands.personal.memories.selector_guidance")}`,
     }
 
     if (selectedMemory) {
+      const bottomComponents: ComponentInContainerData[] = [
+        { type: ComponentType.Separator, divider: true, spacing: 1 },
+        {
+          type: ComponentType.TextDisplay,
+          content: `**${localizer(locale, "commands.personal.memories.stm_title")}**
+> ${localizer(locale, "commands.personal.memories.stm_active_count", { count: input.stmCount })}`,
+        },
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.Button,
+              style: ButtonStyle.Secondary,
+              customId: buildPersonalMemoriesRouteId({ action: "stm-clear", locale, category: "global", lineageId: 0 }),
+              label: localizer(locale, "commands.personal.memories.stm_clear_button"),
+              disabled: writesDisabled,
+            },
+          ],
+        },
+        {
+          type: ComponentType.TextDisplay,
+          content: withLinePrefix("-# ", localizer(locale, "commands.personal.memories.stm_crossserver_hint")),
+        },
+      ];
+      const staleComponent =
+        readStatus === "stale"
+          ? [
+              {
+                type: ComponentType.TextDisplay as const,
+                content: `-# ${localizer(locale, "commands.personal.memories.stale_warning")}`,
+              },
+            ]
+          : [];
+      const fixedTextLength =
+        measureReceiptTextLength(receipt) +
+        measureComponentTextLength(components) +
+        measureComponentTextLength(bottomComponents) +
+        measureComponentTextLength(staleComponent);
+      const availableBudget = Math.max(0, DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - fixedTextLength);
+
       components.push({
         type: ComponentType.TextDisplay,
-        content: renderMemoryBlock(selectedMemory.content),
+        content: renderMemoryBlock(locale, selectedMemory.content, availableBudget),
       });
     } else {
       components.push({
@@ -700,15 +773,31 @@ ${localizer(locale, "commands.personal.memories.persona_description")}`,
           channelTags.length > 0
             ? channelTags.join(", ")
             : localizer(locale, "commands.personal.memories.channel_access_all");
+        const channelAccessContent = `> ${localizer(locale, "commands.personal.memories.channel_access", { channels: channelAccess })}`;
+        const staleComponent =
+          readStatus === "stale"
+            ? [
+                {
+                  type: ComponentType.TextDisplay as const,
+                  content: `-# ${localizer(locale, "commands.personal.memories.stale_warning")}`,
+                },
+              ]
+            : [];
+        const fixedTextLength =
+          measureReceiptTextLength(receipt) +
+          measureComponentTextLength(components) +
+          getDiscordTextLength(channelAccessContent) +
+          measureComponentTextLength(staleComponent);
+        const availableBudget = Math.max(0, DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - fixedTextLength);
 
         components.push(
           {
             type: ComponentType.TextDisplay,
-            content: renderMemoryBlock(selectedMemory.content),
+            content: renderMemoryBlock(locale, selectedMemory.content, availableBudget),
           },
           {
             type: ComponentType.TextDisplay,
-            content: `> ${localizer(locale, "commands.personal.memories.channel_access", { channels: channelAccess })}`,
+            content: channelAccessContent,
           },
         );
       } else {

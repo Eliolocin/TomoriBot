@@ -12,14 +12,35 @@ import type { GuildMcpServerRow } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
-import { buildMcpsRouteId } from "@/utils/discord/mcpsPanelCatalog";
-import { buildPanelContainer, buildPanelReceiptContainer, withLinePrefix } from "@/utils/discord/ui/panel";
+import {
+  buildMcpsRouteId,
+  buildMcpsRouteSegments,
+  MCPS_ROUTE_NAMESPACE,
+  MCPS_ROUTE_VERSION,
+} from "@/utils/discord/mcpsPanelCatalog";
+import {
+  buildPaginationRow,
+  buildPanelContainer,
+  buildPanelReceiptContainer,
+  withLinePrefix,
+} from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
+import { resolveRangeSelection } from "@/utils/discord/interactions/panelController";
 import { MAX_MCP_SERVERS_PER_WORKSPACE, safeMcpEndpoint } from "@/utils/mcp/mcpConfigOperations";
 import { formatMcpToolNamesForDiscord } from "@/utils/mcp/mcpToolSnapshot";
+import { buildTextPreview, textPreviewFooterKey, textPreviewFooterVars } from "@/utils/text/textPreview";
 import { localizer } from "@/utils/text/localizer";
 
-const MAX_DEFENSIVE_RENDERED_MCP_ROWS = 6;
+export const MAX_MCP_PANEL_PAGE_SIZE = 6;
+const MCP_ROW_TEXT_PREVIEW_BUDGET = 300;
+
+function renderMcpName(locale: string, value: string): string {
+  const preview = buildTextPreview(value, MCP_ROW_TEXT_PREVIEW_BUDGET);
+  const rendered = escapeDiscordMarkdown(preview.text);
+  const footerKey = textPreviewFooterKey(preview);
+  if (!footerKey) return rendered;
+  return `${rendered}\n-# ${localizer(locale, footerKey, textPreviewFooterVars(preview))}`;
+}
 
 export type McpsPanelPage =
   | { kind: "collection"; selectedId?: number; rangeIndex?: number; removedIndex?: number }
@@ -114,7 +135,6 @@ function buildAddArea(
   locale: string,
   configs: GuildMcpServerRow[],
   writesDisabled: boolean,
-  overflow: boolean,
 ): ComponentInContainerData[] {
   const buttons: ButtonComponentData[] = [
     {
@@ -122,7 +142,7 @@ function buildAddArea(
       style: ButtonStyle.Secondary,
       customId: buildMcpsRouteId({ action: "add-open", locale }),
       label: localizer(locale, "commands.mcps.add"),
-      disabled: writesDisabled || overflow || configs.length >= MAX_MCP_SERVERS_PER_WORKSPACE,
+      disabled: writesDisabled || configs.length >= MAX_MCP_SERVERS_PER_WORKSPACE,
     },
   ];
   if (writesDisabled) buttons.push(buildRetryRow(locale, configs[0]?.guild_mcp_id ?? "none").components[0]);
@@ -186,7 +206,7 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
         content: `### ${localizer(input.locale, "commands.mcps.remove_title")}\n${localizer(
           input.locale,
           "commands.mcps.remove_description",
-          { name: escapeDiscordMarkdown(removeTarget.name) },
+          { name: renderMcpName(input.locale, removeTarget.name) },
         )}`,
       },
       {
@@ -219,9 +239,15 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
     return buildPayload(components, input.receipt);
   }
 
-  const visibleConfigs = configs.slice(0, MAX_DEFENSIVE_RENDERED_MCP_ROWS);
+  // A remove page with a resolvable target returned above, so one reaching here has a target that
+  // no longer exists and has no range of its own to restore.
+  const requestedRangeIndex = input.page.kind === "collection" ? (input.page.rangeIndex ?? 0) : 0;
+  const selection = resolveRangeSelection(configs, requestedRangeIndex, MAX_MCP_PANEL_PAGE_SIZE);
+  const visibleConfigs = selection.visibleItems;
   for (const row of visibleConfigs) {
     const endpoint = safeMcpEndpoint(row.url) ?? localizer(input.locale, "commands.mcps.endpoint_unavailable");
+    const namePreview = buildTextPreview(row.name, MCP_ROW_TEXT_PREVIEW_BUDGET);
+    const endpointPreview = buildTextPreview(endpoint, MCP_ROW_TEXT_PREVIEW_BUDGET);
     const formattedToolNames = row.last_discovered_tool_names
       ? formatMcpToolNamesForDiscord(row.last_discovered_tool_names)
       : null;
@@ -234,14 +260,24 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
     components.push(
       {
         type: ComponentType.TextDisplay,
-        content: `- ${escapeDiscordMarkdown(row.name)} (\`${endpoint}\`)\n> ${localizer(
+        content: `- ${escapeDiscordMarkdown(namePreview.text)} (\`${endpointPreview.text}\`)\n> ${localizer(
           input.locale,
           "commands.mcps.row_status",
           {
             status: localizer(input.locale, row.is_enabled ? "commands.mcps.enabled" : "commands.mcps.disabled"),
             type: localizer(input.locale, typeLabelKey(row.server_type)),
           },
-        )}\n> ${toolSnapshot}`,
+        )}\n> ${toolSnapshot}${
+          namePreview.truncated || endpointPreview.truncated
+            ? `\n-# ${localizer(
+                input.locale,
+                textPreviewFooterKey(namePreview) ??
+                  textPreviewFooterKey(endpointPreview) ??
+                  "general.text_preview.truncated_footer",
+                textPreviewFooterVars(namePreview.truncated ? namePreview : endpointPreview),
+              )}`
+            : ""
+        }`,
       },
       {
         type: ComponentType.ActionRow,
@@ -273,17 +309,21 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
       },
     );
   }
-  const overflow = visibleConfigs.length < configs.length;
-  if (overflow) {
-    components.push({
-      type: ComponentType.TextDisplay,
-      content: localizer(input.locale, "commands.mcps.overflow_warning", {
-        count: configs.length,
-        shown: visibleConfigs.length,
-      }),
-    });
+  const paginationRow = buildPaginationRow({
+    locale: input.locale,
+    rangeIndex: selection.rangeIndex,
+    rangeCount: selection.rangeCount,
+    namespace: MCPS_ROUTE_NAMESPACE,
+    version: MCPS_ROUTE_VERSION,
+    disabled: writesDisabled,
+    buildSegments: {
+      page: (rangeIndex) => buildMcpsRouteSegments({ action: "range", locale: input.locale, rangeIndex }),
+    },
+  });
+  if (paginationRow) {
+    components.push(paginationRow);
   }
-  components.push(...buildAddArea(input.locale, configs, writesDisabled, overflow));
+  components.push(...buildAddArea(input.locale, configs, writesDisabled));
 
   return buildPayload(components, input.receipt);
 }

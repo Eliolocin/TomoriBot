@@ -51,6 +51,7 @@ import {
   formatStoredParameterValue,
 } from "@/utils/discord/ui/personalConfigParameterControls";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
+import { truncateDiscordText } from "@/utils/text/discordTextLimits";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { localizer } from "@/utils/text/localizer";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
@@ -1709,10 +1710,13 @@ ${localizer(locale, "commands.personal.config.fallbacks_description")}`,
           spotlightRowsText = rows.join("\n");
         }
 
+        const header = `### ${localizer(locale, "commands.personal.config.spotlight_title")}\n${localizer(locale, "commands.personal.config.spotlight_description")}\n`;
+        const content = truncateDiscordText(`${header}${spotlightRowsText}`, 3200, "\n> ...");
+
         components.push(
           {
             type: ComponentType.TextDisplay,
-            content: `### ${localizer(locale, "commands.personal.config.spotlight_title")}\n${localizer(locale, "commands.personal.config.spotlight_description")}\n${spotlightRowsText}`,
+            content,
           },
           {
             type: ComponentType.ActionRow,

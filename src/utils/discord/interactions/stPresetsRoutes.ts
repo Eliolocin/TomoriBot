@@ -12,7 +12,12 @@ import type { StPresetNodeRow, StPresetRow, TomoriState } from "@/types/db/schem
 import type { PanelReceipt } from "@/types/discord/panel";
 import { getCachedTomoriState, getLastDbError } from "@/utils/cache/tomoriStateCache";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
-import { beginPanelInteraction, performPanelAction } from "@/utils/discord/interactions/panelController";
+import {
+  beginPanelInteraction,
+  deliverGuardedPanel,
+  performPanelAction,
+  validateAndFallbackPanelPayload,
+} from "@/utils/discord/interactions/panelController";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   MAX_NODES_PER_MODAL_PAGE,
@@ -92,17 +97,20 @@ function takeNodeSnapshot(nonce: string): { presetId: number; identifiers: strin
 }
 
 function terminalPayload(locale: string, key: string): InteractionEditReplyOptions {
-  return {
-    components: [
-      buildPanelContainer([
-        {
-          type: ComponentType.TextDisplay,
-          content: localizer(locale, key),
-        },
-      ]),
-    ],
-    flags: MessageFlags.IsComponentsV2,
-  };
+  return validateAndFallbackPanelPayload(
+    {
+      components: [
+        buildPanelContainer([
+          {
+            type: ComponentType.TextDisplay,
+            content: localizer(locale, key),
+          },
+        ]),
+      ],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    locale,
+  );
 }
 
 async function defaultResolveScope(
@@ -189,7 +197,8 @@ async function repaint(
   panelReceipt?: PanelReceipt,
   rangeIndex?: number,
 ): Promise<void> {
-  await interaction.editReply(
+  await deliverGuardedPanel(
+    interaction,
     buildStPresetsPanelPayload({
       locale,
       scope: scope.kind,
@@ -201,6 +210,7 @@ async function repaint(
       rangeIndex,
       receipt: panelReceipt,
     }),
+    { locale },
   );
 }
 

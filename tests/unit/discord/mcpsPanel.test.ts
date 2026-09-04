@@ -3,6 +3,10 @@ import { ButtonStyle, ComponentType } from "discord.js";
 import type { GuildMcpServerRow } from "@/types/db/schema";
 import type { PanelReceipt } from "@/types/discord/panel";
 import { buildAddMcpModal, buildMcpsPanelPayload } from "@/utils/discord/ui/mcpsPanel";
+import {
+  DISCORD_MESSAGE_TOTAL_COMPONENTS_MAX,
+  validateComponentsV2MessageLimits,
+} from "@/utils/discord/ui/componentsV2Limits";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
@@ -20,17 +24,6 @@ function row(id: number, overrides: Partial<GuildMcpServerRow> = {}): GuildMcpSe
     created_at: new Date(id),
     ...overrides,
   };
-}
-
-function countComponents(value: unknown): number {
-  if (Array.isArray(value)) return value.reduce((total, child) => total + countComponents(child), 0);
-  if (!value || typeof value !== "object") return 0;
-  const component = value as { type?: unknown; components?: unknown; component?: unknown };
-  return (
-    (typeof component.type === "number" ? 1 : 0) +
-    countComponents(component.components) +
-    countComponents(component.component)
-  );
 }
 
 function receipt(tone: PanelReceipt["tone"]): PanelReceipt {
@@ -99,7 +92,11 @@ describe("MCP collection panel", () => {
     expect(serialized).not.toContain("mcps:v1:select");
     expect(serialized).not.toContain("mcps:v1:range");
     expect(serialized).not.toContain(`"type":${ComponentType.StringSelect}`);
-    expect(countComponents(payload)).toBeLessThanOrEqual(40);
+    const result = validateComponentsV2MessageLimits(payload);
+    expect(
+      result.valid,
+      `Components V2 limit ${DISCORD_MESSAGE_TOTAL_COMPONENTS_MAX} violations: ${JSON.stringify(result.violations)}`,
+    ).toBe(true);
   });
 
   it("renders the compact row with a safe endpoint and no secret or auth metadata", () => {
@@ -161,7 +158,7 @@ describe("MCP collection panel", () => {
     expect(serialized).not.toContain('"label":"Refresh"');
   });
 
-  it("bounds defensive overflow within the 40-component budget", () => {
+  it("paginates defensive overflow within the 40-component budget", () => {
     const payload = buildMcpsPanelPayload({
       locale: "en-US",
       scope: "guild",
@@ -172,11 +169,15 @@ describe("MCP collection panel", () => {
     });
     const serialized = JSON.stringify(payload);
     expect(serialized).toContain("Registered MCPs `(8/5)`");
-    expect(serialized).toContain("panel can safely show only 6");
-    expect(serialized).toContain("mcps:v1:remove-prompt:en-US:6");
-    expect(serialized).not.toContain("mcps:v1:remove-prompt:en-US:7");
+    expect(serialized).toContain("Page 2 of 2");
+    expect(serialized).toContain("mcps:v1:remove-prompt:en-US:7");
+    expect(serialized).not.toContain("mcps:v1:remove-prompt:en-US:6");
     expect(serialized).toContain('"customId":"mcps:v1:add-open:en-US","label":"+ Add MCP","disabled":true');
-    expect(countComponents(payload)).toBeLessThanOrEqual(40);
+    const result = validateComponentsV2MessageLimits(payload);
+    expect(
+      result.valid,
+      `Components V2 limit ${DISCORD_MESSAGE_TOTAL_COMPONENTS_MAX} violations: ${JSON.stringify(result.violations)}`,
+    ).toBe(true);
   });
 
   it("renders receipts as non-interactive top-level containers with semantic accents", () => {

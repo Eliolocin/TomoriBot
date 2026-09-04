@@ -6,6 +6,7 @@ import {
 } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import { buildInitialPersonalMemoriesPanel } from "@/utils/discord/interactions/personalMemoriesRoutes";
+import { deliverGuardedPanel } from "@/utils/discord/interactions/panelController";
 import { localizer } from "@/utils/text/localizer";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
@@ -18,5 +19,8 @@ export async function execute(
   locale: string,
 ): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  await interaction.editReply(await buildInitialPersonalMemoriesPanel(interaction, locale));
+  await deliverGuardedPanel(interaction, await buildInitialPersonalMemoriesPanel(interaction, locale), {
+    method: "editReply",
+    locale,
+  });
 }

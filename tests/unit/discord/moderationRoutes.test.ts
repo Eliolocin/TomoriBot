@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
   ChannelType,
+  MessageFlags,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
@@ -1063,7 +1064,11 @@ describe("moderation interaction routes", () => {
       },
     } as unknown as ChatInputCommandInteraction;
 
-    await executeModerationCommand(mockInteraction, "en-US", async () => ({ components: [] }) as never);
+    await executeModerationCommand(
+      mockInteraction,
+      "en-US",
+      async () => ({ components: [], flags: MessageFlags.IsComponentsV2 }) as never,
+    );
 
     expect(log).toEqual(["deferReply:64", "editReply"]);
   });

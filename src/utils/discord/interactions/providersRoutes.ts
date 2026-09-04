@@ -11,7 +11,12 @@ import type { CustomEndpointCapability } from "@/types/db/schema";
 import type { PanelReceipt } from "@/types/discord/panel";
 import type { ProviderPanelCapabilitySection, ProviderPanelModel } from "@/types/discord/providerPanel";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
-import { beginPanelInteraction, performPanelAction } from "@/utils/discord/interactions/panelController";
+import {
+  beginPanelInteraction,
+  deliverGuardedPanel,
+  performPanelAction,
+  validateAndFallbackPanelPayload,
+} from "@/utils/discord/interactions/panelController";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import {
@@ -151,10 +156,13 @@ function isAuthorized(interaction: GlobalRoutableInteraction | ChatInputCommandI
 }
 
 function terminalPayload(locale: string, key: string): InteractionEditReplyOptions {
-  return {
-    components: [buildPanelContainer([{ type: ComponentType.TextDisplay, content: localizer(locale, key) }])],
-    flags: MessageFlags.IsComponentsV2,
-  };
+  return validateAndFallbackPanelPayload(
+    {
+      components: [buildPanelContainer([{ type: ComponentType.TextDisplay, content: localizer(locale, key) }])],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    locale,
+  );
 }
 
 async function defaultResolveScope(
@@ -493,7 +501,8 @@ function repaint(
   rangeIndex?: number,
   receipt?: PanelReceipt,
 ): Promise<unknown> {
-  return interaction.editReply(
+  return deliverGuardedPanel(
+    interaction,
     buildProvidersPanelPayload({
       locale,
       entries: scope.data.entries,
@@ -506,6 +515,7 @@ function repaint(
       routeNamespace: scope.routeNamespace,
       footerCommand: scope.footerCommand,
     }),
+    { locale },
   );
 }
 

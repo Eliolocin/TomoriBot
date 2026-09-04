@@ -25,6 +25,7 @@ import {
   decodeSpotlightMask,
 } from "@/utils/discord/personalConfigPanelCatalog";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
+import { deliverGuardedPanel, validateAndFallbackPanelPayload } from "@/utils/discord/interactions/panelController";
 import {
   buildPersonalConfigPanelPayload,
   type PersonalConfigModelDisplayInfo,
@@ -194,18 +195,21 @@ export interface PersonalConfigRouteDependencies {
 }
 
 export function terminalPayload(locale: string, key: string): InteractionEditReplyOptions {
-  return {
-    components: [
-      buildPanelContainer([
-        {
-          type: ComponentType.TextDisplay,
-          content: localizer(locale, key),
-        },
-      ]),
-    ],
-    attachments: [],
-    flags: MessageFlags.IsComponentsV2,
-  };
+  return validateAndFallbackPanelPayload(
+    {
+      components: [
+        buildPanelContainer([
+          {
+            type: ComponentType.TextDisplay,
+            content: localizer(locale, key),
+          },
+        ]),
+      ],
+      attachments: [],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    locale,
+  );
 }
 
 export function noChangesReceipt(locale: string): PanelReceipt {
@@ -335,7 +339,8 @@ export async function repaint(
     }
   }
 
-  await interaction.editReply(
+  await deliverGuardedPanel(
+    interaction,
     withPersonaPanelAvatar(
       buildPersonalConfigPanelPayload({
         locale,
@@ -368,6 +373,7 @@ export async function repaint(
       }),
       selectedPersonaAvatar,
     ),
+    { locale },
   );
 }
 

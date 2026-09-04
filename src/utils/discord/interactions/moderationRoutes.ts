@@ -11,7 +11,11 @@ import {
 import type { CooldownType } from "@/types/db/schema";
 import type { PanelReceipt } from "@/types/discord/panel";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
-import { beginPanelInteraction } from "@/utils/discord/interactions/panelController";
+import {
+  beginPanelInteraction,
+  deliverGuardedPanel,
+  validateAndFallbackPanelPayload,
+} from "@/utils/discord/interactions/panelController";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   buildMemberAccessModalFieldId,
@@ -175,17 +179,20 @@ function isAuthorized(interaction: GlobalRoutableInteraction | ChatInputCommandI
 }
 
 function terminalPayload(locale: string, key: string): InteractionEditReplyOptions {
-  return {
-    components: [
-      buildPanelContainer([
-        {
-          type: ComponentType.TextDisplay,
-          content: localizer(locale, key),
-        },
-      ]),
-    ],
-    flags: MessageFlags.IsComponentsV2,
-  };
+  return validateAndFallbackPanelPayload(
+    {
+      components: [
+        buildPanelContainer([
+          {
+            type: ComponentType.TextDisplay,
+            content: localizer(locale, key),
+          },
+        ]),
+      ],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    locale,
+  );
 }
 
 async function defaultResolveScope(
@@ -319,7 +326,8 @@ async function repaint(
   channelRemoveTarget?: string,
   roleRemoveTarget?: string,
 ): Promise<void> {
-  await interaction.editReply(
+  await deliverGuardedPanel(
+    interaction,
     buildModerationPanelPayload({
       locale,
       category,
@@ -331,6 +339,7 @@ async function repaint(
       channelRemoveTarget,
       roleRemoveTarget,
     }),
+    { locale },
   );
 }
 
@@ -2464,5 +2473,5 @@ export async function executeModerationCommand(
   buildPanel: typeof buildInitialModerationPanel = buildInitialModerationPanel,
 ): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  await interaction.editReply(await buildPanel(interaction, locale));
+  await deliverGuardedPanel(interaction, await buildPanel(interaction, locale), { locale });
 }

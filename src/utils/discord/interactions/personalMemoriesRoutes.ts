@@ -18,7 +18,12 @@ import {
 import { getCachedUserRow, invalidateUserCache } from "@/utils/cache/userCache";
 import { personaRepository, personalMemoryRepository, serverRepository, userRepository } from "@/utils/db/repositories";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
-import { beginPanelInteraction, performPanelAction } from "@/utils/discord/interactions/panelController";
+import {
+  beginPanelInteraction,
+  deliverGuardedPanel,
+  performPanelAction,
+  validateAndFallbackPanelPayload,
+} from "@/utils/discord/interactions/panelController";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   PERSONAL_MEMORIES_ROUTE_NAMESPACE,
@@ -275,18 +280,21 @@ export const personalMemoriesOperations: PersonalMemoriesOperations = {
 };
 
 function terminalPayload(locale: string, key: string): InteractionEditReplyOptions {
-  return {
-    components: [
-      buildPanelContainer([
-        {
-          type: ComponentType.TextDisplay,
-          content: localizer(locale, key),
-        },
-      ]),
-    ],
-    attachments: [],
-    flags: MessageFlags.IsComponentsV2,
-  };
+  return validateAndFallbackPanelPayload(
+    {
+      components: [
+        buildPanelContainer([
+          {
+            type: ComponentType.TextDisplay,
+            content: localizer(locale, key),
+          },
+        ]),
+      ],
+      attachments: [],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    locale,
+  );
 }
 
 async function resolveScope(
@@ -403,7 +411,8 @@ async function repaint(
   const selectedPersonaAvatar = representative
     ? await dependencies.getPersonaAvatarData(interaction, representative)
     : undefined;
-  await interaction.editReply(
+  await deliverGuardedPanel(
+    interaction,
     withPersonaPanelAvatar(
       buildPersonalMemoriesPanelPayload({
         locale,
@@ -421,6 +430,7 @@ async function repaint(
       }),
       selectedPersonaAvatar,
     ),
+    { locale },
   );
 }
 

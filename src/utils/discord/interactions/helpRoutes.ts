@@ -8,6 +8,7 @@ import {
   resolveHelpSelection,
 } from "@/utils/discord/ui/helpDashboard";
 import { getSupportedLocales } from "@/utils/text/localizer";
+import { deliverGuardedPanel } from "@/utils/discord/interactions/panelController";
 
 function resolveLocale(locale?: string | null, guildLocale?: string | null): string {
   return locale ?? guildLocale ?? "en-US";
@@ -28,7 +29,11 @@ export const helpInteractionRoute: GlobalInteractionRoute = {
       if (selection.category.id !== firstValue) {
         throw new Error(`Invalid help category: ${firstValue}`);
       }
-      await interaction.update(buildHelpDashboardPayload(locale, selection.category.id, selection.page.id));
+      await deliverGuardedPanel(
+        interaction,
+        buildHelpDashboardPayload(locale, selection.category.id, selection.page.id),
+        { method: "update", locale },
+      );
       return;
     }
 
@@ -37,7 +42,11 @@ export const helpInteractionRoute: GlobalInteractionRoute = {
       if (selection.category.id !== firstValue || selection.page.id !== secondValue) {
         throw new Error(`Invalid help navigation target: ${firstValue}:${secondValue}`);
       }
-      await interaction.update(buildHelpDashboardPayload(locale, selection.category.id, selection.page.id));
+      await deliverGuardedPanel(
+        interaction,
+        buildHelpDashboardPayload(locale, selection.category.id, selection.page.id),
+        { method: "update", locale },
+      );
       return;
     }
 
@@ -46,7 +55,11 @@ export const helpInteractionRoute: GlobalInteractionRoute = {
       if (selection.category.id !== firstValue || selection.page.id !== interaction.values[0]) {
         throw new Error(`Invalid help page selection: ${firstValue}:${interaction.values[0] ?? "missing"}`);
       }
-      await interaction.update(buildHelpDashboardPayload(locale, selection.category.id, selection.page.id));
+      await deliverGuardedPanel(
+        interaction,
+        buildHelpDashboardPayload(locale, selection.category.id, selection.page.id),
+        { method: "update", locale },
+      );
       return;
     }
 
@@ -55,8 +68,10 @@ export const helpInteractionRoute: GlobalInteractionRoute = {
       if (!selection.variant) {
         throw new Error(`Invalid help guide selection: ${interaction.values[0] ?? "missing"}`);
       }
-      await interaction.update(
+      await deliverGuardedPanel(
+        interaction,
         buildHelpDashboardPayload(locale, selection.category.id, selection.page.id, selection.variant.id),
+        { method: "update", locale },
       );
       return;
     }

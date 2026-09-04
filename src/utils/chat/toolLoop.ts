@@ -25,6 +25,7 @@ import {
 } from "@/utils/chat/contextAnnotations";
 import { takeEnhancedContextItem } from "@/utils/chat/pendingEnhancedContext";
 import type { ChatTurnContext, GenerationTurnResult, ToolHistoryEntry } from "@/utils/chat/types";
+import { neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { redactToolParametersForStorage } from "@/utils/tools/toolParameterRedaction";
 
 const MAX_FUNCTION_CALL_ITERATIONS = parseIntegerEnvFlag(process.env.BOT_MAX_FUNCTION_CALL_ITERATIONS, 100, 1);
@@ -674,7 +675,7 @@ function truncateToolFailureNotice(value: string): string {
 }
 
 function codeBlock(value: string): string {
-  return `\`\`\`json\n${value.replace(/```/g, "`\u200b``")}\n\`\`\``;
+  return `\`\`\`json\n${neutralizeFenceRuns(value)}\n\`\`\``;
 }
 
 function handleEnhancedContextRestart(params: ToolLoopParams, data: unknown): boolean {

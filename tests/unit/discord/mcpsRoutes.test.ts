@@ -161,8 +161,8 @@ describe("MCP panel routes", () => {
     expect([...handlerActions].filter((a) => !codecTableActions.includes(a))).toEqual([]);
   });
 
-  it("guarantees producer coverage against production UI and modal surfaces with exactly five allowlisted compatibility-only actions", () => {
-    const COMPATIBILITY_ONLY_ACTIONS = ["add-page", "add-type", "range", "refresh", "select"] as const;
+  it("guarantees producer coverage against production UI and modal surfaces with exactly four allowlisted compatibility-only actions", () => {
+    const COMPATIBILITY_ONLY_ACTIONS = ["add-page", "add-type", "refresh", "select"] as const;
     const ACCEPTED_12_ACTIONS = [
       "add-open",
       "add-page",
@@ -277,6 +277,7 @@ describe("MCP panel routes", () => {
     for (const action of COMPATIBILITY_ONLY_ACTIONS) {
       expect(producedActions.has(action)).toBe(false);
     }
+    expect(producedActions.has("range")).toBe(true);
 
     const unionedActions = [...new Set([...producedActions, ...COMPATIBILITY_ONLY_ACTIONS])].sort();
     expect(unionedActions).toEqual(ACCEPTED_12_ACTIONS);

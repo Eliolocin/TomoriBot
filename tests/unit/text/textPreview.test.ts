@@ -83,6 +83,69 @@ describe("buildTextPreview", () => {
     expect(preview.shownChars).toBe(CONFIRMATION_PREVIEW_BUDGET);
     expect(textPreviewFooterVars(preview)).toEqual({ shown: "200", total: "4,120" });
   });
+
+  it("never produces a lone surrogate when cutting astral-plane text", () => {
+    const input = "😀".repeat(10);
+    const preview = buildTextPreview(input, 5);
+    expect(preview.truncated).toBe(true);
+    expect(preview.shownChars).toBe(5);
+    expect(preview.totalChars).toBe(10);
+    expect([...preview.text].length).toBe(5);
+    expect(preview.text).toBe("😀".repeat(5));
+
+    for (let i = 0; i < preview.text.length; i++) {
+      const code = preview.text.charCodeAt(i);
+      if (code >= 0xd800 && code <= 0xdbff) {
+        const next = preview.text.charCodeAt(i + 1);
+        expect(next >= 0xdc00 && next <= 0xdfff).toBe(true);
+        i++;
+      } else {
+        expect(code >= 0xdc00 && code <= 0xdfff).toBe(false);
+      }
+    }
+  });
+
+  it("measures totalChars and shownChars in codepoints rather than UTF-16 code units", () => {
+    // Astral-plane emoji require 2 UTF-16 code units per codepoint.
+    const emojiInput = "🎉🎈🚀🔥🌟";
+    expect(emojiInput.length).toBe(10);
+    expect([...emojiInput].length).toBe(5);
+
+    const emojiPreview = buildTextPreview(emojiInput, 3);
+    expect(emojiPreview.totalChars).toBe(5);
+    expect(emojiPreview.shownChars).toBe(3);
+    expect(emojiPreview.truncated).toBe(true);
+    expect(emojiPreview.text).toBe("🎉🎈🚀");
+    expect([...emojiPreview.text].length).toBe(3);
+
+    // Basic Multilingual Plane characters remain 1 UTF-16 unit and 1 codepoint each.
+    const bmpPreview = buildTextPreview("你好世界", 2);
+    expect(bmpPreview.totalChars).toBe(4);
+    expect(bmpPreview.shownChars).toBe(2);
+    expect(bmpPreview.truncated).toBe(true);
+    expect(bmpPreview.text).toBe("你好");
+  });
+
+  it("never appends an ellipsis suffix to truncated text", () => {
+    const previewAscii = buildTextPreview("abcdefghij", 4);
+    expect(previewAscii.text).toBe("abcd");
+    expect(previewAscii.text.endsWith("...")).toBe(false);
+
+    const previewEmoji = buildTextPreview("😀😁😂😃😄", 3);
+    expect(previewEmoji.text).toBe("😀😁😂");
+    expect(previewEmoji.text.endsWith("...")).toBe(false);
+
+    const previewLong = buildTextPreview("x".repeat(5000), 100);
+    expect(previewLong.text).toBe("x".repeat(100));
+    expect(previewLong.text.endsWith("...")).toBe(false);
+  });
+
+  it("converges across runs of five and eight backticks leaving no adjacent backticks", () => {
+    const input = "pre`````mid````````post";
+    const preview = buildTextPreview(input);
+    expect(preview.text).not.toContain("``");
+    expect(preview.text.replaceAll("​", "")).toBe(input);
+  });
 });
 
 describe("textPreviewFooter helpers", () => {

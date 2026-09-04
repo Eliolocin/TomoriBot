@@ -274,8 +274,11 @@ function makeComponentMessage(id: string, harness: WorkflowHarness): Message {
     components: [
       {
         type: ComponentType.ActionRow,
+        components: [{ type: ComponentType.Button, custom_id: "button", style: 1, label: "Button" }],
+      },
+      {
+        type: ComponentType.ActionRow,
         components: [
-          { type: ComponentType.Button, custom_id: "button", style: 1, label: "Button" },
           {
             type: ComponentType.StringSelect,
             custom_id: "select",
@@ -1212,6 +1215,41 @@ describe("anchor persona message controller", () => {
 
       expectTypedError(failure, scenario.expectedCode);
     }
+  });
+
+  it("rejects over-budget Components V2 replacements with unsupported-replacement", async () => {
+    const harness = makeHarness();
+    queueSelection(makeButton(harness), 0);
+    let failure: unknown;
+
+    await runPersonaPickerWorkflow(harness.root, "en-US", {
+      personas: [makePersona(1)],
+      onSelected: async (selection) => {
+        try {
+          const overBudgetPayload = {
+            flags: MessageFlags.IsComponentsV2,
+            components: [
+              {
+                type: ComponentType.Container,
+                components: [
+                  {
+                    type: ComponentType.TextDisplay,
+                    content: "A".repeat(4005),
+                  },
+                ],
+              },
+            ],
+          } as unknown as PersonaWorkflowComponentsV2Payload;
+          await selection.message.replace(overBudgetPayload);
+        } catch (error) {
+          failure = error;
+        }
+        return completePersonaWorkflow();
+      },
+    });
+
+    expectTypedError(failure, "unsupported-replacement");
+    expect((failure as PersonaWorkflowUpdateError).message).toContain("TEXT_DISPLAY_TOTAL_EXCEEDED");
   });
 });
 

@@ -60,9 +60,23 @@ the constants in the gate and re-run it: the failures name every string to rewra
 
 Width is measured **as rendered**, not as stored: a link's URL and the markers around bold,
 italic, strikethrough, and inline code occupy no width on screen and are stripped before
-counting. Runtime content is out of scope, because its length is not an authoring decision:
-a memory preview, a model codename, or a user-supplied label may be any length and is bounded
-by `safeSelectOptionText` instead.
+counting. Runtime content is out of scope for the width gate, because its length is not an
+authoring decision.
+
+Runtime content is still bounded, but by a different mechanism depending on where it lands, and
+the two are not interchangeable:
+
+- **Select slots** use `safeSelectOptionText`: option labels, values and descriptions, select
+  placeholders, and modal titles and field labels. It bounds one slot against that slot's own
+  ceiling and knows nothing about the rest of the message.
+- **Body text** in a `TextDisplay` uses `buildTextPreview` against a budget derived from the
+  page's measured chrome, then the whole payload is checked by
+  `validateComponentsV2MessageLimits`. Discord caps a message at 4,000 codepoints across every
+  `TextDisplay`, so a body preview that fits its own slot can still make the message invalid.
+
+Reaching for `safeSelectOptionText` to bound a body string is a category error: it returns a
+string short enough for a select option, which says nothing about the message-wide budget the
+body actually competes for.
 
 ## Per-line markers
 
@@ -122,9 +136,18 @@ reads as panel chrome; a fence reads as the thing the user saved, which is what 
 prompt body is.
 
 Do not markdown-escape text inside a fence: escapes render literally there. Instead make the
-content fence-safe, because a value containing its own triple backtick would close the fence
-early and spill the rest of the panel into the block. `renderMemoryBlock` in
+content fence-safe, because a value containing its own backtick run would close the fence early
+and spill the rest of the panel into the block. `renderMemoryBlock` in
 `personalMemoriesPanel.ts` is the worked example.
+
+**Use `neutralizeFenceRuns` from `@/utils/text/discordTextLimits`, and never replace the literal
+triple backtick.** The literal replacement does not converge. Rewriting ``` as `` `<zwsp>`` ``
+leaves a run of four backticks as `` `<zwsp>``` ``, whose tail is still a closing delimiter, and
+applying the same pass twice does not fix it. `neutralizeFenceRuns` interleaves a zero-width
+space through the whole run, so no two backticks remain adjacent at any run length.
+
+Guard **before** truncating, not after. The guard expands a run of `N` backticks to `2N - 1`
+codepoints, so guarding a string that was already cut to the budget can push it back over.
 
 ## Jargon
 

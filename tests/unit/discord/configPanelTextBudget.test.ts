@@ -74,6 +74,15 @@ function getTextDisplays(payload: unknown): string[] {
   return contents;
 }
 
+// Tightness tolerances at stored maxima:
+// When dynamic content is truncated, rendered message Text Display total should be tight to the limit.
+// For character-cut bounded text previews (markdown fenced blocks, text prompts), cutting stops within 3 characters
+// of available budget.
+const PREVIEW_TIGHTNESS_TOLERANCE = 3;
+// For collection-row lists (e.g. channel lists), trimming is whole-row discrete units (channel mentions + newlines +
+// hidden notices), where a single channel row is ~35-45 characters. One row boundary step is bounded by 70 characters.
+const COLLECTION_ROW_TIGHTNESS_TOLERANCE = 70;
+
 describe("config page text budgeting at stored maxima", () => {
   const memoryLimits = getMemoryLimits();
   const maxAttribute = Math.min(4000, memoryLimits.maxAttributeLength);
@@ -82,6 +91,7 @@ describe("config page text budgeting at stored maxima", () => {
   const testCases = [
     {
       name: "Persona Identity & Personality",
+      maxTolerance: PREVIEW_TIGHTNESS_TOLERANCE,
       buildPayload: (locale: string, receipt: boolean) =>
         buildConfigPanelPayload({
           locale,
@@ -105,6 +115,7 @@ describe("config page text budgeting at stored maxima", () => {
     },
     {
       name: "Persona Appearance",
+      maxTolerance: PREVIEW_TIGHTNESS_TOLERANCE,
       buildPayload: (locale: string, receipt: boolean) =>
         buildConfigPanelPayload({
           locale,
@@ -114,7 +125,7 @@ describe("config page text budgeting at stored maxima", () => {
           personas: [
             makePersona({
               persona_id: 55,
-              physical_appearance_tags: ["tag1".repeat(200), "tag2".repeat(200), "tag3".repeat(400)],
+              physical_appearance_tags: ["tag1".repeat(500), "tag2".repeat(500), "tag3".repeat(500)],
             }),
           ],
           selectedPersonaId: 55,
@@ -124,6 +135,7 @@ describe("config page text budgeting at stored maxima", () => {
     },
     {
       name: "Persona Advanced",
+      maxTolerance: PREVIEW_TIGHTNESS_TOLERANCE,
       buildPayload: (locale: string, receipt: boolean) =>
         buildConfigPanelPayload({
           locale,
@@ -144,6 +156,7 @@ describe("config page text budgeting at stored maxima", () => {
     },
     {
       name: "Behavior General",
+      maxTolerance: PREVIEW_TIGHTNESS_TOLERANCE,
       buildPayload: (locale: string, receipt: boolean) => {
         const behaviorView: ConfigBehaviorView = {
           general: {
@@ -169,6 +182,7 @@ describe("config page text budgeting at stored maxima", () => {
     },
     {
       name: "Behavior Memory & STM",
+      maxTolerance: PREVIEW_TIGHTNESS_TOLERANCE,
       buildPayload: (locale: string, receipt: boolean) => {
         const behaviorView: ConfigBehaviorView = {
           memory: {
@@ -202,6 +216,7 @@ describe("config page text budgeting at stored maxima", () => {
     },
     {
       name: "Persona Memory & STM",
+      maxTolerance: PREVIEW_TIGHTNESS_TOLERANCE,
       buildPayload: (locale: string, receipt: boolean) => {
         const personaMemoryView: ConfigPersonaMemoryView = {
           serverMemoryCount: 4,
@@ -214,6 +229,7 @@ describe("config page text budgeting at stored maxima", () => {
             channelId: "channel-1",
             personaId: 55,
             personaLineageId: 55,
+            summary: "M".repeat(4000),
             categories: { summary: "M".repeat(4000) },
             lastUpdated: Date.now(),
           },
@@ -234,6 +250,7 @@ describe("config page text budgeting at stored maxima", () => {
     },
     {
       name: "Channels Destinations",
+      maxTolerance: PREVIEW_TIGHTNESS_TOLERANCE,
       buildPayload: (locale: string, receipt: boolean) => {
         const channelsView: ConfigChannelsView = {
           availableTextChannels: [],
@@ -261,6 +278,7 @@ describe("config page text budgeting at stored maxima", () => {
     },
     {
       name: "Channels Auto-Trigger",
+      maxTolerance: COLLECTION_ROW_TIGHTNESS_TOLERANCE,
       buildPayload: (locale: string, receipt: boolean) => {
         const channels = makeChannelList(220);
         const channelsView: ConfigChannelsView = {
@@ -294,6 +312,7 @@ describe("config page text budgeting at stored maxima", () => {
     },
     {
       name: "Channels Rules",
+      maxTolerance: COLLECTION_ROW_TIGHTNESS_TOLERANCE,
       buildPayload: (locale: string, receipt: boolean) => {
         const privateChannels = makeChannelList(220);
         const roleplayChannels = makeChannelList(220);
@@ -323,6 +342,7 @@ describe("config page text budgeting at stored maxima", () => {
     },
     {
       name: "Channels Overrides",
+      maxTolerance: PREVIEW_TIGHTNESS_TOLERANCE,
       buildPayload: (locale: string, receipt: boolean) => {
         const selectedId = makeSnowflake(100);
         const channelsView: ConfigChannelsView = {
@@ -370,6 +390,20 @@ describe("config page text budgeting at stored maxima", () => {
               totalText += getDiscordTextLength(text);
             }
             expect(totalText).toBeLessThanOrEqual(DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX);
+
+            const slack = DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - totalText;
+            const isTruncated = displays.some(
+              (text) =>
+                text.includes("Content truncated") ||
+                text.includes("channels hidden") ||
+                /Showing \d+ of \d+ channels/.test(text),
+            );
+            if (isTruncated) {
+              expect(
+                slack,
+                `${tc.name} [${locale}] (receipt=${receipt}) slack ${slack} exceeds tolerance ${tc.maxTolerance}`,
+              ).toBeLessThanOrEqual(tc.maxTolerance);
+            }
           });
         }
       }

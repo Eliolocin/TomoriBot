@@ -20,7 +20,12 @@ import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/
 import { getCachedUserRow } from "@/utils/cache/userCache";
 import { personaRepository, serverMemoryRepository, serverRepository, userRepository } from "@/utils/db/repositories";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
-import { beginPanelInteraction, performPanelAction } from "@/utils/discord/interactions/panelController";
+import {
+  beginPanelInteraction,
+  deliverGuardedPanel,
+  performPanelAction,
+  validateAndFallbackPanelPayload,
+} from "@/utils/discord/interactions/panelController";
 import {
   MEMORIES_ROUTE_NAMESPACE,
   MEMORIES_ROUTE_VERSION,
@@ -557,18 +562,21 @@ function noChangesReceipt(locale: string): PanelReceipt {
 }
 
 function terminalPayload(locale: string, key: string): InteractionEditReplyOptions {
-  return {
-    components: [
-      buildPanelContainer([
-        {
-          type: ComponentType.TextDisplay,
-          content: localizer(locale, key),
-        },
-      ]),
-    ],
-    attachments: [],
-    flags: MessageFlags.IsComponentsV2,
-  };
+  return validateAndFallbackPanelPayload(
+    {
+      components: [
+        buildPanelContainer([
+          {
+            type: ComponentType.TextDisplay,
+            content: localizer(locale, key),
+          },
+        ]),
+      ],
+      attachments: [],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    locale,
+  );
 }
 
 function parseDocumentChannelTags(raw: string, interaction: GlobalRoutableInteraction): string[] {
@@ -851,7 +859,8 @@ async function repaint(
     ? await dependencies.getPersonaAvatarData(interaction, representative)
     : undefined;
 
-  await interaction.editReply(
+  await deliverGuardedPanel(
+    interaction,
     withPersonaPanelAvatar(
       buildMemoriesPanelPayload({
         locale,
@@ -878,6 +887,7 @@ async function repaint(
       }),
       selectedPersonaAvatar,
     ),
+    { locale },
   );
 }
 

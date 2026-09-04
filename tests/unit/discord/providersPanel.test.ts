@@ -862,6 +862,6 @@ describe("Provider entry body stays inside the TextDisplay budget", () => {
       expect((text.content as string).length).toBeLessThanOrEqual(4000);
       expect((text.content as string).length).toBeGreaterThan(0);
     }
-    expect(JSON.stringify(panel)).toContain("more lines are not shown here");
+    expect(JSON.stringify(panel)).toContain("Showing the first 3,500 of");
   });
 });

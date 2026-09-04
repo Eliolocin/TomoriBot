@@ -66,3 +66,27 @@ describe("panel controller lifecycle", () => {
     expect(actionCalls).toEqual(["write", "reload"]);
   });
 });
+
+describe("panelController guarded delivery exports", () => {
+  it("re-exports deliverGuardedPanel and buildPanelFallbackPayload", async () => {
+    const { deliverGuardedPanel, buildPanelFallbackPayload } = await import(
+      "@/utils/discord/interactions/panelController"
+    );
+    expect(typeof deliverGuardedPanel).toBe("function");
+    expect(typeof buildPanelFallbackPayload).toBe("function");
+
+    const fallback = buildPanelFallbackPayload("en-US");
+    expect(fallback.flags).toBeDefined();
+
+    let delivered: unknown;
+    const target = {
+      editReply: async (payload: unknown) => {
+        delivered = payload;
+        return { id: "ok" };
+      },
+    };
+
+    await deliverGuardedPanel(target, fallback, { method: "editReply" });
+    expect(delivered).toEqual(fallback);
+  });
+});

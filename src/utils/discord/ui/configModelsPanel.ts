@@ -32,6 +32,7 @@ import {
 } from "@/utils/discord/ui/personalConfigParameterControls";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { formatStopStringForDisplay } from "@/utils/provider/stopStringConfig";
+import { neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { localizer } from "@/utils/text/localizer";
 
 const MODEL_CAPABILITY_LOCALE_KEYS: Record<ConfigModelCapability, string> = {
@@ -761,7 +762,7 @@ ${localizer(locale, "commands.config.panel.randomizer_description")}
 }
 
 function renderTagBlock(tags: readonly string[]): string {
-  return ["```markdown", tags.join(", ").replaceAll("```", "`​``") || " ", "```"].join("\n");
+  return ["```markdown", neutralizeFenceRuns(tags.join(", ")) || " ", "```"].join("\n");
 }
 
 function buildImageGenerationBody(input: ConfigModelsPageInput): ComponentInContainerData[] {

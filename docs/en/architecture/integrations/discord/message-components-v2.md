@@ -1045,6 +1045,86 @@ All other fields will be automatically populated by Discord.
 
 To upload a file with your message, you'll need to send your payload as `multipart/form-data` (rather than `application/json`) and include your file with a valid filename in your payload. Details and examples for uploading files can be found in the Discord API Reference.
 
+## Message limits and guarded delivery
+
+Discord rejects an oversized or grammatically invalid Components V2 message with a 400 at the REST boundary.
+The payload builds fine, passes every unit test that only inspects it, and then fails against the live API, so
+these bounds are enforced in code rather than left to authoring discipline.
+
+`src/utils/discord/ui/componentsV2Limits.ts` owns the constants and the validators. Import the constants; never
+retype the numbers.
+
+### The bounds TomoriBot enforces
+
+| Bound | Value | Notes |
+|---|---|---|
+| Total components | **40** | Counted **recursively**: top-level layout components, nested children, and Section accessories all count. Top-level array length is not the measure. |
+| Text Display total | **4,000 codepoints** | Summed across every `TextDisplay.content` in the message. Button labels and select placeholders do **not** count toward it; they have their own per-slot ceilings. |
+| Action Row | one select, or at most **5** buttons | Never a mixture. |
+| Section | 1 to 3 Text Displays, exactly one accessory | The accessory must be a supported Button or Thumbnail. |
+| String Select | 1 to 25 options | Option label, value, and description at most 100; placeholder at most 150; `minValues`/`maxValues` coherent with the option count. |
+| Button | label at most 80 | Interactive `custom_id` 1 to 100 and unique within the message; link URL at most 512. |
+| Media description | at most 1,024 | Where TomoriBot emits one. |
+
+Length is measured in **Unicode codepoints**, matching Discord's backend, not in UTF-16 code units. Use
+`getDiscordTextLength` and `truncateDiscordText` from `@/utils/text/discordTextLimits`, which is deliberately
+free of any discord.js import so tool execution paths can budget text without loading the Discord client
+runtime. `truncateDiscordText` walks grapheme clusters, so it never splits a surrogate pair or a combining
+sequence. A `.length` comparison or a `.slice()` on user content is a defect: it is wrong for CJK and emoji and
+can emit a lone surrogate.
+
+### Validation is separate from fitting
+
+`validateComponentsV2MessageLimits(payload)` is pure. It never mutates or silently truncates: it returns
+`{ valid, violations }`, where each violation names the payload path, the component type, the observed value,
+the limit, and a stable low-cardinality reason code. Builders do the fitting, by paginating a collection or
+rendering a bounded preview with a localized hidden or truncated count, while the complete stored value stays
+reachable through its existing editor, export, or detail flow.
+
+**Never satisfy a bound by lowering a stored limit, removing an action, or clipping a collection without a
+hidden count.** The transport budget is a presentation constraint, not a data constraint.
+
+### Page budgets are measured, not guessed
+
+A page derives its dynamic text budget by subtracting its **measured** fixed chrome from the message
+allowance, rather than subtracting a hand-tuned constant. A guessed reserve cannot be distinguished from a
+correct one by a validity test, since both pass, and it rots silently the moment a line of prose is added or a
+locale's wording grows. `tests/unit/discord/configPanelTextBudget.test.ts` asserts that each page at stored
+maxima is either untruncated or within a small named tolerance of the cap, so an over-generous reserve fails.
+
+### Guarded delivery
+
+Every panel transport goes through `deliverGuardedPanel` in `src/utils/discord/ui/interactionCore.ts`: initial
+reply, `editReply`, component `update`, anchor replacement, and the attachment-bearing avatar path. Terminal
+notice payloads are validated at construction instead, through `validateAndFallbackPanelPayload`, so a notice
+is checked once wherever it is delivered from.
+
+Behavior differs by environment on purpose:
+
+- Outside production the guard **throws** `ComponentsV2LimitError` carrying the violations, so a broken panel
+  fails loudly in tests and development.
+- In production it logs a **redacted** structured diagnostic and delivers a minimal localized Components V2
+  error payload in place of the invalid one. The diagnostic carries the path, component type, observed value,
+  limit, and code. It never carries stored prompt, tag, memory, receipt, or endpoint text.
+
+The guard must never throw after a successful database write and leave an acknowledged interaction
+unrepainted: an operation that already committed still has to produce a visible result, which is why the
+production branch substitutes a payload rather than propagating.
+
+### Adding a panel
+
+A new module that emits `MessageFlags.IsComponentsV2` must appear in the manifest in
+`tests/unit/discord/componentsV2ProducerManifest.test.ts`. The coverage assertion scans `src/` for that flag
+and compares the result against the manifest by module name in both directions, so an unregistered producer
+fails with a name rather than an arithmetic mismatch. An entry is either `suite`, naming boundary fixtures that
+drive its builder, or `delivery`, meaning its payload is built inline with no exported builder a fixture can
+drive and is validated at construction instead.
+
+Boundary fixtures sweep every runtime locale discovered from `src/locales/`, receipts on and off, each read
+status and page or view kind, and collection sizes around the page-size boundary. They must also vary **content
+shape**, not only collection size: a sweep in which every record carries the same short body passed 1,659
+combinations while a fence breakout and an unbounded body both went undetected.
+
 ## Legacy Message Component Behavior
 
 TomoriBot's `/mcps` collection panel is a persistent-routing example. Its `mcps:v1` custom IDs carry

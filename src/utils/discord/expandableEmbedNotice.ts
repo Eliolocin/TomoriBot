@@ -34,6 +34,7 @@ import {
 import type { StandardEmbedOptions } from "@/types/discord/embed";
 import { createStandardEmbed, type WebhookEmbedContext } from "@/utils/discord/embedHelper";
 import { buildNoticeContainer } from "@/utils/discord/ui/statusComponents";
+import { validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhook/webhookCore";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { buildTextPreview } from "@/utils/text/textPreview";
@@ -167,7 +168,9 @@ async function deliverNoticeComponents(
   channel: SupportedChannel,
   components: TopLevelComponentData[],
   webhookContext: WebhookEmbedContext | undefined,
+  locale: string,
 ): Promise<{ message: Message | null; sentViaWebhook: boolean; threadId: string | undefined }> {
+  const payload = validateAndFallbackPanelPayload({ components, flags: MessageFlags.IsComponentsV2 as const }, locale);
   // Persona webhooks live on the parent channel and need `threadId` to post
   // into a thread.
   const threadId =
@@ -183,8 +186,7 @@ async function deliverNoticeComponents(
       const message = await sendWebhookMessageWithIdentity(
         webhook,
         {
-          components,
-          flags: MessageFlags.IsComponentsV2,
+          ...payload,
           withComponents: true,
           ...(threadId ? { threadId } : {}),
         },
@@ -203,7 +205,7 @@ async function deliverNoticeComponents(
   }
 
   try {
-    const message = await channel.send({ components, flags: MessageFlags.IsComponentsV2 });
+    const message = await channel.send(payload);
     return { message, sentViaWebhook: false, threadId };
   } catch (error) {
     log.warn("CV2 notice: channel send failed", error as Error);
@@ -236,7 +238,7 @@ export async function sendNoticeContainerMessage(
     footerKey: embedOptions.footerKey,
     footerVars: embedOptions.footerVars,
   });
-  await deliverNoticeComponents(channel, components, webhookContext);
+  await deliverNoticeComponents(channel, components, webhookContext, locale);
 }
 
 async function sendEmbedWithExpand(
@@ -258,12 +260,16 @@ async function sendEmbedWithExpand(
   const disabledComponents = shouldAttachExpandButton
     ? buildNoticeComponents(locale, embedOptions, config, true, true)
     : activeComponents;
+  const disabledPayload = validateAndFallbackPanelPayload(
+    { components: disabledComponents, flags: MessageFlags.IsComponentsV2 as const },
+    locale,
+  );
 
   const {
     message: noticeMessage,
     sentViaWebhook,
     threadId,
-  } = await deliverNoticeComponents(channel, activeComponents, webhookContext);
+  } = await deliverNoticeComponents(channel, activeComponents, webhookContext, locale);
   const webhook = webhookContext?.webhook;
 
   // Short content was not truncated, so there is no collector to wire.
@@ -306,8 +312,7 @@ async function sendEmbedWithExpand(
     if (sentViaWebhook && webhook) {
       await webhook
         .editMessage(noticeMessage.id, {
-          components: disabledComponents,
-          flags: MessageFlags.IsComponentsV2,
+          ...disabledPayload,
           withComponents: true,
           ...(threadId ? { threadId } : {}),
         })
@@ -317,8 +322,7 @@ async function sendEmbedWithExpand(
     } else {
       await noticeMessage
         .edit({
-          components: disabledComponents,
-          flags: MessageFlags.IsComponentsV2,
+          ...disabledPayload,
         })
         .catch((err: unknown) => log.warn("[ExpandEmbed] Failed to disable expand button after collector end", err));
     }

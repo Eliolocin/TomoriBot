@@ -19,6 +19,7 @@ import { isBridgeUserId } from "../utils/bridges";
 import { sendMatrixReminderMention } from "../utils/bridges/matrix";
 import type { GenerationTurnResult, QueuedMessageDiscardReason } from "@/utils/chat/types";
 import { runWithErrorContext } from "@/utils/misc/errorContextStore";
+import { neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { localizer } from "@/utils/text/localizer";
 
 const REMINDER_DELIVERY_RETRY_DELAY_MS = parseIntegerEnvFlag(
@@ -63,7 +64,7 @@ function buildFallbackDescription(locale: string, reminder: ReminderRow): string
   });
   const fenceStart = "```text\n";
   const fenceEnd = "\n```";
-  const sanitizedPurpose = reminder.reminder_purpose.replaceAll("```", "`\u200b``");
+  const sanitizedPurpose = neutralizeFenceRuns(reminder.reminder_purpose);
   const purpose = truncateForEmbedDescription(
     sanitizedPurpose,
     header.length + fenceStart.length + fenceEnd.length + 1,

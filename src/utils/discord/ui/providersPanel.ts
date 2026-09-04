@@ -48,10 +48,11 @@ import {
   providerUsesApiFamily,
 } from "@/utils/provider/providerInfoRegistry";
 import { providerRequiresAlternation, providerRequiresPrefixCompletion } from "@/providers/utils/strictChatCompat";
+import { buildTextPreview, textPreviewFooterKey, textPreviewFooterVars } from "@/utils/text/textPreview";
 import { localizer } from "@/utils/text/localizer";
 
 export const PROVIDERS_ENTRIES_PER_SELECTOR_PAGE = 23;
-const MAX_MODELS_PER_SELECTOR_PAGE = 19;
+export const PROVIDERS_MODELS_PER_SELECTOR_PAGE = 19;
 export const PROVIDERS_ADD_PROVIDER_VALUE = "action:add-provider";
 export const PROVIDERS_ADD_ENDPOINT_VALUE = "action:add-endpoint";
 
@@ -781,7 +782,16 @@ function buildModelLine(locale: string, model: ProviderPanelModel, routeNamespac
  * Leaves room for the model-selector guidance that is appended to this body, inside Discord's
  * 4000-character TextDisplay limit.
  */
-const ENTRY_BODY_LIMIT = 3600;
+const ENTRY_BODY_LIMIT = 3_500;
+const PROVIDER_NAME_PREVIEW_BUDGET = 600;
+
+function renderProviderName(locale: string, value: string): string {
+  const preview = buildTextPreview(value, PROVIDER_NAME_PREVIEW_BUDGET);
+  const rendered = escapeDiscordMarkdown(preview.text);
+  const footerKey = textPreviewFooterKey(preview);
+  if (!footerKey) return rendered;
+  return `${rendered}\n-# ${localizer(locale, footerKey, textPreviewFooterVars(preview))}`;
+}
 
 function buildCapabilitySection(
   locale: string,
@@ -820,19 +830,10 @@ function buildEntryBody(locale: string, entry: ProviderPanelEntry, routeNamespac
  * remains bounded to Discord's TextDisplay limit.
  */
 function capEntryBody(locale: string, body: string): string {
-  if (body.length <= ENTRY_BODY_LIMIT) return body;
-
-  const lines = body.split("\n");
-  const kept: string[] = [];
-  let used = 0;
-  for (const line of lines) {
-    if (used + line.length + 1 > ENTRY_BODY_LIMIT) break;
-    kept.push(line);
-    used += line.length + 1;
-  }
-
-  const omitted = lines.length - kept.length;
-  return `${kept.join("\n")}\n${localizer(locale, "commands.providers.entry_truncated", { count: omitted })}`;
+  const preview = buildTextPreview(body, ENTRY_BODY_LIMIT);
+  const footerKey = textPreviewFooterKey(preview);
+  if (!footerKey) return preview.text;
+  return `${preview.text}\n-# ${localizer(locale, footerKey, textPreviewFooterVars(preview))}`;
 }
 
 function buildEntryActions(
@@ -911,7 +912,7 @@ function buildEntryModelSelector(
       .filter((model) => model.isCustomRegistration)
       .map((model) => ({ capability: section.capability, model })),
   );
-  const selection = resolveRangeSelection(customModels, rangeIndex, MAX_MODELS_PER_SELECTOR_PAGE);
+  const selection = resolveRangeSelection(customModels, rangeIndex, PROVIDERS_MODELS_PER_SELECTOR_PAGE);
   // A capability the entry does not expose cannot be registered: the shared-provider path answers
   // `unsupported-capability` and the endpoint path `not-found`, so offering it is a dead end.
   const offeredCapabilities = MODEL_SELECTION_CAPABILITIES.filter((capability) =>
@@ -1143,7 +1144,7 @@ export function buildProvidersPanelPayload(input: ProvidersPanelRenderInput): Pr
           type: ComponentType.TextDisplay,
           content: `### ${localizer(locale, "commands.providers.remove_title")}
 ${localizer(locale, `commands.providers.remove_impact_${entry.kind}`, {
-  name: escapeDiscordMarkdown(entry.displayName),
+  name: renderProviderName(locale, entry.displayName),
 })}`,
         },
         {

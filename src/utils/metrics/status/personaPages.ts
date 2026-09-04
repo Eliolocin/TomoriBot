@@ -23,6 +23,7 @@ import {
 } from "@/utils/discord/ui/personaWorkflow";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
+import { validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
 import { formatBooleanLocalized } from "@/utils/text/processors/formatters";
 import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
@@ -153,11 +154,14 @@ function buildPersonaStatusPayload(
     components,
   };
 
-  return {
-    components: [container],
-    flags: MessageFlags.IsComponentsV2,
-    allowedMentions: { parse: [] },
-  };
+  return validateAndFallbackPanelPayload(
+    {
+      components: [container],
+      flags: MessageFlags.IsComponentsV2,
+      allowedMentions: { parse: [] },
+    },
+    locale,
+  );
 }
 
 async function paginatePersonaStatus(

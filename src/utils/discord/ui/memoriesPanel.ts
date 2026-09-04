@@ -33,9 +33,16 @@ import {
   buildStateControlRow,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
+import {
+  DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX,
+  DISCORD_TEXT_INPUT_MAX,
+  measureComponentTextLength,
+} from "@/utils/discord/ui/componentsV2Limits";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
+import { getDiscordTextLength, neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { localizer } from "@/utils/text/localizer";
+import { buildTextPreview, textPreviewFooterKey, textPreviewFooterVars } from "@/utils/text/textPreview";
 import { personaRepresentativeForLineage } from "@/utils/persona/lineage";
 
 export const MAX_SERVER_MEMORY_PAGE_SIZE = 24;
@@ -407,14 +414,28 @@ export function buildEditServerMemoryModal(
 /**
  * Renders one memory as a fenced block so it reads as content rather than panel prose.
  *
- * The fence is why the text is not markdown-escaped: escapes render literally inside a code block.
- * A memory holding its own triple backtick would close the fence early and spill the rest of the
- * panel into the block, so the sequence is broken with a zero-width space, which Discord renders as
- * nothing and does not treat as a fence.
+ * Stored content is guarded via {@link neutralizeFenceRuns} so runs of backticks cannot close the
+ * markdown fence early. Rendered text is bounded to `availableBudget` (including fence syntax overhead
+ * and the footer line) using {@link buildTextPreview}, appending an honest hidden-character notice
+ * when truncation occurs. The footer reserve is measured dynamically from the preview.
  */
-function renderMemoryBlock(content: string): string {
-  const fenceSafe = content.replaceAll("```", "`\u200b``");
-  return ["```markdown", fenceSafe, "```"].join("\n");
+function renderMemoryBlock(locale: string, content: string, availableBudget: number): string {
+  const fenceOverhead = getDiscordTextLength("```markdown\n\n```");
+  const rawBudget = Math.max(0, availableBudget - fenceOverhead);
+  const initialPreview = buildTextPreview(content, rawBudget);
+  if (!initialPreview.truncated) {
+    return ["```markdown", initialPreview.text, "```"].join("\n");
+  }
+  const footerKey = textPreviewFooterKey(initialPreview);
+  const footerVars = textPreviewFooterVars(initialPreview);
+  const initialFooter = footerKey ? `\n-# ${localizer(locale, footerKey, footerVars)}` : "";
+  const footerReserve = getDiscordTextLength(initialFooter);
+  const refinedBudget = Math.max(0, availableBudget - fenceOverhead - footerReserve);
+  const preview = buildTextPreview(content, refinedBudget);
+  const finalFooterKey = textPreviewFooterKey(preview);
+  const finalFooterVars = textPreviewFooterVars(preview);
+  const finalFooter = finalFooterKey ? `\n-# ${localizer(locale, finalFooterKey, finalFooterVars)}` : "";
+  return ["```markdown", preview.text, "```"].join("\n") + finalFooter;
 }
 
 function describeServerLineageMemories(locale: string, count: number | undefined, personaCount: number): string {
@@ -487,6 +508,11 @@ function buildPayload(components: ComponentInContainerData[], receipt?: PanelRec
     components: topLevelComponents,
     flags: MessageFlags.IsComponentsV2,
   };
+}
+
+function measureReceiptTextLength(receipt?: PanelReceipt): number {
+  if (!receipt) return 0;
+  return measureComponentTextLength(buildPanelReceiptContainer(receipt));
 }
 
 function buildRetryRow(
@@ -569,6 +595,14 @@ export function buildMemoriesPanelPayload(input: MemoriesPanelRenderInput): Memo
   if (page.kind === "remove") {
     const targetMemory = memories.find((m) => m.server_memory_id === page.memoryId);
     if (targetMemory?.server_memory_id) {
+      const descriptionTemplate = localizer(locale, "commands.memories.remove_confirm_description", {
+        memory: "",
+      });
+      const titleText = `### ${localizer(locale, "commands.memories.remove_title")}\n${descriptionTemplate}`;
+      const fixedTextLength =
+        measureReceiptTextLength(receipt) + measureComponentTextLength(components) + getDiscordTextLength(titleText);
+      const availableBudget = Math.max(0, DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - fixedTextLength);
+
       components.push(
         {
           type: ComponentType.TextDisplay,
@@ -576,7 +610,7 @@ export function buildMemoriesPanelPayload(input: MemoriesPanelRenderInput): Memo
             locale,
             "commands.memories.remove_confirm_description",
             {
-              memory: renderMemoryBlock(targetMemory.content),
+              memory: renderMemoryBlock(locale, targetMemory.content, availableBudget),
             },
           )}`,
         },
@@ -616,13 +650,19 @@ export function buildMemoriesPanelPayload(input: MemoriesPanelRenderInput): Memo
   if (page.kind === "vectorize") {
     const targetMemory = memories.find((memory) => memory.server_memory_id === page.memoryId);
     if (targetMemory?.server_memory_id) {
+      const impactTemplate = localizer(locale, "commands.memories.vectorize_impact", { memory: "" });
+      const titleText = `### ${localizer(locale, "commands.memories.vectorize_title")}\n${impactTemplate}`;
+      const fixedTextLength =
+        measureReceiptTextLength(receipt) + measureComponentTextLength(components) + getDiscordTextLength(titleText);
+      const availableBudget = Math.max(0, DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - fixedTextLength);
+
       components.push(
         {
           type: ComponentType.TextDisplay,
           content: `### ${localizer(locale, "commands.memories.vectorize_title")}\n${localizer(
             locale,
             "commands.memories.vectorize_impact",
-            { memory: renderMemoryBlock(targetMemory.content) },
+            { memory: renderMemoryBlock(locale, targetMemory.content, availableBudget) },
           )}`,
         },
         {
@@ -827,9 +867,12 @@ export function buildMemoriesPanelPayload(input: MemoriesPanelRenderInput): Memo
       }
 
       if (selectedMemory) {
+        const fixedTextLength = measureReceiptTextLength(receipt) + measureComponentTextLength(components);
+        const availableBudget = Math.max(0, DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - fixedTextLength);
+
         components.push({
           type: ComponentType.TextDisplay,
-          content: renderMemoryBlock(selectedMemory.content),
+          content: renderMemoryBlock(locale, selectedMemory.content, availableBudget),
         });
       } else {
         components.push({
@@ -1149,14 +1192,36 @@ ${localizer(locale, "commands.memories.documents_description")}`,
       const requestedPosition = chunks.findIndex((candidate) => candidate.chunk_index === documentPage.chunkIdx);
       const chunkIndex = requestedPosition >= 0 ? requestedPosition : 0;
       const chunk = chunks[chunkIndex];
+      const titleContent = `**${safeSelectOptionText(selectedDocument.document_name, 250)}**`;
+      const removePromptComponent =
+        page.kind === "document-chunk-remove" && chunk
+          ? [
+              {
+                type: ComponentType.TextDisplay as const,
+                content: `### ${localizer(locale, "commands.memories.document_chunk_remove_title")}\n${localizer(
+                  locale,
+                  chunks.length === 1
+                    ? "commands.memories.document_chunk_remove_last_description"
+                    : "commands.memories.document_chunk_remove_description",
+                )}`,
+              },
+            ]
+          : [];
+      const fixedTextLength =
+        measureReceiptTextLength(receipt) +
+        measureComponentTextLength(components) +
+        getDiscordTextLength(titleContent) +
+        measureComponentTextLength(removePromptComponent);
+      const availableBudget = Math.max(0, DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - fixedTextLength);
+
       components.push({
         type: ComponentType.TextDisplay,
-        content: `**${safeSelectOptionText(selectedDocument.document_name, 250)}**`,
+        content: titleContent,
       });
       components.push({
         type: ComponentType.TextDisplay,
         content: chunk
-          ? renderMemoryBlock(chunk.content.slice(0, 3800))
+          ? renderMemoryBlock(locale, chunk.content, availableBudget)
           : `> ${localizer(locale, "commands.memories.document_no_chunks")}`,
       });
       if (chunks.length > 1) {
@@ -1206,7 +1271,7 @@ ${localizer(locale, "commands.memories.documents_description")}`,
               chunkIdx: chunk.chunk_index,
             }),
             label: localizer(locale, "commands.memories.document_chunk_edit_button"),
-            disabled: writesDisabled || chunk.content.length > 4000,
+            disabled: writesDisabled || getDiscordTextLength(chunk.content) > DISCORD_TEXT_INPUT_MAX,
           },
           {
             type: ComponentType.Button,

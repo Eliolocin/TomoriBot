@@ -4,6 +4,10 @@ import { ComponentType } from "discord.js";
 import type { StPresetNodeRow, StPresetRow } from "@/types/db/schema";
 import type { PanelReceipt } from "@/types/discord/panel";
 import {
+  DISCORD_MESSAGE_TOTAL_COMPONENTS_MAX,
+  validateComponentsV2MessageLimits,
+} from "@/utils/discord/ui/componentsV2Limits";
+import {
   buildStPresetsRouteId,
   buildStPresetsRouteSegments,
   listStPresetsPanelActions,
@@ -52,17 +56,6 @@ function makeNode(id: number, overrides: Partial<StPresetNodeRow> = {}): StPrese
     injection_order: 100,
     ...overrides,
   };
-}
-
-function countComponents(value: unknown): number {
-  if (Array.isArray(value)) return value.reduce((total, child) => total + countComponents(child), 0);
-  if (!value || typeof value !== "object") return 0;
-  const component = value as { type?: unknown; components?: unknown; component?: unknown };
-  return (
-    (typeof component.type === "number" ? 1 : 0) +
-    countComponents(component.components) +
-    countComponents(component.component)
-  );
 }
 
 function receipt(tone: PanelReceipt["tone"]): PanelReceipt {
@@ -966,8 +959,11 @@ describe("ST Presets panel rendering", () => {
       receipt: receipt("warning"),
     });
 
-    const totalComponents = countComponents(payload);
-    expect(totalComponents).toBeLessThanOrEqual(40);
+    const result = validateComponentsV2MessageLimits(payload);
+    expect(
+      result.valid,
+      `Components V2 limit ${DISCORD_MESSAGE_TOTAL_COMPONENTS_MAX} violations: ${JSON.stringify(result.violations)}`,
+    ).toBe(true);
   });
 });
 

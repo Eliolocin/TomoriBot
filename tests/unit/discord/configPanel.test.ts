@@ -21,6 +21,7 @@ import {
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type { ConfigPersonaMemoryView } from "@/utils/discord/interactions/configRouteContext";
 import { validateComponentsV2MessageLimits } from "@/utils/discord/ui/componentsV2Limits";
+import { buildConfigModelsBody } from "@/utils/discord/ui/configModelsPanel";
 import { buildConfigPanelPayload } from "@/utils/discord/ui/configPanel";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
@@ -1543,5 +1544,41 @@ describe("config Behavior pages", () => {
         start: CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
       })?.disabled,
     ).toBe(false);
+  });
+
+  describe("configModelsPanel image tags fence guard convergence", () => {
+    for (const runLen of [3, 4, 5, 6, 8]) {
+      it(`neutralizes backtick runs of ${runLen} in image tags so no two adjacent backticks survive`, () => {
+        const backtickRun = `tag_${"`".repeat(runLen)}_test`;
+        const components = buildConfigModelsBody({
+          locale: "en-US",
+          page: "image",
+          readStatus: "fresh",
+          imageView: {
+            positiveTags: [backtickRun],
+            negativeTags: [`neg_${"`".repeat(runLen)}_run`],
+            sampler: "Euler",
+            steps: "28",
+            scale: "5.0",
+            noiseSchedule: "native",
+            cfgRescale: "0.0",
+          },
+        });
+        const displays = walk(components).filter(
+          (c): c is typeof c & { content: string } =>
+            typeof c.content === "string" && c.content.includes("```markdown"),
+        );
+        expect(displays.length).toBeGreaterThanOrEqual(1);
+        for (const display of displays) {
+          const content = display.content;
+          const fenceMatches = [...content.matchAll(/```markdown\n([\s\S]*?)\n```/g)];
+          expect(fenceMatches.length).toBeGreaterThanOrEqual(2);
+          for (const match of fenceMatches) {
+            const innerContent = match[1];
+            expect(innerContent).not.toContain("``");
+          }
+        }
+      });
+    }
   });
 });

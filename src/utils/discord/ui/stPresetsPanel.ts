@@ -30,10 +30,20 @@ import {
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
 import { safeModalLocalizer, safeSelectOptionText } from "@/utils/discord/ui/modals";
+import { buildTextPreview, textPreviewFooterKey, textPreviewFooterVars } from "@/utils/text/textPreview";
 import { localizer } from "@/utils/text/localizer";
 
-const MAX_PRESETS_PER_SELECTOR_PAGE = 23;
+export const MAX_PRESETS_PER_SELECTOR_PAGE = 23;
 const MAX_NODE_OPTIONS_PER_GROUP = 10;
+const ST_PRESET_DESCRIPTION_PREVIEW_BUDGET = 1_200;
+
+function renderStPresetText(locale: string, value: string): string {
+  const preview = buildTextPreview(value, ST_PRESET_DESCRIPTION_PREVIEW_BUDGET);
+  const rendered = escapeDiscordMarkdown(preview.text);
+  const footerKey = textPreviewFooterKey(preview);
+  if (!footerKey) return rendered;
+  return `${rendered}\n-# ${localizer(locale, footerKey, textPreviewFooterVars(preview))}`;
+}
 
 export type StPresetsPanelPage =
   | {
@@ -254,7 +264,7 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
 
       const bodyLines = [activeLine];
       if (targetPreset.description && targetPreset.description.trim().length > 0) {
-        bodyLines.push(`> ${escapeDiscordMarkdown(targetPreset.description.trim())}`);
+        bodyLines.push(`> ${renderStPresetText(locale, targetPreset.description)}`);
       }
 
       components.push(
@@ -358,7 +368,7 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
         content: `### ${localizer(locale, "commands.st-presets.delete_title")}\n${localizer(
           locale,
           "commands.st-presets.delete_description",
-          { name: escapeDiscordMarkdown(targetPreset?.preset_name ?? "preset") },
+          { name: renderStPresetText(locale, targetPreset?.preset_name ?? "preset") },
         )}`,
       },
       {

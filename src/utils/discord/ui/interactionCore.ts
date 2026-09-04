@@ -22,7 +22,10 @@ import type {
   Message,
   MessageActionRowComponentBuilder,
   ModalSubmitInteraction,
+  InteractionEditReplyOptions,
   InteractionReplyOptions,
+  InteractionUpdateOptions,
+  MessagePayload,
   MentionableSelectMenuInteraction,
   RoleSelectMenuInteraction,
   APIAttachment,
@@ -41,7 +44,14 @@ import type {
 import type { TomoriState } from "@/types/db/schema";
 import { resolveAlterPersonaAvatarAsset, type PersonaAvatarAsset } from "@/utils/discord/personaPanelAvatar";
 import { getLastDbError } from "@/utils/cache/tomoriStateCache";
-import { truncateDiscordText } from "./componentsV2Limits";
+import {
+  ComponentsV2LimitError,
+  truncateDiscordText,
+  validateComponentsV2MessageLimits,
+  type ComponentsV2MessagePayload,
+} from "./componentsV2Limits";
+export { ComponentsV2LimitError, validateComponentsV2MessageLimits, type ComponentsV2MessagePayload };
+import { buildPanelContainer } from "./panel";
 
 // Clean storage for select values (Discord.js will strip them, so we preserve them)
 const modalSelectValues = new Map<string, Record<string, string>>();
@@ -1906,6 +1916,191 @@ export async function acknowledgeModalSubmitForRefresh(interaction: ModalSubmitI
   } catch (error) {
     log.warn("Failed to silently acknowledge modal submit for picker refresh:", error);
   }
+}
+
+export interface GuardedPanelWorkflowController {
+  replace(payload: unknown): Promise<unknown>;
+  replaceFrom?(source: unknown, payload: unknown): Promise<unknown>;
+}
+
+export type GuardedPanelDeliveryTarget =
+  | ChatInputCommandInteraction
+  | ButtonInteraction
+  | StringSelectMenuInteraction
+  | ChannelSelectMenuInteraction
+  | RoleSelectMenuInteraction
+  | UserSelectMenuInteraction
+  | MentionableSelectMenuInteraction
+  | ModalSubmitInteraction
+  | GuardedPanelWorkflowController
+  | {
+      editReply?: (payload: InteractionEditReplyOptions | MessagePayload | string) => Promise<unknown>;
+      update?: (payload: InteractionUpdateOptions | MessagePayload | string) => Promise<unknown>;
+      reply?: (payload: InteractionReplyOptions | MessagePayload | string) => Promise<unknown>;
+      replace?: (payload: unknown) => Promise<unknown>;
+      replaceFrom?: (source: unknown, payload: unknown) => Promise<unknown>;
+      deferred?: boolean;
+      replied?: boolean;
+    };
+
+export type GuardedPanelDeliveryMethod = "editReply" | "update" | "reply" | "replace" | "replaceFrom";
+
+export interface GuardedPanelDeliveryOptions {
+  /** Delivery transport to invoke on the target. Defaults to editReply, falling back to available methods. */
+  method?: GuardedPanelDeliveryMethod;
+  /** Locale used to localize the minimal fallback payload if the provided payload is invalid. */
+  locale?: string;
+  /** Source interaction when method is "replace" and target provides replaceFrom. */
+  sourceInteraction?: unknown;
+  /** Flags override, e.g. Ephemeral | IsComponentsV2 for initial reply. */
+  flags?: MessageFlags | number;
+}
+
+/**
+ * Resolves whether the current environment should enforce production behavior for panel delivery.
+ * Reads dynamically from environment variables with fallback so runtime mode switches are detected immediately.
+ */
+export function isProductionEnvironment(): boolean {
+  const env = process.env.RUN_ENV || process.env.NODE_ENV || "development";
+  return env.toLowerCase() === "production";
+}
+
+/**
+ * Builds the minimal fallback Components V2 container payload for panel delivery.
+ * Contains only a localized error title and description in a single container.
+ * Guaranteed to satisfy validateComponentsV2MessageLimits.
+ */
+export function buildPanelFallbackPayload(locale = "en-US"): ComponentsV2MessagePayload {
+  const container = buildPanelContainer([
+    {
+      type: ComponentType.TextDisplay,
+      content: localizer(locale, "general.errors.unknown_error_description"),
+    },
+  ]);
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2,
+  };
+}
+
+/**
+ * Validates a Components V2 payload before it reaches a delivery transport.
+ *
+ * Invalid payloads throw outside production so tests and development expose the exact violation.
+ * Production logs only structured limit metadata and returns the minimal fallback while retaining
+ * attachment fields as empty arrays when the original payload included them.
+ */
+export function validateAndFallbackPanelPayload<T>(payload: T, locale = "en-US"): T {
+  const validation = validateComponentsV2MessageLimits(payload as ComponentsV2MessagePayload);
+  if (validation.valid) return payload;
+
+  if (!isProductionEnvironment()) {
+    const summary = validation.violations
+      .map((v) => `${v.path}: [${v.code}] observed ${v.observed} (limit ${v.limit})`)
+      .join("; ");
+    throw new ComponentsV2LimitError(
+      `Components V2 panel payload exceeded Discord limits: ${summary}`,
+      validation.violations,
+    );
+  }
+
+  const sanitizedViolations = validation.violations.map((v) => ({
+    path: v.path,
+    componentType: v.componentType,
+    observed: v.observed,
+    limit: v.limit,
+    code: v.code,
+  }));
+
+  void log.error("Components V2 panel payload exceeded Discord limits", undefined, {
+    metadata: {
+      violations: sanitizedViolations,
+    },
+  });
+
+  const fallback = buildPanelFallbackPayload(locale);
+  const original = payload as Record<string, unknown>;
+  return {
+    ...fallback,
+    ...(payload && typeof payload === "object" && "attachments" in original ? { attachments: [] } : {}),
+    ...(payload && typeof payload === "object" && "files" in original ? { files: [] } : {}),
+  } as T;
+}
+
+/**
+ * Universal guarded delivery helper used across all panel transports (initial reply,
+ * editReply, component update, anchor replacement, and avatar-bearing paths).
+ *
+ * In tests and development, surfaces exact limit violations loudly.
+ * In production, logs a redacted structured diagnostic and delivers the minimal fallback
+ * payload so committed operations always leave an acknowledged interaction repainted.
+ */
+export async function deliverGuardedPanel<T = unknown>(
+  target: GuardedPanelDeliveryTarget | ((payload: unknown) => Promise<T>),
+  payload: unknown,
+  options?: GuardedPanelDeliveryOptions,
+): Promise<T> {
+  const locale = options?.locale ?? "en-US";
+  let deliveryPayload = validateAndFallbackPanelPayload(payload, locale) as Record<string, unknown>;
+
+  if (options?.method === "reply" && options?.flags !== undefined) {
+    deliveryPayload = {
+      ...deliveryPayload,
+      flags: options.flags,
+    };
+  }
+
+  let result: T;
+  if (typeof target === "function") {
+    result = (await target(deliveryPayload)) as T;
+  } else {
+    const candidate = target as Record<string, unknown>;
+    if (options?.method === "update") {
+      if (typeof candidate.update !== "function") {
+        throw new TypeError("Target does not support update delivery");
+      }
+      result = (await (candidate.update as (payload: unknown) => Promise<unknown>)(deliveryPayload)) as T;
+    } else if (options?.method === "reply") {
+      if (typeof candidate.reply !== "function") {
+        throw new TypeError("Target does not support reply delivery");
+      }
+      result = (await (candidate.reply as (payload: unknown) => Promise<unknown>)(deliveryPayload)) as T;
+    } else if (options?.method === "replace" || options?.method === "replaceFrom") {
+      if (options?.sourceInteraction && typeof candidate.replaceFrom === "function") {
+        result = (await (candidate.replaceFrom as (source: unknown, payload: unknown) => Promise<unknown>)(
+          options.sourceInteraction,
+          deliveryPayload,
+        )) as T;
+      } else if (typeof candidate.replace === "function") {
+        result = (await (candidate.replace as (payload: unknown) => Promise<unknown>)(deliveryPayload)) as T;
+      } else {
+        throw new TypeError("Target does not support replace delivery");
+      }
+    } else {
+      if (typeof candidate.editReply === "function") {
+        result = (await (candidate.editReply as (payload: unknown) => Promise<unknown>)(deliveryPayload)) as T;
+      } else if (typeof candidate.update === "function") {
+        result = (await (candidate.update as (payload: unknown) => Promise<unknown>)(deliveryPayload)) as T;
+      } else if (typeof candidate.replace === "function") {
+        result = (await (candidate.replace as (payload: unknown) => Promise<unknown>)(deliveryPayload)) as T;
+      } else if (typeof candidate.reply === "function") {
+        result = (await (candidate.reply as (payload: unknown) => Promise<unknown>)(deliveryPayload)) as T;
+      } else {
+        throw new TypeError("Target does not provide a known delivery method");
+      }
+    }
+  }
+
+  if (typeof target === "object" && target !== null) {
+    try {
+      markComponentsV2Reply(target as unknown as ChatInputCommandInteraction);
+    } catch {
+      // Best-effort tracking
+    }
+  }
+
+  return result;
 }
 
 /**

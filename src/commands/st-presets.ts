@@ -1,6 +1,7 @@
 import { MessageFlags, type ChatInputCommandInteraction, type Client, type SlashCommandBuilder } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import { buildInitialStPresetsPanel } from "@/utils/discord/interactions/stPresetsRoutes";
+import { deliverGuardedPanel } from "@/utils/discord/interactions/panelController";
 import { localizer } from "@/utils/text/localizer";
 
 export const managerOnly = true;
@@ -23,5 +24,8 @@ export async function executeStPresetsCommand(
   buildPanel: typeof buildInitialStPresetsPanel = buildInitialStPresetsPanel,
 ): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  await interaction.editReply(await buildPanel(interaction, locale));
+  await deliverGuardedPanel(interaction, await buildPanel(interaction, locale), {
+    method: "editReply",
+    locale,
+  });
 }

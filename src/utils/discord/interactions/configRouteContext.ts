@@ -34,6 +34,7 @@ import type { ConfigActor } from "@/utils/discord/interactions/configPermissionP
 import type { ConfigPersonaOperations, GuildIdentityPort } from "@/utils/discord/interactions/configPersonaOperations";
 import type { ConfigSpriteOperations } from "@/utils/discord/interactions/configSpriteOperations";
 import type { ConfigModelOperations } from "@/utils/discord/interactions/configModelOperations";
+import { deliverGuardedPanel, validateAndFallbackPanelPayload } from "@/utils/discord/interactions/panelController";
 import type { ConfigFallbackOption } from "@/utils/discord/ui/configModelModals";
 import type {
   ConfigFallbacksView,
@@ -252,18 +253,21 @@ export function asEphemeralComponentsV2FollowUp(
 }
 
 export function terminalPayload(locale: string, key: string): InteractionEditReplyOptions {
-  return {
-    components: [
-      buildPanelContainer([
-        {
-          type: ComponentType.TextDisplay,
-          content: localizer(locale, key),
-        },
-      ]),
-    ],
-    attachments: [],
-    flags: MessageFlags.IsComponentsV2,
-  };
+  return validateAndFallbackPanelPayload(
+    {
+      components: [
+        buildPanelContainer([
+          {
+            type: ComponentType.TextDisplay,
+            content: localizer(locale, key),
+          },
+        ]),
+      ],
+      attachments: [],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    locale,
+  );
 }
 
 export function deniedReceipt(locale: string): PanelReceipt {
@@ -442,7 +446,8 @@ export async function repaint(
     }
   }
 
-  await interaction.editReply(
+  await deliverGuardedPanel(
+    interaction,
     withPersonaPanelAvatar(
       buildConfigPanelPayload({
         locale,
@@ -486,5 +491,6 @@ export async function repaint(
       }),
       [avatar, spriteAvatar].filter((item): item is PersonaPanelAvatarData => item !== undefined),
     ),
+    { locale },
   );
 }

@@ -102,8 +102,10 @@ import { buildSlugMap } from "@/utils/text/slugifyLabel";
 import {
   DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX,
   getDiscordTextLength,
+  measureComponentTextLength,
   truncateDiscordText,
 } from "@/utils/discord/ui/componentsV2Limits";
+import { FENCE_GUARD, neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { getCapabilitiesManagePermissionDefinitions } from "@/utils/discord/manageConfigMapping";
@@ -255,35 +257,20 @@ function buildPayload(components: ComponentInContainerData[], receipt?: PanelRec
   };
 }
 
-/**
- * Text Display budget reserved for shared chrome outside page body builders:
- * covers the appended persona creation hint (~110 codepoints) and surrounding whitespace.
- */
-const CONFIG_PANEL_CHROME_TEXT_RESERVE = 200;
-
-function measureComponentTextLength(component: unknown): number {
-  if (!component || typeof component !== "object") return 0;
-  let total = 0;
-  const comp = component as { type?: unknown; content?: unknown; components?: unknown[] };
-  if (comp.type === ComponentType.TextDisplay && typeof comp.content === "string") {
-    total += getDiscordTextLength(comp.content);
-  }
-  if (Array.isArray(comp.components)) {
-    for (const child of comp.components) {
-      total += measureComponentTextLength(child);
-    }
-  }
-  return total;
-}
-
 function measureReceiptTextLength(receipt?: PanelReceipt): number {
   if (!receipt) return 0;
   return measureComponentTextLength(buildPanelReceiptContainer(receipt));
 }
 
-function getConfigPageTextAllowance(input: ConfigPanelRenderInput): number {
+function measurePersonaCreateHintLength(locale: string): number {
+  const content = withLinePrefix("-# ", localizer(locale, "commands.config.panel.persona_create_hint"));
+  return 2 + getDiscordTextLength(content);
+}
+
+function getBasePageTextAllowance(input: ConfigPanelRenderInput, isPersonaPage = false): number {
   const receiptLength = measureReceiptTextLength(input.receipt);
-  return Math.max(0, DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - CONFIG_PANEL_CHROME_TEXT_RESERVE - receiptLength);
+  const hintLength = isPersonaPage ? measurePersonaCreateHintLength(input.locale) : 0;
+  return Math.max(0, DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - receiptLength - hintLength);
 }
 
 function appendPersonaCreateHint(components: ComponentInContainerData[], locale: string): void {
@@ -430,22 +417,6 @@ function buildPersonaSelectorRows(input: ConfigPanelRenderInput): ComponentInCon
   if (paginationRow) rows.push(paginationRow);
 
   return rows;
-}
-
-/** Zero-width space: renders as nothing, but stops a backtick run from parsing as a fence. */
-const FENCE_GUARD = "​";
-
-/**
- * Breaks up every run of two or more backticks so stored content cannot close the fence it is
- * rendered inside.
- *
- * Replacing the literal triple backtick instead leaves a fence intact for some run lengths: five
- * backticks guard to `` `<zwsp>```` ``, whose tail is still a closing delimiter, and applying the
- * same replacement twice does not converge. Interleaving the whole run leaves no two backticks
- * adjacent at any length. This mirrors `neutralizeCodeFences` in `@/utils/text/textPreview`.
- */
-function neutralizeFenceRuns(content: string): string {
-  return content.replace(/`{2,}/g, (run) => run.split("").join(FENCE_GUARD));
 }
 
 function renderFencedCollectionContent(content: string): string {
@@ -628,10 +599,62 @@ function mayWritePersonaCollection(
   );
 }
 
+function getPersonaGeneralFixedChromeLength(input: ConfigPanelRenderInput, persona: TomoriState): number {
+  const { locale, selectedPersonaAvatarUrl } = input;
+  const heading: TextDisplayComponentData = {
+    type: ComponentType.TextDisplay,
+    content: `### ${localizer(locale, "commands.config.panel.general_title")}
+${localizer(locale, "commands.config.panel.general_description")}
+> ${localizer(locale, "commands.config.panel.name_label")}: ${escapeDiscordMarkdown(persona.persona_nickname)}
+> ${localizer(locale, "commands.config.panel.role_label")}: ${localizer(
+      locale,
+      persona.is_alter ? "commands.config.panel.role_alter" : "commands.config.panel.role_main",
+    )}`,
+  };
+  const headingComp = buildOptionalThumbnailSection(heading, selectedPersonaAvatarUrl);
+
+  const mayWriteAttr = mayWritePersonaCollection(input, "attribute-add", input.attributeMemteachingEnabled);
+  const attrTitleDesc = `${localizer(locale, "commands.config.panel.attributes_title")}
+${localizer(locale, "commands.config.panel.attributes_description")}`;
+  const attrDisabled = mayWriteAttr
+    ? ""
+    : withLinePrefix("-# ", localizer(locale, "commands.config.panel.collection_teaching_disabled"));
+
+  const mayWriteDlg = mayWritePersonaCollection(input, "dialogue-add", input.sampledialogueMemteachingEnabled);
+  const dlgTitleDesc = `${localizer(locale, "commands.config.panel.dialogues_title")}
+${localizer(locale, "commands.config.panel.dialogues_description")}`;
+  const dlgDisabled = mayWriteDlg
+    ? ""
+    : withLinePrefix("-# ", localizer(locale, "commands.config.panel.collection_teaching_disabled"));
+
+  const attributes = persona.attribute_list ?? [];
+  const hasSelectedAttr =
+    input.selectedAttributeIndex !== undefined &&
+    input.selectedAttributeIndex >= 0 &&
+    input.selectedAttributeIndex < attributes.length;
+
+  const pairCount = Math.min(persona.sample_dialogues_in?.length ?? 0, persona.sample_dialogues_out?.length ?? 0);
+  const hasSelectedDlg =
+    input.selectedDialogueIndex !== undefined &&
+    input.selectedDialogueIndex >= 0 &&
+    input.selectedDialogueIndex < pairCount;
+
+  let fixed = measureComponentTextLength(headingComp);
+  fixed += getDiscordTextLength(attrTitleDesc);
+  if (attrDisabled) fixed += getDiscordTextLength(attrDisabled);
+  if (hasSelectedAttr) fixed += 1;
+
+  fixed += getDiscordTextLength(dlgTitleDesc);
+  if (dlgDisabled) fixed += getDiscordTextLength(dlgDisabled);
+  if (hasSelectedDlg) fixed += 1;
+
+  return fixed;
+}
+
 function getPersonaGeneralCollectionBudget(input: ConfigPanelRenderInput, persona: TomoriState): number {
-  const allowance = getConfigPageTextAllowance(input);
-  const staticReserve = 600;
-  const available = Math.max(0, allowance - staticReserve);
+  const allowance = getBasePageTextAllowance(input, true);
+  const fixedReserve = getPersonaGeneralFixedChromeLength(input, persona);
+  const available = Math.max(0, allowance - fixedReserve);
 
   const attributes = persona.attribute_list ?? [];
   const hasSelectedAttr =
@@ -1262,11 +1285,32 @@ ${localizer(locale, "commands.config.panel.appearance_description")}`,
   const actionState = (action: Parameters<typeof resolvePersonaAdvancedActionState>[0]) =>
     resolvePersonaAdvancedActionState(action, actor);
 
+  const characterReferenceState = actionState("character-reference");
+  let characterRefTextDisplay: ComponentInContainerData | undefined;
+  if (characterReferenceState !== "omitted") {
+    const reference = persona.nai_char_ref_url
+      ? localizer(locale, "commands.config.panel.character_reference_uploaded")
+      : localizer(locale, "commands.config.panel.none_label");
+    characterRefTextDisplay = {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.character_reference_title")}**
+${localizer(locale, "commands.config.panel.character_reference_description")}
+> ${localizer(locale, "commands.config.panel.character_reference_image_label")}: ${reference}`,
+    };
+  }
+
   const imageTagsState = actionState("image-tags");
   if (imageTagsState !== "omitted") {
     const tags = persona.physical_appearance_tags ?? [];
-    const allowance = getConfigPageTextAllowance(input);
-    const tagsBudget = Math.max(0, allowance - 500);
+    const imageTagsHeader = `**${localizer(locale, "commands.config.panel.image_tags_title")}**
+${localizer(locale, "commands.config.panel.image_tags_description")}
+`;
+    const baseAllowance = getBasePageTextAllowance(input, true);
+    let fixedTextLength = measureComponentTextLength(components[0]) + getDiscordTextLength(imageTagsHeader);
+    if (characterRefTextDisplay) {
+      fixedTextLength += measureComponentTextLength(characterRefTextDisplay);
+    }
+    const tagsBudget = Math.max(0, baseAllowance - fixedTextLength);
     const renderedTags =
       tags.length > 0
         ? renderBoundedFencedContent(locale, tags.join(", "), tagsBudget).rendered
@@ -1274,9 +1318,7 @@ ${localizer(locale, "commands.config.panel.appearance_description")}`,
     components.push(
       {
         type: ComponentType.TextDisplay,
-        content: `**${localizer(locale, "commands.config.panel.image_tags_title")}**
-${localizer(locale, "commands.config.panel.image_tags_description")}
-${renderedTags}`,
+        content: `${imageTagsHeader}${renderedTags}`,
       },
       {
         type: ComponentType.ActionRow,
@@ -1293,38 +1335,26 @@ ${renderedTags}`,
     );
   }
 
-  const characterReferenceState = actionState("character-reference");
-  if (characterReferenceState !== "omitted") {
-    const reference = persona.nai_char_ref_url
-      ? localizer(locale, "commands.config.panel.character_reference_uploaded")
-      : localizer(locale, "commands.config.panel.none_label");
-    components.push(
-      {
-        type: ComponentType.TextDisplay,
-        content: `**${localizer(locale, "commands.config.panel.character_reference_title")}**
-${localizer(locale, "commands.config.panel.character_reference_description")}
-> ${localizer(locale, "commands.config.panel.character_reference_image_label")}: ${reference}`,
-      },
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            customId: buildConfigRouteId({ action: "character-reference-open", locale, personaId }),
-            label: localizer(locale, "commands.config.panel.upload_reference_button"),
-            disabled: writesDisabled || characterReferenceState === "disabled",
-          },
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Danger,
-            customId: buildConfigRouteId({ action: "character-reference-clear-view", locale, personaId }),
-            label: localizer(locale, "commands.config.panel.clear_reference_button"),
-            disabled: writesDisabled || characterReferenceState === "disabled" || !persona.nai_char_ref_url,
-          },
-        ],
-      },
-    );
+  if (characterRefTextDisplay) {
+    components.push(characterRefTextDisplay, {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "character-reference-open", locale, personaId }),
+          label: localizer(locale, "commands.config.panel.upload_reference_button"),
+          disabled: writesDisabled || characterReferenceState === "disabled",
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Danger,
+          customId: buildConfigRouteId({ action: "character-reference-clear-view", locale, personaId }),
+          label: localizer(locale, "commands.config.panel.clear_reference_button"),
+          disabled: writesDisabled || characterReferenceState === "disabled" || !persona.nai_char_ref_url,
+        },
+      ],
+    });
   }
 
   return components;
@@ -1366,9 +1396,63 @@ ${localizer(locale, "commands.config.panel.advanced_description")}`,
   const contextState = actionState("context-note");
   const hasPromptContent = promptState !== "omitted" && Boolean(persona.persona_prompt?.trim());
   const hasContextContent = contextState !== "omitted" && Boolean(persona.context_note?.trim());
-  const advancedAllowance = getConfigPageTextAllowance(input);
-  const advancedStaticReserve = 800;
-  const advancedDynamicAllowance = Math.max(0, advancedAllowance - advancedStaticReserve);
+  const baseAllowance = getBasePageTextAllowance(input, true);
+  const promptHeader =
+    promptState !== "omitted"
+      ? `**${localizer(locale, "commands.config.panel.persona_prompt_title")}**\n${localizer(locale, "commands.config.panel.persona_prompt_description")}\n`
+      : "";
+  const contextHeader =
+    contextState !== "omitted"
+      ? `**${localizer(locale, "commands.config.panel.context_note_title")}**\n${localizer(locale, "commands.config.panel.context_note_description")}\n> ${localizer(locale, "commands.config.panel.context_note_depth", { depth: persona.context_note_depth ?? 0 })}\n`
+      : "";
+  const noneContent = renderFencedCollectionContent(localizer(locale, "commands.config.panel.none_label"));
+  const humanizerState = actionState("humanizer");
+  const humanizerValue = persona.humanizer_degree_override ?? null;
+  const humanizerTextDisplay: ComponentInContainerData | undefined =
+    humanizerState !== "omitted"
+      ? {
+          type: ComponentType.TextDisplay,
+          content: `**${localizer(locale, "commands.config.panel.response_style_title")}**
+${localizer(locale, "commands.config.panel.response_style_description")}
+> ${localizer(locale, "commands.config.panel.persona_override_label")}: ${getHumanizerLabel(locale, humanizerValue)}
+> ${localizer(locale, "commands.config.panel.server_default_label")}: ${renderHumanizerDegree(locale, input.serverHumanizerDegree)}`,
+        }
+      : undefined;
+
+  const textState = actionState("text-override");
+  const textOverride = persona.persona_llm
+    ? `${persona.persona_llm.llm_provider} / ${persona.persona_llm.llm_codename}`
+    : localizer(locale, "commands.config.panel.none_label");
+  const serverModel = persona.llm
+    ? `${persona.llm.llm_provider} / ${persona.llm.llm_codename}`
+    : localizer(locale, "commands.config.panel.none_label");
+  const textOverrideTextDisplay: ComponentInContainerData | undefined =
+    textState !== "omitted"
+      ? {
+          type: ComponentType.TextDisplay,
+          content: `**${localizer(locale, "commands.config.panel.text_override_title")}**
+${localizer(locale, "commands.config.panel.text_override_description")}
+> ${localizer(locale, "commands.config.panel.persona_override_label")}: ${textOverride}
+> ${localizer(locale, "commands.config.panel.server_default_label")}: ${serverModel}`,
+        }
+      : undefined;
+
+  let fixedTextLength = measureComponentTextLength(components[0]);
+  if (promptState !== "omitted") {
+    fixedTextLength += getDiscordTextLength(promptHeader);
+    if (!hasPromptContent) fixedTextLength += getDiscordTextLength(noneContent);
+  }
+  if (contextState !== "omitted") {
+    fixedTextLength += getDiscordTextLength(contextHeader);
+    if (!hasContextContent) fixedTextLength += getDiscordTextLength(noneContent);
+  }
+  if (humanizerTextDisplay) {
+    fixedTextLength += measureComponentTextLength(humanizerTextDisplay);
+  }
+  if (textOverrideTextDisplay) {
+    fixedTextLength += measureComponentTextLength(textOverrideTextDisplay);
+  }
+  const advancedDynamicAllowance = Math.max(0, baseAllowance - fixedTextLength);
   const advancedPerValueBudget =
     hasPromptContent && hasContextContent ? Math.floor(advancedDynamicAllowance / 2) : advancedDynamicAllowance;
 
@@ -1436,16 +1520,8 @@ ${renderedNote}`,
     );
   }
 
-  const humanizerState = actionState("humanizer");
-  if (humanizerState !== "omitted") {
-    const humanizerValue = persona.humanizer_degree_override ?? null;
-    components.push({
-      type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.response_style_title")}**
-${localizer(locale, "commands.config.panel.response_style_description")}
-> ${localizer(locale, "commands.config.panel.persona_override_label")}: ${getHumanizerLabel(locale, humanizerValue)}
-> ${localizer(locale, "commands.config.panel.server_default_label")}: ${renderHumanizerDegree(locale, input.serverHumanizerDegree)}`,
-    });
+  if (humanizerTextDisplay) {
+    components.push(humanizerTextDisplay);
     if (input.view?.kind === "humanizer-editor" && input.view.personaId === personaId) {
       const options = createHumanizerOptions(
         locale,
@@ -1485,21 +1561,8 @@ ${localizer(locale, "commands.config.panel.response_style_description")}
     }
   }
 
-  const textState = actionState("text-override");
-  if (textState !== "omitted") {
-    const override = persona.persona_llm
-      ? `${persona.persona_llm.llm_provider} / ${persona.persona_llm.llm_codename}`
-      : localizer(locale, "commands.config.panel.none_label");
-    const serverModel = persona.llm
-      ? `${persona.llm.llm_provider} / ${persona.llm.llm_codename}`
-      : localizer(locale, "commands.config.panel.none_label");
-    components.push({
-      type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.text_override_title")}**
-${localizer(locale, "commands.config.panel.text_override_description")}
-> ${localizer(locale, "commands.config.panel.persona_override_label")}: ${override}
-> ${localizer(locale, "commands.config.panel.server_default_label")}: ${serverModel}`,
-    });
+  if (textOverrideTextDisplay) {
+    components.push(textOverrideTextDisplay);
 
     if (input.view?.kind === "text-override-provider" && input.view.personaId === personaId) {
       components.push({
@@ -1946,32 +2009,9 @@ ${withLinePrefix(
 ${localizer(locale, "commands.config.panel.stm_description")}
 ${withLinePrefix("> ", channelText)}
 `;
-  const personaMemoryAllowance = getConfigPageTextAllowance(input);
-  const personaMemoryReserve = 600;
-  const personaMemoryStmBudget = Math.max(0, personaMemoryAllowance - personaMemoryReserve);
-  const stmContent =
-    stmSections.length > 0
-      ? renderBoundedFencedContent(locale, stmSections.join("\n\n"), personaMemoryStmBudget).rendered
-      : `> ${localizer(locale, "commands.config.panel.stm_empty")}`;
-  components.push(
-    {
-      type: ComponentType.TextDisplay,
-      content: `${stmHeader}${stmContent}`,
-    },
-    {
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildConfigRouteId({ action: "stm-edit-open", locale, personaId }),
-          label: localizer(locale, "commands.config.panel.stm_edit_button"),
-          disabled: writesDisabled || stmEditState !== "enabled" || !view?.channelId,
-        },
-      ],
-    },
-  );
-
+  let conditioningTextDisplay: ComponentInContainerData | undefined;
+  let conditioningActionRow: ComponentInContainerData | undefined;
+  let conditioningFooterDisplay: ComponentInContainerData | undefined;
   if (input.actor.workspaceKind === "guild") {
     const conditioningGroups = (view?.conditioningGroups ?? []).filter((group) => group.reasonText.trim().length > 0);
     const conditioningLines = CONDITIONING_TYPE_ORDER.flatMap((conditioningType) => {
@@ -1997,30 +2037,61 @@ ${withLinePrefix("> ", channelText)}
       }
       return summaryLines;
     });
-    components.push(
-      {
-        type: ComponentType.TextDisplay,
-        content: `${localizer(locale, "commands.config.panel.conditioning_title")}
+    conditioningTextDisplay = {
+      type: ComponentType.TextDisplay,
+      content: `${localizer(locale, "commands.config.panel.conditioning_title")}
 ${localizer(locale, "commands.config.panel.conditioning_description")}
 ${conditioningLines.join("\n")}`,
-      },
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            customId: buildConfigRouteId({ action: "conditioning-open", locale, personaId }),
-            label: localizer(locale, "commands.config.panel.conditioning_manage_button"),
-            disabled: writesDisabled || conditioningState !== "enabled" || conditioningGroups.length === 0,
-          },
-        ],
-      },
-      {
-        type: ComponentType.TextDisplay,
-        content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.conditioning_footer")),
-      },
-    );
+    };
+    conditioningActionRow = {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "conditioning-open", locale, personaId }),
+          label: localizer(locale, "commands.config.panel.conditioning_manage_button"),
+          disabled: writesDisabled || conditioningState !== "enabled" || conditioningGroups.length === 0,
+        },
+      ],
+    };
+    conditioningFooterDisplay = {
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.conditioning_footer")),
+    };
+  }
+
+  const baseAllowance = getBasePageTextAllowance(input, true);
+  let fixedTextLength = measureComponentTextLength(components) + getDiscordTextLength(stmHeader);
+  if (conditioningTextDisplay) fixedTextLength += measureComponentTextLength(conditioningTextDisplay);
+  if (conditioningFooterDisplay) fixedTextLength += measureComponentTextLength(conditioningFooterDisplay);
+  const personaMemoryStmBudget = Math.max(0, baseAllowance - fixedTextLength);
+
+  const stmContent =
+    stmSections.length > 0
+      ? renderBoundedFencedContent(locale, stmSections.join("\n\n"), personaMemoryStmBudget).rendered
+      : `> ${localizer(locale, "commands.config.panel.stm_empty")}`;
+  components.push(
+    {
+      type: ComponentType.TextDisplay,
+      content: `${stmHeader}${stmContent}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "stm-edit-open", locale, personaId }),
+          label: localizer(locale, "commands.config.panel.stm_edit_button"),
+          disabled: writesDisabled || stmEditState !== "enabled" || !view?.channelId,
+        },
+      ],
+    },
+  );
+
+  if (conditioningTextDisplay && conditioningActionRow && conditioningFooterDisplay) {
+    components.push(conditioningTextDisplay, conditioningActionRow, conditioningFooterDisplay);
   }
 
   return components;
@@ -2126,9 +2197,47 @@ function buildBehaviorGeneralBody(input: ConfigPanelRenderInput): ComponentInCon
 
   const prompt = view.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT.trim();
   const contextNote = view.contextNote?.trim() ?? "";
-  const generalAllowance = getConfigPageTextAllowance(input);
-  const generalStaticReserve = 800;
-  const generalDynamicAllowance = Math.max(0, generalAllowance - generalStaticReserve);
+  const promptHeader = `**${localizer(locale, "commands.config.panel.system_prompt_title")}**\n${localizer(
+    locale,
+    "commands.config.panel.system_prompt_description",
+  )}\n`;
+  const contextHeader = `**${localizer(locale, "commands.config.panel.context_note_title")}**\n${localizer(
+    locale,
+    "commands.config.panel.global_context_note_description",
+  )}\n`;
+  const noneContent = renderFencedCollectionContent(localizer(locale, "commands.config.panel.none_label"));
+  const responseStyleTextDisplay: ComponentInContainerData = {
+    type: ComponentType.TextDisplay,
+    content: `**${localizer(locale, "commands.config.panel.response_style_title")}**\n${localizer(
+      locale,
+      "commands.config.panel.global_response_style_description",
+    )}\n> ${localizer(locale, "commands.config.panel.humanizer_label")}: ${getHumanizerLabel(
+      locale,
+      view.humanizerDegree,
+    )}\n> ${localizer(locale, "commands.config.panel.message_fetch_limit_label")}: ${view.messageFetchLimit}`,
+  };
+  const timezoneTextDisplay: ComponentInContainerData | undefined =
+    input.actor.workspaceKind === "guild"
+      ? {
+          type: ComponentType.TextDisplay,
+          content: `**${localizer(locale, "commands.config.panel.server_timezone_title")}**\n${localizer(
+            locale,
+            "commands.config.panel.server_timezone_description",
+          )}\n> ${localizer(locale, "commands.config.panel.utc_offset_label")}: ${formatUTCOffset(view.timezoneOffset)}`,
+        }
+      : undefined;
+
+  const baseAllowance = getBasePageTextAllowance(input, false);
+  let fixedTextLength =
+    measureComponentTextLength(components[0]) +
+    getDiscordTextLength(promptHeader) +
+    getDiscordTextLength(contextHeader) +
+    (contextNote ? 0 : getDiscordTextLength(noneContent)) +
+    measureComponentTextLength(responseStyleTextDisplay);
+  if (timezoneTextDisplay) {
+    fixedTextLength += measureComponentTextLength(timezoneTextDisplay);
+  }
+  const generalDynamicAllowance = Math.max(0, baseAllowance - fixedTextLength);
   const generalPerValueBudget = contextNote ? Math.floor(generalDynamicAllowance / 2) : generalDynamicAllowance;
 
   const renderedPrompt = renderBoundedFencedContent(locale, prompt, generalPerValueBudget).rendered;
@@ -2189,16 +2298,7 @@ function buildBehaviorGeneralBody(input: ConfigPanelRenderInput): ComponentInCon
         },
       ],
     },
-    {
-      type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.response_style_title")}**\n${localizer(
-        locale,
-        "commands.config.panel.global_response_style_description",
-      )}\n> ${localizer(locale, "commands.config.panel.humanizer_label")}: ${getHumanizerLabel(
-        locale,
-        view.humanizerDegree,
-      )}\n> ${localizer(locale, "commands.config.panel.message_fetch_limit_label")}: ${view.messageFetchLimit}`,
-    },
+    responseStyleTextDisplay,
     {
       type: ComponentType.ActionRow,
       components: [
@@ -2220,28 +2320,19 @@ function buildBehaviorGeneralBody(input: ConfigPanelRenderInput): ComponentInCon
     },
   );
 
-  if (input.actor.workspaceKind === "guild") {
-    components.push(
-      {
-        type: ComponentType.TextDisplay,
-        content: `**${localizer(locale, "commands.config.panel.server_timezone_title")}**\n${localizer(
-          locale,
-          "commands.config.panel.server_timezone_description",
-        )}\n> ${localizer(locale, "commands.config.panel.utc_offset_label")}: ${formatUTCOffset(view.timezoneOffset)}`,
-      },
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            customId: buildConfigRouteId({ action: "behavior-timezone-open", locale }),
-            label: localizer(locale, "commands.config.panel.change_timezone_button"),
-            disabled: writesDisabled || resolveBehaviorGeneralActionState("timezone", input.actor) !== "enabled",
-          },
-        ],
-      },
-    );
+  if (timezoneTextDisplay) {
+    components.push(timezoneTextDisplay, {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "behavior-timezone-open", locale }),
+          label: localizer(locale, "commands.config.panel.change_timezone_button"),
+          disabled: writesDisabled || resolveBehaviorGeneralActionState("timezone", input.actor) !== "enabled",
+        },
+      ],
+    });
   }
   return components;
 }
@@ -2856,9 +2947,13 @@ function buildBehaviorMemoryBody(input: ConfigPanelRenderInput): ComponentInCont
   const toolDescription = view.stmConfig?.tool_description_override ?? DEFAULT_STM_TOOL_DESCRIPTION;
   const updateNudge =
     view.stmConfig?.update_nudge_override ?? (categoryMode ? SEED_CATEGORY_UPDATE_HINT : SEED_SUMMARY_UPDATE_HINT);
-  const memoryAllowance = getConfigPageTextAllowance(input);
-  const memoryStaticReserve = 1100;
-  const memoryDynamicAllowance = Math.max(0, memoryAllowance - memoryStaticReserve);
+  const stmPromptHeader = `**${localizer(locale, "commands.config.panel.stm_prompt_title")}**\n${localizer(
+    locale,
+    "commands.config.panel.stm_prompt_description",
+  )}\n`;
+  const baseAllowance = getBasePageTextAllowance(input, false);
+  const fixedTextLength = measureComponentTextLength(components) + getDiscordTextLength(stmPromptHeader) + 1;
+  const memoryDynamicAllowance = Math.max(0, baseAllowance - fixedTextLength);
   const memoryPerValueBudget = Math.floor(memoryDynamicAllowance / 2);
 
   const renderedToolDescription = renderBoundedFencedContent(locale, toolDescription, memoryPerValueBudget).rendered;
@@ -2867,10 +2962,7 @@ function buildBehaviorMemoryBody(input: ConfigPanelRenderInput): ComponentInCont
   components.push(
     {
       type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.stm_prompt_title")}**\n${localizer(
-        locale,
-        "commands.config.panel.stm_prompt_description",
-      )}\n${renderedToolDescription}\n${renderedUpdateNudge}`,
+      content: `${stmPromptHeader}${renderedToolDescription}\n${renderedUpdateNudge}`,
     },
     {
       type: ComponentType.ActionRow,
@@ -3153,10 +3245,6 @@ ${localizer(locale, "commands.config.panel.channels_destinations_description")}`
   }
   if (!view) return components;
 
-  const destinationsAllowance = getConfigPageTextAllowance(input);
-  const destinationsStaticReserve = 800;
-  const destinationsBudget = Math.max(0, destinationsAllowance - destinationsStaticReserve);
-
   const actionDisabled = writesDisabled || resolveChannelsDestinationsActionState("log", actor) !== "enabled";
   const logChannelId = view.thoughtLogChannelId;
   const welcomeChannelId = view.welcomeChannelId;
@@ -3168,13 +3256,28 @@ ${localizer(locale, "commands.config.panel.channels_destinations_description")}`
   const clearLogDisabled = actionDisabled || !logChannelId;
   const clearWelcomeDisabled = actionDisabled || (!welcomeChannelId && !view.welcomePrompt);
 
-  components.push(
-    {
-      type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.channels_logs_title")}**
+  const logTextDisplay: ComponentInContainerData = {
+    type: ComponentType.TextDisplay,
+    content: `**${localizer(locale, "commands.config.panel.channels_logs_title")}**
 ${localizer(locale, "commands.config.panel.channels_logs_description")}
 > ${localizer(locale, "commands.config.panel.channels_destination_label")}: ${logChannelId ? `<#${logChannelId}>` : none}`,
-    },
+  };
+
+  const welcomeHeader = `**${localizer(locale, "commands.config.panel.channels_welcome_title")}**
+${localizer(locale, "commands.config.panel.channels_welcome_description")}
+> ${localizer(locale, "commands.config.panel.channels_destination_label")}: ${welcomeChannelId ? `<#${welcomeChannelId}>` : none}
+> ${localizer(locale, "commands.config.panel.channels_welcome_persona_value_label")}: ${welcomePersona}
+${localizer(locale, "commands.config.panel.channels_welcome_prompt_value_label")}:
+`;
+  const baseAllowance = getBasePageTextAllowance(input, false);
+  const fixedTextLength =
+    measureComponentTextLength([components[0], logTextDisplay]) +
+    getDiscordTextLength(welcomeHeader) +
+    (view.welcomePrompt ? 0 : getDiscordTextLength(renderFencedCollectionContent(none)));
+  const destinationsBudget = Math.max(0, baseAllowance - fixedTextLength);
+
+  components.push(
+    logTextDisplay,
     {
       type: ComponentType.ActionRow,
       components: [
@@ -3200,16 +3303,11 @@ ${localizer(locale, "commands.config.panel.channels_logs_description")}
     },
     {
       type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.channels_welcome_title")}**
-${localizer(locale, "commands.config.panel.channels_welcome_description")}
-> ${localizer(locale, "commands.config.panel.channels_destination_label")}: ${welcomeChannelId ? `<#${welcomeChannelId}>` : none}
-> ${localizer(locale, "commands.config.panel.channels_welcome_persona_value_label")}: ${welcomePersona}
-${localizer(locale, "commands.config.panel.channels_welcome_prompt_value_label")}:
-${
-  view.welcomePrompt
-    ? renderBoundedFencedContent(locale, view.welcomePrompt, destinationsBudget).rendered
-    : renderFencedCollectionContent(none)
-}`,
+      content: `${welcomeHeader}${
+        view.welcomePrompt
+          ? renderBoundedFencedContent(locale, view.welcomePrompt, destinationsBudget).rendered
+          : renderFencedCollectionContent(none)
+      }`,
     },
     ...buildPersonaRangeEntry({
       locale,
@@ -3274,10 +3372,6 @@ ${localizer(locale, "commands.config.panel.channels_auto_trigger_description")}`
   }
   if (!view || !input.channelsView) return components;
 
-  const autoTriggerAllowance = getConfigPageTextAllowance(input);
-  const autoTriggerStaticReserve = 700;
-  const autoTriggerBudget = Math.max(0, autoTriggerAllowance - autoTriggerStaticReserve);
-
   const actionDisabled = writesDisabled || resolveChannelsAutoTriggerActionState("auto-trigger", actor) !== "enabled";
   const rangeIndex = input.channelsAutoTriggerRangeIndex ?? 0;
   const overrides = new Map(view.personaOverrides.map((override) => [override.channel_disc_id, override.persona_id]));
@@ -3296,12 +3390,25 @@ ${localizer(locale, "commands.config.panel.channels_auto_trigger_description")}`
             threshold: view.threshold,
           });
 
+  const enabledHeader = `**${localizer(locale, "commands.config.panel.channels_auto_trigger_enabled_title")}**
+${localizer(locale, "commands.config.panel.channels_auto_trigger_enabled_description")}
+`;
+  const thresholdTextDisplay: ComponentInContainerData = {
+    type: ComponentType.TextDisplay,
+    content: `**${localizer(locale, "commands.config.panel.channels_auto_trigger_threshold_title")}**
+${localizer(locale, "commands.config.panel.channels_auto_trigger_threshold_description")}
+> ${localizer(locale, "commands.config.panel.channels_auto_trigger_threshold_value_label")}: ${threshold}`,
+  };
+
+  const baseAllowance = getBasePageTextAllowance(input, false);
+  const fixedTextLength =
+    measureComponentTextLength([components[0], thresholdTextDisplay]) + getDiscordTextLength(enabledHeader);
+  const autoTriggerBudget = Math.max(0, baseAllowance - fixedTextLength);
+
   components.push(
     {
       type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.channels_auto_trigger_enabled_title")}**
-${localizer(locale, "commands.config.panel.channels_auto_trigger_enabled_description")}
-${renderBoundedChannelRows(locale, enabledRows, autoTriggerBudget, localizer(locale, "commands.config.panel.channels_auto_trigger_none"))}`,
+      content: `${enabledHeader}${renderBoundedChannelRows(locale, enabledRows, autoTriggerBudget, localizer(locale, "commands.config.panel.channels_auto_trigger_none"))}`,
     },
     ...buildPersonaRangeEntry({
       locale,
@@ -3421,9 +3528,20 @@ ${localizer(locale, "commands.config.panel.channels_rules_description")}`,
   }
   if (!view || !input.channelsView) return components;
 
-  const rulesAllowance = getConfigPageTextAllowance(input);
-  const rulesStaticReserve = 800;
-  const rulesAvailable = Math.max(0, rulesAllowance - rulesStaticReserve);
+  const privateTitle = localizer(locale, "commands.config.panel.channels_rules_private_title");
+  const privateDesc = localizer(locale, "commands.config.panel.channels_rules_private_description");
+  const roleplayTitle = `[${localizer(locale, "commands.config.panel.channels_rules_roleplay_title")}](${buildDocsUrl(DOCS_PATHS.ROLEPLAY_CHANNELS)})`;
+  const roleplayDesc = localizer(locale, "commands.config.panel.channels_rules_roleplay_description");
+  const blocklistTitle = localizer(locale, "commands.config.panel.channels_rules_blocklist_title");
+  const blocklistDesc = localizer(locale, "commands.config.panel.channels_rules_blocklist_description");
+
+  const baseAllowance = getBasePageTextAllowance(input, false);
+  const fixedTextLength =
+    measureComponentTextLength(components[0]) +
+    getDiscordTextLength(`**${privateTitle}**\n${privateDesc}\n`) +
+    getDiscordTextLength(`**${roleplayTitle}**\n${roleplayDesc}\n`) +
+    getDiscordTextLength(`**${blocklistTitle}**\n${blocklistDesc}\n`);
+  const rulesAvailable = Math.max(0, baseAllowance - fixedTextLength);
   const rulesPerSectionBudget = Math.floor(rulesAvailable / 3);
 
   const privateActionDisabled = writesDisabled || resolveChannelsRulesActionState("private", actor) !== "enabled";
@@ -3588,24 +3706,54 @@ ${localizer(locale, "commands.config.panel.channels_overrides_description")}`,
   const contextNote = overrides?.contextNote;
   const textOverride = overrides?.textModelOverride ?? null;
   const serverTextModel = input.personas[0]?.llm ?? null;
-
-  const overridesAllowance = getConfigPageTextAllowance(input);
-  const overridesStaticReserve = 1100;
-  const overridesDynamicAllowance = Math.max(0, overridesAllowance - overridesStaticReserve);
   const hasPromptContent = Boolean(prompt?.prompt);
   const hasContextContent = Boolean(contextNote?.note);
+
+  const promptTitleDesc = `**${localizer(locale, "commands.config.panel.channels_overrides_prompt_title")}**
+${localizer(locale, "commands.config.panel.channels_overrides_prompt_description")}`;
+  const contextTitleDesc = `**${localizer(locale, "commands.config.panel.channels_overrides_context_note_title")}**
+${localizer(locale, "commands.config.panel.channels_overrides_context_note_description")}`;
+  const textModelTitleDesc = `**${localizer(locale, "commands.config.panel.channels_overrides_text_model_title")}**
+${localizer(locale, "commands.config.panel.channels_overrides_text_model_description")}`;
+
+  const promptMode = prompt
+    ? localizer(locale, `commands.config.panel.channels_overrides_prompt_mode_${prompt.mode}`)
+    : none;
+  const promptModeLine = selectedChannel
+    ? `> ${localizer(locale, "commands.config.panel.channels_overrides_prompt_mode_label")}: ${promptMode}\n`
+    : "";
+  const contextDepthLine = selectedChannel
+    ? `> ${localizer(locale, "commands.config.panel.channels_overrides_context_note_depth_label")}: ${contextNote?.depth ?? none}\n`
+    : "";
+  const textModelValues = selectedChannel
+    ? `> ${localizer(locale, "commands.config.panel.channels_overrides_channel_override_label")}: ${channelOverrideModelLabel(locale, textOverride)}
+> ${localizer(locale, "commands.config.panel.channels_overrides_server_default_label")}: ${channelOverrideModelLabel(locale, serverTextModel)}`
+    : "";
+  const noneContent = renderFencedCollectionContent(none);
+
+  const baseAllowance = getBasePageTextAllowance(input, false);
+  let fixedTextLength = measureComponentTextLength(components);
+  fixedTextLength += getDiscordTextLength(promptTitleDesc);
+  if (selectedChannel) {
+    fixedTextLength += getDiscordTextLength(promptModeLine);
+    if (!hasPromptContent) fixedTextLength += getDiscordTextLength(noneContent);
+
+    fixedTextLength += getDiscordTextLength(contextTitleDesc);
+    fixedTextLength += getDiscordTextLength(contextDepthLine);
+    if (!hasContextContent) fixedTextLength += getDiscordTextLength(noneContent);
+
+    fixedTextLength += getDiscordTextLength(textModelTitleDesc);
+    fixedTextLength += getDiscordTextLength(textModelValues);
+  }
+  const overridesDynamicAllowance = Math.max(0, baseAllowance - fixedTextLength);
   const overridesPerValueBudget =
     hasPromptContent && hasContextContent ? Math.floor(overridesDynamicAllowance / 2) : overridesDynamicAllowance;
 
   components.push({
     type: ComponentType.TextDisplay,
-    content: `**${localizer(locale, "commands.config.panel.channels_overrides_prompt_title")}**
-${localizer(locale, "commands.config.panel.channels_overrides_prompt_description")}`,
+    content: promptTitleDesc,
   });
   if (selectedChannel) {
-    const promptMode = prompt
-      ? localizer(locale, `commands.config.panel.channels_overrides_prompt_mode_${prompt.mode}`)
-      : none;
     components.push(
       {
         type: ComponentType.TextDisplay,

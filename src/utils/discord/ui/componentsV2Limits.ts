@@ -9,6 +9,7 @@
 import { ComponentType, MessageFlags } from "discord.js";
 import type { TopLevelComponentData } from "discord.js";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
+import { getDiscordTextLength } from "@/utils/text/discordTextLimits";
 import type { RawModalPayload } from "./configModals";
 
 // Discord Component Limits
@@ -26,6 +27,38 @@ export const DISCORD_MESSAGE_TOTAL_COMPONENTS_MAX = 40;
  * Measured in Unicode codepoints matching Discord's backend length calculation.
  */
 export const DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX = 4000;
+
+/**
+ * Recursively measures total Text Display characters across a component, container, or list.
+ *
+ * Walks nested components, containers, and sections, summing codepoints measured via
+ * {@link getDiscordTextLength}.
+ */
+export function measureComponentTextLength(component: unknown): number {
+  if (!component) return 0;
+  if (Array.isArray(component)) {
+    let total = 0;
+    for (const item of component) {
+      total += measureComponentTextLength(item);
+    }
+    return total;
+  }
+  if (typeof component !== "object") return 0;
+  let total = 0;
+  const comp = component as { type?: unknown; content?: unknown; components?: unknown[]; accessory?: unknown };
+  if (comp.type === ComponentType.TextDisplay && typeof comp.content === "string") {
+    total += getDiscordTextLength(comp.content);
+  }
+  if (Array.isArray(comp.components)) {
+    for (const child of comp.components) {
+      total += measureComponentTextLength(child);
+    }
+  }
+  if (comp.accessory && typeof comp.accessory === "object") {
+    total += measureComponentTextLength(comp.accessory);
+  }
+  return total;
+}
 
 /** Maximum buttons allowed in a single Action Row. */
 export const DISCORD_ACTION_ROW_BUTTONS_MAX = 5;
@@ -108,50 +141,7 @@ export const DISCORD_RADIO_GROUP_OPTIONS_MAX = 10;
 /** Maximum characters for a modal text input value or max_length. */
 export const DISCORD_TEXT_INPUT_MAX = 4000;
 
-/**
- * Measures text length in Unicode codepoints, matching Discord's backend length calculation.
- */
-export function getDiscordTextLength(text: string): number {
-  return [...text].length;
-}
-
-/**
- * Truncates text so its Discord codepoint length stays within maxLength without splitting
- * surrogate pairs or combining-mark grapheme clusters.
- */
-export function truncateDiscordText(text: string, maxLength: number, suffix = "..."): string {
-  if (maxLength <= 0) return "";
-  const totalLength = getDiscordTextLength(text);
-  if (totalLength <= maxLength) {
-    return text;
-  }
-
-  const suffixLength = getDiscordTextLength(suffix);
-  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-
-  if (maxLength <= suffixLength) {
-    let result = "";
-    let count = 0;
-    for (const { segment } of segmenter.segment(text)) {
-      const segLen = getDiscordTextLength(segment);
-      if (count + segLen > maxLength) break;
-      result += segment;
-      count += segLen;
-    }
-    return result;
-  }
-
-  const available = maxLength - suffixLength;
-  let result = "";
-  let count = 0;
-  for (const { segment } of segmenter.segment(text)) {
-    const segLen = getDiscordTextLength(segment);
-    if (count + segLen > available) break;
-    result += segment;
-    count += segLen;
-  }
-  return `${result}${suffix}`;
-}
+export { getDiscordTextLength, truncateDiscordText } from "@/utils/text/discordTextLimits";
 
 export type DiscordLimitViolationCode =
   | "TOTAL_COMPONENTS_EXCEEDED"

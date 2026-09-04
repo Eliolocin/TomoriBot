@@ -49,6 +49,8 @@ import type {
   ModerationScopeData,
   QuotaConfigState,
 } from "@/utils/moderation/moderationOperations";
+import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
+import { buildTextPreview, textPreviewFooterKey, textPreviewFooterVars } from "@/utils/text/textPreview";
 import { localizer } from "@/utils/text/localizer";
 
 export interface ModerationPanelRenderInput {
@@ -125,6 +127,24 @@ function buildRetryButtonRow(
       },
     ],
   };
+}
+
+/**
+ * Per-row preview budget for persona names displayed in moderation panels.
+ *
+ * In the persona-channels whitelist view, up to MODERATION_PANEL_RANGE_SIZE (10) rows are joined
+ * into a single TextDisplay component. Each line also includes markdown prefix, channel mentions,
+ * and a truncation notice when truncated (~80 codepoints). A budget of 200 ensures 10 lines
+ * (10 * (200 + 80) = 2800) easily fit within Discord's 4000-codepoint TextDisplay limit.
+ */
+export const MODERATION_NAME_PREVIEW_BUDGET = 200;
+
+function renderModerationName(locale: string, value: string): string {
+  const preview = buildTextPreview(value, MODERATION_NAME_PREVIEW_BUDGET);
+  const rendered = escapeDiscordMarkdown(preview.text);
+  const footerKey = textPreviewFooterKey(preview);
+  if (!footerKey) return rendered;
+  return `${rendered}\n-# ${localizer(locale, footerKey, textPreviewFooterVars(preview))}`;
 }
 
 export function buildModerationPanelPayload(input: ModerationPanelRenderInput): ModerationPanelPayload {
@@ -322,7 +342,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
                 "commands.moderation.user_blacklist_remove_persona_block_description",
                 {
                   user: `<@${target.userId}>`,
-                  persona: block.persona_name,
+                  persona: renderModerationName(locale, block.persona_name),
                   type: blockTypeLabel,
                 },
               )}`,
@@ -434,7 +454,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
         const typeLabel = localizer(locale, blockTypeKey);
         components.push({
           type: ComponentType.TextDisplay,
-          content: `> <@${block.user_disc_id}> for **${block.persona_name}** (${typeLabel})`,
+          content: `> <@${block.user_disc_id}> for **${renderModerationName(locale, block.persona_name)}** (${typeLabel})`,
         });
       }
     }
@@ -656,7 +676,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
         const lines = selection.visibleItems.map((item) => {
           const channelMentions = item.channelIds.map((id) => `<#${id}>`).join(", ");
           return `> ${localizer(locale, "commands.moderation.persona_channels_restriction", {
-            persona: item.personaName,
+            persona: renderModerationName(locale, item.personaName),
             channels: channelMentions,
           })}`;
         });

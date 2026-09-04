@@ -28,6 +28,7 @@ import {
 } from "./interactionCore";
 import type { AvatarSessionCache } from "./interactionCore";
 import type { NoticeContainerOptions } from "./interactionCore";
+import { validateComponentsV2MessageLimits, type ComponentsV2MessagePayload } from "./componentsV2Limits";
 
 // Re-exported so anchor-workflow callers (e.g. commands/model/text.ts) can detect a
 // collector timeout without importing the heavy interactionCore module directly, keeping
@@ -285,6 +286,17 @@ function assertComponentsV2Payload(payload: PersonaWorkflowComponentsV2Payload):
     throw new PersonaWorkflowUpdateError(
       "unsupported-replacement",
       "Anchor persona workflow updates cannot contain legacy content or embeds.",
+    );
+  }
+
+  const validation = validateComponentsV2MessageLimits(payload as unknown as ComponentsV2MessagePayload);
+  if (!validation.valid) {
+    const summary = validation.violations
+      .map((v) => `${v.path}: [${v.code}] observed ${v.observed} (limit ${v.limit})`)
+      .join("; ");
+    throw new PersonaWorkflowUpdateError(
+      "unsupported-replacement",
+      `Anchor persona workflow payload exceeded Discord limits: ${summary}`,
     );
   }
 }

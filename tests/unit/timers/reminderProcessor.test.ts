@@ -419,4 +419,31 @@ describe("ReminderProcessor delivery retry cap", () => {
     // Six failures total: without the reset the cap would have fired on the last one.
     expect(deleteReminderByIdMock).not.toHaveBeenCalled();
   });
+
+  it("neutralizes backtick runs (3, 4, 5, 6, 8) in fallback description so no two adjacent backticks survive", async () => {
+    for (const runLen of [3, 4, 5, 6, 8]) {
+      const purpose = `prefix ${"`".repeat(runLen)} middle ${"`".repeat(runLen)} suffix`;
+      const reminder = makeReminder({ reminder_purpose: purpose });
+      getDueRemindersMock.mockImplementation(async () => [reminder]);
+      alwaysFailDelivery();
+
+      const client = makeClient();
+      const channel = await client.channels.fetch();
+      const processor = new ReminderProcessor(client as never);
+      for (let attempt = 0; attempt <= 5; attempt++) {
+        await processor.processDueReminders();
+      }
+
+      const fallbackPayload = channel.send.mock.calls[0]?.[0] as
+        | { embeds?: Array<{ toJSON(): { description?: string } }> }
+        | undefined;
+      const description = fallbackPayload?.embeds?.[0]?.toJSON().description ?? "";
+      const fenceStart = description.indexOf("```text\n");
+      const fenceEnd = description.lastIndexOf("\n```");
+      expect(fenceStart).toBeGreaterThanOrEqual(0);
+      expect(fenceEnd).toBeGreaterThan(fenceStart);
+      const innerContent = description.slice(fenceStart + "```text\n".length, fenceEnd);
+      expect(innerContent).not.toContain("``");
+    }
+  });
 });
