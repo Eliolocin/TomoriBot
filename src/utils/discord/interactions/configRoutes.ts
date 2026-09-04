@@ -229,6 +229,9 @@ const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
 ]);
 
 /** Sprite routes repaint their own page rather than the Persona General default. */
+/** Naming edits repaint Persona > Naming Habits, which is where their controls live. */
+const NAMING_ACTIONS = new Set<ConfigPanelRoute["action"]>(["naming-open", "naming-submit", "naming-style-select"]);
+
 const SPRITE_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "sprite-select",
   "sprite-page",
@@ -2953,6 +2956,10 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       if (SPRITE_ACTIONS.has(route.action)) {
         category = "persona";
         page = "sprites";
+      }
+      if (NAMING_ACTIONS.has(route.action)) {
+        category = "persona";
+        page = "naming";
       }
       if (route.action === "page" && selectedValue) {
         const candidate = selectedValue as ConfigPage;

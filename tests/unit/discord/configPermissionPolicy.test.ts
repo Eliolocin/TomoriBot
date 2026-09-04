@@ -131,7 +131,14 @@ describe("config page filtering", () => {
     expect(resolveConfigPageState("persona", "general", GUILD_MEMBER)).toBe("enabled");
     expect(resolveConfigPageState("persona", "memories", GUILD_MEMBER)).toBe("read-only");
     expect(resolveConfigPageState("persona", "sprites", GUILD_MEMBER)).toBe("read-only");
-    expect(visibleConfigPages("persona", GUILD_MEMBER)).toEqual(["general", "triggers", "memories", "sprites"]);
+    expect(resolveConfigPageState("persona", "naming", GUILD_MEMBER)).toBe("read-only");
+    expect(visibleConfigPages("persona", GUILD_MEMBER)).toEqual([
+      "general",
+      "triggers",
+      "memories",
+      "naming",
+      "sprites",
+    ]);
   });
 
   it("omits the manager-owned Behavior category for a guild member", () => {

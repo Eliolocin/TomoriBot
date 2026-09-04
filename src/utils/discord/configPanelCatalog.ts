@@ -21,7 +21,7 @@ export const CONFIG_ROUTE_VERSION = "v1";
 
 export type ConfigCategory = "persona" | "behavior" | "channels" | "permissions" | "models";
 
-type PersonaPage = "general" | "triggers" | "memories" | "appearance" | "sprites" | "advanced";
+type PersonaPage = "general" | "triggers" | "memories" | "appearance" | "sprites" | "advanced" | "naming";
 type BehaviorPage = "general" | "trigger" | "experimental" | "notices" | "memory";
 type ChannelsPage = "destinations" | "auto-trigger" | "rules" | "overrides";
 type PermissionsPage = "capabilities" | "privacy";
@@ -35,7 +35,7 @@ export type ConfigPage = PersonaPage | BehaviorPage | ChannelsPage | Permissions
  * custom ID, which is why the category field must stay ahead of the page field in every codec.
  */
 export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPage[]> = {
-  persona: ["general", "triggers", "memories", "sprites", "appearance", "advanced"],
+  persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "advanced"],
   behavior: ["general", "trigger", "notices", "experimental", "memory"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   permissions: ["capabilities", "privacy"],

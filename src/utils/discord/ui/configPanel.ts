@@ -99,7 +99,11 @@ import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import { localizer } from "@/utils/text/localizer";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
 import { buildSlugMap } from "@/utils/text/slugifyLabel";
-import { buildTextPreview } from "@/utils/text/textPreview";
+import {
+  DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX,
+  getDiscordTextLength,
+  truncateDiscordText,
+} from "@/utils/discord/ui/componentsV2Limits";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { getCapabilitiesManagePermissionDefinitions } from "@/utils/discord/manageConfigMapping";
@@ -155,6 +159,7 @@ const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
     memories: "commands.config.panel.page_persona_memories",
     appearance: "commands.config.panel.page_persona_appearance",
     advanced: "commands.config.panel.page_persona_advanced",
+    naming: "commands.config.panel.page_persona_naming",
     sprites: "commands.config.panel.page_persona_sprites",
   },
   behavior: {
@@ -248,6 +253,37 @@ function buildPayload(components: ComponentInContainerData[], receipt?: PanelRec
     components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
     flags: MessageFlags.IsComponentsV2,
   };
+}
+
+/**
+ * Text Display budget reserved for shared chrome outside page body builders:
+ * covers the appended persona creation hint (~110 codepoints) and surrounding whitespace.
+ */
+const CONFIG_PANEL_CHROME_TEXT_RESERVE = 200;
+
+function measureComponentTextLength(component: unknown): number {
+  if (!component || typeof component !== "object") return 0;
+  let total = 0;
+  const comp = component as { type?: unknown; content?: unknown; components?: unknown[] };
+  if (comp.type === ComponentType.TextDisplay && typeof comp.content === "string") {
+    total += getDiscordTextLength(comp.content);
+  }
+  if (Array.isArray(comp.components)) {
+    for (const child of comp.components) {
+      total += measureComponentTextLength(child);
+    }
+  }
+  return total;
+}
+
+function measureReceiptTextLength(receipt?: PanelReceipt): number {
+  if (!receipt) return 0;
+  return measureComponentTextLength(buildPanelReceiptContainer(receipt));
+}
+
+function getConfigPageTextAllowance(input: ConfigPanelRenderInput): number {
+  const receiptLength = measureReceiptTextLength(input.receipt);
+  return Math.max(0, DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - CONFIG_PANEL_CHROME_TEXT_RESERVE - receiptLength);
 }
 
 function appendPersonaCreateHint(components: ComponentInContainerData[], locale: string): void {
@@ -396,18 +432,175 @@ function buildPersonaSelectorRows(input: ConfigPanelRenderInput): ComponentInCon
   return rows;
 }
 
-function renderFencedCollectionContent(content: string): string {
-  return ["```markdown", content.replaceAll("```", "`\u200b``"), "```"].join("\n");
+/** Zero-width space: renders as nothing, but stops a backtick run from parsing as a fence. */
+const FENCE_GUARD = "​";
+
+/**
+ * Breaks up every run of two or more backticks so stored content cannot close the fence it is
+ * rendered inside.
+ *
+ * Replacing the literal triple backtick instead leaves a fence intact for some run lengths: five
+ * backticks guard to `` `<zwsp>```` ``, whose tail is still a closing delimiter, and applying the
+ * same replacement twice does not converge. Interleaving the whole run leaves no two backticks
+ * adjacent at any length. This mirrors `neutralizeCodeFences` in `@/utils/text/textPreview`.
+ */
+function neutralizeFenceRuns(content: string): string {
+  return content.replace(/`{2,}/g, (run) => run.split("").join(FENCE_GUARD));
 }
 
-function renderStmContent(locale: string, content: string, maxLength = 3800): string {
-  const safeContent = content.replaceAll("```", "`\u200b``");
-  const rendered = renderFencedCollectionContent(safeContent);
-  if (rendered.length <= maxLength) return rendered;
-  const truncatedNotice = `\n${localizer(locale, "commands.config.panel.stm_truncated")}`;
-  const fenceOverhead = renderFencedCollectionContent("").length;
-  const availableLength = Math.max(0, maxLength - fenceOverhead - truncatedNotice.length);
-  return renderFencedCollectionContent(`${safeContent.slice(0, availableLength)}${truncatedNotice}`);
+function renderFencedCollectionContent(content: string): string {
+  return ["```markdown", neutralizeFenceRuns(content), "```"].join("\n");
+}
+
+interface BoundedFencedResult {
+  rendered: string;
+  isTruncated: boolean;
+  shownCount: number;
+  totalCount: number;
+  notice?: string;
+}
+
+interface BoundedFencedOptions {
+  noticePosition?: "inside" | "outside";
+}
+
+function formatTruncationNotice(locale: string, shown: number, total: number): string {
+  return localizer(locale, "commands.config.panel.content_truncated", {
+    shown: String(shown),
+    total: String(total),
+  });
+}
+
+function renderBoundedFencedContent(
+  locale: string,
+  content: string,
+  budget: number,
+  options?: BoundedFencedOptions,
+): BoundedFencedResult {
+  const totalCount = getDiscordTextLength(content);
+  if (budget <= 0) {
+    return {
+      rendered: "",
+      isTruncated: totalCount > 0,
+      shownCount: 0,
+      totalCount,
+    };
+  }
+
+  // Guarded before truncation so the guard's expansion counts against the budget rather than
+  // being appended past it.
+  const safeContent = neutralizeFenceRuns(content);
+  const fullRendered = renderFencedCollectionContent(safeContent);
+  if (getDiscordTextLength(fullRendered) <= budget) {
+    return {
+      rendered: fullRendered,
+      isTruncated: false,
+      shownCount: totalCount,
+      totalCount,
+    };
+  }
+
+  const noticePosition = options?.noticePosition ?? "inside";
+  const fenceOverhead = getDiscordTextLength(renderFencedCollectionContent(""));
+
+  if (noticePosition === "outside") {
+    const estimatedNotice = formatTruncationNotice(locale, budget, totalCount);
+    let available = Math.max(0, budget - fenceOverhead - getDiscordTextLength(estimatedNotice));
+    let truncatedSafe = truncateDiscordText(safeContent, available, "");
+    let shownCount = getDiscordTextLength(truncatedSafe.split(FENCE_GUARD).join(""));
+    let notice = formatTruncationNotice(locale, shownCount, totalCount);
+
+    while (
+      shownCount > 0 &&
+      getDiscordTextLength(renderFencedCollectionContent(truncatedSafe)) + getDiscordTextLength(notice) > budget
+    ) {
+      available = Math.max(0, available - 1);
+      truncatedSafe = truncateDiscordText(safeContent, available, "");
+      shownCount = getDiscordTextLength(truncatedSafe.split(FENCE_GUARD).join(""));
+      notice = formatTruncationNotice(locale, shownCount, totalCount);
+    }
+
+    return {
+      rendered: renderFencedCollectionContent(truncatedSafe),
+      isTruncated: true,
+      shownCount,
+      totalCount,
+      notice,
+    };
+  }
+
+  // Inside the fence: the notice is appended on a new line inside the markdown code block.
+  const estimatedNotice = formatTruncationNotice(locale, budget, totalCount);
+  let available = Math.max(0, budget - fenceOverhead - 1 - getDiscordTextLength(estimatedNotice));
+  let truncatedSafe = truncateDiscordText(safeContent, available, "");
+  let shownCount = getDiscordTextLength(truncatedSafe.split(FENCE_GUARD).join(""));
+  let notice = formatTruncationNotice(locale, shownCount, totalCount);
+
+  while (
+    shownCount > 0 &&
+    getDiscordTextLength(renderFencedCollectionContent(`${truncatedSafe}\n${notice}`)) > budget
+  ) {
+    available = Math.max(0, available - 1);
+    truncatedSafe = truncateDiscordText(safeContent, available, "");
+    shownCount = getDiscordTextLength(truncatedSafe.split(FENCE_GUARD).join(""));
+    notice = formatTruncationNotice(locale, shownCount, totalCount);
+  }
+
+  const rendered =
+    shownCount > 0
+      ? renderFencedCollectionContent(`${truncatedSafe}\n${notice}`)
+      : renderFencedCollectionContent(notice);
+
+  return {
+    // Truncating an already fenced string would cut its closing delimiter and leak the fence into
+    // the rest of the panel, so a budget too small for even the notice yields no block at all.
+    rendered: getDiscordTextLength(rendered) <= budget ? rendered : "",
+    isTruncated: true,
+    shownCount,
+    totalCount,
+    notice,
+  };
+}
+
+function renderBoundedChannelRows(
+  locale: string,
+  rows: readonly string[],
+  budget: number,
+  emptyFallback: string,
+): string {
+  if (budget <= 0) {
+    return "";
+  }
+  if (rows.length === 0) {
+    return withLinePrefix("> ", emptyFallback);
+  }
+
+  const fullContent = withLinePrefix("> ", rows.join("\n"));
+  if (getDiscordTextLength(fullContent) <= budget) {
+    return fullContent;
+  }
+
+  const total = rows.length;
+  for (let shown = total - 1; shown >= 0; shown--) {
+    const notice = localizer(locale, "commands.config.panel.channels_collection_hidden", {
+      shown: String(shown),
+      total: String(total),
+      hidden: String(total - shown),
+    });
+    const candidateLines = shown > 0 ? [...rows.slice(0, shown), notice] : [notice];
+    const candidate = withLinePrefix("> ", candidateLines.join("\n"));
+    if (getDiscordTextLength(candidate) <= budget) {
+      return candidate;
+    }
+  }
+
+  const notice = localizer(locale, "commands.config.panel.channels_collection_hidden", {
+    shown: "0",
+    total: String(total),
+    hidden: String(total),
+  });
+  const fallback = withLinePrefix("> ", notice);
+  return getDiscordTextLength(fallback) <= budget ? fallback : "";
 }
 
 function collectionRangeIndex(
@@ -435,6 +628,29 @@ function mayWritePersonaCollection(
   );
 }
 
+function getPersonaGeneralCollectionBudget(input: ConfigPanelRenderInput, persona: TomoriState): number {
+  const allowance = getConfigPageTextAllowance(input);
+  const staticReserve = 600;
+  const available = Math.max(0, allowance - staticReserve);
+
+  const attributes = persona.attribute_list ?? [];
+  const hasSelectedAttr =
+    input.selectedAttributeIndex !== undefined &&
+    input.selectedAttributeIndex >= 0 &&
+    input.selectedAttributeIndex < attributes.length;
+
+  const pairCount = Math.min(persona.sample_dialogues_in?.length ?? 0, persona.sample_dialogues_out?.length ?? 0);
+  const hasSelectedDlg =
+    input.selectedDialogueIndex !== undefined &&
+    input.selectedDialogueIndex >= 0 &&
+    input.selectedDialogueIndex < pairCount;
+
+  if (hasSelectedAttr && hasSelectedDlg) {
+    return Math.floor(available / 2);
+  }
+  return available;
+}
+
 function buildAttributeCollectionBody(input: ConfigPanelRenderInput, persona: TomoriState): ComponentInContainerData[] {
   const { locale, readStatus } = input;
   const mayWrite = mayWritePersonaCollection(input, "attribute-add", input.attributeMemteachingEnabled);
@@ -459,22 +675,23 @@ function buildAttributeCollectionBody(input: ConfigPanelRenderInput, persona: To
         ]
       : []),
     ...visibleAttributes.map((attribute, offset) => ({
-      label: safeSelectOptionText(
-        `${localizer(locale, "commands.config.panel.attribute_option_prefix")} ${start + offset + 1}: ${attribute}`,
-        100,
-      ),
+      label: safeSelectOptionText(`${start + offset + 1}. ${attribute}`, 100),
       value: String(start + offset),
       default: start + offset === selectedIndex,
     })),
   ];
 
+  const budget = getPersonaGeneralCollectionBudget(input, persona);
+  const renderedSelectedContent =
+    selectedAttributeContent !== undefined
+      ? `\n${renderBoundedFencedContent(locale, selectedAttributeContent, budget).rendered}`
+      : "";
+
   const components: ComponentInContainerData[] = [
     {
       type: ComponentType.TextDisplay,
       content: `${localizer(locale, "commands.config.panel.attributes_title")}
-${localizer(locale, "commands.config.panel.attributes_description")}${
-  selectedAttributeContent !== undefined ? `\n${renderFencedCollectionContent(selectedAttributeContent)}` : ""
-}`,
+${localizer(locale, "commands.config.panel.attributes_description")}${renderedSelectedContent}`,
     },
   ];
 
@@ -593,28 +810,26 @@ function buildDialogueCollectionBody(input: ConfigPanelRenderInput, persona: Tom
         ]
       : []),
     ...visibleInputs.map((dialogue, offset) => ({
-      label: safeSelectOptionText(
-        `${localizer(locale, "commands.config.panel.dialogue_option_prefix")} ${start + offset + 1}: ${dialogue}`,
-        100,
-      ),
+      label: safeSelectOptionText(`${start + offset + 1}. ${dialogue}`, 100),
       value: String(start + offset),
       description: safeSelectOptionText(outputs[start + offset] ?? "", 100),
       default: start + offset === selectedIndex,
     })),
   ];
 
+  const budget = getPersonaGeneralCollectionBudget(input, persona);
+  let renderedSelectedContent = "";
+  if (selectedInput !== undefined && selectedOutput !== undefined) {
+    const dialoguePair = `${localizer(locale, "commands.config.panel.dialogue_user_prefix")}: ${selectedInput}
+${localizer(locale, "commands.config.panel.dialogue_bot_prefix")}: ${selectedOutput}`;
+    renderedSelectedContent = `\n${renderBoundedFencedContent(locale, dialoguePair, budget).rendered}`;
+  }
+
   const components: ComponentInContainerData[] = [
     {
       type: ComponentType.TextDisplay,
       content: `${localizer(locale, "commands.config.panel.dialogues_title")}
-${localizer(locale, "commands.config.panel.dialogues_description")}${
-  selectedInput !== undefined && selectedOutput !== undefined
-    ? `\n${renderFencedCollectionContent(
-        `${localizer(locale, "commands.config.panel.dialogue_user_prefix")}: ${selectedInput}
-${localizer(locale, "commands.config.panel.dialogue_bot_prefix")}: ${selectedOutput}`,
-      )}`
-    : ""
-}`,
+${localizer(locale, "commands.config.panel.dialogues_description")}${renderedSelectedContent}`,
     },
   ];
 
@@ -702,12 +917,6 @@ ${localizer(locale, "commands.config.panel.dialogue_bot_prefix")}: ${selectedOut
   return components;
 }
 
-function isTextDisplayComponent(
-  component: ComponentInContainerData | undefined,
-): component is TextDisplayComponentData {
-  return component?.type === ComponentType.TextDisplay;
-}
-
 function hasSelectedCollectionEntry(selectedIndex: number | undefined, entryCount: number): boolean {
   return selectedIndex !== undefined && selectedIndex >= 0 && selectedIndex < entryCount;
 }
@@ -746,7 +955,6 @@ function buildPersonaGeneralBody(input: ConfigPanelRenderInput): ComponentInCont
   const { locale, actor, personas, selectedPersonaId, readStatus } = input;
   const writesDisabled = readStatus !== "fresh";
   const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
-  const namingStyle = input.namingStyle ?? "neutral";
 
   const heading: TextDisplayComponentData = {
     type: ComponentType.TextDisplay,
@@ -810,13 +1018,6 @@ ${localizer(locale, "commands.config.panel.general_description")}`,
 
   const attributeComponents = buildAttributeCollectionBody(input, persona);
   const dialogueComponents = buildDialogueCollectionBody(input, persona);
-  const attributeHeading = attributeComponents[0];
-  const dialogueHeading = dialogueComponents.shift();
-  if (isTextDisplayComponent(attributeHeading) && isTextDisplayComponent(dialogueHeading)) {
-    attributeHeading.content += `\n\n${dialogueHeading.content}`;
-  } else if (isTextDisplayComponent(dialogueHeading)) {
-    dialogueComponents.unshift(dialogueHeading);
-  }
 
   const attributeCount = (persona.attribute_list ?? []).length;
   const dialoguePairCount = Math.min(
@@ -858,54 +1059,61 @@ ${localizer(locale, "commands.config.panel.general_description")}`,
     });
   }
 
+  return components;
+}
+
+function buildPersonaNamingBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor, personas, selectedPersonaId, readStatus } = input;
+  const writesDisabled = readStatus !== "fresh";
+  const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
+
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.naming_title")}
+${localizer(locale, "commands.config.panel.naming_page_description")}`,
+    },
+  ];
+
+  if (!persona) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: localizer(locale, "commands.config.panel.no_personas"),
+    });
+    return components;
+  }
+
   const namingState = resolvePersonaGeneralActionState("naming", actor);
-  if (namingState !== "omitted") {
+  if (namingState === "omitted") return components;
+
+  // Every style is rendered at once, so the edit route carries the style it belongs to and no
+  // selector is needed to tell one shared button which style it is editing.
+  for (const style of ADDRESSING_STYLES) {
     components.push(
       {
-        type: ComponentType.Section,
-        components: [
-          {
-            type: ComponentType.TextDisplay,
-            content: `**${localizer(locale, NAMING_STYLE_LOCALE_KEYS[namingStyle])} ${localizer(locale, "commands.config.panel.naming_title")}**
-${localizer(locale, NAMING_STYLE_DESCRIPTION_LOCALE_KEYS[namingStyle])}`,
-          },
-        ],
-        accessory: {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildConfigRouteId({
-            action: "naming-open",
-            locale,
-            personaId: persona.persona_id as number,
-            style: namingStyle,
-          }),
-          label: localizer(locale, "commands.config.panel.edit_naming_button"),
-          disabled: writesDisabled || namingState === "disabled",
-        },
+        type: ComponentType.TextDisplay,
+        content: `**${localizer(locale, NAMING_STYLE_LOCALE_KEYS[style])}**
+${localizer(locale, NAMING_STYLE_DESCRIPTION_LOCALE_KEYS[style])}
+${withLinePrefix("> ", describeNamingStyle(locale, persona, style))}`,
       },
       {
         type: ComponentType.ActionRow,
         components: [
           {
-            type: ComponentType.StringSelect,
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
             customId: buildConfigRouteId({
-              action: "naming-style-select",
+              action: "naming-open",
               locale,
               personaId: persona.persona_id as number,
+              style,
             }),
-            placeholder: localizer(locale, "commands.config.panel.naming_style_placeholder"),
-            options: ADDRESSING_STYLES.map((style) => ({
-              label: safeSelectOptionText(localizer(locale, NAMING_STYLE_LOCALE_KEYS[style]), 100),
-              value: style,
-              default: style === namingStyle,
-            })),
+            label: localizer(locale, "commands.config.panel.edit_naming_style_button", {
+              style: localizer(locale, NAMING_STYLE_LOCALE_KEYS[style]),
+            }),
             disabled: writesDisabled || namingState === "disabled",
           },
         ],
-      },
-      {
-        type: ComponentType.TextDisplay,
-        content: withLinePrefix("> ", describeNamingStyle(locale, persona, namingStyle)),
       },
     );
   }
@@ -1057,12 +1265,18 @@ ${localizer(locale, "commands.config.panel.appearance_description")}`,
   const imageTagsState = actionState("image-tags");
   if (imageTagsState !== "omitted") {
     const tags = persona.physical_appearance_tags ?? [];
+    const allowance = getConfigPageTextAllowance(input);
+    const tagsBudget = Math.max(0, allowance - 500);
+    const renderedTags =
+      tags.length > 0
+        ? renderBoundedFencedContent(locale, tags.join(", "), tagsBudget).rendered
+        : renderFencedCollectionContent(localizer(locale, "commands.config.panel.none_label"));
     components.push(
       {
         type: ComponentType.TextDisplay,
         content: `**${localizer(locale, "commands.config.panel.image_tags_title")}**
 ${localizer(locale, "commands.config.panel.image_tags_description")}
-${renderFencedCollectionContent(tags.length > 0 ? tags.join(", ") : localizer(locale, "commands.config.panel.none_label"))}`,
+${renderedTags}`,
       },
       {
         type: ComponentType.ActionRow,
@@ -1149,14 +1363,26 @@ ${localizer(locale, "commands.config.panel.advanced_description")}`,
     resolvePersonaAdvancedActionState(action, actor);
 
   const promptState = actionState("prompt");
+  const contextState = actionState("context-note");
+  const hasPromptContent = promptState !== "omitted" && Boolean(persona.persona_prompt?.trim());
+  const hasContextContent = contextState !== "omitted" && Boolean(persona.context_note?.trim());
+  const advancedAllowance = getConfigPageTextAllowance(input);
+  const advancedStaticReserve = 800;
+  const advancedDynamicAllowance = Math.max(0, advancedAllowance - advancedStaticReserve);
+  const advancedPerValueBudget =
+    hasPromptContent && hasContextContent ? Math.floor(advancedDynamicAllowance / 2) : advancedDynamicAllowance;
+
   if (promptState !== "omitted") {
-    const preview = buildTextPreview(persona.persona_prompt, 3000);
+    const promptText = persona.persona_prompt?.trim() ?? "";
+    const renderedPrompt = promptText
+      ? renderBoundedFencedContent(locale, promptText, advancedPerValueBudget).rendered
+      : renderFencedCollectionContent(localizer(locale, "commands.config.panel.none_label"));
     components.push(
       {
         type: ComponentType.TextDisplay,
         content: `**${localizer(locale, "commands.config.panel.persona_prompt_title")}**
 ${localizer(locale, "commands.config.panel.persona_prompt_description")}
-${renderFencedCollectionContent(preview.text || localizer(locale, "commands.config.panel.none_label"))}`,
+${renderedPrompt}`,
       },
       {
         type: ComponentType.ActionRow,
@@ -1180,9 +1406,11 @@ ${renderFencedCollectionContent(preview.text || localizer(locale, "commands.conf
     );
   }
 
-  const contextState = actionState("context-note");
   if (contextState !== "omitted") {
     const note = persona.context_note?.trim() ?? "";
+    const renderedNote = note
+      ? renderBoundedFencedContent(locale, note, advancedPerValueBudget).rendered
+      : renderFencedCollectionContent(localizer(locale, "commands.config.panel.none_label"));
     components.push(
       {
         type: ComponentType.TextDisplay,
@@ -1191,7 +1419,7 @@ ${localizer(locale, "commands.config.panel.context_note_description")}
 > ${localizer(locale, "commands.config.panel.context_note_depth", {
           depth: persona.context_note_depth ?? 0,
         })}
-${renderFencedCollectionContent(note || localizer(locale, "commands.config.panel.none_label"))}`,
+${renderedNote}`,
       },
       {
         type: ComponentType.ActionRow,
@@ -1718,9 +1946,12 @@ ${withLinePrefix(
 ${localizer(locale, "commands.config.panel.stm_description")}
 ${withLinePrefix("> ", channelText)}
 `;
+  const personaMemoryAllowance = getConfigPageTextAllowance(input);
+  const personaMemoryReserve = 600;
+  const personaMemoryStmBudget = Math.max(0, personaMemoryAllowance - personaMemoryReserve);
   const stmContent =
     stmSections.length > 0
-      ? renderStmContent(locale, stmSections.join("\n\n"), Math.max(0, 3800 - stmHeader.length))
+      ? renderBoundedFencedContent(locale, stmSections.join("\n\n"), personaMemoryStmBudget).rendered
       : `> ${localizer(locale, "commands.config.panel.stm_empty")}`;
   components.push(
     {
@@ -1894,13 +2125,24 @@ function buildBehaviorGeneralBody(input: ConfigPanelRenderInput): ComponentInCon
   if (!view) return components;
 
   const prompt = view.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT.trim();
+  const contextNote = view.contextNote?.trim() ?? "";
+  const generalAllowance = getConfigPageTextAllowance(input);
+  const generalStaticReserve = 800;
+  const generalDynamicAllowance = Math.max(0, generalAllowance - generalStaticReserve);
+  const generalPerValueBudget = contextNote ? Math.floor(generalDynamicAllowance / 2) : generalDynamicAllowance;
+
+  const renderedPrompt = renderBoundedFencedContent(locale, prompt, generalPerValueBudget).rendered;
+  const renderedContextNote = contextNote
+    ? renderBoundedFencedContent(locale, contextNote, generalPerValueBudget).rendered
+    : renderFencedCollectionContent(localizer(locale, "commands.config.panel.none_label"));
+
   components.push(
     {
       type: ComponentType.TextDisplay,
       content: `**${localizer(locale, "commands.config.panel.system_prompt_title")}**\n${localizer(
         locale,
         "commands.config.panel.system_prompt_description",
-      )}\n${renderFencedCollectionContent(prompt)}`,
+      )}\n${renderedPrompt}`,
     },
     {
       type: ComponentType.ActionRow,
@@ -1933,7 +2175,7 @@ function buildBehaviorGeneralBody(input: ConfigPanelRenderInput): ComponentInCon
       content: `**${localizer(locale, "commands.config.panel.context_note_title")}**\n${localizer(
         locale,
         "commands.config.panel.global_context_note_description",
-      )}\n${renderFencedCollectionContent(view.contextNote ?? localizer(locale, "commands.config.panel.none_label"))}`,
+      )}\n${renderedContextNote}`,
     },
     {
       type: ComponentType.ActionRow,
@@ -2614,10 +2856,21 @@ function buildBehaviorMemoryBody(input: ConfigPanelRenderInput): ComponentInCont
   const toolDescription = view.stmConfig?.tool_description_override ?? DEFAULT_STM_TOOL_DESCRIPTION;
   const updateNudge =
     view.stmConfig?.update_nudge_override ?? (categoryMode ? SEED_CATEGORY_UPDATE_HINT : SEED_SUMMARY_UPDATE_HINT);
+  const memoryAllowance = getConfigPageTextAllowance(input);
+  const memoryStaticReserve = 1100;
+  const memoryDynamicAllowance = Math.max(0, memoryAllowance - memoryStaticReserve);
+  const memoryPerValueBudget = Math.floor(memoryDynamicAllowance / 2);
+
+  const renderedToolDescription = renderBoundedFencedContent(locale, toolDescription, memoryPerValueBudget).rendered;
+  const renderedUpdateNudge = renderBoundedFencedContent(locale, updateNudge, memoryPerValueBudget).rendered;
+
   components.push(
     {
       type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.stm_prompt_title")}**\n${localizer(locale, "commands.config.panel.stm_prompt_description")}\n${renderStmContent(locale, toolDescription)}\n${renderStmContent(locale, updateNudge)}`,
+      content: `**${localizer(locale, "commands.config.panel.stm_prompt_title")}**\n${localizer(
+        locale,
+        "commands.config.panel.stm_prompt_description",
+      )}\n${renderedToolDescription}\n${renderedUpdateNudge}`,
     },
     {
       type: ComponentType.ActionRow,
@@ -2900,14 +3153,18 @@ ${localizer(locale, "commands.config.panel.channels_destinations_description")}`
   }
   if (!view) return components;
 
+  const destinationsAllowance = getConfigPageTextAllowance(input);
+  const destinationsStaticReserve = 800;
+  const destinationsBudget = Math.max(0, destinationsAllowance - destinationsStaticReserve);
+
   const actionDisabled = writesDisabled || resolveChannelsDestinationsActionState("log", actor) !== "enabled";
   const logChannelId = view.thoughtLogChannelId;
   const welcomeChannelId = view.welcomeChannelId;
+  const none = localizer(locale, "commands.config.panel.none_label");
   const welcomePersona =
     view.welcomePersonaId === null
       ? localizer(locale, "commands.config.panel.channels_welcome_random_label")
-      : (input.personas.find((persona) => persona.persona_id === view.welcomePersonaId)?.persona_nickname ??
-        localizer(locale, "commands.config.panel.none_label"));
+      : (input.personas.find((persona) => persona.persona_id === view.welcomePersonaId)?.persona_nickname ?? none);
   const clearLogDisabled = actionDisabled || !logChannelId;
   const clearWelcomeDisabled = actionDisabled || (!welcomeChannelId && !view.welcomePrompt);
 
@@ -2916,7 +3173,7 @@ ${localizer(locale, "commands.config.panel.channels_destinations_description")}`
       type: ComponentType.TextDisplay,
       content: `**${localizer(locale, "commands.config.panel.channels_logs_title")}**
 ${localizer(locale, "commands.config.panel.channels_logs_description")}
-> ${localizer(locale, "commands.config.panel.channels_destination_label")}: ${logChannelId ? `<#${logChannelId}>` : localizer(locale, "commands.config.panel.none_label")}`,
+> ${localizer(locale, "commands.config.panel.channels_destination_label")}: ${logChannelId ? `<#${logChannelId}>` : none}`,
     },
     {
       type: ComponentType.ActionRow,
@@ -2945,10 +3202,14 @@ ${localizer(locale, "commands.config.panel.channels_logs_description")}
       type: ComponentType.TextDisplay,
       content: `**${localizer(locale, "commands.config.panel.channels_welcome_title")}**
 ${localizer(locale, "commands.config.panel.channels_welcome_description")}
-> ${localizer(locale, "commands.config.panel.channels_destination_label")}: ${welcomeChannelId ? `<#${welcomeChannelId}>` : localizer(locale, "commands.config.panel.none_label")}
+> ${localizer(locale, "commands.config.panel.channels_destination_label")}: ${welcomeChannelId ? `<#${welcomeChannelId}>` : none}
 > ${localizer(locale, "commands.config.panel.channels_welcome_persona_value_label")}: ${welcomePersona}
 ${localizer(locale, "commands.config.panel.channels_welcome_prompt_value_label")}:
-${renderFencedCollectionContent(view.welcomePrompt ?? localizer(locale, "commands.config.panel.none_label"))}`,
+${
+  view.welcomePrompt
+    ? renderBoundedFencedContent(locale, view.welcomePrompt, destinationsBudget).rendered
+    : renderFencedCollectionContent(none)
+}`,
     },
     ...buildPersonaRangeEntry({
       locale,
@@ -3013,6 +3274,10 @@ ${localizer(locale, "commands.config.panel.channels_auto_trigger_description")}`
   }
   if (!view || !input.channelsView) return components;
 
+  const autoTriggerAllowance = getConfigPageTextAllowance(input);
+  const autoTriggerStaticReserve = 700;
+  const autoTriggerBudget = Math.max(0, autoTriggerAllowance - autoTriggerStaticReserve);
+
   const actionDisabled = writesDisabled || resolveChannelsAutoTriggerActionState("auto-trigger", actor) !== "enabled";
   const rangeIndex = input.channelsAutoTriggerRangeIndex ?? 0;
   const overrides = new Map(view.personaOverrides.map((override) => [override.channel_disc_id, override.persona_id]));
@@ -3036,7 +3301,7 @@ ${localizer(locale, "commands.config.panel.channels_auto_trigger_description")}`
       type: ComponentType.TextDisplay,
       content: `**${localizer(locale, "commands.config.panel.channels_auto_trigger_enabled_title")}**
 ${localizer(locale, "commands.config.panel.channels_auto_trigger_enabled_description")}
-${withLinePrefix("> ", enabledRows.join("\n") || localizer(locale, "commands.config.panel.channels_auto_trigger_none"))}`,
+${renderBoundedChannelRows(locale, enabledRows, autoTriggerBudget, localizer(locale, "commands.config.panel.channels_auto_trigger_none"))}`,
     },
     ...buildPersonaRangeEntry({
       locale,
@@ -3105,6 +3370,7 @@ function buildChannelRulesCollectionSection(options: {
   title: string;
   description: string;
   members: string[];
+  budget: number;
   manageCustomId: string;
   manageLabel: string;
   pagination: ActionRowData<ButtonComponentData> | null;
@@ -3116,7 +3382,7 @@ function buildChannelRulesCollectionSection(options: {
       type: ComponentType.TextDisplay,
       content: `**${options.title}**
 ${options.description}
-${withLinePrefix("> ", options.members.join("\n") || localizer(options.locale, "commands.config.panel.none_label"))}`,
+${renderBoundedChannelRows(options.locale, options.members, options.budget, localizer(options.locale, "commands.config.panel.none_label"))}`,
     },
     {
       type: ComponentType.ActionRow,
@@ -3155,6 +3421,11 @@ ${localizer(locale, "commands.config.panel.channels_rules_description")}`,
   }
   if (!view || !input.channelsView) return components;
 
+  const rulesAllowance = getConfigPageTextAllowance(input);
+  const rulesStaticReserve = 800;
+  const rulesAvailable = Math.max(0, rulesAllowance - rulesStaticReserve);
+  const rulesPerSectionBudget = Math.floor(rulesAvailable / 3);
+
   const privateActionDisabled = writesDisabled || resolveChannelsRulesActionState("private", actor) !== "enabled";
   const roleplayActionDisabled = writesDisabled || resolveChannelsRulesActionState("roleplay", actor) !== "enabled";
   const blocklistActionDisabled = writesDisabled || resolveChannelsRulesActionState("blocklist", actor) !== "enabled";
@@ -3174,6 +3445,7 @@ ${localizer(locale, "commands.config.panel.channels_rules_description")}`,
       title: localizer(locale, "commands.config.panel.channels_rules_private_title"),
       description: localizer(locale, "commands.config.panel.channels_rules_private_description"),
       members: view.privateChannels.map((channel) => `<#${channel.id}>`),
+      budget: rulesPerSectionBudget,
       manageCustomId: buildConfigRouteId({
         action: "channels-private-manage-open",
         locale,
@@ -3199,6 +3471,7 @@ ${localizer(locale, "commands.config.panel.channels_rules_description")}`,
       title: `[${localizer(locale, "commands.config.panel.channels_rules_roleplay_title")}](${buildDocsUrl(DOCS_PATHS.ROLEPLAY_CHANNELS)})`,
       description: localizer(locale, "commands.config.panel.channels_rules_roleplay_description"),
       members: view.roleplayChannels.map((channel) => `<#${channel.id}>`),
+      budget: rulesPerSectionBudget,
       manageCustomId: buildConfigRouteId({
         action: "channels-rp-manage-open",
         locale,
@@ -3224,6 +3497,7 @@ ${localizer(locale, "commands.config.panel.channels_rules_description")}`,
       title: localizer(locale, "commands.config.panel.channels_rules_blocklist_title"),
       description: localizer(locale, "commands.config.panel.channels_rules_blocklist_description"),
       members: view.crossChannelBlocklist.map((channel) => `<#${channel.id}>`),
+      budget: rulesPerSectionBudget,
       manageCustomId: buildConfigRouteId({
         action: "channels-blocklist-manage-open",
         locale,
@@ -3315,6 +3589,14 @@ ${localizer(locale, "commands.config.panel.channels_overrides_description")}`,
   const textOverride = overrides?.textModelOverride ?? null;
   const serverTextModel = input.personas[0]?.llm ?? null;
 
+  const overridesAllowance = getConfigPageTextAllowance(input);
+  const overridesStaticReserve = 1100;
+  const overridesDynamicAllowance = Math.max(0, overridesAllowance - overridesStaticReserve);
+  const hasPromptContent = Boolean(prompt?.prompt);
+  const hasContextContent = Boolean(contextNote?.note);
+  const overridesPerValueBudget =
+    hasPromptContent && hasContextContent ? Math.floor(overridesDynamicAllowance / 2) : overridesDynamicAllowance;
+
   components.push({
     type: ComponentType.TextDisplay,
     content: `**${localizer(locale, "commands.config.panel.channels_overrides_prompt_title")}**
@@ -3328,7 +3610,11 @@ ${localizer(locale, "commands.config.panel.channels_overrides_prompt_description
       {
         type: ComponentType.TextDisplay,
         content: `> ${localizer(locale, "commands.config.panel.channels_overrides_prompt_mode_label")}: ${promptMode}
-${renderFencedCollectionContent(prompt?.prompt ?? none)}`,
+${
+  prompt?.prompt
+    ? renderBoundedFencedContent(locale, prompt.prompt, overridesPerValueBudget).rendered
+    : renderFencedCollectionContent(none)
+}`,
       },
       {
         type: ComponentType.ActionRow,
@@ -3371,7 +3657,11 @@ ${localizer(locale, "commands.config.panel.channels_overrides_context_note_descr
       {
         type: ComponentType.TextDisplay,
         content: `> ${localizer(locale, "commands.config.panel.channels_overrides_context_note_depth_label")}: ${contextNote?.depth ?? none}
-${renderFencedCollectionContent(contextNote?.note ?? none)}`,
+${
+  contextNote?.note
+    ? renderBoundedFencedContent(locale, contextNote.note, overridesPerValueBudget).rendered
+    : renderFencedCollectionContent(none)
+}`,
       },
       {
         type: ComponentType.ActionRow,
@@ -3635,6 +3925,12 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "persona" && page === "memories") {
     components.push(...buildPersonaMemoriesBody(input));
+    appendPersonaCreateHint(components, locale);
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "persona" && page === "naming") {
+    components.push(...buildPersonaNamingBody(input));
     appendPersonaCreateHint(components, locale);
     return buildPayload(components, receipt);
   }

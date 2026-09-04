@@ -253,7 +253,13 @@ describe("config panel shell", () => {
     const pageSelect = walk(payload).find(
       (component) => component.type === STRING_SELECT && component.placeholder === "Choose a page...",
     );
-    expect(pageSelect?.options?.map((option) => option.value)).toEqual(["general", "triggers", "memories", "sprites"]);
+    expect(pageSelect?.options?.map((option) => option.value)).toEqual([
+      "general",
+      "triggers",
+      "memories",
+      "naming",
+      "sprites",
+    ]);
   });
 
   it("keeps Advanced Memory last in the Behavior page selector", () => {
@@ -375,59 +381,69 @@ describe("config Persona General body", () => {
     expect(buttonFor(payload, { action: "trigger-remove-open", locale: "en-US", personaId: 55 })).toBeUndefined();
     expect(buttonFor(payload, { action: "promote-view", locale: "en-US", personaId: 56 })).toBeUndefined();
     expect(buttonFor(payload, { action: "rename-open", locale: "en-US", personaId: 55 })?.disabled).toBe(false);
+
+    const namingPayload = build(DM_OWNER, { page: "naming" });
     expect(
-      buttonFor(payload, { action: "naming-open", locale: "en-US", personaId: 55, style: "neutral" })?.disabled,
+      buttonFor(namingPayload, { action: "naming-open", locale: "en-US", personaId: 55, style: "neutral" })?.disabled,
     ).toBe(false);
   });
 
   it("keeps Persona General states within Discord's component ceiling", () => {
     const personaCounts = [0, 1, 24, 25, 26, 50, 200] as const;
-    const selectedPersona = makePersona({
-      persona_id: 55,
-      persona_nickname: "Aphel",
-      attribute_list: ["Likes tea"],
-      sample_dialogues_in: ["Hello"],
-      sample_dialogues_out: ["Hi"],
-    });
+    // An alter carries the Promote button, so a main persona is one component short of this page's
+    // maximum and cannot clear a change to its component budget on its own.
+    const makeSelected = (isAlter: boolean) =>
+      makePersona({
+        persona_id: 55,
+        persona_nickname: "Aphel",
+        is_alter: isAlter,
+        attribute_list: ["Likes tea"],
+        sample_dialogues_in: ["Hello"],
+        sample_dialogues_out: ["Hi"],
+      });
 
     for (const personaCount of personaCounts) {
-      const personas =
-        personaCount === 0
-          ? []
-          : [
-              selectedPersona,
-              ...Array.from({ length: personaCount - 1 }, (_, index) => {
-                const personaId = index + 1;
-                return makePersona({ persona_id: personaId === 55 ? personaCount + 1000 : personaId });
-              }),
-            ];
+      for (const isAlter of [false, true]) {
+        const selectedPersona = makeSelected(isAlter);
+        const personas =
+          personaCount === 0
+            ? []
+            : [
+                selectedPersona,
+                ...Array.from({ length: personaCount - 1 }, (_, index) => {
+                  const personaId = index + 1;
+                  return makePersona({ persona_id: personaId === 55 ? personaCount + 1000 : personaId });
+                }),
+              ];
 
-      for (const hasReceipt of [false, true]) {
-        for (const hasAvatar of [false, true]) {
-          for (const hasSelectedAttribute of [false, true]) {
-            for (const hasSelectedDialogue of [false, true]) {
-              const state = {
-                personaCount,
-                hasReceipt,
-                hasAvatar,
-                hasSelectedAttribute,
-                hasSelectedDialogue,
-              };
-              const payload = build(GUILD_MANAGER, {
-                personas,
-                selectedAttributeIndex: hasSelectedAttribute ? 0 : undefined,
-                selectedDialogueIndex: hasSelectedDialogue ? 0 : undefined,
-                selectedPersonaAvatarUrl: hasAvatar ? "https://cdn.example.invalid/55.png" : null,
-                receipt: hasReceipt
-                  ? { tone: "success", heading: "Saved", detail: "The change was saved." }
-                  : undefined,
-              });
-              const result = validateComponentsV2MessageLimits(payload);
+        for (const hasReceipt of [false, true]) {
+          for (const hasAvatar of [false, true]) {
+            for (const hasSelectedAttribute of [false, true]) {
+              for (const hasSelectedDialogue of [false, true]) {
+                const state = {
+                  personaCount,
+                  isAlter,
+                  hasReceipt,
+                  hasAvatar,
+                  hasSelectedAttribute,
+                  hasSelectedDialogue,
+                };
+                const payload = build(GUILD_MANAGER, {
+                  personas,
+                  selectedAttributeIndex: hasSelectedAttribute ? 0 : undefined,
+                  selectedDialogueIndex: hasSelectedDialogue ? 0 : undefined,
+                  selectedPersonaAvatarUrl: hasAvatar ? "https://cdn.example.invalid/55.png" : null,
+                  receipt: hasReceipt
+                    ? { tone: "success", heading: "Saved", detail: "The change was saved." }
+                    : undefined,
+                });
+                const result = validateComponentsV2MessageLimits(payload);
 
-              expect(
-                result.valid,
-                `Persona General state ${JSON.stringify(state)} violations: ${JSON.stringify(result.violations)}`,
-              ).toBe(true);
+                expect(
+                  result.valid,
+                  `Persona General state ${JSON.stringify(state)} violations: ${JSON.stringify(result.violations)}`,
+                ).toBe(true);
+              }
             }
           }
         }
@@ -581,11 +597,23 @@ describe("config Persona General collections", () => {
         }),
     );
 
+    // The ordinal is load-bearing: edit and remove routes carry the index and paging is positional,
+    // so it is how a user and the route agree on which entry is meant. The word is not, because the
+    // section heading directly above the select already says it, and a label is capped at 100.
+    expect(attributeSelect?.options?.[1]).toMatchObject({ label: "1. Likes tea", value: "0" });
+    expect(dialogueSelect?.options?.[1]?.label).toBe("1. Hello");
     expect(attributeSelect?.options?.[0]).toMatchObject({ label: "+ Add new Attribute", value: "add" });
     expect(dialogueSelect?.options?.[0]).toMatchObject({ label: "+ Add new Dialogue", value: "add" });
     expect(attributeSelect?.options?.find((option) => option.default)?.value).toBe("1");
     expect(dialogueSelect?.options?.find((option) => option.default)?.value).toBe("0");
-    expect(seen.some((component) => component.content?.includes("`\u200b``"))).toBe(true);
+    // The attribute's own triple backtick must survive as guarded text, leaving only the wrapper's
+    // opening and closing delimiters. Asserting the guard's byte shape instead would pin one
+    // escaping algorithm rather than the property that keeps the fence closed.
+    const guardedAttribute = seen.find((component) => component.content?.includes("Uses"));
+    expect(guardedAttribute?.content).toBeDefined();
+    expect(guardedAttribute?.content).not.toContain("Uses ``` safely");
+    expect(guardedAttribute?.content).toContain("\u200b");
+    expect((guardedAttribute?.content?.match(/```/g) ?? []).length % 2).toBe(0);
     expect(
       seen.some(
         (component) =>
@@ -878,7 +906,7 @@ describe("config Persona General collections", () => {
     expect(seen.filter((component) => component.label === "Page 1 of 2")).toHaveLength(2);
   });
 
-  it("keeps the naming editor pointed at the selected addressing style", () => {
+  it("renders every addressing style with its own edit button", () => {
     const persona = makePersona({
       persona_id: 55,
       persona_nickname: "Aphel",
@@ -888,30 +916,29 @@ describe("config Persona General collections", () => {
         addressTerms: {},
       },
     } as Partial<TomoriState> & { persona_id: number });
-    const payload = build(GUILD_MANAGER, { personas: [persona], namingStyle: "feminine" });
+    const payload = build(GUILD_MANAGER, { personas: [persona], page: "naming" });
+    const components = walk(payload);
 
-    const styleSelect = walk(payload).find(
-      (component) => component.type === STRING_SELECT && component.placeholder === "Choose an addressing style...",
-    );
-    expect(styleSelect?.options?.find((option) => option.default)?.value).toBe("feminine");
-    expect(walk(payload).some((component) => component.content?.includes("`Miss`"))).toBe(true);
+    // Showing all three styles is what retires the addressing-style selector: an edit route already
+    // carries the style it belongs to, so no shared button needs telling which one is active.
     expect(
-      buttonFor(payload, { action: "naming-open", locale: "en-US", personaId: 55, style: "feminine" }),
-    ).toBeDefined();
+      components.some(
+        (component) => component.type === STRING_SELECT && component.placeholder === "Choose an addressing style...",
+      ),
+    ).toBe(false);
+
+    for (const style of ["masculine", "feminine", "neutral"] as const) {
+      expect(buttonFor(payload, { action: "naming-open", locale: "en-US", personaId: 55, style })).toBeDefined();
+    }
+
     expect(
-      walk(payload).some((component) =>
+      components.some((component) =>
         component.content?.includes(
-          "Feminine Naming Habits**\nControls how this persona addresses people\nwho identify as feminine.",
+          "**Feminine**\nControls how this persona addresses people\nwho identify as feminine.",
         ),
       ),
     ).toBe(true);
-    const components = walk(payload);
-    const styleSelectIndex = components.findIndex(
-      (component) => component.type === STRING_SELECT && component.placeholder === "Choose an addressing style...",
-    );
-    const namingValuesIndex = components.findIndex((component) => component.content?.includes("> Prefix: `Miss`"));
-    expect(namingValuesIndex).toBeGreaterThan(styleSelectIndex);
-    expect(components[namingValuesIndex]?.content).toContain("Add a new persona with `/persona create`");
+    expect(components.some((component) => component.content?.includes("> Prefix: `Miss`"))).toBe(true);
   });
 
   it("renders the Lilya preset's neutral suffix", () => {
@@ -920,7 +947,7 @@ describe("config Persona General collections", () => {
       persona_nickname: "Lilya",
       naming_config: { prefixes: {}, suffixes: { neutral: "-senpai" }, addressTerms: {} },
     });
-    const payload = build(GUILD_MANAGER, { personas: [lilya], selectedPersonaId: 55 });
+    const payload = build(GUILD_MANAGER, { personas: [lilya], selectedPersonaId: 55, page: "naming" });
     expect(walk(payload).some((component) => component.content?.includes("Suffix: `-senpai`"))).toBe(true);
   });
 
@@ -1030,7 +1057,7 @@ describe("config Persona Memories body", () => {
     );
 
     expect(stmDisplay?.content?.length).toBeLessThanOrEqual(3800);
-    expect(stmDisplay?.content).toContain("Content truncated.");
+    expect(stmDisplay?.content).toMatch(/Content truncated \(\d+\/\d+ shown\)\./);
   });
 });
 
