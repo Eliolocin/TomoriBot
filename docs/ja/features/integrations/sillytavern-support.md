@@ -42,13 +42,13 @@ SillyTavernのプロンプトマネージャーのプリセットは、プロン
 
 プリセットは*レイアウト*を管理するものであり、すべてのテキストソースを管理するわけではありません。以下はプリセットと並行して存在します。
 
-- ユーザーのシステムやペルソナのブロック：`/config` > Behavior > General、`/config` > Persona > Advanced、`/config` > Persona > Identity & Personality。
+- ユーザーのシステムやペルソナのブロック：`/config` > Engine > General、`/config` > Persona > Advanced、`/config` > Persona > Identity & Personality。
 - ライブチャットの履歴と検索されたドキュメントのコンテキスト。
 - TomoriBotの自動コンテキスト：サーバーメモリー、絵文字・スタンプのコンテキスト、会話中のユーザー、短期メモリー、条件付け、および同様のブロック。
 
 ### ネイティブのブロックのマッピング
 
-- `main` → 現在のシステムプロンプト（`/config` > Behavior > Generalで設定されたもの、または組み込みのフォールバック）
+- `main` → 現在のシステムプロンプト（`/config` > Engine > Generalで設定されたもの、または組み込みのフォールバック）
 - `charDescription` → `/config` > Persona > Advanced
 - `charPersonality` → `/config` > Persona > Identity & Personality
 - `dialogueExamples` → `/config` > Persona > Identity & Personality
@@ -57,7 +57,7 @@ SillyTavernのプロンプトマネージャーのプリセットは、プロン
 
 ### システムプロンプトのルール
 
-プリセットがアクティブな間は、組み込みのフォールバックのシステムプロンプトは削除されます。ただし、`/config` > Behavior > Generalで独自のプロンプトを設定している場合は、引き続き送信されます。
+プリセットがアクティブな間は、組み込みのフォールバックのシステムプロンプトは削除されます。ただし、`/config` > Engine > Generalで独自のプロンプトを設定している場合は、引き続き送信されます。
 
 ### 互換性に関する注意事項
 

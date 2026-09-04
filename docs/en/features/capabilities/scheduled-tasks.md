@@ -28,7 +28,7 @@ they fire; tasks are silent self-actions the persona performs at the scheduled t
 ## Timezones
 
 Absolute times ("at 14:30", "on Friday at 8pm") are interpreted in the **server's timezone**
-(`/config` > Behavior > General) by default. If you've set a personal timezone with `/personal config`,
+(`/config` > Engine > General) by default. If you've set a personal timezone with `/personal config`,
 the AI sees your local clock in context and labels your times with your UTC offset when
 creating the task — the bot then does the conversion deterministically, so "remind me at 9am"
 means *your* 9am even if the server is on another continent. Relative times ("in 2 hours")

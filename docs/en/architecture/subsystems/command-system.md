@@ -320,7 +320,7 @@ Examples:
 
 - `/moderation` User Blacklist and Whitelist removal actions
 - `/config remove modeloverride` (channels + personas together)
-- `/config` > Behavior > Experimental (experimental server-scoped workaround toggles)
+- `/config` > Engine > Experimental (experimental server-scoped workaround toggles)
 - `/memories` Short-Term category (active server-shared STM entries)
 - `/config` > Channels > Channel Rules (private, roleplay, and cross-channel blocklist sets)
 
@@ -1072,7 +1072,7 @@ wait independently, so dismissing one modal does not strand the still-visible pa
 
 The randomizer on `/config` > Models > Fallbacks & Randomizer is a server-level toggle for the per-turn text model randomizer. When enabled, each generation turn randomly promotes one model from the pool (primary model + configured fallbacks) to lead the attempt chain, breaking the bot out of any single model's repetitive phrasing while keeping the rest as failover. It enforces a **block-until-fallbacks** precondition: enabling is refused with a localized warning embed unless the server has ≥1 fallback configured on that same page, guaranteeing the pool always has ≥2 members so the toggle is never a silent no-op. The flag lives in `server_chat_configs.model_randomizer_enabled` and is consumed by `buildGenerationAttempts` — see the [generation-turn pipeline](../pipelines/chat/06-per-turn/03-run-generation-turn).
 
-The Compatibility section of `/config` > Behavior > Experimental is a checkbox-group modal for experimental compatibility patches. V1 exposes `Verbatim Tool-Calling`, a default-off server flag stored in `server_capabilities_configs.verbatim_tool_calling_enabled`. It writes only changed columns through `ConfigRepository.updateCapabilitiesConfig` and invalidates TomoriState cache after a successful DB write.
+The Compatibility section of `/config` > Engine > Experimental is a checkbox-group modal for experimental compatibility patches. V1 exposes `Verbatim Tool-Calling`, a default-off server flag stored in `server_capabilities_configs.verbatim_tool_calling_enabled`. It writes only changed columns through `ConfigRepository.updateCapabilitiesConfig` and invalidates TomoriState cache after a successful DB write.
 
 ### Personal-provider (BYOK) routing in commands
 

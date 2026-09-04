@@ -23,7 +23,7 @@ Phase 4 routes both through custom endpoint capabilities:
 - `/providers` switches the active STT endpoint.
 - `/speech voice-add` uploads the one server-local reference sample supported in Phase 4. You can upload any audio format; it is automatically converted to mono WAV and stored in S3/CloudFront in production or under `data/voice-samples/` in non-production. A 10-20 second clip with no background music is recommended.
 - `/speech voice-assign` assigns either the local sample or an ElevenLabs voice to a persona.
-- `/config` > Behavior > Notices controls visible transcript posting in chat. It does not enable or disable background STT.
+- `/config` > Engine > Notices controls visible transcript posting in chat. It does not enable or disable background STT.
 
 ## Runtime Behavior
 

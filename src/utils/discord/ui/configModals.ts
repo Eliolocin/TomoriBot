@@ -21,6 +21,7 @@ import { formatImageTagsForModalValue, TAGS_MODAL_MAX_LENGTH } from "@/utils/ima
 import { CONTEXT_NOTE_MAX_LENGTH } from "@/utils/discord/contextNoteOptions";
 import { PERSONA_SPRITE_LIMITS } from "@/utils/persona/sprites";
 import { splitPromptIntoModalParts } from "@/utils/text/modalPromptParts";
+import { promptPartDescription, promptPartLabel } from "@/utils/discord/ui/modalPromptPartLabels";
 import { resolvePrefillPrompt } from "@/utils/text/personaPrompt";
 import { localizer } from "@/utils/text/localizer";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
@@ -375,12 +376,6 @@ export function buildPersonaPromptModal(locale: string, personaId: number, nonce
     CONFIG_PERSONA_PROMPT_PART_FIELDS.length,
     4000,
   );
-  const labels = [
-    "commands.teach.personaprompt.part1_label",
-    "commands.teach.personaprompt.part2_label",
-    "commands.teach.personaprompt.part3_label",
-    "commands.teach.personaprompt.part4_label",
-  ];
   const placeholders = [
     "commands.teach.personaprompt.part1_placeholder",
     "commands.teach.personaprompt.part2_placeholder",
@@ -393,7 +388,13 @@ export function buildPersonaPromptModal(locale: string, personaId: number, nonce
     title: modalTitle(locale, "commands.teach.personaprompt.modal_title"),
     components: CONFIG_PERSONA_PROMPT_PART_FIELDS.map((field, index) => ({
       type: 18 as const,
-      label: modalLabel(locale, labels[index] as string),
+      label: promptPartLabel(
+        locale,
+        "commands.config.panel.prompt_part_name_persona",
+        index,
+        CONFIG_PERSONA_PROMPT_PART_FIELDS.length,
+      ),
+      description: promptPartDescription(locale, index),
       component: {
         type: 4,
         custom_id: buildConfigModalFieldId(field, nonce),

@@ -25,7 +25,7 @@ sidebar:
 アルターペルソナを使うと、1つのサーバー内に複数のキャラクターを共存させることができます。
 
 - 各アルターペルソナは自身の性格、トリガーワード、そして**Webhookアバター**を持ちます。これにより、同じチャンネルで異なるキャラクターがそれぞれ別の名前と画像で現れます。
-- `/config` > Behavior > Triggerの制限まで、複数のアルターペルソナが1つのメッセージに応答できます。
+- `/config` > Engine > Triggerの制限まで、複数のアルターペルソナが1つのメッセージに応答できます。
 - **Webhookメッセージに返信する**と、そのペルソナとしての会話が継続されます。
 - `/persona import`（alterオプション）を使ってアルターペルソナを追加し、`/persona`と`/persona remove`で管理します。
 
@@ -64,7 +64,7 @@ sidebar:
 - `/config` > Persona > Identity & Personality：自分の呼び方を設定します。
 - `/config` > Persona > Identity & Personality：このサーバー用のプロフィール画像を設定します。
 
-また、`/config` > Behavior > Generalを使用してカスタムシステムプロンプトを設定し、振る舞いをさらに形作ることもできます。[振る舞いの調整](/ja/features/chatting-personality/behavior-tweaking/)を参照してください。
+また、`/config` > Engine > Generalを使用してカスタムシステムプロンプトを設定し、振る舞いをさらに形作ることもできます。[振る舞いの調整](/ja/features/chatting-personality/behavior-tweaking/)を参照してください。
 
 ## スプライト（表情アバター）
 

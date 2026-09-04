@@ -28,6 +28,7 @@ import type { RawModalPayload } from "@/utils/discord/ui/configModals";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { localizer } from "@/utils/text/localizer";
 import { splitPromptIntoModalParts } from "@/utils/text/modalPromptParts";
+import { promptPartDescription, promptPartLabel } from "@/utils/discord/ui/modalPromptPartLabels";
 
 export const BEHAVIOR_HUMANIZER_FIELD = "behavior_humanizer";
 export const BEHAVIOR_FETCH_LIMIT_FIELD = "behavior_fetch_limit";
@@ -610,12 +611,6 @@ export function buildBehaviorPromptModal(
   prompt: string | null | undefined,
 ): RawModalPayload {
   const parts = splitPromptIntoModalParts(prompt ?? "", CONFIG_PERSONA_PROMPT_PART_FIELDS.length, 4000);
-  const labels = [
-    "commands.config.prompt.change.part1_label",
-    "commands.config.prompt.change.part2_label",
-    "commands.config.prompt.change.part3_label",
-    "commands.config.prompt.change.part4_label",
-  ];
   const placeholders = [
     "commands.config.prompt.change.part1_placeholder",
     "commands.config.prompt.change.part2_placeholder",
@@ -627,7 +622,13 @@ export function buildBehaviorPromptModal(
     title: title(locale, "commands.config.prompt.change.modal_title"),
     components: CONFIG_PERSONA_PROMPT_PART_FIELDS.map((field, index) => ({
       type: LABEL,
-      label: label(locale, labels[index] as string),
+      label: promptPartLabel(
+        locale,
+        "commands.config.panel.prompt_part_name_system",
+        index,
+        CONFIG_PERSONA_PROMPT_PART_FIELDS.length,
+      ),
+      description: promptPartDescription(locale, index),
       component: {
         type: TEXT_INPUT,
         custom_id: buildConfigModalFieldId(field, nonce),

@@ -10,7 +10,7 @@ model as the main prompt/context, in this order:
 
 | Block | Optional? | Commands | What it is |
 |---|---|---|---|
-| [**System prompt**](/features/chatting-personality/behavior-tweaking/#system-prompt) | | `/config` > Behavior > General | Basic instructions at the topmost of context. |
+| [**System prompt**](/features/chatting-personality/behavior-tweaking/#system-prompt) | | `/config` > Engine > General | Basic instructions at the topmost of context. |
 
 > **Default system prompt text** (used only while no server system prompt is set):
 >
@@ -31,12 +31,12 @@ model as the main prompt/context, in this order:
 | [**Server emojis**](/features/chatting-personality/behavior-tweaking/#capabilities-what-shes-allowed-to-do) | *(Optional)* | `/config` > Permissions (Emoji Usage) (toggle only), initialize with `/expressions initialize` | The custom emojis present in the server.|
 | [**Server stickers**](/features/chatting-personality/behavior-tweaking/#capabilities-what-shes-allowed-to-do) | *(Optional)* | `/config` > Permissions (Sticker Usage) (toggle only), initialize with `/expressions initialize` | The custom stickers present in the server. |
 | [**Persona sprites**](/features/chatting-personality/multiple-personas/#sprites-emotion-avatars) | *(Optional)* | `/config` > Persona > Sprites | Named expression sprites configured for the persona, if it has any. |
-| [**Conversation Participants**](/features/knowledge/memory/#personal-vs-server-memories) | *(Optional)* | `/personal memories` (gated by `/config` > Permissions (Personalization)) | The people in the conversation, their nicknames and mention handles, and the personal memories saved about each of them. Loaded when the person owns a message in context, or if their name/alias get mentioned. Also carries the current channel and local time as a footer, using `/config` > Behavior > General. |
+| [**Conversation Participants**](/features/knowledge/memory/#personal-vs-server-memories) | *(Optional)* | `/personal memories` (gated by `/config` > Permissions (Personalization)) | The people in the conversation, their nicknames and mention handles, and the personal memories saved about each of them. Loaded when the person owns a message in context, or if their name/alias get mentioned. Also carries the current channel and local time as a footer, using `/config` > Engine > General. |
 | [**Short-term memory**](/features/knowledge/memory/#short-term-memory-stm) | | `/config` > Persona > Memories; `/memories` to clear entries; gated by `/config` > Permissions (Short-Term Memory) | Contains summaries and recent messages of different channels |
 | [**Documents**](/features/knowledge/memory/#document-knowledge-base-rag) | *(Optional)* | `/memories` | Relevant chunks pulled from the knowledge base using RAG. |
 | [**Conditioning**](/features/knowledge/memory/#conditioning) | *(Optional)* | `/reward <feed\|headpat\|hug\|kiss\|tickle>`, `/punish <bite\|bonk\|pinch\|spank\|squeeze>`, managed via `/conditioning manage` | Accumulated behavioral nudges for this persona in this server. |
 | [**Sample dialogues**](/features/chatting-personality/multiple-personas/#sample-dialogues) | *(Optional)* | `/config` > Persona > Identity & Personality | Examples of how this persona talks, if any are configured. |
-| [**Recent messages**](/features/chatting-personality/behavior-tweaking/#generation-tuning) | | `/config` > Behavior > General | The actual conversation, up to this many messages (default 80). Your context note and any reunion note are injected inline inside this block, at a configurable depth, rather than as a separate block of their own. |
+| [**Recent messages**](/features/chatting-personality/behavior-tweaking/#generation-tuning) | | `/config` > Engine > General | The actual conversation, up to this many messages (default 80). Your context note and any reunion note are injected inline inside this block, at a configurable depth, rather than as a separate block of their own. |
 
 Rows marked *(Optional)* contribute nothing (and cost no tokens) when there's nothing to say, e.g. no documents matched, or the server has no custom emojis.
 
@@ -70,9 +70,9 @@ If you want something to survive all of the above, it has to become a **long-ter
 
 ## Tips and Tricks
 
-- `/config` > Behavior > General widens the conversation window (20-100 messages). More
+- `/config` > Engine > General widens the conversation window (20-100 messages). More
   context, more tokens per reply.
-- `/config` > Behavior > General injects a short reminder at a chosen depth. Because it sits low
+- `/config` > Engine > General injects a short reminder at a chosen depth. Because it sits low
   in the bundle, close to the recent messages, she is more likely to act on it than on
   something in the system prompt. This is the best place to nudge her into saving memories
   more often.

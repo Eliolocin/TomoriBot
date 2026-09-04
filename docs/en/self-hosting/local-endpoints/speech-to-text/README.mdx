@@ -10,7 +10,7 @@ import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 TomoriBot treats speech-to-text as the `transcription` custom endpoint capability. Audio attachments are transcribed in the background and added to conversation context when an active transcription endpoint exists.
 
-Visible transcript posting is separate. `/config` > Behavior > Notices only controls whether voice-message transcripts are posted in chat; it does not enable or disable background STT.
+Visible transcript posting is separate. `/config` > Engine > Notices only controls whether voice-message transcripts are posted in chat; it does not enable or disable background STT.
 
 ## Available Engines
 
@@ -34,6 +34,6 @@ Visible transcript posting is separate. `/config` > Behavior > Notices only cont
 
 When a transcription endpoint is active, TomoriBot reads supported audio attachments in the background and adds the transcript to chat context. No persona assignment is needed.
 
-Use `/config` > Behavior > Notices only if you also want those transcripts posted visibly in chat.
+Use `/config` > Engine > Notices only if you also want those transcripts posted visibly in chat.
 
 ElevenLabs users should choose **Add New Provider** and **ElevenLabs** in `/providers`; it registers transcription alongside speech.

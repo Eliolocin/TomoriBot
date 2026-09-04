@@ -12,6 +12,7 @@ import { buildConfigRouteId } from "@/utils/discord/configPanelCatalog";
 import { buildConfigModalFieldId } from "@/utils/discord/ui/configModals";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { splitPromptIntoModalParts } from "@/utils/text/modalPromptParts";
+import { promptPartDescription, promptPartLabel } from "@/utils/discord/ui/modalPromptPartLabels";
 import { localizer } from "@/utils/text/localizer";
 
 const LABEL = 18 as const;
@@ -514,8 +515,13 @@ export function buildConfigChannelPromptModal(
       },
       ...CONFIG_CHANNEL_OVERRIDE_PROMPT_PART_FIELDS.map((field, index) => ({
         type: LABEL as 18,
-        label: modalLabel(locale, "commands.config.panel.channels_overrides_prompt_part_label"),
-        description: modalDescription(locale, "commands.config.panel.channels_overrides_prompt_part_description"),
+        label: promptPartLabel(
+          locale,
+          "commands.config.panel.prompt_part_name_channel",
+          index,
+          CONFIG_CHANNEL_OVERRIDE_PROMPT_PART_FIELDS.length,
+        ),
+        description: promptPartDescription(locale, index),
         component: {
           type: TEXT_INPUT,
           custom_id: buildConfigModalFieldId(field, nonce),

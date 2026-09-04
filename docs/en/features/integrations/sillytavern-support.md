@@ -52,7 +52,7 @@ to import presets, inspect enabled nodes, switch between presets, or return to t
 
 A preset owns the *layout*, not every source of text. These still exist alongside it:
 
-- Your system/persona blocks: `/config` > Behavior > General, `/config` > Persona > Advanced,
+- Your system/persona blocks: `/config` > Engine > General, `/config` > Persona > Advanced,
   the attribute and sample-dialogue actions on `/config` > Persona > Identity & Personality.
 - Live chat history and retrieved document context.
 - TomoriBot's automatic context: server memory, emoji/sticker context, users-in-conversation,
@@ -60,7 +60,7 @@ A preset owns the *layout*, not every source of text. These still exist alongsid
 
 ### How Native Blocks Map
 
-- `main` → the current system prompt (`/config` > Behavior > General, else the built-in fallback)
+- `main` → the current system prompt (`/config` > Engine > General, else the built-in fallback)
 - `charDescription` → `/config` > Persona > Advanced
 - `charPersonality` → `/config` > Persona > Identity & Personality
 - `dialogueExamples` → `/config` > Persona > Identity & Personality
@@ -70,7 +70,7 @@ A preset owns the *layout*, not every source of text. These still exist alongsid
 ### System Prompt Rule
 
 While a preset is active, the built-in fallback system prompt is removed — but if *you* set
-your own with `/config` > Behavior > General, it's still sent.
+your own with `/config` > Engine > General, it's still sent.
 
 ### Compatibility Notes
 

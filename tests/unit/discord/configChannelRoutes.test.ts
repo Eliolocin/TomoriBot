@@ -818,7 +818,7 @@ describe("Channels Destinations panel", () => {
     });
     const serialized = JSON.stringify(payload);
 
-    expect(serialized).toContain("Channel Destinations");
+    expect(serialized).toContain("Logs & Welcome");
     expect(serialized).toContain("Logs");
     expect(serialized).toContain("Welcome Messages");
     expect(serialized).toContain("Reasoning, tool activity, attribution, and diagnostics are");
@@ -875,7 +875,7 @@ describe("Channels Destinations panel", () => {
     });
 
     const serialized = JSON.stringify(payload);
-    expect(serialized).toContain("### Channel Destinations");
+    expect(serialized).toContain("### Logs & Welcome");
     expect(serialized).not.toContain("Welcome Messages");
   });
 });

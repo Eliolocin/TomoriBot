@@ -21,19 +21,19 @@ can't do it, no matter what a user asks.
 
 - `/config` > Models > Samplers & Parameters — sampling parameters (temperature, top-p, …): creativity/randomness.
   Higher temperature is more varied.
-- `/config` > Behavior > General — how human-like her responses read. The optional `scope` option
+- `/config` > Engine > General — how human-like her responses read. The optional `scope` option
   applies the degree server-wide (`Global`, the default) or to a single persona
   (`Persona`), handy when one persona should text casually at degree 3 while another texts like a novel. A persona's "Inherit" choice clears its override.
-- `/config` > Behavior > General — how many recent messages she pulls as context per trigger.
+- `/config` > Engine > General — how many recent messages she pulls as context per trigger.
   A useful lever: raise it for more conversational awareness, lower it to cut token cost.
 
 ## System Prompt
 
 The system prompt sits above the persona and shapes overall behavior:
 
-- `/config` > Behavior > General — set a custom system instruction (up to 16,000 characters).
-- `/config` > Behavior > General — choose from preset system prompts.
-- `/config` > Behavior > General — reset to the default. The confirmation shows the prompt it just
+- `/config` > Engine > General — set a custom system instruction (up to 16,000 characters).
+- `/config` > Engine > General — choose from preset system prompts.
+- `/config` > Engine > General — reset to the default. The confirmation shows the prompt it just
   removed, so you can copy it back out if you cleared it by accident.
 
 When a [SillyTavern preset](/features/integrations/sillytavern-support/) is active, the built-in fallback
@@ -63,7 +63,7 @@ age-restricted — see
 ## Appearance & Time
 
 - `/config` > Persona > Identity & Personality: what she calls herself.
-- `/config` > Behavior > General — the server timezone, used for time-aware replies and reminders.
+- `/config` > Engine > General — the server timezone, used for time-aware replies and reminders.
 
 ---
 

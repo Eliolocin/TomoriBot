@@ -9,7 +9,7 @@ verbatim tool-calling workaround is enabled.
 
 ## Mission
 
-The verbatim tool-calling workaround (`/config` > Behavior > Experimental) exists for
+The verbatim tool-calling workaround (`/config` > Engine > Experimental) exists for
 endpoints that accept the native `tools` field but ignore it — typically
 local / custom OpenAI-compatible servers. In that mode the model never
 reliably "sees" the tool schemas, so the
@@ -78,7 +78,7 @@ After this stage runs:
 
 | Source | Field | Effect |
 |---|---|---|
-| `tomoriConfig` | `verbatim_tool_calling_enabled` | Master toggle (set via `/config` > Behavior > Experimental) |
+| `tomoriConfig` | `verbatim_tool_calling_enabled` | Master toggle (set via `/config` > Engine > Experimental) |
 | `tomoriState.llm` | `has_tools` | Must be true; otherwise no tools to dump |
 
 ## Extension points

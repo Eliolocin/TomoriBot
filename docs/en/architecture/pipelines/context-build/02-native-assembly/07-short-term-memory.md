@@ -27,7 +27,7 @@ so the pipeline can inject it at a configurable dialogue depth.
 ## Categories
 
 Servers can configure up to `STM_MAX_CATEGORIES` (default 5) categories via
-`/config` > Behavior > Memory & STM. Each category has a `label`, `description`,
+`/config` > Engine > Memory & STM. Each category has a `label`, `description`,
 and `position`. The tool schema dynamically builds one string property per
 category slug.
 
@@ -57,7 +57,7 @@ The default became `crude_summary` in migration 055, which also rewrote existing
 rows. Servers with no `server_stm_configs` row (the common case, since the table is
 not seeded at setup) get the same default from the runtime fallback in `memories.ts`.
 
-The render mode is set per-server via `/config` > Behavior > Memory & STM and stored in
+The render mode is set per-server via `/config` > Engine > Memory & STM and stored in
 `server_stm_configs.render_mode`.
 
 ## Cadence gating
@@ -169,7 +169,7 @@ All overrides go through `sanitizeUnknownTemplatePlaceholders` after macro
 expansion via `toolPromptMacroResolver.expand(...)`. In category mode,
 `{category_labels}` is resolved before sanitization.
 
-Configurable via `/config` > Behavior > Memory & STM.
+Configurable via `/config` > Engine > Memory & STM.
 
 ## DB persistence
 
@@ -310,9 +310,9 @@ After this stage runs:
 
 | Command | Purpose |
 |---|---|
-| `/config` > Behavior > Memory & STM | Configure cadence, render mode, crude message count, nudge depth, content depth |
-| `/config` > Behavior > Memory & STM | Set tool description and the unified nudge override |
-| `/config` > Behavior > Memory & STM | Define category labels and descriptions |
+| `/config` > Engine > Memory & STM | Configure cadence, render mode, crude message count, nudge depth, content depth |
+| `/config` > Engine > Memory & STM | Set tool description and the unified nudge override |
+| `/config` > Engine > Memory & STM | Define category labels and descriptions |
 | `/config` > Persona > Memories | Hand-edit live STM for a persona in the current channel (Manage Server) |
 | `/config` > Persona > Memories | Read-only inspect the live STM for a persona in the current channel (open to all members) |
 | `/config` > Permissions | "Short-Term Memory" toggle — turns OFF the bot's automatic STM management (write tool + cadence nudge) while leaving STM content visible |

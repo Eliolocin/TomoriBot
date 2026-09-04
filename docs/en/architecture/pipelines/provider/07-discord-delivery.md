@@ -174,7 +174,7 @@ contexts, not stylistic prose.
 
 `HumanizerDegree` (a `TomoriState.config` field) controls how the resulting blocks emit as
 messages after parsing. The value is per-answering-persona: a persona-level override
-(`persona_configs.humanizer_degree`, set via `/config` > Behavior > General with `scope: Persona`) is
+(`persona_configs.humanizer_degree`, set via `/config` > Engine > General with `scope: Persona`) is
 overlaid onto that persona's `config.humanizer_degree` at state-load time, falling back to
 the server-wide `server_chat_configs` value when NULL:
 

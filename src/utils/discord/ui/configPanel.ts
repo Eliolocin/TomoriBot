@@ -3040,20 +3040,12 @@ ${localizer(locale, "commands.config.panel.permissions_tool_use_description")}`,
       type: ComponentType.TextDisplay,
       content: `**${localizer(locale, "commands.config.panel.permissions_capabilities_state_title")}**
 ${localizer(locale, "commands.config.panel.permissions_capabilities_state_description")}
-${withLinePrefix(
-  "> ",
-  getCapabilitiesManagePermissionDefinitions({ includeElevenLabs: view.includeElevenLabs })
-    .map(
-      (definition) =>
-        `${localizer(locale, definition.labelKey)}: ${localizer(
-          locale,
-          view.definitionStates[definition.value]
-            ? "commands.config.panel.enabled_option"
-            : "commands.config.panel.disabled_option",
-        )}`,
-    )
-    .join("\n"),
-)}`,
+${getCapabilitiesManagePermissionDefinitions({ includeElevenLabs: view.includeElevenLabs })
+  .map(
+    (definition) =>
+      `> ${view.definitionStates[definition.value] ? "🟢" : "🔴"} ${localizer(locale, definition.labelKey)}`,
+  )
+  .join("\n")}`,
     },
     {
       type: ComponentType.ActionRow,

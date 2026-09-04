@@ -199,7 +199,7 @@ describe("config panel shell", () => {
 
     expect(categoryRow.map((button) => button.label)).toEqual([
       "Persona",
-      "Behavior",
+      "Engine",
       "Channels",
       "Permissions",
       "Models",
@@ -215,7 +215,7 @@ describe("config panel shell", () => {
 
     expect(categoryRow.map((button) => [button.label, button.disabled ?? false])).toEqual([
       ["Persona", false],
-      ["Behavior", true],
+      ["Engine", true],
       ["Channels", true],
       ["Permissions", true],
       ["Models", true],
@@ -228,7 +228,7 @@ describe("config panel shell", () => {
 
     expect(row.components[0].components.map((button) => button.label)).toEqual([
       "Persona",
-      "Behavior",
+      "Engine",
       "Permissions",
       "Models",
     ]);

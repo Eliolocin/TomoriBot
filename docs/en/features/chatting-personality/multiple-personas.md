@@ -40,7 +40,7 @@ Alter personas let multiple characters coexist in one server:
 
 - Each alter has its own personality, trigger words, and **webhook avatar** — so different
   characters appear with different names and pictures in the same channel.
-- Multiple alters can respond to a single message, up to the `/config` > Behavior > Trigger
+- Multiple alters can respond to a single message, up to the `/config` > Engine > Trigger
   limit.
 - **Replying to a webhook message** continues the conversation as that persona.
 - Add alters via `/persona import` (alter option); manage them with `/persona` and
@@ -86,7 +86,7 @@ Remove examples with `/config` > Persona > Identity & Personality.
 - `/config` > Persona > Identity & Personality: set what she calls herself.
 - `/config` > Persona > Identity & Personality: set her profile picture for this server.
 
-You can also set a custom system prompt with `/config` > Behavior > General to further shape
+You can also set a custom system prompt with `/config` > Engine > General to further shape
 behavior — see [Behavior Tweaking](/features/chatting-personality/behavior-tweaking/).
 
 ## Sprites (Emotion Avatars)

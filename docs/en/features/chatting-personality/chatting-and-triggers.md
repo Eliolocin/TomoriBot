@@ -51,7 +51,7 @@ what was said. This context includes:
 - **Where she is** — the current server's name and description (or that it's a Direct
   Message), and the current channel.
 - **The current time** — the server's local time and rough time of day, based on
-  `/config` > Behavior > General, plus each person's own local time if they've set `/personal config`.
+  `/config` > Engine > General, plus each person's own local time if they've set `/personal config`.
 - **Who's in the conversation** — participants' display names, how to mention them, any
   physical-appearance tags, and their pending reminders.
 - **What someone's up to (presence)** — a user's Discord activity: what they're **playing**,
@@ -69,8 +69,8 @@ Auto-trigger lets her join the conversation without being named at all.
 
 - `/server autotrigger channels` — set the channels where she responds without a mention.
 - `/server autotrigger threshold` — set how many messages accumulate before she chimes in.
-- `/config` > Behavior > Trigger: add a probabilistic timer-based auto-trigger to a channel.
-- `/config` > Behavior > Trigger: remove an existing random trigger.
+- `/config` > Engine > Trigger: add a probabilistic timer-based auto-trigger to a channel.
+- `/config` > Engine > Trigger: remove an existing random trigger.
 - ~~`/natres` — humanlike timing for autonomous responses~~ to be implemented
 
 Use this in a dedicated chat channel where you want her to feel like a participant rather

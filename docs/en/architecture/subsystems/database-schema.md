@@ -75,19 +75,19 @@ than externalising SQL. Size is the signal; the split must follow a coherent dom
 
 `tomori_configs` was split across 14 command-aligned tables and dropped (migration `008_drop_tomori_configs.sql`):
 
-- `server_chat_configs` — `/config` > Behavior > General (humanizer and message fetch limit), model parameters, `cascade_limit`, `match_limit`, `context_note`, `context_note_depth`
-- `server_notice_embeds_configs` — `/config` > Behavior > Notices
+- `server_chat_configs` — `/config` > Engine > General (humanizer and message fetch limit), model parameters, `cascade_limit`, `match_limit`, `context_note`, `context_note_depth`
+- `server_notice_embeds_configs` — `/config` > Engine > Notices
 - `server_member_permissions_configs` — `/moderation` Member Access; `/config` > Permissions also writes `self_teaching_enabled` and `personal_memories_enabled`
 - `server_channel_scope_configs` — `/config` > Channels > Channel Rules (roleplay, private, and cross-channel blocklist sets), thought-log channel
-- `server_welcome_configs` — `/config` > Channels > Destinations
-- `server_trigger_behavior_configs` — `/config` > Behavior > Trigger (always-reply and deliberate trigger mode), cooldown settings (`ServerScheduleRepository`)
+- `server_welcome_configs` — `/config` > Channels > Logs & Welcome
+- `server_trigger_behavior_configs` — `/config` > Engine > Trigger (always-reply and deliberate trigger mode), cooldown settings (`ServerScheduleRepository`)
 - `server_auto_trigger_configs` — `/config` > Channels > Auto-Trigger channels + threshold (`ServerScheduleRepository`)
-- `server_capabilities_configs` — `/config` > Permissions feature and tool toggles, plus the Compatibility workarounds on `/config` > Behavior > Experimental
+- `server_capabilities_configs` — `/config` > Permissions feature and tool toggles, plus the Compatibility workarounds on `/config` > Engine > Experimental
 - `server_novelai_imagegen_configs` — `/novelai` image parameters, `/config` > Models > Image Generation defaults, `nai_diffusion_model_id`
 - `server_nsfw_configs` — `/nsfw` jailbreak toggles
 - `server_speech_configs` — `/speech` Chatterbox parameters, `chatterbox_turbo_enabled`, `chatterbox_cfg_weight`, `chatterbox_exaggeration`
 - `server_byok_configs` — `/moderation` ((Member Access)) server model access
-- `server_memory_configs` — `/config` > Behavior > Memory & STM settings (`ServerMemoryRepository`)
+- `server_memory_configs` — `/config` > Engine > Memory & STM settings (`ServerMemoryRepository`)
 - `server_model_configs` — active model-selection FKs (`llm_id`, `embedding_model_id`, `diffusion_model_id`, `video_model_id`, `vision_llm_id`) plus runtime credential/thinking mirrors and Phase 3 inline custom endpoint fields that remain on the active assembled server config
 
 ### Persona config normalization (Phase 6 Step #14 — complete)
@@ -210,13 +210,13 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - Persona names are constrained unique per server (case-insensitive, trimmed).
 - Exactly one non-alter persona (`is_alter = false`) per server is enforced by partial unique index `personas_one_main_per_server ON personas(server_id) WHERE is_alter = false` (added in Phase 6 Step #14.6, migration `012`). This hardens the invariant that was previously enforced only at the command layer.
 - `persona_configs.reward_conditioning_enabled` and `persona_configs.punish_conditioning_enabled` are persona-scoped prompt-injection toggles for conditioning memory.
-- `persona_configs.humanizer_degree` (nullable, migration `047`) is a per-persona humanizer override managed by `/config` > Behavior > General with `scope: Persona`; NULL inherits `server_chat_configs.humanizer_degree`. The value is overlaid onto the persona's assembled `config.humanizer_degree` at state-load time.
+- `persona_configs.humanizer_degree` (nullable, migration `047`) is a per-persona humanizer override managed by `/config` > Engine > General with `scope: Persona`; NULL inherits `server_chat_configs.humanizer_degree`. The value is overlaid onto the persona's assembled `config.humanizer_degree` at state-load time.
 
 ### Server config scoping
 
 `tomori_configs` was dropped in Phase 6 Step #14 (migration `008`). Per-server configuration is now owned by 14 command-aligned split tables. Column mapping for notable fields:
 
-- `server_chat_configs.message_fetch_limit` stores the per-server context fetch cap (default `80`, configurable via `/config` > Behavior > General).
+- `server_chat_configs.message_fetch_limit` stores the per-server context fetch cap (default `80`, configurable via `/config` > Engine > General).
 - `server_chat_configs.match_limit` and `server_chat_configs.cascade_limit` store the per-message persona trigger cap and the session cascade limit respectively.
 - `server_chat_configs.llm_stop_strings` and `server_chat_configs.llm_stop_speaker_pattern_enabled` store server-wide stop-string settings applied to every text provider. The speaker-pattern flag defaults to `false`, so `\n{Name}:` generation stops are opt-in.
 - `server_chat_configs.llm_logit_biases` stores server-wide logit-bias entries as raw text/token-ID input plus tokenizer-specific cached resolutions. Raw text stays canonical so entries can be refreshed when `llm_id` changes.
@@ -231,10 +231,10 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `server_channel_scope_configs.crosschannel_blocklist_ids` stores the server-scoped channel blocklist for tool-driven `cross_channel_message` dispatch. Blocking a forum/media parent also blocks visits into threads under that parent.
 - `channel_prompt_overrides` (`(server_id, channel_disc_id)` PK) stores the optional per-channel system prompt set by `/config` > Channels > Channel Overrides. `channel_prompt_mode` is `append` (the prompt is injected as a distinct `SYSTEM_CHANNEL_PROMPT` block after the server system prompt) or `replace` (the prompt takes over the system-prompt slot). Persona prompt and persona attributes are never affected. Resolved per request via `getCachedChannelPrompt` (TTL cache with negative caching). Per-channel data is server-local and is not exported.
 - `server_welcome_configs.welcome_channel_disc_id` stores the single configured join-welcome channel per server.
-- `server_welcome_configs.welcome_prompt` stores the required additional greeting instruction shown in `/config` > Channels > Destinations.
+- `server_welcome_configs.welcome_prompt` stores the required additional greeting instruction shown in `/config` > Channels > Logs & Welcome.
 - `server_welcome_configs.welcome_persona_id` stores the selected welcome persona; `NULL` means random persona selection per join.
 - `server_auto_trigger_persona_overrides` (junction table, Phase 6 step #15) stores optional per-channel persona overrides for auto-trigger channels. Each row maps `(server_id, channel_disc_id)` → `persona_id` (FK to `personas(persona_id)` with `ON DELETE CASCADE`). Missing entries fall back to the main persona. The assembled config exposes these as `autoch_persona_overrides: [{channel_disc_id, persona_id}]` via a `JSON_AGG` subquery in `PersonaRepository`.
-- `server_notice_embeds_configs.tool_notice_hidden_keys` stores the hidden notice-embed key registry used by `/config` > Behavior > Notices, covering both tool progress notices and selected public command notice embeds.
+- `server_notice_embeds_configs.tool_notice_hidden_keys` stores the hidden notice-embed key registry used by `/config` > Engine > Notices, covering both tool progress notices and selected public command notice embeds.
 - `server_novelai_imagegen_configs.image_default_positive_tags` stores server-wide default positive image tags. `generate_image` injects them as prompt style guidance; NovelAI tag paths prepend them as trusted positive tags.
 - `server_novelai_imagegen_configs.image_default_negative_tags` stores server-wide default negative image tags. NovelAI consumes them as the negative prompt, while standard image providers consume them only when the backend exposes a real negative-prompt channel.
 - `server_novelai_imagegen_configs.nai_diffusion_model_id` stores the dedicated NovelAI image-model selection for `generate_image_nai`; `NULL` means NovelAI image generation is disabled until a NovelAI model is explicitly selected again.

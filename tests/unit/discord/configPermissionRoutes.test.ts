@@ -635,7 +635,8 @@ describe("permissions panel", () => {
       permissionsView: view,
     });
     const serialized = JSON.stringify(payload);
-    expect(serialized.match(/Enabled/g)?.length).toBe(14);
+    const capabilityDots = (serialized.match(/🟢/gu)?.length ?? 0) + (serialized.match(/🔴/gu)?.length ?? 0);
+    expect(capabilityDots).toBe(14);
     expect(serialized).toContain("perm-tool-use-set");
     expect(serialized.indexOf("Controls whether I may call tools at all.")).toBeLessThan(
       serialized.indexOf("perm-tool-use-set"),

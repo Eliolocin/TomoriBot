@@ -62,7 +62,7 @@ See the [Text-to-Speech](/self-hosting/local-endpoints/text-to-speech/) hub for 
 
 Transcription endpoints turn user audio attachments into text for background conversation
 context. Whether transcripts are **visibly posted** in chat is controlled separately by
-`/config` > Behavior > Notices.
+`/config` > Engine > Notices.
 
 ### ElevenLabs (cloud)
 

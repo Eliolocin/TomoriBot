@@ -48,4 +48,4 @@ Adding the model makes the endpoint active immediately. Use `/providers` later o
 
 ## Use Transcripts
 
-After registration, TomoriBot transcribes audio attachments in the background and adds the text to chat context. Use `/config` > Behavior > Notices only if you also want transcripts posted visibly in chat.
+After registration, TomoriBot transcribes audio attachments in the background and adds the text to chat context. Use `/config` > Engine > Notices only if you also want transcripts posted visibly in chat.

@@ -36,7 +36,7 @@ You can also bootstrap a server with **no** server-side text provider at all by 
 - `/moderation` → **Whitelist** → **Channels** — choose triggering channels and optional cooldown overrides.
 - `/moderation` → **Whitelist** → **Personas** — limit which channels a specific persona can trigger in.
 - `/moderation` → **Whitelist** → **Roles** — restrict triggering to specific roles.
-- `/config` > Behavior > Trigger — set the global cooldown between responses.
+- `/config` > Engine > Trigger — set the global cooldown between responses.
 
 Whitelisted channels inherit the global cooldown unless you set a channel-specific override.
 
@@ -55,7 +55,7 @@ are posted — useful for auditing what she's doing (including which trigger exp
 
 ## Welcome Greetings
 
-`/config` > Channels > Destinations configures an automated greeting for new members in a chosen
+`/config` > Channels > Logs & Welcome configures an automated greeting for new members in a chosen
 channel. By default, Tomori waits one minute before greeting them so server onboarding can
 finish. Instance operators can tune this grace period with `WELCOME_DELAY_MS`. Use the
 **Clear Welcome** button on that same page to stop greetings.

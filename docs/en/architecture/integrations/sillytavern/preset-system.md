@@ -201,7 +201,7 @@ When the preset walker encounters a marker node, it pulls items from the corresp
 
 | ST Marker | ContextItemTag | Native Block | Typical TomoriBot Source |
 |-----------|---------------|--------------|--------------------------|
-| `main` | `SYSTEM_HUMANIZER_RULES` (first item only), then `SYSTEM_CHANNEL_PROMPT` | System prompt + per-channel append prompt | `/config` > Behavior > General (or fallback), plus `/config` > Channels > Channel Overrides in append mode |
+| `main` | `SYSTEM_HUMANIZER_RULES` (first item only), then `SYSTEM_CHANNEL_PROMPT` | System prompt + per-channel append prompt | `/config` > Engine > General (or fallback), plus `/config` > Channels > Channel Overrides in append mode |
 | `charDescription` | `SYSTEM_PERSONA_PROMPT` | Persona prompt | `/config` > Persona > Advanced |
 | `charPersonality` | `SYSTEM_PERSONALITY` | Personality attributes | `/config` > Persona > Identity & Personality |
 | `dialogueExamples` | `DIALOGUE_SAMPLE` | Sample dialogues | `/config` > Persona > Identity & Personality |
@@ -212,7 +212,7 @@ When the preset walker encounters a marker node, it pulls items from the corresp
 **Special case: `main`** — The `main` marker pulls the first `SYSTEM_HUMANIZER_RULES` item (the system prompt) and then the `SYSTEM_CHANNEL_PROMPT` item if present, keeping a per-channel append prompt directly after the system prompt. In `replace` mode there is no separate channel block — the channel prompt has already taken over the `SYSTEM_HUMANIZER_RULES` content upstream. The persona prompt is carried by `SYSTEM_PERSONA_PROMPT` and pulled by `charDescription`.
 
 These marker-controlled blocks are usually **moved, not removed**. The real suppressions are narrow:
-- The built-in fallback system prompt is removed only when a preset is active and the user has not set `/config` > Behavior > General
+- The built-in fallback system prompt is removed only when a preset is active and the user has not set `/config` > Engine > General
 - The native `charDescription` block is skipped only if a custom preset node already expands `{{description}}`
 - The native `charPersonality` block is skipped only if a custom preset node already expands `{{personality}}`
 

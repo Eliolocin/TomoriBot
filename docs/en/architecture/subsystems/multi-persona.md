@@ -44,7 +44,7 @@ Key columns:
 
 Per-persona configuration (one row per persona in `personas`):
 - `trigger_words`: trigger words for this persona — **all personas use this column** (Phase 6 F1 merged the former `personas.alter_triggers` column here; the old `is_alter ? alter_triggers : trigger_words` ternary is gone).
-- `humanizer_degree` (nullable, migration `047`): per-persona humanizer override set via `/config` > Behavior > General with `scope: Persona`. NULL inherits the server-wide `server_chat_configs.humanizer_degree`. When set, persona state loading overlays the value onto that persona's assembled `config.humanizer_degree`, so providers, the stream buffer, and HEAVY-degree context transforms all see the persona-scoped degree with no call-site awareness. Like the persona LLM override (and unlike content edits), setting it does **not** materialize a preset-pointer persona.
+- `humanizer_degree` (nullable, migration `047`): per-persona humanizer override set via `/config` > Engine > General with `scope: Persona`. NULL inherits the server-wide `server_chat_configs.humanizer_degree`. When set, persona state loading overlays the value onto that persona's assembled `config.humanizer_degree`, so providers, the stream buffer, and HEAVY-degree context transforms all see the persona-scoped degree with no call-site awareness. Like the persona LLM override (and unlike content edits), setting it does **not** materialize a preset-pointer persona.
 
 ### `persona_sprites`
 
@@ -93,7 +93,7 @@ Reminders are tied to a persona to preserve the identity that set them:
 
 Each persona checks its own trigger list in `persona_configs.trigger_words`. The former split (`tomori_configs.trigger_words` for main, `personas.alter_triggers` for alters) was unified in Phase 6 F1.
 
-If multiple personas match, they respond in deterministic order based on where their trigger first appears in the message. The per-message count is capped by `/config` > Behavior > Trigger.
+If multiple personas match, they respond in deterministic order based on where their trigger first appears in the message. The per-message count is capped by `/config` > Engine > Trigger.
 
 #### Single-owner trigger resolution
 
@@ -136,7 +136,7 @@ Manual triggers can specify `selectedPersonaId`. In that case, **only that perso
 4. the main persona.
 
 Configured join welcomes also use the manual-trigger path:
-- `/config` > Channels > Destinations stores a selected persona or `Random`.
+- `/config` > Channels > Logs & Welcome stores a selected persona or `Random`.
 - On `guildMemberAdd`, the welcome event resolves that persona and calls `tomoriChat(..., isManuallyTriggered = true, selectedPersonaId = ...)`.
 - If `welcome_persona_id` is `NULL`, one persona is chosen uniformly from the server's available personas for that join.
 
@@ -217,7 +217,7 @@ To prevent infinite loops and unbounded persona activations, TomoriBot implement
 
 ### Overview
 
-- **Default limit**: 3 (configurable via `/config` > Behavior > Trigger, max 10)
+- **Default limit**: 3 (configurable via `/config` > Engine > Trigger, max 10)
 - **Scope**: Per-channel (shared across all personas)
 - **Purpose**: Limit the total number of persona activations after the first trigger in a session
 - **Origin tracking**: each trigger session keeps the originating user identity so downstream persona self-messages still respect that user’s server whitelist and personal spotlight restrictions
@@ -302,14 +302,14 @@ Proxy-trigger note: if user A is restricted to persona Alice by either server wh
 - 0 = Only the first triggered persona responds, no additional triggers allowed
 - N = N additional triggers allowed after the first (N+1 total per session)
 
-**Command:** `/config` > Behavior > Trigger
+**Command:** `/config` > Engine > Trigger
 
 **Database:** `server_chat_configs.match_limit`
 - Default: 3
 - Range: 1 to 10
 - Caps how many personas one message can trigger
 
-**Command:** `/config` > Behavior > Trigger
+**Command:** `/config` > Engine > Trigger
 
 ### Example Flow
 
@@ -357,7 +357,7 @@ Trigger 4: C: "Maybe @E?"
 - Check if cascade trigger limit is reached
 - Look for log: `Self-reply trigger limit reached (X)`
 - Have a user send a message to reset the session
-- Increase limit with `/config` > Behavior > Trigger (max 10)
+- Increase limit with `/config` > Engine > Trigger (max 10)
 
 **Want to allow only the first persona to respond?**
 - Set limit to 0: `/config trigger-cascade-limit limit:0`
@@ -622,7 +622,7 @@ In-memory caches:
 2. **Check cascade trigger limit:**
    - Look for log: `Self-reply trigger limit reached (X)`
    - Have a user send a message to reset the session
-   - Increase limit with `/config` > Behavior > Trigger if needed
+   - Increase limit with `/config` > Engine > Trigger if needed
 
 3. **Check webhook permissions:**
    - Verify bot has `MANAGE_WEBHOOKS` permission in channel
@@ -652,12 +652,12 @@ In-memory caches:
 **Personas stop responding after several triggers:**
 - Trigger limit reached (default: 3 additional after first)
 - User message resets the trigger session
-- Check current limit: `/config` > Behavior > Trigger
+- Check current limit: `/config` > Engine > Trigger
 - Increase limit (max 10) or set to 0 for first-trigger-only
 
 **Personas triggering infinite loops:**
 - Limit is too high
-- Reduce limit with `/config` > Behavior > Trigger
+- Reduce limit with `/config` > Engine > Trigger
 - Check persona personalities (may be too eager to mention each other)
 
 ## Test Checklist (Recommended)

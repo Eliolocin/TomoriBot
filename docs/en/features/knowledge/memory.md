@@ -17,7 +17,7 @@ From most permanent to most fleeting
 |---|---|---|
 | **Long-term memory (LTM)** | Saved facts about a user or a server, uploaded documents, and conditioning | Forever, until someone removes it. Survives `/refresh`, restarts, everything |
 | **Short-term memory (STM)** | A summary she writes for a channel, plus a few recent messages | 24 hours. Can reach across channels |
-| **Chat history** | The recent messages in the channel she's replying in | Only this channel, only until they scroll out of `/config` > Behavior > General range (defaults to latest 80 messages). `/refresh` cuts it off immediately |
+| **Chat history** | The recent messages in the channel she's replying in | Only this channel, only until they scroll out of `/config` > Engine > General range (defaults to latest 80 messages). `/refresh` cuts it off immediately |
 
 Almost everything she appears to "know" in a conversation is just recent chat history, which is why
 she seems to forget a message once the conversation becomes too long. **Only long-term memory is
@@ -73,9 +73,9 @@ If she is not saving things you want kept, you have three options, in increasing
 force:
 
 - Ask her directly to remember it.
-- Add a nudge with `/config` > Behavior > General, or with any of the other prompt-carrying
+- Add a nudge with `/config` > Engine > General, or with any of the other prompt-carrying
   commands from [Inside The Prompt](/features/knowledge/inside-the-prompt/) (`/config` > Persona > Advanced,
-  `/config` > Behavior > General, `/config` > Channels > Channel Overrides). A context note in particular sits low
+  `/config` > Engine > General, `/config` > Channels > Channel Overrides). A context note in particular sits low
   in her prompt, which makes it more likely to be acted on. Something as simple as *"It is
   encouraged to create long-term memories for information that is worth remembering"* is usually
   enough. To reference the actual save-memory tool by name without hardcoding something that can
@@ -155,7 +155,7 @@ Scope narrows things before anything else does: a server memory only ever reache
 in its own server, a personal memory only when that user is visible in the conversation,
 and both only for the persona that owns them. Within that scope, **every memory is sent
 with every prompt** by default. Tagging narrows it further, so a memory activates only on
-a keyword or only in one channel. Turn it on with `/config` > Behavior > Memory & STM.
+a keyword or only in one channel. Turn it on with `/config` > Engine > Memory & STM.
 
 ### Keyword Tags
 
@@ -207,9 +207,9 @@ and refreshes as the conversation moves along. It fades on its own after a few q
 | `/config` > Persona > Memories | Correct it or write it yourself |
 | `/personal config` / `/personal memories` | Opt into cross-server recall, or wipe your own |
 | `/refresh` | Make her forget this channel right now |
-| `/config` > Behavior > Memory & STM | How often she updates it, and how much detail she keeps |
-| `/config` > Behavior > Memory & STM | Swap the summary for up to 5 labeled fields (*Current scene*, *Mood*, …) |
-| `/config` > Behavior > Memory & STM | Reword how she's asked to keep it |
+| `/config` > Engine > Memory & STM | How often she updates it, and how much detail she keeps |
+| `/config` > Engine > Memory & STM | Swap the summary for up to 5 labeled fields (*Current scene*, *Mood*, …) |
+| `/config` > Engine > Memory & STM | Reword how she's asked to keep it |
 | `/memories` | Review and selectively clear active server entries from one manager panel |
 | `/config` > Permissions | Let private-channel memories surface elsewhere |
 | `/config` > Permissions | Turn the feature on or off (stored memories are kept either way) |

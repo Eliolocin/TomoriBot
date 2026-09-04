@@ -10,7 +10,7 @@ import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 TomoriBotは、Speech-to-Textを`transcription`カスタムエンドポイント機能として扱います。有効なtranscriptionエンドポイントが存在する場合、音声添付ファイルはバックグラウンドで文字起こしされ、会話コンテキストに追加されます。
 
-表示される文字起こしの投稿は別です。`/config` > Behavior > Noticesは、ボイスメッセージの文字起こしをチャットに表示して投稿するかどうかのみを制御します。バックグラウンドのSTTを有効または無効にすることはありません。
+表示される文字起こしの投稿は別です。`/config` > Engine > Noticesは、ボイスメッセージの文字起こしをチャットに表示して投稿するかどうかのみを制御します。バックグラウンドのSTTを有効または無効にすることはありません。
 
 ## 利用可能なエンジン
 
@@ -33,6 +33,6 @@ TomoriBotは、Speech-to-Textを`transcription`カスタムエンドポイント
 
 transcriptionエンドポイントが有効な場合、TomoriBotはサポートされている音声添付ファイルをバックグラウンドで読み取り、チャットコンテキストに文字起こしを追加します。ペルソナの割り当ては必要ありません。
 
-文字起こしをチャットに表示して投稿したい場合にのみ、`/config` > Behavior > Noticesを使用してください。
+文字起こしをチャットに表示して投稿したい場合にのみ、`/config` > Engine > Noticesを使用してください。
 
 ElevenLabsのユーザーは`/providers`を使用する必要があります。これにより、speechと一緒にtranscriptionが登録されます。
