@@ -102,13 +102,26 @@ export interface ConfigImageGenerationView {
 }
 
 /** Drilldown state for one capability's model catalog, mirroring the Persona Text-override shape. */
-export interface ConfigModelListView {
+export interface ConfigModelCatalogListView {
+  kind?: "models";
   capability: ConfigModelCapability;
   provider: string;
   models: ConfigModelChoice[];
   start: number;
   currentModelId: number | null;
 }
+
+/** One capability's provider catalog, which keeps provider pagination out of the six-slot overview. */
+export interface ConfigModelProviderListView {
+  kind: "providers";
+  capability: ConfigModelCapability;
+  providers: string[];
+  start: number;
+  currentModelName?: string | null;
+  currentProvider?: string | null;
+}
+
+export type ConfigModelListView = ConfigModelCatalogListView | ConfigModelProviderListView;
 
 export interface ConfigModelsPageInput {
   locale: string;
@@ -178,7 +191,10 @@ function appendCapabilityStatus(
   }
 }
 
-function buildModelListBody(input: ConfigModelsPageInput, view: ConfigModelListView): ComponentInContainerData[] {
+function buildModelListBody(
+  input: ConfigModelsPageInput,
+  view: ConfigModelCatalogListView,
+): ComponentInContainerData[] {
   const { locale } = input;
   const writesDisabled = input.readStatus !== "fresh";
   const capabilityLabel = localizer(locale, MODEL_CAPABILITY_LOCALE_KEYS[view.capability]);
@@ -268,6 +284,105 @@ function buildModelListBody(input: ConfigModelsPageInput, view: ConfigModelListV
   return components;
 }
 
+function buildProviderListBody(
+  input: ConfigModelsPageInput,
+  view: ConfigModelProviderListView,
+): ComponentInContainerData[] {
+  const { locale } = input;
+  const writesDisabled = input.readStatus !== "fresh";
+  const capabilityLabel = localizer(locale, MODEL_CAPABILITY_LOCALE_KEYS[view.capability]);
+  const slot = input.switchView?.slots.find((candidate) => candidate.capability === view.capability);
+  const currentModelName = slot ? slot.currentModelName : (view.currentModelName ?? null);
+  const currentProvider = slot ? slot.currentProvider : (view.currentProvider ?? null);
+  const clearDescriptionKey =
+    currentModelName === null ? undefined : MODEL_CLEAR_DESCRIPTION_LOCALE_KEYS[view.capability];
+  const showClear = clearDescriptionKey !== undefined;
+  // A clearable slot spends one of Discord's 25 option slots on its None entry, and that entry is
+  // re-prepended to every page, so its page size has to shrink or the last provider of each page would
+  // be sliced away with no page able to reach it.
+  const pageSize = CONFIG_MODEL_PAGE_SIZE - (showClear ? 1 : 0);
+  const pageCount = Math.max(1, Math.ceil(view.providers.length / pageSize));
+  const rangeIndex = Math.min(Math.max(Math.floor(view.start / pageSize), 0), pageCount - 1);
+  const start = rangeIndex * pageSize;
+  const visibleProviders = view.providers.slice(start, start + pageSize);
+  const current = currentModelName
+    ? `${currentModelName}${currentProvider ? ` (${getProviderDisplayName(currentProvider)})` : ""}`
+    : localizer(locale, "commands.config.panel.none_label");
+
+  const options: SelectMenuComponentOptionData[] = [];
+  if (clearDescriptionKey !== undefined) {
+    options.push({
+      label: safeSelectOptionText(localizer(locale, "commands.config.panel.model_no_model_option"), 100),
+      description: safeSelectOptionText(localizer(locale, clearDescriptionKey), 100),
+      value: CONFIG_MODEL_CLEAR_VALUE,
+    });
+  }
+  if (visibleProviders.length > 0) {
+    options.push(
+      ...visibleProviders.map((provider) => ({
+        label: safeSelectOptionText(getProviderDisplayName(provider), 100),
+        value: provider,
+      })),
+    );
+  } else if (!showClear) {
+    options.push({
+      label: safeSelectOptionText(localizer(locale, "commands.config.panel.no_providers_option"), 100),
+      value: "none",
+    });
+  }
+
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.StringSelect,
+          customId: buildConfigRouteId({ action: "model-provider-select", locale, capability: view.capability }),
+          placeholder: safeSelectOptionText(`${capabilityLabel}: ${current}`, 150),
+          options,
+          // A model assignment can outlive the provider it came from, so the clear entry keeps the
+          // select live even with nothing eligible left to pick; without it the select is inert
+          // rather than absent, and the placeholder is what keeps the assignment readable.
+          disabled: writesDisabled || (visibleProviders.length === 0 && !showClear),
+        },
+      ],
+    },
+  ];
+
+  const paginationRow = buildPaginationRow({
+    locale,
+    rangeIndex,
+    rangeCount: pageCount,
+    namespace: CONFIG_ROUTE_NAMESPACE,
+    version: CONFIG_ROUTE_VERSION,
+    buildSegments: {
+      page: (targetRangeIndex) =>
+        buildConfigRouteSegments({
+          action: "model-provider-page",
+          locale,
+          capability: view.capability,
+          start: targetRangeIndex * pageSize,
+        }),
+    },
+    disabled: writesDisabled,
+  });
+  if (paginationRow) components.push(paginationRow);
+
+  components.push({
+    type: ComponentType.ActionRow,
+    components: [
+      {
+        type: ComponentType.Button,
+        style: ButtonStyle.Secondary,
+        customId: buildConfigRouteId({ action: "model-cancel", locale, capability: view.capability }),
+        label: localizer(locale, "commands.config.panel.cancel_button"),
+      },
+    ],
+  } satisfies ActionRowData<ButtonComponentData>);
+
+  return components;
+}
+
 function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContainerData[] {
   const { locale } = input;
   const view = input.switchView;
@@ -278,7 +393,11 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
   if (!view) return components;
 
   if (input.modelListView) {
-    components.push(...buildModelListBody(input, input.modelListView));
+    components.push(
+      ...(input.modelListView.kind === "providers"
+        ? buildProviderListBody(input, input.modelListView)
+        : buildModelListBody(input, input.modelListView)),
+    );
     return components;
   }
 
@@ -298,9 +417,7 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
     const showClear = clearDescriptionKey !== undefined;
     const providerPageSize = CONFIG_MODEL_PAGE_SIZE - (showClear ? 1 : 0);
     const pageCount = Math.max(1, Math.ceil(slot.eligibleProviders.length / providerPageSize));
-    const rangeIndex = Math.min(Math.max(Math.floor(slot.providerPageStart / providerPageSize), 0), pageCount - 1);
-    const start = rangeIndex * providerPageSize;
-    const visibleProviders = slot.eligibleProviders.slice(start, start + providerPageSize);
+    const visibleProviders = slot.eligibleProviders.slice(0, providerPageSize);
 
     const options: SelectMenuComponentOptionData[] = [];
     if (clearDescriptionKey !== undefined) {
@@ -340,24 +457,24 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
       ],
     });
 
-    const paginationRow = buildPaginationRow({
-      locale,
-      rangeIndex,
-      rangeCount: pageCount,
-      namespace: CONFIG_ROUTE_NAMESPACE,
-      version: CONFIG_ROUTE_VERSION,
-      buildSegments: {
-        page: (targetRangeIndex) =>
-          buildConfigRouteSegments({
-            action: "model-provider-page",
-            locale,
-            capability,
-            start: targetRangeIndex * providerPageSize,
-          }),
-      },
-      disabled: writesDisabled,
-    });
-    if (paginationRow) components.push(paginationRow);
+    if (pageCount > 1) {
+      components.push({
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "model-provider-page", locale, capability, start: 0 }),
+            // Every overflowing capability emits one of these, so the label has to name its own
+            // capability: six buttons reading only "Provider" are indistinguishable in the client.
+            label: localizer(locale, "commands.config.panel.model_browse_providers_button", {
+              capability: capabilityLabel,
+            }),
+            disabled: writesDisabled,
+          },
+        ],
+      } satisfies ActionRowData<ButtonComponentData>);
+    }
 
     if (capability === "nai-image") appendCapabilityStatus(components, locale, view, "image");
     if (capability === "video") appendCapabilityStatus(components, locale, view, "video");

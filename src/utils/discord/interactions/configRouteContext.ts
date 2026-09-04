@@ -38,6 +38,7 @@ import type { ConfigFallbackOption } from "@/utils/discord/ui/configModelModals"
 import type {
   ConfigFallbacksView,
   ConfigImageGenerationView,
+  ConfigModelCatalogListView,
   ConfigModelListView,
   ConfigParametersView,
   ConfigSwitchModelsView,
@@ -227,7 +228,7 @@ export interface ConfigRouteDependencies {
     capability: ConfigModelCapability,
     provider: string,
     start: number,
-  ): Promise<ConfigModelListView>;
+  ): Promise<ConfigModelCatalogListView>;
   loadFallbackOptions(state: TomoriState, provider: string): Promise<ConfigFallbackOption[]>;
   loadModelProviders(state: TomoriState, capability: ConfigModelCapability): Promise<string[]>;
   createGuildIdentity(guildId: string, interaction: GlobalRoutableInteraction): GuildIdentityPort;

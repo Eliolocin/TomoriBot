@@ -17,13 +17,16 @@ import { ragRepository, serverMemoryRepository } from "@/utils/db/repositories";
 import * as credentialResolver from "@/utils/provider/credentialResolver";
 import {
   buildConfigRouteId,
+  CONFIG_CLEARABLE_MODEL_CAPABILITIES,
   CONFIG_MODEL_CLEAR_VALUE,
+  CONFIG_MODEL_PAGE_SIZE,
   type ConfigModelCapability,
 } from "@/utils/discord/configPanelCatalog";
 import {
   filterProvidersForCapability,
   isNaiPipelineProvider,
   configModelOperations,
+  type ConfigModelOperations,
 } from "@/utils/discord/interactions/configModelOperations";
 import {
   decodeFallbackProviderValue,
@@ -40,6 +43,10 @@ import { InteractionRouteRegistry } from "@/utils/discord/interactions/routeRegi
 import { buildConfigModalFieldId } from "@/utils/discord/ui/configModals";
 import { buildConfigFallbackSlotId } from "@/utils/discord/ui/configModelModals";
 import { buildConfigPanelPayload } from "@/utils/discord/ui/configPanel";
+import {
+  validateComponentsV2MessageLimits,
+  type ComponentsV2MessagePayload,
+} from "@/utils/discord/ui/componentsV2Limits";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
@@ -126,6 +133,7 @@ function makeSavedProvider(provider: string, overrides: Record<string, unknown> 
 interface HarnessOptions {
   isManager?: boolean;
   inGuild?: boolean;
+  unavailable?: boolean;
   readStatus?: PanelReadStatus;
   state?: TomoriState;
   refreshedState?: TomoriState;
@@ -136,6 +144,7 @@ interface HarnessOptions {
   parametersProviders?: string[];
   selectedConfig?: SavedProviderConfigRow | null;
   fallbackProviderEntries?: Array<{ value: string; label: string }>;
+  modelOperationsOverrides?: Partial<ConfigModelOperations>;
 }
 
 interface Harness {
@@ -158,18 +167,21 @@ function makeHarness(options: HarnessOptions = {}): Harness {
   const selectValues: Record<string, string | undefined> = {};
   const deferredAtWrite: boolean[] = [];
 
-  const buildScope = (forceRefresh: boolean): ConfigScope => ({
-    serverDiscId: options.inGuild === false ? "user-1" : "guild-1",
-    guildId: options.inGuild === false ? null : "guild-1",
-    internalServerId: 9,
-    userId: 1,
-    actor:
-      options.inGuild === false
-        ? { workspaceKind: "dm", isManager: true }
-        : { workspaceKind: "guild", isManager: options.isManager ?? true },
-    personas: [(forceRefresh ? (options.refreshedState ?? options.state) : options.state) ?? makeState()],
-    readStatus: options.readStatus ?? "fresh",
-  });
+  const buildScope = (forceRefresh: boolean): ConfigScope | null => {
+    if (options.unavailable) return null;
+    return {
+      serverDiscId: options.inGuild === false ? "user-1" : "guild-1",
+      guildId: options.inGuild === false ? null : "guild-1",
+      internalServerId: 9,
+      userId: 1,
+      actor:
+        options.inGuild === false
+          ? { workspaceKind: "dm", isManager: true }
+          : { workspaceKind: "guild", isManager: options.isManager ?? true },
+      personas: [(forceRefresh ? (options.refreshedState ?? options.state) : options.state) ?? makeState()],
+      readStatus: options.readStatus ?? "fresh",
+    };
+  };
 
   return {
     telemetry,
@@ -186,6 +198,7 @@ function makeHarness(options: HarnessOptions = {}): Harness {
         telemetry.push(input.action);
       },
       createNonce: () => "nonce1234567",
+      modelOperations: { ...configModelOperations, ...options.modelOperationsOverrides },
       showModal: async (_interaction, payload) => {
         modals.push(payload);
       },
@@ -370,6 +383,20 @@ function findComponentByCustomId(value: unknown, customId: string): Record<strin
     if (match) return match;
   }
   return undefined;
+}
+
+function selectOptionValues(payload: unknown, customId: string): string[] {
+  const select = findComponentByCustomId(payload, customId);
+  if (!Array.isArray(select?.options)) return [];
+  return select.options.flatMap((option) => {
+    if (typeof option !== "object" || option === null) return [];
+    const value = (option as { value?: unknown }).value;
+    return typeof value === "string" ? [value] : [];
+  });
+}
+
+function expectValidComponentsV2Payload(payload: unknown): void {
+  expect(validateComponentsV2MessageLimits(payload as ComponentsV2MessagePayload).valid).toBe(true);
 }
 
 describe("config models provider eligibility", () => {
@@ -837,6 +864,297 @@ describe("config models switch page", () => {
       }),
     );
     expect(modelSelectOptions(second.edits.at(-1)).map((option) => option.value)).toContain("25");
+  });
+
+  it("keeps every eligible provider reachable for zero through sixty providers", async () => {
+    const capabilities = ["text", "vision", "embedding", "image", "nai-image", "video"] as const;
+    const counts = [0, 1, 25, 26, 60];
+    expect(buildConfigRouteId({ action: "model-provider-page", locale: "en-US", capability: "text", start: 0 })).toBe(
+      "config:v1:model-prov-page:en-US:text:0",
+    );
+
+    for (const count of counts) {
+      const providersByCapability = Object.fromEntries(
+        capabilities.map((capability) => [
+          capability,
+          Array.from({ length: count }, (_unused, index) => `${capability}-provider-${index + 1}`),
+        ]),
+      ) as Record<ConfigModelCapability, string[]>;
+      const harness = makeHarness({ switchProviders: providersByCapability });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+          kind: "select",
+          values: ["switch"],
+          harness,
+        }),
+      );
+
+      const overview = harness.edits.at(-1);
+      expectValidComponentsV2Payload(overview);
+      for (const capability of capabilities) {
+        const eligible = providersByCapability[capability];
+        const reachable = new Set(
+          selectOptionValues(
+            overview,
+            buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+          ).filter((value) => value !== CONFIG_MODEL_CLEAR_VALUE && value !== "none"),
+        );
+        let detail = overview;
+        const pageSize = CONFIG_MODEL_PAGE_SIZE;
+        for (let start = 0; start < eligible.length; start += pageSize) {
+          const pageRoute = buildConfigRouteId({
+            action: "model-provider-page",
+            locale: "en-US",
+            capability,
+            start,
+          });
+          if (start > 0) {
+            expect(findComponentByCustomId(detail, pageRoute)).toBeDefined();
+          } else if (eligible.length > pageSize) {
+            expect(findComponentByCustomId(overview, pageRoute)?.disabled).toBe(false);
+          }
+
+          await dispatch(harness, makeInteraction({ customId: pageRoute, harness }));
+          detail = harness.edits.at(-1);
+          expectValidComponentsV2Payload(detail);
+          for (const value of selectOptionValues(
+            detail,
+            buildConfigRouteId({
+              action: "model-provider-select",
+              locale: "en-US",
+              capability,
+            }),
+          )) {
+            if (value !== CONFIG_MODEL_CLEAR_VALUE && value !== "none") reachable.add(value);
+          }
+        }
+
+        expect([...reachable].sort()).toEqual(eligible.sort());
+      }
+    }
+  });
+
+  it("keeps all six overflowing provider catalogs reachable with a later current provider", async () => {
+    const capabilities = ["text", "vision", "embedding", "image", "nai-image", "video"] as const;
+    const providersByCapability = Object.fromEntries(
+      capabilities.map((capability) => [
+        capability,
+        Array.from({ length: 60 }, (_unused, index) => `${capability}-provider-${index + 1}`),
+      ]),
+    ) as Record<ConfigModelCapability, string[]>;
+    const currentModels = Object.fromEntries(
+      capabilities.map((capability) => [capability, "current-model"]),
+    ) as Partial<Record<ConfigModelCapability, string | null>>;
+    const currentProviders = Object.fromEntries(
+      capabilities.map((capability) => [capability, `${capability}-provider-60`]),
+    ) as Partial<Record<ConfigModelCapability, string | null>>;
+    const harness = makeHarness({ switchProviders: providersByCapability, currentModels, currentProviders });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness,
+      }),
+    );
+
+    const overview = harness.edits.at(-1);
+    expectValidComponentsV2Payload(overview);
+    for (const capability of capabilities) {
+      const topSelect = findComponentByCustomId(
+        overview,
+        buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+      );
+      expect(String(topSelect?.placeholder)).toContain(`${capability}-provider-60`);
+
+      const reachable = new Set(
+        selectOptionValues(
+          overview,
+          buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+        ).filter((value) => value !== CONFIG_MODEL_CLEAR_VALUE && value !== "none"),
+      );
+      const pageSize = CONFIG_MODEL_PAGE_SIZE - (CONFIG_CLEARABLE_MODEL_CAPABILITIES.has(capability) ? 1 : 0);
+      let detail: unknown = overview;
+      for (let start = 0; start < providersByCapability[capability].length; start += pageSize) {
+        const pageRoute = buildConfigRouteId({
+          action: "model-provider-page",
+          locale: "en-US",
+          capability,
+          start,
+        });
+        if (start > 0) expect(findComponentByCustomId(detail, pageRoute)).toBeDefined();
+        else expect(findComponentByCustomId(overview, pageRoute)?.disabled).toBe(false);
+
+        await dispatch(harness, makeInteraction({ customId: pageRoute, harness }));
+        detail = harness.edits.at(-1);
+        expectValidComponentsV2Payload(detail);
+        for (const value of selectOptionValues(
+          detail,
+          buildConfigRouteId({
+            action: "model-provider-select",
+            locale: "en-US",
+            capability,
+          }),
+        )) {
+          if (value !== CONFIG_MODEL_CLEAR_VALUE && value !== "none") reachable.add(value);
+        }
+      }
+
+      expect([...reachable].sort()).toEqual(providersByCapability[capability].sort());
+    }
+  });
+
+  it("keeps every model reachable across the clear-aware model detail pages", async () => {
+    const capabilities = ["text", "vision", "embedding", "image", "nai-image", "video"] as const;
+    const models = Array.from({ length: 60 }, (_unused, index) => ({
+      id: index + 1,
+      name: `model-${index + 1}`,
+      description: null,
+    }));
+
+    for (const capability of capabilities) {
+      const harness = makeHarness({ models });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }),
+          kind: "select",
+          values: ["google"],
+          harness,
+        }),
+      );
+
+      const modelRoute = buildConfigRouteId({
+        action: "model-select",
+        locale: "en-US",
+        capability,
+        provider: "google",
+      });
+      let detail: unknown = harness.edits.at(-1);
+      expectValidComponentsV2Payload(detail);
+      const reachable = new Set(
+        modelSelectOptions(detail)
+          .map((option) => option.value)
+          .filter((value) => value !== CONFIG_MODEL_CLEAR_VALUE),
+      );
+      const pageSize = CONFIG_MODEL_PAGE_SIZE - (CONFIG_CLEARABLE_MODEL_CAPABILITIES.has(capability) ? 1 : 0);
+      for (let start = pageSize; start < models.length; start += pageSize) {
+        const pageRoute = buildConfigRouteId({
+          action: "model-page",
+          locale: "en-US",
+          capability,
+          provider: "google",
+          start,
+        });
+        expect(findComponentByCustomId(detail, pageRoute)).toBeDefined();
+        await dispatch(harness, makeInteraction({ customId: pageRoute, harness }));
+        detail = harness.edits.at(-1);
+        expectValidComponentsV2Payload(detail);
+        for (const option of modelSelectOptions(detail)) {
+          if (option.value !== CONFIG_MODEL_CLEAR_VALUE) reachable.add(option.value);
+        }
+      }
+
+      expect([...reachable].sort()).toEqual(models.map((model) => String(model.id)).sort());
+      expect(findComponentByCustomId(detail, modelRoute)).toBeDefined();
+    }
+  });
+
+  it("keeps receipt, retry, stale, and unavailable Models repaints within their intended paths", async () => {
+    const initial = makeHarness();
+    await dispatch(
+      initial,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: initial,
+      }),
+    );
+    expectValidComponentsV2Payload(initial.edits.at(-1));
+
+    const stale = makeHarness();
+    await dispatch(
+      stale,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability: "text" }),
+        kind: "select",
+        values: ["retired-provider"],
+        harness: stale,
+      }),
+    );
+    expectValidComponentsV2Payload(stale.edits.at(-1));
+
+    const staleRead = makeHarness({ readStatus: "stale" });
+    await dispatch(
+      staleRead,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: staleRead,
+      }),
+    );
+    expectValidComponentsV2Payload(staleRead.edits.at(-1));
+
+    const retry = makeHarness();
+    await dispatch(
+      retry,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "retry", locale: "en-US", category: "models", page: "switch" }),
+        harness: retry,
+      }),
+    );
+    expectValidComponentsV2Payload(retry.edits.at(-1));
+
+    const unavailable = makeHarness({ unavailable: true });
+    await dispatch(
+      unavailable,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+        kind: "select",
+        values: ["switch"],
+        harness: unavailable,
+      }),
+    );
+    if (unavailable.edits.length > 0) {
+      expectValidComponentsV2Payload(unavailable.edits.at(-1));
+    } else {
+      expect(unavailable.replies).toHaveLength(1);
+    }
+
+    const resultCases = [
+      { status: "already-selected" as const },
+      { status: "success" as const, modelName: "model-7", reembedded: false },
+      { status: "openrouter-moved" as const },
+      { status: "write-failed" as const },
+    ];
+    for (const result of resultCases) {
+      const harness = makeHarness({
+        modelOperationsOverrides: {
+          setCapabilityModel: async () => result,
+        },
+      });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({
+            action: "model-select",
+            locale: "en-US",
+            capability: "vision",
+            provider: "google",
+          }),
+          kind: "select",
+          values: ["7"],
+          harness,
+        }),
+      );
+      expectValidComponentsV2Payload(harness.edits.at(-1));
+    }
   });
 });
 

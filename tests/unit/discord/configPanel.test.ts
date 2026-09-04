@@ -20,6 +20,7 @@ import {
 } from "@/utils/discord/configPanelCatalog";
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type { ConfigPersonaMemoryView } from "@/utils/discord/interactions/configRouteContext";
+import { validateComponentsV2MessageLimits } from "@/utils/discord/ui/componentsV2Limits";
 import { buildConfigPanelPayload } from "@/utils/discord/ui/configPanel";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
@@ -157,6 +158,21 @@ function build(
 function buttonFor(payload: unknown, route: Parameters<typeof buildConfigRouteId>[0]): Observed | undefined {
   const customId = buildConfigRouteId(route);
   return walk(payload).find((component) => component.customId === customId);
+}
+
+/** Returns the custom IDs of the button row holding a button whose custom ID contains `marker`. */
+function buttonRowContaining(payload: unknown, marker: string): string[] | undefined {
+  const rows: string[][] = [];
+  const visit = (components: readonly Observed[]): void => {
+    for (const component of components) {
+      if (component.type === ACTION_ROW && Array.isArray(component.components)) {
+        rows.push((component.components as Observed[]).map((child) => String(child.customId ?? "")));
+      }
+      if (Array.isArray(component.components)) visit(component.components as Observed[]);
+    }
+  };
+  visit((payload as { components: Observed[] }).components);
+  return rows.find((row) => row.some((customId) => customId.includes(marker)));
 }
 
 describe("config panel shell", () => {
@@ -364,21 +380,121 @@ describe("config Persona General body", () => {
     ).toBe(false);
   });
 
-  it("keeps a receipt-bearing collection view within Discord's component ceiling", () => {
+  it("keeps Persona General states within Discord's component ceiling", () => {
+    const personaCounts = [0, 1, 24, 25, 26, 50, 200] as const;
+    const selectedPersona = makePersona({
+      persona_id: 55,
+      persona_nickname: "Aphel",
+      attribute_list: ["Likes tea"],
+      sample_dialogues_in: ["Hello"],
+      sample_dialogues_out: ["Hi"],
+    });
+
+    for (const personaCount of personaCounts) {
+      const personas =
+        personaCount === 0
+          ? []
+          : [
+              selectedPersona,
+              ...Array.from({ length: personaCount - 1 }, (_, index) => {
+                const personaId = index + 1;
+                return makePersona({ persona_id: personaId === 55 ? personaCount + 1000 : personaId });
+              }),
+            ];
+
+      for (const hasReceipt of [false, true]) {
+        for (const hasAvatar of [false, true]) {
+          for (const hasSelectedAttribute of [false, true]) {
+            for (const hasSelectedDialogue of [false, true]) {
+              const state = {
+                personaCount,
+                hasReceipt,
+                hasAvatar,
+                hasSelectedAttribute,
+                hasSelectedDialogue,
+              };
+              const payload = build(GUILD_MANAGER, {
+                personas,
+                selectedAttributeIndex: hasSelectedAttribute ? 0 : undefined,
+                selectedDialogueIndex: hasSelectedDialogue ? 0 : undefined,
+                selectedPersonaAvatarUrl: hasAvatar ? "https://cdn.example.invalid/55.png" : null,
+                receipt: hasReceipt
+                  ? { tone: "success", heading: "Saved", detail: "The change was saved." }
+                  : undefined,
+              });
+              const result = validateComponentsV2MessageLimits(payload);
+
+              expect(
+                result.valid,
+                `Persona General state ${JSON.stringify(state)} violations: ${JSON.stringify(result.violations)}`,
+              ).toBe(true);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("keeps collection pagination out of the identity action row when nothing is selected", () => {
+    // Both collection bodies end on their own pagination row when nothing is selected, so a merge
+    // that identifies the trailing row by position captures pagination buttons instead of the edit
+    // and remove pair, stranding a collection's page controls in the identity row above its select.
+    const persona = makePersona({
+      persona_id: 55,
+      attribute_list: Array.from({ length: 30 }, (_unused, index) => `Attribute ${index + 1}`),
+      sample_dialogues_in: Array.from({ length: 30 }, (_unused, index) => `In ${index + 1}`),
+      sample_dialogues_out: Array.from({ length: 30 }, (_unused, index) => `Out ${index + 1}`),
+    });
+    const payload = build(GUILD_MANAGER, {
+      personas: [persona, ALTER],
+      selectedPersonaAvatarUrl: "https://cdn.example.invalid/55.png",
+      receipt: { tone: "success", heading: "Saved", detail: "The change was saved." },
+    });
+    const result = validateComponentsV2MessageLimits(payload);
+    expect(result.valid, `violations: ${JSON.stringify(result.violations)}`).toBe(true);
+
+    const identityRow = buttonRowContaining(payload, "avatar-open");
+    expect(identityRow).toBeDefined();
+    for (const customId of identityRow ?? []) {
+      expect(customId, "identity row holds a collection page control").not.toContain("attr-page");
+      expect(customId, "identity row holds a collection page control").not.toContain("dlg-page");
+      expect(customId, "identity row holds a pagination indicator").not.toContain("pagination-indicator");
+    }
+  });
+
+  it("keeps Persona confirmation, stale, unavailable, and receipt repaints valid", () => {
     const persona = makePersona({
       persona_id: 55,
       attribute_list: ["Likes tea"],
       sample_dialogues_in: ["Hello"],
       sample_dialogues_out: ["Hi"],
     });
-    const payload = build(GUILD_MANAGER, {
-      personas: [persona],
+    const base = {
+      personas: [persona, ALTER],
       selectedAttributeIndex: 0,
       selectedDialogueIndex: 0,
       selectedPersonaAvatarUrl: "https://cdn.example.invalid/55.png",
-      receipt: { tone: "success", heading: "Saved", detail: "The change was saved." },
-    });
-    expect(walk(payload)).toHaveLength(40);
+    } satisfies Partial<Parameters<typeof buildConfigPanelPayload>[0]>;
+    const repaints: Array<{
+      name: string;
+      overrides: Partial<Parameters<typeof buildConfigPanelPayload>[0]>;
+    }> = [
+      {
+        name: "confirmation",
+        overrides: { view: { kind: "promote-confirm", personaId: 56, nonce: "nonce1234567" } },
+      },
+      { name: "stale", overrides: { readStatus: "stale" } },
+      { name: "unavailable and retry", overrides: { readStatus: "unavailable" } },
+      {
+        name: "receipt-bearing",
+        overrides: { receipt: { tone: "success", heading: "Saved", detail: "The change was saved." } },
+      },
+    ];
+
+    for (const repaint of repaints) {
+      const result = validateComponentsV2MessageLimits(build(GUILD_MANAGER, { ...base, ...repaint.overrides }));
+      expect(result.valid, `${repaint.name} violations: ${JSON.stringify(result.violations)}`).toBe(true);
+    }
   });
 });
 

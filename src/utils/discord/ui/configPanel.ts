@@ -448,6 +448,7 @@ function buildAttributeCollectionBody(input: ConfigPanelRenderInput, persona: To
   const rangeIndex = collectionRangeIndex(attributes.length, input.attributePageStart, selectedIndex);
   const start = rangeIndex * CONFIG_PERSONA_COLLECTION_PAGE_SIZE;
   const visibleAttributes = attributes.slice(start, start + CONFIG_PERSONA_COLLECTION_PAGE_SIZE);
+  const selectedAttributeContent = selectedIndex !== undefined ? attributes[selectedIndex] : undefined;
   const options: SelectMenuComponentOptionData[] = [
     ...(mayWrite
       ? [
@@ -471,7 +472,9 @@ function buildAttributeCollectionBody(input: ConfigPanelRenderInput, persona: To
     {
       type: ComponentType.TextDisplay,
       content: `${localizer(locale, "commands.config.panel.attributes_title")}
-${localizer(locale, "commands.config.panel.attributes_description")}`,
+${localizer(locale, "commands.config.panel.attributes_description")}${
+  selectedAttributeContent !== undefined ? `\n${renderFencedCollectionContent(selectedAttributeContent)}` : ""
+}`,
     },
   ];
 
@@ -527,40 +530,37 @@ ${localizer(locale, "commands.config.panel.attributes_description")}`,
       persona.persona_attributes?.find((attribute) => attribute.attribute_order === selectedIndex + 1)?.is_public ??
       false;
     const fp = computeAttributeFingerprint(persona.persona_id as number, selectedIndex, selectedAttribute, isPublic);
-    components.push(
-      { type: ComponentType.TextDisplay, content: renderFencedCollectionContent(selectedAttribute) },
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            customId: buildConfigRouteId({
-              action: "attribute-edit-open",
-              locale,
-              personaId: persona.persona_id as number,
-              index: selectedIndex,
-              fp,
-            }),
-            label: localizer(locale, "commands.config.panel.attribute_edit_button"),
-            disabled: readStatus !== "fresh" || !mayWrite,
-          },
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Danger,
-            customId: buildConfigRouteId({
-              action: "attribute-remove",
-              locale,
-              personaId: persona.persona_id as number,
-              index: selectedIndex,
-              fp,
-            }),
-            label: localizer(locale, "commands.config.panel.attribute_remove_button"),
-            disabled: readStatus !== "fresh" || !mayWrite,
-          },
-        ],
-      },
-    );
+    components.push({
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({
+            action: "attribute-edit-open",
+            locale,
+            personaId: persona.persona_id as number,
+            index: selectedIndex,
+            fp,
+          }),
+          label: localizer(locale, "commands.config.panel.attribute_edit_button"),
+          disabled: readStatus !== "fresh" || !mayWrite,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Danger,
+          customId: buildConfigRouteId({
+            action: "attribute-remove",
+            locale,
+            personaId: persona.persona_id as number,
+            index: selectedIndex,
+            fp,
+          }),
+          label: localizer(locale, "commands.config.panel.attribute_remove_button"),
+          disabled: readStatus !== "fresh" || !mayWrite,
+        },
+      ],
+    });
   }
 
   return components;
@@ -581,6 +581,8 @@ function buildDialogueCollectionBody(input: ConfigPanelRenderInput, persona: Tom
   const rangeIndex = collectionRangeIndex(pairCount, input.dialoguePageStart, selectedIndex);
   const start = rangeIndex * CONFIG_PERSONA_COLLECTION_PAGE_SIZE;
   const visibleInputs = inputs.slice(start, start + CONFIG_PERSONA_COLLECTION_PAGE_SIZE);
+  const selectedInput = selectedIndex !== undefined ? inputs[selectedIndex] : undefined;
+  const selectedOutput = selectedIndex !== undefined ? outputs[selectedIndex] : undefined;
   const options: SelectMenuComponentOptionData[] = [
     ...(mayWrite
       ? [
@@ -605,7 +607,14 @@ function buildDialogueCollectionBody(input: ConfigPanelRenderInput, persona: Tom
     {
       type: ComponentType.TextDisplay,
       content: `${localizer(locale, "commands.config.panel.dialogues_title")}
-${localizer(locale, "commands.config.panel.dialogues_description")}`,
+${localizer(locale, "commands.config.panel.dialogues_description")}${
+  selectedInput !== undefined && selectedOutput !== undefined
+    ? `\n${renderFencedCollectionContent(
+        `${localizer(locale, "commands.config.panel.dialogue_user_prefix")}: ${selectedInput}
+${localizer(locale, "commands.config.panel.dialogue_bot_prefix")}: ${selectedOutput}`,
+      )}`
+    : ""
+}`,
     },
   ];
 
@@ -655,53 +664,82 @@ ${localizer(locale, "commands.config.panel.dialogues_description")}`,
     if (paginationRow) components.push(paginationRow);
   }
 
-  if (selectedIndex !== undefined) {
-    const selectedInput = inputs[selectedIndex];
-    const selectedOutput = outputs[selectedIndex];
+  if (selectedIndex !== undefined && selectedInput !== undefined && selectedOutput !== undefined) {
     const fp = computeDialogueFingerprint(persona.persona_id as number, selectedIndex, selectedInput, selectedOutput);
-    components.push(
-      {
-        type: ComponentType.TextDisplay,
-        content: renderFencedCollectionContent(
-          `${localizer(locale, "commands.config.panel.dialogue_user_prefix")}: ${selectedInput}
-${localizer(locale, "commands.config.panel.dialogue_bot_prefix")}: ${selectedOutput}`,
-        ),
-      },
-      {
-        type: ComponentType.ActionRow,
-        components: [
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Secondary,
-            customId: buildConfigRouteId({
-              action: "dialogue-edit-open",
-              locale,
-              personaId: persona.persona_id as number,
-              index: selectedIndex,
-              fp,
-            }),
-            label: localizer(locale, "commands.config.panel.dialogue_edit_button"),
-            disabled: readStatus !== "fresh" || !mayWrite,
-          },
-          {
-            type: ComponentType.Button,
-            style: ButtonStyle.Danger,
-            customId: buildConfigRouteId({
-              action: "dialogue-remove",
-              locale,
-              personaId: persona.persona_id as number,
-              index: selectedIndex,
-              fp,
-            }),
-            label: localizer(locale, "commands.config.panel.dialogue_remove_button"),
-            disabled: readStatus !== "fresh" || !mayWrite,
-          },
-        ],
-      },
-    );
+    components.push({
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({
+            action: "dialogue-edit-open",
+            locale,
+            personaId: persona.persona_id as number,
+            index: selectedIndex,
+            fp,
+          }),
+          label: localizer(locale, "commands.config.panel.dialogue_edit_button"),
+          disabled: readStatus !== "fresh" || !mayWrite,
+        },
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Danger,
+          customId: buildConfigRouteId({
+            action: "dialogue-remove",
+            locale,
+            personaId: persona.persona_id as number,
+            index: selectedIndex,
+            fp,
+          }),
+          label: localizer(locale, "commands.config.panel.dialogue_remove_button"),
+          disabled: readStatus !== "fresh" || !mayWrite,
+        },
+      ],
+    });
   }
 
   return components;
+}
+
+function isTextDisplayComponent(
+  component: ComponentInContainerData | undefined,
+): component is TextDisplayComponentData {
+  return component?.type === ComponentType.TextDisplay;
+}
+
+function hasSelectedCollectionEntry(selectedIndex: number | undefined, entryCount: number): boolean {
+  return selectedIndex !== undefined && selectedIndex >= 0 && selectedIndex < entryCount;
+}
+
+/**
+ * Returns a collection body's trailing edit and remove row, but only when that body actually has a
+ * selected entry.
+ *
+ * A collection body ends on its own pagination row whenever nothing is selected, and those buttons
+ * are indistinguishable by shape from the edit and remove pair. Identifying the row by position
+ * alone captures pagination controls and strands them in whichever row absorbs them.
+ */
+function getSelectedEntryActionRow(
+  components: ComponentInContainerData[],
+  hasSelectedEntry: boolean,
+): ButtonComponentData[] | undefined {
+  if (!hasSelectedEntry) return undefined;
+  const last = components[components.length - 1];
+  if (!last || last.type !== ComponentType.ActionRow || !("components" in last)) return undefined;
+  const rowComponents = last.components as unknown[];
+  if (
+    !rowComponents.every(
+      (component) =>
+        typeof component === "object" &&
+        component !== null &&
+        "type" in component &&
+        component.type === ComponentType.Button,
+    )
+  ) {
+    return undefined;
+  }
+  return rowComponents as ButtonComponentData[];
 }
 
 function buildPersonaGeneralBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
@@ -767,12 +805,58 @@ ${localizer(locale, "commands.config.panel.general_description")}`,
     });
   }
 
-  if (identityButtons.length > 0) {
-    components.push({ type: ComponentType.ActionRow, components: identityButtons });
+  const identityActionRow: ComponentInContainerData | undefined =
+    identityButtons.length > 0 ? { type: ComponentType.ActionRow, components: identityButtons } : undefined;
+
+  const attributeComponents = buildAttributeCollectionBody(input, persona);
+  const dialogueComponents = buildDialogueCollectionBody(input, persona);
+  const attributeHeading = attributeComponents[0];
+  const dialogueHeading = dialogueComponents.shift();
+  if (isTextDisplayComponent(attributeHeading) && isTextDisplayComponent(dialogueHeading)) {
+    attributeHeading.content += `\n\n${dialogueHeading.content}`;
+  } else if (isTextDisplayComponent(dialogueHeading)) {
+    dialogueComponents.unshift(dialogueHeading);
   }
 
-  components.push(...buildAttributeCollectionBody(input, persona));
-  components.push(...buildDialogueCollectionBody(input, persona));
+  const attributeCount = (persona.attribute_list ?? []).length;
+  const dialoguePairCount = Math.min(
+    (persona.sample_dialogues_in ?? []).length,
+    (persona.sample_dialogues_out ?? []).length,
+  );
+  const attributeActions = getSelectedEntryActionRow(
+    attributeComponents,
+    hasSelectedCollectionEntry(input.selectedAttributeIndex, attributeCount),
+  );
+  const dialogueActions = getSelectedEntryActionRow(
+    dialogueComponents,
+    hasSelectedCollectionEntry(input.selectedDialogueIndex, dialoguePairCount),
+  );
+  const identityWithAttributeActions =
+    identityActionRow !== undefined &&
+    attributeActions !== undefined &&
+    identityButtons.length + attributeActions.length <= 5;
+  if (identityWithAttributeActions) {
+    attributeComponents.pop();
+    components.push({
+      type: ComponentType.ActionRow,
+      components: [...identityButtons, ...attributeActions],
+    });
+  } else if (identityActionRow) {
+    components.push(identityActionRow);
+  }
+
+  const collectionsWithCombinedActions = !identityWithAttributeActions && attributeActions && dialogueActions;
+  if (collectionsWithCombinedActions) {
+    attributeComponents.pop();
+    dialogueComponents.pop();
+  }
+  components.push(...attributeComponents, ...dialogueComponents);
+  if (collectionsWithCombinedActions) {
+    components.push({
+      type: ComponentType.ActionRow,
+      components: [...attributeActions, ...dialogueActions],
+    });
+  }
 
   const namingState = resolvePersonaGeneralActionState("naming", actor);
   if (namingState !== "omitted") {

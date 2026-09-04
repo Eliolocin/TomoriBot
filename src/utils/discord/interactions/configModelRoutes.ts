@@ -59,6 +59,7 @@ import {
   CONFIG_NAI_STEPS_FIELD,
   CONFIG_STOP_SPEAKER_PATTERN_FIELD,
 } from "@/utils/discord/ui/configModelModals";
+import type { ConfigModelProviderListView } from "@/utils/discord/ui/configModelsPanel";
 import { NAI_IMAGE_NOISE_SCHEDULES, NAI_IMAGE_SAMPLERS } from "@/utils/image/naiImageParams";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { log } from "@/utils/misc/logger";
@@ -390,6 +391,21 @@ function recordModelAction(context: ConfigModelRouteContext, action: PanelAction
   });
 }
 
+async function loadModelProviderListView(
+  state: TomoriState,
+  capability: ConfigModelCapability,
+  start: number,
+  dependencies: ConfigRouteDependencies,
+): Promise<ConfigModelProviderListView> {
+  const providers = await dependencies.loadModelProviders(state, capability);
+  return {
+    kind: "providers",
+    capability,
+    providers,
+    start,
+  };
+}
+
 async function clearSwitchModel(context: ConfigModelRouteContext, capability: ConfigModelCapability): Promise<boolean> {
   const { dependencies, route } = context;
   const locale = route.locale;
@@ -431,8 +447,9 @@ async function handleSwitchModels(context: ConfigModelRouteContext): Promise<boo
   if (!state) return false;
 
   if (route.action === "model-provider-page") {
+    const modelProviderListView = await loadModelProviderListView(state, route.capability, route.start, dependencies);
     await baseRepaint(context, "switch", {
-      modelProviderPage: { capability: route.capability, start: route.start },
+      modelListView: modelProviderListView,
     });
     return true;
   }
