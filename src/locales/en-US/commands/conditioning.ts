@@ -19,18 +19,13 @@ export default {
     },
     remove: {
       description: `Remove conditioning entries across every persona in this server.`,
+      empty_title: `No Conditioning Memories`,
+      empty_description: `There are no persistent conditioning entries to manage in this server.`,
+      page_select_prompt: `Found {total} conditioning entries. Select a batch to remove:`,
+      page_select_prompt_capped: `Found {total} conditioning entries. The {shown} most recent are
+shown below; remove some to reach the rest.`,
     },
     panel: {
-      title: `Server Conditioning Memories`,
-      description: `Review persistent reward and punishment history across
-all personas in this server.`,
-      empty_title: `No Conditioning Memories`,
-      empty_description: `There are no persistent conditioning entries to manage in
-this server.`,
-      hidden_count: `Showing {shown} of {total} entries ({hidden} hidden).`,
-      entry_count: `{count} occurrences`,
-      entry_count_single: `1 occurrence`,
-      remove_button: `Remove Entries`,
       remove_modal_title: `Remove Conditioning`,
       remove_checkbox_label: `Conditioning Entries`,
       remove_checkbox_label_continued: `Conditioning Entries (Continued)`,

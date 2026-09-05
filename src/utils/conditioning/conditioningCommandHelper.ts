@@ -3,8 +3,18 @@ import type { UserRow } from "@/types/db/schema";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { ColorCode } from "@/utils/misc/logger";
 import { personaRepository } from "@/utils/db/repositories";
-import { buildConditioningPanelPayload } from "@/utils/discord/ui/conditioningPanel";
-import { deliverGuardedPanel } from "@/utils/discord/interactions/panelController";
+import {
+  CONDITIONING_MODAL_CAPACITY,
+  computeConditioningAggregateFingerprint,
+} from "@/utils/discord/conditioningPanelCatalog";
+import { createNonce } from "@/utils/discord/panelRouteTokens";
+import {
+  CONDITIONING_PAGE_SELECT_MAX_ENTRIES,
+  buildConditioningPageSelectRows,
+  buildConditioningRemoveModal,
+} from "@/utils/discord/ui/conditioningPanel";
+import { showRoutedRawModal } from "@/utils/discord/ui/modals";
+import { localizer } from "@/utils/text/localizer";
 import { loadConditioningManageEntriesWithPersonas } from "@/utils/discord/interactions/conditioningRoutes";
 
 export function hasManageGuildPermission(interaction: ChatInputCommandInteraction): boolean {
@@ -37,8 +47,6 @@ export async function executeConditioningRemovalCommand(
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
   const personas = await personaRepository.loadAllForServer(interaction.guildId);
   if (personas.length === 0) {
     await replyInfoEmbed(interaction, locale, {
@@ -51,11 +59,36 @@ export async function executeConditioningRemovalCommand(
   }
 
   const entries = await loadConditioningManageEntriesWithPersonas(personas);
-  const payload = buildConditioningPanelPayload({
-    locale,
-    entries,
-    rangeIndex: 0,
-  });
+  if (entries.length === 0) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.conditioning.remove.empty_title",
+      descriptionKey: "commands.conditioning.remove.empty_description",
+      color: ColorCode.INFO,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
-  await deliverGuardedPanel(interaction, payload, { locale });
+  if (entries.length <= CONDITIONING_MODAL_CAPACITY) {
+    const fp = computeConditioningAggregateFingerprint(entries, 0);
+    const nonce = createNonce();
+    const modalData = buildConditioningRemoveModal(locale, 0, fp, nonce, entries);
+    await showRoutedRawModal(interaction, modalData);
+    return;
+  }
+
+  const pageRows = buildConditioningPageSelectRows(locale, entries.length);
+  const capped = entries.length > CONDITIONING_PAGE_SELECT_MAX_ENTRIES;
+  await interaction.reply({
+    content: capped
+      ? localizer(locale, "commands.conditioning.remove.page_select_prompt_capped", {
+          total: String(entries.length),
+          shown: String(CONDITIONING_PAGE_SELECT_MAX_ENTRIES),
+        })
+      : localizer(locale, "commands.conditioning.remove.page_select_prompt", {
+          total: String(entries.length),
+        }),
+    components: pageRows,
+    flags: MessageFlags.Ephemeral,
+  });
 }

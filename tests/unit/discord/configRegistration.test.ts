@@ -112,6 +112,20 @@ const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
 };
 
 describe("Config command registration", () => {
+  it("retains /model override remove with its manager permission", async () => {
+    const { registrationData, executionMap } = await loadCommandData();
+    const modelCommand = registrationData.find((command) => command.name === "model") as unknown as
+      | RegistrationPayload
+      | undefined;
+
+    expect(modelCommand).toBeDefined();
+    if (!modelCommand) return;
+
+    expect(modelCommand.contexts).toBeUndefined();
+    expect(modelCommand.default_member_permissions).toBe("32");
+    expect([...(executionMap.get("model") ?? new Map()).keys()]).toContain("override.remove");
+  });
+
   it("registers /config as a bare root with no contexts and no default member permission", async () => {
     const { registrationData, executionMap } = await loadCommandData();
 

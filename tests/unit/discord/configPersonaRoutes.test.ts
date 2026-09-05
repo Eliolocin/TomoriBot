@@ -23,6 +23,7 @@ import {
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
 import { execute as executeConditioningManage } from "@/commands/conditioning/manage";
 import * as panelController from "@/utils/discord/interactions/panelController";
+import * as modalModule from "@/utils/discord/ui/modals";
 import * as embedModule from "@/utils/discord/ui/embeds";
 import * as avatarStorage from "@/utils/storage/avatarStorage";
 import * as imageProcessor from "@/utils/image/imageProcessor";
@@ -1781,9 +1782,9 @@ describe("config Persona Memories routes", () => {
     const loadGroupsSpy = spyOn(conditioningMemoryRepository, "loadGroupsForPersona").mockImplementation(
       async (_serverId, lineageId) => (lineageId === 101 ? [mainGroup] : [alterGroup]),
     );
-    let deliveredPayload: unknown;
-    const deliverSpy = spyOn(panelController, "deliverGuardedPanel").mockImplementation(async (_target, payload) => {
-      deliveredPayload = payload;
+    let deliveredModal: unknown;
+    const modalSpy = spyOn(modalModule, "showRoutedRawModal").mockImplementation(async (_target, modal) => {
+      deliveredModal = modal;
       return undefined as never;
     });
     let deferredWithFlags: unknown;
@@ -1807,13 +1808,13 @@ describe("config Persona Memories routes", () => {
     expect(loadGroupsSpy).toHaveBeenCalledTimes(2);
     expect(loadGroupsSpy).toHaveBeenNthCalledWith(1, 9, 101);
     expect(loadGroupsSpy).toHaveBeenNthCalledWith(2, 9, 202);
-    expect(deferredWithFlags).toEqual({ flags: MessageFlags.Ephemeral });
-    expect(deliverSpy).toHaveBeenCalledTimes(1);
-    const payloadText = JSON.stringify(deliveredPayload);
+    expect(deferredWithFlags).toBeUndefined();
+    expect(modalSpy).toHaveBeenCalledTimes(1);
+    const payloadText = JSON.stringify(deliveredModal);
     expect(payloadText).toContain("Persona 55");
     expect(payloadText).toContain("Persona 56");
     expect(payloadText).toContain("❤️");
-    deliverSpy.mockRestore();
+    modalSpy.mockRestore();
     loadGroupsSpy.mockRestore();
     loadPersonasSpy.mockRestore();
   });
@@ -1823,6 +1824,7 @@ describe("config Persona Memories routes", () => {
     const loadGroupsSpy = spyOn(conditioningMemoryRepository, "loadGroupsForPersona");
     const deleteSpy = spyOn(conditioningMemoryRepository, "deleteGroupsForPersona");
     const deliverSpy = spyOn(panelController, "deliverGuardedPanel");
+    const modalSpy = spyOn(modalModule, "showRoutedRawModal");
     let deniedTitleKey: string | undefined;
     const replySpy = spyOn(embedModule, "replyInfoEmbed").mockImplementation(async (_interaction, _locale, options) => {
       deniedTitleKey = options.titleKey;
@@ -1845,7 +1847,9 @@ describe("config Persona Memories routes", () => {
     expect(loadGroupsSpy).not.toHaveBeenCalled();
     expect(deleteSpy).not.toHaveBeenCalled();
     expect(deliverSpy).not.toHaveBeenCalled();
+    expect(modalSpy).not.toHaveBeenCalled();
     replySpy.mockRestore();
+    modalSpy.mockRestore();
     deliverSpy.mockRestore();
     deleteSpy.mockRestore();
     loadGroupsSpy.mockRestore();

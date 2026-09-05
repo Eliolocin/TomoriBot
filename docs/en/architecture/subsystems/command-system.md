@@ -1061,10 +1061,11 @@ Behavior pages place Advanced Memory before Notice Behavior and keep Experimenta
 Trigger cooldown omits its stored duration while disabled. Notice Behavior marks each notice with
 a green or red status icon and explains that disabled notice embeds are redirected to Logs.
 
-`/conditioning remove` defers ephemerally, renders a Components V2 aggregate panel paginated in
-place through the global interaction router, and opens a checkbox removal modal whose submission is
-bound to a fingerprint of the exact page it was opened from. `/conditioning manage` is a temporary
-compatibility leaf running the same implementation.
+`/conditioning remove` shows the removal modal directly when stored conditioning entries are at or under
+the modal ceiling of 50. When more than 50 entries exist, it displays a minimal ephemeral page-select
+whose routed buttons each open the removal modal for a 50-entry batch. Modal submissions remain bound to a
+fingerprint of the exact entries presented. `/conditioning manage` is a temporary compatibility leaf running
+the same implementation.
 
 `/tool visualize` is a modal-driven, fire-and-forget scene snapshot command. It plans against the current channel context with the active text provider, preparing its simplified-history participants through the same API as live chat, then renders with either the current provider's native image path or NovelAI's tag-based image tool when a NovelAI backend is available. Personal provider overlays apply before the hidden turn is built so personal text/image routing is respected.
 

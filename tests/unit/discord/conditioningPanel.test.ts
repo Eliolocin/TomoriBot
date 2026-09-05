@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import { ButtonStyle, ComponentType } from "discord.js";
-import type { PanelReceipt } from "@/types/discord/panel";
+import { ButtonStyle } from "discord.js";
 import {
   buildConditioningRouteId,
   computeConditioningAggregateFingerprint,
@@ -9,7 +8,12 @@ import {
   type ConditioningPanelRoute,
 } from "@/utils/discord/conditioningPanelCatalog";
 import { parseInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
-import { buildConditioningPanelPayload, buildConditioningRemoveModal } from "@/utils/discord/ui/conditioningPanel";
+import {
+  CONDITIONING_PAGE_SELECT_MAX_BUTTONS,
+  CONDITIONING_PAGE_SELECT_MAX_ENTRIES,
+  buildConditioningPageSelectRows,
+  buildConditioningRemoveModal,
+} from "@/utils/discord/ui/conditioningPanel";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => {
@@ -37,10 +41,9 @@ function createMockEntry(id: number, overrides: Partial<ConditioningAggregateEnt
 describe("conditioning panel route catalog", () => {
   it("round-trips every valid route action through codec encode and decode", () => {
     const routes: ConditioningPanelRoute[] = [
-      { action: "range", locale: "en-US", range: 0 },
-      { action: "range", locale: "en-US", range: 42 },
-      { action: "remove-open", locale: "en-US", range: 3, fp: "aB9_-xY1" },
-      { action: "remove-submit", locale: "en-US", range: 5, fp: "aB9_-xY1", nonce: "nonce-12345678" },
+      { action: "page", locale: "en-US", page: 0 },
+      { action: "page", locale: "en-US", page: 42 },
+      { action: "remove-submit", locale: "en-US", page: 5, fp: "aB9_-xY1", nonce: "nonce-12345678" },
     ];
 
     for (const route of routes) {
@@ -54,26 +57,26 @@ describe("conditioning panel route catalog", () => {
 
   it("rejects routes with foreign namespace, bumped version, or invalid segments", () => {
     expect(
-      parseConditioningPanelRoute({ namespace: "other", version: "v1", segments: ["range", "en-US", "0"] }),
+      parseConditioningPanelRoute({ namespace: "other", version: "v1", segments: ["page", "en-US", "0"] }),
     ).toBeNull();
     expect(
-      parseConditioningPanelRoute({ namespace: "conditioning", version: "v2", segments: ["range", "en-US", "0"] }),
+      parseConditioningPanelRoute({ namespace: "conditioning", version: "v2", segments: ["page", "en-US", "0"] }),
     ).toBeNull();
     expect(
       parseConditioningPanelRoute({
         namespace: "conditioning",
         version: "v1",
-        segments: ["range", "invalid-locale", "0"],
+        segments: ["page", "invalid-locale", "0"],
       }),
     ).toBeNull();
     expect(
-      parseConditioningPanelRoute({ namespace: "conditioning", version: "v1", segments: ["range", "en-US", "-1"] }),
+      parseConditioningPanelRoute({ namespace: "conditioning", version: "v1", segments: ["page", "en-US", "-1"] }),
     ).toBeNull();
     expect(
       parseConditioningPanelRoute({
         namespace: "conditioning",
         version: "v1",
-        segments: ["remove-open", "en-US", "0", "short"],
+        segments: ["remove-submit", "en-US", "0", "short"],
       }),
     ).toBeNull();
     expect(
@@ -92,7 +95,7 @@ describe("conditioning panel route catalog", () => {
     const route: ConditioningPanelRoute = {
       action: "remove-submit",
       locale: "en-US",
-      range: 99999,
+      page: 99999,
       fp: "aB9_-xY1",
       nonce: "a".repeat(32),
     };
@@ -143,79 +146,7 @@ describe("conditioning aggregate fingerprint", () => {
   });
 });
 
-describe("conditioning panel payload builder", () => {
-  it("renders empty state when there are no entries", () => {
-    const payload = buildConditioningPanelPayload({
-      locale: "en-US",
-      entries: [],
-    });
-
-    const serialized = JSON.stringify(payload);
-    expect(serialized).toContain("Server Conditioning Memories");
-    expect(serialized).toContain("No Conditioning Memories");
-    expect(serialized).not.toContain("Showing");
-    expect(serialized).not.toContain("general.pagination");
-
-    const container = payload.components[0] as {
-      components: Array<{ type: number; components?: Array<{ style?: number; disabled?: boolean }> }>;
-    };
-    const actionRow = container.components.find((c) => c.type === ComponentType.ActionRow);
-    expect(actionRow).toBeDefined();
-    const removalButton = actionRow?.components?.[0];
-    expect(removalButton?.style).toBe(ButtonStyle.Danger);
-    expect(removalButton?.disabled).toBe(true);
-  });
-
-  it("renders expected entry count and clamps out-of-range requests", () => {
-    const entries = Array.from({ length: 25 }, (_, i) => createMockEntry(i + 1));
-
-    const page0 = buildConditioningPanelPayload({
-      locale: "en-US",
-      entries,
-      rangeIndex: 0,
-    });
-    const serialized0 = JSON.stringify(page0);
-    expect(serialized0).toContain("Showing 10 of 25 entries (15 hidden).");
-    expect(serialized0).toContain("Persona1");
-    expect(serialized0).toContain("Persona10");
-    expect(serialized0).not.toContain("Persona11");
-
-    const page2 = buildConditioningPanelPayload({
-      locale: "en-US",
-      entries,
-      rangeIndex: 2,
-    });
-    const serialized2 = JSON.stringify(page2);
-    expect(serialized2).toContain("Persona21");
-    expect(serialized2).toContain("Persona25");
-    expect(serialized2).not.toContain("Persona1");
-
-    const clampedHigh = buildConditioningPanelPayload({
-      locale: "en-US",
-      entries,
-      rangeIndex: 999,
-    });
-    expect(JSON.stringify(clampedHigh)).toBe(serialized2);
-
-    const clampedLow = buildConditioningPanelPayload({
-      locale: "en-US",
-      entries,
-      rangeIndex: -10,
-    });
-    expect(JSON.stringify(clampedLow)).toBe(serialized0);
-  });
-
-  it("renders the localized action label rather than the raw action key", () => {
-    const payload = buildConditioningPanelPayload({
-      locale: "en-US",
-      entries: [createMockEntry(0, { conditioningType: "reward", actionKey: "headpat" })],
-    });
-
-    const serialized = JSON.stringify(payload);
-    expect(serialized).toContain("Headpat");
-    expect(serialized).not.toContain("history_label");
-  });
-
+describe("conditioning removal modal builder", () => {
   it("builds the removal modal from a label wrapper around a checkbox group", () => {
     const modal = buildConditioningRemoveModal("en-US", 0, "abcd1234", "nonce123", [
       createMockEntry(0, { conditioningType: "reward", actionKey: "headpat" }),
@@ -232,21 +163,43 @@ describe("conditioning panel payload builder", () => {
     expect((wrapper.component.options[0] as { default: boolean }).default).toBe(true);
   });
 
-  it("includes receipt container when a receipt is provided", () => {
-    const receipt: PanelReceipt = {
-      tone: "success",
-      heading: "Conditioning Cleared",
-      detail: "Deleted 3 conditioning records.",
-    };
-    const payload = buildConditioningPanelPayload({
-      locale: "en-US",
-      entries: [createMockEntry(1)],
-      receipt,
-    });
+  it("renders the localized action label on modal checkbox options rather than raw action key", () => {
+    const modal = buildConditioningRemoveModal("en-US", 0, "abcd1234", "nonce123", [
+      createMockEntry(0, { conditioningType: "reward", actionKey: "headpat" }),
+    ]);
 
-    expect(payload.components).toHaveLength(2);
-    const serialized = JSON.stringify(payload);
-    expect(serialized).toContain("Conditioning Cleared");
-    expect(serialized).toContain("Deleted 3 conditioning records.");
+    const serialized = JSON.stringify(modal);
+    expect(serialized).toContain("Headpat");
+    expect(serialized).not.toContain("history_label");
+  });
+
+  it("builds page select button rows for batches above the modal ceiling", () => {
+    const rows = buildConditioningPageSelectRows("en-US", 125);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].components).toHaveLength(3);
+    expect(rows[0].components[0].label).toBe("1-50");
+    expect(rows[0].components[1].label).toBe("51-100");
+    expect(rows[0].components[2].label).toBe("101-125");
+    expect(rows[0].components[0].style).toBe(ButtonStyle.Secondary);
+  });
+});
+
+describe("conditioning page select overflow", () => {
+  it("never exceeds Discord's five action rows, however many entries exist", () => {
+    const rows = buildConditioningPageSelectRows("en-US", CONDITIONING_PAGE_SELECT_MAX_ENTRIES * 4);
+
+    // A legacy message rejects a sixth action row outright, so an uncapped selector would make the
+    // whole reply fail rather than degrade.
+    expect(rows.length).toBeLessThanOrEqual(5);
+    const buttons = rows.flatMap((row) => row.components);
+    expect(buttons).toHaveLength(CONDITIONING_PAGE_SELECT_MAX_BUTTONS);
+    for (const row of rows) {
+      expect(row.components.length).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it("does not cap a server that fits", () => {
+    const rows = buildConditioningPageSelectRows("en-US", 120);
+    expect(rows.flatMap((row) => row.components)).toHaveLength(3);
   });
 });

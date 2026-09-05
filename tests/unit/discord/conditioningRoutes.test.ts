@@ -111,17 +111,16 @@ describe("conditioning panel routes", () => {
 
     const route = createConditioningInteractionRoute(dependencies);
 
-    const openRoute: ConditioningPanelRoute = {
-      action: "remove-open",
+    const pageRoute: ConditioningPanelRoute = {
+      action: "page",
       locale: "en-US",
-      range: 0,
-      fp: "abcdefgh",
+      page: 0,
     };
-    const openCustomId = buildConditioningRouteId(openRoute);
-    const parsedOpen = parseRouteOrThrow(openCustomId);
+    const pageCustomId = buildConditioningRouteId(pageRoute);
+    const parsedPage = parseRouteOrThrow(pageCustomId);
 
-    const nonManagerInteraction = createMockInteraction(openCustomId, { hasPermission: false });
-    await route.execute(CLIENT, nonManagerInteraction as unknown as ButtonInteraction, parsedOpen);
+    const nonManagerInteraction = createMockInteraction(pageCustomId, { hasPermission: false });
+    await route.execute(CLIENT, nonManagerInteraction as unknown as ButtonInteraction, parsedPage);
 
     expect(deleteCalled).toBe(false);
     expect(modalShown).toBe(false);
@@ -131,43 +130,7 @@ describe("conditioning panel routes", () => {
     });
   });
 
-  it("does not open modal when remove-open has a stale fingerprint", async () => {
-    let modalShown = false;
-    const entries = [makeEntry({ reasonNormalized: "fresh entry" })];
-    const dependencies: ConditioningRouteDependencies = {
-      resolveScope: async () => ({ guildId: "guild-1", entries }),
-      deleteGroups: async () => 0,
-      showRemoveModal: async () => {
-        modalShown = true;
-      },
-      takeCheckboxValues: () => undefined,
-      createNonce: () => "nonce123",
-    };
-
-    const route = createConditioningInteractionRoute(dependencies);
-
-    const openRoute: ConditioningPanelRoute = {
-      action: "remove-open",
-      locale: "en-US",
-      range: 0,
-      fp: "stale_fp",
-    };
-    const openCustomId = buildConditioningRouteId(openRoute);
-    const parsedOpen = parseRouteOrThrow(openCustomId);
-
-    const interaction = createMockInteraction(openCustomId, { isButton: true });
-    await route.execute(CLIENT, interaction as unknown as ButtonInteraction, parsedOpen);
-
-    expect(modalShown).toBe(false);
-    expect(interaction.wasDeferredUpdate()).toBe(true);
-    const edited = interaction.getEditedReply() as { components: unknown[] };
-    expect(edited).toBeDefined();
-    const payloadText = JSON.stringify(edited);
-    expect(payloadText).toContain(localizer("en-US", "commands.conditioning.panel.stale_heading"));
-    expect(payloadText).toContain(localizer("en-US", "commands.conditioning.panel.stale_detail"));
-  });
-
-  it("opens modal when remove-open has a matching fingerprint", async () => {
+  it("opens modal directly when page button is clicked without deferUpdate", async () => {
     let modalShown = false;
     let modalFp: string | null = null;
     const entries = [makeEntry({ reasonNormalized: "matching entry" })];
@@ -176,7 +139,7 @@ describe("conditioning panel routes", () => {
     const dependencies: ConditioningRouteDependencies = {
       resolveScope: async () => ({ guildId: "guild-1", entries }),
       deleteGroups: async () => 0,
-      showRemoveModal: async (_interaction, _locale, _range, fp) => {
+      showRemoveModal: async (_interaction, _locale, _page, fp) => {
         modalShown = true;
         modalFp = fp;
       },
@@ -186,18 +149,18 @@ describe("conditioning panel routes", () => {
 
     const route = createConditioningInteractionRoute(dependencies);
 
-    const openRoute: ConditioningPanelRoute = {
-      action: "remove-open",
+    const pageRoute: ConditioningPanelRoute = {
+      action: "page",
       locale: "en-US",
-      range: 0,
-      fp: validFp,
+      page: 0,
     };
-    const openCustomId = buildConditioningRouteId(openRoute);
-    const parsedOpen = parseRouteOrThrow(openCustomId);
+    const pageCustomId = buildConditioningRouteId(pageRoute);
+    const parsedPage = parseRouteOrThrow(pageCustomId);
 
-    const interaction = createMockInteraction(openCustomId, { isButton: true });
-    await route.execute(CLIENT, interaction as unknown as ButtonInteraction, parsedOpen);
+    const interaction = createMockInteraction(pageCustomId, { isButton: true });
+    await route.execute(CLIENT, interaction as unknown as ButtonInteraction, parsedPage);
 
+    expect(interaction.wasDeferredUpdate()).toBe(false);
     expect(modalShown).toBe(true);
     expect(modalFp).toBe(validFp);
   });
@@ -221,7 +184,7 @@ describe("conditioning panel routes", () => {
     const submitRoute: ConditioningPanelRoute = {
       action: "remove-submit",
       locale: "en-US",
-      range: 0,
+      page: 0,
       fp: "stale_fp",
       nonce: "nonce123",
     };
@@ -259,7 +222,7 @@ describe("conditioning panel routes", () => {
     const submitRoute: ConditioningPanelRoute = {
       action: "remove-submit",
       locale: "en-US",
-      range: 0,
+      page: 0,
       fp: validFp,
       nonce: "nonce123",
     };
@@ -325,7 +288,7 @@ describe("conditioning panel routes", () => {
     const submitRoute: ConditioningPanelRoute = {
       action: "remove-submit",
       locale: "en-US",
-      range: 0,
+      page: 0,
       fp: validFp,
       nonce: "nonce123",
     };
@@ -386,7 +349,7 @@ describe("conditioning panel routes", () => {
     const staleRoute: ConditioningPanelRoute = {
       action: "remove-submit",
       locale: "en-US",
-      range: 0,
+      page: 0,
       fp: oldFp,
       nonce: "nonce123",
     };
@@ -407,7 +370,7 @@ describe("conditioning panel routes", () => {
     const freshRoute: ConditioningPanelRoute = {
       action: "remove-submit",
       locale: "en-US",
-      range: 0,
+      page: 0,
       fp: newFp,
       nonce: "nonce123",
     };

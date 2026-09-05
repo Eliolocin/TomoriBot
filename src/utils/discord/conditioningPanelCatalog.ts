@@ -21,10 +21,11 @@ export type ConditioningAggregateEntry = ConditioningGroup & {
   personaLineageId: number;
 };
 
+export const CONDITIONING_MODAL_CAPACITY = 50;
+
 export type ConditioningPanelRoute =
-  | { action: "range"; locale: string; range: number }
-  | { action: "remove-open"; locale: string; range: number; fp: string }
-  | { action: "remove-submit"; locale: string; range: number; fp: string; nonce: string };
+  | { action: "page"; locale: string; page: number }
+  | { action: "remove-submit"; locale: string; page: number; fp: string; nonce: string };
 
 export type ConditioningAction = ConditioningPanelRoute["action"];
 
@@ -40,8 +41,8 @@ export type ConditioningRouteCodecs = {
   [A in ConditioningAction]: RouteCodec<ConditioningRouteForAction<A>>;
 };
 
-const rangeField: RouteFieldCodec<"range", number> = {
-  key: "range",
+const pageField: RouteFieldCodec<"page", number> = {
+  key: "page",
   encode: (v) => String(v),
   decode: (v) => parseNonNegativeInt(v),
 };
@@ -63,17 +64,13 @@ const nonceField: RouteFieldCodec<"nonce", string> = {
 };
 
 export const CONDITIONING_ROUTE_CODECS: ConditioningRouteCodecs = {
-  range: {
-    wireToken: "range",
-    fields: [rangeField],
-  },
-  "remove-open": {
-    wireToken: "remove-open",
-    fields: [rangeField, fpField],
+  page: {
+    wireToken: "page",
+    fields: [pageField],
   },
   "remove-submit": {
     wireToken: "remove-submit",
-    fields: [rangeField, fpField, nonceField],
+    fields: [pageField, fpField, nonceField],
   },
 };
 
@@ -123,7 +120,7 @@ export interface ConditioningFingerprintEntry {
 
 export function computeConditioningAggregateFingerprint(
   entries: readonly ConditioningFingerprintEntry[],
-  range: number,
+  page: number,
 ): string {
   const tuples = entries.map((entry) => [
     entry.conditioningType,
@@ -132,7 +129,7 @@ export function computeConditioningAggregateFingerprint(
     entry.personaLineageId,
   ]);
   return createHash("sha256")
-    .update(`conditioning-aggregate:${range}:${JSON.stringify(tuples)}`)
+    .update(`conditioning-aggregate:${page}:${JSON.stringify(tuples)}`)
     .digest("base64url")
     .slice(0, 8);
 }
