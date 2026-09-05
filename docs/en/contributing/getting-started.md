@@ -154,7 +154,7 @@ you must still update its published body (`gh release edit`).
 ## Quick Health Checks
 
 - `/ping`
-- `/tool status`
+- `/status`
 - Mention the bot or use trigger words in chat
 
 ## Troubleshooting

@@ -47,49 +47,49 @@ export async function showPersonalStatus(
           ? `${rawImpersonationPrompt.slice(0, MAX_PROMPT_PREVIEW)}...`
           : rawImpersonationPrompt
       }\n\`\`\``
-    : localizer(locale, "commands.tool.status.field_impersonation_prompt_not_set");
+    : localizer(locale, "commands.status.field_impersonation_prompt_not_set");
 
   const userSavedProvidersValue = formatUserSavedProviders(userSavedProviderConfigs, locale);
   const userCustomEndpointsValue = formatCustomEndpoints(userCustomEndpoints, locale);
 
   const personalPage: SummaryEmbedOptions = {
-    titleKey: "commands.tool.status.personal_title",
-    descriptionKey: "commands.tool.status.personal_description",
+    titleKey: "commands.status.personal_title",
+    descriptionKey: "commands.status.personal_description",
     color: ColorCode.INFO,
-    footerKey: "commands.tool.status.export_footer_global_personal_memories",
+    footerKey: "commands.status.export_footer_global_personal_memories",
     fields: [
       {
-        nameKey: "commands.tool.status.field_user_nickname",
+        nameKey: "commands.status.field_user_nickname",
         value: userData.user_nickname ?? userData.user_disc_id,
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_language_pref",
+        nameKey: "commands.status.field_language_pref",
         value: userData.language_pref,
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_privacy",
+        nameKey: "commands.status.field_privacy",
         value: getPrivacyLevelLabel(locale, userData.privacy_level ?? PrivacyLevel.MINIMAL),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_impersonation_prompt",
+        nameKey: "commands.status.field_impersonation_prompt",
         value: impersonationPromptValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_reminders_count",
+        nameKey: "commands.status.field_reminders_count",
         value: String(reminderCount),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_personal_dtm",
+        nameKey: "commands.status.field_personal_dtm",
         value: localizer(locale, `commands.personal.deliberatetriggermode.${userData.personal_dtm ?? "follow"}_option`),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_personal_deliberate_tool_mode",
+        nameKey: "commands.status.field_personal_deliberate_tool_mode",
         value: localizer(
           locale,
           `commands.personal.deliberatetoolmode.${userData.personal_deliberate_tool_mode ?? "follow"}_option`,
@@ -97,12 +97,12 @@ export async function showPersonalStatus(
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_crossserver_stm",
+        nameKey: "commands.status.field_crossserver_stm",
         value: formatBooleanLocalized(userData.shortterm_cache_crossserver_opt_in ?? false, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_physical_appearance_tags",
+        nameKey: "commands.status.field_physical_appearance_tags",
         value:
           (userData.physical_appearance_tags?.length ?? 0) > 0
             ? `${userData.physical_appearance_tags.length} tags`
@@ -110,12 +110,12 @@ export async function showPersonalStatus(
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_nai_char_ref",
+        nameKey: "commands.status.field_nai_char_ref",
         value: formatBooleanLocalized(!!userData.nai_char_ref_url, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_global_personal_memories_with_count",
+        nameKey: "commands.status.field_global_personal_memories_with_count",
         nameVars: {
           current: globalPersonalMemoriesCount,
           max: limits.maxPersonalMemories,
@@ -127,18 +127,18 @@ export async function showPersonalStatus(
   };
 
   const personalProvidersPage: SummaryEmbedOptions = {
-    titleKey: "commands.tool.status.personal_page2_title",
-    descriptionKey: "commands.tool.status.personal_page2_description",
+    titleKey: "commands.status.personal_page2_title",
+    descriptionKey: "commands.status.personal_page2_description",
     color: ColorCode.INFO,
     fields: [
       {
-        nameKey: "commands.tool.status.field_personal_providers_with_count",
+        nameKey: "commands.status.field_personal_providers_with_count",
         nameVars: { count: userSavedProviderConfigs.length },
         value: userSavedProvidersValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_personal_custom_endpoints_with_count",
+        nameKey: "commands.status.field_personal_custom_endpoints_with_count",
         nameVars: { count: userCustomEndpoints.length },
         value: userCustomEndpointsValue,
         inline: false,

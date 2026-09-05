@@ -149,6 +149,11 @@ function getCommandLocalizationAliases(key: string): string[] {
     aliases.push(staticAlias);
   }
 
+  const compatibilityPrefix = ["commands", "tool", "status"].join(".");
+  if (key.startsWith(`${compatibilityPrefix}.`)) {
+    aliases.push(key.replace(`${compatibilityPrefix}.`, "commands.status."));
+  }
+
   if (key.includes(".deliberate-tool-mode.")) {
     aliases.push(key.replace(".deliberate-tool-mode.", ".deliberatetoolmode."));
   }

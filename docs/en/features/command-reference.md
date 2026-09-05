@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **40**. Runnable slash commands: **85**.
+Top-level command groups: **41**. Runnable slash commands: **86**.
 
 ## `/comment`
 
@@ -349,6 +349,14 @@ View usage statistics
 | `/stats persona` | View a persona's usage statistics on this server. |
 | `/stats personal` | View your own usage statistics. |
 | `/stats server` | View server-wide usage statistics. |
+
+## `/status`
+
+Show current personal, server, or persona status.
+
+| Command | Summary |
+|---|---|
+| `/status` | Show current personal, server, or persona status. |
 
 ## `/support`
 

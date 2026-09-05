@@ -6,9 +6,9 @@ import { formatConfiguredEntryNames } from "@/utils/metrics/providerStats";
 function getOptionalApiServiceDisplayName(serviceName: string, locale: string): string {
   switch (serviceName) {
     case "brave-search":
-      return localizer(locale, "commands.tool.status.optional_api_service_brave");
+      return localizer(locale, "commands.status.optional_api_service_brave");
     case "elevenlabs":
-      return localizer(locale, "commands.tool.status.optional_api_service_elevenlabs");
+      return localizer(locale, "commands.status.optional_api_service_elevenlabs");
     default:
       return getProviderDisplayName(serviceName);
   }

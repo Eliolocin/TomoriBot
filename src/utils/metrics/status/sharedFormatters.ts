@@ -64,7 +64,7 @@ export function truncateText(input: string, maxLength: number): string {
 }
 
 export function formatQuotaLimitValue(locale: string, limit: number): string {
-  return limit === 0 ? localizer(locale, "commands.tool.status.field_quota_unlimited") : String(limit);
+  return limit === 0 ? localizer(locale, "commands.status.field_quota_unlimited") : String(limit);
 }
 
 export function formatOmittedSamplingParams(
@@ -156,7 +156,7 @@ export function formatFallbackChain(
         const label =
           entry.kind === "llm"
             ? formatLlmDisplayLabel(entry.model, customModelName, otherModelCodename)
-            : `\`${truncateText(entry.endpoint.model_name || entry.endpoint.label, 48)}\` (${localizer(locale, "commands.tool.status.custom_endpoint_capability_label", { capability: entry.endpoint.capability })})`;
+            : `\`${truncateText(entry.endpoint.model_name || entry.endpoint.label, 48)}\` (${localizer(locale, "commands.status.custom_endpoint_capability_label", { capability: entry.endpoint.capability })})`;
         return `${index + 1}. ${label}`;
       })
       .join("\n");
@@ -180,8 +180,8 @@ export function formatCustomEndpoints(endpoints: CustomEndpointRow[], locale: st
   return endpoints
     .map((ep, index) => {
       const authLabel = ep.requires_auth
-        ? localizer(locale, "commands.tool.status.mcp_server_auth_present")
-        : localizer(locale, "commands.tool.status.mcp_server_auth_absent");
+        ? localizer(locale, "commands.status.mcp_server_auth_present")
+        : localizer(locale, "commands.status.mcp_server_auth_absent");
       return `${index + 1}. **${truncateText(ep.model_name || ep.label, 32)}** · ${ep.capability} · ${ep.api_style} · ${authLabel}`;
     })
     .join("\n");
@@ -196,7 +196,7 @@ export function formatRotationPoolValue(keys: TomoriState["rotation_keys"], loca
 
   return totalEntries === 0
     ? localizer(locale, "commands.choices.none")
-    : localizer(locale, "commands.tool.status.field_api_key_rotation_pool_value", {
+    : localizer(locale, "commands.status.field_api_key_rotation_pool_value", {
         total: totalEntries,
         additional: additionalKeys,
         enabled: enabledEntries,
@@ -214,7 +214,7 @@ export function formatStPresetNodeSummary(toggleableNodes: StPresetNodeRow[], lo
   }
 
   const enabledCount = toggleableNodes.filter((node) => node.is_enabled).length;
-  return localizer(locale, "commands.tool.status.field_st_preset_nodes_value", {
+  return localizer(locale, "commands.status.field_st_preset_nodes_value", {
     enabled: enabledCount,
     total: toggleableNodes.length,
   });

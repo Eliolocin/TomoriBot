@@ -21,7 +21,7 @@ async function resolveChannelMention(client: Client, id: string, locale: string)
     const channel = await client.channels.fetch(id);
     return channel instanceof TextChannel ? channel.toString() : `<#${id}>`;
   } catch {
-    return `*<${localizer(locale, "commands.tool.status.unknown_channel")} ${id}>*`;
+    return `*<${localizer(locale, "commands.status.unknown_channel")} ${id}>*`;
   }
 }
 
@@ -36,7 +36,7 @@ export async function formatChannelList(client: Client, ids: string[], locale: s
   const mentions = await Promise.all(ids.map((id) => resolveChannelMention(client, id, locale)));
   return mentions.length <= MAX_ITEMS_DISPLAY
     ? mentions.join(", ")
-    : localizer(locale, "commands.tool.status.item_count", {
+    : localizer(locale, "commands.status.item_count", {
         count: mentions.length,
       });
 }
@@ -53,7 +53,7 @@ export async function formatWhitelistEntries(
   locale: string,
 ): Promise<string> {
   if (entries.length === 0) {
-    return localizer(locale, "commands.tool.status.whitelist_all_allowed");
+    return localizer(locale, "commands.status.whitelist_all_allowed");
   }
 
   const lines = await Promise.all(
@@ -82,7 +82,7 @@ export async function formatWhitelistEntries(
  */
 export function formatWhitelistRolesEntries(entries: RoleWhitelistRow[], locale: string): string {
   if (entries.length === 0) {
-    return localizer(locale, "commands.tool.status.whitelist_roles_all_allowed");
+    return localizer(locale, "commands.status.whitelist_roles_all_allowed");
   }
 
   return entries
@@ -99,7 +99,7 @@ export async function formatWhitelistPersonaEntries(
   locale: string,
 ): Promise<string> {
   if (entries.length === 0) {
-    return localizer(locale, "commands.tool.status.whitelist_personas_all_allowed");
+    return localizer(locale, "commands.status.whitelist_personas_all_allowed");
   }
 
   const channelsByPersona = new Map<number, string[]>();
@@ -118,7 +118,7 @@ export async function formatWhitelistPersonaEntries(
           ? (
               await Promise.all(sortedChannelIds.map((channelId) => resolveChannelMention(client, channelId, locale)))
             ).join(", ")
-          : localizer(locale, "commands.tool.status.item_count", {
+          : localizer(locale, "commands.status.item_count", {
               count: sortedChannelIds.length,
             });
       return `${index + 1}. **${personaName}**: ${channelsValue}`;
@@ -149,28 +149,28 @@ export async function formatRandomTriggers(
       const personaName =
         trigger.persona_id != null
           ? (personaNameMap.get(trigger.persona_id) ?? `ID:${trigger.persona_id}`)
-          : localizer(locale, "commands.tool.status.random_trigger_persona_random");
+          : localizer(locale, "commands.status.random_trigger_persona_random");
       const offsetSegment =
         trigger.random_offset_range != null && trigger.random_offset_range > 0
-          ? ` · ${localizer(locale, "commands.tool.status.random_trigger_offset_segment", {
+          ? ` · ${localizer(locale, "commands.status.random_trigger_offset_segment", {
               hours: trigger.random_offset_range,
             })}`
           : "";
       const silenceSegment =
         trigger.silence_threshold_hours != null && trigger.silence_threshold_hours > 0
-          ? ` · ${localizer(locale, "commands.tool.status.random_trigger_silence_segment", {
+          ? ` · ${localizer(locale, "commands.status.random_trigger_silence_segment", {
               hours: trigger.silence_threshold_hours,
             })}`
           : "";
       const respondToSelfSegment = trigger.respond_to_self
-        ? ` · ${localizer(locale, "commands.tool.status.random_trigger_self_segment")}`
+        ? ` · ${localizer(locale, "commands.status.random_trigger_self_segment")}`
         : "";
       const promptSegment = trigger.custom_prompt?.trim()
-        ? ` · ${localizer(locale, "commands.tool.status.random_trigger_prompt_segment")}`
+        ? ` · ${localizer(locale, "commands.status.random_trigger_prompt_segment")}`
         : "";
       const failureSegment =
         trigger.failure_threshold != null && trigger.failure_threshold > 0
-          ? ` · ${localizer(locale, "commands.tool.status.random_trigger_failure_segment", {
+          ? ` · ${localizer(locale, "commands.status.random_trigger_failure_segment", {
               count: trigger.failure_threshold,
             })}`
           : "";
@@ -178,11 +178,11 @@ export async function formatRandomTriggers(
       return truncateText(
         `${index + 1}. ${mention} · ${personaName} · ${localizer(
           locale,
-          "commands.tool.status.random_trigger_timer_segment",
+          "commands.status.random_trigger_timer_segment",
           {
             hours: trigger.timer_hours,
           },
-        )}${offsetSegment} · ${localizer(locale, "commands.tool.status.random_trigger_chance_segment", {
+        )}${offsetSegment} · ${localizer(locale, "commands.status.random_trigger_chance_segment", {
           chance: trigger.chance_percent,
         })}${silenceSegment}${respondToSelfSegment}${promptSegment}${failureSegment}`,
         220,
@@ -206,7 +206,7 @@ export async function formatAutochatChannels(
   }
 
   if (channelIds.length > MAX_ITEMS_DISPLAY) {
-    return localizer(locale, "commands.tool.status.item_count", {
+    return localizer(locale, "commands.status.item_count", {
       count: channelIds.length,
     });
   }
@@ -301,7 +301,7 @@ export async function formatWelcomeChannel(
   const personaName =
     config.welcome_persona_id != null
       ? (personaNameMap.get(config.welcome_persona_id) ?? `ID:${config.welcome_persona_id}`)
-      : localizer(locale, "commands.tool.status.random_trigger_persona_random");
+      : localizer(locale, "commands.status.random_trigger_persona_random");
 
   return `${channelMention} · ${personaName}`;
 }
@@ -313,7 +313,7 @@ export async function formatMatrixLinks(client: Client, links: MatrixLinkStatusR
 
   const channelIds = links.map((link) => link.channel_disc_id);
   if (channelIds.length > MAX_ITEMS_DISPLAY) {
-    return localizer(locale, "commands.tool.status.item_count", {
+    return localizer(locale, "commands.status.item_count", {
       count: channelIds.length,
     });
   }

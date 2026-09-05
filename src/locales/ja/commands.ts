@@ -6,6 +6,7 @@ import speech from "./commands/speech";
 import choices from "./commands/choices";
 import stPreset from "./commands/st-preset";
 import tool from "./commands/tool";
+import status from "./commands/status";
 import data from "./commands/data";
 import persona from "./commands/persona";
 import help from "./commands/help";
@@ -56,6 +57,7 @@ export default {
     ...choices,
     ...stPreset,
     ...tool,
+    ...status,
     ...data,
     ...persona,
     ...help,

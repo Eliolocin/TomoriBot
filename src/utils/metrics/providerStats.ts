@@ -39,10 +39,10 @@ export function formatUserSavedProviders(configs: UserSavedProviderConfigRow[], 
       const capabilities =
         config.enabled_capabilities.length > 0
           ? config.enabled_capabilities.join(", ")
-          : localizer(locale, "commands.tool.status.personal_provider_no_capabilities");
+          : localizer(locale, "commands.status.personal_provider_no_capabilities");
       const keyLabel = config.api_key
-        ? localizer(locale, "commands.tool.status.mcp_server_auth_present")
-        : localizer(locale, "commands.tool.status.mcp_server_auth_absent");
+        ? localizer(locale, "commands.status.mcp_server_auth_present")
+        : localizer(locale, "commands.status.mcp_server_auth_absent");
       return `${index + 1}. **${providerLabel}** · ${capabilities} · ${keyLabel}`;
     })
     .join("\n");

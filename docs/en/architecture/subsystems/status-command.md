@@ -1,14 +1,15 @@
 ---
-title: "Tool Status Command"
+title: "Status Command"
 ---
 
-`/tool status` is the read-only snapshot command for durable personal, server, and persona state.
+`/status` is the read-only snapshot command for durable personal, server, and persona state.
 
 It exists so users can inspect current configuration without reopening every management command.
 
 ## Implementation Boundary
 
-- Slash command registration and routing live in `src/commands/tool/status.ts`.
+- Slash command registration and routing live in `src/commands/status.ts`.
+- `/tool status` remains a temporary compatibility leaf in `src/commands/tool/status.ts` and uses the same coordinator.
 - The status coordinator lives in `src/utils/metrics/status/command.ts`.
 - Status page implementation lives under `src/utils/metrics/status/`:
   - `personalPages.ts` builds personal settings/provider pages.
@@ -89,7 +90,7 @@ Server status is split across multiple pages so durable state stays visible with
 
 ## Privacy Rules
 
-`/tool status` must not expose raw secrets or private external endpoints.
+`/status` must not expose raw secrets or private external endpoints.
 
 Redacted surfaces:
 
@@ -109,6 +110,6 @@ Existing prompt preview pages remain intentionally visible because they are firs
 When a new durable config surface is added:
 
 1. update the owning management command
-2. surface the resulting state in `/tool status`
+2. surface the resulting state in `/status`
 3. keep this document in sync
 4. preserve the redaction rules above for any secret-bearing fields

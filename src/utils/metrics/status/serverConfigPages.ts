@@ -69,7 +69,7 @@ export async function showServerConfigStatus(
   const cooldownLengthValue =
     cooldownType === CooldownType.OFF
       ? localizer(locale, "commands.choices.disabled")
-      : localizer(locale, "commands.tool.status.field_cooldown_length_value", {
+      : localizer(locale, "commands.status.field_cooldown_length_value", {
           seconds: config.cooldown_length,
         });
   const autochThresholdMax =
@@ -85,9 +85,7 @@ export async function showServerConfigStatus(
   const serverUserByokToggleMention = commandRegistry.getCommandMention("moderation");
   const userByokValue = localizer(
     locale,
-    config.user_byok_mode
-      ? "commands.tool.status.field_user_byok_enabled"
-      : "commands.tool.status.field_user_byok_disabled",
+    config.user_byok_mode ? "commands.status.field_user_byok_enabled" : "commands.status.field_user_byok_disabled",
     { toggle_command: serverUserByokToggleMention },
   );
 
@@ -105,7 +103,7 @@ export async function showServerConfigStatus(
           ? `${rawContextNote.slice(0, MAX_PROMPT_PREVIEW)}...`
           : rawContextNote
       }\n\`\`\``
-    : localizer(locale, "commands.tool.status.field_context_note_not_set");
+    : localizer(locale, "commands.status.field_context_note_not_set");
 
   const optApiKeyServiceNames = optApiKeyRows.map((row) => row.service_name);
   const braveApiKeySet = optApiKeyServiceNames.includes("brave-search");
@@ -123,7 +121,7 @@ export async function showServerConfigStatus(
   const savedProviderConfigsValue = formatSavedProviderConfigs(savedProviderConfigs, locale);
   const hiddenNoticeKeys = config.tool_notice_hidden_keys ?? [];
   const hiddenNoticeEmbedsValue = formatHiddenNoticeEmbeds(hiddenNoticeKeys, locale);
-  const stPresetLibraryValue = localizer(locale, "commands.tool.status.field_st_preset_library_value", {
+  const stPresetLibraryValue = localizer(locale, "commands.status.field_st_preset_library_value", {
     count: stPresets.length,
   });
   const activeStPresetValue = formatActiveStPresetValue(activeStPreset, locale);
@@ -133,27 +131,27 @@ export async function showServerConfigStatus(
   const matrixLinksValue = await formatMatrixLinks(client, matrixLinks, locale);
 
   const configPage1: SummaryEmbedOptions = {
-    titleKey: "commands.tool.status.server_page2_title",
-    descriptionKey: "commands.tool.status.server_page2_description",
+    titleKey: "commands.status.server_page2_title",
+    descriptionKey: "commands.status.server_page2_description",
     color: ColorCode.INFO,
     fields: [
       {
-        nameKey: "commands.tool.status.field_timezone",
+        nameKey: "commands.status.field_timezone",
         value: timezoneValue,
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_message_fetch_limit",
+        nameKey: "commands.status.field_message_fetch_limit",
         value: String(config.message_fetch_limit),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_cascade_limit",
+        nameKey: "commands.status.field_cascade_limit",
         value: String(config.cascade_limit),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_send_message_limit",
+        nameKey: "commands.status.field_send_message_limit",
         value:
           (config.send_message_limit ?? 0) > 0
             ? String(config.send_message_limit)
@@ -161,49 +159,49 @@ export async function showServerConfigStatus(
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_always_reply",
+        nameKey: "commands.status.field_always_reply",
         value: config.always_reply_enabled
           ? localizer(locale, "commands.choices.enabled")
           : localizer(locale, "commands.choices.disabled"),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_match_limit",
+        nameKey: "commands.status.field_match_limit",
         value: String(config.match_limit),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_cooldown_type",
+        nameKey: "commands.status.field_cooldown_type",
         value: cooldownTypeLabel,
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_cooldown_length",
+        nameKey: "commands.status.field_cooldown_length",
         value: cooldownLengthValue,
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_autoch_threshold",
+        nameKey: "commands.status.field_autoch_threshold",
         value: autochModeValue,
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_deliberate_trigger",
+        nameKey: "commands.status.field_deliberate_trigger",
         value: formatBooleanLocalized(config.deliberate_trigger_mode ?? false, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_deliberate_tool_mode",
+        nameKey: "commands.status.field_deliberate_tool_mode",
         value: formatBooleanLocalized(config.deliberate_tool_mode ?? false, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_deliberate_tool_context_turns",
+        nameKey: "commands.status.field_deliberate_tool_context_turns",
         value: resolveDeliberateToolContextTurns(config.deliberate_tool_context_turns).toString(),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_user_byok",
+        nameKey: "commands.status.field_user_byok",
         value: userByokValue,
         inline: false,
       },
@@ -211,147 +209,147 @@ export async function showServerConfigStatus(
   };
 
   const configPage2: SummaryEmbedOptions = {
-    titleKey: "commands.tool.status.server_page4_title",
-    descriptionKey: "commands.tool.status.server_page4_description",
+    titleKey: "commands.status.server_page4_title",
+    descriptionKey: "commands.status.server_page4_description",
     color: ColorCode.INFO,
     fields: [
       {
-        nameKey: "commands.tool.status.field_personalization",
+        nameKey: "commands.status.field_personalization",
         value: formatBooleanLocalized(config.personal_memories_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_self_teach",
+        nameKey: "commands.status.field_self_teach",
         value: formatBooleanLocalized(config.self_teaching_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_image_generation",
+        nameKey: "commands.status.field_image_generation",
         value: formatBooleanLocalized(config.imagegen_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_videogen",
+        nameKey: "commands.status.field_videogen",
         value: formatBooleanLocalized(config.videogen_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_web_search",
+        nameKey: "commands.status.field_web_search",
         value: formatBooleanLocalized(config.web_search_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_manage_message",
+        nameKey: "commands.status.field_manage_message",
         value: formatBooleanLocalized(config.manage_message_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_emoji_usage",
+        nameKey: "commands.status.field_emoji_usage",
         value: formatBooleanLocalized(config.emoji_usage_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_sticker_usage",
+        nameKey: "commands.status.field_sticker_usage",
         value: formatBooleanLocalized(config.sticker_usage_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_api_key_set",
+        nameKey: "commands.status.field_api_key_set",
         value: formatBooleanLocalized(!!config.api_key, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_brave_api_key_set",
+        nameKey: "commands.status.field_brave_api_key_set",
         value: formatBooleanLocalized(braveApiKeySet, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_server_memteaching",
+        nameKey: "commands.status.field_server_memteaching",
         value: formatBooleanLocalized(config.server_memteaching_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_attribute_memteaching",
+        nameKey: "commands.status.field_attribute_memteaching",
         value: formatBooleanLocalized(config.attribute_memteaching_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_sampledialogue_memteaching",
+        nameKey: "commands.status.field_sampledialogue_memteaching",
         value: formatBooleanLocalized(config.sampledialogue_memteaching_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_hide_impersonation",
+        nameKey: "commands.status.field_hide_impersonation",
         value: formatBooleanLocalized(!isNoticeEmbedVisible(config, "impersonation_notice"), locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_hide_respond_embed",
+        nameKey: "commands.status.field_hide_respond_embed",
         value: formatBooleanLocalized(!isNoticeEmbedVisible(config, "respond_embed"), locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_self_debug",
+        nameKey: "commands.status.field_self_debug",
         value: formatBooleanLocalized(config.self_debug_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_model_randomizer",
+        nameKey: "commands.status.field_model_randomizer",
         value: formatBooleanLocalized(config.model_randomizer_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_uncensor_injection",
+        nameKey: "commands.status.field_uncensor_injection",
         value: formatBooleanLocalized(config.uncensor_injection_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_uncensor_unicode",
+        nameKey: "commands.status.field_uncensor_unicode",
         value: formatBooleanLocalized(config.uncensor_unicode_space_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_uncensor_sanitize",
+        nameKey: "commands.status.field_uncensor_sanitize",
         value: formatBooleanLocalized(config.uncensor_sanitize_enabled, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_tool_use",
+        nameKey: "commands.status.field_tool_use",
         value: formatBooleanLocalized(config.tool_use_enabled ?? true, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_verbatim_tool_calling",
+        nameKey: "commands.status.field_verbatim_tool_calling",
         value: formatBooleanLocalized(config.verbatim_tool_calling_enabled ?? false, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_prompt_snapshot",
+        nameKey: "commands.status.field_prompt_snapshot",
         value: formatBooleanLocalized(config.prompt_snapshot_enabled ?? false, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_short_term_memory",
+        nameKey: "commands.status.field_short_term_memory",
         value: formatBooleanLocalized(config.short_term_memory_enabled ?? true, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_user_info_updates",
+        nameKey: "commands.status.field_user_info_updates",
         value: formatBooleanLocalized(config.user_info_updates_enabled ?? true, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_stm_privacy_bypass",
+        nameKey: "commands.status.field_stm_privacy_bypass",
         value: formatBooleanLocalized(config.stm_privacy_bypass ?? false, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_voice_messages",
+        nameKey: "commands.status.field_voice_messages",
         value: formatBooleanLocalized(config.voice_message_enabled ?? true, locale),
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_voice_transcript_mode",
+        nameKey: "commands.status.field_voice_transcript_mode",
         value: formatBooleanLocalized(config.voice_transcript_chat_mode ?? true, locale),
         inline: true,
       },
@@ -359,23 +357,23 @@ export async function showServerConfigStatus(
   };
 
   const configPage3: SummaryEmbedOptions = {
-    titleKey: "commands.tool.status.server_page5_title",
-    descriptionKey: "commands.tool.status.server_page5_description",
+    titleKey: "commands.status.server_page5_title",
+    descriptionKey: "commands.status.server_page5_description",
     color: ColorCode.INFO,
-    footerKey: "commands.tool.status.export_footer_server_config",
+    footerKey: "commands.status.export_footer_server_config",
     fields: [
       {
-        nameKey: "commands.tool.status.field_system_prompt",
+        nameKey: "commands.status.field_system_prompt",
         value: systemPromptValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_context_note",
+        nameKey: "commands.status.field_context_note",
         value: contextNoteValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_context_note_depth",
+        nameKey: "commands.status.field_context_note_depth",
         value: String(config.context_note_depth ?? 0),
         inline: true,
       },
@@ -383,68 +381,68 @@ export async function showServerConfigStatus(
   };
 
   const configPage4: SummaryEmbedOptions = {
-    titleKey: "commands.tool.status.server_page9_title",
-    descriptionKey: "commands.tool.status.server_page9_description",
+    titleKey: "commands.status.server_page9_title",
+    descriptionKey: "commands.status.server_page9_description",
     color: ColorCode.INFO,
     fields: [
       {
-        nameKey: "commands.tool.status.field_api_key_rotation_status",
+        nameKey: "commands.status.field_api_key_rotation_status",
         value: rotationStatusValue,
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_api_key_rotation_pool",
+        nameKey: "commands.status.field_api_key_rotation_pool",
         value: rotationPoolValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_optional_api_keys_with_count",
+        nameKey: "commands.status.field_optional_api_keys_with_count",
         nameVars: { count: optionalApiKeyCount },
         value: optionalApiKeysValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_saved_provider_configs_with_count",
+        nameKey: "commands.status.field_saved_provider_configs_with_count",
         nameVars: { count: savedProviderConfigCount },
         value: savedProviderConfigsValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_server_custom_endpoints_with_count",
+        nameKey: "commands.status.field_server_custom_endpoints_with_count",
         nameVars: { count: serverCustomEndpoints.length },
         value: serverCustomEndpointsValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_mcp_servers_with_count",
+        nameKey: "commands.status.field_mcp_servers_with_count",
         nameVars: { count: guildMcpServers.length },
         value: mcpServersValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_matrix_links_with_count",
+        nameKey: "commands.status.field_matrix_links_with_count",
         nameVars: { count: matrixLinks.length },
         value: matrixLinksValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_hidden_notice_embeds_with_count",
+        nameKey: "commands.status.field_hidden_notice_embeds_with_count",
         nameVars: { count: hiddenNoticeKeys.length },
         value: hiddenNoticeEmbedsValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_st_preset_active",
+        nameKey: "commands.status.field_st_preset_active",
         value: activeStPresetValue,
         inline: false,
       },
       {
-        nameKey: "commands.tool.status.field_st_preset_library",
+        nameKey: "commands.status.field_st_preset_library",
         value: stPresetLibraryValue,
         inline: true,
       },
       {
-        nameKey: "commands.tool.status.field_st_preset_nodes",
+        nameKey: "commands.status.field_st_preset_nodes",
         value: stPresetNodeSummaryValue,
         inline: true,
       },

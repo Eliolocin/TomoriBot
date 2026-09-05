@@ -1,8 +1,8 @@
-import type { SlashCommandSubcommandBuilder } from "discord.js";
+import type { SlashCommandBuilder } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 
-export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
+export const configureCommand = (command: SlashCommandBuilder) =>
+  command
     .setName("status")
     .setDescription(localizer("en-US", "commands.status.description"))
     .addStringOption((option) =>

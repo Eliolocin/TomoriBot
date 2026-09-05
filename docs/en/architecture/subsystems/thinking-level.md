@@ -38,7 +38,7 @@ Storage:
 
 That means the active value is:
 
-- visible in `/tool status`
+- visible in `/status`
 - reflected in `/tool prompt snapshot`
 - preserved in provider snapshots and restored by `/config provider switch`
 

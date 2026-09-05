@@ -230,7 +230,6 @@ export async function showPersonaStatus(
   locale: string,
 ): Promise<void> {
   const limits = getMemoryLimits();
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const allPersonas = await personaRepository.loadAllForServer(serverDiscId);
 
   if (allPersonas.length === 0) {
@@ -291,7 +290,7 @@ export async function showPersonaStatus(
             selectedPersona.persona_attributes.length > 0
               ? selectedPersona.persona_attributes.map((attribute) =>
                   attribute.is_public
-                    ? `${attribute.attribute_text} ${localizer(locale, "commands.tool.status.attribute_public_suffix")}`
+                    ? `${attribute.attribute_text} ${localizer(locale, "commands.status.attribute_public_suffix")}`
                     : attribute.attribute_text,
                 )
               : selectedPersona.attribute_list;
@@ -340,7 +339,7 @@ export async function showPersonaStatus(
                 selectedPersona.config.custom_model_name,
                 selectedPersona.config.other_model_codename,
               )
-            : localizer(locale, "commands.tool.status.persona_model_server_default");
+            : localizer(locale, "commands.status.persona_model_server_default");
 
           const noneLabel = localizer(locale, "commands.choices.none");
           const attgAuthor = selectedPersona.nai_attg_author ?? noneLabel;
@@ -355,7 +354,7 @@ export async function showPersonaStatus(
             !selectedPersona.nai_attg_genre &&
             selectedPersona.nai_attg_stars == null;
           const attgValue = attgAllUnset
-            ? localizer(locale, "commands.tool.status.nai_attg_not_set")
+            ? localizer(locale, "commands.status.nai_attg_not_set")
             : `Author: ${attgAuthor}\nTitle: ${attgTitle}\nTags: ${attgTags}\nGenre: ${attgGenre}\nStars: ${attgStars}`;
 
           const rawPersonaPrompt = selectedPersona.persona_prompt ?? null;
@@ -365,7 +364,7 @@ export async function showPersonaStatus(
                   ? `${rawPersonaPrompt.slice(0, MAX_PROMPT_PREVIEW)}...`
                   : rawPersonaPrompt
               }\n\`\`\``
-            : localizer(locale, "commands.tool.status.field_persona_prompt_not_set");
+            : localizer(locale, "commands.status.field_persona_prompt_not_set");
 
           const rawPersonaContextNote = selectedPersona.context_note ?? null;
           const personaContextNoteValue = rawPersonaContextNote
@@ -374,58 +373,58 @@ export async function showPersonaStatus(
                   ? `${rawPersonaContextNote.slice(0, MAX_PROMPT_PREVIEW)}...`
                   : rawPersonaContextNote
               }\n\`\`\``
-            : localizer(locale, "commands.tool.status.field_persona_context_note_not_set");
+            : localizer(locale, "commands.status.field_persona_context_note_not_set");
 
           const personaPage1: SummaryEmbedOptions = {
-            titleKey: "commands.tool.status.persona_page1_title",
+            titleKey: "commands.status.persona_page1_title",
             titleVars: { persona_name: personaName },
-            descriptionKey: "commands.tool.status.persona_page1_description",
+            descriptionKey: "commands.status.persona_page1_description",
             color: ColorCode.INFO,
             fields: [
               {
-                nameKey: "commands.tool.status.field_nickname",
+                nameKey: "commands.status.field_nickname",
                 value: personaName,
                 inline: true,
               },
               {
-                nameKey: "commands.tool.status.field_is_alter",
+                nameKey: "commands.status.field_is_alter",
                 value: formatBooleanLocalized(selectedPersona.is_alter, locale),
                 inline: true,
               },
               {
-                nameKey: "commands.tool.status.field_persona_triggers",
+                nameKey: "commands.status.field_persona_triggers",
                 value: personaTriggersValue,
                 inline: true,
               },
               {
-                nameKey: "commands.tool.status.field_persona_model",
+                nameKey: "commands.status.field_persona_model",
                 value: personaModelValue,
                 inline: true,
               },
               {
-                nameKey: "commands.tool.status.field_avatar",
+                nameKey: "commands.status.field_avatar",
                 value: selectedPersona.webhook_avatar_url
                   ? localizer(locale, "general.yes")
                   : localizer(locale, "commands.choices.none"),
                 inline: true,
               },
               {
-                nameKey: "commands.tool.status.field_voice",
+                nameKey: "commands.status.field_voice",
                 value: selectedPersona.speech_voice_name ?? localizer(locale, "commands.choices.none"),
                 inline: true,
               },
               {
-                nameKey: "commands.tool.status.field_persona_nai_ref",
+                nameKey: "commands.status.field_persona_nai_ref",
                 value: formatBooleanLocalized(!!selectedPersona.nai_char_ref_url, locale),
                 inline: true,
               },
               {
-                nameKey: "commands.tool.status.field_reward_conditioning",
+                nameKey: "commands.status.field_reward_conditioning",
                 value: formatBooleanLocalized(selectedPersona.reward_conditioning_enabled ?? true, locale),
                 inline: true,
               },
               {
-                nameKey: "commands.tool.status.field_punish_conditioning",
+                nameKey: "commands.status.field_punish_conditioning",
                 value: formatBooleanLocalized(selectedPersona.punish_conditioning_enabled ?? true, locale),
                 inline: true,
               },
@@ -433,14 +432,14 @@ export async function showPersonaStatus(
           };
 
           const personaPage2: SummaryEmbedOptions = {
-            titleKey: "commands.tool.status.persona_page2_title",
+            titleKey: "commands.status.persona_page2_title",
             titleVars: { persona_name: personaName },
-            descriptionKey: "commands.tool.status.persona_page2_description",
+            descriptionKey: "commands.status.persona_page2_description",
             color: ColorCode.INFO,
-            footerKey: "commands.tool.status.export_footer_persona_attributes_and_dialogues",
+            footerKey: "commands.status.export_footer_persona_attributes_and_dialogues",
             fields: [
               {
-                nameKey: "commands.tool.status.field_attributes_with_count",
+                nameKey: "commands.status.field_attributes_with_count",
                 nameVars: {
                   current: attributesCount,
                   max: limits.maxAttributes,
@@ -452,14 +451,14 @@ export async function showPersonaStatus(
           };
 
           const personaPage3: SummaryEmbedOptions = {
-            titleKey: "commands.tool.status.persona_page3_title",
+            titleKey: "commands.status.persona_page3_title",
             titleVars: { persona_name: personaName },
-            descriptionKey: "commands.tool.status.persona_page3_description",
+            descriptionKey: "commands.status.persona_page3_description",
             color: ColorCode.INFO,
-            footerKey: "commands.tool.status.export_footer_persona_attributes_and_dialogues",
+            footerKey: "commands.status.export_footer_persona_attributes_and_dialogues",
             fields: [
               {
-                nameKey: "commands.tool.status.field_sample_dialogues_with_count",
+                nameKey: "commands.status.field_sample_dialogues_with_count",
                 nameVars: {
                   current: dialogueCount,
                   max: limits.maxSampleDialogues,
@@ -471,14 +470,14 @@ export async function showPersonaStatus(
           };
 
           const personaPage4: SummaryEmbedOptions = {
-            titleKey: "commands.tool.status.persona_page4_title",
+            titleKey: "commands.status.persona_page4_title",
             titleVars: { persona_name: personaName },
-            descriptionKey: "commands.tool.status.persona_page4_description",
+            descriptionKey: "commands.status.persona_page4_description",
             color: ColorCode.INFO,
-            footerKey: "commands.tool.status.export_footer_persona_memories",
+            footerKey: "commands.status.export_footer_persona_memories",
             fields: [
               {
-                nameKey: "commands.tool.status.field_persona_personal_memories_with_count",
+                nameKey: "commands.status.field_persona_personal_memories_with_count",
                 nameVars: {
                   current: personaPersonalMemoriesCount,
                   max: limits.maxPersonalMemories,
@@ -487,7 +486,7 @@ export async function showPersonaStatus(
                 inline: false,
               },
               {
-                nameKey: "commands.tool.status.field_persona_server_memories_with_count",
+                nameKey: "commands.status.field_persona_server_memories_with_count",
                 nameVars: {
                   current: personaServerMemoriesCount,
                   max: limits.maxServerMemories,
@@ -499,33 +498,33 @@ export async function showPersonaStatus(
           };
 
           const personaPage5: SummaryEmbedOptions = {
-            titleKey: "commands.tool.status.persona_page5_title",
+            titleKey: "commands.status.persona_page5_title",
             titleVars: { persona_name: personaName },
-            descriptionKey: "commands.tool.status.persona_page5_description",
+            descriptionKey: "commands.status.persona_page5_description",
             color: ColorCode.INFO,
             fields: [
               {
-                nameKey: "commands.tool.status.field_persona_prompt",
+                nameKey: "commands.status.field_persona_prompt",
                 value: personaPromptValue,
                 inline: false,
               },
               {
-                nameKey: "commands.tool.status.field_physical_appearance_tags",
+                nameKey: "commands.status.field_physical_appearance_tags",
                 value: physicalAppearanceTagsValue,
                 inline: false,
               },
               {
-                nameKey: "commands.tool.status.field_nai_attg",
+                nameKey: "commands.status.field_nai_attg",
                 value: attgValue,
                 inline: false,
               },
               {
-                nameKey: "commands.tool.status.field_persona_context_note",
+                nameKey: "commands.status.field_persona_context_note",
                 value: personaContextNoteValue,
                 inline: false,
               },
               {
-                nameKey: "commands.tool.status.field_persona_context_note_depth",
+                nameKey: "commands.status.field_persona_context_note_depth",
                 value: String(selectedPersona.context_note_depth ?? 0),
                 inline: true,
               },
@@ -546,7 +545,7 @@ export async function showPersonaStatus(
             personaId: selectedPersona.persona_id,
             errorType: "CommandExecutionError",
             metadata: {
-              command: "tool status",
+              command: "status",
               scope: "persona",
               userId: interaction.user.id,
             },
@@ -568,7 +567,7 @@ export async function showPersonaStatus(
     log.error("Persona status workflow terminated unexpectedly", error, {
       errorType: "CommandExecutionError",
       metadata: {
-        command: "tool status",
+        command: "status",
         scope: "persona",
         userId: interaction.user.id,
       },
