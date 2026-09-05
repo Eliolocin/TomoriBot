@@ -10,12 +10,20 @@ import { initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
 
+let commandDataCache: Awaited<ReturnType<typeof loadCommandData>> | null = null;
+async function getLoadedCommandData() {
+  if (!commandDataCache) {
+    commandDataCache = await loadCommandData();
+  }
+  return commandDataCache;
+}
+
 const PUNISH_ACTIONS = ["bite", "bonk", "pinch", "spank", "squeeze"];
 const REWARD_ACTIONS = ["feed", "headpat", "hug", "kiss", "tickle"];
 
 describe("commandLoader autocomplete registration", () => {
   it("registers an autocomplete handler for every conditioning action", async () => {
-    const { autocompleteMap } = await loadCommandData();
+    const { autocompleteMap } = await getLoadedCommandData();
 
     const punishHandlers = autocompleteMap.get("punish");
     const rewardHandlers = autocompleteMap.get("reward");
@@ -33,7 +41,7 @@ describe("commandLoader autocomplete registration", () => {
   });
 
   it("keys autocomplete handlers identically to their execute handlers", async () => {
-    const { autocompleteMap, executionMap } = await loadCommandData();
+    const { autocompleteMap, executionMap } = await getLoadedCommandData();
 
     for (const [categoryName, handlers] of autocompleteMap) {
       const executionHandlers = executionMap.get(categoryName);
@@ -47,7 +55,7 @@ describe("commandLoader autocomplete registration", () => {
   });
 
   it("omits commands that export no autocomplete handler", async () => {
-    const { autocompleteMap, executionMap } = await loadCommandData();
+    const { autocompleteMap, executionMap } = await getLoadedCommandData();
 
     // The loader mirrors executionMap's category structure, so the meaningful assertion is that
     // a command declaring no autocomplete export contributes no handler.
@@ -58,7 +66,7 @@ describe("commandLoader autocomplete registration", () => {
 
 describe("conditioning persona option registration", () => {
   it("declares an optional autocomplete persona option on every conditioning leaf", async () => {
-    const { registrationData } = await loadCommandData();
+    const { registrationData } = await getLoadedCommandData();
 
     type OptionPayload = { name?: string; required?: boolean; autocomplete?: boolean };
     type SubcommandPayload = { name?: string; options?: OptionPayload[] };
@@ -83,5 +91,41 @@ describe("conditioning persona option registration", () => {
         expect(personaOption?.autocomplete).toBe(true);
       }
     }
+  });
+});
+
+describe("stats persona option and autocomplete registration", () => {
+  it("registers an autocomplete handler at stats/persona reachable via autocompleteMap", async () => {
+    const { autocompleteMap } = await getLoadedCommandData();
+
+    const statsHandlers = autocompleteMap.get("stats");
+    expect(statsHandlers).toBeDefined();
+    expect(typeof statsHandlers?.get("persona")).toBe("function");
+  });
+
+  it("declares required autocomplete persona first and optional timeframe second", async () => {
+    const { registrationData } = await getLoadedCommandData();
+
+    type OptionPayload = { name?: string; required?: boolean; autocomplete?: boolean };
+    type SubcommandPayload = { name?: string; options?: OptionPayload[] };
+
+    const statsCommand = registrationData.find((entry) => entry.name === "stats") as unknown as
+      | { options?: SubcommandPayload[] }
+      | undefined;
+    expect(statsCommand).toBeDefined();
+
+    const personaSubcommand = statsCommand?.options?.find((option) => option.name === "persona");
+    expect(personaSubcommand).toBeDefined();
+
+    const options = personaSubcommand?.options ?? [];
+    expect(options.length).toBe(2);
+
+    const [firstOption, secondOption] = options;
+    expect(firstOption.name).toBe("persona");
+    expect(firstOption.required).toBe(true);
+    expect(firstOption.autocomplete).toBe(true);
+
+    expect(secondOption.name).toBe("timeframe");
+    expect(secondOption.required ?? false).toBe(false);
   });
 });

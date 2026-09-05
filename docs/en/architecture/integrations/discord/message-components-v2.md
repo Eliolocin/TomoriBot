@@ -814,8 +814,8 @@ button and compacts the anchor private picker. The returned phase can then creat
 one public follow-up. Its public payload type forbids the ephemeral option, and a second
 `reply()` call fails with `public-reply-already-sent`.
 
-This policy is used by intentionally public results such as `/stats persona` and persona
-`/stats generate`. A private workflow must use the default `replace-picker` policy instead.
+This policy is used by intentionally public results such as persona `/stats generate`.
+A private workflow must use the default `replace-picker` policy instead.
 
 #### In-place modal range bridge
 
@@ -843,7 +843,7 @@ When modernizing an embed workflow to Components V2, migrate the complete reply 
 - Initial deferred reply edits, "processing" messages, success messages, timeout messages, cancellation messages, and post-processing errors should all use Components V2 components with `MessageFlags.IsComponentsV2`.
 - Files attached to V2 messages must be referenced by `MediaGallery`, `Thumbnail`, or `File`; an unreferenced attachment is not displayed.
 - Shared helpers such as status containers are preferred for repeated states. Local builders are acceptable for command-specific payloads, but do not mix them with legacy embeds on the same original interaction reply after the V2 state has been sent.
-- Persona-picker commands must use `runPersonaPickerWorkflow(...)`; direct use of the low-level persona renderer is mechanically rejected by `tests/unit/checks/personaWorkflowBoundary.test.ts`.
+- Commands that need an interactive persona picker must use `runPersonaPickerWorkflow(...)`; direct use of the low-level persona renderer is mechanically rejected by `tests/unit/checks/personaWorkflowBoundary.test.ts`.
 
 ---
 

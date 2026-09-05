@@ -9,11 +9,12 @@ export default {
     },
     persona: {
       description: `View a persona's usage statistics on this server.`,
+      persona_description: `The persona to view statistics for.`,
       timeframe_description: `The time window to summarize.`,
-      picker_title: `Pick a Persona`,
-      picker_description: `Select a persona to view its statistics.`,
       no_personas_title: `No Personas`,
       no_personas_description: `This server has no personas to show statistics for yet.`,
+      not_found_title: `Persona Not Found`,
+      not_found_description: `The selected persona could not be found on this server.`,
       chosen_title: `{name} has been selected`,
     },
     server: {

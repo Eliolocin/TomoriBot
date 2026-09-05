@@ -10,8 +10,6 @@ export default {
     persona: {
       description: `このサーバーでのペルソナの使用統計を表示します。`,
       timeframe_description: `集計する期間。`,
-      picker_title: `ペルソナを選択`,
-      picker_description: `統計を表示するペルソナを選んでください。`,
       no_personas_title: `ペルソナがありません`,
       no_personas_description: `このサーバーには統計を表示できるペルソナがまだありません。`,
       chosen_title: `{name}が選択されました`,
