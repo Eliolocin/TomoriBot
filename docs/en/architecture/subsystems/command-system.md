@@ -319,7 +319,7 @@ Use when the user is managing an existing set of configured entries and batch ke
 Examples:
 
 - `/moderation` User Blacklist and Whitelist removal actions
-- `/config remove modeloverride` (channels + personas together)
+- `/model override remove` (channels + personas together)
 - `/config` > Engine > Experimental (experimental server-scoped workaround toggles)
 - `/memories` Short-Term category (active server-shared STM entries)
 - `/config` > Channels > Channel Rules (private, roleplay, and cross-channel blocklist sets)

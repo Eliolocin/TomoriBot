@@ -804,26 +804,5 @@ export default {
 {triggers_removed}`,
       },
     },
-    remove: {
-      modeloverride: {
-        description: `チャンネルとペルソナのモデル上書きを削除します。`,
-        modal_title: `モデル上書きの削除`,
-        channel_checkbox_label: `チャンネル上書き`,
-        channel_checkbox_label_continued: `チャンネル上書き（続き）`,
-        channel_checkbox_description: `削除したいチャンネル上書きのチェックを外してください。`,
-        persona_checkbox_label: `ペルソナ上書き`,
-        persona_checkbox_label_continued: `ペルソナ上書き（続き）`,
-        persona_checkbox_description: `削除したいペルソナ上書きのチェックを外してください。`,
-        none_title: `モデル上書きなし`,
-        none_description: `このサーバーにはチャンネルまたはペルソナのモデル上書きが設定されていません。`,
-        too_many_title: `モデル上書きが多すぎます`,
-        too_many_description: `このサーバーにはチャンネル上書きが **{channel_count}** 件、ペルソナ上書きが **{persona_count}** 件（合計 **{total_count}** 件）あります。Discord のモーダルではチェックボックスグループを **{max_groups}** 個（合計 **{max_entries}** 項目）までしか表示できません。`,
-        no_removals_title: `削除されたモデル上書きはありません`,
-        no_removals_description: `どの上書きも未チェックになっていません。モデル上書きは変更されていません。`,
-        success_title: `モデル上書きを更新しました`,
-        success_description: `次のモデル上書きを削除しました。
-{removed_overrides}`,
-      },
-    },
   },
 };

@@ -1742,26 +1742,5 @@ Preview:
 {triggers_removed}`,
       },
     },
-    remove: {
-      modeloverride: {
-        description: `Remove channel and persona model overrides.`,
-        modal_title: `Remove Model Overrides`,
-        channel_checkbox_label: `Channel Overrides`,
-        channel_checkbox_label_continued: `Channel Overrides (Continued)`,
-        channel_checkbox_description: `Uncheck any channel overrides you want to remove.`,
-        persona_checkbox_label: `Persona Overrides`,
-        persona_checkbox_label_continued: `Persona Overrides (Continued)`,
-        persona_checkbox_description: `Uncheck any persona overrides you want to remove.`,
-        none_title: `No Model Overrides`,
-        none_description: `This server has no channel or persona model overrides configured.`,
-        too_many_title: `Too Many Model Overrides`,
-        too_many_description: `This server has **{channel_count}** channel override(s) and **{persona_count}** persona override(s) (**{total_count}** total). Discord only allows **{max_groups}** checkbox groups (**{max_entries}** total options) per modal.`,
-        no_removals_title: `No Model Overrides Removed`,
-        no_removals_description: `No overrides were unchecked. Model overrides remain unchanged.`,
-        success_title: `Model Overrides Updated`,
-        success_description: `Removed the following model overrides.
-{removed_overrides}`,
-      },
-    },
   },
 };

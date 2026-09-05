@@ -606,7 +606,7 @@ Implemented examples:
 - `/config` > Channels > Channel Rules manages the full saved RP-channel set in one modal, with paginated fallback beyond 50 channels.
 - `/config` > Channels > Channel Rules manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.
 - `/config` > Engine > Notices manages visible notice embed types in one modal.
-- `/config remove modeloverride` manages channel and persona overrides together in one modal.
+- `/model override remove` remains a combined aggregate managing channel and persona overrides together, opening direct raw modal batches up to 50, and offering page selection above that.
 - MCP registrations are deliberately excluded from this pattern: the `/mcps` panel removes one
   registration at a time behind an explicit confirmation, so selection never becomes destructive
   consent.

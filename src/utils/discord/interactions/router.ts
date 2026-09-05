@@ -12,6 +12,7 @@ import {
   providersInteractionRoute,
 } from "@/utils/discord/interactions/providersRoutes";
 import { stPresetsInteractionRoute } from "@/utils/discord/interactions/stPresetsRoutes";
+import { modelOverrideInteractionRoute } from "@/utils/discord/interactions/modelOverrideRoutes";
 import { InteractionRouteRegistry, type GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
@@ -22,6 +23,7 @@ const registry = new InteractionRouteRegistry([
   helpInteractionRoute,
   mcpsInteractionRoute,
   memoriesInteractionRoute,
+  modelOverrideInteractionRoute,
   moderationInteractionRoute,
   personalConfigInteractionRoute,
   personalMemoriesInteractionRoute,
@@ -70,7 +72,9 @@ export async function dispatchGlobalInteraction(
               ? "/personal config"
               : namespace === "conditioning"
                 ? "/conditioning remove"
-                : `/${namespace}`;
+                : namespace === "model-overrides"
+                  ? "/model override remove"
+                  : `/${namespace}`;
       await interaction.reply({
         content: localizer(interaction.locale ?? interaction.guildLocale ?? "en-US", key, { command }),
         flags: MessageFlags.Ephemeral,
