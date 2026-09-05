@@ -19,32 +19,32 @@ function formatNumber(value: number): string {
 
 function formatBoolean(locale: string, value: boolean): string {
   return value
-    ? localizer(locale, "commands.speech.chatterbox.parameters.enabled_label")
-    : localizer(locale, "commands.speech.chatterbox.parameters.disabled_label");
+    ? localizer(locale, "commands.config.panel.voices.parameters.enabled_label")
+    : localizer(locale, "commands.config.panel.voices.parameters.disabled_label");
 }
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("parameters")
-    .setDescription(localizer("en-US", "commands.speech.chatterbox.parameters.description"))
+    .setDescription(localizer("en-US", "commands.config.panel.voices.parameters.description"))
     .addNumberOption((option) =>
       option
         .setName("cfg_weight")
-        .setDescription(localizer("en-US", "commands.speech.chatterbox.parameters.cfg_weight_description"))
+        .setDescription(localizer("en-US", "commands.config.panel.voices.parameters.cfg_weight_description"))
         .setRequired(false)
         .setMinValue(CHATTERBOX_PARAM_MIN),
     )
     .addNumberOption((option) =>
       option
         .setName("exaggeration")
-        .setDescription(localizer("en-US", "commands.speech.chatterbox.parameters.exaggeration_description"))
+        .setDescription(localizer("en-US", "commands.config.panel.voices.parameters.exaggeration_description"))
         .setRequired(false)
         .setMinValue(CHATTERBOX_PARAM_MIN),
     )
     .addBooleanOption((option) =>
       option
         .setName("turbo")
-        .setDescription(localizer("en-US", "commands.speech.chatterbox.parameters.turbo_description"))
+        .setDescription(localizer("en-US", "commands.config.panel.voices.parameters.turbo_description"))
         .setRequired(false),
     );
 
@@ -130,7 +130,7 @@ export async function execute(
     invalidateTomoriStateCache(serverDiscId);
 
     const descriptions = [
-      localizer(locale, "commands.speech.chatterbox.parameters.success_description", {
+      localizer(locale, "commands.config.panel.voices.parameters.success_description", {
         turbo: formatBoolean(locale, turboEnabled),
         cfg_weight: formatNumber(cfgWeight),
         exaggeration: formatNumber(exaggeration),
@@ -138,13 +138,13 @@ export async function execute(
     ];
 
     if (turboEnabled) {
-      descriptions.push(localizer(locale, "commands.speech.chatterbox.parameters.turbo_notice"));
+      descriptions.push(localizer(locale, "commands.config.panel.voices.parameters.turbo_notice"));
     } else {
-      descriptions.push(localizer(locale, "commands.speech.chatterbox.parameters.standard_notice"));
+      descriptions.push(localizer(locale, "commands.config.panel.voices.parameters.standard_notice"));
     }
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.speech.chatterbox.parameters.success_title",
+      titleKey: "commands.config.panel.voices.parameters.success_title",
       description: descriptions.join("\n\n"),
       color: ColorCode.SUCCESS,
     });

@@ -608,6 +608,16 @@ export const MODELS_PAGE_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], Co
   "image-tags-default-submit": "image",
   "nai-parameters-open": "image",
   "nai-parameters-submit": "image",
+  "tts-parameters-open": "voices",
+  "tts-parameters-submit": "voices",
+  "tts-turbo-set": "voices",
+  "voice-sample-select": "voices",
+  "voice-sample-page": "voices",
+  "voice-sample-add-open": "voices",
+  "voice-sample-add-submit": "voices",
+  "voice-sample-remove-view": "voices",
+  "voice-sample-remove-confirm": "voices",
+  "voice-sample-remove-cancel": "voices",
 };
 
 /**

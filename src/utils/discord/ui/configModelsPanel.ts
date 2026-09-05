@@ -42,6 +42,8 @@ import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { formatStopStringForDisplay } from "@/utils/provider/stopStringConfig";
 import { neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { localizer } from "@/utils/text/localizer";
+import { buildConfigVoicesBody, type ConfigVoicesView } from "@/utils/discord/ui/configVoicesPanel";
+export { buildConfigVoicesBody, type ConfigVoicesView };
 
 export const CONFIG_MODEL_CAPABILITY_LOCALE_KEYS: Record<ConfigModelCapability, string> = {
   text: "commands.config.panel.capability_text",
@@ -133,6 +135,7 @@ export interface ConfigModelsPageInput {
   parametersView?: ConfigParametersView;
   fallbacksView?: ConfigFallbacksView;
   imageView?: ConfigImageGenerationView;
+  voicesView?: ConfigVoicesView;
 }
 
 function heading(locale: string, titleKey: string, descriptionKey: string): ComponentInContainerData {
@@ -725,6 +728,12 @@ export function buildConfigModelsBody(input: ConfigModelsPageInput): ComponentIn
       return buildFallbacksBody(input);
     case "image":
       return buildImageGenerationBody(input);
+    case "voices":
+      return buildConfigVoicesBody({
+        locale: input.locale,
+        readStatus: input.readStatus,
+        view: input.voicesView,
+      });
     default:
       return [];
   }

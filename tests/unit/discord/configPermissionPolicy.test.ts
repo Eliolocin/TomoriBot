@@ -122,7 +122,7 @@ describe("config page filtering", () => {
     expect(resolveConfigPageState("permissions", "privacy", DM_OWNER)).toBe("omitted");
     expect(resolveConfigPageState("models", "image", DM_OWNER)).toBe("omitted");
     expect(visibleConfigPages("permissions", DM_OWNER)).toEqual(["capabilities"]);
-    expect(visibleConfigPages("models", DM_OWNER)).toEqual(["switch", "parameters", "fallbacks"]);
+    expect(visibleConfigPages("models", DM_OWNER)).toEqual(["switch", "parameters", "fallbacks", "voices"]);
   });
 
   it("omits Persona Appearance and Advanced from a guild member and leaves its siblings readable", () => {
@@ -658,6 +658,29 @@ describe("isConfigRouteAuthorized", () => {
       expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
     }
     expect(Object.keys(MODELS_PAGE_BY_ROUTE)).toContain("model-provider-select");
+  });
+
+  it("keeps every TTS Parameters & Voices route manager-only in a guild and open to a DM owner", () => {
+    // These ten absorb /speech leaves that shipped with no handler-level check at all, so the panel
+    // route is their entire gate. The DM owner keeps access because the page is workspace scoped.
+    const routes: ConfigPanelRoute[] = [
+      { action: "tts-parameters-open", locale: "en-US" },
+      { action: "tts-parameters-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "tts-turbo-set", locale: "en-US", enabled: true },
+      { action: "voice-sample-select", locale: "en-US", start: 0 },
+      { action: "voice-sample-page", locale: "en-US", start: 0 },
+      { action: "voice-sample-add-open", locale: "en-US" },
+      { action: "voice-sample-add-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "voice-sample-remove-view", locale: "en-US", index: 0, fp: "abcd1234" },
+      { action: "voice-sample-remove-confirm", locale: "en-US", index: 0, fp: "abcd1234", nonce: "nonce1234567" },
+      { action: "voice-sample-remove-cancel", locale: "en-US" },
+    ];
+
+    for (const route of routes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
+    }
   });
 
   it("covers every declared action, so a new route cannot default to authorized", () => {

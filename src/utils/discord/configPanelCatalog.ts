@@ -25,7 +25,7 @@ type PersonaPage = "general" | "triggers" | "memories" | "appearance" | "sprites
 type BehaviorPage = "general" | "trigger" | "experimental" | "notices" | "memory";
 type ChannelsPage = "destinations" | "auto-trigger" | "rules" | "overrides";
 type PermissionsPage = "capabilities" | "privacy";
-type ModelsPage = "switch" | "parameters" | "fallbacks" | "image";
+type ModelsPage = "switch" | "parameters" | "fallbacks" | "image" | "voices";
 
 export type ConfigPage = PersonaPage | BehaviorPage | ChannelsPage | PermissionsPage | ModelsPage;
 
@@ -39,7 +39,7 @@ export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPag
   behavior: ["general", "trigger", "notices", "experimental", "memory"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   permissions: ["capabilities", "privacy"],
-  models: ["switch", "parameters", "image", "fallbacks"],
+  models: ["switch", "parameters", "image", "fallbacks", "voices"],
 };
 
 export const CONFIG_CATEGORY_ORDER: readonly ConfigCategory[] = [
@@ -440,6 +440,16 @@ export type ConfigPanelRoute =
   | { action: "image-tags-default-submit"; locale: string; negative: boolean; nonce: string }
   | { action: "nai-parameters-open"; locale: string }
   | { action: "nai-parameters-submit"; locale: string; nonce: string }
+  | { action: "tts-parameters-open"; locale: string }
+  | { action: "tts-parameters-submit"; locale: string; nonce: string }
+  | { action: "tts-turbo-set"; locale: string; enabled: boolean }
+  | { action: "voice-sample-select"; locale: string; start: number }
+  | { action: "voice-sample-page"; locale: string; start: number }
+  | { action: "voice-sample-add-open"; locale: string }
+  | { action: "voice-sample-add-submit"; locale: string; nonce: string }
+  | { action: "voice-sample-remove-view"; locale: string; index: number; fp: string }
+  | { action: "voice-sample-remove-confirm"; locale: string; index: number; fp: string; nonce: string }
+  | { action: "voice-sample-remove-cancel"; locale: string }
   | { action: "behavior-prompt-open"; locale: string }
   | { action: "behavior-prompt-submit"; locale: string; nonce: string }
   | { action: "behavior-preset-open"; locale: string }
@@ -828,6 +838,16 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "image-tags-default-submit": { wireToken: "img-tags-sub", fields: [negativeField, nonceField] },
   "nai-parameters-open": { wireToken: "nai-params-open", fields: [] },
   "nai-parameters-submit": { wireToken: "nai-params-sub", fields: [nonceField] },
+  "tts-parameters-open": { wireToken: "tts-params-open", fields: [] },
+  "tts-parameters-submit": { wireToken: "tts-params-sub", fields: [nonceField] },
+  "tts-turbo-set": { wireToken: "tts-turbo-set", fields: [enabledField] },
+  "voice-sample-select": { wireToken: "vsample-select", fields: [startField] },
+  "voice-sample-page": { wireToken: "vsample-page", fields: [startField] },
+  "voice-sample-add-open": { wireToken: "vsample-add-open", fields: [] },
+  "voice-sample-add-submit": { wireToken: "vsample-add-sub", fields: [nonceField] },
+  "voice-sample-remove-view": { wireToken: "vsample-rem-view", fields: [indexField, fpField] },
+  "voice-sample-remove-confirm": { wireToken: "vsample-rem-conf", fields: [indexField, fpField, nonceField] },
+  "voice-sample-remove-cancel": { wireToken: "vsample-rem-cancel", fields: [] },
   "behavior-prompt-open": { wireToken: "beh-prompt-open", fields: [] },
   "behavior-prompt-submit": { wireToken: "beh-prompt-sub", fields: [nonceField] },
   "behavior-preset-open": { wireToken: "beh-preset-open", fields: [] },

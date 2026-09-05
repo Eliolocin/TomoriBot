@@ -909,6 +909,28 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       fp: "abcd1234",
     },
   ],
+  ["config:v1:tts-params-open:en-US", { action: "tts-parameters-open", locale: "en-US" }],
+  [
+    "config:v1:tts-params-sub:en-US:nonce1234567",
+    { action: "tts-parameters-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v1:tts-turbo-set:en-US:1", { action: "tts-turbo-set", locale: "en-US", enabled: true }],
+  ["config:v1:vsample-select:en-US:25", { action: "voice-sample-select", locale: "en-US", start: 25 }],
+  ["config:v1:vsample-page:en-US:0", { action: "voice-sample-page", locale: "en-US", start: 0 }],
+  ["config:v1:vsample-add-open:en-US", { action: "voice-sample-add-open", locale: "en-US" }],
+  [
+    "config:v1:vsample-add-sub:en-US:nonce1234567",
+    { action: "voice-sample-add-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  [
+    "config:v1:vsample-rem-view:en-US:0:abcd1234",
+    { action: "voice-sample-remove-view", locale: "en-US", index: 0, fp: "abcd1234" },
+  ],
+  [
+    "config:v1:vsample-rem-conf:en-US:3:abcd1234:nonce1234567",
+    { action: "voice-sample-remove-confirm", locale: "en-US", index: 3, fp: "abcd1234", nonce: "nonce1234567" },
+  ],
+  ["config:v1:vsample-rem-cancel:en-US", { action: "voice-sample-remove-cancel", locale: "en-US" }],
 ];
 
 describe("config route wire contract", () => {

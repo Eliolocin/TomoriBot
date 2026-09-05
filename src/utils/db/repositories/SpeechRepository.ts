@@ -15,8 +15,10 @@
  */
 import type { CustomEndpointRow, VoiceSampleRow } from "@/types/db/schema";
 import { customEndpointSchema, voiceSampleSchema } from "@/types/db/schema";
+import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCacheStore";
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
+import { deleteStoredVoiceSample } from "@/utils/storage/voiceSampleStorage";
 import type {} from "./IRepository";
 
 /**
@@ -220,12 +222,80 @@ export async function countPersonaVoiceSampleRefs(serverId: number, sampleId: nu
  *
  */
 export async function clearPersonaVoiceSampleRefs(serverId: number, sampleId: number): Promise<void> {
+  // speech_voice_name must clear with the sample id: every provider reads it as the active voice
+  // name, so leaving it set makes a persona report a voice that no longer exists. The surviving
+  // design prompt is the only remaining name source, and a surviving speech_voice_id is
+  // deliberately left nameless rather than inheriting the deleted sample's name.
+  // The regex tests for any non-whitespace character, which is what the JS `.trim()` truthiness
+  // check in the voice-assign clear ladder resolves to, and it leaves a NULL prompt NULL.
   await sql`
     UPDATE persona_voice_configs pvc
-    SET speech_voice_sample_id = NULL
+    SET speech_voice_sample_id = NULL,
+        speech_voice_name = CASE
+          WHEN pvc.speech_voice_design_prompt ~ '[^[:space:]]' THEN 'VoiceDesign'
+          ELSE NULL
+        END
     FROM personas p
     WHERE p.persona_id = pvc.persona_id
       AND p.server_id = ${serverId}
       AND pvc.speech_voice_sample_id = ${sampleId}
   `;
+}
+
+/** Identifies the sample to retire and the workspace whose cached state references it. */
+export interface VoiceSampleRemovalInput {
+  serverId: number;
+  /** Guild id, or the invoking user's id for a DM-backed workspace: the tomoriStateCache key. */
+  serverDiscId: string;
+  sampleId: number;
+  filePath: string;
+}
+
+export interface VoiceSampleRemovalResult {
+  storedFileRemoved: boolean;
+}
+
+/**
+ * Collaborators of removeVoiceSample, injectable so a test can observe call ordering.
+ * Bun cannot unregister `mock.module`, so mocking the sql client or the cache store would leak
+ * into every other test sharing the lane process.
+ */
+export interface VoiceSampleRemovalDeps {
+  clearRefs: typeof clearPersonaVoiceSampleRefs;
+  deleteRow: typeof deleteVoiceSample;
+  invalidateCache: typeof invalidateTomoriStateCache;
+  deleteStoredFile: typeof deleteStoredVoiceSample;
+}
+
+const DEFAULT_REMOVAL_DEPS: VoiceSampleRemovalDeps = {
+  clearRefs: clearPersonaVoiceSampleRefs,
+  deleteRow: deleteVoiceSample,
+  invalidateCache: invalidateTomoriStateCache,
+  deleteStoredFile: deleteStoredVoiceSample,
+};
+
+/**
+ * Retires a voice sample completely: clears every persona reference, deletes the row, invalidates
+ * cached state, then removes the stored audio file.
+ *
+ * Cache invalidation runs after the row delete commits and before stored-file cleanup, so a cleanup
+ * failure can never leave the deleted assignment being served from cache. Cleanup failure is
+ * reported rather than thrown, because the row is already gone and a retry would find nothing.
+ */
+export async function removeVoiceSample(
+  { serverId, serverDiscId, sampleId, filePath }: VoiceSampleRemovalInput,
+  deps: VoiceSampleRemovalDeps = DEFAULT_REMOVAL_DEPS,
+): Promise<VoiceSampleRemovalResult> {
+  await deps.clearRefs(serverId, sampleId);
+  await deps.deleteRow(sampleId);
+
+  deps.invalidateCache(serverDiscId);
+
+  try {
+    await deps.deleteStoredFile(filePath);
+    return { storedFileRemoved: true };
+  } catch (error) {
+    log.error(`SpeechRepository.removeVoiceSample: stored file cleanup failed for sample ${sampleId}`, error);
+    return { storedFileRemoved: false };
+  }
 }

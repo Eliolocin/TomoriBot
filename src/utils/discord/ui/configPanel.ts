@@ -88,6 +88,7 @@ import {
   type ConfigImageGenerationView,
   type ConfigParametersView,
   type ConfigSwitchModelsView,
+  type ConfigVoicesView,
 } from "@/utils/discord/ui/configModelsPanel";
 import { TOOL_NOTICE_DEFINITIONS } from "@/constants/toolNotices";
 import { WORKAROUND_DEFINITIONS } from "@/utils/discord/workaroundConfigMapping";
@@ -122,6 +123,7 @@ export type ConfigPanelView =
   | { kind: "promote-confirm"; personaId: number; nonce: string }
   | { kind: "character-reference-clear-confirm"; personaId: number; nonce: string }
   | { kind: "sprite-remove-confirm"; personaId: number; index: number; fp: string; nonce: string }
+  | { kind: "voice-sample-remove-confirm"; index: number; fp: string; nonce: string }
   | { kind: "humanizer-editor"; personaId: number }
   | { kind: "text-override-provider"; personaId: number; providers: string[] }
   | {
@@ -185,6 +187,7 @@ const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
     parameters: "commands.config.panel.page_models_parameters",
     fallbacks: "commands.config.panel.page_models_fallbacks",
     image: "commands.config.panel.page_models_image",
+    voices: "commands.config.panel.page_models_voices",
   },
 };
 
@@ -237,6 +240,7 @@ export interface ConfigPanelRenderInput {
   modelParametersView?: ConfigParametersView;
   modelFallbacksView?: ConfigFallbacksView;
   imageGenerationView?: ConfigImageGenerationView;
+  voicesView?: ConfigVoicesView;
   randomTriggerPageStart?: number;
   behaviorView?: ConfigBehaviorView;
   permissionsView?: ConfigPermissionsView;
@@ -4106,6 +4110,7 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
           parametersView: input.modelParametersView,
           fallbacksView: input.modelFallbacksView,
           imageView: input.imageGenerationView,
+          voicesView: input.voicesView,
         }),
       );
     }

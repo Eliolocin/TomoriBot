@@ -14,10 +14,8 @@ import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { ensureSpeechCommandAccess } from "@/utils/discord/speechPermission";
 import { promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { createStandardEmbed } from "@/utils/discord/embedHelper";
-import { deleteStoredVoiceSample } from "@/utils/storage/voiceSampleStorage";
 import {
-  clearPersonaVoiceSampleRefs,
-  deleteVoiceSample,
+  removeVoiceSample,
   loadVoiceSamples,
   countPersonaVoiceSampleRefs,
 } from "@/utils/db/repositories/SpeechRepository";
@@ -33,7 +31,9 @@ const SAMPLE_SELECT_ID = "sample_select";
 const INTERACTION_TIMEOUT_MS = 30_000;
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("voice-remove").setDescription(localizer("en-US", "commands.speech.voice_remove.description"));
+  subcommand
+    .setName("voice-remove")
+    .setDescription(localizer("en-US", "commands.config.panel.voices.remove.description"));
 
 export async function execute(
   _client: Client,
@@ -55,7 +55,8 @@ export async function execute(
     return;
   }
 
-  const serverId = await serverRepository.loadServerIdByDiscId(interaction.guild?.id ?? interaction.user.id);
+  const serverDiscId = interaction.guild?.id ?? interaction.user.id;
+  const serverId = await serverRepository.loadServerIdByDiscId(serverDiscId);
   if (!serverId) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.tomori_not_setup_title",
@@ -71,8 +72,8 @@ export async function execute(
 
     if (!sampleRows.length) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.speech.voice_remove.no_sample_title",
-        descriptionKey: "commands.speech.voice_remove.no_sample_description",
+        titleKey: "commands.config.panel.voices.remove.no_sample_title",
+        descriptionKey: "commands.config.panel.voices.remove.no_sample_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -89,12 +90,12 @@ export async function execute(
     // Show modal with string select; must be called before any defer/reply.
     const modalResult = await promptWithPaginatedModal(interaction, locale, {
       modalCustomId: MODAL_CUSTOM_ID,
-      modalTitleKey: "commands.speech.voice_remove.modal_title",
+      modalTitleKey: "commands.config.panel.voices.remove.modal_title",
       components: [
         {
           customId: SAMPLE_SELECT_ID,
-          labelKey: "commands.speech.voice_remove.select_label",
-          placeholder: "commands.speech.voice_remove.select_placeholder",
+          labelKey: "commands.config.panel.voices.remove.select_label",
+          placeholder: "commands.config.panel.voices.remove.select_placeholder",
           required: true,
           options: sampleSelectOptions,
         },
@@ -128,8 +129,8 @@ export async function execute(
     const refCount = await countPersonaVoiceSampleRefs(serverId, sampleRow.sample_id!);
 
     const confirmEmbed = createStandardEmbed(locale, {
-      titleKey: "commands.speech.voice_remove.confirm_title",
-      descriptionKey: "commands.speech.voice_remove.confirm_description",
+      titleKey: "commands.config.panel.voices.remove.confirm_title",
+      descriptionKey: "commands.config.panel.voices.remove.confirm_description",
       descriptionVars: { name: sampleRow.name, refs: String(refCount) },
       color: ColorCode.WARN,
     });
@@ -137,11 +138,11 @@ export async function execute(
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(CONFIRM_BTN_ID)
-        .setLabel(localizer(locale, "commands.speech.voice_remove.confirm_button"))
+        .setLabel(localizer(locale, "commands.config.panel.voices.remove.confirm_button"))
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId(CANCEL_BTN_ID)
-        .setLabel(localizer(locale, "commands.speech.voice_remove.cancel_button"))
+        .setLabel(localizer(locale, "commands.config.panel.voices.remove.cancel_button"))
         .setStyle(ButtonStyle.Secondary),
     );
 
@@ -166,21 +167,22 @@ export async function execute(
       return;
     }
 
-    // biome-ignore lint/style/noNonNullAssertion: sampleRow is validated above, sample_id is always present
-    await clearPersonaVoiceSampleRefs(serverId, sampleRow.sample_id!);
-
-    // biome-ignore lint/style/noNonNullAssertion: sampleRow is validated above, sample_id is always present
-    await deleteVoiceSample(sampleRow.sample_id!);
-    // biome-ignore lint/style/noNonNullAssertion: sampleRow is validated above, file_path is always present
-    await deleteStoredVoiceSample(sampleRow.file_path!);
+    await removeVoiceSample({
+      serverId,
+      serverDiscId,
+      // biome-ignore lint/style/noNonNullAssertion: sampleRow is validated above, sample_id is always present
+      sampleId: sampleRow.sample_id!,
+      // biome-ignore lint/style/noNonNullAssertion: sampleRow is validated above, file_path is always present
+      filePath: sampleRow.file_path!,
+    });
 
     log.info(
       `[VoiceRemove] Deleted sample "${sampleRow.name}" (id=${sampleRow.sample_id}) for server ${serverId} | ${refCount} persona(s) cleared`,
     );
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {
-      titleKey: "commands.speech.voice_remove.success_title",
-      descriptionKey: "commands.speech.voice_remove.success_description",
+      titleKey: "commands.config.panel.voices.remove.success_title",
+      descriptionKey: "commands.config.panel.voices.remove.success_description",
       descriptionVars: { name: sampleRow.name },
       color: ColorCode.SUCCESS,
     });
