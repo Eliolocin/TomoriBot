@@ -147,7 +147,7 @@ Here are past things Tomori did that got punished for. Avoid doing them again:
 ```
 
 Without a `reason`, the tally is
-recorded but never surfaces in her prompt. Review or clear entries with `/conditioning manage`.
+recorded but never surfaces in her prompt. Review or clear entries with `/conditioning remove`.
 
 ## Controlling When Memories Activate
 

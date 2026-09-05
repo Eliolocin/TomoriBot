@@ -22,7 +22,8 @@ import {
 } from "@/utils/db/repositories";
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
 import { execute as executeConditioningManage } from "@/commands/conditioning/manage";
-import * as modalModule from "@/utils/discord/ui/modals";
+import * as panelController from "@/utils/discord/interactions/panelController";
+import * as embedModule from "@/utils/discord/ui/embeds";
 import * as avatarStorage from "@/utils/storage/avatarStorage";
 import * as imageProcessor from "@/utils/image/imageProcessor";
 import * as safeDownloadModule from "@/utils/security/safeDownload";
@@ -1780,17 +1781,19 @@ describe("config Persona Memories routes", () => {
     const loadGroupsSpy = spyOn(conditioningMemoryRepository, "loadGroupsForPersona").mockImplementation(
       async (_serverId, lineageId) => (lineageId === 101 ? [mainGroup] : [alterGroup]),
     );
-    let modalOptions: { components: Array<{ options: Array<{ value: string; label: string }> }> } | undefined;
-    const modalSpy = spyOn(modalModule, "promptWithRawModal").mockImplementation(
-      async (_interaction, _locale, options) => {
-        modalOptions = options as { components: Array<{ options: Array<{ value: string; label: string }> }> };
-        return { outcome: "cancel" };
-      },
-    );
+    let deliveredPayload: unknown;
+    const deliverSpy = spyOn(panelController, "deliverGuardedPanel").mockImplementation(async (_target, payload) => {
+      deliveredPayload = payload;
+      return undefined as never;
+    });
+    let deferredWithFlags: unknown;
     const interaction = {
       guildId: "guild-1",
       memberPermissions: { has: () => true },
       user: { id: "user-1" },
+      deferReply: async (opts: unknown) => {
+        deferredWithFlags = opts;
+      },
     } as unknown as Parameters<typeof executeConditioningManage>[1];
 
     await executeConditioningManage(
@@ -1804,12 +1807,47 @@ describe("config Persona Memories routes", () => {
     expect(loadGroupsSpy).toHaveBeenCalledTimes(2);
     expect(loadGroupsSpy).toHaveBeenNthCalledWith(1, 9, 101);
     expect(loadGroupsSpy).toHaveBeenNthCalledWith(2, 9, 202);
-    expect(modalOptions?.components[0]?.options.map((option) => option.value)).toEqual(["0", "1"]);
-    expect(modalOptions?.components[0]?.options.map((option) => option.label)).toEqual([
-      expect.stringContaining("Persona 55"),
-      expect.stringContaining("Persona 56"),
-    ]);
-    modalSpy.mockRestore();
+    expect(deferredWithFlags).toEqual({ flags: MessageFlags.Ephemeral });
+    expect(deliverSpy).toHaveBeenCalledTimes(1);
+    const payloadText = JSON.stringify(deliveredPayload);
+    expect(payloadText).toContain("Persona 55");
+    expect(payloadText).toContain("Persona 56");
+    expect(payloadText).toContain("❤️");
+    deliverSpy.mockRestore();
+    loadGroupsSpy.mockRestore();
+    loadPersonasSpy.mockRestore();
+  });
+
+  it("denies conditioning manage to a non manager before reading or deleting anything", async () => {
+    const loadPersonasSpy = spyOn(personaRepository, "loadAllForServer");
+    const loadGroupsSpy = spyOn(conditioningMemoryRepository, "loadGroupsForPersona");
+    const deleteSpy = spyOn(conditioningMemoryRepository, "deleteGroupsForPersona");
+    const deliverSpy = spyOn(panelController, "deliverGuardedPanel");
+    let deniedTitleKey: string | undefined;
+    const replySpy = spyOn(embedModule, "replyInfoEmbed").mockImplementation(async (_interaction, _locale, options) => {
+      deniedTitleKey = options.titleKey;
+    });
+    const interaction = {
+      guildId: "guild-1",
+      memberPermissions: { has: () => false },
+      user: { id: "user-1" },
+    } as unknown as Parameters<typeof executeConditioningManage>[1];
+
+    await executeConditioningManage(
+      CLIENT,
+      interaction,
+      {} as Parameters<typeof executeConditioningManage>[2],
+      "en-US",
+    );
+
+    expect(deniedTitleKey).toBe("general.errors.permission_denied_title");
+    expect(loadPersonasSpy).not.toHaveBeenCalled();
+    expect(loadGroupsSpy).not.toHaveBeenCalled();
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(deliverSpy).not.toHaveBeenCalled();
+    replySpy.mockRestore();
+    deliverSpy.mockRestore();
+    deleteSpy.mockRestore();
     loadGroupsSpy.mockRestore();
     loadPersonasSpy.mockRestore();
   });

@@ -1,4 +1,5 @@
 import { MessageFlags, type Client, type Interaction } from "discord.js";
+import { conditioningInteractionRoute } from "@/utils/discord/interactions/conditioningRoutes";
 import { configInteractionRoute } from "@/utils/discord/interactions/configRoutes";
 import { helpInteractionRoute } from "@/utils/discord/interactions/helpRoutes";
 import { mcpsInteractionRoute } from "@/utils/discord/interactions/mcpsRoutes";
@@ -16,6 +17,7 @@ import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
 const registry = new InteractionRouteRegistry([
+  conditioningInteractionRoute,
   configInteractionRoute,
   helpInteractionRoute,
   mcpsInteractionRoute,
@@ -66,7 +68,9 @@ export async function dispatchGlobalInteraction(
             ? "/personal memories"
             : namespace === "personal-config"
               ? "/personal config"
-              : `/${namespace}`;
+              : namespace === "conditioning"
+                ? "/conditioning remove"
+                : `/${namespace}`;
       await interaction.reply({
         content: localizer(interaction.locale ?? interaction.guildLocale ?? "en-US", key, { command }),
         flags: MessageFlags.Ephemeral,

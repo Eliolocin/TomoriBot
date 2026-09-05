@@ -32,7 +32,7 @@ TomoriBotをトリガーするたびに、以下の内容が組み立てられ�
 | [**会話の参加者**](/ja/features/knowledge/memory/#personal-vs-server-memories) | *（任意）* | `/personal memories`。`/config` > Permissions (Personalization) でゲート | 会話にいる人、そのニックネームとメンションハンドル、各人について保存された個人の記憶。コンテキスト内でメッセージを発言している人、または名前・エイリアスが言及された人がいる場合に読み込まれます。フッターとして、現在のチャンネルと `/config` > Engine > General によるローカル時刻も含みます。 |
 | [**短期記憶**](/ja/features/knowledge/memory/#short-term-memory-stm) | | `/config` > Persona > Memories（`view` も）。エントリーの削除は `/memories`。`/config` > Permissions (Short-Term Memory) でゲート | 異なるチャンネルの要約と直近のメッセージを含みます |
 | [**ドキュメント**](/ja/features/knowledge/memory/#document-knowledge-base-rag) | *（任意）* | `/memories`（`remove`、`view` も） | RAGを使ってナレッジベースから取り出された関連チャンク。 |
-| [**条件付け**](/ja/features/knowledge/memory/#conditioning) | *（任意）* | `/reward <feed\|headpat\|hug\|kiss\|tickle>`、`/punish <bite\|bonk\|pinch\|spank\|squeeze>`、管理は `/conditioning manage` | このサーバーにおけるこのペルソナへの蓄積された行動の後押し。 |
+| [**条件付け**](/ja/features/knowledge/memory/#conditioning) | *（任意）* | `/reward <feed\|headpat\|hug\|kiss\|tickle>`、`/punish <bite\|bonk\|pinch\|spank\|squeeze>`、管理は `/conditioning remove` | このサーバーにおけるこのペルソナへの蓄積された行動の後押し。 |
 | [**サンプル対話**](/ja/features/chatting-personality/multiple-personas/#sample-dialogues) | *（任意）* | `/config` > Persona > Identity & Personality | このペルソナの話し方の例（設定されていれば）。 |
 | [**直近のメッセージ**](/ja/features/chatting-personality/behavior-tweaking/#generation-tuning) | | `/config` > Engine > General | 実際の会話。この件数まで（デフォルト80件）。`/config` > Engine > General で設定した内容や再会ノートは、独立したブロックとしてではなく、設定可能な深さでこのブロックの中にインラインで挿入されます。 |
 

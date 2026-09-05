@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **40**. Runnable slash commands: **84**.
+Top-level command groups: **40**. Runnable slash commands: **85**.
 
 ## `/comment`
 
@@ -36,6 +36,7 @@ Manage persistent reward and punishment conditioning memories.
 | Command | Summary |
 |---|---|
 | `/conditioning manage` | Manage injected conditioning history across all personas in this server. |
+| `/conditioning remove` | Remove conditioning entries across every persona in this server. |
 
 ## `/config`
 

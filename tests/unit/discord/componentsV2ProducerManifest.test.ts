@@ -82,6 +82,14 @@ export const COMPONENTS_V2_PRODUCER_MANIFEST: readonly ProducerManifestEntry[] =
     builderName: "buildHelpDashboardPayload",
     coverage: { kind: "suite", suites: ["tests/unit/discord/helpDashboardLimits.test.ts"] },
   },
+  {
+    modulePath: "src/utils/discord/ui/conditioningPanel.ts",
+    builderName: "buildConditioningPanelPayload",
+    coverage: {
+      kind: "suite",
+      suites: ["tests/unit/discord/conditioningPanel.test.ts", "tests/unit/discord/conditioningPanelLimits.test.ts"],
+    },
+  },
 
   // --- Tier 2: Declared tier (19 non-panel or one-shot producers) ---
   {
@@ -122,6 +130,14 @@ export const COMPONENTS_V2_PRODUCER_MANIFEST: readonly ProducerManifestEntry[] =
     modulePath: "src/utils/discord/interactions/configRouteContext.ts",
     reason: "Route context ephemeral notice and error messages for config",
     coverage: { kind: "suite", suites: ["tests/unit/discord/componentsV2DeclaredProducerSmoke.test.ts"] },
+  },
+  {
+    modulePath: "src/utils/discord/interactions/conditioningRoutes.ts",
+    reason: "Route ephemeral acknowledgement and notice messages for conditioning",
+    coverage: {
+      kind: "delivery",
+      note: "Payloads are validated at construction by validateAndFallbackPanelPayload in terminalPayload; the route exports no terminal payload builder for a fixture to drive.",
+    },
   },
   {
     modulePath: "src/utils/discord/interactions/mcpsRoutes.ts",

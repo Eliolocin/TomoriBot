@@ -97,7 +97,7 @@ const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   persona: ["create", "default", "export", "generate", "import", "remove"],
   model: ["override.remove"],
   server: ["config.export", "config.import", "config.remove"],
-  conditioning: ["manage"],
+  conditioning: ["manage", "remove"],
   tool: ["status", "delete.turn", "estimate.cost", "prompt.snapshot", "visualize"],
   memory: ["personal.export", "personal.import", "server.export", "server.import"],
   speech: [

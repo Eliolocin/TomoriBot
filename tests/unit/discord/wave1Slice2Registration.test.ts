@@ -103,6 +103,9 @@ describe("Wave 1 slice 2 command registration restrictions", () => {
 
     const keys = Array.from(conditioningExec.keys());
     expect(keys).toContain("manage");
+    expect(keys).toContain("remove");
+    expect(typeof conditioningExec.get("manage")).toBe("function");
+    expect(typeof conditioningExec.get("remove")).toBe("function");
     expect(keys.some((k) => k.startsWith("punish."))).toBe(false);
     expect(keys.some((k) => k.startsWith("reward."))).toBe(false);
   });

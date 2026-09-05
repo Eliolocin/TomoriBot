@@ -105,7 +105,7 @@ Here are past things Tomori did that got punished for. Avoid doing them again:
 - [Tomori was bonked by Amaori. Reason: `spamming pings after being told to stop`]
 ```
 
-`reason` を指定しない場合、集計は記録されますがプロンプトには表れません。`/conditioning manage` でエントリーの確認や削除ができます。
+`reason` を指定しない場合、集計は記録されますがプロンプトには表れません。`/conditioning remove` でエントリーの確認や削除ができます。
 
 ## メモリーの有効化を制御
 

@@ -936,8 +936,8 @@ export function buildPersonaConditioningRemoveModal(
             const action = localizer(locale, `commands.${group.conditioningType}.${group.actionKey}.history_label`);
             const descriptionKey =
               group.totalCount > 1
-                ? "commands.conditioning.manage.option_reason_description"
-                : "commands.conditioning.manage.option_reason_description_single";
+                ? "commands.conditioning.shared.option_reason_description"
+                : "commands.conditioning.shared.option_reason_description_single";
             let description = localizer(locale, descriptionKey, {
               count: String(group.totalCount),
               reason: group.reasonText,
@@ -945,9 +945,9 @@ export function buildPersonaConditioningRemoveModal(
             if (group.actionText) description = `${description} • ${group.actionText}`;
             return {
               label: safeSelectOptionText(
-                localizer(locale, "commands.conditioning.manage.option_label", {
+                localizer(locale, "commands.conditioning.shared.option_label", {
                   persona_name: personaName,
-                  type_marker: localizer(locale, `commands.conditioning.manage.marker_${group.conditioningType}`),
+                  type_marker: localizer(locale, `commands.conditioning.shared.marker_${group.conditioningType}`),
                   action,
                 }),
                 100,

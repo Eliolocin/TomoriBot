@@ -2103,8 +2103,8 @@ const CONDITIONING_TYPE_ORDER = ["reward", "punish"] as const;
  * assembled from the type at the call site would drop out of its parity check.
  */
 const CONDITIONING_MARKER_LOCALE_KEYS: Record<(typeof CONDITIONING_TYPE_ORDER)[number], string> = {
-  reward: "commands.conditioning.manage.marker_reward",
-  punish: "commands.conditioning.manage.marker_punish",
+  reward: "commands.conditioning.shared.marker_reward",
+  punish: "commands.conditioning.shared.marker_punish",
 };
 
 const CONDITIONING_SUMMARY_LOCALE_KEYS: Record<
