@@ -4,6 +4,7 @@ import type { ErrorContext, UserRow } from "@/types/db/schema";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { configRepository } from "@/utils/db/repositories";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
+import { ensureSpeechCommandAccess } from "@/utils/discord/speechPermission";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
@@ -53,6 +54,10 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
+  if (!(await ensureSpeechCommandAccess(interaction, locale))) {
+    return;
+  }
+
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.channel_only_title",

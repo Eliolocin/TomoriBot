@@ -8,6 +8,7 @@ import ffmpegPath from "ffmpeg-static";
 import { parseBuffer } from "music-metadata";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
+import { ensureSpeechCommandAccess } from "@/utils/discord/speechPermission";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { storeVoiceSample } from "@/utils/storage/voiceSampleStorage";
 import { insertVoiceSample, updateVoiceSamplePath, deleteVoiceSample } from "@/utils/db/repositories/SpeechRepository";
@@ -135,6 +136,10 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
+  if (!(await ensureSpeechCommandAccess(interaction, locale))) {
+    return;
+  }
+
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.channel_only_title",

@@ -126,6 +126,22 @@ describe("Config command registration", () => {
     expect([...(executionMap.get("model") ?? new Map()).keys()]).toContain("override.remove");
   });
 
+  it("registers /speech with manager permission and no contexts restriction", async () => {
+    const { registrationData, executionMap } = await loadCommandData();
+    const speechCommand = registrationData.find((command) => command.name === "speech") as unknown as
+      | RegistrationPayload
+      | undefined;
+
+    expect(speechCommand).toBeDefined();
+    if (!speechCommand) return;
+
+    expect(speechCommand.contexts).toBeUndefined();
+    expect(speechCommand.default_member_permissions).toBe("32");
+    expect([...(executionMap.get("speech") ?? new Map()).keys()]).toEqual(
+      expect.arrayContaining([...RETAINED_KEYS_BY_ROOT.speech]),
+    );
+  });
+
   it("registers /config as a bare root with no contexts and no default member permission", async () => {
     const { registrationData, executionMap } = await loadCommandData();
 

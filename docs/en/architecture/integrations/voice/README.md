@@ -25,6 +25,8 @@ Phase 4 routes both through custom endpoint capabilities:
 - `/speech voice-assign` assigns either the local sample or an ElevenLabs voice to a persona.
 - `/config` > Engine > Notices controls visible transcript posting in chat. It does not enable or disable background STT.
 
+The compatibility `/speech` commands require Manage Server in a guild and remain available to the owner in a DM-backed workspace.
+
 ## Runtime Behavior
 
 The `generate_voice_message` tool appears only when the active persona has a voice assignment compatible with the active speech endpoint.

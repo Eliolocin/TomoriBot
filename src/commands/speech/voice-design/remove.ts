@@ -7,6 +7,7 @@ import {
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { personaRepository } from "@/utils/db/repositories";
 
+import { ensureSpeechCommandAccess } from "@/utils/discord/speechPermission";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { hasVoiceDesignPrompt } from "@/utils/discord/ui/personaEligibility";
 import {
@@ -30,6 +31,10 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
+  if (!(await ensureSpeechCommandAccess(interaction, locale))) {
+    return;
+  }
+
   const serverDiscId = interaction.guild?.id ?? interaction.user.id;
   let personaWorkflowStarted = false;
 

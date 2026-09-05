@@ -11,6 +11,7 @@ import {
 import { log, ColorCode } from "@/utils/misc/logger";
 import { safeReply } from "@/utils/discord/safeReply";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
+import { ensureSpeechCommandAccess } from "@/utils/discord/speechPermission";
 import { promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { createStandardEmbed } from "@/utils/discord/embedHelper";
 import { deleteStoredVoiceSample } from "@/utils/storage/voiceSampleStorage";
@@ -40,6 +41,10 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
+  if (!(await ensureSpeechCommandAccess(interaction, locale))) {
+    return;
+  }
+
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.channel_only_title",

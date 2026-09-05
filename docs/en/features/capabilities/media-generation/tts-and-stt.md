@@ -36,6 +36,7 @@ Notes:
   monthly limits — check your ElevenLabs dashboard.
 - Voice replies are gated by `voice_message_enabled` and require the active persona to have a
   voice assigned.
+- The compatibility `/speech` commands require Manage Server in a guild and remain available to the owner in a DM-backed workspace.
 
 In `/help`, choose **Features**, then **Speech**, for the same walkthrough in Discord.
 
