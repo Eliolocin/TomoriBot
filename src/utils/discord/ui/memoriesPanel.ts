@@ -500,10 +500,10 @@ export interface MemoriesPanelRenderInput {
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): MemoriesPanelPayload {
   const topLevelComponents: TopLevelComponentData[] = [];
+  topLevelComponents.push(buildPanelContainer(components));
   if (receipt) {
     topLevelComponents.push(buildPanelReceiptContainer(receipt));
   }
-  topLevelComponents.push(buildPanelContainer(components));
   return {
     components: topLevelComponents,
     flags: MessageFlags.IsComponentsV2,

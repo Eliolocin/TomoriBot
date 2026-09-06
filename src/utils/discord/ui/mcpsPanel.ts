@@ -126,7 +126,7 @@ function buildEmptyState(
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): McpsPanelPayload {
   return {
-    components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
+    components: [buildPanelContainer(components), ...(receipt ? [buildPanelReceiptContainer(receipt)] : [])],
     flags: MessageFlags.IsComponentsV2,
   };
 }

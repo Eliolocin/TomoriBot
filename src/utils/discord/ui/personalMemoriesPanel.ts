@@ -285,7 +285,7 @@ function buildRetryRow(
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): PersonalMemoriesPanelPayload {
   return {
-    components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
+    components: [buildPanelContainer(components), ...(receipt ? [buildPanelReceiptContainer(receipt)] : [])],
     flags: MessageFlags.IsComponentsV2,
   };
 }

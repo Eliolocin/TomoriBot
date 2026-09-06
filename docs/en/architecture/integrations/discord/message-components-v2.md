@@ -1135,7 +1135,7 @@ reload. Names, endpoints, credentials, and permission bits are never trusted fro
 renders the complete supported collection in deterministic order, with stable-ID Enable/Disable and
 Remove actions on each row. Already-issued version-one selector and range routes remain accepted as
 read-only compatibility repaints but are not emitted by current panels. Receipts use their own top-level
-Container beside the authoritative collection Container, keeping status color separate from the panel.
+Container below the authoritative collection Container, keeping status color separate from the panel.
 Healthy views omit a routine refresh button because transactions reload and repaint automatically. Only stale or
 unavailable reads expose **Retry**, which performs a configuration read without testing or connecting
 to the remote MCP endpoint.

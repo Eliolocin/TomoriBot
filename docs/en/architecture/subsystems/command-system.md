@@ -1,4 +1,4 @@
-﻿---
+---
 title: "Command System"
 ---
 
@@ -998,7 +998,7 @@ Healthy empty and collection views repaint automatically after transactions and 
 refresh control. Stale or unavailable reads expose a read-only **Retry** action; Retry reloads saved
 configuration and never connects to an MCP endpoint. The collection renders every supported registration
 in deterministic order with its own Enable/Disable and Remove actions, then a **+ Add MCP** action.
-Receipts render in a separate top-level container beside the authoritative collection repaint.
+Receipts render in a separate top-level container below the authoritative collection repaint.
 **+ Add MCP** opens one raw modal containing Name, URL, optional Auth Token, and the required
 General Purpose/Web Search/URL Fetcher Radio Group, with General Purpose selected by default. Its modal
 and field IDs carry bounded random nonces, and submission returns through the global router rather

@@ -197,7 +197,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
     );
 
     return {
-      components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
+      components: [buildPanelContainer(components), ...(receipt ? [buildPanelReceiptContainer(receipt)] : [])],
       flags: MessageFlags.IsComponentsV2,
     };
   }
@@ -324,7 +324,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
             );
           }
           return {
-            components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
+            components: [buildPanelContainer(components), ...(receipt ? [buildPanelReceiptContainer(receipt)] : [])],
             flags: MessageFlags.IsComponentsV2,
           };
         }
@@ -385,7 +385,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
             );
           }
           return {
-            components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
+            components: [buildPanelContainer(components), ...(receipt ? [buildPanelReceiptContainer(receipt)] : [])],
             flags: MessageFlags.IsComponentsV2,
           };
         }
@@ -896,7 +896,7 @@ export function buildModerationPanelPayload(input: ModerationPanelRenderInput): 
   }
 
   return {
-    components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
+    components: [buildPanelContainer(components), ...(receipt ? [buildPanelReceiptContainer(receipt)] : [])],
     flags: MessageFlags.IsComponentsV2,
   };
 }

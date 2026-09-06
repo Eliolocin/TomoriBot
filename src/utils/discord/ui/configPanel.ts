@@ -262,7 +262,7 @@ function buildPayload(
   files: AttachmentBuilder[] = [],
 ): ConfigPanelPayload {
   return {
-    components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
+    components: [buildPanelContainer(components), ...(receipt ? [buildPanelReceiptContainer(receipt)] : [])],
     files,
     flags: MessageFlags.IsComponentsV2,
   };

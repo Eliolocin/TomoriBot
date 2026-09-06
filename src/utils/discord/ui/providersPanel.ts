@@ -745,7 +745,7 @@ function buildRetryRow(locale: string, routeNamespace: ProvidersRouteNamespace):
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): ProvidersPanelPayload {
   return {
-    components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
+    components: [buildPanelContainer(components), ...(receipt ? [buildPanelReceiptContainer(receipt)] : [])],
     flags: MessageFlags.IsComponentsV2,
   };
 }

@@ -125,7 +125,7 @@ function buildCommentNodeDescription(content: string): string | undefined {
 
 function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): StPresetsPanelPayload {
   return {
-    components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
+    components: [buildPanelContainer(components), ...(receipt ? [buildPanelReceiptContainer(receipt)] : [])],
     flags: MessageFlags.IsComponentsV2,
   };
 }
