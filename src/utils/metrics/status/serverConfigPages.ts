@@ -19,10 +19,10 @@ import { formatHiddenNoticeEmbeds, formatOptionalApiKeys } from "@/utils/metrics
 import {
   formatActiveStPresetValue,
   formatCustomEndpoints,
+  formatPromptPreview,
   formatRotationPoolValue,
   formatStPresetNodeSummary,
   getCooldownTypeLabel,
-  MAX_PROMPT_PREVIEW,
 } from "@/utils/metrics/status/sharedFormatters";
 import { CooldownType } from "@/types/db/schema";
 import { resolveDeliberateToolContextTurns } from "@/utils/tools/deliberateToolMode";
@@ -89,20 +89,11 @@ export async function showServerConfigStatus(
     { toggle_command: serverUserByokToggleMention },
   );
 
-  const rawSystemPrompt = config.system_prompt ?? null;
-  const systemPromptText = rawSystemPrompt
-    ? rawSystemPrompt.length > MAX_PROMPT_PREVIEW
-      ? `${rawSystemPrompt.slice(0, MAX_PROMPT_PREVIEW)}...`
-      : rawSystemPrompt
-    : DEFAULT_SYSTEM_PROMPT.trim();
-  const systemPromptValue = `\`\`\`\n${systemPromptText}\n\`\`\``;
+  const rawSystemPrompt = config.system_prompt ?? DEFAULT_SYSTEM_PROMPT.trim();
+  const systemPromptValue = formatPromptPreview(rawSystemPrompt, locale);
   const rawContextNote = config.context_note ?? null;
   const contextNoteValue = rawContextNote
-    ? `\`\`\`\n${
-        rawContextNote.length > MAX_PROMPT_PREVIEW
-          ? `${rawContextNote.slice(0, MAX_PROMPT_PREVIEW)}...`
-          : rawContextNote
-      }\n\`\`\``
+    ? formatPromptPreview(rawContextNote, locale)
     : localizer(locale, "commands.status.field_context_note_not_set");
 
   const optApiKeyServiceNames = optApiKeyRows.map((row) => row.service_name);
@@ -208,7 +199,7 @@ export async function showServerConfigStatus(
     ],
   };
 
-  const configPage2: SummaryEmbedOptions = {
+  const configPage2a: SummaryEmbedOptions = {
     titleKey: "commands.status.server_page4_title",
     descriptionKey: "commands.status.server_page4_description",
     color: ColorCode.INFO,
@@ -278,6 +269,14 @@ export async function showServerConfigStatus(
         value: formatBooleanLocalized(config.sampledialogue_memteaching_enabled, locale),
         inline: true,
       },
+    ],
+  };
+
+  const configPage2b: SummaryEmbedOptions = {
+    titleKey: "commands.status.server_page10_title",
+    descriptionKey: "commands.status.server_page10_description",
+    color: ColorCode.INFO,
+    fields: [
       {
         nameKey: "commands.status.field_hide_impersonation",
         value: formatBooleanLocalized(!isNoticeEmbedVisible(config, "impersonation_notice"), locale),
@@ -452,7 +451,7 @@ export async function showServerConfigStatus(
   await replyPaginatedStatusPages(
     interaction,
     locale,
-    [configPage1, configPage2, configPage3, configPage4],
+    [configPage1, configPage2a, configPage2b, configPage3, configPage4],
     MessageFlags.Ephemeral,
   );
 }

@@ -9,8 +9,8 @@ import { formatBooleanLocalized } from "@/utils/text/processors/formatters";
 import {
   formatCustomEndpoints,
   formatNumberedList,
+  formatPromptPreview,
   getPrivacyLevelLabel,
-  MAX_PROMPT_PREVIEW,
   MEMORY_TRUNCATE_LENGTH,
 } from "@/utils/metrics/status/sharedFormatters";
 import { formatUserSavedProviders } from "@/utils/metrics/providerStats";
@@ -42,11 +42,7 @@ export async function showPersonalStatus(
   const reminderCount = await serverScheduleRepository.getUserReminderCount(interaction.user.id);
   const rawImpersonationPrompt = userData.impersonation_prompt?.trim() ?? null;
   const impersonationPromptValue = rawImpersonationPrompt
-    ? `\`\`\`\n${
-        rawImpersonationPrompt.length > MAX_PROMPT_PREVIEW
-          ? `${rawImpersonationPrompt.slice(0, MAX_PROMPT_PREVIEW)}...`
-          : rawImpersonationPrompt
-      }\n\`\`\``
+    ? formatPromptPreview(rawImpersonationPrompt, locale)
     : localizer(locale, "commands.status.field_impersonation_prompt_not_set");
 
   const userSavedProvidersValue = formatUserSavedProviders(userSavedProviderConfigs, locale);

@@ -33,8 +33,8 @@ import {
   DIALOGUE_TRUNCATE_LENGTH,
   formatBulletList,
   formatNumberedList,
+  formatPromptPreview,
   formatSampleDialogues,
-  MAX_PROMPT_PREVIEW,
   MEMORY_TRUNCATE_LENGTH,
 } from "@/utils/metrics/status/sharedFormatters";
 
@@ -359,20 +359,12 @@ export async function showPersonaStatus(
 
           const rawPersonaPrompt = selectedPersona.persona_prompt ?? null;
           const personaPromptValue = rawPersonaPrompt
-            ? `\`\`\`\n${
-                rawPersonaPrompt.length > MAX_PROMPT_PREVIEW
-                  ? `${rawPersonaPrompt.slice(0, MAX_PROMPT_PREVIEW)}...`
-                  : rawPersonaPrompt
-              }\n\`\`\``
+            ? formatPromptPreview(rawPersonaPrompt, locale)
             : localizer(locale, "commands.status.field_persona_prompt_not_set");
 
           const rawPersonaContextNote = selectedPersona.context_note ?? null;
           const personaContextNoteValue = rawPersonaContextNote
-            ? `\`\`\`\n${
-                rawPersonaContextNote.length > MAX_PROMPT_PREVIEW
-                  ? `${rawPersonaContextNote.slice(0, MAX_PROMPT_PREVIEW)}...`
-                  : rawPersonaContextNote
-              }\n\`\`\``
+            ? formatPromptPreview(rawPersonaContextNote, locale)
             : localizer(locale, "commands.status.field_persona_context_note_not_set");
 
           const personaPage1: SummaryEmbedOptions = {
