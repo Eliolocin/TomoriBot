@@ -149,9 +149,7 @@ export function buildDashboardPagePayload(input: StatusPageRendererInput): {
 }
 
 /** Backward-compatible status name while callers migrate to the shared renderer. */
-export const buildStatusPagePayload = buildDashboardPagePayload;
-
-export function categoryButtonRows(
+function categoryButtonRows(
   interactionId: string,
   locale: string,
   categories: StatusPageCategory[],
@@ -171,7 +169,7 @@ export function categoryButtonRows(
   ];
 }
 
-export function pageControlRows(
+function pageControlRows(
   interactionId: string,
   locale: string,
   category: StatusPageCategory,
@@ -209,7 +207,7 @@ export function dashboardPayload(
 ) {
   const category = categories.find((candidate) => candidate.id === activeCategory) ?? categories[0];
   const page = category.pages[Math.min(activePage, category.pages.length - 1)];
-  return buildStatusPagePayload({
+  return buildDashboardPagePayload({
     locale,
     page,
     buttonRows: categoryButtonRows(interactionId, locale, categories, category.id, disabled),

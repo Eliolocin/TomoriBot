@@ -17,7 +17,7 @@ export const MAX_ITEMS_DISPLAY = 5; // Max channel/member items before switching
 export const MEMORY_TRUNCATE_LENGTH = 100; // Max chars per memory snippet
 export const ATTRIBUTE_TRUNCATE_LENGTH = 200; // Max chars per attribute snippet
 export const DIALOGUE_TRUNCATE_LENGTH = 140; // Max chars per sample dialogue side
-export const MAX_PROMPT_PREVIEW = Number.parseInt(process.env.SYSPROMPT_SHOW_MAX_PREVIEW || "3800", 10); // Max chars shown for system/persona prompts
+const MAX_PROMPT_PREVIEW = Number.parseInt(process.env.SYSPROMPT_SHOW_MAX_PREVIEW || "3800", 10); // Max chars shown for system/persona prompts
 
 /**
  * Resolves the operator-configured maximum prompt preview length, falling back to MAX_PROMPT_PREVIEW.

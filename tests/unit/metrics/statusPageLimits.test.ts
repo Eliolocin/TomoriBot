@@ -12,7 +12,7 @@ import {
 import { formatOptionalApiKeys } from "@/utils/metrics/status/providerConfigFormatters";
 import { formatCustomEndpoints, formatRotationPoolValue } from "@/utils/metrics/status/sharedFormatters";
 import {
-  buildStatusPagePayload,
+  buildDashboardPagePayload,
   type StatusCategory,
   type StatusPageCategory,
 } from "@/utils/metrics/status/statusPageRenderer";
@@ -83,7 +83,7 @@ describe("status Components V2 limits and redaction", () => {
     for (const locale of RUNTIME_LOCALES) {
       for (const populated of [false, true]) {
         for (const category of buildCategories(populated)) {
-          const payload = buildStatusPagePayload({
+          const payload = buildDashboardPagePayload({
             locale,
             page: category.pages[0],
             buttonRows: [
@@ -109,7 +109,7 @@ describe("status Components V2 limits and redaction", () => {
   });
 
   it("places category controls above the page body", () => {
-    const payload = buildStatusPagePayload({
+    const payload = buildDashboardPagePayload({
       locale: "en-US",
       page: buildPage("behavior", true),
       buttonRows: [
@@ -189,7 +189,7 @@ describe("status Components V2 limits and redaction", () => {
       ] as Parameters<typeof formatMcpServers>[0],
       "en-US",
     );
-    const payload = buildStatusPagePayload({
+    const payload = buildDashboardPagePayload({
       locale: "en-US",
       page: {
         titleKey: "commands.status.server_page7_title",
@@ -265,7 +265,7 @@ describe("status Components V2 limits and redaction", () => {
       locale,
     );
 
-    const payload = buildStatusPagePayload({
+    const payload = buildDashboardPagePayload({
       locale,
       page: {
         titleKey: "commands.status.server_page7_title",

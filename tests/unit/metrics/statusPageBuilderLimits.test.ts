@@ -9,7 +9,7 @@ import {
 } from "discord.js";
 import type { TomoriState, UserRow } from "@/types/db/schema";
 import { ComponentsV2LimitError, validateComponentsV2MessageLimits } from "@/utils/discord/ui/componentsV2Limits";
-import { buildStatusPagePayload, type DashboardPage } from "@/utils/metrics/status/statusPageRenderer";
+import { buildDashboardPagePayload, type DashboardPage } from "@/utils/metrics/status/statusPageRenderer";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 import * as realDbClient from "@/utils/db/client";
 import * as realPersonaWorkflow from "@/utils/discord/ui/personaWorkflow";
@@ -364,7 +364,7 @@ describe("actual status page builders", () => {
       buildServerChannelPages(client, "status-server", producerState, "en-US"),
     ]);
     const payloads = [...configPages, ...channelPages].map((page) =>
-      buildStatusPagePayload({ locale: "en-US", page: page as DashboardPage }),
+      buildDashboardPagePayload({ locale: "en-US", page: page as DashboardPage }),
     );
     const serialized = JSON.stringify(payloads);
 
@@ -428,7 +428,7 @@ describe("actual status page builders", () => {
 
         for (const category of categories) {
           for (const [pageIndex, page] of category.pages.entries()) {
-            const payload = buildStatusPagePayload({
+            const payload = buildDashboardPagePayload({
               locale,
               page: page as DashboardPage,
               buttonRows: [
@@ -497,7 +497,7 @@ describe("actual status page builders", () => {
     };
 
     expect(() =>
-      buildStatusPagePayload({
+      buildDashboardPagePayload({
         locale: "en-US",
         page: overBudgetPage,
       }),
@@ -538,10 +538,10 @@ describe("actual status page builders", () => {
       }
     };
 
-    const validPayload = buildStatusPagePayload({ locale: "en-US", page });
+    const validPayload = buildDashboardPagePayload({ locale: "en-US", page });
     expect(() => assertFieldsSurvive(page, JSON.stringify(validPayload))).not.toThrow();
 
-    const mutatedPayload = buildStatusPagePayload({ locale: "en-US", page: mutatedPage });
+    const mutatedPayload = buildDashboardPagePayload({ locale: "en-US", page: mutatedPage });
     expect(() => assertFieldsSurvive(page, JSON.stringify(mutatedPayload))).toThrow();
   });
 });
