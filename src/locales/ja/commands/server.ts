@@ -32,12 +32,6 @@ export default {
         confirmation_choice_yes: `はい、インポートする`,
         confirmation_choice_no: `いいえ、キャンセル`,
       },
-      remove: {
-        description: `このサーバーの設定をリセットします。`,
-        confirmation_description: `このサーバーの設定をリセットしてよいか確認します。`,
-        confirmation_choice_yes: `はい、リセットする`,
-        confirmation_choice_no: `いいえ、キャンセル`,
-      },
     },
     stm: {
       description: `全ペルソナのサーバー共有STMを管理`,

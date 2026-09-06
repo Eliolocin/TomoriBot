@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **41**. Runnable slash commands: **83**.
+Top-level command groups: **42**. Runnable slash commands: **84**.
 
 ## `/comment`
 
@@ -271,6 +271,15 @@ Clear conversation history (this channel only).
 |---|---|
 | `/refresh` | Clear conversation history (this channel only). |
 
+## `/reset`
+
+Reset server or personal configuration to defaults.
+
+| Command | Summary |
+|---|---|
+| `/reset config` | Reset this server's configuration to database defaults. |
+| `/reset personal config` | Reset your personal configuration to database defaults. |
+
 ## `/respond`
 
 Manually trigger response to the latest message in this channel.
@@ -308,7 +317,6 @@ Manage server-wide settings, channels, permissions, and integrations.
 |---|---|
 | `/server config export` | Export this server's settings, excluding memories, personas, and personal settings. |
 | `/server config import` | Import server settings. Does not import memories, personas, or personal settings. |
-| `/server config remove` | Reset this server's configuration. |
 
 ## `/setup`
 

@@ -828,7 +828,7 @@ DROP TRIGGER IF EXISTS update_server_stickers_timestamp ON server_stickers;
 CREATE TABLE IF NOT EXISTS users (
   user_id SERIAL PRIMARY KEY,
   user_disc_id TEXT UNIQUE NOT NULL,
-  language_pref TEXT DEFAULT 'en',
+  language_pref TEXT DEFAULT 'en-US',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

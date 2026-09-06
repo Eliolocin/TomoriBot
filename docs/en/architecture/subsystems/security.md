@@ -153,7 +153,7 @@ Primary files:
 - `src/utils/discord/interactions/memoriesRoutes.ts`
 - `src/utils/discord/interactions/memoriesDocumentOperations.ts`
 - `src/commands/server/config/export.ts`
-- `src/commands/server/config/remove.ts`
+- `src/commands/reset/config.ts`
 - `src/utils/db/repositories/ImportExportRepository.ts`
 - `src/utils/db/repositoryExportSql.ts`
 
