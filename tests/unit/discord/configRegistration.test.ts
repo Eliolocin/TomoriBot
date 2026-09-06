@@ -87,6 +87,7 @@ const ABSORBED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   memory: ["tagging.set"],
   speech: ["transcripts"],
   novelai: ["character-reference", "image.parameters"],
+  tool: ["status"],
 };
 
 /** Roots the cutover removed outright, rather than reducing to a retained remainder. */
@@ -98,7 +99,7 @@ const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   model: ["override.remove"],
   server: ["config.export", "config.import", "config.remove"],
   conditioning: ["manage", "remove"],
-  tool: ["status", "delete.turn", "estimate.cost", "prompt.snapshot", "visualize"],
+  tool: ["delete.turn", "estimate.cost", "prompt.snapshot", "visualize"],
   memory: ["personal.export", "personal.import", "server.export", "server.import"],
   speech: ["voice-assign", "voice-design.set", "voice-design.remove"],
   novelai: ["attg", "generate.image", "preset.text"],

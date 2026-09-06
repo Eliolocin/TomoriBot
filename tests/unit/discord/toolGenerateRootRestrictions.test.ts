@@ -42,7 +42,6 @@ describe("/tool and /generate root registration restrictions", () => {
 
     const toolCommands = executionMap.get("tool");
     expect(toolCommands).toBeDefined();
-    expect(toolCommands?.has("status")).toBe(true);
     expect(toolCommands?.has("delete.turn")).toBe(true);
     expect(toolCommands?.has("estimate.cost")).toBe(true);
     expect(toolCommands?.has("prompt.snapshot")).toBe(true);

@@ -3,20 +3,28 @@ import type { UserRow } from "@/types/db/schema";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { ColorCode, log } from "@/utils/misc/logger";
-import { showPersonalStatus } from "@/utils/metrics/status/personalPages";
-import { showPersonaStatus } from "@/utils/metrics/status/personaPages";
-import { showServerChannelsStatus } from "@/utils/metrics/status/serverChannelPages";
-import { showServerConfigStatus } from "@/utils/metrics/status/serverConfigPages";
-import { showServerModelStatus } from "@/utils/metrics/status/serverModelPages";
+import { buildPersonalStatusPages, showPersonalStatus } from "@/utils/metrics/status/personalPages";
+import { buildPersonaStatusPages, showPersonaStatus } from "@/utils/metrics/status/personaPages";
+import { buildServerChannelPages } from "@/utils/metrics/status/serverChannelPages";
+import { buildServerConfigPages } from "@/utils/metrics/status/serverConfigPages";
+import { buildServerModelPages } from "@/utils/metrics/status/serverModelPages";
+import {
+  renderStatusPageDashboard,
+  type StatusCategory,
+  type StatusPageCategory,
+} from "@/utils/metrics/status/statusPageRenderer";
 
 export interface StatusCommandDependencies {
   getCachedTomoriState: typeof getCachedTomoriState;
   replyInfoEmbed: typeof replyInfoEmbed;
   showPersonalStatus: typeof showPersonalStatus;
   showPersonaStatus: typeof showPersonaStatus;
-  showServerChannelsStatus: typeof showServerChannelsStatus;
-  showServerConfigStatus: typeof showServerConfigStatus;
-  showServerModelStatus: typeof showServerModelStatus;
+  buildServerChannelPages: typeof buildServerChannelPages;
+  buildServerConfigPages: typeof buildServerConfigPages;
+  buildServerModelPages: typeof buildServerModelPages;
+  buildPersonalStatusPages: typeof buildPersonalStatusPages;
+  buildPersonaStatusPages: typeof buildPersonaStatusPages;
+  renderStatusPageDashboard: typeof renderStatusPageDashboard;
 }
 
 const defaultStatusCommandDependencies: StatusCommandDependencies = {
@@ -24,9 +32,12 @@ const defaultStatusCommandDependencies: StatusCommandDependencies = {
   replyInfoEmbed,
   showPersonalStatus,
   showPersonaStatus,
-  showServerChannelsStatus,
-  showServerConfigStatus,
-  showServerModelStatus,
+  buildServerChannelPages,
+  buildServerConfigPages,
+  buildServerModelPages,
+  buildPersonalStatusPages,
+  buildPersonaStatusPages,
+  renderStatusPageDashboard,
 };
 
 /**
@@ -45,48 +56,87 @@ export async function executeStatusCommand(
   try {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    if (scope === "personal") {
-      await dependencies.showPersonalStatus(interaction, userData, locale);
+    const validScopes: StatusCategory[] = ["persona", "behavior", "models", "access", "personal"];
+    if (!validScopes.includes(scope as StatusCategory)) {
+      log.error(`Invalid status scope received: ${scope}`);
+      await dependencies.replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+      });
       return;
     }
+
+    const tomoriState = await dependencies.getCachedTomoriState(serverDiscId);
+
+    if (!tomoriState) {
+      await dependencies.replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.tomori_not_setup_title",
+        descriptionKey: "general.errors.tomori_not_setup_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const [configPages, modelPages, channelPages, personalPages] = await Promise.all([
+      dependencies.buildServerConfigPages(client, tomoriState, locale),
+      dependencies.buildServerModelPages(client, serverDiscId, tomoriState, locale),
+      dependencies.buildServerChannelPages(client, serverDiscId, tomoriState, locale),
+      dependencies.buildPersonalStatusPages(interaction, userData, locale),
+    ]);
+
+    const siblingCategories: StatusPageCategory[] = [
+      {
+        id: "behavior",
+        labelKey: "commands.status.scope_choice_behavior",
+        pages: [configPages[0], configPages[3], channelPages[0]],
+      },
+      {
+        id: "models",
+        labelKey: "commands.status.scope_choice_models",
+        pages: [modelPages[0], modelPages[1], modelPages[3], configPages[4]],
+      },
+      {
+        id: "access",
+        labelKey: "commands.status.scope_choice_access",
+        pages: [configPages[1], configPages[2], modelPages[2]],
+      },
+      {
+        id: "personal",
+        labelKey: "commands.status.scope_choice_personal",
+        pages: personalPages,
+      },
+    ];
 
     if (scope === "persona") {
-      await dependencies.showPersonaStatus(interaction, userData, serverDiscId, locale);
+      await dependencies.showPersonaStatus(interaction, userData, serverDiscId, locale, siblingCategories);
       return;
     }
 
-    if (scope === "server_model" || scope === "server_config" || scope === "server_channels") {
-      const tomoriState = await dependencies.getCachedTomoriState(serverDiscId);
+    const categories: StatusPageCategory[] = [
+      {
+        id: "persona",
+        labelKey: "commands.status.scope_choice_persona",
+        pages: [],
+      },
+      ...siblingCategories,
+    ];
 
-      if (!tomoriState) {
-        await dependencies.replyInfoEmbed(interaction, locale, {
-          titleKey: "general.errors.tomori_not_setup_title",
-          descriptionKey: "general.errors.tomori_not_setup_description",
-          color: ColorCode.ERROR,
-        });
-        return;
-      }
-
-      if (scope === "server_model") {
-        await dependencies.showServerModelStatus(client, interaction, serverDiscId, tomoriState, locale);
-        return;
-      }
-
-      if (scope === "server_config") {
-        await dependencies.showServerConfigStatus(client, interaction, tomoriState, locale);
-        return;
-      }
-
-      await dependencies.showServerChannelsStatus(client, interaction, serverDiscId, tomoriState, locale);
-      return;
-    }
-
-    log.error(`Invalid status scope received: ${scope}`);
-    await dependencies.replyInfoEmbed(interaction, locale, {
-      titleKey: "general.errors.unknown_error_title",
-      descriptionKey: "general.errors.unknown_error_description",
-      color: ColorCode.ERROR,
-    });
+    await dependencies.renderStatusPageDashboard(
+      interaction,
+      locale,
+      categories,
+      scope as StatusCategory,
+      async (personaButtonInteraction) => {
+        await dependencies.showPersonaStatus(
+          personaButtonInteraction,
+          userData,
+          serverDiscId,
+          locale,
+          siblingCategories,
+        );
+      },
+    );
   } catch (error) {
     log.error(`Error executing status command for scope ${scope}:`, error, {
       errorType: "CommandExecutionError",

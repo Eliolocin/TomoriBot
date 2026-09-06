@@ -423,7 +423,6 @@ function getLocalizationAliases(key: string): string[] {
     "commands.server.deliberate-trigger-mode.description": "commands.server.deliberatetriggermode.description",
     "commands.personal.deliberate-trigger-mode.description": "commands.personal.deliberatetriggermode.description",
     "commands.config.model-fallback.remove.description": "commands.config.remove.modelfallback.description",
-    "commands.tool.status.description": "commands.status.description",
   };
   const pathAlias = pathAliases[key];
   if (pathAlias) {

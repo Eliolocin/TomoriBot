@@ -42,12 +42,12 @@ describe("/compact registration", () => {
     const toolSubcommands = executionMap.get("tool");
     expect(toolSubcommands).toBeDefined();
     expect(toolSubcommands?.has("compact")).toBe(false);
-    expect(toolSubcommands?.has("status")).toBe(true);
+    expect(toolSubcommands?.has("status")).toBe(false);
     expect(toolSubcommands?.has("delete.turn")).toBe(true);
     expect(toolSubcommands?.has("estimate.cost")).toBe(true);
     expect(toolSubcommands?.has("prompt.snapshot")).toBe(true);
     expect(toolSubcommands?.has("visualize")).toBe(true);
-    expect(toolSubcommands?.size).toBe(5);
+    expect(toolSubcommands?.size).toBe(4);
   });
 
   it("resolves the description key in both locales without returning the key path", () => {

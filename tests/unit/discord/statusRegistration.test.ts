@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "bun:test";
 import { ApplicationCommandOptionType, SlashCommandBuilder } from "discord.js";
 import * as statusCommand from "@/commands/status";
-import { loadCommandData, ROOT_COMMAND_EXECUTION_KEY } from "@/utils/discord/commandLoader";
+import { loadCommandData } from "@/utils/discord/commandLoader";
 import { localizer, initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
@@ -31,11 +31,11 @@ type RegistrationPayload = {
 };
 
 const scopeChoices = [
-  ["scope_choice_server_model", "server_model"],
-  ["scope_choice_server_config", "server_config"],
-  ["scope_choice_server_channels", "server_channels"],
-  ["scope_choice_personal", "personal"],
   ["scope_choice_persona", "persona"],
+  ["scope_choice_behavior", "behavior"],
+  ["scope_choice_models", "models"],
+  ["scope_choice_access", "access"],
+  ["scope_choice_personal", "personal"],
 ] as const;
 
 function getScopeOption(command: RegistrationPayload): OptionPayload {
@@ -82,34 +82,5 @@ describe("/status registration", () => {
     expect((statusCommand as Record<string, unknown>).guildOnly).toBeUndefined();
     expect((statusCommand as Record<string, unknown>).managerOnly).toBeUndefined();
     expectScopeRegistration(status);
-  });
-
-  it("retains /tool status and resolves its Japanese localizations through the compatibility alias", async () => {
-    const { registrationData } = await loadCommandData();
-    const tool = registrationData.find((command) => command.name === "tool") as unknown as
-      | RegistrationPayload
-      | undefined;
-
-    expect(tool).toBeDefined();
-    if (!tool) return;
-
-    const status = tool.options?.find((option) => option.name === "status");
-    expect(status).toBeDefined();
-    if (!status) return;
-
-    expect(status.description_localizations?.ja).toBe(localizer("ja", "commands.status.description"));
-    expectScopeRegistration(status);
-  });
-
-  it("wires both command paths to the same coordinator function", async () => {
-    const { executionMap } = await loadCommandData();
-    const statusExecution = executionMap.get("status");
-    const toolStatusExecution = executionMap.get("tool")?.get("status");
-
-    expect(statusExecution).toBeDefined();
-    if (!statusExecution) return;
-
-    expect(Array.from(statusExecution.keys())).toEqual([ROOT_COMMAND_EXECUTION_KEY]);
-    expect(toolStatusExecution).toBe(statusExecution.get(ROOT_COMMAND_EXECUTION_KEY));
   });
 });

@@ -116,41 +116,71 @@ export function formatOmittedSamplingParams(
 
 /**
  * Formats an array of strings as a numbered list, truncating each item.
- * All items are included (nothing omitted).
+ * If the total formatted length exceeds maxTotalLength, clips the list and appends a clipped notice.
  * @param truncateLength - Max chars per item before truncation
+ * @param maxTotalLength - Max total chars for the entire list before clipping
  * @returns Formatted numbered list, or localized "None" if empty
  */
-export function formatNumberedList(items: string[], locale: string, truncateLength: number): string {
+export function formatNumberedList(
+  items: string[],
+  locale: string,
+  truncateLength: number,
+  maxTotalLength = 3000,
+): string {
   if (items.length === 0) {
     return localizer(locale, "commands.choices.none");
   }
-  return items
+  const fullText = items
     .map((item, index) => {
       return `${index + 1}. ${truncateText(item, truncateLength)}`;
     })
     .join("\n");
+
+  if (getDiscordTextLength(fullText) <= maxTotalLength) {
+    return fullText;
+  }
+
+  const notice = localizer(locale, "commands.status.field_preview_clipped");
+  const budget = Math.max(0, maxTotalLength - getDiscordTextLength(`\n${notice}`));
+  return `${truncateDiscordText(fullText, budget)}\n${notice}`;
 }
 
 /**
  * Formats an array of strings as a bullet list, truncating each item.
- * All items are included (nothing omitted).
+ * If the total formatted length exceeds maxTotalLength, clips the list and appends a clipped notice.
  * @param truncateLength - Max chars per item before truncation
+ * @param maxTotalLength - Max total chars for the entire list before clipping
  * @returns Formatted bullet list, or localized "None" if empty
  */
-export function formatBulletList(items: string[], locale: string, truncateLength: number): string {
+export function formatBulletList(
+  items: string[],
+  locale: string,
+  truncateLength: number,
+  maxTotalLength = 3000,
+): string {
   if (items.length === 0) {
     return localizer(locale, "commands.choices.none");
   }
-  return items
+  const fullText = items
     .map((item) => {
       return `• ${truncateText(item, truncateLength)}`;
     })
     .join("\n");
+
+  if (getDiscordTextLength(fullText) <= maxTotalLength) {
+    return fullText;
+  }
+
+  const notice = localizer(locale, "commands.status.field_preview_clipped");
+  const budget = Math.max(0, maxTotalLength - getDiscordTextLength(`\n${notice}`));
+  return `${truncateDiscordText(fullText, budget)}\n${notice}`;
 }
 
 /**
  * Formats sample dialogue pairs as a numbered list with truncation on each side.
+ * If the total formatted length exceeds maxTotalLength, clips the list and appends a clipped notice.
  * @param truncateLength - Max chars per dialogue side before truncation
+ * @param maxTotalLength - Max total chars for the entire list before clipping
  * @returns Formatted list, or localized "None" if empty
  */
 export function formatSampleDialogues(
@@ -158,17 +188,26 @@ export function formatSampleDialogues(
   dialoguesOut: string[],
   locale: string,
   truncateLength: number,
+  maxTotalLength = 3000,
 ): string {
   const pairCount = Math.max(dialoguesIn.length, dialoguesOut.length);
   if (pairCount === 0) {
     return localizer(locale, "commands.choices.none");
   }
 
-  return Array.from({ length: pairCount }, (_, index) => {
+  const fullText = Array.from({ length: pairCount }, (_, index) => {
     const input = truncateText(dialoguesIn[index] ?? localizer(locale, "commands.choices.none"), truncateLength);
     const output = truncateText(dialoguesOut[index] ?? localizer(locale, "commands.choices.none"), truncateLength);
     return `${index + 1}. ${input} -> ${output}`;
   }).join("\n");
+
+  if (getDiscordTextLength(fullText) <= maxTotalLength) {
+    return fullText;
+  }
+
+  const notice = localizer(locale, "commands.status.field_preview_clipped");
+  const budget = Math.max(0, maxTotalLength - getDiscordTextLength(`\n${notice}`));
+  return `${truncateDiscordText(fullText, budget)}\n${notice}`;
 }
 
 export function formatFallbackChain(
