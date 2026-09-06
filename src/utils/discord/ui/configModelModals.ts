@@ -280,15 +280,17 @@ export function buildConfigStopStringManageModal(
         groupIndex === 0
           ? modalDescription(locale, "commands.config.panel.stop_manage_checkbox_description")
           : undefined,
-      component: {
-        type: 22,
-        custom_id: buildConfigStopStringGroupId(groupIndex, nonce),
-        min_values: 0,
-        max_values: CONFIG_STOP_STRING_CHECKBOX_GROUP_SIZE,
-        required: false,
-        options: stopStrings
-          .slice(offset, offset + CONFIG_STOP_STRING_CHECKBOX_GROUP_SIZE)
-          .map((stopString, indexInGroup) => ({
+      component: (() => {
+        const groupOptions = stopStrings.slice(offset, offset + CONFIG_STOP_STRING_CHECKBOX_GROUP_SIZE);
+        return {
+          type: 22,
+          custom_id: buildConfigStopStringGroupId(groupIndex, nonce),
+          min_values: 0,
+          // Discord requires options.length >= max_values, so a partial trailing group must cap
+          // max_values to its own size instead of the full group capacity.
+          max_values: groupOptions.length,
+          required: false,
+          options: groupOptions.map((stopString, indexInGroup) => ({
             label: safeSelectOptionText(
               formatStopStringForDisplay(stopString) || localizer(locale, "general.unknown"),
               50,
@@ -296,7 +298,8 @@ export function buildConfigStopStringManageModal(
             value: String(offset + indexInGroup),
             default: true,
           })),
-      },
+        };
+      })(),
     });
   }
 
@@ -387,19 +390,24 @@ export function buildConfigLogitBiasManageModal(
         groupIndex === 0
           ? modalDescription(locale, "commands.config.panel.logit_manage_checkbox_description")
           : undefined,
-      component: {
-        type: 22,
-        custom_id: buildConfigLogitBiasGroupId(groupIndex, nonce),
-        min_values: 0,
-        max_values: CONFIG_LOGIT_BIAS_CHECKBOX_GROUP_SIZE,
-        required: false,
-        options: entries.slice(offset, offset + CONFIG_LOGIT_BIAS_CHECKBOX_GROUP_SIZE).map((entry) => ({
-          label: safeSelectOptionText(entry.text, 50),
-          value: entry.id,
-          description: safeSelectOptionText(String(entry.value), 100),
-          default: true,
-        })),
-      },
+      component: (() => {
+        const groupOptions = entries.slice(offset, offset + CONFIG_LOGIT_BIAS_CHECKBOX_GROUP_SIZE);
+        return {
+          type: 22,
+          custom_id: buildConfigLogitBiasGroupId(groupIndex, nonce),
+          min_values: 0,
+          // Discord requires options.length >= max_values, so a partial trailing group must cap
+          // max_values to its own size instead of the full group capacity.
+          max_values: groupOptions.length,
+          required: false,
+          options: groupOptions.map((entry) => ({
+            label: safeSelectOptionText(entry.text, 50),
+            value: entry.id,
+            description: safeSelectOptionText(String(entry.value), 100),
+            default: true,
+          })),
+        };
+      })(),
     });
   }
 

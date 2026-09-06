@@ -943,22 +943,25 @@ export function buildTriggerRemoveModal(
                 : "commands.config.panel.trigger_remove_checkbox_description",
             )
           : undefined,
-      component: {
-        // 22 is CheckboxGroup. A FileUpload (19) also renders and submits, but with no option
-        // values, which would make unchecked-means-remove delete every presented word.
-        type: 22,
-        custom_id: buildTriggerRemoveCheckboxGroupId(groupIndex, nonce),
-        min_values: 0,
-        max_values: CONFIG_TRIGGER_CHECKBOX_GROUP_SIZE,
-        required: false,
-        options: presented
-          .slice(offset, offset + CONFIG_TRIGGER_CHECKBOX_GROUP_SIZE)
-          .map((triggerWord, indexInGroup) => ({
+      component: (() => {
+        const groupOptions = presented.slice(offset, offset + CONFIG_TRIGGER_CHECKBOX_GROUP_SIZE);
+        return {
+          // 22 is CheckboxGroup. A FileUpload (19) also renders and submits, but with no option
+          // values, which would make unchecked-means-remove delete every presented word.
+          type: 22,
+          custom_id: buildTriggerRemoveCheckboxGroupId(groupIndex, nonce),
+          min_values: 0,
+          // Discord requires options.length >= max_values, so a partial trailing group (fewer
+          // than CONFIG_TRIGGER_CHECKBOX_GROUP_SIZE words) must cap max_values to its own size.
+          max_values: groupOptions.length,
+          required: false,
+          options: groupOptions.map((triggerWord, indexInGroup) => ({
             label: safeSelectOptionText(normalizeTriggerWord(triggerWord, { lowercase: false }), 50),
             value: String(offset + indexInGroup),
             default: true,
           })),
-      },
+        };
+      })(),
     });
   }
 
@@ -1038,15 +1041,17 @@ export function buildPersonaConditioningRemoveModal(
                 : "commands.config.panel.conditioning_checkbox_description",
             )
           : undefined,
-      component: {
-        type: 22,
-        custom_id: buildConditioningCheckboxGroupId(groupIndex, nonce),
-        min_values: 0,
-        max_values: CONFIG_CONDITIONING_CHECKBOX_GROUP_SIZE,
-        required: false,
-        options: presented
-          .slice(offset, offset + CONFIG_CONDITIONING_CHECKBOX_GROUP_SIZE)
-          .map((group, indexInGroup) => {
+      component: (() => {
+        const groupOptions = presented.slice(offset, offset + CONFIG_CONDITIONING_CHECKBOX_GROUP_SIZE);
+        return {
+          type: 22,
+          custom_id: buildConditioningCheckboxGroupId(groupIndex, nonce),
+          min_values: 0,
+          // Discord requires options.length >= max_values, so a partial trailing group must cap
+          // max_values to its own size instead of the full group capacity.
+          max_values: groupOptions.length,
+          required: false,
+          options: groupOptions.map((group, indexInGroup) => {
             const action = localizer(locale, `commands.${group.conditioningType}.${group.actionKey}.history_label`);
             const descriptionKey =
               group.totalCount > 1
@@ -1071,7 +1076,8 @@ export function buildPersonaConditioningRemoveModal(
               default: true,
             };
           }),
-      },
+        };
+      })(),
     });
   }
 
