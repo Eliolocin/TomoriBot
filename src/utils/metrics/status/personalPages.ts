@@ -1,8 +1,7 @@
-import { type ChatInputCommandInteraction, MessageFlags } from "discord.js";
+import type { ChatInputCommandInteraction } from "discord.js";
 import type { CustomEndpointRow, UserRow, UserSavedProviderConfigRow } from "@/types/db/schema";
 import type { SummaryEmbedOptions } from "@/types/discord/embed";
 import { llmProviderRepo, personalMemoryRepository, serverScheduleRepository } from "@/utils/db/repositories";
-import { replyPaginatedStatusPages } from "@/utils/discord/ui/statusComponents";
 import { ColorCode } from "@/utils/misc/logger";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
 import { formatBooleanLocalized } from "@/utils/text/processors/formatters";
@@ -16,12 +15,13 @@ import {
 import { formatUserSavedProviders } from "@/utils/metrics/providerStats";
 import { localizer } from "@/utils/text/localizer";
 import { PrivacyLevel } from "@/types/db/schema";
+import { renderStatusPageDashboard } from "@/utils/metrics/status/statusPageRenderer";
 
-export async function showPersonalStatus(
+export async function buildPersonalStatusPages(
   interaction: ChatInputCommandInteraction,
   userData: UserRow,
   locale: string,
-): Promise<void> {
+): Promise<SummaryEmbedOptions[]> {
   const limits = getMemoryLimits();
   let globalPersonalMemoryList: string[] = [];
   let userSavedProviderConfigs: UserSavedProviderConfigRow[] = [];
@@ -36,7 +36,12 @@ export async function showPersonalStatus(
     ]);
   }
 
-  const globalPersonalMemoriesValue = formatNumberedList(globalPersonalMemoryList, locale, MEMORY_TRUNCATE_LENGTH);
+  const globalPersonalMemoriesValue = formatNumberedList(
+    globalPersonalMemoryList,
+    locale,
+    MEMORY_TRUNCATE_LENGTH,
+    1600,
+  );
   const globalPersonalMemoriesCount = globalPersonalMemoryList.length;
 
   const reminderCount = await serverScheduleRepository.getUserReminderCount(interaction.user.id);
@@ -142,5 +147,19 @@ export async function showPersonalStatus(
     ],
   };
 
-  await replyPaginatedStatusPages(interaction, locale, [personalPage, personalProvidersPage], MessageFlags.Ephemeral);
+  return [personalPage, personalProvidersPage];
+}
+
+export async function showPersonalStatus(
+  interaction: ChatInputCommandInteraction,
+  userData: UserRow,
+  locale: string,
+): Promise<void> {
+  const pages = await buildPersonalStatusPages(interaction, userData, locale);
+  await renderStatusPageDashboard(
+    interaction,
+    locale,
+    [{ id: "personal", labelKey: "commands.status.scope_choice_personal", pages }],
+    "personal",
+  );
 }

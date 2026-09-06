@@ -1,13 +1,4 @@
-import {
-  ButtonStyle,
-  ComponentType,
-  MessageFlags,
-  type ActionRowData,
-  type ButtonComponentData,
-  type ChatInputCommandInteraction,
-  type ComponentInContainerData,
-  type ContainerComponentData,
-} from "discord.js";
+import type { ButtonInteraction, ChatInputCommandInteraction } from "discord.js";
 import type { SummaryEmbedOptions } from "@/types/discord/embed";
 import type { TomoriState, UserRow } from "@/types/db/schema";
 import { personaRepository, personalMemoryRepository } from "@/utils/db/repositories";
@@ -23,7 +14,6 @@ import {
 } from "@/utils/discord/ui/personaWorkflow";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
-import { validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
 import { formatBooleanLocalized } from "@/utils/text/processors/formatters";
 import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
@@ -37,173 +27,64 @@ import {
   formatSampleDialogues,
   MEMORY_TRUNCATE_LENGTH,
 } from "@/utils/metrics/status/sharedFormatters";
-
-const PERSONA_STATUS_PREV_SUFFIX = "_persona_status_prev";
-const PERSONA_STATUS_NEXT_SUFFIX = "_persona_status_next";
-const MAX_TEXT_DISPLAY_LENGTH = 4000;
-
-type SummaryField = SummaryEmbedOptions["fields"][number];
-
-function formatStatusField(field: SummaryField, locale: string): string {
-  const name = field.name ?? (field.nameKey ? localizer(locale, field.nameKey, field.nameVars) : "");
-  const value = field.value ?? (field.valueKey ? localizer(locale, field.valueKey, field.valueVars) : "");
-  return `**${name}**\n${value}`;
-}
-
-function truncateTextDisplayContent(content: string): string {
-  if (content.length <= MAX_TEXT_DISPLAY_LENGTH) return content;
-
-  const suffix = "\n...";
-  const rawLimit = MAX_TEXT_DISPLAY_LENGTH - suffix.length;
-  const boundary = content.lastIndexOf("\n", rawLimit);
-  const cutAt = boundary >= Math.floor(rawLimit * 0.8) ? boundary : rawLimit;
-  let truncated = content.slice(0, cutAt).trimEnd();
-  const openCodeFence = (truncated.match(/```/g)?.length ?? 0) % 2 === 1;
-
-  if (openCodeFence) {
-    const closingFence = "\n```";
-    const fencedLimit = MAX_TEXT_DISPLAY_LENGTH - suffix.length - closingFence.length;
-    truncated = content
-      .slice(0, Math.min(cutAt, fencedLimit))
-      .trimEnd()
-      .replace(/`{1,2}$/, "");
-    return `${truncated}${closingFence}${suffix}`;
-  }
-
-  return `${truncated}${suffix}`;
-}
-
-function buildPersonaStatusPayload(
-  page: SummaryEmbedOptions,
-  locale: string,
-  currentPage: number,
-  totalPages: number,
-  previousCustomId: string,
-  nextCustomId: string,
-  includeControls: boolean,
-): PersonaWorkflowComponentsV2Payload {
-  const description =
-    page.description ?? (page.descriptionKey ? localizer(locale, page.descriptionKey, page.descriptionVars) : "");
-  const heading = `## ${localizer(locale, page.titleKey, page.titleVars)}${description ? `\n${description}` : ""}`;
-  const components: ComponentInContainerData[] = [{ type: ComponentType.TextDisplay, content: heading }];
-
-  let inlineFields: string[] = [];
-  const flushInlineFields = () => {
-    if (inlineFields.length === 0) return;
-    components.push({ type: ComponentType.TextDisplay, content: inlineFields.join("\n") });
-    inlineFields = [];
-  };
-
-  for (const field of page.fields) {
-    const fieldContent = truncateTextDisplayContent(formatStatusField(field, locale));
-    if (field.inline) {
-      const nextLength = inlineFields.join("\n").length + (inlineFields.length > 0 ? 1 : 0) + fieldContent.length;
-      if (nextLength > MAX_TEXT_DISPLAY_LENGTH) flushInlineFields();
-      inlineFields.push(fieldContent);
-      continue;
-    }
-    flushInlineFields();
-    components.push({ type: ComponentType.TextDisplay, content: fieldContent });
-  }
-  flushInlineFields();
-
-  if (page.footerKey) {
-    components.push({ type: ComponentType.Separator, divider: true, spacing: 1 });
-    components.push({
-      type: ComponentType.TextDisplay,
-      content: `-# ${localizer(locale, page.footerKey, page.footerVars)}`,
-    });
-  }
-
-  if (includeControls && totalPages > 1) {
-    const navigationRow: ActionRowData<ButtonComponentData> = {
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.Button,
-          customId: previousCustomId,
-          label: `◀ ${localizer(locale, "general.pagination.previous")}`,
-          style: ButtonStyle.Secondary,
-          disabled: currentPage === 0,
-        },
-        {
-          type: ComponentType.Button,
-          customId: `${previousCustomId}_label`,
-          label: localizer(locale, "general.pagination.page_info", {
-            current: currentPage + 1,
-            total: totalPages,
-          }),
-          style: ButtonStyle.Secondary,
-          disabled: true,
-        },
-        {
-          type: ComponentType.Button,
-          customId: nextCustomId,
-          label: `${localizer(locale, "general.pagination.next")} ▶`,
-          style: ButtonStyle.Secondary,
-          disabled: currentPage === totalPages - 1,
-        },
-      ],
-    };
-    components.push(navigationRow);
-  }
-
-  const container: ContainerComponentData<ComponentInContainerData> = {
-    type: ComponentType.Container,
-    accentColor: Number.parseInt(ColorCode.INFO.slice(1), 16),
-    components,
-  };
-
-  return validateAndFallbackPanelPayload(
-    {
-      components: [container],
-      flags: MessageFlags.IsComponentsV2,
-      allowedMentions: { parse: [] },
-    },
-    locale,
-  );
-}
+import {
+  dashboardPayload,
+  type StatusCategory,
+  type StatusPageCategory,
+} from "@/utils/metrics/status/statusPageRenderer";
 
 async function paginatePersonaStatus(
   selection: PersonaWorkflowSelectionPhase<TomoriState>,
-  interaction: ChatInputCommandInteraction,
+  interaction: ChatInputCommandInteraction | ButtonInteraction,
   locale: string,
-  pages: SummaryEmbedOptions[],
+  categories: StatusPageCategory[],
 ): Promise<void> {
-  if (pages.length === 0) return;
+  if (categories.length === 0 || categories[0].pages.length === 0) return;
 
-  let currentPage = 0;
-  const previousCustomId = `${selection.message.anchorMessageId}${PERSONA_STATUS_PREV_SUFFIX}`;
-  const nextCustomId = `${selection.message.anchorMessageId}${PERSONA_STATUS_NEXT_SUFFIX}`;
-  const buildPayload = (includeControls: boolean) =>
-    buildPersonaStatusPayload(
-      pages[currentPage],
-      locale,
-      currentPage,
-      pages.length,
-      previousCustomId,
-      nextCustomId,
-      includeControls,
-    );
+  let activeCategory: StatusCategory = "persona";
+  let activePage = 0;
+  const interactionId = selection.message.anchorMessageId;
 
-  await selection.message.replace(buildPayload(true));
+  const render = (disabled: boolean) =>
+    dashboardPayload(interactionId, locale, categories, activeCategory, activePage, disabled);
+
+  await selection.message.replace(render(false) as PersonaWorkflowComponentsV2Payload);
   const anchorMessage = await selection.message.fetchMessage();
 
   try {
     while (true) {
-      const button = await anchorMessage.awaitMessageComponent({
-        componentType: ComponentType.Button,
+      const component = await anchorMessage.awaitMessageComponent({
         filter: (candidate) =>
           candidate.user.id === interaction.user.id &&
-          (candidate.customId === previousCustomId || candidate.customId === nextCustomId),
+          (candidate.customId.startsWith(`status:${interactionId}:`) ||
+            candidate.customId.startsWith("status:") ||
+            candidate.customId.includes("persona_status_page")),
         time: PERSONA_STATUS_TIMEOUT_MS,
       });
 
-      currentPage =
-        button.customId === previousCustomId
-          ? Math.max(0, currentPage - 1)
-          : Math.min(pages.length - 1, currentPage + 1);
-      await selection.useButton(button).replace(buildPayload(true));
+      if ("values" in component && Array.isArray(component.values)) {
+        const pageIndex = Number.parseInt(component.values[0] ?? "", 10);
+        const currentCategory = categories.find((candidate) => candidate.id === activeCategory);
+        if (
+          currentCategory &&
+          Number.isInteger(pageIndex) &&
+          pageIndex >= 0 &&
+          pageIndex < currentCategory.pages.length
+        ) {
+          activePage = pageIndex;
+        }
+      } else if ("customId" in component && typeof component.customId === "string") {
+        const [, , action, value] = component.customId.split(":");
+        if (action === "category") {
+          const category = categories.find((candidate) => candidate.id === value);
+          if (category) {
+            activeCategory = category.id;
+            activePage = 0;
+          }
+        }
+      }
+
+      await component.update(render(false) as PersonaWorkflowComponentsV2Payload);
     }
   } catch (error) {
     if (error instanceof PersonaWorkflowUpdateError) throw error;
@@ -212,7 +93,7 @@ async function paginatePersonaStatus(
       metadata: { userId: interaction.user.id, error },
     });
     try {
-      await selection.message.replace(buildPayload(false));
+      await selection.message.replace(render(true) as PersonaWorkflowComponentsV2Payload);
     } catch (replacementError) {
       log.warn("Failed to clear persona status controls after collector ended", {
         errorType: "InteractionEditFailed",
@@ -223,13 +104,274 @@ async function paginatePersonaStatus(
   }
 }
 
+export async function buildPersonaStatusPages(
+  selectedPersona: TomoriState,
+  userData: UserRow,
+  locale: string,
+): Promise<SummaryEmbedOptions[]> {
+  const limits = getMemoryLimits();
+  const personaName = selectedPersona.persona_nickname ?? "Tomori";
+  const personaLineageId = selectedPersona.persona_lineage_id ?? 0;
+
+  let personaPersonalMemoryList: string[] = [];
+  if (userData.user_id) {
+    const personaPersonalMemoryRows = await personalMemoryRepository.loadForUserLineage(
+      userData.user_id,
+      personaLineageId,
+      false,
+    );
+    personaPersonalMemoryList = personaPersonalMemoryRows.map((row) => row.content);
+  }
+
+  const personaServerMemoryList = selectedPersona.server_memories ?? [];
+
+  const displayedAttributes =
+    (selectedPersona.persona_attributes?.length ?? 0) > 0
+      ? selectedPersona.persona_attributes.map((attribute) =>
+          attribute.is_public
+            ? `${attribute.attribute_text} ${localizer(locale, "commands.status.attribute_public_suffix")}`
+            : attribute.attribute_text,
+        )
+      : (selectedPersona.attribute_list ?? []);
+  const attributesCount = displayedAttributes.length;
+  const attributesValue = formatBulletList(displayedAttributes, locale, ATTRIBUTE_TRUNCATE_LENGTH, 3000);
+
+  const dialogueCount = Math.max(
+    selectedPersona.sample_dialogues_in?.length ?? 0,
+    selectedPersona.sample_dialogues_out?.length ?? 0,
+  );
+  const sampleDialoguesValue = formatSampleDialogues(
+    selectedPersona.sample_dialogues_in ?? [],
+    selectedPersona.sample_dialogues_out ?? [],
+    locale,
+    DIALOGUE_TRUNCATE_LENGTH,
+    3000,
+  );
+
+  const personaPersonalMemoriesCount = personaPersonalMemoryList.length;
+  const personaPersonalMemoriesValue = formatNumberedList(
+    personaPersonalMemoryList,
+    locale,
+    MEMORY_TRUNCATE_LENGTH,
+    1500,
+  );
+  const personaServerMemoriesCount = personaServerMemoryList.length;
+  const personaServerMemoriesValue = formatNumberedList(personaServerMemoryList, locale, MEMORY_TRUNCATE_LENGTH, 1500);
+
+  const personaTriggersValue =
+    (selectedPersona.trigger_words?.length ?? 0) > 0
+      ? selectedPersona.trigger_words.map((t) => `\`${normalizeTriggerWord(t, { lowercase: false })}\``).join(", ")
+      : localizer(locale, "commands.choices.none");
+
+  const physicalAppearanceTagsValue =
+    (selectedPersona.physical_appearance_tags?.length ?? 0) > 0
+      ? selectedPersona.physical_appearance_tags.join(", ")
+      : localizer(locale, "commands.choices.none");
+
+  const personaModelValue = selectedPersona.persona_llm
+    ? formatLlmDisplayLabel(
+        selectedPersona.persona_llm,
+        selectedPersona.config?.custom_model_name,
+        selectedPersona.config?.other_model_codename,
+      )
+    : localizer(locale, "commands.status.persona_model_server_default");
+
+  const noneLabel = localizer(locale, "commands.choices.none");
+  const attgAuthor = selectedPersona.nai_attg_author ?? noneLabel;
+  const attgTitle = selectedPersona.nai_attg_title ?? noneLabel;
+  const attgTags = selectedPersona.nai_attg_tags ?? noneLabel;
+  const attgGenre = selectedPersona.nai_attg_genre ?? noneLabel;
+  const attgStars = selectedPersona.nai_attg_stars != null ? `${selectedPersona.nai_attg_stars}★` : noneLabel;
+  const attgAllUnset =
+    !selectedPersona.nai_attg_author &&
+    !selectedPersona.nai_attg_title &&
+    !selectedPersona.nai_attg_tags &&
+    !selectedPersona.nai_attg_genre &&
+    selectedPersona.nai_attg_stars == null;
+  const attgValue = attgAllUnset
+    ? localizer(locale, "commands.status.nai_attg_not_set")
+    : `Author: ${attgAuthor}\nTitle: ${attgTitle}\nTags: ${attgTags}\nGenre: ${attgGenre}\nStars: ${attgStars}`;
+
+  const rawPersonaPrompt = selectedPersona.persona_prompt ?? null;
+  const personaPromptValue = rawPersonaPrompt
+    ? formatPromptPreview(rawPersonaPrompt, locale)
+    : localizer(locale, "commands.status.field_persona_prompt_not_set");
+
+  const rawPersonaContextNote = selectedPersona.context_note ?? null;
+  const personaContextNoteValue = rawPersonaContextNote
+    ? formatPromptPreview(rawPersonaContextNote, locale)
+    : localizer(locale, "commands.status.field_persona_context_note_not_set");
+
+  const personaPage1: SummaryEmbedOptions = {
+    titleKey: "commands.status.persona_page1_title",
+    titleVars: { persona_name: personaName },
+    descriptionKey: "commands.status.persona_page1_description",
+    color: ColorCode.INFO,
+    fields: [
+      {
+        nameKey: "commands.status.field_nickname",
+        value: personaName,
+        inline: true,
+      },
+      {
+        nameKey: "commands.status.field_is_alter",
+        value: formatBooleanLocalized(selectedPersona.is_alter ?? false, locale),
+        inline: true,
+      },
+      {
+        nameKey: "commands.status.field_persona_triggers",
+        value: personaTriggersValue,
+        inline: true,
+      },
+      {
+        nameKey: "commands.status.field_persona_model",
+        value: personaModelValue,
+        inline: true,
+      },
+      {
+        nameKey: "commands.status.field_avatar",
+        value: selectedPersona.webhook_avatar_url
+          ? localizer(locale, "general.yes")
+          : localizer(locale, "commands.choices.none"),
+        inline: true,
+      },
+      {
+        nameKey: "commands.status.field_voice",
+        value: selectedPersona.speech_voice_name ?? localizer(locale, "commands.choices.none"),
+        inline: true,
+      },
+      {
+        nameKey: "commands.status.field_persona_nai_ref",
+        value: formatBooleanLocalized(!!selectedPersona.nai_char_ref_url, locale),
+        inline: true,
+      },
+      {
+        nameKey: "commands.status.field_reward_conditioning",
+        value: formatBooleanLocalized(selectedPersona.reward_conditioning_enabled ?? true, locale),
+        inline: true,
+      },
+      {
+        nameKey: "commands.status.field_punish_conditioning",
+        value: formatBooleanLocalized(selectedPersona.punish_conditioning_enabled ?? true, locale),
+        inline: true,
+      },
+    ],
+  };
+
+  const personaPage2: SummaryEmbedOptions = {
+    titleKey: "commands.status.persona_page2_title",
+    titleVars: { persona_name: personaName },
+    descriptionKey: "commands.status.persona_page2_description",
+    color: ColorCode.INFO,
+    footerKey: "commands.status.export_footer_persona_attributes_and_dialogues",
+    fields: [
+      {
+        nameKey: "commands.status.field_attributes_with_count",
+        nameVars: {
+          current: attributesCount,
+          max: limits.maxAttributes,
+        },
+        value: attributesValue,
+        inline: false,
+      },
+    ],
+  };
+
+  const personaPage3: SummaryEmbedOptions = {
+    titleKey: "commands.status.persona_page3_title",
+    titleVars: { persona_name: personaName },
+    descriptionKey: "commands.status.persona_page3_description",
+    color: ColorCode.INFO,
+    footerKey: "commands.status.export_footer_persona_attributes_and_dialogues",
+    fields: [
+      {
+        nameKey: "commands.status.field_sample_dialogues_with_count",
+        nameVars: {
+          current: dialogueCount,
+          max: limits.maxSampleDialogues,
+        },
+        value: sampleDialoguesValue,
+        inline: false,
+      },
+    ],
+  };
+
+  const personaPage4: SummaryEmbedOptions = {
+    titleKey: "commands.status.persona_page4_title",
+    titleVars: { persona_name: personaName },
+    descriptionKey: "commands.status.persona_page4_description",
+    color: ColorCode.INFO,
+    footerKey: "commands.status.export_footer_persona_memories",
+    fields: [
+      {
+        nameKey: "commands.status.field_persona_personal_memories_with_count",
+        nameVars: {
+          current: personaPersonalMemoriesCount,
+          max: limits.maxPersonalMemories,
+        },
+        value: personaPersonalMemoriesValue,
+        inline: false,
+      },
+      {
+        nameKey: "commands.status.field_persona_server_memories_with_count",
+        nameVars: {
+          current: personaServerMemoriesCount,
+          max: limits.maxServerMemories,
+        },
+        value: personaServerMemoriesValue,
+        inline: false,
+      },
+    ],
+  };
+
+  const personaPage5: SummaryEmbedOptions = {
+    titleKey: "commands.status.persona_page5_title",
+    titleVars: { persona_name: personaName },
+    descriptionKey: "commands.status.persona_page5_description",
+    color: ColorCode.INFO,
+    fields: [
+      {
+        nameKey: "commands.status.field_persona_prompt",
+        value: personaPromptValue,
+        inline: false,
+      },
+      {
+        nameKey: "commands.status.field_physical_appearance_tags",
+        value: physicalAppearanceTagsValue,
+        inline: false,
+      },
+      {
+        nameKey: "commands.status.field_nai_attg",
+        value: attgValue,
+        inline: false,
+      },
+      {
+        nameKey: "commands.status.field_persona_context_note",
+        value: personaContextNoteValue,
+        inline: false,
+      },
+      {
+        nameKey: "commands.status.field_persona_context_note_depth",
+        value: String(selectedPersona.context_note_depth ?? 0),
+        inline: true,
+      },
+    ],
+  };
+
+  return [personaPage1, personaPage2, personaPage3, personaPage4, personaPage5];
+}
+
 export async function showPersonaStatus(
-  interaction: ChatInputCommandInteraction,
+  interaction: ChatInputCommandInteraction | ButtonInteraction,
   userData: UserRow,
   serverDiscId: string,
   locale: string,
+  siblingCategories: StatusPageCategory[] = [],
 ): Promise<void> {
-  const limits = getMemoryLimits();
+  if ("deferUpdate" in interaction && !interaction.deferred && !interaction.replied) {
+    await interaction.deferUpdate();
+  }
+
   const allPersonas = await personaRepository.loadAllForServer(serverDiscId);
 
   if (allPersonas.length === 0) {
@@ -271,265 +413,17 @@ export async function showPersonaStatus(
             }),
           );
 
-          const personaName = selectedPersona.persona_nickname;
-          const personaLineageId = selectedPersona.persona_lineage_id ?? 0;
+          const personaPages = await buildPersonaStatusPages(selectedPersona, userData, locale);
+          const categories: StatusPageCategory[] = [
+            {
+              id: "persona",
+              labelKey: "commands.status.scope_choice_persona",
+              pages: personaPages,
+            },
+            ...siblingCategories,
+          ];
 
-          let personaPersonalMemoryList: string[] = [];
-          if (userData.user_id) {
-            const personaPersonalMemoryRows = await personalMemoryRepository.loadForUserLineage(
-              userData.user_id,
-              personaLineageId,
-              false,
-            );
-            personaPersonalMemoryList = personaPersonalMemoryRows.map((row) => row.content);
-          }
-
-          const personaServerMemoryList = selectedPersona.server_memories ?? [];
-
-          const displayedAttributes =
-            selectedPersona.persona_attributes.length > 0
-              ? selectedPersona.persona_attributes.map((attribute) =>
-                  attribute.is_public
-                    ? `${attribute.attribute_text} ${localizer(locale, "commands.status.attribute_public_suffix")}`
-                    : attribute.attribute_text,
-                )
-              : selectedPersona.attribute_list;
-          const attributesCount = displayedAttributes.length;
-          const attributesValue = formatBulletList(displayedAttributes, locale, ATTRIBUTE_TRUNCATE_LENGTH);
-
-          const dialogueCount = Math.max(
-            selectedPersona.sample_dialogues_in.length,
-            selectedPersona.sample_dialogues_out.length,
-          );
-          const sampleDialoguesValue = formatSampleDialogues(
-            selectedPersona.sample_dialogues_in,
-            selectedPersona.sample_dialogues_out,
-            locale,
-            DIALOGUE_TRUNCATE_LENGTH,
-          );
-
-          const personaPersonalMemoriesCount = personaPersonalMemoryList.length;
-          const personaPersonalMemoriesValue = formatNumberedList(
-            personaPersonalMemoryList,
-            locale,
-            MEMORY_TRUNCATE_LENGTH,
-          );
-          const personaServerMemoriesCount = personaServerMemoryList.length;
-          const personaServerMemoriesValue = formatNumberedList(
-            personaServerMemoryList,
-            locale,
-            MEMORY_TRUNCATE_LENGTH,
-          );
-
-          const personaTriggersValue =
-            selectedPersona.trigger_words.length > 0
-              ? selectedPersona.trigger_words
-                  .map((t) => `\`${normalizeTriggerWord(t, { lowercase: false })}\``)
-                  .join(", ")
-              : localizer(locale, "commands.choices.none");
-
-          const physicalAppearanceTagsValue =
-            selectedPersona.physical_appearance_tags.length > 0
-              ? selectedPersona.physical_appearance_tags.join(", ")
-              : localizer(locale, "commands.choices.none");
-
-          const personaModelValue = selectedPersona.persona_llm
-            ? formatLlmDisplayLabel(
-                selectedPersona.persona_llm,
-                selectedPersona.config.custom_model_name,
-                selectedPersona.config.other_model_codename,
-              )
-            : localizer(locale, "commands.status.persona_model_server_default");
-
-          const noneLabel = localizer(locale, "commands.choices.none");
-          const attgAuthor = selectedPersona.nai_attg_author ?? noneLabel;
-          const attgTitle = selectedPersona.nai_attg_title ?? noneLabel;
-          const attgTags = selectedPersona.nai_attg_tags ?? noneLabel;
-          const attgGenre = selectedPersona.nai_attg_genre ?? noneLabel;
-          const attgStars = selectedPersona.nai_attg_stars != null ? `${selectedPersona.nai_attg_stars}★` : noneLabel;
-          const attgAllUnset =
-            !selectedPersona.nai_attg_author &&
-            !selectedPersona.nai_attg_title &&
-            !selectedPersona.nai_attg_tags &&
-            !selectedPersona.nai_attg_genre &&
-            selectedPersona.nai_attg_stars == null;
-          const attgValue = attgAllUnset
-            ? localizer(locale, "commands.status.nai_attg_not_set")
-            : `Author: ${attgAuthor}\nTitle: ${attgTitle}\nTags: ${attgTags}\nGenre: ${attgGenre}\nStars: ${attgStars}`;
-
-          const rawPersonaPrompt = selectedPersona.persona_prompt ?? null;
-          const personaPromptValue = rawPersonaPrompt
-            ? formatPromptPreview(rawPersonaPrompt, locale)
-            : localizer(locale, "commands.status.field_persona_prompt_not_set");
-
-          const rawPersonaContextNote = selectedPersona.context_note ?? null;
-          const personaContextNoteValue = rawPersonaContextNote
-            ? formatPromptPreview(rawPersonaContextNote, locale)
-            : localizer(locale, "commands.status.field_persona_context_note_not_set");
-
-          const personaPage1: SummaryEmbedOptions = {
-            titleKey: "commands.status.persona_page1_title",
-            titleVars: { persona_name: personaName },
-            descriptionKey: "commands.status.persona_page1_description",
-            color: ColorCode.INFO,
-            fields: [
-              {
-                nameKey: "commands.status.field_nickname",
-                value: personaName,
-                inline: true,
-              },
-              {
-                nameKey: "commands.status.field_is_alter",
-                value: formatBooleanLocalized(selectedPersona.is_alter, locale),
-                inline: true,
-              },
-              {
-                nameKey: "commands.status.field_persona_triggers",
-                value: personaTriggersValue,
-                inline: true,
-              },
-              {
-                nameKey: "commands.status.field_persona_model",
-                value: personaModelValue,
-                inline: true,
-              },
-              {
-                nameKey: "commands.status.field_avatar",
-                value: selectedPersona.webhook_avatar_url
-                  ? localizer(locale, "general.yes")
-                  : localizer(locale, "commands.choices.none"),
-                inline: true,
-              },
-              {
-                nameKey: "commands.status.field_voice",
-                value: selectedPersona.speech_voice_name ?? localizer(locale, "commands.choices.none"),
-                inline: true,
-              },
-              {
-                nameKey: "commands.status.field_persona_nai_ref",
-                value: formatBooleanLocalized(!!selectedPersona.nai_char_ref_url, locale),
-                inline: true,
-              },
-              {
-                nameKey: "commands.status.field_reward_conditioning",
-                value: formatBooleanLocalized(selectedPersona.reward_conditioning_enabled ?? true, locale),
-                inline: true,
-              },
-              {
-                nameKey: "commands.status.field_punish_conditioning",
-                value: formatBooleanLocalized(selectedPersona.punish_conditioning_enabled ?? true, locale),
-                inline: true,
-              },
-            ],
-          };
-
-          const personaPage2: SummaryEmbedOptions = {
-            titleKey: "commands.status.persona_page2_title",
-            titleVars: { persona_name: personaName },
-            descriptionKey: "commands.status.persona_page2_description",
-            color: ColorCode.INFO,
-            footerKey: "commands.status.export_footer_persona_attributes_and_dialogues",
-            fields: [
-              {
-                nameKey: "commands.status.field_attributes_with_count",
-                nameVars: {
-                  current: attributesCount,
-                  max: limits.maxAttributes,
-                },
-                value: attributesValue,
-                inline: false,
-              },
-            ],
-          };
-
-          const personaPage3: SummaryEmbedOptions = {
-            titleKey: "commands.status.persona_page3_title",
-            titleVars: { persona_name: personaName },
-            descriptionKey: "commands.status.persona_page3_description",
-            color: ColorCode.INFO,
-            footerKey: "commands.status.export_footer_persona_attributes_and_dialogues",
-            fields: [
-              {
-                nameKey: "commands.status.field_sample_dialogues_with_count",
-                nameVars: {
-                  current: dialogueCount,
-                  max: limits.maxSampleDialogues,
-                },
-                value: sampleDialoguesValue,
-                inline: false,
-              },
-            ],
-          };
-
-          const personaPage4: SummaryEmbedOptions = {
-            titleKey: "commands.status.persona_page4_title",
-            titleVars: { persona_name: personaName },
-            descriptionKey: "commands.status.persona_page4_description",
-            color: ColorCode.INFO,
-            footerKey: "commands.status.export_footer_persona_memories",
-            fields: [
-              {
-                nameKey: "commands.status.field_persona_personal_memories_with_count",
-                nameVars: {
-                  current: personaPersonalMemoriesCount,
-                  max: limits.maxPersonalMemories,
-                },
-                value: personaPersonalMemoriesValue,
-                inline: false,
-              },
-              {
-                nameKey: "commands.status.field_persona_server_memories_with_count",
-                nameVars: {
-                  current: personaServerMemoriesCount,
-                  max: limits.maxServerMemories,
-                },
-                value: personaServerMemoriesValue,
-                inline: false,
-              },
-            ],
-          };
-
-          const personaPage5: SummaryEmbedOptions = {
-            titleKey: "commands.status.persona_page5_title",
-            titleVars: { persona_name: personaName },
-            descriptionKey: "commands.status.persona_page5_description",
-            color: ColorCode.INFO,
-            fields: [
-              {
-                nameKey: "commands.status.field_persona_prompt",
-                value: personaPromptValue,
-                inline: false,
-              },
-              {
-                nameKey: "commands.status.field_physical_appearance_tags",
-                value: physicalAppearanceTagsValue,
-                inline: false,
-              },
-              {
-                nameKey: "commands.status.field_nai_attg",
-                value: attgValue,
-                inline: false,
-              },
-              {
-                nameKey: "commands.status.field_persona_context_note",
-                value: personaContextNoteValue,
-                inline: false,
-              },
-              {
-                nameKey: "commands.status.field_persona_context_note_depth",
-                value: String(selectedPersona.context_note_depth ?? 0),
-                inline: true,
-              },
-            ],
-          };
-
-          await paginatePersonaStatus(selection, interaction, locale, [
-            personaPage1,
-            personaPage2,
-            personaPage3,
-            personaPage4,
-            personaPage5,
-          ]);
+          await paginatePersonaStatus(selection, interaction, locale, categories);
         } catch (error) {
           if (error instanceof PersonaWorkflowUpdateError) throw error;
           log.error("Failed to build persona status pages", error, {

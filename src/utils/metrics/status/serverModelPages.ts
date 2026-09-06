@@ -1,4 +1,4 @@
-import { type ChatInputCommandInteraction, type Client, MessageFlags } from "discord.js";
+import type { Client } from "discord.js";
 import type { SummaryEmbedOptions } from "@/types/discord/embed";
 import type { TomoriState } from "@/types/db/schema";
 import { llmModelRepo, llmOverrideRepo, personaRepository } from "@/utils/db/repositories";
@@ -12,7 +12,6 @@ import {
 } from "@/utils/provider/speechEndpointResolver";
 import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
 import { resolveCustomEndpointForProvider } from "@/utils/provider/customEndpointService";
-import { replyPaginatedStatusPages } from "@/utils/discord/ui/statusComponents";
 import { ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import { formatBooleanLocalized } from "@/utils/text/processors/formatters";
@@ -25,13 +24,12 @@ import {
   getThinkingLevelLabel,
 } from "@/utils/metrics/status/sharedFormatters";
 
-export async function showServerModelStatus(
+export async function buildServerModelPages(
   client: Client,
-  interaction: ChatInputCommandInteraction,
   serverDiscId: string,
   tomoriState: TomoriState,
   locale: string,
-): Promise<void> {
+): Promise<SummaryEmbedOptions[]> {
   const config = tomoriState.config;
   const llm = tomoriState.llm;
   const [
@@ -124,8 +122,8 @@ export async function showServerModelStatus(
   );
 
   const serverPage1: SummaryEmbedOptions = {
-    titleKey: "commands.status.server_page1_title",
-    descriptionKey: "commands.status.server_page1_description",
+    titleKey: "commands.status.server_page4_title",
+    descriptionKey: "commands.status.server_page4_description",
     color: ColorCode.INFO,
     fields: [
       {
@@ -227,8 +225,8 @@ export async function showServerModelStatus(
   };
 
   const serverPage2: SummaryEmbedOptions = {
-    titleKey: "commands.status.server_page6_title",
-    descriptionKey: "commands.status.server_page6_description",
+    titleKey: "commands.status.server_page5_title",
+    descriptionKey: "commands.status.server_page5_description",
     color: ColorCode.INFO,
     fields: [
       {
@@ -245,8 +243,8 @@ export async function showServerModelStatus(
   };
 
   const serverPage3: SummaryEmbedOptions = {
-    titleKey: "commands.status.server_page7_title",
-    descriptionKey: "commands.status.server_page7_description",
+    titleKey: "commands.status.server_page10_title",
+    descriptionKey: "commands.status.server_page10_description",
     color: ColorCode.INFO,
     fields: [
       {
@@ -319,8 +317,8 @@ export async function showServerModelStatus(
   };
 
   const serverPage4: SummaryEmbedOptions = {
-    titleKey: "commands.status.server_page8_title",
-    descriptionKey: "commands.status.server_page8_description",
+    titleKey: "commands.status.server_page6_title",
+    descriptionKey: "commands.status.server_page6_description",
     color: ColorCode.INFO,
     fields: [
       {
@@ -378,10 +376,5 @@ export async function showServerModelStatus(
     ],
   };
 
-  await replyPaginatedStatusPages(
-    interaction,
-    locale,
-    [serverPage1, serverPage2, serverPage3, serverPage4],
-    MessageFlags.Ephemeral,
-  );
+  return [serverPage1, serverPage2, serverPage3, serverPage4];
 }

@@ -1,11 +1,10 @@
-import { type ChatInputCommandInteraction, type Client, MessageFlags } from "discord.js";
+import type { Client } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
 import type { SummaryEmbedOptions } from "@/types/discord/embed";
 import { sql } from "@/utils/db/client";
 import { llmProviderRepo } from "@/utils/db/repositories";
 import { toolRepository } from "@/utils/db/repositories/ToolRepository";
 import { presetRepository } from "@/utils/db/repositories/PresetRepository";
-import { replyPaginatedStatusPages } from "@/utils/discord/ui/statusComponents";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
@@ -31,12 +30,11 @@ interface OptApiKeyStatusRow {
   service_name: string;
 }
 
-export async function showServerConfigStatus(
+export async function buildServerConfigPages(
   client: Client,
-  interaction: ChatInputCommandInteraction,
   tomoriState: TomoriState,
   locale: string,
-): Promise<void> {
+): Promise<SummaryEmbedOptions[]> {
   const config = tomoriState.config;
   const [optApiKeyRows, savedProviderConfigs, guildMcpServers, matrixLinks, stPresets, serverCustomEndpoints] =
     await Promise.all([
@@ -122,8 +120,8 @@ export async function showServerConfigStatus(
   const matrixLinksValue = await formatMatrixLinks(client, matrixLinks, locale);
 
   const configPage1: SummaryEmbedOptions = {
-    titleKey: "commands.status.server_page2_title",
-    descriptionKey: "commands.status.server_page2_description",
+    titleKey: "commands.status.server_page1_title",
+    descriptionKey: "commands.status.server_page1_description",
     color: ColorCode.INFO,
     fields: [
       {
@@ -200,8 +198,8 @@ export async function showServerConfigStatus(
   };
 
   const configPage2a: SummaryEmbedOptions = {
-    titleKey: "commands.status.server_page4_title",
-    descriptionKey: "commands.status.server_page4_description",
+    titleKey: "commands.status.server_page8_title",
+    descriptionKey: "commands.status.server_page8_description",
     color: ColorCode.INFO,
     fields: [
       {
@@ -273,8 +271,8 @@ export async function showServerConfigStatus(
   };
 
   const configPage2b: SummaryEmbedOptions = {
-    titleKey: "commands.status.server_page10_title",
-    descriptionKey: "commands.status.server_page10_description",
+    titleKey: "commands.status.server_page9_title",
+    descriptionKey: "commands.status.server_page9_description",
     color: ColorCode.INFO,
     fields: [
       {
@@ -356,8 +354,8 @@ export async function showServerConfigStatus(
   };
 
   const configPage3: SummaryEmbedOptions = {
-    titleKey: "commands.status.server_page5_title",
-    descriptionKey: "commands.status.server_page5_description",
+    titleKey: "commands.status.server_page2_title",
+    descriptionKey: "commands.status.server_page2_description",
     color: ColorCode.INFO,
     footerKey: "commands.status.export_footer_server_config",
     fields: [
@@ -380,8 +378,8 @@ export async function showServerConfigStatus(
   };
 
   const configPage4: SummaryEmbedOptions = {
-    titleKey: "commands.status.server_page9_title",
-    descriptionKey: "commands.status.server_page9_description",
+    titleKey: "commands.status.server_page7_title",
+    descriptionKey: "commands.status.server_page7_description",
     color: ColorCode.INFO,
     fields: [
       {
@@ -448,10 +446,5 @@ export async function showServerConfigStatus(
     ],
   };
 
-  await replyPaginatedStatusPages(
-    interaction,
-    locale,
-    [configPage1, configPage2a, configPage2b, configPage3, configPage4],
-    MessageFlags.Ephemeral,
-  );
+  return [configPage1, configPage2a, configPage2b, configPage3, configPage4];
 }

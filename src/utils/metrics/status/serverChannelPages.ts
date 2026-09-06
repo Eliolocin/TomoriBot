@@ -1,9 +1,8 @@
-import { type ChatInputCommandInteraction, type Client, MessageFlags } from "discord.js";
+import type { Client } from "discord.js";
 import type { SummaryEmbedOptions } from "@/types/discord/embed";
 import type { TomoriState } from "@/types/db/schema";
 import { personaRepository, serverScheduleRepository, userRepository } from "@/utils/db/repositories";
 import { whitelistRepository } from "@/utils/db/repositories/WhitelistRepository";
-import { replyPaginatedStatusPages } from "@/utils/discord/ui/statusComponents";
 import { ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import { formatBooleanLocalized } from "@/utils/text/processors/formatters";
@@ -18,13 +17,12 @@ import {
 } from "@/utils/metrics/status/channelFormatters";
 import { MAX_ITEMS_DISPLAY } from "@/utils/metrics/status/sharedFormatters";
 
-export async function showServerChannelsStatus(
+export async function buildServerChannelPages(
   client: Client,
-  interaction: ChatInputCommandInteraction,
   serverDiscId: string,
   tomoriState: TomoriState,
   locale: string,
-): Promise<void> {
+): Promise<SummaryEmbedOptions[]> {
   const config = tomoriState.config;
   const [blacklistedMemberIds, whitelistPersonas, whitelistChannels, whitelistRoles, randomTriggers, allPersonas] =
     await Promise.all([
@@ -148,5 +146,5 @@ export async function showServerChannelsStatus(
     ],
   };
 
-  await replyPaginatedStatusPages(interaction, locale, [channelsPage], MessageFlags.Ephemeral);
+  return [channelsPage];
 }

@@ -11,11 +11,11 @@ export const configureCommand = (command: SlashCommandBuilder) =>
         .setDescription(localizer("en-US", "commands.status.scope_description"))
         .setRequired(true)
         .addChoices(
-          { name: localizer("en-US", "commands.status.scope_choice_server_model"), value: "server_model" },
-          { name: localizer("en-US", "commands.status.scope_choice_server_config"), value: "server_config" },
-          { name: localizer("en-US", "commands.status.scope_choice_server_channels"), value: "server_channels" },
-          { name: localizer("en-US", "commands.status.scope_choice_personal"), value: "personal" },
           { name: localizer("en-US", "commands.status.scope_choice_persona"), value: "persona" },
+          { name: localizer("en-US", "commands.status.scope_choice_behavior"), value: "behavior" },
+          { name: localizer("en-US", "commands.status.scope_choice_models"), value: "models" },
+          { name: localizer("en-US", "commands.status.scope_choice_access"), value: "access" },
+          { name: localizer("en-US", "commands.status.scope_choice_personal"), value: "personal" },
         ),
     );
 

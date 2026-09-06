@@ -26,13 +26,11 @@ import {
   type AttachmentBuilder,
   ButtonStyle,
   ComponentType,
-  MessageFlags,
+  type MessageFlags,
   type ActionRowData,
   type ButtonComponentData,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
-  type ComponentInContainerData,
-  type ContainerComponentData,
   type Message,
   type TopLevelComponentData,
 } from "discord.js";
@@ -48,6 +46,7 @@ import type {
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
+import { buildDashboardPagePayload, type DashboardPage } from "@/utils/metrics/status/statusPageRenderer";
 
 /** Selectable time windows. `all_time` omits the bucket floor entirely. */
 export type Timeframe = "today" | "week" | "month" | "year" | "all_time";
@@ -233,11 +232,6 @@ export interface StatsTab {
 const FOOTER_KEY = "commands.stats.footer";
 const DASHBOARD_COLOR = ColorCode.INFO;
 
-/** Resolves the dashboard accent color (hex string) to the numeric form CV2 needs. */
-function accentColor(): number {
-  return Number.parseInt(DASHBOARD_COLOR.replace("#", ""), 16);
-}
-
 /** Common page scaffolding (title + subtitle + footer) for a tab. */
 function page(titleKey: string, subtitle: string, fields: StatField[]): StatsTabPage {
   return { titleKey, subtitle, footerKey: FOOTER_KEY, fields };
@@ -274,79 +268,20 @@ function buildTabButtonRows(
   return rows;
 }
 
-/**
- * Renders one tab as a Components V2 container: an H3 title, the subtitle, a divider,
- * the stat fields (consecutive inline scalars merged into one block; ranked lists each
- * in their own labelled block), a muted footer, and (when `withButtons`) the tab
- * button rows inside the same card.
- */
-function buildTabContainer(
-  locale: string,
-  tabPage: StatsTabPage,
-  buttonRows: ActionRowData<ButtonComponentData>[],
-  withButtons: boolean,
-  iconUrl?: string,
-): TopLevelComponentData[] {
-  const components: ComponentInContainerData[] = [];
-
-  const titleText = `### ${localizer(locale, tabPage.titleKey)}`;
-  if (iconUrl) {
-    components.push({
-      type: ComponentType.Section,
-      components: [
-        { type: ComponentType.TextDisplay, content: titleText },
-        { type: ComponentType.TextDisplay, content: tabPage.subtitle },
-      ],
-      accessory: { type: ComponentType.Thumbnail, media: { url: iconUrl } },
-    });
-  } else {
-    components.push({ type: ComponentType.TextDisplay, content: titleText });
-    components.push({ type: ComponentType.TextDisplay, content: tabPage.subtitle });
-  }
-  components.push({ type: ComponentType.Separator, divider: true, spacing: 1 });
-
-  // Fields. Merge consecutive inline scalars into a single text block (one line
-  //    each, "**Name:** value"); flush it when a non-inline list field appears.
-  let scalarBuffer: string[] = [];
-  const flushScalars = () => {
-    if (scalarBuffer.length > 0) {
-      components.push({ type: ComponentType.TextDisplay, content: scalarBuffer.join("\n") });
-      scalarBuffer = [];
-    }
+/** Adapts statistics fields to the shared dashboard layout without losing visual separators. */
+function toDashboardPage(tabPage: StatsTabPage, iconUrl?: string): DashboardPage {
+  return {
+    titleKey: tabPage.titleKey,
+    description: tabPage.subtitle,
+    footerKey: tabPage.footerKey,
+    color: DASHBOARD_COLOR,
+    thumbnailUrl: iconUrl,
+    fields: tabPage.fields.map((field) =>
+      field.kind === "separator"
+        ? { separator: true }
+        : { nameKey: field.nameKey, value: field.value, inline: field.inline },
+    ),
   };
-  for (const field of tabPage.fields) {
-    if (field.kind === "separator") {
-      flushScalars();
-      components.push({ type: ComponentType.Separator, divider: true, spacing: 1 });
-      continue;
-    }
-    if (field.inline) {
-      scalarBuffer.push(`**${localizer(locale, field.nameKey)}:** ${field.value}`);
-    } else {
-      flushScalars();
-      components.push({
-        type: ComponentType.TextDisplay,
-        content: `**${localizer(locale, field.nameKey)}**\n${field.value}`,
-      });
-    }
-  }
-  flushScalars();
-
-  if (tabPage.footerKey) {
-    components.push({ type: ComponentType.Separator, divider: true, spacing: 1 });
-    components.push({ type: ComponentType.TextDisplay, content: `-# ${localizer(locale, tabPage.footerKey)}` });
-  }
-
-  if (withButtons) {
-    for (const row of buttonRows) components.push(row);
-  }
-
-  const container: ContainerComponentData<ComponentInContainerData> = {
-    type: ComponentType.Container,
-    accentColor: accentColor(),
-    components,
-  };
-  return [container];
 }
 
 /**
@@ -371,8 +306,11 @@ export function buildStatsDashboardPayload(
 } {
   const buttonRows = buildTabButtonRows(interactionId, tabs, activeIndex, locale, disableAll);
   return {
-    components: buildTabContainer(locale, tabs[activeIndex].page, buttonRows, withButtons, iconUrl),
-    flags: MessageFlags.IsComponentsV2,
+    ...buildDashboardPagePayload({
+      locale,
+      page: toDashboardPage(tabs[activeIndex].page, iconUrl),
+      buttonRows: withButtons ? buttonRows : [],
+    }),
     ...(iconFile ? { files: [iconFile] } : {}),
   };
 }

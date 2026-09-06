@@ -9,7 +9,6 @@ It exists so users can inspect current configuration without reopening every man
 ## Implementation Boundary
 
 - Slash command registration and routing live in `src/commands/status.ts`.
-- `/tool status` remains a temporary compatibility leaf in `src/commands/tool/status.ts` and uses the same coordinator.
 - The status coordinator lives in `src/utils/metrics/status/command.ts`.
 - Status page implementation lives under `src/utils/metrics/status/`:
   - `personalPages.ts` builds personal settings/provider pages.
@@ -19,6 +18,17 @@ It exists so users can inspect current configuration without reopening every man
 - `/compact` routing lives in `src/commands/compact.ts`; the public coordinator lives in `src/utils/compaction/compactOrchestrator.ts`, with implementation under `src/utils/compaction/compact/`.
 
 ## Scope Coverage
+
+`/status` provides five ordered categories: Persona, Behavior, Models, Access, and Personal. Every resulting dashboard displays all five category buttons at the top, regardless of initial slash scope, allowing readers to navigate among all five without re-running the command.
+
+Persona additionally provides its real persona selector/picker-backed workflow with private delivery and ownership scoping, while keeping Personal and the three server categories reachable from that same surface.
+
+Category page counts:
+- Persona: 5 pages (Identity, Attributes, Sample Dialogues, Memories, Prompt and Tags)
+- Behavior: 3 pages (General Behavior, Channels and Automation, Thought Logs & Matrix)
+- Models: 4 pages (Models and Sampling, Overrides, Integrations and Endpoints, NAI Image)
+- Access: 3 pages (System Prompt, Capabilities & Moderation, Quotas)
+- Personal: 2 pages (Personal Status, Providers and Endpoints)
 
 ### Personal
 
@@ -46,47 +56,17 @@ It exists so users can inspect current configuration without reopening every man
 - NovelAI tags and ATTG metadata
 - persona author's note
 
-### Server
+### Server Categories
 
-Server status is split across multiple pages so durable state stays visible without exceeding Discord embed limits.
+Status is rendered as a private Components V2 dashboard. Category buttons are placed above the page selector and
+page body, so readers can move between categories without re-running the command. The renderer reserves four of
+Discord's 40 components for future controls and bounds Text Display output to Discord's 4,000-codepoint limit.
 
-- Model and sampling:
-  - active text model
-  - `None (User BYOK)` when the server intentionally has no server text provider
-  - real OpenRouter `other-model` codename
-  - vision / fallback / image / video / embedding models
-  - custom endpoint presence
-- Behavior:
-  - timezone
-  - fetch / send / cooldown / trigger limits
-  - member BYOK mode status
-- Channels and automation:
-  - auto-chat, RP, private, cross-channel blocklist
-  - welcome channel and welcome prompt presence
-  - whitelists
-  - random trigger advanced fields
-- Features and moderation:
-  - feature toggles
-  - experimental workaround toggles
-  - moderation flags
-  - blacklist state
-- Prompt pages:
-  - system prompt
-  - server author's note
-- Overrides:
-  - channel and persona model overrides
-- Quotas:
-  - image, text, and video quota config
-- NovelAI image config:
-  - preset, sampler, steps, scale, noise schedule, tags
-- Integrations and access:
-  - API key rotation pool status
-  - optional API key coverage
-  - saved provider configs
-  - MCP registrations
-  - Matrix link coverage
-  - hidden notice embeds
-  - active SillyTavern preset and node state
+- Behavior: general behavior, system prompt, channels, and automation.
+- Models: model and sampling, overrides, NAI image configuration, integrations, and endpoints.
+- Access: capabilities, moderation, member access, and image, text, and video quotas.
+
+Each page identifies the management command that owns its settings, so a status reader can return to the editor.
 
 ## Privacy Rules
 

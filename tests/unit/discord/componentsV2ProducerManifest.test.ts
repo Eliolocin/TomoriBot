@@ -201,11 +201,11 @@ export const COMPONENTS_V2_PRODUCER_MANIFEST: readonly ProducerManifestEntry[] =
     coverage: { kind: "suite", suites: ["tests/unit/discord/componentsV2DeclaredProducerSmoke.test.ts"] },
   },
   {
-    modulePath: "src/utils/metrics/status/personaPages.ts",
-    reason: "Persona status metrics pages",
+    modulePath: "src/utils/metrics/status/statusPageRenderer.ts",
+    reason: "Shared status and stats Components V2 dashboard payload renderer",
     coverage: {
-      kind: "delivery",
-      note: "Payloads are validated at construction by validateAndFallbackPanelPayload in buildPersonaStatusPayload; the builder is private, so no exported payload builder is available to fixture.",
+      kind: "suite",
+      suites: ["tests/unit/metrics/statusPageLimits.test.ts", "tests/unit/metrics/statusPageBuilderLimits.test.ts"],
     },
   },
   {

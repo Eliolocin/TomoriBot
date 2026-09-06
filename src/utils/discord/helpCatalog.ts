@@ -397,7 +397,7 @@ const memoryPages: readonly HelpPageDefinition[] = [
       memoryServerAdd: mention("memories"),
       memoryServerRemove: mention("memories"),
       memoryServerExport: mention("memory", "server", "export"),
-      status: mention("tool", "status"),
+      status: mention("status"),
       helpCustomization: buildHelpPageReference(locale, "commands.help.dashboard.pages.customization"),
       personalStm: mention("personal", "config"),
       personalStmClear: mention("personal", "memories"),
