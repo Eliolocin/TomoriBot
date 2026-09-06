@@ -13,6 +13,7 @@ import {
   ROUTING_CAPABILITY_LOCALE_KEYS,
   decodeProviderPageValue,
   decodeProviderParam,
+  decodeProviderRangeValue,
 } from "@/utils/discord/personalConfigPanelCatalog";
 import { localizer } from "@/utils/text/localizer";
 import { log } from "@/utils/misc/logger";
@@ -383,7 +384,8 @@ export async function handlePersonalConfigModalOpen(
     }
     const selectMenu = interaction as StringSelectMenuInteraction;
     const chosen = selectMenu.values[0];
-    if (chosen === PERSONAL_PROVIDER_RANGE_VALUE) {
+    const range = decodeProviderRangeValue(chosen);
+    if (chosen === PERSONAL_PROVIDER_RANGE_VALUE || range !== null) {
       await interaction.deferUpdate();
       const cachedScope = await dependencies.resolveScope(interaction, false);
       if (!cachedScope) {
@@ -400,7 +402,8 @@ export async function handlePersonalConfigModalOpen(
         page: "switch",
         dependencies,
         selectedCapability: route.capability,
-        providerStart: 0,
+        selectedModelProvider: range?.expandedProvider ?? undefined,
+        providerStart: range?.start ?? 0,
       });
       return "handled";
     }

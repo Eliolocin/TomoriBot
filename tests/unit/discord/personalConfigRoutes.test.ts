@@ -28,6 +28,7 @@ import {
   encodeSpotlightMask,
   decodeProviderParam,
   encodeProviderParam,
+  decodeProviderRangeValue,
   parsePersonalConfigPanelRoute,
   PERSONAL_CONFIG_ROUTE_CODECS,
   type PersonalConfigAction,
@@ -3199,19 +3200,19 @@ describe("Range pagination workflow", () => {
     );
     expect(providerSelect?.options?.map((option) => option.value)).toEqual([
       "__server_default__",
+      "custom~24",
       "custom~25",
       "custom~26",
       "custom~27",
       "custom~28",
       "custom~29",
       "custom~30",
+      "__provider_range__:0:",
     ]);
 
-    const prevBtn = page1Components.find((c) => c.customId?.includes(":model-provider-range-open:en-US:text:0"));
-    const pageInfoBtn = page1Components.find((c) => c.label === "Page 2 of 2" && c.disabled === true);
-    expect(prevBtn).toBeDefined();
-    expect(prevBtn?.disabled).toBe(false);
-    expect(pageInfoBtn).toBeDefined();
+    const moreOption = providerSelect?.options?.find((option) => option.value === "__provider_range__:0:");
+    expect(moreOption).toBeDefined();
+    expect(moreOption?.label).toBe("More Text providers (page 1 of 2)");
 
     const json = JSON.stringify(page1Payload);
     expect(json).toContain("Personal Model Routing");
@@ -3303,16 +3304,19 @@ describe("Range pagination workflow", () => {
     const providerSelect = components.find((c) => c.customId?.endsWith(":model-provider-select:en-US:text"));
     expect(providerSelect?.options?.map((o) => o.value)).toEqual([
       "__server_default__",
+      "custom~24",
       "custom~25",
       "custom~26",
       "custom~27",
       "custom~28",
       "custom~29",
       "custom~30",
+      "__provider_range__:0:",
     ]);
 
-    const pageInfoBtn = components.find((c) => c.label === "Page 2 of 2" && c.disabled === true);
-    expect(pageInfoBtn).toBeDefined();
+    const moreOption = providerSelect?.options?.find((o) => o.value === "__provider_range__:0:");
+    expect(moreOption).toBeDefined();
+    expect(moreOption?.label).toBe("More Text providers (page 1 of 2)");
 
     expect(JSON.stringify(repaintedPayload)).not.toContain("Personal configuration is currently unavailable.");
     expect(calls).toEqual([]);
@@ -3395,6 +3399,74 @@ describe("Range pagination workflow", () => {
     const rendered = JSON.stringify(repaintedPayload);
     expect(rendered).toContain("Choose a Model Page");
     expect(rendered).toContain("OpenRouter has 30 models for Text");
+  });
+
+  it("carries the expanded provider in the navigation option when the entry list overflows", async () => {
+    const twentyFourProviders = Array.from({ length: 24 }, (_, i) => `provider_${i + 1}`);
+    const thirtyModels = Array.from({ length: 30 }, (_, i) => ({
+      id: 200 + i,
+      name: `Model ${i + 1}`,
+    }));
+
+    const { dependencies } = makeDependencies([], {
+      loadPersonalModelDisplayInfo: async () => ({
+        routingRows: {
+          text: {
+            capability: "text",
+            activeModelName: "Model 1",
+            storedProvider: "provider_1",
+            activeProvider: "provider_1",
+            parameterConfigured: false,
+          },
+        },
+        availableCapabilities: ["text"],
+        eligibleProvidersForCapability: {
+          text: twentyFourProviders,
+        },
+        parametersProviders: ["provider_1"],
+        selectedParametersConfig: null,
+      }),
+      loadAvailableModelsForCapability: async () => thirtyModels,
+    });
+
+    const route = createPersonalConfigInteractionRoute(dependencies);
+    const customId = buildPersonalConfigRouteId({
+      action: "model-provider-select",
+      locale: "en-US",
+      capability: "text",
+    });
+
+    let repaintedPayload: unknown = null;
+    const interaction = {
+      isButton: () => false,
+      isStringSelectMenu: () => true,
+      isModalSubmit: () => false,
+      customId,
+      values: ["provider_1"],
+      user: { id: "user-123", username: "tester", displayName: "Tester" },
+      guildId: "guild-123",
+      deferred: false,
+      replied: false,
+      deferUpdate: async () => {},
+      editReply: async (payload: unknown) => {
+        repaintedPayload = payload;
+      },
+    } as unknown as StringSelectMenuInteraction;
+
+    await route.execute({} as Client, interaction, requireRoute(customId));
+
+    const components = collectComponents(repaintedPayload);
+    const textSelect = components.find((c) => c.customId?.includes(":model-provider-select:en-US:text"));
+    expect(textSelect).toBeDefined();
+
+    const moreOption = textSelect?.options?.find((o) => decodeProviderRangeValue(o.value) !== null);
+    expect(moreOption).toBeDefined();
+    if (!moreOption) throw new Error("Expected moreOption to be defined");
+    const decoded = decodeProviderRangeValue(moreOption.value);
+    expect(decoded).toEqual({
+      start: 23,
+      expandedProvider: "provider_1",
+    });
   });
 
   it("opens the modal on the chosen slice when model-provider-select carries a page value", async () => {

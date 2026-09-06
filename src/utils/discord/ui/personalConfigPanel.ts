@@ -31,6 +31,7 @@ import {
   SPOTLIGHT_REMOVE_PAGE_SIZE,
   encodeProviderPageValue,
   encodeProviderParam,
+  encodeProviderRangeValue,
   type PersonalConfigCategory,
   type PersonalConfigManagedCapability,
   type PersonalConfigPage,
@@ -1186,15 +1187,26 @@ ${localizer(locale, "commands.personal.config.models_description")}`,
         // Defaulting to the expansion's own offset keeps a freshly expanded provider on screen; a
         // caller-supplied start means the reader paged deliberately and outranks it.
         const providerStart = isSelectedCapability ? (input.providerStart ?? expandedStartIndex) : 0;
-        const rangeCount = Math.ceil(entries.length / PERSONAL_PROVIDER_DIRECT_LIMIT);
-        const rangeIndex = Math.min(
-          Math.max(0, Math.floor(providerStart / PERSONAL_PROVIDER_DIRECT_LIMIT)),
-          Math.max(0, rangeCount - 1),
-        );
-        const slicedEntries = entries.slice(
-          rangeIndex * PERSONAL_PROVIDER_DIRECT_LIMIT,
-          rangeIndex * PERSONAL_PROVIDER_DIRECT_LIMIT + PERSONAL_PROVIDER_DIRECT_LIMIT,
-        );
+        const overflows = entries.length > PERSONAL_PROVIDER_DIRECT_LIMIT;
+        const windowSize = overflows ? PERSONAL_PROVIDER_DIRECT_LIMIT - 1 : PERSONAL_PROVIDER_DIRECT_LIMIT;
+        const rangeCount = Math.max(1, Math.ceil(entries.length / windowSize));
+        const rangeIndex = Math.min(Math.max(0, Math.floor(providerStart / windowSize)), rangeCount - 1);
+        const slicedEntries = entries.slice(rangeIndex * windowSize, rangeIndex * windowSize + windowSize);
+
+        const providerEntries = [...slicedEntries];
+        if (rangeCount > 1) {
+          // Wrapping past the last window is what keeps every entry reachable from any window without a
+          // second control: advancing repeatedly always returns to the first.
+          const nextRangeIndex = (rangeIndex + 1) % rangeCount;
+          providerEntries.push({
+            value: encodeProviderRangeValue(nextRangeIndex * windowSize, expandedProvider),
+            label: localizer(locale, "commands.config.panel.model_provider_more_option", {
+              capability: localizer(locale, ROUTING_CAPABILITY_LOCALE_KEYS[capability]),
+              page: nextRangeIndex + 1,
+              total: rangeCount,
+            }),
+          });
+        }
 
         components.push(
           buildModelRoutingControl({
@@ -1210,7 +1222,7 @@ ${localizer(locale, "commands.personal.config.models_description")}`,
                     provider: getProviderDisplayName(expandedProvider),
                   })
                 : undefined,
-            providerEntries: slicedEntries,
+            providerEntries,
             customId: buildPersonalConfigRouteId({
               action: "model-provider-select",
               locale,
@@ -1222,36 +1234,6 @@ ${localizer(locale, "commands.personal.config.models_description")}`,
             disabled: writesDisabled,
           }),
         );
-
-        const providerPaginationRow = buildPaginationRow({
-          locale,
-          rangeIndex,
-          rangeCount,
-          namespace: PERSONAL_CONFIG_ROUTE_NAMESPACE,
-          version: PERSONAL_CONFIG_ROUTE_VERSION,
-          buildSegments: {
-            // Paging past an expansion has to carry it, or the next page rebuilds a shorter entry
-            // list and the offset it was given now points outside it.
-            page: (targetRangeIndex) =>
-              expandedProvider
-                ? buildPersonalConfigRouteSegments({
-                    action: "model-provider-page",
-                    locale,
-                    capability,
-                    provider: expandedProvider,
-                    start: targetRangeIndex * PERSONAL_PROVIDER_DIRECT_LIMIT,
-                  })
-                : buildPersonalConfigRouteSegments({
-                    action: "model-provider-range-open",
-                    locale,
-                    capability,
-                    start: targetRangeIndex * PERSONAL_PROVIDER_DIRECT_LIMIT,
-                  }),
-          },
-        });
-        if (providerPaginationRow) {
-          components.push(providerPaginationRow);
-        }
       }
 
       components.push(

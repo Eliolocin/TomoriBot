@@ -74,6 +74,37 @@ export const PERSONAL_MODEL_PAGE_SIZE = 25;
 export const PERSONAL_PROVIDER_PAGE_SIZE = 25;
 export const PERSONAL_PROVIDER_DIRECT_LIMIT = 24;
 export const PERSONAL_PROVIDER_RANGE_VALUE = "__provider_range__";
+
+const PROVIDER_RANGE_VALUE_PREFIX = `${PERSONAL_PROVIDER_RANGE_VALUE}:`;
+
+export function encodeProviderRangeValue(start: number, expandedProvider: string | null = null): string {
+  const encodedProvider = expandedProvider ? encodeProviderParam(expandedProvider) : "";
+  return `${PROVIDER_RANGE_VALUE_PREFIX}${start}:${encodedProvider}`;
+}
+
+/**
+ * Returns null for any value that is not a range sentinel so callers can branch on shape rather
+ * than on a separate flag.
+ */
+export function decodeProviderRangeValue(value: string): { start: number; expandedProvider: string | null } | null {
+  if (value === PERSONAL_PROVIDER_RANGE_VALUE) {
+    return { start: 0, expandedProvider: null };
+  }
+  if (!value.startsWith(PROVIDER_RANGE_VALUE_PREFIX)) return null;
+  const rest = value.slice(PROVIDER_RANGE_VALUE_PREFIX.length);
+  const separator = rest.indexOf(":");
+  if (separator < 0) {
+    const rawStart = Number(rest);
+    if (!Number.isSafeInteger(rawStart) || rawStart < 0) return null;
+    return { start: rawStart, expandedProvider: null };
+  }
+  const rawStart = Number(rest.slice(0, separator));
+  if (!Number.isSafeInteger(rawStart) || rawStart < 0) return null;
+  const providerPart = rest.slice(separator + 1);
+  const expandedProvider = providerPart ? decodeProviderParam(providerPart) : null;
+  return { start: rawStart, expandedProvider };
+}
+
 export const PERSONAL_FALLBACK_PAGE_SIZE = 24;
 export const SPOTLIGHT_AUTO_TRIGGER_PAGE_SIZE = 24;
 

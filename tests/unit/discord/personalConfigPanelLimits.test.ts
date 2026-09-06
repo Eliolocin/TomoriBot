@@ -7,6 +7,8 @@ import { PrivacyLevel } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import {
   SPOTLIGHT_REMOVE_PAGE_SIZE,
+  decodeProviderRangeValue,
+  encodeProviderParam,
   type PersonalConfigCategory,
   type PersonalConfigManagedCapability,
   type PersonalConfigPage,
@@ -70,7 +72,7 @@ function makePersona(id: number, lineageId: number, name: string): TomoriState {
   } as unknown as TomoriState;
 }
 
-function makeModelDisplayInfo(fallbackCount = 2): PersonalConfigModelDisplayInfo {
+function makeModelDisplayInfo(fallbackCount = 2, providerCount = 1): PersonalConfigModelDisplayInfo {
   const routingRow: PersonalConfigRoutingRow = {
     capability: "text",
     activeModelName: "Claude 3.5 Sonnet",
@@ -91,16 +93,19 @@ function makeModelDisplayInfo(fallbackCount = 2): PersonalConfigModelDisplayInfo
     modelName: `Fallback Model ${i + 1}`,
   }));
 
+  const makeProviders = (prefix: string): string[] =>
+    Array.from({ length: providerCount }, (_, i) => `${prefix}_${i + 1}`);
+
   return {
     routingRows,
     availableCapabilities: ["text", "vision", "embedding", "image", "image_nai", "video"],
     eligibleProvidersForCapability: {
-      text: ["openrouter"],
-      vision: ["openrouter"],
-      embedding: ["openrouter"],
-      image: ["openrouter"],
-      image_nai: ["novelai"],
-      video: ["openrouter"],
+      text: makeProviders("provider_text"),
+      vision: makeProviders("provider_vision"),
+      embedding: makeProviders("provider_embedding"),
+      image: makeProviders("provider_image"),
+      image_nai: makeProviders("provider_nai"),
+      video: makeProviders("provider_video"),
     },
     parametersProviders: ["openrouter"],
     selectedParametersConfig: {
@@ -137,6 +142,20 @@ function makeSpotlightDisplayInfo(activeCount = 2, personaCount = 5): PersonalCo
     expiresAt: new Date(Date.now() + 3600 * 1000 * (i + 1)),
   }));
   return { activeSpotlights, personas };
+}
+
+function collectSelects(value: unknown): StringSelectMenuComponentData[] {
+  if (Array.isArray(value)) return value.flatMap(collectSelects);
+  if (typeof value !== "object" || value === null) return [];
+  const record = value as Record<string, unknown>;
+  const list: StringSelectMenuComponentData[] = [];
+  if (record.type === ComponentType.StringSelect) {
+    list.push(record as unknown as StringSelectMenuComponentData);
+  }
+  if (Array.isArray(record.components)) {
+    list.push(...collectSelects(record.components));
+  }
+  return list;
 }
 
 describe("PersonalConfigPanel Limits & Boundary Sweeps", () => {
@@ -301,20 +320,6 @@ describe("PersonalConfigPanel Limits & Boundary Sweeps", () => {
     };
     const page0Payload = buildPersonalConfigPanelPayload(page0Input);
 
-    function collectSelects(value: unknown): StringSelectMenuComponentData[] {
-      if (Array.isArray(value)) return value.flatMap(collectSelects);
-      if (typeof value !== "object" || value === null) return [];
-      const record = value as Record<string, unknown>;
-      const list: StringSelectMenuComponentData[] = [];
-      if (record.type === ComponentType.StringSelect) {
-        list.push(record as unknown as StringSelectMenuComponentData);
-      }
-      if (Array.isArray(record.components)) {
-        list.push(...collectSelects(record.components));
-      }
-      return list;
-    }
-
     function collectTextContents(value: unknown): string[] {
       if (Array.isArray(value)) return value.flatMap(collectTextContents);
       if (typeof value !== "object" || value === null) return [];
@@ -365,5 +370,108 @@ describe("PersonalConfigPanel Limits & Boundary Sweeps", () => {
     const texts = collectTextContents(personaPayload.components);
     const hasHiddenNotice = texts.some((content) => content.includes("1"));
     expect(hasHiddenNotice).toBe(true);
+  });
+
+  it("conforms to Discord Components V2 protocol limits across provider count sweeps on Switch Models", () => {
+    const providerCounts = [1, 24, 25, 26, 60];
+    const receipts: (PanelReceipt | undefined)[] = [undefined, REALISTIC_RECEIPT];
+    const readStatuses: PanelReadStatus[] = ["fresh", "stale", "unavailable"];
+
+    for (const providerCount of providerCounts) {
+      for (const receipt of receipts) {
+        for (const readStatus of readStatuses) {
+          const input: PersonalConfigPanelRenderInput = {
+            locale: "en-US",
+            category: "models",
+            page: "switch",
+            user: makeUser(),
+            resolvedNickname: "Tester",
+            personas: [makePersona(1, 10, "Tomori")],
+            guildId: "guild-123",
+            memoryCount: 5,
+            stmCount: 2,
+            readStatus,
+            receipt,
+            modelDisplayInfo: makeModelDisplayInfo(2, providerCount),
+          };
+          const payload = buildPersonalConfigPanelPayload(input);
+          const result = validateComponentsV2MessageLimits(payload);
+          if (!result.valid) {
+            throw new Error(
+              `PersonalConfig models/switch (providerCount: ${providerCount}, status: ${readStatus}, receipt: ${Boolean(receipt)}) violations: ${JSON.stringify(result.violations)}`,
+            );
+          }
+          expect(result.valid).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("walks provider navigation options across windows reaching all 60 providers without looping infinitely", () => {
+    const totalProviders = 60;
+    const modelDisplayInfo = makeModelDisplayInfo(2, totalProviders);
+    const expectedProviders = new Set(
+      modelDisplayInfo.eligibleProvidersForCapability.text.map((p) => encodeProviderParam(p)),
+    );
+
+    const visitedStarts = new Set<number>();
+    const seenProviderValues = new Set<string>();
+    let providerStart = 0;
+    const maxHops = 20;
+    let hops = 0;
+
+    while (hops < maxHops) {
+      hops += 1;
+      if (visitedStarts.has(providerStart)) {
+        break;
+      }
+      visitedStarts.add(providerStart);
+
+      const input: PersonalConfigPanelRenderInput = {
+        locale: "en-US",
+        category: "models",
+        page: "switch",
+        user: makeUser(),
+        resolvedNickname: "Tester",
+        personas: [makePersona(1, 10, "Tomori")],
+        guildId: "guild-123",
+        memoryCount: 0,
+        stmCount: 0,
+        readStatus: "fresh",
+        selectedCapability: "text",
+        providerStart,
+        modelDisplayInfo,
+      };
+
+      const payload = buildPersonalConfigPanelPayload(input);
+      const validation = validateComponentsV2MessageLimits(payload);
+      expect(validation.valid).toBe(true);
+
+      const selects = collectSelects(payload.components);
+      const textSelect = selects.find((s) => s.customId?.endsWith(":model-provider-select:en-US:text"));
+      expect(textSelect).toBeDefined();
+      if (!textSelect) throw new Error("Expected textSelect to be defined");
+
+      for (const option of textSelect.options) {
+        if (option.value === "__server_default__") continue;
+        const range = decodeProviderRangeValue(option.value);
+        if (range === null) {
+          seenProviderValues.add(option.value);
+        }
+      }
+
+      const moreOption = textSelect.options.find((o) => decodeProviderRangeValue(o.value) !== null);
+      expect(moreOption).toBeDefined();
+      if (!moreOption) throw new Error("Expected moreOption to be defined");
+      const decoded = decodeProviderRangeValue(moreOption.value);
+      expect(decoded).not.toBeNull();
+      if (!decoded) throw new Error("Expected decoded to not be null");
+      providerStart = decoded.start;
+    }
+
+    expect(hops).toBeLessThan(maxHops);
+    expect(visitedStarts.size).toBe(3);
+    expect(providerStart).toBe(0);
+    expect(seenProviderValues).toEqual(expectedProviders);
   });
 });
