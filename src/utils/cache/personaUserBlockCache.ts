@@ -81,3 +81,15 @@ export function invalidatePersonaUserBlockCache(serverId: number, personaId: num
     }
   }
 }
+
+/** Removes all persona and user block-cache entries for one server. */
+export function invalidateAllPersonaUserBlockCacheForServer(serverId: number): void {
+  const prefix = `${serverId}:`;
+  for (const cache of [personaCache, userCache]) {
+    for (const key of cache.keys()) {
+      if (key.startsWith(prefix)) {
+        cache.delete(key);
+      }
+    }
+  }
+}

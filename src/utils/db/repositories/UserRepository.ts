@@ -551,44 +551,6 @@ class UserRepository implements IRepository<UserExportShape> {
     return updated !== null;
   }
 
-  async clearPortablePersonalSettings(userId: number): Promise<boolean> {
-    try {
-      const [user] = await sql.begin(async (tx) => {
-        const rows = await tx<Array<{ user_disc_id: string }>>`
-          UPDATE users
-          SET language_pref = 'en-US', updated_at = NOW()
-          WHERE user_id = ${userId}
-          RETURNING user_disc_id
-        `;
-        if (rows.length === 0) return rows;
-        await tx`
-          UPDATE user_personalization_configs
-          SET
-            user_nickname = NULL,
-            impersonation_prompt = NULL,
-            personal_dtm = 'follow',
-            personal_deliberate_tool_mode = 'follow',
-            timezone_offset = NULL,
-            prefix_override = NULL,
-            suffix_override = NULL,
-            gender_identity = NULL,
-            pronouns = NULL,
-            addressing_style = NULL,
-            updated_at = NOW()
-          WHERE user_id = ${userId}
-        `;
-        await tx`DELETE FROM user_persona_naming_preferences WHERE user_id = ${userId}`;
-        return rows;
-      });
-      if (!user) return false;
-      invalidateUserCache(user.user_disc_id);
-      return true;
-    } catch (error) {
-      log.error(`Failed to clear portable personal settings for user ${userId}`, error);
-      return false;
-    }
-  }
-
   /**
    * Upserts a personal spotlight for a user in a channel, replacing all persona
    * associations atomically.

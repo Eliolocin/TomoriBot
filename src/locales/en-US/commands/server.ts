@@ -33,12 +33,6 @@ export default {
         confirmation_choice_yes: `Yes, import it`,
         confirmation_choice_no: `No, cancel`,
       },
-      remove: {
-        description: `Reset this server's configuration.`,
-        confirmation_description: `Confirm that you want to reset this server's configuration.`,
-        confirmation_choice_yes: `Yes, reset it`,
-        confirmation_choice_no: `No, cancel`,
-      },
     },
     stm: {
       description: `Manage server-shared STM entries for all personas`,

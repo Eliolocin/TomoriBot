@@ -83,6 +83,7 @@ const ABSORBED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
     "stm.privacy-bypass",
     "welcome-channel.set",
     "welcome-channel.remove",
+    "config.remove",
   ],
   memory: ["tagging.set"],
   speech: ["transcripts"],
@@ -97,7 +98,7 @@ const DISSOLVED_ROOTS = ["capabilities"];
 const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   persona: ["create", "default", "export", "generate", "import", "remove"],
   model: ["override.remove"],
-  server: ["config.export", "config.import", "config.remove"],
+  server: ["config.export", "config.import"],
   conditioning: ["manage", "remove"],
   tool: ["delete.turn", "estimate.cost", "prompt.snapshot", "visualize"],
   memory: ["personal.export", "personal.import", "server.export", "server.import"],

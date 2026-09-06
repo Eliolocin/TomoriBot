@@ -52,9 +52,11 @@ import moderation from "./commands/moderation";
 import quota from "./commands/quota";
 import providers from "./commands/providers";
 import memories from "./commands/memories";
+import reset from "./commands/reset";
 
 export default {
   commands: {
+    ...reset,
     ...memories,
     ...providers,
     ...quota,

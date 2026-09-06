@@ -185,6 +185,13 @@ export function invalidateUserBlacklistCache(serverDiscId: string, userDiscId: s
   }
 }
 
+/** Removes cached blacklist answers for a workspace while retaining unrelated user settings. */
+export function invalidateAllUserBlacklistCacheForServer(serverDiscId: string): void {
+  for (const entry of cache.values()) {
+    entry.blacklistStatus.delete(serverDiscId);
+  }
+}
+
 /**
  * Useful for testing or manual refresh operations.
  */

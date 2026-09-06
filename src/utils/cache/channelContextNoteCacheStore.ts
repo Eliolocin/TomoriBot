@@ -50,3 +50,13 @@ export function setChannelContextNoteCache(
 export function invalidateChannelContextNoteCache(serverId: number, channelDiscId: string): void {
   channelContextNoteCache.delete(getCacheKey(serverId, channelDiscId));
 }
+
+/** Removes every cached context-note result for one server without flushing other servers. */
+export function invalidateAllChannelContextNoteCacheForServer(serverId: number): void {
+  const prefix = `${serverId}:`;
+  for (const key of channelContextNoteCache.keys()) {
+    if (key.startsWith(prefix)) {
+      channelContextNoteCache.delete(key);
+    }
+  }
+}
