@@ -374,16 +374,11 @@ function buildParametersBody(input: ConfigModelsPageInput): ComponentInContainer
         : formatStoredParameterValue(value);
     components.push(
       ...buildProviderParameterBlock({
-        // With exactly one saved provider the block renders a static line instead of an inert
-        // one-option select, which is what an empty option list asks it for.
-        providerOptions:
-          view.textProviders.length > 1
-            ? view.textProviders.map((provider) => ({
-                value: provider,
-                label: getProviderDisplayName(provider),
-                default: provider === view.selectedProvider,
-              }))
-            : [],
+        providerOptions: view.textProviders.map((provider) => ({
+          value: provider,
+          label: getProviderDisplayName(provider),
+          default: provider === view.selectedProvider,
+        })),
         copy: {
           providerLabel: localizer(locale, "commands.config.panel.provider_label"),
           providerSelectPlaceholder: localizer(locale, "commands.config.panel.parameters_provider_placeholder"),
