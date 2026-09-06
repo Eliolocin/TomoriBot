@@ -118,7 +118,7 @@ function prepareVoiceDesignText(
  * This is intentionally separate from `ttsCloningAdapter.ts`. Clone models
  * synthesize from a stored speaker sample; voice-design models synthesize from
  * a persona-level natural-language prompt. Sending the prompt as `instruct`
- * makes the JSON body honest and keeps `/speech voice-add` focused on actual
+ * makes the JSON body honest and keeps `/config` focused on actual
  * reference samples.
  */
 export async function synthesizeSpeechViaTtsVoiceDesign(request: TtsVoiceDesignRequest): Promise<TtsCloneResult> {

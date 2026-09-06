@@ -6,6 +6,7 @@ import {
   type ButtonComponentData,
   type ComponentInContainerData,
   type StringSelectMenuComponentData,
+  type TextDisplayComponentData,
 } from "discord.js";
 import type { PanelReadStatus } from "@/types/discord/panel";
 import type { VoiceSampleRow } from "@/types/db/schema";
@@ -15,7 +16,7 @@ import {
   buildConfigRouteId,
   buildConfigRouteSegments,
 } from "@/utils/discord/configPanelCatalog";
-import { buildPaginationRow, buildStateControlRow } from "@/utils/discord/ui/panel";
+import { buildPaginationRow } from "@/utils/discord/ui/panel";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
 import { localizer } from "@/utils/text/localizer";
 import {
@@ -27,15 +28,28 @@ import {
 
 export const CONFIG_VOICE_SAMPLE_PAGE_SIZE = 25;
 
+export interface ConfigVoiceSamplePreview {
+  sampleId: number;
+  fingerprint: string;
+  attachmentName: string;
+  buffer?: Buffer;
+  unavailable: boolean;
+}
+
 export interface ConfigVoicesView {
   turboEnabled: boolean;
   cfgWeight: number;
   exaggeration: number;
   samples: readonly VoiceSampleRow[]; // the page slice, already sliced by the caller
-  totalSampleCount: number; // full library size, for the hidden-count line
+  totalSampleCount: number; // full library size, for pagination
   start: number; // pagination offset of this slice
   selectedIndex: number | null;
+  preview?: ConfigVoiceSamplePreview;
   removeConfirm?: { index: number; fp: string; refCount: number; nonce?: string };
+}
+
+export function voiceSampleAttachmentName(sampleId: number): string {
+  return `voice_sample_${sampleId}.wav`;
 }
 
 export function computeVoiceSampleFingerprint(sample: VoiceSampleRow): string {
@@ -62,6 +76,29 @@ export function decodeVoiceSampleOptionValue(value: string): { index: number; fp
 }
 
 export const decodeVoiceSampleSelectValue = decodeVoiceSampleOptionValue;
+
+export function resolveSelectedVoiceSample(
+  view: ConfigVoicesView,
+): { sample: VoiceSampleRow; preview?: ConfigVoiceSamplePreview } | null {
+  if (view.selectedIndex === null || !Number.isSafeInteger(view.selectedIndex)) return null;
+  const offset = view.selectedIndex - view.start;
+  if (offset < 0 || offset >= view.samples.length) return null;
+
+  const sample = view.samples[offset];
+  if (!sample || typeof sample.sample_id !== "number") return null;
+
+  const preview = view.preview;
+  if (
+    !preview ||
+    preview.sampleId !== sample.sample_id ||
+    preview.fingerprint !== computeVoiceSampleFingerprint(sample) ||
+    preview.attachmentName !== voiceSampleAttachmentName(sample.sample_id)
+  ) {
+    return { sample };
+  }
+
+  return { sample, preview };
+}
 
 function heading(locale: string, titleKey: string, descriptionKey: string): ComponentInContainerData {
   return {
@@ -111,25 +148,6 @@ ${
 }`,
   });
 
-  components.push(
-    buildStateControlRow(
-      [
-        {
-          value: false,
-          label: localizer(locale, "commands.config.panel.off_button"),
-          customId: buildConfigRouteId({ action: "tts-turbo-set", locale, enabled: false }),
-        },
-        {
-          value: true,
-          label: localizer(locale, "commands.config.panel.on_button"),
-          customId: buildConfigRouteId({ action: "tts-turbo-set", locale, enabled: true }),
-        },
-      ],
-      view.turboEnabled,
-      writesDisabled,
-    ),
-  );
-
   components.push({
     type: ComponentType.ActionRow,
     components: [
@@ -143,8 +161,7 @@ ${
     ],
   } satisfies ActionRowData<ButtonComponentData>);
 
-  // When view.removeConfirm is set, replace items 5 through 8 with a confirm view showing the reference count and
-  // a confirm/cancel pair (vsample-rem-conf, vsample-rem-cancel).
+  // Confirmation stays attachment-free so a removal action cannot retain an earlier preview.
   if (view.removeConfirm) {
     const confirm = view.removeConfirm;
     const targetSample = view.samples.find((_, i) => view.start + i === confirm.index);
@@ -184,31 +201,21 @@ ${
     return components;
   }
 
-  const hiddenCount = Math.max(0, view.totalSampleCount - view.samples.length);
-
+  const selected = resolveSelectedVoiceSample(view);
   let libraryBody: string;
   if (view.samples.length === 0) {
     libraryBody = localizer(locale, "commands.config.panel.voices.page.empty_library");
+  } else if (!selected) {
+    libraryBody = localizer(locale, "commands.config.panel.voices.page.select_sample_prompt");
   } else {
-    const sampleLines: string[] = [];
-    for (const sample of view.samples) {
-      const namePreview = buildTextPreview(sample.name, 60);
-      let line = `• **${namePreview.text}**`;
-      if (sample.duration_ms > 0) {
-        line += ` (${(sample.duration_ms / 1000).toFixed(1)}s)`;
-      }
-      if (sample.ref_text) {
-        const refPreview = buildTextPreview(sample.ref_text, 100);
-        line += `\n> ${refPreview.text}`;
-      }
-      sampleLines.push(line);
+    const lines = [`> ${(selected.sample.duration_ms / 1000).toFixed(1)}s duration`];
+    if (selected.sample.ref_text?.trim()) {
+      lines.push(`> *${buildTextPreview(selected.sample.ref_text, 100).text}*`);
     }
-    libraryBody = sampleLines.join("\n");
-    if (hiddenCount > 0) {
-      libraryBody += `\n${localizer(locale, "commands.config.panel.voices.page.hidden_count", {
-        count: hiddenCount,
-      })}`;
+    if (selected.preview?.unavailable) {
+      lines.push(`-# ${localizer(locale, "commands.config.panel.voices.page.audio_preview_unavailable")}`);
     }
+    libraryBody = lines.join("\n");
   }
 
   const libraryPreview = buildTextPreview(libraryBody, CV2_TEXT_PREVIEW_BUDGET);
@@ -217,10 +224,10 @@ ${
     ? `${libraryPreview.text}\n-# ${localizer(locale, libraryFooterKey, textPreviewFooterVars(libraryPreview))}`
     : libraryPreview.text;
 
-  components.push({
+  const libraryText: TextDisplayComponentData = {
     type: ComponentType.TextDisplay,
     content: `**${localizer(locale, "commands.config.panel.voices.page.library_header")}**\n${finalLibraryText}`,
-  });
+  };
 
   const selectOptions =
     view.samples.length > 0
@@ -267,6 +274,15 @@ ${
       },
     ],
   } satisfies ActionRowData<StringSelectMenuComponentData>);
+
+  components.push(libraryText);
+
+  if (selected?.preview?.buffer && !selected.preview.unavailable) {
+    components.push({
+      type: ComponentType.File,
+      file: { url: `attachment://${selected.preview.attachmentName}` },
+    });
+  }
 
   const rangeCount = Math.max(1, Math.ceil(view.totalSampleCount / CONFIG_VOICE_SAMPLE_PAGE_SIZE));
   const rangeIndex = Math.min(Math.max(0, Math.floor(view.start / CONFIG_VOICE_SAMPLE_PAGE_SIZE)), rangeCount - 1);

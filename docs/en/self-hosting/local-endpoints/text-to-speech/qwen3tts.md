@@ -58,7 +58,7 @@ Adding the model makes the endpoint active immediately. Use `/providers` later o
 Use this for personas that should imitate a reference clip:
 
 1. Prepare a clean 10-20 second voice clip with one speaker and no background music.
-2. Run `/speech voice-add` and upload the clip.
+2. Open `/config` under Models > TTS Parameters & Voices and upload the clip.
 3. Run `/speech voice-assign`, then choose the persona and the voice sample.
 
 ### VoiceDesign

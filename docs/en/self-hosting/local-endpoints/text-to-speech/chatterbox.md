@@ -48,14 +48,14 @@ Adding the model makes the endpoint active immediately. Use `/providers` later o
 ## Set Up a Persona Voice
 
 1. Prepare a clean 10-20 second voice clip with one speaker and no background music.
-2. Run `/speech voice-add` and upload the clip.
+2. Open `/config` under Models > TTS Parameters & Voices and upload the clip.
 3. Run `/speech voice-assign`, then choose the persona and the voice sample.
 
 Chatterbox can use bracket delivery tags such as `[laugh]` and `[sigh]` when Turbo mode is enabled.
 
 ## Optional Tuning
 
-Use `/speech chatterbox parameters` to tune the Chatterbox request payload:
+Use `/config` under Models > TTS Parameters & Voices to tune the Chatterbox request payload:
 
 - `turbo` defaults to `true`. When enabled, TomoriBot keeps supported Chatterbox-Turbo event tags and strips unsupported bracket descriptors before the wrapper uses `ChatterboxTurboTTS.model.generate(...)`.
 - `cfg_weight` defaults to `0.5`. Minimum is `0`; TomoriBot does not set a hard maximum. It only applies when `turbo` is `false`; lower values can help slow fast reference voices, while higher values follow the reference more strongly.

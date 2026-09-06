@@ -8,9 +8,6 @@ import { initializeLocalizer } from "@/utils/text/localizer";
 import { execute as executeVoiceAssign } from "@/commands/speech/voice-assign";
 import { execute as executeVoiceDesignSet } from "@/commands/speech/voice-design/set";
 import { execute as executeVoiceDesignRemove } from "@/commands/speech/voice-design/remove";
-import { execute as executeVoiceAdd } from "@/commands/speech/voice-add";
-import { execute as executeVoiceRemove } from "@/commands/speech/voice-remove";
-import { execute as executeChatterboxParameters } from "@/commands/speech/chatterbox/parameters";
 
 beforeAll(async () => {
   await initializeLocalizer();
@@ -69,9 +66,6 @@ describe("/speech permission hardening", () => {
     { name: "/speech voice-assign", execute: executeVoiceAssign },
     { name: "/speech voice-design set", execute: executeVoiceDesignSet },
     { name: "/speech voice-design remove", execute: executeVoiceDesignRemove },
-    { name: "/speech voice-add", execute: executeVoiceAdd },
-    { name: "/speech voice-remove", execute: executeVoiceRemove },
-    { name: "/speech chatterbox parameters", execute: executeChatterboxParameters },
   ];
 
   for (const { name, execute } of HANDLERS) {

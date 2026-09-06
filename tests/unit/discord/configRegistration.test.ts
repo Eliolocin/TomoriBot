@@ -100,16 +100,11 @@ const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   conditioning: ["manage", "remove"],
   tool: ["status", "delete.turn", "estimate.cost", "prompt.snapshot", "visualize"],
   memory: ["personal.export", "personal.import", "server.export", "server.import"],
-  speech: [
-    "voice-add",
-    "voice-assign",
-    "voice-remove",
-    "voice-design.set",
-    "voice-design.remove",
-    "chatterbox.parameters",
-  ],
+  speech: ["voice-assign", "voice-design.set", "voice-design.remove"],
   novelai: ["attg", "image.generate", "preset.text"],
 };
+
+const DISSOLVED_SPEECH_KEYS = ["voice-add", "voice-remove", "chatterbox.parameters"];
 
 describe("Config command registration", () => {
   it("retains /model override remove with its manager permission", async () => {
@@ -140,6 +135,13 @@ describe("Config command registration", () => {
     expect([...(executionMap.get("speech") ?? new Map()).keys()]).toEqual(
       expect.arrayContaining([...RETAINED_KEYS_BY_ROOT.speech]),
     );
+  });
+
+  it("removes the U8 speech leaves from the real command graph", async () => {
+    const { executionMap } = await loadCommandData();
+    const present = [...(executionMap.get("speech") ?? new Map()).keys()];
+
+    expect(DISSOLVED_SPEECH_KEYS.filter((key) => present.includes(key))).toEqual([]);
   });
 
   it("registers /config as a bare root with no contexts and no default member permission", async () => {

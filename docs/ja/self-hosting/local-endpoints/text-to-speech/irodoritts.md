@@ -75,7 +75,7 @@ TomoriBotがIrodoriTTSを使用している間は、そのターミナルを開�
 ## ペルソナ音声のセットアップ
 
 1. 背景音楽のない、1人の話者による10〜20秒のクリアな日本語の音声クリップを準備します。
-2. `/speech voice-add`を実行してクリップをアップロードします。
+2. `/config`を実行してクリップをアップロードします。
 3. `/speech voice-assign`を実行し、ペルソナと音声サンプルを選択します。
 
 TomoriBotは、テキストをTTSに送信する前にDiscordのカスタム絵文字構文を削除します。`script_markup: emoji`を設定すると、IrodoriTTSの感情制御用にUnicode絵文字が保持されます。他のspeechモードではUnicode絵文字も削除されるため、文字通りに読まれることはありません。

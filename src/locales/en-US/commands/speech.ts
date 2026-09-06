@@ -1,12 +1,6 @@
 export default {
   speech: {
     description: `Manage speech voices and samples.`,
-    "voice-add": {
-      description: `Upload a local TTS reference voice sample.`,
-    },
-    "voice-remove": {
-      description: `Remove this server's local TTS voice sample.`,
-    },
     "voice-assign": {
       description: `Assign a speech voice to a persona.`,
     },
@@ -47,7 +41,7 @@ export default {
       no_speech_endpoint_title: `No Speech Endpoint`,
       no_speech_endpoint_description: `Register a speech endpoint first with \`/providers\`.`,
       no_sample_title: `No Voice Samples`,
-      no_sample_description: `Add a local voice sample first with \`/speech voice-add\`.`,
+      no_sample_description: `Add a local voice sample first in \`/config\` under Models > TTS Parameters & Voices.`,
       select_persona_title: `Select Persona Voice Target`,
       clear_choice_label: `Disable Voice`,
       clear_choice_description: `Remove the current speech voice from this persona.`,

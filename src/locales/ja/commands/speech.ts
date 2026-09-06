@@ -1,12 +1,6 @@
 export default {
   speech: {
     description: `音声出力の声とサンプルを管理します。`,
-    "voice-add": {
-      description: `ローカルTTS用の参照音声サンプルをアップロードします。`,
-    },
-    "voice-remove": {
-      description: `このサーバーのローカルTTS音声サンプルを削除します。`,
-    },
     "voice-assign": {
       description: `ペルソナに音声出力用の声を割り当てます。`,
     },
@@ -47,7 +41,7 @@ export default {
       no_speech_endpoint_title: `音声エンドポイントがありません`,
       no_speech_endpoint_description: `まず \`/providers\` で音声エンドポイントを登録してください。`,
       no_sample_title: `音声サンプルがありません`,
-      no_sample_description: `まず \`/speech voice-add\` でローカル音声サンプルを追加してください。`,
+      no_sample_description: `まず \`/config\` でローカル音声サンプルを追加してください。`,
       select_persona_title: `音声を設定するペルソナを選択`,
       clear_choice_label: `音声を無効化`,
       clear_choice_description: `このペルソナの現在の音声設定を削除します。`,

@@ -199,7 +199,7 @@ function speechVariables(locale: string): HelpVariables {
   return {
     custom_endpoint_add: mention("providers"),
     model_speech: mention("providers"),
-    voice_add: mention("speech", "voice-add"),
+    voice_add: mention("config"),
     voice_assign: mention("speech", "voice-assign"),
     voice_design_set: mention("speech", "voice-design", "set"),
     elevenlabs: mention("providers"),

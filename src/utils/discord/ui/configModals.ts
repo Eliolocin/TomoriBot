@@ -62,6 +62,12 @@ export const CONFIG_SPRITE_INSTRUCTIONS_FIELD = "sprite_instructions";
 export const CONFIG_SPRITE_IDENTITY_FIELD = "sprite_identity";
 export const CONFIG_SPRITE_ARCHIVE_FIELD = "sprite_archive";
 export const CONFIG_SPRITE_IDENTITY_OPTION_VALUE = "identity";
+export const CONFIG_VOICE_SAMPLE_FILE_FIELD = "voice_sample_file";
+export const CONFIG_VOICE_SAMPLE_NAME_FIELD = "voice_sample_name";
+export const CONFIG_VOICE_SAMPLE_REF_TEXT_FIELD = "voice_sample_ref_text";
+export const CONFIG_TTS_CFG_WEIGHT_FIELD = "tts_cfg_weight";
+export const CONFIG_TTS_EXAGGERATION_FIELD = "tts_exaggeration";
+export const CONFIG_TTS_TURBO_FIELD = "tts_turbo";
 
 const MODAL_TITLE_MAX_LENGTH = 45;
 const MODAL_DESCRIPTION_MAX_LENGTH = 100;
@@ -82,6 +88,114 @@ function modalLabel(locale: string, key: string): string {
 
 function modalDescription(locale: string, key: string): string {
   return safeSelectOptionText(localizer(locale, key), MODAL_DESCRIPTION_MAX_LENGTH);
+}
+
+export function buildConfigVoiceSampleAddModal(locale: string, nonce: string): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "voice-sample-add-submit", locale, nonce }),
+    title: modalTitle(locale, "commands.config.panel.voices.add.modal_title"),
+    components: [
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.config.panel.voices.add.file_label"),
+        description: modalDescription(locale, "commands.config.panel.voices.add.file_description"),
+        component: {
+          // FileUpload is represented by literal type 19 inside a Label on Discord's modal API.
+          type: 19,
+          custom_id: buildConfigModalFieldId(CONFIG_VOICE_SAMPLE_FILE_FIELD, nonce),
+          min_values: 1,
+          max_values: 1,
+          required: true,
+        },
+      },
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.config.panel.voices.add.name_label"),
+        description: modalDescription(locale, "commands.config.panel.voices.add.name_input_description"),
+        component: {
+          type: 4,
+          custom_id: buildConfigModalFieldId(CONFIG_VOICE_SAMPLE_NAME_FIELD, nonce),
+          style: TextInputStyle.Short,
+          max_length: 80,
+          required: true,
+        },
+      },
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.config.panel.voices.add.ref_text_label"),
+        description: modalDescription(locale, "commands.config.panel.voices.add.ref_text_input_description"),
+        component: {
+          type: 4,
+          custom_id: buildConfigModalFieldId(CONFIG_VOICE_SAMPLE_REF_TEXT_FIELD, nonce),
+          style: TextInputStyle.Paragraph,
+          max_length: 500,
+          required: false,
+        },
+      },
+    ],
+  };
+}
+
+export function buildConfigTtsParametersModal(
+  locale: string,
+  nonce: string,
+  cfgWeight: number,
+  exaggeration: number,
+  turboEnabled: boolean,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({ action: "tts-parameters-submit", locale, nonce }),
+    title: modalTitle(locale, "commands.config.panel.voices.parameters.modal_title"),
+    components: [
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.config.panel.voices.parameters.cfg_weight_label"),
+        description: modalDescription(locale, "commands.config.panel.voices.parameters.cfg_weight_input_description"),
+        component: {
+          type: 4,
+          custom_id: buildConfigModalFieldId(CONFIG_TTS_CFG_WEIGHT_FIELD, nonce),
+          style: TextInputStyle.Short,
+          value: String(cfgWeight),
+          required: true,
+        },
+      },
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.config.panel.voices.parameters.exaggeration_label"),
+        description: modalDescription(locale, "commands.config.panel.voices.parameters.exaggeration_input_description"),
+        component: {
+          type: 4,
+          custom_id: buildConfigModalFieldId(CONFIG_TTS_EXAGGERATION_FIELD, nonce),
+          style: TextInputStyle.Short,
+          value: String(exaggeration),
+          required: true,
+        },
+      },
+      {
+        type: 18,
+        label: modalLabel(locale, "commands.config.panel.voices.parameters.turbo_label"),
+        description: modalDescription(locale, "commands.config.panel.voices.parameters.turbo_input_description"),
+        component: {
+          // RadioGroup is represented by literal type 21 inside a Label on Discord's modal API.
+          type: 21,
+          custom_id: buildConfigModalFieldId(CONFIG_TTS_TURBO_FIELD, nonce),
+          required: true,
+          options: [
+            {
+              label: modalLabel(locale, "commands.config.panel.off_button"),
+              value: "off",
+              default: !turboEnabled,
+            },
+            {
+              label: modalLabel(locale, "commands.config.panel.on_button"),
+              value: "on",
+              default: turboEnabled,
+            },
+          ],
+        },
+      },
+    ],
+  };
 }
 
 export function buildPersonaAvatarModal(locale: string, personaId: number, nonce: string): RawModalPayload {

@@ -44,7 +44,7 @@ In `/help`, choose **Features**, then **Speech**, for the same walkthrough in Di
 
 On a self-hosted instance you can run a local voice-clone server instead. The general flow is:
 start the wrapper server, register its connection and model with `/providers`, select it with
-`/providers`, upload a sample with `/speech voice-add`, then assign it with
+`/providers`, upload a sample with `/config` under Models > TTS Parameters & Voices, then assign it with
 `/speech voice-assign`. Any audio format is accepted (auto-converted to mono WAV); 10–20
 second clips with no background music work best.
 

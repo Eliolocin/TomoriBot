@@ -7,13 +7,18 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "bun:test";
 import { ComponentType } from "discord.js";
-import type { TomoriState } from "@/types/db/schema";
+import type { TomoriState, VoiceSampleRow } from "@/types/db/schema";
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type {
   ConfigBehaviorView,
   ConfigChannelsView,
   ConfigPersonaMemoryView,
 } from "@/utils/discord/interactions/configRouteContext";
+import {
+  computeVoiceSampleFingerprint,
+  voiceSampleAttachmentName,
+  type ConfigVoicesView,
+} from "@/utils/discord/ui/configVoicesPanel";
 import {
   DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX,
   getDiscordTextLength,
@@ -72,6 +77,104 @@ function getTextDisplays(payload: unknown): string[] {
   };
   visit(payload);
   return contents;
+}
+
+function countRenderedComponents(payload: unknown): number {
+  if (Array.isArray(payload)) {
+    return payload.reduce((total, item) => total + countRenderedComponents(item), 0);
+  }
+  if (typeof payload !== "object" || payload === null) return 0;
+
+  const record = payload as Record<string, unknown>;
+  const ownCount = typeof record.type === "number" ? 1 : 0;
+  const childCount = Array.isArray(record.components) ? countRenderedComponents(record.components) : 0;
+  const accessoryCount = record.accessory ? countRenderedComponents(record.accessory) : 0;
+  return ownCount + childCount + accessoryCount;
+}
+
+function getStringSelectMenus(payload: unknown): Array<Record<string, unknown>> {
+  const menus: Array<Record<string, unknown>> = [];
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (typeof node !== "object" || node === null) return;
+    const record = node as Record<string, unknown>;
+    if (record.type === ComponentType.StringSelect) menus.push(record);
+    if (Array.isArray(record.components)) visit(record.components);
+    if (record.accessory) visit(record.accessory);
+  };
+  visit(payload);
+  return menus;
+}
+
+function getVoiceSelectMenu(payload: unknown): Record<string, unknown> {
+  const menu = getStringSelectMenus(payload).find((candidate) => {
+    if (!Array.isArray(candidate.options)) return false;
+    return candidate.options.some((option) => {
+      if (typeof option !== "object" || option === null) return false;
+      const value = (option as Record<string, unknown>).value;
+      return value === "none" || (typeof value === "string" && value.includes(":"));
+    });
+  });
+  expect(menu).toBeDefined();
+  return menu as Record<string, unknown>;
+}
+
+function getPayloadTextTotal(payload: unknown): number {
+  return getTextDisplays(payload).reduce((total, text) => total + getDiscordTextLength(text), 0);
+}
+
+function makeVoiceSample(index: number, name: string, refText: string): VoiceSampleRow {
+  return {
+    sample_id: index + 1,
+    server_id: 9,
+    name,
+    file_path: `data/voice-samples/sample-${index + 1}.wav`,
+    ref_text: refText,
+    duration_ms: 1250 + index * 25,
+  };
+}
+
+const VOICE_SAMPLE_RUNS = [3, 4, 5, 6, 8];
+const VOICE_SAMPLES: VoiceSampleRow[] = Array.from({ length: 53 }, (_, index) => {
+  const runLength = VOICE_SAMPLE_RUNS[index % VOICE_SAMPLE_RUNS.length];
+  const name =
+    index === 0
+      ? "A".repeat(80)
+      : index === 1
+        ? "B".repeat(81)
+        : `Voice sample ${index + 1} ${"`".repeat(runLength)} 🌸✨`;
+  const refText =
+    index === 0
+      ? "R".repeat(500)
+      : `Reference ${index + 1} ${"`".repeat(runLength)} 🌸✨ ${"reference text ".repeat(40)}`;
+  return makeVoiceSample(index, name, refText);
+});
+
+function makeVoicesView(samples: readonly VoiceSampleRow[], totalSampleCount: number, start: number): ConfigVoicesView {
+  const selectedSample = samples[0];
+  return {
+    turboEnabled: true,
+    cfgWeight: 0.75,
+    exaggeration: 0.4,
+    samples,
+    totalSampleCount,
+    start,
+    selectedIndex: start < totalSampleCount ? start : null,
+    ...(selectedSample?.sample_id !== undefined
+      ? {
+          preview: {
+            sampleId: selectedSample.sample_id,
+            fingerprint: computeVoiceSampleFingerprint(selectedSample),
+            attachmentName: voiceSampleAttachmentName(selectedSample.sample_id),
+            buffer: Buffer.from("RIFF-preview"),
+            unavailable: false,
+          },
+        }
+      : {}),
+  };
 }
 
 // Tightness tolerances at stored maxima:
@@ -429,6 +532,138 @@ describe("config page text budgeting at stored maxima", () => {
         expect(totalText).toBeLessThanOrEqual(DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX);
       });
     }
+  });
+});
+
+describe("voices page text and component budgeting", () => {
+  const buildVoicePayload = (
+    locale: string,
+    receipt: boolean,
+    samples: readonly VoiceSampleRow[],
+    totalSampleCount: number,
+    start: number,
+  ) =>
+    buildConfigPanelPayload({
+      locale,
+      actor: GUILD_MANAGER,
+      category: "models",
+      page: "voices",
+      personas: [makePersona({ persona_id: 55 })],
+      selectedPersonaId: 55,
+      readStatus: "fresh",
+      voicesView: makeVoicesView(samples, totalSampleCount, start),
+      receipt: receipt ? { tone: "success", heading: "Saved", detail: "Voice configuration was saved." } : undefined,
+    });
+
+  const expectValidVoicePayload = (payload: ReturnType<typeof buildVoicePayload>): void => {
+    const validation = validateComponentsV2MessageLimits(payload);
+    expect(validation.valid, `Violations: ${JSON.stringify(validation.violations)}`).toBe(true);
+    expect(getPayloadTextTotal(payload)).toBeLessThanOrEqual(DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX);
+    expect(countRenderedComponents(payload)).toBeLessThanOrEqual(29);
+  };
+
+  for (const locale of RUNTIME_LOCALES) {
+    describe(`locale ${locale}`, () => {
+      for (const receipt of [false, true]) {
+        it(`renders an empty library with one placeholder option (receipt=${receipt})`, () => {
+          const payload = buildVoicePayload(locale, receipt, [], 0, 0);
+          expectValidVoicePayload(payload);
+
+          const menu = getVoiceSelectMenu(payload);
+          const options = menu.options;
+          expect(Array.isArray(options)).toBe(true);
+          expect(options).toHaveLength(1);
+          const option = options?.[0] as Record<string, unknown>;
+          expect(option.value).toBe("none");
+        });
+
+        it(`renders a one-page library with 25 sample options (receipt=${receipt})`, () => {
+          const pageSamples = VOICE_SAMPLES.slice(0, 25);
+          const payload = buildVoicePayload(locale, receipt, pageSamples, pageSamples.length, 0);
+          expectValidVoicePayload(payload);
+
+          const menu = getVoiceSelectMenu(payload);
+          const options = menu.options;
+          expect(Array.isArray(options)).toBe(true);
+          expect(options).toHaveLength(25);
+          if (!Array.isArray(options)) return;
+
+          const firstOption = options[0] as Record<string, unknown>;
+          const secondOption = options[1] as Record<string, unknown>;
+          expect(firstOption.label).toBe("A".repeat(80));
+          expect(secondOption.label).toBe("B".repeat(81));
+          expect(typeof firstOption.description).toBe("string");
+          if (typeof firstOption.description === "string") {
+            expect(getDiscordTextLength(firstOption.description)).toBe(100);
+          }
+          const labels = options.flatMap((option) => {
+            const label = (option as Record<string, unknown>).label;
+            return typeof label === "string" ? [label] : [];
+          });
+          for (const runLength of VOICE_SAMPLE_RUNS) {
+            expect(labels.some((label) => label.includes("`".repeat(runLength)))).toBe(true);
+          }
+          expect(labels.some((label) => label.includes("🌸✨"))).toBe(true);
+        });
+
+        it(`covers every sample across deep library page slices (receipt=${receipt})`, () => {
+          const starts = [0, 25, 50];
+          const coveredIndices = new Set<number>();
+
+          for (const start of starts) {
+            const pageSamples = VOICE_SAMPLES.slice(start, start + 25);
+            const payload = buildVoicePayload(locale, receipt, pageSamples, VOICE_SAMPLES.length, start);
+            expectValidVoicePayload(payload);
+
+            const menu = getVoiceSelectMenu(payload);
+            const options = menu.options;
+            expect(Array.isArray(options)).toBe(true);
+            expect(options).toHaveLength(pageSamples.length);
+            if (!Array.isArray(options)) continue;
+
+            const pageIndices: number[] = [];
+            for (const option of options) {
+              const value = (option as Record<string, unknown>).value;
+              expect(typeof value).toBe("string");
+              if (typeof value !== "string") continue;
+              const separator = value.indexOf(":");
+              const index = Number.parseInt(value.slice(0, separator), 10);
+              pageIndices.push(index);
+              coveredIndices.add(index);
+            }
+            expect(pageIndices).toEqual(pageSamples.map((_sample, offset) => start + offset));
+          }
+
+          expect(coveredIndices).toEqual(new Set(VOICE_SAMPLES.map((_sample, index) => index)));
+        });
+
+        it(`reports 26 unsliced samples as an oversized select (receipt=${receipt})`, () => {
+          const payload = buildVoicePayload(locale, receipt, VOICE_SAMPLES.slice(0, 26), VOICE_SAMPLES.length, 0);
+          const validation = validateComponentsV2MessageLimits(payload);
+          expect(validation.valid).toBe(false);
+          expect(validation.violations).toContainEqual(
+            expect.objectContaining({
+              code: "SELECT_OPTIONS_OVERSIZED",
+              observed: 26,
+            }),
+          );
+        });
+      }
+    });
+  }
+
+  it("observes the 27-component receipt and deep-page ceiling from the rendered payload", () => {
+    const payload = buildVoicePayload("en-US", true, VOICE_SAMPLES.slice(25, 50), VOICE_SAMPLES.length, 25);
+    expectValidVoicePayload(payload);
+
+    const observedCount = countRenderedComponents(payload);
+    expect(observedCount).toBe(27);
+
+    const payloadWithOverGenerousReserve = {
+      ...payload,
+      components: [...payload.components, { type: ComponentType.TextDisplay, content: "Reserve" }],
+    };
+    expect(countRenderedComponents(payloadWithOverGenerousReserve)).toBeGreaterThan(27);
   });
 });
 

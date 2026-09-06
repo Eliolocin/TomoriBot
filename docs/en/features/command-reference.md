@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **41**. Runnable slash commands: **86**.
+Top-level command groups: **41**. Runnable slash commands: **83**.
 
 ## `/comment`
 
@@ -324,12 +324,9 @@ Manage speech voices and samples.
 
 | Command | Summary |
 |---|---|
-| `/speech chatterbox parameters` | Tune Chatterbox Turbo and standard-model speech generation. |
-| `/speech voice-add` | Upload a local TTS reference voice sample. |
 | `/speech voice-assign` | Assign a speech voice to a persona. |
 | `/speech voice-design remove` | Remove a persona's voice design prompt. |
 | `/speech voice-design set` | Set a voice design prompt for a persona. |
-| `/speech voice-remove` | Remove a local TTS voice sample from this server. |
 
 ## `/st-presets`
 

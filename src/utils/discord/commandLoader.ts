@@ -139,7 +139,6 @@ const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
   "commands.memory.personal.remove.description": "commands.forget.memory.personal.description",
   "commands.memory.server.add.description": "commands.teach.memory.server.description",
   "commands.memory.server.remove.description": "commands.forget.memory.server.description",
-  "commands.speech.chatterbox.parameters.description": "commands.config.panel.voices.parameters.description",
 };
 
 function getCommandLocalizationAliases(key: string): string[] {

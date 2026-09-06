@@ -2,6 +2,7 @@ import {
   ButtonStyle,
   ChannelType,
   ComponentType,
+  AttachmentBuilder,
   inlineCode,
   MessageFlags,
   SelectMenuDefaultValueType,
@@ -90,6 +91,7 @@ import {
   type ConfigSwitchModelsView,
   type ConfigVoicesView,
 } from "@/utils/discord/ui/configModelsPanel";
+import { resolveSelectedVoiceSample } from "@/utils/discord/ui/configVoicesPanel";
 import { TOOL_NOTICE_DEFINITIONS } from "@/constants/toolNotices";
 import { WORKAROUND_DEFINITIONS } from "@/utils/discord/workaroundConfigMapping";
 import { DEFAULT_STM_TOOL_DESCRIPTION } from "@/tools/functionCalls/updateShortTermMemoryTool";
@@ -115,6 +117,7 @@ const RANDOM_TRIGGER_PAGE_SIZE = CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY;
 
 export interface ConfigPanelPayload {
   components: TopLevelComponentData[];
+  files: AttachmentBuilder[];
   flags: MessageFlags.IsComponentsV2;
 }
 
@@ -252,11 +255,23 @@ export interface ConfigPanelRenderInput {
   channelsBlocklistRangeIndex?: number;
 }
 
-function buildPayload(components: ComponentInContainerData[], receipt?: PanelReceipt): ConfigPanelPayload {
+function buildPayload(
+  components: ComponentInContainerData[],
+  receipt?: PanelReceipt,
+  files: AttachmentBuilder[] = [],
+): ConfigPanelPayload {
   return {
     components: [...(receipt ? [buildPanelReceiptContainer(receipt)] : []), buildPanelContainer(components)],
+    files,
     flags: MessageFlags.IsComponentsV2,
   };
+}
+
+function buildVoiceSampleFiles(view: ConfigVoicesView | undefined): AttachmentBuilder[] {
+  const selected = view ? resolveSelectedVoiceSample(view) : null;
+  const buffer = selected?.preview?.buffer;
+  if (!buffer || !selected?.preview || selected.preview.unavailable) return [];
+  return [new AttachmentBuilder(buffer, { name: selected.preview.attachmentName })];
 }
 
 function measureReceiptTextLength(receipt?: PanelReceipt): number {
@@ -4114,7 +4129,7 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
         }),
       );
     }
-    return buildPayload(components, receipt);
+    return buildPayload(components, receipt, page === "voices" ? buildVoiceSampleFiles(input.voicesView) : []);
   }
 
   if (category === "behavior" && page === "general") {

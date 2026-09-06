@@ -59,7 +59,7 @@ python servers\tts\qwen3tts\server.py --mode auto
 参照クリップを模倣する必要があるペルソナには、これを使用します。
 
 1. 背景音楽のない、1人の話者による10〜20秒のクリアな音声クリップを準備します。
-2. `/speech voice-add`を実行してクリップをアップロードします。
+2. `/config`を実行してクリップをアップロードします。
 3. `/speech voice-assign`を実行し、ペルソナと音声サンプルを選択します。
 
 ### VoiceDesign

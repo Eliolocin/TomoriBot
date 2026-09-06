@@ -11,6 +11,7 @@ import type { PanelReceipt, PanelReceiptTone } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import { isToolNoticeKey } from "@/constants/toolNotices";
 import { getCachedAllPersonas, getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCacheStore";
 import {
   getShortTermMemoryForServerChannel,
   getShortTermMemoryForUserChannel,
@@ -76,6 +77,9 @@ import {
   loadConfigParametersView,
   loadConfigSwitchModelsView,
 } from "@/utils/discord/interactions/configModelLoaders";
+import { loadConfigVoicesView } from "@/utils/discord/interactions/configVoicesLoader";
+import { addVoiceSample } from "@/utils/speech/voiceSampleAddOperation";
+import * as speechRepository from "@/utils/db/repositories/SpeechRepository";
 import {
   CONFIG_MODEL_MODAL_OPEN_ACTIONS,
   CONFIG_MODEL_MODAL_SUBMIT_ACTIONS,
@@ -108,6 +112,15 @@ import {
   handleConfigChannelModalOpen,
   handleConfigChannelRoutes,
 } from "@/utils/discord/interactions/configChannelRoutes";
+import {
+  CONFIG_VOICES_MODAL_OPEN_ACTIONS,
+  CONFIG_VOICES_MODAL_SUBMIT_ACTIONS,
+  configVoicesPreflightReply,
+  handleConfigVoicesModalOpen,
+  handleConfigVoicesRoutes,
+  prepareConfigVoicesSubmit,
+  type ConfigVoicesSubmitPreflight,
+} from "@/utils/discord/interactions/configVoicesRoutes";
 import {
   loadCachedGuildBlocklistChannels,
   loadCachedGuildChannelOverrideChannels,
@@ -467,6 +480,15 @@ const defaultDependencies: ConfigRouteDependencies = {
   loadParametersView: loadConfigParametersView,
   loadFallbacksView: loadConfigFallbacksView,
   loadImageGenerationView: loadConfigImageGenerationView,
+  loadVoicesView: (state, requestedStart, loaderDependencies) =>
+    loadConfigVoicesView(state, requestedStart, loaderDependencies),
+  loadVoiceSamples: (serverId) => speechRepository.loadVoiceSamples(serverId),
+  countVoiceSampleRefs: (serverId, sampleId) => speechRepository.countPersonaVoiceSampleRefs(serverId, sampleId),
+  removeVoiceSample: (input) => speechRepository.removeVoiceSample(input),
+  loadSpeechConfig: (serverId) => configRepository.getSpeechConfig(serverId),
+  updateSpeechConfig: (serverId, patch) => configRepository.updateSpeechConfig(serverId, patch),
+  invalidateSpeechConfigCache: invalidateTomoriStateCache,
+  addVoiceSample,
   loadBehaviorView: async (state) => {
     const rawChatConfig = await configRepository.getChatConfig(state.server_id);
     const [speechConfig, stmConfig, stmCategories] = await Promise.all([
@@ -2717,6 +2739,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "text-override-model-select" ||
         route.action === "channels-overrides-text-model-select" ||
         route.action === "sprite-select" ||
+        route.action === "voice-sample-select" ||
         CONFIG_MODEL_SELECT_ACTIONS.has(route.action) ||
         CONFIG_CHANNEL_SELECT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_SELECT_ACTIONS.has(route.action);
@@ -2746,7 +2769,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         CONFIG_BEHAVIOR_MODAL_SUBMIT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_D10_MODAL_SUBMIT_ACTIONS.has(route.action) ||
         CONFIG_PERMISSION_MODAL_SUBMIT_ACTIONS.has(route.action) ||
-        CONFIG_CHANNEL_MODAL_SUBMIT_ACTIONS.has(route.action);
+        CONFIG_CHANNEL_MODAL_SUBMIT_ACTIONS.has(route.action) ||
+        CONFIG_VOICES_MODAL_SUBMIT_ACTIONS.has(route.action);
 
       if (expectsStringSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Config ${route.action} route requires a String Select interaction`);
@@ -2764,6 +2788,22 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       // The actor comes from the interaction rather than the workspace, so a forged custom ID is
       // rejected before any repository read.
       const actor = resolveConfigActor(interaction);
+
+      let voiceSubmitPreflight: ConfigVoicesSubmitPreflight | undefined;
+      if (route.action === "voice-sample-add-submit") {
+        voiceSubmitPreflight = prepareConfigVoicesSubmit(interaction, route, dependencies) ?? undefined;
+        if (!voiceSubmitPreflight || voiceSubmitPreflight.status !== "valid") {
+          await interaction.reply(
+            isConfigRouteAuthorized(route, actor)
+              ? configVoicesPreflightReply(route.locale, voiceSubmitPreflight?.status ?? "missing")
+              : {
+                  content: localizer(route.locale, "commands.config.panel.denied_detail"),
+                  flags: MessageFlags.Ephemeral,
+                },
+          );
+          return;
+        }
+      }
 
       const submittedValue = interaction.isStringSelectMenu()
         ? (interaction.values[0] ?? null)
@@ -2809,6 +2849,11 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         return;
       }
 
+      if (CONFIG_VOICES_MODAL_OPEN_ACTIONS.has(route.action)) {
+        await handleConfigVoicesModalOpen(interaction, route, dependencies, actor);
+        return;
+      }
+
       if (MODAL_OPEN_ACTIONS.has(route.action)) {
         await handleModalOpen(interaction, route, dependencies, actor);
         return;
@@ -2837,6 +2882,18 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         onMissing: () => interaction.editReply(terminalPayload(route.locale, "commands.config.panel.unavailable")),
       });
       if (!scope) return;
+
+      if (
+        await handleConfigVoicesRoutes({
+          interaction,
+          route,
+          scope,
+          dependencies,
+          preflight: voiceSubmitPreflight,
+        })
+      ) {
+        return;
+      }
 
       if (
         await handleConfigModelRoutes({

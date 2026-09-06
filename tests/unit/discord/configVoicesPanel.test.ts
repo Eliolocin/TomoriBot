@@ -18,6 +18,7 @@ import {
   computeVoiceSampleFingerprint,
   decodeVoiceSampleOptionValue,
   encodeVoiceSampleOptionValue,
+  voiceSampleAttachmentName,
   type ConfigVoicesView,
 } from "@/utils/discord/ui/configVoicesPanel";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
@@ -38,9 +39,7 @@ function makeSample(index: number, overrides: Partial<VoiceSampleRow> = {}): Voi
 
 describe("configVoicesPanel", () => {
   beforeAll(async () => initializeLocalizer());
-  // TEST 1: The voices page body is NON-EMPTY and contains, in order, the components listed above.
-  // This is the test that catches the `default: return []` hazard.
-  it("renders non-empty body with all 8 components in exact order through buildConfigModelsBody", () => {
+  it("renders non-empty body with all components in exact order through buildConfigModelsBody", () => {
     const samples = Array.from({ length: 25 }, (_, i) => makeSample(i));
     const view: ConfigVoicesView = {
       turboEnabled: false,
@@ -59,7 +58,7 @@ describe("configVoicesPanel", () => {
       voicesView: view,
     });
 
-    expect(components.length).toBe(8);
+    expect(components.length).toBe(7);
 
     expect(components[0].type).toBe(ComponentType.TextDisplay);
     const headingText = (components[0] as TextDisplayComponentData).content;
@@ -71,35 +70,32 @@ describe("configVoicesPanel", () => {
     expect(paramsText).toContain("Turbo is currently disabled");
 
     expect(components[2].type).toBe(ComponentType.ActionRow);
-    const turboRow = components[2] as ActionRowData<ButtonComponentData>;
-    expect(turboRow.components.length).toBe(2);
-
-    expect(components[3].type).toBe(ComponentType.ActionRow);
-    const editParamsRow = components[3] as ActionRowData<ButtonComponentData>;
+    const editParamsRow = components[2] as ActionRowData<ButtonComponentData>;
     expect(editParamsRow.components.length).toBe(1);
     const editParamsRoute = parseConfigPanelRoute(parseInteractionRoute(editParamsRow.components[0].customId ?? ""));
     expect(editParamsRoute?.action).toBe("tts-parameters-open");
 
-    expect(components[4].type).toBe(ComponentType.TextDisplay);
-    const libraryText = (components[4] as TextDisplayComponentData).content;
-    expect(libraryText).toContain("Voice Sample Library");
-    expect(libraryText).toContain("Voice Sample 1");
-
-    expect(components[5].type).toBe(ComponentType.ActionRow);
-    const selectRow = components[5] as ActionRowData<StringSelectMenuComponentData>;
+    expect(components[3].type).toBe(ComponentType.ActionRow);
+    const selectRow = components[3] as ActionRowData<StringSelectMenuComponentData>;
     expect(selectRow.components[0].type).toBe(ComponentType.StringSelect);
     const selectRoute = parseConfigPanelRoute(parseInteractionRoute(selectRow.components[0].customId ?? ""));
     expect(selectRoute?.action).toBe("voice-sample-select");
     expect(selectRow.components[0].options.length).toBe(25);
+    expect(selectRow.components[0].options[0]).toMatchObject({ label: "Voice Sample 1", default: true });
 
-    expect(components[6].type).toBe(ComponentType.ActionRow);
-    const paginationRow = components[6] as ActionRowData<ButtonComponentData>;
+    expect(components[4].type).toBe(ComponentType.TextDisplay);
+    const libraryText = (components[4] as TextDisplayComponentData).content;
+    expect(libraryText).toContain("Voice Sample Library");
+    expect(libraryText).not.toContain("Voice Sample 1");
+
+    expect(components[5].type).toBe(ComponentType.ActionRow);
+    const paginationRow = components[5] as ActionRowData<ButtonComponentData>;
     expect(paginationRow.components.length).toBe(3); // prev, indicator, next
     const nextRoute = parseConfigPanelRoute(parseInteractionRoute(paginationRow.components[2].customId ?? ""));
     expect(nextRoute?.action).toBe("voice-sample-page");
 
-    expect(components[7].type).toBe(ComponentType.ActionRow);
-    const actionRow = components[7] as ActionRowData<ButtonComponentData>;
+    expect(components[6].type).toBe(ComponentType.ActionRow);
+    const actionRow = components[6] as ActionRowData<ButtonComponentData>;
     expect(actionRow.components.length).toBe(2);
     const addRoute = parseConfigPanelRoute(parseInteractionRoute(actionRow.components[0].customId ?? ""));
     expect(addRoute?.action).toBe("voice-sample-add-open");
@@ -108,10 +104,7 @@ describe("configVoicesPanel", () => {
     expect(actionRow.components[1].disabled).toBe(false); // selectedIndex is 0 (valid)
   });
 
-  // TEST 2: The turbo row's selected button carries ButtonStyle.Primary and is disabled,
-  // matching buildStateControlRow semantics.
-  it("turbo row selected button carries ButtonStyle.Primary and is disabled", () => {
-    // When turbo is enabled:
+  it("keeps turbo controls in the parameter summary and uses the edit button for changes", () => {
     const viewTurboOn: ConfigVoicesView = {
       turboEnabled: true,
       cfgWeight: 0.7,
@@ -121,55 +114,102 @@ describe("configVoicesPanel", () => {
       start: 0,
       selectedIndex: null,
     };
-    const bodyTurboOn = buildConfigVoicesBody({
-      locale: "en-US",
-      readStatus: "fresh",
-      view: viewTurboOn,
-    });
-    const turboRowOn = bodyTurboOn[2] as ActionRowData<ButtonComponentData>;
-    const [offBtnOn, onBtnOn] = turboRowOn.components;
+    const body = buildConfigVoicesBody({ locale: "en-US", readStatus: "fresh", view: viewTurboOn });
+    const paramsText = body[1] as TextDisplayComponentData;
+    expect(paramsText.content).toContain("Chatterbox Turbo: Enabled");
+    const hasTurboRoute = body.some(
+      (component) =>
+        component.type === ComponentType.ActionRow &&
+        (component as ActionRowData<ButtonComponentData>).components.some((button) =>
+          button.customId?.includes("tts-turbo-set"),
+        ),
+    );
+    expect(hasTurboRoute).toBe(false);
+  });
 
-    // Off button: Secondary, enabled
-    expect(offBtnOn.style).toBe(ButtonStyle.Secondary);
-    expect(offBtnOn.disabled).toBe(false);
-    // On button: Primary, disabled
-    expect(onBtnOn.style).toBe(ButtonStyle.Primary);
-    expect(onBtnOn.disabled).toBe(true);
-
-    // When turbo is disabled:
-    const viewTurboOff: ConfigVoicesView = {
+  it("renders only the selected sample and its File component", () => {
+    const samples = [makeSample(0, { duration_ms: 10100 }), makeSample(1, { name: "Other Sample" })];
+    const view: ConfigVoicesView = {
       turboEnabled: false,
       cfgWeight: 0.5,
       exaggeration: 0.5,
-      samples: [],
-      totalSampleCount: 0,
+      samples,
+      totalSampleCount: samples.length,
       start: 0,
-      selectedIndex: null,
+      selectedIndex: 0,
+      preview: {
+        sampleId: samples[0].sample_id as number,
+        fingerprint: computeVoiceSampleFingerprint(samples[0]),
+        attachmentName: voiceSampleAttachmentName(samples[0].sample_id as number),
+        buffer: Buffer.from("RIFF-preview"),
+        unavailable: false,
+      },
     };
-    const bodyTurboOff = buildConfigVoicesBody({
+
+    const components = buildConfigVoicesBody({ locale: "en-US", readStatus: "fresh", view });
+    const libraryText = components.find(
+      (component) =>
+        component.type === ComponentType.TextDisplay &&
+        (component as TextDisplayComponentData).content.includes("Voice Sample Library"),
+    ) as TextDisplayComponentData;
+
+    expect(libraryText.content).toContain("> 10.1s duration");
+    expect(libraryText.content).toContain("> *Reference transcript text for sample 1.*");
+    expect(libraryText.content).not.toContain("Voice Sample 1");
+    expect(libraryText.content).not.toContain("Other Sample");
+    expect(libraryText.content).not.toContain("more voice sample");
+
+    const selectRow = components.find(
+      (component) =>
+        component.type === ComponentType.ActionRow &&
+        (component as ActionRowData<StringSelectMenuComponentData>).components[0]?.type === ComponentType.StringSelect,
+    ) as ActionRowData<StringSelectMenuComponentData>;
+    expect(selectRow.components[0]?.options[0]).toMatchObject({ label: "Voice Sample 1", default: true });
+
+    const file = components.find((component) => component.type === ComponentType.File) as {
+      type: ComponentType.File;
+      file: { url: string };
+    };
+    expect(file.type).toBe(ComponentType.File);
+    expect(file.file.url).toBe(`attachment://${voiceSampleAttachmentName(1)}`);
+    expect(components.indexOf(file)).toBeGreaterThan(components.indexOf(selectRow));
+  });
+
+  it("keeps selected metadata when the audio preview is unavailable", () => {
+    const sample = makeSample(0, { duration_ms: 10100 });
+    const components = buildConfigVoicesBody({
       locale: "en-US",
       readStatus: "fresh",
-      view: viewTurboOff,
+      view: {
+        turboEnabled: false,
+        cfgWeight: 0.5,
+        exaggeration: 0.5,
+        samples: [sample],
+        totalSampleCount: 1,
+        start: 0,
+        selectedIndex: 0,
+        preview: {
+          sampleId: sample.sample_id as number,
+          fingerprint: computeVoiceSampleFingerprint(sample),
+          attachmentName: voiceSampleAttachmentName(sample.sample_id as number),
+          unavailable: true,
+        },
+      },
     });
-    const turboRowOff = bodyTurboOff[2] as ActionRowData<ButtonComponentData>;
-    const [offBtnOff, onBtnOff] = turboRowOff.components;
 
-    // Off button: Primary, disabled
-    expect(offBtnOff.style).toBe(ButtonStyle.Primary);
-    expect(offBtnOff.disabled).toBe(true);
-    // On button: Secondary, enabled
-    expect(onBtnOff.style).toBe(ButtonStyle.Secondary);
-    expect(onBtnOff.disabled).toBe(false);
-
-    // When readStatus is stale (writesDisabled):
-    const bodyStale = buildConfigVoicesBody({
-      locale: "en-US",
-      readStatus: "stale",
-      view: viewTurboOn,
-    });
-    const staleTurboRow = bodyStale[2] as ActionRowData<ButtonComponentData>;
-    expect(staleTurboRow.components[0].disabled).toBe(true);
-    expect(staleTurboRow.components[1].disabled).toBe(true);
+    const text = components
+      .filter((component) => component.type === ComponentType.TextDisplay)
+      .map((component) => (component as TextDisplayComponentData).content)
+      .join("\n");
+    const selectRow = components.find(
+      (component) =>
+        component.type === ComponentType.ActionRow &&
+        (component as ActionRowData<StringSelectMenuComponentData>).components[0]?.type === ComponentType.StringSelect,
+    ) as ActionRowData<StringSelectMenuComponentData>;
+    expect(selectRow.components[0]?.options[0]).toMatchObject({ label: "Voice Sample 1", default: true });
+    expect(text).not.toContain("Voice Sample 1");
+    expect(text).toContain("Audio preview is unavailable.");
+    expect(components.some((component) => component.type === ComponentType.File)).toBe(false);
   });
 
   // TEST 3: Every select option value round-trips through the route decoder to the index and fingerprint
@@ -399,18 +439,16 @@ describe("configVoicesPanel", () => {
       view,
     });
 
-    // Items 1-4 (heading, params, turbo row, edit params button) remain.
-    // Items 5-8 (library display, string select, pagination, add/remove buttons) are replaced by confirm view.
-    expect(components.length).toBe(6);
+    expect(components.length).toBe(5);
 
     // Confirm text display
-    const confirmTextComp = components[4] as TextDisplayComponentData;
+    const confirmTextComp = components[3] as TextDisplayComponentData;
     expect(confirmTextComp.type).toBe(ComponentType.TextDisplay);
     expect(confirmTextComp.content).toContain("Remove Voice Sample?");
     expect(confirmTextComp.content).toContain("3 persona(s)"); // Ref count is present
 
     // Confirm action row
-    const confirmRow = components[5] as ActionRowData<ButtonComponentData>;
+    const confirmRow = components[4] as ActionRowData<ButtonComponentData>;
     expect(confirmRow.type).toBe(ComponentType.ActionRow);
     expect(confirmRow.components.length).toBe(2);
 

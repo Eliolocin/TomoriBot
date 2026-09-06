@@ -13,6 +13,8 @@ import type {
   RandomTriggerRow,
   ServerStmConfigRow,
   StmCategoryRow,
+  ServerSpeechConfigRow,
+  VoiceSampleRow,
   TomoriState,
 } from "@/types/db/schema";
 import type { ToolNoticeKey } from "@/constants/toolNotices";
@@ -34,6 +36,11 @@ import type { ConfigActor } from "@/utils/discord/interactions/configPermissionP
 import type { ConfigPersonaOperations, GuildIdentityPort } from "@/utils/discord/interactions/configPersonaOperations";
 import type { ConfigSpriteOperations } from "@/utils/discord/interactions/configSpriteOperations";
 import type { ConfigModelOperations } from "@/utils/discord/interactions/configModelOperations";
+import type {
+  VoiceSampleAddDependencies,
+  VoiceSampleAddInput,
+  VoiceSampleAddResult,
+} from "@/utils/speech/voiceSampleAddOperation";
 import { deliverGuardedPanel, validateAndFallbackPanelPayload } from "@/utils/discord/interactions/panelController";
 import type { ConfigFallbackOption } from "@/utils/discord/ui/configModelModals";
 import type { ConfigModelChoice } from "@/utils/discord/interactions/configModelOperations";
@@ -44,6 +51,8 @@ import type {
   ConfigSwitchModelsProviderPage,
   ConfigSwitchModelsView,
 } from "@/utils/discord/ui/configModelsPanel";
+import type { ConfigVoicesView } from "@/utils/discord/ui/configVoicesPanel";
+import type { ConfigVoicesLoaderDependencies } from "@/utils/discord/interactions/configVoicesLoader";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { type PersonaPanelAvatarData, withPersonaPanelAvatar } from "@/utils/discord/personaPanelAvatar";
 import { buildConfigPanelPayload, type ConfigPanelView } from "@/utils/discord/ui/configPanel";
@@ -223,6 +232,24 @@ export interface ConfigRouteDependencies {
     entryStart: number,
   ): Promise<ConfigFallbacksView>;
   loadImageGenerationView(state: TomoriState, locale: string): ConfigImageGenerationView;
+  loadVoicesView(
+    state: TomoriState,
+    requestedStart?: number,
+    loaderDependencies?: ConfigVoicesLoaderDependencies,
+  ): Promise<ConfigVoicesView>;
+  loadVoiceSamples(serverId: number): Promise<VoiceSampleRow[]>;
+  countVoiceSampleRefs(serverId: number, sampleId: number): Promise<number>;
+  removeVoiceSample(input: {
+    serverId: number;
+    serverDiscId: string;
+    sampleId: number;
+    filePath: string;
+  }): Promise<{ storedFileRemoved: boolean }>;
+  loadSpeechConfig(serverId: number): Promise<ServerSpeechConfigRow | null>;
+  updateSpeechConfig(serverId: number, patch: Partial<ServerSpeechConfigRow>): Promise<boolean>;
+  invalidateSpeechConfigCache(serverDiscId: string): void;
+  addVoiceSample: (input: VoiceSampleAddInput, deps?: VoiceSampleAddDependencies) => Promise<VoiceSampleAddResult>;
+  voiceSampleAddDependencies?: VoiceSampleAddDependencies;
   loadBehaviorView?(state: TomoriState): Promise<ConfigBehaviorView>;
   loadPermissionsView(state: TomoriState): Promise<ConfigPermissionsView>;
   loadChannelsView(
@@ -338,6 +365,9 @@ export interface ConfigRepaintOptions {
   logitBiasPageStart?: number;
   fallbackExpandedProvider?: string | null;
   fallbackEntryStart?: number;
+  voicesView?: ConfigVoicesView;
+  voiceSamplePageStart?: number;
+  selectedVoiceSampleIndex?: number;
   dependencies: ConfigRouteDependencies;
 }
 
@@ -383,6 +413,7 @@ export async function repaint(
   let modelParametersView: ConfigParametersView | undefined;
   let modelFallbacksView: ConfigFallbacksView | undefined;
   let imageGenerationView: ConfigImageGenerationView | undefined;
+  let voicesView = options.voicesView;
   let behaviorView = options.behaviorView;
   if (category === "models") {
     // Server model state lives on the assembled workspace config every persona row carries, so any
@@ -406,6 +437,11 @@ export async function repaint(
         );
       } else if (page === "image") {
         imageGenerationView = dependencies.loadImageGenerationView(state, locale);
+      } else if (page === "voices" && !voicesView) {
+        voicesView = await dependencies.loadVoicesView(state, options.voiceSamplePageStart ?? 0);
+        if (options.selectedVoiceSampleIndex !== undefined) {
+          voicesView = { ...voicesView, selectedIndex: options.selectedVoiceSampleIndex };
+        }
       }
     }
   }
@@ -483,6 +519,7 @@ export async function repaint(
         modelParametersView,
         modelFallbacksView,
         imageGenerationView,
+        voicesView,
         randomTriggerPageStart: options.randomTriggerPageStart,
         behaviorView,
         permissionsView,

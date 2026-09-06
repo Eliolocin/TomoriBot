@@ -106,6 +106,6 @@ export function withPersonaPanelAvatar<T extends InteractionEditReplyOptions>(
   return {
     ...payload,
     attachments: [],
-    files: avatars.flatMap((item) => item.files),
+    files: [...(payload.files ?? []), ...avatars.flatMap((item) => item.files)],
   };
 }

@@ -49,14 +49,14 @@ TomoriBotがChatterboxを使用している間は、そのターミナルを開�
 ## ペルソナ音声のセットアップ
 
 1. 背景音楽のない、1人の話者による10〜20秒のクリアな音声クリップを準備します。
-2. `/speech voice-add`を実行してクリップをアップロードします。
+2. `/config`を実行してクリップをアップロードします。
 3. `/speech voice-assign`を実行し、ペルソナと音声サンプルを選択します。
 
 Chatterboxは、Turboモードが有効な場合、`[laugh]`や`[sigh]`などのブラケット配信タグを使用できます。
 
 ## オプションのチューニング
 
-Chatterboxのリクエストペイロードを調整するには、`/speech chatterbox parameters`を使用します。
+Chatterboxのリクエストペイロードを調整するには、`/config`を使用します。
 
 - `turbo`のデフォルトは`true`です。有効な場合、TomoriBotはサポートされているChatterbox-Turboのイベントタグを保持し、ラッパーが`ChatterboxTurboTTS.model.generate(...)`を使用する前に、サポートされていないブラケット記述子を削除します。
 - `cfg_weight`のデフォルトは`0.5`です。最小値は`0`で、TomoriBotはハード的な最大値を設定していません。これは`turbo`が`false`の場合にのみ適用され、値を低くすると速い参照音声を遅くするのに役立ち、値を高くすると参照音声に強く従うようになります。
