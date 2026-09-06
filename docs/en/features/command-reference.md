@@ -184,7 +184,7 @@ Configure NovelAI text and image generation for this server.
 | Command | Summary |
 |---|---|
 | `/novelai attg` | Configure Author/Title/Tags/Genre/Stars metadata for NovelAI Kayra and Erato prompts. |
-| `/novelai image generate` | Generate a NovelAI image using imageboard-style tags and an optional character reference. |
+| `/novelai generate image` | Generate a NovelAI image using imageboard-style tags and an optional character reference. |
 | `/novelai preset text` | Apply a NovelAI sampling preset to this server's text generation settings. |
 
 ## `/nsfw`

@@ -222,6 +222,7 @@ export interface ConfigPanelRenderInput {
   personas: TomoriState[];
   selectedPersonaId: number | null;
   selectedPersonaAvatarUrl?: string | null;
+  selectedPersonaCharacterReferenceUrl?: string | null;
   selectedSpriteAvatarUrl?: string | null;
   personaSelectStart?: number;
   attributePageStart?: number;
@@ -293,6 +294,17 @@ function getBasePageTextAllowance(input: ConfigPanelRenderInput, isPersonaPage =
 function appendPersonaCreateHint(components: ComponentInContainerData[], locale: string): void {
   const content = withLinePrefix("-# ", localizer(locale, "commands.config.panel.persona_create_hint"));
   const lastComponent = components.at(-1);
+  if (lastComponent?.type === ComponentType.MediaGallery) {
+    const precedingTextDisplay = [...components]
+      .reverse()
+      .find((component) => component.type === ComponentType.TextDisplay) as TextDisplayComponentData | undefined;
+    if (precedingTextDisplay) {
+      precedingTextDisplay.content = `${precedingTextDisplay.content}\n\n${content}`;
+    } else {
+      components.splice(-1, 0, { type: ComponentType.TextDisplay, content });
+    }
+    return;
+  }
   if (lastComponent?.type === ComponentType.TextDisplay) {
     const textDisplay = lastComponent as TextDisplayComponentData;
     textDisplay.content = `${textDisplay.content}\n\n${content}`;
@@ -1372,6 +1384,12 @@ ${localizer(locale, "commands.config.panel.image_tags_description")}
         },
       ],
     });
+    if (input.selectedPersonaCharacterReferenceUrl) {
+      components.push({
+        type: ComponentType.MediaGallery,
+        items: [{ media: { url: input.selectedPersonaCharacterReferenceUrl } }],
+      });
+    }
   }
 
   return components;

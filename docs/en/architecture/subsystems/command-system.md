@@ -1010,7 +1010,7 @@ Bare `/mcps` is the only registered MCP path; the legacy `mcp` subcommand tree n
 - `nsfw`: jailbreaks
 - `optional-key`: brave/set/remove
 - `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel, channel-prompt
-- `novelai`: attg, image(params/generate), character-reference
+- `novelai`: attg, generate(image), preset(text)
 - `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove, image-tags, sprites(add/edit/remove/export/import), attribute(add/edit/remove), sample-dialogue(add/edit/remove), prompt(set/remove), history(import/remove)
 - `memory`: document(add/remove), personal(add/edit/remove/import/export), server(add/edit/remove/import/export)
@@ -1050,8 +1050,9 @@ Ordinary members may inspect trigger words, but both mutation buttons and their 
 require Manage Server.
 
 `/config` > Persona > Appearance owns per-persona image tags and the NovelAI character reference.
-The panel reports only whether a reference is saved and never renders its storage URL or path.
-Uploading a reference is required in the upload modal; clearing uses a separate confirmation.
+The panel previews a trusted saved reference without exposing its storage URL or path, using a
+configured public URL directly and a local attachment fallback. Uploading a reference is required
+in the upload modal; clearing uses a separate confirmation.
 Appearance follows Memories in the page selector, while Advanced is last. Advanced Humanizer
 opens a modal select directly. Text model overrides use a provider picker followed by a modal model
 picker when the provider has at most 25 models; larger catalogs retain the paginated picker because
@@ -1079,7 +1080,7 @@ The Compatibility section of `/config` > Engine > Experimental is a checkbox-gro
 
 ### Personal-provider (BYOK) routing in commands
 
-Any command that performs AI work the invoking user triggers must honor that user's personal (BYOK) provider. TomoriState-consuming command handlers apply the user's personal provider onto the loaded server state via `applyPersonalProviderSelectionsToTomoriState(tomoriState, userData.user_id)` before reading `config.api_key`, deriving the provider/model name, or validating capabilities. The overlay returns the server state unchanged when the user has no enabled personal provider, so it is always safe to call. Commands that currently apply it: `/persona generate`, `/novelai image generate`, `/generate image`, `/generate video`, `/tool visualize`, `/learn history`, `/expressions initialize`, and `/tool estimate cost` (so its live estimate stays in parity with what would actually run for the user).
+Any command that performs AI work the invoking user triggers must honor that user's personal (BYOK) provider. TomoriState-consuming command handlers apply the user's personal provider onto the loaded server state via `applyPersonalProviderSelectionsToTomoriState(tomoriState, userData.user_id)` before reading `config.api_key`, deriving the provider/model name, or validating capabilities. The overlay returns the server state unchanged when the user has no enabled personal provider, so it is always safe to call. Commands that currently apply it: `/persona generate`, `/novelai generate image`, `/generate image`, `/generate video`, `/tool visualize`, `/learn history`, `/expressions initialize`, and `/tool estimate cost` (so its live estimate stays in parity with what would actually run for the user).
 
 In contrast, `/memories` resolves the invoking user's embedding credentials directly through the credential resolver via `resolveCapabilityCredentials(serverId, "embedding", { userId })` during document addition and memory vectorization operations.
 

@@ -232,6 +232,7 @@ describe("config page text budgeting at stored maxima", () => {
             }),
           ],
           selectedPersonaId: 55,
+          selectedPersonaCharacterReferenceUrl: "attachment://persona_char_ref_55.png",
           readStatus: "fresh",
           receipt: receipt ? { tone: "success", heading: "Saved", detail: "Configuration was saved." } : undefined,
         }),
@@ -652,18 +653,18 @@ describe("voices page text and component budgeting", () => {
     });
   }
 
-  it("observes the 27-component receipt and deep-page ceiling from the rendered payload", () => {
+  it("observes the 28-component receipt and deep-page ceiling from the rendered payload", () => {
     const payload = buildVoicePayload("en-US", true, VOICE_SAMPLES.slice(25, 50), VOICE_SAMPLES.length, 25);
     expectValidVoicePayload(payload);
 
     const observedCount = countRenderedComponents(payload);
-    expect(observedCount).toBe(27);
+    expect(observedCount).toBe(28);
 
     const payloadWithOverGenerousReserve = {
       ...payload,
       components: [...payload.components, { type: ComponentType.TextDisplay, content: "Reserve" }],
     };
-    expect(countRenderedComponents(payloadWithOverGenerousReserve)).toBeGreaterThan(27);
+    expect(countRenderedComponents(payloadWithOverGenerousReserve)).toBeGreaterThan(28);
   });
 });
 

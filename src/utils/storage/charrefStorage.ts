@@ -13,13 +13,20 @@ export type CharRefUploadOptions = {
   buffer: Buffer;
 };
 
-type CharRefStorageConfig = {
+export type CharRefStorageConfig = {
   bucket: string;
   region: string;
   prefix: string;
   publicBaseUrl: string;
   endpoint?: string;
 };
+
+export type CharRefDisplayAsset = { type: "url"; url: string } | { type: "buffer"; buffer: Buffer };
+
+export interface CharRefDisplayResolverDependencies {
+  storageConfig?: CharRefStorageConfig | null;
+  loadLocalBuffer?: (absolutePath: string) => Promise<Buffer | null>;
+}
 
 const IS_PRODUCTION = process.env.RUN_ENV === "production";
 const LOCAL_CHARREF_BASE_DIR = path.resolve(process.cwd(), "data", "charreferences");
@@ -99,6 +106,28 @@ function resolveLocalCharRefPath(storedPath: string): string | null {
   return null;
 }
 
+function resolvePersonaLocalCharRefPath(storedPath: string, personaId: number): string | null {
+  const normalizedPath = storedPath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const personaPrefix = `data/charreferences/personas/${String(personaId)}/`;
+  if (!normalizedPath.startsWith(personaPrefix)) {
+    return null;
+  }
+
+  const resolvedPath = resolveLocalCharRefPath(storedPath);
+  if (!resolvedPath) {
+    return null;
+  }
+
+  const personaBaseDir = path.resolve(process.cwd(), "data", "charreferences", "personas", String(personaId));
+  const relativePath = path.relative(personaBaseDir, resolvedPath);
+  if (relativePath === "" || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    log.warn(`[CharRef Storage] Rejected character reference path for persona ${personaId}: ${storedPath}`);
+    return null;
+  }
+
+  return resolvedPath;
+}
+
 function extractKeyFromRemoteUrl(config: CharRefStorageConfig, url: string): string | null {
   try {
     const parsedUrl = new URL(url);
@@ -120,6 +149,72 @@ function extractKeyFromRemoteUrl(config: CharRefStorageConfig, url: string): str
 
     return pathName;
   } catch {
+    return null;
+  }
+}
+
+function extractKeyFromConfiguredPublicUrl(config: CharRefStorageConfig, url: string): string | null {
+  try {
+    const parsedUrl = new URL(url);
+    const publicBaseUrl = new URL(config.publicBaseUrl);
+    if (parsedUrl.origin !== publicBaseUrl.origin) {
+      return null;
+    }
+
+    const basePath = decodeURIComponent(publicBaseUrl.pathname).replace(/^\/+|\/+$/g, "");
+    const pathName = decodeURIComponent(parsedUrl.pathname).replace(/^\/+/, "");
+    const relativePath = basePath
+      ? pathName.startsWith(`${basePath}/`)
+        ? pathName.slice(basePath.length + 1)
+        : null
+      : pathName;
+    if (!relativePath?.startsWith(`${config.prefix}/`)) {
+      return null;
+    }
+
+    return relativePath;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveCharRefDisplayAsset(
+  reference: string | null | undefined,
+  personaId: number,
+  dependencies: CharRefDisplayResolverDependencies = {},
+): Promise<CharRefDisplayAsset | null> {
+  const target = reference?.trim();
+  if (!target) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(target)) {
+    const config = dependencies.storageConfig === undefined ? getCharRefStorageConfig() : dependencies.storageConfig;
+    if (!config) {
+      return null;
+    }
+
+    const key = extractKeyFromConfiguredPublicUrl(config, target);
+    const ownerPrefix = `${config.prefix}/personas/${String(personaId)}/`;
+    if (!key?.startsWith(ownerPrefix) || key.length === ownerPrefix.length) {
+      return null;
+    }
+
+    return { type: "url", url: target };
+  }
+
+  const absolutePath = resolvePersonaLocalCharRefPath(target, personaId);
+  if (!absolutePath) {
+    return null;
+  }
+
+  try {
+    const buffer = dependencies.loadLocalBuffer
+      ? await dependencies.loadLocalBuffer(absolutePath)
+      : await fs.readFile(absolutePath);
+    return buffer ? { type: "buffer", buffer } : null;
+  } catch (error) {
+    log.warn(`[CharRef Storage] Failed to load local character reference ${target}`, error);
     return null;
   }
 }

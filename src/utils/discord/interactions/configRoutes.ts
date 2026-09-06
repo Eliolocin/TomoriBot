@@ -148,6 +148,7 @@ import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/
 import type { ConfigPanelView } from "@/utils/discord/ui/configPanel";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import { resolvePersonaPanelAvatar, resolvePersonaPanelAvatarReference } from "@/utils/discord/personaPanelAvatar";
+import { resolvePersonaPanelCharacterReference } from "@/utils/discord/personaPanelCharacterReference";
 import {
   buildConfigModalFieldId,
   buildConditioningCheckboxGroupId,
@@ -458,6 +459,7 @@ const defaultDependencies: ConfigRouteDependencies = {
   },
   getPersonaAvatarData: resolvePersonaPanelAvatar,
   getPersonaAvatarReferenceData: resolvePersonaPanelAvatarReference,
+  getPersonaCharacterReferenceData: resolvePersonaPanelCharacterReference,
   loadPersonaMemoryView: loadConfigPersonaMemoryView,
   loadServerHumanizerDegree: async (serverId) =>
     (await configRepository.getChatConfig(serverId))?.humanizer_degree ?? null,

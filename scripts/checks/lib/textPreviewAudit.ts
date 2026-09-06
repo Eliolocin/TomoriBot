@@ -45,7 +45,7 @@ export const KNOWN_UNGUARDED = new Set([
   "commands.config.image-tags.default-positive.cleared_description",
   "commands.config.image-tags.default-negative.success_description",
   "commands.config.image-tags.default-negative.cleared_description",
-  "commands.novelai.image.generate.error_description",
+  "commands.novelai.generate.image.error_description",
   "commands.novelai.image.parameters.success_description",
 ]);
 

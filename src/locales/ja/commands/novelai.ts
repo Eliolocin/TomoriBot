@@ -33,9 +33,9 @@ export default {
         success_description: `サンプリングプリセット **{preset_name}** を適用しました。温度、トップK、トップP、ミンPがサーバー設定に反映されました。`,
       },
     },
-    image: {
-      description: `このサーバーのNovelAI画像生成モデルとパラメータ上書きを管理します。`,
-      generate: {
+    generate: {
+      description: `NovelAIで画像やメディアを生成します。`,
+      image: {
         description: `画像掲示板タグ形式のプロンプトと任意のキャラクター参照画像でNovelAI画像を生成します。`,
         modal_title: `NovelAI画像生成`,
         prompt_label: `プロンプトタグ`,
@@ -77,6 +77,9 @@ export default {
 {error}
 \`\`\``,
       },
+    },
+    image: {
+      description: `このサーバーのNovelAI画像生成モデルとパラメータ上書きを管理します。`,
       parameters: {
         description: `このサーバー用にNovelAI画像生成のサンプラーと品質設定を上書きします。`,
         modal_title: `NovelAI画像生成パラメータ`,

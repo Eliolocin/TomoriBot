@@ -35,9 +35,9 @@ export default {
         success_description: `Sampling preset **{preset_name}** has been applied. Temperature, top-K, top-P, and min-P have been updated in your server config.`,
       },
     },
-    image: {
-      description: `Manage server-wide NovelAI image generation model and parameter overrides.`,
-      generate: {
+    generate: {
+      description: `Generate NovelAI images and media.`,
+      image: {
         description: `Generate a NovelAI image using imageboard-style tags and an optional character reference.`,
         modal_title: `NovelAI Image Generate`,
         prompt_label: `Prompt Tags`,
@@ -79,6 +79,9 @@ export default {
 {error}
 \`\`\``,
       },
+    },
+    image: {
+      description: `Manage server-wide NovelAI image generation model and parameter overrides.`,
       parameters: {
         description: `Override NovelAI image generation sampler and quality settings for this server.`,
         modal_title: `NovelAI Image Generation Parameters`,

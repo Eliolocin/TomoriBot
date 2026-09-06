@@ -101,7 +101,7 @@ const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   tool: ["status", "delete.turn", "estimate.cost", "prompt.snapshot", "visualize"],
   memory: ["personal.export", "personal.import", "server.export", "server.import"],
   speech: ["voice-assign", "voice-design.set", "voice-design.remove"],
-  novelai: ["attg", "image.generate", "preset.text"],
+  novelai: ["attg", "generate.image", "preset.text"],
 };
 
 const DISSOLVED_SPEECH_KEYS = ["voice-add", "voice-remove", "chatterbox.parameters"];

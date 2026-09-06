@@ -58,7 +58,7 @@ describe("configVoicesPanel", () => {
       voicesView: view,
     });
 
-    expect(components.length).toBe(7);
+    expect(components.length).toBe(8);
 
     expect(components[0].type).toBe(ComponentType.TextDisplay);
     const headingText = (components[0] as TextDisplayComponentData).content;
@@ -75,27 +75,30 @@ describe("configVoicesPanel", () => {
     const editParamsRoute = parseConfigPanelRoute(parseInteractionRoute(editParamsRow.components[0].customId ?? ""));
     expect(editParamsRoute?.action).toBe("tts-parameters-open");
 
-    expect(components[3].type).toBe(ComponentType.ActionRow);
-    const selectRow = components[3] as ActionRowData<StringSelectMenuComponentData>;
+    expect(components[3].type).toBe(ComponentType.TextDisplay);
+    const libraryHeader = (components[3] as TextDisplayComponentData).content;
+    expect(libraryHeader).toContain("Voice Sample Library");
+
+    expect(components[4].type).toBe(ComponentType.ActionRow);
+    const selectRow = components[4] as ActionRowData<StringSelectMenuComponentData>;
     expect(selectRow.components[0].type).toBe(ComponentType.StringSelect);
     const selectRoute = parseConfigPanelRoute(parseInteractionRoute(selectRow.components[0].customId ?? ""));
     expect(selectRoute?.action).toBe("voice-sample-select");
     expect(selectRow.components[0].options.length).toBe(25);
     expect(selectRow.components[0].options[0]).toMatchObject({ label: "Voice Sample 1", default: true });
 
-    expect(components[4].type).toBe(ComponentType.TextDisplay);
-    const libraryText = (components[4] as TextDisplayComponentData).content;
-    expect(libraryText).toContain("Voice Sample Library");
+    expect(components[5].type).toBe(ComponentType.TextDisplay);
+    const libraryText = (components[5] as TextDisplayComponentData).content;
     expect(libraryText).not.toContain("Voice Sample 1");
 
-    expect(components[5].type).toBe(ComponentType.ActionRow);
-    const paginationRow = components[5] as ActionRowData<ButtonComponentData>;
+    expect(components[6].type).toBe(ComponentType.ActionRow);
+    const paginationRow = components[6] as ActionRowData<ButtonComponentData>;
     expect(paginationRow.components.length).toBe(3); // prev, indicator, next
     const nextRoute = parseConfigPanelRoute(parseInteractionRoute(paginationRow.components[2].customId ?? ""));
     expect(nextRoute?.action).toBe("voice-sample-page");
 
-    expect(components[6].type).toBe(ComponentType.ActionRow);
-    const actionRow = components[6] as ActionRowData<ButtonComponentData>;
+    expect(components[7].type).toBe(ComponentType.ActionRow);
+    const actionRow = components[7] as ActionRowData<ButtonComponentData>;
     expect(actionRow.components.length).toBe(2);
     const addRoute = parseConfigPanelRoute(parseInteractionRoute(actionRow.components[0].customId ?? ""));
     expect(addRoute?.action).toBe("voice-sample-add-open");
@@ -147,12 +150,18 @@ describe("configVoicesPanel", () => {
     };
 
     const components = buildConfigVoicesBody({ locale: "en-US", readStatus: "fresh", view });
-    const libraryText = components.find(
+    const libraryHeader = components.find(
       (component) =>
         component.type === ComponentType.TextDisplay &&
         (component as TextDisplayComponentData).content.includes("Voice Sample Library"),
     ) as TextDisplayComponentData;
+    const libraryText = components.find(
+      (component) =>
+        component.type === ComponentType.TextDisplay &&
+        (component as TextDisplayComponentData).content.includes("> 10.1s duration"),
+    ) as TextDisplayComponentData;
 
+    expect(libraryHeader.content).toContain("Voice Sample Library");
     expect(libraryText.content).toContain("> 10.1s duration");
     expect(libraryText.content).toContain("> *Reference transcript text for sample 1.*");
     expect(libraryText.content).not.toContain("Voice Sample 1");
@@ -172,7 +181,8 @@ describe("configVoicesPanel", () => {
     };
     expect(file.type).toBe(ComponentType.File);
     expect(file.file.url).toBe(`attachment://${voiceSampleAttachmentName(1)}`);
-    expect(components.indexOf(file)).toBeGreaterThan(components.indexOf(selectRow));
+    expect(components.indexOf(selectRow)).toBeGreaterThan(components.indexOf(libraryHeader));
+    expect(components.indexOf(file)).toBeGreaterThan(components.indexOf(libraryText));
   });
 
   it("keeps selected metadata when the audio preview is unavailable", () => {

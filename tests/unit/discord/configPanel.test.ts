@@ -6,6 +6,7 @@
  * and a wrong one renders without throwing; only a literal assertion catches it.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
+import { ComponentType } from "discord.js";
 import type { PersonaSpriteRow, StmCategoryRow, TomoriState } from "@/types/db/schema";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import {
@@ -1120,6 +1121,45 @@ describe("config Persona Appearance and Advanced bodies", () => {
     ).toBe(4);
     expect(JSON.stringify(payload)).toContain("Uploaded and Saved");
     expect(JSON.stringify(payload)).not.toContain("data/charreferences");
+  });
+
+  it("places a resolved character-reference gallery directly below its action row", () => {
+    const payload = build(GUILD_MANAGER, {
+      page: "appearance",
+      personas: [advancedPersona],
+      selectedPersonaId: 55,
+      selectedPersonaCharacterReferenceUrl: "attachment://persona_char_ref_55.png",
+    });
+    const container = payload.components.find((component) => component.type === ComponentType.Container) as {
+      components: Array<Record<string, unknown>>;
+    };
+    const actionId = buildConfigRouteId({ action: "character-reference-open", locale: "en-US", personaId: 55 });
+    const actionRowIndex = container.components.findIndex((component) => {
+      if (component.type !== ComponentType.ActionRow || !Array.isArray(component.components)) return false;
+      return (component.components as Array<Record<string, unknown>>).some((child) => child.customId === actionId);
+    });
+
+    expect(actionRowIndex).toBeGreaterThanOrEqual(0);
+    expect(container.components[actionRowIndex + 1]).toEqual({
+      type: ComponentType.MediaGallery,
+      items: [{ media: { url: "attachment://persona_char_ref_55.png" } }],
+    });
+    expect(container.components.at(-1)).toEqual(container.components[actionRowIndex + 1]);
+    const limits = validateComponentsV2MessageLimits(payload);
+    expect(limits.valid, JSON.stringify(limits.violations)).toBe(true);
+
+    const withoutAsset = build(GUILD_MANAGER, {
+      page: "appearance",
+      personas: [advancedPersona],
+      selectedPersonaId: 55,
+    });
+    expect(
+      (
+        withoutAsset.components.find((component) => component.type === ComponentType.Container) as {
+          components: Array<Record<string, unknown>>;
+        }
+      ).components.some((component) => component.type === ComponentType.MediaGallery),
+    ).toBe(false);
   });
 
   it("renders the four Advanced sections in wireframe order and uses modal action routes", () => {

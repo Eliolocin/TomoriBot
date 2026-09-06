@@ -224,10 +224,16 @@ ${
     ? `${libraryPreview.text}\n-# ${localizer(locale, libraryFooterKey, textPreviewFooterVars(libraryPreview))}`
     : libraryPreview.text;
 
+  const libraryHeader: TextDisplayComponentData = {
+    type: ComponentType.TextDisplay,
+    content: `**${localizer(locale, "commands.config.panel.voices.page.library_header")}**`,
+  };
   const libraryText: TextDisplayComponentData = {
     type: ComponentType.TextDisplay,
-    content: `**${localizer(locale, "commands.config.panel.voices.page.library_header")}**\n${finalLibraryText}`,
+    content: finalLibraryText,
   };
+
+  components.push(libraryHeader);
 
   const selectOptions =
     view.samples.length > 0

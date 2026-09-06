@@ -32,7 +32,10 @@ import type {
 } from "@/utils/discord/channelChecklistManager";
 import type { ChannelContextNote } from "@/utils/cache/channelContextNoteCacheStore";
 import type { ChannelPromptOverride } from "@/utils/cache/channelPromptCacheStore";
-import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
+import {
+  resolvePersonaAdvancedActionState,
+  type ConfigActor,
+} from "@/utils/discord/interactions/configPermissionPolicy";
 import type { ConfigPersonaOperations, GuildIdentityPort } from "@/utils/discord/interactions/configPersonaOperations";
 import type { ConfigSpriteOperations } from "@/utils/discord/interactions/configSpriteOperations";
 import type { ConfigModelOperations } from "@/utils/discord/interactions/configModelOperations";
@@ -55,6 +58,7 @@ import type { ConfigVoicesView } from "@/utils/discord/ui/configVoicesPanel";
 import type { ConfigVoicesLoaderDependencies } from "@/utils/discord/interactions/configVoicesLoader";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { type PersonaPanelAvatarData, withPersonaPanelAvatar } from "@/utils/discord/personaPanelAvatar";
+import type { PersonaPanelCharacterReferenceData } from "@/utils/discord/personaPanelCharacterReference";
 import { buildConfigPanelPayload, type ConfigPanelView } from "@/utils/discord/ui/configPanel";
 import type { RawModalPayload } from "@/utils/discord/ui/configModals";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
@@ -194,6 +198,11 @@ export interface ConfigRouteDependencies {
     persona: TomoriState,
   ): Promise<PersonaPanelAvatarData>;
   getPersonaAvatarReferenceData(reference: string, attachmentName: string): Promise<PersonaPanelAvatarData>;
+  getPersonaCharacterReferenceData(
+    reference: string,
+    personaId: number,
+    attachmentName: string,
+  ): Promise<PersonaPanelCharacterReferenceData>;
   loadPersonaMemoryView(
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
     scope: ConfigScope,
@@ -379,6 +388,7 @@ export async function repaint(
 
   let avatar: PersonaPanelAvatarData | undefined;
   let spriteAvatar: PersonaPanelAvatarData | undefined;
+  let characterReference: PersonaPanelCharacterReferenceData | undefined;
   let personaMemoryView = options.personaMemoryView;
   let serverHumanizerDegree = options.serverHumanizerDegree;
   let personaSprites = options.personaSprites;
@@ -405,6 +415,19 @@ export async function repaint(
             `persona_sprite_${persona.persona_id}_${sprite.sprite_id ?? options.selectedSpriteIndex}.png`,
           );
         }
+      }
+      if (
+        page === "appearance" &&
+        !options.view &&
+        resolvePersonaAdvancedActionState("character-reference", scope.actor) !== "omitted" &&
+        persona.persona_id !== undefined &&
+        persona.nai_char_ref_url
+      ) {
+        characterReference = await dependencies.getPersonaCharacterReferenceData(
+          persona.nai_char_ref_url,
+          persona.persona_id,
+          `persona_char_ref_${persona.persona_id}.png`,
+        );
       }
     }
   }
@@ -498,6 +521,7 @@ export async function repaint(
         personas: scope.personas,
         selectedPersonaId,
         selectedPersonaAvatarUrl: avatar?.url,
+        selectedPersonaCharacterReferenceUrl: characterReference?.url,
         selectedSpriteAvatarUrl: spriteAvatar?.url,
         personaSelectStart: options.personaSelectStart,
         attributePageStart: options.attributePageStart,
@@ -530,7 +554,7 @@ export async function repaint(
         channelsRoleplayRangeIndex: options.channelsRoleplayRangeIndex,
         channelsBlocklistRangeIndex: options.channelsBlocklistRangeIndex,
       }),
-      [avatar, spriteAvatar].filter((item): item is PersonaPanelAvatarData => item !== undefined),
+      [avatar, spriteAvatar, characterReference].filter((item): item is PersonaPanelAvatarData => item !== undefined),
     ),
     { locale },
   );
