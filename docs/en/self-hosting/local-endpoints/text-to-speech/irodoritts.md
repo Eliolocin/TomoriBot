@@ -15,7 +15,7 @@ Irodori now uses `uv` for dependency and PyTorch backend management. Install `uv
 
 ```powershell
 .\servers\tts\irodoritts\install-irodori.ps1 cu128
-python servers\tts\irodoritts\server.py
+.\servers\tts\irodoritts\.venv\Scripts\python.exe servers\tts\irodoritts\server.py
 ```
 
 ### Linux Bash (NVIDIA)
@@ -42,7 +42,7 @@ Set the model before starting the sidecar:
 
 ```powershell
 $env:IRODORI_TTS_MODEL_ID = "phasefield-audio/Irodori-TTS-v4.1-Anime"
-python servers\tts\irodoritts\server.py
+.\servers\tts\irodoritts\.venv\Scripts\python.exe servers\tts\irodoritts\server.py
 ```
 
 On Bash:
