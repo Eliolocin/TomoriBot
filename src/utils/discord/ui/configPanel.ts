@@ -1445,19 +1445,19 @@ ${localizer(locale, "commands.config.panel.advanced_description")}`,
   const hasContextContent = contextState !== "omitted" && Boolean(persona.context_note?.trim());
   const attgValues = [
     {
-      label: localizer(locale, "commands.novelai.attg.author_label"),
+      label: localizer(locale, "commands.config.panel.attg.author_label"),
       value: persona.nai_attg_author?.trim() ?? "",
     },
     {
-      label: localizer(locale, "commands.novelai.attg.title_label"),
+      label: localizer(locale, "commands.config.panel.attg.title_label"),
       value: persona.nai_attg_title?.trim() ?? "",
     },
     {
-      label: localizer(locale, "commands.novelai.attg.tags_label"),
+      label: localizer(locale, "commands.config.panel.attg.tags_label"),
       value: persona.nai_attg_tags?.trim() ?? "",
     },
     {
-      label: localizer(locale, "commands.novelai.attg.genre_label"),
+      label: localizer(locale, "commands.config.panel.attg.genre_label"),
       value: persona.nai_attg_genre?.trim() ?? "",
     },
   ];
@@ -1473,14 +1473,14 @@ ${localizer(locale, "commands.config.panel.advanced_description")}`,
   const noneContent = renderFencedCollectionContent(localizer(locale, "commands.config.panel.none_label"));
   const attgHeader =
     attgState !== "omitted"
-      ? `**${localizer(locale, "commands.novelai.attg.modal_title")}**\n${safeSelectOptionText(
-          localizer(locale, "commands.novelai.attg.description"),
+      ? `**${localizer(locale, "commands.config.panel.attg.modal_title")}**\n${safeSelectOptionText(
+          localizer(locale, "commands.config.panel.attg.description"),
           65,
         )}`
       : "";
   const attgStars =
     attgState !== "omitted"
-      ? `**${localizer(locale, "commands.novelai.attg.stars_label")}:** ${
+      ? `**${localizer(locale, "commands.config.panel.attg.stars_label")}:** ${
           persona.nai_attg_stars === null || persona.nai_attg_stars === undefined
             ? localizer(locale, "commands.config.panel.none_label")
             : String(persona.nai_attg_stars)

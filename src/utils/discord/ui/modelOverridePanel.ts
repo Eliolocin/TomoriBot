@@ -114,7 +114,7 @@ export function buildModelOverrideRemoveModal(
             };
           }
 
-          const destination = "/config > Persona > Advanced";
+          const destination = "/config > Persona > Overrides";
           const scope = localizer(locale, "commands.model.override.remove.persona_scope");
           const targetPreview = safeSelectOptionText(entry.persona_nickname, MODEL_OVERRIDE_TARGET_PREVIEW_MAX_LENGTH);
           const modelPreview = safeSelectOptionText(

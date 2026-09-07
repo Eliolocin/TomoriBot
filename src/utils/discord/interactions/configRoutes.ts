@@ -1371,8 +1371,8 @@ async function runPersonaWrite(
           receipt: receipt(
             locale,
             "error",
-            "commands.novelai.attg.invalid_stars_title",
-            "commands.novelai.attg.invalid_stars_description",
+            "commands.config.panel.attg.invalid_stars_title",
+            "commands.config.panel.attg.invalid_stars_description",
           ),
         };
       }
@@ -1393,8 +1393,10 @@ async function runPersonaWrite(
         receipt: receipt(
           locale,
           "success",
-          isClearing ? "commands.novelai.attg.cleared_title" : "commands.novelai.attg.success_title",
-          isClearing ? "commands.novelai.attg.cleared_description" : "commands.novelai.attg.success_description",
+          isClearing ? "commands.config.panel.attg.cleared_title" : "commands.config.panel.attg.success_title",
+          isClearing
+            ? "commands.config.panel.attg.cleared_description"
+            : "commands.config.panel.attg.success_description",
           { persona_name: persona.persona_nickname },
         ),
       };

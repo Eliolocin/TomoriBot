@@ -954,7 +954,9 @@ describe("buildModelOverrideRemoveModal option descriptions and mixed chunk cont
     );
     expect(options[0].description.length).toBeLessThanOrEqual(100);
 
-    expect(options[1].description).toBe("Persona • Sparrow • gemini-2.5-flash (google) • /config > Persona > Advanced");
+    expect(options[1].description).toBe(
+      "Persona • Sparrow • gemini-2.5-flash (google) • /config > Persona > Overrides",
+    );
     expect(options[1].description.length).toBeLessThanOrEqual(100);
   });
 
@@ -1017,6 +1019,6 @@ describe("buildModelOverrideRemoveModal option descriptions and mixed chunk cont
     expect(personaDesc.startsWith(localizer("en-US", "commands.model.override.remove.persona_scope"))).toBe(true);
     expect(personaDesc.includes("oversized-persona")).toBe(true);
     expect(personaDesc.includes("oversized-model")).toBe(true);
-    expect(personaDesc.endsWith("/config > Persona > Advanced")).toBe(true);
+    expect(personaDesc.endsWith("/config > Persona > Overrides")).toBe(true);
   });
 });

@@ -490,14 +490,14 @@ function buildNaiPresetBlock(
         ? "not_kayra_erato"
         : null;
   const display = explanationKey
-    ? `**${localizer(locale, `commands.novelai.preset.text.${explanationKey}_title`)}**\n${localizer(
+    ? `**${localizer(locale, `commands.config.panel.nai_preset.${explanationKey}_title`)}**\n${localizer(
         locale,
-        `commands.novelai.preset.text.${explanationKey}_description`,
+        `commands.config.panel.nai_preset.${explanationKey}_description`,
       )}`
     : (() => {
-        const prefix = `**${localizer(locale, "commands.novelai.preset.text.select_label")}**\n${localizer(
+        const prefix = `**${localizer(locale, "commands.config.panel.nai_preset.select_label")}**\n${localizer(
           locale,
-          "commands.novelai.preset.text.select_description",
+          "commands.config.panel.nai_preset.select_description",
         )}\n> `;
         const suffix = ` (${view.target})`;
         const activeName = view.activePresetName ?? localizer(locale, "commands.config.panel.none_label");
@@ -524,14 +524,14 @@ function buildNaiPresetBlock(
         }))
       : [
           {
-            label: safeSelectOptionText(localizer(locale, "commands.novelai.preset.text.select_label"), 100),
+            label: safeSelectOptionText(localizer(locale, "commands.config.panel.nai_preset.select_label"), 100),
             value: "__nai-preset-disabled__",
             description: safeSelectOptionText(
               localizer(
                 locale,
                 explanationKey
-                  ? `commands.novelai.preset.text.${explanationKey}_description`
-                  : "commands.novelai.preset.text.select_description",
+                  ? `commands.config.panel.nai_preset.${explanationKey}_description`
+                  : "commands.config.panel.nai_preset.select_description",
               ),
               100,
             ),
@@ -542,7 +542,7 @@ function buildNaiPresetBlock(
     options.unshift({
       label: safeSelectOptionText(
         localizer(locale, "commands.config.panel.model_provider_more_option", {
-          capability: localizer(locale, "commands.novelai.preset.text.select_label"),
+          capability: localizer(locale, "commands.config.panel.nai_preset.select_label"),
           page: pageIndex === 0 ? pageCount : pageIndex,
           total: pageCount,
         }),
@@ -555,7 +555,7 @@ function buildNaiPresetBlock(
     options.push({
       label: safeSelectOptionText(
         localizer(locale, "commands.config.panel.model_provider_more_option", {
-          capability: localizer(locale, "commands.novelai.preset.text.select_label"),
+          capability: localizer(locale, "commands.config.panel.nai_preset.select_label"),
           page: ((pageIndex + 1) % pageCount) + 1,
           total: pageCount,
         }),
@@ -578,7 +578,10 @@ function buildNaiPresetBlock(
             view.compatibility === "eligible" && view.fingerprint
               ? buildConfigRouteId({ action: "nai-preset-select", locale, start: pageStart, fp: view.fingerprint })
               : buildConfigRouteId({ action: "nai-preset-select", locale, start: pageStart, fp: "00000000" }),
-          placeholder: safeSelectOptionText(localizer(locale, "commands.novelai.preset.text.select_placeholder"), 150),
+          placeholder: safeSelectOptionText(
+            localizer(locale, "commands.config.panel.nai_preset.select_placeholder"),
+            150,
+          ),
           options,
           disabled: writesDisabled || view.compatibility !== "eligible" || view.presets.length === 0,
         },

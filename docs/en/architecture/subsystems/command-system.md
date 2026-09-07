@@ -1010,7 +1010,7 @@ Bare `/mcps` is the only registered MCP path; the legacy `mcp` subcommand tree n
 - `nsfw`: jailbreaks
 - `optional-key`: brave/set/remove
 - `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel, channel-prompt
-- `novelai`: attg, generate(image), preset(text)
+- `novelai`: generate(image)
 - `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove, image-tags, sprites(add/edit/remove/export/import), attribute(add/edit/remove), sample-dialogue(add/edit/remove), prompt(set/remove), history(import/remove)
 - `memory`: document(add/remove), personal(add/edit/remove/import/export), server(add/edit/remove/import/export)
@@ -1053,10 +1053,11 @@ require Manage Server.
 The panel previews a trusted saved reference without exposing its storage URL or path, using a
 configured public URL directly and a local attachment fallback. Uploading a reference is required
 in the upload modal; clearing uses a separate confirmation.
-Appearance follows Memories in the page selector, while Advanced is last. Advanced Humanizer
-opens a modal select directly. Text model overrides use a provider picker followed by a modal model
-picker when the provider has at most 25 models; larger catalogs retain the paginated picker because
-Discord limits one select to 25 options.
+Appearance follows Memories in the page selector. Advanced owns persona prompts, context notes, and
+ATTG metadata; Overrides owns response style and text-model overrides.
+Text model overrides use a provider picker followed by a modal model picker when the provider has
+at most 25 models; larger catalogs retain the paginated picker because Discord limits one select to
+25 options.
 
 Behavior pages place Advanced Memory before Notice Behavior and keep Experimental Behavior last.
 Trigger cooldown omits its stored duration while disabled. Notice Behavior marks each notice with

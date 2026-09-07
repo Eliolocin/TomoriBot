@@ -3015,9 +3015,9 @@ describe("config Persona Advanced routes", () => {
       nai_attg_genre: null,
       nai_attg_stars: null,
     });
-    expect(savedReceipt).toContain(localizer("en-US", "commands.novelai.attg.success_title"));
-    expect(clearedReceipt).toContain(localizer("en-US", "commands.novelai.attg.cleared_title"));
-    expect(clearedReceipt).not.toContain(localizer("en-US", "commands.novelai.attg.success_title"));
+    expect(savedReceipt).toContain(localizer("en-US", "commands.config.panel.attg.success_title"));
+    expect(clearedReceipt).toContain(localizer("en-US", "commands.config.panel.attg.cleared_title"));
+    expect(clearedReceipt).not.toContain(localizer("en-US", "commands.config.panel.attg.success_title"));
     setAttgSpy.mockRestore();
   });
 

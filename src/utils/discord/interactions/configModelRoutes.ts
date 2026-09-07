@@ -834,8 +834,8 @@ async function handleParameters(context: ConfigModelRouteContext): Promise<boole
           ? receipt(
               locale,
               "success",
-              "commands.novelai.preset.text.success_title",
-              "commands.novelai.preset.text.success_description",
+              "commands.config.panel.nai_preset.success_title",
+              "commands.config.panel.nai_preset.success_description",
               { preset_name: chosenPreset.preset_name },
             )
           : result.status === "not-found"

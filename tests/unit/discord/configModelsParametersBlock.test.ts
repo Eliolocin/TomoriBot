@@ -270,7 +270,7 @@ describe("configModelsPanel parameters block", () => {
       flat.some(
         (component) =>
           component.type === ComponentType.TextDisplay &&
-          component.content.includes(localizer("en-US", "commands.novelai.preset.text.not_novelai_description")),
+          component.content.includes(localizer("en-US", "commands.config.panel.nai_preset.not_novelai_description")),
       ),
     ).toBe(true);
     const disabledSelect = flat.find(

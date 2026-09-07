@@ -269,36 +269,36 @@ export function buildPersonaAttgModal(
   const fields = [
     {
       field: CONFIG_NAI_ATTG_AUTHOR_FIELD,
-      labelKey: "commands.novelai.attg.author_label",
-      placeholderKey: "commands.novelai.attg.author_placeholder",
+      labelKey: "commands.config.panel.attg.author_label",
+      placeholderKey: "commands.config.panel.attg.author_placeholder",
       value: current.nai_attg_author,
       maxLength: 256,
     },
     {
       field: CONFIG_NAI_ATTG_TITLE_FIELD,
-      labelKey: "commands.novelai.attg.title_label",
-      placeholderKey: "commands.novelai.attg.title_placeholder",
+      labelKey: "commands.config.panel.attg.title_label",
+      placeholderKey: "commands.config.panel.attg.title_placeholder",
       value: current.nai_attg_title,
       maxLength: 256,
     },
     {
       field: CONFIG_NAI_ATTG_TAGS_FIELD,
-      labelKey: "commands.novelai.attg.tags_label",
-      placeholderKey: "commands.novelai.attg.tags_placeholder",
+      labelKey: "commands.config.panel.attg.tags_label",
+      placeholderKey: "commands.config.panel.attg.tags_placeholder",
       value: current.nai_attg_tags,
       maxLength: 256,
     },
     {
       field: CONFIG_NAI_ATTG_GENRE_FIELD,
-      labelKey: "commands.novelai.attg.genre_label",
-      placeholderKey: "commands.novelai.attg.genre_placeholder",
+      labelKey: "commands.config.panel.attg.genre_label",
+      placeholderKey: "commands.config.panel.attg.genre_placeholder",
       value: current.nai_attg_genre,
       maxLength: 256,
     },
     {
       field: CONFIG_NAI_ATTG_STARS_FIELD,
-      labelKey: "commands.novelai.attg.stars_label",
-      placeholderKey: "commands.novelai.attg.stars_placeholder",
+      labelKey: "commands.config.panel.attg.stars_label",
+      placeholderKey: "commands.config.panel.attg.stars_placeholder",
       value:
         current.nai_attg_stars === null || current.nai_attg_stars === undefined ? null : String(current.nai_attg_stars),
       maxLength: 1,
@@ -307,7 +307,7 @@ export function buildPersonaAttgModal(
 
   return {
     custom_id: buildConfigRouteId({ action: "attg-submit", locale, personaId, nonce }),
-    title: modalTitle(locale, "commands.novelai.attg.modal_title"),
+    title: modalTitle(locale, "commands.config.panel.attg.modal_title"),
     components: fields.map(({ field, labelKey, placeholderKey, value, maxLength }) => ({
       type: 18,
       label: modalLabel(locale, labelKey),
