@@ -14,7 +14,7 @@ Irodori-TTS v4.1は、日本語向けの音声合成モデルです。1つのチ
 
 ```powershell
 .\servers\tts\irodoritts\install-irodori.ps1 cu128
-python servers\tts\irodoritts\server.py
+.\servers\tts\irodoritts\.venv\Scripts\python.exe servers\tts\irodoritts\server.py
 ```
 
 ### Linux Bash（NVIDIA）
@@ -41,7 +41,7 @@ servers/tts/irodoritts/.venv/bin/python servers/tts/irodoritts/server.py
 
 ```powershell
 $env:IRODORI_TTS_MODEL_ID = "phasefield-audio/Irodori-TTS-v4.1-Anime"
-python servers\tts\irodoritts\server.py
+.\servers\tts\irodoritts\.venv\Scripts\python.exe servers\tts\irodoritts\server.py
 ```
 
 Bashの場合:
