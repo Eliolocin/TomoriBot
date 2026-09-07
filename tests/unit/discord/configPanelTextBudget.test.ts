@@ -14,6 +14,7 @@ import type {
   ConfigChannelsView,
   ConfigPersonaMemoryView,
 } from "@/utils/discord/interactions/configRouteContext";
+import type { ConfigPersonaVoiceView } from "@/utils/discord/interactions/configPersonaVoiceLoader";
 import {
   CONFIG_MODEL_CAPABILITY_ORDER,
   isConfigCatalogModelCapability,
@@ -24,10 +25,12 @@ import {
   voiceSampleAttachmentName,
   type ConfigVoicesView,
 } from "@/utils/discord/ui/configVoicesPanel";
+import type { ConfigPersonaVoiceRemoteView } from "@/utils/discord/ui/configVoicePanel";
 import type { ConfigCapabilityEndpoint } from "@/utils/discord/interactions/configModelLoaders";
 import type { ConfigSwitchModelsView } from "@/utils/discord/ui/configModelsPanel";
 import {
   DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX,
+  DISCORD_TEXT_INPUT_MAX,
   getDiscordTextLength,
   validateComponentsV2MessageLimits,
 } from "@/utils/discord/ui/componentsV2Limits";
@@ -1052,6 +1055,241 @@ describe("voices page text and component budgeting", () => {
       components: [...payload.components, { type: ComponentType.TextDisplay, content: "Reserve" }],
     };
     expect(countRenderedComponents(payloadWithOverGenerousReserve)).toBeGreaterThan(28);
+  });
+});
+
+describe("Persona Voice page text and component budgeting", () => {
+  const makePersonaVoiceView = (
+    apiStyle: ConfigPersonaVoiceView["capability"]["apiStyle"],
+    samples: readonly VoiceSampleRow[] = [],
+    supportsVoiceDesign = false,
+  ): ConfigPersonaVoiceView => ({
+    capability: { apiStyle, assignable: apiStyle !== null, supportsVoiceDesign },
+    samples: samples.map(({ sample_id, name, ref_text, duration_ms }) => ({
+      sample_id,
+      name,
+      ref_text,
+      duration_ms,
+    })),
+  });
+
+  const buildVoicePayload = (
+    locale: string,
+    receipt: boolean,
+    overrides: Partial<Parameters<typeof buildConfigPanelPayload>[0]> = {},
+  ) =>
+    buildConfigPanelPayload({
+      locale,
+      actor: GUILD_MANAGER,
+      category: "persona",
+      page: "voice",
+      personas: [makePersona({ persona_id: 55 })],
+      selectedPersonaId: 55,
+      readStatus: "fresh",
+      personaVoiceView: makePersonaVoiceView("tts-clone", VOICE_SAMPLES, true),
+      receipt: receipt ? { tone: "success", heading: "Saved", detail: "Voice configuration was saved." } : undefined,
+      ...overrides,
+    });
+
+  const assertValid = (payload: ReturnType<typeof buildVoicePayload>, expectedComponents?: number): void => {
+    const validation = validateComponentsV2MessageLimits(payload);
+    expect(validation.valid, `Violations: ${JSON.stringify(validation.violations)}`).toBe(true);
+    const componentCount = countRenderedComponents(payload);
+    expect(componentCount).toBeLessThanOrEqual(30);
+    if (expectedComponents !== undefined) expect(componentCount).toBe(expectedComponents);
+    expect(getPayloadTextTotal(payload)).toBeLessThanOrEqual(DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX);
+  };
+
+  const maximumPersonaSet = (prompt: string): TomoriState[] => [
+    makePersona({
+      persona_id: 55,
+      speech_voice_sample_id: VOICE_SAMPLES[0]?.sample_id,
+      speech_voice_name: "Stored clone voice",
+      speech_voice_design_prompt: prompt,
+    }),
+    ...Array.from({ length: 30 }, (_, index) => makePersona({ persona_id: index + 100 })),
+  ];
+
+  const expectedLocalMaximum = (receipt: boolean, avatarPresent: boolean): number =>
+    26 + (receipt ? 2 : 0) + (avatarPresent ? 2 : 0);
+
+  const makePrompt = (length: number, runLength: number): string => {
+    const seed = `${"`".repeat(runLength)} 🌸✨ warm, unhurried voice. `;
+    let prompt = seed;
+    while (getDiscordTextLength(prompt) < length) prompt += "Detailed delivery guidance. ";
+    return Array.from(prompt).slice(0, length).join("");
+  };
+
+  for (const locale of RUNTIME_LOCALES) {
+    for (const receipt of [false, true]) {
+      for (const avatarPresent of [false, true]) {
+        it(`pins clone Voice maximum (locale=${locale}, receipt=${receipt}, avatar=${avatarPresent})`, () => {
+          const payload = buildVoicePayload(locale, receipt, {
+            personas: maximumPersonaSet(makePrompt(DISCORD_TEXT_INPUT_MAX, 3)),
+            selectedPersonaId: 55,
+            selectedPersonaAvatarUrl: avatarPresent ? "https://cdn.example/avatar.png" : null,
+            receipt: receipt ? { tone: "success", heading: "Saved", detail: "Voice saved." } : undefined,
+          });
+          assertValid(payload, expectedLocalMaximum(receipt, avatarPresent));
+
+          const voiceSelector = getStringSelectMenus(payload).find((menu) =>
+            String(menu.customId).includes("voice-select"),
+          );
+          expect(voiceSelector).toBeDefined();
+          const options = voiceSelector?.options as unknown[];
+          expect(options).toHaveLength(25);
+          expect((options.at(-1) as Record<string, unknown>).value).toBe("page:24");
+        });
+      }
+    }
+  }
+
+  it("keeps the stored maximum and oversized prompts bounded for every fence run and astral emoji", () => {
+    for (const promptSize of ["maximum", "oversized"] as const) {
+      for (const runLength of [3, 4, 5, 6, 8]) {
+        const prompt = makePrompt(
+          promptSize === "maximum" ? DISCORD_TEXT_INPUT_MAX : DISCORD_TEXT_INPUT_MAX + 500,
+          runLength,
+        );
+        const payload = buildVoicePayload("en-US", true, {
+          personas: maximumPersonaSet(prompt),
+          selectedPersonaAvatarUrl: "https://cdn.example/avatar.png",
+        });
+        assertValid(payload, 30);
+        const promptDisplay = getTextDisplays(payload).find((text) => text.includes("Stored VoiceDesign prompt"));
+        expect(promptDisplay).toBeDefined();
+        const inner = promptDisplay?.replace(/^[\s\S]*```markdown\n/, "").replace(/\n```[\s\S]*$/, "") ?? "";
+        expect(inner).not.toContain("``");
+      }
+    }
+
+    const unsupportedPrompt = "🌸✨ hidden design prompt `".repeat(800);
+    const unsupported = buildVoicePayload("en-US", false, {
+      personas: maximumPersonaSet(unsupportedPrompt),
+      personaVoiceView: makePersonaVoiceView("tts-clone", VOICE_SAMPLES, false),
+    });
+    const unsupportedText = getTextDisplays(unsupported).join("\n");
+    expect(unsupportedText).not.toContain(unsupportedPrompt);
+    expect(JSON.stringify(unsupported)).not.toContain("voice-design-open");
+  });
+
+  it("keeps the local library's advance entry within one select and fails its boundary if reserve is weakened", () => {
+    const payload = buildVoicePayload("en-US", false, {
+      personaVoiceView: makePersonaVoiceView("tts-clone", VOICE_SAMPLES.slice(0, 26), true),
+    });
+    assertValid(payload);
+    const selector = getStringSelectMenus(payload).find((menu) => String(menu.customId).includes("voice-select"));
+    expect(selector?.options).toHaveLength(25);
+    expect(validateComponentsV2MessageLimits(payload).violations).not.toContainEqual(
+      expect.objectContaining({ code: "SELECT_OPTIONS_OVERSIZED" }),
+    );
+
+    const coveredPositions = new Set<number>();
+    for (const pageStart of [0, 24, 48]) {
+      const pagePayload = buildVoicePayload("en-US", false, {
+        personaVoicePageStart: pageStart,
+        personaVoiceView: makePersonaVoiceView("tts-clone", VOICE_SAMPLES, true),
+      });
+      assertValid(pagePayload);
+      const pageSelector = getStringSelectMenus(pagePayload).find((menu) =>
+        String(menu.customId).includes("voice-select"),
+      );
+      for (const option of (pageSelector?.options ?? []) as Array<Record<string, unknown>>) {
+        if (/^\d+$/.test(String(option.value))) coveredPositions.add(Number(option.value));
+      }
+    }
+    expect(coveredPositions).toEqual(new Set(VOICE_SAMPLES.map((_sample, index) => index)));
+  });
+
+  it("renders a disabled endpoint control without leaking a stored unsupported prompt", () => {
+    const missing = buildVoicePayload("en-US", false, {
+      personaVoiceView: makePersonaVoiceView(null),
+    });
+    assertValid(missing);
+    expect(JSON.stringify(missing)).toContain("No speech endpoint");
+    expect(JSON.stringify(missing)).toContain('"disabled":true');
+  });
+
+  it("ends unsupported capability views with their notice so the persona hint remains absorbed", () => {
+    for (const personaVoiceView of [
+      makePersonaVoiceView(null),
+      makePersonaVoiceView("tts-clone", VOICE_SAMPLES, false),
+      makePersonaVoiceView("elevenlabs"),
+    ]) {
+      const payload = buildVoicePayload("en-US", false, { personaVoiceView });
+      const finalTextDisplay = getTextDisplays(payload).at(-1);
+      expect(finalTextDisplay).toContain("-#");
+      assertValid(payload);
+    }
+  });
+
+  it("measures a deep remote chooser separately and keeps position plus fingerprint values bounded", () => {
+    const remoteView: ConfigPersonaVoiceRemoteView = {
+      voices: Array.from({ length: 73 }, (_, index) => ({
+        label: `Remote voice ${index} 🌸✨ ${"`".repeat([3, 4, 5, 6, 8][index % 5] ?? 3)}`,
+        fingerprint: `catalog-fingerprint-${index}`,
+      })),
+      catalogFingerprint: "catalog-fingerprint",
+      pageStart: 48,
+    };
+    for (const locale of RUNTIME_LOCALES) {
+      for (const receipt of [false, true]) {
+        for (const avatarPresent of [false, true]) {
+          const payload = buildVoicePayload(locale, receipt, {
+            personas: maximumPersonaSet("stored but hidden by provider mode").map((persona, index) =>
+              index === 0
+                ? {
+                    ...persona,
+                    speech_voice_sample_id: null,
+                    speech_voice_id: "external-voice-id-48",
+                    speech_voice_name: "Remote stored voice",
+                  }
+                : persona,
+            ),
+            selectedPersonaAvatarUrl: avatarPresent ? "https://cdn.example/avatar.png" : null,
+            personaVoiceView: makePersonaVoiceView("elevenlabs"),
+            personaVoiceRemoteView: remoteView,
+            receipt: receipt ? { tone: "success", heading: "Saved", detail: "Voice saved." } : undefined,
+          });
+          assertValid(payload, 24 + (receipt ? 2 : 0) + (avatarPresent ? 2 : 0));
+          const selector = getStringSelectMenus(payload).find((menu) => String(menu.customId).includes("voice-select"));
+          const options = (selector?.options ?? []) as Array<Record<string, unknown>>;
+          expect(options).toHaveLength(25);
+          expect(options.slice(0, 24).every((option) => /^voice:\d+:[A-Za-z0-9_-]+$/.test(String(option.value)))).toBe(
+            true,
+          );
+          expect(String(options.at(-1)?.value)).toMatch(/^page:\d+:[A-Za-z0-9_-]+$/);
+          expect(JSON.stringify(payload)).not.toContain("external-voice-id-48");
+          expect(JSON.stringify(payload)).not.toContain("stored but hidden by provider mode");
+        }
+      }
+    }
+
+    const onePage = buildVoicePayload("en-US", false, {
+      personaVoiceView: makePersonaVoiceView("elevenlabs"),
+      personaVoiceRemoteView: { voices: remoteView.voices?.slice(0, 25), catalogFingerprint: "short-catalog" },
+    });
+    expect(
+      getStringSelectMenus(onePage).find((menu) => String(menu.customId).includes("voice-select"))?.options,
+    ).toHaveLength(25);
+
+    const coveredPositions = new Set<number>();
+    for (const pageStart of [0, 24, 48, 72]) {
+      const pagePayload = buildVoicePayload("en-US", false, {
+        personaVoiceView: makePersonaVoiceView("elevenlabs"),
+        personaVoiceRemoteView: { ...remoteView, pageStart: undefined },
+        personaVoicePageStart: pageStart,
+      });
+      assertValid(pagePayload);
+      const pageSelector = getStringSelectMenus(pagePayload).find((menu) =>
+        String(menu.customId).includes("voice-select"),
+      );
+      for (const option of (pageSelector?.options ?? []) as Array<Record<string, unknown>>) {
+        const match = String(option.value).match(/^voice:(\d+):/);
+        if (match) coveredPositions.add(Number(match[1]));
+      }
+    }
+    expect(coveredPositions).toEqual(new Set(remoteView.voices?.map((_voice, index) => index)));
   });
 });
 

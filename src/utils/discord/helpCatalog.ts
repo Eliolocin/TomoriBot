@@ -200,8 +200,8 @@ function speechVariables(locale: string): HelpVariables {
     custom_endpoint_add: mention("providers"),
     model_speech: mention("providers"),
     voice_add: mention("config"),
-    voice_assign: mention("speech", "voice-assign"),
-    voice_design_set: mention("speech", "voice-design", "set"),
+    voice_assign: mention("config"),
+    voice_design_set: mention("config"),
     elevenlabs: mention("providers"),
     help_transcription: buildHelpPageReference(locale, "commands.help.dashboard.pages.transcription"),
   };

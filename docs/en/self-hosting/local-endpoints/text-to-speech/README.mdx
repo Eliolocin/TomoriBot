@@ -36,9 +36,9 @@ For clone engines, add and assign one voice sample per persona:
 
 1. Prepare a clean 10-20 second clip with one speaker and no background music.
 2. Open `/config` under Models > TTS Parameters & Voices and upload the sample. Any audio format is accepted; TomoriBot converts it to mono WAV.
-3. Run `/speech voice-assign`, then choose the persona and voice sample.
+3. Open `/config` under Persona > Voice, then choose the persona and voice sample.
 
-For Qwen3-TTS VoiceDesign, skip the audio sample and run `/speech voice-design set` for each persona instead.
+For Qwen3-TTS VoiceDesign, skip the audio sample and use Persona > Voice in `/config` for each persona instead.
 
 ElevenLabs users should choose **Add New Provider** and **ElevenLabs** in `/providers`; it registers the speech and transcription endpoints together.
 

@@ -28,6 +28,7 @@ import {
   resolvePersonaGeneralActionState,
   resolvePersonaMemoriesActionState,
   resolvePersonaSpritesActionState,
+  PERSONA_VOICE_PAGE_BY_ROUTE,
   resolveBehaviorGeneralActionState,
   resolveBehaviorTriggerActionState,
   resolvePermissionsCapabilitiesActionState,
@@ -125,9 +126,11 @@ describe("config page filtering", () => {
     expect(visibleConfigPages("models", DM_OWNER)).toEqual(["switch", "parameters", "fallbacks", "voices"]);
   });
 
-  it("omits Persona Appearance and Advanced from a guild member and leaves its siblings readable", () => {
+  it("omits Persona Appearance, Advanced, and Voice from a guild member and leaves its siblings readable", () => {
     expect(resolveConfigPageState("persona", "appearance", GUILD_MEMBER)).toBe("omitted");
     expect(resolveConfigPageState("persona", "advanced", GUILD_MEMBER)).toBe("omitted");
+    expect(resolveConfigPageState("persona", "voice", GUILD_MEMBER)).toBe("omitted");
+    expect(resolveConfigPageState("persona", "voice", GUILD_MANAGER)).toBe("enabled");
     expect(resolveConfigPageState("persona", "general", GUILD_MEMBER)).toBe("enabled");
     expect(resolveConfigPageState("persona", "memories", GUILD_MEMBER)).toBe("read-only");
     expect(resolveConfigPageState("persona", "sprites", GUILD_MEMBER)).toBe("read-only");
@@ -139,6 +142,7 @@ describe("config page filtering", () => {
       "naming",
       "sprites",
     ]);
+    expect(visibleConfigPages("persona", GUILD_MANAGER)).toContain("voice");
   });
 
   it("omits the manager-owned Behavior category for a guild member", () => {
@@ -649,6 +653,24 @@ describe("isConfigRouteAuthorized", () => {
     ).toBe(true);
   });
 
+  it("keeps Persona Voice routes manager-only in guilds while allowing the DM owner", () => {
+    const routes: ConfigPanelRoute[] = [
+      { action: "voice-select", locale: "en-US", personaId: 5 },
+      { action: "voice-page", locale: "en-US", personaId: 5, start: 0 },
+      { action: "voice-chooser-cancel", locale: "en-US", personaId: 5 },
+      { action: "voice-clear", locale: "en-US", personaId: 5 },
+      { action: "voice-design-open", locale: "en-US", personaId: 5 },
+      { action: "voice-design-submit", locale: "en-US", personaId: 5, nonce: "nonce1234567" },
+      { action: "voice-design-remove", locale: "en-US", personaId: 5 },
+    ];
+
+    for (const route of routes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
+    }
+  });
+
   it("authorizes provider-independent clear through the Models switch page", () => {
     // The clear rides the switch page's provider select now, so that route carries its gate.
     for (const capability of ["image", "nai-image"] as const) {
@@ -762,6 +784,7 @@ describe("isConfigRouteAuthorized", () => {
       ...Object.keys(CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_RULES_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_OVERRIDES_ACTION_BY_ROUTE),
+      ...Object.keys(PERSONA_VOICE_PAGE_BY_ROUTE),
     ]);
 
     const unknownRoute = { action: "not-a-real-action", locale: "en-US" } as unknown as ConfigPanelRoute;

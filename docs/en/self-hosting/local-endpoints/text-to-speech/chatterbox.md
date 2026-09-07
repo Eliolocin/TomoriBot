@@ -49,7 +49,7 @@ Adding the model makes the endpoint active immediately. Use `/providers` later o
 
 1. Prepare a clean 10-20 second voice clip with one speaker and no background music.
 2. Open `/config` under Models > TTS Parameters & Voices and upload the clip.
-3. Run `/speech voice-assign`, then choose the persona and the voice sample.
+3. Open `/config` under Persona > Voice, then choose the persona and the voice sample.
 
 Chatterbox can use bracket delivery tags such as `[laugh]` and `[sigh]` when Turbo mode is enabled.
 

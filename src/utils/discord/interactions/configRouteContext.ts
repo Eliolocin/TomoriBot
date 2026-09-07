@@ -63,6 +63,10 @@ import type {
 } from "@/utils/discord/ui/configModelsPanel";
 import type { ConfigVoicesView } from "@/utils/discord/ui/configVoicesPanel";
 import type { ConfigVoicesLoaderDependencies } from "@/utils/discord/interactions/configVoicesLoader";
+import type { ConfigPersonaVoiceView } from "@/utils/discord/interactions/configPersonaVoiceLoader";
+import type { ConfigPersonaVoiceRemoteView } from "@/utils/discord/ui/configVoicePanel";
+import type { ElevenLabsVoiceCatalogResult } from "@/utils/audio/elevenLabsVoiceCatalog";
+import type { SpeechEndpointResult } from "@/utils/provider/speechEndpointResolver";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { type PersonaPanelAvatarData, withPersonaPanelAvatar } from "@/utils/discord/personaPanelAvatar";
 import type { PersonaPanelCharacterReferenceData } from "@/utils/discord/personaPanelCharacterReference";
@@ -215,6 +219,19 @@ export interface ConfigRouteDependencies {
     scope: ConfigScope,
     persona: TomoriState,
   ): Promise<ConfigPersonaMemoryView>;
+  loadPersonaVoiceView(state: TomoriState): Promise<ConfigPersonaVoiceView>;
+  resolveActiveSpeechEndpoint(serverId: number): Promise<SpeechEndpointResult | null>;
+  fetchElevenLabsVoiceCatalog(apiKey: string): Promise<ElevenLabsVoiceCatalogResult>;
+  setPersonaVoiceConfig(
+    personaId: number,
+    voice: {
+      speech_voice_sample_id: number | null;
+      speech_voice_id: string | null;
+      speech_voice_name: string | null;
+      speech_voice_design_prompt: string | null;
+    },
+  ): Promise<boolean>;
+  invalidatePersonaVoiceCache(serverDiscId: string): void;
   loadServerHumanizerDegree(serverId: number): Promise<number | null>;
   loadPersonaSprites(personaId: number): Promise<PersonaSpriteRow[]>;
   loadSavedTextProviders(serverId: number): Promise<Array<{ provider: string }>>;
@@ -370,6 +387,9 @@ export interface ConfigRepaintOptions {
   personaSprites?: PersonaSpriteRow[];
   spritePageStart?: number;
   selectedSpriteIndex?: number;
+  personaVoiceView?: ConfigPersonaVoiceView;
+  personaVoiceRemoteView?: ConfigPersonaVoiceRemoteView;
+  personaVoicePageStart?: number;
   modelProviderPage?: ConfigSwitchModelsProviderPage;
   endpointPage?: ConfigEndpointPage;
   behaviorView?: ConfigBehaviorView;
@@ -403,6 +423,7 @@ export async function repaint(
   let personaMemoryView = options.personaMemoryView;
   let serverHumanizerDegree = options.serverHumanizerDegree;
   let personaSprites = options.personaSprites;
+  let personaVoiceView = options.personaVoiceView;
   if (category === "persona") {
     const persona = scope.personas.find((candidate) => candidate.persona_id === selectedPersonaId);
     if (persona) {
@@ -439,6 +460,9 @@ export async function repaint(
           persona.persona_id,
           `persona_char_ref_${persona.persona_id}.png`,
         );
+      }
+      if (page === "voice" && !personaVoiceView) {
+        personaVoiceView = await dependencies.loadPersonaVoiceView(persona);
       }
     }
   }
@@ -549,6 +573,9 @@ export async function repaint(
         personaSprites,
         spritePageStart: options.spritePageStart,
         selectedSpriteIndex: options.selectedSpriteIndex,
+        personaVoiceView,
+        personaVoiceRemoteView: options.personaVoiceRemoteView,
+        personaVoicePageStart: options.personaVoicePageStart,
         attributeMemteachingEnabled: scope.personas[0]?.config?.attribute_memteaching_enabled === true,
         sampledialogueMemteachingEnabled: scope.personas[0]?.config?.sampledialogue_memteaching_enabled === true,
         namingStyle: options.namingStyle,

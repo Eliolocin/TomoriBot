@@ -46,6 +46,7 @@ const MAX_PANEL_PROSE_LINE_BESIDE_THUMBNAIL = 40;
  */
 const THUMBNAIL_PANELS_WITH_RENDER_COVERAGE = new Set([
   "configPanel.ts",
+  "configVoicePanel.ts",
   "memoriesPanel.ts",
   "personalConfigPanel.ts",
   "personalMemoriesPanel.ts",

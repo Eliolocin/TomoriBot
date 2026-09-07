@@ -444,7 +444,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
       return {
         success: false,
         error:
-          "The active speech endpoint is configured for VoiceDesign, but the active persona does not have a voice design prompt yet. A server manager can add one with /speech voice-design set.",
+          "The active speech endpoint is configured for VoiceDesign, but the active persona does not have a voice design prompt yet. A server manager can add one in /config under Persona > Voice.",
       };
     }
 
@@ -452,7 +452,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
       return {
         success: false,
         error:
-          "No voice is configured for the active persona. A server manager can set one with /speech voice-assign or /speech voice-design set.",
+          "No voice is configured for the active persona. A server manager can set one in /config under Persona > Voice.",
       };
     }
 
@@ -603,7 +603,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
       return {
         success: false,
         error:
-          "No voice ID is configured for the active persona. A server manager can set one with /config speech voice-assign.",
+          "No voice ID is configured for the active persona. A server manager can set one in /config under Persona > Voice.",
       };
     }
 

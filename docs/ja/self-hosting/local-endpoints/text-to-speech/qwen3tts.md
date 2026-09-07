@@ -60,19 +60,19 @@ python servers\tts\qwen3tts\server.py --mode auto
 
 1. 背景音楽のない、1人の話者による10〜20秒のクリアな音声クリップを準備します。
 2. `/config`を実行してクリップをアップロードします。
-3. `/speech voice-assign`を実行し、ペルソナと音声サンプルを選択します。
+3. `/config`を実行し、ペルソナと音声サンプルを選択します。
 
 ### VoiceDesign
 
 サンプルの代わりに書かれた音声の説明を使用する必要があるペルソナには、これを使用します。
 
-1. `/speech voice-design set`を実行します。
+1. `/config`を実行します。
 2. ペルソナを選択します。
 3. 話者の年齢、トーン、アクセント、話し方など、自然言語の音声プロンプトを入力します。
 
-ペルソナのVoiceDesignプロンプトを削除するには、`/speech voice-design remove`を使用します。生成中、TomoriBotは保存されたプロンプトを`/synthesize`のJSON本文に`instruct`として送信します。ツールからの1回限りの`voice_instructions`は末尾に追加されます。
+ペルソナのVoiceDesignプロンプトを削除するには、`/config`を使用します。生成中、TomoriBotは保存されたプロンプトを`/synthesize`のJSON本文に`instruct`として送信します。ツールからの1回限りの`voice_instructions`は末尾に追加されます。
 
-オートモードは両方のセットアップを保持します。`/speech voice-assign`で設定されたペルソナはクローン合成を使用し、`/speech voice-design set`で設定されたペルソナはVoiceDesign合成を使用します。
+オートモードは両方のセットアップを保持します。`/config`で設定されたペルソナは選択に応じてクローン合成またはVoiceDesign合成を使用します。
 
 ## (オプション) VoiceDesign専用サーバー
 

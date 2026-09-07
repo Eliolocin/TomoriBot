@@ -555,7 +555,7 @@ describe("providers endpoint-activate route", () => {
       sourceChanged: true,
     });
     expect(changed.text).toBe(
-      "### Endpoint activated\n> **elevenlabs (speech)** is now active. Because the voice source type changed, run `/speech voice-assign` if any persona needs a matching voice assignment.",
+      "### Endpoint activated\n> **elevenlabs (speech)** is now active. Because the voice source type changed, open `/config` under Persona > Voice if any persona needs a matching voice assignment.",
     );
 
     const unchanged = await paintFor("speech:502", {

@@ -116,7 +116,7 @@ export function getProviderGuideVariables(locale: string): HelpVariables {
     helpCustomModels: buildHelpPageReference(locale, "commands.help.dashboard.pages.custom_endpoints"),
     supportServer: commandRegistry.getCommandMention("support", "discord"),
     configSpeechElevenlabs: commandRegistry.getCommandMention("providers"),
-    configSpeechVoiceAssign: commandRegistry.getCommandMention("speech", "voice-assign"),
+    configSpeechVoiceAssign: commandRegistry.getCommandMention("config"),
     configSpeechTranscripts: commandRegistry.getCommandMention("config"),
   };
 }

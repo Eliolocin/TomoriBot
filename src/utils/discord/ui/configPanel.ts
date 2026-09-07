@@ -112,6 +112,11 @@ import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { getCapabilitiesManagePermissionDefinitions } from "@/utils/discord/manageConfigMapping";
 import { buildDocsUrl, DOCS_PATHS } from "@/utils/discord/docsLinks";
+import {
+  buildConfigVoiceBody,
+  type ConfigPersonaVoiceRemoteView,
+  type ConfigPersonaVoiceRenderView,
+} from "@/utils/discord/ui/configVoicePanel";
 
 const RANDOM_TRIGGER_PAGE_SIZE = CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY;
 
@@ -167,6 +172,7 @@ const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
     advanced: "commands.config.panel.page_persona_advanced",
     naming: "commands.config.panel.page_persona_naming",
     sprites: "commands.config.panel.page_persona_sprites",
+    voice: "commands.config.panel.page_persona_voice",
   },
   behavior: {
     general: "commands.config.panel.page_behavior_general",
@@ -240,6 +246,9 @@ export interface ConfigPanelRenderInput {
   personaSprites?: PersonaSpriteRow[];
   spritePageStart?: number;
   selectedSpriteIndex?: number;
+  personaVoiceView?: ConfigPersonaVoiceRenderView;
+  personaVoiceRemoteView?: ConfigPersonaVoiceRemoteView;
+  personaVoicePageStart?: number;
   switchModelsView?: ConfigSwitchModelsView;
   modelParametersView?: ConfigParametersView;
   modelFallbacksView?: ConfigFallbacksView;
@@ -4127,6 +4136,27 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
   if (category === "persona" && page === "advanced") {
     if (resolveConfigPageState(category, page, actor) !== "omitted") {
       components.push(...buildPersonaAdvancedBody(input));
+    }
+    appendPersonaCreateHint(components, locale);
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "persona" && page === "voice") {
+    if (resolveConfigPageState(category, page, actor) !== "omitted") {
+      const selectedPersona = input.personas.find((persona) => persona.persona_id === input.selectedPersonaId) ?? null;
+      components.push(
+        ...buildConfigVoiceBody({
+          locale,
+          actor,
+          readStatus,
+          selectedPersona,
+          selectedPersonaAvatarUrl: input.selectedPersonaAvatarUrl,
+          view: input.personaVoiceView,
+          remoteView: input.personaVoiceRemoteView,
+          samplePageStart: input.personaVoicePageStart,
+          remotePageStart: input.personaVoicePageStart,
+        }),
+      );
     }
     appendPersonaCreateHint(components, locale);
     return buildPayload(components, receipt);

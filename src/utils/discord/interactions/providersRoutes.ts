@@ -379,7 +379,7 @@ function activateReceipt(
       detail: sourceChanged
         ? localizer(locale, "commands.providers.endpoint_activated_source_changed_detail", {
             endpoint: result.identity,
-            voice_assign_command: commandRegistry.getCommandMention("speech", "voice-assign"),
+            voice_assign_command: commandRegistry.getCommandMention("config"),
           })
         : localizer(locale, "commands.providers.endpoint_activated_detail", { endpoint: result.identity }),
     };

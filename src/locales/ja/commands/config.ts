@@ -69,6 +69,60 @@ export default {
       naming_modal_title_masculine: `男性向けの呼び方を編集`,
       naming_modal_title_feminine: `女性向けの呼び方を編集`,
       naming_modal_title_neutral: `通常の呼び方を編集`,
+      voice_assign: {
+        description: `ペルソナに音声出力用の声を割り当てます。`,
+        no_speech_endpoint_title: `音声エンドポイントがありません`,
+        no_speech_endpoint_description: `まず \`/providers\` で音声エンドポイントを登録してください。`,
+        no_sample_title: `音声サンプルがありません`,
+        no_sample_description: `まず \`/config\` でローカル音声サンプルを追加してください。`,
+        select_persona_title: `音声を設定するペルソナを選択`,
+        clear_choice_label: `音声を無効化`,
+        clear_choice_description: `このペルソナの現在の音声設定を削除します。`,
+        assign_clone_title: `音声サンプルを割り当て`,
+        sample_ref_hint_with: `書き起こしあり · {duration}`,
+        sample_ref_hint_without: `{duration}`,
+        elevenlabs_modal_title: `ElevenLabs音声を選択`,
+        elevenlabs_voice_fetch_failed_title: `音声一覧を取得できませんでした`,
+        elevenlabs_voice_fetch_failed_description: `ElevenLabsの音声一覧を読み込めませんでした。設定済みキーを確認して再試行してください。`,
+        success_title: `ペルソナの音声を更新しました`,
+        success_description: `**{persona}** は今後、ボイスメッセージで **{voice}** を使用します。`,
+        cleared_title: `ペルソナの音声を解除しました`,
+        cleared_description: `**{persona}** の音声設定を削除しました。`,
+      },
+      voice_design: {
+        description: `ペルソナに VoiceDesign 用の声質プロンプトを設定します。`,
+        prompt_description: `任意の声質説明。省略すると大きめの入力欄を開きます。`,
+        unsupported_endpoint_title: `VoiceDesign エンドポイントが有効ではありません`,
+        unsupported_endpoint_description: `VoiceDesign プロンプトを設定する前に、Supports Instruct が有効なローカルTTSエンドポイントを選択してください。`,
+        select_persona_title: `VoiceDesign を設定するペルソナを選択`,
+        modal_title: `VoiceDesign プロンプト`,
+        update_modal_title: `VoiceDesign プロンプトを更新`,
+        prompt_label: `声質説明`,
+        prompt_help: `話者の年齢、声色、質感、アクセント、速度、感情、話し方を説明してください。`,
+        prompt_placeholder: `落ち着いた大人のナレーター。ゆっくりめで、柔らかく息成分のある、安心感のある話し方。`,
+        prompt_required_description: `VoiceDesign プロンプトを入力してください。`,
+        success_title: `VoiceDesign プロンプトを設定しました`,
+        success_description: `**{persona}** はローカルボイスメッセージで次の VoiceDesign プロンプトを使用します:
+\`\`\`
+{preview}
+\`\`\``,
+        no_prompt_title: `VoiceDesign プロンプトがありません`,
+        no_prompt_description: `削除できる VoiceDesign プロンプトがありません。\`/config\` で設定できます。`,
+        cleared_title: `VoiceDesign プロンプトを削除しました`,
+        cleared_description: `**{persona}** から VoiceDesign プロンプトを削除しました。`,
+        cleared_description_with_prompt: `**{persona}** から VoiceDesign プロンプトを削除しました。控えが必要な場合は以下をコピーしてください：
+\`\`\`
+{removed_prompt}
+\`\`\``,
+      },
+      "voice-design": {
+        set: {
+          description: `ペルソナに VoiceDesign 用の声質プロンプトを設定します。`,
+        },
+        remove: {
+          description: `ペルソナの VoiceDesign プロンプトを削除します。`,
+        },
+      },
       voices: {
         add: {
           description: `ローカルTTS用の参照音声サンプルをアップロードします。`,
@@ -224,9 +278,9 @@ Exaggeration: **{exaggeration}**`,
         auth_token_description: `保護されたエンドポイント用のBearerトークン（任意）。`,
         success_title: `カスタムエンドポイントを追加しました`,
         success_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加し、現在の **{capability}** に設定しました。`,
-        speech_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加し、現在の **{capability}** に設定しました。次に \`/config\` で音声サンプルを追加し、\`/speech voice-assign\` で割り当ててください。`,
-        speech_voice_design_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加し、現在の **{capability}** に設定しました。次に \`/speech voice-design set\` でペルソナの声質プロンプトを設定してください。`,
-        speech_auto_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加し、現在の **{capability}** に設定しました。クローン用ペルソナは \`/config\` と \`/speech voice-assign\`、VoiceDesign 用ペルソナは \`/speech voice-design set\` を使用します。`,
+        speech_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加し、現在の **{capability}** に設定しました。次に \`/config\` で音声サンプルを追加し、\`/config\` で割り当ててください。`,
+        speech_voice_design_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加し、現在の **{capability}** に設定しました。次に \`/config\` でペルソナの声質プロンプトを設定してください。`,
+        speech_auto_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加し、現在の **{capability}** に設定しました。クローン用ペルソナは \`/config\` と \`/config\`、VoiceDesign 用ペルソナは \`/config\` を使用します。`,
       },
       edit: {
         description: `登録済みのラベル付きカスタムエンドポイントを編集します。`,

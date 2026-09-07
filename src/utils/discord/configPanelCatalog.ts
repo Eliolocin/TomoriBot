@@ -21,7 +21,7 @@ export const CONFIG_ROUTE_VERSION = "v1";
 
 export type ConfigCategory = "persona" | "behavior" | "channels" | "permissions" | "models";
 
-type PersonaPage = "general" | "triggers" | "memories" | "appearance" | "sprites" | "advanced" | "naming";
+type PersonaPage = "general" | "triggers" | "memories" | "appearance" | "sprites" | "advanced" | "voice" | "naming";
 type BehaviorPage = "general" | "trigger" | "experimental" | "notices" | "memory";
 type ChannelsPage = "destinations" | "auto-trigger" | "rules" | "overrides";
 type PermissionsPage = "capabilities" | "privacy";
@@ -35,7 +35,7 @@ export type ConfigPage = PersonaPage | BehaviorPage | ChannelsPage | Permissions
  * custom ID, which is why the category field must stay ahead of the page field in every codec.
  */
 export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPage[]> = {
-  persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "advanced"],
+  persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "advanced", "voice"],
   behavior: ["general", "trigger", "notices", "experimental", "memory"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   permissions: ["capabilities", "privacy"],
@@ -349,6 +349,13 @@ export type ConfigPanelRoute =
   | { action: "page"; locale: string; category: ConfigCategory; page: ConfigPage }
   | { action: "persona-select"; locale: string; personaId: number }
   | { action: "persona-page"; locale: string; personaId: number; start: number }
+  | { action: "voice-select"; locale: string; personaId: number }
+  | { action: "voice-page"; locale: string; personaId: number; start: number }
+  | { action: "voice-chooser-cancel"; locale: string; personaId: number }
+  | { action: "voice-clear"; locale: string; personaId: number }
+  | { action: "voice-design-open"; locale: string; personaId: number }
+  | { action: "voice-design-submit"; locale: string; personaId: number; nonce: string }
+  | { action: "voice-design-remove"; locale: string; personaId: number }
   | { action: "avatar-open"; locale: string; personaId: number }
   | { action: "avatar-submit"; locale: string; personaId: number; nonce: string }
   | { action: "rename-open"; locale: string; personaId: number }
@@ -737,6 +744,13 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   page: { wireToken: "page", fields: [categoryField, pageField] },
   "persona-select": { wireToken: "persona-select", fields: [personaIdField] },
   "persona-page": { wireToken: "persona-page", fields: [personaIdField, startField] },
+  "voice-select": { wireToken: "voice-select", fields: [personaIdField] },
+  "voice-page": { wireToken: "voice-page", fields: [personaIdField, startField] },
+  "voice-chooser-cancel": { wireToken: "voice-choose-cancel", fields: [personaIdField] },
+  "voice-clear": { wireToken: "voice-clear", fields: [personaIdField] },
+  "voice-design-open": { wireToken: "voice-design-open", fields: [personaIdField] },
+  "voice-design-submit": { wireToken: "voice-design-sub", fields: [personaIdField, nonceField] },
+  "voice-design-remove": { wireToken: "voice-design-rem", fields: [personaIdField] },
   "avatar-open": { wireToken: "avatar-open", fields: [personaIdField] },
   "avatar-submit": { wireToken: "avatar-submit", fields: [personaIdField, nonceField] },
   "rename-open": { wireToken: "rename-open", fields: [personaIdField] },

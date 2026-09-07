@@ -79,6 +79,12 @@ import {
   loadConfigSwitchModelsView,
 } from "@/utils/discord/interactions/configModelLoaders";
 import { loadConfigVoicesView } from "@/utils/discord/interactions/configVoicesLoader";
+import { loadConfigPersonaVoiceView } from "@/utils/discord/interactions/configPersonaVoiceLoader";
+import {
+  CONFIG_PERSONA_VOICE_MODAL_OPEN_ACTIONS,
+  handleConfigPersonaVoiceModalOpen,
+  handleConfigPersonaVoiceRoutes,
+} from "@/utils/discord/interactions/configPersonaVoiceRoutes";
 import { addVoiceSample } from "@/utils/speech/voiceSampleAddOperation";
 import * as speechRepository from "@/utils/db/repositories/SpeechRepository";
 import {
@@ -150,6 +156,8 @@ import type { ConfigPanelView } from "@/utils/discord/ui/configPanel";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import { resolvePersonaPanelAvatar, resolvePersonaPanelAvatarReference } from "@/utils/discord/personaPanelAvatar";
 import { resolvePersonaPanelCharacterReference } from "@/utils/discord/personaPanelCharacterReference";
+import { fetchElevenLabsVoiceCatalog } from "@/utils/audio/elevenLabsVoiceCatalog";
+import { resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
 import {
   buildConfigModalFieldId,
   buildConditioningCheckboxGroupId,
@@ -462,6 +470,11 @@ const defaultDependencies: ConfigRouteDependencies = {
   getPersonaAvatarReferenceData: resolvePersonaPanelAvatarReference,
   getPersonaCharacterReferenceData: resolvePersonaPanelCharacterReference,
   loadPersonaMemoryView: loadConfigPersonaMemoryView,
+  loadPersonaVoiceView: loadConfigPersonaVoiceView,
+  resolveActiveSpeechEndpoint,
+  fetchElevenLabsVoiceCatalog,
+  setPersonaVoiceConfig: (personaId, voice) => personaRepository.setVoiceConfig(personaId, voice),
+  invalidatePersonaVoiceCache: invalidateTomoriStateCache,
   loadServerHumanizerDegree: async (serverId) =>
     (await configRepository.getChatConfig(serverId))?.humanizer_degree ?? null,
   loadPersonaSprites: loadPersonaSpriteList,
@@ -2747,6 +2760,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         CONFIG_MODEL_SELECT_ACTIONS.has(route.action) ||
         CONFIG_CHANNEL_SELECT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_SELECT_ACTIONS.has(route.action);
+      const expectsPersonaVoiceSelect = route.action === "voice-select";
       const expectsChannelSelect = route.action === "channels-overrides-select";
       const expectsModal =
         route.action === "avatar-submit" ||
@@ -2769,6 +2783,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "sprite-add-submit" ||
         route.action === "sprite-edit-submit" ||
         route.action === "sprite-import-submit" ||
+        route.action === "voice-design-submit" ||
         CONFIG_MODEL_MODAL_SUBMIT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_MODAL_SUBMIT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_D10_MODAL_SUBMIT_ACTIONS.has(route.action) ||
@@ -2779,13 +2794,22 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       if (expectsStringSelect && !interaction.isStringSelectMenu()) {
         throw new Error(`Config ${route.action} route requires a String Select interaction`);
       }
+      if (expectsPersonaVoiceSelect && !interaction.isStringSelectMenu() && !interaction.isButton()) {
+        throw new Error(`Config ${route.action} route requires a button or String Select interaction`);
+      }
       if (expectsChannelSelect && !isChannelSelectMenu) {
         throw new Error(`Config ${route.action} route requires a Channel Select interaction`);
       }
       if (expectsModal && !interaction.isModalSubmit()) {
         throw new Error(`Config ${route.action} route requires a modal submission`);
       }
-      if (!expectsStringSelect && !expectsChannelSelect && !expectsModal && !interaction.isButton()) {
+      if (
+        !expectsStringSelect &&
+        !expectsPersonaVoiceSelect &&
+        !expectsChannelSelect &&
+        !expectsModal &&
+        !interaction.isButton()
+      ) {
         throw new Error(`Config ${route.action} route requires a button interaction`);
       }
 
@@ -2858,6 +2882,11 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         return;
       }
 
+      if (CONFIG_PERSONA_VOICE_MODAL_OPEN_ACTIONS.has(route.action)) {
+        await handleConfigPersonaVoiceModalOpen(interaction, route, dependencies, actor);
+        return;
+      }
+
       if (MODAL_OPEN_ACTIONS.has(route.action)) {
         await handleModalOpen(interaction, route, dependencies, actor);
         return;
@@ -2894,6 +2923,17 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
           scope,
           dependencies,
           preflight: voiceSubmitPreflight,
+        })
+      ) {
+        return;
+      }
+
+      if (
+        await handleConfigPersonaVoiceRoutes({
+          interaction,
+          route,
+          scope,
+          dependencies,
         })
       ) {
         return;

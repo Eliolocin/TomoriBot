@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **42**. Runnable slash commands: **83**.
+Top-level command groups: **41**. Runnable slash commands: **80**.
 
 ## `/comment`
 
@@ -325,16 +325,6 @@ Start the initial setup process. Configure AI provider and personality.
 | Command | Summary |
 |---|---|
 | `/setup` | Start the initial setup process. Configure AI provider and personality. |
-
-## `/speech`
-
-Manage speech voices and samples.
-
-| Command | Summary |
-|---|---|
-| `/speech voice-assign` | Assign a speech voice to a persona. |
-| `/speech voice-design remove` | Remove a persona's voice design prompt. |
-| `/speech voice-design set` | Set a voice design prompt for a persona. |
 
 ## `/st-presets`
 

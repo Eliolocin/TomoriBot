@@ -665,7 +665,7 @@ describe("providers panel rendering", () => {
     // Every choice explains when to pick it, which is the whole point of splitting these out.
     expect(json).toContain("Pick this for --mode auto.");
     expect(json).toContain("Strip every cue.");
-    expect(json).toContain("/speech voice-design");
+    expect(json).toContain("/config");
   });
 
   it("omits the clone-only controls for a preset endpoint that has no voice-mode split", () => {

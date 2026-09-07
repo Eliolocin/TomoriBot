@@ -118,8 +118,8 @@ export function resolveConfigPageState(
   if (actor.isManager) return "enabled";
 
   if (category === "persona") {
-    // Appearance and Advanced hold manager-owned image, prompt, note, and routing state.
-    if (page === "appearance" || page === "advanced") return "omitted";
+    // Appearance, Advanced, and Voice hold manager-owned image, prompt, note, routing, and voice state.
+    if (page === "appearance" || page === "advanced" || page === "voice") return "omitted";
     return page === "general" ? "enabled" : "read-only";
   }
 
@@ -334,6 +334,16 @@ export const PERSONA_SPRITES_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["a
     "sprite-import-open": "import",
     "sprite-import-submit": "import",
   };
+
+export const PERSONA_VOICE_PAGE_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPage>> = {
+  "voice-select": "voice",
+  "voice-page": "voice",
+  "voice-chooser-cancel": "voice",
+  "voice-clear": "voice",
+  "voice-design-open": "voice",
+  "voice-design-submit": "voice",
+  "voice-design-remove": "voice",
+};
 
 /**
  * Behavior General keeps the DM-capable global settings from their legacy commands. Timezone is
@@ -647,6 +657,11 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   const spritesAction = PERSONA_SPRITES_ACTION_BY_ROUTE[route.action];
   if (spritesAction) {
     return resolvePersonaSpritesActionState(spritesAction, actor) === "enabled";
+  }
+
+  const personaVoicePage = PERSONA_VOICE_PAGE_BY_ROUTE[route.action];
+  if (personaVoicePage) {
+    return resolveConfigPageState("persona", personaVoicePage, actor) === "enabled";
   }
 
   const modelsPage = MODELS_PAGE_BY_ROUTE[route.action];

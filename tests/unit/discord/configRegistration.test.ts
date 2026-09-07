@@ -92,7 +92,7 @@ const ABSORBED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
 };
 
 /** Roots the cutover removed outright, rather than reducing to a retained remainder. */
-const DISSOLVED_ROOTS = ["capabilities"];
+const DISSOLVED_ROOTS = ["capabilities", "speech"];
 
 /** Explicitly retained leaves, including the aggregate views the panel deliberately does not absorb. */
 const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
@@ -102,11 +102,8 @@ const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   conditioning: ["manage", "remove"],
   tool: ["delete.turn", "estimate.cost", "prompt.snapshot", "visualize"],
   memory: ["personal.export", "personal.import", "server.export", "server.import"],
-  speech: ["voice-assign", "voice-design.set", "voice-design.remove"],
   novelai: ["attg", "generate.image", "preset.text"],
 };
-
-const DISSOLVED_SPEECH_KEYS = ["voice-add", "voice-remove", "chatterbox.parameters"];
 
 describe("Config command registration", () => {
   it("retains /model override remove with its manager permission", async () => {
@@ -121,29 +118,6 @@ describe("Config command registration", () => {
     expect(modelCommand.contexts).toBeUndefined();
     expect(modelCommand.default_member_permissions).toBe("32");
     expect([...(executionMap.get("model") ?? new Map()).keys()]).toContain("override.remove");
-  });
-
-  it("registers /speech with manager permission and no contexts restriction", async () => {
-    const { registrationData, executionMap } = await loadCommandData();
-    const speechCommand = registrationData.find((command) => command.name === "speech") as unknown as
-      | RegistrationPayload
-      | undefined;
-
-    expect(speechCommand).toBeDefined();
-    if (!speechCommand) return;
-
-    expect(speechCommand.contexts).toBeUndefined();
-    expect(speechCommand.default_member_permissions).toBe("32");
-    expect([...(executionMap.get("speech") ?? new Map()).keys()]).toEqual(
-      expect.arrayContaining([...RETAINED_KEYS_BY_ROOT.speech]),
-    );
-  });
-
-  it("removes the U8 speech leaves from the real command graph", async () => {
-    const { executionMap } = await loadCommandData();
-    const present = [...(executionMap.get("speech") ?? new Map()).keys()];
-
-    expect(DISSOLVED_SPEECH_KEYS.filter((key) => present.includes(key))).toEqual([]);
   });
 
   it("registers /config as a bare root with no contexts and no default member permission", async () => {

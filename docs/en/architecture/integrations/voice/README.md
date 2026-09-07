@@ -22,10 +22,10 @@ Phase 4 routes both through custom endpoint capabilities:
 - `/providers` switches the active TTS endpoint.
 - `/providers` switches the active STT endpoint.
 - `/config` > Models > TTS Parameters & Voices uploads the one server-local reference sample supported in Phase 4. You can upload any audio format; it is automatically converted to mono WAV and stored in S3/CloudFront in production or under `data/voice-samples/` in non-production. A 10-20 second clip with no background music is recommended.
-- `/speech voice-assign` assigns either the local sample or an ElevenLabs voice to a persona.
+- `/config` > Persona > Voice assigns either the local sample or an ElevenLabs voice to a persona.
 - `/config` > Engine > Notices controls visible transcript posting in chat. It does not enable or disable background STT.
 
-The compatibility `/speech` commands require Manage Server in a guild and remain available to the owner in a DM-backed workspace.
+`/config` > Persona > Voice requires Manage Server in a guild and remains available to the owner in a DM-backed workspace.
 
 ## Runtime Behavior
 

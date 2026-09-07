@@ -117,7 +117,7 @@ const GUILD_ONLY_CATEGORIES: string[] = [
   "quota",
 ];
 // Categories that require manage permissions in guild context
-const MANAGER_ONLY_CATEGORIES = ["model", "nsfw", "server", "expressions", "matrix", "quota", "speech"];
+const MANAGER_ONLY_CATEGORIES = ["model", "nsfw", "server", "expressions", "matrix", "quota"];
 
 const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
   "commands.memory.description": "commands.teach.memory.description",

@@ -2,7 +2,6 @@
 // Assembler: edit the individual files in commands/ instead.
 
 import learn from "./commands/learn";
-import speech from "./commands/speech";
 import choices from "./commands/choices";
 import stPreset from "./commands/st-preset";
 import tool from "./commands/tool";
@@ -53,7 +52,6 @@ export default {
   commands: {
     ...providers,
     ...learn,
-    ...speech,
     ...choices,
     ...stPreset,
     ...tool,

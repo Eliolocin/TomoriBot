@@ -22,7 +22,7 @@ and follow the self-hosting guides.
    - registers the ElevenLabs **speech** endpoint (and the **transcription** endpoint too),
    - selects them as active,
    - can assign a voice to one persona on the spot.
-3. Assign voices to additional personas with `/speech voice-assign`. Browse voices in the
+3. Assign voices to additional personas under Persona > Voice in `/config`. Browse voices in the
    [ElevenLabs Voice Library](https://elevenlabs.io/app/voice-library), where you can also
    clone your own.
 
@@ -36,7 +36,7 @@ Notes:
   monthly limits — check your ElevenLabs dashboard.
 - Voice replies are gated by `voice_message_enabled` and require the active persona to have a
   voice assigned.
-- The compatibility `/speech` commands require Manage Server in a guild and remain available to the owner in a DM-backed workspace.
+- Persona > Voice in `/config` requires Manage Server in a guild and remains available to the owner in a DM-backed workspace.
 
 In `/help`, choose **Features**, then **Speech**, for the same walkthrough in Discord.
 
@@ -44,8 +44,8 @@ In `/help`, choose **Features**, then **Speech**, for the same walkthrough in Di
 
 On a self-hosted instance you can run a local voice-clone server instead. The general flow is:
 start the wrapper server, register its connection and model with `/providers`, select it with
-`/providers`, upload a sample with `/config` under Models > TTS Parameters & Voices, then assign it with
-`/speech voice-assign`. Any audio format is accepted (auto-converted to mono WAV); 10–20
+`/providers`, upload a sample with `/config` under Models > TTS Parameters & Voices, then assign it under
+Persona > Voice in `/config`. Any audio format is accepted (auto-converted to mono WAV); 10–20
 second clips with no background music work best.
 
 Each engine has its own setup guide:
