@@ -39,6 +39,7 @@ import {
 import {
   resolveConfigPageState,
   resolvePersonaAdvancedActionState,
+  resolvePersonaOverridesActionState,
   resolvePersonaMemoriesActionState,
   resolvePersonaCollectionActionState,
   resolvePersonaGeneralActionState,
@@ -170,6 +171,7 @@ const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
     memories: "commands.config.panel.page_persona_memories",
     appearance: "commands.config.panel.page_persona_appearance",
     advanced: "commands.config.panel.page_persona_advanced",
+    overrides: "commands.config.panel.page_persona_overrides",
     naming: "commands.config.panel.page_persona_naming",
     sprites: "commands.config.panel.page_persona_sprites",
     voice: "commands.config.panel.page_persona_voice",
@@ -1438,8 +1440,27 @@ ${localizer(locale, "commands.config.panel.advanced_description")}`,
 
   const promptState = actionState("prompt");
   const contextState = actionState("context-note");
+  const attgState = actionState("attg");
   const hasPromptContent = promptState !== "omitted" && Boolean(persona.persona_prompt?.trim());
   const hasContextContent = contextState !== "omitted" && Boolean(persona.context_note?.trim());
+  const attgValues = [
+    {
+      label: localizer(locale, "commands.novelai.attg.author_label"),
+      value: persona.nai_attg_author?.trim() ?? "",
+    },
+    {
+      label: localizer(locale, "commands.novelai.attg.title_label"),
+      value: persona.nai_attg_title?.trim() ?? "",
+    },
+    {
+      label: localizer(locale, "commands.novelai.attg.tags_label"),
+      value: persona.nai_attg_tags?.trim() ?? "",
+    },
+    {
+      label: localizer(locale, "commands.novelai.attg.genre_label"),
+      value: persona.nai_attg_genre?.trim() ?? "",
+    },
+  ];
   const baseAllowance = getBasePageTextAllowance(input, true);
   const promptHeader =
     promptState !== "omitted"
@@ -1450,37 +1471,21 @@ ${localizer(locale, "commands.config.panel.advanced_description")}`,
       ? `**${localizer(locale, "commands.config.panel.context_note_title")}**\n${localizer(locale, "commands.config.panel.context_note_description")}\n> ${localizer(locale, "commands.config.panel.context_note_depth", { depth: persona.context_note_depth ?? 0 })}\n`
       : "";
   const noneContent = renderFencedCollectionContent(localizer(locale, "commands.config.panel.none_label"));
-  const humanizerState = actionState("humanizer");
-  const humanizerValue = persona.humanizer_degree_override ?? null;
-  const humanizerTextDisplay: ComponentInContainerData | undefined =
-    humanizerState !== "omitted"
-      ? {
-          type: ComponentType.TextDisplay,
-          content: `**${localizer(locale, "commands.config.panel.response_style_title")}**
-${localizer(locale, "commands.config.panel.response_style_description")}
-> ${localizer(locale, "commands.config.panel.persona_override_label")}: ${getHumanizerLabel(locale, humanizerValue)}
-> ${localizer(locale, "commands.config.panel.server_default_label")}: ${renderHumanizerDegree(locale, input.serverHumanizerDegree)}`,
-        }
-      : undefined;
-
-  const textState = actionState("text-override");
-  const textOverride = persona.persona_llm
-    ? `${persona.persona_llm.llm_provider} / ${persona.persona_llm.llm_codename}`
-    : localizer(locale, "commands.config.panel.none_label");
-  const serverModel = persona.llm
-    ? `${persona.llm.llm_provider} / ${persona.llm.llm_codename}`
-    : localizer(locale, "commands.config.panel.none_label");
-  const textOverrideTextDisplay: ComponentInContainerData | undefined =
-    textState !== "omitted"
-      ? {
-          type: ComponentType.TextDisplay,
-          content: `**${localizer(locale, "commands.config.panel.text_override_title")}**
-${localizer(locale, "commands.config.panel.text_override_description")}
-> ${localizer(locale, "commands.config.panel.persona_override_label")}: ${textOverride}
-> ${localizer(locale, "commands.config.panel.server_default_label")}: ${serverModel}`,
-        }
-      : undefined;
-
+  const attgHeader =
+    attgState !== "omitted"
+      ? `**${localizer(locale, "commands.novelai.attg.modal_title")}**\n${safeSelectOptionText(
+          localizer(locale, "commands.novelai.attg.description"),
+          65,
+        )}`
+      : "";
+  const attgStars =
+    attgState !== "omitted"
+      ? `**${localizer(locale, "commands.novelai.attg.stars_label")}:** ${
+          persona.nai_attg_stars === null || persona.nai_attg_stars === undefined
+            ? localizer(locale, "commands.config.panel.none_label")
+            : String(persona.nai_attg_stars)
+        }`
+      : "";
   let fixedTextLength = measureComponentTextLength(components[0]);
   if (promptState !== "omitted") {
     fixedTextLength += getDiscordTextLength(promptHeader);
@@ -1490,15 +1495,21 @@ ${localizer(locale, "commands.config.panel.text_override_description")}
     fixedTextLength += getDiscordTextLength(contextHeader);
     if (!hasContextContent) fixedTextLength += getDiscordTextLength(noneContent);
   }
-  if (humanizerTextDisplay) {
-    fixedTextLength += measureComponentTextLength(humanizerTextDisplay);
-  }
-  if (textOverrideTextDisplay) {
-    fixedTextLength += measureComponentTextLength(textOverrideTextDisplay);
+  if (attgState !== "omitted") {
+    const attgFixedParts = [attgHeader];
+    for (const { label, value } of attgValues) {
+      attgFixedParts.push(`**${label}**`);
+      if (!value) attgFixedParts.push(noneContent);
+    }
+    attgFixedParts.push(attgStars);
+    fixedTextLength += getDiscordTextLength(attgFixedParts.join("\n"));
   }
   const advancedDynamicAllowance = Math.max(0, baseAllowance - fixedTextLength);
-  const advancedPerValueBudget =
-    hasPromptContent && hasContextContent ? Math.floor(advancedDynamicAllowance / 2) : advancedDynamicAllowance;
+  const dynamicValueCount =
+    Number(hasPromptContent) +
+    Number(hasContextContent) +
+    (attgState === "omitted" ? 0 : attgValues.filter(({ value }) => value.length > 0).length);
+  const advancedPerValueBudget = dynamicValueCount > 0 ? Math.floor(advancedDynamicAllowance / dynamicValueCount) : 0;
 
   if (promptState !== "omitted") {
     const promptText = persona.persona_prompt?.trim() ?? "";
@@ -1563,6 +1574,106 @@ ${renderedNote}`,
       },
     );
   }
+
+  if (attgState !== "omitted") {
+    const attgParts = [attgHeader];
+    for (const { label, value } of attgValues) {
+      attgParts.push(`**${label}**`);
+      attgParts.push(value ? renderBoundedFencedContent(locale, value, advancedPerValueBudget).rendered : noneContent);
+    }
+    attgParts.push(attgStars);
+    components.push(
+      { type: ComponentType.TextDisplay, content: attgParts.join("\n") },
+      {
+        type: ComponentType.ActionRow,
+        components: [
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Secondary,
+            customId: buildConfigRouteId({ action: "attg-open", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.edit_nai_button"),
+            disabled: writesDisabled || attgState === "disabled",
+          },
+          {
+            type: ComponentType.Button,
+            style: ButtonStyle.Danger,
+            customId: buildConfigRouteId({ action: "attg-clear-all", locale, personaId }),
+            label: localizer(locale, "commands.config.panel.clear_override_button"),
+            disabled:
+              writesDisabled ||
+              attgState === "disabled" ||
+              (attgValues.every(({ value }) => !value) &&
+                (persona.nai_attg_stars === null || persona.nai_attg_stars === undefined)),
+          },
+        ],
+      },
+    );
+  }
+
+  return components;
+}
+
+function buildPersonaOverridesBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale, actor, personas, selectedPersonaId, readStatus } = input;
+  const persona = personas.find((candidate) => candidate.persona_id === selectedPersonaId) ?? null;
+  if (!persona) {
+    return [
+      buildOptionalThumbnailSection(
+        {
+          type: ComponentType.TextDisplay,
+          content: `### ${localizer(locale, "commands.config.panel.overrides_title")}
+${localizer(locale, "commands.config.panel.overrides_description")}`,
+        },
+        input.selectedPersonaAvatarUrl,
+      ),
+      { type: ComponentType.TextDisplay, content: localizer(locale, "commands.config.panel.no_personas") },
+    ];
+  }
+
+  const writesDisabled = readStatus !== "fresh";
+  const components: ComponentInContainerData[] = [
+    buildOptionalThumbnailSection(
+      {
+        type: ComponentType.TextDisplay,
+        content: `### ${localizer(locale, "commands.config.panel.overrides_title")}
+${localizer(locale, "commands.config.panel.overrides_description")}`,
+      },
+      input.selectedPersonaAvatarUrl,
+    ),
+  ];
+  const personaId = persona.persona_id as number;
+  const actionState = (action: Parameters<typeof resolvePersonaOverridesActionState>[0]) =>
+    resolvePersonaOverridesActionState(action, actor);
+  const humanizerState = actionState("humanizer");
+  const humanizerValue = persona.humanizer_degree_override ?? null;
+  const humanizerTextDisplay: ComponentInContainerData | undefined =
+    humanizerState !== "omitted"
+      ? {
+          type: ComponentType.TextDisplay,
+          content: `**${localizer(locale, "commands.config.panel.response_style_title")}**
+${localizer(locale, "commands.config.panel.response_style_description")}
+> ${localizer(locale, "commands.config.panel.persona_override_label")}: ${getHumanizerLabel(locale, humanizerValue)}
+> ${localizer(locale, "commands.config.panel.server_default_label")}: ${renderHumanizerDegree(locale, input.serverHumanizerDegree)}`,
+        }
+      : undefined;
+
+  const textState = actionState("text-override");
+  const textOverride = persona.persona_llm
+    ? `${persona.persona_llm.llm_provider} / ${persona.persona_llm.llm_codename}`
+    : localizer(locale, "commands.config.panel.none_label");
+  const serverModel = persona.llm
+    ? `${persona.llm.llm_provider} / ${persona.llm.llm_codename}`
+    : localizer(locale, "commands.config.panel.none_label");
+  const textOverrideTextDisplay: ComponentInContainerData | undefined =
+    textState !== "omitted"
+      ? {
+          type: ComponentType.TextDisplay,
+          content: `**${localizer(locale, "commands.config.panel.text_override_title")}**
+${localizer(locale, "commands.config.panel.text_override_description")}
+> ${localizer(locale, "commands.config.panel.persona_override_label")}: ${textOverride}
+> ${localizer(locale, "commands.config.panel.server_default_label")}: ${serverModel}`,
+        }
+      : undefined;
 
   if (humanizerTextDisplay) {
     components.push(humanizerTextDisplay);
@@ -4136,6 +4247,14 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
   if (category === "persona" && page === "advanced") {
     if (resolveConfigPageState(category, page, actor) !== "omitted") {
       components.push(...buildPersonaAdvancedBody(input));
+    }
+    appendPersonaCreateHint(components, locale);
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "persona" && page === "overrides") {
+    if (resolveConfigPageState(category, page, actor) !== "omitted") {
+      components.push(...buildPersonaOverridesBody(input));
     }
     appendPersonaCreateHint(components, locale);
     return buildPayload(components, receipt);

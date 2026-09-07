@@ -7,7 +7,7 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "bun:test";
 import { ComponentType } from "discord.js";
-import type { TomoriState, VoiceSampleRow } from "@/types/db/schema";
+import type { LlmRow, TomoriState, VoiceSampleRow } from "@/types/db/schema";
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type {
   ConfigBehaviorView,
@@ -649,6 +649,112 @@ describe("config page text budgeting at stored maxima", () => {
       });
     }
   });
+});
+
+describe("Persona Advanced and Overrides component budgeting", () => {
+  const personas = Array.from({ length: 41 }, (_, index) =>
+    makePersona({
+      persona_id: index + 1,
+      persona_prompt: index === 40 ? "P".repeat(4000) : undefined,
+      context_note: index === 40 ? "C".repeat(2000) : undefined,
+      nai_attg_author: index === 40 ? "A".repeat(256) : undefined,
+      nai_attg_title: index === 40 ? "T".repeat(256) : undefined,
+      nai_attg_tags: index === 40 ? "G".repeat(256) : undefined,
+      nai_attg_genre: index === 40 ? "N".repeat(256) : undefined,
+      humanizer_degree_override: index === 40 ? 2 : undefined,
+      llm: index === 40 ? { llm_id: 10, llm_provider: "openrouter", llm_codename: "server-model" } : undefined,
+      persona_llm: index === 40 ? { llm_id: 11, llm_provider: "google", llm_codename: "persona-model" } : undefined,
+    }),
+  );
+  const models = Array.from(
+    { length: 26 },
+    (_, index) =>
+      ({
+        llm_id: index + 1,
+        llm_provider: "openrouter",
+        llm_codename: `model-${index + 1}`,
+        llm_description: `Model ${index + 1}`,
+      }) as unknown as LlmRow,
+  );
+
+  const buildSplitPayload = (page: "advanced" | "overrides", receipt: boolean, selectedPersonaId = 41) =>
+    buildConfigPanelPayload({
+      locale: "en-US",
+      actor: GUILD_MANAGER,
+      category: "persona",
+      page,
+      personas,
+      selectedPersonaId,
+      serverHumanizerDegree: 0,
+      readStatus: "fresh",
+      view:
+        page === "overrides"
+          ? { kind: "text-override-model", personaId: 41, provider: "openrouter", models, start: 25 }
+          : undefined,
+      receipt: receipt ? { tone: "success", heading: "Saved", detail: "Configuration was saved." } : undefined,
+    });
+
+  it("keeps Advanced at 31 components with a receipt and rejects an extra row", () => {
+    for (const selectedPersonaId of [1, 41]) {
+      const payload = buildSplitPayload("advanced", true, selectedPersonaId);
+      const validation = validateComponentsV2MessageLimits(payload);
+      expect(validation.valid, JSON.stringify(validation.violations)).toBe(true);
+      expect(countRenderedComponents(payload)).toBe(31);
+      const payloadWithExtraRow = {
+        ...payload,
+        components: [
+          ...payload.components,
+          {
+            type: ComponentType.ActionRow,
+            components: [
+              {
+                type: ComponentType.StringSelect,
+                customId: `extra-advanced-row-${selectedPersonaId}`,
+                placeholder: "Extra",
+                options: [{ value: "one", label: "One" }],
+              },
+            ],
+          },
+        ],
+      };
+      expect(countRenderedComponents(payloadWithExtraRow)).toBeGreaterThan(31);
+    }
+  });
+
+  it("keeps Overrides at 29 components with a receipt and rejects an extra row", () => {
+    const payload = buildSplitPayload("overrides", true);
+    const validation = validateComponentsV2MessageLimits(payload);
+    expect(validation.valid, JSON.stringify(validation.violations)).toBe(true);
+    expect(countRenderedComponents(payload)).toBe(29);
+    const payloadWithExtraRow = {
+      ...payload,
+      components: [
+        ...payload.components,
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.StringSelect,
+              customId: "extra-overrides-row",
+              placeholder: "Extra",
+              options: [{ value: "one", label: "One" }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(countRenderedComponents(payloadWithExtraRow)).toBeGreaterThan(29);
+  });
+
+  for (const page of ["advanced", "overrides"] as const) {
+    for (const receipt of [false, true]) {
+      it(`validates ${page} with receipt=${receipt}`, () => {
+        const payload = buildSplitPayload(page, receipt);
+        const validation = validateComponentsV2MessageLimits(payload);
+        expect(validation.valid, JSON.stringify(validation.violations)).toBe(true);
+      });
+    }
+  }
 });
 
 describe("Switch Models capability notice budgeting", () => {
@@ -1407,6 +1513,35 @@ describe("bounded preview unicode and truncation boundary assertions", () => {
 
     const fenceMatches = systemPromptDisplay?.match(/```/g) ?? [];
     expect(fenceMatches.length).toBe(2);
+  });
+
+  it.each([3, 4, 5, 6, 8])("keeps all four 256-character ATTG previews fence-safe for run length %i", (runLength) => {
+    const fieldValue = "🌸".repeat(256 - runLength) + "`".repeat(runLength);
+    const payload = buildConfigPanelPayload({
+      locale: "en-US",
+      actor: GUILD_MANAGER,
+      category: "persona",
+      page: "advanced",
+      personas: [
+        makePersona({
+          persona_id: 55,
+          nai_attg_author: fieldValue,
+          nai_attg_title: fieldValue,
+          nai_attg_tags: fieldValue,
+          nai_attg_genre: fieldValue,
+        }),
+      ],
+      selectedPersonaId: 55,
+      readStatus: "fresh",
+      receipt: { tone: "success", heading: "Saved", detail: "Configuration was saved." },
+    });
+
+    const validation = validateComponentsV2MessageLimits(payload);
+    expect(validation.valid, JSON.stringify(validation.violations)).toBe(true);
+    const attgDisplay = getTextDisplays(payload).find((text) => text.includes("ATTG Configuration"));
+    expect(attgDisplay).toBeDefined();
+    expect(attgDisplay?.match(/```/g)).toHaveLength(8);
+    expect(getDiscordTextLength(fieldValue)).toBe(256);
   });
 
   // Three backticks are the one run length a literal triple-backtick replacement handles. Five and

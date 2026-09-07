@@ -87,7 +87,7 @@ const ABSORBED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   ],
   memory: ["tagging.set"],
   speech: ["transcripts"],
-  novelai: ["character-reference", "image.parameters"],
+  novelai: ["attg", "character-reference", "image.parameters"],
   tool: ["status"],
 };
 
@@ -102,7 +102,7 @@ const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   conditioning: ["manage", "remove"],
   tool: ["delete.turn", "estimate.cost", "prompt.snapshot", "visualize"],
   memory: ["personal.export", "personal.import", "server.export", "server.import"],
-  novelai: ["attg", "generate.image", "preset.text"],
+  novelai: ["generate.image", "preset.text"],
 };
 
 describe("Config command registration", () => {

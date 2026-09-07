@@ -691,7 +691,7 @@ These modals collect free-form text and have no structured option set:
 | -------------------------- | ----------------------------- | ------------------------------------------------------- |
 | `/config` > Engine > General | `config/system-prompt/set.ts`  | Free-form paragraph text (up to 16000 chars, 4 fields)  |
 | `/config` > Engine > Trigger| `config/random-trigger/add.ts` | Free-form trigger word/phrase (text input portion stays) |
-| `/novelai attg`            | `novelai/attg.ts`             | 5 free-form text fields (author, title, tags, etc.)     |
+| `/config` > Persona > Advanced | `utils/discord/ui/configModals.ts` | 5 free-form text fields (author, title, tags, etc.) |
 | `/personal config`         | `utils/discord/ui/personalConfigPanel.ts` | Free-form physical appearance image tag text            |
 | `/config` > Models > ImageGen Defaults   | `config/image-tags/default-negative.ts`    | Free-form default negative tag text                     |
 | `/config` > Models > ImageGen Defaults      | `config/image-tags/default-positive.ts`       | Free-form default positive tag text                  |

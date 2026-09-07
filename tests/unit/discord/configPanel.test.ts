@@ -1092,6 +1092,11 @@ describe("config Persona Appearance and Advanced bodies", () => {
     persona_id: 55,
     physical_appearance_tags: ["silver hair", "green eyes"],
     nai_char_ref_url: "data/charreferences/personas/55/old.png",
+    nai_attg_author: "A careful author",
+    nai_attg_title: "A careful title",
+    nai_attg_tags: "archivist, mystery",
+    nai_attg_genre: "fantasy",
+    nai_attg_stars: 5,
     persona_prompt: "A careful archivist.",
     context_note: "Prefer concise answers.",
     context_note_depth: 4,
@@ -1162,7 +1167,7 @@ describe("config Persona Appearance and Advanced bodies", () => {
     ).toBe(false);
   });
 
-  it("renders the four Advanced sections in wireframe order and uses modal action routes", () => {
+  it("renders prompt, context, and ATTG sections on Advanced", () => {
     const payload = build(GUILD_MANAGER, {
       page: "advanced",
       personas: [advancedPersona],
@@ -1170,34 +1175,63 @@ describe("config Persona Appearance and Advanced bodies", () => {
       serverHumanizerDegree: 0,
     });
     const seen = walk(payload);
-    const sectionTitles = ["Persona Prompt", "Context Note", "Response Style", "Text Model Override"];
-    const titlePositions = sectionTitles.map((title) =>
-      seen.findIndex((component) => component.content?.includes(`**${title}**`)),
-    );
-
-    expect(titlePositions.every((position) => position >= 0)).toBe(true);
-    expect(titlePositions).toEqual([...titlePositions].sort((left, right) => left - right));
+    expect(seen.some((component) => component.content?.includes("**Persona Prompt**"))).toBe(true);
+    expect(seen.some((component) => component.content?.includes("**Context Note**"))).toBe(true);
+    expect(seen.some((component) => component.content?.includes("**ATTG Configuration**"))).toBe(true);
+    expect(seen.some((component) => component.content?.includes("**Response Style**"))).toBe(false);
+    expect(seen.some((component) => component.content?.includes("**Text Model Override**"))).toBe(false);
     expect(buttonFor(payload, { action: "prompt-open", locale: "en-US", personaId: 55 })).toBeDefined();
     expect(buttonFor(payload, { action: "context-note-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(buttonFor(payload, { action: "attg-open", locale: "en-US", personaId: 55 })?.style).toBe(2);
+    expect(buttonFor(payload, { action: "attg-clear-all", locale: "en-US", personaId: 55 })?.style).toBe(4);
+    expect(buttonFor(payload, { action: "humanizer-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+    expect(buttonFor(payload, { action: "text-override-clear", locale: "en-US", personaId: 55 })).toBeUndefined();
+  });
+
+  it("renders response style and text override sections on Overrides", () => {
+    const payload = build(GUILD_MANAGER, {
+      page: "overrides",
+      personas: [advancedPersona],
+      selectedPersonaId: 55,
+      serverHumanizerDegree: 0,
+    });
+    const seen = walk(payload);
+    expect(seen.some((component) => component.content?.includes("**Persona Prompt**"))).toBe(false);
+    expect(seen.some((component) => component.content?.includes("**Context Note**"))).toBe(false);
+    expect(seen.filter((component) => component.content?.includes("**Response Style**"))).toHaveLength(1);
+    expect(seen.filter((component) => component.content?.includes("**Text Model Override**"))).toHaveLength(1);
     expect(buttonFor(payload, { action: "humanizer-open", locale: "en-US", personaId: 55 })).toBeDefined();
     expect(buttonFor(payload, { action: "text-override-clear", locale: "en-US", personaId: 55 })?.style).toBe(2);
     expect(seen.some((component) => component.content?.includes("> Server default: 0: None"))).toBe(true);
   });
 
-  it("omits guild-only Advanced actions in a DM while retaining the four allowed sections", () => {
+  it("omits guild-only Advanced actions in a DM while retaining prompt and context", () => {
     const payload = build(DM_OWNER, { page: "advanced", personas: [advancedPersona] });
     expect(buttonFor(payload, { action: "image-tags-open", locale: "en-US", personaId: 55 })).toBeUndefined();
     expect(buttonFor(payload, { action: "character-reference-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+    expect(buttonFor(payload, { action: "attg-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+    expect(buttonFor(payload, { action: "attg-clear-all", locale: "en-US", personaId: 55 })).toBeUndefined();
     expect(buttonFor(payload, { action: "prompt-open", locale: "en-US", personaId: 55 })).toBeDefined();
     expect(buttonFor(payload, { action: "context-note-open", locale: "en-US", personaId: 55 })).toBeDefined();
+    expect(buttonFor(payload, { action: "humanizer-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+    expect(buttonFor(payload, { action: "text-override-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+  });
+
+  it("renders both Overrides actions in a DM", () => {
+    const payload = build(DM_OWNER, { page: "overrides", personas: [advancedPersona] });
     expect(buttonFor(payload, { action: "humanizer-open", locale: "en-US", personaId: 55 })).toBeDefined();
     expect(buttonFor(payload, { action: "text-override-open", locale: "en-US", personaId: 55 })).toBeDefined();
   });
 
-  it("omits the whole Advanced body for a guild member", () => {
+  it("omits both manager-owned bodies for a guild member", () => {
     const payload = build(GUILD_MEMBER, { page: "advanced", personas: [advancedPersona] });
     expect(walk(payload).some((component) => component.content?.includes("Advanced Persona Settings"))).toBe(false);
     expect(buttonFor(payload, { action: "prompt-open", locale: "en-US", personaId: 55 })).toBeUndefined();
+    const overridesPayload = build(GUILD_MEMBER, { page: "overrides", personas: [advancedPersona] });
+    expect(walk(overridesPayload).some((component) => component.content?.includes("Persona Overrides"))).toBe(false);
+    expect(
+      buttonFor(overridesPayload, { action: "text-override-open", locale: "en-US", personaId: 55 }),
+    ).toBeUndefined();
   });
 });
 

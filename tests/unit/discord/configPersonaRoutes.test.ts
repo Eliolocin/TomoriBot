@@ -12,6 +12,7 @@ import type { PersonaSpriteRow, StmCategoryRow, TomoriState } from "@/types/db/s
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import { conditioningMemoryRepository } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import * as shortTermMemoryCache from "@/utils/cache/shortTermMemoryCache";
+import * as tomoriStateCacheStore from "@/utils/cache/tomoriStateCacheStore";
 import {
   llmOverrideRepo,
   personalMemoryRepository,
@@ -58,6 +59,11 @@ import {
   buildConfigModalFieldId,
   buildTriggerRemoveCheckboxGroupId,
   CONFIG_PERSONA_PROMPT_PART_FIELDS,
+  CONFIG_NAI_ATTG_AUTHOR_FIELD,
+  CONFIG_NAI_ATTG_TITLE_FIELD,
+  CONFIG_NAI_ATTG_TAGS_FIELD,
+  CONFIG_NAI_ATTG_GENRE_FIELD,
+  CONFIG_NAI_ATTG_STARS_FIELD,
   CONFIG_SPRITE_IDENTITY_OPTION_VALUE,
   CONFIG_SPRITE_INSTRUCTIONS_FIELD,
   CONFIG_SPRITE_NAME_FIELD,
@@ -371,6 +377,12 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     "config:v1:image-tags-submit:en-US:55:nonce1234567",
     { action: "image-tags-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
+  ["config:v1:attg-open:en-US:55", { action: "attg-open", locale: "en-US", personaId: 55 }],
+  [
+    "config:v1:attg-submit:en-US:55:nonce1234567",
+    { action: "attg-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+  ],
+  ["config:v1:attg-clear-all:en-US:55", { action: "attg-clear-all", locale: "en-US", personaId: 55 }],
   ["config:v1:sprite-select:en-US:55", { action: "sprite-select", locale: "en-US", personaId: 55 }],
   ["config:v1:sprite-page:en-US:55:25", { action: "sprite-page", locale: "en-US", personaId: 55, start: 25 }],
   ["config:v1:sprite-add-open:en-US:55", { action: "sprite-add-open", locale: "en-US", personaId: 55 }],
@@ -2718,6 +2730,179 @@ describe("config promotion", () => {
 });
 
 describe("config Persona Advanced routes", () => {
+  const attgFields = (values: Partial<Record<string, string>> = {}) =>
+    Object.fromEntries(
+      [
+        CONFIG_NAI_ATTG_AUTHOR_FIELD,
+        CONFIG_NAI_ATTG_TITLE_FIELD,
+        CONFIG_NAI_ATTG_TAGS_FIELD,
+        CONFIG_NAI_ATTG_GENRE_FIELD,
+        CONFIG_NAI_ATTG_STARS_FIELD,
+      ].map((field) => [buildConfigModalFieldId(field, "nonce1234567"), values[field] ?? ""]),
+    );
+
+  it("opens ATTG with five prefilled routed inputs without deferring first", async () => {
+    const persona = makePersona({
+      persona_id: 55,
+      nai_attg_author: "Old Author",
+      nai_attg_title: "Old Title",
+      nai_attg_tags: "old, tags",
+      nai_attg_genre: "fantasy",
+      nai_attg_stars: 4,
+    });
+    const harness = makeHarness({ personas: [persona] });
+    const interaction = makeInteraction({
+      customId: buildConfigRouteId({ action: "attg-open", locale: "en-US", personaId: 55 }),
+      harness,
+    });
+
+    await dispatch(harness, interaction);
+
+    expect(interaction.deferred).toBe(false);
+    const modal = harness.modals[0] as {
+      custom_id: string;
+      components: Array<{ component?: { type: number; custom_id: string; value?: string; max_length?: number } }>;
+    };
+    expect(modal.custom_id).toBe(
+      buildConfigRouteId({ action: "attg-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" }),
+    );
+    expect(modal.components).toHaveLength(5);
+    expect(modal.components.map((entry) => entry.component?.type)).toEqual([4, 4, 4, 4, 4]);
+    expect(modal.components.map((entry) => entry.component?.custom_id)).toEqual(
+      [
+        CONFIG_NAI_ATTG_AUTHOR_FIELD,
+        CONFIG_NAI_ATTG_TITLE_FIELD,
+        CONFIG_NAI_ATTG_TAGS_FIELD,
+        CONFIG_NAI_ATTG_GENRE_FIELD,
+        CONFIG_NAI_ATTG_STARS_FIELD,
+      ].map((field) => buildConfigModalFieldId(field, "nonce1234567")),
+    );
+    expect(modal.components.map((entry) => entry.component?.value)).toEqual([
+      "Old Author",
+      "Old Title",
+      "old, tags",
+      "fantasy",
+      "4",
+    ]);
+    expect(modal.components.map((entry) => entry.component?.max_length)).toEqual([256, 256, 256, 256, 1]);
+  });
+
+  it("trims ATTG fields, clears blanks, and writes all five columns together", async () => {
+    const setAttgSpy = spyOn(personaRepository, "setNaiAttg").mockResolvedValue(true);
+    const harness = makeHarness({ personas: [makePersona({ persona_id: 55 })] });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "attg-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" }),
+        kind: "modal",
+        fields: attgFields({
+          [CONFIG_NAI_ATTG_AUTHOR_FIELD]: " Author ",
+          [CONFIG_NAI_ATTG_TITLE_FIELD]: " ",
+          [CONFIG_NAI_ATTG_TAGS_FIELD]: " tags ",
+          [CONFIG_NAI_ATTG_GENRE_FIELD]: "Genre",
+          [CONFIG_NAI_ATTG_STARS_FIELD]: " 5 ",
+        }),
+        harness,
+      }),
+    );
+    expect(setAttgSpy).toHaveBeenCalledWith(55, {
+      nai_attg_author: "Author",
+      nai_attg_title: null,
+      nai_attg_tags: "tags",
+      nai_attg_genre: "Genre",
+      nai_attg_stars: 5,
+    });
+
+    setAttgSpy.mockClear();
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "attg-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" }),
+        kind: "modal",
+        fields: attgFields({
+          [CONFIG_NAI_ATTG_AUTHOR_FIELD]: "  ",
+          [CONFIG_NAI_ATTG_TITLE_FIELD]: "\t",
+          [CONFIG_NAI_ATTG_TAGS_FIELD]: "",
+          [CONFIG_NAI_ATTG_GENRE_FIELD]: "  ",
+          [CONFIG_NAI_ATTG_STARS_FIELD]: "",
+        }),
+        harness,
+      }),
+    );
+    expect(setAttgSpy).toHaveBeenCalledWith(55, {
+      nai_attg_author: null,
+      nai_attg_title: null,
+      nai_attg_tags: null,
+      nai_attg_genre: null,
+      nai_attg_stars: null,
+    });
+    setAttgSpy.mockRestore();
+  });
+
+  it("rejects every non-canonical Stars value before the repository call", async () => {
+    const setAttgSpy = spyOn(personaRepository, "setNaiAttg").mockResolvedValue(true);
+    for (const stars of ["0", "6", "01", "1.0", "abc"]) {
+      const harness = makeHarness({ personas: [makePersona({ persona_id: 55 })] });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({
+            action: "attg-submit",
+            locale: "en-US",
+            personaId: 55,
+            nonce: "nonce1234567",
+          }),
+          kind: "modal",
+          fields: attgFields({ [CONFIG_NAI_ATTG_STARS_FIELD]: stars }),
+          harness,
+        }),
+      );
+    }
+    expect(setAttgSpy).not.toHaveBeenCalled();
+    setAttgSpy.mockRestore();
+  });
+
+  it("clears ATTG from a button and invalidates after a false repository result", async () => {
+    let interaction: ReturnType<typeof makeInteraction>;
+    let acknowledged = false;
+    const setAttgSpy = spyOn(personaRepository, "setNaiAttg").mockImplementation(async () => {
+      acknowledged = interaction.deferred || interaction.replied;
+      return false;
+    });
+    const invalidateSpy = spyOn(tomoriStateCacheStore, "invalidateTomoriStateCache").mockImplementation(
+      () => undefined,
+    );
+    const harness = makeHarness({
+      personas: [
+        makePersona({
+          persona_id: 55,
+          nai_attg_author: "Author",
+          nai_attg_title: "Title",
+          nai_attg_tags: "Tags",
+          nai_attg_genre: "Genre",
+          nai_attg_stars: 3,
+        }),
+      ],
+    });
+    interaction = makeInteraction({
+      customId: buildConfigRouteId({ action: "attg-clear-all", locale: "en-US", personaId: 55 }),
+      harness,
+    });
+    await dispatch(harness, interaction);
+    expect(setAttgSpy).toHaveBeenCalledWith(55, {
+      nai_attg_author: null,
+      nai_attg_title: null,
+      nai_attg_tags: null,
+      nai_attg_genre: null,
+      nai_attg_stars: null,
+    });
+    expect(acknowledged).toBe(true);
+    expect(invalidateSpy).toHaveBeenCalledWith("guild-1");
+    expect(harness.modals).toHaveLength(0);
+    setAttgSpy.mockRestore();
+    invalidateSpy.mockRestore();
+  });
+
   it("does not clear a saved character reference when an upload is missing", async () => {
     let writes = 0;
     const persona = makePersona({ persona_id: 55, nai_char_ref_url: "saved/reference.png" });
@@ -2834,6 +3019,7 @@ describe("config Persona Advanced routes", () => {
 
     expect(acknowledged).toBe(true);
     expect(selectedValue).toBeNull();
+    expect(JSON.stringify(harness.edits.at(-1))).toContain("Persona Overrides");
   });
 
   it("opens Humanizer as a modal with the persona override selected", async () => {
@@ -3010,6 +3196,7 @@ describe("config Persona Advanced routes", () => {
     const promptSpy = spyOn(personaRepository, "setPrompt").mockResolvedValue(true);
     const removePromptSpy = spyOn(personaRepository, "removePrompt").mockResolvedValue(true);
     const contextSpy = spyOn(personaRepository, "setContextNote").mockResolvedValue(true);
+    const attgSpy = spyOn(personaRepository, "setNaiAttg").mockResolvedValue(true);
     const humanizerSpy = spyOn(personaRepository, "setHumanizerOverride").mockResolvedValue(true);
     const charRefSpy = spyOn(personaRepository, "setNaiCharRef").mockResolvedValue(true);
     const modelSpy = spyOn(llmOverrideRepo, "setPersonaLlmOverride").mockResolvedValue(true);
@@ -3024,6 +3211,12 @@ describe("config Persona Advanced routes", () => {
         kind: "modal",
         fields: { [buildConfigModalFieldId("image_tags", "nonce1234567")]: "tag" },
       },
+      {
+        route: { action: "attg-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+        kind: "modal",
+        fields: attgFields({ [CONFIG_NAI_ATTG_AUTHOR_FIELD]: "author" }),
+      },
+      { route: { action: "attg-clear-all", locale: "en-US", personaId: 55 } },
       {
         route: { action: "character-reference-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
         kind: "modal",
@@ -3074,6 +3267,7 @@ describe("config Persona Advanced routes", () => {
     expect(promptSpy).not.toHaveBeenCalled();
     expect(removePromptSpy).not.toHaveBeenCalled();
     expect(contextSpy).not.toHaveBeenCalled();
+    expect(attgSpy).not.toHaveBeenCalled();
     expect(humanizerSpy).not.toHaveBeenCalled();
     expect(charRefSpy).not.toHaveBeenCalled();
     expect(modelSpy).not.toHaveBeenCalled();
@@ -3082,6 +3276,7 @@ describe("config Persona Advanced routes", () => {
     promptSpy.mockRestore();
     removePromptSpy.mockRestore();
     contextSpy.mockRestore();
+    attgSpy.mockRestore();
     humanizerSpy.mockRestore();
     charRefSpy.mockRestore();
     modelSpy.mockRestore();
@@ -3089,6 +3284,7 @@ describe("config Persona Advanced routes", () => {
 
   it("denies the guild-only Advanced writes in a DM while the DM-capable ones still land", async () => {
     const imageTagsSpy = spyOn(personaRepository, "setPhysicalAppearanceTags").mockResolvedValue(true);
+    const attgSpy = spyOn(personaRepository, "setNaiAttg").mockResolvedValue(true);
     const charRefSpy = spyOn(personaRepository, "setNaiCharRef").mockResolvedValue(true);
     const promptSpy = spyOn(personaRepository, "setPrompt").mockResolvedValue(true);
 
@@ -3101,6 +3297,11 @@ describe("config Persona Advanced routes", () => {
         route: { action: "image-tags-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
         kind: "modal",
         fields: { [buildConfigModalFieldId("image_tags", "nonce1234567")]: "tag" },
+      },
+      {
+        route: { action: "attg-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
+        kind: "modal",
+        fields: attgFields({ [CONFIG_NAI_ATTG_AUTHOR_FIELD]: "author" }),
       },
       {
         route: { action: "character-reference-clear-confirm", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
@@ -3122,6 +3323,7 @@ describe("config Persona Advanced routes", () => {
     }
 
     expect(imageTagsSpy).not.toHaveBeenCalled();
+    expect(attgSpy).not.toHaveBeenCalled();
     expect(charRefSpy).not.toHaveBeenCalled();
 
     // Asserting a write that must still land keeps the denials above meaningful: a route layer that
@@ -3148,6 +3350,7 @@ describe("config Persona Advanced routes", () => {
     expect(promptSpy).toHaveBeenCalledTimes(1);
 
     imageTagsSpy.mockRestore();
+    attgSpy.mockRestore();
     charRefSpy.mockRestore();
     promptSpy.mockRestore();
   });

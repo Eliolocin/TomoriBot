@@ -39,13 +39,8 @@ export type ConfigPersonaCollectionAction =
   | "dialogue-remove";
 export type ConfigPersonaMemoriesAction = "server-memory-open" | "personal-memory-open" | "stm-edit" | "conditioning";
 export type ConfigPersonaSpritesAction = "inspect" | "export" | "add" | "edit" | "remove" | "import";
-export type ConfigPersonaAdvancedAction =
-  | "image-tags"
-  | "character-reference"
-  | "prompt"
-  | "context-note"
-  | "humanizer"
-  | "text-override";
+export type ConfigPersonaAdvancedAction = "image-tags" | "attg" | "character-reference" | "prompt" | "context-note";
+export type ConfigPersonaOverridesAction = "humanizer" | "text-override";
 
 export type ConfigBehaviorGeneralAction = "prompt" | "context-note" | "humanizer" | "fetch-limit" | "timezone";
 export type ConfigBehaviorTriggerAction =
@@ -118,8 +113,8 @@ export function resolveConfigPageState(
   if (actor.isManager) return "enabled";
 
   if (category === "persona") {
-    // Appearance, Advanced, and Voice hold manager-owned image, prompt, note, routing, and voice state.
-    if (page === "appearance" || page === "advanced" || page === "voice") return "omitted";
+    // Appearance, Advanced, Overrides, and Voice hold manager-owned image, prompt, note, routing, and voice state.
+    if (page === "appearance" || page === "advanced" || page === "overrides" || page === "voice") return "omitted";
     return page === "general" ? "enabled" : "read-only";
   }
 
@@ -212,21 +207,33 @@ export function resolvePersonaMemoriesActionState(
 }
 
 /**
- * Per-action policy for Persona > Advanced, re-derived from the four commands these actions absorb.
- * The gates are not uniform: `/persona image-tags` and the `persona` target of
- * `/novelai character-reference` require a guild, while `/persona prompt set|remove` gate on Manage
- * Guild only inside `if (interaction.guild)`, so a DM workspace owner may write. `/config humanizer`,
- * `/config context-note set`, and `/model text` carry no handler gate at all, so the route is their
- * only gate once the bare root drops its registration default.
+ * Per-action policy for Persona > Advanced, re-derived from the five commands these actions absorb.
+ * Image tags, ATTG, and the persona target of character reference require a guild, while prompt
+ * set/remove gate on Manage Guild only inside `if (interaction.guild)`, so a DM workspace owner may
+ * write. Context-note set carries no handler gate at all, so the route is its only gate once the bare
+ * root drops its registration default.
  */
 export function resolvePersonaAdvancedActionState(
   action: ConfigPersonaAdvancedAction,
   actor: ConfigActor,
 ): ConfigSurfaceState {
   if (actor.workspaceKind === "dm") {
-    return action === "image-tags" || action === "character-reference" ? "omitted" : "enabled";
+    return action === "image-tags" || action === "attg" || action === "character-reference" ? "omitted" : "enabled";
   }
   if (actor.isManager) return "enabled";
+  return "omitted";
+}
+
+/**
+ * Per-action policy for Persona > Overrides, re-derived from the humanizer and text-model routes.
+ * Both actions are available to a DM workspace owner and a guild manager, while guild members
+ * cannot read or change the manager-owned values.
+ */
+export function resolvePersonaOverridesActionState(
+  _action: ConfigPersonaOverridesAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm" || actor.isManager) return "enabled";
   return "omitted";
 }
 
@@ -298,6 +305,9 @@ export const PERSONA_ADVANCED_ACTION_BY_ROUTE: Partial<
 > = {
   "image-tags-open": "image-tags",
   "image-tags-submit": "image-tags",
+  "attg-open": "attg",
+  "attg-submit": "attg",
+  "attg-clear-all": "attg",
   "character-reference-open": "character-reference",
   "character-reference-submit": "character-reference",
   "character-reference-clear-view": "character-reference",
@@ -308,6 +318,11 @@ export const PERSONA_ADVANCED_ACTION_BY_ROUTE: Partial<
   "prompt-remove": "prompt",
   "context-note-open": "context-note",
   "context-note-submit": "context-note",
+};
+
+export const PERSONA_OVERRIDES_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigPersonaOverridesAction>
+> = {
   "humanizer-open": "humanizer",
   "humanizer-select": "humanizer",
   "humanizer-submit": "humanizer",
@@ -676,6 +691,12 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   if (advancedAction) {
     if (resolveConfigPageState("persona", "advanced", actor) === "omitted") return false;
     return resolvePersonaAdvancedActionState(advancedAction, actor) === "enabled";
+  }
+
+  const overridesAction = PERSONA_OVERRIDES_ACTION_BY_ROUTE[route.action];
+  if (overridesAction) {
+    if (resolveConfigPageState("persona", "overrides", actor) === "omitted") return false;
+    return resolvePersonaOverridesActionState(overridesAction, actor) === "enabled";
   }
 
   const generalBehaviorAction = BEHAVIOR_GENERAL_ACTION_BY_ROUTE[route.action];

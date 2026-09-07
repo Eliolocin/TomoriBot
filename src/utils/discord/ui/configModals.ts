@@ -54,6 +54,11 @@ export const CONFIG_PERSONA_PROMPT_PART_FIELDS = [
   "persona_prompt_part4",
 ] as const;
 export const CONFIG_CHARACTER_REFERENCE_FILE_FIELD = "character_reference";
+export const CONFIG_NAI_ATTG_AUTHOR_FIELD = "nai_attg_author";
+export const CONFIG_NAI_ATTG_TITLE_FIELD = "nai_attg_title";
+export const CONFIG_NAI_ATTG_TAGS_FIELD = "nai_attg_tags";
+export const CONFIG_NAI_ATTG_GENRE_FIELD = "nai_attg_genre";
+export const CONFIG_NAI_ATTG_STARS_FIELD = "nai_attg_stars";
 export const CONFIG_HUMANIZER_FIELD = "humanizer";
 export const CONFIG_TEXT_OVERRIDE_MODEL_FIELD = "text_override_model";
 export const CONFIG_SPRITE_NAME_FIELD = "sprite_name";
@@ -249,6 +254,73 @@ export function buildPersonaImageTagsModal(
         },
       },
     ],
+  };
+}
+
+export function buildPersonaAttgModal(
+  locale: string,
+  personaId: number,
+  nonce: string,
+  current: Pick<
+    TomoriState,
+    "nai_attg_author" | "nai_attg_title" | "nai_attg_tags" | "nai_attg_genre" | "nai_attg_stars"
+  >,
+): RawModalPayload {
+  const fields = [
+    {
+      field: CONFIG_NAI_ATTG_AUTHOR_FIELD,
+      labelKey: "commands.novelai.attg.author_label",
+      placeholderKey: "commands.novelai.attg.author_placeholder",
+      value: current.nai_attg_author,
+      maxLength: 256,
+    },
+    {
+      field: CONFIG_NAI_ATTG_TITLE_FIELD,
+      labelKey: "commands.novelai.attg.title_label",
+      placeholderKey: "commands.novelai.attg.title_placeholder",
+      value: current.nai_attg_title,
+      maxLength: 256,
+    },
+    {
+      field: CONFIG_NAI_ATTG_TAGS_FIELD,
+      labelKey: "commands.novelai.attg.tags_label",
+      placeholderKey: "commands.novelai.attg.tags_placeholder",
+      value: current.nai_attg_tags,
+      maxLength: 256,
+    },
+    {
+      field: CONFIG_NAI_ATTG_GENRE_FIELD,
+      labelKey: "commands.novelai.attg.genre_label",
+      placeholderKey: "commands.novelai.attg.genre_placeholder",
+      value: current.nai_attg_genre,
+      maxLength: 256,
+    },
+    {
+      field: CONFIG_NAI_ATTG_STARS_FIELD,
+      labelKey: "commands.novelai.attg.stars_label",
+      placeholderKey: "commands.novelai.attg.stars_placeholder",
+      value:
+        current.nai_attg_stars === null || current.nai_attg_stars === undefined ? null : String(current.nai_attg_stars),
+      maxLength: 1,
+    },
+  ] as const;
+
+  return {
+    custom_id: buildConfigRouteId({ action: "attg-submit", locale, personaId, nonce }),
+    title: modalTitle(locale, "commands.novelai.attg.modal_title"),
+    components: fields.map(({ field, labelKey, placeholderKey, value, maxLength }) => ({
+      type: 18,
+      label: modalLabel(locale, labelKey),
+      component: {
+        type: 4,
+        custom_id: buildConfigModalFieldId(field, nonce),
+        style: TextInputStyle.Short,
+        placeholder: modalDescription(locale, placeholderKey),
+        max_length: maxLength,
+        required: false,
+        ...(value ? { value } : {}),
+      },
+    })),
   };
 }
 

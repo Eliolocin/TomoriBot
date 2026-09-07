@@ -57,6 +57,7 @@ import { beginPanelInteraction } from "@/utils/discord/interactions/panelControl
 import {
   isConfigRouteAuthorized,
   PERSONA_ADVANCED_ACTION_BY_ROUTE,
+  PERSONA_OVERRIDES_ACTION_BY_ROUTE,
   resolveConfigActor,
   resolveConfigLanding,
   resolvePersonaSpritesActionState,
@@ -168,6 +169,7 @@ import {
   buildPersonaContextNoteModal,
   buildPersonaDialogueAddModal,
   buildPersonaDialogueEditModal,
+  buildPersonaAttgModal,
   buildPersonaImageTagsModal,
   buildPersonaHumanizerModal,
   buildPersonaNamingHabitsModal,
@@ -186,6 +188,11 @@ import {
   CONFIG_ATTRIBUTE_INPUT_FIELD,
   CONFIG_ATTRIBUTE_PUBLIC_FIELD,
   CONFIG_CHARACTER_REFERENCE_FILE_FIELD,
+  CONFIG_NAI_ATTG_AUTHOR_FIELD,
+  CONFIG_NAI_ATTG_TITLE_FIELD,
+  CONFIG_NAI_ATTG_TAGS_FIELD,
+  CONFIG_NAI_ATTG_GENRE_FIELD,
+  CONFIG_NAI_ATTG_STARS_FIELD,
   CONFIG_HUMANIZER_FIELD,
   CONFIG_CONTEXT_NOTE_DEPTH_FIELD,
   CONFIG_CONTEXT_NOTE_TEXT_FIELD,
@@ -245,6 +252,7 @@ const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "stm-edit-open",
   "conditioning-open",
   "image-tags-open",
+  "attg-open",
   "character-reference-open",
   "prompt-open",
   "context-note-open",
@@ -831,6 +839,9 @@ async function handleModalOpen(
         buildPersonaImageTagsModal(locale, persona.persona_id, nonce, persona.physical_appearance_tags),
       );
       return;
+    case "attg-open":
+      await dependencies.showModal(interaction, buildPersonaAttgModal(locale, persona.persona_id, nonce, persona));
+      return;
     case "character-reference-open":
       await dependencies.showModal(interaction, buildPersonaCharacterReferenceModal(locale, persona.persona_id, nonce));
       return;
@@ -1063,7 +1074,7 @@ async function handleTextOverrideChoice(
       locale: route.locale,
       scope,
       category: "persona",
-      page: "advanced",
+      page: "overrides",
       selectedPersonaId: personaId,
       receipt: receipt(
         route.locale,
@@ -1086,7 +1097,7 @@ async function handleTextOverrideChoice(
           locale: route.locale,
           scope,
           category: "persona",
-          page: "advanced",
+          page: "overrides",
           selectedPersonaId: personaId,
           view: {
             kind: "text-override-provider",
@@ -1110,7 +1121,7 @@ async function handleTextOverrideChoice(
       locale: route.locale,
       scope,
       category: "persona",
-      page: "advanced",
+      page: "overrides",
       selectedPersonaId: personaId,
       receipt: staleReceipt(route.locale),
       dependencies,
@@ -1124,7 +1135,7 @@ async function handleTextOverrideChoice(
       locale: route.locale,
       scope,
       category: "persona",
-      page: "advanced",
+      page: "overrides",
       selectedPersonaId: personaId,
       receipt: receipt(
         route.locale,
@@ -1141,7 +1152,7 @@ async function handleTextOverrideChoice(
     locale: route.locale,
     scope,
     category: "persona",
-    page: "advanced",
+    page: "overrides",
     selectedPersonaId: personaId,
     view: {
       kind: "text-override-model",
@@ -1185,7 +1196,7 @@ async function handleTextOverrideModelModalOpen(
       locale: route.locale,
       scope,
       category: "persona",
-      page: "advanced",
+      page: "overrides",
       selectedPersonaId: persona.persona_id,
       view: {
         kind: "text-override-provider",
@@ -1224,7 +1235,7 @@ async function handleTextOverrideModelModalOpen(
       locale: route.locale,
       scope,
       category: "persona",
-      page: "advanced",
+      page: "overrides",
       selectedPersonaId: persona.persona_id,
       view: { kind: "text-override-model", personaId: persona.persona_id, provider, models, start: 0 },
       dependencies,
@@ -1325,6 +1336,67 @@ async function runPersonaWrite(
         };
       }
       return { receipt: receipt(locale, "error", key("write_failed_heading"), key("write_failed_detail")) };
+    }
+
+    case "attg-submit":
+    case "attg-clear-all": {
+      const attg =
+        route.action === "attg-clear-all"
+          ? {
+              nai_attg_author: null,
+              nai_attg_title: null,
+              nai_attg_tags: null,
+              nai_attg_genre: null,
+              nai_attg_stars: null,
+            }
+          : (() => {
+              const modal = interaction as ModalSubmitInteraction;
+              const trimOrNull = (field: string): string | null => {
+                const value = modal.fields.getTextInputValue(buildConfigModalFieldId(field, route.nonce)).trim();
+                return value || null;
+              };
+              const starsRaw = trimOrNull(CONFIG_NAI_ATTG_STARS_FIELD);
+              if (starsRaw !== null && !/^[1-5]$/.test(starsRaw)) return null;
+              return {
+                nai_attg_author: trimOrNull(CONFIG_NAI_ATTG_AUTHOR_FIELD),
+                nai_attg_title: trimOrNull(CONFIG_NAI_ATTG_TITLE_FIELD),
+                nai_attg_tags: trimOrNull(CONFIG_NAI_ATTG_TAGS_FIELD),
+                nai_attg_genre: trimOrNull(CONFIG_NAI_ATTG_GENRE_FIELD),
+                nai_attg_stars: starsRaw === null ? null : Number(starsRaw),
+              };
+            })();
+      if (!attg) {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            "commands.novelai.attg.invalid_stars_title",
+            "commands.novelai.attg.invalid_stars_description",
+          ),
+        };
+      }
+      const isClearing = Object.values(attg).every((value) => value === null);
+      const updated = await personaRepository.setNaiAttg(personaId, attg);
+      invalidateTomoriStateCache(scope.serverDiscId);
+      if (!updated) {
+        return {
+          receipt: receipt(
+            locale,
+            "error",
+            "general.errors.update_failed_title",
+            "general.errors.update_failed_description",
+          ),
+        };
+      }
+      return {
+        receipt: receipt(
+          locale,
+          "success",
+          isClearing ? "commands.novelai.attg.cleared_title" : "commands.novelai.attg.success_title",
+          isClearing ? "commands.novelai.attg.cleared_description" : "commands.novelai.attg.success_description",
+          { persona_name: persona.persona_nickname },
+        ),
+      };
     }
 
     case "character-reference-submit":
@@ -2775,6 +2847,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "conditioning-submit" ||
         route.action === "dialogue-edit-submit" ||
         route.action === "image-tags-submit" ||
+        route.action === "attg-submit" ||
         route.action === "character-reference-submit" ||
         route.action === "prompt-submit" ||
         route.action === "context-note-submit" ||
@@ -3053,6 +3126,9 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       } else if (PERSONA_ADVANCED_ACTION_BY_ROUTE[route.action]) {
         category = "persona";
         page = "advanced";
+      } else if (PERSONA_OVERRIDES_ACTION_BY_ROUTE[route.action]) {
+        category = "persona";
+        page = "overrides";
       }
       if (SPRITE_ACTIONS.has(route.action)) {
         category = "persona";

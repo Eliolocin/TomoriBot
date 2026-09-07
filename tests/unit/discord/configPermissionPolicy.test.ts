@@ -25,6 +25,7 @@ import {
   resolveConfigLanding,
   resolveConfigPageState,
   resolvePersonaAdvancedActionState,
+  resolvePersonaOverridesActionState,
   resolvePersonaGeneralActionState,
   resolvePersonaMemoriesActionState,
   resolvePersonaSpritesActionState,
@@ -52,6 +53,7 @@ import {
   visibleConfigPages,
   type ConfigActor,
   type ConfigPersonaGeneralAction,
+  type ConfigPersonaOverridesAction,
   type ConfigChannelsDestinationsAction,
   type ConfigChannelsAutoTriggerAction,
   type ConfigChannelsRulesAction,
@@ -126,9 +128,10 @@ describe("config page filtering", () => {
     expect(visibleConfigPages("models", DM_OWNER)).toEqual(["switch", "parameters", "fallbacks", "voices"]);
   });
 
-  it("omits Persona Appearance, Advanced, and Voice from a guild member and leaves its siblings readable", () => {
+  it("omits Persona Appearance, Advanced, Overrides, and Voice from a guild member and leaves its siblings readable", () => {
     expect(resolveConfigPageState("persona", "appearance", GUILD_MEMBER)).toBe("omitted");
     expect(resolveConfigPageState("persona", "advanced", GUILD_MEMBER)).toBe("omitted");
+    expect(resolveConfigPageState("persona", "overrides", GUILD_MEMBER)).toBe("omitted");
     expect(resolveConfigPageState("persona", "voice", GUILD_MEMBER)).toBe("omitted");
     expect(resolveConfigPageState("persona", "voice", GUILD_MANAGER)).toBe("enabled");
     expect(resolveConfigPageState("persona", "general", GUILD_MEMBER)).toBe("enabled");
@@ -216,14 +219,7 @@ describe("Persona Memories action policy", () => {
 });
 
 describe("Persona Advanced action policy", () => {
-  const allActions = [
-    "image-tags",
-    "character-reference",
-    "prompt",
-    "context-note",
-    "humanizer",
-    "text-override",
-  ] as const;
+  const allActions = ["image-tags", "attg", "character-reference", "prompt", "context-note"] as const;
 
   it("allows every Advanced action for a guild manager", () => {
     for (const action of allActions) {
@@ -231,17 +227,35 @@ describe("Persona Advanced action policy", () => {
     }
   });
 
-  it("keeps prompt, context note, humanizer, and text override available in DMs", () => {
-    for (const action of ["prompt", "context-note", "humanizer", "text-override"] as const) {
+  it("keeps prompt and context note available in DMs", () => {
+    for (const action of ["prompt", "context-note"] as const) {
       expect(resolvePersonaAdvancedActionState(action, DM_OWNER)).toBe("enabled");
     }
     expect(resolvePersonaAdvancedActionState("image-tags", DM_OWNER)).toBe("omitted");
+    expect(resolvePersonaAdvancedActionState("attg", DM_OWNER)).toBe("omitted");
     expect(resolvePersonaAdvancedActionState("character-reference", DM_OWNER)).toBe("omitted");
   });
 
   it("omits every Advanced action for a guild member", () => {
     for (const action of allActions) {
       expect(resolvePersonaAdvancedActionState(action, GUILD_MEMBER)).toBe("omitted");
+    }
+  });
+});
+
+describe("Persona Overrides action policy", () => {
+  const allActions: ConfigPersonaOverridesAction[] = ["humanizer", "text-override"];
+
+  it("allows every Overrides action for a guild manager and DM owner", () => {
+    for (const action of allActions) {
+      expect(resolvePersonaOverridesActionState(action, GUILD_MANAGER)).toBe("enabled");
+      expect(resolvePersonaOverridesActionState(action, DM_OWNER)).toBe("enabled");
+    }
+  });
+
+  it("omits every Overrides action for a guild member", () => {
+    for (const action of allActions) {
+      expect(resolvePersonaOverridesActionState(action, GUILD_MEMBER)).toBe("omitted");
     }
   });
 });
@@ -588,6 +602,42 @@ describe("isConfigRouteAuthorized", () => {
     { action: "sprite-export", locale: "en-US", personaId: 5 },
   ];
 
+  const personaAdvancedRoutes: ConfigPanelRoute[] = [
+    { action: "image-tags-open", locale: "en-US", personaId: 5 },
+    { action: "image-tags-submit", locale: "en-US", personaId: 5, nonce: "nonce1234567" },
+    { action: "attg-open", locale: "en-US", personaId: 5 },
+    { action: "attg-submit", locale: "en-US", personaId: 5, nonce: "nonce1234567" },
+    { action: "attg-clear-all", locale: "en-US", personaId: 5 },
+    { action: "character-reference-open", locale: "en-US", personaId: 5 },
+    { action: "character-reference-submit", locale: "en-US", personaId: 5, nonce: "nonce1234567" },
+    { action: "character-reference-clear-view", locale: "en-US", personaId: 5 },
+    { action: "character-reference-clear-confirm", locale: "en-US", personaId: 5, nonce: "nonce1234567" },
+    { action: "character-reference-clear-cancel", locale: "en-US", personaId: 5 },
+    { action: "prompt-open", locale: "en-US", personaId: 5 },
+    { action: "prompt-submit", locale: "en-US", personaId: 5, nonce: "nonce1234567" },
+    { action: "prompt-remove", locale: "en-US", personaId: 5 },
+    { action: "context-note-open", locale: "en-US", personaId: 5 },
+    { action: "context-note-submit", locale: "en-US", personaId: 5, nonce: "nonce1234567" },
+  ];
+
+  const personaOverridesRoutes: ConfigPanelRoute[] = [
+    { action: "humanizer-open", locale: "en-US", personaId: 5 },
+    { action: "humanizer-select", locale: "en-US", personaId: 5 },
+    { action: "humanizer-submit", locale: "en-US", personaId: 5, nonce: "nonce1234567" },
+    { action: "text-override-open", locale: "en-US", personaId: 5 },
+    { action: "text-override-provider-select", locale: "en-US", personaId: 5 },
+    { action: "text-override-model-select", locale: "en-US", personaId: 5, provider: "openrouter" },
+    {
+      action: "text-override-model-submit",
+      locale: "en-US",
+      personaId: 5,
+      provider: "openrouter",
+      nonce: "nonce1234567",
+    },
+    { action: "text-override-model-page", locale: "en-US", personaId: 5, provider: "openrouter", start: 0 },
+    { action: "text-override-clear", locale: "en-US", personaId: 5 },
+  ];
+
   it("refuses a forged sprite mutation replayed by a member or in a DM while Export still lands", () => {
     for (const route of [...spriteMutationRoutes, ...spriteReadRoutes]) {
       expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
@@ -599,6 +649,20 @@ describe("isConfigRouteAuthorized", () => {
     // The read-only page must not take Export down with the mutations it disables.
     for (const route of spriteReadRoutes) {
       expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
+    }
+  });
+
+  it("maps Advanced and Overrides routes to their separate page policies", () => {
+    for (const route of personaAdvancedRoutes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      const dmAllowed = route.action.startsWith("prompt-") || route.action.startsWith("context-note-");
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(dmAllowed);
+    }
+    for (const route of personaOverridesRoutes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
       expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
     }
   });
@@ -751,6 +815,9 @@ describe("isConfigRouteAuthorized", () => {
       "conditioning-submit",
       "image-tags-open",
       "image-tags-submit",
+      "attg-open",
+      "attg-submit",
+      "attg-clear-all",
       "character-reference-open",
       "character-reference-submit",
       "character-reference-clear-view",

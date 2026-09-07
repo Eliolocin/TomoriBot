@@ -21,7 +21,16 @@ export const CONFIG_ROUTE_VERSION = "v1";
 
 export type ConfigCategory = "persona" | "behavior" | "channels" | "permissions" | "models";
 
-type PersonaPage = "general" | "triggers" | "memories" | "appearance" | "sprites" | "advanced" | "voice" | "naming";
+type PersonaPage =
+  | "general"
+  | "triggers"
+  | "memories"
+  | "appearance"
+  | "sprites"
+  | "advanced"
+  | "overrides"
+  | "voice"
+  | "naming";
 type BehaviorPage = "general" | "trigger" | "experimental" | "notices" | "memory";
 type ChannelsPage = "destinations" | "auto-trigger" | "rules" | "overrides";
 type PermissionsPage = "capabilities" | "privacy";
@@ -35,7 +44,7 @@ export type ConfigPage = PersonaPage | BehaviorPage | ChannelsPage | Permissions
  * custom ID, which is why the category field must stay ahead of the page field in every codec.
  */
 export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPage[]> = {
-  persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "advanced", "voice"],
+  persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "advanced", "overrides", "voice"],
   behavior: ["general", "trigger", "notices", "experimental", "memory"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   permissions: ["capabilities", "privacy"],
@@ -392,6 +401,9 @@ export type ConfigPanelRoute =
   | { action: "conditioning-submit"; locale: string; personaId: number; fp: string; nonce: string }
   | { action: "image-tags-open"; locale: string; personaId: number }
   | { action: "image-tags-submit"; locale: string; personaId: number; nonce: string }
+  | { action: "attg-open"; locale: string; personaId: number }
+  | { action: "attg-submit"; locale: string; personaId: number; nonce: string }
+  | { action: "attg-clear-all"; locale: string; personaId: number }
   | { action: "character-reference-open"; locale: string; personaId: number }
   | { action: "character-reference-submit"; locale: string; personaId: number; nonce: string }
   | { action: "character-reference-clear-view"; locale: string; personaId: number }
@@ -793,6 +805,9 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "conditioning-submit": { wireToken: "conditioning-submit", fields: [personaIdField, fpField, nonceField] },
   "image-tags-open": { wireToken: "image-tags-open", fields: [personaIdField] },
   "image-tags-submit": { wireToken: "image-tags-submit", fields: [personaIdField, nonceField] },
+  "attg-open": { wireToken: "attg-open", fields: [personaIdField] },
+  "attg-submit": { wireToken: "attg-submit", fields: [personaIdField, nonceField] },
+  "attg-clear-all": { wireToken: "attg-clear-all", fields: [personaIdField] },
   "character-reference-open": { wireToken: "char-ref-open", fields: [personaIdField] },
   "character-reference-submit": { wireToken: "char-ref-submit", fields: [personaIdField, nonceField] },
   "character-reference-clear-view": { wireToken: "char-ref-clear-view", fields: [personaIdField] },
