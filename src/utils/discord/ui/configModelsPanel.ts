@@ -4,6 +4,7 @@ import {
   type ActionRowData,
   type ButtonComponentData,
   type ComponentInContainerData,
+  type SelectMenuComponentOptionData,
   type StringSelectMenuComponentData,
 } from "discord.js";
 import type { LogitBiasEntry } from "@/types/provider/logitBias";
@@ -16,16 +17,26 @@ import {
   CONFIG_MODEL_CLEAR_VALUE,
   CONFIG_MODEL_PAGE_SIZE,
   CONFIG_MODEL_PROVIDER_DIRECT_LIMIT,
+  CONFIG_ENDPOINT_PAGE_SIZE,
   CONFIG_ROUTE_NAMESPACE,
   CONFIG_ROUTE_VERSION,
   buildConfigRouteId,
   buildConfigRouteSegments,
+  isConfigCatalogModelCapability,
+  type ConfigCatalogModelCapability,
   type ConfigModelCapability,
   type ConfigPage,
 } from "@/utils/discord/configPanelCatalog";
 import {
+  computeConfigEndpointFingerprint,
+  encodeConfigEndpointPageValue,
+  encodeConfigEndpointSelection,
   encodeConfigProviderPageValue,
   encodeConfigProviderRangeValue,
+} from "@/utils/discord/interactions/configModelLoaders";
+import type {
+  ConfigCapabilityEndpoint,
+  ConfigEndpointModelCapability,
 } from "@/utils/discord/interactions/configModelLoaders";
 import {
   buildModelRoutingControl,
@@ -52,13 +63,15 @@ export const CONFIG_MODEL_CAPABILITY_LOCALE_KEYS: Record<ConfigModelCapability, 
   image: "commands.config.panel.capability_image",
   "nai-image": "commands.config.panel.capability_nai_image",
   video: "commands.config.panel.capability_video",
+  tts: "commands.config.panel.capability_tts",
+  stt: "commands.config.panel.capability_stt",
 };
 
 /**
  * Clearing Vision disables the image-understanding tools outright, while either image slot only
  * contributes to one shared flag, so the two consequences cannot share one description.
  */
-const MODEL_CLEAR_DESCRIPTION_LOCALE_KEYS: Partial<Record<ConfigModelCapability, string>> = {
+const MODEL_CLEAR_DESCRIPTION_LOCALE_KEYS: Partial<Record<ConfigCatalogModelCapability, string>> = {
   vision: "commands.config.panel.model_no_model_vision_description",
   image: "commands.config.panel.model_no_model_image_description",
   "nai-image": "commands.config.panel.model_no_model_image_description",
@@ -66,7 +79,7 @@ const MODEL_CLEAR_DESCRIPTION_LOCALE_KEYS: Partial<Record<ConfigModelCapability,
 
 /** One server-default slot as the panel renders it. */
 interface ConfigModelSlotView {
-  capability: ConfigModelCapability;
+  capability: ConfigCatalogModelCapability;
   currentModelName: string | null;
   currentProvider: string | null;
   eligibleProviders: string[];
@@ -79,9 +92,20 @@ interface ConfigModelSlotView {
 
 /** Which capability's provider selector is expanded, and where its entry list is scrolled. */
 export interface ConfigSwitchModelsProviderPage {
-  capability: ConfigModelCapability;
+  capability: ConfigCatalogModelCapability;
   provider?: string;
   start: number;
+}
+
+export interface ConfigEndpointPage {
+  capability: ConfigEndpointModelCapability;
+  start: number;
+}
+
+export interface ConfigEndpointSlotView {
+  capability: ConfigEndpointModelCapability;
+  endpoints: ConfigCapabilityEndpoint[];
+  pageStart: number;
 }
 
 export interface ConfigSwitchModelsView {
@@ -90,6 +114,8 @@ export interface ConfigSwitchModelsView {
   personaOverrideCount: number;
   imageGenerationEnabled: boolean;
   videoGenerationEnabled: boolean;
+  speechCapabilityEnabled?: boolean;
+  endpointSlots?: ConfigEndpointSlotView[];
 }
 
 export interface ConfigParametersView {
@@ -155,44 +181,42 @@ function hasUsableModel(slot: ConfigModelSlotView): boolean {
   );
 }
 
-function appendCapabilityStatus(
-  components: ComponentInContainerData[],
-  locale: string,
-  view: ConfigSwitchModelsView,
-  capability: "image" | "video",
-): void {
-  const enabled = capability === "image" ? view.imageGenerationEnabled : view.videoGenerationEnabled;
+function buildCapabilityNoticeLine(locale: string, view: ConfigSwitchModelsView): ComponentInContainerData | null {
   // One Image flag enables either provider-specific image path, so one usable image slot is enough.
-  const hasModel =
-    capability === "image"
-      ? view.slots.some(
-          (slot) => (slot.capability === "image" || slot.capability === "nai-image") && hasUsableModel(slot),
-        )
-      : view.slots.some((slot) => slot.capability === "video" && hasUsableModel(slot));
-  const direction =
-    capability === "image"
-      ? enabled
-        ? localizer(locale, "commands.config.panel.image_generation_enabled_direction")
-        : localizer(locale, "commands.config.panel.image_generation_disabled_direction")
-      : enabled
-        ? localizer(locale, "commands.config.panel.video_generation_enabled_direction")
-        : localizer(locale, "commands.config.panel.video_generation_disabled_direction");
-  const missingModel =
-    capability === "image"
-      ? localizer(locale, "commands.config.panel.image_generation_missing_model")
-      : localizer(locale, "commands.config.panel.video_generation_missing_model");
+  const hasUsableImageModel = view.slots.some(
+    (slot) => (slot.capability === "image" || slot.capability === "nai-image") && hasUsableModel(slot),
+  );
+  const hasUsableVideoModel = view.slots.some((slot) => slot.capability === "video" && hasUsableModel(slot));
+  const warnings: string[] = [];
 
-  components.push({
-    type: ComponentType.TextDisplay,
-    content: withLinePrefix("-# ", direction),
-  });
-
-  if (enabled && !hasModel) {
-    components.push({
-      type: ComponentType.TextDisplay,
-      content: withLinePrefix("-# ", missingModel),
-    });
+  if (!view.imageGenerationEnabled) {
+    warnings.push(localizer(locale, "commands.config.panel.image_generation_disabled_direction"));
+  } else if (!hasUsableImageModel) {
+    warnings.push(localizer(locale, "commands.config.panel.image_generation_missing_model"));
   }
+
+  if (!view.videoGenerationEnabled) {
+    warnings.push(localizer(locale, "commands.config.panel.video_generation_disabled_direction"));
+  } else if (!hasUsableVideoModel) {
+    warnings.push(localizer(locale, "commands.config.panel.video_generation_missing_model"));
+  }
+
+  if (view.speechCapabilityEnabled === false) {
+    warnings.push(localizer(locale, "commands.config.panel.speech_capability_disabled_direction"));
+  } else if (view.speechCapabilityEnabled !== undefined) {
+    warnings.push(localizer(locale, "commands.config.panel.speech_capability_enabled_direction"));
+    const speechSlot = view.endpointSlots?.find((slot) => slot.capability === "tts");
+    const hasActiveSpeechEndpoint = speechSlot?.endpoints.some((endpoint) => endpoint.isActive && endpoint.id > 0);
+    if (!hasActiveSpeechEndpoint) {
+      warnings.push(localizer(locale, "commands.config.panel.speech_capability_missing_endpoint"));
+    }
+  }
+
+  if (warnings.length === 0) return null;
+  return {
+    type: ComponentType.TextDisplay,
+    content: warnings.map((warning) => withLinePrefix("-# ", warning)).join("\n"),
+  };
 }
 
 interface SwitchProviderOptionsInput {
@@ -236,6 +260,7 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
   if (!view) return components;
 
   for (const capability of CONFIG_MODEL_CAPABILITY_ORDER) {
+    if (!isConfigCatalogModelCapability(capability)) continue;
     const slot = view.slots.find((candidate) => candidate.capability === capability);
     if (!slot) continue;
     const capabilityLabel = localizer(locale, CONFIG_MODEL_CAPABILITY_LOCALE_KEYS[capability]);
@@ -309,13 +334,93 @@ function buildSwitchModelsBody(input: ConfigModelsPageInput): ComponentInContain
         disabled: writesDisabled || (entries.length === 0 && !showClear),
       }),
     );
-
-    if (capability === "nai-image") appendCapabilityStatus(components, locale, view, "image");
-    if (capability === "video") appendCapabilityStatus(components, locale, view, "video");
   }
 
+  for (const capability of ["tts", "stt"] as const) {
+    const slot = view.endpointSlots?.find((candidate) => candidate.capability === capability);
+    if (!slot) continue;
+    const capabilityLabel = localizer(locale, CONFIG_MODEL_CAPABILITY_LOCALE_KEYS[capability]);
+    const overflows = slot.endpoints.length > CONFIG_ENDPOINT_PAGE_SIZE;
+    const windowSize = overflows ? CONFIG_ENDPOINT_PAGE_SIZE - 1 : CONFIG_ENDPOINT_PAGE_SIZE;
+    const rangeCount = Math.max(1, Math.ceil(slot.endpoints.length / windowSize));
+    const rangeIndex = Math.min(Math.max(0, Math.floor(slot.pageStart / windowSize)), rangeCount - 1);
+    const visibleStart = rangeIndex * windowSize;
+    const fingerprint = computeConfigEndpointFingerprint(capability, slot.endpoints);
+    const options: SelectMenuComponentOptionData[] = slot.endpoints
+      .slice(visibleStart, visibleStart + windowSize)
+      .map((endpoint, offset) => {
+        const displayName = `${endpoint.label}: ${endpoint.modelLabel}`;
+        return {
+          value: encodeConfigEndpointSelection(visibleStart + offset, fingerprint),
+          label: safeSelectOptionText(displayName, 100),
+          description: safeSelectOptionText(
+            localizer(
+              locale,
+              endpoint.isActive
+                ? "commands.providers.activate_option_active_description"
+                : "commands.providers.activate_option_description",
+              { capability: endpoint.capability, name: displayName },
+            ),
+            100,
+          ),
+          default: false,
+        };
+      });
+    if (overflows) {
+      const nextRangeIndex = (rangeIndex + 1) % rangeCount;
+      options.push({
+        value: encodeConfigEndpointPageValue(nextRangeIndex * windowSize),
+        label: safeSelectOptionText(
+          localizer(locale, "commands.config.panel.model_provider_more_option", {
+            capability: capabilityLabel,
+            page: nextRangeIndex + 1,
+            total: rangeCount,
+          }),
+          100,
+        ),
+        description: undefined,
+        default: false,
+      });
+    }
+    if (options.length === 0) {
+      options.push({
+        value: "ep-none",
+        label: safeSelectOptionText(localizer(locale, "commands.config.panel.no_endpoints_option"), 100),
+        description: safeSelectOptionText(
+          localizer(locale, "commands.config.panel.providers_endpoint_registration_hint"),
+          100,
+        ),
+        default: false,
+      });
+    }
+    const activeEndpoint = slot.endpoints.find((endpoint) => endpoint.isActive);
+    const placeholder = activeEndpoint
+      ? `${capabilityLabel}: ${activeEndpoint.label}: ${activeEndpoint.modelLabel}`
+      : `${capabilityLabel}: ${localizer(locale, "commands.providers.activate_placeholder")}`;
+    components.push({
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.StringSelect,
+          customId: buildConfigRouteId({ action: "endpoint-select", locale, capability }),
+          placeholder: safeSelectOptionText(placeholder, 150),
+          options,
+          disabled: writesDisabled || slot.endpoints.length === 0,
+        },
+      ],
+    });
+  }
+
+  components.push({
+    type: ComponentType.TextDisplay,
+    content: `-# ${localizer(locale, "commands.config.panel.manage_providers_hint")}`,
+  });
+
+  const capabilityNotice = buildCapabilityNoticeLine(locale, view);
+  if (capabilityNotice) components.push(capabilityNotice);
+
   // Only Text carries narrower scopes, so the summary names those two editors rather than implying
-  // that the other five slots support overrides at all.
+  // that the six other slots support overrides at all.
   components.push({
     type: ComponentType.TextDisplay,
     content: `**${localizer(locale, "commands.config.panel.text_overrides_title")}**

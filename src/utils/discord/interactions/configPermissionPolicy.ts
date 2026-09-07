@@ -582,6 +582,7 @@ export function resolveChannelsOverridesActionState(
  */
 export const MODELS_PAGE_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPage>> = {
   "model-provider-select": "switch",
+  "endpoint-select": "switch",
   "model-modal-submit": "switch",
   "parameters-provider-select": "parameters",
   "sampling-open": "parameters",

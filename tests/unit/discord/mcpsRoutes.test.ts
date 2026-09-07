@@ -777,8 +777,8 @@ describe("MCP panel routes", () => {
       components: Array<{ accentColor?: number; components?: Array<{ content?: string }> }>;
     };
     expect(typedPayload.components).toHaveLength(2);
-    expect(typedPayload.components[0]?.accentColor).toBe(0x57f287);
-    const content = typedPayload.components[0]?.components?.[0]?.content ?? "";
+    expect(typedPayload.components[1]?.accentColor).toBe(0x57f287);
+    const content = typedPayload.components[1]?.components?.[0]?.content ?? "";
     expect(content).toContain("discovered 7 tool(s)");
     const toolList = content.split("Tools: ")[1] ?? "";
     expect(toolList).toContain("`read_wiki`, `'open' repo`, `*danger*`");
@@ -792,7 +792,7 @@ describe("MCP panel routes", () => {
       }),
     ).toBe(true);
     expect(toolList.length).toBeLessThanOrEqual(180);
-    expect(JSON.stringify(typedPayload.components[1])).toContain("mcps:v1:set-enabled:en-US:1:0");
+    expect(JSON.stringify(typedPayload.components[0])).toContain("mcps:v1:set-enabled:en-US:1:0");
   });
 
   it("accepts issued select and range routes as read-only compatibility repaints", async () => {

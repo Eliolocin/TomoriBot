@@ -1062,6 +1062,15 @@ Behavior pages place Advanced Memory before Notice Behavior and keep Experimenta
 Trigger cooldown omits its stored duration while disabled. Notice Behavior marks each notice with
 a green or red status icon and explains that disabled notice embeds are redirected to Logs.
 
+`/config` > Models > Switch Models exposes eight capability slots. The six ordinary model-routing
+slots select a model from the registered provider catalogs and persist their corresponding model-column
+choices. TTS and STT are workspace-wide speech slots: each selects a registered, server-scoped endpoint
+and activates its selected scoped endpoint record (the active/default endpoint), without writing a model
+column. Each speech selector is bounded by Discord's 25-option limit and validates a freshly loaded scoped
+endpoint list before writing, so a stale choice cannot change state. TTS follows `voice_message_enabled`;
+STT has no equivalent flag. `/personal config` retains six personal model-routing slots and directs users
+to `/config` for workspace-wide TTS/STT.
+
 `/conditioning remove` shows the removal modal directly when stored conditioning entries are at or under
 the modal ceiling of 50. When more than 50 entries exist, it displays a minimal ephemeral page-select
 whose routed buttons each open the removal modal for a 50-entry batch. Modal submissions remain bound to a

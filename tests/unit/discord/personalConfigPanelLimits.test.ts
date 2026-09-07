@@ -158,6 +158,20 @@ function collectSelects(value: unknown): StringSelectMenuComponentData[] {
   return list;
 }
 
+function collectTextContents(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(collectTextContents);
+  if (typeof value !== "object" || value === null) return [];
+  const record = value as Record<string, unknown>;
+  const list: string[] = [];
+  if (record.type === ComponentType.TextDisplay && typeof record.content === "string") {
+    list.push(record.content);
+  }
+  if (Array.isArray(record.components)) {
+    list.push(...collectTextContents(record.components));
+  }
+  return list;
+}
+
 describe("PersonalConfigPanel Limits & Boundary Sweeps", () => {
   it("conforms to Discord Components V2 protocol limits across all views and categories", () => {
     const categories: PersonalConfigCategory[] = ["profile", "privacy", "models", "advanced"];
@@ -320,20 +334,6 @@ describe("PersonalConfigPanel Limits & Boundary Sweeps", () => {
     };
     const page0Payload = buildPersonalConfigPanelPayload(page0Input);
 
-    function collectTextContents(value: unknown): string[] {
-      if (Array.isArray(value)) return value.flatMap(collectTextContents);
-      if (typeof value !== "object" || value === null) return [];
-      const record = value as Record<string, unknown>;
-      const list: string[] = [];
-      if (record.type === ComponentType.TextDisplay && typeof record.content === "string") {
-        list.push(record.content);
-      }
-      if (Array.isArray(record.components)) {
-        list.push(...collectTextContents(record.components));
-      }
-      return list;
-    }
-
     const selects = collectSelects(page0Payload.components);
 
     const removeSelect = selects.find((s) => s.customId?.includes(":s-rem-s:"));
@@ -405,6 +405,27 @@ describe("PersonalConfigPanel Limits & Boundary Sweeps", () => {
         }
       }
     }
+  });
+
+  it("renders the workspace speech endpoint direction on Personal Models", () => {
+    const input: PersonalConfigPanelRenderInput = {
+      locale: "en-US",
+      category: "models",
+      page: "switch",
+      user: makeUser(),
+      resolvedNickname: "Tester",
+      personas: [makePersona(1, 10, "Tomori")],
+      guildId: "guild-123",
+      memoryCount: 5,
+      stmCount: 2,
+      readStatus: "fresh",
+      modelDisplayInfo: makeModelDisplayInfo(2, 1),
+    };
+
+    const payload = buildPersonalConfigPanelPayload(input);
+    const texts = collectTextContents(payload.components);
+
+    expect(texts).toContain("-# Server-wide TTS/STT: `/config` > Models > Switch Models.");
   });
 
   it("walks provider navigation options across windows reaching all 60 providers without looping infinitely", () => {

@@ -660,6 +660,16 @@ describe("isConfigRouteAuthorized", () => {
     expect(Object.keys(MODELS_PAGE_BY_ROUTE)).toContain("model-provider-select");
   });
 
+  it("authorizes endpoint activation through the Models switch page", () => {
+    for (const capability of ["tts", "stt"] as const) {
+      const route: ConfigPanelRoute = { action: "endpoint-select", locale: "en-US", capability };
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
+    }
+    expect(MODELS_PAGE_BY_ROUTE["endpoint-select"]).toBe("switch");
+  });
+
   it("keeps every TTS Parameters & Voices route manager-only in a guild and open to a DM owner", () => {
     // These ten absorb /speech leaves that shipped with no handler-level check at all, so the panel
     // route is their entire gate. The DM owner keeps access because the page is workspace scoped.

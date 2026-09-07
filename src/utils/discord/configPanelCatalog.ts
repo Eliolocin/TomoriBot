@@ -245,14 +245,25 @@ export function computeConditioningRemoveFingerprint(
 }
 
 /**
- * The six server-default model slots on Models > Switch Models.
+ * The eight wire-facing model capabilities on Models > Switch Models.
  *
  * `image` and `nai-image` are two slots over one absorbed command: `/model image` picks its target
  * column from the chosen provider's `featureSupport.imageGeneration`, so the panel has to carry the
  * slot on the wire instead of re-deriving it, or a custom provider picked in the NovelAI slot would
  * write the standard column.
+ *
+ * `tts` and `stt` are endpoint activations, not model-column assignments, so they are recognized by
+ * the route codec without becoming model picker slots.
  */
-export type ConfigModelCapability = "text" | "vision" | "embedding" | "image" | "nai-image" | "video";
+export type ConfigModelCapability = "text" | "vision" | "embedding" | "image" | "nai-image" | "video" | "tts" | "stt";
+
+export type ConfigCatalogModelCapability = Exclude<ConfigModelCapability, "tts" | "stt">;
+
+export function isConfigCatalogModelCapability(
+  capability: ConfigModelCapability,
+): capability is ConfigCatalogModelCapability {
+  return capability !== "tts" && capability !== "stt";
+}
 
 export const CONFIG_MODEL_CAPABILITY_ORDER: readonly ConfigModelCapability[] = [
   "text",
@@ -261,6 +272,8 @@ export const CONFIG_MODEL_CAPABILITY_ORDER: readonly ConfigModelCapability[] = [
   "image",
   "nai-image",
   "video",
+  "tts",
+  "stt",
 ];
 
 /**
@@ -286,6 +299,9 @@ export const CONFIG_MODEL_PAGE_SIZE = 25;
  * the pagination row beneath reaches the rest.
  */
 export const CONFIG_MODEL_PROVIDER_DIRECT_LIMIT = 25;
+
+/** Endpoint entries share Discord's 25-option ceiling with one navigation entry when paged. */
+export const CONFIG_ENDPOINT_PAGE_SIZE = 25;
 
 /**
  * The fallback modal reserves one option for its clear entry, so a provider page holds 24 models.
@@ -408,6 +424,7 @@ export type ConfigPanelRoute =
   | { action: "sprite-import-submit"; locale: string; personaId: number; nonce: string }
   | { action: "sprite-export"; locale: string; personaId: number }
   | { action: "model-provider-select"; locale: string; capability: ConfigModelCapability }
+  | { action: "endpoint-select"; locale: string; capability: ConfigModelCapability }
   | {
       action: "model-modal-submit";
       locale: string;
@@ -812,6 +829,7 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "sprite-import-submit": { wireToken: "sprite-import-sub", fields: [personaIdField, nonceField] },
   "sprite-export": { wireToken: "sprite-export", fields: [personaIdField] },
   "model-provider-select": { wireToken: "model-prov-select", fields: [capabilityField] },
+  "endpoint-select": { wireToken: "ep-select", fields: [capabilityField] },
   "model-modal-submit": { wireToken: "model-modal", fields: [capabilityField, providerField, nonceField] },
   "parameters-provider-select": { wireToken: "param-prov-select", fields: [] },
   "sampling-open": { wireToken: "sampling-open", fields: [providerField] },

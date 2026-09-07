@@ -1,10 +1,19 @@
-import type { FallbackEntry, FallbackModelRef, TomoriState } from "@/types/db/schema";
+import { createHash } from "node:crypto";
+import type {
+  CustomEndpointApiStyle,
+  CustomEndpointCapability,
+  CustomEndpointRow,
+  FallbackEntry,
+  FallbackModelRef,
+  TomoriState,
+} from "@/types/db/schema";
 import { llmModelRepo, llmOverrideRepo, llmProviderRepo } from "@/utils/db/repositories";
 import {
   CONFIG_FALLBACK_PAGE_SIZE,
   CONFIG_FALLBACK_SLOT_COUNT,
   CONFIG_MODEL_CAPABILITY_ORDER,
-  type ConfigModelCapability,
+  isConfigCatalogModelCapability,
+  type ConfigCatalogModelCapability,
 } from "@/utils/discord/configPanelCatalog";
 import {
   CONFIG_FALLBACK_ENDPOINT_PREFIX,
@@ -14,6 +23,7 @@ import {
 import type { ConfigFallbackOption } from "@/utils/discord/ui/configModelModals";
 import type {
   ConfigFallbacksView,
+  ConfigEndpointPage,
   ConfigImageGenerationView,
   ConfigParametersView,
   ConfigSwitchModelsProviderPage,
@@ -26,6 +36,107 @@ import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { localizer } from "@/utils/text/localizer";
 
+export type ConfigEndpointModelCapability = "tts" | "stt";
+export type ConfigEndpointServiceCapability = Extract<CustomEndpointCapability, "speech" | "transcription">;
+
+export interface ConfigCapabilityEndpoint {
+  id: number;
+  capability: ConfigEndpointServiceCapability;
+  label: string;
+  modelLabel: string;
+  apiStyle: CustomEndpointApiStyle;
+  isActive: boolean;
+}
+
+export type ConfigCapabilityEndpointInput = ConfigCapabilityEndpoint | CustomEndpointRow;
+
+export type LoadConfigCapabilityEndpoints = (
+  state: TomoriState,
+  capability: ConfigEndpointModelCapability,
+) => Promise<ConfigCapabilityEndpointInput[]>;
+
+export function endpointServiceCapability(capability: ConfigEndpointModelCapability): ConfigEndpointServiceCapability {
+  return capability === "tts" ? "speech" : "transcription";
+}
+
+export function normalizeConfigCapabilityEndpoints(
+  rows: readonly ConfigCapabilityEndpointInput[],
+  capability: ConfigEndpointModelCapability,
+): ConfigCapabilityEndpoint[] {
+  const serviceCapability = endpointServiceCapability(capability);
+  return rows.flatMap((endpoint) => {
+    if ("id" in endpoint) {
+      return endpoint.capability === serviceCapability && Number.isSafeInteger(endpoint.id) && endpoint.id > 0
+        ? [endpoint]
+        : [];
+    }
+    const id = endpoint.custom_endpoint_id;
+    if (endpoint.capability !== serviceCapability || id === undefined || !Number.isSafeInteger(id) || id <= 0) {
+      return [];
+    }
+    return [
+      {
+        id,
+        capability: serviceCapability,
+        label: endpoint.label,
+        modelLabel: endpoint.model_name ?? endpoint.label,
+        apiStyle: endpoint.api_style,
+        isActive: endpoint.is_default,
+      },
+    ];
+  });
+}
+
+export const loadConfigCapabilityEndpoints: LoadConfigCapabilityEndpoints = async (state, capability) => {
+  const rows = await llmProviderRepo.loadCustomEndpointsForServer(state.server_id);
+  return normalizeConfigCapabilityEndpoints(rows, capability);
+};
+
+/** Binds an endpoint choice to its ordered list and the identifying fields of every presented row. */
+export function computeConfigEndpointFingerprint(
+  capability: ConfigEndpointModelCapability,
+  endpoints: readonly ConfigCapabilityEndpoint[],
+): string {
+  return createHash("sha256")
+    .update(
+      `config-endpoints:${capability}:${JSON.stringify(
+        endpoints.map((endpoint) => ({
+          id: endpoint.id,
+          capability: endpoint.capability,
+          label: endpoint.label,
+          modelLabel: endpoint.modelLabel,
+          apiStyle: endpoint.apiStyle,
+          isActive: endpoint.isActive,
+        })),
+      )}`,
+    )
+    .digest("base64url")
+    .slice(0, 8);
+}
+
+export function encodeConfigEndpointSelection(position: number, fingerprint: string): string {
+  return `ep|${position}|${fingerprint}`;
+}
+
+export function decodeConfigEndpointSelection(value: string): { position: number; fingerprint: string } | null {
+  const match = /^ep\|(\d+)\|([A-Za-z0-9_-]{8})$/.exec(value);
+  if (!match) return null;
+  const position = Number.parseInt(match[1] ?? "", 10);
+  if (!Number.isSafeInteger(position) || position < 0) return null;
+  return { position, fingerprint: match[2] ?? "" };
+}
+
+export function encodeConfigEndpointPageValue(start: number): string {
+  return `ep-page|${start}`;
+}
+
+export function decodeConfigEndpointPageValue(value: string): number | null {
+  const match = /^ep-page\|(\d+)$/.exec(value);
+  if (!match) return null;
+  const start = Number.parseInt(match[1] ?? "", 10);
+  return Number.isSafeInteger(start) && start >= 0 ? start : null;
+}
+
 /**
  * Resolves the display name of whatever currently occupies one slot.
  *
@@ -34,7 +145,7 @@ import { localizer } from "@/utils/text/localizer";
  */
 async function resolveSlotAssignment(
   state: TomoriState,
-  capability: ConfigModelCapability,
+  capability: ConfigCatalogModelCapability,
 ): Promise<{ modelName: string | null; provider: string | null }> {
   switch (capability) {
     case "text":
@@ -69,9 +180,11 @@ async function resolveSlotAssignment(
 export async function loadConfigSwitchModelsView(
   state: TomoriState,
   providerPage: ConfigSwitchModelsProviderPage | undefined,
+  endpointPage: ConfigEndpointPage | undefined = undefined,
+  loadCapabilityEndpoints: LoadConfigCapabilityEndpoints = loadConfigCapabilityEndpoints,
 ): Promise<ConfigSwitchModelsView> {
   const slots = await Promise.all(
-    CONFIG_MODEL_CAPABILITY_ORDER.map(async (capability) => {
+    CONFIG_MODEL_CAPABILITY_ORDER.filter(isConfigCatalogModelCapability).map(async (capability) => {
       const expanded = providerPage?.capability === capability ? (providerPage.provider ?? null) : null;
       const [assignment, providers, expandedOptionCount] = await Promise.all([
         resolveSlotAssignment(state, capability),
@@ -93,6 +206,14 @@ export async function loadConfigSwitchModelsView(
     }),
   );
 
+  const endpointSlots = await Promise.all(
+    (["tts", "stt"] as const).map(async (capability) => ({
+      capability,
+      endpoints: normalizeConfigCapabilityEndpoints(await loadCapabilityEndpoints(state, capability), capability),
+      pageStart: endpointPage?.capability === capability ? endpointPage.start : 0,
+    })),
+  );
+
   const [channelOverrides, personaOverrides] = await Promise.all([
     llmOverrideRepo.getAllChannelLlmOverridesForServer(state.server_id),
     llmOverrideRepo.loadPersonaLlmOverridesForServer(state.server_id),
@@ -104,6 +225,8 @@ export async function loadConfigSwitchModelsView(
     personaOverrideCount: personaOverrides.length,
     imageGenerationEnabled: state.config.imagegen_enabled,
     videoGenerationEnabled: state.config.videogen_enabled,
+    speechCapabilityEnabled: state.config.voice_message_enabled ?? true,
+    endpointSlots,
   };
 }
 

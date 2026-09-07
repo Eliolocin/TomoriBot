@@ -74,6 +74,7 @@ import {
   loadConfigFallbackOptions,
   loadConfigFallbacksView,
   loadConfigImageGenerationView,
+  loadConfigCapabilityEndpoints,
   loadConfigParametersView,
   loadConfigSwitchModelsView,
 } from "@/utils/discord/interactions/configModelLoaders";
@@ -478,6 +479,7 @@ const defaultDependencies: ConfigRouteDependencies = {
   operations: configPersonaOperations,
   spriteOperations: configSpriteOperations,
   modelOperations: configModelOperations,
+  loadCapabilityEndpoints: loadConfigCapabilityEndpoints,
   loadSwitchModelsView: loadConfigSwitchModelsView,
   loadParametersView: loadConfigParametersView,
   loadFallbacksView: loadConfigFallbacksView,

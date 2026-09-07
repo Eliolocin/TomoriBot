@@ -53,24 +53,32 @@ free credit — set a $5 usage limit in the Brave dashboard to avoid charges.
 
 ## Choosing Models
 
-`/providers` manages server credentials and model catalogs, while `/model` selects the shared
-defaults every member of this server uses. Both need the required server permission. Individual
-members manage their own credentials and catalogs with `/personal providers`, then select personal
-models in `/personal config`. Personal settings follow them across every server where they use
-TomoriBot. See [Personalization](/features/knowledge/personalization/#your-own-providers) for that
-side.
+`/providers` manages server credentials, model catalogs, and endpoint registrations, while
+`/config` > Models > Switch Models selects the shared capability assignments every member of this
+server uses. Both need the required server permission. Individual members manage their own credentials
+and model catalogs with `/personal providers`, then select personal models in `/personal config`.
+Personal settings follow them across every server where they use TomoriBot. See
+[Personalization](/features/knowledge/personalization/#your-own-providers) for that side.
 
 The panels are titled **Server Providers** and **Personal Providers** so their ownership remains visible after
 the command interaction opens.
 
-After a provider is set, pick which model each capability uses for this server:
+After a provider is set, use `/config` > Models > Switch Models to choose the shared capability assignments.
+The six ordinary slots select model entries from provider catalogs:
 
 - `/config` > Models > Switch Models — the main chat model
 - `/config` > Models > Switch Models — a vision model (for reading images when the chat model can't)
-- `/config` > Models > Switch Models — image generation (see [Image Generation](/features/capabilities/media-generation/image-generation/))
-- `/config` > Models > Switch Models — video generation
 - `/config` > Models > Switch Models — embeddings for the [document knowledge base](/features/knowledge/memory/#document-knowledge-base-rag)
-- `/providers` / `/providers` — [voice](/features/capabilities/media-generation/tts-and-stt/)
+- `/config` > Models > Switch Models — standard image generation (see [Image Generation](/features/capabilities/media-generation/image-generation/))
+- `/config` > Models > Switch Models — NovelAI image generation
+- `/config` > Models > Switch Models — video generation
+- `/config` > Models > Switch Models — text-to-speech (TTS) endpoint
+- `/config` > Models > Switch Models — speech-to-text (STT) endpoint
+
+The first six entries choose model catalog records. The TTS and STT slots choose workspace-scoped
+endpoints instead, so they activate the selected endpoint rather than writing a model column. Register
+and edit those endpoints in `/providers`; its endpoint activation control still works. `/personal config`
+retains six personal model-routing slots and does not add personal TTS/STT endpoint selectors.
 
 You can also manage this server's backup keys for automatic failover and load balancing with
 `/providers`.
@@ -80,9 +88,10 @@ You can also manage this server's backup keys for automatic failover and load ba
 Custom endpoints let you register self-hosted or proxy-backed services — Ollama, LM Studio,
 LiteLLM, vLLM, ComfyUI, local TTS/STT — as **labeled provider bundles**.
 
-- **Server scope:** open `/providers`.
-- **Personal scope:** open `/personal providers` (just you — see
-  [Personalization](/features/knowledge/personalization/#your-own-providers)).
+- **Server scope:** open `/providers` for workspace endpoint registration and editing.
+- **Personal scope:** open `/personal providers` for personal model catalogs (just you — see
+  [Personalization](/features/knowledge/personalization/#your-own-providers)). Personal speech endpoints
+  are not selected from `/personal config`.
 
 A **label** is the user-facing menu name and groups capabilities under one bundle when they share
 one endpoint URL. It is never sent to the remote endpoint. Capabilities served from different URLs
@@ -93,6 +102,11 @@ dropdown to register an exact model code and capability. Adding a model activate
 capability. Use the same dropdown to attach more models or edit a workspace-added registration.
 Text models declare their own capabilities in that form, and image models declare which request modes
 they support.
+
+For TTS and STT, the registered endpoint itself is the workspace-scoped selection. After registering an
+endpoint in `/providers`, choose it in `/config` > Models > Switch Models; those speech slots select an
+endpoint rather than a model catalog entry. `/providers` remains the endpoint registration/editor, and
+its activation control still works.
 
 API compatibility determines the request paths and payloads the service implements, so it also determines which
 capability slots the connection prepares. Registering exact models for those slots is a separate step, and the

@@ -1425,7 +1425,7 @@ describe("moderationPanel UI rendering", () => {
     });
 
     expect(payload.components).toHaveLength(2);
-    const receiptContainer = payload.components[0] as {
+    const receiptContainer = payload.components[1] as {
       type: number;
       accentColor?: number;
       components?: Array<{ type: number; content?: string }>;
@@ -1435,7 +1435,7 @@ describe("moderationPanel UI rendering", () => {
       "### Member access updated\n> Updated member permissions for this server.",
     );
 
-    const mainContainer = payload.components[1] as {
+    const mainContainer = payload.components[0] as {
       type: number;
       components?: Array<{ type: number; content?: string }>;
     };

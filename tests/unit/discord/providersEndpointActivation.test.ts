@@ -400,12 +400,12 @@ function activationInteraction(customId: string, value: string, calls: string[],
 }
 
 /**
- * The receipt is the first container of the repainted payload, ahead of the panel container, and it
+ * The receipt is the second container of the repainted payload, below the interactive panel, and it
  * carries the heading and detail a user actually reads back after the write.
  */
 function paintedReceipt(payload: unknown): { accentColor: unknown; text: string } {
   const containers = (payload as { components: Array<Record<string, unknown>> }).components;
-  const receipt = containers[0] as { accentColor: unknown; components: Array<{ content: string }> };
+  const receipt = containers[1] as { accentColor: unknown; components: Array<{ content: string }> };
   return { accentColor: receipt.accentColor, text: receipt.components[0]?.content ?? "" };
 }
 

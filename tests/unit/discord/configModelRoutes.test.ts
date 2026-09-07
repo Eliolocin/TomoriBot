@@ -6,7 +6,7 @@
  * than by substituting an operations double, which would restate the expected answer instead of
  * exercising the code under test.
  */
-import { beforeAll, describe, expect, it, spyOn } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { PermissionsBitField, type Client } from "discord.js";
 import type { SavedProviderConfigRow, TomoriState } from "@/types/db/schema";
 import type { PanelReadStatus } from "@/types/discord/panel";
@@ -19,6 +19,9 @@ import {
   buildConfigRouteId,
   CONFIG_MODEL_CLEAR_VALUE,
   CONFIG_MODEL_PAGE_SIZE,
+  CONFIG_MODEL_CAPABILITY_ORDER,
+  isConfigCatalogModelCapability,
+  type ConfigCatalogModelCapability,
   type ConfigModelCapability,
 } from "@/utils/discord/configPanelCatalog";
 import {
@@ -31,6 +34,8 @@ import {
   decodeConfigProviderPageValue,
   decodeConfigProviderRangeValue,
   encodeConfigProviderPageValue,
+  computeConfigEndpointFingerprint,
+  encodeConfigEndpointSelection,
   loadConfigFallbacksView,
   loadConfigImageGenerationView,
   loadConfigParametersView,
@@ -38,6 +43,9 @@ import {
 } from "@/utils/discord/interactions/configModelLoaders";
 import { createConfigInteractionRoute } from "@/utils/discord/interactions/configRoutes";
 import type { ConfigRouteDependencies, ConfigScope } from "@/utils/discord/interactions/configRouteContext";
+import { providerPanelOperations } from "@/utils/provider/providerPanelOperations";
+import type { ConfigCapabilityEndpoint } from "@/utils/discord/interactions/configModelLoaders";
+import type { ConfigEndpointSlotView } from "@/utils/discord/ui/configModelsPanel";
 import { InteractionRouteRegistry } from "@/utils/discord/interactions/routeRegistry";
 import { buildConfigModalFieldId } from "@/utils/discord/ui/configModals";
 import { buildConfigFallbackSlotId } from "@/utils/discord/ui/configModelModals";
@@ -51,6 +59,8 @@ import { initializeLocalizer } from "@/utils/text/localizer";
 beforeAll(async () => initializeLocalizer());
 
 const CLIENT = {} as Client;
+const CATALOG_MODEL_CAPABILITIES: readonly ConfigCatalogModelCapability[] =
+  CONFIG_MODEL_CAPABILITY_ORDER.filter(isConfigCatalogModelCapability);
 
 function makeState(overrides: Record<string, unknown> = {}): TomoriState {
   return {
@@ -129,6 +139,20 @@ function makeSavedProvider(provider: string, overrides: Record<string, unknown> 
   } as unknown as SavedProviderConfigRow;
 }
 
+function makeEndpointSlot(capability: "tts" | "stt", count: number, activeIndex = -1): ConfigEndpointSlotView {
+  const serviceCapability = capability === "tts" ? "speech" : "transcription";
+  const apiStyle = capability === "tts" ? "tts-clone" : "openai-compatible-transcription";
+  const endpoints: ConfigCapabilityEndpoint[] = Array.from({ length: count }, (_unused, index) => ({
+    id: index + 1,
+    capability: serviceCapability,
+    label: `${capability}-endpoint-${index + 1}`,
+    modelLabel: `${capability}-model-${index + 1}`,
+    apiStyle,
+    isActive: index === activeIndex,
+  }));
+  return { capability, endpoints, pageStart: 0 };
+}
+
 interface HarnessOptions {
   isManager?: boolean;
   inGuild?: boolean;
@@ -143,6 +167,7 @@ interface HarnessOptions {
   parametersProviders?: string[];
   selectedConfig?: SavedProviderConfigRow | null;
   fallbackProviderEntries?: Array<{ value: string; label: string }>;
+  endpointSlots?: ConfigEndpointSlotView[];
   modelOperationsOverrides?: Partial<ConfigModelOperations>;
 }
 
@@ -204,34 +229,38 @@ function makeHarness(options: HarnessOptions = {}): Harness {
       takeCheckboxValues: (_interactionId, fieldId) => checkboxValues[fieldId],
       takeSelectValue: (_interactionId, fieldId) => selectValues[fieldId],
       takeFileUpload: () => undefined,
-      loadSwitchModelsView: async (state, providerPage) => ({
-        slots: (["text", "vision", "embedding", "image", "nai-image", "video"] as ConfigModelCapability[]).map(
-          (capability) => ({
-            capability,
-            currentModelName:
-              options.currentModels?.[capability] !== undefined
-                ? options.currentModels[capability]
-                : capability === "text"
-                  ? "gemini-2.5-flash"
-                  : null,
-            currentProvider:
-              options.currentProviders?.[capability] !== undefined
-                ? options.currentProviders[capability]
-                : capability === "text"
-                  ? "google"
-                  : null,
-            eligibleProviders: options.switchProviders?.[capability] ?? ["google"],
-            providerPageStart: providerPage?.capability === capability ? providerPage.start : 0,
-            expandedProvider: providerPage?.capability === capability ? (providerPage.provider ?? null) : null,
-            expandedOptionCount:
-              providerPage?.capability === capability && providerPage.provider ? (options.models?.length ?? 1) : 0,
-          }),
-        ),
+      loadSwitchModelsView: async (state, providerPage, endpointPage) => ({
+        slots: CATALOG_MODEL_CAPABILITIES.map((capability) => ({
+          capability,
+          currentModelName:
+            options.currentModels?.[capability] !== undefined
+              ? options.currentModels[capability]
+              : capability === "text"
+                ? "gemini-2.5-flash"
+                : null,
+          currentProvider:
+            options.currentProviders?.[capability] !== undefined
+              ? options.currentProviders[capability]
+              : capability === "text"
+                ? "google"
+                : null,
+          eligibleProviders: options.switchProviders?.[capability] ?? ["google"],
+          providerPageStart: providerPage?.capability === capability ? providerPage.start : 0,
+          expandedProvider: providerPage?.capability === capability ? (providerPage.provider ?? null) : null,
+          expandedOptionCount:
+            providerPage?.capability === capability && providerPage.provider ? (options.models?.length ?? 1) : 0,
+        })),
         channelOverrideCount: 3,
         personaOverrideCount: 2,
         imageGenerationEnabled: state.config.imagegen_enabled,
         videoGenerationEnabled: state.config.videogen_enabled,
+        endpointSlots: options.endpointSlots?.map((slot) => ({
+          ...slot,
+          pageStart: endpointPage?.capability === slot.capability ? endpointPage.start : slot.pageStart,
+        })),
       }),
+      loadCapabilityEndpoints: async (_state, capability) =>
+        options.endpointSlots?.find((slot) => slot.capability === capability)?.endpoints ?? [],
       loadParametersView: async (_state, requestedProvider) => {
         const providers = options.parametersProviders ?? ["google"];
         const selected = providers.includes(requestedProvider ?? "") ? (requestedProvider as string) : providers[0];
@@ -399,13 +428,179 @@ describe("config models provider eligibility", () => {
 
   it("passes every non-image capability through unfiltered", () => {
     const rows = [makeSavedProvider("novelai"), makeSavedProvider("google")];
-    for (const capability of ["text", "vision", "embedding", "video"] as ConfigModelCapability[]) {
+    for (const capability of CATALOG_MODEL_CAPABILITIES.filter(
+      (candidate) => candidate !== "image" && candidate !== "nai-image",
+    )) {
       expect(filterProvidersForCapability(capability, rows).map((row) => row.provider)).toEqual(["novelai", "google"]);
     }
   });
 });
 
 describe("config models switch page", () => {
+  it("keeps endpoint selectors bounded and reaches every endpoint window", async () => {
+    for (const count of [0, 1, 24, 25, 26, 60]) {
+      const endpointSlots = [makeEndpointSlot("tts", count), makeEndpointSlot("stt", 0)];
+      const harness = makeHarness({ endpointSlots });
+      const customId = buildConfigRouteId({ action: "endpoint-select", locale: "en-US", capability: "tts" });
+      const visited = new Set<number>();
+      let values: string[] = [];
+      for (let step = 0; step <= count + 1; step += 1) {
+        await dispatch(
+          harness,
+          makeInteraction({
+            customId: buildConfigRouteId({ action: "page", locale: "en-US", category: "models", page: "switch" }),
+            kind: "select",
+            values: ["switch"],
+            harness,
+          }),
+        );
+        values = selectOptionValues(harness.edits.at(-1), customId);
+        expect(values.length).toBeLessThanOrEqual(25);
+        for (const value of values) {
+          const match = /^ep\|(\d+)\|/.exec(value);
+          if (match) visited.add(Number(match[1]));
+        }
+        const next = values.find((value) => value.startsWith("ep-page|"));
+        if (!next) break;
+        await dispatch(harness, makeInteraction({ customId, kind: "select", values: [next], harness }));
+        values = selectOptionValues(harness.edits.at(-1), customId);
+        for (const value of values) {
+          const match = /^ep\|(\d+)\|/.exec(value);
+          if (match) visited.add(Number(match[1]));
+        }
+        if (!values.some((value) => value.startsWith("ep-page|"))) break;
+        // The next loop re-renders from the current page in the harness.
+        endpointSlots[0].pageStart = Number(values.find((value) => value.startsWith("ep-page|"))?.split("|")[1] ?? 0);
+      }
+      expect(visited.size).toBe(count);
+      if (count === 0) {
+        expect(findComponentByCustomId(harness.edits.at(-1), customId)?.disabled).toBe(true);
+      }
+    }
+  });
+
+  describe("endpoint activation routes", () => {
+    const activationSpies: Array<{ mockRestore: () => void }> = [];
+
+    afterEach(() => {
+      for (const activationSpy of activationSpies.splice(0)) activationSpy.mockRestore();
+    });
+
+    it("re-reads the endpoint list and delegates successful TTS and STT selections", async () => {
+      const activationSpy = spyOn(providerPanelOperations, "activateWorkspaceEndpoint").mockImplementation(
+        async (input) => ({
+          status: "success",
+          identity: `${input.customEndpointId} (${input.capability})`,
+          sourceChanged: input.capability === "speech",
+        }),
+      );
+      activationSpies.push(activationSpy);
+      for (const capability of ["tts", "stt"] as const) {
+        const endpointSlots = [
+          makeEndpointSlot(capability, 1),
+          makeEndpointSlot(capability === "tts" ? "stt" : "tts", 0),
+        ];
+        const endpoints = endpointSlots[0].endpoints;
+        const harness = makeHarness({ endpointSlots });
+        const fingerprint = computeConfigEndpointFingerprint(capability, endpoints);
+        await dispatch(
+          harness,
+          makeInteraction({
+            customId: buildConfigRouteId({ action: "endpoint-select", locale: "en-US", capability }),
+            kind: "select",
+            values: [encodeConfigEndpointSelection(0, fingerprint)],
+            harness,
+          }),
+        );
+
+        expect(activationSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            capability: capability === "tts" ? "speech" : "transcription",
+            customEndpointId: 1,
+            scopeKind: "server",
+          }),
+        );
+        expect(harness.telemetry).toContain("server-config.workspace.model.endpoint-select");
+        if (capability === "tts") expect(JSON.stringify(harness.edits.at(-1))).toContain("speech source changed");
+      }
+    });
+
+    it("rejects malformed, out-of-range, and changed-fingerprint selections without a write", async () => {
+      const endpointSlots = [makeEndpointSlot("tts", 1), makeEndpointSlot("stt", 0)];
+      const harness = makeHarness({ endpointSlots });
+      const activationSpy = spyOn(providerPanelOperations, "activateWorkspaceEndpoint");
+      activationSpies.push(activationSpy);
+      const fingerprint = computeConfigEndpointFingerprint("tts", endpointSlots[0].endpoints);
+      for (const value of ["not-an-endpoint", `ep|1|${fingerprint}`, encodeConfigEndpointSelection(0, "deadbeef")]) {
+        await dispatch(
+          harness,
+          makeInteraction({
+            customId: buildConfigRouteId({ action: "endpoint-select", locale: "en-US", capability: "tts" }),
+            kind: "select",
+            values: [value],
+            harness,
+          }),
+        );
+      }
+      expect(activationSpy).not.toHaveBeenCalled();
+      expect(JSON.stringify(harness.edits.at(-1))).toContain("Panel Out Of Date");
+    });
+
+    it("stops a non-manager at the real route authorization gate", async () => {
+      const endpointSlots = [makeEndpointSlot("tts", 1), makeEndpointSlot("stt", 0)];
+      const harness = makeHarness({ endpointSlots, isManager: false });
+      const repositoryWriteSpy = spyOn(llmProviderRepo, "setActiveCustomEndpoint");
+      activationSpies.push(repositoryWriteSpy);
+      const fingerprint = computeConfigEndpointFingerprint("tts", endpointSlots[0].endpoints);
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({ action: "endpoint-select", locale: "en-US", capability: "tts" }),
+          kind: "select",
+          isManager: false,
+          values: [encodeConfigEndpointSelection(0, fingerprint)],
+          harness,
+        }),
+      );
+      expect(repositoryWriteSpy).not.toHaveBeenCalled();
+      expect(harness.replies).toHaveLength(1);
+    });
+
+    it("keeps a DM-backed config workspace on server-scoped endpoint activation", async () => {
+      const activationSpy = spyOn(providerPanelOperations, "activateWorkspaceEndpoint").mockImplementation(
+        async (input) => ({
+          status: "success",
+          identity: `${input.customEndpointId} (${input.capability})`,
+          sourceChanged: false,
+        }),
+      );
+      activationSpies.push(activationSpy);
+      const endpointSlots = [makeEndpointSlot("tts", 1), makeEndpointSlot("stt", 0)];
+      const harness = makeHarness({ endpointSlots, inGuild: false });
+      const fingerprint = computeConfigEndpointFingerprint("tts", endpointSlots[0].endpoints);
+
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({ action: "endpoint-select", locale: "en-US", capability: "tts" }),
+          kind: "select",
+          inGuild: false,
+          values: [encodeConfigEndpointSelection(0, fingerprint)],
+          harness,
+        }),
+      );
+
+      expect(activationSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          serverDiscId: "user-1",
+          scopeKind: "server",
+          capability: "speech",
+          customEndpointId: 1,
+        }),
+      );
+    });
+  });
+
   it("renders all six capability slots and the Text-override counts", async () => {
     const harness = makeHarness();
     await dispatch(
@@ -419,7 +614,7 @@ describe("config models switch page", () => {
     );
 
     const rendered = renderedText(harness.edits.at(-1));
-    for (const capability of ["text", "vision", "embedding", "image", "nai-image", "video"] as const) {
+    for (const capability of CATALOG_MODEL_CAPABILITIES) {
       expect(rendered).toContain(buildConfigRouteId({ action: "model-provider-select", locale: "en-US", capability }));
     }
     expect(rendered).toContain("Channel overrides");
@@ -448,7 +643,7 @@ describe("config models switch page", () => {
     expect(videoRow.components[0].disabled).toBe(true);
   });
 
-  it("shows capability state and warns only when enabled generation lacks a usable model", async () => {
+  it("renders only actionable capability warnings", async () => {
     const missing = makeHarness({
       state: makeState({ config: { imagegen_enabled: true, videogen_enabled: true } }),
     });
@@ -463,14 +658,9 @@ describe("config models switch page", () => {
     );
 
     const missingContents = textDisplayContents(missing.edits.at(-1));
-    expect(missingContents.some((content) => content.includes("Image generation is enabled."))).toBe(true);
-    expect(missingContents.some((content) => content.includes("Manage it under Permissions > Bot Capabilities."))).toBe(
-      true,
-    );
     expect(
       missingContents.some((content) => content.includes("No usable model is configured for Image generation.")),
     ).toBe(true);
-    expect(missingContents.some((content) => content.includes("Video generation is enabled."))).toBe(true);
     expect(
       missingContents.some((content) => content.includes("No usable model is configured for Video generation.")),
     ).toBe(true);
@@ -833,7 +1023,7 @@ describe("config models switch page", () => {
   });
 
   it("keeps every eligible provider reachable for zero through sixty providers", async () => {
-    const capabilities = ["text", "vision", "embedding", "image", "nai-image", "video"] as const;
+    const capabilities = CATALOG_MODEL_CAPABILITIES;
     const counts = [0, 1, 25, 26, 60];
 
     for (const count of counts) {
@@ -895,7 +1085,7 @@ describe("config models switch page", () => {
   });
 
   it("keeps every model reachable across the expanded provider page entries", async () => {
-    const capabilities = ["text", "vision", "embedding", "image", "nai-image", "video"] as const;
+    const capabilities = CATALOG_MODEL_CAPABILITIES;
     const models = Array.from({ length: 60 }, (_unused, index) => ({
       id: index + 1,
       name: `model-${index + 1}`,
@@ -1043,6 +1233,41 @@ describe("config models switch page", () => {
 });
 
 describe("config models capability writes", () => {
+  it("rejects endpoint capabilities without model repository or cache writes", async () => {
+    const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([]);
+    const modelUpdate = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
+    const naiUpdate = spyOn(configRepository, "updateNovelaiImagegenConfig").mockResolvedValue(true);
+    const invalidate = spyOn(tomoriStateCache, "invalidateTomoriStateCache").mockImplementation(() => undefined);
+
+    for (const capability of ["tts", "stt"] as const) {
+      const setResult = await configModelOperations.setCapabilityModel({
+        tomoriState: makeState(),
+        serverDiscId: "guild-1",
+        capability,
+        provider: "custom:12",
+        modelId: 7,
+      });
+      const clearResult = await configModelOperations.clearCapabilityModel({
+        tomoriState: makeState(),
+        serverDiscId: "guild-1",
+        capability,
+      });
+
+      expect(setResult.status).toBe("not-found");
+      expect(clearResult.status).toBe("not-clearable");
+    }
+
+    expect(providers).not.toHaveBeenCalled();
+    expect(modelUpdate).not.toHaveBeenCalled();
+    expect(naiUpdate).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
+
+    providers.mockRestore();
+    modelUpdate.mockRestore();
+    naiUpdate.mockRestore();
+    invalidate.mockRestore();
+  });
+
   it("writes the vision column and invalidates the workspace cache after success", async () => {
     const providers = spyOn(llmProviderRepo, "loadSavedProviderConfigs").mockResolvedValue([
       makeSavedProvider("google"),
@@ -1165,7 +1390,9 @@ describe("config models capability writes", () => {
 
   it("refuses to clear a slot whose absorbed command has no clear path", async () => {
     const update = spyOn(configRepository, "updateModelConfig").mockResolvedValue(true);
-    for (const capability of ["text", "embedding", "video"] as ConfigModelCapability[]) {
+    for (const capability of CATALOG_MODEL_CAPABILITIES.filter(
+      (candidate) => candidate === "text" || candidate === "embedding" || candidate === "video",
+    )) {
       const result = await configModelOperations.clearCapabilityModel({
         tomoriState: makeState(),
         serverDiscId: "guild-1",
@@ -1815,10 +2042,13 @@ describe("config models view loaders", () => {
 
     const view = await loadConfigSwitchModelsView(makeState(), undefined);
     expect(view.slots).toHaveLength(6);
+    expect(view.slots.map((slot) => slot.capability)).toEqual(CATALOG_MODEL_CAPABILITIES);
+    expect(providers).toHaveBeenCalledTimes(6);
     expect(view.channelOverrideCount).toBe(1);
     expect(view.personaOverrideCount).toBe(2);
     expect(view.imageGenerationEnabled).toBe(true);
     expect(view.videoGenerationEnabled).toBe(false);
+    expect(view.speechCapabilityEnabled).toBe(true);
 
     const payload = buildConfigPanelPayload({
       locale: "en-US",
@@ -1831,7 +2061,7 @@ describe("config models view loaders", () => {
       switchModelsView: view,
     });
     const contents = textDisplayContents(payload);
-    expect(contents.some((content) => content.includes("Image generation is enabled."))).toBe(true);
+    expect(contents.some((content) => content.includes("Image generation is enabled."))).toBe(false);
     expect(contents.some((content) => content.includes("Video generation is disabled."))).toBe(true);
 
     providers.mockRestore();

@@ -1239,6 +1239,10 @@ ${localizer(locale, "commands.personal.config.models_description")}`,
       components.push(
         {
           type: ComponentType.TextDisplay,
+          content: `-# ${localizer(locale, "commands.personal.config.speech_workspace_scope_direction")}`,
+        },
+        {
+          type: ComponentType.TextDisplay,
           content: `-# ${localizer(locale, "commands.personal.config.manage_providers_hint")}`,
         },
         {

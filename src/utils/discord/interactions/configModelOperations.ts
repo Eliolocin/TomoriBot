@@ -31,7 +31,12 @@ import {
   serverMemoryRepository,
 } from "@/utils/db/repositories";
 import { isRagAvailable } from "@/utils/db/ragAvailability";
-import { CONFIG_FALLBACK_SLOT_COUNT, type ConfigModelCapability } from "@/utils/discord/configPanelCatalog";
+import {
+  CONFIG_FALLBACK_SLOT_COUNT,
+  isConfigCatalogModelCapability,
+  type ConfigCatalogModelCapability,
+  type ConfigModelCapability,
+} from "@/utils/discord/configPanelCatalog";
 import { DEFAULT_IMAGE_NEGATIVE_TAGS, DEFAULT_IMAGE_POSITIVE_TAGS } from "@/utils/image/tagDefaults";
 import { parseAndValidateImageTags } from "@/utils/image/tagHelpers";
 import { NAI_IMAGE_NOISE_SCHEDULES, NAI_IMAGE_SAMPLERS } from "@/utils/image/naiImageParams";
@@ -48,6 +53,10 @@ import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolve
 import { getStaticProviderInfo } from "@/utils/provider/providerInfoRegistry";
 import { loadSavedProvidersForCapability, type SavedProviderCapability } from "@/utils/provider/savedProviderConfig";
 import {
+  providerPanelOperations,
+  type ActivateWorkspaceEndpointResult,
+} from "@/utils/provider/providerPanelOperations";
+import {
   MAX_STOP_STRINGS_PER_SERVER,
   MAX_STOP_STRING_LENGTH,
   mergeConfiguredStopStrings,
@@ -61,7 +70,7 @@ export const CONFIG_FALLBACK_CLEAR_VALUE = "__none__";
 export const CONFIG_FALLBACK_ENDPOINT_PREFIX = "ce:";
 
 /** Capability slot to the saved-provider capability whose eligibility list backs it. */
-const SAVED_PROVIDER_CAPABILITY: Record<ConfigModelCapability, SavedProviderCapability> = {
+const SAVED_PROVIDER_CAPABILITY: Record<ConfigCatalogModelCapability, SavedProviderCapability> = {
   text: "text",
   vision: "vision",
   embedding: "embedding",
@@ -84,7 +93,7 @@ export function isNaiPipelineProvider(provider: string): boolean {
 }
 
 export function filterProvidersForCapability(
-  capability: ConfigModelCapability,
+  capability: ConfigCatalogModelCapability,
   providers: readonly SavedProviderConfigRow[],
 ): SavedProviderConfigRow[] {
   if (capability === "image") return providers.filter((row) => !isNaiPipelineProvider(row.provider));
@@ -96,6 +105,10 @@ export async function loadConfigModelProviders(
   serverId: number,
   capability: ConfigModelCapability,
 ): Promise<SavedProviderConfigRow[]> {
+  if (!isConfigCatalogModelCapability(capability)) {
+    // Speech and transcription are custom endpoint activations, not saved model providers.
+    return [];
+  }
   const providers = await loadSavedProvidersForCapability(serverId, SAVED_PROVIDER_CAPABILITY[capability]);
   return filterProvidersForCapability(capability, providers);
 }
@@ -110,7 +123,7 @@ export interface ConfigModelChoice {
 
 export async function loadConfigModelChoices(
   serverId: number,
-  capability: ConfigModelCapability,
+  capability: ConfigCatalogModelCapability,
   provider: string,
 ): Promise<ConfigModelChoice[]> {
   const owner = { kind: "server", ownerId: serverId } as const;
@@ -260,6 +273,14 @@ export interface ConfigModelOperations {
     serverDiscId: string;
     capability: ConfigModelCapability;
   }): Promise<ConfigModelClearResult>;
+  activateWorkspaceEndpoint(input: {
+    tomoriState: TomoriState;
+    serverDiscId: string;
+    ownerId?: number;
+    scopeKind?: "server" | "personal";
+    capability: "tts" | "stt";
+    customEndpointId: number;
+  }): Promise<ActivateWorkspaceEndpointResult>;
   setProviderParameters(input: {
     tomoriState: TomoriState;
     serverDiscId: string;
@@ -333,6 +354,10 @@ export function currentModelIdForCapability(state: TomoriState, capability: Conf
       return state.config.nai_diffusion_model_id ?? null;
     case "video":
       return state.config.video_model_id ?? null;
+    case "tts":
+    case "stt":
+      // Endpoint activation identity lives in custom_endpoints, not in a model id column.
+      return null;
   }
 }
 
@@ -441,6 +466,10 @@ function parseBoundedFloat(raw: string, min: number, max: number): number | null
 
 export const configModelOperations: ConfigModelOperations = {
   async setCapabilityModel({ tomoriState, serverDiscId, capability, provider, modelId }) {
+    if (capability === "tts" || capability === "stt") {
+      // Endpoint activations are not model-column writes and have no model catalog to query.
+      return { status: "not-found" };
+    }
     const eligible = await loadConfigModelProviders(tomoriState.server_id, capability);
     const savedConfig = eligible.find((row) => row.provider.toLowerCase() === provider.toLowerCase()) ?? null;
     if (!savedConfig) return { status: "not-found" };
@@ -537,6 +566,10 @@ export const configModelOperations: ConfigModelOperations = {
   },
 
   async clearCapabilityModel({ tomoriState, serverDiscId, capability }) {
+    if (capability === "tts" || capability === "stt") {
+      // Endpoint activation identity lives in custom_endpoints, so model clearing cannot handle it.
+      return { status: "not-clearable" };
+    }
     if (capability === "text" || capability === "embedding" || capability === "video") {
       return { status: "not-clearable" };
     }
@@ -553,6 +586,17 @@ export const configModelOperations: ConfigModelOperations = {
     if (!updated) return { status: "write-failed" };
     invalidateTomoriStateCache(serverDiscId);
     return { status: "success" };
+  },
+
+  async activateWorkspaceEndpoint({ tomoriState, serverDiscId, ownerId, scopeKind, capability, customEndpointId }) {
+    return providerPanelOperations.activateWorkspaceEndpoint({
+      serverDiscId,
+      ownerId,
+      scopeKind,
+      state: tomoriState,
+      capability: capability === "tts" ? "speech" : "transcription",
+      customEndpointId,
+    });
   },
 
   async setProviderParameters({ tomoriState, serverDiscId, provider, patch }) {

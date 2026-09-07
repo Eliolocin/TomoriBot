@@ -9,7 +9,7 @@ import {
   CONFIG_MODEL_PAGE_SIZE,
   CONFIG_STOP_STRING_CHECKBOX_GROUP_SIZE,
   buildConfigRouteId,
-  type ConfigModelCapability,
+  type ConfigCatalogModelCapability,
 } from "@/utils/discord/configPanelCatalog";
 import {
   CONFIG_FALLBACK_CLEAR_VALUE,
@@ -439,7 +439,7 @@ export interface ConfigFallbackOption {
  */
 export function buildConfigModelSelectModal(
   locale: string,
-  capability: ConfigModelCapability,
+  capability: ConfigCatalogModelCapability,
   provider: string,
   nonce: string,
   models: readonly ConfigModelChoice[],

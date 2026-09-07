@@ -12,14 +12,22 @@ import {
   CONFIG_FALLBACK_SLOT_COUNT,
   computeLogitBiasFingerprint,
   computeStopStringFingerprint,
-  CONFIG_MODEL_PAGE_SIZE,
   type ConfigModelCapability,
+  CONFIG_MODEL_PAGE_SIZE,
+  isConfigCatalogModelCapability,
+  type ConfigCatalogModelCapability,
   type ConfigPage,
   type ConfigPanelRoute,
 } from "@/utils/discord/configPanelCatalog";
 import {
+  computeConfigEndpointFingerprint,
+  decodeConfigEndpointPageValue,
+  decodeConfigEndpointSelection,
+  endpointServiceCapability,
+  normalizeConfigCapabilityEndpoints,
   decodeConfigProviderPageValue,
   decodeConfigProviderRangeValue,
+  type ConfigEndpointModelCapability,
 } from "@/utils/discord/interactions/configModelLoaders";
 import {
   currentModelIdForCapability,
@@ -85,12 +93,14 @@ export const CONFIG_MODEL_MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"
   "logit-manage-select",
   "fallback-provider-select",
   "model-provider-select",
+  "endpoint-select",
   "image-tags-default-open",
   "nai-parameters-open",
 ]);
 
 export const CONFIG_MODEL_SELECT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "model-provider-select",
+  "endpoint-select",
   "parameters-provider-select",
   "fallback-provider-select",
   "logit-manage-select",
@@ -153,6 +163,12 @@ function readOptionalNumber(modal: ModalSubmitInteraction, fieldId: string): num
   if (!modal.fields.fields.has(fieldId)) return undefined;
   const raw = modal.fields.getTextInputValue(fieldId).trim();
   return raw ? Number(raw) : null;
+}
+
+function isConfigEndpointModelCapability(
+  capability: ConfigModelCapability,
+): capability is ConfigEndpointModelCapability {
+  return capability === "tts" || capability === "stt";
 }
 
 export interface ConfigModelRouteContext {
@@ -354,6 +370,14 @@ export async function handleConfigModelModalOpen(
   }
 
   if (route.action === "model-provider-select") {
+    if (!isConfigCatalogModelCapability(route.capability)) {
+      await interaction.reply({
+        content: localizer(locale, "commands.config.panel.stale_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+    const capability = route.capability;
     const selected = interaction.isStringSelectMenu() ? (interaction.values[0] ?? null) : null;
 
     // The advance entry rides the select too, because six selectors cannot each afford a
@@ -368,7 +392,7 @@ export async function handleConfigModelModalOpen(
         page: "switch",
         selectedPersonaId: null,
         modelProviderPage: {
-          capability: route.capability,
+          capability,
           provider: range.expandedProvider ?? undefined,
           start: range.start,
         },
@@ -379,7 +403,7 @@ export async function handleConfigModelModalOpen(
 
     const chosenSlice = selected ? decodeConfigProviderPageValue(selected) : null;
     const chosenProvider = chosenSlice?.provider ?? selected;
-    const providers = await dependencies.loadModelProviders(state, route.capability);
+    const providers = await dependencies.loadModelProviders(state, capability);
     const provider = providers.find((candidate) => candidate.toLowerCase() === chosenProvider?.toLowerCase());
     if (!provider) {
       await interaction.reply({
@@ -389,7 +413,7 @@ export async function handleConfigModelModalOpen(
       return true;
     }
 
-    const models = await dependencies.loadModelChoices(state, route.capability, provider);
+    const models = await dependencies.loadModelChoices(state, capability, provider);
     if (models.length === 0) {
       await interaction.reply({
         content: localizer(locale, "commands.model.text.no_models_description", {
@@ -410,7 +434,7 @@ export async function handleConfigModelModalOpen(
         category: "models",
         page: "switch",
         selectedPersonaId: null,
-        modelProviderPage: { capability: route.capability, provider, start: 0 },
+        modelProviderPage: { capability, provider, start: 0 },
         // Expanding rewrites options inside a selector the reader has already closed, so without a
         // receipt the selection reads as a no-op and gets repeated.
         receipt: receipt(
@@ -438,14 +462,42 @@ export async function handleConfigModelModalOpen(
       interaction,
       buildConfigModelSelectModal(
         locale,
-        route.capability,
+        capability,
         provider,
         nonce,
         models.slice(sliceStart, sliceStart + CONFIG_MODEL_PAGE_SIZE),
-        currentModelIdForCapability(state, route.capability),
+        currentModelIdForCapability(state, capability),
       ),
     );
     return true;
+  }
+
+  if (route.action === "endpoint-select") {
+    if (!isConfigEndpointModelCapability(route.capability)) {
+      await interaction.reply({
+        content: localizer(locale, "commands.config.panel.stale_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+    const selected = interaction.isStringSelectMenu() ? (interaction.values[0] ?? "") : "";
+    const start = decodeConfigEndpointPageValue(selected);
+    if (start !== null) {
+      await interaction.deferUpdate();
+      await repaint(interaction, {
+        locale,
+        scope,
+        category: "models",
+        page: "switch",
+        selectedPersonaId: null,
+        endpointPage: { capability: route.capability, start },
+        dependencies,
+      });
+      return true;
+    }
+    // Endpoint selections are acknowledged by the post-defer handler so it can re-read the list
+    // and reject a stale position or fingerprint before the canonical write is reached.
+    return false;
   }
 
   // The fallback provider select opens its modal directly: one option per option-page, so the
@@ -505,7 +557,10 @@ function recordModelAction(context: ConfigModelRouteContext, action: PanelAction
   });
 }
 
-async function clearSwitchModel(context: ConfigModelRouteContext, capability: ConfigModelCapability): Promise<boolean> {
+async function clearSwitchModel(
+  context: ConfigModelRouteContext,
+  capability: ConfigCatalogModelCapability,
+): Promise<boolean> {
   const { dependencies, route } = context;
   const locale = route.locale;
   const state = serverStateFromScope(context.scope);
@@ -544,6 +599,88 @@ async function handleSwitchModels(context: ConfigModelRouteContext): Promise<boo
   const locale = route.locale;
   const state = serverStateFromScope(context.scope);
   if (!state) return false;
+  if (
+    route.action !== "model-provider-select" &&
+    route.action !== "model-modal-submit" &&
+    route.action !== "endpoint-select"
+  ) {
+    return false;
+  }
+  if (route.action === "endpoint-select") {
+    if (!isConfigEndpointModelCapability(route.capability)) {
+      await baseRepaint(context, "switch", { receipt: staleReceipt(locale) });
+      return true;
+    }
+    const endpointCapability = route.capability;
+    const selected = context.selectedValue ? decodeConfigEndpointSelection(context.selectedValue) : null;
+    const endpoints = normalizeConfigCapabilityEndpoints(
+      await dependencies.loadCapabilityEndpoints(state, endpointCapability),
+      endpointCapability,
+    );
+    const fingerprint = computeConfigEndpointFingerprint(endpointCapability, endpoints);
+    const endpoint =
+      selected && selected.fingerprint === fingerprint && selected.position < endpoints.length
+        ? endpoints[selected.position]
+        : undefined;
+    if (
+      !selected ||
+      !endpoint ||
+      endpoint.capability !== endpointServiceCapability(endpointCapability) ||
+      !Number.isSafeInteger(endpoint.id) ||
+      endpoint.id <= 0
+    ) {
+      await baseRepaint(context, "switch", { receipt: staleReceipt(locale) });
+      return true;
+    }
+
+    const action = await performPanelAction(
+      () =>
+        dependencies.modelOperations.activateWorkspaceEndpoint({
+          tomoriState: state,
+          serverDiscId: context.scope.serverDiscId,
+          ownerId: context.scope.userId,
+          // A DM still resolves `/config` to its recipient-backed server row, unlike `/personal config`.
+          scopeKind: "server",
+          capability: endpointCapability,
+          customEndpointId: endpoint.id,
+        }),
+      () => dependencies.resolveScope(context.interaction, true),
+    );
+    context.scope = action.state ?? context.scope;
+    const result = action.result;
+    if (result.status === "success") recordModelAction(context, "server-config.workspace.model.endpoint-select");
+
+    const endpointPage = {
+      capability: endpointCapability,
+      start: Math.floor(selected.position / 24) * 24,
+    } as const;
+    const speechSourceChanged = endpointCapability === "tts" && result.status === "success" && result.sourceChanged;
+    await baseRepaint(context, "switch", {
+      endpointPage,
+      receipt:
+        result.status === "success"
+          ? receipt(
+              locale,
+              speechSourceChanged ? "warning" : "success",
+              "commands.config.panel.endpoint_activated_heading",
+              speechSourceChanged
+                ? "commands.config.panel.endpoint_source_changed_direction"
+                : "commands.config.panel.endpoint_activated_detail",
+              { endpoint: result.identity },
+            )
+          : result.status === "already-active"
+            ? noChangesReceipt(locale, "commands.config.panel.endpoint_already_active_detail")
+            : result.status === "not-found"
+              ? staleReceipt(locale)
+              : writeFailedReceipt(locale),
+    });
+    return true;
+  }
+  if (!isConfigCatalogModelCapability(route.capability)) {
+    await baseRepaint(context, "switch", { receipt: staleReceipt(locale) });
+    return true;
+  }
+  const capability = route.capability;
 
   // The clearable slots fold their clear into the provider select, which the modal-open handler
   // declines so the write lands here with the interaction already deferred.
@@ -552,12 +689,11 @@ async function handleSwitchModels(context: ConfigModelRouteContext): Promise<boo
       await baseRepaint(context, "switch", { receipt: staleReceipt(locale) });
       return true;
     }
-    return await clearSwitchModel(context, route.capability);
+    return await clearSwitchModel(context, capability);
   }
 
   if (route.action !== "model-modal-submit") return false;
 
-  const capability: ConfigModelCapability = route.capability;
   const modelId = Number(
     dependencies.takeSelectValue(
       context.interaction.id,

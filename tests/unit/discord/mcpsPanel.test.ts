@@ -192,8 +192,8 @@ describe("MCP collection panel", () => {
         receipt: receipt(tone),
       });
       expect(payload.components).toHaveLength(2);
-      const serializedReceipt = JSON.stringify(payload.components[0]);
-      const serializedPanel = JSON.stringify(payload.components[1]);
+      const serializedPanel = JSON.stringify(payload.components[0]);
+      const serializedReceipt = JSON.stringify(payload.components[1]);
       expect(serializedReceipt).toContain(`"accentColor":${accent}`);
       expect(serializedReceipt).toContain(`${tone} heading`);
       expect(serializedReceipt).not.toContain('"type":2');

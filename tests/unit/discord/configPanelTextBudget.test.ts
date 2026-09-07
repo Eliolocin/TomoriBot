@@ -15,18 +15,26 @@ import type {
   ConfigPersonaMemoryView,
 } from "@/utils/discord/interactions/configRouteContext";
 import {
+  CONFIG_MODEL_CAPABILITY_ORDER,
+  isConfigCatalogModelCapability,
+  type ConfigCatalogModelCapability,
+} from "@/utils/discord/configPanelCatalog";
+import {
   computeVoiceSampleFingerprint,
   voiceSampleAttachmentName,
   type ConfigVoicesView,
 } from "@/utils/discord/ui/configVoicesPanel";
+import type { ConfigCapabilityEndpoint } from "@/utils/discord/interactions/configModelLoaders";
+import type { ConfigSwitchModelsView } from "@/utils/discord/ui/configModelsPanel";
 import {
   DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX,
   getDiscordTextLength,
   validateComponentsV2MessageLimits,
 } from "@/utils/discord/ui/componentsV2Limits";
 import { buildConfigPanelPayload } from "@/utils/discord/ui/configPanel";
+import { withLinePrefix } from "@/utils/discord/ui/panel";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
-import { initializeLocalizer } from "@/utils/text/localizer";
+import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
 
@@ -124,6 +132,110 @@ function getVoiceSelectMenu(payload: unknown): Record<string, unknown> {
 
 function getPayloadTextTotal(payload: unknown): number {
   return getTextDisplays(payload).reduce((total, text) => total + getDiscordTextLength(text), 0);
+}
+
+const SWITCH_MODEL_SLOT_STATES: ReadonlyArray<{
+  name: string;
+  isUsable: (capability: ConfigCatalogModelCapability) => boolean;
+}> = [
+  { name: "all slots usable", isUsable: () => true },
+  { name: "all slots unusable", isUsable: () => false },
+  { name: "standard image slot usable", isUsable: (capability) => capability === "image" },
+  { name: "NovelAI image slot usable", isUsable: (capability) => capability === "nai-image" },
+  { name: "video slot usable", isUsable: (capability) => capability === "video" },
+];
+
+function makeSwitchModelsView(
+  imageGenerationEnabled: boolean,
+  videoGenerationEnabled: boolean,
+  slotState: (capability: ConfigCatalogModelCapability) => boolean,
+): ConfigSwitchModelsView {
+  return {
+    slots: CONFIG_MODEL_CAPABILITY_ORDER.filter(isConfigCatalogModelCapability).map((capability) => {
+      const provider = `provider-${capability}`;
+      const usable = slotState(capability);
+      return {
+        capability,
+        currentModelName: usable ? `model-${capability}` : null,
+        currentProvider: usable ? provider : null,
+        eligibleProviders: usable ? [provider] : [],
+        providerPageStart: 0,
+        expandedProvider: null,
+        expandedOptionCount: 0,
+      };
+    }),
+    channelOverrideCount: 0,
+    personaOverrideCount: 0,
+    imageGenerationEnabled,
+    videoGenerationEnabled,
+  };
+}
+
+function makeExplicitCatalogSlot(
+  capability: ConfigCatalogModelCapability,
+  slotState: (candidate: ConfigCatalogModelCapability) => boolean,
+) {
+  const provider = `provider-${capability}`;
+  const usable = slotState(capability);
+  return {
+    capability,
+    currentModelName: usable ? `model-${capability}` : null,
+    currentProvider: usable ? provider : null,
+    eligibleProviders: usable ? [provider] : [],
+    providerPageStart: 0,
+    expandedProvider: null,
+    expandedOptionCount: 0,
+  };
+}
+
+function makeExplicitEightSlotView(
+  imageGenerationEnabled: boolean,
+  videoGenerationEnabled: boolean,
+  slotState: (capability: ConfigCatalogModelCapability) => boolean,
+  endpointCount: number,
+  speechCapabilityEnabled: boolean,
+  speechActiveIndex: number,
+): ConfigSwitchModelsView {
+  const makeEndpoints = (capability: "tts" | "stt"): ConfigCapabilityEndpoint[] =>
+    Array.from({ length: endpointCount }, (_unused, index) => ({
+      id: index + 1,
+      capability: capability === "tts" ? "speech" : "transcription",
+      label: `${capability}-endpoint-${index + 1}`,
+      modelLabel: `${capability}-model-${index + 1}`,
+      apiStyle: capability === "tts" ? "tts-clone" : "openai-compatible-transcription",
+      isActive: index === speechActiveIndex,
+    }));
+
+  return {
+    slots: [
+      makeExplicitCatalogSlot("text", slotState),
+      makeExplicitCatalogSlot("vision", slotState),
+      makeExplicitCatalogSlot("embedding", slotState),
+      makeExplicitCatalogSlot("image", slotState),
+      makeExplicitCatalogSlot("nai-image", slotState),
+      makeExplicitCatalogSlot("video", slotState),
+    ],
+    channelOverrideCount: 0,
+    personaOverrideCount: 0,
+    imageGenerationEnabled,
+    videoGenerationEnabled,
+    speechCapabilityEnabled,
+    endpointSlots: [
+      { capability: "tts", endpoints: makeEndpoints("tts"), pageStart: 0 },
+      { capability: "stt", endpoints: makeEndpoints("stt"), pageStart: 0 },
+    ],
+  };
+}
+
+function getCapabilityWarningKey(capability: "image" | "video", enabled: boolean): string {
+  if (capability === "image") {
+    return enabled
+      ? "commands.config.panel.image_generation_missing_model"
+      : "commands.config.panel.image_generation_disabled_direction";
+  }
+  return enabled
+    ? "commands.config.panel.video_generation_missing_model"
+    : "commands.config.panel.video_generation_disabled_direction";
 }
 
 function makeVoiceSample(index: number, name: string, refText: string): VoiceSampleRow {
@@ -533,6 +645,281 @@ describe("config page text budgeting at stored maxima", () => {
         expect(totalText).toBeLessThanOrEqual(DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX);
       });
     }
+  });
+});
+
+describe("Switch Models capability notice budgeting", () => {
+  const flagCombinations = [
+    { imageGenerationEnabled: false, videoGenerationEnabled: false },
+    { imageGenerationEnabled: false, videoGenerationEnabled: true },
+    { imageGenerationEnabled: true, videoGenerationEnabled: false },
+    { imageGenerationEnabled: true, videoGenerationEnabled: true },
+  ];
+
+  const buildSwitchModelsPayload = (
+    locale: string,
+    receipt: boolean,
+    imageGenerationEnabled: boolean,
+    videoGenerationEnabled: boolean,
+    slotState: (capability: ConfigCatalogModelCapability) => boolean,
+  ) =>
+    buildConfigPanelPayload({
+      locale,
+      actor: GUILD_MANAGER,
+      category: "models",
+      page: "switch",
+      personas: [makePersona({ persona_id: 55 })],
+      selectedPersonaId: 55,
+      readStatus: "fresh",
+      switchModelsView: makeSwitchModelsView(imageGenerationEnabled, videoGenerationEnabled, slotState),
+      receipt: receipt ? { tone: "success", heading: "Saved", detail: "Configuration was saved." } : undefined,
+    });
+
+  for (const locale of RUNTIME_LOCALES) {
+    describe(`locale ${locale}`, () => {
+      for (const receipt of [false, true]) {
+        for (const slotState of SWITCH_MODEL_SLOT_STATES) {
+          for (const flags of flagCombinations) {
+            it(`keeps ${slotState.name} valid for ${
+              flags.imageGenerationEnabled ? "enabled" : "disabled"
+            } image and ${flags.videoGenerationEnabled ? "enabled" : "disabled"} video (receipt=${receipt})`, () => {
+              const payload = buildSwitchModelsPayload(
+                locale,
+                receipt,
+                flags.imageGenerationEnabled,
+                flags.videoGenerationEnabled,
+                slotState.isUsable,
+              );
+              const validation = validateComponentsV2MessageLimits(payload);
+              expect(validation.valid, `Violations: ${JSON.stringify(validation.violations)}`).toBe(true);
+
+              const imageHasUsableModel = slotState.isUsable("image") || slotState.isUsable("nai-image");
+              const videoHasUsableModel = slotState.isUsable("video");
+              const imageHealthy = flags.imageGenerationEnabled && imageHasUsableModel;
+              const videoHealthy = flags.videoGenerationEnabled && videoHasUsableModel;
+              const expectedComponentCount = (receipt ? 27 : 25) + (imageHealthy && videoHealthy ? 0 : 1);
+              expect(countRenderedComponents(payload)).toBe(expectedComponentCount);
+
+              const renderedText = getTextDisplays(payload).join("\n");
+              const expectedWarnings: string[] = [];
+              if (!imageHealthy) {
+                expectedWarnings.push(
+                  withLinePrefix(
+                    "-# ",
+                    localizer(locale, getCapabilityWarningKey("image", flags.imageGenerationEnabled)),
+                  ),
+                );
+              }
+              if (!videoHealthy) {
+                expectedWarnings.push(
+                  withLinePrefix(
+                    "-# ",
+                    localizer(locale, getCapabilityWarningKey("video", flags.videoGenerationEnabled)),
+                  ),
+                );
+              }
+
+              for (const warning of expectedWarnings) {
+                expect(renderedText).toContain(warning);
+              }
+              if (imageHealthy && videoHealthy) {
+                const capabilityNotice = getTextDisplays(payload).find((text) =>
+                  [
+                    "commands.config.panel.image_generation_disabled_direction",
+                    "commands.config.panel.image_generation_missing_model",
+                    "commands.config.panel.video_generation_disabled_direction",
+                    "commands.config.panel.video_generation_missing_model",
+                  ].some((key) => text.includes(withLinePrefix("-# ", localizer(locale, key)))),
+                );
+                expect(capabilityNotice).toBeUndefined();
+              }
+            });
+          }
+        }
+      }
+    });
+  }
+
+  it("keeps the worst unhealthy receipt payload at the 28-component ceiling", () => {
+    const payload = buildSwitchModelsPayload("en-US", true, true, true, () => false);
+    expect(countRenderedComponents(payload)).toBe(28);
+
+    const payloadWithExtraTextDisplay = {
+      ...payload,
+      components: [...payload.components, { type: ComponentType.TextDisplay, content: "Reserve" }],
+    };
+    expect(countRenderedComponents(payloadWithExtraTextDisplay)).toBeGreaterThan(28);
+  });
+
+  it("budgets an explicit eight-slot matrix across locales, flags, reads, and endpoint boundaries", () => {
+    const componentBudget = 32;
+    const componentReserve = 8;
+    const discordComponentLimit = 40;
+    const readStatuses: PanelReadStatus[] = ["fresh", "stale", "unavailable"];
+    const endpointCounts = [0, 1, 24, 25, 26, 60];
+    let maximumReceiptComponentCount = 0;
+
+    for (const locale of RUNTIME_LOCALES) {
+      for (const receipt of [false, true]) {
+        for (const readStatus of readStatuses) {
+          for (const slotState of SWITCH_MODEL_SLOT_STATES) {
+            for (const flags of flagCombinations) {
+              for (const endpointCount of endpointCounts) {
+                const payload = buildConfigPanelPayload({
+                  locale,
+                  actor: GUILD_MANAGER,
+                  category: "models",
+                  page: "switch",
+                  personas: [makePersona({ persona_id: 55 })],
+                  selectedPersonaId: 55,
+                  readStatus,
+                  switchModelsView: makeExplicitEightSlotView(
+                    flags.imageGenerationEnabled,
+                    flags.videoGenerationEnabled,
+                    slotState.isUsable,
+                    endpointCount,
+                    true,
+                    -1,
+                  ),
+                  receipt: receipt
+                    ? { tone: "success", heading: "Saved", detail: "Configuration was saved." }
+                    : undefined,
+                });
+                const validation = validateComponentsV2MessageLimits(payload);
+                expect(
+                  validation.valid,
+                  `${locale} ${readStatus} ${slotState.name} endpoint=${endpointCount} ` +
+                    `${flags.imageGenerationEnabled}/${flags.videoGenerationEnabled}: ${JSON.stringify(validation.violations)}`,
+                ).toBe(true);
+                for (const menu of getStringSelectMenus(payload)) {
+                  const options = Array.isArray(menu.options) ? menu.options : [];
+                  expect(options.length).toBeLessThanOrEqual(25);
+                }
+                const componentCount = countRenderedComponents(payload);
+                expect(componentCount).toBeLessThanOrEqual(componentBudget);
+                if (receipt) maximumReceiptComponentCount = Math.max(maximumReceiptComponentCount, componentCount);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    expect(maximumReceiptComponentCount).toBe(componentBudget);
+    expect(maximumReceiptComponentCount).toBeLessThanOrEqual(discordComponentLimit - componentReserve);
+    expect(maximumReceiptComponentCount + componentReserve).toBe(discordComponentLimit);
+
+    const endpointPayload = buildConfigPanelPayload({
+      locale: "en-US",
+      actor: GUILD_MANAGER,
+      category: "models",
+      page: "switch",
+      personas: [makePersona({ persona_id: 55 })],
+      selectedPersonaId: 55,
+      readStatus: "fresh",
+      switchModelsView: makeExplicitEightSlotView(true, true, () => false, 1, true, 0),
+    });
+    expect(getTextDisplays(endpointPayload)).toContain("-# Use `/providers` to add more model choices.");
+    const endpointMenus = getStringSelectMenus(endpointPayload).filter((menu) => {
+      const customId = menu.customId;
+      return typeof customId === "string" && customId.includes("ep-select");
+    });
+    expect(endpointMenus).toHaveLength(2);
+    for (const capability of ["tts", "stt"] as const) {
+      const menu = endpointMenus.find((candidate) => {
+        const customId = candidate.customId;
+        return typeof customId === "string" && customId.includes(capability);
+      });
+      expect(menu).toBeDefined();
+      const placeholder = menu?.placeholder;
+      expect(typeof placeholder).toBe("string");
+      expect(placeholder).toContain(localizer("en-US", `commands.config.panel.capability_${capability}`));
+      expect(placeholder).toContain(`${capability}-endpoint-1: ${capability}-model-1`);
+      const options = menu?.options;
+      expect(Array.isArray(options)).toBe(true);
+      for (const option of options ?? []) {
+        expect((option as Record<string, unknown>).default).not.toBe(true);
+      }
+    }
+
+    for (const locale of RUNTIME_LOCALES) {
+      const speechStates = [
+        {
+          enabled: false,
+          activeIndex: 0,
+          present: ["speech_capability_disabled_direction"],
+          absent: ["speech_capability_enabled_direction", "speech_capability_missing_endpoint"],
+        },
+        {
+          enabled: true,
+          activeIndex: -1,
+          present: ["speech_capability_enabled_direction", "speech_capability_missing_endpoint"],
+          absent: ["speech_capability_disabled_direction"],
+        },
+        {
+          enabled: true,
+          activeIndex: 0,
+          present: ["speech_capability_enabled_direction"],
+          absent: ["speech_capability_disabled_direction", "speech_capability_missing_endpoint"],
+        },
+      ] as const;
+      for (const speechState of speechStates) {
+        const payload = buildConfigPanelPayload({
+          locale,
+          actor: GUILD_MANAGER,
+          category: "models",
+          page: "switch",
+          personas: [makePersona({ persona_id: 55 })],
+          selectedPersonaId: 55,
+          readStatus: "fresh",
+          switchModelsView: makeExplicitEightSlotView(
+            true,
+            true,
+            () => false,
+            1,
+            speechState.enabled,
+            speechState.activeIndex,
+          ),
+        });
+        const renderedText = getTextDisplays(payload).join("\n");
+        for (const key of speechState.present) {
+          expect(renderedText).toContain(withLinePrefix("-# ", localizer(locale, `commands.config.panel.${key}`)));
+        }
+        for (const key of speechState.absent) {
+          expect(renderedText).not.toContain(withLinePrefix("-# ", localizer(locale, `commands.config.panel.${key}`)));
+        }
+      }
+    }
+
+    const payload = buildConfigPanelPayload({
+      locale: "en-US",
+      actor: GUILD_MANAGER,
+      category: "models",
+      page: "switch",
+      personas: [makePersona({ persona_id: 55 })],
+      selectedPersonaId: 55,
+      readStatus: "fresh",
+      switchModelsView: makeExplicitEightSlotView(true, true, () => false, 60, true, -1),
+      receipt: { tone: "success", heading: "Saved", detail: "Configuration was saved." },
+    });
+    const ninthSlot = {
+      ...payload,
+      components: [
+        ...payload.components,
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.StringSelect,
+              customId: "ninth-slot",
+              placeholder: "Ninth slot",
+              options: [{ value: "one", label: "One" }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(countRenderedComponents(ninthSlot)).toBeGreaterThan(componentBudget);
   });
 });
 

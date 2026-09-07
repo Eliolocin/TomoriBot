@@ -24,7 +24,13 @@ import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import type { ShortTermMemoryEntry } from "@/utils/cache/shortTermMemoryCache";
-import type { ConfigCategory, ConfigModelCapability, ConfigPage } from "@/utils/discord/configPanelCatalog";
+import type {
+  ConfigCatalogModelCapability,
+  ConfigCategory,
+  ConfigModelCapability,
+  ConfigPage,
+} from "@/utils/discord/configPanelCatalog";
+import type { LoadConfigCapabilityEndpoints } from "@/utils/discord/interactions/configModelLoaders";
 import type {
   BlocklistChannelTarget,
   ChannelOverrideChannelTarget,
@@ -52,6 +58,7 @@ import type {
   ConfigImageGenerationView,
   ConfigParametersView,
   ConfigSwitchModelsProviderPage,
+  ConfigEndpointPage,
   ConfigSwitchModelsView,
 } from "@/utils/discord/ui/configModelsPanel";
 import type { ConfigVoicesView } from "@/utils/discord/ui/configVoicesPanel";
@@ -225,9 +232,12 @@ export interface ConfigRouteDependencies {
   operations: ConfigPersonaOperations;
   spriteOperations: ConfigSpriteOperations;
   modelOperations: ConfigModelOperations;
+  loadCapabilityEndpoints: LoadConfigCapabilityEndpoints;
   loadSwitchModelsView(
     state: TomoriState,
-    providerPage: { capability: ConfigModelCapability; start: number } | undefined,
+    providerPage: { capability: ConfigCatalogModelCapability; start: number } | undefined,
+    endpointPage?: ConfigEndpointPage,
+    loadCapabilityEndpoints?: LoadConfigCapabilityEndpoints,
   ): Promise<ConfigSwitchModelsView>;
   loadParametersView(
     state: TomoriState,
@@ -267,7 +277,7 @@ export interface ConfigRouteDependencies {
   ): Promise<ConfigChannelsView>;
   loadModelChoices(
     state: TomoriState,
-    capability: ConfigModelCapability,
+    capability: ConfigCatalogModelCapability,
     provider: string,
   ): Promise<ConfigModelChoice[]>;
   loadFallbackOptions(state: TomoriState, provider: string): Promise<ConfigFallbackOption[]>;
@@ -361,6 +371,7 @@ export interface ConfigRepaintOptions {
   spritePageStart?: number;
   selectedSpriteIndex?: number;
   modelProviderPage?: ConfigSwitchModelsProviderPage;
+  endpointPage?: ConfigEndpointPage;
   behaviorView?: ConfigBehaviorView;
   permissionsView?: ConfigPermissionsView;
   channelsView?: ConfigChannelsView;
@@ -444,7 +455,12 @@ export async function repaint(
     const state = scope.personas[0];
     if (state) {
       if (page === "switch") {
-        switchModelsView = await dependencies.loadSwitchModelsView(state, options.modelProviderPage);
+        switchModelsView = await dependencies.loadSwitchModelsView(
+          state,
+          options.modelProviderPage,
+          options.endpointPage,
+          dependencies.loadCapabilityEndpoints,
+        );
       } else if (page === "parameters") {
         modelParametersView = await dependencies.loadParametersView(
           state,

@@ -459,6 +459,7 @@ These samplers apply to your own requests in every server. This server's sampler
       crossserver_stm_footer: `\`/personal memories\` always persist across servers, but not STM`,
       models_title: `Personal Model Routing`,
       models_description: `Personal overrides follow you across servers.\nA capability set to Server Default uses the current\nserver's models instead.`,
+      speech_workspace_scope_direction: `Server-wide TTS/STT: \`/config\` > Models > Switch Models.`,
       routing_text: `Text`,
       routing_vision: `Vision`,
       routing_embedding: `Embedding`,

@@ -125,6 +125,7 @@ export const PANEL_ACTIONS = [
   "server-config.workspace.persona-sprite.export",
   "server-config.workspace.model.set",
   "server-config.workspace.model.clear",
+  "server-config.workspace.model.endpoint-select",
   "server-config.workspace.thought-logs-channel.set",
   "server-config.workspace.thought-logs-channel.clear",
   "server-config.workspace.welcome-channel.set",

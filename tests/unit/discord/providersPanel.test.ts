@@ -108,6 +108,7 @@ describe("providers panel rendering", () => {
     expect(JSON.stringify(panel)).not.toContain('"customId":"providers:v1:');
     expect(JSON.stringify(panel)).toContain("## Personal Providers");
     expect(JSON.stringify(panel)).not.toContain("## Server Providers");
+    expect(JSON.stringify(panel)).toContain("`/personal config` > Models");
   });
 
   it("offers every API compatibility in one valid modal", () => {
@@ -149,7 +150,7 @@ describe("providers panel rendering", () => {
     expect(serialized).toContain("**Select** or **add** a provider or endpoint");
     expect(serialized).toContain("+ Add New Provider");
     expect(serialized).toContain("+ Add New Custom Endpoint");
-    expect(serialized).toContain("`/model text`");
+    expect(serialized).toContain("`/config` > Models");
     expect((select?.options as unknown[])?.length).toBe(2);
   });
 

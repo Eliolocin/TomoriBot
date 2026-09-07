@@ -19,7 +19,6 @@ import type {
 import type { CustomEndpointApiStyle, CustomEndpointCapability } from "@/types/db/schema";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
-import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { resolveRangeSelection } from "@/utils/discord/interactions/panelController";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import {
@@ -1227,13 +1226,12 @@ ${localizer(locale, `commands.providers.remove_impact_${entry.kind}`, {
     { type: ComponentType.Separator, divider: true, spacing: 1 },
     {
       type: ComponentType.TextDisplay,
-      content: `-# ${localizer(locale, "commands.providers.routing_hint", {
-        command: commandRegistry.getCommandMention(
-          input.footerCommand?.root ?? "model",
-          input.footerCommand?.subcommandGroup ?? input.footerCommand?.subcommand ?? "text",
-          input.footerCommand?.subcommandGroup ? input.footerCommand.subcommand : undefined,
-        ),
-      })}`,
+      content: `-# ${localizer(
+        locale,
+        routeNamespace === PROVIDERS_ROUTE_NAMESPACE
+          ? "commands.providers.routing_hint"
+          : "commands.providers.personal_routing_hint",
+      )}`,
     },
   );
 
