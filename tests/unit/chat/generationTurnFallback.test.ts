@@ -37,9 +37,11 @@ const queuedResults: GenerationTurnResult[] = [];
 // Discord during that attempt. Undefined entries push nothing.
 const queuedDeliveries: Array<Array<{ messageId: string; channelId: string; isWebhook: boolean }> | undefined> = [];
 const toolLoopCalls: Array<{ model: string; suppressUserErrors: boolean | undefined }> = [];
+const providerConfigCalls: Array<{ model: string; apiKey: string }> = [];
 const fallbackNoticeCalls: Array<{ failures: FallbackNoticeAttempt[]; successModel: LlmRow }> = [];
 const personalSavedConfigLoads: Array<{ userId: number; provider: string }> = [];
 const testStopRequests = new Map<string, { type: "stop" | "follow_up"; stopContext?: TestStopContext }>();
+let personalOverlayState: TomoriState | null = null;
 
 type TestStopContext = {
   originalStopMessage: Message;
@@ -185,7 +187,7 @@ scopedMock.module("@/utils/discord/streamOrchestrator", () => ({
 scopedMock.module("@/utils/provider/personalProviderRuntime", () => ({
   ...realPersonalProviderRuntime,
   applyPersonalProviderSelectionsToTomoriState: async (tomoriState: TomoriState) => ({
-    tomoriState,
+    tomoriState: personalOverlayState ?? tomoriState,
     activeConfigs: {},
   }),
 }));
@@ -203,7 +205,7 @@ scopedMock.module("@/utils/provider/providerFactory", () => ({
 // files unable to link against any omitted export.
 scopedMock.module("@/utils/security/crypto", () => ({
   ...realCrypto,
-  decryptApiKey: async () => "decrypted-key",
+  decryptApiKey: async (key: string) => (key === "personal-encrypted-key" ? "personal-key" : "server-key"),
   encryptApiKey: async () => ({ encrypted: Buffer.from(""), version: 1 }),
   reencryptApiKey: async () => ({ encrypted: Buffer.from(""), version: 1 }),
   storeOptApiKey: async () => true,
@@ -434,11 +436,14 @@ function handleContextRestartForShim(params: ToolLoopParams, data: unknown): boo
 }
 
 const fakeProvider = {
-  createConfig: async (tomoriState: TomoriState, apiKey: string): Promise<ProviderConfig> => ({
-    apiKey,
-    model: tomoriState.llm.llm_codename,
-    temperature: tomoriState.config.llm_temperature ?? 0.7,
-  }),
+  createConfig: async (tomoriState: TomoriState, apiKey: string): Promise<ProviderConfig> => {
+    providerConfigCalls.push({ model: tomoriState.llm.llm_codename, apiKey });
+    return {
+      apiKey,
+      model: tomoriState.llm.llm_codename,
+      temperature: tomoriState.config.llm_temperature ?? 0.7,
+    };
+  },
   getInfo: () => ({ name: "google" }),
 };
 
@@ -530,8 +535,10 @@ describe("runGenerationTurn fallback behavior", () => {
     queuedResults.length = 0;
     queuedDeliveries.length = 0;
     toolLoopCalls.length = 0;
+    providerConfigCalls.length = 0;
     fallbackNoticeCalls.length = 0;
     personalSavedConfigLoads.length = 0;
+    personalOverlayState = null;
 
     const { StreamOrchestrator } = await import("@/utils/discord/streamOrchestrator");
     StreamOrchestrator.clearStopRequest("channel_1");
@@ -637,6 +644,50 @@ describe("runGenerationTurn fallback behavior", () => {
 
     expect(toolLoopCalls.map((call) => call.model)).toEqual(["primary-model", "personal-fallback"]);
     expect(personalSavedConfigLoads).toEqual([{ userId: 4, provider: "custom:u4:local" }]);
+  });
+
+  it("falls back from a failed personal text model to the configured server model", async () => {
+    const serverPrimary = makeLlm(1, "server-primary");
+    const serverFallback = makeLlm(2, "server-fallback");
+    const personalPrimary = makeLlm(3, "personal-primary");
+    const context = makeContext(serverPrimary, serverFallback);
+    context.textCredentialSource = "personal";
+    context.personalRoutingUserId = 4;
+    context.personalTextProvider = "openrouter";
+    personalOverlayState = {
+      ...context.currentPersona,
+      llm: personalPrimary,
+      fallback_chain: undefined,
+      fallback_llms: undefined,
+      config: { ...context.currentPersona.config, api_key: "personal-encrypted-key" },
+    } as TomoriState;
+    queuedResults.push(
+      {
+        status: "error",
+        streamResults: [{ status: "error", data: { type: "rate_limit", code: "429", message: "rate limited" } }],
+        personaResponses: [],
+      },
+      {
+        status: "completed",
+        streamResults: [{ status: "completed", accumulatedText: "ok" }],
+        personaResponses: [{ personaName: "Tomori", text: "ok", personaId: 10, personaLineageId: 100 }],
+      },
+    );
+    const sink: ChatResponseSink = {
+      emitStreamResult: async () => undefined,
+      emitError: async () => undefined,
+      finalize: async () => undefined,
+    };
+
+    const { runGenerationTurn } = await import("@/utils/chat/generationTurn");
+    await runGenerationTurn(context, sink);
+
+    expect(toolLoopCalls.map((call) => call.model)).toEqual(["personal-primary", "server-primary"]);
+    expect(providerConfigCalls).toEqual([
+      { model: "personal-primary", apiKey: "personal-key" },
+      { model: "server-primary", apiKey: "server-key" },
+      { model: "server-fallback", apiKey: "server-key" },
+    ]);
   });
 
   it("deletes the timed-out primary's partial message when a fallback succeeds", async () => {

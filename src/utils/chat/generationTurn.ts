@@ -238,10 +238,10 @@ async function purgeSupersededDeliveries(
 async function buildGenerationAttempts(context: ChatTurnContext): Promise<GenerationAttempt[]> {
   const disableAllTools = !!context.streamingContext.disableAllTools;
   const primaryState = await resolvePrimaryTomoriState(context);
-  const fallbackEntries =
+  const personalFallbackEntries =
     primaryState.fallback_chain ?? primaryState.fallback_llms?.map((model) => ({ kind: "llm" as const, model })) ?? [];
 
-  const pool: FallbackEntry[] = [{ kind: "llm", model: primaryState.llm }, ...fallbackEntries];
+  const pool: FallbackEntry[] = [{ kind: "llm", model: primaryState.llm }, ...personalFallbackEntries];
 
   // Model randomizer: when enabled, splice a random pool member to the front so a different model
   //    leads each turn. The remainder keeps its relative order as the failover tail. This is a pure
@@ -272,6 +272,28 @@ async function buildGenerationAttempts(context: ChatTurnContext): Promise<Genera
       attempts.push(attempt);
     } catch (error) {
       log.warn(`Skipping pool entry ${index}: failed to prepare provider config.`, error as Error);
+    }
+  }
+
+  // A personal text route owns its primary and explicitly configured fallbacks, but a failed
+  // personal provider must not make an otherwise configured server model unreachable. Build the
+  // server attempts from the unmodified server state so they use the server's credentials even
+  // when the personal and server models belong to the same provider.
+  if (context.textCredentialSource === "personal" && !context.isUserImpersonation) {
+    const serverState = await resolveServerTomoriState(context);
+    const serverFallbackEntries =
+      serverState.fallback_chain ?? serverState.fallback_llms?.map((model) => ({ kind: "llm" as const, model })) ?? [];
+    const serverPool: FallbackEntry[] = [{ kind: "llm", model: serverState.llm }, ...serverFallbackEntries];
+
+    for (const entry of serverPool) {
+      try {
+        const attempt = await createFallbackAttempt(serverState, entry, attempts.length, disableAllTools);
+        if (attempt) {
+          attempts.push(attempt);
+        }
+      } catch (error) {
+        log.warn(`Skipping server fallback pool entry ${attempts.length}: failed to prepare provider config.`, error as Error);
+      }
     }
   }
 
@@ -366,6 +388,27 @@ async function resolvePrimaryTomoriState(context: ChatTurnContext): Promise<Tomo
   let state: TomoriState = { ...personalBase, llm: overriddenLlm };
 
   if (overriddenLlm.llm_provider.toLowerCase() !== personalBase.llm.llm_provider.toLowerCase()) {
+    state = await applySavedProviderConfig(state, overriddenLlm.llm_provider);
+  }
+
+  return state;
+}
+
+/** Resolves the server's normal text route without applying a personal-provider overlay. */
+async function resolveServerTomoriState(context: ChatTurnContext): Promise<TomoriState> {
+  const incoming = context.turn.lockedTurn.admission.incoming;
+  const channelLlmOverride = context.isUserImpersonation
+    ? null
+    : await getCachedChannelLlm(context.currentPersona.server_id, context.channel.id);
+  const effectiveLlm = context.isUserImpersonation
+    ? context.currentPersona.llm
+    : (context.currentPersona.persona_llm ?? channelLlmOverride ?? context.currentPersona.llm);
+  const overriddenLlm = incoming.llmOverrideCodename
+    ? { ...effectiveLlm, llm_codename: incoming.llmOverrideCodename }
+    : effectiveLlm;
+  let state: TomoriState = { ...context.currentPersona, llm: overriddenLlm };
+
+  if (overriddenLlm.llm_provider.toLowerCase() !== context.currentPersona.llm.llm_provider.toLowerCase()) {
     state = await applySavedProviderConfig(state, overriddenLlm.llm_provider);
   }
 
