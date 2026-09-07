@@ -9,7 +9,7 @@ import {
 } from "discord.js";
 import type { LogitBiasEntry } from "@/types/provider/logitBias";
 import type { PanelReadStatus } from "@/types/discord/panel";
-import type { SavedProviderConfigRow } from "@/types/db/schema";
+import type { NaiPresetRow, SavedProviderConfigRow } from "@/types/db/schema";
 import {
   CONFIG_CLEARABLE_MODEL_CAPABILITIES,
   CONFIG_LOGIT_BIAS_PAGE_SIZE,
@@ -18,6 +18,9 @@ import {
   CONFIG_MODEL_PAGE_SIZE,
   CONFIG_MODEL_PROVIDER_DIRECT_LIMIT,
   CONFIG_ENDPOINT_PAGE_SIZE,
+  CONFIG_NAI_PRESET_NEXT_VALUE,
+  CONFIG_NAI_PRESET_PAGE_SIZE,
+  CONFIG_NAI_PRESET_PREVIOUS_VALUE,
   CONFIG_ROUTE_NAMESPACE,
   CONFIG_ROUTE_VERSION,
   buildConfigRouteId,
@@ -55,6 +58,15 @@ import { neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { localizer } from "@/utils/text/localizer";
 import { buildConfigVoicesBody, type ConfigVoicesView } from "@/utils/discord/ui/configVoicesPanel";
 export { buildConfigVoicesBody, type ConfigVoicesView };
+
+export interface ConfigNaiPresetView {
+  target: "kayra" | "erato" | null;
+  compatibility: "eligible" | "not-novelai" | "unsupported";
+  presets: NaiPresetRow[];
+  activePresetName: string | null;
+  fingerprint: string | null;
+  pageStart: number;
+}
 
 export const CONFIG_MODEL_CAPABILITY_LOCALE_KEYS: Record<ConfigModelCapability, string> = {
   text: "commands.config.panel.capability_text",
@@ -126,6 +138,7 @@ export interface ConfigParametersView {
   speakerPatternEnabled: boolean;
   logitBiasEntries: LogitBiasEntry[];
   logitBiasPageStart: number;
+  naiPresetView?: ConfigNaiPresetView;
 }
 
 interface ConfigFallbackSlotView {
@@ -456,6 +469,107 @@ function formatLogitBiasSummary(locale: string, entries: readonly LogitBiasEntry
   return visible.join(", ");
 }
 
+function buildNaiPresetBlock(
+  locale: string,
+  view: ConfigNaiPresetView,
+  writesDisabled: boolean,
+): ComponentInContainerData[] {
+  const isJapanese = locale.toLowerCase().startsWith("ja");
+  const explanationKey =
+    view.compatibility === "not-novelai"
+      ? "not_novelai"
+      : view.compatibility === "unsupported"
+        ? "not_kayra_erato"
+        : null;
+  const display = explanationKey
+    ? `**${localizer(locale, `commands.novelai.preset.text.${explanationKey}_title`)}**\n${localizer(
+        locale,
+        `commands.novelai.preset.text.${explanationKey}_description`,
+      )}`
+    : `**${localizer(locale, "commands.novelai.preset.text.select_label")}**\n${localizer(
+        locale,
+        "commands.novelai.preset.text.select_description",
+      )}\n> ${view.activePresetName ?? localizer(locale, "commands.config.panel.none_label")} (${view.target})`;
+
+  const pageCount = Math.max(1, Math.ceil(view.presets.length / CONFIG_NAI_PRESET_PAGE_SIZE));
+  const pageStart = Math.min(
+    Math.max(0, Math.floor(view.pageStart / CONFIG_NAI_PRESET_PAGE_SIZE) * CONFIG_NAI_PRESET_PAGE_SIZE),
+    (pageCount - 1) * CONFIG_NAI_PRESET_PAGE_SIZE,
+  );
+  const pageIndex = Math.floor(pageStart / CONFIG_NAI_PRESET_PAGE_SIZE);
+  const options: SelectMenuComponentOptionData[] =
+    view.compatibility === "eligible" && view.presets.length > 0
+      ? view.presets.slice(pageStart, pageStart + CONFIG_NAI_PRESET_PAGE_SIZE).map((preset, offset) => ({
+          label: safeSelectOptionText(preset.preset_name, 100),
+          value: String(pageStart + offset),
+          description: safeSelectOptionText(isJapanese ? preset.ja_preset_desc : preset.preset_desc, 100),
+          default: preset.preset_name === view.activePresetName,
+        }))
+      : [
+          {
+            label: safeSelectOptionText(localizer(locale, "commands.novelai.preset.text.select_label"), 100),
+            value: "__nai-preset-disabled__",
+            description: safeSelectOptionText(
+              localizer(
+                locale,
+                explanationKey
+                  ? `commands.novelai.preset.text.${explanationKey}_description`
+                  : "commands.novelai.preset.text.select_description",
+              ),
+              100,
+            ),
+            default: false,
+          },
+        ];
+  if (view.compatibility === "eligible" && pageCount > 1) {
+    options.unshift({
+      label: safeSelectOptionText(
+        localizer(locale, "commands.config.panel.model_provider_more_option", {
+          capability: localizer(locale, "commands.novelai.preset.text.select_label"),
+          page: pageIndex === 0 ? pageCount : pageIndex,
+          total: pageCount,
+        }),
+        100,
+      ),
+      value: CONFIG_NAI_PRESET_PREVIOUS_VALUE,
+      description: undefined,
+      default: false,
+    });
+    options.push({
+      label: safeSelectOptionText(
+        localizer(locale, "commands.config.panel.model_provider_more_option", {
+          capability: localizer(locale, "commands.novelai.preset.text.select_label"),
+          page: ((pageIndex + 1) % pageCount) + 1,
+          total: pageCount,
+        }),
+        100,
+      ),
+      value: CONFIG_NAI_PRESET_NEXT_VALUE,
+      description: undefined,
+      default: false,
+    });
+  }
+
+  return [
+    { type: ComponentType.TextDisplay, content: display },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.StringSelect,
+          customId:
+            view.compatibility === "eligible" && view.fingerprint
+              ? buildConfigRouteId({ action: "nai-preset-select", locale, start: pageStart, fp: view.fingerprint })
+              : buildConfigRouteId({ action: "nai-preset-select", locale, start: pageStart, fp: "00000000" }),
+          placeholder: safeSelectOptionText(localizer(locale, "commands.novelai.preset.text.select_placeholder"), 150),
+          options,
+          disabled: writesDisabled || view.compatibility !== "eligible" || view.presets.length === 0,
+        },
+      ],
+    } satisfies ActionRowData<StringSelectMenuComponentData>,
+  ];
+}
+
 function buildParametersBody(input: ConfigModelsPageInput): ComponentInContainerData[] {
   const { locale } = input;
   const view = input.parametersView;
@@ -465,6 +579,8 @@ function buildParametersBody(input: ConfigModelsPageInput): ComponentInContainer
   ];
   if (!view) return components;
   const logitBiasPageCount = Math.max(1, Math.ceil(view.logitBiasEntries.length / CONFIG_LOGIT_BIAS_PAGE_SIZE));
+
+  if (view.naiPresetView) components.push(...buildNaiPresetBlock(locale, view.naiPresetView, writesDisabled));
 
   if (!view.selectedProvider) {
     components.push({

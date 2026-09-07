@@ -4,6 +4,7 @@ import type {
   FallbackModelRef,
   DiffusionModelRow,
   LlmRow,
+  NaiPresetRow,
   SavedProviderConfigRow,
   SavedProviderConfigUpsert,
   TomoriState,
@@ -68,6 +69,16 @@ export const CONFIG_FALLBACK_CLEAR_VALUE = "__none__";
 
 /** Distinguishes a custom-endpoint fallback pick from an LLM codename in a slot select value. */
 export const CONFIG_FALLBACK_ENDPOINT_PREFIX = "ce:";
+
+const NAI_PRESET_MODEL_TARGETS: Record<string, "kayra" | "erato"> = {
+  "kayra-v1": "kayra",
+  "llama-3-erato-v1": "erato",
+};
+
+export function resolveNaiPresetTarget(state: TomoriState): "kayra" | "erato" | null {
+  if (state.llm.llm_provider.toLowerCase() !== "novelai") return null;
+  return NAI_PRESET_MODEL_TARGETS[state.llm.llm_codename] ?? null;
+}
 
 /** Capability slot to the saved-provider capability whose eligibility list backs it. */
 const SAVED_PROVIDER_CAPABILITY: Record<ConfigCatalogModelCapability, SavedProviderCapability> = {
@@ -194,6 +205,8 @@ export type ConfigParameterResult =
   | { status: "success" }
   | { status: "no-changes" | "invalid-value" | "not-found" | "write-failed" };
 
+export type ConfigNaiPresetResult = { status: "success" | "write-failed" | "not-found" };
+
 export type ConfigStopAddResult =
   | { status: "success"; addedCount: number; totalCount: number }
   | { status: "no-changes" | "invalid-input" | "write-failed" }
@@ -287,6 +300,11 @@ export interface ConfigModelOperations {
     provider: string;
     patch: ConfigParameterPatch;
   }): Promise<ConfigParameterResult>;
+  applyNaiPreset(input: {
+    tomoriState: TomoriState;
+    serverDiscId: string;
+    preset: NaiPresetRow;
+  }): Promise<ConfigNaiPresetResult>;
   addStopStrings(input: {
     tomoriState: TomoriState;
     serverDiscId: string;
@@ -677,6 +695,19 @@ export const configModelOperations: ConfigModelOperations = {
     }
     invalidateTomoriStateCache(serverDiscId);
     return { status: "success" };
+  },
+
+  async applyNaiPreset({ tomoriState, serverDiscId, preset }) {
+    const target = resolveNaiPresetTarget(tomoriState);
+    if (!target || preset.model_target !== target) return { status: "not-found" };
+
+    const applied = await configRepository.applyNaiPreset(
+      tomoriState.server_id,
+      preset,
+      tomoriState.llm.llm_codename,
+      serverDiscId,
+    );
+    return applied ? { status: "success" } : { status: "write-failed" };
   },
 
   async addStopStrings({ tomoriState, serverDiscId, rawInput }) {

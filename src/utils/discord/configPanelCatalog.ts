@@ -302,6 +302,19 @@ export const CONFIG_MODEL_CLEAR_VALUE = "__clear__";
 /** Discord rejects a String Select carrying more than 25 options. */
 export const CONFIG_MODEL_PAGE_SIZE = 25;
 
+/** A preset page leaves room for explicit previous and next entries in one String Select. */
+export const CONFIG_NAI_PRESET_PAGE_SIZE = 23;
+export const CONFIG_NAI_PRESET_PREVIOUS_VALUE = "__nai-preset-prev__";
+export const CONFIG_NAI_PRESET_NEXT_VALUE = "__nai-preset-next__";
+
+/** Binds a preset selection to its target and ordered catalog names as rendered. */
+export function computeNaiPresetFingerprint(target: "kayra" | "erato", presetNames: readonly string[]): string {
+  return createHash("sha256")
+    .update(`config-nai-preset:${target}:${JSON.stringify([...presetNames])}`)
+    .digest("base64url")
+    .slice(0, 8);
+}
+
 /**
  * Provider entries one Switch Models select renders directly. A clearable slot spends one of
  * Discord's 25 option slots on its None entry, so the renderer subtracts that before slicing and
@@ -452,6 +465,7 @@ export type ConfigPanelRoute =
       nonce: string;
     }
   | { action: "parameters-provider-select"; locale: string }
+  | { action: "nai-preset-select"; locale: string; start: number; fp: string }
   | { action: "sampling-open"; locale: string; provider: string }
   | { action: "sampling-submit"; locale: string; provider: string; nonce: string }
   | { action: "generation-open"; locale: string; provider: string }
@@ -861,6 +875,7 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "endpoint-select": { wireToken: "ep-select", fields: [capabilityField] },
   "model-modal-submit": { wireToken: "model-modal", fields: [capabilityField, providerField, nonceField] },
   "parameters-provider-select": { wireToken: "param-prov-select", fields: [] },
+  "nai-preset-select": { wireToken: "nai-preset-select", fields: [startField, fpField] },
   "sampling-open": { wireToken: "sampling-open", fields: [providerField] },
   "sampling-submit": { wireToken: "sampling-sub", fields: [providerField, nonceField] },
   "generation-open": { wireToken: "generation-open", fields: [providerField] },

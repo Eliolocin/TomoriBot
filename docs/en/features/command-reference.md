@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **41**. Runnable slash commands: **79**.
+Top-level command groups: **41**. Runnable slash commands: **78**.
 
 ## `/comment`
 
@@ -184,7 +184,6 @@ Configure NovelAI text and image generation for this server.
 | Command | Summary |
 |---|---|
 | `/novelai generate image` | Generate a NovelAI image using imageboard-style tags and an optional character reference. |
-| `/novelai preset text` | Apply a NovelAI sampling preset to this server's text generation settings. |
 
 ## `/nsfw`
 

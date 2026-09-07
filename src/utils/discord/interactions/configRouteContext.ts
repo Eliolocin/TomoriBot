@@ -8,6 +8,7 @@ import {
 } from "discord.js";
 import type {
   LlmRow,
+  NaiPresetRow,
   AutochatPersonaOverride,
   PersonaSpriteRow,
   RandomTriggerRow,
@@ -260,7 +261,10 @@ export interface ConfigRouteDependencies {
     state: TomoriState,
     requestedProvider: string | undefined,
     logitBiasPageStart: number,
+    naiPresetPageStart?: number,
+    workspaceKind?: "guild" | "dm",
   ): Promise<ConfigParametersView>;
+  loadNaiPresets(target: "kayra" | "erato"): Promise<NaiPresetRow[]>;
   loadFallbacksView(
     state: TomoriState,
     locale: string,
@@ -403,6 +407,7 @@ export interface ConfigRepaintOptions {
   randomTriggerPageStart?: number;
   parametersProvider?: string;
   logitBiasPageStart?: number;
+  naiPresetPageStart?: number;
   fallbackExpandedProvider?: string | null;
   fallbackEntryStart?: number;
   voicesView?: ConfigVoicesView;
@@ -490,6 +495,8 @@ export async function repaint(
           state,
           options.parametersProvider,
           options.logitBiasPageStart ?? 0,
+          options.naiPresetPageStart ?? 0,
+          scope.guildId ? "guild" : "dm",
         );
       } else if (page === "fallbacks") {
         modelFallbacksView = await dependencies.loadFallbacksView(

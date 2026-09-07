@@ -14,6 +14,10 @@ import {
   computeStopStringFingerprint,
   type ConfigModelCapability,
   CONFIG_MODEL_PAGE_SIZE,
+  CONFIG_NAI_PRESET_PAGE_SIZE,
+  CONFIG_NAI_PRESET_NEXT_VALUE,
+  CONFIG_NAI_PRESET_PREVIOUS_VALUE,
+  computeNaiPresetFingerprint,
   isConfigCatalogModelCapability,
   type ConfigCatalogModelCapability,
   type ConfigPage,
@@ -31,6 +35,7 @@ import {
 } from "@/utils/discord/interactions/configModelLoaders";
 import {
   currentModelIdForCapability,
+  resolveNaiPresetTarget,
   type ConfigParameterPatch,
 } from "@/utils/discord/interactions/configModelOperations";
 import {
@@ -102,6 +107,7 @@ export const CONFIG_MODEL_SELECT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "model-provider-select",
   "endpoint-select",
   "parameters-provider-select",
+  "nai-preset-select",
   "fallback-provider-select",
   "logit-manage-select",
 ]);
@@ -765,6 +771,79 @@ async function handleParameters(context: ConfigModelRouteContext): Promise<boole
   const locale = route.locale;
   const state = serverStateFromScope(context.scope);
   if (!state) return false;
+
+  if (route.action === "nai-preset-select") {
+    const target = resolveNaiPresetTarget(state);
+    if (!target) {
+      await baseRepaint(context, "parameters", { receipt: staleReceipt(locale) });
+      return true;
+    }
+
+    const presets = await dependencies.loadNaiPresets(target);
+    const fingerprint = computeNaiPresetFingerprint(
+      target,
+      presets.map((preset) => preset.preset_name),
+    );
+    if (route.fp !== fingerprint || route.start % CONFIG_NAI_PRESET_PAGE_SIZE !== 0 || route.start >= presets.length) {
+      await baseRepaint(context, "parameters", { receipt: staleReceipt(locale) });
+      return true;
+    }
+
+    const submittedValue = context.selectedValue;
+    if (submittedValue === CONFIG_NAI_PRESET_PREVIOUS_VALUE || submittedValue === CONFIG_NAI_PRESET_NEXT_VALUE) {
+      const pageCount = Math.max(1, Math.ceil(presets.length / CONFIG_NAI_PRESET_PAGE_SIZE));
+      const pageIndex = Math.floor(route.start / CONFIG_NAI_PRESET_PAGE_SIZE);
+      const nextPageIndex =
+        submittedValue === CONFIG_NAI_PRESET_PREVIOUS_VALUE
+          ? (pageIndex - 1 + pageCount) % pageCount
+          : (pageIndex + 1) % pageCount;
+      await baseRepaint(context, "parameters", {
+        naiPresetPageStart: nextPageIndex * CONFIG_NAI_PRESET_PAGE_SIZE,
+      });
+      return true;
+    }
+
+    if (!submittedValue || !/^(0|[1-9]\d*)$/.test(submittedValue)) {
+      await baseRepaint(context, "parameters", { receipt: staleReceipt(locale) });
+      return true;
+    }
+    const position = Number(submittedValue);
+    const expectedStart = Math.floor(position / CONFIG_NAI_PRESET_PAGE_SIZE) * CONFIG_NAI_PRESET_PAGE_SIZE;
+    const chosenPreset = Number.isSafeInteger(position) && position >= 0 ? presets[position] : undefined;
+    if (!chosenPreset || chosenPreset.model_target !== target || route.start !== expectedStart) {
+      await baseRepaint(context, "parameters", { receipt: staleReceipt(locale) });
+      return true;
+    }
+
+    const action = await performPanelAction(
+      () =>
+        dependencies.modelOperations.applyNaiPreset({
+          tomoriState: state,
+          serverDiscId: context.scope.serverDiscId,
+          preset: chosenPreset,
+        }),
+      () => dependencies.resolveScope(context.interaction, true),
+    );
+    context.scope = action.state ?? context.scope;
+    const result = action.result;
+    if (result.status === "success") recordModelAction(context, "server-config.workspace.parameters.set");
+    await baseRepaint(context, "parameters", {
+      naiPresetPageStart: route.start,
+      receipt:
+        result.status === "success"
+          ? receipt(
+              locale,
+              "success",
+              "commands.novelai.preset.text.success_title",
+              "commands.novelai.preset.text.success_description",
+              { preset_name: chosenPreset.preset_name },
+            )
+          : result.status === "not-found"
+            ? staleReceipt(locale)
+            : writeFailedReceipt(locale),
+    });
+    return true;
+  }
 
   if (route.action === "parameters-provider-select") {
     await baseRepaint(context, "parameters", { parametersProvider: context.selectedValue ?? undefined });

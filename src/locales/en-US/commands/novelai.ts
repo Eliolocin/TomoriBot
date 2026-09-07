@@ -20,7 +20,6 @@ export default {
       cleared_persona_description: `Cleared the NovelAI character reference image for **{persona_name}**.`,
     },
     preset: {
-      description: `Apply NovelAI sampling presets.`,
       text: {
         description: `Apply a NovelAI sampling preset to this server's text generation settings.`,
         not_novelai_title: `NovelAI Provider Required`,

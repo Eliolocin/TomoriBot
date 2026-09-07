@@ -8,6 +8,7 @@ import {
   type TextDisplayComponentData,
 } from "discord.js";
 import type { SavedProviderConfigRow } from "@/types/db/schema";
+import { CONFIG_NAI_PRESET_NEXT_VALUE, computeNaiPresetFingerprint } from "@/utils/discord/configPanelCatalog";
 import { buildConfigModelsBody, type ConfigParametersView } from "@/utils/discord/ui/configModelsPanel";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
@@ -65,6 +66,18 @@ function makeParametersView(textProviders: string[]): ConfigParametersView {
     speakerPatternEnabled: false,
     logitBiasEntries: [],
     logitBiasPageStart: 0,
+  };
+}
+
+function makeNaiPreset(name: string, target: "kayra" | "erato" = "kayra") {
+  return {
+    nai_preset_id: 1,
+    preset_name: name,
+    model_target: target,
+    is_default: false,
+    preset_desc: `English description for ${name}`,
+    ja_preset_desc: `Japanese description for ${name}`,
+    parameters: {},
   };
 }
 
@@ -196,5 +209,73 @@ describe("configModelsPanel parameters block", () => {
         component.type === ComponentType.TextDisplay && component.content === noProvidersMessage,
     );
     expect(noProvidersDisplay).toBeDefined();
+  });
+
+  it("renders the compatible NovelAI preset block with the active preset and bounded navigation", () => {
+    const presets = Array.from({ length: 27 }, (_entry, index) => makeNaiPreset(`preset-${index + 1}`));
+    const components = buildConfigModelsBody({
+      locale: "en-US",
+      page: "parameters",
+      readStatus: "fresh",
+      parametersView: {
+        ...makeParametersView(["novelai"]),
+        naiPresetView: {
+          target: "kayra",
+          compatibility: "eligible",
+          presets,
+          activePresetName: "preset-24",
+          fingerprint: computeNaiPresetFingerprint(
+            "kayra",
+            presets.map((preset) => preset.preset_name),
+          ),
+          pageStart: 0,
+        },
+      },
+    });
+    const flat = flattenComponents(components);
+    const presetText = flat.find(
+      (component): component is TextDisplayComponentData =>
+        component.type === ComponentType.TextDisplay && component.content.includes("preset-24"),
+    );
+    expect(presetText).toBeDefined();
+
+    const presetSelect = flat.find(
+      (component): component is StringSelectMenuComponentData =>
+        component.type === ComponentType.StringSelect && component.options.some((option) => option.value === "0"),
+    );
+    expect(presetSelect).toBeDefined();
+    expect(presetSelect?.options).toHaveLength(25);
+    expect(presetSelect?.options.some((option) => option.value === CONFIG_NAI_PRESET_NEXT_VALUE)).toBe(true);
+  });
+
+  it("keeps the preset block visible but disabled with the compatibility explanation", () => {
+    const components = buildConfigModelsBody({
+      locale: "en-US",
+      page: "parameters",
+      readStatus: "fresh",
+      parametersView: {
+        ...makeParametersView(["google"]),
+        naiPresetView: {
+          target: null,
+          compatibility: "not-novelai",
+          presets: [],
+          activePresetName: null,
+          fingerprint: null,
+          pageStart: 0,
+        },
+      },
+    });
+    const flat = flattenComponents(components);
+    expect(
+      flat.some(
+        (component) =>
+          component.type === ComponentType.TextDisplay &&
+          component.content.includes(localizer("en-US", "commands.novelai.preset.text.not_novelai_description")),
+      ),
+    ).toBe(true);
+    const disabledSelect = flat.find(
+      (component): component is StringSelectMenuComponentData => component.type === ComponentType.StringSelect,
+    );
+    expect(disabledSelect?.disabled).toBe(true);
   });
 });

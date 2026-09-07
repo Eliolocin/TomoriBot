@@ -5,13 +5,15 @@ import type {
   CustomEndpointRow,
   FallbackEntry,
   FallbackModelRef,
+  NaiPresetRow,
   TomoriState,
 } from "@/types/db/schema";
-import { llmModelRepo, llmOverrideRepo, llmProviderRepo } from "@/utils/db/repositories";
+import { configRepository, llmModelRepo, llmOverrideRepo, llmProviderRepo } from "@/utils/db/repositories";
 import {
   CONFIG_FALLBACK_PAGE_SIZE,
   CONFIG_FALLBACK_SLOT_COUNT,
   CONFIG_MODEL_CAPABILITY_ORDER,
+  computeNaiPresetFingerprint,
   isConfigCatalogModelCapability,
   type ConfigCatalogModelCapability,
 } from "@/utils/discord/configPanelCatalog";
@@ -19,6 +21,7 @@ import {
   CONFIG_FALLBACK_ENDPOINT_PREFIX,
   loadConfigModelChoices,
   loadConfigModelProviders,
+  resolveNaiPresetTarget,
 } from "@/utils/discord/interactions/configModelOperations";
 import type { ConfigFallbackOption } from "@/utils/discord/ui/configModelModals";
 import type {
@@ -234,6 +237,8 @@ export async function loadConfigParametersView(
   state: TomoriState,
   requestedProvider: string | undefined,
   logitBiasPageStart: number,
+  naiPresetPageStart = 0,
+  workspaceKind: "guild" | "dm" = "guild",
 ): Promise<ConfigParametersView> {
   const providers = await loadSavedProvidersForCapability(state.server_id, "text");
   const selected =
@@ -241,6 +246,30 @@ export async function loadConfigParametersView(
     providers.find((row) => row.provider.toLowerCase() === state.llm?.llm_provider?.toLowerCase()) ??
     providers[0] ??
     null;
+
+  let naiPresetView: ConfigParametersView["naiPresetView"];
+  if (workspaceKind === "guild") {
+    const target = resolveNaiPresetTarget(state);
+    const presets: NaiPresetRow[] = target ? await configRepository.loadNaiPresets(target) : [];
+    naiPresetView = {
+      target,
+      compatibility:
+        target === null
+          ? state.llm.llm_provider.toLowerCase() === "novelai"
+            ? "unsupported"
+            : "not-novelai"
+          : "eligible",
+      presets,
+      activePresetName: state.nai_preset?.preset_name ?? null,
+      fingerprint: target
+        ? computeNaiPresetFingerprint(
+            target,
+            presets.map((preset) => preset.preset_name),
+          )
+        : null,
+      pageStart: naiPresetPageStart,
+    };
+  }
 
   return {
     textProviders: providers.map((row) => row.provider),
@@ -250,6 +279,7 @@ export async function loadConfigParametersView(
     speakerPatternEnabled: state.config.llm_stop_speaker_pattern_enabled ?? false,
     logitBiasEntries: state.config.llm_logit_biases ?? [],
     logitBiasPageStart,
+    naiPresetView,
   };
 }
 

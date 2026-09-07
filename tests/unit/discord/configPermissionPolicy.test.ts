@@ -756,6 +756,14 @@ describe("isConfigRouteAuthorized", () => {
     expect(MODELS_PAGE_BY_ROUTE["endpoint-select"]).toBe("switch");
   });
 
+  it("keeps the NovelAI preset selection manager-only and outside DM workspaces", () => {
+    const route: ConfigPanelRoute = { action: "nai-preset-select", locale: "en-US", start: 0, fp: "abcd1234" };
+    expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+    expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+    expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(false);
+    expect(MODELS_PAGE_BY_ROUTE["nai-preset-select"]).toBe("parameters");
+  });
+
   it("keeps every TTS Parameters & Voices route manager-only in a guild and open to a DM owner", () => {
     // These ten absorb /speech leaves that shipped with no handler-level check at all, so the panel
     // route is their entire gate. The DM owner keeps access because the page is workspace scoped.

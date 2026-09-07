@@ -587,6 +587,10 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   ["config:v1:param-prov-select:en-US", { action: "parameters-provider-select", locale: "en-US" }],
+  [
+    "config:v1:nai-preset-select:en-US:0:deadbeef",
+    { action: "nai-preset-select", locale: "en-US", start: 0, fp: "deadbeef" },
+  ],
   ["config:v1:sampling-open:en-US:google", { action: "sampling-open", locale: "en-US", provider: "google" }],
   [
     "config:v1:sampling-sub:en-US:google:nonce1234567",

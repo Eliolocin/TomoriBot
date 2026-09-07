@@ -602,14 +602,16 @@ export function resolveChannelsOverridesActionState(
  * Models carries no per-action exception: re-derived from source, `/model text|vision|embedding|
  * image|video`, `/model parameters|fallback|stop-strings|logit-bias`, `/config model-randomizer`,
  * and `/config image-tags` carry no handler Manage Guild gate at all, so their whole protection was
- * the registration default. The page state is therefore the entire gate, and it is what the route
- * layer re-resolves on every interaction.
+ * the registration default. The NovelAI preset route is additionally guild-only because its
+ * control is omitted from DMs. The page state is therefore the gate for the remaining routes, and
+ * it is what the route layer re-resolves on every interaction.
  */
 export const MODELS_PAGE_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigPage>> = {
   "model-provider-select": "switch",
   "endpoint-select": "switch",
   "model-modal-submit": "switch",
   "parameters-provider-select": "parameters",
+  "nai-preset-select": "parameters",
   "sampling-open": "parameters",
   "sampling-submit": "parameters",
   "generation-open": "parameters",
@@ -681,6 +683,7 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
 
   const modelsPage = MODELS_PAGE_BY_ROUTE[route.action];
   if (modelsPage) {
+    if (route.action === "nai-preset-select" && actor.workspaceKind === "dm") return false;
     return (
       resolveConfigCategoryState("models", actor) === "enabled" &&
       resolveConfigPageState("models", modelsPage, actor) === "enabled"

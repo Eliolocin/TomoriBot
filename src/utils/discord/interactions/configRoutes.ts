@@ -503,6 +503,7 @@ const defaultDependencies: ConfigRouteDependencies = {
   loadCapabilityEndpoints: loadConfigCapabilityEndpoints,
   loadSwitchModelsView: loadConfigSwitchModelsView,
   loadParametersView: loadConfigParametersView,
+  loadNaiPresets: (target) => configRepository.loadNaiPresets(target),
   loadFallbacksView: loadConfigFallbacksView,
   loadImageGenerationView: loadConfigImageGenerationView,
   loadVoicesView: (state, requestedStart, loaderDependencies) =>

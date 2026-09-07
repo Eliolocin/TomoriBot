@@ -20,6 +20,9 @@ import {
   CONFIG_MODEL_CLEAR_VALUE,
   CONFIG_MODEL_PAGE_SIZE,
   CONFIG_MODEL_CAPABILITY_ORDER,
+  CONFIG_NAI_PRESET_NEXT_VALUE,
+  CONFIG_NAI_PRESET_PAGE_SIZE,
+  computeNaiPresetFingerprint,
   isConfigCatalogModelCapability,
   type ConfigCatalogModelCapability,
   type ConfigModelCapability,
@@ -43,6 +46,7 @@ import {
 } from "@/utils/discord/interactions/configModelLoaders";
 import { createConfigInteractionRoute } from "@/utils/discord/interactions/configRoutes";
 import type { ConfigRouteDependencies, ConfigScope } from "@/utils/discord/interactions/configRouteContext";
+import type { NaiPresetRow } from "@/types/db/schema";
 import { providerPanelOperations } from "@/utils/provider/providerPanelOperations";
 import type { ConfigCapabilityEndpoint } from "@/utils/discord/interactions/configModelLoaders";
 import type { ConfigEndpointSlotView } from "@/utils/discord/ui/configModelsPanel";
@@ -139,6 +143,18 @@ function makeSavedProvider(provider: string, overrides: Record<string, unknown> 
   } as unknown as SavedProviderConfigRow;
 }
 
+function makeNaiPreset(name: string, target: "kayra" | "erato" = "kayra"): NaiPresetRow {
+  return {
+    nai_preset_id: 1,
+    preset_name: name,
+    model_target: target,
+    is_default: false,
+    preset_desc: `Description for ${name}`,
+    ja_preset_desc: `Translated description for ${name}`,
+    parameters: {},
+  };
+}
+
 function makeEndpointSlot(capability: "tts" | "stt", count: number, activeIndex = -1): ConfigEndpointSlotView {
   const serviceCapability = capability === "tts" ? "speech" : "transcription";
   const apiStyle = capability === "tts" ? "tts-clone" : "openai-compatible-transcription";
@@ -165,6 +181,7 @@ interface HarnessOptions {
   currentProviders?: Partial<Record<ConfigModelCapability, string | null>>;
   models?: Array<{ id: number; name: string; description: string | null }>;
   parametersProviders?: string[];
+  naiPresets?: NaiPresetRow[];
   selectedConfig?: SavedProviderConfigRow | null;
   fallbackProviderEntries?: Array<{ value: string; label: string }>;
   endpointSlots?: ConfigEndpointSlotView[];
@@ -179,7 +196,6 @@ interface Harness {
   modals: unknown[];
   checkboxValues: Record<string, string[] | undefined>;
   selectValues: Record<string, string | undefined>;
-  deferredAtWrite: boolean[];
 }
 
 function makeHarness(options: HarnessOptions = {}): Harness {
@@ -189,7 +205,6 @@ function makeHarness(options: HarnessOptions = {}): Harness {
   const modals: unknown[] = [];
   const checkboxValues: Record<string, string[] | undefined> = {};
   const selectValues: Record<string, string | undefined> = {};
-  const deferredAtWrite: boolean[] = [];
 
   const buildScope = (forceRefresh: boolean): ConfigScope | null => {
     if (options.unavailable) return null;
@@ -214,7 +229,6 @@ function makeHarness(options: HarnessOptions = {}): Harness {
     modals,
     checkboxValues,
     selectValues,
-    deferredAtWrite,
     dependencies: {
       resolveScope: async (_interaction, forceRefresh = false) => buildScope(forceRefresh),
       getPersonaAvatarData: async () => ({ url: null, files: [] }),
@@ -261,9 +275,18 @@ function makeHarness(options: HarnessOptions = {}): Harness {
       }),
       loadCapabilityEndpoints: async (_state, capability) =>
         options.endpointSlots?.find((slot) => slot.capability === capability)?.endpoints ?? [],
-      loadParametersView: async (_state, requestedProvider) => {
+      loadParametersView: async (_state, requestedProvider, _logitBiasPageStart, naiPresetPageStart = 0) => {
         const providers = options.parametersProviders ?? ["google"];
+        const parameterState = options.state ?? makeState();
         const selected = providers.includes(requestedProvider ?? "") ? (requestedProvider as string) : providers[0];
+        const naiTarget =
+          parameterState.llm.llm_provider.toLowerCase() === "novelai"
+            ? parameterState.llm.llm_codename === "kayra-v1"
+              ? "kayra"
+              : parameterState.llm.llm_codename === "llama-3-erato-v1"
+                ? "erato"
+                : null
+            : null;
         return {
           textProviders: providers,
           selectedProvider: selected ?? null,
@@ -273,8 +296,28 @@ function makeHarness(options: HarnessOptions = {}): Harness {
           speakerPatternEnabled: options.state?.config.llm_stop_speaker_pattern_enabled ?? false,
           logitBiasEntries: options.state?.config.llm_logit_biases ?? [],
           logitBiasPageStart: 0,
+          naiPresetView: options.naiPresets
+            ? {
+                target: naiTarget,
+                compatibility: naiTarget
+                  ? "eligible"
+                  : parameterState.llm.llm_provider === "novelai"
+                    ? "unsupported"
+                    : "not-novelai",
+                presets: options.naiPresets,
+                activePresetName: parameterState.nai_preset?.preset_name ?? null,
+                fingerprint: naiTarget
+                  ? computeNaiPresetFingerprint(
+                      naiTarget,
+                      options.naiPresets.map((preset) => preset.preset_name),
+                    )
+                  : null,
+                pageStart: naiPresetPageStart,
+              }
+            : undefined,
         };
       },
+      loadNaiPresets: async (target) => (options.naiPresets ?? []).filter((preset) => preset.model_target === target),
       loadFallbacksView: async () => ({
         slots: [{ label: null }, { label: null }, { label: null }, { label: null }, { label: null }],
         providerEntries: options.fallbackProviderEntries ?? [
@@ -395,6 +438,24 @@ function findComponentByCustomId(value: unknown, customId: string): Record<strin
   if (record.customId === customId) return record;
   for (const entry of Object.values(record)) {
     const match = findComponentByCustomId(entry, customId);
+    if (match) return match;
+  }
+  return undefined;
+}
+
+function findComponentByCustomIdFragment(value: unknown, fragment: string): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const match = findComponentByCustomIdFragment(entry, fragment);
+      if (match) return match;
+    }
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.customId === "string" && record.customId.includes(fragment)) return record;
+  for (const entry of Object.values(record)) {
+    const match = findComponentByCustomIdFragment(entry, fragment);
     if (match) return match;
   }
   return undefined;
@@ -1642,6 +1703,120 @@ describe("config models parameters page", () => {
     upsert.mockRestore();
     modelUpdate.mockRestore();
     chatUpdate.mockRestore();
+  });
+
+  it("dispatches a compatible preset selection through the deferred real route", async () => {
+    const presets = [makeNaiPreset("preset-1"), makeNaiPreset("preset-2")];
+    const state = makeState({
+      llm: { llm_id: 1, llm_codename: "kayra-v1", llm_provider: "novelai" },
+      nai_preset: presets[0],
+    });
+    const harness = makeHarness({ state, naiPresets: presets, parametersProviders: ["novelai"] });
+    const interaction = makeInteraction({
+      customId: buildConfigRouteId({
+        action: "nai-preset-select",
+        locale: "en-US",
+        start: 0,
+        fp: computeNaiPresetFingerprint(
+          "kayra",
+          presets.map((preset) => preset.preset_name),
+        ),
+      }),
+      kind: "select",
+      values: ["1"],
+      harness,
+    });
+    let acknowledgedAtWrite = false;
+    const apply = spyOn(configRepository, "applyNaiPreset").mockImplementation(async () => {
+      acknowledgedAtWrite = interaction.deferred || interaction.replied;
+      return true;
+    });
+    await dispatch(harness, interaction);
+    expect(acknowledgedAtWrite).toBe(true);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply.mock.calls[0]?.[1]?.preset_name).toBe("preset-2");
+    expectValidComponentsV2Payload(harness.edits.at(-1));
+    apply.mockRestore();
+  });
+
+  it("denies the preset route in a DM before any repository write", async () => {
+    const presets = [makeNaiPreset("preset-1"), makeNaiPreset("preset-2")];
+    const state = makeState({ llm: { llm_id: 1, llm_codename: "kayra-v1", llm_provider: "novelai" } });
+    const apply = spyOn(configRepository, "applyNaiPreset").mockResolvedValue(true);
+    const harness = makeHarness({ state, naiPresets: presets, parametersProviders: ["novelai"] });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "nai-preset-select",
+          locale: "en-US",
+          start: 0,
+          fp: computeNaiPresetFingerprint(
+            "kayra",
+            presets.map((preset) => preset.preset_name),
+          ),
+        }),
+        kind: "select",
+        values: ["1"],
+        inGuild: false,
+        harness,
+      }),
+    );
+    expect(apply).not.toHaveBeenCalled();
+    apply.mockRestore();
+  });
+
+  it("rejects malformed, out-of-range, and stale preset selections without a repository write", async () => {
+    const presets = [makeNaiPreset("preset-1"), makeNaiPreset("preset-2")];
+    const state = makeState({ llm: { llm_id: 1, llm_codename: "kayra-v1", llm_provider: "novelai" } });
+    const apply = spyOn(configRepository, "applyNaiPreset").mockResolvedValue(true);
+    const fingerprint = computeNaiPresetFingerprint(
+      "kayra",
+      presets.map((preset) => preset.preset_name),
+    );
+    const cases = [
+      { value: "not-a-position", fp: fingerprint },
+      { value: "99", fp: fingerprint },
+      { value: "1", fp: "deadbeef" },
+    ];
+    for (const testCase of cases) {
+      const harness = makeHarness({ state, naiPresets: presets, parametersProviders: ["novelai"] });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({ action: "nai-preset-select", locale: "en-US", start: 0, fp: testCase.fp }),
+          kind: "select",
+          values: [testCase.value],
+          harness,
+        }),
+      );
+    }
+    expect(apply).not.toHaveBeenCalled();
+    apply.mockRestore();
+  });
+
+  it("uses in-select navigation to reach presets beyond the first 25 options", async () => {
+    const presets = Array.from({ length: 50 }, (_entry, index) => makeNaiPreset(`preset-${index + 1}`));
+    const state = makeState({ llm: { llm_id: 1, llm_codename: "kayra-v1", llm_provider: "novelai" } });
+    const harness = makeHarness({ state, naiPresets: presets, parametersProviders: ["novelai"] });
+    const fingerprint = computeNaiPresetFingerprint(
+      "kayra",
+      presets.map((preset) => preset.preset_name),
+    );
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "nai-preset-select", locale: "en-US", start: 0, fp: fingerprint }),
+        kind: "select",
+        values: [CONFIG_NAI_PRESET_NEXT_VALUE],
+        harness,
+      }),
+    );
+    const nextPageSelect = findComponentByCustomIdFragment(harness.edits.at(-1), "nai-preset-select") as
+      | { options?: Array<{ value: string }>; customId?: string }
+      | undefined;
+    expect(nextPageSelect?.options?.some((option) => option.value === String(CONFIG_NAI_PRESET_PAGE_SIZE))).toBe(true);
+    expect(nextPageSelect?.customId).toContain(":23:");
   });
 });
 
