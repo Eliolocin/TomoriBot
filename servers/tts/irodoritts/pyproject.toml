@@ -1,0 +1,95 @@
+[project]
+name = "tomoribot-irodori-sidecar"
+version = "0.1.0"
+description = "TomoriBot local Irodori-TTS sidecar"
+requires-python = ">=3.10"
+dependencies = [
+    "dacvae",
+    "fastapi>=0.115.0",
+    "irodori-tts",
+    "pydantic>=2.5.0",
+    "torch>=2.10.0,<2.11.0",
+    "torchaudio>=2.10.0,<2.11.0",
+    "uvicorn[standard]>=0.32.0",
+]
+
+[project.optional-dependencies]
+cpu = [
+    "torch>=2.10.0,<2.11.0",
+    "torchao>=0.16.0,<0.17.0",
+    "torchaudio>=2.10.0,<2.11.0",
+]
+cu128 = [
+    "torch>=2.10.0,<2.11.0",
+    "torchao>=0.16.0,<0.17.0",
+    "torchaudio>=2.10.0,<2.11.0",
+]
+rocm = [
+    "pytorch-triton-rocm>=3.5.1; sys_platform == 'linux'",
+    "torch>=2.10.0,<2.11.0",
+    "torchao>=0.16.0,<0.17.0",
+    "torchaudio>=2.10.0,<2.11.0",
+    "triton-rocm>=3.6.0; sys_platform == 'linux'",
+]
+xpu = [
+    "torch>=2.10.0,<2.11.0; sys_platform == 'linux' or sys_platform == 'win32'",
+    "torchao>=0.16.0,<0.17.0; sys_platform == 'linux' or sys_platform == 'win32'",
+    "torchaudio>=2.10.0,<2.11.0; sys_platform == 'linux' or sys_platform == 'win32'",
+    "triton-xpu==3.6.0; sys_platform == 'linux' or sys_platform == 'win32'",
+]
+
+[tool.uv]
+package = false
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "cu128" },
+        { extra = "rocm" },
+        { extra = "xpu" },
+    ],
+]
+
+[tool.uv.sources]
+irodori-tts = { git = "https://github.com/Aratako/Irodori-TTS.git", rev = "8224dafb46d0aba89209a8f905f1cb7e3299d9c1" }
+dacvae = { git = "https://github.com/facebookresearch/dacvae.git", rev = "414c20785fc3a28373073ea8ef7a1316eeeaca6e" }
+torch = [
+    { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { index = "pytorch-cu128", extra = "cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { index = "pytorch-rocm", extra = "rocm", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-xpu", extra = "xpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchaudio = [
+    { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { index = "pytorch-cu128", extra = "cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+    { index = "pytorch-rocm", extra = "rocm", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-xpu", extra = "xpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+pytorch-triton-rocm = [
+    { index = "pytorch-rocm", extra = "rocm", marker = "sys_platform == 'linux'" },
+]
+triton-rocm = [
+    { index = "pytorch-rocm", extra = "rocm", marker = "sys_platform == 'linux'" },
+]
+triton-xpu = [
+    { index = "pytorch-xpu", extra = "xpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm7.1"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-xpu"
+url = "https://download.pytorch.org/whl/xpu"
+explicit = true
