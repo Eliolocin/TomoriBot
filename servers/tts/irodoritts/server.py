@@ -113,9 +113,11 @@ def load_model() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
   load_model()
-  yield
-  if runtime is not None:
-    runtime.unload()
+  try:
+    yield
+  finally:
+    if runtime is not None:
+      runtime.unload()
 
 
 app = FastAPI(title="TomoriBot Irodori-TTS Server", lifespan=lifespan)
