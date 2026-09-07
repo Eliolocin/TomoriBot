@@ -54,6 +54,7 @@ import {
   parseInteractionRoute,
   type ParsedInteractionRoute,
 } from "@/utils/discord/interactions/routeRegistry";
+import { hasRawModalAcknowledgement } from "@/utils/discord/ui/interactionCore";
 import {
   buildConditioningCheckboxGroupId,
   buildConfigModalFieldId,
@@ -2745,7 +2746,7 @@ describe("config Persona Advanced routes", () => {
       ].map((field) => [buildConfigModalFieldId(field, "nonce1234567"), values[field] ?? ""]),
     );
 
-  it("opens ATTG with five prefilled routed inputs without deferring first", async () => {
+  it("opens ATTG with five prefilled routed inputs and acknowledges through showModal", async () => {
     const persona = makePersona({
       persona_id: 55,
       nai_attg_author: "Old Author",
@@ -2760,9 +2761,30 @@ describe("config Persona Advanced routes", () => {
       harness,
     });
 
+    const fetchSpy = spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+    let stateAtShowModal: { deferred: boolean; replied: boolean; rawModalAcknowledged: boolean } | undefined;
+    let stateAfterShowModal: { deferred: boolean; replied: boolean; rawModalAcknowledged: boolean } | undefined;
+    harness.dependencies.showModal = async (modalInteraction, payload) => {
+      stateAtShowModal = {
+        deferred: modalInteraction.deferred,
+        replied: modalInteraction.replied,
+        rawModalAcknowledged: hasRawModalAcknowledgement(modalInteraction),
+      };
+      await modalModule.showRoutedRawModal(modalInteraction, payload);
+      stateAfterShowModal = {
+        deferred: modalInteraction.deferred,
+        replied: modalInteraction.replied,
+        rawModalAcknowledged: hasRawModalAcknowledgement(modalInteraction),
+      };
+      harness.modals.push(payload);
+    };
+
     await dispatch(harness, interaction);
 
-    expect(interaction.deferred).toBe(false);
+    expect(stateAtShowModal).toEqual({ deferred: false, replied: false, rawModalAcknowledged: false });
+    expect(stateAfterShowModal).toEqual({ deferred: false, replied: false, rawModalAcknowledged: true });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    fetchSpy.mockRestore();
     const modal = harness.modals[0] as {
       custom_id: string;
       components: Array<{ component?: { type: number; custom_id: string; value?: string; max_length?: number } }>;
@@ -2858,6 +2880,157 @@ describe("config Persona Advanced routes", () => {
           }),
           kind: "modal",
           fields: attgFields({ [CONFIG_NAI_ATTG_STARS_FIELD]: stars }),
+          harness,
+        }),
+      );
+    }
+    expect(setAttgSpy).not.toHaveBeenCalled();
+    setAttgSpy.mockRestore();
+  });
+
+  it("accepts only canonical Stars values and preserves a blank as null", async () => {
+    const setAttgSpy = spyOn(personaRepository, "setNaiAttg").mockResolvedValue(true);
+    const cases: Array<{ raw: string; expected: number | null | false }> = [
+      { raw: "0", expected: false },
+      { raw: "1", expected: 1 },
+      { raw: "5", expected: 5 },
+      { raw: "6", expected: false },
+      { raw: "01", expected: false },
+      { raw: "", expected: null },
+      { raw: "abc", expected: false },
+    ];
+
+    for (const entry of cases) {
+      setAttgSpy.mockClear();
+      const harness = makeHarness({ personas: [makePersona({ persona_id: 55 })] });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({
+            action: "attg-submit",
+            locale: "en-US",
+            personaId: 55,
+            nonce: "nonce1234567",
+          }),
+          kind: "modal",
+          fields: attgFields({ [CONFIG_NAI_ATTG_STARS_FIELD]: entry.raw }),
+          harness,
+        }),
+      );
+
+      if (entry.expected === false) {
+        expect(setAttgSpy).not.toHaveBeenCalled();
+      } else {
+        expect(setAttgSpy).toHaveBeenCalledWith(55, {
+          nai_attg_author: null,
+          nai_attg_title: null,
+          nai_attg_tags: null,
+          nai_attg_genre: null,
+          nai_attg_stars: entry.expected,
+        });
+      }
+    }
+    setAttgSpy.mockRestore();
+  });
+
+  it("clears one ATTG column at a time while retaining the other values", async () => {
+    const setAttgSpy = spyOn(personaRepository, "setNaiAttg").mockResolvedValue(true);
+    const fields = [
+      CONFIG_NAI_ATTG_AUTHOR_FIELD,
+      CONFIG_NAI_ATTG_TITLE_FIELD,
+      CONFIG_NAI_ATTG_TAGS_FIELD,
+      CONFIG_NAI_ATTG_GENRE_FIELD,
+      CONFIG_NAI_ATTG_STARS_FIELD,
+    ];
+
+    for (const blankField of fields) {
+      setAttgSpy.mockClear();
+      const values = Object.fromEntries(
+        fields.map((field) => [
+          field,
+          field === blankField ? " " : field === CONFIG_NAI_ATTG_STARS_FIELD ? " 5 " : ` ${field} `,
+        ]),
+      );
+      const harness = makeHarness({ personas: [makePersona({ persona_id: 55 })] });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId: buildConfigRouteId({
+            action: "attg-submit",
+            locale: "en-US",
+            personaId: 55,
+            nonce: "nonce1234567",
+          }),
+          kind: "modal",
+          fields: attgFields(values),
+          harness,
+        }),
+      );
+
+      expect(setAttgSpy).toHaveBeenCalledWith(55, {
+        nai_attg_author: blankField === CONFIG_NAI_ATTG_AUTHOR_FIELD ? null : CONFIG_NAI_ATTG_AUTHOR_FIELD,
+        nai_attg_title: blankField === CONFIG_NAI_ATTG_TITLE_FIELD ? null : CONFIG_NAI_ATTG_TITLE_FIELD,
+        nai_attg_tags: blankField === CONFIG_NAI_ATTG_TAGS_FIELD ? null : CONFIG_NAI_ATTG_TAGS_FIELD,
+        nai_attg_genre: blankField === CONFIG_NAI_ATTG_GENRE_FIELD ? null : CONFIG_NAI_ATTG_GENRE_FIELD,
+        nai_attg_stars: blankField === CONFIG_NAI_ATTG_STARS_FIELD ? null : 5,
+      });
+    }
+    setAttgSpy.mockRestore();
+  });
+
+  it("keeps Clear All's receipt distinct from a saved ATTG receipt", async () => {
+    const setAttgSpy = spyOn(personaRepository, "setNaiAttg").mockResolvedValue(true);
+    const harness = makeHarness({ personas: [makePersona({ persona_id: 55 })] });
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "attg-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" }),
+        kind: "modal",
+        fields: attgFields({ [CONFIG_NAI_ATTG_AUTHOR_FIELD]: "Author" }),
+        harness,
+      }),
+    );
+    const savedReceipt = JSON.stringify(harness.edits.at(-1));
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "attg-clear-all", locale: "en-US", personaId: 55 }),
+        harness,
+      }),
+    );
+    const clearedReceipt = JSON.stringify(harness.edits.at(-1));
+
+    expect(setAttgSpy).toHaveBeenNthCalledWith(1, 55, {
+      nai_attg_author: "Author",
+      nai_attg_title: null,
+      nai_attg_tags: null,
+      nai_attg_genre: null,
+      nai_attg_stars: null,
+    });
+    expect(setAttgSpy).toHaveBeenNthCalledWith(2, 55, {
+      nai_attg_author: null,
+      nai_attg_title: null,
+      nai_attg_tags: null,
+      nai_attg_genre: null,
+      nai_attg_stars: null,
+    });
+    expect(savedReceipt).toContain(localizer("en-US", "commands.novelai.attg.success_title"));
+    expect(clearedReceipt).toContain(localizer("en-US", "commands.novelai.attg.cleared_title"));
+    expect(clearedReceipt).not.toContain(localizer("en-US", "commands.novelai.attg.success_title"));
+    setAttgSpy.mockRestore();
+  });
+
+  it("does not write for malformed or stale ATTG custom IDs through the registry", async () => {
+    const setAttgSpy = spyOn(personaRepository, "setNaiAttg").mockResolvedValue(true);
+    for (const customId of ["config:v1:attg-submit:en-US:55:", "config:v0:attg-submit:en-US:55:nonce1234567"]) {
+      const harness = makeHarness({ personas: [makePersona({ persona_id: 55 })] });
+      await dispatch(
+        harness,
+        makeInteraction({
+          customId,
+          kind: "modal",
+          fields: attgFields({ [CONFIG_NAI_ATTG_AUTHOR_FIELD]: "Author" }),
           harness,
         }),
       );

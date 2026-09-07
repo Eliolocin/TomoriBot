@@ -837,15 +837,19 @@ describe("Persona Advanced and Overrides component budgeting", () => {
   const personas = Array.from({ length: 41 }, (_, index) =>
     makePersona({
       persona_id: index + 1,
-      persona_prompt: index === 40 ? "P".repeat(4000) : undefined,
-      context_note: index === 40 ? "C".repeat(2000) : undefined,
-      nai_attg_author: index === 40 ? "A".repeat(256) : undefined,
-      nai_attg_title: index === 40 ? "T".repeat(256) : undefined,
-      nai_attg_tags: index === 40 ? "G".repeat(256) : undefined,
-      nai_attg_genre: index === 40 ? "N".repeat(256) : undefined,
-      humanizer_degree_override: index === 40 ? 2 : undefined,
-      llm: index === 40 ? { llm_id: 10, llm_provider: "openrouter", llm_codename: "server-model" } : undefined,
-      persona_llm: index === 40 ? { llm_id: 11, llm_provider: "google", llm_codename: "persona-model" } : undefined,
+      persona_prompt: index === 0 || index === 40 ? "P".repeat(4000) : undefined,
+      context_note: index === 0 || index === 40 ? "C".repeat(2000) : undefined,
+      nai_attg_author: index === 0 || index === 40 ? "A".repeat(256) : undefined,
+      nai_attg_title: index === 0 || index === 40 ? "T".repeat(256) : undefined,
+      nai_attg_tags: index === 0 || index === 40 ? "G".repeat(256) : undefined,
+      nai_attg_genre: index === 0 || index === 40 ? "N".repeat(256) : undefined,
+      humanizer_degree_override: index === 0 || index === 40 ? 2 : undefined,
+      llm:
+        index === 0 || index === 40
+          ? { llm_id: 10, llm_provider: "openrouter", llm_codename: "server-model" }
+          : undefined,
+      persona_llm:
+        index === 0 || index === 40 ? { llm_id: 11, llm_provider: "google", llm_codename: "persona-model" } : undefined,
     }),
   );
   const models = Array.from(
@@ -876,30 +880,48 @@ describe("Persona Advanced and Overrides component budgeting", () => {
       receipt: receipt ? { tone: "success", heading: "Saved", detail: "Configuration was saved." } : undefined,
     });
 
-  it("keeps Advanced at 31 components with a receipt and rejects an extra row", () => {
+  it("keeps ATTG-bearing Advanced at literal 31 components and rejects an extra row", () => {
     for (const selectedPersonaId of [1, 41]) {
-      const payload = buildSplitPayload("advanced", true, selectedPersonaId);
-      const validation = validateComponentsV2MessageLimits(payload);
-      expect(validation.valid, JSON.stringify(validation.violations)).toBe(true);
-      expect(countRenderedComponents(payload)).toBe(31);
-      const payloadWithExtraRow = {
-        ...payload,
-        components: [
-          ...payload.components,
-          {
-            type: ComponentType.ActionRow,
-            components: [
-              {
-                type: ComponentType.StringSelect,
-                customId: `extra-advanced-row-${selectedPersonaId}`,
-                placeholder: "Extra",
-                options: [{ value: "one", label: "One" }],
-              },
-            ],
-          },
-        ],
-      };
-      expect(countRenderedComponents(payloadWithExtraRow)).toBeGreaterThan(31);
+      for (const receipt of [false, true]) {
+        const payload = buildSplitPayload("advanced", receipt, selectedPersonaId);
+        const validation = validateComponentsV2MessageLimits(payload);
+        expect(validation.valid, JSON.stringify(validation.violations)).toBe(true);
+        const renderedComponentCount = countRenderedComponents(payload);
+        expect(renderedComponentCount).toBe(receipt ? 31 : 29);
+        const payloadWithExtraRow = {
+          ...payload,
+          components: [
+            ...payload.components,
+            {
+              type: ComponentType.ActionRow,
+              components: [
+                {
+                  type: ComponentType.Button,
+                  style: 2,
+                  customId: `extra-advanced-row-${selectedPersonaId}-${receipt}`,
+                  label: "Extra",
+                },
+                {
+                  type: ComponentType.Button,
+                  style: 2,
+                  customId: `extra-advanced-row-${selectedPersonaId}-${receipt}-second`,
+                  label: "Extra",
+                },
+              ],
+            },
+          ],
+        };
+        expect(countRenderedComponents(payloadWithExtraRow)).toBeGreaterThan(31);
+
+        const selectedPersona = personas.find((persona) => persona.persona_id === selectedPersonaId);
+        const attgValues = [
+          selectedPersona?.nai_attg_author,
+          selectedPersona?.nai_attg_title,
+          selectedPersona?.nai_attg_tags,
+          selectedPersona?.nai_attg_genre,
+        ];
+        expect(attgValues.map((value) => getDiscordTextLength(value ?? ""))).toEqual([256, 256, 256, 256]);
+      }
     }
   });
 
@@ -1697,8 +1719,11 @@ describe("bounded preview unicode and truncation boundary assertions", () => {
     expect(fenceMatches.length).toBe(2);
   });
 
-  it.each([3, 4, 5, 6, 8])("keeps all four 256-character ATTG previews fence-safe for run length %i", (runLength) => {
+  it.each([
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12,
+  ])("keeps all four 256-character ATTG previews fence-safe for run length %i", (runLength) => {
     const fieldValue = "🌸".repeat(256 - runLength) + "`".repeat(runLength);
+    expect(getDiscordTextLength(fieldValue)).toBe(256);
     const payload = buildConfigPanelPayload({
       locale: "en-US",
       actor: GUILD_MANAGER,
@@ -1723,7 +1748,6 @@ describe("bounded preview unicode and truncation boundary assertions", () => {
     const attgDisplay = getTextDisplays(payload).find((text) => text.includes("ATTG Configuration"));
     expect(attgDisplay).toBeDefined();
     expect(attgDisplay?.match(/```/g)).toHaveLength(8);
-    expect(getDiscordTextLength(fieldValue)).toBe(256);
   });
 
   // Three backticks are the one run length a literal triple-backtick replacement handles. Five and
