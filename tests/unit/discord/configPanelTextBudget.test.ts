@@ -7,7 +7,8 @@ import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "bun:test";
 import { ComponentType } from "discord.js";
-import type { LlmRow, TomoriState, VoiceSampleRow } from "@/types/db/schema";
+import type { LlmRow, NaiPresetRow, SavedProviderConfigRow, TomoriState, VoiceSampleRow } from "@/types/db/schema";
+import type { PanelReadStatus } from "@/types/discord/panel";
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type {
   ConfigBehaviorView,
@@ -17,6 +18,7 @@ import type {
 import type { ConfigPersonaVoiceView } from "@/utils/discord/interactions/configPersonaVoiceLoader";
 import {
   CONFIG_MODEL_CAPABILITY_ORDER,
+  CONFIG_NAI_PRESET_PAGE_SIZE,
   isConfigCatalogModelCapability,
   type ConfigCatalogModelCapability,
 } from "@/utils/discord/configPanelCatalog";
@@ -27,7 +29,7 @@ import {
 } from "@/utils/discord/ui/configVoicesPanel";
 import type { ConfigPersonaVoiceRemoteView } from "@/utils/discord/ui/configVoicePanel";
 import type { ConfigCapabilityEndpoint } from "@/utils/discord/interactions/configModelLoaders";
-import type { ConfigSwitchModelsView } from "@/utils/discord/ui/configModelsPanel";
+import type { ConfigParametersView, ConfigSwitchModelsView } from "@/utils/discord/ui/configModelsPanel";
 import {
   DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX,
   DISCORD_TEXT_INPUT_MAX,
@@ -57,6 +59,68 @@ function makePersona(overrides: Partial<TomoriState> & { persona_id: number }): 
     naming_config: { prefixes: {}, suffixes: {}, addressTerms: {} },
     ...overrides,
   } as unknown as TomoriState;
+}
+
+function makeSavedProvider(provider: string): SavedProviderConfigRow {
+  return { provider } as unknown as SavedProviderConfigRow;
+}
+
+function makeNaiPresetCatalog(count: number, runLength: number, oversized: boolean): NaiPresetRow[] {
+  return Array.from({ length: count }, (_unused, index) => {
+    const marker = `Preset ${index + 1} ${"`".repeat(runLength)} 😀`;
+    const presetName = oversized && index === 0 ? `\uFEFF${marker}${"N".repeat(10000)}` : `${marker}${"N".repeat(256)}`;
+    const description = oversized && index < 2 ? `${marker}${"D".repeat(10000)}` : `${marker}${"D".repeat(1024)}`;
+    return {
+      nai_preset_id: index + 1,
+      preset_name: presetName,
+      model_target: "kayra",
+      is_default: index === 0,
+      preset_desc: description,
+      ja_preset_desc: description,
+      parameters: {},
+    } as NaiPresetRow;
+  });
+}
+
+function makeNaiParametersView(providers: string[], presets: NaiPresetRow[], pageStart: number): ConfigParametersView {
+  return {
+    textProviders: providers,
+    selectedProvider: providers[0] ?? null,
+    selectedConfig: providers[0] ? makeSavedProvider(providers[0]) : null,
+    stopStrings: [],
+    speakerPatternEnabled: false,
+    logitBiasEntries: [],
+    logitBiasPageStart: 0,
+    naiPresetView: {
+      target: "kayra",
+      compatibility: "eligible",
+      presets,
+      activePresetName: presets[0]?.preset_name ?? null,
+      fingerprint: "12345678",
+      pageStart,
+    },
+  };
+}
+
+function buildNaiParametersPayload(
+  locale: string,
+  readStatus: PanelReadStatus,
+  receipt: boolean,
+  providers: string[],
+  presets: NaiPresetRow[],
+  pageStart: number,
+) {
+  return buildConfigPanelPayload({
+    locale,
+    actor: GUILD_MANAGER,
+    category: "models",
+    page: "parameters",
+    personas: [makePersona({ persona_id: 55 })],
+    selectedPersonaId: 55,
+    readStatus,
+    modelParametersView: makeNaiParametersView(providers, presets, pageStart),
+    receipt: receipt ? { tone: "success", heading: "Saved", detail: "Configuration was saved." } : undefined,
+  });
 }
 
 function makeSnowflake(n: number): string {
@@ -648,6 +712,124 @@ describe("config page text budgeting at stored maxima", () => {
         expect(totalText).toBeLessThanOrEqual(DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX);
       });
     }
+  });
+});
+
+describe("NovelAI preset Parameters budgeting", () => {
+  const readStatuses: PanelReadStatus[] = ["fresh", "stale", "unavailable"];
+  const providerSets = [["novelai"], ["novelai", "google"]];
+  const presetCounts = [0, 1, 24, 25, 26, 60];
+  const backtickRuns = [3, 4, 5, 6, 8];
+  const stringProfiles = [
+    { name: "stored-practical", oversized: false },
+    { name: "oversized", oversized: true },
+  ];
+
+  for (const locale of RUNTIME_LOCALES) {
+    for (const receipt of [false, true]) {
+      for (const readStatus of readStatuses) {
+        for (const providers of providerSets) {
+          for (const runLength of backtickRuns) {
+            for (const profile of stringProfiles) {
+              for (const presetCount of presetCounts) {
+                it(`keeps ${presetCount} ${profile.name} presets valid for ${providers.length} providers, ${readStatus}, and receipt=${receipt} (${locale}, backticks=${runLength})`, () => {
+                  const presets = makeNaiPresetCatalog(presetCount, runLength, profile.oversized);
+                  const pageStarts = Array.from(
+                    { length: Math.max(1, Math.ceil(presetCount / CONFIG_NAI_PRESET_PAGE_SIZE)) },
+                    (_unused, page) => page * CONFIG_NAI_PRESET_PAGE_SIZE,
+                  );
+                  const reachable = new Set<number>();
+                  let componentCeiling = 0;
+
+                  for (const pageStart of pageStarts) {
+                    const payload = buildNaiParametersPayload(
+                      locale,
+                      readStatus,
+                      receipt,
+                      providers,
+                      presets,
+                      pageStart,
+                    );
+                    const validation = validateComponentsV2MessageLimits(payload);
+                    expect(
+                      validation.valid,
+                      `${locale} ${readStatus} providers=${providers.length} presets=${presetCount} ` +
+                        `page=${pageStart} receipt=${receipt}: ${JSON.stringify(validation.violations)}`,
+                    ).toBe(true);
+                    expect(getPayloadTextTotal(payload)).toBeLessThanOrEqual(DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX);
+                    componentCeiling = Math.max(componentCeiling, countRenderedComponents(payload));
+
+                    for (const menu of getStringSelectMenus(payload)) {
+                      const options = Array.isArray(menu.options) ? menu.options : [];
+                      expect(options.length).toBeLessThanOrEqual(25);
+                      if (typeof menu.customId === "string" && menu.customId.includes("nai-preset-select")) {
+                        for (const option of options) {
+                          if (typeof option !== "object" || option === null) continue;
+                          const value = (option as Record<string, unknown>).value;
+                          if (typeof value === "string" && /^\d+$/.test(value)) reachable.add(Number(value));
+                          const description = (option as Record<string, unknown>).description;
+                          if (typeof description === "string") {
+                            expect(getDiscordTextLength(description)).toBeLessThanOrEqual(100);
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  if (readStatus !== "unavailable") {
+                    expect([...reachable]).toEqual(Array.from({ length: presetCount }, (_unused, index) => index));
+                  }
+                  expect(componentCeiling).toBeGreaterThan(0);
+                });
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  it("enforces the literal Parameters component ceiling and rejects an extra row", () => {
+    const payload = buildNaiParametersPayload(
+      "en-US",
+      "fresh",
+      true,
+      ["novelai", "google"],
+      makeNaiPresetCatalog(60, 8, true),
+      46,
+    );
+    expect(countRenderedComponents(payload)).toBe(31);
+    const payloadWithExtraRow = {
+      ...payload,
+      components: [
+        ...payload.components,
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.StringSelect,
+              customId: "extra-nai-preset-row",
+              placeholder: "Extra",
+              options: [{ value: "one", label: "One" }],
+            },
+          ],
+        },
+      ],
+    };
+    expect(countRenderedComponents(payloadWithExtraRow)).toBeGreaterThan(31);
+  });
+
+  it("keeps normal active names exact while preserving a leading BOM in a bounded name", () => {
+    const normalPresets = makeNaiPresetCatalog(1, 3, false);
+    const normalPayload = buildNaiParametersPayload("en-US", "fresh", false, ["novelai"], normalPresets, 0);
+    expect(getTextDisplays(normalPayload).join("\n")).toContain(normalPresets[0]?.preset_name ?? "");
+
+    const oversizedPresets = makeNaiPresetCatalog(1, 3, true);
+    const oversizedPayload = buildNaiParametersPayload("en-US", "fresh", true, ["novelai"], oversizedPresets, 0);
+    const activeDisplay = getTextDisplays(oversizedPayload).find((text) => text.includes("Sampling Preset"));
+    expect(activeDisplay).toBeDefined();
+    expect(activeDisplay).toContain("\uFEFF");
+    expect(getPayloadTextTotal(oversizedPayload)).toBeLessThanOrEqual(DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX);
   });
 });
 

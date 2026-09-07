@@ -33,6 +33,11 @@ import {
   validateComponentsV2MessageLimits,
   type ComponentsV2MessagePayload,
 } from "@/utils/discord/ui/componentsV2Limits";
+import {
+  CONFIG_NAI_PRESET_NEXT_VALUE,
+  CONFIG_NAI_PRESET_PAGE_SIZE,
+  CONFIG_NAI_PRESET_PREVIOUS_VALUE,
+} from "@/utils/discord/configPanelCatalog";
 import { safeSelectOptionText } from "@/utils/discord/ui/interactionCore";
 
 function createValidMessagePayload(): ComponentsV2MessagePayload {
@@ -709,6 +714,50 @@ describe("componentsV2Limits rule mutations with exact path and code assertions"
       ],
     };
     expect(validateComponentsV2MessageLimits(oversizedOptions).violations).toContainEqual({
+      path: "components[0].components[0].options",
+      componentType: ComponentType.StringSelect,
+      observed: 26,
+      limit: DISCORD_SELECT_OPTIONS_MAX,
+      code: "SELECT_OPTIONS_OVERSIZED",
+    });
+  });
+
+  it("enforces the U9b preset page boundary with both navigation sentinels", () => {
+    const selectableOptions = Array.from({ length: CONFIG_NAI_PRESET_PAGE_SIZE }, (_, index) => ({
+      label: `Preset ${index + 1}`,
+      value: `preset-${index + 1}`,
+    }));
+    const boundaryOptions = [
+      { label: "Previous page", value: CONFIG_NAI_PRESET_PREVIOUS_VALUE },
+      ...selectableOptions,
+      { label: "Next page", value: CONFIG_NAI_PRESET_NEXT_VALUE },
+    ];
+    const makePayload = (options: Array<{ label: string; value: string }>): ComponentsV2MessagePayload => ({
+      flags: MessageFlags.IsComponentsV2,
+      components: [
+        {
+          type: ComponentType.ActionRow,
+          components: [
+            {
+              type: ComponentType.StringSelect,
+              customId: "nai-preset-page-boundary",
+              options,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(selectableOptions).toHaveLength(CONFIG_NAI_PRESET_PAGE_SIZE);
+    expect(boundaryOptions).toHaveLength(25);
+    expect(validateComponentsV2MessageLimits(makePayload(boundaryOptions))).toMatchObject({
+      valid: true,
+      violations: [],
+    });
+
+    const oversizedOptions = [...boundaryOptions, { label: "Preset 24", value: "preset-24" }];
+    expect(oversizedOptions).toHaveLength(26);
+    expect(validateComponentsV2MessageLimits(makePayload(oversizedOptions)).violations).toContainEqual({
       path: "components[0].components[0].options",
       componentType: ComponentType.StringSelect,
       observed: 26,

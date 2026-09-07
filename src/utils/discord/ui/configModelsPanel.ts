@@ -52,12 +52,19 @@ import {
   buildProviderParameterBlock,
   formatStoredParameterValue,
 } from "@/utils/discord/ui/personalConfigParameterControls";
+import {
+  DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX,
+  measureComponentTextLength,
+} from "@/utils/discord/ui/componentsV2Limits";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { formatStopStringForDisplay } from "@/utils/provider/stopStringConfig";
-import { neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
+import { getDiscordTextLength, neutralizeFenceRuns, truncateDiscordText } from "@/utils/text/discordTextLimits";
 import { localizer } from "@/utils/text/localizer";
 import { buildConfigVoicesBody, type ConfigVoicesView } from "@/utils/discord/ui/configVoicesPanel";
 export { buildConfigVoicesBody, type ConfigVoicesView };
+
+/** Keeps the active preset line from consuming room needed by receipts and future parameter copy. */
+const CONFIG_NAI_PRESET_DISPLAY_HEADROOM = 256;
 
 export interface ConfigNaiPresetView {
   target: "kayra" | "erato" | null;
@@ -473,6 +480,7 @@ function buildNaiPresetBlock(
   locale: string,
   view: ConfigNaiPresetView,
   writesDisabled: boolean,
+  displayBudget: number,
 ): ComponentInContainerData[] {
   const isJapanese = locale.toLowerCase().startsWith("ja");
   const explanationKey =
@@ -486,10 +494,19 @@ function buildNaiPresetBlock(
         locale,
         `commands.novelai.preset.text.${explanationKey}_description`,
       )}`
-    : `**${localizer(locale, "commands.novelai.preset.text.select_label")}**\n${localizer(
-        locale,
-        "commands.novelai.preset.text.select_description",
-      )}\n> ${view.activePresetName ?? localizer(locale, "commands.config.panel.none_label")} (${view.target})`;
+    : (() => {
+        const prefix = `**${localizer(locale, "commands.novelai.preset.text.select_label")}**\n${localizer(
+          locale,
+          "commands.novelai.preset.text.select_description",
+        )}\n> `;
+        const suffix = ` (${view.target})`;
+        const activeName = view.activePresetName ?? localizer(locale, "commands.config.panel.none_label");
+        const activeNameBudget = Math.max(
+          0,
+          displayBudget - getDiscordTextLength(prefix) - getDiscordTextLength(suffix),
+        );
+        return `${prefix}${truncateDiscordText(activeName, activeNameBudget)}${suffix}`;
+      })();
 
   const pageCount = Math.max(1, Math.ceil(view.presets.length / CONFIG_NAI_PRESET_PAGE_SIZE));
   const pageStart = Math.min(
@@ -579,8 +596,6 @@ function buildParametersBody(input: ConfigModelsPageInput): ComponentInContainer
   ];
   if (!view) return components;
   const logitBiasPageCount = Math.max(1, Math.ceil(view.logitBiasEntries.length / CONFIG_LOGIT_BIAS_PAGE_SIZE));
-
-  if (view.naiPresetView) components.push(...buildNaiPresetBlock(locale, view.naiPresetView, writesDisabled));
 
   if (!view.selectedProvider) {
     components.push({
@@ -722,6 +737,15 @@ ${localizer(locale, "commands.config.panel.logit_bias_description")}
         },
       ],
     });
+  }
+
+  if (view.naiPresetView) {
+    const remainingTextLength = measureComponentTextLength(components);
+    const displayBudget = Math.max(
+      0,
+      DISCORD_MESSAGE_TEXT_DISPLAY_TOTAL_MAX - remainingTextLength - CONFIG_NAI_PRESET_DISPLAY_HEADROOM,
+    );
+    components.splice(1, 0, ...buildNaiPresetBlock(locale, view.naiPresetView, writesDisabled, displayBudget));
   }
 
   return components;

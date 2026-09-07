@@ -1712,7 +1712,13 @@ describe("config models parameters page", () => {
       nai_preset: presets[0],
     });
     const harness = makeHarness({ state, naiPresets: presets, parametersProviders: ["novelai"] });
-    const interaction = makeInteraction({
+    let interaction: ReturnType<typeof makeInteraction>;
+    let acknowledgedAtCatalogRead: boolean | null = null;
+    harness.dependencies.loadNaiPresets = async (target) => {
+      acknowledgedAtCatalogRead = interaction.deferred;
+      return presets.filter((preset) => preset.model_target === target);
+    };
+    interaction = makeInteraction({
       customId: buildConfigRouteId({
         action: "nai-preset-select",
         locale: "en-US",
@@ -1732,6 +1738,7 @@ describe("config models parameters page", () => {
       return true;
     });
     await dispatch(harness, interaction);
+    expect(acknowledgedAtCatalogRead).toBe(true);
     expect(acknowledgedAtWrite).toBe(true);
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply.mock.calls[0]?.[1]?.preset_name).toBe("preset-2");
@@ -1739,29 +1746,33 @@ describe("config models parameters page", () => {
     apply.mockRestore();
   });
 
-  it("denies the preset route in a DM before any repository write", async () => {
+  it("denies the preset route to a guild member and a DM owner before any repository write", async () => {
     const presets = [makeNaiPreset("preset-1"), makeNaiPreset("preset-2")];
-    const state = makeState({ llm: { llm_id: 1, llm_codename: "kayra-v1", llm_provider: "novelai" } });
+    const state = makeState({
+      llm: { llm_id: 1, llm_codename: "kayra-v1", llm_provider: "novelai" },
+      nai_preset: presets[0],
+    });
+    const fingerprint = computeNaiPresetFingerprint(
+      "kayra",
+      presets.map((preset) => preset.preset_name),
+    );
     const apply = spyOn(configRepository, "applyNaiPreset").mockResolvedValue(true);
-    const harness = makeHarness({ state, naiPresets: presets, parametersProviders: ["novelai"] });
-    await dispatch(
-      harness,
-      makeInteraction({
-        customId: buildConfigRouteId({
-          action: "nai-preset-select",
-          locale: "en-US",
-          start: 0,
-          fp: computeNaiPresetFingerprint(
-            "kayra",
-            presets.map((preset) => preset.preset_name),
-          ),
-        }),
+
+    for (const context of [{ isManager: false }, { inGuild: false }]) {
+      const harness = makeHarness({ state, naiPresets: presets, parametersProviders: ["novelai"] });
+      const interaction = makeInteraction({
+        customId: buildConfigRouteId({ action: "nai-preset-select", locale: "en-US", start: 0, fp: fingerprint }),
         kind: "select",
         values: ["1"],
-        inGuild: false,
+        ...context,
         harness,
-      }),
-    );
+      });
+
+      await dispatch(harness, interaction);
+
+      expect(interaction.deferred).toBe(true);
+    }
+
     expect(apply).not.toHaveBeenCalled();
     apply.mockRestore();
   });
