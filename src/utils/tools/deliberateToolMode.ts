@@ -307,23 +307,6 @@ function addToolMatches(
   }
 }
 
-function addShortTermMemoryMaintenanceMatch(
-  allowedToolNames: string[],
-  matches: DeliberateToolIntentMatch[],
-): void {
-  if (allowedToolNames.length === 0 || SHORT_TERM_MEMORY_TOOL_NAMES.some((name) => allowedToolNames.includes(name))) {
-    return;
-  }
-
-  addToolMatches(
-    allowedToolNames,
-    matches,
-    SHORT_TERM_MEMORY_TOOL_NAMES,
-    "short-term memory maintenance",
-    "built-in",
-  );
-}
-
 function getRegexTrigger(text: string, pattern: RegExp, fallback: string): string {
   const match = text.match(pattern);
   return match?.[1]?.trim().toLowerCase() || fallback;
@@ -445,7 +428,6 @@ export function getDeliberateToolIntentResult(
   matches.push(...customResult.matches);
 
   if (!text) {
-    addShortTermMemoryMaintenanceMatch(allowedToolNames, matches);
     return {
       allowedToolNames: uniqueToolNames(allowedToolNames),
       matches: uniqueMatches(matches),
@@ -585,7 +567,6 @@ export function getDeliberateToolIntentResult(
     );
   }
 
-  addShortTermMemoryMaintenanceMatch(allowedToolNames, matches);
   return {
     allowedToolNames: uniqueToolNames(allowedToolNames),
     matches: uniqueMatches(matches),
@@ -615,15 +596,13 @@ export function getFollowUpToolIntentResult(
     return { allowedToolNames: [], matches: [] };
   }
   const allowedToolNames = uniqueToolNames(recentToolNames);
-  const matches: DeliberateToolIntentMatch[] = allowedToolNames.map((toolName) => ({
-    toolName,
-    trigger: "recent tool follow-up",
-    source: "follow-up",
-  }));
-  addShortTermMemoryMaintenanceMatch(allowedToolNames, matches);
   return {
-    allowedToolNames: uniqueToolNames(allowedToolNames),
-    matches: uniqueMatches(matches),
+    allowedToolNames,
+    matches: allowedToolNames.map((toolName) => ({
+      toolName,
+      trigger: "recent tool follow-up",
+      source: "follow-up",
+    })),
   };
 }
 
@@ -759,7 +738,6 @@ export function getRecentTriggeredToolIntentResult(
     );
   }
 
-  addShortTermMemoryMaintenanceMatch(allowedToolNames, matches);
   return {
     allowedToolNames: Array.from(new Set(allowedToolNames)),
     matches: Array.from(
