@@ -2822,6 +2822,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
 
       const expectsStringSelect =
         route.action === "page" ||
+        route.action === "persona-page-select" ||
         route.action === "persona-select" ||
         route.action === "naming-style-select" ||
         route.action === "attribute-select" ||
@@ -3141,7 +3142,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         category = "persona";
         page = "naming";
       }
-      if (route.action === "page" && selectedValue) {
+      if ((route.action === "page" || route.action === "persona-page-select") && selectedValue) {
         const candidate = selectedValue as ConfigPage;
         if (visibleConfigPages(route.category, actor).includes(candidate)) page = candidate;
         category = route.category;

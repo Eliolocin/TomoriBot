@@ -4172,12 +4172,24 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
   // A String Select option cannot be disabled, so a filtered category that leaves one page renders
   // that page directly rather than an inert one-option selector.
   if (pages.length > 1) {
+    const personaNavigationId =
+      input.selectedPersonaId ?? input.personas.find((persona) => persona.is_alter !== true)?.persona_id;
     const pageSelectorRow: ActionRowData<StringSelectMenuComponentData> = {
       type: ComponentType.ActionRow,
       components: [
         {
           type: ComponentType.StringSelect,
-          customId: buildConfigRouteId({ action: "page", locale, category, page }),
+          customId: buildConfigRouteId(
+            category === "persona" && personaNavigationId !== undefined
+              ? {
+                  action: "persona-page-select",
+                  locale,
+                  category,
+                  page,
+                  personaId: personaNavigationId,
+                }
+              : { action: "page", locale, category, page },
+          ),
           placeholder: localizer(locale, "commands.config.panel.page_select_placeholder"),
           options: pages.map((candidate) => ({
             label: safeSelectOptionText(localizer(locale, PAGE_LOCALE_KEYS[category][candidate]), 100),

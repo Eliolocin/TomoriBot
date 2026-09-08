@@ -715,6 +715,18 @@ describe("isConfigRouteAuthorized", () => {
     expect(
       isConfigRouteAuthorized({ action: "persona-page", locale: "en-US", personaId: 5, start: 25 }, GUILD_MEMBER),
     ).toBe(true);
+    expect(
+      isConfigRouteAuthorized(
+        { action: "persona-page-select", locale: "en-US", category: "persona", page: "memories", personaId: 5 },
+        GUILD_MEMBER,
+      ),
+    ).toBe(true);
+    expect(
+      isConfigRouteAuthorized(
+        { action: "persona-page-select", locale: "en-US", category: "persona", page: "advanced", personaId: 5 },
+        GUILD_MEMBER,
+      ),
+    ).toBe(false);
   });
 
   it("keeps Persona Voice routes manager-only in guilds while allowing the DM owner", () => {
@@ -809,6 +821,7 @@ describe("isConfigRouteAuthorized", () => {
       "dialogue-remove",
       "category",
       "page",
+      "persona-page-select",
       "persona-select",
       "persona-page",
       "naming-style-select",

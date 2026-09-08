@@ -343,6 +343,10 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     { action: "category", locale: "en-US", category: "persona", page: "general" },
   ],
   ["config:v1:page:en-US:models:switch", { action: "page", locale: "en-US", category: "models", page: "switch" }],
+  [
+    "config:v1:persona-page-select:en-US:persona:general:55",
+    { action: "persona-page-select", locale: "en-US", category: "persona", page: "general", personaId: 55 },
+  ],
   ["config:v1:persona-select:en-US:55", { action: "persona-select", locale: "en-US", personaId: 55 }],
   ["config:v1:persona-page:en-US:55:25", { action: "persona-page", locale: "en-US", personaId: 55, start: 25 }],
   ["config:v1:voice-select:en-US:55", { action: "voice-select", locale: "en-US", personaId: 55 }],
@@ -997,6 +1001,7 @@ describe("config route wire contract", () => {
     expect(parseConfigPanelRoute(requireRoute("config:v1:persona-select:en-US:abc"))).toBeNull();
     // `general` is a Behavior page too, so a page must decode against its own category.
     expect(parseConfigPanelRoute(requireRoute("config:v1:page:en-US:models:general"))).toBeNull();
+    expect(parseConfigPanelRoute(requireRoute("config:v1:persona-page-select:en-US:models:switch:55"))).toBeNull();
     expect(parseConfigPanelRoute(requireRoute("config:v1:naming-open:en-US:55:androgynous"))).toBeNull();
     expect(parseConfigPanelRoute(requireRoute("config:v1:not-a-token:en-US:55"))).toBeNull();
   });
@@ -1295,6 +1300,143 @@ describe("config route write behavior", () => {
     expect(JSON.stringify(denied.edits.at(-1))).toContain(
       buildConfigRouteId({ action: "rename-open", locale: "en-US", personaId: 55 }),
     );
+  });
+
+  it("keeps Persona page navigation and rendered controls on the selected alter", async () => {
+    const harness = makeHarness();
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "persona-select", locale: "en-US", personaId: 55 }),
+        kind: "select",
+        values: ["56"],
+        harness,
+      }),
+    );
+    expect(JSON.stringify(harness.edits.at(-1))).toContain(
+      buildConfigRouteId({
+        action: "persona-page-select",
+        locale: "en-US",
+        category: "persona",
+        page: "general",
+        personaId: 56,
+      }),
+    );
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "persona-page-select",
+          locale: "en-US",
+          category: "persona",
+          page: "general",
+          personaId: 56,
+        }),
+        kind: "select",
+        values: ["sprites"],
+        harness,
+      }),
+    );
+    const sprites = JSON.stringify(harness.edits.at(-1));
+    expect(sprites).toContain(buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 56 }));
+    expect(sprites).not.toContain(buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 55 }));
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "persona-page-select",
+          locale: "en-US",
+          category: "persona",
+          page: "sprites",
+          personaId: 56,
+        }),
+        kind: "select",
+        values: ["memories"],
+        harness,
+      }),
+    );
+    const memories = JSON.stringify(harness.edits.at(-1));
+    expect(memories).toContain(buildConfigRouteId({ action: "server-memory-open", locale: "en-US", personaId: 56 }));
+    expect(memories).not.toContain(
+      buildConfigRouteId({ action: "server-memory-open", locale: "en-US", personaId: 55 }),
+    );
+  });
+
+  it("keeps page navigation scoped to an alter beyond the first selector window", async () => {
+    const personas = [
+      MAIN,
+      ...Array.from({ length: 25 }, (_, index) =>
+        makePersona({ persona_id: 100 + index, persona_nickname: `Alter ${index + 1}`, is_alter: true }),
+      ),
+    ];
+    const selectedPersonaId = 124;
+    const harness = makeHarness({ personas });
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({ action: "persona-select", locale: "en-US", personaId: 55 }),
+        kind: "select",
+        values: [String(selectedPersonaId)],
+        harness,
+      }),
+    );
+    const selected = JSON.stringify(harness.edits.at(-1));
+    expect(selected).toContain(
+      buildConfigRouteId({
+        action: "persona-page-select",
+        locale: "en-US",
+        category: "persona",
+        page: "general",
+        personaId: selectedPersonaId,
+      }),
+    );
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "persona-page-select",
+          locale: "en-US",
+          category: "persona",
+          page: "general",
+          personaId: selectedPersonaId,
+        }),
+        kind: "select",
+        values: ["sprites"],
+        harness,
+      }),
+    );
+    expect(JSON.stringify(harness.edits.at(-1))).toContain(
+      buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: selectedPersonaId }),
+    );
+  });
+
+  it("falls back to the main persona when a carried page-navigation persona is gone", async () => {
+    const harness = makeHarness();
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "persona-page-select",
+          locale: "en-US",
+          category: "persona",
+          page: "general",
+          personaId: 999,
+        }),
+        kind: "select",
+        values: ["sprites"],
+        harness,
+      }),
+    );
+
+    const rendered = JSON.stringify(harness.edits.at(-1));
+    expect(rendered).toContain(buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 55 }));
+    expect(rendered).not.toContain(buildConfigRouteId({ action: "sprite-select", locale: "en-US", personaId: 999 }));
   });
 
   it("keeps the naming editor on the style the select submitted", async () => {

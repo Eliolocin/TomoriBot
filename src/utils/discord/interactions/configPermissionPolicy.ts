@@ -777,6 +777,12 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
         resolveConfigCategoryState(route.category, actor) === "enabled" &&
         resolveConfigPageState(route.category, route.page, actor) !== "omitted"
       );
+    case "persona-page-select":
+      return (
+        route.category === "persona" &&
+        resolveConfigCategoryState("persona", actor) === "enabled" &&
+        resolveConfigPageState("persona", route.page, actor) !== "omitted"
+      );
     case "persona-select":
     case "persona-page":
       return resolveConfigCategoryState("persona", actor) === "enabled";

@@ -369,6 +369,7 @@ export function computeLogitBiasFingerprint(serverId: number, entryIds: readonly
 export type ConfigPanelRoute =
   | { action: "category"; locale: string; category: ConfigCategory; page: ConfigPage }
   | { action: "page"; locale: string; category: ConfigCategory; page: ConfigPage }
+  | { action: "persona-page-select"; locale: string; category: "persona"; page: ConfigPage; personaId: number }
   | { action: "persona-select"; locale: string; personaId: number }
   | { action: "persona-page"; locale: string; personaId: number; start: number }
   | { action: "voice-select"; locale: string; personaId: number }
@@ -656,6 +657,12 @@ const categoryField: RouteFieldCodec<"category", ConfigCategory> = {
   decode: (v) => parseConfigCategory(v),
 };
 
+const personaCategoryField: RouteFieldCodec<"category", "persona"> = {
+  key: "category",
+  encode: (v) => String(v),
+  decode: (v) => (v === "persona" ? v : null),
+};
+
 const pageField: RouteFieldCodec<"page", ConfigPage> = {
   key: "page",
   encode: (v) => String(v),
@@ -768,6 +775,10 @@ const requiredChannelIdField: RouteFieldCodec<"channelId", string> = {
 export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   category: { wireToken: "category", fields: [categoryField, pageField] },
   page: { wireToken: "page", fields: [categoryField, pageField] },
+  "persona-page-select": {
+    wireToken: "persona-page-select",
+    fields: [personaCategoryField, pageField, personaIdField],
+  },
   "persona-select": { wireToken: "persona-select", fields: [personaIdField] },
   "persona-page": { wireToken: "persona-page", fields: [personaIdField, startField] },
   "voice-select": { wireToken: "voice-select", fields: [personaIdField] },
