@@ -45,6 +45,7 @@ import { usesOpenAIEndpoint, validateNovelAIApiKey } from "./novelaiService";
 import { novelaiProviderInfo } from "./providerInfo";
 import { getActiveTemperature } from "@/utils/provider/samplingControl";
 import { applyDeliberateToolAllowlist } from "@/utils/tools/deliberateToolMode";
+import { resolveToolsEnabled } from "@/utils/tools/toolUseGate";
 
 /**
  * Gets the default NovelAI model with a robust fallback chain:
@@ -172,8 +173,10 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
       return [];
     }
 
-    if (!tomoriState.llm.has_tools) {
-      log.info("NovelAI provider: Model does not support tools (db flag has_tools=false)");
+    if (!resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
+      log.info(
+        `NovelAI provider: Tools unavailable (tool_use_enabled=${tomoriState.config.tool_use_enabled}, has_tools=${tomoriState.llm.has_tools})`,
+      );
       return [];
     }
 

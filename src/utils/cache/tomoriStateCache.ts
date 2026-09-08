@@ -125,6 +125,9 @@ export async function getCachedAllPersonas(serverDiscId: string): Promise<Tomori
 
       // Apply tool-use master toggle: when tool_use_enabled is false, artificially
       // override has_tools to false on every persona so all providers see no tools.
+      // The narrowed flag also carries the toggle into context synthesis, but it is not the
+      // enforcement point: a provider holding a live capability catalog can raise it again, so
+      // `resolveToolsEnabled` re-reads tool_use_enabled at every gate.
       const effectivePersonas = personas.map((p) =>
         p.config.tool_use_enabled ? p : { ...p, llm: { ...p.llm, has_tools: false } },
       );

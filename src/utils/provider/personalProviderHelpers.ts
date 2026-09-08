@@ -195,6 +195,9 @@ export async function assignPersonalCapabilityToProvider(
  *
  * Re-enabling resolves the target through the stored assignment, so it returns to
  * the provider that was serving the capability before it was switched off.
+ *
+ * @returns `false` only when the request could not be satisfied: a failed upsert, or an
+ *   enable with no provider able to serve `capability`.
  */
 export async function setPersonalCapabilityEnabled(
   userId: number,
@@ -202,25 +205,33 @@ export async function setPersonalCapabilityEnabled(
   enabled: boolean,
 ): Promise<boolean> {
   const rows = await llmProviderRepo.loadUserSavedProviderConfigs(userId);
+
+  if (!enabled) {
+    // Disabling needs no target row: a capability no provider serves is already off, so the
+    // request is satisfied. The quick-toggle modal submits all six capabilities at once and
+    // ANDs the results, so treating an unconfigured capability as a failure reported
+    // "Operation Failed" over the successful write the user actually asked for.
+    // Disabling also never reassigns, so every row keeps its assignment and only the on/off
+    // state is cleared.
+    for (const row of rows) {
+      if (!row.enabled_capabilities.includes(capability)) {
+        continue;
+      }
+      const ok = await llmProviderRepo.upsertUserSavedProviderConfig(
+        userId,
+        withCapabilityEnabled(row, capability, false),
+      );
+      if (!ok) return false;
+    }
+    return true;
+  }
+
   const targetRow = getStoredPersonalProviderForCapability(rows, capability);
   if (!targetRow) {
     return false;
   }
 
   for (const row of rows) {
-    // Disabling never reassigns, so every row keeps its assignment and only the
-    // on/off state is cleared.
-    if (!enabled) {
-      if (row.enabled_capabilities.includes(capability)) {
-        const ok = await llmProviderRepo.upsertUserSavedProviderConfig(
-          userId,
-          withCapabilityEnabled(row, capability, false),
-        );
-        if (!ok) return false;
-      }
-      continue;
-    }
-
     if (row.provider.toLowerCase() === targetRow.provider.toLowerCase()) {
       const ok = await llmProviderRepo.upsertUserSavedProviderConfig(
         userId,
@@ -230,6 +241,8 @@ export async function setPersonalCapabilityEnabled(
       continue;
     }
 
+    // Ownership is exclusive, so the losing rows give up the assignment as well as the
+    // on/off state; otherwise two rows would claim the same capability.
     if (claimsCapability(row, capability)) {
       const ok = await llmProviderRepo.upsertUserSavedProviderConfig(userId, withCapabilityUnassigned(row, capability));
       if (!ok) return false;

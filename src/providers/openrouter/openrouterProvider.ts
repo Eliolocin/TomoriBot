@@ -73,6 +73,7 @@ import { resolveEffectiveOpenRouterSeesYouTube } from "@/utils/provider/openrout
 import { buildOpenRouterAttributionHeaders } from "@/utils/provider/openrouterAttribution";
 import { buildActiveSamplingParams, getActiveTemperature } from "@/utils/provider/samplingControl";
 import { applyDeliberateToolAllowlist } from "@/utils/tools/deliberateToolMode";
+import { resolveToolsEnabled } from "@/utils/tools/toolUseGate";
 
 /**
  * Gets the default OpenRouter model with a robust fallback chain:
@@ -690,7 +691,10 @@ export class OpenrouterProvider
       config.logitBias = runtimeLogitBias;
     }
 
-    if (effectiveHasTools) config.tools = await this.getTools(tomoriState);
+    // The catalog override above can raise effectiveHasTools above the flag the pipeline
+    // narrowed, which is how the Tool Use master toggle and the deliberate-tool kill switch
+    // both used to leak tools on this provider alone.
+    if (resolveToolsEnabled(tomoriState, effectiveHasTools)) config.tools = await this.getTools(tomoriState);
 
     return config;
   }

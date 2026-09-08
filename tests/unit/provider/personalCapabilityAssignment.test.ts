@@ -169,6 +169,29 @@ describe("setPersonalCapabilityEnabled", () => {
     expect(providerOf(state.rows, "text")).toEqual({ active: "deepseek", assigned: "deepseek" });
   });
 
+  it("reports success when disabling a capability no provider serves", async () => {
+    // The quick-toggle modal submits all six capabilities and ANDs the results, so an
+    // unconfigured capability returning false turned an unrelated successful write into
+    // "Operation Failed".
+    const state = stubRepo(makeAccount());
+
+    expect(await setPersonalCapabilityEnabled(1, "video", false)).toBe(true);
+    expect(providerOf(state.rows, "text")).toEqual({ active: "deepseek", assigned: "deepseek" });
+  });
+
+  it("still refuses to enable a capability no provider serves", async () => {
+    stubRepo(makeAccount());
+
+    expect(await setPersonalCapabilityEnabled(1, "video", true)).toBe(false);
+  });
+
+  it("still reports failure when the underlying upsert fails", async () => {
+    stubRepo(makeAccount());
+    spyOn(llmProviderRepo, "upsertUserSavedProviderConfig").mockImplementation(async () => false);
+
+    expect(await setPersonalCapabilityEnabled(1, "text", false)).toBe(false);
+  });
+
   it("leaves other capabilities untouched", async () => {
     const rows = makeAccount();
     rows[2] = makeRow({

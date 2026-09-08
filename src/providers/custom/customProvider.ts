@@ -81,6 +81,7 @@ import { customProviderInfo } from "./providerInfo";
 import { resolveCustomEndpointForProvider } from "@/utils/provider/customEndpointService";
 import { buildCustomHeaders } from "@/providers/custom/customOpenAICompatibleUtils";
 import { applyDeliberateToolAllowlist } from "@/utils/tools/deliberateToolMode";
+import { resolveToolsEnabled } from "@/utils/tools/toolUseGate";
 
 /**
  * Default model name placeholder for custom provider
@@ -207,8 +208,10 @@ export class CustomProvider
     streamingContext?: StreamingContext,
   ): Promise<Array<Record<string, unknown>>> {
     // Only return tools if the model supports them (user-declared capability)
-    if (!tomoriState.llm.has_tools) {
-      log.info("Custom provider: Model does not support tools (user-declared capability)");
+    if (!resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
+      log.info(
+        `Custom provider: Tools unavailable (tool_use_enabled=${tomoriState.config.tool_use_enabled}, has_tools=${tomoriState.llm.has_tools})`,
+      );
       return [];
     }
 
@@ -465,7 +468,7 @@ export class CustomProvider
       numCtx: tomoriState.config.custom_num_ctx ?? endpointNumCtxHint ?? null,
     };
 
-    if (tomoriState.llm.has_tools) {
+    if (resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
       config.tools = await this.getTools(tomoriState);
     }
 
@@ -519,12 +522,12 @@ export class CustomProvider
         isManuallyTriggered: streamingContext?.isManuallyTriggered,
       };
 
-      if (streamingContext && tomoriState.llm.has_tools) {
+      if (streamingContext && resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
         log.info("CustomProvider: Reloading tools with streaming context for context-aware availability");
         const contextAwareTools = await this.getTools(tomoriState, streamingContext);
         streamConfig.tools = contextAwareTools;
         log.info(`Context-aware tools loaded: ${contextAwareTools.length} tools`);
-      } else if (streamingContext && !tomoriState.llm.has_tools) {
+      } else if (streamingContext && !resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
         log.info("Skipping context-aware tool reload - model doesn't support tools");
       }
 

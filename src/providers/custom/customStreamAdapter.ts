@@ -7,6 +7,7 @@ import type { ThoughtLogEntry } from "@/types/provider/interfaces";
 import { log } from "@/utils/misc/logger";
 import { buildCustomThinkingRequest } from "@/utils/provider/thinkingControl";
 import { VerbatimToolCallParser, getVerbatimToolCallMaxBufferChars } from "@/utils/tools/verbatimToolCallParser";
+import { resolveToolsEnabled } from "@/utils/tools/toolUseGate";
 
 /**
  * When true, the stream adapter scans `delta.content` for Gemma 4's hallucinated
@@ -201,7 +202,9 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
 
     const tools = Array.isArray(config.tools) ? config.tools : [];
     const enabled = Boolean(
-      context.tomoriState.config.verbatim_tool_calling_enabled && context.tomoriState.llm.has_tools && tools.length > 0,
+      context.tomoriState.config.verbatim_tool_calling_enabled &&
+        resolveToolsEnabled(context.tomoriState, context.tomoriState.llm.has_tools) &&
+        tools.length > 0,
     );
     if (!enabled) {
       return;

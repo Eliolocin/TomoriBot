@@ -13,7 +13,7 @@ import { storeVoiceSample } from "@/utils/storage/voiceSampleStorage";
 export const SPEECH_SAMPLE_MAX_MB = Math.max(1, Number.parseInt(process.env.SPEECH_SAMPLE_MAX_MB ?? "10", 10) || 10);
 
 /** Maximum allowed clip duration in seconds. */
-export const SPEECH_SAMPLE_MAX_DURATION_SECS = 30;
+export const SPEECH_SAMPLE_MAX_DURATION_SECS = 40;
 
 /** Accepted audio MIME types and file extensions for reference samples. */
 const ACCEPTED_MIME_TYPES = new Set([

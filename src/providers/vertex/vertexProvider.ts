@@ -72,6 +72,7 @@ import { generatePresetFromPrompt } from "../google/presetGenerator";
 import { validateGoogleModelsEndpoint } from "../google/googleCredentialValidation";
 import { getActiveTemperature, isParamDisabled } from "@/utils/provider/samplingControl";
 import { applyDeliberateToolAllowlist } from "@/utils/tools/deliberateToolMode";
+import { resolveToolsEnabled } from "@/utils/tools/toolUseGate";
 
 /**
  * Gets the default Vertex model with a robust fallback chain:
@@ -458,7 +459,7 @@ export class VertexProvider
     };
 
     // Only attach tools for models that support function calling
-    if (tomoriState.llm.has_tools) {
+    if (resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
       config.tools = await this.getTools(tomoriState);
     }
 
@@ -540,11 +541,11 @@ export class VertexProvider
         log.info(`VertexProvider: Applied thinking config for model ${config.model}`);
       }
 
-      if (streamingContext && tomoriState.llm.has_tools) {
+      if (streamingContext && resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
         log.info("VertexProvider: Reloading tools with streaming context for context-aware availability");
         const contextAwareTools = await this.getTools(tomoriState, streamingContext);
         streamConfig.tools = contextAwareTools;
-      } else if (streamingContext && !tomoriState.llm.has_tools) {
+      } else if (streamingContext && !resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
         log.info("VertexProvider: Skipping context-aware tool reload - model doesn't support tools");
       }
 
