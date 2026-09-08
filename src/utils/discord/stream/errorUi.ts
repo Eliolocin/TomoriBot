@@ -1,6 +1,6 @@
-import { EmbedBuilder, MessageFlags, type ColorResolvable } from "discord.js";
+import { MessageFlags, type ColorResolvable } from "discord.js";
 import type { ProviderError, StreamProvider, StreamContext } from "@/types/stream/interfaces";
-import { createTipEmbed, sendStandardEmbed, truncateForEmbedDescription } from "@/utils/discord/embedHelper";
+import { sendStandardEmbed, truncateForEmbedDescription } from "@/utils/discord/embedHelper";
 import { ColorCode, log } from "@/utils/misc/logger";
 import {
   getProviderErrorDetail,
@@ -44,19 +44,12 @@ export class StreamErrorUi {
     if (providerDescription) {
       const { titleKey, tipKeys, color } = this.resolveProviderErrorPresentation(providerError, provider, context);
 
-      const embed = new EmbedBuilder()
-        .setColor(color)
-        .setTitle(localizer(locale, titleKey))
-        .setDescription(providerDescription);
-
-      // Actionable tips now ride in a separate green Tip embed (footers cannot render the hyperlinks
-      // that tips like the OpenRouter model list need).
-      const tipEmbed = createTipEmbed(locale, tipKeys);
-      const embeds = tipEmbed ? [embed, tipEmbed] : [embed];
-
-      await context.channel
-        .send({ embeds })
-        .catch((e) => log.warn("Stream: Failed to send provider error embed to channel", e));
+      await sendStandardEmbed(context.channel, locale, {
+        titleKey,
+        description: providerDescription,
+        color,
+        tipKeys,
+      }).catch((e) => log.warn("Stream: Failed to send provider error embed to channel", e));
       return;
     }
 

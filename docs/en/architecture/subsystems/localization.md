@@ -116,13 +116,13 @@ genai: {
 }
 ```
 
-Callers compose the bullet list by passing an ordered `tipKeys` array to `createTipEmbed()` (see
-[Tip embeds](./utils.md#tip-embeds)), including or omitting keys per branch. This is why tips are
+Callers compose the bullet list by passing an ordered `tipKeys` array to `createTipText()` (see
+[Tip modals](./utils.md#tip-modals)), including or omitting keys per branch. This is why tips are
 atomic: a conditional hint (e.g. an OpenRouter-only tip) is added by including its key in one branch,
 not by duplicating a whole paragraph string. Descriptions render markdown and hyperlinks.
 
-`genai.tips.support_server` is the one reserved key: `createTipEmbed()` appends it as the closing
-bullet of every rendered tip embed so the Official Support Server link is always offered. Do not put
+`genai.tips.support_server` is the one reserved key: `createTipText()` appends it as the closing
+bullet of every rendered tip modal so the Official Support Server link is always offered. Do not put
 it in a caller's `tipKeys` array.
 
 When adding a tip:

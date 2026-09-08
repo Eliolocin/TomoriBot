@@ -21,7 +21,7 @@ import { setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 import { generateVoiceMessageMetadata } from "@/utils/audio/voiceMessageMetadata";
 import type { VoiceMessageMetadata } from "@/utils/audio/voiceMessageMetadata";
 import { getOptApiKey } from "@/utils/security/crypto";
-import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhook/personaDispatch";
+import { runWithWebhookIdentity, sendWebhookMessageWithIdentity } from "@/utils/discord/webhook/personaDispatch";
 import { resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
 import { statRepository } from "@/utils/db/repositories";
 import { log } from "@/utils/misc/logger";
@@ -198,45 +198,52 @@ export class GenerateVoiceMessageTool extends BaseTool {
 
       if (!webhook.token) return undefined;
 
-      // Build multipart form: Discord requires payload_json + binary file part
-      const form = new FormData();
+      const isLocalAvatar = avatarUrl?.startsWith("data:image/") === true;
+      return await runWithWebhookIdentity(
+        webhook,
+        {
+          username,
+          avatarUrl: isLocalAvatar ? undefined : (avatarUrl ?? undefined),
+          avatarDataUri: isLocalAvatar ? (avatarUrl ?? undefined) : undefined,
+        },
+        async () => {
+          const form = new FormData();
+          const payloadJson: Record<string, unknown> = {
+            flags: IS_VOICE_MESSAGE_FLAG,
+            attachments: [
+              {
+                id: 0,
+                filename,
+                waveform: voiceMeta.waveform,
+                duration_secs: voiceMeta.durationSecs,
+              },
+            ],
+            allowed_mentions: { parse: [] },
+          };
 
-      const payloadJson: Record<string, unknown> = {
-        flags: IS_VOICE_MESSAGE_FLAG,
-        attachments: [
-          {
-            id: 0,
-            filename,
-            waveform: voiceMeta.waveform,
-            duration_secs: voiceMeta.durationSecs,
-          },
-        ],
-        allowed_mentions: { parse: [] },
-      };
+          if (username) payloadJson.username = username;
+          if (!isLocalAvatar && avatarUrl) payloadJson.avatar_url = avatarUrl;
 
-      if (username) payloadJson.username = username;
-      // data: URIs cannot be used as avatar_url, so only HTTP(S) URLs are accepted
-      if (avatarUrl && !avatarUrl.startsWith("data:image/")) {
-        payloadJson.avatar_url = avatarUrl;
-      }
+          form.append("payload_json", JSON.stringify(payloadJson));
+          form.append("files[0]", new Blob([new Uint8Array(audioBuffer)], { type: mimeType }), filename);
 
-      form.append("payload_json", JSON.stringify(payloadJson));
-      form.append("files[0]", new Blob([new Uint8Array(audioBuffer)], { type: mimeType }), filename);
+          // `wait=true` is required to receive the delivered message ID instead of a 204.
+          const threadParam = threadId ? `&thread_id=${encodeURIComponent(threadId)}` : "";
+          const url = `${DISCORD_API_BASE}/webhooks/${webhook.id}/${webhook.token}?wait=true${threadParam}`;
+          const response = await fetch(url, { method: "POST", body: form });
 
-      // ?wait=true is required to receive a Message object back (otherwise 204)
-      const threadParam = threadId ? `&thread_id=${encodeURIComponent(threadId)}` : "";
-      const url = `${DISCORD_API_BASE}/webhooks/${webhook.id}/${webhook.token}?wait=true${threadParam}`;
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => "unknown");
+            log.warn(
+              `[VoiceWaveform] Discord API rejected native voice message: HTTP ${response.status} — ${errorText}`,
+            );
+            return undefined;
+          }
 
-      const response = await fetch(url, { method: "POST", body: form });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "unknown");
-        log.warn(`[VoiceWaveform] Discord API rejected native voice message: HTTP ${response.status} — ${errorText}`);
-        return undefined;
-      }
-
-      const data = (await response.json()) as { id?: string };
-      return data.id;
+          const data = (await response.json()) as { id?: string };
+          return data.id;
+        },
+      );
     } catch (error) {
       log.warn("[VoiceWaveform] Exception during native voice message send", error);
       return undefined;
@@ -525,7 +532,12 @@ export class GenerateVoiceMessageTool extends BaseTool {
         });
       }
 
-      return { success: true, message: "Voice message generated and sent to Discord.", endTurn: true };
+      return {
+        success: true,
+        message: "Voice message generated and sent to Discord.",
+        responseDelivered: true,
+        endTurn: true,
+      };
     }
 
     if (voiceDesignPrompt && !voiceSampleId && !voiceId) {
@@ -596,7 +608,12 @@ export class GenerateVoiceMessageTool extends BaseTool {
         });
       }
 
-      return { success: true, message: "Voice message generated and sent to Discord.", endTurn: true };
+      return {
+        success: true,
+        message: "Voice message generated and sent to Discord.",
+        responseDelivered: true,
+        endTurn: true,
+      };
     }
 
     if (!voiceId) {
@@ -671,6 +688,11 @@ export class GenerateVoiceMessageTool extends BaseTool {
       });
     }
 
-    return { success: true, message: "Voice message generated and sent to Discord.", endTurn: true };
+    return {
+      success: true,
+      message: "Voice message generated and sent to Discord.",
+      responseDelivered: true,
+      endTurn: true,
+    };
   }
 }

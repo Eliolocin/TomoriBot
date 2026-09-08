@@ -67,6 +67,7 @@ export async function runToolLoop(params: ToolLoopParams): Promise<GenerationTur
   let naiConsecutiveToolFailures = 0;
   let selectedStickerToSend: Sticker | null = null;
   let thoughtLog: GenerationTurnResult["thoughtLog"];
+  let toolResponseDelivered = false;
 
   for (let iteration = 0; iteration < MAX_FUNCTION_CALL_ITERATIONS; iteration++) {
     if (iteration === SOFT_WARN_ITERATION_THRESHOLD && params.context.shouldSurfaceUserErrors) {
@@ -98,13 +99,32 @@ export async function runToolLoop(params: ToolLoopParams): Promise<GenerationTur
           detailsText,
           thoughtLog,
           selectedStickerToSend ?? undefined,
+          toolResponseDelivered,
         );
       case "error":
       case "timeout":
         resetChannelFollowUpCount(params.context.channel.id);
-        return buildResult(streamResult.status, params.context, streamResults, finalText, detailsText, thoughtLog);
+        return buildResult(
+          streamResult.status,
+          params.context,
+          streamResults,
+          finalText,
+          detailsText,
+          thoughtLog,
+          undefined,
+          toolResponseDelivered,
+        );
       case "empty_response":
-        return buildResult("empty_response", params.context, streamResults, finalText, detailsText, thoughtLog);
+        return buildResult(
+          "empty_response",
+          params.context,
+          streamResults,
+          finalText,
+          detailsText,
+          thoughtLog,
+          undefined,
+          toolResponseDelivered,
+        );
       case "stopped_by_user":
         queueStopResponseIfPresent(params.context);
         resetChannelFollowUpCount(params.context.channel.id);
@@ -112,10 +132,28 @@ export async function runToolLoop(params: ToolLoopParams): Promise<GenerationTur
         // forgets what it just said in the channel whenever a turn is cut short.
         finalText = streamResult.accumulatedText ?? finalText;
         detailsText = mergeDetails(detailsText, streamResult.detailsContent);
-        return buildResult("stopped_by_user", params.context, streamResults, finalText, detailsText, thoughtLog);
+        return buildResult(
+          "stopped_by_user",
+          params.context,
+          streamResults,
+          finalText,
+          detailsText,
+          thoughtLog,
+          undefined,
+          toolResponseDelivered,
+        );
       case "follow_up_interrupt":
         incrementChannelFollowUpCount(params.context.channel.id);
-        return buildResult("follow_up_interrupt", params.context, streamResults, finalText, detailsText, thoughtLog);
+        return buildResult(
+          "follow_up_interrupt",
+          params.context,
+          streamResults,
+          finalText,
+          detailsText,
+          thoughtLog,
+          undefined,
+          toolResponseDelivered,
+        );
       case "function_call": {
         detailsText = mergeDetails(detailsText, streamResult.detailsContent);
         setChannelToolCallChainActive(channelLocks.get(params.context.turn.lockedTurn.channelId), true);
@@ -126,10 +164,20 @@ export async function runToolLoop(params: ToolLoopParams): Promise<GenerationTur
           continue;
         }
         if (toolOutcome.kind === "abort") {
-          return buildResult(toolOutcome.status, params.context, streamResults, finalText, detailsText, thoughtLog);
+          return buildResult(
+            toolOutcome.status,
+            params.context,
+            streamResults,
+            finalText,
+            detailsText,
+            thoughtLog,
+            undefined,
+            toolResponseDelivered,
+          );
         }
 
         functionHistory.push(toolOutcome.historyEntry);
+        toolResponseDelivered ||= toolOutcome.responseDelivered;
         // Visible text emitted before the tool call now lives on that history
         // entry's assistant tool-call turn. Remove the same buffered parts from
         // the trailing prefill so providers do not receive it a second time.
@@ -144,7 +192,16 @@ export async function runToolLoop(params: ToolLoopParams): Promise<GenerationTur
           consecutiveToolErrors += 1;
           if (consecutiveToolErrors >= MAX_CONSECUTIVE_TOOL_ERRORS) {
             await emitToolErrorLoop(params.context);
-            return buildResult("error", params.context, streamResults, finalText, detailsText, thoughtLog);
+            return buildResult(
+              "error",
+              params.context,
+              streamResults,
+              finalText,
+              detailsText,
+              thoughtLog,
+              undefined,
+              toolResponseDelivered,
+            );
           }
         }
 
@@ -157,6 +214,7 @@ export async function runToolLoop(params: ToolLoopParams): Promise<GenerationTur
             detailsText,
             thoughtLog,
             selectedStickerToSend ?? undefined,
+            toolResponseDelivered,
           );
         }
 
@@ -177,6 +235,7 @@ export async function runToolLoop(params: ToolLoopParams): Promise<GenerationTur
               detailsText,
               thoughtLog,
               selectedStickerToSend ?? undefined,
+              toolResponseDelivered,
             );
           }
 
@@ -204,6 +263,7 @@ export async function runToolLoop(params: ToolLoopParams): Promise<GenerationTur
             detailsText,
             thoughtLog,
             selectedStickerToSend ?? undefined,
+            toolResponseDelivered,
           );
         }
 
@@ -228,7 +288,16 @@ export async function runToolLoop(params: ToolLoopParams): Promise<GenerationTur
     });
   }
   selectedStickerToSend = null;
-  return buildResult("timeout", params.context, streamResults, finalText, detailsText, thoughtLog);
+  return buildResult(
+    "timeout",
+    params.context,
+    streamResults,
+    finalText,
+    detailsText,
+    thoughtLog,
+    undefined,
+    toolResponseDelivered,
+  );
 }
 
 async function streamOnce(
@@ -378,6 +447,7 @@ async function executeToolCall(
       functionName: string;
       success: boolean;
       endTurn: boolean;
+      responseDelivered: boolean;
       stickerSelection?: Sticker | null;
       historyEntry: ToolHistoryEntry;
     }
@@ -590,6 +660,7 @@ async function executeToolCall(
     functionName,
     success: toolResult.success,
     endTurn: toolResult.endTurn === true,
+    responseDelivered: toolResult.success && toolResult.responseDelivered === true,
     stickerSelection,
     historyEntry: {
       functionCall,
@@ -822,6 +893,7 @@ function buildResult(
   detailsText: string,
   thoughtLog: GenerationTurnResult["thoughtLog"],
   selectedSticker?: Sticker,
+  toolResponseDelivered = false,
 ): GenerationTurnResult {
   const text = detailsText.trim()
     ? `${responseText.trim()}\n\n[Scene Metadata]\n${detailsText.trim()}`
@@ -840,6 +912,7 @@ function buildResult(
             },
           ]
         : [],
+    toolResponseDelivered: toolResponseDelivered || undefined,
     thoughtLog,
     thoughtLogOwner: thoughtLog ? resolveThoughtLogOwner(context) : undefined,
     selectedSticker,

@@ -51,30 +51,31 @@ This is a current map of shared utility modules under `src/utils/`.
 - `interactionHelper.ts`: compatibility barrel for grouped UI helpers in `utils/discord/ui/`; new code imports the owned UI module directly
 - `streamOrchestrator.ts`: public stream orchestration entry point backed by responsibility modules in `utils/discord/stream/`
 - `webhookManager.ts`: compatibility barrel for grouped webhook helpers in `utils/discord/webhook/`; new code imports the owned webhook module directly
-- `embedHelper.ts`: shared embed builders (`createStandardEmbed`, `createSummaryEmbed`, `createTipEmbed`, `sendStandardEmbed`) — see [Tip embeds](#tip-embeds) below
+- `embedHelper.ts`: shared embed builders and senders (`createStandardEmbed`, `createSummaryEmbed`, `createTipText`, `sendStandardEmbed`) — see [Tip modals](#tip-modals) below
+- `textDisplayModal.ts`: reusable read-only text modal, trigger button, and collector wiring
 - `historyFetcher.ts`, `historyFormatter.ts`
 
-#### Tip embeds
+#### Tip modals
 
-`createTipEmbed(locale, tipKeys, tipVars?)` in `embedHelper.ts` builds the reusable green **💡 Tip**
-embed shown alongside an error/info embed (e.g. by `stream/errorUi.ts` and `ui/interactionCore.ts`).
+`createTipText(locale, tipKeys, tipVars?)` in `embedHelper.ts` builds the reusable markdown opened by
+the **What You Can Do** button below an error (e.g. in `stream/errorUi.ts` and `ui/interactionCore.ts`).
 
 - Each entry in `tipKeys` is an **atomic** locale key resolved independently and rendered as its own
   dashed bullet (`- item`). Keys live under `genai.tips.*` (see the Localization doc's
   [Tip-item keys](./localization.md#tip-item-keys-genaitips) convention).
-- Tips render as an embed **description**, not a footer, so markdown and hyperlinks render — that is
-  the reason tips moved out of error-embed footers.
+- Tips render in a read-only Discord text-display modal, so markdown and hyperlinks remain usable
+  without adding another embed or ephemeral reply to the channel.
 - **Conditional tips are the caller's job**: include or omit a key inline (e.g. an OpenRouter-only
   item) instead of maintaining whole-paragraph tip strings per branch. Items that resolve to empty
   text are dropped, and the function returns `null` when nothing resolves, so the caller can skip
-  attaching a tip embed entirely.
+  attaching a tip button entirely.
 - **The Official Support Server link is automatic**: `genai.tips.support_server` (exported as
-  `SUPPORT_SERVER_TIP_KEY`) is appended as the last bullet of every rendered tip embed. Callers must
+  `SUPPORT_SERVER_TIP_KEY`) is appended as the last bullet of every rendered tip modal. Callers must
   not list it in `tipKeys` — it is filtered out if they do, so it can never be duplicated or
-  reordered. It is appended *after* the empty check, so a tip embed with no caller-supplied items
+  reordered. It is appended *after* the empty check, so a tip modal with no caller-supplied items
   still returns `null` rather than degrading into a support-link-only embed.
-- Colored `ColorCode.SUCCESS` (green) to read as "helpful" and stay visibly distinct from the
-  red/yellow error embed above it; the description is truncated to Discord's embed-description limit.
+- The button is disabled after `TIP_BUTTON_TIMEOUT_MS` (default 24 hours). The generic
+  `textDisplayModal.ts` builder is also available to read-only legal and help surfaces.
 
 ### `utils/text`
 

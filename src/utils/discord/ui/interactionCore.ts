@@ -345,8 +345,15 @@ import {
   isModalRoleSelectField,
   isModalChannelSelectField,
 } from "../../../types/discord/modal";
-import { createStandardEmbed, createSummaryEmbed, createTipEmbed } from "../embedHelper";
+import {
+  createStandardEmbed,
+  createSummaryEmbed,
+  createTipText,
+  TIP_BUTTON_TIMEOUT_MS,
+  TIP_DETAILS_BUTTON_ID,
+} from "../embedHelper";
 import { buildDocsLinkRow } from "@/utils/discord/docsLinks";
+import { attachTextDisplayModalCollector, buildTextDisplayModalButton } from "@/utils/discord/textDisplayModal";
 
 const PROMPT_TIMEOUT = 60000; // 60 seconds
 const MODAL_DESCRIPTION_MAX_LENGTH = 99; // Discord modal description limit
@@ -1051,20 +1058,40 @@ export async function replyInfoEmbed(
   // Components V2 collision guard. If this interaction's reply already carries
   //      IsComponentsV2 (e.g. a range selector rendered onto it), a legacy
   //      `editReply({ embeds })` would be rejected by Discord. Render the same
-  //      title/description/footer as a V2 notice container instead. Tip embeds are
+  //      title/description/footer as a V2 notice container instead. Tip buttons are
   //      dropped here, so they are rare on the error/info paths that hit this guard.
   if (hasComponentsV2Reply(interaction)) {
     await replyNoticeContainerV2(interaction, standardOptionsToNotice(locale, finalOptions));
     return;
   }
 
-  // Build the embed using the shared helper for consistency. When tip-item keys are supplied,
-  //    append the reusable green Tip embed so every send path below emits both embeds together.
   const embed = createStandardEmbed(locale, finalOptions);
-  const tipEmbed = finalOptions.tipKeys?.length
-    ? createTipEmbed(locale, finalOptions.tipKeys, finalOptions.tipVars)
+  const tipText = finalOptions.tipKeys?.length
+    ? createTipText(locale, finalOptions.tipKeys, finalOptions.tipVars)
     : null;
-  const embeds = tipEmbed ? [embed, tipEmbed] : [embed];
+  const activeTipRow = tipText
+    ? buildTextDisplayModalButton(TIP_DETAILS_BUTTON_ID, localizer(locale, "genai.tips.button"))
+    : undefined;
+  const disabledTipRow = tipText
+    ? buildTextDisplayModalButton(TIP_DETAILS_BUTTON_ID, localizer(locale, "genai.tips.button"), true)
+    : undefined;
+  const components = activeTipRow ? [activeTipRow] : [];
+  const embeds = [embed];
+
+  const attachTipCollector = (message: Message): void => {
+    if (!tipText || !disabledTipRow) return;
+    attachTextDisplayModalCollector({
+      message,
+      customId: TIP_DETAILS_BUTTON_ID,
+      title: localizer(locale, "genai.tips.title"),
+      content: tipText,
+      timeoutMs: TIP_BUTTON_TIMEOUT_MS,
+      logLabel: "Interaction error tips",
+      onExpire: async () => {
+        await interaction.webhook.editMessage(message.id, { embeds, components: [disabledTipRow] });
+      },
+    });
+  };
 
   const interactionState = {
     deferred: interaction.deferred,
@@ -1085,11 +1112,12 @@ export async function replyInfoEmbed(
     // Discord.js internal guard, so bypass it by calling webhook.send() directly.
     log.info(`Raw modal state desync detected for interaction ${interaction.id}, using webhook.send directly`);
     try {
-      await interaction.webhook.send({
+      const message = await interaction.webhook.send({
         embeds,
-        components: [],
+        components,
         flags: flags || MessageFlags.Ephemeral,
       });
+      attachTipCollector(message);
       return;
     } catch (webhookError) {
       log.error("webhook.send failed for raw-modal-acknowledged interaction:", webhookError);
@@ -1098,9 +1126,11 @@ export async function replyInfoEmbed(
 
   try {
     if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({ embeds, components: [] });
+      const message = await interaction.editReply({ embeds, components });
+      attachTipCollector(message);
     } else {
-      await interaction.reply({ embeds, components: [], flags });
+      await interaction.reply({ embeds, components, flags });
+      attachTipCollector(await interaction.fetchReply());
     }
   } catch (error) {
     log.warn("Failed to show info embed via primary method:", error);
@@ -1113,27 +1143,30 @@ export async function replyInfoEmbed(
         // Discord.js state is out of sync. followUp() would hit the same
         // INTERACTION_NOT_REPLIED guard, so use webhook.send() instead.
         log.info("Attempting webhook.send due to acknowledgment conflict (raw REST desync)");
-        await interaction.webhook.send({
+        const message = await interaction.webhook.send({
           embeds,
-          components: [],
+          components,
           flags: flags || MessageFlags.Ephemeral,
         });
+        attachTipCollector(message);
       } else if (errorMessage.includes("not been sent or deferred")) {
         // Interaction wasn't properly acknowledged - try reply without flags first
         log.info("Attempting basic reply due to no prior acknowledgment");
         await interaction.reply({
           embeds,
-          components: [],
+          components,
           flags: MessageFlags.Ephemeral,
         });
+        attachTipCollector(await interaction.fetchReply());
       } else {
         // Other error - try webhook.send as last resort (avoids followUp guard)
         log.info("Attempting webhook.send as last resort fallback");
-        await interaction.webhook.send({
+        const message = await interaction.webhook.send({
           embeds,
-          components: [],
+          components,
           flags: flags || MessageFlags.Ephemeral,
         });
+        attachTipCollector(message);
       }
     } catch (fallbackError) {
       await log.error("All interaction methods failed for replyInfoEmbed:", error, {

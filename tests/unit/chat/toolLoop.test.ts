@@ -372,6 +372,18 @@ describe("runToolLoop — contract tests", () => {
     expect(result.streamResults).toHaveLength(2);
   });
 
+  it("preserves direct tool delivery when the tool ends without streamed text", async () => {
+    const { runToolLoop } = await import("@/utils/chat/toolLoop");
+    const { provider } = makeProvider([makeFunctionCallResult("voice_tool")]);
+    toolExecuteQueue.push({ success: true, responseDelivered: true, endTurn: true });
+
+    const result = await runToolLoop(makeParams(makeContext(), provider));
+
+    expect(result.status).toBe("completed");
+    expect(result.personaResponses).toHaveLength(0);
+    expect(result.toolResponseDelivered).toBe(true);
+  });
+
   it("tool failure: error is represented in the history entry and the loop continues", async () => {
     const { runToolLoop } = await import("@/utils/chat/toolLoop");
 

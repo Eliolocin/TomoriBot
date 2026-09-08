@@ -313,6 +313,8 @@ export interface GenerationTurnResult {
   status: StreamResult["status"] | "skipped";
   streamResults: StreamResult[];
   personaResponses: ChatPersonaResponse[];
+  /** A tool delivered the response directly even though no streamed text was captured. */
+  toolResponseDelivered?: boolean;
   thoughtLog?: ThoughtLogPayload;
   thoughtLogOwner?: ThoughtLogOwner;
   selectedSticker?: Sticker;

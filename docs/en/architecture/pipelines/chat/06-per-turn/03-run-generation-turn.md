@@ -117,7 +117,7 @@ a non-error result *and* the loop falls through (rare; defensive).
   so their details can be summarized by the fallback notice instead of posted
   as public errors.
 - On completed model fallback: sends the compact `Fallback Used` button notice
-  with the earlier failure chain available on demand, unless a stop/follow-up
+  with the earlier failure chain available in a read-only text modal, unless a stop/follow-up
   interrupt is pending for the channel.
 - On non-error or last attempt: emits only final error results, calls
   `responseSink.finalize(result)`, and returns.

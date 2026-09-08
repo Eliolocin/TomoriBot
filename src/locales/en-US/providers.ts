@@ -75,11 +75,12 @@ export default {
       inactivity_timeout_title: `🟡️ Response Timed Out`,
       inactivity_timeout_description: `The AI provider stopped responding and the connection timed out. This can happen when the provider is overloaded or experiencing issues. Please try again.`,
     },
-    // Atomic tip-item strings rendered by createTipEmbed() as a dashed bullet list in a separate
-    // green "Tip" embed. Each key is one bullet; callers compose them (including conditional items)
-    // instead of maintaining whole-paragraph tip strings. Descriptions render markdown + hyperlinks.
+    // Atomic tip-item strings rendered by createTipText() as a dashed bullet list in a read-only
+    // modal. Each key is one bullet; callers compose conditional items instead of maintaining
+    // whole-paragraph tip strings. Text displays render markdown and hyperlinks.
     tips: {
       title: `💡 What you can do`,
+      button: `What You Can Do`,
       wait_and_retry: `Please wait a few minutes before trying again.`,
       api_key_rotation: `If this server has multiple keys, select the provider in \`/providers\` to manage its rotation pool.`,
       model_fallback: `Add backup models with \`/config\` > Models > Fallbacks & Randomizer for better resilience.`,
@@ -107,7 +108,7 @@ export default {
       switch_model_provider: `Switch to a different model or provider with \`/config\` > Models > Switch Models or \`/providers\`.`,
       switch_model_provider_personal: `Switch with \`/personal config\`, or update the provider in \`/personal providers\`.`,
       disable_personal_text_override: `This request error was from your [personal provider](https://docs.tomoribot.app/en/features/knowledge/personalization/#your-own-providers). Update it in \`/personal providers\` or select a working model with \`/personal config\`.`,
-      // Auto-appended to every non-empty tip embed by createTipEmbed(); never list it in a caller's tipKeys.
+      // Auto-appended to every non-empty tip modal by createTipText(); never list it in a caller's tipKeys.
       support_server: `Visit the [Official Support Server](https://discord.gg/bjCfHm9QsB) for assistance.`,
       shorten_message: `Try shortening your message, then send it again.`,
       refresh_context: `Clear the conversation context with \`/refresh\`.`,

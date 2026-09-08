@@ -767,13 +767,36 @@ async function ensureWebhookAvatarState(webhook: Webhook, identity?: ResolvedWeb
   }
 }
 
+/**
+ * Runs a custom webhook operation with the same serialized avatar handling as
+ * ordinary webhook sends. Local persona avatars are data URIs, which Discord
+ * cannot accept as a per-message `avatar_url`, so callers that use raw REST must
+ * temporarily apply that image to the shared webhook while holding its mutation
+ * lock.
+ */
+export async function runWithWebhookIdentity<T>(
+  webhook: Webhook,
+  identity: ResolvedWebhookIdentity | undefined,
+  operation: () => Promise<T>,
+  lockKey?: string,
+): Promise<T> {
+  const run = async (): Promise<T> => {
+    await ensureWebhookAvatarState(webhook, identity);
+    return await operation();
+  };
+
+  if (identity?.avatarDataUri || shouldResetWebhookAvatar(webhook, identity)) {
+    return await withWebhookMutationLock(lockKey ?? webhook.channelId ?? webhook.id, run);
+  }
+
+  return await run();
+}
+
 async function sendWebhookMessagesInternal(
   webhook: Webhook,
   payloads: WebhookSendPayload[],
   identity?: ResolvedWebhookIdentity,
 ): Promise<Message[]> {
-  await ensureWebhookAvatarState(webhook, identity);
-
   const messages: Message[] = [];
   for (const payload of payloads) {
     const finalPayload = buildWebhookSendPayload(payload, identity);
@@ -793,13 +816,12 @@ export async function sendWebhookMessagesWithIdentity(
   lockKey?: string,
 ): Promise<Message[]> {
   try {
-    if (identity?.avatarDataUri || shouldResetWebhookAvatar(webhook, identity)) {
-      return await withWebhookMutationLock(lockKey ?? webhook.channelId ?? webhook.id, () =>
-        sendWebhookMessagesInternal(webhook, payloads, identity),
-      );
-    }
-
-    return await sendWebhookMessagesInternal(webhook, payloads, identity);
+    return await runWithWebhookIdentity(
+      webhook,
+      identity,
+      () => sendWebhookMessagesInternal(webhook, payloads, identity),
+      lockKey,
+    );
   } catch (error) {
     if (isInvalidWebhookError(error) && webhook.channelId) {
       invalidateWebhookCache(webhook.channelId);

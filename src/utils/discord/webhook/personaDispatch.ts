@@ -1,4 +1,5 @@
 export {
+  runWithWebhookIdentity,
   sendAsPersona,
   sendWebhookMessageWithIdentity,
   sendWebhookMessagesWithIdentity,

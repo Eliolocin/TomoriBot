@@ -20,6 +20,13 @@ const emptyResult: GenerationTurnResult = {
   personaResponses: [],
 };
 
+const toolDeliveredResult: GenerationTurnResult = {
+  status: "completed",
+  streamResults: [],
+  personaResponses: [],
+  toolResponseDelivered: true,
+};
+
 function makeResolveArgs(userId: number) {
   return {
     turn: {
@@ -126,6 +133,20 @@ describe("ReunionClaimRegistry", () => {
     const first = await firstPromise;
     expect(first.presence?.mode).toBe("claimed");
     await recordReunionPresence(first.presence, emptyResult, presenceStore);
+  });
+
+  it("consumes the reunion after a tool directly delivers the persona response", async () => {
+    const write = mock(async () => true);
+    const presenceStore = makePresenceStore({
+      getUserPersonaReunionInfo: async () => ({ lastPreviousDayAt: null, seenToday: false }),
+      recordPresenceSeen: write,
+    });
+    const first = await resolveReunionNote(makeResolveArgs(33), presenceStore);
+
+    expect(first.note).toContain("very first time");
+    await recordReunionPresence(first.presence, toolDeliveredResult, presenceStore);
+
+    expect(write).toHaveBeenCalledTimes(1);
   });
 
   it("releases a failed claim without letting a suppressed turn consume it", async () => {

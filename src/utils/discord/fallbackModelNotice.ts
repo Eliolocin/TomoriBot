@@ -1,7 +1,8 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, type Message, MessageFlags } from "discord.js";
+import type { Message, Webhook } from "discord.js";
 import type { LlmRow } from "@/types/db/schema";
 import type { ToolContext } from "@/types/tool/interfaces";
-import { createStandardEmbed, truncateForEmbedDescription } from "@/utils/discord/embedHelper";
+import { truncateForEmbedDescription } from "@/utils/discord/embedHelper";
+import { attachTextDisplayModalCollector, buildTextDisplayModalButton } from "@/utils/discord/textDisplayModal";
 import { isNoticeEmbedVisible, routeHiddenToolNotice } from "@/utils/discord/toolProgressNotice";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhook/personaDispatch";
 import { resolveManagedChannelWebhook } from "@/utils/discord/webhook/webhookCore";
@@ -74,16 +75,6 @@ function resolveFallbackSlot(context: ToolContext, successModel: LlmRow, failure
   return Math.max(1, failures.length);
 }
 
-function createFallbackDetailsButton(locale: string, disabled = false): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(FALLBACK_DETAILS_BUTTON_ID)
-      .setLabel(localizer(locale, "genai.fallback_used_details_button"))
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(disabled),
-  );
-}
-
 export async function sendFallbackModelUsageNotice({
   context,
   failures,
@@ -106,14 +97,17 @@ export async function sendFallbackModelUsageNotice({
     return;
   }
 
-  const detailsEmbed = createStandardEmbed(context.locale, {
-    ...detailsOptions,
-    footerKey: "genai.fallback_used_hide_footer",
-  });
+  const modalTitle = localizer(context.locale, detailsOptions.titleKey);
+  const modalContent = `${localizer(
+    context.locale,
+    detailsOptions.descriptionKey,
+    detailsOptions.descriptionVars,
+  )}\n\n-# ${localizer(context.locale, "genai.fallback_used_hide_footer")}`;
 
   try {
-    const buttonRow = createFallbackDetailsButton(context.locale);
-    const disabledButtonRow = createFallbackDetailsButton(context.locale, true);
+    const buttonLabel = localizer(context.locale, "genai.fallback_used_details_button");
+    const buttonRow = buildTextDisplayModalButton(FALLBACK_DETAILS_BUTTON_ID, buttonLabel);
+    const disabledButtonRow = buildTextDisplayModalButton(FALLBACK_DETAILS_BUTTON_ID, buttonLabel, true);
 
     // Resolve thread ID: webhooks targeting a parent channel need it to post into a thread.
     const threadId =
@@ -133,8 +127,8 @@ export async function sendFallbackModelUsageNotice({
     // so when a sprite put it on the webhook path the webhook is resolved lazily here: the
     // lookup is cached, so this costs nothing on the common path.
     const deliveredIdentity = getChannelDeliveredWebhookIdentity(context.channel.id);
-    const noticeWebhook = deliveredIdentity
-      ? (context.webhook ?? (await resolveManagedChannelWebhook(context.channel)))
+    const noticeWebhook: Webhook | undefined = deliveredIdentity
+      ? (context.webhook ?? (await resolveManagedChannelWebhook(context.channel)) ?? undefined)
       : undefined;
 
     if (deliveredIdentity && noticeWebhook) {
@@ -151,39 +145,23 @@ export async function sendFallbackModelUsageNotice({
       noticeMessage = await context.channel.send({ components: [buttonRow] });
     }
 
-    const collector = noticeMessage.createMessageComponentCollector({
-      componentType: ComponentType.Button,
-      time: FALLBACK_NOTICE_BUTTON_TIMEOUT_MS,
-      filter: (interaction) => interaction.customId === FALLBACK_DETAILS_BUTTON_ID && !interaction.user.bot,
-    });
-
-    collector.on("collect", async (interaction) => {
-      try {
-        await interaction.reply({
-          embeds: [detailsEmbed],
-          flags: MessageFlags.Ephemeral,
-        });
-      } catch (error) {
-        log.warn("Fallback model details button reply failed", error as Error);
-      }
-    });
-
-    collector.on("end", async () => {
-      // Webhook messages must be edited via the webhook token, not the bot token.
-      if (context.webhook) {
-        await context.webhook
-          .editMessage(noticeMessage.id, {
+    attachTextDisplayModalCollector({
+      message: noticeMessage,
+      customId: FALLBACK_DETAILS_BUTTON_ID,
+      title: modalTitle,
+      content: modalContent,
+      timeoutMs: FALLBACK_NOTICE_BUTTON_TIMEOUT_MS,
+      logLabel: "Fallback model details",
+      onExpire: async () => {
+        if (deliveredIdentity && noticeWebhook) {
+          await noticeWebhook.editMessage(noticeMessage.id, {
             components: [disabledButtonRow],
             ...(threadId ? { threadId } : {}),
-          })
-          .catch((err: unknown) =>
-            log.warn("[FallbackNotice] Failed to disable buttons via webhook after collector end", err),
-          );
-      } else {
-        await noticeMessage
-          .edit({ components: [disabledButtonRow] })
-          .catch((err: unknown) => log.warn("[FallbackNotice] Failed to disable buttons after collector end", err));
-      }
+          });
+          return;
+        }
+        await noticeMessage.edit({ components: [disabledButtonRow] });
+      },
     });
   } catch (error) {
     log.warn("Failed to send compact fallback model notice", error as Error);

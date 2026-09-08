@@ -208,9 +208,11 @@ leaderboard correctness.
    turns release immediately; eligible turns carry the claim in the
    `ReunionPresenceScope` on `ChatTurnContext.reunionPresence`.
 2. `recordReunionPresence` at **post-turn** immediately persists `presence_seen`
-   after a response lands, then releases the claim. Empty and failed turns release
-   without writing. A concurrent turn suppressed by an active claim also does not
-   write, so a failed claimant cannot make the user lose the pending reunion.
+   after a response lands, then releases the claim. A direct-delivery tool such as
+   voice generation also counts when it confirms that its message reached Discord,
+   even if the model emits no separate text. Empty and failed turns release without
+   writing. A concurrent turn suppressed by an active claim also does not write, so
+   a failed claimant cannot make the user lose the pending reunion.
 
 The claim prevents separate channel locks from building the same reunion context at
 the same time. `TIME_AWARENESS_REUNION_CLAIM_TTL_MS` releases abandoned claims after

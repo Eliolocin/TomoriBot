@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, mock } from "bun:test";
-import type { Client, TextChannel } from "discord.js";
+import type { Client, ModalBuilder, TextChannel } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
 import type { ProviderError, StreamContext, StreamProvider } from "@/types/stream/interfaces";
 import { StreamErrorUi } from "@/utils/discord/stream/errorUi";
@@ -53,26 +53,47 @@ function makeProvider(name = "openrouter"): StreamProvider {
   } as unknown as StreamProvider;
 }
 
-/** Reads the tip embed (the second embed) that `handleProviderError` sends to the channel. */
-function tipText(send: SendMock): string {
-  const payload = send.mock.calls[0]?.[0] as {
-    embeds?: Array<{ data?: { description?: string } }>;
-  };
-  return payload.embeds?.[1]?.data?.description ?? "";
-}
-
 async function renderTips(
   error: ProviderError,
   textCredentialSource: StreamContext["textCredentialSource"],
   options: { providerName?: string; fallbackChain?: unknown[] } = {},
 ): Promise<string> {
-  const send = mock(async () => undefined);
+  let modal: ReturnType<ModalBuilder["toJSON"]> | undefined;
+  const collector = {
+    on(event: string, listener: (interaction: unknown) => Promise<void>) {
+      if (event === "collect") {
+        void listener({
+          customId: "error_tip_details",
+          user: { bot: false },
+          showModal: async (builtModal: ModalBuilder) => {
+            modal = builtModal.toJSON();
+          },
+        });
+      }
+      return collector;
+    },
+  };
+  const send = mock(async () => ({
+    createMessageComponentCollector: () => collector,
+  }));
   await new StreamErrorUi().handleProviderError(
     error,
     makeProvider(options.providerName),
     makeContext(send, textCredentialSource, options.fallbackChain ?? []),
   );
-  return tipText(send);
+  await Promise.resolve();
+  const payload = send.mock.calls[0]?.[0] as {
+    embeds?: unknown[];
+    components?: Array<{ toJSON(): { components: Array<{ label?: string }> } }>;
+  };
+  expect(payload.embeds).toHaveLength(1);
+  expect(payload.components?.[0]?.toJSON().components[0]?.label).toBe("What You Can Do");
+  return (
+    modal?.components
+      ?.map((component) => ("content" in component ? component.content : ""))
+      .filter(Boolean)
+      .join("") ?? ""
+  );
 }
 
 const MODEL_ERROR: ProviderError = {

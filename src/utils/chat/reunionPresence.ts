@@ -160,7 +160,7 @@ export async function recordReunionPresence(
 ): Promise<void> {
   if (!presence) return;
 
-  if (result.personaResponses.length === 0) {
+  if (result.personaResponses.length === 0 && result.toolResponseDelivered !== true) {
     if (presence.mode === "claimed") reunionClaims.release(presence.claim);
     return;
   }

@@ -487,6 +487,9 @@ Tools can send embeds via `sendStandardEmbed`. The tool execution context includ
 
 - If a webhook is available, embeds are sent through that webhook with persona name/avatar.
 - Otherwise, embeds are sent as normal bot messages.
+- Native voice-message REST sends serialize local-avatar changes through the same
+  shared-webhook identity lock before delivery; `data:` avatars cannot be supplied
+  through Discord's per-message `avatar_url` field.
 
 The same shared webhook identity path is used for streamed chunks, tool embeds, generated images, sticker URL sends, reminder fallback pings, and manual alter impersonation.
 
