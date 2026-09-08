@@ -1884,6 +1884,36 @@ describe("config Persona Memories routes", () => {
     deleteSpy.mockRestore();
   });
 
+  it("repaints an all-selected conditioning submit as a no-change receipt without deleting", async () => {
+    const persona = makePersona({ persona_id: 55, persona_lineage_id: 707 });
+    const harness = makeHarness({ isManager: true, personas: [persona] });
+    harness.dependencies.takeCheckboxValues = (_interactionId, fieldId) =>
+      fieldId === buildConditioningCheckboxGroupId(0, "nonce1234567") ? ["0"] : undefined;
+    const deleteSpy = spyOn(conditioningMemoryRepository, "deleteGroupsForPersona").mockResolvedValue(1);
+
+    await dispatch(
+      harness,
+      makeInteraction({
+        customId: buildConfigRouteId({
+          action: "conditioning-submit",
+          locale: "en-US",
+          personaId: 55,
+          fp: computeConditioningRemoveFingerprint(55, [CONDITIONING_GROUP]),
+          nonce: "nonce1234567",
+        }),
+        kind: "modal",
+        harness,
+      }),
+    );
+
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(harness.edits).not.toHaveLength(0);
+    const receipt = JSON.stringify(harness.edits.at(-1));
+    expect(receipt).toContain(localizer("en-US", "commands.config.panel.conditioning_no_changes_heading"));
+    expect(receipt).toContain(localizer("en-US", "commands.config.panel.conditioning_no_changes_detail"));
+    deleteSpy.mockRestore();
+  });
+
   it("prewarms the selected STM scope before reading its entry", async () => {
     let prewarmed = false;
     const prewarmSpy = spyOn(shortTermMemoryCache, "preWarmStmEntry").mockImplementation(async () => {

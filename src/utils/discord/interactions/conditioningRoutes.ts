@@ -13,7 +13,7 @@ import {
 } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import { personaRepository } from "@/utils/db/repositories";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
-import { beginPanelInteraction, validateAndFallbackPanelPayload } from "@/utils/discord/interactions/panelController";
+import { validateAndFallbackPanelPayload } from "@/utils/discord/interactions/panelController";
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   CONDITIONING_MODAL_CAPACITY,
@@ -216,20 +216,20 @@ export function createConditioningInteractionRoute(
 
       if (route.action === "remove-submit") {
         const modal = interaction as ModalSubmitInteraction;
-        const initialScope = await beginPanelInteraction(interaction, {
-          authorize: () => isAuthorized(interaction),
-          onDenied: () => {
-            dependencies.takeCheckboxValues(modal.id, buildConditioningCheckboxGroupId(0, route.nonce));
-            return interaction.editReply(terminalPayload(route.locale, "general.errors.permission_denied_description"));
-          },
-          load: () => dependencies.resolveScope(interaction),
-          onMissing: () => {
-            dependencies.takeCheckboxValues(modal.id, buildConditioningCheckboxGroupId(0, route.nonce));
-            return interaction.editReply(terminalPayload(route.locale, "general.errors.tomori_not_setup_description"));
-          },
-        });
-        if (!initialScope) return;
+        await modal.deferReply({ flags: MessageFlags.Ephemeral });
 
+        if (!isAuthorized(interaction)) {
+          dependencies.takeCheckboxValues(modal.id, buildConditioningCheckboxGroupId(0, route.nonce));
+          await interaction.editReply(terminalPayload(route.locale, "general.errors.permission_denied_description"));
+          return;
+        }
+
+        const initialScope = await dependencies.resolveScope(interaction);
+        if (!initialScope) {
+          dependencies.takeCheckboxValues(modal.id, buildConditioningCheckboxGroupId(0, route.nonce));
+          await interaction.editReply(terminalPayload(route.locale, "general.errors.tomori_not_setup_description"));
+          return;
+        }
         const scope = initialScope;
         const startIndex = route.page * CONDITIONING_MODAL_CAPACITY;
         const pageEntries = scope.entries.slice(startIndex, startIndex + CONDITIONING_MODAL_CAPACITY);

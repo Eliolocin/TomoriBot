@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import type { ButtonInteraction, Client, ModalSubmitInteraction } from "discord.js";
+import { MessageFlags, type ButtonInteraction, type Client, type ModalSubmitInteraction } from "discord.js";
 import {
   createConditioningInteractionRoute,
   type ConditioningRouteDependencies,
@@ -53,6 +53,8 @@ function createMockInteraction(customId: string, options: MockInteractionOptions
   let repliedMessage: unknown = null;
   let editedReply: unknown = null;
   let deferredUpdate = false;
+  let deferredReplyPayload: unknown = null;
+  let deferredReplyCount = 0;
 
   const interaction = {
     id: "interaction-1",
@@ -77,7 +79,9 @@ function createMockInteraction(customId: string, options: MockInteractionOptions
       deferredUpdate = true;
       interaction.deferred = true;
     },
-    deferReply: async () => {
+    deferReply: async (payload: unknown) => {
+      deferredReplyPayload = payload;
+      deferredReplyCount += 1;
       interaction.deferred = true;
     },
     editReply: async (payload: unknown) => {
@@ -86,6 +90,8 @@ function createMockInteraction(customId: string, options: MockInteractionOptions
     },
     getRepliedMessage: () => repliedMessage,
     getEditedReply: () => editedReply,
+    getDeferredReply: () => deferredReplyPayload,
+    getDeferredReplyCount: () => deferredReplyCount,
     wasDeferredUpdate: () => deferredUpdate,
   };
 
@@ -237,6 +243,49 @@ describe("conditioning panel routes", () => {
     expect(edited).toBeDefined();
     const payloadText = JSON.stringify(edited);
     expect(payloadText).toContain(localizer("en-US", "commands.conditioning.panel.stale_heading"));
+  });
+
+  it("acknowledges an aggregate all-selected submit as an ephemeral no-op", async () => {
+    let deleteCalled = false;
+    let interaction: ReturnType<typeof createMockInteraction>;
+    const entries = [makeEntry({ reasonNormalized: "already selected" })];
+    const validFp = computeConditioningAggregateFingerprint(entries, 0);
+    const dependencies: ConditioningRouteDependencies = {
+      resolveScope: async () => {
+        expect(interaction.getDeferredReplyCount()).toBe(1);
+        return { guildId: "guild-1", entries };
+      },
+      deleteGroups: async () => {
+        deleteCalled = true;
+        return 1;
+      },
+      showRemoveModal: async () => {},
+      takeCheckboxValues: () => ["0"],
+      createNonce: () => "nonce123",
+    };
+
+    const route = createConditioningInteractionRoute(dependencies);
+    const submitRoute: ConditioningPanelRoute = {
+      action: "remove-submit",
+      locale: "en-US",
+      page: 0,
+      fp: validFp,
+      nonce: "nonce123",
+    };
+    const submitCustomId = buildConditioningRouteId(submitRoute);
+    const parsedSubmit = parseRouteOrThrow(submitCustomId);
+    interaction = createMockInteraction(submitCustomId, { isButton: false, isModalSubmit: true });
+
+    await route.execute(CLIENT, interaction as unknown as ModalSubmitInteraction, parsedSubmit);
+
+    expect(interaction.getDeferredReply()).toEqual({ flags: MessageFlags.Ephemeral });
+    expect(interaction.wasDeferredUpdate()).toBe(false);
+    expect(deleteCalled).toBe(false);
+    const edited = interaction.getEditedReply() as { embeds: unknown[] };
+    expect(edited).toBeDefined();
+    const payloadText = JSON.stringify(edited);
+    expect(payloadText).toContain(localizer("en-US", "commands.conditioning.panel.no_changes_heading"));
+    expect(payloadText).toContain(localizer("en-US", "commands.conditioning.panel.no_changes_detail"));
   });
 
   it("normal submit deletes unchecked groups grouped by persona lineage", async () => {
