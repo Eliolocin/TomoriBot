@@ -150,7 +150,8 @@ sent here.`,
       channels_rules_title: `Channel Rules`,
       channels_rules_description: `Set how special channel groups affect context and tools.`,
       channels_rules_private_title: `Private Channels`,
-      channels_rules_private_description: `STM in these channels is isolated from other channels.`,
+      channels_rules_private_description: `STM in these channels is isolated from other channels and
+thought logs are not rendered.`,
       channels_rules_private_manage_button: `Manage Private Channels`,
       channels_rules_roleplay_title: `Roleplay Channels`,
       channels_rules_roleplay_description: `Responses suppress emojis and stickers. Members can also use

@@ -1,24 +1,21 @@
 import { MessageFlags, type ChatInputCommandInteraction, type Client } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
-import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import { getCachedAllPersonas, getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { buildPersonalStatusPages, showPersonalStatus } from "@/utils/metrics/status/personalPages";
-import { buildPersonaStatusPages, showPersonaStatus } from "@/utils/metrics/status/personaPages";
+import { buildPersonaStatusPages } from "@/utils/metrics/status/personaPages";
 import { buildServerChannelPages } from "@/utils/metrics/status/serverChannelPages";
 import { buildServerConfigPages } from "@/utils/metrics/status/serverConfigPages";
 import { buildServerModelPages } from "@/utils/metrics/status/serverModelPages";
-import {
-  renderStatusPageDashboard,
-  type StatusCategory,
-  type StatusPageCategory,
-} from "@/utils/metrics/status/statusPageRenderer";
+import { resolveStatusDashboardCategories } from "@/utils/metrics/status/statusDashboard";
+import { renderStatusPageDashboard, type StatusCategory } from "@/utils/metrics/status/statusPageRenderer";
 
 export interface StatusCommandDependencies {
+  getCachedAllPersonas: typeof getCachedAllPersonas;
   getCachedTomoriState: typeof getCachedTomoriState;
   replyInfoEmbed: typeof replyInfoEmbed;
   showPersonalStatus: typeof showPersonalStatus;
-  showPersonaStatus: typeof showPersonaStatus;
   buildServerChannelPages: typeof buildServerChannelPages;
   buildServerConfigPages: typeof buildServerConfigPages;
   buildServerModelPages: typeof buildServerModelPages;
@@ -28,10 +25,10 @@ export interface StatusCommandDependencies {
 }
 
 const defaultStatusCommandDependencies: StatusCommandDependencies = {
+  getCachedAllPersonas,
   getCachedTomoriState,
   replyInfoEmbed,
   showPersonalStatus,
-  showPersonaStatus,
   buildServerChannelPages,
   buildServerConfigPages,
   buildServerModelPages,
@@ -41,7 +38,7 @@ const defaultStatusCommandDependencies: StatusCommandDependencies = {
 };
 
 /**
- * Executes the /status command for personal, server, and persona status scopes.
+ * Executes the /status command for personal, server, and persona status categories.
  */
 export async function executeStatusCommand(
   client: Client,
@@ -51,21 +48,10 @@ export async function executeStatusCommand(
   dependencies: StatusCommandDependencies = defaultStatusCommandDependencies,
 ): Promise<void> {
   const serverDiscId = interaction.guildId ?? interaction.user.id;
-  const scope = interaction.options.getString("scope", true);
+  const scope: StatusCategory = "persona";
 
   try {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    const validScopes: StatusCategory[] = ["persona", "behavior", "models", "access", "personal"];
-    if (!validScopes.includes(scope as StatusCategory)) {
-      log.error(`Invalid status scope received: ${scope}`);
-      await dependencies.replyInfoEmbed(interaction, locale, {
-        titleKey: "general.errors.unknown_error_title",
-        descriptionKey: "general.errors.unknown_error_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
 
     const tomoriState = await dependencies.getCachedTomoriState(serverDiscId);
 
@@ -78,65 +64,26 @@ export async function executeStatusCommand(
       return;
     }
 
-    const [configPages, modelPages, channelPages, personalPages] = await Promise.all([
-      dependencies.buildServerConfigPages(client, tomoriState, locale),
-      dependencies.buildServerModelPages(client, serverDiscId, tomoriState, locale),
-      dependencies.buildServerChannelPages(client, serverDiscId, tomoriState, locale),
-      dependencies.buildPersonalStatusPages(interaction, userData, locale),
-    ]);
-
-    const siblingCategories: StatusPageCategory[] = [
-      {
-        id: "behavior",
-        labelKey: "commands.status.scope_choice_behavior",
-        pages: [configPages[0], configPages[3], channelPages[0]],
-      },
-      {
-        id: "models",
-        labelKey: "commands.status.scope_choice_models",
-        pages: [modelPages[0], modelPages[1], modelPages[3], configPages[4]],
-      },
-      {
-        id: "access",
-        labelKey: "commands.status.scope_choice_access",
-        pages: [configPages[1], configPages[2], modelPages[2]],
-      },
-      {
-        id: "personal",
-        labelKey: "commands.status.scope_choice_personal",
-        pages: personalPages,
-      },
-    ];
-
-    if (scope === "persona") {
-      await dependencies.showPersonaStatus(interaction, userData, serverDiscId, locale, siblingCategories);
-      return;
-    }
-
-    const categories: StatusPageCategory[] = [
-      {
-        id: "persona",
-        labelKey: "commands.status.scope_choice_persona",
-        pages: [],
-      },
-      ...siblingCategories,
-    ];
-
-    await dependencies.renderStatusPageDashboard(
+    const categories = await resolveStatusDashboardCategories(
+      client,
       interaction,
+      userData,
+      serverDiscId,
+      tomoriState,
       locale,
-      categories,
-      scope as StatusCategory,
-      async (personaButtonInteraction) => {
-        await dependencies.showPersonaStatus(
-          personaButtonInteraction,
-          userData,
-          serverDiscId,
-          locale,
-          siblingCategories,
-        );
-      },
+      dependencies,
     );
+
+    const personas = await dependencies.getCachedAllPersonas(serverDiscId);
+    const mainPersona = personas.find((persona) => !persona.is_alter) ?? tomoriState;
+    const personaPages = await dependencies.buildPersonaStatusPages(mainPersona, userData, locale);
+    const personaCategory = categories.find((category) => category.id === "persona");
+    if (personaCategory) personaCategory.pages = personaPages;
+
+    await dependencies.renderStatusPageDashboard(interaction, locale, categories, scope, {
+      selectedPersonaId: mainPersona.persona_id,
+      personas,
+    });
   } catch (error) {
     log.error(`Error executing status command for scope ${scope}:`, error, {
       errorType: "CommandExecutionError",

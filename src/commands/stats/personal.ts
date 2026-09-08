@@ -104,7 +104,21 @@ export async function execute(
     });
 
     const iconUrl = interaction.user.displayAvatarURL({ extension: "png", size: 256 });
-    await renderStatsDashboard(interaction, interaction.user.id, locale, tabs, iconUrl);
+    await renderStatsDashboard(
+      interaction,
+      {
+        view: "personal",
+        locale,
+        ownerId: interaction.user.id,
+        serverId,
+        guildId: guild.id,
+        timeframe,
+        scope,
+        timezoneOffset: userData.timezone_offset ?? null,
+      },
+      tabs,
+      iconUrl,
+    );
   } catch (error) {
     await log.error(`Error executing /stats personal for user ${userData.user_disc_id}`, error as Error, {
       userId: userData.user_id,

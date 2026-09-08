@@ -17,9 +17,28 @@ import { localizer } from "@/utils/text/localizer";
 import { PrivacyLevel } from "@/types/db/schema";
 import { renderStatusPageDashboard } from "@/utils/metrics/status/statusPageRenderer";
 
+export type PersonalStatusIdentity = Pick<
+  UserRow,
+  | "user_id"
+  | "user_disc_id"
+  | "user_nickname"
+  | "language_pref"
+  | "privacy_level"
+  | "impersonation_prompt"
+  | "personal_dtm"
+  | "personal_deliberate_tool_mode"
+  | "shortterm_cache_crossserver_opt_in"
+  | "physical_appearance_tags"
+  | "nai_char_ref_url"
+>;
+
+export interface StatusViewerInteraction {
+  user: { id: string };
+}
+
 export async function buildPersonalStatusPages(
-  interaction: ChatInputCommandInteraction,
-  userData: UserRow,
+  interaction: StatusViewerInteraction,
+  userData: PersonalStatusIdentity,
   locale: string,
 ): Promise<SummaryEmbedOptions[]> {
   const limits = getMemoryLimits();

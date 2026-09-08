@@ -1,7 +1,6 @@
 export default {
   status: {
     description: `Show current personal, server, or persona status.`,
-    scope_description: `Which scope to display status for?`,
     scope_choice_behavior: `Behavior`,
     scope_choice_models: `Models`,
     scope_choice_access: `Access`,

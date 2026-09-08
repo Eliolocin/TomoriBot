@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { ButtonStyle, ComponentType, MessageFlags, type ChatInputCommandInteraction, type Client } from "discord.js";
-import type { UserRow } from "@/types/db/schema";
+import type { TomoriState, UserRow } from "@/types/db/schema";
 import type { SummaryEmbedOptions } from "@/types/discord/embed";
 import { ColorCode } from "@/utils/misc/logger";
 import { executeStatusCommand, type StatusCommandDependencies } from "@/utils/metrics/status/command";
@@ -10,7 +10,6 @@ import {
   type StatusPageCategory,
 } from "@/utils/metrics/status/statusPageRenderer";
 
-type StatusScope = "personal" | "persona" | "behavior" | "models" | "access";
 type DependencyCall<Name extends keyof StatusCommandDependencies> = Parameters<StatusCommandDependencies[Name]>;
 type CachedTomoriState = NonNullable<Awaited<ReturnType<StatusCommandDependencies["getCachedTomoriState"]>>>;
 
@@ -25,10 +24,10 @@ type MockInteraction = {
 };
 
 type DependencyCalls = {
+  personas: DependencyCall<"getCachedAllPersonas">[];
   cache: DependencyCall<"getCachedTomoriState">[];
   info: DependencyCall<"replyInfoEmbed">[];
   personal: DependencyCall<"showPersonalStatus">[];
-  persona: DependencyCall<"showPersonaStatus">[];
   configPages: DependencyCall<"buildServerConfigPages">[];
   modelPages: DependencyCall<"buildServerModelPages">[];
   channelPages: DependencyCall<"buildServerChannelPages">[];
@@ -39,7 +38,8 @@ type DependencyCalls = {
 
 const client = { user: { id: "bot-user" } } as Client;
 const userData = { user_id: 42, user_disc_id: "user-42" } as UserRow;
-const tomoriState = {} as CachedTomoriState;
+const tomoriState = { persona_id: 1, persona_nickname: "Main", is_alter: false } as CachedTomoriState;
+const personas = [tomoriState] as TomoriState[];
 const personaPages = Array.from(
   { length: 5 },
   (_, index) => ({ titleKey: `persona-${index}`, fields: [] }) as SummaryEmbedOptions,
@@ -90,33 +90,22 @@ const expectedCategories: StatusPageCategory[] = [
   ...expectedSiblingCategories,
 ];
 
-const expectedInitialCategories: StatusPageCategory[] = [
-  {
-    id: "persona",
-    labelKey: "commands.status.scope_choice_persona",
-    pages: [],
-  },
-  ...expectedSiblingCategories,
-];
-
-function createInteraction(scope: string, guildId: string | null, interactionId = "interaction-123") {
+function createInteraction(guildId: string | null, interactionId = "interaction-123") {
   const deferCalls: ({ flags?: MessageFlags } | undefined)[] = [];
   const interaction: MockInteraction = {
     id: interactionId,
     guildId,
     user: { id: "dm-user" },
-    options: {
-      getString: (name, required) => {
-        expect(name).toBe("scope");
-        expect(required).toBe(true);
-        return scope;
-      },
-    },
     deferred: false,
     replied: false,
     deferReply: async (options) => {
       deferCalls.push(options);
       interaction.deferred = true;
+    },
+    options: {
+      getString: () => {
+        throw new Error("/status must not read command options");
+      },
     },
   };
 
@@ -125,10 +114,10 @@ function createInteraction(scope: string, guildId: string | null, interactionId 
 
 function createDependencies(interaction: MockInteraction, state: CachedTomoriState | null) {
   const calls: DependencyCalls = {
+    personas: [],
     cache: [],
     info: [],
     personal: [],
-    persona: [],
     configPages: [],
     modelPages: [],
     channelPages: [],
@@ -139,6 +128,11 @@ function createDependencies(interaction: MockInteraction, state: CachedTomoriSta
   const expectAcknowledged = () => expect(interaction.deferred || interaction.replied).toBe(true);
 
   const dependencies: StatusCommandDependencies = {
+    getCachedAllPersonas: async (...args) => {
+      calls.personas.push(args);
+      expectAcknowledged();
+      return personas;
+    },
     getCachedTomoriState: async (...args) => {
       calls.cache.push(args);
       expectAcknowledged();
@@ -150,10 +144,6 @@ function createDependencies(interaction: MockInteraction, state: CachedTomoriSta
     },
     showPersonalStatus: async (...args) => {
       calls.personal.push(args);
-      expectAcknowledged();
-    },
-    showPersonaStatus: async (...args) => {
-      calls.persona.push(args);
       expectAcknowledged();
     },
     buildServerConfigPages: async (...args) => {
@@ -196,60 +186,45 @@ function expectNoPageBuilderCalls(calls: DependencyCalls): void {
   expect(calls.channelPages).toHaveLength(0);
   expect(calls.buildPersonalPages).toHaveLength(0);
   expect(calls.buildPersonaPages).toHaveLength(0);
+  expect(calls.personas).toHaveLength(0);
   expect(calls.dashboard).toHaveLength(0);
-  expect(calls.persona).toHaveLength(0);
   expect(calls.personal).toHaveLength(0);
 }
 
 describe("executeStatusCommand", () => {
-  it("acknowledges before dispatching and delivers all 5 ordered categories across scopes", async () => {
-    const scopes: StatusScope[] = ["persona", "behavior", "models", "access", "personal"];
+  it("acknowledges before reads and opens the main Persona with all five categories", async () => {
+    const { interaction, deferCalls } = createInteraction("guild-123");
+    const { dependencies, calls } = createDependencies(interaction, tomoriState);
+    await executeStatusCommand(
+      client,
+      interaction as unknown as ChatInputCommandInteraction,
+      userData,
+      "en-US",
+      dependencies,
+    );
 
-    for (const scope of scopes) {
-      const { interaction, deferCalls } = createInteraction(scope, "guild-123");
-      const { dependencies, calls } = createDependencies(interaction, tomoriState);
-      await executeStatusCommand(
-        client,
-        interaction as unknown as ChatInputCommandInteraction,
-        userData,
-        "en-US",
-        dependencies,
-      );
-
-      expect(deferCalls).toEqual([{ flags: MessageFlags.Ephemeral }]);
-      expect(calls.info).toHaveLength(0);
-      expect(calls.cache).toEqual([["guild-123"]]);
-      expect(calls.configPages).toEqual([[client, tomoriState, "en-US"]]);
-      expect(calls.modelPages).toEqual([[client, "guild-123", tomoriState, "en-US"]]);
-      expect(calls.channelPages).toEqual([[client, "guild-123", tomoriState, "en-US"]]);
-      expect(calls.buildPersonalPages).toEqual([
-        [interaction as unknown as ChatInputCommandInteraction, userData, "en-US"],
-      ]);
-
-      if (scope === "persona") {
-        expect(calls.persona).toEqual([
-          [
-            interaction as unknown as ChatInputCommandInteraction,
-            userData,
-            "guild-123",
-            "en-US",
-            expectedSiblingCategories,
-          ],
-        ]);
-        expect(calls.dashboard).toHaveLength(0);
-      } else {
-        expect(calls.buildPersonaPages).toHaveLength(0);
-        expect(calls.dashboard).toEqual([
-          [
-            interaction as unknown as ChatInputCommandInteraction,
-            "en-US",
-            expectedInitialCategories,
-            scope,
-            expect.any(Function),
-          ],
-        ]);
-      }
-    }
+    expect(deferCalls).toEqual([{ flags: MessageFlags.Ephemeral }]);
+    expect(calls.info).toHaveLength(0);
+    expect(calls.cache).toEqual([["guild-123"]]);
+    expect(calls.configPages).toEqual([[client, tomoriState, "en-US"]]);
+    expect(calls.modelPages).toEqual([[client, "guild-123", tomoriState, "en-US"]]);
+    expect(calls.channelPages).toEqual([[client, "guild-123", tomoriState, "en-US"]]);
+    expect(calls.buildPersonalPages).toEqual([
+      [interaction as unknown as ChatInputCommandInteraction, userData, "en-US"],
+    ]);
+    expect(calls.dashboard).toHaveLength(1);
+    expect(calls.personas).toEqual([["guild-123"]]);
+    expect(calls.buildPersonaPages).toEqual([[tomoriState, userData, "en-US"]]);
+    expect(calls.dashboard[0]?.[2]).toEqual(expectedCategories);
+    expect((calls.dashboard[0]?.[2] as StatusPageCategory[]).map(({ id }) => id)).toEqual([
+      "persona",
+      "behavior",
+      "models",
+      "access",
+      "personal",
+    ]);
+    expect(calls.dashboard[0]?.[3]).toBe("persona");
+    expect(calls.dashboard[0]?.[4]).toEqual({ selectedPersonaId: 1, personas });
   });
 
   it("renders exactly the five ordered buttons and expected page counts at the seam", () => {
@@ -270,9 +245,7 @@ describe("executeStatusCommand", () => {
       expect(buttonRow.components).toHaveLength(5);
 
       const buttons = buttonRow.components ?? [];
-      expect(buttons.map((b) => b.customId)).toEqual(
-        orderedCategoryIds.map((id) => `status:anchor-456:category:${id}`),
-      );
+      expect(buttons.map((b) => b.customId)).toEqual(orderedCategoryIds.map((id) => `status:v1:category:en-US:${id}`));
 
       for (const [index, id] of orderedCategoryIds.entries()) {
         const expectedStyle = id === scope ? ButtonStyle.Primary : ButtonStyle.Secondary;
@@ -288,54 +261,28 @@ describe("executeStatusCommand", () => {
   });
 
   it("uses the DM user ID as the effective server ID", async () => {
-    for (const scope of ["behavior", "models", "access"] as const) {
-      const { interaction } = createInteraction(scope, null);
-      const { dependencies, calls } = createDependencies(interaction, tomoriState);
-      await executeStatusCommand(
-        client,
-        interaction as unknown as ChatInputCommandInteraction,
-        userData,
-        "ja",
-        dependencies,
-      );
+    const { interaction } = createInteraction(null);
+    const { dependencies, calls } = createDependencies(interaction, tomoriState);
+    await executeStatusCommand(
+      client,
+      interaction as unknown as ChatInputCommandInteraction,
+      userData,
+      "ja",
+      dependencies,
+    );
 
-      expect(calls.cache).toEqual([["dm-user"]]);
-      expect(calls.channelPages).toEqual([[client, "dm-user", tomoriState, "ja"]]);
-      expect(calls.modelPages).toEqual([[client, "dm-user", tomoriState, "ja"]]);
-    }
+    expect(calls.cache).toEqual([["dm-user"]]);
+    expect(calls.channelPages).toEqual([[client, "dm-user", tomoriState, "ja"]]);
+    expect(calls.modelPages).toEqual([[client, "dm-user", tomoriState, "ja"]]);
+    expect(calls.personas).toEqual([["dm-user"]]);
+    expect(calls.buildPersonaPages).toEqual([[tomoriState, userData, "ja"]]);
+    expect(calls.dashboard[0]?.[2]).toEqual(expectedCategories);
+    expect(calls.dashboard[0]?.[3]).toBe("persona");
   });
 
   it("replies for not-setup server categories without building pages", async () => {
-    for (const scope of ["persona", "behavior", "models", "access", "personal"] as const) {
-      const { interaction } = createInteraction(scope, "guild-empty");
-      const { dependencies, calls } = createDependencies(interaction, null);
-      await executeStatusCommand(
-        client,
-        interaction as unknown as ChatInputCommandInteraction,
-        userData,
-        "en-US",
-        dependencies,
-      );
-
-      expect(calls.cache).toEqual([["guild-empty"]]);
-      expect(calls.info).toEqual([
-        [
-          interaction,
-          "en-US",
-          {
-            titleKey: "general.errors.tomori_not_setup_title",
-            descriptionKey: "general.errors.tomori_not_setup_description",
-            color: ColorCode.ERROR,
-          },
-        ],
-      ]);
-      expectNoPageBuilderCalls(calls);
-    }
-  });
-
-  it("replies for an invalid scope after acknowledgement", async () => {
-    const { interaction } = createInteraction("unknown", "guild-123");
-    const { dependencies, calls } = createDependencies(interaction, tomoriState);
+    const { interaction } = createInteraction("guild-empty");
+    const { dependencies, calls } = createDependencies(interaction, null);
     await executeStatusCommand(
       client,
       interaction as unknown as ChatInputCommandInteraction,
@@ -344,14 +291,14 @@ describe("executeStatusCommand", () => {
       dependencies,
     );
 
-    expect(calls.cache).toHaveLength(0);
+    expect(calls.cache).toEqual([["guild-empty"]]);
     expect(calls.info).toEqual([
       [
         interaction,
         "en-US",
         {
-          titleKey: "general.errors.unknown_error_title",
-          descriptionKey: "general.errors.unknown_error_description",
+          titleKey: "general.errors.tomori_not_setup_title",
+          descriptionKey: "general.errors.tomori_not_setup_description",
           color: ColorCode.ERROR,
         },
       ],
@@ -359,119 +306,27 @@ describe("executeStatusCommand", () => {
     expectNoPageBuilderCalls(calls);
   });
 
-  it("enters the persona workflow when activating Persona from a non-Persona scope and renders the selected persona", async () => {
-    const { interaction } = createInteraction("behavior", "guild-123", "anchor-789");
+  it("renders the Persona control as a persistent global route", async () => {
+    const { interaction } = createInteraction("guild-123", "anchor-789");
     const { dependencies } = createDependencies(interaction, tomoriState);
-
-    let capturedCollectorHandler:
-      | ((component: {
-          customId: string;
-          user: { id: string };
-          deferUpdate?: () => Promise<void>;
-          update?: (payload: unknown) => Promise<void>;
-        }) => Promise<void>)
-      | undefined;
-    let collectorStoppedWithReason: string | undefined;
-
     const deliveredDashboardPayloads: unknown[] = [];
-    const mockMessage = {
-      createMessageComponentCollector: () => ({
-        on: (
-          event: string,
-          handler: (component: {
-            customId: string;
-            user: { id: string };
-            deferUpdate?: () => Promise<void>;
-            update?: (payload: unknown) => Promise<void>;
-          }) => Promise<void>,
-        ) => {
-          if (event === "collect") {
-            capturedCollectorHandler = handler;
-          }
-        },
-        stop: (reason?: string) => {
-          collectorStoppedWithReason = reason;
-        },
-      }),
-    };
-
     const mockInteraction = interaction as unknown as ChatInputCommandInteraction & {
       editReply: (payload: unknown) => Promise<unknown>;
     };
     mockInteraction.editReply = async (payload: unknown) => {
       deliveredDashboardPayloads.push(payload);
-      return mockMessage;
+      return payload;
     };
-
     dependencies.renderStatusPageDashboard = renderStatusPageDashboard;
-
-    const nonDefaultPersona = {
-      persona_id: 2,
-      server_id: 1,
-      persona_nickname: "Sparrow",
-      persona_lineage_id: 2,
-    } as CachedTomoriState;
-    const sparrowPages = [
-      {
-        titleKey: "commands.status.persona_page1_title",
-        titleVars: { persona_name: nonDefaultPersona.persona_nickname },
-        fields: [{ nameKey: "commands.status.field_nickname", value: nonDefaultPersona.persona_nickname }],
-      } as SummaryEmbedOptions,
-      { titleKey: "commands.status.persona_page2_title", fields: [] } as SummaryEmbedOptions,
-      { titleKey: "commands.status.persona_page3_title", fields: [] } as SummaryEmbedOptions,
-      { titleKey: "commands.status.persona_page4_title", fields: [] } as SummaryEmbedOptions,
-      { titleKey: "commands.status.persona_page5_title", fields: [] } as SummaryEmbedOptions,
-    ];
-
-    let pickerInvoked = false;
-    let renderedPersonaPayload: unknown = null;
-    dependencies.showPersonaStatus = async (personaInteraction, _user, _serverDiscId, locale, siblings) => {
-      pickerInvoked = true;
-      const fullCategories: StatusPageCategory[] = [
-        {
-          id: "persona",
-          labelKey: "commands.status.scope_choice_persona",
-          pages: sparrowPages,
-        },
-        ...(siblings ?? []),
-      ];
-      renderedPersonaPayload = dashboardPayload("anchor-789", locale, fullCategories, "persona", 0, false);
-      if ("update" in personaInteraction && typeof personaInteraction.update === "function") {
-        await personaInteraction.update(renderedPersonaPayload);
-      }
-    };
 
     await executeStatusCommand(client, mockInteraction, userData, "en-US", dependencies);
 
     expect(deliveredDashboardPayloads).toHaveLength(1);
-    expect(capturedCollectorHandler).toBeDefined();
-
-    const personaButtonInteraction = {
-      id: "btn-persona",
-      customId: "status:anchor-789:category:persona",
-      user: { id: "dm-user" },
-      deferred: false,
-      replied: false,
-      deferUpdate: async () => {
-        personaButtonInteraction.deferred = true;
-      },
-      update: async (payload: unknown) => {
-        renderedPersonaPayload = payload;
-      },
-    };
-
-    await capturedCollectorHandler?.(personaButtonInteraction);
-
-    expect(collectorStoppedWithReason).toBe("persona_transition");
-    expect(pickerInvoked).toBe(true);
-    expect(renderedPersonaPayload).not.toBeNull();
-
-    const serialized = JSON.stringify(renderedPersonaPayload);
-    expect(serialized).toContain("Sparrow");
-    expect(serialized).toContain("status:anchor-789:category:persona");
-    expect(serialized).toContain("status:anchor-789:category:behavior");
-    expect(serialized).toContain("status:anchor-789:category:models");
-    expect(serialized).toContain("status:anchor-789:category:access");
-    expect(serialized).toContain("status:anchor-789:category:personal");
+    const serialized = JSON.stringify(deliveredDashboardPayloads[0]);
+    expect(serialized).toContain('"customId":"status:v1:category:en-US:persona:1"');
+    expect(serialized).toContain('"customId":"status:v1:category:en-US:behavior:1"');
+    expect(serialized).toContain('"customId":"status:v1:page:en-US:persona:1"');
+    expect(serialized).toContain('"customId":"status:v1:persona-select:en-US:1"');
+    expect(serialized).toMatch(/"customId":"status:v1:category:en-US:persona:1","label":"[^"]+","disabled":false/);
   });
 });

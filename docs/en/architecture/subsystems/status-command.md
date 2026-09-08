@@ -10,18 +10,30 @@ It exists so users can inspect current configuration without reopening every man
 
 - Slash command registration and routing live in `src/commands/status.ts`.
 - The status coordinator lives in `src/utils/metrics/status/command.ts`.
+- Persistent category/page IDs and global interaction routing live in
+  `src/utils/discord/statusDashboardCatalog.ts` and `src/utils/discord/interactions/statusRoutes.ts`.
+- `src/utils/metrics/status/statusDashboard.ts` resolves the same ordered category set for commands and routes.
 - Status page implementation lives under `src/utils/metrics/status/`:
   - `personalPages.ts` builds personal settings/provider pages.
-  - `personaPages.ts` handles persona selection and persona detail pages.
+  - `personaPages.ts` builds the five persona detail pages.
   - `serverModelPages.ts`, `serverConfigPages.ts`, and `serverChannelPages.ts` build the server status scopes.
   - `channelFormatters.ts`, `providerConfigFormatters.ts`, and `sharedFormatters.ts` own reusable redaction and display formatting.
 - `/compact` routing lives in `src/commands/compact.ts`; the public coordinator lives in `src/utils/compaction/compactOrchestrator.ts`, with implementation under `src/utils/compaction/compact/`.
 
 ## Scope Coverage
 
-`/status` provides five ordered categories: Persona, Behavior, Models, Access, and Personal. Every resulting dashboard displays all five category buttons at the top, regardless of initial slash scope, allowing readers to navigate among all five without re-running the command.
+`/status` provides five ordered categories: Persona, Behavior, Models, Access, and Personal. Every invocation opens
+on the main Persona's Identity page. Every resulting dashboard displays all five category buttons at the top,
+allowing readers to navigate among every category without re-running the command. Category and
+page controls use persistent, versioned `status:v1` interaction routes, so navigation remains available after the
+initial command interaction has finished.
 
-Persona additionally provides its real persona selector/picker-backed workflow with private delivery and ownership scoping, while keeping Personal and the three server categories reachable from that same surface.
+Persona is a persistent global dashboard category. Opening it loads the current server roster and displays a bounded
+String Select with up to 25 persona options. Page choices use only their page name because the selected persona is
+already identified by the dashboard. Larger rosters use range buttons, and every range remains reachable.
+Selection and range routes carry only numeric persona IDs and offsets. Category and page routes preserve the selected
+persona ID, so navigating away and back rebuilds the pages from the fresh roster. These interactions are read-only and
+never use a collector or write to the database.
 
 Category page counts:
 - Persona: 5 pages (Identity, Attributes, Sample Dialogues, Memories, Prompt and Tags)

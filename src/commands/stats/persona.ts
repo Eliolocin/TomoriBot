@@ -198,6 +198,22 @@ export async function execute(
       });
       return;
     }
+    if (
+      typeof selected.persona_id !== "number" ||
+      !Number.isSafeInteger(selected.persona_id) ||
+      selected.persona_id <= 0
+    ) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.stats.persona.not_found_title",
+        descriptionKey: "commands.stats.persona.not_found_description",
+        color: ColorCode.WARN,
+      });
+      return;
+    }
+
+    // Keep the private picker only for validation; leaving it during stats reads would
+    // create a transient acknowledgement alongside the eventual public dashboard.
+    await interaction.deleteReply().catch(() => {});
 
     const timeframe = (interaction.options.getString("timeframe") ??
       statsDashboard.DEFAULT_TIMEFRAME) as statsDashboard.Timeframe;
@@ -234,12 +250,17 @@ export async function execute(
       personaIconUrl = guild.members.me?.displayAvatarURL({ extension: "png", size: 256 }) ?? undefined;
     }
 
-    await interaction.deleteReply().catch(() => {});
     await statsDashboard.renderStatsDashboardWithReply(
       (payload) => interaction.followUp(payload),
-      interaction.id,
-      interaction.user.id,
-      locale,
+      {
+        view: "persona",
+        locale,
+        ownerId: interaction.user.id,
+        serverId,
+        guildId: guild.id,
+        timeframe,
+        personaId: selected.persona_id,
+      },
       tabs,
       personaIconUrl,
       personaIconFile,

@@ -12,6 +12,8 @@ import {
   providersInteractionRoute,
 } from "@/utils/discord/interactions/providersRoutes";
 import { stPresetsInteractionRoute } from "@/utils/discord/interactions/stPresetsRoutes";
+import { statusInteractionRoute } from "@/utils/discord/interactions/statusRoutes";
+import { statsInteractionRoute } from "@/utils/discord/interactions/statsRoutes";
 import { modelOverrideInteractionRoute } from "@/utils/discord/interactions/modelOverrideRoutes";
 import { InteractionRouteRegistry, type GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { log } from "@/utils/misc/logger";
@@ -30,6 +32,8 @@ const registry = new InteractionRouteRegistry([
   personalProvidersInteractionRoute,
   providersInteractionRoute,
   stPresetsInteractionRoute,
+  statusInteractionRoute,
+  statsInteractionRoute,
 ]);
 
 export function isGlobalRoutableInteraction(interaction: Interaction): interaction is GlobalRoutableInteraction {

@@ -1,7 +1,6 @@
 export default {
   status: {
     description: `現在の個人、サーバー、またはペルソナのステータスを表示します。`,
-    scope_description: `どのスコープのステータスを表示しますか？`,
     scope_choice_personal: `個人`,
     scope_choice_persona: `ペルソナ`,
     personal_title: `個人ステータス`,

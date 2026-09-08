@@ -3,22 +3,29 @@ import {
   MessageFlags,
   type ActionRowData,
   type ButtonComponentData,
-  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type ComponentInContainerData,
   type ContainerComponentData,
-  type Message,
+  type SelectMenuComponentOptionData,
   type StringSelectMenuComponentData,
   type TopLevelComponentData,
 } from "discord.js";
+import type { TomoriState } from "@/types/db/schema";
 import type { SummaryEmbedOptions } from "@/types/discord/embed";
+import {
+  buildStatusCategoryButtonId,
+  buildStatusPersonaRangeSegments,
+  buildStatusPersonaSelectorId,
+  buildStatusPageSelectorId,
+  STATUS_PERSONA_SELECT_PAGE_SIZE,
+  type StatusCategory,
+} from "@/utils/discord/statusDashboardCatalog";
 import { validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
-import { buildCategoryButtonRow } from "@/utils/discord/ui/panel";
-import { PERSONA_WORKFLOW_COMPONENT_TIMEOUT_MS } from "@/utils/discord/ui/personaWorkflow";
-import { ColorCode, log } from "@/utils/misc/logger";
+import { buildCategoryButtonRow, buildPaginationRow } from "@/utils/discord/ui/panel";
+import { ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-export type StatusCategory = "persona" | "behavior" | "models" | "access" | "personal";
+export type { StatusCategory } from "@/utils/discord/statusDashboardCatalog";
 
 export interface StatusPageCategory {
   id: StatusCategory;
@@ -30,9 +37,20 @@ export interface StatusPageRendererInput {
   locale: string;
   page: DashboardPage;
   buttonRows?: ActionRowData<ButtonComponentData>[];
-  controlRows?: ActionRowData<StringSelectMenuComponentData>[];
+  controlRows?: StatusControlRow[];
   thumbnailUrl?: string;
   disabled?: boolean;
+}
+
+export type StatusControlRow = ActionRowData<ButtonComponentData> | ActionRowData<StringSelectMenuComponentData>;
+
+export interface StatusDashboardIdentity {
+  /** The persona to preserve in subsequent category and page routes. */
+  selectedPersonaId?: number | null;
+  /** Fresh personas used only when the Persona category is visible. */
+  personas?: readonly TomoriState[];
+  /** Entry offset for the visible Persona selector range. */
+  personaSelectStart?: number;
 }
 
 type DashboardPageField = SummaryEmbedOptions["fields"][number] | { separator: true };
@@ -41,7 +59,7 @@ type DashboardPageField = SummaryEmbedOptions["fields"][number] | { separator: t
  * Common Components V2 page shape used by the status and stats dashboards.
  *
  * Both surfaces already produce localized field arrays. Sharing the layout primitive keeps their
- * collectors from independently deciding where interactive rows belong.
+ * flows from independently deciding where interactive rows belong.
  */
 export interface DashboardPage extends Omit<SummaryEmbedOptions, "fields" | "thumbnailUrl"> {
   fields: DashboardPageField[];
@@ -148,53 +166,182 @@ export function buildDashboardPagePayload(input: StatusPageRendererInput): {
   );
 }
 
-/** Backward-compatible status name while callers migrate to the shared renderer. */
+/**
+ * Renders persistent category controls. Persona is a normal global route; an optional selected
+ * persona ID is carried on every button while the dashboard is displaying a persona.
+ */
 function categoryButtonRows(
-  interactionId: string,
+  _interactionId: string,
   locale: string,
   categories: StatusPageCategory[],
   activeCategory: StatusCategory,
   disabled: boolean,
+  selectedPersonaId: number | null | undefined,
 ): ActionRowData<ButtonComponentData>[] {
+  const row = buildCategoryButtonRow(
+    categories.map((category) => ({
+      id: category.id,
+      label: localizer(locale, category.labelKey),
+      customId: buildStatusCategoryButtonId(locale, category.id, selectedPersonaId),
+    })),
+    activeCategory,
+    disabled,
+  );
+
   return [
-    buildCategoryButtonRow(
-      categories.map((category) => ({
-        id: category.id,
-        label: localizer(locale, category.labelKey),
-        customId: `status:${interactionId}:category:${category.id}`,
-      })),
-      activeCategory,
-      disabled,
-    ),
+    {
+      ...row,
+      components: row.components.map((button) => ({ ...button, disabled })),
+    },
   ];
 }
 
-function pageControlRows(
-  interactionId: string,
+function safeSelectText(value: string | null | undefined, maxLength: number, fallback: string): string {
+  const normalized = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  return (normalized || fallback).slice(0, maxLength);
+}
+
+function personaWithId(persona: TomoriState): persona is TomoriState & { persona_id: number } {
+  return typeof persona.persona_id === "number" && Number.isSafeInteger(persona.persona_id) && persona.persona_id > 0;
+}
+
+function personaSelectStart(
+  personas: readonly (TomoriState & { persona_id: number })[],
+  selectedPersonaId: number,
+): number {
+  const selectedIndex = personas.findIndex((persona) => persona.persona_id === selectedPersonaId);
+  return selectedIndex < 0
+    ? 0
+    : Math.floor(selectedIndex / STATUS_PERSONA_SELECT_PAGE_SIZE) * STATUS_PERSONA_SELECT_PAGE_SIZE;
+}
+
+function personaSelectorRows(
   locale: string,
-  category: StatusPageCategory,
-  activePage: number,
+  personas: readonly TomoriState[],
+  selectedPersonaId: number | null | undefined,
+  requestedStart: number | undefined,
   disabled: boolean,
 ): ActionRowData<StringSelectMenuComponentData>[] {
-  if (category.pages.length <= 1) return [];
+  const selectablePersonas = personas.filter(personaWithId);
+  if (selectablePersonas.length === 0) return [];
+
+  const selectedPersona = selectablePersonas.find((persona) => persona.persona_id === selectedPersonaId);
+  const effectiveSelectedId = selectedPersona?.persona_id ?? selectablePersonas[0]?.persona_id;
+  if (effectiveSelectedId === undefined) return [];
+
+  const pageCount = Math.max(1, Math.ceil(selectablePersonas.length / STATUS_PERSONA_SELECT_PAGE_SIZE));
+  const defaultStart = personaSelectStart(selectablePersonas, effectiveSelectedId);
+  const requestedPage = Math.floor((requestedStart ?? defaultStart) / STATUS_PERSONA_SELECT_PAGE_SIZE);
+  const rangeIndex = Math.min(Math.max(Number.isFinite(requestedPage) ? requestedPage : 0, 0), pageCount - 1);
+  const start = rangeIndex * STATUS_PERSONA_SELECT_PAGE_SIZE;
+  const visiblePersonas = selectablePersonas.slice(start, start + STATUS_PERSONA_SELECT_PAGE_SIZE);
+  const personaFallback = localizer(locale, "commands.status.scope_choice_persona");
+  const placeholder = selectedPersona
+    ? safeSelectText(selectedPersona.persona_nickname, 150, personaFallback)
+    : safeSelectText(localizer(locale, "commands.config.panel.persona_select_placeholder"), 150, personaFallback);
+  const options: SelectMenuComponentOptionData[] = visiblePersonas.map((persona) => ({
+    label: safeSelectText(persona.persona_nickname, 100, personaFallback),
+    value: String(persona.persona_id),
+    default: persona.persona_id === effectiveSelectedId,
+  }));
+
   return [
     {
       type: ComponentType.ActionRow,
       components: [
         {
           type: ComponentType.StringSelect,
-          customId: `status:${interactionId}:page:${category.id}`,
-          placeholder: localizer(locale, "commands.config.panel.page_select_placeholder"),
+          customId: buildStatusPersonaSelectorId(locale, effectiveSelectedId),
+          placeholder,
           disabled,
-          options: category.pages.map((page, index) => ({
-            label: pageTitle(locale, page).slice(0, 100),
-            value: String(index),
-            default: index === activePage,
-          })),
+          options,
         },
       ],
     },
   ];
+}
+
+function personaRangeRow(
+  locale: string,
+  personas: readonly TomoriState[],
+  selectedPersonaId: number | null | undefined,
+  requestedStart: number | undefined,
+  disabled: boolean,
+): ActionRowData<ButtonComponentData>[] {
+  const selectablePersonas = personas.filter(personaWithId);
+  if (selectablePersonas.length <= STATUS_PERSONA_SELECT_PAGE_SIZE) return [];
+
+  const selectedPersona = selectablePersonas.find((persona) => persona.persona_id === selectedPersonaId);
+  const effectiveSelectedId = selectedPersona?.persona_id ?? selectablePersonas[0]?.persona_id;
+  if (effectiveSelectedId === undefined) return [];
+
+  const pageCount = Math.max(1, Math.ceil(selectablePersonas.length / STATUS_PERSONA_SELECT_PAGE_SIZE));
+  const defaultStart = personaSelectStart(selectablePersonas, effectiveSelectedId);
+  const requestedPage = Math.floor((requestedStart ?? defaultStart) / STATUS_PERSONA_SELECT_PAGE_SIZE);
+  const rangeIndex = Math.min(Math.max(Number.isFinite(requestedPage) ? requestedPage : 0, 0), pageCount - 1);
+  const row = buildPaginationRow({
+    locale,
+    rangeIndex,
+    rangeCount: pageCount,
+    disabled,
+    namespace: "status",
+    version: "v1",
+    buildSegments: {
+      page: (targetRangeIndex) =>
+        buildStatusPersonaRangeSegments(
+          locale,
+          effectiveSelectedId,
+          targetRangeIndex * STATUS_PERSONA_SELECT_PAGE_SIZE,
+        ),
+    },
+  });
+  return row ? [row] : [];
+}
+
+function pageControlRows(
+  _interactionId: string,
+  locale: string,
+  category: StatusPageCategory,
+  activePage: number,
+  disabled: boolean,
+  identity: StatusDashboardIdentity,
+): StatusControlRow[] {
+  const controls: StatusControlRow[] = [];
+  if (category.id === "persona" && identity.personas) {
+    controls.push(
+      ...personaSelectorRows(
+        locale,
+        identity.personas,
+        identity.selectedPersonaId,
+        identity.personaSelectStart,
+        disabled,
+      ),
+    );
+  }
+  if (category.pages.length <= 1) return controls;
+  controls.push({
+    type: ComponentType.ActionRow,
+    components: [
+      {
+        type: ComponentType.StringSelect,
+        customId: buildStatusPageSelectorId(locale, category.id, identity.selectedPersonaId),
+        placeholder: localizer(locale, "commands.config.panel.page_select_placeholder"),
+        disabled,
+        options: category.pages.map((page, index) => ({
+          label: selectorPageLabel(locale, page),
+          value: String(index),
+          default: index === activePage,
+        })),
+      },
+    ],
+  });
+  return controls;
+}
+
+function selectorPageLabel(locale: string, page: DashboardPage): string {
+  const title = pageTitle(locale, page);
+  const colonIndex = title.indexOf(":");
+  return (colonIndex >= 0 ? title.slice(colonIndex + 1).trim() : title).slice(0, 100);
 }
 
 export function dashboardPayload(
@@ -204,79 +351,48 @@ export function dashboardPayload(
   activeCategory: StatusCategory,
   activePage: number,
   disabled: boolean,
+  identity: StatusDashboardIdentity = {},
 ) {
   const category = categories.find((candidate) => candidate.id === activeCategory) ?? categories[0];
   const page = category.pages[Math.min(activePage, category.pages.length - 1)];
   return buildDashboardPagePayload({
     locale,
     page,
-    buttonRows: categoryButtonRows(interactionId, locale, categories, category.id, disabled),
-    controlRows: pageControlRows(interactionId, locale, category, activePage, disabled),
+    buttonRows: categoryButtonRows(
+      interactionId,
+      locale,
+      categories,
+      category.id,
+      disabled,
+      identity.selectedPersonaId,
+    ),
+    controlRows: [
+      ...pageControlRows(interactionId, locale, category, activePage, disabled, identity),
+      ...(category.id === "persona" && identity.personas
+        ? personaRangeRow(locale, identity.personas, identity.selectedPersonaId, identity.personaSelectStart, disabled)
+        : []),
+    ],
     disabled,
   });
 }
 
-export type PersonaCategorySelectHandler = (interaction: ButtonInteraction) => Promise<void>;
-
 /**
- * Displays a private, selector-driven status dashboard.
- * The caller supplies already-built pages, so collector updates cannot repeat database reads.
+ * Displays a private status dashboard. Persistent controls are handled by the global route registry.
  */
 export async function renderStatusPageDashboard(
   interaction: ChatInputCommandInteraction,
   locale: string,
   categories: StatusPageCategory[],
   initialCategory: StatusCategory,
-  onSelectPersona?: PersonaCategorySelectHandler,
+  identity: StatusDashboardIdentity = {},
 ): Promise<void> {
   const initial = categories.find((category) => category.id === initialCategory);
   if (!initial || initial.pages.length === 0) return;
 
-  let activeCategory = initial.id;
-  let activePage = 0;
+  const activeCategory = initial.id;
+  const activePage = 0;
   const render = (disabled = false) =>
-    dashboardPayload(interaction.id, locale, categories, activeCategory, activePage, disabled);
+    dashboardPayload(interaction.id, locale, categories, activeCategory, activePage, disabled, identity);
 
-  const message = (await interaction.editReply(render())) as Message;
-  const collector = message.createMessageComponentCollector({
-    time: PERSONA_WORKFLOW_COMPONENT_TIMEOUT_MS,
-    filter: (candidate) =>
-      candidate.user.id === interaction.user.id && candidate.customId.startsWith(`status:${interaction.id}:`),
-  });
-
-  collector.on("collect", async (component) => {
-    const [, , action, value] = component.customId.split(":");
-    if (action === "category") {
-      if (value === "persona" && onSelectPersona) {
-        collector.stop("persona_transition");
-        await onSelectPersona(component as ButtonInteraction);
-        return;
-      }
-      const category = categories.find((candidate) => candidate.id === value);
-      if (!category || category.pages.length === 0) return;
-      activeCategory = category.id;
-      activePage = 0;
-    } else if (action === "page") {
-      const pageIndex = component.isStringSelectMenu() ? Number.parseInt(component.values[0] ?? "", 10) : Number.NaN;
-      const category = categories.find((candidate) => candidate.id === activeCategory);
-      if (!category || !Number.isInteger(pageIndex) || pageIndex < 0 || pageIndex >= category.pages.length) return;
-      activePage = pageIndex;
-    } else {
-      return;
-    }
-
-    await component.update(render());
-  });
-
-  collector.on("end", async (_collected, reason) => {
-    if (reason === "persona_transition") return;
-    try {
-      await interaction.editReply(render(true));
-    } catch (error) {
-      log.warn("Failed to disable status dashboard controls after collector ended", {
-        errorType: "InteractionEditFailed",
-        metadata: { userId: interaction.user.id, error },
-      });
-    }
-  });
+  await interaction.editReply(render());
 }

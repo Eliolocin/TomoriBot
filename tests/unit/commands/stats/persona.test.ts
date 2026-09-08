@@ -210,7 +210,10 @@ describe("/stats persona execute handler", () => {
     editReply: (payload: unknown) => Promise<void>;
   };
 
-  function createMockExecuteInteraction(personaOption: string | null): {
+  function createMockExecuteInteraction(
+    personaOption: string | null,
+    events: string[] = [],
+  ): {
     interaction: MockChatInputInteraction;
     deferCalls: { flags?: MessageFlags }[];
     getDeleteCalls: () => number;
@@ -240,9 +243,11 @@ describe("/stats persona execute handler", () => {
         deferCalls.push(options ?? {});
       },
       deleteReply: async () => {
+        events.push("delete");
         deleteCalls++;
       },
       followUp: async (payload) => {
+        events.push("followUp");
         followUpCalls.push(payload);
         return { id: "public_msg_1" };
       },
@@ -330,5 +335,27 @@ describe("/stats persona execute handler", () => {
     expect(getDeleteCalls()).toBe(1);
     expect(followUpCalls.length).toBe(1);
     expect(followUpCalls[0]).toEqual({ content: "Dashboard payload" });
+  });
+
+  it("deletes the private acknowledgement before slow stats construction", async () => {
+    const events: string[] = [];
+    trackSpy(
+      spyOn(statsDashboard, "buildPersonaTabs").mockImplementation(async () => {
+        events.push("buildPersonaTabs");
+        return [] as unknown as Awaited<ReturnType<typeof statsDashboard.buildPersonaTabs>>;
+      }),
+    );
+    trackSpy(
+      spyOn(statsDashboard, "renderStatsDashboardWithReply").mockImplementation(async (replyFn) => {
+        events.push("render");
+        await replyFn({ content: "Dashboard payload" });
+      }),
+    );
+
+    const { interaction, followUpCalls } = createMockExecuteInteraction("2", events);
+    await execute(client, interaction as unknown as ChatInputCommandInteraction, mockUserData, "en-US");
+
+    expect(events).toEqual(["delete", "buildPersonaTabs", "render", "followUp"]);
+    expect(followUpCalls).toHaveLength(1);
   });
 });
