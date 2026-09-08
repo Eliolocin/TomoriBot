@@ -14,6 +14,7 @@ export interface ShortTermMemoryMaintenanceParams {
   currentServerId: string;
   tomoriState: TomoriState | null | undefined;
   explicitLongTermMemoryIntent?: boolean;
+  disableShortTermMemoryUpdate?: boolean;
 }
 
 /**
@@ -31,6 +32,7 @@ export async function isShortTermMemoryMaintenanceDue(params: ShortTermMemoryMai
   if (tomoriState.llm.llm_provider === "novelai") return false;
   if (tomoriState.config?.short_term_memory_enabled === false) return false;
   if (params.explicitLongTermMemoryIntent) return false;
+  if (params.disableShortTermMemoryUpdate) return false;
 
   const numericServerId = tomoriState.server_id ?? null;
   const stmConfig = numericServerId ? await shortTermMemoryRepository.getStmConfig(numericServerId) : null;
