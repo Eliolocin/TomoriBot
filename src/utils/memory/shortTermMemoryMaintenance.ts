@@ -5,6 +5,7 @@ import {
   preWarmStmEntry,
 } from "@/utils/cache/shortTermMemoryCache";
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
+import { log } from "@/utils/misc/logger";
 
 const DEFAULT_STM_REFRESH_CADENCE = 5;
 
@@ -34,18 +35,30 @@ export async function isShortTermMemoryMaintenanceDue(params: ShortTermMemoryMai
   if (params.explicitLongTermMemoryIntent) return false;
   if (params.disableShortTermMemoryUpdate) return false;
 
-  const numericServerId = tomoriState.server_id ?? null;
-  const stmConfig = numericServerId ? await shortTermMemoryRepository.getStmConfig(numericServerId) : null;
-  const refreshCadence = stmConfig?.refresh_cadence ?? DEFAULT_STM_REFRESH_CADENCE;
+  try {
+    const numericServerId = tomoriState.server_id ?? null;
+    const stmConfig = numericServerId ? await shortTermMemoryRepository.getStmConfig(numericServerId) : null;
+    const refreshCadence = stmConfig?.refresh_cadence ?? DEFAULT_STM_REFRESH_CADENCE;
 
-  await (params.currentServerId === "DM"
-    ? preWarmStmEntry("user", params.triggeringUserId, params.currentChannelId, tomoriState.persona_id)
-    : preWarmStmEntry("server", params.currentServerId, params.currentChannelId, tomoriState.persona_id));
+    await (params.currentServerId === "DM"
+      ? preWarmStmEntry("user", params.triggeringUserId, params.currentChannelId, tomoriState.persona_id)
+      : preWarmStmEntry("server", params.currentServerId, params.currentChannelId, tomoriState.persona_id));
 
-  const sameChannelMemory =
-    params.currentServerId === "DM"
-      ? getShortTermMemoryForUserChannel(params.triggeringUserId, params.currentChannelId, tomoriState.persona_id)
-      : getShortTermMemoryForServerChannel(params.currentServerId, params.currentChannelId, tomoriState.persona_id);
+    const sameChannelMemory =
+      params.currentServerId === "DM"
+        ? getShortTermMemoryForUserChannel(params.triggeringUserId, params.currentChannelId, tomoriState.persona_id)
+        : getShortTermMemoryForServerChannel(params.currentServerId, params.currentChannelId, tomoriState.persona_id);
 
-  return (sameChannelMemory?.turnsSinceRefresh ?? 0) >= refreshCadence;
+    return (sameChannelMemory?.turnsSinceRefresh ?? 0) >= refreshCadence;
+  } catch (error) {
+    await log.error(
+      `[isShortTermMemoryMaintenanceDue] Failed to resolve short-term memory maintenance - triggeringUserId=${params.triggeringUserId}, currentChannelId=${params.currentChannelId}`,
+      error,
+      {
+        errorType: "SHORT_TERM_MEMORY_CONTEXT_ERROR",
+        metadata: { userDiscId: params.triggeringUserId, currentChannelId: params.currentChannelId },
+      },
+    );
+    return false;
+  }
 }
