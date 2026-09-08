@@ -11,12 +11,23 @@ describe("deliberate tool mode", () => {
   it("keeps web_search visible after applying the deliberate allowlist", () => {
     const result = applyDeliberateToolAllowlist({
       providerLabel: "test",
-      builtInTools: [{ name: "web_search" }, { name: "create_task" }],
+      builtInTools: [{ name: "web_search" }, { name: "create_task" }, { name: "update_short_term_memory" }],
       mcpFunctionNames: [],
       allowedToolNames: getDeliberateToolAllowedNames("look up today's AI news"),
     });
 
-    expect(result.builtInTools.map((tool) => tool.name)).toEqual(["web_search"]);
+    expect(result.builtInTools.map((tool) => tool.name)).toEqual(["web_search", "update_short_term_memory"]);
+  });
+
+  it("keeps STM maintenance available whenever deliberate mode exposes another tool", () => {
+    const imageAllowedNames = getDeliberateToolAllowedNames("create an image of a sleepy hamster");
+
+    expect(imageAllowedNames).toContain("generate_image");
+    expect(imageAllowedNames).toContain("update_short_term_memory");
+  });
+
+  it("does not turn ordinary chat into deliberate tool intent just to expose STM", () => {
+    expect(getDeliberateToolAllowedNames("hello there")).toEqual([]);
   });
 
   it("allows update_task for reminder edit/delete intent", () => {
