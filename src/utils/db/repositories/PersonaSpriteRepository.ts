@@ -52,7 +52,9 @@ class PersonaSpriteRepository {
    * materialized/independent persona, its own `persona_sprites` rows are returned.
    *
    * @param personaId - Target persona id
-   * @returns Sprite rows (preset-resolved or persona-owned), or [] on error
+   * @returns Sprite rows (preset-resolved or persona-owned)
+   * @throws When the persona or sprite query fails, so callers that make cleanup decisions do not
+   * treat an unavailable snapshot as an empty sprite set.
    */
   async listForPersona(personaId: number): Promise<PersonaSpriteRow[]> {
     try {
@@ -70,10 +72,10 @@ class PersonaSpriteRepository {
         ORDER BY sprite_key ASC, sprite_id ASC
       `;
 
-      return this.parseRows(rows, `persona ${personaId}`);
+      return this.parseRowsStrict(rows, `persona ${personaId}`);
     } catch (error) {
       log.error(`Error loading persona sprites for persona ${personaId}:`, error);
-      return [];
+      throw error;
     }
   }
 
@@ -374,7 +376,8 @@ class PersonaSpriteRepository {
    * Deletes ALL of a persona's own sprite rows (used when `/persona default`
    * re-points a persona, resetting it to the official preset sprite set).
    *
-   * @returns The deleted rows (for storage cleanup), or [] on error/no-op
+   * @returns The deleted rows (for storage cleanup), or [] when no rows matched
+   * @throws When the delete query fails
    */
   async deleteAllForPersona(personaId: number): Promise<PersonaSpriteRow[]> {
     try {
@@ -383,14 +386,13 @@ class PersonaSpriteRepository {
         WHERE persona_id = ${personaId}
         RETURNING sprite_id, persona_id, sprite_name, sprite_key, avatar_url, usage_instructions, is_identity, created_at, updated_at
       `;
-      const parsedRows = this.parseRows(rows, `persona ${personaId} sprite reset`);
-      if (parsedRows.length > 0) {
-        invalidatePersonaSpriteCache(personaId);
-      }
-      return parsedRows;
+      // A successful DELETE with no matching rows still establishes that the cache is not
+      // authoritative for this reset. Invalidation follows the completed write, never before it.
+      invalidatePersonaSpriteCache(personaId);
+      return this.parseRowsStrict(rows, `persona ${personaId} sprite reset`);
     } catch (error) {
       log.error(`Error clearing persona sprites for persona ${personaId}:`, error);
-      return [];
+      throw error;
     }
   }
 
@@ -401,6 +403,18 @@ class PersonaSpriteRepository {
       if (parsed) {
         parsedRows.push(parsed);
       }
+    }
+    return parsedRows;
+  }
+
+  private parseRowsStrict(rows: PersonaSpriteRow[], context: string): PersonaSpriteRow[] {
+    const parsedRows: PersonaSpriteRow[] = [];
+    for (const row of rows) {
+      const parsed = this.parseRow(row, context);
+      if (!parsed) {
+        throw new Error(`Invalid persona_sprites row for ${context}`);
+      }
+      parsedRows.push(parsed);
     }
     return parsedRows;
   }

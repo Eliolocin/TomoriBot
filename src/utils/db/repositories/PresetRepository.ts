@@ -1126,6 +1126,7 @@ class PresetRepository {
             dialogueCount: validatedImportData.sample_dialogues_in.length,
             triggerWordCount: validatedImportData.trigger_words.length,
           },
+          mainPersonaIsPointer: true,
         };
       }
 
@@ -1234,6 +1235,7 @@ class PresetRepository {
           dialogueCount: validatedImportData.sample_dialogues_in.length,
           triggerWordCount: validatedImportData.trigger_words.length,
         },
+        mainPersonaIsPointer: false,
       };
     } catch (error) {
       log.error(`Error importing preset data for server ${serverDiscId}:`, error);

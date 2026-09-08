@@ -568,6 +568,171 @@ describe("chat regression harness", () => {
     expect(processedMessageIds).toEqual([queuedMessage.id]);
   });
 
+  it("queues a manual user impersonation in FIFO and replays its incoming target", async () => {
+    const client = makeClient();
+    const fixture = conversations[0];
+    const activeMessage = makeMessage(fixture, client);
+    const queuedMessage = makeMessage(
+      {
+        ...fixture,
+        id: "queued_user_impersonation",
+        message: {
+          ...fixture.message,
+          authorBot: true,
+          content: "latest channel message",
+        },
+      },
+      client,
+    );
+    const targetUserId = "target_user_001";
+    const tomoriState = makeTomoriState(fixture, {
+      id: 1001,
+      nickname: "Tomori",
+      isAlter: false,
+      triggers: ["tomori"],
+    });
+    const incoming: ChatIncoming = {
+      client,
+      message: queuedMessage,
+      isFromQueue: false,
+      isManuallyTriggered: true,
+      retryCount: 0,
+      skipLock: false,
+      isPersonaJob: false,
+      isUserImpersonation: true,
+      impersonatedUserId: targetUserId,
+      textQuotaSource: "user",
+      manualTriggerInvoker: {
+        userDiscId: activeMessage.author.id,
+        username: "Sparrow",
+      },
+    };
+    const lockEntry = getOrCreateChannelLockEntry(channelId, guildId);
+    acquireChannelLockForTurn(lockEntry, {
+      messageId: activeMessage.id,
+      userDiscId: activeMessage.author.id,
+      isPersonaJob: false,
+      isCommandTriggered: false,
+    });
+    setActiveChannelTurnState(lockEntry, {
+      activePersonaId: tomoriState.persona_id,
+      triggeredPersonaIds: [tomoriState.persona_id],
+      followUpEligible: true,
+      isUserImpersonation: false,
+    });
+
+    const disposition = await evaluateAdmissionQueueAndTriggerGate({
+      incoming,
+      channelScope: {
+        guild: null,
+        serverDiscId: guildId,
+        isDMChannel: false,
+      },
+      earlyTomoriState: tomoriState,
+      earlyAllPersonas: [tomoriState],
+      userDiscId: activeMessage.author.id,
+      cooldownUserDiscId: activeMessage.author.id,
+      isActiveNaturalStopMessage: false,
+      isNaturalStopMessage: false,
+    });
+
+    expect(disposition?.disposition).toBe("queued");
+    expect(disposition?.reason).toBe("locked_busy_queued");
+    expect(lockEntry.messageQueue).toHaveLength(1);
+    expect(lockEntry.messageQueue[0]).toMatchObject({
+      isUserImpersonation: true,
+      impersonatedUserId: targetUserId,
+      isManuallyTriggered: true,
+    });
+
+    const replayedTargets: string[] = [];
+    releaseChannelLockAndReplayQueue({
+      channelId,
+      lockEntry,
+      completedMessageId: activeMessage.id,
+      handleStopResponse: async () => {},
+      processQueuedMessage: async (queued) => {
+        if (queued.isUserImpersonation && queued.impersonatedUserId) {
+          replayedTargets.push(queued.impersonatedUserId);
+        }
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(replayedTargets).toEqual([targetUserId]);
+  });
+
+  it("reports accepted live follow-ups as queued and keeps incoming impersonation metadata", async () => {
+    const client = makeClient();
+    const fixture = conversations[0];
+    const activeMessage = makeMessage(fixture, client);
+    const followUpMessage = makeMessage(
+      {
+        ...fixture,
+        id: "eligible_follow_up_impersonation",
+        message: {
+          ...fixture.message,
+          content: "Tomori, continue",
+        },
+      },
+      client,
+    );
+    const targetUserId = "follow_up_target_001";
+    const tomoriState = makeTomoriState(fixture, {
+      id: 1001,
+      nickname: "Tomori",
+      isAlter: false,
+      triggers: ["tomori"],
+    });
+    const incoming: ChatIncoming = {
+      client,
+      message: followUpMessage,
+      isFromQueue: false,
+      retryCount: 0,
+      skipLock: false,
+      isPersonaJob: false,
+      isUserImpersonation: true,
+      impersonatedUserId: targetUserId,
+      textQuotaSource: "user",
+    };
+    const lockEntry = getOrCreateChannelLockEntry(channelId, guildId);
+    acquireChannelLockForTurn(lockEntry, {
+      messageId: activeMessage.id,
+      userDiscId: activeMessage.author.id,
+      isPersonaJob: false,
+      isCommandTriggered: false,
+    });
+    setActiveChannelTurnState(lockEntry, {
+      activePersonaId: tomoriState.persona_id,
+      triggeredPersonaIds: [tomoriState.persona_id],
+      followUpEligible: true,
+      isUserImpersonation: false,
+    });
+
+    const disposition = await evaluateAdmissionQueueAndTriggerGate({
+      incoming,
+      channelScope: {
+        guild: null,
+        serverDiscId: guildId,
+        isDMChannel: false,
+      },
+      earlyTomoriState: tomoriState,
+      earlyAllPersonas: [tomoriState],
+      userDiscId: activeMessage.author.id,
+      cooldownUserDiscId: activeMessage.author.id,
+      isActiveNaturalStopMessage: false,
+      isNaturalStopMessage: false,
+    });
+
+    expect(disposition?.disposition).toBe("queued");
+    expect(disposition?.reason).toBe("locked_follow_up_queued");
+    expect(lockEntry.messageQueue[0]).toMatchObject({
+      isFollowUp: true,
+      isUserImpersonation: true,
+      impersonatedUserId: targetUserId,
+    });
+  });
+
   it("notifies queued message discard handlers when the channel queue is cleared", async () => {
     const client = makeClient();
     const fixture = conversations[0];

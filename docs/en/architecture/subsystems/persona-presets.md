@@ -117,6 +117,12 @@ Import re-links to an official preset pointer only when all of these are true:
 
 If any exact-match check fails, import creates an independent copy with `is_pointer = false`. The imported `preset_lineage_id` is kept as provenance when present, but `preset_language` remains null.
 
+Main-persona imports snapshot the current sprite rows before changing the persona. A materialized import
+deletes those rows after the persona write and uses the rows returned by that delete for best-effort storage
+cleanup. An import that becomes a preset pointer deletes its persona rows inside the pointer transaction and
+uses the pre-import snapshot for storage cleanup. A snapshot or row-delete failure is reported as an incomplete
+import, while a storage-file failure is reported as partial cleanup. Shared `presets/` references are skipped.
+
 `/persona generate` emits the canonical six generated attributes and marks only the generated Appearance attribute public. `/persona create` emits an explicit all-private flag array because its single freeform description is not guaranteed to be an appearance-only field. SillyTavern card conversion also defaults converted attributes to private because ST cards do not carry Tomori public visibility metadata.
 
 ### Import Now button

@@ -32,6 +32,7 @@ import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
 import { getCachedUserRow } from "@/utils/cache/userCache";
 import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
 import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/persona/personaAccess";
+import { UserImpersonationGenerationSkippedError } from "@/utils/chat/userImpersonationCompletion";
 
 type ImpersonationInteraction = ChatInputCommandInteraction;
 
@@ -490,11 +491,14 @@ export async function executeUserImpersonation(
 
     if (interaction.deferred || interaction.replied) {
       const isTimeoutError = error instanceof Error && /timed?\s*out|timeout/i.test(error.message);
+      const isSkippedError = error instanceof UserImpersonationGenerationSkippedError;
       const description = isTimeoutError
         ? localizer(locale, "genai.error_stream_timeout_description")
-        : localizer(locale, "genai.generic_error_description", {
-            error_message: error instanceof Error ? error.message : "Unknown error",
-          });
+        : isSkippedError
+          ? localizer(locale, "commands.impersonate.user_generation_skipped_description")
+          : localizer(locale, "genai.generic_error_description", {
+              error_message: error instanceof Error ? error.message : "Unknown error",
+            });
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()

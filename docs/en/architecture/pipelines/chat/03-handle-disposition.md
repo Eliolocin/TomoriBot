@@ -8,14 +8,17 @@ Terminal handler for non-run dispositions.
 
 ## Mission
 
-The "exit door" for the four non-runnable dispositions. Currently log-only —
+The "exit door" for the four non-runnable dispositions. Currently log-only:
 emits `log.warn` for errors and `log.info` for ignore/queued/blocked. Exists as
 a named stage (rather than being inlined into the coordinator) precisely so
 disposition handling has a single seam to grow into.
 
 Separately, the coordinator (`tomoriChat`) returns the final
 `ChatAdmissionDisposition` to its caller (`"run"` after a successful turn,
-otherwise the disposition reported by stage 02). Callers that schedule work
+otherwise the disposition reported by stage 02). A `"queued"` return means the
+message was accepted into live channel work, not discarded. The coordinator
+leaves queue callbacks attached, and the replayed invocation reports the
+eventual generation outcome. Callers that schedule work
 externally — notably the reminder processor (`src/timers/reminderProcessor.ts`)
 — inspect this return value to decide whether to delete the source DB row,
 treat it as in-flight (queued), or leave it for the next reconcile cycle
@@ -52,8 +55,10 @@ retry budget across restarts.
 
 After this stage runs:
 
-- The chat coordinator returns immediately; no lock is acquired, no further
-  stages execute for this message.
+- For `"ignore"`, `"blocked"`, and `"error"`, the chat coordinator returns
+  immediately; no lock is acquired and no further stages execute for this
+  message. An accepted `"queued"` admission has already enqueued work and is
+  replayed by the channel-lock stage.
 - The original `messageCreate` event has been fully consumed.
 - Channel state (locks, queues, self-reply chain) is **not** mutated here —
   stage 02 made any required mutations already.
