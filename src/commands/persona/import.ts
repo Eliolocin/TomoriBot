@@ -11,15 +11,16 @@ import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import { memoryGuard, IMPORT_LIMITS, reserveImportQuota } from "../../utils/security/rateLimiter";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
+import { invalidatePersonaSpriteCache } from "../../utils/cache/personaSpriteCache";
 import { presetRepository } from "@/utils/db/repositories/PresetRepository";
 import type { PresetExportData } from "../../types/preset/presetExport";
 import { extractMetadataFromPNG, extractSillyTavernMetadataFromPNG } from "../../utils/image/pngMetadata";
 import { validatePNGBuffer } from "../../utils/image/avatarHelper";
-import { personaRepository } from "@/utils/db/repositories";
+import { personaRepository, personaSpriteRepository } from "@/utils/db/repositories";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { dedupeTriggerWords, parseTriggerWordListInput } from "@/utils/text/triggerWords";
-import { uploadPersonaAvatarToStorage } from "../../utils/storage/avatarStorage";
+import { deletePersonaSpriteFromStorage, uploadPersonaAvatarToStorage } from "../../utils/storage/avatarStorage";
 import { isAvatarUpdateRateLimited } from "@/utils/discord/avatarRateLimit";
 import { importAlterPreset } from "@/utils/persona/importAlterPreset";
 
@@ -601,6 +602,14 @@ export async function execute(
     const isDM = !interaction.guild;
 
     if (importType === "main") {
+      const currentMainPersona = (await personaRepository.loadAllForServer(serverDiscId)).find(
+        (persona) => !persona.is_alter,
+      );
+      const mainPersonaId = currentMainPersona?.persona_id ?? null;
+      const spritesBeforeImport = mainPersonaId
+        ? await personaSpriteRepository.listForPersona(mainPersonaId)
+        : [];
+
       const importResult = await presetRepository.importPresetData(serverDiscId, presetData, identityMode);
 
       if (!importResult.success) {
@@ -617,6 +626,19 @@ export async function execute(
           ],
         });
         return;
+      }
+
+      if (mainPersonaId) {
+        const removedSprites = await personaSpriteRepository.deleteAllForPersona(mainPersonaId);
+        const importedAsPointer = await personaRepository.isPersonaPointer(mainPersonaId);
+        const spritesToDeleteFromStorage = importedAsPointer === true ? spritesBeforeImport : removedSprites;
+
+        await Promise.all(
+          spritesToDeleteFromStorage.map((sprite) => deletePersonaSpriteFromStorage(sprite.avatar_url)),
+        );
+        // A preset-pointer main can have zero private rows while its shared preset
+        // sprite set is still cached under the same persona_id. Always invalidate.
+        invalidatePersonaSpriteCache(mainPersonaId);
       }
 
       // Invalidate cache so next message gets fresh persona/config
