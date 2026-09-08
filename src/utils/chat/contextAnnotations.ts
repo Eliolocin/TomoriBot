@@ -1,4 +1,5 @@
 import type { Embed, Message, MessageReaction } from "discord.js";
+import { MessageType } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
 import type { ForcedMention } from "@/types/discord/mentions";
 import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context";
@@ -209,7 +210,7 @@ export function insertBeforeLatestDialoguePair(
  * (sample/example dialogues) are intentionally excluded from the depth walk
  * so they don't interfere with nudge positioning in real conversation history.
  *
- * If fewer DIALOGUE_HISTORY items exist than requested depth, clamps to the
+ * If fewer real dialogue turns exist than requested depth, clamps to the
  * earliest available position (just before the first real dialogue turn) rather
  * than jumping to tail, keeping the nudge within the conversation area.
  */
@@ -439,8 +440,13 @@ export async function buildReplyReferenceContextAnnotation(params: {
 
   const replyRef = params.messageIdMap.register(params.replyMessage.id, "ref");
   const referencedRef = params.messageIdMap.register(params.referencedMessage.id, "ref");
+  const referencedSummary = `${formatInlineSystemContent(params.referencedMessage.content)}${buildReplyReferenceAttachmentInfo(params.referencedMessage)}`;
 
-  return `[System: This message (ID: ${replyRef}) by ${replyAuthorName} is referring to a previous message (ID: ${referencedRef}) by ${referencedAuthorName} saying: ${formatInlineSystemContent(params.referencedMessage.content)}${buildReplyReferenceAttachmentInfo(params.referencedMessage)}]`;
+  if (params.replyMessage.type === MessageType.ChannelPinnedMessage) {
+    return `[System: ${replyAuthorName} pinned a previous message (ID: ${referencedRef}) by ${referencedAuthorName} saying: ${referencedSummary}]`;
+  }
+
+  return `[System: This message (ID: ${replyRef}) by ${replyAuthorName} is referring to a previous message (ID: ${referencedRef}) by ${referencedAuthorName} saying: ${referencedSummary}]`;
 }
 
 export async function buildReactionContextAnnotation(
