@@ -914,9 +914,9 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:ch-ov-t-model:en-US:123456789012345678:openrouter:abcd1234",
+    "config:v1:ch-ov-t-range:en-US:123456789012345678:openrouter:abcd1234",
     {
-      action: "channels-overrides-text-model-select",
+      action: "channels-overrides-text-model-range-select",
       locale: "en-US",
       channelId: "123456789012345678",
       provider: "openrouter",
@@ -924,13 +924,14 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:ch-ov-t-page:en-US:123456789012345678:openrouter:25",
+    "config:v1:ch-ov-t-submit:en-US:123456789012345678:openrouter:abcd1234:nonce1234567",
     {
-      action: "channels-overrides-text-model-page",
+      action: "channels-overrides-text-model-submit",
       locale: "en-US",
       channelId: "123456789012345678",
       provider: "openrouter",
-      start: 25,
+      fp: "abcd1234",
+      nonce: "nonce1234567",
     },
   ],
   [
@@ -985,13 +986,14 @@ describe("config route wire contract", () => {
     expect([...pinned].sort()).toEqual(Object.keys(CONFIG_ROUTE_CODECS).sort());
   });
 
-  it("keeps the longest channel Text model page route under Discord's limit", () => {
+  it("keeps the longest channel Text model submit route under Discord's limit", () => {
     const customId = buildConfigRouteId({
-      action: "channels-overrides-text-model-page",
+      action: "channels-overrides-text-model-submit",
       locale: "en-US",
       channelId: "99999999999999999999",
       provider: "openrouter",
-      start: 999999,
+      fp: "abcd1234",
+      nonce: "nonce1234567",
     });
     expect(customId.length).toBeLessThan(100);
   });

@@ -1,5 +1,5 @@
 import { ChannelType, TextInputStyle } from "discord.js";
-import type { ChannelPromptMode, TomoriState } from "@/types/db/schema";
+import type { ChannelPromptMode, LlmRow, TomoriState } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import {
   CHECKLIST_CHANNELS_PER_PAGE,
@@ -88,6 +88,7 @@ export const CONFIG_CHANNEL_OVERRIDE_PROMPT_PART_FIELDS = [
 export const CONFIG_CHANNEL_OVERRIDE_MODE_FIELD = "channels_override_prompt_mode";
 export const CONFIG_CHANNEL_OVERRIDE_CONTEXT_NOTE_TEXT_FIELD = "channels_override_context_note_text";
 export const CONFIG_CHANNEL_OVERRIDE_CONTEXT_NOTE_DEPTH_FIELD = "channels_override_context_note_depth";
+export const CONFIG_CHANNEL_OVERRIDE_TEXT_MODEL_FIELD = "channels_override_text_model";
 
 function modalTitle(locale: string, key: string): string {
   return safeSelectOptionText(localizer(locale, key), 45);
@@ -99,6 +100,47 @@ function modalLabel(locale: string, key: string): string {
 
 function modalDescription(locale: string, key: string): string {
   return safeSelectOptionText(localizer(locale, key), 100);
+}
+
+export function buildConfigChannelTextModelModal(
+  locale: string,
+  channelId: string,
+  provider: string,
+  fp: string,
+  nonce: string,
+  models: readonly LlmRow[],
+  currentModelId: number | null | undefined,
+): RawModalPayload {
+  return {
+    custom_id: buildConfigRouteId({
+      action: "channels-overrides-text-model-submit",
+      locale,
+      channelId,
+      provider,
+      fp,
+      nonce,
+    }),
+    title: modalTitle(locale, "commands.config.panel.change_override_button"),
+    components: [
+      {
+        type: LABEL,
+        label: modalLabel(locale, "commands.config.panel.text_override_model_placeholder"),
+        component: {
+          type: STRING_SELECT,
+          custom_id: buildConfigModalFieldId(CONFIG_CHANNEL_OVERRIDE_TEXT_MODEL_FIELD, nonce),
+          min_values: 1,
+          max_values: 1,
+          required: true,
+          options: models.map((model) => ({
+            label: safeSelectOptionText(model.llm_codename, 100),
+            value: model.llm_codename,
+            description: model.llm_description ? safeSelectOptionText(model.llm_description, 100) : undefined,
+            default: model.llm_id === currentModelId,
+          })),
+        },
+      },
+    ],
+  };
 }
 
 function channelField(locale: string, nonce: string, field: string, labelKey: string, descriptionKey: string) {

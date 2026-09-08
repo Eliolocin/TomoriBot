@@ -4,6 +4,7 @@ import {
   computeAutoTriggerFingerprint,
   computeChannelRulesFingerprint,
   computeChannelOverridesFingerprint,
+  CONFIG_MODEL_PAGE_SIZE,
   type ConfigChannelRulesCollection,
   type ConfigPanelRoute,
 } from "@/utils/discord/configPanelCatalog";
@@ -47,11 +48,13 @@ import {
   buildConfigPrivateChannelsModal,
   buildConfigRoleplayChannelsModal,
   buildConfigChannelContextNoteModal,
+  buildConfigChannelTextModelModal,
   buildConfigChannelPromptModal,
   CONFIG_CHANNEL_OVERRIDE_CONTEXT_NOTE_DEPTH_FIELD,
   CONFIG_CHANNEL_OVERRIDE_CONTEXT_NOTE_TEXT_FIELD,
   CONFIG_CHANNEL_OVERRIDE_MODE_FIELD,
   CONFIG_CHANNEL_OVERRIDE_PROMPT_PART_FIELDS,
+  CONFIG_CHANNEL_OVERRIDE_TEXT_MODEL_FIELD,
 } from "@/utils/discord/ui/configChannelModals";
 import { buildConfigModalFieldId } from "@/utils/discord/ui/configModals";
 import { localizer } from "@/utils/text/localizer";
@@ -74,6 +77,8 @@ export const CONFIG_CHANNEL_MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["actio
   "channels-blocklist-manage-open",
   "channels-overrides-prompt-open",
   "channels-overrides-context-note-open",
+  "channels-overrides-text-provider-select",
+  "channels-overrides-text-model-range-select",
 ]);
 
 /**
@@ -84,6 +89,7 @@ export const CONFIG_CHANNEL_MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["actio
 export const CONFIG_CHANNEL_SELECT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "channels-welcome-range-select",
   "channels-autoch-range-select",
+  "channels-overrides-text-model-range-select",
 ]);
 
 export const CONFIG_CHANNEL_MODAL_SUBMIT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
@@ -97,6 +103,7 @@ export const CONFIG_CHANNEL_MODAL_SUBMIT_ACTIONS = new Set<ConfigPanelRoute["act
   "channels-blocklist-submit",
   "channels-overrides-prompt-submit",
   "channels-overrides-context-note-submit",
+  "channels-overrides-text-model-submit",
 ]);
 
 export const CONFIG_CHANNEL_DIRECT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
@@ -116,12 +123,10 @@ const CONFIG_CHANNEL_NAVIGATION_ACTIONS = new Set<ConfigPanelRoute["action"]>([
 const CONFIG_CHANNEL_OVERRIDE_NAVIGATION_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "channels-overrides-select",
   "channels-overrides-text-open",
-  "channels-overrides-text-provider-select",
-  "channels-overrides-text-model-page",
 ]);
 
 const CONFIG_CHANNEL_OVERRIDE_TEXT_WRITE_ACTIONS = new Set<ConfigPanelRoute["action"]>([
-  "channels-overrides-text-model-select",
+  "channels-overrides-text-model-submit",
   "channels-overrides-text-clear",
 ]);
 
@@ -985,7 +990,7 @@ type ChannelOverrideWriteRoute = Extract<
       | "channels-overrides-prompt-submit"
       | "channels-overrides-prompt-clear"
       | "channels-overrides-context-note-submit"
-      | "channels-overrides-text-model-select"
+      | "channels-overrides-text-model-submit"
       | "channels-overrides-text-clear";
   }
 >;
@@ -993,10 +998,7 @@ type ChannelOverrideWriteRoute = Extract<
 type ChannelOverrideTextNavigationRoute = Extract<
   ConfigPanelRoute,
   {
-    action:
-      | "channels-overrides-text-open"
-      | "channels-overrides-text-provider-select"
-      | "channels-overrides-text-model-page";
+    action: "channels-overrides-text-open";
   }
 >;
 
@@ -1179,7 +1181,13 @@ async function runChannelOverrideWrite(
       : { receipt: receipt(route.locale, "error", "write_failed_heading", "write_failed_detail") };
   }
 
-  const selectedCodename = interaction.isStringSelectMenu() ? (interaction.values[0] ?? "") : "";
+  const selectedCodename =
+    textRoute.action === "channels-overrides-text-model-submit"
+      ? (dependencies.takeSelectValue(
+          interaction.id,
+          buildConfigModalFieldId(CONFIG_CHANNEL_OVERRIDE_TEXT_MODEL_FIELD, textRoute.nonce),
+        ) ?? "")
+      : "";
   const savedProviders = await dependencies.loadSavedTextProviders(state.server_id);
   const provider = savedProviders.find((saved) => saved.provider.toLowerCase() === textRoute.provider.toLowerCase());
   if (!provider) return { receipt: staleReceipt(route.locale) };
@@ -1223,7 +1231,6 @@ async function handleChannelTextNavigation(
   route: ChannelOverrideTextNavigationRoute,
   scope: ConfigScope,
   dependencies: ConfigRouteDependencies,
-  submittedValue: string | null,
 ): Promise<void> {
   const state = stateFromScope(scope);
   if (!state) return;
@@ -1236,19 +1243,6 @@ async function handleChannelTextNavigation(
       dependencies,
       null,
       invalid(route.locale, "channels_overrides_invalid_channel_detail"),
-    );
-    return;
-  }
-
-  const fp = channelOverridesFingerprint(state, route.channelId, view);
-  if (route.action === "channels-overrides-text-provider-select" && route.fp !== fp) {
-    await repaintChannelOverrides(
-      interaction,
-      route.locale,
-      scope,
-      dependencies,
-      route.channelId,
-      staleReceipt(route.locale),
     );
     return;
   }
@@ -1271,70 +1265,12 @@ async function handleChannelTextNavigation(
     return;
   }
 
-  let provider: string | undefined;
-  if (route.action === "channels-overrides-text-model-page") {
-    provider = savedProviders.find((saved) => saved.provider.toLowerCase() === route.provider.toLowerCase())?.provider;
-  } else if (route.action === "channels-overrides-text-open") {
-    provider = savedProviders.length === 1 ? savedProviders[0]?.provider : undefined;
-    if (!provider) {
-      const panelView: ConfigPanelView = {
-        kind: "channel-text-override-provider",
-        channelId: route.channelId,
-        fp,
-        providers: savedProviders.map((saved) => saved.provider),
-      };
-      await repaintChannelOverrides(
-        interaction,
-        route.locale,
-        scope,
-        dependencies,
-        route.channelId,
-        undefined,
-        panelView,
-      );
-      return;
-    }
-  } else {
-    provider = savedProviders.find((saved) => saved.provider.toLowerCase() === submittedValue?.toLowerCase())?.provider;
-  }
-
-  if (!provider) {
-    await repaintChannelOverrides(
-      interaction,
-      route.locale,
-      scope,
-      dependencies,
-      route.channelId,
-      staleReceipt(route.locale),
-    );
-    return;
-  }
-
-  const models = await dependencies.loadPersonaTextModels(provider, state.server_id);
-  if (models.length === 0) {
-    await repaintChannelOverrides(
-      interaction,
-      route.locale,
-      scope,
-      dependencies,
-      route.channelId,
-      externalReceipt(
-        route.locale,
-        "error",
-        "commands.model.text.no_models_title",
-        "commands.model.text.no_models_description",
-      ),
-    );
-    return;
-  }
-
+  const fp = channelOverridesFingerprint(state, route.channelId, view);
   const panelView: ConfigPanelView = {
-    kind: "channel-text-override-model",
+    kind: "channel-text-override-provider",
     channelId: route.channelId,
     fp,
-    provider,
-    models,
-    start: route.action === "channels-overrides-text-model-page" ? route.start : 0,
+    providers: savedProviders.map((saved) => saved.provider),
   };
   await repaintChannelOverrides(interaction, route.locale, scope, dependencies, route.channelId, undefined, panelView);
 }
@@ -1365,7 +1301,122 @@ export async function handleConfigChannelModalOpen(
   }
 
   const nonce = dependencies.createNonce();
-  if (route.action === "channels-overrides-prompt-open" || route.action === "channels-overrides-context-note-open") {
+  if (
+    route.action === "channels-overrides-text-provider-select" ||
+    route.action === "channels-overrides-text-model-range-select"
+  ) {
+    const view = await dependencies.loadChannelsView(interaction, route.channelId);
+    const target = channelOverrideTarget(view, route.channelId, CHANNEL_OVERRIDE_TYPES);
+    if (!target) {
+      await interaction.reply({
+        content: overridesInvalidReply(route.locale, "channels_overrides_invalid_channel_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+    const fp = channelOverridesFingerprint(state, target.id, view);
+    if (route.fp !== fp) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.config.panel.stale_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const savedProviders = await dependencies.loadSavedTextProviders(state.server_id);
+    const submittedProvider =
+      route.action === "channels-overrides-text-provider-select"
+        ? interaction.isStringSelectMenu()
+          ? (interaction.values[0] ?? "")
+          : ""
+        : route.provider;
+    const provider = savedProviders.find(
+      (saved) => saved.provider.toLowerCase() === submittedProvider.toLowerCase(),
+    )?.provider;
+    if (!provider) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.config.panel.stale_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const models = await dependencies.loadPersonaTextModels(provider, state.server_id);
+    if (models.length === 0) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.model.text.no_models_description"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    const requestedStart =
+      route.action === "channels-overrides-text-model-range-select"
+        ? Number.parseInt(interaction.isStringSelectMenu() ? (interaction.values[0] ?? "") : "", 10)
+        : 0;
+    if (route.action === "channels-overrides-text-provider-select" && models.length > CONFIG_MODEL_PAGE_SIZE) {
+      await interaction.deferUpdate();
+      await repaintChannelOverrides(interaction, route.locale, scope, dependencies, route.channelId, undefined, {
+        kind: "channel-text-override-model-range",
+        channelId: route.channelId,
+        fp,
+        provider,
+        modelCount: models.length,
+        rangePageIndex: 0,
+      });
+      return true;
+    }
+    const selectedRangeValue = interaction.isStringSelectMenu() ? (interaction.values[0] ?? "") : "";
+    if (route.action === "channels-overrides-text-model-range-select" && selectedRangeValue.startsWith("__range__")) {
+      const pageCount = Math.ceil(models.length / CONFIG_MODEL_PAGE_SIZE);
+      const rangePageIndex = Number.parseInt(selectedRangeValue.slice("__range__".length), 10);
+      if (!Number.isInteger(rangePageIndex) || rangePageIndex < 0 || rangePageIndex >= pageCount) {
+        await interaction.reply({
+          content: localizer(route.locale, "commands.config.panel.stale_detail"),
+          flags: MessageFlags.Ephemeral,
+        });
+        return true;
+      }
+      await interaction.deferUpdate();
+      await repaintChannelOverrides(interaction, route.locale, scope, dependencies, route.channelId, undefined, {
+        kind: "channel-text-override-model-range",
+        channelId: route.channelId,
+        fp,
+        provider,
+        modelCount: models.length,
+        rangePageIndex,
+      });
+      return true;
+    }
+    if (
+      !Number.isInteger(requestedStart) ||
+      requestedStart < 0 ||
+      requestedStart % CONFIG_MODEL_PAGE_SIZE !== 0 ||
+      requestedStart >= models.length
+    ) {
+      await interaction.reply({
+        content: localizer(route.locale, "commands.config.panel.stale_detail"),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    await dependencies.showModal(
+      interaction,
+      buildConfigChannelTextModelModal(
+        route.locale,
+        route.channelId,
+        provider,
+        fp,
+        nonce,
+        models.slice(requestedStart, requestedStart + CONFIG_MODEL_PAGE_SIZE),
+        view.overrides.textModelOverride?.llm_id,
+      ),
+    );
+  } else if (
+    route.action === "channels-overrides-prompt-open" ||
+    route.action === "channels-overrides-context-note-open"
+  ) {
     const view = await dependencies.loadChannelsView(interaction, route.channelId);
     const allowedTypes =
       route.action === "channels-overrides-prompt-open" ? CHANNEL_OVERRIDE_TYPES : CONTEXT_NOTE_CHANNEL_TYPES;
@@ -1524,12 +1575,8 @@ export async function handleConfigChannelRoutes(context: ConfigChannelRouteConte
     return true;
   }
 
-  if (
-    route.action === "channels-overrides-text-open" ||
-    route.action === "channels-overrides-text-provider-select" ||
-    route.action === "channels-overrides-text-model-page"
-  ) {
-    await handleChannelTextNavigation(interaction, route, scope, dependencies, selectedValue);
+  if (route.action === "channels-overrides-text-open") {
+    await handleChannelTextNavigation(interaction, route, scope, dependencies);
     return true;
   }
 
@@ -1556,14 +1603,18 @@ export async function handleConfigChannelRoutes(context: ConfigChannelRouteConte
     return true;
   }
 
+  const writeScope =
+    route.action === "channels-overrides-text-model-submit"
+      ? ((await dependencies.resolveScope(interaction, true)) ?? scope)
+      : scope;
   const outcome =
     route.action === "channels-overrides-prompt-submit" ||
     route.action === "channels-overrides-prompt-clear" ||
     route.action === "channels-overrides-context-note-submit" ||
-    route.action === "channels-overrides-text-model-select" ||
+    route.action === "channels-overrides-text-model-submit" ||
     route.action === "channels-overrides-text-clear"
-      ? await runChannelOverrideWrite(interaction, route, scope, dependencies)
-      : await runChannelWrite(interaction, route, scope, dependencies);
+      ? await runChannelOverrideWrite(interaction, route, writeScope, dependencies)
+      : await runChannelWrite(interaction, route, writeScope, dependencies);
   const refreshed = (await dependencies.resolveScope(interaction, true)) ?? scope;
   if (outcome.telemetry && refreshed.internalServerId) {
     dependencies.recordAction({
@@ -1603,7 +1654,7 @@ export async function handleConfigChannelRoutes(context: ConfigChannelRouteConte
     route.action === "channels-overrides-prompt-submit" ||
     route.action === "channels-overrides-prompt-clear" ||
     route.action === "channels-overrides-context-note-submit" ||
-    route.action === "channels-overrides-text-model-select" ||
+    route.action === "channels-overrides-text-model-submit" ||
     route.action === "channels-overrides-text-clear"
   ) {
     await repaintChannelOverrides(interaction, route.locale, refreshed, dependencies, route.channelId, outcome.receipt);

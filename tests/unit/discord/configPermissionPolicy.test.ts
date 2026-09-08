@@ -530,18 +530,19 @@ describe("Channels Overrides action policy", () => {
         fp: "abcd1234",
       },
       {
-        action: "channels-overrides-text-model-select",
+        action: "channels-overrides-text-model-range-select",
         locale: "en-US",
         channelId: "123456789012345678",
         provider: "openrouter",
         fp: "abcd1234",
       },
       {
-        action: "channels-overrides-text-model-page",
+        action: "channels-overrides-text-model-submit",
         locale: "en-US",
         channelId: "123456789012345678",
         provider: "openrouter",
-        start: 0,
+        fp: "abcd1234",
+        nonce: "nonce1234567",
       },
       {
         action: "channels-overrides-text-clear",

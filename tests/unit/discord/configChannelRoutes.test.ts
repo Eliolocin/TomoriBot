@@ -51,6 +51,7 @@ import {
   CONFIG_CHANNEL_OVERRIDE_CONTEXT_NOTE_TEXT_FIELD,
   CONFIG_CHANNEL_OVERRIDE_MODE_FIELD,
   CONFIG_CHANNEL_OVERRIDE_PROMPT_PART_FIELDS,
+  CONFIG_CHANNEL_OVERRIDE_TEXT_MODEL_FIELD,
   WELCOME_PERSONA_PAGE_SIZE,
 } from "@/utils/discord/ui/configChannelModals";
 import { buildConfigModalFieldId } from "@/utils/discord/ui/configModals";
@@ -1865,7 +1866,52 @@ describe("Channels Overrides", () => {
     expect(interaction.deferred).toBe(true);
   });
 
-  it("routes provider selections through the dispatcher and safely repaints forged or stale submissions", async () => {
+  it("bounds the model range chooser to Discord's 25-option limit", () => {
+    const state = makePersona();
+    const channels = makeOverrideChannels();
+    const payload = buildConfigPanelPayload({
+      locale: "en-US",
+      actor: { workspaceKind: "guild", isManager: true },
+      category: "channels",
+      page: "overrides",
+      personas: [state],
+      selectedPersonaId: null,
+      readStatus: "fresh",
+      channelsView: makeChannelsView(state, undefined, undefined, channels, { selectedChannelId: CHANNEL_ONE }),
+      channelsSelectedChannelId: CHANNEL_ONE,
+      view: {
+        kind: "channel-text-override-model-range",
+        channelId: CHANNEL_ONE,
+        fp: overrideFingerprint(state, CHANNEL_ONE),
+        provider: "openrouter",
+        modelCount: 626,
+        rangePageIndex: 0,
+      },
+    });
+    const container = payload.components.find((component) => component.type === ComponentType.Container);
+    if (!container || container.type !== ComponentType.Container) throw new Error("config container missing");
+    const modelSelect = container.components
+      .filter((component) => component.type === ComponentType.ActionRow)
+      .flatMap((row) => (row.type === ComponentType.ActionRow ? row.components : []))
+      .find(
+        (component) =>
+          component.type === ComponentType.StringSelect &&
+          component.customId ===
+            buildConfigRouteId({
+              action: "channels-overrides-text-model-range-select",
+              locale: "en-US",
+              channelId: CHANNEL_ONE,
+              provider: "openrouter",
+              fp: overrideFingerprint(state, CHANNEL_ONE),
+            }),
+      );
+    if (!modelSelect || modelSelect.type !== ComponentType.StringSelect) throw new Error("model range missing");
+
+    expect(modelSelect.options).toHaveLength(25);
+    expect(modelSelect.options.at(-1)?.value).toContain("__range__");
+  });
+
+  it("opens a provider's model modal directly and rejects forged or stale selections", async () => {
     const state = makePersona({ llm: makeLlm(10, "openrouter", "server-default") });
     const channels = makeOverrideChannels();
     const selectedChannelId = CHANNEL_ONE;
@@ -1874,12 +1920,19 @@ describe("Channels Overrides", () => {
     const model = makeLlm(20, "openrouter", "channel-model");
     const loadPersonaTextModels = mock(async (_provider: string, _serverId: number) => [model]);
     const recordAction = mock(() => undefined);
+    let modal: RawModalPayload | undefined;
+    let acknowledgedBeforeModal = true;
     const shared = {
       state,
       recordAction,
       loadChannelsView: makeOverrideLoader(state, channels, values),
       loadSavedTextProviders: async () => [{ provider: "openrouter" }],
       loadPersonaTextModels,
+      showModal: async (interaction: unknown, payload: RawModalPayload) => {
+        const target = interaction as { deferred: boolean; replied: boolean };
+        acknowledgedBeforeModal = target.deferred || target.replied;
+        modal = payload;
+      },
     };
 
     const validInteraction = makeInteraction({
@@ -1894,17 +1947,12 @@ describe("Channels Overrides", () => {
     });
     await makeHarness(shared).dispatch(validInteraction);
 
-    const validPayload = JSON.stringify(validInteraction.editedReplies);
-    expect(validPayload).toContain(model.llm_codename);
-    expect(validPayload).toContain(
-      buildConfigRouteId({
-        action: "channels-overrides-text-model-select",
-        locale: "en-US",
-        channelId: selectedChannelId,
-        provider: "openrouter",
-        fp,
-      }),
-    );
+    expect(acknowledgedBeforeModal).toBe(false);
+    expect(validInteraction.deferred).toBe(false);
+    expect(modal?.custom_id).toContain("ch-ov-t-submit");
+    expect(modal?.components[0]?.type).toBe(18);
+    expect(modal?.components[0]?.component?.type).toBe(3);
+    expect(modal?.components[0]?.component?.options?.[0]?.value).toBe(model.llm_codename);
     expect(loadPersonaTextModels).toHaveBeenCalledWith("openrouter", state.server_id);
 
     for (const testCase of [
@@ -1923,13 +1971,130 @@ describe("Channels Overrides", () => {
       });
       await makeHarness(shared).dispatch(interaction);
 
-      expect(interaction.deferred).toBe(true);
-      expect(interaction.editedReplies).toHaveLength(1);
-      expect(JSON.stringify(interaction.editedReplies)).not.toContain(model.llm_codename);
+      expect(interaction.deferred).toBe(false);
+      expect(interaction.replied).toBe(true);
+      expect(interaction.editedReplies).toHaveLength(0);
     }
 
     expect(loadPersonaTextModels).toHaveBeenCalledTimes(1);
     expect(recordAction).not.toHaveBeenCalled();
+  });
+
+  it("reaches a later model slice through the persistent range chooser", async () => {
+    const state = makePersona({ llm: makeLlm(10, "openrouter", "server-default") });
+    const channels = makeOverrideChannels();
+    const selectedChannelId = CHANNEL_ONE;
+    const values: Partial<ConfigChannelsOverridesView> = { selectedChannelId };
+    const fp = overrideFingerprint(state, selectedChannelId, values);
+    const models = Array.from({ length: 51 }, (_, index) => makeLlm(index + 20, "openrouter", `model-${index}`));
+    let modal: RawModalPayload | undefined;
+    const providerInteraction = makeInteraction({
+      route: {
+        action: "channels-overrides-text-provider-select",
+        locale: "en-US",
+        channelId: selectedChannelId,
+        fp,
+      },
+      kind: "string-select",
+      selectedValue: "openrouter",
+    });
+    const shared = {
+      state,
+      loadChannelsView: makeOverrideLoader(state, channels, values),
+      loadSavedTextProviders: async () => [{ provider: "openrouter" }],
+      loadPersonaTextModels: async () => models,
+    };
+
+    await makeHarness(shared).dispatch(providerInteraction);
+
+    expect(providerInteraction.deferred).toBe(true);
+    const rangeRoute = buildConfigRouteId({
+      action: "channels-overrides-text-model-range-select",
+      locale: "en-US",
+      channelId: selectedChannelId,
+      provider: "openrouter",
+      fp,
+    });
+    const rangePayload = JSON.stringify(providerInteraction.editedReplies);
+    expect(rangePayload).toContain(rangeRoute);
+    expect(rangePayload).toContain('"value":"25"');
+
+    const rangeInteraction = makeInteraction({
+      route: {
+        action: "channels-overrides-text-model-range-select",
+        locale: "en-US",
+        channelId: selectedChannelId,
+        provider: "openrouter",
+        fp,
+      },
+      kind: "string-select",
+      selectedValue: "25",
+    });
+    await makeHarness({
+      ...shared,
+      showModal: async (_interaction, payload) => {
+        modal = payload;
+      },
+    }).dispatch(rangeInteraction);
+
+    expect(rangeInteraction.deferred).toBe(false);
+    expect(modal?.components[0]?.type).toBe(18);
+    expect(modal?.components[0]?.component?.type).toBe(3);
+    expect(modal?.components[0]?.component?.options?.[0]?.value).toBe("model-25");
+    expect(modal?.components[0]?.component?.options?.some((option) => option.value === "model-0")).toBe(false);
+
+    const nonce = modal?.custom_id.split(":").at(-1);
+    if (!nonce) throw new Error("model modal nonce missing");
+    const textWrite = mock(async () => ({ status: "success" as const }));
+    const submitInteraction = makeInteraction({
+      route: {
+        action: "channels-overrides-text-model-submit",
+        locale: "en-US",
+        channelId: selectedChannelId,
+        provider: "openrouter",
+        fp,
+        nonce,
+      },
+      kind: "modal",
+    });
+    await makeHarness({
+      ...shared,
+      selectValues: {
+        [buildConfigModalFieldId(CONFIG_CHANNEL_OVERRIDE_TEXT_MODEL_FIELD, nonce)]: "model-25",
+      },
+      operations: { ...configPersonaOperations, setTextModelOverride: textWrite },
+    }).dispatch(submitInteraction);
+
+    expect(submitInteraction.deferred).toBe(true);
+    expect(textWrite).toHaveBeenCalledWith({
+      scope: "channel",
+      serverId: state.server_id,
+      channelId: selectedChannelId,
+      llmId: models[25]?.llm_id,
+      serverDiscId: "guild-1",
+    });
+
+    const staleSubmit = makeInteraction({
+      route: {
+        action: "channels-overrides-text-model-submit",
+        locale: "en-US",
+        channelId: selectedChannelId,
+        provider: "openrouter",
+        fp: "stale123",
+        nonce,
+      },
+      kind: "modal",
+    });
+    await makeHarness({
+      ...shared,
+      selectValues: {
+        [buildConfigModalFieldId(CONFIG_CHANNEL_OVERRIDE_TEXT_MODEL_FIELD, nonce)]: "model-25",
+      },
+      operations: { ...configPersonaOperations, setTextModelOverride: textWrite },
+    }).dispatch(staleSubmit);
+
+    expect(staleSubmit.deferred).toBe(true);
+    expect(textWrite).toHaveBeenCalledTimes(1);
   });
 
   it("accepts prompts for every thread target but rejects announcement-thread context notes", async () => {
@@ -2243,14 +2408,14 @@ describe("Channels Overrides", () => {
       },
       {
         route: {
-          action: "channels-overrides-text-model-select",
+          action: "channels-overrides-text-model-submit",
           locale: "en-US",
           channelId: CHANNEL_ONE,
           provider: "openrouter",
           fp,
+          nonce,
         },
-        kind: "string-select",
-        selectedValue: "new-model",
+        kind: "modal",
       },
       {
         route: { action: "channels-overrides-text-clear", locale: "en-US", channelId: CHANNEL_ONE, fp },
@@ -2325,16 +2490,17 @@ describe("Channels Overrides", () => {
 
     const textValues = { selectedChannelId } satisfies Partial<ConfigChannelsOverridesView>;
     const textModel = makeLlm(20, "openrouter", "new-model");
+    const textNonce = "nonce0434567";
     const textInteraction = makeInteraction({
       route: {
-        action: "channels-overrides-text-model-select",
+        action: "channels-overrides-text-model-submit",
         locale: "en-US",
         channelId: selectedChannelId,
         provider: "openrouter",
         fp: overrideFingerprint(state, selectedChannelId, textValues),
+        nonce: textNonce,
       },
-      kind: "string-select",
-      selectedValue: textModel.llm_codename,
+      kind: "modal",
     });
     let textAcknowledged = false;
     const textWrite = mock(async () => {
@@ -2346,6 +2512,9 @@ describe("Channels Overrides", () => {
       loadChannelsView: makeOverrideLoader(state, makeOverrideChannels(), textValues),
       loadSavedTextProviders: async () => [{ provider: "openrouter" }],
       loadPersonaTextModels: async () => [textModel],
+      selectValues: {
+        [buildConfigModalFieldId(CONFIG_CHANNEL_OVERRIDE_TEXT_MODEL_FIELD, textNonce)]: textModel.llm_codename,
+      },
       operations: { ...configPersonaOperations, setTextModelOverride: textWrite },
     }).dispatch(textInteraction);
 
@@ -2463,6 +2632,7 @@ describe("Channels Overrides", () => {
       }),
     );
     const textModel = makeLlm(20, "openrouter", "channel-model");
+    const textNonce = "nonce1534567";
     await makeHarness({
       state,
       recordAction,
@@ -2473,14 +2643,14 @@ describe("Channels Overrides", () => {
     }).dispatch(
       makeInteraction({
         route: {
-          action: "channels-overrides-text-model-select",
+          action: "channels-overrides-text-model-submit",
           locale: "en-US",
           channelId: CHANNEL_ONE,
           provider: "openrouter",
           fp: overrideFingerprint(state, CHANNEL_ONE, values),
+          nonce: textNonce,
         },
-        kind: "string-select",
-        selectedValue: "channel-model",
+        kind: "modal",
       }),
     );
     await makeHarness({
@@ -2589,18 +2759,21 @@ describe("Channels Overrides", () => {
       loadChannelsView: loader,
       loadSavedTextProviders: async () => [{ provider: "openrouter" }],
       loadPersonaTextModels: async () => [makeLlm(30, "openrouter", "new-channel-model")],
+      selectValues: {
+        [buildConfigModalFieldId(CONFIG_CHANNEL_OVERRIDE_TEXT_MODEL_FIELD, "nonce1734567")]: "new-channel-model",
+      },
       operations: { ...configPersonaOperations, setTextModelOverride: textWrite },
     }).dispatch(
       makeInteraction({
         route: {
-          action: "channels-overrides-text-model-select",
+          action: "channels-overrides-text-model-submit",
           locale: "en-US",
           channelId: CHANNEL_ONE,
           provider: "openrouter",
           fp: overrideFingerprint(state, CHANNEL_ONE, values),
+          nonce: "nonce1734567",
         },
-        kind: "string-select",
-        selectedValue: "new-channel-model",
+        kind: "modal",
       }),
     );
     await makeHarness({

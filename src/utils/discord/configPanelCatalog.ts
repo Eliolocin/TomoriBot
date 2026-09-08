@@ -597,18 +597,19 @@ export type ConfigPanelRoute =
   | { action: "channels-overrides-text-open"; locale: string; channelId: string }
   | { action: "channels-overrides-text-provider-select"; locale: string; channelId: string; fp: string }
   | {
-      action: "channels-overrides-text-model-select";
+      action: "channels-overrides-text-model-range-select";
       locale: string;
       channelId: string;
       provider: string;
       fp: string;
     }
   | {
-      action: "channels-overrides-text-model-page";
+      action: "channels-overrides-text-model-submit";
       locale: string;
       channelId: string;
       provider: string;
-      start: number;
+      fp: string;
+      nonce: string;
     }
   | { action: "channels-overrides-text-clear"; locale: string; channelId: string; fp: string }
   | {
@@ -1020,13 +1021,13 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
     wireToken: "ch-ov-t-provider",
     fields: [requiredChannelIdField, fpField],
   },
-  "channels-overrides-text-model-select": {
-    wireToken: "ch-ov-t-model",
+  "channels-overrides-text-model-range-select": {
+    wireToken: "ch-ov-t-range",
     fields: [requiredChannelIdField, providerField, fpField],
   },
-  "channels-overrides-text-model-page": {
-    wireToken: "ch-ov-t-page",
-    fields: [requiredChannelIdField, providerField, startField],
+  "channels-overrides-text-model-submit": {
+    wireToken: "ch-ov-t-submit",
+    fields: [requiredChannelIdField, providerField, fpField, nonceField],
   },
   "channels-overrides-text-clear": {
     wireToken: "ch-ov-t-clear",

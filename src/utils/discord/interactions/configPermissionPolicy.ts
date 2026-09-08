@@ -499,8 +499,8 @@ export const CHANNELS_OVERRIDES_ACTION_BY_ROUTE: Partial<
   "channels-overrides-context-note-submit": "context-note",
   "channels-overrides-text-open": "text-model",
   "channels-overrides-text-provider-select": "text-model",
-  "channels-overrides-text-model-select": "text-model",
-  "channels-overrides-text-model-page": "text-model",
+  "channels-overrides-text-model-range-select": "text-model",
+  "channels-overrides-text-model-submit": "text-model",
   "channels-overrides-text-clear": "text-model",
 };
 

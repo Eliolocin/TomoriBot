@@ -149,12 +149,12 @@ export type ConfigPanelView =
       providers: string[];
     }
   | {
-      kind: "channel-text-override-model";
+      kind: "channel-text-override-model-range";
       channelId: string;
       fp: string;
       provider: string;
-      models: LlmRow[];
-      start: number;
+      modelCount: number;
+      rangePageIndex: number;
     };
 
 const ADDRESSING_STYLES: readonly AddressingStyle[] = ["masculine", "feminine", "neutral"];
@@ -4011,66 +4011,57 @@ ${localizer(locale, "commands.config.panel.channels_overrides_text_model_descrip
           },
         ],
       });
-    } else if (textView?.kind === "channel-text-override-model" && textView.channelId === selectedChannel.id) {
-      const pageCount = Math.max(1, Math.ceil(textView.models.length / CONFIG_MODEL_PAGE_SIZE));
-      const pageIndex = Math.min(Math.max(Math.floor(textView.start / CONFIG_MODEL_PAGE_SIZE), 0), pageCount - 1);
-      const start = pageIndex * CONFIG_MODEL_PAGE_SIZE;
+    } else if (textView?.kind === "channel-text-override-model-range" && textView.channelId === selectedChannel.id) {
+      const pageCount = Math.max(1, Math.ceil(textView.modelCount / CONFIG_MODEL_PAGE_SIZE));
+      const rangeWindowSize = pageCount > CONFIG_MODEL_PAGE_SIZE ? CONFIG_MODEL_PAGE_SIZE - 1 : pageCount;
+      const rangePageIndex = Math.min(Math.max(textView.rangePageIndex, 0), pageCount - 1);
+      const visiblePageCount = Math.min(rangeWindowSize, pageCount - rangePageIndex);
+      const rangeOptions = Array.from({ length: visiblePageCount }, (_, offset) => {
+        const pageIndex = rangePageIndex + offset;
+        return {
+          label: safeSelectOptionText(
+            localizer(locale, "commands.config.panel.provider_page_label", {
+              provider: textView.provider,
+              page: pageIndex + 1,
+            }),
+            100,
+          ),
+          value: String(pageIndex * CONFIG_MODEL_PAGE_SIZE),
+        };
+      });
+      if (pageCount > CONFIG_MODEL_PAGE_SIZE) {
+        const nextRangePageIndex =
+          rangePageIndex + visiblePageCount < pageCount ? rangePageIndex + visiblePageCount : 0;
+        rangeOptions.push({
+          label: safeSelectOptionText(
+            localizer(locale, "commands.config.panel.model_provider_more_option", {
+              capability: localizer(locale, "commands.config.panel.capability_text"),
+              page: nextRangePageIndex + 1,
+              total: pageCount,
+            }),
+            100,
+          ),
+          value: `__range__${nextRangePageIndex}`,
+        });
+      }
       components.push({
         type: ComponentType.ActionRow,
         components: [
           {
             type: ComponentType.StringSelect,
             customId: buildConfigRouteId({
-              action: "channels-overrides-text-model-select",
+              action: "channels-overrides-text-model-range-select",
               locale,
               channelId: selectedChannel.id,
               provider: textView.provider,
               fp: textView.fp,
             }),
             placeholder: localizer(locale, "commands.config.panel.text_override_model_placeholder"),
-            options: textView.models.slice(start, start + CONFIG_MODEL_PAGE_SIZE).map((model) => ({
-              label: safeSelectOptionText(model.llm_codename, 100),
-              value: model.llm_codename,
-              description: model.llm_description ? safeSelectOptionText(model.llm_description, 100) : undefined,
-              default: model.llm_id === textOverride?.llm_id,
-            })),
+            options: rangeOptions,
             disabled: actionDisabled,
           },
         ],
       });
-      if (pageCount > 1) {
-        components.push({
-          type: ComponentType.ActionRow,
-          components: [
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Secondary,
-              customId: buildConfigRouteId({
-                action: "channels-overrides-text-model-page",
-                locale,
-                channelId: selectedChannel.id,
-                provider: textView.provider,
-                start: Math.max(0, start - CONFIG_MODEL_PAGE_SIZE),
-              }),
-              label: localizer(locale, "commands.config.panel.previous_page"),
-              disabled: actionDisabled || pageIndex === 0,
-            },
-            {
-              type: ComponentType.Button,
-              style: ButtonStyle.Secondary,
-              customId: buildConfigRouteId({
-                action: "channels-overrides-text-model-page",
-                locale,
-                channelId: selectedChannel.id,
-                provider: textView.provider,
-                start: Math.min((pageCount - 1) * CONFIG_MODEL_PAGE_SIZE, start + CONFIG_MODEL_PAGE_SIZE),
-              }),
-              label: localizer(locale, "commands.config.panel.next_page"),
-              disabled: actionDisabled || pageIndex >= pageCount - 1,
-            },
-          ],
-        });
-      }
     } else {
       components.push({
         type: ComponentType.ActionRow,

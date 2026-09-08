@@ -2831,7 +2831,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "text-override-provider-select" ||
         route.action === "text-override-model-select" ||
         route.action === "channels-overrides-text-provider-select" ||
-        route.action === "channels-overrides-text-model-select" ||
+        route.action === "channels-overrides-text-model-range-select" ||
         route.action === "sprite-select" ||
         route.action === "voice-sample-select" ||
         CONFIG_MODEL_SELECT_ACTIONS.has(route.action) ||
@@ -2858,6 +2858,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "context-note-submit" ||
         route.action === "humanizer-submit" ||
         route.action === "text-override-model-submit" ||
+        route.action === "channels-overrides-text-model-submit" ||
         route.action === "sprite-add-submit" ||
         route.action === "sprite-edit-submit" ||
         route.action === "sprite-import-submit" ||
