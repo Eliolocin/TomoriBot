@@ -1,4 +1,4 @@
-import type { Client, Message } from "discord.js";
+import { MessageType, type Client, type Message } from "discord.js";
 import { evaluateChatAdmission, handleChatDisposition, normalizeChatInvocation } from "@/utils/chat/admission";
 import {
   clearChannelProcessingQueue,
@@ -153,5 +153,12 @@ async function runAdmittedChatTurn(incoming: ChatIncoming): Promise<ChatAdmissio
 
 /** Thin event-dispatch adapter: satisfies EventFunction(client, ...args) called by the event loader. */
 export default async function messageCreateHandler(client: Client, message: Message): Promise<void> {
+  // Discord emits pin notifications as ChannelPinnedMessage system messages with
+  // a message reference to the pinned message. That reference is context metadata,
+  // not an intentional conversational reply, so it must never enter the trigger path.
+  if (message.type === MessageType.ChannelPinnedMessage) {
+    return;
+  }
+
   await tomoriChat({ client, message, isFromQueue: false });
 }
