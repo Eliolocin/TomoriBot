@@ -7,7 +7,7 @@ import {
   runWithChannelLock,
   suppressNextSelfReply,
 } from "@/utils/chat/channelQueue";
-import { buildChatTurnContext } from "@/utils/chat/contextPipeline";
+import { buildChatTurnContext } from "@/utils/chat/contextPipelineIntent";
 import { runGenerationTurn } from "@/utils/chat/generationTurn";
 import type { ChatAdmissionDisposition, ChatIncoming, TomoriChatInput } from "@/utils/chat/types";
 import { installUserImpersonationCompletion } from "@/utils/chat/userImpersonationCompletion";

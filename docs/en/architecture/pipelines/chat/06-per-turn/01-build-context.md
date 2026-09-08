@@ -4,7 +4,8 @@ title: "06.1: Build Context"
 
 Assemble the LLM-visible prompt for one persona turn.
 
-**File:** `src/utils/chat/contextPipeline.ts:49-193`
+**Files:** `src/utils/chat/contextPipelineIntent.ts` (intent wrapper) and
+`src/utils/chat/contextPipeline.ts` (base builder)
 
 ## Mission
 
@@ -18,6 +19,15 @@ the closure that stages 02–04 read and mutate.
 This stage is the **thin chat-side wrapper** around a much larger inner
 pipeline. The heavy lifting (mentions, memories, RAG, persona prompt,
 participants, dialogue history) lives in [context-build](../../context-build/).
+
+When Deliberate Tool Mode is active, the intent wrapper performs an autonomous
+STM maintenance preflight before calling the base builder. A due refresh is
+carried through the existing `endTurnAfterTools` allowlist path so
+`update_short_term_memory` is exposed without changing the user-intent rules;
+the temporary marker is removed before generation. Config or cache failures in
+this preflight are logged as `SHORT_TERM_MEMORY_CONTEXT_ERROR` with the
+triggering user and channel metadata, then treated as "not due" so the base
+chat context still builds.
 
 ## Input
 
@@ -113,6 +123,8 @@ After this stage runs:
 - The `messageIdMap` is populated with every message ID the LLM will see.
 - `streamingContext.explicitLongTermMemoryIntent` reflects whether the
   triggering message mentions long-term memory phrasing.
+- A failed STM maintenance preflight does not abort context construction; it
+  fails closed and leaves the normal deliberate-tool gate in effect.
 - `streamingContext.replyNoticeState` is initialized to
   `{ attempted: false, sent: false }` whenever `incoming.isFromQueue` is true —
   for **any** persona, not only alters. This is the only place where
