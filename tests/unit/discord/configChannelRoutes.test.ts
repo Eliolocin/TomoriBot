@@ -1865,28 +1865,54 @@ describe("Channels Overrides", () => {
     expect(interaction.deferred).toBe(true);
   });
 
-  it("accepts an announcement-thread prompt but rejects that channel for a context note", async () => {
+  it("accepts prompts for every thread target but rejects announcement-thread context notes", async () => {
     const state = makePersona();
     const channels = makeOverrideChannels();
-    const selectedChannelId = "523456789012345678";
-    const values: Partial<ConfigChannelsOverridesView> = { selectedChannelId };
+    const threadTargets = channels.filter(
+      ({ type }) =>
+        type === ChannelType.PublicThread ||
+        type === ChannelType.PrivateThread ||
+        type === ChannelType.AnnouncementThread,
+    );
     const promptSet = spyOn(channelPromptRepo, "setChannelPromptOverride").mockResolvedValue(true);
     const contextSet = spyOn(channelContextNoteRepo, "setChannelContextNote").mockResolvedValue(true);
-    const nonce = "nonce1234567";
-    const fp = overrideFingerprint(state, selectedChannelId, values);
-    const loadChannelsView = makeOverrideLoader(state, channels, values);
-    const promptInteraction = makeInteraction({
-      route: { action: "channels-overrides-prompt-submit", locale: "en-US", channelId: selectedChannelId, fp, nonce },
-      kind: "modal",
-      fields: promptOverrideFields(nonce, ["thread prompt"]),
-    });
-    const promptHarness = makeHarness({
-      state,
-      loadChannelsView,
-      selectValues: { [buildConfigModalFieldId(CONFIG_CHANNEL_OVERRIDE_MODE_FIELD, nonce)]: "append" },
-    });
-    await promptHarness.dispatch(promptInteraction);
+    const loadChannelsView = makeOverrideLoader(state, channels);
 
+    expect(threadTargets).toHaveLength(3);
+    expect(threadTargets.map(({ type }) => type)).toEqual([
+      ChannelType.PublicThread,
+      ChannelType.PrivateThread,
+      ChannelType.AnnouncementThread,
+    ]);
+    for (const [index, target] of threadTargets.entries()) {
+      const nonce = `nonce${index + 1}234567`;
+      const values: Partial<ConfigChannelsOverridesView> = { selectedChannelId: target.id };
+      const prompt = `${target.name} prompt`;
+      await makeHarness({
+        state,
+        loadChannelsView,
+        selectValues: { [buildConfigModalFieldId(CONFIG_CHANNEL_OVERRIDE_MODE_FIELD, nonce)]: "append" },
+      }).dispatch(
+        makeInteraction({
+          route: {
+            action: "channels-overrides-prompt-submit",
+            locale: "en-US",
+            channelId: target.id,
+            fp: overrideFingerprint(state, target.id, values),
+            nonce,
+          },
+          kind: "modal",
+          fields: promptOverrideFields(nonce, [prompt]),
+        }),
+      );
+    }
+
+    const announcementTarget = threadTargets.find(({ type }) => type === ChannelType.AnnouncementThread);
+    if (!announcementTarget) throw new Error("announcement-thread fixture target missing");
+    const selectedChannelId = announcementTarget.id;
+    const values: Partial<ConfigChannelsOverridesView> = { selectedChannelId };
+    const nonce = "nonce4234567";
+    const fp = overrideFingerprint(state, selectedChannelId, values);
     const contextInteraction = makeInteraction({
       route: {
         action: "channels-overrides-context-note-submit",
@@ -1900,7 +1926,10 @@ describe("Channels Overrides", () => {
     });
     await makeHarness({ state, loadChannelsView }).dispatch(contextInteraction);
 
-    expect(promptSet).toHaveBeenCalledWith(9, selectedChannelId, "thread prompt", "append");
+    expect(promptSet).toHaveBeenCalledTimes(threadTargets.length);
+    for (const [index, target] of threadTargets.entries()) {
+      expect(promptSet).toHaveBeenNthCalledWith(index + 1, 9, target.id, `${target.name} prompt`, "append");
+    }
     expect(contextSet).not.toHaveBeenCalled();
     promptSet.mockRestore();
     contextSet.mockRestore();
