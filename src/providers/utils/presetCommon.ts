@@ -105,8 +105,9 @@ Instructions:
 - Create a rich, detailed character profile in the structured JSON format
 - The character should be interesting and engaging for conversation
 - Do NOT prepend the sample dialogues with character names or "User:"/"Character:" prefixes - the chat application will handle that
-- Use "{user}" as a placeholder when referring to other people or the conversation partner in dialogues
-- Use "{bot}" as a placeholder when referring to the character themselves
+- Use "{user}" ONLY where you would write the conversation partner's name (NOT for the pronoun "you"). Keep "you" as "you"
+- Use "{bot}" ONLY where you would write the character's own name (NOT for the pronouns "I"/"me"). Keep "I" as "I" and "I'm" as "I'm"
+- Default dialogue voice is FIRST PERSON. Use normal first-person pronouns (I, me, my) in the character's speech. Only use {bot} where the character would literally say their own name, such as a self-introduction. The only exception is characters who canonically refer to themselves in third person (e.g., young children, certain anime archetypes)
 - Ensure exactly 5 sample dialogue pairs (sample_dialogues_in paired with sample_dialogues_out)
 
 The attribute_list MUST contain exactly 6 items in this exact order:
@@ -175,8 +176,8 @@ ${params.existingPresetContext.trim()}`;
 - sample_dialogues_in: Keep user messages concise (1-3 sentences, MAX ${maxStringLength} characters each)
 - sample_dialogues_out: Character responses can be longer and more detailed to showcase personality (MAX ${maxStringLength} characters each)
 - No speaker name prefixes in any dialogue (no "User:", "Character:", "{user}:", "{bot}:", etc.)
-- Use "{user}" placeholder when character refers to other people in their responses
-- Use "{bot}" placeholder when character refers to themselves in their responses
+- "{user}" and "{bot}" are NAME placeholders, never pronoun replacements: use "{user}" only in place of the conversation partner's name and "{bot}" only in place of the character's own name
+- NEVER replace pronouns: write "you", "I", "me", "I'm" literally (e.g. write "I'm {bot}", never "{bot}'m {bot}")
 - All string lengths must not exceed ${maxStringLength} characters per item`;
 
   return prompt;
