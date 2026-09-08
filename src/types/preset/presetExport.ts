@@ -121,6 +121,8 @@ export type ImportResult =
         dialogueCount: number;
         triggerWordCount: number;
       };
+      /** Whether the imported main persona now resolves sprites from an official preset. */
+      mainPersonaIsPointer: boolean;
     }
   | {
       success: false;

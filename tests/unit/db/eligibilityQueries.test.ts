@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 import * as realClient from "@/utils/db/client";
+import {
+  clearPersonaSpriteCache,
+  getPersonaSpriteCacheEntry,
+  setPersonaSpriteCache,
+} from "@/utils/cache/personaSpriteCacheStore";
 import { createScopedModuleMocker } from "../../helpers/mockSurface";
 
 // Captured query text + queued row results for the mocked `sql` tag. Each query
@@ -10,11 +15,12 @@ interface SqlCall {
   values: unknown[];
 }
 const sqlCalls: SqlCall[] = [];
-let rowQueue: unknown[][] = [];
+let rowQueue: Array<unknown[] | Error> = [];
 
 function sqlTag(strings: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]> {
   sqlCalls.push({ text: strings.join(" ? "), values });
-  return Promise.resolve(rowQueue.shift() ?? []);
+  const response = rowQueue.shift() ?? [];
+  return response instanceof Error ? Promise.reject(response) : Promise.resolve(response);
 }
 // `sql.array(...)` is used by the sprite query; return a marker so it can appear
 // as an interpolated value without a real driver.
@@ -42,6 +48,7 @@ const { personaSpriteRepository } = await import("@/utils/db/repositories/Person
 beforeEach(() => {
   sqlCalls.length = 0;
   rowQueue = [];
+  clearPersonaSpriteCache();
 });
 
 describe("ServerMemoryRepository batched eligibility queries", () => {
@@ -99,5 +106,21 @@ describe("PersonaSpriteRepository batched eligibility query", () => {
     expect(sqlCalls[0]?.text).toContain("persona_sprites");
     expect(sqlCalls[0]?.text).toContain("preset_sprites");
     expect(sqlCalls[0]?.text).toContain("is_pointer");
+  });
+
+  it("propagates a sprite snapshot read failure instead of returning an empty set", async () => {
+    const readError = new Error("sprite snapshot unavailable");
+    rowQueue = [readError];
+
+    await expect(personaSpriteRepository.listForPersona(5)).rejects.toBe(readError);
+  });
+
+  it("propagates a sprite row deletion failure instead of reporting a no-op", async () => {
+    const deleteError = new Error("sprite delete unavailable");
+    rowQueue = [deleteError];
+    setPersonaSpriteCache(5, []);
+
+    await expect(personaSpriteRepository.deleteAllForPersona(5)).rejects.toBe(deleteError);
+    expect(getPersonaSpriteCacheEntry(5)).toEqual([]);
   });
 });
