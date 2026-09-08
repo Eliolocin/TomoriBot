@@ -1865,6 +1865,73 @@ describe("Channels Overrides", () => {
     expect(interaction.deferred).toBe(true);
   });
 
+  it("routes provider selections through the dispatcher and safely repaints forged or stale submissions", async () => {
+    const state = makePersona({ llm: makeLlm(10, "openrouter", "server-default") });
+    const channels = makeOverrideChannels();
+    const selectedChannelId = CHANNEL_ONE;
+    const values: Partial<ConfigChannelsOverridesView> = { selectedChannelId };
+    const fp = overrideFingerprint(state, selectedChannelId, values);
+    const model = makeLlm(20, "openrouter", "channel-model");
+    const loadPersonaTextModels = mock(async (_provider: string, _serverId: number) => [model]);
+    const recordAction = mock(() => undefined);
+    const shared = {
+      state,
+      recordAction,
+      loadChannelsView: makeOverrideLoader(state, channels, values),
+      loadSavedTextProviders: async () => [{ provider: "openrouter" }],
+      loadPersonaTextModels,
+    };
+
+    const validInteraction = makeInteraction({
+      route: {
+        action: "channels-overrides-text-provider-select",
+        locale: "en-US",
+        channelId: selectedChannelId,
+        fp,
+      },
+      kind: "string-select",
+      selectedValue: "openrouter",
+    });
+    await makeHarness(shared).dispatch(validInteraction);
+
+    const validPayload = JSON.stringify(validInteraction.editedReplies);
+    expect(validPayload).toContain(model.llm_codename);
+    expect(validPayload).toContain(
+      buildConfigRouteId({
+        action: "channels-overrides-text-model-select",
+        locale: "en-US",
+        channelId: selectedChannelId,
+        provider: "openrouter",
+        fp,
+      }),
+    );
+    expect(loadPersonaTextModels).toHaveBeenCalledWith("openrouter", state.server_id);
+
+    for (const testCase of [
+      { selectedValue: "forged-provider", fp },
+      { selectedValue: "openrouter", fp: "stale123" },
+    ]) {
+      const interaction = makeInteraction({
+        route: {
+          action: "channels-overrides-text-provider-select",
+          locale: "en-US",
+          channelId: selectedChannelId,
+          fp: testCase.fp,
+        },
+        kind: "string-select",
+        selectedValue: testCase.selectedValue,
+      });
+      await makeHarness(shared).dispatch(interaction);
+
+      expect(interaction.deferred).toBe(true);
+      expect(interaction.editedReplies).toHaveLength(1);
+      expect(JSON.stringify(interaction.editedReplies)).not.toContain(model.llm_codename);
+    }
+
+    expect(loadPersonaTextModels).toHaveBeenCalledTimes(1);
+    expect(recordAction).not.toHaveBeenCalled();
+  });
+
   it("accepts prompts for every thread target but rejects announcement-thread context notes", async () => {
     const state = makePersona();
     const channels = makeOverrideChannels();

@@ -2830,6 +2830,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "humanizer-select" ||
         route.action === "text-override-provider-select" ||
         route.action === "text-override-model-select" ||
+        route.action === "channels-overrides-text-provider-select" ||
         route.action === "channels-overrides-text-model-select" ||
         route.action === "sprite-select" ||
         route.action === "voice-sample-select" ||
