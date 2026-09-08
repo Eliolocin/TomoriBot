@@ -44,6 +44,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Preset import - regression", () => {
     const result = await presetRepository.importPresetData(FIXTURE_IDS.serverDiscId, presetData, "preserve");
 
     expect(result.success).toBe(true);
+    if (result.success) expect(result.mainPersonaIsPointer).toBe(false);
 
     const [personaConfig] = await testSql<Array<{ trigger_words: string[]; persona_prompt: string | null }>>`
       SELECT trigger_words, persona_prompt
@@ -133,6 +134,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Preset import - regression", () => {
 
       const result = await presetRepository.importPresetData(FIXTURE_IDS.serverDiscId, presetData, "preserve");
       expect(result.success).toBe(true);
+      if (result.success) expect(result.mainPersonaIsPointer).toBe(true);
 
       const [personaRow] = await testSql<
         Array<{

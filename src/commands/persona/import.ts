@@ -8,21 +8,24 @@ import { MessageFlags, EmbedBuilder, AttachmentBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import type { UserRow } from "../../types/db/schema";
+import type { PersonaSpriteRow, UserRow } from "../../types/db/schema";
 import { memoryGuard, IMPORT_LIMITS, reserveImportQuota } from "../../utils/security/rateLimiter";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
-import { invalidatePersonaSpriteCache } from "../../utils/cache/personaSpriteCache";
 import { presetRepository } from "@/utils/db/repositories/PresetRepository";
 import type { PresetExportData } from "../../types/preset/presetExport";
 import { extractMetadataFromPNG, extractSillyTavernMetadataFromPNG } from "../../utils/image/pngMetadata";
 import { validatePNGBuffer } from "../../utils/image/avatarHelper";
-import { personaRepository, personaSpriteRepository } from "@/utils/db/repositories";
+import { personaRepository } from "@/utils/db/repositories";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { dedupeTriggerWords, parseTriggerWordListInput } from "@/utils/text/triggerWords";
-import { deletePersonaSpriteFromStorage, uploadPersonaAvatarToStorage } from "../../utils/storage/avatarStorage";
+import { uploadPersonaAvatarToStorage } from "../../utils/storage/avatarStorage";
 import { isAvatarUpdateRateLimited } from "@/utils/discord/avatarRateLimit";
 import { importAlterPreset } from "@/utils/persona/importAlterPreset";
+import {
+  cleanupMainPersonaSpritesAfterImport,
+  snapshotMainPersonaSprites,
+} from "@/utils/persona/mainImportSpriteCleanup";
 
 /**
  * Maximum file size for imports (uses centralized constant)
@@ -606,9 +609,26 @@ export async function execute(
         (persona) => !persona.is_alter,
       );
       const mainPersonaId = currentMainPersona?.persona_id ?? null;
-      const spritesBeforeImport = mainPersonaId
-        ? await personaSpriteRepository.listForPersona(mainPersonaId)
-        : [];
+      let spritesBeforeImport: PersonaSpriteRow[] = [];
+      if (mainPersonaId) {
+        try {
+          spritesBeforeImport = await snapshotMainPersonaSprites(mainPersonaId);
+        } catch (error) {
+          await log.error(`Failed to snapshot sprites before importing main persona ${mainPersonaId}:`, error, {
+            errorType: "PersonaImportSpriteSnapshotError",
+            metadata: { personaId: mainPersonaId, serverDiscId },
+          });
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(localizer(locale, "commands.persona.import.failed_title"))
+                .setDescription(localizer(locale, "commands.persona.import.sprite_snapshot_failed_description"))
+                .setColor(ColorCode.ERROR),
+            ],
+          });
+          return;
+        }
+      }
 
       const importResult = await presetRepository.importPresetData(serverDiscId, presetData, identityMode);
 
@@ -628,21 +648,34 @@ export async function execute(
         return;
       }
 
-      if (mainPersonaId) {
-        const removedSprites = await personaSpriteRepository.deleteAllForPersona(mainPersonaId);
-        const importedAsPointer = await personaRepository.isPersonaPointer(mainPersonaId);
-        const spritesToDeleteFromStorage = importedAsPointer === true ? spritesBeforeImport : removedSprites;
-
-        await Promise.all(
-          spritesToDeleteFromStorage.map((sprite) => deletePersonaSpriteFromStorage(sprite.avatar_url)),
-        );
-        // A preset-pointer main can have zero private rows while its shared preset
-        // sprite set is still cached under the same persona_id. Always invalidate.
-        invalidatePersonaSpriteCache(mainPersonaId);
-      }
-
       // Invalidate cache so next message gets fresh persona/config
       invalidateTomoriStateCache(serverDiscId);
+
+      let failedSpriteStorageDeletes = 0;
+      if (mainPersonaId) {
+        try {
+          failedSpriteStorageDeletes = await cleanupMainPersonaSpritesAfterImport({
+            personaId: mainPersonaId,
+            serverDiscId,
+            importedAsPointer: importResult.mainPersonaIsPointer,
+            spritesBeforeImport,
+          });
+        } catch (error) {
+          await log.error(`Failed to clear sprites after importing main persona ${mainPersonaId}:`, error, {
+            errorType: "PersonaImportSpriteCleanupError",
+            metadata: { personaId: mainPersonaId, serverDiscId },
+          });
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(localizer(locale, "commands.persona.import.failed_title"))
+                .setDescription(localizer(locale, "commands.persona.import.sprite_cleanup_failed_description"))
+                .setColor(ColorCode.ERROR),
+            ],
+          });
+          return;
+        }
+      }
 
       // Try to set TomoriBot's server-specific avatar and nickname (guild-only, non-fatal if fails)
       let avatarUpdateSucceeded = false;
@@ -754,6 +787,14 @@ export async function execute(
         }),
       ];
 
+      if (failedSpriteStorageDeletes > 0) {
+        descriptionLines.push(
+          localizer(locale, "commands.persona.import.sprite_storage_cleanup_partial_description", {
+            failed_count: failedSpriteStorageDeletes,
+          }),
+        );
+      }
+
       if (nicknameUpdateRateLimited || nicknameUpdateFailed) {
         descriptionLines.push(localizer(locale, "commands.persona.import.nickname_update_failed"));
       } else if (nicknameUpdateSucceeded) {
@@ -779,7 +820,8 @@ export async function execute(
             avatarUpdateRateLimited ||
             avatarUpdateFailed ||
             nicknameUpdateRateLimited ||
-            nicknameUpdateFailed
+            nicknameUpdateFailed ||
+            failedSpriteStorageDeletes > 0
             ? ColorCode.WARN
             : ColorCode.SUCCESS,
         );
