@@ -2833,6 +2833,230 @@ describe("config persona collections", () => {
 });
 
 describe("config promotion", () => {
+  it("transfers the live CDN avatar to the former main before cleaning up either source", async () => {
+    const mainPersona = makePersona({
+      persona_id: 55,
+      persona_nickname: "Aphel",
+      webhook_avatar_url: "data/avatars/personas/55/previous-main.png",
+    });
+    const alterPersona = makePersona({
+      persona_id: 56,
+      persona_nickname: "Wren",
+      is_alter: true,
+      webhook_avatar_url: "data/avatars/personas/56/selected-alter.png",
+    });
+    const liveCdnReference = "https://cdn.discordapp.com/avatars/guild-main.png";
+    const formerMainReference = "data/avatars/personas/55/former-main.png";
+    const promotedAlterReference = "data/avatars/personas/56/promoted-alter.png";
+    const events: string[] = [];
+
+    const loadSpy = spyOn(avatarStorage, "loadStoredPersonaAvatarBuffer").mockImplementation(async (reference) => {
+      events.push(`load:${reference}`);
+      return Buffer.from(`bytes:${reference}`);
+    });
+    const pngSpy = spyOn(imageProcessor, "convertToPNG").mockImplementation(async (buffer: Buffer) => {
+      events.push(`png:${buffer.toString()}`);
+      return buffer;
+    });
+    const swapSpy = spyOn(personaRepository, "swapPersona").mockImplementation(async (mainId, alterId) => {
+      events.push(`swap:${mainId}:${alterId}`);
+      return true;
+    });
+    const setAvatarSpy = spyOn(personaRepository, "setAvatar").mockImplementation(async (personaId, reference) => {
+      events.push(`persist:${personaId}:${reference}`);
+      return true;
+    });
+    const uploadSpy = spyOn(avatarStorage, "uploadPersonaAvatarToStorage").mockImplementation(
+      async ({ personaId, label }) => {
+        const reference = personaId === mainPersona.persona_id ? formerMainReference : promotedAlterReference;
+        events.push(`upload:${personaId}:${label}:${reference}`);
+        return reference;
+      },
+    );
+    const deleteSpy = spyOn(avatarStorage, "deletePersonaAvatarFromStorage").mockImplementation(async (reference) => {
+      events.push(`delete:${reference}`);
+      return true;
+    });
+    const invalidateSpy = spyOn(tomoriStateCacheStore, "invalidateTomoriStateCache").mockImplementation(
+      (serverDiscId) => {
+        events.push(`invalidate:${serverDiscId}`);
+      },
+    );
+
+    try {
+      const result = await configPersonaOperations.promoteToMain({
+        alterPersona,
+        mainPersona,
+        serverDiscId: "guild-1",
+        guildId: "guild-1",
+        guildIdentity: {
+          currentAvatarReference: async () => {
+            events.push("current-avatar");
+            return liveCdnReference;
+          },
+          setNickname: async (nickname) => {
+            events.push(`nickname:${nickname}`);
+            return true;
+          },
+          setAvatar: async () => {
+            events.push("guild-avatar");
+            return { ok: true, rateLimited: false };
+          },
+        },
+      });
+
+      expect(result).toMatchObject({ status: "success", nicknameSynced: true, avatarSynced: true });
+      expect(loadSpy).toHaveBeenCalledWith(liveCdnReference);
+      expect(loadSpy).toHaveBeenCalledWith(alterPersona.webhook_avatar_url);
+      expect(uploadSpy).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ personaId: mainPersona.persona_id, label: "former main swap" }),
+      );
+      expect(uploadSpy).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ personaId: alterPersona.persona_id, label: "selected alter swap" }),
+      );
+      expect(setAvatarSpy).toHaveBeenCalledWith(mainPersona.persona_id, formerMainReference);
+      expect(setAvatarSpy).toHaveBeenCalledWith(alterPersona.persona_id, promotedAlterReference);
+      expect(deleteSpy).toHaveBeenCalledWith(mainPersona.webhook_avatar_url);
+      expect(deleteSpy).toHaveBeenCalledWith(alterPersona.webhook_avatar_url);
+      expect(deleteSpy).not.toHaveBeenCalledWith(formerMainReference);
+      expect(deleteSpy).not.toHaveBeenCalledWith(promotedAlterReference);
+
+      const loadIndex = events.indexOf(`load:${liveCdnReference}`);
+      const swapIndex = events.indexOf(`swap:${mainPersona.persona_id}:${alterPersona.persona_id}`);
+      const formerUploadIndex = events.indexOf(
+        `upload:${mainPersona.persona_id}:former main swap:${formerMainReference}`,
+      );
+      const formerPersistIndex = events.indexOf(`persist:${mainPersona.persona_id}:${formerMainReference}`);
+      const formerDeleteIndex = events.indexOf(`delete:${mainPersona.webhook_avatar_url}`);
+      const finalInvalidateIndex = events.lastIndexOf("invalidate:guild-1");
+      expect(loadIndex).toBeGreaterThanOrEqual(0);
+      expect(loadIndex).toBeLessThan(swapIndex);
+      expect(formerUploadIndex).toBeGreaterThanOrEqual(0);
+      expect(swapIndex).toBeLessThan(formerUploadIndex);
+      expect(formerUploadIndex).toBeLessThan(formerPersistIndex);
+      expect(formerPersistIndex).toBeGreaterThanOrEqual(0);
+      expect(formerPersistIndex).toBeLessThan(formerDeleteIndex);
+      expect(invalidateSpy).toHaveBeenCalledTimes(1);
+      expect(finalInvalidateIndex).toBe(events.length - 1);
+    } finally {
+      loadSpy.mockRestore();
+      pngSpy.mockRestore();
+      swapSpy.mockRestore();
+      setAvatarSpy.mockRestore();
+      uploadSpy.mockRestore();
+      deleteSpy.mockRestore();
+      invalidateSpy.mockRestore();
+    }
+  });
+
+  it("uses the local former-main fallback and keeps avatar transfer after a nickname-sync failure", async () => {
+    const mainPersona = makePersona({
+      persona_id: 55,
+      persona_nickname: "Aphel",
+      webhook_avatar_url: "data/avatars/personas/55/local-main.png",
+    });
+    const alterPersona = makePersona({
+      persona_id: 56,
+      persona_nickname: "Wren",
+      is_alter: true,
+      webhook_avatar_url: "data/avatars/personas/56/local-alter.png",
+    });
+    const formerMainReference = "data/avatars/personas/55/local-former-main.png";
+    const promotedAlterReference = "data/avatars/personas/56/local-promoted-alter.png";
+    const events: string[] = [];
+
+    const loadSpy = spyOn(avatarStorage, "loadStoredPersonaAvatarBuffer").mockImplementation(async (reference) => {
+      events.push(`load:${reference}`);
+      return Buffer.from(`bytes:${reference}`);
+    });
+    const pngSpy = spyOn(imageProcessor, "convertToPNG").mockImplementation(async (buffer: Buffer) => buffer);
+    const swapSpy = spyOn(personaRepository, "swapPersona").mockImplementation(async (mainId, alterId) => {
+      events.push(`swap:${mainId}:${alterId}`);
+      return true;
+    });
+    const setAvatarSpy = spyOn(personaRepository, "setAvatar").mockImplementation(async (personaId, reference) => {
+      events.push(`persist:${personaId}:${reference}`);
+      return true;
+    });
+    const uploadSpy = spyOn(avatarStorage, "uploadPersonaAvatarToStorage").mockImplementation(
+      async ({ personaId, label }) => {
+        const reference = personaId === mainPersona.persona_id ? formerMainReference : promotedAlterReference;
+        events.push(`upload:${personaId}:${label}:${reference}`);
+        return reference;
+      },
+    );
+    const deleteSpy = spyOn(avatarStorage, "deletePersonaAvatarFromStorage").mockImplementation(async (reference) => {
+      events.push(`delete:${reference}`);
+      return true;
+    });
+    const invalidateSpy = spyOn(tomoriStateCacheStore, "invalidateTomoriStateCache").mockImplementation(
+      (serverDiscId) => {
+        events.push(`invalidate:${serverDiscId}`);
+      },
+    );
+
+    try {
+      const result = await configPersonaOperations.promoteToMain({
+        alterPersona,
+        mainPersona,
+        serverDiscId: "guild-1",
+        guildId: "guild-1",
+        guildIdentity: {
+          currentAvatarReference: async () => {
+            events.push("current-avatar");
+            return null;
+          },
+          setNickname: async () => {
+            events.push("nickname-failed");
+            return false;
+          },
+          setAvatar: async () => ({ ok: true, rateLimited: false }),
+        },
+      });
+
+      expect(result).toMatchObject({ status: "success", nicknameSynced: false, avatarSynced: true });
+      expect(swapSpy).toHaveBeenCalledWith(mainPersona.persona_id, alterPersona.persona_id);
+      expect(loadSpy).toHaveBeenCalledWith(mainPersona.webhook_avatar_url);
+      expect(uploadSpy).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ personaId: mainPersona.persona_id, label: "former main swap" }),
+      );
+      expect(setAvatarSpy).toHaveBeenCalledWith(mainPersona.persona_id, formerMainReference);
+      expect(setAvatarSpy).toHaveBeenCalledWith(alterPersona.persona_id, promotedAlterReference);
+      expect(deleteSpy).toHaveBeenCalledWith(mainPersona.webhook_avatar_url);
+      expect(deleteSpy).toHaveBeenCalledWith(alterPersona.webhook_avatar_url);
+      expect(deleteSpy).not.toHaveBeenCalledWith(formerMainReference);
+      expect(deleteSpy).not.toHaveBeenCalledWith(promotedAlterReference);
+
+      const loadIndex = events.indexOf(`load:${mainPersona.webhook_avatar_url}`);
+      const swapIndex = events.indexOf(`swap:${mainPersona.persona_id}:${alterPersona.persona_id}`);
+      const formerUploadIndex = events.indexOf(
+        `upload:${mainPersona.persona_id}:former main swap:${formerMainReference}`,
+      );
+      const formerPersistIndex = events.indexOf(`persist:${mainPersona.persona_id}:${formerMainReference}`);
+      const formerDeleteIndex = events.indexOf(`delete:${mainPersona.webhook_avatar_url}`);
+      const finalInvalidateIndex = events.lastIndexOf("invalidate:guild-1");
+      expect(loadIndex).toBeLessThan(swapIndex);
+      expect(formerUploadIndex).toBeGreaterThanOrEqual(0);
+      expect(swapIndex).toBeLessThan(formerUploadIndex);
+      expect(formerUploadIndex).toBeLessThan(formerPersistIndex);
+      expect(formerPersistIndex).toBeGreaterThanOrEqual(0);
+      expect(formerPersistIndex).toBeLessThan(formerDeleteIndex);
+      expect(invalidateSpy).toHaveBeenCalledTimes(1);
+      expect(finalInvalidateIndex).toBe(events.length - 1);
+    } finally {
+      loadSpy.mockRestore();
+      pngSpy.mockRestore();
+      swapSpy.mockRestore();
+      setAvatarSpy.mockRestore();
+      uploadSpy.mockRestore();
+      deleteSpy.mockRestore();
+      invalidateSpy.mockRestore();
+    }
+  });
+
   it("opens a confirmation before promoting rather than swapping on the first press", async () => {
     const swapSpy = spyOn(personaRepository, "swapPersona");
     const harness = makeHarness();

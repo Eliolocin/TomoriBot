@@ -1022,8 +1022,6 @@ export const configPersonaOperations: ConfigPersonaOperations = {
       }
     }
 
-    invalidateTomoriStateCache(serverDiscId);
-
     if (formerMainAvatarBuffer) {
       try {
         const storedUrl = await uploadPersonaAvatarToStorage({
