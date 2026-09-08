@@ -9,6 +9,7 @@ export default {
     user_impersonation_notice_footer: `{user}が{target}のなりすましをトリガーしました`,
     me_success_title: `ユーザーなりすましが発動しました`,
     me_success_description: `{user}としてメッセージを生成できました.`,
+    user_generation_skipped_description: `ユーザーなりすましのメッセージを生成できませんでした。サーバーのアクセス権、ペルソナ、クォータ、プロバイダー設定を確認して、もう一度お試しください。`,
     no_messages_title: `メッセージが見つかりません`,
     no_messages_description: `このチャンネルにメッセージが見つかりません。ユーザーなりすましを使用する前に、少なくとも1つのメッセージを送信してください。`,
     cooldown_active_user: `このサーバーの管理者がクールダウンを設定しています。\`/impersonate user\` を再度使用するまで、あと **{seconds}** 秒お待ちください。このクールダウンはメッセージトリガーと\`/respond\`と共有されています。`,

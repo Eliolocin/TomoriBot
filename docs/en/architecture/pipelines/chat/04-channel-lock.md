@@ -87,6 +87,10 @@ The callback receives `LockedChatTurn`:
   otherwise the queued replay will be a silently-degraded copy of the original
   call.
 
+Manual slash-command work bypasses the latest-follow-up replacement path and is
+stored in this FIFO queue. This preserves command-owned callbacks and payload
+fields such as the user-impersonation target while an ordinary turn is active.
+
 **`skipLock=true` path:**
 
 - Re-entries from retry/post-turn effects pass `skipLock=true`. The stage
