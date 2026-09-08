@@ -1,7 +1,14 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import { ComponentType, MessageFlags, type ComponentInContainerData, type ContainerComponentData } from "discord.js";
+import {
+  ComponentType,
+  MessageFlags,
+  type Client,
+  type ComponentInContainerData,
+  type ContainerComponentData,
+} from "discord.js";
 import { HELP_CATEGORIES } from "@/utils/discord/helpCatalog";
 import { HELP_PROVIDER_IDS } from "@/utils/discord/helpProviderGuides";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import {
   buildHelpDashboardPayload,
   buildProviderGuideModal,
@@ -11,6 +18,15 @@ import { initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => {
   await initializeLocalizer();
+  const commands = new Map([["987654321012345678", { name: "config" }]]);
+  const client = {
+    application: {
+      commands: {
+        fetch: async () => commands,
+      },
+    },
+  } as unknown as Client;
+  await commandRegistry.initialize(client);
 });
 
 function getContainer(
@@ -97,6 +113,24 @@ describe("help dashboard", () => {
     expect(comfyUi).toContain("/self-hosting/local-endpoints/setup-comfyui/");
     expect(whisperX).toContain("WhisperX Transcription");
     expect(whisperX).toContain("help:v2:variant:en-US:features:transcription");
+  });
+
+  it("renders clickable config mentions on every absorbed-command help page", () => {
+    const expectedMention = "</config:987654321012345678>";
+    const pages = [
+      ["setup", "setup-step-3"],
+      ["behavior", "customization"],
+      ["memory", "short-term-memory"],
+      ["memory", "memory-tagging"],
+      ["behavior", "deliberate-tool-mode"],
+    ];
+
+    for (const [categoryId, pageId] of pages) {
+      const serialized = JSON.stringify(buildHelpDashboardPayload("en-US", categoryId, pageId));
+      expect(serialized).toContain(expectedMention);
+      expect(serialized).not.toContain("</config:0>");
+      expect(serialized).not.toContain("`/config`");
+    }
   });
 
   it("falls back to Setup Step 1 for invalid external state", () => {

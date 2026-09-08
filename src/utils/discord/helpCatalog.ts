@@ -86,7 +86,7 @@ function mention(command: string, subcommandOrGroup?: string, subcommand?: strin
  * apart. The breadcrumb carries the distinction the subcommand name used to.
  */
 function configPage(breadcrumb: string): string {
-  return `${mention("config")} > ${breadcrumb}`;
+  return `${commandRegistry.getCommandMention("config", undefined, undefined, true)} > ${breadcrumb}`;
 }
 
 const setupPages: readonly HelpPageDefinition[] = [
