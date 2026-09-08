@@ -448,6 +448,8 @@ export function queueFollowUpForLockedTurn(args: {
   manualStreamingContextOverrides: QueuedMessage["manualStreamingContextOverrides"];
   isNaturalStopMessage: boolean;
   shouldSurfaceUserErrors?: boolean;
+  isUserImpersonation?: boolean;
+  impersonatedUserId?: string;
   onGenerationResult?: ChatGenerationResultHandler;
   onQueueDiscard?: QueuedMessageDiscardHandler;
 }): boolean {
@@ -472,8 +474,8 @@ export function queueFollowUpForLockedTurn(args: {
       isFollowUp: true,
       selectedPersonaId: args.lockEntry.activePersonaId,
       triggeredPersonaIds: args.lockEntry.activeTriggeredPersonaIds,
-      isUserImpersonation: args.lockEntry.activeIsUserImpersonation,
-      impersonatedUserId: args.lockEntry.activeImpersonatedUserId,
+      isUserImpersonation: args.isUserImpersonation,
+      impersonatedUserId: args.impersonatedUserId,
       textQuotaSource: args.textQuotaSource,
       textQuotaTriggerKey: args.textQuotaTriggerKey,
       textQuotaUserDiscId: args.textQuotaUserDiscId,
@@ -499,8 +501,8 @@ export function queueFollowUpForLockedTurn(args: {
     isFollowUp: true,
     selectedPersonaId: args.lockEntry.activePersonaId,
     triggeredPersonaIds: args.lockEntry.activeTriggeredPersonaIds,
-    isUserImpersonation: args.lockEntry.activeIsUserImpersonation,
-    impersonatedUserId: args.lockEntry.activeImpersonatedUserId,
+    isUserImpersonation: args.isUserImpersonation,
+    impersonatedUserId: args.impersonatedUserId,
     textQuotaSource: args.textQuotaSource,
     textQuotaTriggerKey: args.textQuotaTriggerKey,
     textQuotaUserDiscId: args.textQuotaUserDiscId,

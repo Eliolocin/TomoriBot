@@ -57,7 +57,7 @@ describe("user impersonation generation completion", () => {
     await incoming.onGenerationResult?.(result);
 
     expect(await caught).toBeInstanceOf(Error);
-    expect((await caught as Error).message).toBe("provider exploded");
+    expect(((await caught) as Error).message).toBe("provider exploded");
   });
 
   it("rejects timeout results so the slash command can show its timeout embed", async () => {
@@ -68,7 +68,20 @@ describe("user impersonation generation completion", () => {
       makeResult("timeout", [{ status: "timeout", data: new Error("Stream timed out due to inactivity.") }]),
     );
 
-    expect((await caught as Error).message).toBe("Stream timed out due to inactivity.");
+    expect(((await caught) as Error).message).toBe("Stream timed out due to inactivity.");
+  });
+
+  it("rejects skipped results instead of treating a guarded turn as success", async () => {
+    expect(getUserImpersonationGenerationError(makeResult("skipped"))?.message).toBe(
+      "User impersonation did not generate a message.",
+    );
+
+    const incoming = makeIncoming();
+    const completion = installUserImpersonationCompletion(incoming)!;
+    const caught = completion.catch((error: unknown) => error);
+    await incoming.onGenerationResult?.(makeResult("skipped"));
+
+    expect(((await caught) as Error).message).toBe("User impersonation did not generate a message.");
   });
 
   it("rejects when a queued impersonation is discarded before generation", async () => {
@@ -77,7 +90,7 @@ describe("user impersonation generation completion", () => {
     const caught = completion.catch((error: unknown) => error);
     await incoming.onQueueDiscard?.("stale_lock_release");
 
-    expect((await caught as Error).message).toContain("stale_lock_release");
+    expect(((await caught) as Error).message).toContain("stale_lock_release");
   });
 
   it("preserves pre-existing generation and discard callbacks", async () => {

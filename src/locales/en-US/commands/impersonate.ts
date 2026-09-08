@@ -16,6 +16,7 @@ export default {
     user_impersonation_notice_footer: `{user} triggered a {target} impersonation`,
     me_success_title: `User Impersonation Triggered`,
     me_success_description: `Generated message as {user}.`,
+    user_generation_skipped_description: `User impersonation did not generate a message. Check the server's access, persona, quota, and provider settings, then try again.`,
     no_messages_title: `No Messages Found`,
     no_messages_description: `No messages found in this channel. Send at least one message before using user impersonation.`,
     cooldown_active_user: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/impersonate user\` again. This cooldown is shared with message triggers and \`/respond\`.`,

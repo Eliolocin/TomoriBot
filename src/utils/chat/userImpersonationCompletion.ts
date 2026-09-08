@@ -1,5 +1,14 @@
 import type { ChatIncoming, GenerationTurnResult, QueuedMessageDiscardReason } from "@/utils/chat/types";
 
+export class UserImpersonationGenerationSkippedError extends Error {
+  readonly reason = "skipped" as const;
+
+  constructor() {
+    super("User impersonation did not generate a message.");
+    this.name = "UserImpersonationGenerationSkippedError";
+  }
+}
+
 function normalizeError(value: unknown, fallbackMessage: string): Error {
   if (value instanceof Error) {
     return value;
@@ -16,6 +25,10 @@ function normalizeError(value: unknown, fallbackMessage: string): Error {
 }
 
 export function getUserImpersonationGenerationError(result: GenerationTurnResult): Error | null {
+  if (result.status === "skipped") {
+    return new UserImpersonationGenerationSkippedError();
+  }
+
   if (result.status !== "error" && result.status !== "timeout") {
     return null;
   }

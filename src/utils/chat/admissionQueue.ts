@@ -125,6 +125,7 @@ async function evaluateLockedChannelAdmission(args: {
   if (
     !incoming.isStopResponse &&
     !incoming.isPersonaJob &&
+    !incoming.isManuallyTriggered &&
     !hasCrossPersonaTrigger &&
     queueFollowUpForLockedTurn({
       lockEntry,
@@ -137,11 +138,18 @@ async function evaluateLockedChannelAdmission(args: {
       manualStreamingContextOverrides: followUpOverrides,
       isNaturalStopMessage: args.isNaturalStopMessage,
       shouldSurfaceUserErrors: true,
+      isUserImpersonation: incoming.isUserImpersonation,
+      impersonatedUserId: incoming.impersonatedUserId,
       onGenerationResult: incoming.onGenerationResult,
       onQueueDiscard: incoming.onQueueDiscard,
     })
   ) {
-    return ignored("locked_follow_up_queued");
+    return {
+      incoming,
+      disposition: "queued",
+      locale: "en-US",
+      reason: "locked_follow_up_queued",
+    };
   }
 
   if (!earlyTomoriState) {
