@@ -44,7 +44,7 @@ export type ConfigPage = PersonaPage | BehaviorPage | ChannelsPage | Permissions
  * custom ID, which is why the category field must stay ahead of the page field in every codec.
  */
 export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPage[]> = {
-  persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "advanced", "overrides", "voice"],
+  persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "voice", "overrides", "advanced"],
   behavior: ["general", "trigger", "notices", "experimental", "memory"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   permissions: ["capabilities", "privacy"],

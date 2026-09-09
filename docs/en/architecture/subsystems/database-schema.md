@@ -83,7 +83,7 @@ than externalising SQL. Size is the signal; the split must follow a coherent dom
 - `server_trigger_behavior_configs` — `/config` > Engine > Trigger (always-reply and deliberate trigger mode), cooldown settings (`ServerScheduleRepository`)
 - `server_auto_trigger_configs` — `/config` > Channels > Auto-Trigger channels + threshold (`ServerScheduleRepository`)
 - `server_capabilities_configs` — `/config` > Permissions feature and tool toggles, plus the Compatibility workarounds on `/config` > Engine > Experimental
-- `server_novelai_imagegen_configs` — `/novelai` image parameters, `/config` > Models > ImageGen Defaults defaults, `nai_diffusion_model_id`
+- `server_novelai_imagegen_configs` — `/novelai` image parameters, `/config` > Models > Image Generation Defaults defaults, `nai_diffusion_model_id`
 - `server_nsfw_configs` — `/nsfw` jailbreak toggles
 - `server_speech_configs` — `/config` Models > TTS Parameters & Voices Chatterbox parameters, `chatterbox_turbo_enabled`, `chatterbox_cfg_weight`, `chatterbox_exaggeration`
 - `server_byok_configs` — `/moderation` ((Member Access)) server model access

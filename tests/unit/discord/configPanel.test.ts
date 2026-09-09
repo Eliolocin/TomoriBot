@@ -358,6 +358,24 @@ describe("config panel shell", () => {
       "memory",
     ]);
   });
+
+  it("keeps Advanced last in the Persona page selector", () => {
+    const payload = build(GUILD_MANAGER, { category: "persona", page: "general" });
+    const pageSelect = walk(payload).find(
+      (component) => component.type === STRING_SELECT && component.placeholder === "Choose a page...",
+    );
+    expect(pageSelect?.options?.map((option) => option.value)).toEqual([
+      "general",
+      "triggers",
+      "memories",
+      "naming",
+      "sprites",
+      "appearance",
+      "voice",
+      "overrides",
+      "advanced",
+    ]);
+  });
 });
 
 describe("config persona selector", () => {

@@ -146,6 +146,7 @@ describe("config page filtering", () => {
       "sprites",
     ]);
     expect(visibleConfigPages("persona", GUILD_MANAGER)).toContain("voice");
+    expect(visibleConfigPages("persona", GUILD_MANAGER).at(-1)).toBe("advanced");
   });
 
   it("omits the manager-owned Behavior category for a guild member", () => {

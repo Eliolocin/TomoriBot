@@ -40,7 +40,7 @@ pre-filled with the current tags, so you edit in place:
 - **`/personal config`** — *your own* appearance tags, applied when a generation
   references you. Follows you across every server (see
   [Personalization](/features/knowledge/personalization/)).
-- **Default positive and negative tags** on **`/config` > Models > ImageGen Defaults** —
+- **Default positive and negative tags** on **`/config` > Models > Image Generation Defaults** —
   the server-wide default tags added to (or steered away from) every generation. Negative
   tags only take effect where the backend supports negative prompts. Submitting the modal with
   an empty box resets that list to the built-in defaults.

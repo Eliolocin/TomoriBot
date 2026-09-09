@@ -693,8 +693,8 @@ These modals collect free-form text and have no structured option set:
 | `/config` > Engine > Trigger| `config/random-trigger/add.ts` | Free-form trigger word/phrase (text input portion stays) |
 | `/config` > Persona > Advanced | `utils/discord/ui/configModals.ts` | 5 free-form text fields (author, title, tags, etc.) |
 | `/personal config`         | `utils/discord/ui/personalConfigPanel.ts` | Free-form physical appearance image tag text            |
-| `/config` > Models > ImageGen Defaults   | `config/image-tags/default-negative.ts`    | Free-form default negative tag text                     |
-| `/config` > Models > ImageGen Defaults      | `config/image-tags/default-positive.ts`       | Free-form default positive tag text                  |
+| `/config` > Models > Image Generation Defaults   | `config/image-tags/default-negative.ts`    | Free-form default negative tag text                     |
+| `/config` > Models > Image Generation Defaults      | `config/image-tags/default-positive.ts`       | Free-form default positive tag text                  |
 | `/persona create`          | `persona/create.ts`           | Free-form text fields + file upload                     |
 | `/persona generate`        | `persona/generate.ts`         | Free-form name + file upload                            |
 | `/server trigger add`      | `server/trigger/add.ts`       | Free-form text fields (word, response, cooldown)        |

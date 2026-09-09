@@ -1053,7 +1053,7 @@ require Manage Server.
 The panel previews a trusted saved reference without exposing its storage URL or path, using a
 configured public URL directly and a local attachment fallback. Uploading a reference is required
 in the upload modal; clearing uses a separate confirmation.
-Appearance follows Memories in the page selector. Advanced owns persona prompts, context notes, and
+Appearance follows Memories in the page selector, followed by Voice and Overrides, with Advanced placed last. Advanced owns persona prompts, context notes, and
 ATTG metadata; Overrides owns response style and text-model overrides.
 Text model overrides use a provider picker followed by a modal model picker when the provider has
 at most 25 models; larger catalogs retain the paginated picker because Discord limits one select to
