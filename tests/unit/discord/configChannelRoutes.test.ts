@@ -853,12 +853,12 @@ describe("Channels Destinations panel", () => {
     };
 
     const fits = renderDestinations(WELCOME_PERSONA_PAGE_SIZE);
-    expect(fits).toContain("config:v1:channels-welcome-open:en-US");
-    expect(fits).not.toContain("config:v1:welcome-range-select:en-US");
+    expect(fits).toContain("config:v2:channels-welcome-open:en-US");
+    expect(fits).not.toContain("config:v2:welcome-range-select:en-US");
 
     const overflows = renderDestinations(WELCOME_PERSONA_PAGE_SIZE + 1);
-    expect(overflows).toContain("config:v1:welcome-range-select:en-US");
-    expect(overflows).not.toContain("config:v1:channels-welcome-open:en-US");
+    expect(overflows).toContain("config:v2:welcome-range-select:en-US");
+    expect(overflows).not.toContain("config:v2:channels-welcome-open:en-US");
     expect(overflows).toContain("Personas 1-24");
     // The range holding the stored persona opens marked, so the reader knows where to look.
     expect(overflows).toContain("Persona 1 through Persona 24");

@@ -56,12 +56,12 @@ export type ConfigBehaviorExperimentalAction =
   | "tool-context"
   | "tool-trigger"
   | "send-limit"
-  | "self-debug"
   | "workarounds";
 export type ConfigBehaviorNoticesAction = "notice-visibility" | "speech-transcripts";
 export type ConfigBehaviorMemoryAction = "memory-tagging" | "stm-parameters" | "stm-categories" | "stm-prompt";
 export type ConfigPermissionsCapabilitiesAction = "tool-use" | "manage";
 export type ConfigPermissionsPrivacyAction = "privacy-bypass";
+export type ConfigPluginsContextAdditionsAction = "self-debug";
 export type ConfigChannelsDestinationsAction = "log" | "welcome";
 export type ConfigChannelsAutoTriggerAction = "auto-trigger" | "threshold";
 export type ConfigChannelsRulesAction = "private" | "roleplay" | "blocklist";
@@ -105,7 +105,6 @@ export function resolveConfigPageState(
   if (actor.workspaceKind === "dm") {
     if (category === "persona" && page === "triggers") return "omitted";
     if (category === "behavior") return page === "trigger" || page === "memory" ? "omitted" : "enabled";
-    if (category === "permissions") return page === "privacy" ? "omitted" : "enabled";
     if (category === "models") return page === "image" ? "omitted" : "enabled";
     return "enabled";
   }
@@ -126,9 +125,9 @@ export function resolveConfigPageState(
  * page must not appear at all; a read-only page still appears because its prose is safe.
  */
 export function visibleConfigPages(category: ConfigCategory, actor: ConfigActor): ConfigPage[] {
-  return CONFIG_PAGES_BY_CATEGORY[category].filter(
-    (page) => resolveConfigPageState(category, page, actor) !== "omitted",
-  );
+  const pages = CONFIG_PAGES_BY_CATEGORY[category];
+  if (!pages) return [];
+  return pages.filter((page) => resolveConfigPageState(category, page, actor) !== "omitted");
 }
 
 export function visibleConfigCategories(actor: ConfigActor): Array<{ category: ConfigCategory; disabled: boolean }> {
@@ -414,7 +413,6 @@ export const BEHAVIOR_EXPERIMENTAL_ACTION_BY_ROUTE: Partial<
   "behavior-tool-trigger-remove-submit": "tool-trigger",
   "behavior-send-limit-open": "send-limit",
   "behavior-send-limit-submit": "send-limit",
-  "behavior-self-debug-set": "self-debug",
   "behavior-workarounds-open": "workarounds",
   "behavior-workarounds-submit": "workarounds",
 };
@@ -451,6 +449,12 @@ export const PERMISSIONS_PRIVACY_ACTION_BY_ROUTE: Partial<
   Record<ConfigPanelRoute["action"], ConfigPermissionsPrivacyAction>
 > = {
   "permissions-privacy-bypass-set": "privacy-bypass",
+};
+
+export const PLUGINS_CONTEXT_ADDITIONS_ACTION_BY_ROUTE: Partial<
+  Record<ConfigPanelRoute["action"], ConfigPluginsContextAdditionsAction>
+> = {
+  "behavior-self-debug-set": "self-debug",
 };
 
 export const CHANNELS_DESTINATIONS_ACTION_BY_ROUTE: Partial<
@@ -563,6 +567,14 @@ export function resolvePermissionsPrivacyActionState(
   actor: ConfigActor,
 ): ConfigSurfaceState {
   if (actor.workspaceKind === "dm") return "omitted";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolvePluginsContextAdditionsActionState(
+  _action: ConfigPluginsContextAdditionsAction,
+  actor: ConfigActor,
+): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "enabled";
   return actor.isManager ? "enabled" : "disabled";
 }
 
@@ -722,6 +734,12 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
     return resolveBehaviorExperimentalActionState(experimentalAction, actor) === "enabled";
   }
 
+  const pluginsContextAdditionsAction = PLUGINS_CONTEXT_ADDITIONS_ACTION_BY_ROUTE[route.action];
+  if (pluginsContextAdditionsAction) {
+    if (resolveConfigPageState("plugins", "context-additions", actor) === "omitted") return false;
+    return resolvePluginsContextAdditionsActionState(pluginsContextAdditionsAction, actor) === "enabled";
+  }
+
   const noticesAction = BEHAVIOR_NOTICES_ACTION_BY_ROUTE[route.action];
   if (noticesAction) {
     if (resolveConfigPageState("behavior", "notices", actor) === "omitted") return false;
@@ -736,13 +754,12 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
 
   const permissionsCapabilitiesAction = PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE[route.action];
   if (permissionsCapabilitiesAction) {
-    if (resolveConfigPageState("permissions", "capabilities", actor) === "omitted") return false;
+    if (resolveConfigPageState("plugins", "available-tools", actor) === "omitted") return false;
     return resolvePermissionsCapabilitiesActionState(permissionsCapabilitiesAction, actor) === "enabled";
   }
 
   const permissionsPrivacyAction = PERMISSIONS_PRIVACY_ACTION_BY_ROUTE[route.action];
   if (permissionsPrivacyAction) {
-    if (resolveConfigPageState("permissions", "privacy", actor) === "omitted") return false;
     return resolvePermissionsPrivacyActionState(permissionsPrivacyAction, actor) === "enabled";
   }
 

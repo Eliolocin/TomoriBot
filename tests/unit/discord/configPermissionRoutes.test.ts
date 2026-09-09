@@ -11,6 +11,7 @@ import {
 import { buildConfigRouteId } from "@/utils/discord/configPanelCatalog";
 import { createConfigInteractionRoute } from "@/utils/discord/interactions/configRoutes";
 import type {
+  ConfigChannelsView,
   ConfigPermissionsView,
   ConfigRouteDependencies,
   ConfigScope,
@@ -120,6 +121,21 @@ function makeHarness(options: HarnessOptions = {}): Harness {
     dependencies: {
       resolveScope: async () => scope,
       getPersonaAvatarData: async () => ({ url: null, files: [] }),
+      loadChannelsView: async () =>
+        ({
+          destinations: {
+            thoughtLogChannelId: null,
+            welcomeChannelId: null,
+            welcomePrompt: null,
+            welcomePersonaId: null,
+          },
+          autoTrigger: { enabledChannels: [], personaOverrides: [], threshold: 0, maxThreshold: 0 },
+          rules: { privateChannels: [], roleplayChannels: [], crossChannelBlocklist: [] },
+          availableTextChannels: [],
+          availableBlocklistChannels: [],
+          availableOverrideChannels: [],
+          overrides: { selectedChannelId: null, prompt: null, contextNote: null, textModelOverride: null },
+        }) as ConfigChannelsView,
       loadPermissionsView: async (current) => buildPermissionsView(current, includeElevenLabs),
       showModal: async (_interaction, payload) => {
         modals.push(payload);
@@ -253,9 +269,7 @@ describe("permissions mapping and modal", () => {
     expect(definitions).toHaveLength(14);
     expect(definitions.map((definition) => [definition.value, definition.table, definition.dbColumn])).toEqual([
       ["selfteaching", "memberPermissions", "self_teaching_enabled"],
-      ["personalization", "memberPermissions", "personal_memories_enabled"],
       ["userinfo", "capabilities", "user_info_updates_enabled"],
-      ["emojiusage", "capabilities", "emoji_usage_enabled"],
       ["stickerusage", "capabilities", "sticker_usage_enabled"],
       ["websearch", "capabilities", "web_search_enabled"],
       ["managemessage", "capabilities", "manage_message_enabled"],
@@ -264,6 +278,8 @@ describe("permissions mapping and modal", () => {
       ["videogen", "capabilities", "videogen_enabled"],
       ["voicemessage", "capabilities", "voice_message_enabled"],
       ["userblocking", "capabilities", "user_blocking_enabled"],
+      ["personalization", "memberPermissions", "personal_memories_enabled"],
+      ["emojiusage", "capabilities", "emoji_usage_enabled"],
       ["shorttermmemory", "capabilities", "short_term_memory_enabled"],
       ["timeawareness", "capabilities", "time_awareness_enabled"],
     ]);
@@ -286,15 +302,21 @@ describe("permissions mapping and modal", () => {
     expect(withoutElevenLabs.some((definition) => definition.value === "voicemessage")).toBe(false);
   });
 
-  it("builds two literal CheckboxGroup components and pins the presented key state", () => {
-    const modal = buildConfigPermissionsManageModal("en-US", "nonce1234567", true, makeState().config);
-    expect(modal.components).toHaveLength(2);
+  it("builds a page-scoped CheckboxGroup and pins the presented key state", () => {
+    const modal = buildConfigPermissionsManageModal(
+      "en-US",
+      "nonce1234567",
+      "available-tools",
+      true,
+      makeState().config,
+    );
+    expect(modal.components).toHaveLength(1);
     expect((modal.components[0] as { component: { type: number } }).component.type).toBe(22);
-    expect((modal.components[1] as { component: { type: number } }).component.type).toBe(22);
     expect(modal.custom_id).toBe(
       buildConfigRouteId({
         action: "permissions-manage-submit",
         locale: "en-US",
+        page: "available-tools",
         includeElevenLabs: true,
         nonce: "nonce1234567",
       }),
@@ -308,7 +330,7 @@ describe("permissions routes", () => {
     try {
       const harness = makeHarness({ includeElevenLabs: false });
       const interaction = makeInteraction(
-        buildConfigRouteId({ action: "permissions-manage-open", locale: "en-US" }),
+        buildConfigRouteId({ action: "permissions-manage-open", locale: "en-US", page: "available-tools" }),
         harness,
       );
       await dispatch(harness, interaction);
@@ -316,8 +338,8 @@ describe("permissions routes", () => {
       expect(interaction.deferred).toBe(false);
       expect(harness.modals).toHaveLength(1);
       const modal = harness.modals[0] as { components: Array<{ component: { type: number; options: unknown[] } }> };
-      expect(modal.components.map((component) => component.component.type)).toEqual([22, 22]);
-      expect(modal.components.reduce((count, component) => count + component.component.options.length, 0)).toBe(13);
+      expect(modal.components.map((component) => component.component.type)).toEqual([22]);
+      expect(modal.components.reduce((count, component) => count + component.component.options.length, 0)).toBe(9);
     } finally {
       key.mockRestore();
     }
@@ -396,6 +418,7 @@ describe("permissions routes", () => {
         buildConfigRouteId({
           action: "permissions-manage-submit",
           locale: "en-US",
+          page: "available-tools",
           includeElevenLabs: true,
           nonce: "nonce1234567",
         }),
@@ -427,6 +450,56 @@ describe("permissions routes", () => {
     }
   });
 
+  it("writes only Context Additions without changing Available Tools", async () => {
+    const events: string[] = [];
+    const update = spyOn(configRepository, "updateCapabilitiesAndMemberPermissionsConfig").mockResolvedValue(true);
+    const invalidate = spyOn(tomoriStateCache, "invalidateTomoriStateCache").mockImplementation(() => {
+      events.push("invalidate");
+    });
+    const key = spyOn(crypto, "hasOptApiKey").mockResolvedValue(true);
+    try {
+      const selectedValues = getCapabilitiesManagePermissionDefinitions({ page: "context-additions" })
+        .map((definition) => definition.value)
+        .filter((value) => value !== "personalization");
+      const harness = makeHarness({
+        checkboxValues: new Map([
+          [buildConfigModalFieldId(`${CONFIG_PERMISSIONS_CHECKBOX_GROUP_PREFIX}_0`, "nonce1234567"), selectedValues],
+        ]),
+      });
+      const interaction = makeInteraction(
+        buildConfigRouteId({
+          action: "permissions-manage-submit",
+          locale: "en-US",
+          page: "context-additions",
+          includeElevenLabs: true,
+          nonce: "nonce1234567",
+        }),
+        harness,
+        { kind: "modal" },
+      );
+      let acknowledged = false;
+      update.mockImplementation(async (_serverId, patch) => {
+        acknowledged = interaction.deferred || interaction.replied;
+        events.push("write");
+        expect(patch).toEqual({
+          memberPermissions: { personal_memories_enabled: false },
+          capabilities: {},
+        });
+        return true;
+      });
+
+      await dispatch(harness, interaction);
+
+      expect(acknowledged).toBe(true);
+      expect(events).toEqual(["write", "invalidate"]);
+      expect(JSON.stringify(harness.edits.at(-1))).toContain("context-additions");
+    } finally {
+      update.mockRestore();
+      invalidate.mockRestore();
+      key.mockRestore();
+    }
+  });
+
   it("does not write or invalidate when the manage selection preserves every state", async () => {
     const update = spyOn(configRepository, "updateCapabilitiesAndMemberPermissionsConfig").mockResolvedValue(true);
     const invalidate = spyOn(tomoriStateCache, "invalidateTomoriStateCache").mockImplementation(() => undefined);
@@ -441,6 +514,7 @@ describe("permissions routes", () => {
         buildConfigRouteId({
           action: "permissions-manage-submit",
           locale: "en-US",
+          page: "available-tools",
           includeElevenLabs: true,
           nonce: "nonce1234567",
         }),
@@ -472,6 +546,7 @@ describe("permissions routes", () => {
         buildConfigRouteId({
           action: "permissions-manage-submit",
           locale: "en-US",
+          page: "available-tools",
           includeElevenLabs: true,
           nonce: "nonce1234567",
         }),
@@ -483,14 +558,13 @@ describe("permissions routes", () => {
 
       update.mockClear();
       const staleHarness = makeHarness({
-        checkboxValues: new Map([
-          [buildConfigModalFieldId(`${CONFIG_PERMISSIONS_CHECKBOX_GROUP_PREFIX}_0`, "nonce1234567"), []],
-        ]),
+        checkboxValues: new Map(),
       });
       const staleInteraction = makeInteraction(
         buildConfigRouteId({
           action: "permissions-manage-submit",
           locale: "en-US",
+          page: "available-tools",
           includeElevenLabs: true,
           nonce: "nonce1234567",
         }),
@@ -518,6 +592,7 @@ describe("permissions routes", () => {
         buildConfigRouteId({
           action: "permissions-manage-submit",
           locale: "en-US",
+          page: "available-tools",
           includeElevenLabs: true,
           nonce: "nonce1234567",
         }),
@@ -562,6 +637,8 @@ describe("permissions routes", () => {
       expect(privacyAcknowledged).toBe(true);
       expect(events).toEqual(["write", "invalidate"]);
       expect(updatePrivacy).toHaveBeenCalledWith(9, { stm_privacy_bypass: true });
+      expect(JSON.stringify(manager.edits.at(-1))).toContain("rules");
+      expect(JSON.stringify(manager.edits.at(-1))).toContain("Memory Privacy");
 
       for (const route of [
         { action: "permissions-tool-use-set", locale: "en-US", enabled: true },
@@ -569,6 +646,7 @@ describe("permissions routes", () => {
         {
           action: "permissions-manage-submit",
           locale: "en-US",
+          page: "available-tools",
           includeElevenLabs: true,
           nonce: "nonce1234567",
         },
@@ -620,15 +698,15 @@ describe("permissions routes", () => {
   });
 });
 
-describe("permissions panel", () => {
-  it("renders every presented capability, state controls, and privacy disclosure", () => {
+describe("Plugins and Channel Rules panels", () => {
+  it("renders page-partitioned capabilities, state controls, and Channel Rules privacy", () => {
     const state = makeState({ tool_use_enabled: true, stm_privacy_bypass: true });
     const view = buildPermissionsView(state, true);
     const payload = buildConfigPanelPayload({
       locale: "en-US",
       actor: { workspaceKind: "guild", isManager: true },
-      category: "permissions",
-      page: "capabilities",
+      category: "plugins",
+      page: "available-tools",
       personas: [state],
       selectedPersonaId: null,
       readStatus: "fresh",
@@ -636,7 +714,7 @@ describe("permissions panel", () => {
     });
     const serialized = JSON.stringify(payload);
     const capabilityDots = (serialized.match(/🟢/gu)?.length ?? 0) + (serialized.match(/🔴/gu)?.length ?? 0);
-    expect(capabilityDots).toBe(14);
+    expect(capabilityDots).toBe(10);
     expect(serialized).toContain("perm-tool-use-set");
     expect(serialized.indexOf("Controls whether I may call tools at all.")).toBeLessThan(
       serialized.indexOf("perm-tool-use-set"),
@@ -644,26 +722,72 @@ describe("permissions panel", () => {
     expect(serialized.indexOf("perm-tool-use-set")).toBeLessThan(
       serialized.indexOf("I may use tools when the conversation calls for them."),
     );
-    const privacySerialized = JSON.stringify(
+    const toolOffState = makeState({ tool_use_enabled: false });
+    const toolOffSerialized = JSON.stringify(
       buildConfigPanelPayload({
         locale: "en-US",
         actor: { workspaceKind: "guild", isManager: true },
-        category: "permissions",
-        page: "privacy",
+        category: "plugins",
+        page: "available-tools",
+        personas: [toolOffState],
+        selectedPersonaId: null,
+        readStatus: "fresh",
+        permissionsView: buildPermissionsView(toolOffState, true),
+      }),
+    );
+    expect(toolOffSerialized.match(/~~/gu)?.length).toBe(20);
+    const contextSerialized = JSON.stringify(
+      buildConfigPanelPayload({
+        locale: "en-US",
+        actor: { workspaceKind: "guild", isManager: true },
+        category: "plugins",
+        page: "context-additions",
         personas: [state],
         selectedPersonaId: null,
         readStatus: "fresh",
         permissionsView: view,
       }),
     );
-    expect(privacySerialized).toContain("Private-channel Bypass");
+    const contextDots = (contextSerialized.match(/🟢/gu)?.length ?? 0) + (contextSerialized.match(/🔴/gu)?.length ?? 0);
+    expect(contextDots).toBe(4);
+    expect(contextSerialized).toContain("Self-Debug");
+    expect(contextSerialized).not.toContain("~~");
+
+    const channelsView: ConfigChannelsView = {
+      destinations: {
+        thoughtLogChannelId: null,
+        welcomeChannelId: null,
+        welcomePrompt: null,
+        welcomePersonaId: null,
+      },
+      autoTrigger: { enabledChannels: [], personaOverrides: [], threshold: 0, maxThreshold: 0 },
+      rules: { privateChannels: [], roleplayChannels: [], crossChannelBlocklist: [] },
+      availableTextChannels: [],
+      availableBlocklistChannels: [],
+      availableOverrideChannels: [],
+      overrides: { selectedChannelId: null, prompt: null, contextNote: null, textModelOverride: null },
+    };
+    const privacySerialized = JSON.stringify(
+      buildConfigPanelPayload({
+        locale: "en-US",
+        actor: { workspaceKind: "guild", isManager: true },
+        category: "channels",
+        page: "rules",
+        personas: [state],
+        selectedPersonaId: null,
+        readStatus: "fresh",
+        permissionsView: view,
+        channelsView,
+      }),
+    );
+    expect(privacySerialized).toContain("Memory Privacy");
     expect(privacySerialized).toContain("/memories");
 
     const stalePayload = buildConfigPanelPayload({
       locale: "en-US",
       actor: { workspaceKind: "guild", isManager: true },
-      category: "permissions",
-      page: "capabilities",
+      category: "plugins",
+      page: "available-tools",
       personas: [state],
       selectedPersonaId: null,
       readStatus: "stale",
@@ -672,7 +796,7 @@ describe("permissions panel", () => {
     for (const action of [
       { action: "permissions-tool-use-set", locale: "en-US", enabled: false },
       { action: "permissions-tool-use-set", locale: "en-US", enabled: true },
-      { action: "permissions-manage-open", locale: "en-US" },
+      { action: "permissions-manage-open", locale: "en-US", page: "available-tools" },
       { action: "permissions-privacy-bypass-set", locale: "en-US", enabled: false },
       { action: "permissions-privacy-bypass-set", locale: "en-US", enabled: true },
     ] as const) {
@@ -680,12 +804,13 @@ describe("permissions panel", () => {
         ? buildConfigPanelPayload({
             locale: "en-US",
             actor: { workspaceKind: "guild", isManager: true },
-            category: "permissions",
-            page: "privacy",
+            category: "channels",
+            page: "rules",
             personas: [state],
             selectedPersonaId: null,
             readStatus: "stale",
             permissionsView: view,
+            channelsView,
           })
         : stalePayload;
       const component = findComponentByCustomId(targetPayload, buildConfigRouteId(action));

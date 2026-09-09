@@ -333,42 +333,42 @@ async function dispatch(harness: Harness, interaction: ReturnType<typeof makeInt
 }
 
 /**
- * Pins the `/config` v1 wire contract: each literal custom ID and the exact route it must decode to.
+ * Pins the `/config` v2 wire contract: each literal custom ID and the exact route it must decode to.
  * Encoding and decoding through one shared codec table cannot catch a field reordering, because
  * both sides move together and a round-trip still succeeds; only literal bytes can.
  */
-const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
+const WIRE_CONTRACT_V2: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
   [
-    "config:v1:category:en-US:persona:general",
+    "config:v2:category:en-US:persona:general",
     { action: "category", locale: "en-US", category: "persona", page: "general" },
   ],
-  ["config:v1:page:en-US:models:switch", { action: "page", locale: "en-US", category: "models", page: "switch" }],
+  ["config:v2:page:en-US:models:switch", { action: "page", locale: "en-US", category: "models", page: "switch" }],
   [
-    "config:v1:persona-page-select:en-US:persona:general:55",
+    "config:v2:persona-page-select:en-US:persona:general:55",
     { action: "persona-page-select", locale: "en-US", category: "persona", page: "general", personaId: 55 },
   ],
-  ["config:v1:persona-select:en-US:55", { action: "persona-select", locale: "en-US", personaId: 55 }],
-  ["config:v1:persona-page:en-US:55:25", { action: "persona-page", locale: "en-US", personaId: 55, start: 25 }],
-  ["config:v1:voice-select:en-US:55", { action: "voice-select", locale: "en-US", personaId: 55 }],
-  ["config:v1:voice-page:en-US:55:25", { action: "voice-page", locale: "en-US", personaId: 55, start: 25 }],
-  ["config:v1:voice-choose-cancel:en-US:55", { action: "voice-chooser-cancel", locale: "en-US", personaId: 55 }],
-  ["config:v1:voice-clear:en-US:55", { action: "voice-clear", locale: "en-US", personaId: 55 }],
-  ["config:v1:voice-design-open:en-US:55", { action: "voice-design-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:persona-select:en-US:55", { action: "persona-select", locale: "en-US", personaId: 55 }],
+  ["config:v2:persona-page:en-US:55:25", { action: "persona-page", locale: "en-US", personaId: 55, start: 25 }],
+  ["config:v2:voice-select:en-US:55", { action: "voice-select", locale: "en-US", personaId: 55 }],
+  ["config:v2:voice-page:en-US:55:25", { action: "voice-page", locale: "en-US", personaId: 55, start: 25 }],
+  ["config:v2:voice-choose-cancel:en-US:55", { action: "voice-chooser-cancel", locale: "en-US", personaId: 55 }],
+  ["config:v2:voice-clear:en-US:55", { action: "voice-clear", locale: "en-US", personaId: 55 }],
+  ["config:v2:voice-design-open:en-US:55", { action: "voice-design-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:voice-design-sub:en-US:55:nonce1234567",
+    "config:v2:voice-design-sub:en-US:55:nonce1234567",
     { action: "voice-design-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:voice-design-rem:en-US:55", { action: "voice-design-remove", locale: "en-US", personaId: 55 }],
-  ["config:v1:server-memory:en-US:55", { action: "server-memory-open", locale: "en-US", personaId: 55 }],
-  ["config:v1:personal-memory:en-US:55", { action: "personal-memory-open", locale: "en-US", personaId: 55 }],
-  ["config:v1:stm-edit-open:en-US:55", { action: "stm-edit-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:voice-design-rem:en-US:55", { action: "voice-design-remove", locale: "en-US", personaId: 55 }],
+  ["config:v2:server-memory:en-US:55", { action: "server-memory-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:personal-memory:en-US:55", { action: "personal-memory-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:stm-edit-open:en-US:55", { action: "stm-edit-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:stm-edit-submit:en-US:55:nonce1234567",
+    "config:v2:stm-edit-submit:en-US:55:nonce1234567",
     { action: "stm-edit-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:conditioning-open:en-US:55", { action: "conditioning-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:conditioning-open:en-US:55", { action: "conditioning-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:conditioning-submit:en-US:55:abcd1234:nonce1234567",
+    "config:v2:conditioning-submit:en-US:55:abcd1234:nonce1234567",
     {
       action: "conditioning-submit",
       locale: "en-US",
@@ -377,38 +377,38 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       nonce: "nonce1234567",
     },
   ],
-  ["config:v1:image-tags-open:en-US:55", { action: "image-tags-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:image-tags-open:en-US:55", { action: "image-tags-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:image-tags-submit:en-US:55:nonce1234567",
+    "config:v2:image-tags-submit:en-US:55:nonce1234567",
     { action: "image-tags-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:attg-open:en-US:55", { action: "attg-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:attg-open:en-US:55", { action: "attg-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:attg-submit:en-US:55:nonce1234567",
+    "config:v2:attg-submit:en-US:55:nonce1234567",
     { action: "attg-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:attg-clear-all:en-US:55", { action: "attg-clear-all", locale: "en-US", personaId: 55 }],
-  ["config:v1:sprite-select:en-US:55", { action: "sprite-select", locale: "en-US", personaId: 55 }],
-  ["config:v1:sprite-page:en-US:55:25", { action: "sprite-page", locale: "en-US", personaId: 55, start: 25 }],
-  ["config:v1:sprite-add-open:en-US:55", { action: "sprite-add-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:attg-clear-all:en-US:55", { action: "attg-clear-all", locale: "en-US", personaId: 55 }],
+  ["config:v2:sprite-select:en-US:55", { action: "sprite-select", locale: "en-US", personaId: 55 }],
+  ["config:v2:sprite-page:en-US:55:25", { action: "sprite-page", locale: "en-US", personaId: 55, start: 25 }],
+  ["config:v2:sprite-add-open:en-US:55", { action: "sprite-add-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:sprite-add-sub:en-US:55:nonce1234567",
+    "config:v2:sprite-add-sub:en-US:55:nonce1234567",
     { action: "sprite-add-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
   [
-    "config:v1:sprite-edit-open:en-US:55:0:abcd1234",
+    "config:v2:sprite-edit-open:en-US:55:0:abcd1234",
     { action: "sprite-edit-open", locale: "en-US", personaId: 55, index: 0, fp: "abcd1234" },
   ],
   [
-    "config:v1:sprite-edit-sub:en-US:55:0:abcd1234:nonce1234567",
+    "config:v2:sprite-edit-sub:en-US:55:0:abcd1234:nonce1234567",
     { action: "sprite-edit-submit", locale: "en-US", personaId: 55, index: 0, fp: "abcd1234", nonce: "nonce1234567" },
   ],
   [
-    "config:v1:sprite-rem-view:en-US:55:0:abcd1234",
+    "config:v2:sprite-rem-view:en-US:55:0:abcd1234",
     { action: "sprite-remove-view", locale: "en-US", personaId: 55, index: 0, fp: "abcd1234" },
   ],
   [
-    "config:v1:sprite-rem-confirm:en-US:55:0:abcd1234:nonce1234567",
+    "config:v2:sprite-rem-confirm:en-US:55:0:abcd1234:nonce1234567",
     {
       action: "sprite-remove-confirm",
       locale: "en-US",
@@ -418,58 +418,58 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       nonce: "nonce1234567",
     },
   ],
-  ["config:v1:sprite-rem-cancel:en-US:55", { action: "sprite-remove-cancel", locale: "en-US", personaId: 55 }],
-  ["config:v1:sprite-import-open:en-US:55", { action: "sprite-import-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:sprite-rem-cancel:en-US:55", { action: "sprite-remove-cancel", locale: "en-US", personaId: 55 }],
+  ["config:v2:sprite-import-open:en-US:55", { action: "sprite-import-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:sprite-import-sub:en-US:55:nonce1234567",
+    "config:v2:sprite-import-sub:en-US:55:nonce1234567",
     { action: "sprite-import-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:sprite-export:en-US:55", { action: "sprite-export", locale: "en-US", personaId: 55 }],
-  ["config:v1:char-ref-open:en-US:55", { action: "character-reference-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:sprite-export:en-US:55", { action: "sprite-export", locale: "en-US", personaId: 55 }],
+  ["config:v2:char-ref-open:en-US:55", { action: "character-reference-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:char-ref-submit:en-US:55:nonce1234567",
+    "config:v2:char-ref-submit:en-US:55:nonce1234567",
     { action: "character-reference-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
   [
-    "config:v1:char-ref-clear-view:en-US:55",
+    "config:v2:char-ref-clear-view:en-US:55",
     { action: "character-reference-clear-view", locale: "en-US", personaId: 55 },
   ],
   [
-    "config:v1:char-ref-clear-confirm:en-US:55:nonce1234567",
+    "config:v2:char-ref-clear-confirm:en-US:55:nonce1234567",
     { action: "character-reference-clear-confirm", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
   [
-    "config:v1:char-ref-clear-cancel:en-US:55",
+    "config:v2:char-ref-clear-cancel:en-US:55",
     { action: "character-reference-clear-cancel", locale: "en-US", personaId: 55 },
   ],
-  ["config:v1:prompt-open:en-US:55", { action: "prompt-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:prompt-open:en-US:55", { action: "prompt-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:prompt-submit:en-US:55:nonce1234567",
+    "config:v2:prompt-submit:en-US:55:nonce1234567",
     { action: "prompt-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:prompt-remove:en-US:55", { action: "prompt-remove", locale: "en-US", personaId: 55 }],
-  ["config:v1:context-open:en-US:55", { action: "context-note-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:prompt-remove:en-US:55", { action: "prompt-remove", locale: "en-US", personaId: 55 }],
+  ["config:v2:context-open:en-US:55", { action: "context-note-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:context-submit:en-US:55:nonce1234567",
+    "config:v2:context-submit:en-US:55:nonce1234567",
     { action: "context-note-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:humanizer-open:en-US:55", { action: "humanizer-open", locale: "en-US", personaId: 55 }],
-  ["config:v1:humanizer-select:en-US:55", { action: "humanizer-select", locale: "en-US", personaId: 55 }],
+  ["config:v2:humanizer-open:en-US:55", { action: "humanizer-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:humanizer-select:en-US:55", { action: "humanizer-select", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:humanizer-submit:en-US:55:nonce1234567",
+    "config:v2:humanizer-submit:en-US:55:nonce1234567",
     { action: "humanizer-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:text-override-open:en-US:55", { action: "text-override-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:text-override-open:en-US:55", { action: "text-override-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:text-override-provider-select:en-US:55",
+    "config:v2:text-override-provider-select:en-US:55",
     { action: "text-override-provider-select", locale: "en-US", personaId: 55 },
   ],
   [
-    "config:v1:text-override-model-select:en-US:55:openrouter",
+    "config:v2:text-override-model-select:en-US:55:openrouter",
     { action: "text-override-model-select", locale: "en-US", personaId: 55, provider: "openrouter" },
   ],
   [
-    "config:v1:text-model-submit:en-US:55:openrouter:nonce1234567",
+    "config:v2:text-model-submit:en-US:55:openrouter:nonce1234567",
     {
       action: "text-override-model-submit",
       locale: "en-US",
@@ -479,52 +479,52 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:text-override-model-page:en-US:55:openrouter:25",
+    "config:v2:text-override-model-page:en-US:55:openrouter:25",
     { action: "text-override-model-page", locale: "en-US", personaId: 55, provider: "openrouter", start: 25 },
   ],
-  ["config:v1:text-override-clear:en-US:55", { action: "text-override-clear", locale: "en-US", personaId: 55 }],
-  ["config:v1:avatar-open:en-US:55", { action: "avatar-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:text-override-clear:en-US:55", { action: "text-override-clear", locale: "en-US", personaId: 55 }],
+  ["config:v2:avatar-open:en-US:55", { action: "avatar-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:avatar-submit:en-US:55:nonce1234567",
+    "config:v2:avatar-submit:en-US:55:nonce1234567",
     { action: "avatar-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:rename-open:en-US:55", { action: "rename-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:rename-open:en-US:55", { action: "rename-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:rename-submit:en-US:55:nonce1234567",
+    "config:v2:rename-submit:en-US:55:nonce1234567",
     { action: "rename-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:naming-style:en-US:55", { action: "naming-style-select", locale: "en-US", personaId: 55 }],
+  ["config:v2:naming-style:en-US:55", { action: "naming-style-select", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:naming-open:en-US:55:neutral",
+    "config:v2:naming-open:en-US:55:neutral",
     { action: "naming-open", locale: "en-US", personaId: 55, style: "neutral" },
   ],
   [
-    "config:v1:naming-submit:en-US:55:feminine:nonce1234567",
+    "config:v2:naming-submit:en-US:55:feminine:nonce1234567",
     { action: "naming-submit", locale: "en-US", personaId: 55, style: "feminine", nonce: "nonce1234567" },
   ],
-  ["config:v1:trig-add-open:en-US:55", { action: "trigger-add-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:trig-add-open:en-US:55", { action: "trigger-add-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:trig-add-sub:en-US:55:nonce1234567",
+    "config:v2:trig-add-sub:en-US:55:nonce1234567",
     { action: "trigger-add-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
-  ["config:v1:trig-rem-open:en-US:55", { action: "trigger-remove-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:trig-rem-open:en-US:55", { action: "trigger-remove-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:trig-rem-sub:en-US:55:abcd1234:nonce1234567",
+    "config:v2:trig-rem-sub:en-US:55:abcd1234:nonce1234567",
     { action: "trigger-remove-submit", locale: "en-US", personaId: 55, fp: "abcd1234", nonce: "nonce1234567" },
   ],
-  ["config:v1:attr-select:en-US:55", { action: "attribute-select", locale: "en-US", personaId: 55 }],
-  ["config:v1:attr-page:en-US:55:24", { action: "attribute-page", locale: "en-US", personaId: 55, start: 24 }],
-  ["config:v1:attr-add-open:en-US:55", { action: "attribute-add-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:attr-select:en-US:55", { action: "attribute-select", locale: "en-US", personaId: 55 }],
+  ["config:v2:attr-page:en-US:55:24", { action: "attribute-page", locale: "en-US", personaId: 55, start: 24 }],
+  ["config:v2:attr-add-open:en-US:55", { action: "attribute-add-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:attr-add-sub:en-US:55:nonce1234567",
+    "config:v2:attr-add-sub:en-US:55:nonce1234567",
     { action: "attribute-add-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
   [
-    "config:v1:attr-edit-open:en-US:55:0:abcd1234",
+    "config:v2:attr-edit-open:en-US:55:0:abcd1234",
     { action: "attribute-edit-open", locale: "en-US", personaId: 55, index: 0, fp: "abcd1234" },
   ],
   [
-    "config:v1:attr-edit-sub:en-US:55:0:abcd1234:nonce1234567",
+    "config:v2:attr-edit-sub:en-US:55:0:abcd1234:nonce1234567",
     {
       action: "attribute-edit-submit",
       locale: "en-US",
@@ -535,22 +535,22 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:attr-remove:en-US:55:0:abcd1234",
+    "config:v2:attr-remove:en-US:55:0:abcd1234",
     { action: "attribute-remove", locale: "en-US", personaId: 55, index: 0, fp: "abcd1234" },
   ],
-  ["config:v1:dlg-select:en-US:55", { action: "dialogue-select", locale: "en-US", personaId: 55 }],
-  ["config:v1:dlg-page:en-US:55:24", { action: "dialogue-page", locale: "en-US", personaId: 55, start: 24 }],
-  ["config:v1:dlg-add-open:en-US:55", { action: "dialogue-add-open", locale: "en-US", personaId: 55 }],
+  ["config:v2:dlg-select:en-US:55", { action: "dialogue-select", locale: "en-US", personaId: 55 }],
+  ["config:v2:dlg-page:en-US:55:24", { action: "dialogue-page", locale: "en-US", personaId: 55, start: 24 }],
+  ["config:v2:dlg-add-open:en-US:55", { action: "dialogue-add-open", locale: "en-US", personaId: 55 }],
   [
-    "config:v1:dlg-add-sub:en-US:55:nonce1234567",
+    "config:v2:dlg-add-sub:en-US:55:nonce1234567",
     { action: "dialogue-add-submit", locale: "en-US", personaId: 55, nonce: "nonce1234567" },
   ],
   [
-    "config:v1:dlg-edit-open:en-US:55:0:abcd1234",
+    "config:v2:dlg-edit-open:en-US:55:0:abcd1234",
     { action: "dialogue-edit-open", locale: "en-US", personaId: 55, index: 0, fp: "abcd1234" },
   ],
   [
-    "config:v1:dlg-edit-sub:en-US:55:0:abcd1234:nonce1234567",
+    "config:v2:dlg-edit-sub:en-US:55:0:abcd1234:nonce1234567",
     {
       action: "dialogue-edit-submit",
       locale: "en-US",
@@ -561,28 +561,28 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:dlg-remove:en-US:55:0:abcd1234",
+    "config:v2:dlg-remove:en-US:55:0:abcd1234",
     { action: "dialogue-remove", locale: "en-US", personaId: 55, index: 0, fp: "abcd1234" },
   ],
-  ["config:v1:promote-view:en-US:56", { action: "promote-view", locale: "en-US", personaId: 56 }],
+  ["config:v2:promote-view:en-US:56", { action: "promote-view", locale: "en-US", personaId: 56 }],
   [
-    "config:v1:promote-confirm:en-US:56:nonce1234567",
+    "config:v2:promote-confirm:en-US:56:nonce1234567",
     { action: "promote-confirm", locale: "en-US", personaId: 56, nonce: "nonce1234567" },
   ],
-  ["config:v1:promote-cancel:en-US:56", { action: "promote-cancel", locale: "en-US", personaId: 56 }],
+  ["config:v2:promote-cancel:en-US:56", { action: "promote-cancel", locale: "en-US", personaId: 56 }],
   [
-    "config:v1:retry:en-US:persona:general:55",
+    "config:v2:retry:en-US:persona:general:55",
     { action: "retry", locale: "en-US", category: "persona", page: "general", personaId: 55 },
   ],
   [
-    "config:v1:refresh:en-US:persona:general",
+    "config:v2:refresh:en-US:persona:general",
     { action: "refresh", locale: "en-US", category: "persona", page: "general" },
   ],
-  ["config:v1:model-prov-select:en-US:text", { action: "model-provider-select", locale: "en-US", capability: "text" }],
-  ["config:v1:ep-select:en-US:tts", { action: "endpoint-select", locale: "en-US", capability: "tts" }],
-  ["config:v1:ep-select:en-US:stt", { action: "endpoint-select", locale: "en-US", capability: "stt" }],
+  ["config:v2:model-prov-select:en-US:text", { action: "model-provider-select", locale: "en-US", capability: "text" }],
+  ["config:v2:ep-select:en-US:tts", { action: "endpoint-select", locale: "en-US", capability: "tts" }],
+  ["config:v2:ep-select:en-US:stt", { action: "endpoint-select", locale: "en-US", capability: "stt" }],
   [
-    "config:v1:model-modal:en-US:video:custom~12:nonce1234567",
+    "config:v2:model-modal:en-US:video:custom~12:nonce1234567",
     {
       action: "model-modal-submit",
       locale: "en-US",
@@ -591,217 +591,221 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       nonce: "nonce1234567",
     },
   ],
-  ["config:v1:param-prov-select:en-US", { action: "parameters-provider-select", locale: "en-US" }],
+  ["config:v2:param-prov-select:en-US", { action: "parameters-provider-select", locale: "en-US" }],
   [
-    "config:v1:nai-preset-select:en-US:0:deadbeef",
+    "config:v2:nai-preset-select:en-US:0:deadbeef",
     { action: "nai-preset-select", locale: "en-US", start: 0, fp: "deadbeef" },
   ],
-  ["config:v1:sampling-open:en-US:google", { action: "sampling-open", locale: "en-US", provider: "google" }],
+  ["config:v2:sampling-open:en-US:google", { action: "sampling-open", locale: "en-US", provider: "google" }],
   [
-    "config:v1:sampling-sub:en-US:google:nonce1234567",
+    "config:v2:sampling-sub:en-US:google:nonce1234567",
     { action: "sampling-submit", locale: "en-US", provider: "google", nonce: "nonce1234567" },
   ],
-  ["config:v1:generation-open:en-US:google", { action: "generation-open", locale: "en-US", provider: "google" }],
+  ["config:v2:generation-open:en-US:google", { action: "generation-open", locale: "en-US", provider: "google" }],
   [
-    "config:v1:generation-sub:en-US:google:nonce1234567",
+    "config:v2:generation-sub:en-US:google:nonce1234567",
     { action: "generation-submit", locale: "en-US", provider: "google", nonce: "nonce1234567" },
   ],
-  ["config:v1:stop-add-open:en-US", { action: "stop-add-open", locale: "en-US" }],
-  ["config:v1:stop-add-sub:en-US:nonce1234567", { action: "stop-add-submit", locale: "en-US", nonce: "nonce1234567" }],
-  ["config:v1:stop-man-open:en-US", { action: "stop-manage-open", locale: "en-US" }],
+  ["config:v2:stop-add-open:en-US", { action: "stop-add-open", locale: "en-US" }],
+  ["config:v2:stop-add-sub:en-US:nonce1234567", { action: "stop-add-submit", locale: "en-US", nonce: "nonce1234567" }],
+  ["config:v2:stop-man-open:en-US", { action: "stop-manage-open", locale: "en-US" }],
   [
-    "config:v1:stop-man-sub:en-US:abcd1234:nonce1234567",
+    "config:v2:stop-man-sub:en-US:abcd1234:nonce1234567",
     { action: "stop-manage-submit", locale: "en-US", fp: "abcd1234", nonce: "nonce1234567" },
   ],
-  ["config:v1:logit-add-open:en-US", { action: "logit-add-open", locale: "en-US" }],
+  ["config:v2:logit-add-open:en-US", { action: "logit-add-open", locale: "en-US" }],
   [
-    "config:v1:logit-add-sub:en-US:nonce1234567",
+    "config:v2:logit-add-sub:en-US:nonce1234567",
     { action: "logit-add-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:logit-up-open:en-US", { action: "logit-upload-open", locale: "en-US" }],
+  ["config:v2:logit-up-open:en-US", { action: "logit-upload-open", locale: "en-US" }],
   [
-    "config:v1:logit-up-sub:en-US:nonce1234567",
+    "config:v2:logit-up-sub:en-US:nonce1234567",
     { action: "logit-upload-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:logit-man-select:en-US", { action: "logit-manage-select", locale: "en-US" }],
-  ["config:v1:logit-man-open:en-US:0", { action: "logit-manage-open", locale: "en-US", start: 0 }],
+  ["config:v2:logit-man-select:en-US", { action: "logit-manage-select", locale: "en-US" }],
+  ["config:v2:logit-man-open:en-US:0", { action: "logit-manage-open", locale: "en-US", start: 0 }],
   [
-    "config:v1:logit-man-sub:en-US:50:abcd1234:nonce1234567",
+    "config:v2:logit-man-sub:en-US:50:abcd1234:nonce1234567",
     { action: "logit-manage-submit", locale: "en-US", start: 50, fp: "abcd1234", nonce: "nonce1234567" },
   ],
-  ["config:v1:fb-prov-select:en-US", { action: "fallback-provider-select", locale: "en-US" }],
-  ["config:v1:fb-prov-rng:en-US:24", { action: "fallback-provider-range", locale: "en-US", start: 24 }],
+  ["config:v2:fb-prov-select:en-US", { action: "fallback-provider-select", locale: "en-US" }],
+  ["config:v2:fb-prov-rng:en-US:24", { action: "fallback-provider-range", locale: "en-US", start: 24 }],
   [
-    "config:v1:fb-prov-page:en-US:openrouter:48",
+    "config:v2:fb-prov-page:en-US:openrouter:48",
     { action: "fallback-provider-page", locale: "en-US", provider: "openrouter", start: 48 },
   ],
   [
-    "config:v1:fb-sub:en-US:google:24:nonce1234567",
+    "config:v2:fb-sub:en-US:google:24:nonce1234567",
     { action: "fallback-submit", locale: "en-US", provider: "google", start: 24, nonce: "nonce1234567" },
   ],
-  ["config:v1:randomizer-set:en-US:1", { action: "randomizer-set", locale: "en-US", enabled: true }],
-  ["config:v1:randomizer-set:en-US:0", { action: "randomizer-set", locale: "en-US", enabled: false }],
-  ["config:v1:img-tags-open:en-US:0", { action: "image-tags-default-open", locale: "en-US", negative: false }],
+  ["config:v2:randomizer-set:en-US:1", { action: "randomizer-set", locale: "en-US", enabled: true }],
+  ["config:v2:randomizer-set:en-US:0", { action: "randomizer-set", locale: "en-US", enabled: false }],
+  ["config:v2:img-tags-open:en-US:0", { action: "image-tags-default-open", locale: "en-US", negative: false }],
   [
-    "config:v1:img-tags-sub:en-US:1:nonce1234567",
+    "config:v2:img-tags-sub:en-US:1:nonce1234567",
     { action: "image-tags-default-submit", locale: "en-US", negative: true, nonce: "nonce1234567" },
   ],
-  ["config:v1:nai-params-open:en-US", { action: "nai-parameters-open", locale: "en-US" }],
+  ["config:v2:nai-params-open:en-US", { action: "nai-parameters-open", locale: "en-US" }],
   [
-    "config:v1:nai-params-sub:en-US:nonce1234567",
+    "config:v2:nai-params-sub:en-US:nonce1234567",
     { action: "nai-parameters-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-prompt-open:en-US", { action: "behavior-prompt-open", locale: "en-US" }],
+  ["config:v2:beh-prompt-open:en-US", { action: "behavior-prompt-open", locale: "en-US" }],
   [
-    "config:v1:beh-prompt-sub:en-US:nonce1234567",
+    "config:v2:beh-prompt-sub:en-US:nonce1234567",
     { action: "behavior-prompt-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-preset-open:en-US", { action: "behavior-preset-open", locale: "en-US" }],
+  ["config:v2:beh-preset-open:en-US", { action: "behavior-preset-open", locale: "en-US" }],
   [
-    "config:v1:beh-preset-sub:en-US:nonce1234567",
+    "config:v2:beh-preset-sub:en-US:nonce1234567",
     { action: "behavior-preset-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-prompt-remove:en-US", { action: "behavior-prompt-remove", locale: "en-US" }],
-  ["config:v1:beh-context-open:en-US", { action: "behavior-context-open", locale: "en-US" }],
+  ["config:v2:beh-prompt-remove:en-US", { action: "behavior-prompt-remove", locale: "en-US" }],
+  ["config:v2:beh-context-open:en-US", { action: "behavior-context-open", locale: "en-US" }],
   [
-    "config:v1:beh-context-sub:en-US:nonce1234567",
+    "config:v2:beh-context-sub:en-US:nonce1234567",
     { action: "behavior-context-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-humanizer-open:en-US", { action: "behavior-humanizer-open", locale: "en-US" }],
+  ["config:v2:beh-humanizer-open:en-US", { action: "behavior-humanizer-open", locale: "en-US" }],
   [
-    "config:v1:beh-humanizer-sub:en-US:nonce1234567",
+    "config:v2:beh-humanizer-sub:en-US:nonce1234567",
     { action: "behavior-humanizer-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-fetch-open:en-US", { action: "behavior-fetch-open", locale: "en-US" }],
+  ["config:v2:beh-fetch-open:en-US", { action: "behavior-fetch-open", locale: "en-US" }],
   [
-    "config:v1:beh-fetch-sub:en-US:nonce1234567",
+    "config:v2:beh-fetch-sub:en-US:nonce1234567",
     { action: "behavior-fetch-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-timezone-open:en-US", { action: "behavior-timezone-open", locale: "en-US" }],
+  ["config:v2:beh-timezone-open:en-US", { action: "behavior-timezone-open", locale: "en-US" }],
   [
-    "config:v1:beh-timezone-sub:en-US:nonce1234567",
+    "config:v2:beh-timezone-sub:en-US:nonce1234567",
     { action: "behavior-timezone-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-random-add-open:en-US", { action: "behavior-random-add-open", locale: "en-US" }],
-  ["config:v1:beh-random-add-range:en-US", { action: "behavior-random-add-range-select", locale: "en-US" }],
+  ["config:v2:beh-random-add-open:en-US", { action: "behavior-random-add-open", locale: "en-US" }],
+  ["config:v2:beh-random-add-range:en-US", { action: "behavior-random-add-range-select", locale: "en-US" }],
   [
-    "config:v1:beh-random-add-sub:en-US:nonce1234567",
+    "config:v2:beh-random-add-sub:en-US:nonce1234567",
     { action: "behavior-random-add-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-random-rem-open:en-US", { action: "behavior-random-remove-open", locale: "en-US" }],
-  ["config:v1:beh-random-rem-select:en-US", { action: "behavior-random-remove-select", locale: "en-US" }],
-  ["config:v1:beh-random-rem-page:en-US:1250", { action: "behavior-random-remove-page", locale: "en-US", start: 1250 }],
-  ["config:v1:beh-random-rem-cancel:en-US", { action: "behavior-random-remove-cancel", locale: "en-US" }],
+  ["config:v2:beh-random-rem-open:en-US", { action: "behavior-random-remove-open", locale: "en-US" }],
+  ["config:v2:beh-random-rem-select:en-US", { action: "behavior-random-remove-select", locale: "en-US" }],
+  ["config:v2:beh-random-rem-page:en-US:1250", { action: "behavior-random-remove-page", locale: "en-US", start: 1250 }],
+  ["config:v2:beh-random-rem-cancel:en-US", { action: "behavior-random-remove-cancel", locale: "en-US" }],
   [
-    "config:v1:beh-random-rem-cancel:en-US:1250",
+    "config:v2:beh-random-rem-cancel:en-US:1250",
     { action: "behavior-random-remove-cancel", locale: "en-US", start: 1250 },
   ],
   [
-    "config:v1:beh-random-rem-sub:en-US:50:abcd1234:nonce1234567",
+    "config:v2:beh-random-rem-sub:en-US:50:abcd1234:nonce1234567",
     { action: "behavior-random-remove-submit", locale: "en-US", start: 50, fp: "abcd1234", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-limits-open:en-US", { action: "behavior-limits-open", locale: "en-US" }],
+  ["config:v2:beh-limits-open:en-US", { action: "behavior-limits-open", locale: "en-US" }],
   [
-    "config:v1:beh-limits-sub:en-US:nonce1234567",
+    "config:v2:beh-limits-sub:en-US:nonce1234567",
     { action: "behavior-limits-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-dtm-set:en-US:1", { action: "behavior-dtm-set", locale: "en-US", enabled: true }],
-  ["config:v1:beh-always-set:en-US:0", { action: "behavior-always-set", locale: "en-US", enabled: false }],
-  ["config:v1:beh-cooldown-open:en-US", { action: "behavior-cooldown-open", locale: "en-US" }],
+  ["config:v2:beh-dtm-set:en-US:1", { action: "behavior-dtm-set", locale: "en-US", enabled: true }],
+  ["config:v2:beh-always-set:en-US:0", { action: "behavior-always-set", locale: "en-US", enabled: false }],
+  ["config:v2:beh-cooldown-open:en-US", { action: "behavior-cooldown-open", locale: "en-US" }],
   [
-    "config:v1:beh-cooldown-sub:en-US:nonce1234567",
+    "config:v2:beh-cooldown-sub:en-US:nonce1234567",
     { action: "behavior-cooldown-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-tool-mode-set:en-US:1", { action: "behavior-tool-mode-set", locale: "en-US", enabled: true }],
-  ["config:v1:beh-tool-context-open:en-US", { action: "behavior-tool-context-open", locale: "en-US" }],
+  ["config:v2:beh-tool-mode-set:en-US:1", { action: "behavior-tool-mode-set", locale: "en-US", enabled: true }],
+  ["config:v2:beh-tool-context-open:en-US", { action: "behavior-tool-context-open", locale: "en-US" }],
   [
-    "config:v1:beh-tool-context-sub:en-US:nonce1234567",
+    "config:v2:beh-tool-context-sub:en-US:nonce1234567",
     { action: "behavior-tool-context-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-tool-trigger-add-open:en-US", { action: "behavior-tool-trigger-add-open", locale: "en-US" }],
+  ["config:v2:beh-tool-trigger-add-open:en-US", { action: "behavior-tool-trigger-add-open", locale: "en-US" }],
   [
-    "config:v1:beh-tool-trigger-add-sub:en-US:nonce1234567",
+    "config:v2:beh-tool-trigger-add-sub:en-US:nonce1234567",
     { action: "behavior-tool-trigger-add-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-tool-trigger-remove-open:en-US", { action: "behavior-tool-trigger-remove-open", locale: "en-US" }],
+  ["config:v2:beh-tool-trigger-remove-open:en-US", { action: "behavior-tool-trigger-remove-open", locale: "en-US" }],
   [
-    "config:v1:beh-tool-trigger-remove-sub:en-US:nonce1234567",
+    "config:v2:beh-tool-trigger-remove-sub:en-US:nonce1234567",
     { action: "behavior-tool-trigger-remove-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-send-limit-open:en-US", { action: "behavior-send-limit-open", locale: "en-US" }],
+  ["config:v2:beh-send-limit-open:en-US", { action: "behavior-send-limit-open", locale: "en-US" }],
   [
-    "config:v1:beh-send-limit-sub:en-US:nonce1234567",
+    "config:v2:beh-send-limit-sub:en-US:nonce1234567",
     { action: "behavior-send-limit-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-self-debug-set:en-US:1", { action: "behavior-self-debug-set", locale: "en-US", enabled: true }],
-  ["config:v1:beh-workarounds-open:en-US", { action: "behavior-workarounds-open", locale: "en-US" }],
+  ["config:v2:beh-self-debug-set:en-US:1", { action: "behavior-self-debug-set", locale: "en-US", enabled: true }],
+  ["config:v2:beh-workarounds-open:en-US", { action: "behavior-workarounds-open", locale: "en-US" }],
   [
-    "config:v1:beh-workarounds-sub:en-US:nonce1234567",
+    "config:v2:beh-workarounds-sub:en-US:nonce1234567",
     { action: "behavior-workarounds-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-notices-open:en-US", { action: "behavior-notice-visibility-open", locale: "en-US" }],
+  ["config:v2:beh-notices-open:en-US", { action: "behavior-notice-visibility-open", locale: "en-US" }],
   [
-    "config:v1:beh-notices-sub:en-US:nonce1234567",
+    "config:v2:beh-notices-sub:en-US:nonce1234567",
     { action: "behavior-notice-visibility-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
   [
-    "config:v1:beh-transcripts-set:en-US:0",
+    "config:v2:beh-transcripts-set:en-US:0",
     { action: "behavior-speech-transcripts-set", locale: "en-US", enabled: false },
   ],
-  ["config:v1:beh-memory-tag-open:en-US", { action: "behavior-memory-tagging-open", locale: "en-US" }],
+  ["config:v2:beh-memory-tag-open:en-US", { action: "behavior-memory-tagging-open", locale: "en-US" }],
   [
-    "config:v1:beh-memory-tag-sub:en-US:nonce1234567",
+    "config:v2:beh-memory-tag-sub:en-US:nonce1234567",
     { action: "behavior-memory-tagging-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-stm-params-open:en-US", { action: "behavior-stm-parameters-open", locale: "en-US" }],
+  ["config:v2:beh-stm-params-open:en-US", { action: "behavior-stm-parameters-open", locale: "en-US" }],
   [
-    "config:v1:beh-stm-params-sub:en-US:nonce1234567",
+    "config:v2:beh-stm-params-sub:en-US:nonce1234567",
     { action: "behavior-stm-parameters-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-stm-categories-open:en-US", { action: "behavior-stm-categories-open", locale: "en-US" }],
+  ["config:v2:beh-stm-categories-open:en-US", { action: "behavior-stm-categories-open", locale: "en-US" }],
   [
-    "config:v1:beh-stm-categories-sub:en-US:nonce1234567",
+    "config:v2:beh-stm-categories-sub:en-US:nonce1234567",
     { action: "behavior-stm-categories-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-stm-prompt-open:en-US", { action: "behavior-stm-prompt-open", locale: "en-US" }],
+  ["config:v2:beh-stm-prompt-open:en-US", { action: "behavior-stm-prompt-open", locale: "en-US" }],
   [
-    "config:v1:beh-stm-prompt-sub:en-US:nonce1234567",
+    "config:v2:beh-stm-prompt-sub:en-US:nonce1234567",
     { action: "behavior-stm-prompt-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:perm-tool-use-set:en-US:1", { action: "permissions-tool-use-set", locale: "en-US", enabled: true }],
-  ["config:v1:perm-manage-open:en-US", { action: "permissions-manage-open", locale: "en-US" }],
+  ["config:v2:perm-tool-use-set:en-US:1", { action: "permissions-tool-use-set", locale: "en-US", enabled: true }],
   [
-    "config:v1:perm-manage-submit:en-US:1:nonce1234567",
+    "config:v2:perm-manage-open:en-US:available-tools",
+    { action: "permissions-manage-open", locale: "en-US", page: "available-tools" },
+  ],
+  [
+    "config:v2:perm-manage-submit:en-US:available-tools:1:nonce1234567",
     {
       action: "permissions-manage-submit",
       locale: "en-US",
+      page: "available-tools",
       includeElevenLabs: true,
       nonce: "nonce1234567",
     },
   ],
-  ["config:v1:perm-privacy-set:en-US:0", { action: "permissions-privacy-bypass-set", locale: "en-US", enabled: false }],
-  ["config:v1:channels-log-open:en-US", { action: "channels-log-open", locale: "en-US" }],
+  ["config:v2:perm-privacy-set:en-US:0", { action: "permissions-privacy-bypass-set", locale: "en-US", enabled: false }],
+  ["config:v2:channels-log-open:en-US", { action: "channels-log-open", locale: "en-US" }],
   [
-    "config:v1:channels-log-submit:en-US:nonce1234567",
+    "config:v2:channels-log-submit:en-US:nonce1234567",
     { action: "channels-log-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
   [
-    "config:v1:channels-log-clear:en-US:123456789012345678",
+    "config:v2:channels-log-clear:en-US:123456789012345678",
     { action: "channels-log-clear", locale: "en-US", channelId: "123456789012345678" },
   ],
-  ["config:v1:channels-welcome-open:en-US", { action: "channels-welcome-open", locale: "en-US" }],
-  ["config:v1:welcome-range-select:en-US", { action: "channels-welcome-range-select", locale: "en-US" }],
+  ["config:v2:channels-welcome-open:en-US", { action: "channels-welcome-open", locale: "en-US" }],
+  ["config:v2:welcome-range-select:en-US", { action: "channels-welcome-range-select", locale: "en-US" }],
   [
-    "config:v1:channels-welcome-submit:en-US:nonce1234567",
+    "config:v2:channels-welcome-submit:en-US:nonce1234567",
     { action: "channels-welcome-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
   [
-    "config:v1:channels-welcome-clear:en-US:123456789012345678",
+    "config:v2:channels-welcome-clear:en-US:123456789012345678",
     { action: "channels-welcome-clear", locale: "en-US", channelId: "123456789012345678" },
   ],
-  ["config:v1:autoch-manage-open:en-US:0", { action: "channels-autoch-manage-open", locale: "en-US", start: 0 }],
+  ["config:v2:autoch-manage-open:en-US:0", { action: "channels-autoch-manage-open", locale: "en-US", start: 0 }],
   [
-    "config:v1:autoch-submit:en-US:1:abcd1234:nonce1234567",
+    "config:v2:autoch-submit:en-US:1:abcd1234:nonce1234567",
     {
       action: "channels-autoch-submit",
       locale: "en-US",
@@ -810,11 +814,11 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       nonce: "nonce1234567",
     },
   ],
-  ["config:v1:autoch-page:en-US:1", { action: "channels-autoch-page", locale: "en-US", start: 1 }],
-  ["config:v1:autoch-config-open:en-US", { action: "channels-autoch-configure-open", locale: "en-US" }],
-  ["config:v1:autoch-range-select:en-US", { action: "channels-autoch-range-select", locale: "en-US" }],
+  ["config:v2:autoch-page:en-US:1", { action: "channels-autoch-page", locale: "en-US", start: 1 }],
+  ["config:v2:autoch-config-open:en-US", { action: "channels-autoch-configure-open", locale: "en-US" }],
+  ["config:v2:autoch-range-select:en-US", { action: "channels-autoch-range-select", locale: "en-US" }],
   [
-    "config:v1:autoch-config-submit:en-US:abcd1234:nonce1234567",
+    "config:v2:autoch-config-submit:en-US:abcd1234:nonce1234567",
     {
       action: "channels-autoch-configure-submit",
       locale: "en-US",
@@ -822,9 +826,9 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       nonce: "nonce1234567",
     },
   ],
-  ["config:v1:autoch-threshold-open:en-US", { action: "channels-autoch-threshold-open", locale: "en-US" }],
+  ["config:v2:autoch-threshold-open:en-US", { action: "channels-autoch-threshold-open", locale: "en-US" }],
   [
-    "config:v1:autoch-threshold-submit:en-US:abcd1234:nonce1234567",
+    "config:v2:autoch-threshold-submit:en-US:abcd1234:nonce1234567",
     {
       action: "channels-autoch-threshold-submit",
       locale: "en-US",
@@ -832,9 +836,9 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       nonce: "nonce1234567",
     },
   ],
-  ["config:v1:private-manage-open:en-US:0", { action: "channels-private-manage-open", locale: "en-US", start: 0 }],
+  ["config:v2:private-manage-open:en-US:0", { action: "channels-private-manage-open", locale: "en-US", start: 0 }],
   [
-    "config:v1:private-submit:en-US:1:abcd1234:nonce1234567",
+    "config:v2:private-submit:en-US:1:abcd1234:nonce1234567",
     {
       action: "channels-private-submit",
       locale: "en-US",
@@ -843,10 +847,10 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       nonce: "nonce1234567",
     },
   ],
-  ["config:v1:private-page:en-US:1", { action: "channels-private-page", locale: "en-US", start: 1 }],
-  ["config:v1:rp-manage-open:en-US:0", { action: "channels-rp-manage-open", locale: "en-US", start: 0 }],
+  ["config:v2:private-page:en-US:1", { action: "channels-private-page", locale: "en-US", start: 1 }],
+  ["config:v2:rp-manage-open:en-US:0", { action: "channels-rp-manage-open", locale: "en-US", start: 0 }],
   [
-    "config:v1:rp-submit:en-US:1:abcd1234:nonce1234567",
+    "config:v2:rp-submit:en-US:1:abcd1234:nonce1234567",
     {
       action: "channels-rp-submit",
       locale: "en-US",
@@ -855,10 +859,10 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       nonce: "nonce1234567",
     },
   ],
-  ["config:v1:rp-page:en-US:1", { action: "channels-rp-page", locale: "en-US", start: 1 }],
-  ["config:v1:blocklist-manage-open:en-US:0", { action: "channels-blocklist-manage-open", locale: "en-US", start: 0 }],
+  ["config:v2:rp-page:en-US:1", { action: "channels-rp-page", locale: "en-US", start: 1 }],
+  ["config:v2:blocklist-manage-open:en-US:0", { action: "channels-blocklist-manage-open", locale: "en-US", start: 0 }],
   [
-    "config:v1:blocklist-submit:en-US:1:abcd1234:nonce1234567",
+    "config:v2:blocklist-submit:en-US:1:abcd1234:nonce1234567",
     {
       action: "channels-blocklist-submit",
       locale: "en-US",
@@ -867,14 +871,14 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       nonce: "nonce1234567",
     },
   ],
-  ["config:v1:blocklist-page:en-US:1", { action: "channels-blocklist-page", locale: "en-US", start: 1 }],
-  ["config:v1:ch-ov-select:en-US", { action: "channels-overrides-select", locale: "en-US" }],
+  ["config:v2:blocklist-page:en-US:1", { action: "channels-blocklist-page", locale: "en-US", start: 1 }],
+  ["config:v2:ch-ov-select:en-US", { action: "channels-overrides-select", locale: "en-US" }],
   [
-    "config:v1:ch-ov-p-open:en-US:123456789012345678",
+    "config:v2:ch-ov-p-open:en-US:123456789012345678",
     { action: "channels-overrides-prompt-open", locale: "en-US", channelId: "123456789012345678" },
   ],
   [
-    "config:v1:ch-ov-p-submit:en-US:123456789012345678:abcd1234:nonce1234567",
+    "config:v2:ch-ov-p-submit:en-US:123456789012345678:abcd1234:nonce1234567",
     {
       action: "channels-overrides-prompt-submit",
       locale: "en-US",
@@ -884,7 +888,7 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:ch-ov-p-clear:en-US:123456789012345678:abcd1234",
+    "config:v2:ch-ov-p-clear:en-US:123456789012345678:abcd1234",
     {
       action: "channels-overrides-prompt-clear",
       locale: "en-US",
@@ -893,11 +897,11 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:ch-ov-c-open:en-US:123456789012345678",
+    "config:v2:ch-ov-c-open:en-US:123456789012345678",
     { action: "channels-overrides-context-note-open", locale: "en-US", channelId: "123456789012345678" },
   ],
   [
-    "config:v1:ch-ov-c-submit:en-US:123456789012345678:abcd1234:nonce1234567",
+    "config:v2:ch-ov-c-submit:en-US:123456789012345678:abcd1234:nonce1234567",
     {
       action: "channels-overrides-context-note-submit",
       locale: "en-US",
@@ -907,11 +911,11 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:ch-ov-t-open:en-US:123456789012345678",
+    "config:v2:ch-ov-t-open:en-US:123456789012345678",
     { action: "channels-overrides-text-open", locale: "en-US", channelId: "123456789012345678" },
   ],
   [
-    "config:v1:ch-ov-t-provider:en-US:123456789012345678:abcd1234",
+    "config:v2:ch-ov-t-provider:en-US:123456789012345678:abcd1234",
     {
       action: "channels-overrides-text-provider-select",
       locale: "en-US",
@@ -920,7 +924,7 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:ch-ov-t-range:en-US:123456789012345678:openrouter:abcd1234",
+    "config:v2:ch-ov-t-range:en-US:123456789012345678:openrouter:abcd1234",
     {
       action: "channels-overrides-text-model-range-select",
       locale: "en-US",
@@ -930,7 +934,7 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:ch-ov-t-submit:en-US:123456789012345678:openrouter:abcd1234:nonce1234567",
+    "config:v2:ch-ov-t-submit:en-US:123456789012345678:openrouter:abcd1234:nonce1234567",
     {
       action: "channels-overrides-text-model-submit",
       locale: "en-US",
@@ -941,7 +945,7 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     },
   ],
   [
-    "config:v1:ch-ov-t-clear:en-US:123456789012345678:abcd1234",
+    "config:v2:ch-ov-t-clear:en-US:123456789012345678:abcd1234",
     {
       action: "channels-overrides-text-clear",
       locale: "en-US",
@@ -949,46 +953,46 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
       fp: "abcd1234",
     },
   ],
-  ["config:v1:tts-params-open:en-US", { action: "tts-parameters-open", locale: "en-US" }],
+  ["config:v2:tts-params-open:en-US", { action: "tts-parameters-open", locale: "en-US" }],
   [
-    "config:v1:tts-params-sub:en-US:nonce1234567",
+    "config:v2:tts-params-sub:en-US:nonce1234567",
     { action: "tts-parameters-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:tts-turbo-set:en-US:1", { action: "tts-turbo-set", locale: "en-US", enabled: true }],
-  ["config:v1:vsample-select:en-US:25", { action: "voice-sample-select", locale: "en-US", start: 25 }],
-  ["config:v1:vsample-page:en-US:0", { action: "voice-sample-page", locale: "en-US", start: 0 }],
-  ["config:v1:vsample-add-open:en-US", { action: "voice-sample-add-open", locale: "en-US" }],
+  ["config:v2:tts-turbo-set:en-US:1", { action: "tts-turbo-set", locale: "en-US", enabled: true }],
+  ["config:v2:vsample-select:en-US:25", { action: "voice-sample-select", locale: "en-US", start: 25 }],
+  ["config:v2:vsample-page:en-US:0", { action: "voice-sample-page", locale: "en-US", start: 0 }],
+  ["config:v2:vsample-add-open:en-US", { action: "voice-sample-add-open", locale: "en-US" }],
   [
-    "config:v1:vsample-add-sub:en-US:nonce1234567",
+    "config:v2:vsample-add-sub:en-US:nonce1234567",
     { action: "voice-sample-add-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
   [
-    "config:v1:vsample-rem-view:en-US:0:abcd1234",
+    "config:v2:vsample-rem-view:en-US:0:abcd1234",
     { action: "voice-sample-remove-view", locale: "en-US", index: 0, fp: "abcd1234" },
   ],
   [
-    "config:v1:vsample-rem-conf:en-US:3:abcd1234:nonce1234567",
+    "config:v2:vsample-rem-conf:en-US:3:abcd1234:nonce1234567",
     { action: "voice-sample-remove-confirm", locale: "en-US", index: 3, fp: "abcd1234", nonce: "nonce1234567" },
   ],
-  ["config:v1:vsample-rem-cancel:en-US", { action: "voice-sample-remove-cancel", locale: "en-US" }],
+  ["config:v2:vsample-rem-cancel:en-US", { action: "voice-sample-remove-cancel", locale: "en-US" }],
 ];
 
 describe("config route wire contract", () => {
-  it("decodes every pinned v1 wire string to its exact route", () => {
-    for (const [customId, expected] of WIRE_CONTRACT_V1) {
+  it("decodes every pinned v2 wire string to its exact route", () => {
+    for (const [customId, expected] of WIRE_CONTRACT_V2) {
       expect(customId.length).toBeLessThanOrEqual(100);
       expect(parseConfigPanelRoute(requireRoute(customId))).toEqual(expected);
     }
   });
 
   it("re-encodes every pinned route to the exact wire string it came from", () => {
-    for (const [customId, route] of WIRE_CONTRACT_V1) {
+    for (const [customId, route] of WIRE_CONTRACT_V2) {
       expect(buildConfigRouteId(route)).toBe(customId);
     }
   });
 
   it("covers every declared action in the pinned wire contract", () => {
-    const pinned = new Set(WIRE_CONTRACT_V1.map(([, route]) => route.action));
+    const pinned = new Set(WIRE_CONTRACT_V2.map(([, route]) => route.action));
     expect([...pinned].sort()).toEqual(Object.keys(CONFIG_ROUTE_CODECS).sort());
   });
 
@@ -1005,13 +1009,13 @@ describe("config route wire contract", () => {
   });
 
   it("rejects a malformed or out-of-range field rather than defaulting it", () => {
-    expect(parseConfigPanelRoute(requireRoute("config:v1:persona-select:en-US:0"))).toBeNull();
-    expect(parseConfigPanelRoute(requireRoute("config:v1:persona-select:en-US:abc"))).toBeNull();
+    expect(parseConfigPanelRoute(requireRoute("config:v2:persona-select:en-US:0"))).toBeNull();
+    expect(parseConfigPanelRoute(requireRoute("config:v2:persona-select:en-US:abc"))).toBeNull();
     // `general` is a Behavior page too, so a page must decode against its own category.
-    expect(parseConfigPanelRoute(requireRoute("config:v1:page:en-US:models:general"))).toBeNull();
-    expect(parseConfigPanelRoute(requireRoute("config:v1:persona-page-select:en-US:models:switch:55"))).toBeNull();
-    expect(parseConfigPanelRoute(requireRoute("config:v1:naming-open:en-US:55:androgynous"))).toBeNull();
-    expect(parseConfigPanelRoute(requireRoute("config:v1:not-a-token:en-US:55"))).toBeNull();
+    expect(parseConfigPanelRoute(requireRoute("config:v2:page:en-US:models:general"))).toBeNull();
+    expect(parseConfigPanelRoute(requireRoute("config:v2:persona-page-select:en-US:models:switch:55"))).toBeNull();
+    expect(parseConfigPanelRoute(requireRoute("config:v2:naming-open:en-US:55:androgynous"))).toBeNull();
+    expect(parseConfigPanelRoute(requireRoute("config:v2:not-a-token:en-US:55"))).toBeNull();
   });
 });
 
@@ -3427,7 +3431,7 @@ describe("config Persona Advanced routes", () => {
 
   it("does not write for malformed or stale ATTG custom IDs through the registry", async () => {
     const setAttgSpy = spyOn(personaRepository, "setNaiAttg").mockResolvedValue(true);
-    for (const customId of ["config:v1:attg-submit:en-US:55:", "config:v0:attg-submit:en-US:55:nonce1234567"]) {
+    for (const customId of ["config:v2:attg-submit:en-US:55:", "config:v0:attg-submit:en-US:55:nonce1234567"]) {
       const harness = makeHarness({ personas: [makePersona({ persona_id: 55 })] });
       await dispatch(
         harness,
@@ -3617,7 +3621,7 @@ describe("config Persona Advanced routes", () => {
     );
 
     const modal = JSON.stringify(harness.modals.at(-1));
-    expect(modal).toContain("config:v1:humanizer-submit");
+    expect(modal).toContain("config:v2:humanizer-submit");
     expect(modal).toContain('"value":"2"');
     expect(modal).toContain('"default":true');
   });
@@ -3649,7 +3653,7 @@ describe("config Persona Advanced routes", () => {
     );
 
     const modal = JSON.stringify(harness.modals.at(-1));
-    expect(modal).toContain("config:v1:text-model-submit");
+    expect(modal).toContain("config:v2:text-model-submit");
     expect(modal).toContain('"value":"example-model"');
   });
 

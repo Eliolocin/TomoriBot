@@ -280,13 +280,7 @@ describe("config panel shell", () => {
     };
     const categoryRow = row.components[0].components;
 
-    expect(categoryRow.map((button) => button.label)).toEqual([
-      "Persona",
-      "Engine",
-      "Channels",
-      "Permissions",
-      "Models",
-    ]);
+    expect(categoryRow.map((button) => button.label)).toEqual(["Persona", "Behavior", "Plugins", "Channels", "Models"]);
     // ButtonStyle.Primary is 1, Secondary is 2.
     expect(categoryRow.map((button) => button.style)).toEqual([1, 2, 2, 2, 2]);
   });
@@ -298,9 +292,9 @@ describe("config panel shell", () => {
 
     expect(categoryRow.map((button) => [button.label, button.disabled ?? false])).toEqual([
       ["Persona", false],
-      ["Engine", true],
+      ["Behavior", true],
+      ["Plugins", true],
       ["Channels", true],
-      ["Permissions", true],
       ["Models", true],
     ]);
   });
@@ -311,25 +305,22 @@ describe("config panel shell", () => {
 
     expect(row.components[0].components.map((button) => button.label)).toEqual([
       "Persona",
-      "Engine",
-      "Permissions",
+      "Behavior",
+      "Plugins",
       "Models",
     ]);
   });
 
-  it("renders no page selector when filtering leaves a category one page", () => {
-    // A String Select option cannot be disabled, so a one-option selector would be inert furniture.
-    const single = build(DM_OWNER, { category: "permissions", page: "capabilities" });
-    const pageSelect = walk(single).find(
+  it("renders both Plugins pages for DM and guild managers", () => {
+    const dmPageSelect = walk(build(DM_OWNER, { category: "plugins", page: "available-tools" })).find(
       (component) => component.type === STRING_SELECT && component.placeholder === "Choose a page...",
     );
-    expect(pageSelect).toBeUndefined();
+    expect(dmPageSelect?.options?.map((option) => option.value)).toEqual(["available-tools", "context-additions"]);
 
-    const multi = build(GUILD_MANAGER, { category: "permissions", page: "capabilities" });
-    const managerPageSelect = walk(multi).find(
+    const managerPageSelect = walk(build(GUILD_MANAGER, { category: "plugins", page: "available-tools" })).find(
       (component) => component.type === STRING_SELECT && component.placeholder === "Choose a page...",
     );
-    expect(managerPageSelect?.options?.map((option) => option.value)).toEqual(["capabilities", "privacy"]);
+    expect(managerPageSelect?.options?.map((option) => option.value)).toEqual(["available-tools", "context-additions"]);
   });
 
   it("lists only pages the actor may open in the page selector", () => {
@@ -1634,16 +1625,16 @@ describe("config Behavior pages", () => {
     };
 
     const fits = renderTrigger(RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE);
-    expect(fits).toContain("config:v1:beh-random-add-open:en-US");
-    expect(fits).not.toContain("config:v1:beh-random-add-range:en-US");
-    expect(fits).toContain("config:v1:beh-random-rem-open:en-US");
+    expect(fits).toContain("config:v2:beh-random-add-open:en-US");
+    expect(fits).not.toContain("config:v2:beh-random-add-range:en-US");
+    expect(fits).toContain("config:v2:beh-random-rem-open:en-US");
 
     const overflows = renderTrigger(RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE + 1);
-    expect(overflows).toContain("config:v1:beh-random-add-range:en-US");
-    expect(overflows).not.toContain("config:v1:beh-random-add-open:en-US");
+    expect(overflows).toContain("config:v2:beh-random-add-range:en-US");
+    expect(overflows).not.toContain("config:v2:beh-random-add-open:en-US");
     expect(overflows).toContain("Personas 1-24");
-    // Remove stays reachable beside the range selector.
-    expect(overflows).toContain("config:v1:beh-random-rem-open:en-US");
+    // Keep removal beside the range selector so overflow navigation does not hide deletion.
+    expect(overflows).toContain("config:v2:beh-random-rem-open:en-US");
   });
 
   it("renders Trigger as direct Off/On state controls and no live values for a member", () => {

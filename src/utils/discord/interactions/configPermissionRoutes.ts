@@ -60,6 +60,11 @@ function stateFromScope(scope: ConfigScope): TomoriState | null {
   return scope.personas[0] ?? null;
 }
 
+type ConfigPermissionManageRoute = Extract<
+  ConfigPanelRoute,
+  { action: "permissions-manage-open" | "permissions-manage-submit" }
+>;
+
 export async function loadConfigPermissionsView(state: TomoriState): Promise<ConfigPermissionsView> {
   const includeElevenLabs = await hasOptApiKey(state.server_id, ELEVENLABS_SERVICE_NAME);
   const definitions = getCapabilitiesManagePermissionDefinitions({ includeElevenLabs });
@@ -138,7 +143,8 @@ async function runPermissionWrite(
 
   const definitions = getCapabilitiesManagePermissionDefinitions({
     includeElevenLabs: route.includeElevenLabs,
-  });
+    page: route.page,
+  }).filter((definition) => definition.page === route.page);
   const selectedValues = new Set<string>();
   const groupCount = Math.ceil(definitions.length / CONFIG_PERMISSIONS_CHECKBOX_GROUP_SIZE);
   for (let groupIndex = 0; groupIndex < groupCount; groupIndex += 1) {
@@ -152,6 +158,7 @@ async function runPermissionWrite(
 
   const writePlan = buildCapabilitiesManageConfigWritePlan(state.config, selectedValues, {
     includeElevenLabs: route.includeElevenLabs,
+    page: route.page,
   });
   if (writePlan.changes.length === 0) {
     return { receipt: receipt(route.locale, "info", "state_no_changes_heading", "state_no_changes_detail") };
@@ -192,11 +199,13 @@ export async function handleConfigPermissionModalOpen(
   }
 
   const view = await dependencies.loadPermissionsView(state);
+  const manageRoute = route as ConfigPermissionManageRoute;
   await dependencies.showModal(
     interaction,
     buildConfigPermissionsManageModal(
       route.locale,
       dependencies.createNonce(),
+      manageRoute.page,
       view.capabilities.includeElevenLabs,
       state.config,
     ),
@@ -230,11 +239,17 @@ export async function handleConfigPermissionRoutes(context: ConfigPermissionRout
       userDiscId: interaction.user.id,
     });
   }
+  const page =
+    route.action === "permissions-privacy-bypass-set"
+      ? "rules"
+      : route.action === "permissions-manage-submit"
+        ? route.page
+        : "available-tools";
   await repaint(interaction, {
     locale: route.locale,
     scope: refreshed,
-    category: "permissions",
-    page: route.action === "permissions-privacy-bypass-set" ? "privacy" : "capabilities",
+    category: route.action === "permissions-privacy-bypass-set" ? "channels" : "plugins",
+    page,
     selectedPersonaId: null,
     receipt: outcome.receipt,
     dependencies,

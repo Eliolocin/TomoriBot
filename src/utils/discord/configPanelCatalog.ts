@@ -17,9 +17,9 @@ import type { RandomTriggerRow } from "@/types/db/schema";
 import type { AddressingStyle } from "@/types/personaNaming";
 
 export const CONFIG_ROUTE_NAMESPACE = "config";
-export const CONFIG_ROUTE_VERSION = "v1";
+export const CONFIG_ROUTE_VERSION = "v2";
 
-export type ConfigCategory = "persona" | "behavior" | "channels" | "permissions" | "models";
+export type ConfigCategory = "persona" | "behavior" | "plugins" | "channels" | "models";
 
 type PersonaPage =
   | "general"
@@ -32,11 +32,11 @@ type PersonaPage =
   | "voice"
   | "naming";
 type BehaviorPage = "general" | "trigger" | "experimental" | "notices" | "memory";
+type PluginsPage = "available-tools" | "context-additions";
 type ChannelsPage = "destinations" | "auto-trigger" | "rules" | "overrides";
-type PermissionsPage = "capabilities" | "privacy";
 type ModelsPage = "switch" | "parameters" | "fallbacks" | "image" | "voices";
 
-export type ConfigPage = PersonaPage | BehaviorPage | ChannelsPage | PermissionsPage | ModelsPage;
+export type ConfigPage = PersonaPage | BehaviorPage | PluginsPage | ChannelsPage | ModelsPage;
 
 /**
  * Page identifiers are namespaced by category, so `general` names both a Persona page and a
@@ -46,24 +46,24 @@ export type ConfigPage = PersonaPage | BehaviorPage | ChannelsPage | Permissions
 export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPage[]> = {
   persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "voice", "overrides", "advanced"],
   behavior: ["general", "trigger", "notices", "experimental", "memory"],
+  plugins: ["available-tools", "context-additions"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
-  permissions: ["capabilities", "privacy"],
   models: ["switch", "parameters", "image", "fallbacks", "voices"],
 };
 
 export const CONFIG_CATEGORY_ORDER: readonly ConfigCategory[] = [
   "persona",
   "behavior",
+  "plugins",
   "channels",
-  "permissions",
   "models",
 ];
 
 export const DEFAULT_PAGE_FOR_CONFIG_CATEGORY: Record<ConfigCategory, ConfigPage> = {
   persona: "general",
   behavior: "general",
+  plugins: "available-tools",
   channels: "destinations",
-  permissions: "capabilities",
   models: "switch",
 };
 
@@ -552,10 +552,11 @@ export type ConfigPanelRoute =
   | { action: "behavior-stm-prompt-open"; locale: string }
   | { action: "behavior-stm-prompt-submit"; locale: string; nonce: string }
   | { action: "permissions-tool-use-set"; locale: string; enabled: boolean }
-  | { action: "permissions-manage-open"; locale: string }
+  | { action: "permissions-manage-open"; locale: string; page: "available-tools" | "context-additions" }
   | {
       action: "permissions-manage-submit";
       locale: string;
+      page: "available-tools" | "context-additions";
       includeElevenLabs: boolean;
       nonce: string;
     }
@@ -670,6 +671,12 @@ const pageField: RouteFieldCodec<"page", ConfigPage> = {
   key: "page",
   encode: (v) => String(v),
   decode: (v, r) => (r.category ? parseConfigPage(r.category as ConfigCategory, v) : null),
+};
+
+const pluginsPageField: RouteFieldCodec<"page", "available-tools" | "context-additions"> = {
+  key: "page",
+  encode: (v) => String(v),
+  decode: (v) => (v === "available-tools" || v === "context-additions" ? v : null),
 };
 
 const personaIdField: RouteFieldCodec<"personaId", number> = {
@@ -975,10 +982,10 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "behavior-stm-prompt-open": { wireToken: "beh-stm-prompt-open", fields: [] },
   "behavior-stm-prompt-submit": { wireToken: "beh-stm-prompt-sub", fields: [nonceField] },
   "permissions-tool-use-set": { wireToken: "perm-tool-use-set", fields: [enabledField] },
-  "permissions-manage-open": { wireToken: "perm-manage-open", fields: [] },
+  "permissions-manage-open": { wireToken: "perm-manage-open", fields: [pluginsPageField] },
   "permissions-manage-submit": {
     wireToken: "perm-manage-submit",
-    fields: [includeElevenLabsField, nonceField],
+    fields: [pluginsPageField, includeElevenLabsField, nonceField],
   },
   "permissions-privacy-bypass-set": { wireToken: "perm-privacy-set", fields: [enabledField] },
   "channels-log-open": { wireToken: "channels-log-open", fields: [] },

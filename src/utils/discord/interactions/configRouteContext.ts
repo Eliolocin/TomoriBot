@@ -518,7 +518,7 @@ export async function repaint(
   }
 
   let permissionsView = options.permissionsView;
-  if (category === "permissions" && !permissionsView) {
+  if ((category === "plugins" || (category === "channels" && page === "rules")) && !permissionsView) {
     const state = scope.personas[0];
     if (state) permissionsView = await dependencies.loadPermissionsView(state);
   }
@@ -531,7 +531,7 @@ export async function repaint(
     );
   }
 
-  if (category === "behavior" && !behaviorView) {
+  if ((category === "behavior" || (category === "plugins" && page === "context-additions")) && !behaviorView) {
     const state = scope.personas[0];
     if (state) {
       behaviorView = dependencies.loadBehaviorView
@@ -553,6 +553,16 @@ export async function repaint(
               alwaysReplyEnabled: state.config.always_reply_enabled ?? false,
               cooldownType: state.config.cooldown_type ?? 0,
               cooldownLength: state.config.cooldown_length ?? 5,
+            },
+            experimental: {
+              deliberateToolMode: state.config.deliberate_tool_mode ?? false,
+              deliberateToolContextTurns: 0,
+              deliberateToolTriggers: {},
+              sendLimit: state.config.send_message_limit ?? 0,
+              selfDebugEnabled: state.config.self_debug_enabled ?? false,
+              workarounds: {
+                verbatim_tool_calling_enabled: state.config.verbatim_tool_calling_enabled ?? false,
+              },
             },
           };
     }

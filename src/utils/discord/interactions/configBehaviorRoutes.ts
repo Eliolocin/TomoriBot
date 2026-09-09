@@ -1444,18 +1444,21 @@ export async function handleConfigBehaviorD10Routes(context: ConfigBehaviorRoute
       userDiscId: interaction.user.id,
     });
   }
+  const category = route.action === "behavior-self-debug-set" ? "plugins" : "behavior";
   const page =
-    route.action.startsWith("behavior-stm-") ||
-    route.action === "behavior-memory-tagging-open" ||
-    route.action === "behavior-memory-tagging-submit"
-      ? "memory"
-      : route.action.startsWith("behavior-notice") || route.action.startsWith("behavior-speech")
-        ? "notices"
-        : "experimental";
+    route.action === "behavior-self-debug-set"
+      ? "context-additions"
+      : route.action.startsWith("behavior-stm-") ||
+          route.action === "behavior-memory-tagging-open" ||
+          route.action === "behavior-memory-tagging-submit"
+        ? "memory"
+        : route.action.startsWith("behavior-notice") || route.action.startsWith("behavior-speech")
+          ? "notices"
+          : "experimental";
   await repaint(interaction, {
     locale: route.locale,
     scope: refreshed,
-    category: "behavior",
+    category,
     page,
     selectedPersonaId: null,
     receipt: outcome.receipt,

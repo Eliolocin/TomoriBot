@@ -263,7 +263,7 @@ describe("configVoicesPanel", () => {
       expect(decoded?.fp).toBe(computeVoiceSampleFingerprint(samples[i]));
 
       // Also assert round-trip through the interaction route parser as vsample-rem-view segments
-      const routeId = `config:v1:vsample-rem-view:en-US:${option.value}`;
+      const routeId = `config:v2:vsample-rem-view:en-US:${option.value}`;
       const parsed = parseConfigPanelRoute(parseInteractionRoute(routeId));
       expect(parsed).not.toBeNull();
       expect((parsed as Extract<ConfigPanelRoute, { action: "voice-sample-remove-view" }>).index).toBe(i);

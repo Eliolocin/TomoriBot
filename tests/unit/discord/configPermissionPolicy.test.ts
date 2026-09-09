@@ -45,6 +45,7 @@ import {
   BEHAVIOR_MEMORY_ACTION_BY_ROUTE,
   PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE,
   PERMISSIONS_PRIVACY_ACTION_BY_ROUTE,
+  PLUGINS_CONTEXT_ADDITIONS_ACTION_BY_ROUTE,
   CHANNELS_DESTINATIONS_ACTION_BY_ROUTE,
   CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE,
   CHANNELS_RULES_ACTION_BY_ROUTE,
@@ -99,7 +100,7 @@ describe("config category filtering", () => {
     expect(resolveConfigCategoryState("persona", GUILD_MEMBER)).toBe("enabled");
     expect(resolveConfigCategoryState("behavior", GUILD_MEMBER)).toBe("disabled");
     expect(resolveConfigCategoryState("channels", GUILD_MEMBER)).toBe("disabled");
-    expect(resolveConfigCategoryState("permissions", GUILD_MEMBER)).toBe("disabled");
+    expect(resolveConfigCategoryState("plugins", GUILD_MEMBER)).toBe("disabled");
     expect(resolveConfigCategoryState("models", GUILD_MEMBER)).toBe("disabled");
   });
 
@@ -122,9 +123,10 @@ describe("config page filtering", () => {
   it("omits the guild-only pages a DM workspace cannot act on", () => {
     expect(resolveConfigPageState("behavior", "trigger", DM_OWNER)).toBe("omitted");
     expect(resolveConfigPageState("behavior", "memory", DM_OWNER)).toBe("omitted");
-    expect(resolveConfigPageState("permissions", "privacy", DM_OWNER)).toBe("omitted");
+    expect(resolveConfigPageState("plugins", "available-tools", DM_OWNER)).toBe("enabled");
+    expect(resolveConfigPageState("plugins", "context-additions", DM_OWNER)).toBe("enabled");
     expect(resolveConfigPageState("models", "image", DM_OWNER)).toBe("omitted");
-    expect(visibleConfigPages("permissions", DM_OWNER)).toEqual(["capabilities"]);
+    expect(visibleConfigPages("plugins", DM_OWNER)).toEqual(["available-tools", "context-additions"]);
     expect(visibleConfigPages("models", DM_OWNER)).toEqual(["switch", "parameters", "fallbacks", "voices"]);
   });
 
@@ -347,7 +349,9 @@ describe("Behavior action policy", () => {
       expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
       expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
       expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(
-        route.action.startsWith("behavior-notice") || route.action === "behavior-speech-transcripts-set",
+        route.action.startsWith("behavior-notice") ||
+          route.action === "behavior-speech-transcripts-set" ||
+          route.action === "behavior-self-debug-set",
       );
     }
   });
@@ -371,8 +375,14 @@ describe("Permissions action policy", () => {
   it("authorizes every permissions route only for its permitted workspace", () => {
     const routes: ConfigPanelRoute[] = [
       { action: "permissions-tool-use-set", locale: "en-US", enabled: true },
-      { action: "permissions-manage-open", locale: "en-US" },
-      { action: "permissions-manage-submit", locale: "en-US", includeElevenLabs: true, nonce: "nonce1234567" },
+      { action: "permissions-manage-open", locale: "en-US", page: "available-tools" },
+      {
+        action: "permissions-manage-submit",
+        locale: "en-US",
+        page: "available-tools",
+        includeElevenLabs: true,
+        nonce: "nonce1234567",
+      },
       { action: "permissions-privacy-bypass-set", locale: "en-US", enabled: true },
     ];
     for (const route of routes) {
@@ -700,7 +710,7 @@ describe("isConfigRouteAuthorized", () => {
 
     expect(isConfigRouteAuthorized(navigate("channels", "destinations"), GUILD_MEMBER)).toBe(false);
     expect(isConfigRouteAuthorized(navigate("models", "switch"), GUILD_MEMBER)).toBe(false);
-    expect(isConfigRouteAuthorized(navigate("permissions", "capabilities"), GUILD_MEMBER)).toBe(false);
+    expect(isConfigRouteAuthorized(navigate("plugins", "available-tools"), GUILD_MEMBER)).toBe(false);
     expect(isConfigRouteAuthorized(navigate("persona", "advanced"), GUILD_MEMBER)).toBe(false);
     expect(isConfigRouteAuthorized(navigate("persona", "memories"), GUILD_MEMBER)).toBe(true);
 
@@ -870,6 +880,7 @@ describe("isConfigRouteAuthorized", () => {
       ...Object.keys(BEHAVIOR_MEMORY_ACTION_BY_ROUTE),
       ...Object.keys(PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE),
       ...Object.keys(PERMISSIONS_PRIVACY_ACTION_BY_ROUTE),
+      ...Object.keys(PLUGINS_CONTEXT_ADDITIONS_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_DESTINATIONS_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_RULES_ACTION_BY_ROUTE),

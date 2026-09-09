@@ -9,6 +9,7 @@ import { beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { PermissionsBitField, type Client } from "discord.js";
 import type { RandomTriggerRow, TomoriState } from "@/types/db/schema";
 import * as shortTermMemoryCache from "@/utils/cache/shortTermMemoryCache";
+import * as tomoriStateCache from "@/utils/cache/tomoriStateCache";
 import { configRepository, serverScheduleRepository } from "@/utils/db/repositories";
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
 import {
@@ -22,6 +23,7 @@ import {
 import { createConfigInteractionRoute } from "@/utils/discord/interactions/configRoutes";
 import type { ConfigRouteDependencies, ConfigScope } from "@/utils/discord/interactions/configRouteContext";
 import { InteractionRouteRegistry, parseInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
 import { buildConfigModalFieldId, CONFIG_PERSONA_PROMPT_PART_FIELDS } from "@/utils/discord/ui/configModals";
 import {
   BEHAVIOR_FETCH_LIMIT_FIELD,
@@ -155,6 +157,10 @@ function makeHarness(inGuild = true): Harness {
           cooldownLength: current.config.cooldown_length ?? 5,
         },
       }),
+      loadPermissionsView: async () => ({
+        capabilities: { toolUseEnabled: true, includeElevenLabs: true, definitionStates: {} },
+        privacy: { stmPrivacyBypass: false },
+      }),
     },
   };
   return harness;
@@ -235,71 +241,117 @@ function collectRawComponentTypes(value: unknown): number[] {
 }
 
 const D9_WIRE_CONTRACT: ReadonlyArray<readonly [string, Parameters<typeof buildConfigRouteId>[0]]> = [
-  ["config:v1:beh-prompt-open:en-US", { action: "behavior-prompt-open", locale: "en-US" }],
+  ["config:v2:beh-prompt-open:en-US", { action: "behavior-prompt-open", locale: "en-US" }],
   [
-    "config:v1:beh-prompt-sub:en-US:nonce1234567",
+    "config:v2:beh-prompt-sub:en-US:nonce1234567",
     { action: "behavior-prompt-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-preset-open:en-US", { action: "behavior-preset-open", locale: "en-US" }],
+  ["config:v2:beh-preset-open:en-US", { action: "behavior-preset-open", locale: "en-US" }],
   [
-    "config:v1:beh-preset-sub:en-US:nonce1234567",
+    "config:v2:beh-preset-sub:en-US:nonce1234567",
     { action: "behavior-preset-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-prompt-remove:en-US", { action: "behavior-prompt-remove", locale: "en-US" }],
-  ["config:v1:beh-context-open:en-US", { action: "behavior-context-open", locale: "en-US" }],
+  ["config:v2:beh-prompt-remove:en-US", { action: "behavior-prompt-remove", locale: "en-US" }],
+  ["config:v2:beh-context-open:en-US", { action: "behavior-context-open", locale: "en-US" }],
   [
-    "config:v1:beh-context-sub:en-US:nonce1234567",
+    "config:v2:beh-context-sub:en-US:nonce1234567",
     { action: "behavior-context-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-humanizer-open:en-US", { action: "behavior-humanizer-open", locale: "en-US" }],
+  ["config:v2:beh-humanizer-open:en-US", { action: "behavior-humanizer-open", locale: "en-US" }],
   [
-    "config:v1:beh-humanizer-sub:en-US:nonce1234567",
+    "config:v2:beh-humanizer-sub:en-US:nonce1234567",
     { action: "behavior-humanizer-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-fetch-open:en-US", { action: "behavior-fetch-open", locale: "en-US" }],
+  ["config:v2:beh-fetch-open:en-US", { action: "behavior-fetch-open", locale: "en-US" }],
   [
-    "config:v1:beh-fetch-sub:en-US:nonce1234567",
+    "config:v2:beh-fetch-sub:en-US:nonce1234567",
     { action: "behavior-fetch-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-timezone-open:en-US", { action: "behavior-timezone-open", locale: "en-US" }],
+  ["config:v2:beh-timezone-open:en-US", { action: "behavior-timezone-open", locale: "en-US" }],
   [
-    "config:v1:beh-timezone-sub:en-US:nonce1234567",
+    "config:v2:beh-timezone-sub:en-US:nonce1234567",
     { action: "behavior-timezone-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-random-add-open:en-US", { action: "behavior-random-add-open", locale: "en-US" }],
-  ["config:v1:beh-random-add-range:en-US", { action: "behavior-random-add-range-select", locale: "en-US" }],
+  ["config:v2:beh-random-add-open:en-US", { action: "behavior-random-add-open", locale: "en-US" }],
+  ["config:v2:beh-random-add-range:en-US", { action: "behavior-random-add-range-select", locale: "en-US" }],
   [
-    "config:v1:beh-random-add-sub:en-US:nonce1234567",
+    "config:v2:beh-random-add-sub:en-US:nonce1234567",
     { action: "behavior-random-add-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-random-rem-open:en-US", { action: "behavior-random-remove-open", locale: "en-US" }],
-  ["config:v1:beh-random-rem-open:en-US:1250", { action: "behavior-random-remove-open", locale: "en-US", start: 1250 }],
-  ["config:v1:beh-random-rem-select:en-US", { action: "behavior-random-remove-select", locale: "en-US" }],
-  ["config:v1:beh-random-rem-page:en-US:1250", { action: "behavior-random-remove-page", locale: "en-US", start: 1250 }],
-  ["config:v1:beh-random-rem-cancel:en-US", { action: "behavior-random-remove-cancel", locale: "en-US" }],
+  ["config:v2:beh-random-rem-open:en-US", { action: "behavior-random-remove-open", locale: "en-US" }],
+  ["config:v2:beh-random-rem-open:en-US:1250", { action: "behavior-random-remove-open", locale: "en-US", start: 1250 }],
+  ["config:v2:beh-random-rem-select:en-US", { action: "behavior-random-remove-select", locale: "en-US" }],
+  ["config:v2:beh-random-rem-page:en-US:1250", { action: "behavior-random-remove-page", locale: "en-US", start: 1250 }],
+  ["config:v2:beh-random-rem-cancel:en-US", { action: "behavior-random-remove-cancel", locale: "en-US" }],
   [
-    "config:v1:beh-random-rem-cancel:en-US:1250",
+    "config:v2:beh-random-rem-cancel:en-US:1250",
     { action: "behavior-random-remove-cancel", locale: "en-US", start: 1250 },
   ],
   [
-    "config:v1:beh-random-rem-sub:en-US:1250:abcd1234:nonce1234567",
+    "config:v2:beh-random-rem-sub:en-US:1250:abcd1234:nonce1234567",
     { action: "behavior-random-remove-submit", locale: "en-US", start: 1250, fp: "abcd1234", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-limits-open:en-US", { action: "behavior-limits-open", locale: "en-US" }],
+  ["config:v2:beh-limits-open:en-US", { action: "behavior-limits-open", locale: "en-US" }],
   [
-    "config:v1:beh-limits-sub:en-US:nonce1234567",
+    "config:v2:beh-limits-sub:en-US:nonce1234567",
     { action: "behavior-limits-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
-  ["config:v1:beh-dtm-set:en-US:1", { action: "behavior-dtm-set", locale: "en-US", enabled: true }],
-  ["config:v1:beh-always-set:en-US:0", { action: "behavior-always-set", locale: "en-US", enabled: false }],
-  ["config:v1:beh-cooldown-open:en-US", { action: "behavior-cooldown-open", locale: "en-US" }],
+  ["config:v2:beh-dtm-set:en-US:1", { action: "behavior-dtm-set", locale: "en-US", enabled: true }],
+  ["config:v2:beh-always-set:en-US:0", { action: "behavior-always-set", locale: "en-US", enabled: false }],
+  ["config:v2:beh-cooldown-open:en-US", { action: "behavior-cooldown-open", locale: "en-US" }],
   [
-    "config:v1:beh-cooldown-sub:en-US:nonce1234567",
+    "config:v2:beh-cooldown-sub:en-US:nonce1234567",
     { action: "behavior-cooldown-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
 ];
 
 describe("config Behavior routes", () => {
+  it("routes a v1 Config control to the stale-version outdated-panel path", async () => {
+    const harness = makeHarness();
+    const staleInteraction = makeInteraction(harness, "config:v1:beh-prompt-open:en-US");
+
+    await dispatchGlobalInteraction(CLIENT, staleInteraction);
+
+    expect(harness.replies).toHaveLength(1);
+    expect((harness.replies[0] as { content?: string }).content).toContain("out of date");
+  });
+
+  it("writes Self-Debug through the real route and repaints Context Additions", async () => {
+    const events: string[] = [];
+    const update = spyOn(configRepository, "updateChatConfig").mockImplementation(async (_serverId, patch) => {
+      events.push("write");
+      expect(patch).toEqual({ self_debug_enabled: true });
+      return true;
+    });
+    const invalidate = spyOn(tomoriStateCache, "invalidateTomoriStateCache").mockImplementation(() => {
+      events.push("invalidate");
+    });
+    try {
+      const harness = makeHarness();
+      const interaction = makeInteraction(
+        harness,
+        buildConfigRouteId({ action: "behavior-self-debug-set", locale: "en-US", enabled: true }),
+      );
+      let acknowledged = false;
+      update.mockImplementation(async (_serverId, patch) => {
+        acknowledged = interaction.deferred || interaction.replied;
+        events.push("write");
+        expect(patch).toEqual({ self_debug_enabled: true });
+        return true;
+      });
+
+      await dispatch(harness, interaction);
+
+      expect(acknowledged).toBe(true);
+      expect(events).toEqual(["write", "invalidate"]);
+      expect(harness.telemetry).toEqual(["server-config.workspace.self-debug.set"]);
+      expect(JSON.stringify(harness.edits.at(-1))).toContain("context-additions");
+    } finally {
+      update.mockRestore();
+      invalidate.mockRestore();
+    }
+  });
+
   it("round-trips the literal D9 custom-ID wire contract", () => {
     for (const [customId, expected] of D9_WIRE_CONTRACT) {
       const parsed = parseInteractionRoute(customId);

@@ -13,6 +13,7 @@ import type { ConfigActor } from "@/utils/discord/interactions/configPermissionP
 import type {
   ConfigBehaviorView,
   ConfigChannelsView,
+  ConfigPermissionsView,
   ConfigPersonaMemoryView,
 } from "@/utils/discord/interactions/configRouteContext";
 import type { ConfigPersonaVoiceView } from "@/utils/discord/interactions/configPersonaVoiceLoader";
@@ -37,6 +38,7 @@ import {
   validateComponentsV2MessageLimits,
 } from "@/utils/discord/ui/componentsV2Limits";
 import { buildConfigPanelPayload } from "@/utils/discord/ui/configPanel";
+import { getCapabilitiesManagePermissionDefinitions } from "@/utils/discord/manageConfigMapping";
 import { withLinePrefix } from "@/utils/discord/ui/panel";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
@@ -590,6 +592,10 @@ describe("config page text budgeting at stored maxima", () => {
           selectedPersonaId: 55,
           readStatus: "fresh",
           channelsView,
+          permissionsView: {
+            capabilities: { toolUseEnabled: true, includeElevenLabs: true, definitionStates: {} },
+            privacy: { stmPrivacyBypass: false },
+          },
           receipt: receipt ? { tone: "success", heading: "Saved", detail: "Configuration was saved." } : undefined,
         });
       },
@@ -714,6 +720,95 @@ describe("config page text budgeting at stored maxima", () => {
       });
     }
   });
+});
+
+describe("Plugins and Channel Rules component budgeting", () => {
+  const state = makePersona({ persona_id: 55 });
+  const permissionsView: ConfigPermissionsView = {
+    capabilities: {
+      toolUseEnabled: true,
+      includeElevenLabs: true,
+      definitionStates: Object.fromEntries(
+        getCapabilitiesManagePermissionDefinitions().map((definition) => [definition.value, true]),
+      ),
+    },
+    privacy: { stmPrivacyBypass: true },
+  };
+  const channelsView: ConfigChannelsView = {
+    destinations: {
+      thoughtLogChannelId: null,
+      welcomeChannelId: null,
+      welcomePrompt: null,
+      welcomePersonaId: null,
+    },
+    autoTrigger: { enabledChannels: [], personaOverrides: [], threshold: 0, maxThreshold: 0 },
+    rules: { privateChannels: [], roleplayChannels: [], crossChannelBlocklist: [] },
+    availableTextChannels: [],
+    availableBlocklistChannels: [],
+    availableOverrideChannels: [],
+    overrides: { selectedChannelId: null, prompt: null, contextNote: null, textModelOverride: null },
+  };
+
+  for (const locale of RUNTIME_LOCALES) {
+    for (const receipt of [false, true]) {
+      for (const toolUseEnabled of [true, false]) {
+        it(`keeps Available Tools valid for ${locale}, toolUse=${toolUseEnabled}, receipt=${receipt}`, () => {
+          const payload = buildConfigPanelPayload({
+            locale,
+            actor: GUILD_MANAGER,
+            category: "plugins",
+            page: "available-tools",
+            personas: [state],
+            selectedPersonaId: 55,
+            readStatus: "fresh",
+            permissionsView: {
+              ...permissionsView,
+              capabilities: { ...permissionsView.capabilities, toolUseEnabled },
+            },
+            receipt: receipt ? { tone: "success", heading: "Saved", detail: "Configuration was saved." } : undefined,
+          });
+          const validation = validateComponentsV2MessageLimits(payload);
+          expect(validation.valid, JSON.stringify(validation.violations)).toBe(true);
+          expect(countRenderedComponents(payload)).toBe(receipt ? 21 : 19);
+        });
+      }
+
+      it(`keeps Context Additions valid for ${locale}, receipt=${receipt}`, () => {
+        const payload = buildConfigPanelPayload({
+          locale,
+          actor: GUILD_MANAGER,
+          category: "plugins",
+          page: "context-additions",
+          personas: [state],
+          selectedPersonaId: 55,
+          readStatus: "fresh",
+          permissionsView,
+          receipt: receipt ? { tone: "success", heading: "Saved", detail: "Configuration was saved." } : undefined,
+        });
+        const validation = validateComponentsV2MessageLimits(payload);
+        expect(validation.valid, JSON.stringify(validation.violations)).toBe(true);
+        expect(countRenderedComponents(payload)).toBe(receipt ? 21 : 19);
+      });
+
+      it(`keeps Channel Rules with Memory Privacy valid for ${locale}, receipt=${receipt}`, () => {
+        const payload = buildConfigPanelPayload({
+          locale,
+          actor: GUILD_MANAGER,
+          category: "channels",
+          page: "rules",
+          personas: [state],
+          selectedPersonaId: 55,
+          readStatus: "fresh",
+          permissionsView,
+          channelsView,
+          receipt: receipt ? { tone: "success", heading: "Saved", detail: "Configuration was saved." } : undefined,
+        });
+        const validation = validateComponentsV2MessageLimits(payload);
+        expect(validation.valid, JSON.stringify(validation.violations)).toBe(true);
+        expect(countRenderedComponents(payload)).toBe(receipt ? 28 : 26);
+      });
+    }
+  }
 });
 
 describe("NovelAI preset Parameters budgeting", () => {

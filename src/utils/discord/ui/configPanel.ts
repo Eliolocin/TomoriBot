@@ -51,6 +51,7 @@ import {
   resolveChannelsOverridesActionState,
   resolvePermissionsCapabilitiesActionState,
   resolvePermissionsPrivacyActionState,
+  resolvePluginsContextAdditionsActionState,
   visibleConfigCategories,
   visibleConfigPages,
   type ConfigActor,
@@ -191,9 +192,9 @@ const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
     rules: "commands.config.panel.page_channels_rules",
     overrides: "commands.config.panel.page_channels_overrides",
   },
-  permissions: {
-    capabilities: "commands.config.panel.page_permissions_capabilities",
-    privacy: "commands.config.panel.page_permissions_privacy",
+  plugins: {
+    "available-tools": "commands.config.panel.page_plugins_available_tools",
+    "context-additions": "commands.config.panel.page_plugins_context_additions",
   },
   models: {
     switch: "commands.config.panel.page_models_switch",
@@ -208,7 +209,7 @@ const CATEGORY_LOCALE_KEYS: Record<ConfigCategory, string> = {
   persona: "commands.config.panel.category_persona",
   behavior: "commands.config.panel.category_behavior",
   channels: "commands.config.panel.category_channels",
-  permissions: "commands.config.panel.category_permissions",
+  plugins: "commands.config.panel.category_plugins",
   models: "commands.config.panel.category_models",
 };
 
@@ -2854,33 +2855,6 @@ function buildBehaviorExperimentalBody(input: ConfigPanelRenderInput): Component
         },
       ],
     },
-    {
-      type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.self_debug_title")}**\n${localizer(locale, "commands.config.panel.self_debug_description")}`,
-    },
-    buildStateControlRow(
-      [
-        {
-          value: false,
-          label: localizer(locale, "commands.config.panel.off_button"),
-          customId: buildConfigRouteId({ action: "behavior-self-debug-set", locale, enabled: false }),
-        },
-        {
-          value: true,
-          label: localizer(locale, "commands.config.panel.on_button"),
-          customId: buildConfigRouteId({ action: "behavior-self-debug-set", locale, enabled: true }),
-        },
-      ],
-      view.selfDebugEnabled,
-      writesDisabled,
-    ),
-    {
-      type: ComponentType.TextDisplay,
-      content: `> ${localizer(
-        locale,
-        view.selfDebugEnabled ? "commands.config.panel.self_debug_on" : "commands.config.panel.self_debug_off",
-      )}`,
-    },
   );
 
   const workaroundLines = WORKAROUND_DEFINITIONS.map((definition) => {
@@ -3107,15 +3081,15 @@ function buildBehaviorMemoryBody(input: ConfigPanelRenderInput): ComponentInCont
   return components;
 }
 
-function buildPermissionsCapabilitiesBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+function buildPluginsAvailableToolsBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
   const { locale, actor } = input;
   const view = input.permissionsView?.capabilities;
   const writesDisabled = input.readStatus !== "fresh";
   const components: ComponentInContainerData[] = [
     {
       type: ComponentType.TextDisplay,
-      content: `### ${localizer(locale, "commands.config.panel.permissions_capabilities_title")}
-${localizer(locale, "commands.config.panel.permissions_capabilities_description")}`,
+      content: `### ${localizer(locale, "commands.config.panel.plugins_available_tools_title")}
+${localizer(locale, "commands.config.panel.plugins_available_tools_description")}`,
     },
   ];
 
@@ -3132,8 +3106,8 @@ ${localizer(locale, "commands.config.panel.permissions_capabilities_description"
   components.push(
     {
       type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.permissions_tool_use_title")}**
-${localizer(locale, "commands.config.panel.permissions_tool_use_description")}`,
+      content: `**${localizer(locale, "commands.config.panel.plugins_tool_use_title")}**
+${localizer(locale, "commands.config.panel.plugins_tool_use_description")}`,
     },
     buildStateControlRow(
       [
@@ -3158,19 +3132,20 @@ ${localizer(locale, "commands.config.panel.permissions_tool_use_description")}`,
         localizer(
           locale,
           view.toolUseEnabled
-            ? "commands.config.panel.permissions_tool_use_on"
-            : "commands.config.panel.permissions_tool_use_off",
+            ? "commands.config.panel.plugins_tool_use_on"
+            : "commands.config.panel.plugins_tool_use_off",
         ),
       ),
     },
     {
       type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.permissions_capabilities_state_title")}**
-${localizer(locale, "commands.config.panel.permissions_capabilities_state_description")}
+      content: `**${localizer(locale, "commands.config.panel.plugins_available_tools_state_title")}**
+${localizer(locale, "commands.config.panel.plugins_available_tools_state_description")}
 ${getCapabilitiesManagePermissionDefinitions({ includeElevenLabs: view.includeElevenLabs })
+  .filter((definition) => definition.page === "available-tools")
   .map(
     (definition) =>
-      `> ${view.definitionStates[definition.value] ? "🟢" : "🔴"} ${localizer(locale, definition.labelKey)}`,
+      `> ${view.toolUseEnabled ? "" : "~~"}${view.definitionStates[definition.value] ? "🟢" : "🔴"} ${localizer(locale, definition.labelKey)}${view.toolUseEnabled ? "" : "~~"}`,
   )
   .join("\n")}`,
     },
@@ -3180,8 +3155,8 @@ ${getCapabilitiesManagePermissionDefinitions({ includeElevenLabs: view.includeEl
         {
           type: ComponentType.Button,
           style: ButtonStyle.Secondary,
-          customId: buildConfigRouteId({ action: "permissions-manage-open", locale }),
-          label: localizer(locale, "commands.config.panel.permissions_manage_button"),
+          customId: buildConfigRouteId({ action: "permissions-manage-open", locale, page: "available-tools" }),
+          label: localizer(locale, "commands.config.panel.plugins_manage_button"),
           disabled: writesDisabled || resolvePermissionsCapabilitiesActionState("manage", actor) !== "enabled",
         },
       ],
@@ -3190,15 +3165,16 @@ ${getCapabilitiesManagePermissionDefinitions({ includeElevenLabs: view.includeEl
   return components;
 }
 
-function buildPermissionsPrivacyBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+function buildPluginsContextAdditionsBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
   const { locale, actor } = input;
-  const view = input.permissionsView?.privacy;
+  const view = input.permissionsView?.capabilities;
+  const selfDebug = input.behaviorView?.experimental?.selfDebugEnabled ?? false;
   const writesDisabled = input.readStatus !== "fresh";
   const components: ComponentInContainerData[] = [
     {
       type: ComponentType.TextDisplay,
-      content: `### ${localizer(locale, "commands.config.panel.permissions_privacy_title")}
-${localizer(locale, "commands.config.panel.permissions_privacy_description")}`,
+      content: `### ${localizer(locale, "commands.config.panel.plugins_context_additions_title")}
+${localizer(locale, "commands.config.panel.plugins_context_additions_description")}`,
     },
   ];
 
@@ -3211,44 +3187,58 @@ ${localizer(locale, "commands.config.panel.permissions_privacy_description")}`,
   }
   if (!view) return components;
 
-  const actionDisabled = writesDisabled || resolvePermissionsPrivacyActionState("privacy-bypass", actor) !== "enabled";
   components.push(
     {
       type: ComponentType.TextDisplay,
-      content: `**${localizer(locale, "commands.config.panel.permissions_privacy_bypass_title")}**
-${localizer(locale, "commands.config.panel.permissions_privacy_bypass_description")}`,
+      content: `**${localizer(locale, "commands.config.panel.plugins_context_additions_state_title")}**
+${localizer(locale, "commands.config.panel.plugins_context_additions_state_description")}
+${getCapabilitiesManagePermissionDefinitions({ includeElevenLabs: view.includeElevenLabs })
+  .filter((definition) => definition.page === "context-additions")
+  .map(
+    (definition) =>
+      `> ${view.definitionStates[definition.value] ? "🟢" : "🔴"} ${localizer(locale, definition.labelKey)}`,
+  )
+  .join("\n")}`,
+    },
+    {
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.Button,
+          style: ButtonStyle.Secondary,
+          customId: buildConfigRouteId({ action: "permissions-manage-open", locale, page: "context-additions" }),
+          label: localizer(locale, "commands.config.panel.plugins_manage_button"),
+          disabled: writesDisabled || resolvePermissionsCapabilitiesActionState("manage", actor) !== "enabled",
+        },
+      ],
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.self_debug_title")}**
+${localizer(locale, "commands.config.panel.self_debug_description")}`,
     },
     buildStateControlRow(
       [
         {
           value: false,
           label: localizer(locale, "commands.config.panel.off_button"),
-          customId: buildConfigRouteId({ action: "permissions-privacy-bypass-set", locale, enabled: false }),
+          customId: buildConfigRouteId({ action: "behavior-self-debug-set", locale, enabled: false }),
         },
         {
           value: true,
           label: localizer(locale, "commands.config.panel.on_button"),
-          customId: buildConfigRouteId({ action: "permissions-privacy-bypass-set", locale, enabled: true }),
+          customId: buildConfigRouteId({ action: "behavior-self-debug-set", locale, enabled: true }),
         },
       ],
-      view.stmPrivacyBypass,
-      actionDisabled,
+      selfDebug,
+      writesDisabled || resolvePluginsContextAdditionsActionState("self-debug", actor) !== "enabled",
     ),
     {
       type: ComponentType.TextDisplay,
-      content: withLinePrefix(
-        "> ",
-        localizer(
-          locale,
-          view.stmPrivacyBypass
-            ? "commands.config.panel.permissions_privacy_on"
-            : "commands.config.panel.permissions_privacy_off",
-        ),
-      ),
-    },
-    {
-      type: ComponentType.TextDisplay,
-      content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.permissions_privacy_direction")),
+      content: `> ${localizer(
+        locale,
+        selfDebug ? "commands.config.panel.self_debug_on" : "commands.config.panel.self_debug_off",
+      )}`,
     },
   );
   return components;
@@ -3653,11 +3643,15 @@ ${localizer(locale, "commands.config.panel.channels_rules_description")}`,
   const roleplayDesc = localizer(locale, "commands.config.panel.channels_rules_roleplay_description");
   const blocklistTitle = localizer(locale, "commands.config.panel.channels_rules_blocklist_title");
   const blocklistDesc = localizer(locale, "commands.config.panel.channels_rules_blocklist_description");
+  const privacyView = input.permissionsView?.privacy;
+  const privacyTitle = localizer(locale, "commands.config.panel.channels_rules_memory_privacy_title");
+  const privacyDesc = localizer(locale, "commands.config.panel.channels_rules_memory_privacy_description");
 
   const baseAllowance = getBasePageTextAllowance(input, false);
   const fixedTextLength =
     measureComponentTextLength(components[0]) +
     getDiscordTextLength(`**${privateTitle}**\n${privateDesc}\n`) +
+    (privacyView ? getDiscordTextLength(`**${privacyTitle}**\n${privacyDesc}\n`) : 0) +
     getDiscordTextLength(`**${roleplayTitle}**\n${roleplayDesc}\n`) +
     getDiscordTextLength(`**${blocklistTitle}**\n${blocklistDesc}\n`);
   const rulesAvailable = Math.max(0, baseAllowance - fixedTextLength);
@@ -3703,6 +3697,46 @@ ${localizer(locale, "commands.config.panel.channels_rules_description")}`,
       disabled: privateActionDisabled,
       noChannels: input.channelsView.availableTextChannels.length === 0,
     }),
+    ...(privacyView
+      ? [
+          {
+            type: ComponentType.TextDisplay as const,
+            content: `**${privacyTitle}**\n${privacyDesc}`,
+          },
+          buildStateControlRow(
+            [
+              {
+                value: false,
+                label: localizer(locale, "commands.config.panel.off_button"),
+                customId: buildConfigRouteId({ action: "permissions-privacy-bypass-set", locale, enabled: false }),
+              },
+              {
+                value: true,
+                label: localizer(locale, "commands.config.panel.on_button"),
+                customId: buildConfigRouteId({ action: "permissions-privacy-bypass-set", locale, enabled: true }),
+              },
+            ],
+            privacyView.stmPrivacyBypass,
+            writesDisabled || resolvePermissionsPrivacyActionState("privacy-bypass", actor) !== "enabled",
+          ),
+          {
+            type: ComponentType.TextDisplay as const,
+            content: withLinePrefix(
+              "> ",
+              localizer(
+                locale,
+                privacyView.stmPrivacyBypass
+                  ? "commands.config.panel.permissions_privacy_on"
+                  : "commands.config.panel.permissions_privacy_off",
+              ),
+            ),
+          },
+          {
+            type: ComponentType.TextDisplay as const,
+            content: withLinePrefix("-# ", localizer(locale, "commands.config.panel.permissions_privacy_direction")),
+          },
+        ]
+      : []),
     ...buildChannelRulesCollectionSection({
       locale,
       title: `[${localizer(locale, "commands.config.panel.channels_rules_roleplay_title")}](${buildDocsUrl(DOCS_PATHS.ROLEPLAY_CHANNELS)})`,
@@ -4299,13 +4333,13 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
     return buildPayload(components, receipt);
   }
 
-  if (category === "permissions" && page === "capabilities") {
-    components.push(...buildPermissionsCapabilitiesBody(input));
+  if (category === "plugins" && page === "available-tools") {
+    components.push(...buildPluginsAvailableToolsBody(input));
     return buildPayload(components, receipt);
   }
 
-  if (category === "permissions" && page === "privacy") {
-    components.push(...buildPermissionsPrivacyBody(input));
+  if (category === "plugins" && page === "context-additions") {
+    components.push(...buildPluginsContextAdditionsBody(input));
     return buildPayload(components, receipt);
   }
 
@@ -4331,9 +4365,17 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   // Every other destination lands in a later Phase D slice. `/config` registers no slash command
   // until that cutover, so this placeholder is unreachable rather than shipped.
+  const fallbackPageKey = PAGE_LOCALE_KEYS[category]?.[page];
+  if (!fallbackPageKey) {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.unavailable")}`,
+    });
+    return buildPayload(components, receipt);
+  }
   components.push({
     type: ComponentType.TextDisplay,
-    content: `### ${localizer(locale, PAGE_LOCALE_KEYS[category][page])}
+    content: `### ${localizer(locale, fallbackPageKey)}
 ${localizer(locale, "commands.config.panel.page_pending")}${
   resolveConfigPageState(category, page, actor) === "read-only"
     ? `\n${withLinePrefix("-# ", localizer(locale, "commands.config.panel.page_read_only"))}`

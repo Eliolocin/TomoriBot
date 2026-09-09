@@ -201,10 +201,11 @@ function checkboxGroupField(
 export function buildConfigPermissionsManageModal(
   locale: string,
   nonce: string,
+  page: "available-tools" | "context-additions",
   includeElevenLabs: boolean,
   config: CapabilitiesManageConfigState,
 ): RawModalPayload {
-  const definitions = getCapabilitiesManagePermissionDefinitions({ includeElevenLabs });
+  const definitions = getCapabilitiesManagePermissionDefinitions({ includeElevenLabs, page });
   const groups = Array.from(
     { length: Math.ceil(definitions.length / CONFIG_PERMISSIONS_CHECKBOX_GROUP_SIZE) },
     (_unused, groupIndex) => {
@@ -217,9 +218,13 @@ export function buildConfigPermissionsManageModal(
         nonce,
         `${CONFIG_PERMISSIONS_CHECKBOX_GROUP_PREFIX}_${groupIndex}`,
         groupIndex === 0
-          ? "commands.config.panel.permissions_capabilities_group_label"
-          : "commands.config.panel.permissions_capabilities_group_label_continued",
-        "commands.config.panel.permissions_capabilities_group_description",
+          ? page === "available-tools"
+            ? "commands.config.panel.plugins_available_tools_group_label"
+            : "commands.config.panel.plugins_context_additions_group_label"
+          : page === "available-tools"
+            ? "commands.config.panel.plugins_available_tools_group_label_continued"
+            : "commands.config.panel.plugins_context_additions_group_label_continued",
+        "commands.config.panel.plugins_manage_group_description",
         definitionsInGroup.map((definition) => ({
           label: localizer(locale, definition.labelKey),
           value: definition.value,
@@ -234,10 +239,16 @@ export function buildConfigPermissionsManageModal(
     custom_id: buildConfigRouteId({
       action: "permissions-manage-submit",
       locale,
+      page,
       includeElevenLabs,
       nonce,
     }),
-    title: title(locale, "commands.config.panel.permissions_manage_title"),
+    title: title(
+      locale,
+      page === "available-tools"
+        ? "commands.config.panel.plugins_available_tools_manage_title"
+        : "commands.config.panel.plugins_context_additions_manage_title",
+    ),
     components: groups,
   };
 }
