@@ -103,10 +103,9 @@ capability. Use the same dropdown to attach more models or edit a workspace-adde
 Text models declare their own capabilities in that form, and image models declare which request modes
 they support.
 
-For TTS and STT, the registered endpoint itself is the workspace-scoped selection. After registering an
-endpoint in `/providers`, choose it in `/config` > Models > Switch Models; those speech slots select an
-endpoint rather than a model catalog entry. `/providers` remains the endpoint registration/editor, and
-its activation control still works.
+For TTS and STT, register the endpoint and its models in `/providers`, then choose and activate the
+endpoint in `/config` > Models > Switch Models. Those speech slots select an endpoint rather than a
+model catalog entry. `/providers` remains the endpoint registration, model setup, and editing surface.
 
 API compatibility determines the request paths and payloads the service implements, so it also determines which
 capability slots the connection prepares. Registering exact models for those slots is a separate step, and the

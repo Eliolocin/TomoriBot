@@ -49,7 +49,7 @@ Run `/providers`, choose **Add New Custom Endpoint**, and use the speech API com
 After saving the connection, select it and use its model dropdown to add a Speech model. The model form
 asks for **Voice Source Mode** and **Script Markup**; choose `Auto` and `Plain` for the auto-mode server.
 
-Adding the model makes the endpoint active immediately. Use `/providers` later only when switching between speech endpoints.
+Use `/providers` for endpoint registration and model setup. Then open `/config` > Models > Switch Models to select and activate the registered endpoint.
 
 ## Set Up Persona Voices
 

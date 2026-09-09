@@ -43,7 +43,7 @@ Run `/providers`, choose **Add New Custom Endpoint**, and use the speech API com
 After saving the connection, select it and use its model dropdown to add a Speech model. Choose `Voice Clone`
 as the Voice Source Mode and `Bracket Tags` as the Script Markup so delivery tags survive the send.
 
-Adding the model makes the endpoint active immediately. Use `/providers` later only when switching between speech endpoints.
+Use `/providers` for endpoint registration and model setup. Then open `/config` > Models > Switch Models to select and activate the registered endpoint.
 
 ## Set Up a Persona Voice
 

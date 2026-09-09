@@ -75,8 +75,8 @@ recommended settings are:
 
 You can still choose `Voice Clone` as the Voice Source Mode if you only want reference-audio voice cloning.
 
-Adding the model makes the endpoint active immediately. Use `/providers` later only when switching between
-speech endpoints.
+Use `/providers` for endpoint registration and model setup. Then open `/config` > Models > Switch Models to
+select and activate the registered endpoint.
 
 ## Set up persona voices
 

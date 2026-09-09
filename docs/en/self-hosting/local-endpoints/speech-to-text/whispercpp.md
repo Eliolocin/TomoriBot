@@ -27,7 +27,7 @@ Run `/providers`, choose **Add New Custom Endpoint**, and use the transcription 
 After saving the connection, select it and use its model dropdown to add the model name your
 server reports as a Transcription model.
 
-Adding the model makes the endpoint active immediately. Use `/providers` later only when switching endpoints.
+Use `/providers` for endpoint registration and model setup. Then open `/config` > Models > Switch Models to select and activate the registered endpoint.
 
 ## Use Transcripts
 

@@ -32,8 +32,6 @@ export const PANEL_ACTIONS = [
   "providers.workspace.endpoint.edit",
   "providers.workspace.model.save",
   "providers.workspace.entry.remove",
-  "providers.workspace.speech-endpoint.activate",
-  "providers.workspace.transcription-endpoint.activate",
 
   // providers (personal)
   "providers.personal.provider.add",

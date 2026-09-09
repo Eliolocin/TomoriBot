@@ -31,7 +31,6 @@ export type ProvidersPanelRoute =
   | { action: "edit-provider-submit"; locale: string; provider: string; nonce: string }
   | { action: "edit-endpoint-open"; locale: string; connectionId: number }
   | { action: "edit-endpoint-submit"; locale: string; connectionId: number; nonce: string }
-  | { action: "endpoint-activate"; locale: string; connectionId: number }
   | {
       action: "remove-prompt" | "remove-cancel" | "remove-confirm";
       locale: string;
@@ -174,10 +173,6 @@ export const PROVIDERS_ROUTE_CODECS: ProvidersRouteCodecs = {
   "edit-provider-submit": {
     wireToken: "edit-provider-submit",
     fields: [providerField, nonceField],
-  },
-  "endpoint-activate": {
-    wireToken: "endpoint-activate",
-    fields: [connectionIdField],
   },
   "endpoint-submit": {
     wireToken: "endpoint-submit",
