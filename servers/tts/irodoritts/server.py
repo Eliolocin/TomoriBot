@@ -14,10 +14,53 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 
+def _load_env_files() -> list[Path]:
+  # Standalone Python execution does not inherit repo root .env values unless loaded explicitly.
+  candidates = [
+    Path(__file__).resolve().parents[3] / ".env",
+    Path(__file__).resolve().parent / ".env",
+  ]
+  loaded: list[Path] = []
+  for path in candidates:
+    if not path.is_file():
+      continue
+    try:
+      from dotenv import load_dotenv
+
+      load_dotenv(path, override=False)
+      loaded.append(path)
+    except ImportError:
+      for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+          continue
+        key, val = line.split("=", 1)
+        key = key.strip()
+        val = val.strip().strip("\"'")
+        if key and key not in os.environ:
+          os.environ[key] = val
+      loaded.append(path)
+  return loaded
+
+
+_loaded_env_files = _load_env_files()
+
 DEFAULT_MODEL_ID = "Aratako/Irodori-TTS-v4.1-Small"
 
 MODEL_ID = os.getenv("IRODORI_TTS_MODEL_ID", DEFAULT_MODEL_ID)
 LOCAL_CHECKPOINT = os.getenv("IRODORI_TTS_CHECKPOINT")
+
+if _loaded_env_files:
+  env_paths = ", ".join(str(p) for p in _loaded_env_files)
+  print(f"[Irodori-TTS] Loaded environment from {env_paths}")
+
+if LOCAL_CHECKPOINT:
+  print(f"[Irodori-TTS] Model checkpoint path: {LOCAL_CHECKPOINT}")
+elif MODEL_ID != DEFAULT_MODEL_ID:
+  print(f"[Irodori-TTS] Using model ID: {MODEL_ID} (configured override)")
+else:
+  print(f"[Irodori-TTS] Using model ID: {MODEL_ID} (default)")
+
 HOST = os.getenv("TOMORI_TTS_HOST", "127.0.0.1")
 PORT = int(os.getenv("TOMORI_TTS_PORT", "8013"))
 

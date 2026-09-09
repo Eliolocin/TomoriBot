@@ -36,20 +36,42 @@ Available backends are:
 
 The default endpoint URL is `http://127.0.0.1:8013`.
 
-## Use the Anime v4.1 checkpoint
+## Using a Different Checkpoint
 
-Set the model before starting the sidecar:
+The default model is `Aratako/Irodori-TTS-v4.1-Small`. Compatible Hugging Face repositories, community fine-tunes (such as `phasefield-audio/Irodori-TTS-v4.1-Anime`), or local checkpoint files can be configured via environment variables.
+
+When starting the sidecar (directly with Python or via `bun run launch --irodoritts`), the server automatically reads the repository root `.env` (or a local `.env` in `servers/tts/irodoritts/`) and logs the active model ID on startup.
+
+### Via `.env` (Persistent)
+
+Add to your `.env` in the TomoriBot root:
+
+```env
+IRODORI_TTS_MODEL_ID="phasefield-audio/Irodori-TTS-v4.1-Anime"
+```
+
+### Via Environment Variable per Session
+
+In Windows PowerShell:
 
 ```powershell
 $env:IRODORI_TTS_MODEL_ID = "phasefield-audio/Irodori-TTS-v4.1-Anime"
 .\servers\tts\irodoritts\.venv\Scripts\python.exe servers\tts\irodoritts\server.py
 ```
 
-On Bash:
+On Linux Bash:
 
 ```bash
 IRODORI_TTS_MODEL_ID=phasefield-audio/Irodori-TTS-v4.1-Anime \
   servers/tts/irodoritts/.venv/bin/python servers/tts/irodoritts/server.py
+```
+
+### Using a Local Checkpoint File
+
+If you have downloaded a checkpoint file (`.pt` or `.safetensors`) locally, set `IRODORI_TTS_CHECKPOINT` to its path:
+
+```env
+IRODORI_TTS_CHECKPOINT="/path/to/custom_checkpoint.pt"
 ```
 
 Current Irodori downloads the checkpoint together with any tokenizer assets bundled in the Hugging Face repo. Hugging Face subfolder variants are also supported by `IRODORI_TTS_MODEL_ID` when the model repo provides them.

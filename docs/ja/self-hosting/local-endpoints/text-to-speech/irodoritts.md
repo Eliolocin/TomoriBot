@@ -35,20 +35,42 @@ servers/tts/irodoritts/.venv/bin/python servers/tts/irodoritts/server.py
 
 デフォルトのエンドポイントURLは`http://127.0.0.1:8013`です。
 
-## Anime v4.1チェックポイントを使用する
+## 別のチェックポイントを使用する
 
-サイドカーを起動する前にモデルを指定します。
+デフォルトモデルは`Aratako/Irodori-TTS-v4.1-Small`です。環境変数を設定することで、互換性のあるHugging Faceリポジトリやコミュニティファインチューン（`phasefield-audio/Irodori-TTS-v4.1-Anime`など）、またはローカルのチェックポイントファイルを指定できます。
+
+サイドカー起動時（Pythonによる直接起動、または`bun run launch --irodoritts`）、サーバーはリポジトリ直下の`.env`（または`servers/tts/irodoritts/.env`）を自動的に読み込み、起動時に使用中のモデルIDをログ出力します。
+
+### `.env` を使用する場合（設定を保持）
+
+TomoriBotのルートにある`.env`ファイルに追記します。
+
+```env
+IRODORI_TTS_MODEL_ID="phasefield-audio/Irodori-TTS-v4.1-Anime"
+```
+
+### セッションごとに環境変数を指定する場合
+
+Windows PowerShellの場合:
 
 ```powershell
 $env:IRODORI_TTS_MODEL_ID = "phasefield-audio/Irodori-TTS-v4.1-Anime"
 .\servers\tts\irodoritts\.venv\Scripts\python.exe servers\tts\irodoritts\server.py
 ```
 
-Bashの場合:
+Linux Bashの場合:
 
 ```bash
 IRODORI_TTS_MODEL_ID=phasefield-audio/Irodori-TTS-v4.1-Anime \
   servers/tts/irodoritts/.venv/bin/python servers/tts/irodoritts/server.py
+```
+
+### ローカルのチェックポイントファイルを使用する場合
+
+チェックポイントファイル（`.pt`または`.safetensors`）をローカルにダウンロードしている場合は、`IRODORI_TTS_CHECKPOINT`にファイルパスを指定します。
+
+```env
+IRODORI_TTS_CHECKPOINT="/path/to/custom_checkpoint.pt"
 ```
 
 現在のIrodoriは、チェックポイントとHugging Faceリポジトリ内のトークナイザー資産をまとめて取得します。モデル側が提供している場合は、`IRODORI_TTS_MODEL_ID`でHugging Faceのサブフォルダ版も指定できます。
