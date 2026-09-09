@@ -362,8 +362,9 @@ function makeVoicesView(samples: readonly VoiceSampleRow[], totalSampleCount: nu
 // of available budget.
 const PREVIEW_TIGHTNESS_TOLERANCE = 3;
 // For collection-row lists (e.g. channel lists), trimming is whole-row discrete units (channel mentions + newlines +
-// hidden notices), where a single channel row is ~35-45 characters. One row boundary step is bounded by 70 characters.
-const COLLECTION_ROW_TIGHTNESS_TOLERANCE = 70;
+// hidden notices), where a single channel row is ~25 characters. Multi-section pages (e.g. Channels Rules with 3
+// sections) compound this waste across independent truncations plus a floor division remainder of up to 2 characters.
+const COLLECTION_ROW_TIGHTNESS_TOLERANCE = 80;
 
 describe("config page text budgeting at stored maxima", () => {
   const memoryLimits = getMemoryLimits();
