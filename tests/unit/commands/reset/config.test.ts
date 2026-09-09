@@ -1,4 +1,4 @@
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import {
   ButtonStyle,
   type ChatInputCommandInteraction,
@@ -8,6 +8,7 @@ import {
 } from "discord.js";
 import { execute, type ResetConfigDependencies } from "@/commands/reset/config";
 import type { UserRow } from "@/types/db/schema";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { ColorCode } from "@/utils/misc/logger";
 
 const SERVER_ID = 42;
@@ -76,6 +77,14 @@ function createMockDeps(): {
 }
 
 describe("/reset config handler", () => {
+  const activeSpies: Array<{ mockRestore(): void }> = [];
+
+  afterEach(() => {
+    for (const activeSpy of activeSpies.splice(0)) {
+      activeSpy.mockRestore();
+    }
+  });
+
   it("blocks non-managers in a guild and makes zero repository or reset calls", async () => {
     const interaction = createMockInteraction({ isGuild: true, hasManageGuild: false });
     const { deps, calls } = createMockDeps();
@@ -221,6 +230,40 @@ describe("/reset config handler", () => {
       descriptionKey: "commands.reset.config.success_description",
       color: ColorCode.SUCCESS,
     });
+  });
+
+  it("passes exactly the five preserved-data rows and clickable command mentions", async () => {
+    const mentionSpy = spyOn(commandRegistry, "getCommandMention").mockImplementation(
+      (commandName, subcommandOrGroup, subcommand, clickable) =>
+        `mention:${commandName}:${subcommandOrGroup ?? ""}:${subcommand ?? ""}:${clickable}`,
+    );
+    activeSpies.push(mentionSpy);
+    const interaction = createMockInteraction({ isGuild: true, hasManageGuild: true });
+    const { deps, calls } = createMockDeps();
+
+    await execute({} as Client, interaction, {} as UserRow, LOCALE, deps);
+
+    const confirmationOptions = calls.promptWithConfirmation[0] as {
+      embedDescriptionVars: Record<string, string>;
+    };
+    expect(confirmationOptions.embedDescriptionVars).toEqual({
+      persona_remove: "mention:persona:remove::true",
+      memories: "mention:memories:::true",
+      personal_memories: "mention:personal:memories::true",
+      providers: "mention:providers:::true",
+      personal_providers: "mention:personal:providers::true",
+      scheduled_task_remove: "mention:scheduled-task:remove::true",
+      nuke: "mention:nuke:::true",
+    });
+    expect(mentionSpy.mock.calls).toEqual([
+      ["persona", "remove", undefined, true],
+      ["memories", undefined, undefined, true],
+      ["personal", "memories", undefined, true],
+      ["providers", undefined, undefined, true],
+      ["personal", "providers", undefined, true],
+      ["scheduled-task", "remove", undefined, true],
+      ["nuke", undefined, undefined, true],
+    ]);
   });
 
   it("replies with error if reset operation fails", async () => {

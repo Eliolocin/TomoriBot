@@ -4,6 +4,7 @@ import { executePersonalReset, type PersonalResetOperationInput } from "@/comman
 import type { ConfirmationOptions, ConfirmationResult, StandardEmbedOptions } from "@/types/discord/embed";
 import type { UserRow } from "@/types/db/schema";
 import type { PersonalResetResult } from "@/utils/db/repositories/ResetRepository";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { promptWithConfirmation } from "@/utils/discord/ui/confirmation";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { ColorCode, log } from "@/utils/misc/logger";
@@ -46,6 +47,11 @@ export async function execute(
     const confirmation = await deps.promptWithConfirmation(interaction, locale, {
       embedTitleKey: "commands.reset.personal.config.confirm_title",
       embedDescriptionKey: "commands.reset.personal.config.confirm_description",
+      embedDescriptionVars: {
+        personal_providers: commandRegistry.getCommandMention("personal", "providers", undefined, true),
+        personal_memories: commandRegistry.getCommandMention("personal", "memories", undefined, true),
+        scheduled_task_remove: commandRegistry.getCommandMention("scheduled-task", "remove", undefined, true),
+      },
       embedColor: ColorCode.ERROR,
       continueStyle: ButtonStyle.Danger,
       cancelStyle: ButtonStyle.Secondary,

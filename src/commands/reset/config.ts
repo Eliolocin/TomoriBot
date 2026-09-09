@@ -3,6 +3,7 @@ import { ButtonStyle, MessageFlags } from "discord.js";
 import { resetServerConfiguration, type ServerResetOperationInput } from "@/commands/reset/serverResetOperation";
 import type { ConfirmationOptions, ConfirmationResult, StandardEmbedOptions } from "@/types/discord/embed";
 import type { UserRow } from "@/types/db/schema";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { serverRepository } from "@/utils/db/repositories/ServerRepository";
 import { promptWithConfirmation } from "@/utils/discord/ui/confirmation";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
@@ -74,6 +75,15 @@ export async function execute(
     const confirmation = await deps.promptWithConfirmation(interaction, locale, {
       embedTitleKey: "commands.reset.config.confirm_title",
       embedDescriptionKey: "commands.reset.config.confirm_description",
+      embedDescriptionVars: {
+        persona_remove: commandRegistry.getCommandMention("persona", "remove", undefined, true),
+        memories: commandRegistry.getCommandMention("memories", undefined, undefined, true),
+        personal_memories: commandRegistry.getCommandMention("personal", "memories", undefined, true),
+        providers: commandRegistry.getCommandMention("providers", undefined, undefined, true),
+        personal_providers: commandRegistry.getCommandMention("personal", "providers", undefined, true),
+        scheduled_task_remove: commandRegistry.getCommandMention("scheduled-task", "remove", undefined, true),
+        nuke: commandRegistry.getCommandMention("nuke", undefined, undefined, true),
+      },
       embedColor: ColorCode.ERROR,
       continueStyle: ButtonStyle.Danger,
       cancelStyle: ButtonStyle.Secondary,

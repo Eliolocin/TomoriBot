@@ -1,7 +1,8 @@
-import { describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { ButtonStyle, type ChatInputCommandInteraction, type Client } from "discord.js";
 import { execute, type ResetPersonalConfigDependencies } from "@/commands/reset/personal/config";
 import type { UserRow } from "@/types/db/schema";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { ColorCode } from "@/utils/misc/logger";
 
 const USER_ID = 51;
@@ -62,6 +63,14 @@ function createMockDeps(): {
 }
 
 describe("/reset personal config handler", () => {
+  const activeSpies: Array<{ mockRestore(): void }> = [];
+
+  afterEach(() => {
+    for (const activeSpy of activeSpies.splice(0)) {
+      activeSpy.mockRestore();
+    }
+  });
+
   it("prompts with Danger confirmation and correct locale keys without calling reset prematurely", async () => {
     const interaction = createMockInteraction();
     const { deps, calls } = createMockDeps();
@@ -78,6 +87,32 @@ describe("/reset personal config handler", () => {
       cancelLabelKey: "general.pagination.cancel",
       useComponentsV2: true,
     });
+  });
+
+  it("passes exactly the three personal preserved-data rows and clickable command mentions", async () => {
+    const mentionSpy = spyOn(commandRegistry, "getCommandMention").mockImplementation(
+      (commandName, subcommandOrGroup, subcommand, clickable) =>
+        `mention:${commandName}:${subcommandOrGroup ?? ""}:${subcommand ?? ""}:${clickable}`,
+    );
+    activeSpies.push(mentionSpy);
+    const interaction = createMockInteraction();
+    const { deps, calls } = createMockDeps();
+
+    await execute({} as Client, interaction, mockUserData, LOCALE, deps);
+
+    const confirmationOptions = calls.promptWithConfirmation[0] as {
+      embedDescriptionVars: Record<string, string>;
+    };
+    expect(confirmationOptions.embedDescriptionVars).toEqual({
+      personal_providers: "mention:personal:providers::true",
+      personal_memories: "mention:personal:memories::true",
+      scheduled_task_remove: "mention:scheduled-task:remove::true",
+    });
+    expect(mentionSpy.mock.calls).toEqual([
+      ["personal", "providers", undefined, true],
+      ["personal", "memories", undefined, true],
+      ["scheduled-task", "remove", undefined, true],
+    ]);
   });
 
   it("does not make any repository or reset calls when user cancels confirmation", async () => {

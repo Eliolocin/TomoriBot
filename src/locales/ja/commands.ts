@@ -47,6 +47,7 @@ import nuke from "./commands/nuke";
 import setup from "./commands/setup";
 import compact from "./commands/compact";
 import providers from "./commands/providers";
+import reset from "./commands/reset";
 
 export default {
   commands: {
@@ -96,5 +97,6 @@ export default {
     ...nuke,
     ...setup,
     ...compact,
+    ...reset,
   },
 };
