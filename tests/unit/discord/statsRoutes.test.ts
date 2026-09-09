@@ -140,10 +140,11 @@ function registryFor(
 describe("durable stats dashboard interaction route", () => {
   it("has no collector or interaction-bound dashboard anchor", async () => {
     const source = await Bun.file(new URL("../../../src/utils/stats/statsDashboard.ts", import.meta.url)).text();
+    const oldInteractionAnchor = ["`stats:", "$", "{interactionId}:"].join("");
 
     expect(source).not.toContain("createMessageComponentCollector");
     expect(source).not.toContain("STATS_DASHBOARD_TIMEOUT_MS");
-    expect(source).not.toContain("`stats:${interactionId}:");
+    expect(source).not.toContain(oldInteractionAnchor);
   });
 
   it("rejects a wrong component type privately without acknowledgement or reads", async () => {
