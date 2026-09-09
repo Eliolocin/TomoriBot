@@ -2097,7 +2097,7 @@ describe("Channels Overrides", () => {
     expect(textWrite).toHaveBeenCalledTimes(1);
   });
 
-  it("accepts prompts for every thread target but rejects announcement-thread context notes", async () => {
+  it("accepts prompts and context notes for every thread target", async () => {
     const state = makePersona();
     const channels = makeOverrideChannels();
     const threadTargets = channels.filter(
@@ -2107,7 +2107,11 @@ describe("Channels Overrides", () => {
         type === ChannelType.AnnouncementThread,
     );
     const promptSet = spyOn(channelPromptRepo, "setChannelPromptOverride").mockResolvedValue(true);
-    const contextSet = spyOn(channelContextNoteRepo, "setChannelContextNote").mockResolvedValue(true);
+    let contextWriteAcknowledged = false;
+    const contextSet = spyOn(channelContextNoteRepo, "setChannelContextNote").mockImplementation(async () => {
+      contextWriteAcknowledged = contextInteraction.deferred || contextInteraction.replied;
+      return true;
+    });
     const loadChannelsView = makeOverrideLoader(state, channels);
 
     expect(threadTargets).toHaveLength(3);
@@ -2154,7 +2158,7 @@ describe("Channels Overrides", () => {
         nonce,
       },
       kind: "modal",
-      fields: contextNoteFields(nonce, "not accepted on announcement threads", 2),
+      fields: contextNoteFields(nonce, "announcement thread note", 2),
     });
     await makeHarness({ state, loadChannelsView }).dispatch(contextInteraction);
 
@@ -2162,7 +2166,12 @@ describe("Channels Overrides", () => {
     for (const [index, target] of threadTargets.entries()) {
       expect(promptSet).toHaveBeenNthCalledWith(index + 1, 9, target.id, `${target.name} prompt`, "append");
     }
-    expect(contextSet).not.toHaveBeenCalled();
+    expect(contextSet).toHaveBeenCalledWith(9, selectedChannelId, "announcement thread note", 2);
+    expect(contextWriteAcknowledged).toBe(true);
+    expect(contextInteraction.deferred).toBe(true);
+    expect(contextInteraction.replied).toBe(false);
+    expect(contextInteraction.editedReplies).toHaveLength(1);
+    expect(JSON.stringify(contextInteraction.editedReplies)).toContain("Context Note Updated");
     promptSet.mockRestore();
     contextSet.mockRestore();
   });

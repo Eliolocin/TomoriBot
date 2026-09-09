@@ -138,13 +138,6 @@ const CHANNEL_OVERRIDE_TYPES = new Set<ChannelOverrideChannelTarget["type"]>([
   ChannelType.AnnouncementThread,
 ]);
 
-const CONTEXT_NOTE_CHANNEL_TYPES = new Set<ChannelOverrideChannelTarget["type"]>([
-  ChannelType.GuildText,
-  ChannelType.GuildAnnouncement,
-  ChannelType.PublicThread,
-  ChannelType.PrivateThread,
-]);
-
 /**
  * Reads the persona page a range select was opened on.
  *
@@ -1106,9 +1099,6 @@ async function runChannelOverrideWrite(
   }
 
   if (route.action === "channels-overrides-context-note-submit") {
-    if (!CONTEXT_NOTE_CHANNEL_TYPES.has(target.type)) {
-      return { receipt: invalid(route.locale, "channels_overrides_invalid_channel_detail") };
-    }
     const submitted = modal(interaction);
     const note = modalTextValue(
       submitted,
@@ -1418,9 +1408,7 @@ export async function handleConfigChannelModalOpen(
     route.action === "channels-overrides-context-note-open"
   ) {
     const view = await dependencies.loadChannelsView(interaction, route.channelId);
-    const allowedTypes =
-      route.action === "channels-overrides-prompt-open" ? CHANNEL_OVERRIDE_TYPES : CONTEXT_NOTE_CHANNEL_TYPES;
-    const target = channelOverrideTarget(view, route.channelId, allowedTypes);
+    const target = channelOverrideTarget(view, route.channelId, CHANNEL_OVERRIDE_TYPES);
     if (!target) {
       await interaction.reply({
         content: overridesInvalidReply(route.locale, "channels_overrides_invalid_channel_detail"),
