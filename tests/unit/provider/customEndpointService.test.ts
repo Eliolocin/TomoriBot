@@ -20,6 +20,18 @@ describe("normalizeCustomEndpointUrlForStorage", () => {
     );
   });
 
+  it("places /v1 before query strings and fragments on bare origins", () => {
+    expect(normalizeCustomEndpointUrlForStorage("openai-compatible", "http://localhost:1234?key=secret")).toBe(
+      "http://localhost:1234/v1?key=secret",
+    );
+    expect(normalizeCustomEndpointUrlForStorage("openai-compatible", "http://localhost:1234/#ref")).toBe(
+      "http://localhost:1234/v1#ref",
+    );
+    expect(normalizeCustomEndpointUrlForStorage("openai-compatible", "http://localhost:1234/?key=secret#ref")).toBe(
+      "http://localhost:1234/v1?key=secret#ref",
+    );
+  });
+
   it("keeps URLs that already end in /v1", () => {
     expect(normalizeCustomEndpointUrlForStorage("openai-compatible", "http://localhost:1234/v1")).toBe(
       "http://localhost:1234/v1",

@@ -662,11 +662,15 @@ export async function validateCustomEndpointReachability(params: {
     }
 
     // openai-compatible-transcription servers expose /v1/models (OpenAI-compatible) or /models.
+    // The stored URL may already carry /v1, so probe versioned and unversioned roots instead of
+    // blindly appending /v1 (which would double it into /v1/v1/models).
     if (params.apiStyle === "openai-compatible-transcription") {
-      const response = await fetchUserRemoteUrl(`${baseUrl}/v1/models`, { headers }, fetchOptions);
+      const versionedRoot = /\/v1$/i.test(baseUrl) ? baseUrl : `${baseUrl}/v1`;
+      const unversionedRoot = /\/v1$/i.test(baseUrl) ? baseUrl.replace(/\/v1$/i, "") : baseUrl;
+      const response = await fetchUserRemoteUrl(`${versionedRoot}/models`, { headers }, fetchOptions);
       if (response.ok) return { ok: true };
       // Fall back to the shorter /models path some servers expose.
-      const fallback = await fetchUserRemoteUrl(`${baseUrl}/models`, { headers }, fetchOptions);
+      const fallback = await fetchUserRemoteUrl(`${unversionedRoot}/models`, { headers }, fetchOptions);
       return fallback.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
     }
 
@@ -718,7 +722,10 @@ export function normalizeCustomEndpointUrlForStorage(apiStyle: CustomEndpointApi
     // Pathname "/" or "" means a bare origin; a non-root path is an explicit server route
     // that downstream adapters append to, so it is preserved as-is.
     if (parsed.pathname === "" || parsed.pathname === "/") {
-      return `${trimmed}/v1`;
+      // Rebuild through the parsed URL so the prefix lands before any query string or
+      // fragment: appending to the raw input would produce "...?key=secret/v1".
+      parsed.pathname = "/v1";
+      return parsed.toString();
     }
   } catch {
     // Malformed input: leave it untouched so URL validation reports the real problem.

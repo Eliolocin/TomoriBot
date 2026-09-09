@@ -7,11 +7,13 @@
 -- never worked, so repairing it cannot break a working setup.
 --
 -- Rows with an explicit path are left untouched: a path such as /api/v1 or a gateway
--- prefix is intentional and must not gain an extra /v1 segment.
+-- prefix is intentional and must not gain an extra /v1 segment. Bare origins carrying a
+-- query string or fragment are skipped too, because runtime normalization inserts /v1
+-- before those suffixes, while this repair appends after the origin only.
 
 UPDATE custom_endpoint_connections
 SET
   endpoint_url = rtrim(endpoint_url, '/') || '/v1',
   updated_at = CURRENT_TIMESTAMP
 WHERE api_style IN ('openai-compatible', 'openai-compatible-transcription', 'ollama-native')
-  AND endpoint_url ~ '^https?://[^/]+/?$';
+  AND endpoint_url ~* '^https?://[^/?#]+/?$';

@@ -50,4 +50,56 @@ describe("custom endpoint reachability", () => {
       "http://localhost:11434/v1",
     );
   });
+
+  it("probes /v1/models first when a transcription URL already ends in /v1", async () => {
+    process.env[RUN_ENV_NAME] = "development";
+    const requestedPaths: string[] = [];
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request) => {
+        const path = new URL(request.url).pathname;
+        requestedPaths.push(path);
+        return path === "/v1/models" ? Response.json({ data: [] }) : new Response(null, { status: 404 });
+      },
+    });
+
+    try {
+      const result = await validateCustomEndpointReachability({
+        apiStyle: "openai-compatible-transcription",
+        endpointUrl: `http://localhost:${server.port}/v1`,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(requestedPaths).toEqual(["/v1/models"]);
+    } finally {
+      server.stop(true);
+    }
+  });
+
+  it("falls back to /models for a versioned transcription URL without probing /v1/v1/models", async () => {
+    process.env[RUN_ENV_NAME] = "development";
+    const requestedPaths: string[] = [];
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request) => {
+        const path = new URL(request.url).pathname;
+        requestedPaths.push(path);
+        return path === "/models" ? Response.json({ data: [] }) : new Response(null, { status: 404 });
+      },
+    });
+
+    try {
+      const result = await validateCustomEndpointReachability({
+        apiStyle: "openai-compatible-transcription",
+        endpointUrl: `http://localhost:${server.port}/v1`,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(requestedPaths).toEqual(["/v1/models", "/models"]);
+    } finally {
+      server.stop(true);
+    }
+  });
 });
