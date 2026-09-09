@@ -22,6 +22,7 @@ import {
 import type { ConfigActor } from "@/utils/discord/interactions/configPermissionPolicy";
 import type { ConfigPersonaMemoryView } from "@/utils/discord/interactions/configRouteContext";
 import { validateComponentsV2MessageLimits } from "@/utils/discord/ui/componentsV2Limits";
+import { RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE } from "@/utils/discord/ui/configBehaviorModals";
 import { buildConfigModelsBody } from "@/utils/discord/ui/configModelsPanel";
 import { buildConfigPanelPayload } from "@/utils/discord/ui/configPanel";
 import { initializeLocalizer } from "@/utils/text/localizer";
@@ -1622,6 +1623,27 @@ describe("config Behavior pages", () => {
     expect(seen.some((component) => component.content?.includes("```markdown\nStay on topic."))).toBe(true);
     expect(buttonFor(payload, { action: "behavior-context-open", locale: "en-US" })).toBeDefined();
     expect(buttonFor(payload, { action: "behavior-timezone-open", locale: "en-US" })).toBeUndefined();
+  });
+
+  it("swaps the Random Trigger Add entry for a persona range select past one page", () => {
+    // Within one page a range select would be the inert one-option selector the shell avoids, so
+    // the plain button has to survive the common case and only give way once paging is real.
+    const renderTrigger = (personaCount: number): string => {
+      const personas = Array.from({ length: personaCount }, (_unused, index) => makePersona({ persona_id: index + 1 }));
+      return JSON.stringify(build(GUILD_MANAGER, { category: "behavior", page: "trigger", behaviorView, personas }));
+    };
+
+    const fits = renderTrigger(RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE);
+    expect(fits).toContain("config:v1:beh-random-add-open:en-US");
+    expect(fits).not.toContain("config:v1:beh-random-add-range:en-US");
+    expect(fits).toContain("config:v1:beh-random-rem-open:en-US");
+
+    const overflows = renderTrigger(RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE + 1);
+    expect(overflows).toContain("config:v1:beh-random-add-range:en-US");
+    expect(overflows).not.toContain("config:v1:beh-random-add-open:en-US");
+    expect(overflows).toContain("Personas 1-24");
+    // Remove stays reachable beside the range selector.
+    expect(overflows).toContain("config:v1:beh-random-rem-open:en-US");
   });
 
   it("renders Trigger as direct Off/On state controls and no live values for a member", () => {

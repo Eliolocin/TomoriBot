@@ -26,6 +26,7 @@ import {
 } from "@/utils/discord/ui/configModals";
 import type { RawModalPayload } from "@/utils/discord/ui/configModals";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
+import { selectablePersonas, SELECT_OPTION_LIMIT } from "@/utils/discord/ui/configChannelModals";
 import { localizer } from "@/utils/text/localizer";
 import { splitPromptIntoModalParts } from "@/utils/text/modalPromptParts";
 import { promptPartDescription, promptPartLabel } from "@/utils/discord/ui/modalPromptPartLabels";
@@ -63,6 +64,12 @@ export const BEHAVIOR_STM_TOOL_DESCRIPTION_FIELD = "behavior_stm_tool_descriptio
 export const BEHAVIOR_STM_UPDATE_NUDGE_FIELD = "behavior_stm_update_nudge";
 export const CONFIG_PERMISSIONS_CHECKBOX_GROUP_PREFIX = "permissions_capabilities_group";
 export const CONFIG_PERMISSIONS_CHECKBOX_GROUP_SIZE = 10;
+
+/**
+ * Personas one Random Trigger Add modal page carries. Its Random entry is repeated on every page,
+ * so it spends one of Discord's 25 option slots and the roster gets the rest.
+ */
+export const RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE = SELECT_OPTION_LIMIT - 1;
 
 const LABEL = 18 as const;
 const TEXT_INPUT = 4 as const;
@@ -849,6 +856,7 @@ export function buildBehaviorRandomAddModal(
   locale: string,
   nonce: string,
   personas: readonly TomoriState[],
+  start = 0,
 ): RawModalPayload {
   return {
     custom_id: buildConfigRouteId({ action: "behavior-random-add-submit", locale, nonce }),
@@ -876,11 +884,9 @@ export function buildBehaviorRandomAddModal(
         "commands.config.random-trigger.add.persona_select_placeholder",
         [
           { label: localizer(locale, "commands.config.random-trigger.add.persona_random_label"), value: "random" },
-          ...personas.flatMap((persona) =>
-            persona.persona_id === undefined
-              ? []
-              : [{ label: persona.persona_nickname, value: String(persona.persona_id) }],
-          ),
+          ...selectablePersonas(personas)
+            .slice(start, start + RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE)
+            .map((persona) => ({ label: persona.persona_nickname, value: String(persona.persona_id) })),
         ],
       ),
       textField(

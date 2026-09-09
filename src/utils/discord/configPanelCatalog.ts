@@ -515,6 +515,7 @@ export type ConfigPanelRoute =
   | { action: "behavior-timezone-open"; locale: string }
   | { action: "behavior-timezone-submit"; locale: string; nonce: string }
   | { action: "behavior-random-add-open"; locale: string }
+  | { action: "behavior-random-add-range-select"; locale: string }
   | { action: "behavior-random-add-submit"; locale: string; nonce: string }
   | { action: "behavior-random-remove-open"; locale: string; start?: number }
   | { action: "behavior-random-remove-select"; locale: string }
@@ -937,6 +938,7 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "behavior-timezone-open": { wireToken: "beh-timezone-open", fields: [] },
   "behavior-timezone-submit": { wireToken: "beh-timezone-sub", fields: [nonceField] },
   "behavior-random-add-open": { wireToken: "beh-random-add-open", fields: [] },
+  "behavior-random-add-range-select": { wireToken: "beh-random-add-range", fields: [] },
   "behavior-random-add-submit": { wireToken: "beh-random-add-sub", fields: [nonceField] },
   "behavior-random-remove-open": { wireToken: "beh-random-rem-open", fields: [optionalStartField] },
   "behavior-random-remove-select": { wireToken: "beh-random-rem-select", fields: [] },

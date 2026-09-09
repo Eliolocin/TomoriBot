@@ -267,6 +267,7 @@ const D9_WIRE_CONTRACT: ReadonlyArray<readonly [string, Parameters<typeof buildC
     { action: "behavior-timezone-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
   ["config:v1:beh-random-add-open:en-US", { action: "behavior-random-add-open", locale: "en-US" }],
+  ["config:v1:beh-random-add-range:en-US", { action: "behavior-random-add-range-select", locale: "en-US" }],
   [
     "config:v1:beh-random-add-sub:en-US:nonce1234567",
     { action: "behavior-random-add-submit", locale: "en-US", nonce: "nonce1234567" },
@@ -325,6 +326,7 @@ describe("config Behavior routes", () => {
       "behavior-timezone-open": { wireToken: "beh-timezone-open", fields: [] },
       "behavior-timezone-submit": { wireToken: "beh-timezone-sub", fields: ["nonce"] },
       "behavior-random-add-open": { wireToken: "beh-random-add-open", fields: [] },
+      "behavior-random-add-range-select": { wireToken: "beh-random-add-range", fields: [] },
       "behavior-random-add-submit": { wireToken: "beh-random-add-sub", fields: ["nonce"] },
       "behavior-random-remove-open": { wireToken: "beh-random-rem-open", fields: ["start"] },
       "behavior-random-remove-select": { wireToken: "beh-random-rem-select", fields: [] },
@@ -411,6 +413,39 @@ describe("config Behavior routes", () => {
     expect(buildBehaviorToolTriggerRemoveModal("en-US", "nonce1234567", fiftyTriggerEntries).components).toHaveLength(
       5,
     );
+  });
+
+  it("opens the Random Trigger Add modal on the persona page its range entry names", async () => {
+    // A roster past one page is reachable only through the range select, so the start the option
+    // carries has to reach the builder: otherwise every range would reopen page one.
+    const personas = Array.from({ length: 60 }, (_unused, index) => ({
+      ...makeState(),
+      persona_id: index + 1,
+      persona_nickname: `Persona ${index + 1}`,
+      is_alter: index !== 0,
+    }));
+    const harness = makeHarness(true);
+    harness.scope.personas = personas;
+    await dispatch(
+      harness,
+      makeInteraction(harness, buildConfigRouteId({ action: "behavior-random-add-range-select", locale: "en-US" }), {
+        kind: "select",
+        values: ["24"],
+      }),
+    );
+    expect(harness.modals).toHaveLength(1);
+    const personaWrapper = (harness.modals[0] as { components: unknown[] }).components[1] as
+      | { component?: { options?: Array<{ value: string }> } }
+      | undefined;
+    const options = personaWrapper?.component?.options ?? [];
+    // Random is repeated on every page, which is why a page holds 24 personas rather than 25.
+    expect(options[0]?.value).toBe("random");
+    expect(options).toHaveLength(25);
+    const values = options.map((option) => option.value);
+    expect(values).toContain("25");
+    expect(values).toContain("48");
+    expect(values).not.toContain("1");
+    expect(values).not.toContain("49");
   });
 
   it("acknowledges before a permitted DM General write", async () => {

@@ -25,7 +25,7 @@ const TEXT_INPUT = 4 as const;
  * no pagination row to spend the overflow on, so a workspace with many personas has to be trimmed
  * before the payload is built.
  */
-const SELECT_OPTION_LIMIT = 25;
+export const SELECT_OPTION_LIMIT = 25;
 
 /**
  * Personas one Welcome modal page carries. Its Random entry is repeated on every page, so it

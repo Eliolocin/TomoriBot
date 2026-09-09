@@ -683,6 +683,7 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
     { action: "behavior-timezone-submit", locale: "en-US", nonce: "nonce1234567" },
   ],
   ["config:v1:beh-random-add-open:en-US", { action: "behavior-random-add-open", locale: "en-US" }],
+  ["config:v1:beh-random-add-range:en-US", { action: "behavior-random-add-range-select", locale: "en-US" }],
   [
     "config:v1:beh-random-add-sub:en-US:nonce1234567",
     { action: "behavior-random-add-submit", locale: "en-US", nonce: "nonce1234567" },

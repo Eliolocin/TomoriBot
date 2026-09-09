@@ -1054,4 +1054,47 @@ describe("buildModelOverrideRemoveModal option descriptions and mixed chunk cont
     expect(options[1].description.length).toBeLessThanOrEqual(100);
     expect(options[1].description).not.toContain("•");
   });
+
+  it("shows the codename and provider verbatim until the checkbox option description cap", () => {
+    const withinCapLlm: LlmRow = {
+      llm_id: 89,
+      llm_provider: "openrouter",
+      llm_codename: "deepseek/deepseek-v4-flash-2026-02-14-exp",
+    } as unknown as LlmRow;
+
+    const modal = buildModelOverrideRemoveModal(
+      "en-US",
+      0,
+      "abcd1234",
+      "nonce123",
+      [makePersonaEntry(56, "Sparrow", withinCapLlm)],
+      null,
+    );
+    const options = (modal.components[0].component as { options: Array<{ label: string; description: string }> })
+      .options;
+    // A summary inside the checkbox option description allowance is never ellipsized.
+    expect(options[0].description).toBe("deepseek/deepseek-v4-flash-2026-02-14-exp (openrouter)");
+    expect(options[0].description).not.toContain("...");
+
+    const overCapLlm: LlmRow = {
+      llm_id: 90,
+      llm_provider: "p".repeat(60),
+      llm_codename: "a".repeat(150),
+    } as unknown as LlmRow;
+    const overCapModal = buildModelOverrideRemoveModal(
+      "en-US",
+      0,
+      "abcd1234",
+      "nonce123",
+      [makePersonaEntry(57, "Sparrow", overCapLlm)],
+      null,
+    );
+    const overCapOptions = (
+      overCapModal.components[0].component as { options: Array<{ label: string; description: string }> }
+    ).options;
+    // Discord rejects an option description over 100 characters, so even a pathological summary
+    // must stay inside the wire allowance rather than failing the whole modal to open.
+    expect(overCapOptions[0].description.length).toBe(100);
+    expect(overCapOptions[0].description).toMatch(/^a+\.\.\.$/);
+  });
 });

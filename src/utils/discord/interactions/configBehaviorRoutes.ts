@@ -113,13 +113,17 @@ export const CONFIG_BEHAVIOR_MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["acti
   "behavior-fetch-open",
   "behavior-timezone-open",
   "behavior-random-add-open",
+  "behavior-random-add-range-select",
   "behavior-random-remove-open",
   "behavior-random-remove-select",
   "behavior-limits-open",
   "behavior-cooldown-open",
 ]);
 
-export const CONFIG_BEHAVIOR_SELECT_ACTIONS = new Set<ConfigPanelRoute["action"]>(["behavior-random-remove-select"]);
+export const CONFIG_BEHAVIOR_SELECT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
+  "behavior-random-add-range-select",
+  "behavior-random-remove-select",
+]);
 
 export const CONFIG_BEHAVIOR_MODAL_SUBMIT_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "behavior-prompt-submit",
@@ -162,6 +166,17 @@ function invalid(locale: string, detail: string, vars: Record<string, string | n
 
 function modal(interaction: GlobalRoutableInteraction): ModalSubmitInteraction {
   return interaction as ModalSubmitInteraction;
+}
+
+/**
+ * Reads the persona page a range select was opened on. The range entry carries its own start in the
+ * option value rather than the route id, mirroring how the persona range selects on the Channels
+ * pages hand their page to the shared modal builders.
+ */
+function personaRangeStart(interaction: GlobalRoutableInteraction): number {
+  if (!interaction.isStringSelectMenu()) return 0;
+  const start = Number.parseInt(interaction.values[0] ?? "", 10);
+  return Number.isInteger(start) && start >= 0 ? start : 0;
 }
 
 function stateFromScope(scope: ConfigScope): TomoriState | null {
@@ -368,7 +383,7 @@ export async function handleConfigBehaviorModalOpen(
         view?.trigger.cooldownLength ?? 5,
       ),
     );
-  } else if (route.action === "behavior-random-add-open") {
+  } else if (route.action === "behavior-random-add-open" || route.action === "behavior-random-add-range-select") {
     const count = view?.trigger.randomTriggers.length ?? 0;
     if (count >= RANDOM_TRIGGER_MAX_PER_SERVER) {
       await interaction.reply({
@@ -379,7 +394,10 @@ export async function handleConfigBehaviorModalOpen(
       });
       return true;
     }
-    await dependencies.showModal(interaction, buildBehaviorRandomAddModal(route.locale, nonce, scope.personas));
+    await dependencies.showModal(
+      interaction,
+      buildBehaviorRandomAddModal(route.locale, nonce, scope.personas, personaRangeStart(interaction)),
+    );
   } else if (route.action === "behavior-random-remove-open" || route.action === "behavior-random-remove-select") {
     const rows = triggerRows(view?.trigger.randomTriggers ?? []);
     if (rows.length === 0) {

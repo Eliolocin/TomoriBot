@@ -387,6 +387,7 @@ export const BEHAVIOR_TRIGGER_ACTION_BY_ROUTE: Partial<
   Record<ConfigPanelRoute["action"], ConfigBehaviorTriggerAction>
 > = {
   "behavior-random-add-open": "random-add",
+  "behavior-random-add-range-select": "random-add",
   "behavior-random-add-submit": "random-add",
   "behavior-random-remove-open": "random-remove",
   "behavior-random-remove-select": "random-remove",

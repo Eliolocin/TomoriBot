@@ -80,6 +80,7 @@ import {
   buildPanelReceiptContainer,
   withLinePrefix,
 } from "@/utils/discord/ui/panel";
+import { RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE } from "@/utils/discord/ui/configBehaviorModals";
 import {
   AUTO_TRIGGER_PERSONA_PAGE_SIZE,
   selectablePersonas,
@@ -2599,16 +2600,18 @@ function buildBehaviorTriggerBody(input: ConfigPanelRenderInput): ComponentInCon
         "commands.config.panel.random_triggers_description",
       )}\n${withLinePrefix("-# ", localizer(locale, "commands.config.panel.random_triggers_help_hint"))}\n${triggerSummary}`,
     },
-    {
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.Button,
-          style: ButtonStyle.Secondary,
-          customId: buildConfigRouteId({ action: "behavior-random-add-open", locale }),
-          label: localizer(locale, "commands.config.panel.add_random_trigger_button"),
-          disabled: writesDisabled,
-        },
+    ...buildPersonaRangeEntry({
+      locale,
+      personas: input.personas,
+      pageSize: RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE,
+      // A fresh Add carries no stored persona, so no page can open marked over the others.
+      selectedPersonaId: null,
+      disabled: writesDisabled,
+      buttonCustomId: buildConfigRouteId({ action: "behavior-random-add-open", locale }),
+      buttonLabelKey: "commands.config.panel.add_random_trigger_button",
+      selectCustomId: buildConfigRouteId({ action: "behavior-random-add-range-select", locale }),
+      selectPlaceholderKey: "commands.config.panel.random_trigger_add_persona_range_placeholder",
+      siblingButtons: [
         {
           type: ComponentType.Button,
           style: ButtonStyle.Danger,
@@ -2617,7 +2620,7 @@ function buildBehaviorTriggerBody(input: ConfigPanelRenderInput): ComponentInCon
           disabled: writesDisabled || view.randomTriggers.length === 0,
         },
       ],
-    },
+    }),
     {
       type: ComponentType.TextDisplay,
       content: `**${localizer(locale, "commands.config.panel.trigger_matching_title")}**\n${localizer(

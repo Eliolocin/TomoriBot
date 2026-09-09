@@ -1048,6 +1048,18 @@ export function validateRawModalLimits(payload: RawModalPayload): DiscordCompone
             seenValues.add(opt.value);
           }
         }
+        if (typeof opt?.description === "string") {
+          const dLen = getDiscordTextLength(opt.description);
+          if (dLen > DISCORD_SELECT_OPTION_DESCRIPTION_MAX) {
+            violations.push({
+              path: `${optPath}.description`,
+              componentType: comp.type,
+              observed: dLen,
+              limit: DISCORD_SELECT_OPTION_DESCRIPTION_MAX,
+              code: "SELECT_OPTION_DESCRIPTION_OVERSIZED",
+            });
+          }
+        }
       }
     }
 
@@ -1099,6 +1111,18 @@ export function validateRawModalLimits(payload: RawModalPayload): DiscordCompone
             });
           } else {
             seenValues.add(opt.value);
+          }
+        }
+        if (typeof opt?.description === "string") {
+          const dLen = getDiscordTextLength(opt.description);
+          if (dLen > DISCORD_SELECT_OPTION_DESCRIPTION_MAX) {
+            violations.push({
+              path: `${optPath}.description`,
+              componentType: comp.type,
+              observed: dLen,
+              limit: DISCORD_SELECT_OPTION_DESCRIPTION_MAX,
+              code: "SELECT_OPTION_DESCRIPTION_OVERSIZED",
+            });
           }
         }
       }

@@ -612,6 +612,7 @@ Implemented examples:
   consent.
 - `/config` > Models > Fallbacks & Randomizer manages the fallback chain in one modal, and each slot can be cleared directly with the built-in `None` option.
 - `/config` > Behavior > Trigger removes random triggers in one modal when the set fits; beyond 50 schedules, Remove first repaints the page into an explicit removal-range state whose selector opens each batch.
+- `/config` > Behavior > Trigger adds a random trigger for any persona page: past 24 selectable personas the Add button becomes a range select that opens the modal on the chosen page, because the modal repeats its fixed Random entry on every page and that entry spends one of Discord's 25 option slots.
 - `/server trigger remove` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
 
 ---

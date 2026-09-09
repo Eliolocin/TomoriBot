@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { LlmRow } from "@/types/db/schema";
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
-import { truncateDiscordText } from "@/utils/discord/ui/componentsV2Limits";
+import { DISCORD_SELECT_OPTION_DESCRIPTION_MAX, truncateDiscordText } from "@/utils/discord/ui/componentsV2Limits";
 import {
   buildRouteSegments,
   decodeRouteSegments,
@@ -18,11 +18,12 @@ export const MODEL_OVERRIDE_ROUTE_VERSION = "v1";
 export const MODEL_OVERRIDE_MODAL_CAPACITY = 50;
 
 /**
- * Model summaries stay compact across every override surface so a long codename cannot crowd a
- * checkbox row or preview line. Bounded here once so the remove picker and the Models preview
- * adopt the same shape.
+ * An override-row option description prints only the effective model, so the summary may spend
+ * the whole checkbox option description allowance instead of a compact row bound. The truncation
+ * stays as a wire guard: Discord rejects an option description over 100 characters, and an
+ * absurd codename or provider must not make the removal modal fail to open.
  */
-export const MODEL_OVERRIDE_MODEL_SUMMARY_MAX_LENGTH = 28;
+export const MODEL_OVERRIDE_MODEL_SUMMARY_MAX_LENGTH = DISCORD_SELECT_OPTION_DESCRIPTION_MAX;
 
 export function formatModelOverrideModelSummary(llm: LlmRow): string {
   return truncateDiscordText(

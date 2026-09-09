@@ -7,6 +7,7 @@ export default {
     panel: {
       channels_welcome_range_placeholder: `ようこそ設定：ペルソナのページを選択`,
       channels_auto_trigger_range_placeholder: `自動トリガー設定：ペルソナのページを選択`,
+      random_trigger_add_persona_range_placeholder: `ランダムトリガー追加：ペルソナのページを選択`,
       channels_persona_range_label: `ペルソナ {start}-{end}`,
       channels_persona_range_description: `{first} から {last}`,
       conditioning_reward_summary: `{count}回ご褒美をもらいました：`,

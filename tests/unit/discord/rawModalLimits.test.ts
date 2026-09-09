@@ -24,6 +24,7 @@ import {
   buildBehaviorNoticeVisibilityModal,
   buildBehaviorRandomAddModal,
   buildBehaviorWorkaroundsModal,
+  RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE,
 } from "@/utils/discord/ui/configBehaviorModals";
 import {
   DISCORD_CHECKBOX_GROUP_OPTIONS_MAX,
@@ -245,10 +246,14 @@ describe("raw config modal limits", () => {
     }
   });
 
-  it("keeps the Random Trigger Add modal within Discord limits across all runtime locales", () => {
+  it("keeps the Random Trigger Add modal within Discord limits across all runtime locales and roster sizes", () => {
     for (const locale of RUNTIME_LOCALES) {
-      const payload = buildBehaviorRandomAddModal(locale, "nonce", makePersonas(3));
-      assertWithinDiscordLimits(payload, `random-add/${locale}`);
+      for (const size of ROSTER_SIZES) {
+        for (const start of [0, size]) {
+          const payload = buildBehaviorRandomAddModal(locale, "nonce", makePersonas(size), start);
+          assertWithinDiscordLimits(payload, `random-add/${locale}/${size}/@${start}`);
+        }
+      }
     }
   });
 
@@ -496,6 +501,63 @@ describe("raw config modal limits", () => {
     const descResult = validateRawModalLimits(overlongDescPayload);
     expect(descResult.valid).toBe(false);
     expect(descResult.violations.some((v) => v.code === "MODAL_FIELD_DESCRIPTION_OVERSIZED")).toBe(true);
+
+    // Checkbox Group option description: 100 accepted, 101 rejected
+    const checkboxDesc100Payload: RawModalPayload = {
+      title: "Checkboxes",
+      custom_id: "modal_cb_desc_ok",
+      components: [
+        {
+          type: LABEL,
+          label: "Group",
+          component: {
+            type: CHECKBOX_GROUP,
+            custom_id: "check_group_desc",
+            options: [{ label: "Opt", value: "val", description: "d".repeat(100) }],
+          },
+        },
+      ],
+    };
+    expect(validateRawModalLimits(checkboxDesc100Payload).valid).toBe(true);
+
+    const checkboxDesc101Payload: RawModalPayload = {
+      title: "Checkboxes",
+      custom_id: "modal_cb_desc_bad",
+      components: [
+        {
+          type: LABEL,
+          label: "Group",
+          component: {
+            type: CHECKBOX_GROUP,
+            custom_id: "check_group_desc",
+            options: [{ label: "Opt", value: "val", description: "d".repeat(101) }],
+          },
+        },
+      ],
+    };
+    const checkboxDescResult = validateRawModalLimits(checkboxDesc101Payload);
+    expect(checkboxDescResult.valid).toBe(false);
+    expect(checkboxDescResult.violations.some((v) => v.code === "SELECT_OPTION_DESCRIPTION_OVERSIZED")).toBe(true);
+
+    // Radio Group option description: 100 accepted, 101 rejected
+    const radioDesc101Payload: RawModalPayload = {
+      title: "Radio",
+      custom_id: "modal_rd_desc",
+      components: [
+        {
+          type: LABEL,
+          label: "Group",
+          component: {
+            type: RADIO_GROUP,
+            custom_id: "radio_group_desc",
+            options: [{ label: "Opt", value: "val", description: "d".repeat(101) }],
+          },
+        },
+      ],
+    };
+    const radioDescResult = validateRawModalLimits(radioDesc101Payload);
+    expect(radioDescResult.valid).toBe(false);
+    expect(radioDescResult.violations.some((v) => v.code === "SELECT_OPTION_DESCRIPTION_OVERSIZED")).toBe(true);
   });
 
   it("reaches every persona across the ranges the panel offers", () => {
@@ -512,6 +574,11 @@ describe("raw config modal limits", () => {
         AUTO_TRIGGER_PERSONA_PAGE_SIZE,
         (start) => buildConfigAutoTriggerConfigureModal("en-US", "nonce", "fp", personas, "chan-1", true, null, start),
       ],
+      [
+        "random-add",
+        RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE,
+        (start) => buildBehaviorRandomAddModal("en-US", "nonce", personas, start),
+      ],
     ];
 
     for (const [label, pageSize, build] of pages) {
@@ -521,13 +588,32 @@ describe("raw config modal limits", () => {
         assertWithinDiscordLimits(payload, `${label}/page@${start}`);
         eachComponent(payload.components, (component) => {
           if (component.type !== STRING_SELECT) return;
-          for (const option of component.options ?? []) reachable.add(option.value);
+          for (const option of component.options ?? []) {
+            // Random repeats on every Random-Add page and is not a roster entry.
+            if (option.value !== "random") reachable.add(option.value);
+          }
         });
       }
       for (let personaId = 1; personaId <= roster; personaId += 1) {
         expect(reachable.has(String(personaId)), `${label}: persona ${personaId} reachable`).toBe(true);
       }
     }
+  });
+
+  it("pages Random Trigger Add over selectable personas only, so undefined IDs do not consume a slot", () => {
+    const roster = Array.from({ length: 30 }, (_unused, index) =>
+      index >= 27 ? { ...makePersona(index + 1), persona_id: undefined } : makePersona(index + 1),
+    );
+    const pageTwo = buildBehaviorRandomAddModal("en-US", "nonce", roster, RANDOM_TRIGGER_ADD_PERSONA_PAGE_SIZE);
+    const pageTwoOptions: Array<{ value: string }> = [];
+    eachComponent(pageTwo.components, (component) => {
+      if (component.type !== STRING_SELECT) return;
+      pageTwoOptions.push(...(component.options ?? []));
+    });
+    // 27 selectable personas form two pages of 24 and 3; the three undefined-ID rows are not part
+    // of the roster that pages are cut from.
+    expect(pageTwoOptions.map((option) => option.value)).toEqual(["random", "25", "26", "27"]);
+    assertWithinDiscordLimits(pageTwo, "random-add/undefined-ids/page@24");
   });
 
   it("marks the stored persona only on the page that holds it", () => {
