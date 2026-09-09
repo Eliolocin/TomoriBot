@@ -32,7 +32,7 @@ In Discord, configure TomoriBot's `custom` provider and use:
 - **Endpoint URL**: `http://127.0.0.1:8000/v1`
 - **Model Name**: the exact model string ChatMock should receive, such as `gpt-5.4` or `gpt-5.3-codex`
 
-Do **not** use bare `http://127.0.0.1:8000` because TomoriBot appends `/chat/completions` to the configured base URL
+A bare `http://127.0.0.1:8000` also works: TomoriBot normalizes it to `/v1` before appending `/chat/completions`.
 
 Enable these capability flags for ChatMock:
 - **Function Calling / Tools**: Yes

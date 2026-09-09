@@ -686,8 +686,43 @@ export async function validateCustomEndpointReachability(params: {
   }
 }
 
+// Styles whose request paths hang off a versioned OpenAI base (/v1/chat/completions,
+// /v1/embeddings, /v1/audio/transcriptions). Non-OpenAI styles route at the origin itself
+// (ComfyUI, TTS clone) or carry their own preset URL (ElevenLabs) and are stored verbatim.
+const OPENAI_VERSIONED_API_STYLES = new Set<CustomEndpointApiStyle>([
+  "openai-compatible",
+  "openai-compatible-transcription",
+  "ollama-native",
+]);
+
+/**
+ * Normalizes a user-supplied endpoint URL before it is stored.
+ *
+ * A bare origin is extended with /v1 for OpenAI-versioned styles, so a user who pastes
+ * http://localhost:1234 gets http://localhost:1234/v1/chat/completions at request time.
+ * URLs that already end in /v1, or that carry a custom path such as a gateway prefix,
+ * are kept verbatim: appending blindly would corrupt /api/v1 into /api/v1/v1.
+ */
 export function normalizeCustomEndpointUrlForStorage(apiStyle: CustomEndpointApiStyle, endpointUrl: string): string {
-  const baseUrl = endpointUrl.trim().replace(/\/+$/, "");
-  if (apiStyle !== "ollama-native" || /\/v1$/i.test(baseUrl)) return baseUrl;
-  return `${baseUrl}/v1`;
+  const trimmed = endpointUrl.trim().replace(/\/+$/, "");
+  if (!OPENAI_VERSIONED_API_STYLES.has(apiStyle)) {
+    return trimmed;
+  }
+
+  if (/\/v1$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    // Pathname "/" or "" means a bare origin; a non-root path is an explicit server route
+    // that downstream adapters append to, so it is preserved as-is.
+    if (parsed.pathname === "" || parsed.pathname === "/") {
+      return `${trimmed}/v1`;
+    }
+  } catch {
+    // Malformed input: leave it untouched so URL validation reports the real problem.
+  }
+
+  return trimmed;
 }

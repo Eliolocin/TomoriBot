@@ -32,7 +32,7 @@ DiscordでTomoriBotの`custom`プロバイダーを構成し、以下を使用�
 - **Endpoint URL**: `http://127.0.0.1:8000/v1`
 - **Model Name**: `gpt-5.4`や`gpt-5.3-codex`など、ChatMockが受信すべき正確なモデル文字列。
 
-TomoriBotは構成されたベースURLに`/chat/completions`を追加するため、末尾のパスがない`http://127.0.0.1:8000`は使用**しないでください**。
+末尾のパスがない`http://127.0.0.1:8000`も使用できます。TomoriBotは`/chat/completions`を追加する前に`/v1`へ正規化します。
 
 ChatMockの以下の機能フラグを有効にします。
 - **Function Calling / Tools**: Yes
