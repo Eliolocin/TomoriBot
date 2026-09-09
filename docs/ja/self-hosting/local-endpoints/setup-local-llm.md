@@ -67,7 +67,7 @@ ollama list
 | `auth_token` | *(空白のままにします)* |
 
 :::tip[API Compatibilityに一致するURLを選択する]
-`OpenAI-Compatible`は`/v1`ルートを想定しています（`/chat/completions`は自動的に追加されるため、**追加しない**でください）。`Ollama`には`/v1`のないルートを入力すると、Ollamaの`/v1`互換API用に正規化されます。
+`OpenAI-Compatible`と`Ollama`はどちらも`/v1`のないルートを受け入れ、`/v1`ベースに正規化されます。`/chat/completions`は自動的に追加されるため、**追加しない**でください。`https://openrouter.ai/api/v1`やゲートウェイのプレフィックスなど、すでにパスを含むURLはそのまま保存されます。
 :::
 
 保存したエンドポイントを選択し、**Add or Edit a Model** で新しいテキストモデルに以下を入力します。

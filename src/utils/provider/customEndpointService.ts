@@ -662,11 +662,15 @@ export async function validateCustomEndpointReachability(params: {
     }
 
     // openai-compatible-transcription servers expose /v1/models (OpenAI-compatible) or /models.
+    // The stored URL may already carry /v1, so probe versioned and unversioned roots instead of
+    // blindly appending /v1 (which would double it into /v1/v1/models).
     if (params.apiStyle === "openai-compatible-transcription") {
-      const response = await fetchUserRemoteUrl(`${baseUrl}/v1/models`, { headers }, fetchOptions);
+      const versionedRoot = /\/v1$/i.test(baseUrl) ? baseUrl : `${baseUrl}/v1`;
+      const unversionedRoot = /\/v1$/i.test(baseUrl) ? baseUrl.replace(/\/v1$/i, "") : baseUrl;
+      const response = await fetchUserRemoteUrl(`${versionedRoot}/models`, { headers }, fetchOptions);
       if (response.ok) return { ok: true };
       // Fall back to the shorter /models path some servers expose.
-      const fallback = await fetchUserRemoteUrl(`${baseUrl}/models`, { headers }, fetchOptions);
+      const fallback = await fetchUserRemoteUrl(`${unversionedRoot}/models`, { headers }, fetchOptions);
       return fallback.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
     }
 
@@ -686,8 +690,46 @@ export async function validateCustomEndpointReachability(params: {
   }
 }
 
+// Styles whose request paths hang off a versioned OpenAI base (/v1/chat/completions,
+// /v1/embeddings, /v1/audio/transcriptions). Non-OpenAI styles route at the origin itself
+// (ComfyUI, TTS clone) or carry their own preset URL (ElevenLabs) and are stored verbatim.
+const OPENAI_VERSIONED_API_STYLES = new Set<CustomEndpointApiStyle>([
+  "openai-compatible",
+  "openai-compatible-transcription",
+  "ollama-native",
+]);
+
+/**
+ * Normalizes a user-supplied endpoint URL before it is stored.
+ *
+ * A bare origin is extended with /v1 for OpenAI-versioned styles, so a user who pastes
+ * http://localhost:1234 gets http://localhost:1234/v1/chat/completions at request time.
+ * URLs that already end in /v1, or that carry a custom path such as a gateway prefix,
+ * are kept verbatim: appending blindly would corrupt /api/v1 into /api/v1/v1.
+ */
 export function normalizeCustomEndpointUrlForStorage(apiStyle: CustomEndpointApiStyle, endpointUrl: string): string {
-  const baseUrl = endpointUrl.trim().replace(/\/+$/, "");
-  if (apiStyle !== "ollama-native" || /\/v1$/i.test(baseUrl)) return baseUrl;
-  return `${baseUrl}/v1`;
+  const trimmed = endpointUrl.trim().replace(/\/+$/, "");
+  if (!OPENAI_VERSIONED_API_STYLES.has(apiStyle)) {
+    return trimmed;
+  }
+
+  if (/\/v1$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    // Pathname "/" or "" means a bare origin; a non-root path is an explicit server route
+    // that downstream adapters append to, so it is preserved as-is.
+    if (parsed.pathname === "" || parsed.pathname === "/") {
+      // Rebuild through the parsed URL so the prefix lands before any query string or
+      // fragment: appending to the raw input would produce "...?key=secret/v1".
+      parsed.pathname = "/v1";
+      return parsed.toString();
+    }
+  } catch {
+    // Malformed input: leave it untouched so URL validation reports the real problem.
+  }
+
+  return trimmed;
 }

@@ -1,0 +1,2 @@
+-- The /v1-normalized URL is canonical, and a repaired bare origin is indistinguishable from
+-- one the user typed with /v1, so there is no safe reverse. No downgrade is needed.

@@ -31,7 +31,7 @@ export interface OpenAITranscriptionRequest {
  * Covers local WhisperX, whisper.cpp HTTP mode, and compatible cloud services.
  *
  * 1. Builds a multipart form with the audio file, model name, and optional language hint.
- * 2. POSTs to {endpoint_url}/v1/audio/transcriptions.
+ * 2. POSTs to {endpoint_url}/audio/transcriptions, adding /v1 when the stored URL omits it.
  * 3. Returns the transcript text from the JSON response.
  */
 export async function transcribeViaOpenAIAdapter(
@@ -41,7 +41,11 @@ export async function transcribeViaOpenAIAdapter(
 
   const modelName = (endpoint.extra_config.model as string | undefined) ?? "whisper-1";
   const languageHint = (endpoint.extra_config.language as string | undefined) ?? null;
-  const endpointUrl = endpoint.endpoint_url.replace(/\/+$/, "");
+  const baseUrl = endpoint.endpoint_url.replace(/\/+$/, "");
+  // Stored URLs may or may not carry /v1: new registrations normalize bare origins to /v1,
+  // while legacy rows and explicit custom paths can omit it. Only prepend when it is absent,
+  // so a URL that already ends in /v1 never becomes /v1/v1/audio/transcriptions.
+  const targetUrl = /\/v1$/i.test(baseUrl) ? `${baseUrl}/audio/transcriptions` : `${baseUrl}/v1/audio/transcriptions`;
 
   const form = new FormData();
   form.append(
@@ -65,7 +69,7 @@ export async function transcribeViaOpenAIAdapter(
     const abortController = new AbortController();
     const timer = setTimeout(() => abortController.abort(), OPENAI_STT_TIMEOUT_MS);
     try {
-      response = await fetchUserRemoteUrl(`${endpointUrl}/v1/audio/transcriptions`, {
+      response = await fetchUserRemoteUrl(targetUrl, {
         method: "POST",
         headers,
         body: form,
@@ -76,7 +80,7 @@ export async function transcribeViaOpenAIAdapter(
     }
   } catch (error) {
     const isTimeout = error instanceof Error && error.name === "AbortError";
-    log.warn(`[OpenAISTT] Request to ${endpointUrl} ${isTimeout ? "timed out" : "failed"}`, error);
+    log.warn(`[OpenAISTT] Request to ${targetUrl} ${isTimeout ? "timed out" : "failed"}`, error);
     return {
       success: false,
       errorKind: isTimeout ? "timeout" : "request_failed",

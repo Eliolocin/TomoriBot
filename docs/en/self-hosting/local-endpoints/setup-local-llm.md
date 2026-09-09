@@ -81,8 +81,9 @@ Custom Endpoint**, and enter:
 | `auth_token` | *(leave blank)* |
 
 :::tip[Pick the URL that matches the API compatibility]
-`OpenAI-Compatible` expects the `/v1` root (`/chat/completions` is appended automatically, so do
-**not** add it). `Ollama` accepts the bare root and normalizes it to Ollama's `/v1` compatibility API.
+Both `OpenAI-Compatible` and `Ollama` accept the bare root and normalize it to the `/v1` base.
+`/chat/completions` is appended automatically, so do **not** add it. URLs that already carry a
+path, such as `https://openrouter.ai/api/v1` or a gateway prefix, are stored verbatim.
 :::
 
 After saving the connection, select it and choose **+ Add new Text Model** from its model dropdown.

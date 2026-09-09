@@ -123,7 +123,8 @@ describe("providers panel rendering", () => {
     expect(serialized).toContain("It is not sent to the service.");
     expect(serialized).toContain("API Compatibility");
     expect(serialized).toContain("e.g. ollama, koboldcpp, vllm, comfyui");
-    expect(serialized).toContain("request paths are appended automatically");
+    expect(serialized).toContain("Base URL including version prefix (e.g., /v1)");
+    expect(serialized).toContain("https://models.example.com/v1");
     expect(serialized).toContain("Use the bare Ollama root");
     expect(serialized).toContain("openai-compatible");
     expect(serialized).toContain("ollama-native");
