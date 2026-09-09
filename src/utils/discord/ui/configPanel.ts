@@ -980,40 +980,6 @@ ${localizer(locale, "commands.config.panel.dialogues_description")}${renderedSel
   return components;
 }
 
-function hasSelectedCollectionEntry(selectedIndex: number | undefined, entryCount: number): boolean {
-  return selectedIndex !== undefined && selectedIndex >= 0 && selectedIndex < entryCount;
-}
-
-/**
- * Returns a collection body's trailing edit and remove row, but only when that body actually has a
- * selected entry.
- *
- * A collection body ends on its own pagination row whenever nothing is selected, and those buttons
- * are indistinguishable by shape from the edit and remove pair. Identifying the row by position
- * alone captures pagination controls and strands them in whichever row absorbs them.
- */
-function getSelectedEntryActionRow(
-  components: ComponentInContainerData[],
-  hasSelectedEntry: boolean,
-): ButtonComponentData[] | undefined {
-  if (!hasSelectedEntry) return undefined;
-  const last = components[components.length - 1];
-  if (!last || last.type !== ComponentType.ActionRow || !("components" in last)) return undefined;
-  const rowComponents = last.components as unknown[];
-  if (
-    !rowComponents.every(
-      (component) =>
-        typeof component === "object" &&
-        component !== null &&
-        "type" in component &&
-        component.type === ComponentType.Button,
-    )
-  ) {
-    return undefined;
-  }
-  return rowComponents as ButtonComponentData[];
-}
-
 function buildPersonaGeneralBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
   const { locale, actor, personas, selectedPersonaId, readStatus } = input;
   const writesDisabled = readStatus !== "fresh";
@@ -1082,45 +1048,8 @@ ${localizer(locale, "commands.config.panel.general_description")}`,
   const attributeComponents = buildAttributeCollectionBody(input, persona);
   const dialogueComponents = buildDialogueCollectionBody(input, persona);
 
-  const attributeCount = (persona.attribute_list ?? []).length;
-  const dialoguePairCount = Math.min(
-    (persona.sample_dialogues_in ?? []).length,
-    (persona.sample_dialogues_out ?? []).length,
-  );
-  const attributeActions = getSelectedEntryActionRow(
-    attributeComponents,
-    hasSelectedCollectionEntry(input.selectedAttributeIndex, attributeCount),
-  );
-  const dialogueActions = getSelectedEntryActionRow(
-    dialogueComponents,
-    hasSelectedCollectionEntry(input.selectedDialogueIndex, dialoguePairCount),
-  );
-  const identityWithAttributeActions =
-    identityActionRow !== undefined &&
-    attributeActions !== undefined &&
-    identityButtons.length + attributeActions.length <= 5;
-  if (identityWithAttributeActions) {
-    attributeComponents.pop();
-    components.push({
-      type: ComponentType.ActionRow,
-      components: [...identityButtons, ...attributeActions],
-    });
-  } else if (identityActionRow) {
-    components.push(identityActionRow);
-  }
-
-  const collectionsWithCombinedActions = !identityWithAttributeActions && attributeActions && dialogueActions;
-  if (collectionsWithCombinedActions) {
-    attributeComponents.pop();
-    dialogueComponents.pop();
-  }
+  if (identityActionRow) components.push(identityActionRow);
   components.push(...attributeComponents, ...dialogueComponents);
-  if (collectionsWithCombinedActions) {
-    components.push({
-      type: ComponentType.ActionRow,
-      components: [...attributeActions, ...dialogueActions],
-    });
-  }
 
   return components;
 }

@@ -93,6 +93,30 @@ function walk(value: unknown): Observed[] {
   return [...here, ...Object.values(record).flatMap(walk)];
 }
 
+function actionRows(payload: unknown): string[][] {
+  const rows: string[][] = [];
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value !== "object" || value === null) return;
+    const record = value as Record<string, unknown>;
+    if (record.type === ACTION_ROW && Array.isArray(record.components)) {
+      rows.push(
+        record.components.map((component) => {
+          if (typeof component !== "object" || component === null) return "";
+          const customId = (component as Record<string, unknown>).customId;
+          return typeof customId === "string" ? customId : "";
+        }),
+      );
+    }
+    Object.values(record).forEach(visit);
+  };
+  visit(payload);
+  return rows;
+}
+
 function makePersona(overrides: Partial<TomoriState> & { persona_id: number }): TomoriState {
   return {
     server_id: 9,
@@ -164,17 +188,74 @@ function buttonFor(payload: unknown, route: Parameters<typeof buildConfigRouteId
 
 /** Returns the custom IDs of the button row holding a button whose custom ID contains `marker`. */
 function buttonRowContaining(payload: unknown, marker: string): string[] | undefined {
-  const rows: string[][] = [];
-  const visit = (components: readonly Observed[]): void => {
-    for (const component of components) {
-      if (component.type === ACTION_ROW && Array.isArray(component.components)) {
-        rows.push((component.components as Observed[]).map((child) => String(child.customId ?? "")));
-      }
-      if (Array.isArray(component.components)) visit(component.components as Observed[]);
+  return actionRows(payload).find((row) => row.some((customId) => customId.includes(marker)));
+}
+
+function actionRowIndex(rows: readonly string[][], marker: string): number {
+  return rows.findIndex((row) => row.some((customId) => customId.includes(marker)));
+}
+
+function expectCollectionActionPlacement(payload: unknown, selected: { attribute: boolean; dialogue: boolean }): void {
+  const rows = actionRows(payload);
+  const identityIndex = rows.findIndex((row) =>
+    row.some((customId) => ["avatar-open", "rename-open", "promote-view"].some((marker) => customId.includes(marker))),
+  );
+  expect(identityIndex).toBeGreaterThanOrEqual(0);
+  expect(
+    rows[identityIndex]?.every(
+      (customId) =>
+        !customId.includes("attribute-") &&
+        !customId.includes("dialogue-") &&
+        !customId.includes("attr-") &&
+        !customId.includes("dlg-"),
+    ),
+  ).toBe(true);
+  expect(rows[identityIndex]).toHaveLength(3);
+  expect(
+    rows[identityIndex]?.every((customId) =>
+      ["avatar-open", "rename-open", "promote-view"].some((marker) => customId.includes(marker)),
+    ),
+  ).toBe(true);
+
+  const assertCollection = (name: "attribute" | "dialogue", isSelected: boolean): number => {
+    const routePrefix = name === "attribute" ? "attr" : "dlg";
+    const selectIndex = actionRowIndex(rows, `${routePrefix}-select`);
+    const actionIndex = actionRowIndex(rows, `${routePrefix}-edit-open`);
+    expect(selectIndex).toBeGreaterThanOrEqual(0);
+    if (!isSelected) {
+      expect(actionIndex).toBe(-1);
+      return selectIndex;
     }
+
+    expect(actionIndex).toBeGreaterThan(selectIndex);
+    const interveningRows = rows.slice(selectIndex + 1, actionIndex);
+    expect(
+      interveningRows.every(
+        (row) =>
+          row.length > 0 &&
+          row.every(
+            (customId) => customId.includes(`${routePrefix}-page`) || customId.includes("pagination-indicator"),
+          ),
+      ),
+    ).toBe(true);
+    expect(
+      rows[actionIndex]?.every(
+        (customId) => customId.includes(`${routePrefix}-edit-open`) || customId.includes(`${routePrefix}-remove`),
+      ),
+    ).toBe(true);
+    expect(rows[actionIndex]).toHaveLength(2);
+    expect(rows[actionIndex]?.some((customId) => customId.includes(`${routePrefix}-edit-open`))).toBe(true);
+    expect(rows[actionIndex]?.some((customId) => customId.includes(`${routePrefix}-remove`))).toBe(true);
+    return actionIndex;
   };
-  visit((payload as { components: Observed[] }).components);
-  return rows.find((row) => row.some((customId) => customId.includes(marker)));
+
+  const attributeIndex = assertCollection("attribute", selected.attribute);
+  const dialogueIndex = assertCollection("dialogue", selected.dialogue);
+  if (selected.attribute && selected.dialogue) {
+    const dialogueSelectIndex = actionRowIndex(rows, "dlg-select");
+    expect(attributeIndex).toBeLessThan(dialogueSelectIndex);
+    expect(dialogueSelectIndex).toBeLessThan(dialogueIndex);
+  }
 }
 
 describe("config panel shell", () => {
@@ -450,6 +531,41 @@ describe("config Persona General body", () => {
           }
         }
       }
+    }
+
+    for (const selected of [
+      { name: "attribute only", attribute: true, dialogue: false },
+      { name: "dialogue only", attribute: false, dialogue: true },
+      { name: "both collections", attribute: true, dialogue: true },
+    ]) {
+      const semanticPersona = makePersona({
+        persona_id: 56,
+        persona_nickname: "Wren",
+        is_alter: true,
+        attribute_list: Array.from(
+          { length: selected.attribute ? 25 : 1 },
+          (_unused, index) => `Attribute ${index + 1}`,
+        ),
+        sample_dialogues_in: Array.from(
+          { length: selected.dialogue && !selected.attribute ? 25 : 1 },
+          (_unused, index) => `In ${index + 1}`,
+        ),
+        sample_dialogues_out: Array.from(
+          { length: selected.dialogue && !selected.attribute ? 25 : 1 },
+          (_unused, index) => `Out ${index + 1}`,
+        ),
+      });
+      const payload = build(GUILD_MANAGER, {
+        personas: [MAIN, semanticPersona],
+        selectedPersonaId: 56,
+        selectedAttributeIndex: selected.attribute ? 0 : undefined,
+        selectedDialogueIndex: selected.dialogue ? 0 : undefined,
+        selectedPersonaAvatarUrl: "https://cdn.example.invalid/56.png",
+        receipt: { tone: "success", heading: "Saved", detail: "The change was saved." },
+      });
+      const result = validateComponentsV2MessageLimits(payload);
+      expect(result.valid, `${selected.name} violations: ${JSON.stringify(result.violations)}`).toBe(true);
+      expectCollectionActionPlacement(payload, selected);
     }
   });
 
