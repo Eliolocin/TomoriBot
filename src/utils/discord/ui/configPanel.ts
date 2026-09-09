@@ -310,7 +310,7 @@ function appendPersonaCreateHint(components: ComponentInContainerData[], locale:
       .reverse()
       .find((component) => component.type === ComponentType.TextDisplay) as TextDisplayComponentData | undefined;
     if (precedingTextDisplay) {
-      precedingTextDisplay.content = `${precedingTextDisplay.content}\n\n${content}`;
+      precedingTextDisplay.content = `${precedingTextDisplay.content}\n${content}`;
     } else {
       components.splice(-1, 0, { type: ComponentType.TextDisplay, content });
     }

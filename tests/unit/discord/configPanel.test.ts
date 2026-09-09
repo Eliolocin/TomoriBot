@@ -1128,6 +1128,35 @@ describe("config Persona Appearance and Advanced bodies", () => {
     expect(JSON.stringify(payload)).not.toContain("data/charreferences");
   });
 
+  it("keeps the saved reference status adjacent to the persona-create hint", () => {
+    const payload = build(GUILD_MANAGER, {
+      page: "appearance",
+      personas: [advancedPersona],
+      selectedPersonaId: 55,
+      selectedPersonaCharacterReferenceUrl: "attachment://persona_char_ref_55.png",
+    });
+    const savedReferenceDisplay = walk(payload).find(
+      (component) =>
+        component.type === TEXT_DISPLAY &&
+        component.content?.includes("> Image: Uploaded and Saved") &&
+        component.content?.includes("-# Add a new persona"),
+    );
+
+    expect(savedReferenceDisplay?.content).toContain("> Image: Uploaded and Saved\n-# Add a new persona");
+    expect(savedReferenceDisplay?.content).not.toContain("> Image: Uploaded and Saved\n\n-# Add a new persona");
+
+    const absentReferencePayload = build(GUILD_MANAGER, {
+      page: "appearance",
+      personas: [makePersona({ persona_id: 55, nai_char_ref_url: null })],
+      selectedPersonaId: 55,
+    });
+    const hasBlankQuoteMarker = walk(absentReferencePayload).some(
+      (component) =>
+        component.type === TEXT_DISPLAY && component.content?.split("\n").some((line) => /^>\s*$/.test(line)),
+    );
+    expect(hasBlankQuoteMarker).toBe(false);
+  });
+
   it("places a resolved character-reference gallery directly below its action row", () => {
     const payload = build(GUILD_MANAGER, {
       page: "appearance",
