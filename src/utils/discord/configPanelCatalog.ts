@@ -13,6 +13,11 @@ import {
 } from "@/utils/discord/panelRouteCodec";
 import { parseLocale } from "@/utils/discord/panelRouteTokens";
 import type { McpsPanelRouteAdapter, McpsPanelRouteInput } from "@/utils/discord/mcpsPanelCatalog";
+import type {
+  StPresetsAction,
+  StPresetsPanelRoute,
+  StPresetsPanelRouteAdapter,
+} from "@/utils/discord/stPresetsPanelCatalog";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
 import type { RandomTriggerRow } from "@/types/db/schema";
 import type { AddressingStyle } from "@/types/personaNaming";
@@ -33,7 +38,7 @@ type PersonaPage =
   | "voice"
   | "naming";
 type BehaviorPage = "general" | "trigger" | "experimental" | "notices" | "memory";
-type PluginsPage = "available-tools" | "context-additions" | "mcp-servers";
+type PluginsPage = "available-tools" | "context-additions" | "mcp-servers" | "sillytavern-presets";
 type ChannelsPage = "destinations" | "auto-trigger" | "rules" | "overrides";
 type ModelsPage = "switch" | "parameters" | "fallbacks" | "image" | "voices";
 
@@ -47,7 +52,7 @@ export type ConfigPage = PersonaPage | BehaviorPage | PluginsPage | ChannelsPage
 export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPage[]> = {
   persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "voice", "overrides", "advanced"],
   behavior: ["general", "trigger", "notices", "experimental", "memory"],
-  plugins: ["available-tools", "context-additions", "mcp-servers"],
+  plugins: ["available-tools", "context-additions", "mcp-servers", "sillytavern-presets"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   models: ["switch", "parameters", "image", "fallbacks", "voices"],
 };
@@ -569,6 +574,30 @@ export type ConfigPanelRoute =
   | { action: "mcp-add-submit"; locale: string; nonce: string }
   | { action: "mcp-set-enabled"; locale: string; entityId: number; enabled: boolean }
   | { action: "mcp-remove-prompt" | "mcp-remove-cancel" | "mcp-remove-confirm"; locale: string; entityId: number }
+  | {
+      action:
+        | "st-presets-select"
+        | "st-presets-retry"
+        | "st-presets-none"
+        | "st-presets-disable"
+        | "st-presets-add-open";
+      locale: string;
+    }
+  | { action: "st-presets-range"; locale: string; rangeIndex: number }
+  | { action: "st-presets-add-submit"; locale: string; nonce: string }
+  | {
+      action:
+        | "st-presets-nodes-open"
+        | "st-presets-delete-prompt"
+        | "st-presets-delete-cancel"
+        | "st-presets-delete-confirm";
+      locale: string;
+      presetId: number;
+    }
+  | { action: "st-presets-nodes-range"; locale: string; presetId: number; rangeIndex: number }
+  | { action: "st-presets-nodes-range-select"; locale: string; presetId: number }
+  | { action: "st-presets-nodes-page"; locale: string; presetId: number; chooserPage: number }
+  | { action: "st-presets-nodes-submit"; locale: string; presetId: number; nonce: string }
   | { action: "channels-log-open"; locale: string }
   | { action: "channels-log-submit"; locale: string; nonce: string }
   | { action: "channels-log-clear"; locale: string; channelId?: string }
@@ -703,6 +732,24 @@ const mcpEntityIdField: RouteFieldCodec<"entityId", number> = {
   key: "entityId",
   encode: (v) => String(v),
   decode: (v) => parsePositiveId(v),
+};
+
+const stPresetIdField: RouteFieldCodec<"presetId", number> = {
+  key: "presetId",
+  encode: (v) => String(v),
+  decode: (v) => parsePositiveId(v),
+};
+
+const stRangeIndexField: RouteFieldCodec<"rangeIndex", number> = {
+  key: "rangeIndex",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const stChooserPageField: RouteFieldCodec<"chooserPage", number> = {
+  key: "chooserPage",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
 };
 
 const personaIdField: RouteFieldCodec<"personaId", number> = {
@@ -1025,6 +1072,30 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "mcp-remove-prompt": { wireToken: "mcp-remove-prompt", fields: [mcpEntityIdField] },
   "mcp-remove-cancel": { wireToken: "mcp-remove-cancel", fields: [mcpEntityIdField] },
   "mcp-remove-confirm": { wireToken: "mcp-remove-confirm", fields: [mcpEntityIdField] },
+  "st-presets-select": { wireToken: "st-presets-select", fields: [] },
+  "st-presets-retry": { wireToken: "st-presets-retry", fields: [] },
+  "st-presets-none": { wireToken: "st-presets-none", fields: [] },
+  "st-presets-disable": { wireToken: "st-presets-disable", fields: [] },
+  "st-presets-add-open": { wireToken: "st-presets-add-open", fields: [] },
+  "st-presets-range": { wireToken: "st-presets-range", fields: [stRangeIndexField] },
+  "st-presets-add-submit": { wireToken: "st-presets-add-submit", fields: [nonceField] },
+  "st-presets-nodes-open": { wireToken: "st-presets-nodes-open", fields: [stPresetIdField] },
+  "st-presets-delete-prompt": { wireToken: "st-presets-delete-prompt", fields: [stPresetIdField] },
+  "st-presets-delete-cancel": { wireToken: "st-presets-delete-cancel", fields: [stPresetIdField] },
+  "st-presets-delete-confirm": { wireToken: "st-presets-delete-confirm", fields: [stPresetIdField] },
+  "st-presets-nodes-range": {
+    wireToken: "st-presets-nodes-range",
+    fields: [stPresetIdField, stRangeIndexField],
+  },
+  "st-presets-nodes-range-select": { wireToken: "st-presets-nodes-range-select", fields: [stPresetIdField] },
+  "st-presets-nodes-page": {
+    wireToken: "st-presets-nodes-page",
+    fields: [stPresetIdField, stChooserPageField],
+  },
+  "st-presets-nodes-submit": {
+    wireToken: "st-presets-nodes-submit",
+    fields: [stPresetIdField, nonceField],
+  },
   "channels-log-open": { wireToken: "channels-log-open", fields: [] },
   "channels-log-submit": { wireToken: "channels-log-submit", fields: [nonceField] },
   "channels-log-clear": { wireToken: "channels-log-clear", fields: [channelIdField] },
@@ -1128,6 +1199,117 @@ export const CONFIG_MCP_PANEL_ROUTE_ADAPTER: McpsPanelRouteAdapter = {
     }
   },
   buildRangeSegments: (locale, rangeIndex) => buildConfigRouteSegments({ action: "mcp-range", locale, rangeIndex }),
+};
+
+type ConfigStPresetsPanelRoute = Extract<ConfigPanelRoute, { action: `st-presets-${string}` }>;
+
+function buildConfigStPresetsRoute(route: StPresetsPanelRoute): ConfigStPresetsPanelRoute {
+  switch (route.action) {
+    case "select":
+    case "retry":
+    case "none":
+    case "disable":
+    case "add-open":
+      return { action: `st-presets-${route.action}`, locale: route.locale } as ConfigStPresetsPanelRoute;
+    case "range":
+      return { action: "st-presets-range", locale: route.locale, rangeIndex: route.rangeIndex };
+    case "add-submit":
+      return { action: "st-presets-add-submit", locale: route.locale, nonce: route.nonce };
+    case "nodes-open":
+    case "delete-prompt":
+    case "delete-cancel":
+    case "delete-confirm":
+      return { action: `st-presets-${route.action}`, locale: route.locale, presetId: route.presetId };
+    case "nodes-range":
+      return {
+        action: "st-presets-nodes-range",
+        locale: route.locale,
+        presetId: route.presetId,
+        rangeIndex: route.rangeIndex,
+      };
+    case "nodes-range-select":
+      return { action: "st-presets-nodes-range-select", locale: route.locale, presetId: route.presetId };
+    case "nodes-page":
+      return {
+        action: "st-presets-nodes-page",
+        locale: route.locale,
+        presetId: route.presetId,
+        chooserPage: route.chooserPage,
+      };
+    case "nodes-submit":
+      return {
+        action: "st-presets-nodes-submit",
+        locale: route.locale,
+        presetId: route.presetId,
+        nonce: route.nonce,
+      };
+  }
+}
+
+function parseConfigStPresetsRoute(route: ConfigPanelRoute): StPresetsPanelRoute | null {
+  switch (route.action) {
+    case "st-presets-select":
+    case "st-presets-retry":
+    case "st-presets-none":
+    case "st-presets-disable":
+    case "st-presets-add-open":
+      return {
+        action: route.action.slice("st-presets-".length) as Extract<
+          StPresetsAction,
+          "select" | "retry" | "none" | "disable" | "add-open"
+        >,
+        locale: route.locale,
+      };
+    case "st-presets-range":
+      return { action: "range", locale: route.locale, rangeIndex: route.rangeIndex };
+    case "st-presets-add-submit":
+      return { action: "add-submit", locale: route.locale, nonce: route.nonce };
+    case "st-presets-nodes-open":
+    case "st-presets-delete-prompt":
+    case "st-presets-delete-cancel":
+    case "st-presets-delete-confirm":
+      return {
+        action: route.action.slice("st-presets-".length) as StPresetsAction,
+        locale: route.locale,
+        presetId: route.presetId,
+      } as StPresetsPanelRoute;
+    case "st-presets-nodes-range":
+      return {
+        action: "nodes-range",
+        locale: route.locale,
+        presetId: route.presetId,
+        rangeIndex: route.rangeIndex,
+      };
+    case "st-presets-nodes-range-select":
+      return { action: "nodes-range-select", locale: route.locale, presetId: route.presetId };
+    case "st-presets-nodes-page":
+      return {
+        action: "nodes-page",
+        locale: route.locale,
+        presetId: route.presetId,
+        chooserPage: route.chooserPage,
+      };
+    case "st-presets-nodes-submit":
+      return {
+        action: "nodes-submit",
+        locale: route.locale,
+        presetId: route.presetId,
+        nonce: route.nonce,
+      };
+    default:
+      return null;
+  }
+}
+
+export const CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER: StPresetsPanelRouteAdapter = {
+  namespace: CONFIG_ROUTE_NAMESPACE,
+  version: CONFIG_ROUTE_VERSION,
+  buildRouteId: (route) => buildConfigRouteId(buildConfigStPresetsRoute(route)),
+  buildRouteSegments: (route) => buildConfigRouteSegments(buildConfigStPresetsRoute(route)),
+  parseRoute: (route) => {
+    const parsed = parseConfigPanelRoute(route);
+    return parsed ? parseConfigStPresetsRoute(parsed) : null;
+  },
 };
 
 export function parseConfigPanelRoute(route: ParsedInteractionRoute): ConfigPanelRoute | null {

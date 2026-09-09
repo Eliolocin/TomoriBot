@@ -77,6 +77,8 @@ import type { RawModalPayload } from "@/utils/discord/ui/configModals";
 import { buildPanelContainer } from "@/utils/discord/ui/panel";
 import type { RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
+import { stPresetOperations } from "@/utils/stPreset/stPresetOperations";
+import type { StPresetsPanelRenderInput } from "@/utils/discord/ui/stPresetsPanel";
 import { HUMANIZER_DEFAULT } from "@/utils/discord/humanizerOptions";
 import { DEFAULT_MESSAGE_FETCH_LIMIT } from "@/utils/discord/messageFetchLimit";
 import type { McpConfigOperations } from "@/utils/mcp/mcpConfigOperations";
@@ -406,6 +408,7 @@ export interface ConfigRepaintOptions {
   channelsView?: ConfigChannelsView;
   mcpRead?: GuildMcpConfigReadResult;
   mcpPage?: import("@/utils/discord/ui/mcpsPanel").McpsPanelPage;
+  stPresetsView?: Omit<StPresetsPanelRenderInput, "locale" | "routes">;
   channelsSelectedChannelId?: string | null;
   channelsAutoTriggerRangeIndex?: number;
   channelsPrivateRangeIndex?: number;
@@ -487,6 +490,7 @@ export async function repaint(
   let voicesView = options.voicesView;
   let behaviorView = options.behaviorView;
   let mcpRead = options.mcpRead;
+  let stPresetsView = options.stPresetsView;
   if (category === "models") {
     // Server model state lives on the assembled workspace config every persona row carries, so any
     // persona in the workspace is an equally authoritative source for it.
@@ -526,7 +530,11 @@ export async function repaint(
   }
 
   let permissionsView = options.permissionsView;
-  if ((category === "plugins" || (category === "channels" && page === "rules")) && !permissionsView) {
+  if (
+    ((category === "plugins" && (page === "available-tools" || page === "context-additions")) ||
+      (category === "channels" && page === "rules")) &&
+    !permissionsView
+  ) {
     const state = scope.personas[0];
     if (state) permissionsView = await dependencies.loadPermissionsView(state);
   }
@@ -534,6 +542,26 @@ export async function repaint(
   if (category === "plugins" && page === "mcp-servers" && !mcpRead) {
     const state = scope.personas[0];
     if (state) mcpRead = await dependencies.loadMcpRead(state.server_id);
+  }
+
+  if (category === "plugins" && page === "sillytavern-presets" && !stPresetsView) {
+    const data = await stPresetOperations.loadStPresetScopeData(scope.serverDiscId);
+    stPresetsView = data
+      ? {
+          scope: scope.guildId ? "guild" : "dm",
+          presets: data.presets,
+          activePresetId: data.activePresetId,
+          activeNodeCounts: data.activeNodeCounts,
+          readStatus: data.readStatus,
+          page: data.activePresetId !== null ? { kind: "preset", presetId: data.activePresetId } : { kind: "none" },
+        }
+      : {
+          scope: scope.guildId ? "guild" : "dm",
+          presets: [],
+          activePresetId: null,
+          readStatus: "unavailable" as const,
+          page: { kind: "none" as const },
+        };
   }
 
   let channelsView = options.channelsView;
@@ -626,6 +654,7 @@ export async function repaint(
         channelsSelectedChannelId: options.channelsSelectedChannelId,
         mcpRead,
         mcpPage: options.mcpPage,
+        stPresetsView,
         channelsAutoTriggerRangeIndex: options.channelsAutoTriggerRangeIndex,
         channelsPrivateRangeIndex: options.channelsPrivateRangeIndex,
         channelsRoleplayRangeIndex: options.channelsRoleplayRangeIndex,

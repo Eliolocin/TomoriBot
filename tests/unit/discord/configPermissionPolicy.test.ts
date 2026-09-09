@@ -47,6 +47,7 @@ import {
   PERMISSIONS_PRIVACY_ACTION_BY_ROUTE,
   PLUGINS_CONTEXT_ADDITIONS_ACTION_BY_ROUTE,
   MCP_ACTION_BY_ROUTE,
+  ST_PRESETS_ACTION_BY_ROUTE,
   CHANNELS_DESTINATIONS_ACTION_BY_ROUTE,
   CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE,
   CHANNELS_RULES_ACTION_BY_ROUTE,
@@ -127,7 +128,12 @@ describe("config page filtering", () => {
     expect(resolveConfigPageState("plugins", "available-tools", DM_OWNER)).toBe("enabled");
     expect(resolveConfigPageState("plugins", "context-additions", DM_OWNER)).toBe("enabled");
     expect(resolveConfigPageState("models", "image", DM_OWNER)).toBe("omitted");
-    expect(visibleConfigPages("plugins", DM_OWNER)).toEqual(["available-tools", "context-additions", "mcp-servers"]);
+    expect(visibleConfigPages("plugins", DM_OWNER)).toEqual([
+      "available-tools",
+      "context-additions",
+      "mcp-servers",
+      "sillytavern-presets",
+    ]);
     expect(visibleConfigPages("models", DM_OWNER)).toEqual(["switch", "parameters", "fallbacks", "voices"]);
   });
 
@@ -708,6 +714,32 @@ describe("isConfigRouteAuthorized", () => {
     }
   });
 
+  it("keeps every SillyTavern Presets route for DM owners and guild managers only", () => {
+    const routes: ConfigPanelRoute[] = [
+      { action: "st-presets-select", locale: "en-US" },
+      { action: "st-presets-retry", locale: "en-US" },
+      { action: "st-presets-none", locale: "en-US" },
+      { action: "st-presets-disable", locale: "en-US" },
+      { action: "st-presets-add-open", locale: "en-US" },
+      { action: "st-presets-range", locale: "en-US", rangeIndex: 1 },
+      { action: "st-presets-add-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "st-presets-nodes-open", locale: "en-US", presetId: 1 },
+      { action: "st-presets-nodes-range", locale: "en-US", presetId: 1, rangeIndex: 1 },
+      { action: "st-presets-nodes-range-select", locale: "en-US", presetId: 1 },
+      { action: "st-presets-nodes-page", locale: "en-US", presetId: 1, chooserPage: 1 },
+      { action: "st-presets-nodes-submit", locale: "en-US", presetId: 1, nonce: "nonce1234567" },
+      { action: "st-presets-delete-prompt", locale: "en-US", presetId: 1 },
+      { action: "st-presets-delete-cancel", locale: "en-US", presetId: 1 },
+      { action: "st-presets-delete-confirm", locale: "en-US", presetId: 1 },
+    ];
+    expect(Object.keys(ST_PRESETS_ACTION_BY_ROUTE).sort()).toEqual(routes.map((route) => route.action).sort());
+    for (const route of routes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
+    }
+  });
+
   it("refuses a forged manager-owned route replayed by a guild member", () => {
     for (const route of personaWriteRoutes) {
       expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
@@ -905,6 +937,7 @@ describe("isConfigRouteAuthorized", () => {
       ...Object.keys(PERMISSIONS_PRIVACY_ACTION_BY_ROUTE),
       ...Object.keys(PLUGINS_CONTEXT_ADDITIONS_ACTION_BY_ROUTE),
       ...Object.keys(MCP_ACTION_BY_ROUTE),
+      ...Object.keys(ST_PRESETS_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_DESTINATIONS_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_RULES_ACTION_BY_ROUTE),

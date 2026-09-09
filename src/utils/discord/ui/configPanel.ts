@@ -31,6 +31,7 @@ import {
   buildConfigRouteId,
   buildConfigRouteSegments,
   CONFIG_MCP_PANEL_ROUTE_ADAPTER,
+  CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
   computeAttributeFingerprint,
   computeChannelOverridesFingerprint,
   computeDialogueFingerprint,
@@ -124,6 +125,7 @@ import {
   type ConfigPersonaVoiceRenderView,
 } from "@/utils/discord/ui/configVoicePanel";
 import { buildMcpsPanelComponents, type McpsPanelPage } from "@/utils/discord/ui/mcpsPanel";
+import { buildStPresetsPanelComponents, type StPresetsPanelRenderInput } from "@/utils/discord/ui/stPresetsPanel";
 
 const RANDOM_TRIGGER_PAGE_SIZE = CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY;
 export const CONFIG_MCP_PANEL_PAGE_SIZE = 4;
@@ -200,6 +202,7 @@ const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
     "available-tools": "commands.config.panel.page_plugins_available_tools",
     "context-additions": "commands.config.panel.page_plugins_context_additions",
     "mcp-servers": "commands.mcps.title",
+    "sillytavern-presets": "commands.st-presets.title",
   },
   models: {
     switch: "commands.config.panel.page_models_switch",
@@ -271,6 +274,7 @@ export interface ConfigPanelRenderInput {
   channelsView?: ConfigChannelsView;
   mcpRead?: GuildMcpConfigReadResult;
   mcpPage?: McpsPanelPage;
+  stPresetsView?: Omit<StPresetsPanelRenderInput, "locale" | "routes">;
   channelsSelectedChannelId?: string | null;
   channelsAutoTriggerRangeIndex?: number;
   channelsPrivateRangeIndex?: number;
@@ -4364,6 +4368,23 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
         page: input.mcpPage ?? { kind: "collection" },
         pageSize: CONFIG_MCP_PANEL_PAGE_SIZE,
         routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
+      }),
+    );
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "plugins" && page === "sillytavern-presets") {
+    components.push(
+      ...buildStPresetsPanelComponents({
+        locale,
+        routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
+        ...(input.stPresetsView ?? {
+          scope: actor.workspaceKind,
+          presets: [],
+          activePresetId: null,
+          readStatus: "unavailable" as const,
+          page: { kind: "none" } as const,
+        }),
       }),
     );
     return buildPayload(components, receipt);

@@ -319,6 +319,7 @@ describe("config panel shell", () => {
       "available-tools",
       "context-additions",
       "mcp-servers",
+      "sillytavern-presets",
     ]);
 
     const managerPageSelect = walk(build(GUILD_MANAGER, { category: "plugins", page: "available-tools" })).find(
@@ -328,7 +329,51 @@ describe("config panel shell", () => {
       "available-tools",
       "context-additions",
       "mcp-servers",
+      "sillytavern-presets",
     ]);
+  });
+
+  it("embeds the ST panel with config routes and stays within the Components V2 budget", () => {
+    const presets = Array.from({ length: 23 }, (_, index) => ({
+      preset_id: index + 1,
+      preset_name: `Preset ${index + 1}`,
+      description: "A preset",
+      is_active: index === 0,
+    }));
+    const view = {
+      scope: "dm" as const,
+      presets,
+      activePresetId: 1,
+      activeNodeCounts: { total: 1500, enabled: 750 },
+      readStatus: "stale" as const,
+      page: { kind: "preset" as const, presetId: 1, nodeRangeIndex: 0, nodeRangeCount: 30, nodeTotalCount: 1500 },
+    };
+    const withoutReceipt = build(DM_OWNER, {
+      category: "plugins",
+      page: "sillytavern-presets",
+      personas: [],
+      selectedPersonaId: null,
+      stPresetsView: view,
+    });
+    const withReceipt = build(DM_OWNER, {
+      category: "plugins",
+      page: "sillytavern-presets",
+      personas: [],
+      selectedPersonaId: null,
+      receipt: {
+        tone: "warning",
+        heading: "Stale",
+        detail: "Retry",
+      },
+      stPresetsView: view,
+    });
+
+    const serialized = JSON.stringify(withReceipt);
+    expect(serialized).toContain("config:v2:st-presets-select:en-US");
+    expect(serialized).not.toContain("st-presets:v1");
+    expect(walk(withoutReceipt)).toHaveLength(27);
+    expect(walk(withReceipt)).toHaveLength(29);
+    expect(() => validateComponentsV2MessageLimits(withReceipt)).not.toThrow();
   });
 
   it("lists only pages the actor may open in the page selector", () => {

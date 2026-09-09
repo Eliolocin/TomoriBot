@@ -34,6 +34,20 @@ export type StPresetsPanelRoute =
 
 export type StPresetsAction = StPresetsPanelRoute["action"];
 
+/**
+ * Host-neutral route input used by the panel renderer. Hosts provide the namespace, version, and
+ * codec implementation while the panel keeps one semantic action set for every surface.
+ */
+export type StPresetsPanelRouteInput = StPresetsPanelRoute;
+
+export interface StPresetsPanelRouteAdapter {
+  namespace: string;
+  version: string;
+  buildRouteId(route: StPresetsPanelRouteInput): string;
+  buildRouteSegments(route: StPresetsPanelRouteInput): string[];
+  parseRoute(route: ParsedInteractionRoute): StPresetsPanelRouteInput | null;
+}
+
 type StPresetsRouteForAction<A extends StPresetsAction> = StPresetsPanelRoute extends infer R
   ? R extends { action: string }
     ? A extends R["action"]
@@ -178,3 +192,11 @@ export function parseStPresetsPanelRoute(route: ParsedInteractionRoute): StPrese
 
   return decodeRouteSegments(entry.codec, entry.action, locale, tail);
 }
+
+export const ST_PRESETS_PANEL_ROUTE_ADAPTER: StPresetsPanelRouteAdapter = {
+  namespace: ST_PRESETS_ROUTE_NAMESPACE,
+  version: ST_PRESETS_ROUTE_VERSION,
+  buildRouteId: buildStPresetsRouteId,
+  buildRouteSegments: buildStPresetsRouteSegments,
+  parseRoute: parseStPresetsPanelRoute,
+};

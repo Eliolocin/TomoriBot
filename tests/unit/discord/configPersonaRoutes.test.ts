@@ -795,6 +795,39 @@ const WIRE_CONTRACT_V2: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
   ["config:v2:mcp-remove-prompt:en-US:1", { action: "mcp-remove-prompt", locale: "en-US", entityId: 1 }],
   ["config:v2:mcp-remove-cancel:en-US:1", { action: "mcp-remove-cancel", locale: "en-US", entityId: 1 }],
   ["config:v2:mcp-remove-confirm:en-US:1", { action: "mcp-remove-confirm", locale: "en-US", entityId: 1 }],
+  ["config:v2:st-presets-select:en-US", { action: "st-presets-select", locale: "en-US" }],
+  ["config:v2:st-presets-retry:en-US", { action: "st-presets-retry", locale: "en-US" }],
+  ["config:v2:st-presets-none:en-US", { action: "st-presets-none", locale: "en-US" }],
+  ["config:v2:st-presets-disable:en-US", { action: "st-presets-disable", locale: "en-US" }],
+  ["config:v2:st-presets-add-open:en-US", { action: "st-presets-add-open", locale: "en-US" }],
+  ["config:v2:st-presets-range:en-US:1", { action: "st-presets-range", locale: "en-US", rangeIndex: 1 }],
+  [
+    "config:v2:st-presets-add-submit:en-US:nonce1234567",
+    { action: "st-presets-add-submit", locale: "en-US", nonce: "nonce1234567" },
+  ],
+  ["config:v2:st-presets-nodes-open:en-US:1", { action: "st-presets-nodes-open", locale: "en-US", presetId: 1 }],
+  [
+    "config:v2:st-presets-nodes-range:en-US:1:2",
+    { action: "st-presets-nodes-range", locale: "en-US", presetId: 1, rangeIndex: 2 },
+  ],
+  [
+    "config:v2:st-presets-nodes-range-select:en-US:1",
+    { action: "st-presets-nodes-range-select", locale: "en-US", presetId: 1 },
+  ],
+  [
+    "config:v2:st-presets-nodes-page:en-US:1:3",
+    { action: "st-presets-nodes-page", locale: "en-US", presetId: 1, chooserPage: 3 },
+  ],
+  [
+    "config:v2:st-presets-nodes-submit:en-US:1:nonce1234567",
+    { action: "st-presets-nodes-submit", locale: "en-US", presetId: 1, nonce: "nonce1234567" },
+  ],
+  ["config:v2:st-presets-delete-prompt:en-US:1", { action: "st-presets-delete-prompt", locale: "en-US", presetId: 1 }],
+  ["config:v2:st-presets-delete-cancel:en-US:1", { action: "st-presets-delete-cancel", locale: "en-US", presetId: 1 }],
+  [
+    "config:v2:st-presets-delete-confirm:en-US:1",
+    { action: "st-presets-delete-confirm", locale: "en-US", presetId: 1 },
+  ],
   ["config:v2:channels-log-open:en-US", { action: "channels-log-open", locale: "en-US" }],
   [
     "config:v2:channels-log-submit:en-US:nonce1234567",
@@ -1147,6 +1180,23 @@ describe("config route authorization", () => {
 
     expect(harness.modals).toEqual([]);
     expect(harness.replies).toHaveLength(1);
+  });
+
+  it("routes a denied SillyTavern modal open through the Config hosted fallback", async () => {
+    const harness = makeHarness({ isManager: false });
+    const interaction = makeInteraction({
+      customId: buildConfigRouteId({ action: "st-presets-add-open", locale: "en-US" }),
+      isManager: false,
+      harness,
+    });
+
+    await dispatch(harness, interaction);
+
+    expect(interaction.deferred).toBe(true);
+    expect(harness.replies).toEqual([]);
+    expect(harness.modals).toEqual([]);
+    expect(harness.edits).toHaveLength(1);
+    expect(JSON.stringify(harness.edits[0])).toContain("config:v2:st-presets-select:en-US");
   });
 });
 

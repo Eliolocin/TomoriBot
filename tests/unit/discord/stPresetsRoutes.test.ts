@@ -7,6 +7,7 @@ import type {
   StringSelectMenuInteraction,
 } from "discord.js";
 import type { StPresetNodeRow, StPresetRow } from "@/types/db/schema";
+import { CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER } from "@/utils/discord/configPanelCatalog";
 import {
   buildInitialStPresetsPanel,
   createStPresetsInteractionRoute,
@@ -264,6 +265,80 @@ describe("ST Presets interaction routes", () => {
     });
 
     expect(calls).toEqual(["showAddModal"]);
+  });
+
+  it("lets a hosted route repaint its denied select fallback after acknowledgement", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute({
+      ...makeDependencies(calls),
+      routeAdapter: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
+      onDenied: async () => {
+        calls.push("hostedDenied");
+      },
+    });
+    const segments = CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.buildRouteSegments({
+      action: "select",
+      locale: "en-US",
+    });
+    const interaction = makeSelectInteraction(
+      CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.buildRouteId({ action: "select", locale: "en-US" }),
+      ["none"],
+      calls,
+      { memberPermissions: { has: () => false } },
+    );
+
+    await route.execute({} as Client, interaction, {
+      namespace: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.namespace,
+      version: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.version,
+      segments,
+    });
+
+    expect(calls).toEqual(["deferUpdate", "hostedDenied"]);
+  });
+
+  it("acknowledges hosted modal-oriented denials before their fallback repaint", async () => {
+    const calls: string[] = [];
+    const route = createStPresetsInteractionRoute({
+      ...makeDependencies(calls),
+      routeAdapter: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
+      onDenied: async () => {
+        calls.push("hostedDenied");
+      },
+    });
+    const deniedPermissions = { memberPermissions: { has: () => false } };
+    const cases: Array<{
+      route: Parameters<typeof CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.buildRouteId>[0];
+      interaction: "button" | "select";
+      values?: string[];
+    }> = [
+      { route: { action: "add-open", locale: "en-US" }, interaction: "button" },
+      { route: { action: "select", locale: "en-US" }, interaction: "select", values: ["add"] },
+      { route: { action: "nodes-open", locale: "en-US", presetId: 1 }, interaction: "button" },
+      { route: { action: "nodes-range", locale: "en-US", presetId: 1, rangeIndex: 0 }, interaction: "button" },
+      {
+        route: { action: "nodes-range-select", locale: "en-US", presetId: 1 },
+        interaction: "select",
+        values: ["0"],
+      },
+    ];
+
+    for (const entry of cases) {
+      calls.length = 0;
+      const customId = CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.buildRouteId(entry.route);
+      const interaction =
+        entry.interaction === "button"
+          ? makeButtonInteraction(customId, calls, deniedPermissions)
+          : makeSelectInteraction(customId, entry.values ?? [], calls, deniedPermissions);
+      const segments = CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.buildRouteSegments(entry.route);
+
+      await route.execute({} as Client, interaction, {
+        namespace: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.namespace,
+        version: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER.version,
+        segments,
+      });
+
+      expect(calls).toEqual(["deferUpdate", "hostedDenied"]);
+    }
   });
 
   it("selecting None with active preset deactivates immediately and repaints with disabled receipt", async () => {

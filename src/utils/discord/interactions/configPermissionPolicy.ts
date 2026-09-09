@@ -74,6 +74,22 @@ export type ConfigMcpAction =
   | "remove-prompt"
   | "remove-cancel"
   | "remove-confirm";
+export type ConfigStPresetsAction =
+  | "select"
+  | "retry"
+  | "none"
+  | "disable"
+  | "add-open"
+  | "range"
+  | "add-submit"
+  | "nodes-open"
+  | "nodes-range"
+  | "nodes-range-select"
+  | "nodes-page"
+  | "nodes-submit"
+  | "delete-prompt"
+  | "delete-cancel"
+  | "delete-confirm";
 export type ConfigChannelsDestinationsAction = "log" | "welcome";
 export type ConfigChannelsAutoTriggerAction = "auto-trigger" | "threshold";
 export type ConfigChannelsRulesAction = "private" | "roleplay" | "blocklist";
@@ -483,6 +499,24 @@ export const MCP_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], Con
   "mcp-remove-confirm": "remove-confirm",
 };
 
+export const ST_PRESETS_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigStPresetsAction>> = {
+  "st-presets-select": "select",
+  "st-presets-retry": "retry",
+  "st-presets-none": "none",
+  "st-presets-disable": "disable",
+  "st-presets-add-open": "add-open",
+  "st-presets-range": "range",
+  "st-presets-add-submit": "add-submit",
+  "st-presets-nodes-open": "nodes-open",
+  "st-presets-nodes-range": "nodes-range",
+  "st-presets-nodes-range-select": "nodes-range-select",
+  "st-presets-nodes-page": "nodes-page",
+  "st-presets-nodes-submit": "nodes-submit",
+  "st-presets-delete-prompt": "delete-prompt",
+  "st-presets-delete-cancel": "delete-cancel",
+  "st-presets-delete-confirm": "delete-confirm",
+};
+
 export const CHANNELS_DESTINATIONS_ACTION_BY_ROUTE: Partial<
   Record<ConfigPanelRoute["action"], ConfigChannelsDestinationsAction>
 > = {
@@ -605,6 +639,11 @@ export function resolvePluginsContextAdditionsActionState(
 }
 
 export function resolveMcpActionState(_action: ConfigMcpAction, actor: ConfigActor): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "enabled";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolveStPresetsActionState(_action: ConfigStPresetsAction, actor: ConfigActor): ConfigSurfaceState {
   if (actor.workspaceKind === "dm") return "enabled";
   return actor.isManager ? "enabled" : "disabled";
 }
@@ -798,6 +837,12 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   if (mcpAction) {
     if (resolveConfigPageState("plugins", "mcp-servers", actor) === "omitted") return false;
     return resolveMcpActionState(mcpAction, actor) === "enabled";
+  }
+
+  const stPresetsAction = ST_PRESETS_ACTION_BY_ROUTE[route.action];
+  if (stPresetsAction) {
+    if (resolveConfigPageState("plugins", "sillytavern-presets", actor) === "omitted") return false;
+    return resolveStPresetsActionState(stPresetsAction, actor) === "enabled";
   }
 
   const channelsDestinationsAction = CHANNELS_DESTINATIONS_ACTION_BY_ROUTE[route.action];

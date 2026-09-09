@@ -242,6 +242,7 @@ import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderC
 import { resolveDeliberateToolContextTurns } from "@/utils/tools/deliberateToolMode";
 import { mcpConfigOperations } from "@/utils/mcp/mcpConfigOperations";
 import { handleConfigMcpModalOpen, handleConfigMcpRoutes } from "@/utils/discord/interactions/configMcpRoutes";
+import { handleConfigStPresetsRoute } from "@/utils/discord/interactions/configStPresetsRoutes";
 
 const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "avatar-open",
@@ -2820,6 +2821,9 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       const route = parseConfigPanelRoute(parsed);
       if (!route) throw new Error(`Malformed config panel route: ${interaction.customId}`);
 
+      const actor = resolveConfigActor(interaction);
+      if (await handleConfigStPresetsRoute(_client, interaction, parsed, dependencies)) return;
+
       // Route dispatch runs against hand-rolled interaction doubles in four sibling suites that
       // predate channel selects, so probe for the guard before calling it.
       const isChannelSelectMenu =
@@ -2903,8 +2907,6 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
 
       // The actor comes from the interaction rather than the workspace, so a forged custom ID is
       // rejected before any repository read.
-      const actor = resolveConfigActor(interaction);
-
       let voiceSubmitPreflight: ConfigVoicesSubmitPreflight | undefined;
       if (route.action === "voice-sample-add-submit") {
         voiceSubmitPreflight = prepareConfigVoicesSubmit(interaction, route, dependencies) ?? undefined;

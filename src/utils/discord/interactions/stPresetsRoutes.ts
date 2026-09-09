@@ -21,9 +21,9 @@ import {
 import { createNonce } from "@/utils/discord/panelRouteTokens";
 import {
   MAX_NODES_PER_MODAL_PAGE,
-  ST_PRESETS_ROUTE_NAMESPACE,
-  ST_PRESETS_ROUTE_VERSION,
-  parseStPresetsPanelRoute,
+  ST_PRESETS_PANEL_ROUTE_ADAPTER,
+  type StPresetsPanelRoute,
+  type StPresetsPanelRouteAdapter,
 } from "@/utils/discord/stPresetsPanelCatalog";
 import {
   buildAddStPresetModal,
@@ -43,7 +43,7 @@ import {
 import { recordPanelActionStat, type RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
 
-interface StPresetsScope {
+export interface StPresetsScope {
   discordId: string;
   kind: "guild" | "dm";
   state: TomoriState;
@@ -63,6 +63,7 @@ export interface StPresetsRouteDependencies {
     interaction: ButtonInteraction | StringSelectMenuInteraction,
     locale: string,
     nonce: string,
+    routes?: StPresetsPanelRouteAdapter,
   ): Promise<void>;
   showNodesModal(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
@@ -71,11 +72,28 @@ export interface StPresetsRouteDependencies {
     nodes: StPresetNodeRow[],
     pageOffset: number,
     nonce: string,
+    routes?: StPresetsPanelRouteAdapter,
   ): Promise<void>;
   takeFileUpload(interactionId: string, nonce: string): APIAttachment | undefined;
   takeNodeCheckboxValues(interactionId: string, nonce: string, groupIndex: number): string[] | undefined;
   storeNodeSnapshot(nonce: string, snapshot: { presetId: number; identifiers: string[] }): void;
   takeNodeSnapshot(nonce: string): { presetId: number; identifiers: string[] } | undefined;
+  routeAdapter?: StPresetsPanelRouteAdapter;
+  isAuthorized?(
+    interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
+    route: StPresetsPanelRoute,
+  ): boolean;
+  repaint?(
+    interaction: GlobalRoutableInteraction,
+    locale: string,
+    scope: StPresetsScope,
+    page: StPresetsPanelPage,
+    panelReceipt?: PanelReceipt,
+    rangeIndex?: number,
+    routes?: StPresetsPanelRouteAdapter,
+  ): Promise<void>;
+  onDenied?(interaction: GlobalRoutableInteraction, route: StPresetsPanelRoute): Promise<void>;
+  onMissing?(interaction: GlobalRoutableInteraction, route: StPresetsPanelRoute): Promise<void>;
 }
 
 const nodeSnapshots = new Map<string, { presetId: number; identifiers: string[]; expiresAt: number }>();
@@ -189,13 +207,14 @@ function isAuthorized(interaction: GlobalRoutableInteraction | ChatInputCommandI
   return !interaction.guildId || (interaction.memberPermissions?.has("ManageGuild") ?? false);
 }
 
-async function repaint(
+async function renderStPresetsPanel(
   interaction: GlobalRoutableInteraction,
   locale: string,
   scope: StPresetsScope,
   page: StPresetsPanelPage,
   panelReceipt?: PanelReceipt,
   rangeIndex?: number,
+  routes: StPresetsPanelRouteAdapter = ST_PRESETS_PANEL_ROUTE_ADAPTER,
 ): Promise<void> {
   await deliverGuardedPanel(
     interaction,
@@ -209,6 +228,7 @@ async function repaint(
       page,
       rangeIndex,
       receipt: panelReceipt,
+      routes,
     }),
     { locale },
   );
@@ -227,6 +247,13 @@ function requireButton(interaction: GlobalRoutableInteraction, action: string): 
   return interaction;
 }
 
+function requireStringSelect(interaction: GlobalRoutableInteraction, action: string): StringSelectMenuInteraction {
+  if (!interaction.isStringSelectMenu()) {
+    throw new Error(`ST presets ${action} route requires a String Select interaction`);
+  }
+  return interaction;
+}
+
 export function createStPresetsInteractionRoute(
   overrides: Partial<StPresetsRouteDependencies> = {},
 ): GlobalInteractionRoute {
@@ -238,9 +265,10 @@ export function createStPresetsInteractionRoute(
     },
     loadToggleableNodes: (presetId) => loadStPresetToggleableNodes(presetId),
     createNonce,
-    showAddModal: (interaction, locale, nonce) => showRoutedRawModal(interaction, buildAddStPresetModal(locale, nonce)),
-    showNodesModal: (interaction, locale, preset, nodes, pageOffset, nonce) =>
-      showRoutedRawModal(interaction, buildNodesToggleModal(locale, preset, nodes, pageOffset, nonce)),
+    showAddModal: (interaction, locale, nonce, routes) =>
+      showRoutedRawModal(interaction, buildAddStPresetModal(locale, nonce, routes)),
+    showNodesModal: (interaction, locale, preset, nodes, pageOffset, nonce, routes) =>
+      showRoutedRawModal(interaction, buildNodesToggleModal(locale, preset, nodes, pageOffset, nonce, routes)),
     takeFileUpload: (interactionId, nonce) =>
       takeRawModalFileUpload(interactionId, buildStPresetsAddModalFieldId("file", nonce)),
     takeNodeCheckboxValues: (interactionId, nonce, groupIndex) =>
@@ -249,15 +277,46 @@ export function createStPresetsInteractionRoute(
     takeNodeSnapshot,
     ...overrides,
   };
+  const routeAdapter = dependencies.routeAdapter ?? ST_PRESETS_PANEL_ROUTE_ADAPTER;
+  const authorizeRoute = (interaction: GlobalRoutableInteraction, route: StPresetsPanelRoute): boolean =>
+    dependencies.isAuthorized?.(interaction, route) ?? isAuthorized(interaction);
+  const repaintRoute = (
+    interaction: GlobalRoutableInteraction,
+    locale: string,
+    scope: StPresetsScope,
+    page: StPresetsPanelPage,
+    panelReceipt?: PanelReceipt,
+    rangeIndex?: number,
+  ): Promise<void> =>
+    dependencies.repaint
+      ? dependencies.repaint(interaction, locale, scope, page, panelReceipt, rangeIndex, routeAdapter)
+      : renderStPresetsPanel(interaction, locale, scope, page, panelReceipt, rangeIndex, routeAdapter);
+  const repaint = repaintRoute;
+  const handleImmediateDenied = async (
+    interaction: ButtonInteraction | StringSelectMenuInteraction,
+    route: StPresetsPanelRoute,
+  ): Promise<void> => {
+    if (dependencies.onDenied) {
+      await interaction.deferUpdate();
+      await dependencies.onDenied(interaction, route);
+      return;
+    }
+
+    await interaction.reply({
+      content: localizer(route.locale, "general.errors.permission_denied_description"),
+      flags: MessageFlags.Ephemeral,
+    });
+  };
 
   return {
-    namespace: ST_PRESETS_ROUTE_NAMESPACE,
-    version: ST_PRESETS_ROUTE_VERSION,
+    namespace: routeAdapter.namespace,
+    version: routeAdapter.version,
     async execute(_client, interaction, parsed): Promise<void> {
-      const route = parseStPresetsPanelRoute(parsed);
+      const route = routeAdapter.parseRoute(parsed);
       if (!route) {
         throw new Error(`Malformed ST presets panel route: ${interaction.customId}`);
       }
+      const isRouteAuthorized = () => authorizeRoute(interaction, route);
 
       const expectsSelect = route.action === "select" || route.action === "nodes-range-select";
       const expectsModal = route.action === "add-submit" || route.action === "nodes-submit";
@@ -273,15 +332,12 @@ export function createStPresetsInteractionRoute(
       }
 
       if (route.action === "add-open") {
-        if (!isAuthorized(interaction)) {
-          await interaction.reply({
-            content: localizer(route.locale, "general.errors.permission_denied_description"),
-            flags: MessageFlags.Ephemeral,
-          });
+        if (!isRouteAuthorized()) {
+          await handleImmediateDenied(requireButton(interaction, route.action), route);
           return;
         }
         const nonce = dependencies.createNonce();
-        await dependencies.showAddModal(requireButton(interaction, route.action), route.locale, nonce);
+        await dependencies.showAddModal(requireButton(interaction, route.action), route.locale, nonce, routeAdapter);
         return;
       }
 
@@ -290,24 +346,26 @@ export function createStPresetsInteractionRoute(
         const selectedValue = selectMenu.values[0];
 
         if (selectedValue === "add") {
-          if (!isAuthorized(interaction)) {
-            await interaction.reply({
-              content: localizer(route.locale, "general.errors.permission_denied_description"),
-              flags: MessageFlags.Ephemeral,
-            });
+          if (!isRouteAuthorized()) {
+            await handleImmediateDenied(selectMenu, route);
             return;
           }
           const nonce = dependencies.createNonce();
-          await dependencies.showAddModal(selectMenu, route.locale, nonce);
+          await dependencies.showAddModal(selectMenu, route.locale, nonce, routeAdapter);
           return;
         }
 
         const initialScope = await beginPanelInteraction(interaction, {
-          authorize: () => isAuthorized(interaction),
+          authorize: isRouteAuthorized,
           onDenied: () =>
-            interaction.editReply(terminalPayload(route.locale, "general.errors.permission_denied_description")),
+            dependencies.onDenied
+              ? dependencies.onDenied(interaction, route)
+              : interaction.editReply(terminalPayload(route.locale, "general.errors.permission_denied_description")),
           load: () => dependencies.resolveScope(interaction, false),
-          onMissing: () => interaction.editReply(terminalPayload(route.locale, "commands.st-presets.not_setup")),
+          onMissing: () =>
+            dependencies.onMissing
+              ? dependencies.onMissing(interaction, route)
+              : interaction.editReply(terminalPayload(route.locale, "commands.st-presets.not_setup")),
         });
         if (!initialScope) return;
         let scope = initialScope;
@@ -430,11 +488,8 @@ export function createStPresetsInteractionRoute(
       }
 
       if (route.action === "nodes-open") {
-        if (!isAuthorized(interaction)) {
-          await interaction.reply({
-            content: localizer(route.locale, "general.errors.permission_denied_description"),
-            flags: MessageFlags.Ephemeral,
-          });
+        if (!isRouteAuthorized()) {
+          await handleImmediateDenied(requireButton(interaction, route.action), route);
           return;
         }
 
@@ -496,6 +551,7 @@ export function createStPresetsInteractionRoute(
             nodes,
             0,
             nonce,
+            routeAdapter,
           );
           return;
         }
@@ -506,11 +562,13 @@ export function createStPresetsInteractionRoute(
       }
 
       if (route.action === "nodes-range" || route.action === "nodes-range-select") {
-        if (!isAuthorized(interaction)) {
-          await interaction.reply({
-            content: localizer(route.locale, "general.errors.permission_denied_description"),
-            flags: MessageFlags.Ephemeral,
-          });
+        if (!isRouteAuthorized()) {
+          await handleImmediateDenied(
+            route.action === "nodes-range"
+              ? requireButton(interaction, route.action)
+              : requireStringSelect(interaction, route.action),
+            route,
+          );
           return;
         }
 
@@ -594,22 +652,25 @@ export function createStPresetsInteractionRoute(
           pageNodes,
           pageOffset,
           nonce,
+          routeAdapter,
         );
         return;
       }
 
       // Remaining button/modal actions that acknowledge via deferUpdate
       const initialScope = await beginPanelInteraction(interaction, {
-        authorize: () => isAuthorized(interaction),
-        onDenied: () => {
+        authorize: isRouteAuthorized,
+        onDenied: async () => {
           if (route.action === "add-submit") dependencies.takeFileUpload(interaction.id, route.nonce);
           if (route.action === "nodes-submit") dependencies.takeNodeSnapshot(route.nonce);
+          if (dependencies.onDenied) return dependencies.onDenied(interaction, route);
           return interaction.editReply(terminalPayload(route.locale, "general.errors.permission_denied_description"));
         },
         load: () => dependencies.resolveScope(interaction, route.action === "retry"),
-        onMissing: () => {
+        onMissing: async () => {
           if (route.action === "add-submit") dependencies.takeFileUpload(interaction.id, route.nonce);
           if (route.action === "nodes-submit") dependencies.takeNodeSnapshot(route.nonce);
+          if (dependencies.onMissing) return dependencies.onMissing(interaction, route);
           return interaction.editReply(terminalPayload(route.locale, "commands.st-presets.not_setup"));
         },
       });

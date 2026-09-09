@@ -16,12 +16,10 @@ import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import { resolveRangeSelection } from "@/utils/discord/interactions/panelController";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
 import {
-  buildStPresetsRouteId,
-  buildStPresetsRouteSegments,
   MAX_NODES_PER_MODAL_PAGE,
   NODE_RANGE_OPTIONS_PER_PAGE,
-  ST_PRESETS_ROUTE_NAMESPACE,
-  ST_PRESETS_ROUTE_VERSION,
+  ST_PRESETS_PANEL_ROUTE_ADAPTER,
+  type StPresetsPanelRouteAdapter,
 } from "@/utils/discord/stPresetsPanelCatalog";
 import {
   buildPanelContainer,
@@ -71,6 +69,7 @@ export interface StPresetsPanelRenderInput {
   page: StPresetsPanelPage;
   rangeIndex?: number;
   receipt?: PanelReceipt;
+  routes?: StPresetsPanelRouteAdapter;
 }
 
 export type StPresetsAddModalField = "file" | "name" | "description";
@@ -83,14 +82,14 @@ export function buildStPresetsNodesModalFieldId(nonce: string, groupIndex: numbe
   return `nodes_${groupIndex}_${nonce}`;
 }
 
-function buildRetryRow(locale: string): ActionRowData<ButtonComponentData> {
+function buildRetryRow(locale: string, routes: StPresetsPanelRouteAdapter): ActionRowData<ButtonComponentData> {
   return {
     type: ComponentType.ActionRow,
     components: [
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildStPresetsRouteId({ action: "retry", locale }),
+        customId: routes.buildRouteId({ action: "retry", locale }),
         label: localizer(locale, "commands.st-presets.retry"),
       },
     ],
@@ -130,8 +129,9 @@ function buildPayload(components: ComponentInContainerData[], receipt?: PanelRec
   };
 }
 
-export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): StPresetsPanelPayload {
+export function buildStPresetsPanelComponents(input: StPresetsPanelRenderInput): ComponentInContainerData[] {
   const { locale, presets, activePresetId, readStatus, page } = input;
+  const routes = input.routes ?? ST_PRESETS_PANEL_ROUTE_ADAPTER;
   const writesDisabled = readStatus !== "fresh";
 
   const components: ComponentInContainerData[] = [
@@ -150,9 +150,9 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
         type: ComponentType.TextDisplay,
         content: localizer(locale, "commands.st-presets.unavailable"),
       },
-      buildRetryRow(locale),
+      buildRetryRow(locale, routes),
     );
-    return buildPayload(components, input.receipt);
+    return components;
   }
 
   // Preset Selector building
@@ -204,7 +204,7 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
     components: [
       {
         type: ComponentType.StringSelect,
-        customId: buildStPresetsRouteId({ action: "select", locale }),
+        customId: routes.buildRouteId({ action: "select", locale }),
         placeholder: localizer(locale, "commands.st-presets.select_placeholder"),
         options: selectOptions,
         disabled: writesDisabled,
@@ -219,11 +219,11 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
       locale,
       rangeIndex: rangeSelection.rangeIndex,
       rangeCount: rangeSelection.rangeCount,
-      namespace: ST_PRESETS_ROUTE_NAMESPACE,
-      version: ST_PRESETS_ROUTE_VERSION,
+      namespace: routes.namespace,
+      version: routes.version,
       disabled: writesDisabled,
       buildSegments: {
-        page: (rangeIndex) => buildStPresetsRouteSegments({ action: "range", locale, rangeIndex }),
+        page: (rangeIndex) => routes.buildRouteSegments({ action: "range", locale, rangeIndex }),
       },
     });
     if (paginationRow) {
@@ -278,14 +278,14 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
             {
               type: ComponentType.Button,
               style: ButtonStyle.Secondary,
-              customId: buildStPresetsRouteId({ action: "nodes-open", locale, presetId: targetPresetId }),
+              customId: routes.buildRouteId({ action: "nodes-open", locale, presetId: targetPresetId }),
               label: localizer(locale, "commands.st-presets.toggle_nodes"),
               disabled: writesDisabled,
             },
             {
               type: ComponentType.Button,
               style: ButtonStyle.Danger,
-              customId: buildStPresetsRouteId({ action: "delete-prompt", locale, presetId: targetPresetId }),
+              customId: routes.buildRouteId({ action: "delete-prompt", locale, presetId: targetPresetId }),
               label: localizer(locale, "commands.st-presets.delete_preset"),
               disabled: writesDisabled,
             },
@@ -308,7 +308,7 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
           components: [
             {
               type: ComponentType.StringSelect,
-              customId: buildStPresetsRouteId({
+              customId: routes.buildRouteId({
                 action: "nodes-range-select",
                 locale,
                 presetId: targetPresetId,
@@ -337,12 +337,12 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
           locale,
           rangeIndex: Math.floor(blockStart / NODE_RANGE_OPTIONS_PER_PAGE),
           rangeCount: Math.ceil(nodeRangeCount / NODE_RANGE_OPTIONS_PER_PAGE),
-          namespace: ST_PRESETS_ROUTE_NAMESPACE,
-          version: ST_PRESETS_ROUTE_VERSION,
+          namespace: routes.namespace,
+          version: routes.version,
           disabled: writesDisabled,
           buildSegments: {
             page: (blockIndex) =>
-              buildStPresetsRouteSegments({
+              routes.buildRouteSegments({
                 action: "nodes-page",
                 locale,
                 presetId: targetPresetId,
@@ -377,14 +377,14 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
           {
             type: ComponentType.Button,
             style: ButtonStyle.Danger,
-            customId: buildStPresetsRouteId({ action: "delete-confirm", locale, presetId: page.presetId }),
+            customId: routes.buildRouteId({ action: "delete-confirm", locale, presetId: page.presetId }),
             label: localizer(locale, "commands.st-presets.delete_confirm"),
             disabled: writesDisabled,
           },
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildStPresetsRouteId({ action: "delete-cancel", locale, presetId: page.presetId }),
+            customId: routes.buildRouteId({ action: "delete-cancel", locale, presetId: page.presetId }),
             label: localizer(locale, "commands.st-presets.cancel"),
           },
         ],
@@ -393,25 +393,30 @@ export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): St
   }
 
   if (readStatus === "stale") {
-    components.push({ type: ComponentType.Separator, divider: true, spacing: 1 }, buildRetryRow(locale), {
+    components.push({ type: ComponentType.Separator, divider: true, spacing: 1 }, buildRetryRow(locale, routes), {
       type: ComponentType.TextDisplay,
       content: withLinePrefix("-# ", localizer(locale, "commands.st-presets.stale_warning")),
     });
   }
 
-  return buildPayload(components, input.receipt);
+  return components;
+}
+
+export function buildStPresetsPanelPayload(input: StPresetsPanelRenderInput): StPresetsPanelPayload {
+  return buildPayload(buildStPresetsPanelComponents(input), input.receipt);
 }
 
 export function buildAddStPresetModal(
   locale: string,
   nonce: string,
+  routes: StPresetsPanelRouteAdapter = ST_PRESETS_PANEL_ROUTE_ADAPTER,
 ): {
   custom_id: string;
   title: string;
   components: RawDiscordComponent[];
 } {
   return {
-    custom_id: buildStPresetsRouteId({ action: "add-submit", locale, nonce }),
+    custom_id: routes.buildRouteId({ action: "add-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.st-presets.add_modal_title"), 45),
     components: [
       {
@@ -460,6 +465,7 @@ export function buildNodesToggleModal(
   pageNodes: StPresetNodeRow[],
   pageOffset: number,
   nonce: string,
+  routes: StPresetsPanelRouteAdapter = ST_PRESETS_PANEL_ROUTE_ADAPTER,
 ): {
   custom_id: string;
   title: string;
@@ -504,7 +510,7 @@ export function buildNodesToggleModal(
   }
 
   return {
-    custom_id: buildStPresetsRouteId({
+    custom_id: routes.buildRouteId({
       action: "nodes-submit",
       locale,
       presetId: preset.preset_id as number,
