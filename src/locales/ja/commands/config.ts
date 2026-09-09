@@ -55,6 +55,7 @@ export default {
       triggers_page_title: `ペルソナのトリガー`,
       triggers_page_description: `このペルソナを会話に呼び込む単語を管理します。`,
       sprite_select_prompt: `スプライトを選択して確認または編集するか、新しく追加してください：`,
+      sprite_select_placeholder: `スプライトを選択または追加...`,
       sprite_add_option: `＋ スプライトを追加`,
       name_label: `名前`,
       persona_create_hint: `新しいペルソナは \`/persona create\`、\`/persona generate\`、

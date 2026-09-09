@@ -1401,6 +1401,25 @@ describe("config Persona Sprites page", () => {
   const spritesPage = (actor: ConfigActor, overrides: Record<string, unknown> = {}) =>
     build(actor, { page: "sprites", personaSprites: SPRITES, ...overrides });
 
+  it("renders an add-aware selector in English and Japanese", () => {
+    const cases = [
+      { locale: "en-US", placeholder: "Choose or add a sprite..." },
+      { locale: "ja", placeholder: "スプライトを選択または追加..." },
+    ] as const;
+
+    for (const { locale, placeholder } of cases) {
+      const payload = spritesPage(GUILD_MANAGER, { locale });
+      const selector = walk(payload).find(
+        (component) =>
+          component.type === STRING_SELECT &&
+          component.customId === buildConfigRouteId({ action: "sprite-select", locale, personaId: 55 }),
+      );
+
+      expect(selector?.options?.some((option) => option.value === "add")).toBe(true);
+      expect(selector?.placeholder).toBe(placeholder);
+    }
+  });
+
   it("renders the selector, the selected sprite, and both transfer actions for a manager", () => {
     const payload = spritesPage(GUILD_MANAGER, {
       selectedSpriteIndex: 0,
