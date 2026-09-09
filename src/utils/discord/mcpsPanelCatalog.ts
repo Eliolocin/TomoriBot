@@ -27,6 +27,33 @@ export type McpsPanelRoute =
 
 export type McpsAction = McpsPanelRoute["action"];
 
+/**
+ * The panel renderer only needs these bounded route values. Keeping this shape separate from the
+ * standalone route union lets an absorbed panel provide a different namespace without duplicating
+ * the collection UI or allowing free text into a custom ID.
+ */
+export type McpsPanelRouteInput =
+  | { action: "range"; locale: string; rangeIndex: number }
+  | { action: "retry" | "refresh"; locale: string; selectedId: number | "none" }
+  | { action: "add-open" | "add-type"; locale: string }
+  | { action: "add-submit"; locale: string; nonce: string }
+  | { action: "set-enabled"; locale: string; entityId: number; enabled: boolean }
+  | { action: "remove-prompt" | "remove-cancel" | "remove-confirm"; locale: string; entityId: number };
+
+export interface McpsPanelRouteAdapter {
+  namespace: string;
+  version: string;
+  buildRouteId(route: McpsPanelRouteInput): string;
+  buildRangeSegments(locale: string, rangeIndex: number): string[];
+}
+
+export const MCPS_PANEL_ROUTE_ADAPTER: McpsPanelRouteAdapter = {
+  namespace: MCPS_ROUTE_NAMESPACE,
+  version: MCPS_ROUTE_VERSION,
+  buildRouteId: (route) => buildMcpsRouteId(route as McpsPanelRoute),
+  buildRangeSegments: (locale, rangeIndex) => buildMcpsRouteSegments({ action: "range", locale, rangeIndex }),
+};
+
 type McpsRouteForAction<A extends McpsAction> = McpsPanelRoute extends infer R
   ? R extends { action: string }
     ? A extends R["action"]

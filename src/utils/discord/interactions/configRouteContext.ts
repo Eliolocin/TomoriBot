@@ -22,6 +22,7 @@ import type { ToolNoticeKey } from "@/constants/toolNotices";
 import type { DeliberateToolTriggerMap } from "@/utils/tools/deliberateToolMode";
 import type { WorkaroundConfigState } from "@/utils/discord/workaroundConfigMapping";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
+import type { GuildMcpConfigReadResult } from "@/utils/cache/guildMcpConfigCache";
 import type { AddressingStyle } from "@/types/personaNaming";
 import type { ConditioningGroup } from "@/utils/db/repositories/ConditioningMemoryRepository";
 import type { ShortTermMemoryEntry } from "@/utils/cache/shortTermMemoryCache";
@@ -78,6 +79,7 @@ import type { RecordPanelActionInput } from "@/utils/stats/panelActionMetrics";
 import { localizer } from "@/utils/text/localizer";
 import { HUMANIZER_DEFAULT } from "@/utils/discord/humanizerOptions";
 import { DEFAULT_MESSAGE_FETCH_LIMIT } from "@/utils/discord/messageFetchLimit";
+import type { McpConfigOperations } from "@/utils/mcp/mcpConfigOperations";
 
 export interface ConfigScope {
   /** Guild snowflake in a guild, DM recipient snowflake otherwise: the workspace key every absorbed command already uses. */
@@ -89,6 +91,7 @@ export interface ConfigScope {
   actor: ConfigActor;
   personas: TomoriState[];
   readStatus: PanelReadStatus;
+  mcpRead?: GuildMcpConfigReadResult;
 }
 
 export interface ConfigPersonaMemoryView {
@@ -296,6 +299,8 @@ export interface ConfigRouteDependencies {
     interaction: GlobalRoutableInteraction | ChatInputCommandInteraction,
     selectedChannelId?: string,
   ): Promise<ConfigChannelsView>;
+  loadMcpRead(serverId: number, forceRefresh?: boolean): Promise<GuildMcpConfigReadResult>;
+  mcpOperations: Pick<McpConfigOperations, "add" | "setEnabled" | "remove">;
   loadModelChoices(
     state: TomoriState,
     capability: ConfigCatalogModelCapability,
@@ -399,6 +404,8 @@ export interface ConfigRepaintOptions {
   behaviorView?: ConfigBehaviorView;
   permissionsView?: ConfigPermissionsView;
   channelsView?: ConfigChannelsView;
+  mcpRead?: GuildMcpConfigReadResult;
+  mcpPage?: import("@/utils/discord/ui/mcpsPanel").McpsPanelPage;
   channelsSelectedChannelId?: string | null;
   channelsAutoTriggerRangeIndex?: number;
   channelsPrivateRangeIndex?: number;
@@ -479,6 +486,7 @@ export async function repaint(
   let imageGenerationView: ConfigImageGenerationView | undefined;
   let voicesView = options.voicesView;
   let behaviorView = options.behaviorView;
+  let mcpRead = options.mcpRead;
   if (category === "models") {
     // Server model state lives on the assembled workspace config every persona row carries, so any
     // persona in the workspace is an equally authoritative source for it.
@@ -521,6 +529,11 @@ export async function repaint(
   if ((category === "plugins" || (category === "channels" && page === "rules")) && !permissionsView) {
     const state = scope.personas[0];
     if (state) permissionsView = await dependencies.loadPermissionsView(state);
+  }
+
+  if (category === "plugins" && page === "mcp-servers" && !mcpRead) {
+    const state = scope.personas[0];
+    if (state) mcpRead = await dependencies.loadMcpRead(state.server_id);
   }
 
   let channelsView = options.channelsView;
@@ -611,6 +624,8 @@ export async function repaint(
         permissionsView,
         channelsView,
         channelsSelectedChannelId: options.channelsSelectedChannelId,
+        mcpRead,
+        mcpPage: options.mcpPage,
         channelsAutoTriggerRangeIndex: options.channelsAutoTriggerRangeIndex,
         channelsPrivateRangeIndex: options.channelsPrivateRangeIndex,
         channelsRoleplayRangeIndex: options.channelsRoleplayRangeIndex,

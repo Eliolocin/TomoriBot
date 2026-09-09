@@ -12,12 +12,7 @@ import type { GuildMcpServerRow } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import { escapeDiscordMarkdown } from "@/utils/text/discordMarkdown";
-import {
-  buildMcpsRouteId,
-  buildMcpsRouteSegments,
-  MCPS_ROUTE_NAMESPACE,
-  MCPS_ROUTE_VERSION,
-} from "@/utils/discord/mcpsPanelCatalog";
+import { MCPS_PANEL_ROUTE_ADAPTER, type McpsPanelRouteAdapter } from "@/utils/discord/mcpsPanelCatalog";
 import {
   buildPaginationRow,
   buildPanelContainer,
@@ -58,6 +53,8 @@ export interface McpsPanelRenderInput {
   readStatus: PanelReadStatus;
   page: McpsPanelPage;
   receipt?: PanelReceipt;
+  pageSize?: number;
+  routes?: McpsPanelRouteAdapter;
 }
 
 function rowId(row: GuildMcpServerRow): number {
@@ -77,14 +74,18 @@ function typeLabelKey(serverType: string | null | undefined): string {
   return "commands.mcps.type_general";
 }
 
-function buildRetryRow(locale: string, selectedId: number | "none"): ActionRowData<ButtonComponentData> {
+function buildRetryRow(
+  locale: string,
+  selectedId: number | "none",
+  routes: McpsPanelRouteAdapter,
+): ActionRowData<ButtonComponentData> {
   return {
     type: ComponentType.ActionRow,
     components: [
       {
         type: ComponentType.Button,
         style: ButtonStyle.Secondary,
-        customId: buildMcpsRouteId({ action: "retry", locale, selectedId }),
+        customId: routes.buildRouteId({ action: "retry", locale, selectedId }),
         label: localizer(locale, "commands.mcps.retry"),
       },
     ],
@@ -96,17 +97,18 @@ function buildEmptyState(
   scope: "guild" | "dm",
   configs: GuildMcpServerRow[],
   writesDisabled: boolean,
+  routes: McpsPanelRouteAdapter,
 ): ComponentInContainerData[] {
   const buttons: ButtonComponentData[] = [
     {
       type: ComponentType.Button,
       style: ButtonStyle.Secondary,
-      customId: buildMcpsRouteId({ action: "add-open", locale }),
+      customId: routes.buildRouteId({ action: "add-open", locale }),
       label: localizer(locale, "commands.mcps.add"),
       disabled: writesDisabled || configs.length >= MAX_MCP_SERVERS_PER_WORKSPACE,
     },
   ];
-  if (writesDisabled) buttons.push(buildRetryRow(locale, "none").components[0]);
+  if (writesDisabled) buttons.push(buildRetryRow(locale, "none", routes).components[0]);
   return [
     {
       type: ComponentType.TextDisplay,
@@ -135,17 +137,18 @@ function buildAddArea(
   locale: string,
   configs: GuildMcpServerRow[],
   writesDisabled: boolean,
+  routes: McpsPanelRouteAdapter,
 ): ComponentInContainerData[] {
   const buttons: ButtonComponentData[] = [
     {
       type: ComponentType.Button,
       style: ButtonStyle.Secondary,
-      customId: buildMcpsRouteId({ action: "add-open", locale }),
+      customId: routes.buildRouteId({ action: "add-open", locale }),
       label: localizer(locale, "commands.mcps.add"),
       disabled: writesDisabled || configs.length >= MAX_MCP_SERVERS_PER_WORKSPACE,
     },
   ];
-  if (writesDisabled) buttons.push(buildRetryRow(locale, configs[0]?.guild_mcp_id ?? "none").components[0]);
+  if (writesDisabled) buttons.push(buildRetryRow(locale, configs[0]?.guild_mcp_id ?? "none", routes).components[0]);
   return [
     { type: ComponentType.Separator, divider: true, spacing: 1 },
     { type: ComponentType.ActionRow, components: buttons },
@@ -156,7 +159,9 @@ function buildAddArea(
   ];
 }
 
-export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPayload {
+export function buildMcpsPanelComponents(input: McpsPanelRenderInput): ComponentInContainerData[] {
+  const routes = input.routes ?? MCPS_PANEL_ROUTE_ADAPTER;
+  const pageSize = input.pageSize ?? MAX_MCP_PANEL_PAGE_SIZE;
   const configs = sortMcpConfigs(input.configs);
   const writesDisabled = input.readStatus !== "fresh";
   const components: ComponentInContainerData[] = [
@@ -172,28 +177,21 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
         type: ComponentType.TextDisplay,
         content: localizer(input.locale, "commands.mcps.unavailable"),
       },
-      buildRetryRow(input.locale, "none"),
+      buildRetryRow(input.locale, "none", routes),
     );
-    return buildPayload(components, input.receipt);
+    return components;
   }
-  if (input.readStatus === "stale") {
-    components.push({
-      type: ComponentType.TextDisplay,
-      content: localizer(input.locale, "commands.mcps.stale_warning"),
-    });
-  }
-
   components.push({
     type: ComponentType.TextDisplay,
     content: `### ${localizer(input.locale, "commands.mcps.count", {
       count: configs.length,
       max: MAX_MCP_SERVERS_PER_WORKSPACE,
-    })}`,
+    })}${input.readStatus === "stale" ? `\n-# ${localizer(input.locale, "commands.mcps.stale_warning")}` : ""}`,
   });
 
   if (configs.length === 0) {
-    components.push(...buildEmptyState(input.locale, input.scope, configs, writesDisabled));
-    return buildPayload(components, input.receipt);
+    components.push(...buildEmptyState(input.locale, input.scope, configs, writesDisabled, routes));
+    return components;
   }
 
   const removeTargetId = input.page.kind === "remove" ? input.page.entityId : null;
@@ -215,7 +213,7 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
           {
             type: ComponentType.Button,
             style: ButtonStyle.Danger,
-            customId: buildMcpsRouteId({
+            customId: routes.buildRouteId({
               action: "remove-confirm",
               locale: input.locale,
               entityId: removeTarget.guild_mcp_id,
@@ -226,7 +224,7 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildMcpsRouteId({
+            customId: routes.buildRouteId({
               action: "remove-cancel",
               locale: input.locale,
               entityId: removeTarget.guild_mcp_id,
@@ -236,13 +234,13 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
         ],
       },
     );
-    return buildPayload(components, input.receipt);
+    return components;
   }
 
   // A remove page with a resolvable target returned above, so one reaching here has a target that
   // no longer exists and has no range of its own to restore.
   const requestedRangeIndex = input.page.kind === "collection" ? (input.page.rangeIndex ?? 0) : 0;
-  const selection = resolveRangeSelection(configs, requestedRangeIndex, MAX_MCP_PANEL_PAGE_SIZE);
+  const selection = resolveRangeSelection(configs, requestedRangeIndex, pageSize);
   const visibleConfigs = selection.visibleItems;
   for (const row of visibleConfigs) {
     const endpoint = safeMcpEndpoint(row.url) ?? localizer(input.locale, "commands.mcps.endpoint_unavailable");
@@ -285,7 +283,7 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
           {
             type: ComponentType.Button,
             style: ButtonStyle.Secondary,
-            customId: buildMcpsRouteId({
+            customId: routes.buildRouteId({
               action: "set-enabled",
               locale: input.locale,
               entityId: rowId(row),
@@ -297,7 +295,7 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
           {
             type: ComponentType.Button,
             style: ButtonStyle.Danger,
-            customId: buildMcpsRouteId({
+            customId: routes.buildRouteId({
               action: "remove-prompt",
               locale: input.locale,
               entityId: rowId(row),
@@ -313,19 +311,23 @@ export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPay
     locale: input.locale,
     rangeIndex: selection.rangeIndex,
     rangeCount: selection.rangeCount,
-    namespace: MCPS_ROUTE_NAMESPACE,
-    version: MCPS_ROUTE_VERSION,
+    namespace: routes.namespace,
+    version: routes.version,
     disabled: writesDisabled,
     buildSegments: {
-      page: (rangeIndex) => buildMcpsRouteSegments({ action: "range", locale: input.locale, rangeIndex }),
+      page: (rangeIndex) => routes.buildRangeSegments(input.locale, rangeIndex),
     },
   });
   if (paginationRow) {
     components.push(paginationRow);
   }
-  components.push(...buildAddArea(input.locale, configs, writesDisabled));
+  components.push(...buildAddArea(input.locale, configs, writesDisabled, routes));
 
-  return buildPayload(components, input.receipt);
+  return components;
+}
+
+export function buildMcpsPanelPayload(input: McpsPanelRenderInput): McpsPanelPayload {
+  return buildPayload(buildMcpsPanelComponents(input), input.receipt);
 }
 
 export type McpsAddModalField = "name" | "url" | "auth-token" | "server-type";
@@ -357,13 +359,14 @@ function textInput(
 export function buildAddMcpModal(
   locale: string,
   nonce: string,
+  routes: McpsPanelRouteAdapter = MCPS_PANEL_ROUTE_ADAPTER,
 ): {
   custom_id: string;
   title: string;
   components: RawDiscordComponent[];
 } {
   return {
-    custom_id: buildMcpsRouteId({ action: "add-submit", locale, nonce }),
+    custom_id: routes.buildRouteId({ action: "add-submit", locale, nonce }),
     title: safeSelectOptionText(localizer(locale, "commands.mcps.add_modal_title"), 45),
     components: [
       textInput(locale, nonce, "name", {

@@ -124,6 +124,11 @@ export const COMPONENTS_V2_PRODUCER_MANIFEST: readonly ProducerManifestEntry[] =
     coverage: { kind: "suite", suites: ["tests/unit/discord/componentsV2DeclaredProducerSmoke.test.ts"] },
   },
   {
+    modulePath: "src/utils/discord/interactions/configMcpRoutes.ts",
+    reason: "Route ephemeral acknowledgement and notice messages for Config-hosted MCP servers",
+    coverage: { kind: "suite", suites: ["tests/unit/discord/configMcpRoutes.test.ts"] },
+  },
+  {
     modulePath: "src/utils/discord/interactions/conditioningRoutes.ts",
     reason: "Route ephemeral acknowledgement and notice messages for conditioning",
     coverage: {

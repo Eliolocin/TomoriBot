@@ -5,7 +5,7 @@ import { getGuildMcpManager } from "@/utils/mcp/guildMcpManager";
 import { normalizeMcpToolNameSnapshot } from "@/utils/mcp/mcpToolSnapshot";
 import { type RemoteUrlValidationResult, validateRemoteUrl } from "@/utils/security/remoteUrlSecurity";
 
-export const MAX_MCP_SERVERS_PER_WORKSPACE = Number(process.env.MAX_MCP_SERVERS_PER_GUILD) || 5;
+export const MAX_MCP_SERVERS_PER_WORKSPACE = Number(process.env.MAX_MCP_SERVERS_PER_GUILD) || 10;
 export const MCP_SERVER_TYPES = ["general", "web_search", "url_fetcher"] as const;
 export type McpServerType = (typeof MCP_SERVER_TYPES)[number];
 

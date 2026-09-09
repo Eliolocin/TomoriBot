@@ -12,6 +12,7 @@ import {
   type RouteFieldCodec,
 } from "@/utils/discord/panelRouteCodec";
 import { parseLocale } from "@/utils/discord/panelRouteTokens";
+import type { McpsPanelRouteAdapter, McpsPanelRouteInput } from "@/utils/discord/mcpsPanelCatalog";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
 import type { RandomTriggerRow } from "@/types/db/schema";
 import type { AddressingStyle } from "@/types/personaNaming";
@@ -32,7 +33,7 @@ type PersonaPage =
   | "voice"
   | "naming";
 type BehaviorPage = "general" | "trigger" | "experimental" | "notices" | "memory";
-type PluginsPage = "available-tools" | "context-additions";
+type PluginsPage = "available-tools" | "context-additions" | "mcp-servers";
 type ChannelsPage = "destinations" | "auto-trigger" | "rules" | "overrides";
 type ModelsPage = "switch" | "parameters" | "fallbacks" | "image" | "voices";
 
@@ -46,7 +47,7 @@ export type ConfigPage = PersonaPage | BehaviorPage | PluginsPage | ChannelsPage
 export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPage[]> = {
   persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "voice", "overrides", "advanced"],
   behavior: ["general", "trigger", "notices", "experimental", "memory"],
-  plugins: ["available-tools", "context-additions"],
+  plugins: ["available-tools", "context-additions", "mcp-servers"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   models: ["switch", "parameters", "image", "fallbacks", "voices"],
 };
@@ -561,6 +562,13 @@ export type ConfigPanelRoute =
       nonce: string;
     }
   | { action: "permissions-privacy-bypass-set"; locale: string; enabled: boolean }
+  | { action: "mcp-select"; locale: string; rangeIndex: number }
+  | { action: "mcp-range"; locale: string; rangeIndex: number }
+  | { action: "mcp-retry" | "mcp-refresh"; locale: string; selectedId: number | "none" }
+  | { action: "mcp-add-open" | "mcp-add-type"; locale: string }
+  | { action: "mcp-add-submit"; locale: string; nonce: string }
+  | { action: "mcp-set-enabled"; locale: string; entityId: number; enabled: boolean }
+  | { action: "mcp-remove-prompt" | "mcp-remove-cancel" | "mcp-remove-confirm"; locale: string; entityId: number }
   | { action: "channels-log-open"; locale: string }
   | { action: "channels-log-submit"; locale: string; nonce: string }
   | { action: "channels-log-clear"; locale: string; channelId?: string }
@@ -677,6 +685,24 @@ const pluginsPageField: RouteFieldCodec<"page", "available-tools" | "context-add
   key: "page",
   encode: (v) => String(v),
   decode: (v) => (v === "available-tools" || v === "context-additions" ? v : null),
+};
+
+const mcpRangeIndexField: RouteFieldCodec<"rangeIndex", number> = {
+  key: "rangeIndex",
+  encode: (v) => String(v),
+  decode: (v) => parseNonNegativeInt(v),
+};
+
+const mcpSelectedIdField: RouteFieldCodec<"selectedId", number | "none"> = {
+  key: "selectedId",
+  encode: (v) => String(v),
+  decode: (v) => (v === "none" ? "none" : parsePositiveId(v)),
+};
+
+const mcpEntityIdField: RouteFieldCodec<"entityId", number> = {
+  key: "entityId",
+  encode: (v) => String(v),
+  decode: (v) => parsePositiveId(v),
 };
 
 const personaIdField: RouteFieldCodec<"personaId", number> = {
@@ -988,6 +1014,17 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
     fields: [pluginsPageField, includeElevenLabsField, nonceField],
   },
   "permissions-privacy-bypass-set": { wireToken: "perm-privacy-set", fields: [enabledField] },
+  "mcp-select": { wireToken: "mcp-select", fields: [mcpRangeIndexField] },
+  "mcp-range": { wireToken: "mcp-range", fields: [mcpRangeIndexField] },
+  "mcp-retry": { wireToken: "mcp-retry", fields: [mcpSelectedIdField] },
+  "mcp-refresh": { wireToken: "mcp-refresh", fields: [mcpSelectedIdField] },
+  "mcp-add-open": { wireToken: "mcp-add-open", fields: [] },
+  "mcp-add-type": { wireToken: "mcp-add-type", fields: [] },
+  "mcp-add-submit": { wireToken: "mcp-add-submit", fields: [nonceField] },
+  "mcp-set-enabled": { wireToken: "mcp-set-enabled", fields: [mcpEntityIdField, enabledField] },
+  "mcp-remove-prompt": { wireToken: "mcp-remove-prompt", fields: [mcpEntityIdField] },
+  "mcp-remove-cancel": { wireToken: "mcp-remove-cancel", fields: [mcpEntityIdField] },
+  "mcp-remove-confirm": { wireToken: "mcp-remove-confirm", fields: [mcpEntityIdField] },
   "channels-log-open": { wireToken: "channels-log-open", fields: [] },
   "channels-log-submit": { wireToken: "channels-log-submit", fields: [nonceField] },
   "channels-log-clear": { wireToken: "channels-log-clear", fields: [channelIdField] },
@@ -1057,6 +1094,41 @@ export function buildConfigRouteSegments(route: ConfigPanelRoute): string[] {
 export function buildConfigRouteId(route: ConfigPanelRoute): string {
   return buildInteractionRouteId(CONFIG_ROUTE_NAMESPACE, CONFIG_ROUTE_VERSION, ...buildConfigRouteSegments(route));
 }
+
+export const CONFIG_MCP_PANEL_ROUTE_ADAPTER: McpsPanelRouteAdapter = {
+  namespace: CONFIG_ROUTE_NAMESPACE,
+  version: CONFIG_ROUTE_VERSION,
+  buildRouteId: (route: McpsPanelRouteInput) => {
+    switch (route.action) {
+      case "range":
+        return buildConfigRouteId({ action: "mcp-range", locale: route.locale, rangeIndex: route.rangeIndex });
+      case "retry":
+        return buildConfigRouteId({ action: "mcp-retry", locale: route.locale, selectedId: route.selectedId });
+      case "refresh":
+        return buildConfigRouteId({ action: "mcp-refresh", locale: route.locale, selectedId: route.selectedId });
+      case "add-open":
+        return buildConfigRouteId({ action: "mcp-add-open", locale: route.locale });
+      case "add-type":
+        return buildConfigRouteId({ action: "mcp-add-type", locale: route.locale });
+      case "add-submit":
+        return buildConfigRouteId({ action: "mcp-add-submit", locale: route.locale, nonce: route.nonce });
+      case "set-enabled":
+        return buildConfigRouteId({
+          action: "mcp-set-enabled",
+          locale: route.locale,
+          entityId: route.entityId,
+          enabled: route.enabled,
+        });
+      case "remove-prompt":
+        return buildConfigRouteId({ action: "mcp-remove-prompt", locale: route.locale, entityId: route.entityId });
+      case "remove-cancel":
+        return buildConfigRouteId({ action: "mcp-remove-cancel", locale: route.locale, entityId: route.entityId });
+      case "remove-confirm":
+        return buildConfigRouteId({ action: "mcp-remove-confirm", locale: route.locale, entityId: route.entityId });
+    }
+  },
+  buildRangeSegments: (locale, rangeIndex) => buildConfigRouteSegments({ action: "mcp-range", locale, rangeIndex }),
+};
 
 export function parseConfigPanelRoute(route: ParsedInteractionRoute): ConfigPanelRoute | null {
   if (route.namespace !== CONFIG_ROUTE_NAMESPACE || route.version !== CONFIG_ROUTE_VERSION) {

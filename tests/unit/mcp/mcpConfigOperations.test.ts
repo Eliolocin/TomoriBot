@@ -37,6 +37,10 @@ function dependencies(overrides: Partial<McpConfigOperationDependencies> = {}): 
 }
 
 describe("canonical MCP config operations", () => {
+  it("ships the workspace capacity default at ten when no operator override is present", () => {
+    if (process.env.MAX_MCP_SERVERS_PER_GUILD === undefined) expect(MAX_MCP_SERVERS_PER_WORKSPACE).toBe(10);
+  });
+
   it("normalizes names and inserts only after URL validation and connection testing", async () => {
     const calls: string[] = [];
     const operations = new McpConfigOperations(

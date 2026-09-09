@@ -11,6 +11,7 @@ import type { PanelReceipt, PanelReceiptTone } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import { isToolNoticeKey } from "@/constants/toolNotices";
 import { getCachedAllPersonas, getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import { getGuildMcpConfigReadResult } from "@/utils/cache/guildMcpConfigCache";
 import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCacheStore";
 import {
   getShortTermMemoryForServerChannel,
@@ -58,6 +59,7 @@ import {
   isConfigRouteAuthorized,
   PERSONA_ADVANCED_ACTION_BY_ROUTE,
   PERSONA_OVERRIDES_ACTION_BY_ROUTE,
+  MCP_ACTION_BY_ROUTE,
   resolveConfigActor,
   resolveConfigLanding,
   resolvePersonaSpritesActionState,
@@ -238,6 +240,8 @@ import { buildInitialMemoriesPanel } from "@/utils/discord/interactions/memories
 import { buildInitialPersonalMemoriesPanel } from "@/utils/discord/interactions/personalMemoriesRoutes";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { resolveDeliberateToolContextTurns } from "@/utils/tools/deliberateToolMode";
+import { mcpConfigOperations } from "@/utils/mcp/mcpConfigOperations";
+import { handleConfigMcpModalOpen, handleConfigMcpRoutes } from "@/utils/discord/interactions/configMcpRoutes";
 
 const MODAL_OPEN_ACTIONS = new Set<ConfigPanelRoute["action"]>([
   "avatar-open",
@@ -568,6 +572,8 @@ const defaultDependencies: ConfigRouteDependencies = {
     return view;
   },
   loadPermissionsView: loadConfigPermissionsView,
+  loadMcpRead: (serverId, forceRefresh = false) => getGuildMcpConfigReadResult(serverId, { forceRefresh }),
+  mcpOperations: mcpConfigOperations,
   loadChannelsView: async (interaction, selectedChannelId): Promise<ConfigChannelsView> => {
     const availableTextChannels = interaction.guild ? loadCachedGuildTextChecklistChannels(interaction.guild) : [];
     const availableBlocklistChannels = interaction.guild ? loadCachedGuildBlocklistChannels(interaction.guild) : [];
@@ -2834,6 +2840,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "channels-overrides-text-model-range-select" ||
         route.action === "sprite-select" ||
         route.action === "voice-sample-select" ||
+        route.action === "mcp-select" ||
+        route.action === "mcp-add-type" ||
         CONFIG_MODEL_SELECT_ACTIONS.has(route.action) ||
         CONFIG_CHANNEL_SELECT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_SELECT_ACTIONS.has(route.action);
@@ -2862,6 +2870,7 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         route.action === "sprite-add-submit" ||
         route.action === "sprite-edit-submit" ||
         route.action === "sprite-import-submit" ||
+        route.action === "mcp-add-submit" ||
         route.action === "voice-design-submit" ||
         CONFIG_MODEL_MODAL_SUBMIT_ACTIONS.has(route.action) ||
         CONFIG_BEHAVIOR_MODAL_SUBMIT_ACTIONS.has(route.action) ||
@@ -2966,6 +2975,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
         return;
       }
 
+      if (await handleConfigMcpModalOpen(interaction, route, dependencies, actor)) return;
+
       if (MODAL_OPEN_ACTIONS.has(route.action)) {
         await handleModalOpen(interaction, route, dependencies, actor);
         return;
@@ -2974,12 +2985,26 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       const scope = await beginPanelInteraction(interaction, {
         authorize: () => isConfigRouteAuthorized(route, actor),
         onDenied: async () => {
-          const landing = resolveConfigLanding(actor);
           const fallbackScope = await dependencies.resolveScope(interaction, false);
           if (!fallbackScope) {
             await interaction.editReply(terminalPayload(route.locale, "commands.config.panel.unavailable"));
             return;
           }
+          if (MCP_ACTION_BY_ROUTE[route.action]) {
+            const mcpRead = await dependencies.loadMcpRead(fallbackScope.personas[0]?.server_id ?? 0);
+            await repaint(interaction, {
+              locale: route.locale,
+              scope: fallbackScope,
+              category: "plugins",
+              page: "mcp-servers",
+              selectedPersonaId: null,
+              mcpRead,
+              receipt: deniedReceipt(route.locale),
+              dependencies,
+            });
+            return;
+          }
+          const landing = resolveConfigLanding(actor);
           await repaint(interaction, {
             locale: route.locale,
             scope: fallbackScope,
@@ -3062,6 +3087,8 @@ export function createConfigInteractionRoute(overrides: Partial<ConfigRouteDepen
       ) {
         return;
       }
+
+      if (await handleConfigMcpRoutes(interaction, route, scope, dependencies, actor)) return;
 
       if (
         await handleConfigChannelRoutes({

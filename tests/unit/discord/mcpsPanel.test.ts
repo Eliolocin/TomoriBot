@@ -40,7 +40,7 @@ describe("MCP collection panel", () => {
       page: { kind: "collection" },
     });
     const serialized = JSON.stringify(payload);
-    expect(serialized).toContain("Registered MCPs `(0/5)`");
+    expect(serialized).toContain("Registered MCPs `(0/10)`");
     expect(serialized).toContain("This server has no MCPs yet.");
     expect(serialized).toContain(`"type":${ComponentType.Separator}`);
     expect(serialized).toContain(
@@ -70,7 +70,7 @@ describe("MCP collection panel", () => {
       page: { kind: "collection", selectedId: 3, rangeIndex: 8 },
     });
     const serialized = JSON.stringify(payload);
-    expect(serialized).toContain("Registered MCPs `(5/5)`");
+    expect(serialized).toContain("Registered MCPs `(5/10)`");
     expect(serialized.indexOf("first")).toBeLessThan(serialized.indexOf("second"));
     expect(serialized.indexOf("second")).toBeLessThan(serialized.indexOf("third"));
     for (const id of [1, 2, 3, 4, 5]) {
@@ -168,7 +168,7 @@ describe("MCP collection panel", () => {
       receipt: receipt("warning"),
     });
     const serialized = JSON.stringify(payload);
-    expect(serialized).toContain("Registered MCPs `(8/5)`");
+    expect(serialized).toContain("Registered MCPs `(8/10)`");
     expect(serialized).toContain("Page 2 of 2");
     expect(serialized).toContain("mcps:v1:remove-prompt:en-US:7");
     expect(serialized).not.toContain("mcps:v1:remove-prompt:en-US:6");
@@ -221,7 +221,7 @@ describe("MCP collection panel", () => {
       buildMcpsPanelPayload({
         locale: "en-US",
         scope: "guild",
-        configs: Array.from({ length: 5 }, (_, index) => row(index + 1)),
+        configs: Array.from({ length: 10 }, (_, index) => row(index + 1)),
         readStatus: "fresh",
         page: { kind: "collection" },
       }),

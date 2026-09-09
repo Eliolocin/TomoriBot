@@ -46,6 +46,7 @@ import {
   PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE,
   PERMISSIONS_PRIVACY_ACTION_BY_ROUTE,
   PLUGINS_CONTEXT_ADDITIONS_ACTION_BY_ROUTE,
+  MCP_ACTION_BY_ROUTE,
   CHANNELS_DESTINATIONS_ACTION_BY_ROUTE,
   CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE,
   CHANNELS_RULES_ACTION_BY_ROUTE,
@@ -126,7 +127,7 @@ describe("config page filtering", () => {
     expect(resolveConfigPageState("plugins", "available-tools", DM_OWNER)).toBe("enabled");
     expect(resolveConfigPageState("plugins", "context-additions", DM_OWNER)).toBe("enabled");
     expect(resolveConfigPageState("models", "image", DM_OWNER)).toBe("omitted");
-    expect(visibleConfigPages("plugins", DM_OWNER)).toEqual(["available-tools", "context-additions"]);
+    expect(visibleConfigPages("plugins", DM_OWNER)).toEqual(["available-tools", "context-additions", "mcp-servers"]);
     expect(visibleConfigPages("models", DM_OWNER)).toEqual(["switch", "parameters", "fallbacks", "voices"]);
   });
 
@@ -685,6 +686,28 @@ describe("isConfigRouteAuthorized", () => {
     }
   });
 
+  it("keeps every MCP route for DM owners and guild managers only", () => {
+    const routes: ConfigPanelRoute[] = [
+      { action: "mcp-select", locale: "en-US", rangeIndex: 0 },
+      { action: "mcp-range", locale: "en-US", rangeIndex: 1 },
+      { action: "mcp-retry", locale: "en-US", selectedId: "none" },
+      { action: "mcp-refresh", locale: "en-US", selectedId: 1 },
+      { action: "mcp-add-open", locale: "en-US" },
+      { action: "mcp-add-type", locale: "en-US" },
+      { action: "mcp-add-submit", locale: "en-US", nonce: "nonce1234567" },
+      { action: "mcp-set-enabled", locale: "en-US", entityId: 1, enabled: true },
+      { action: "mcp-remove-prompt", locale: "en-US", entityId: 1 },
+      { action: "mcp-remove-cancel", locale: "en-US", entityId: 1 },
+      { action: "mcp-remove-confirm", locale: "en-US", entityId: 1 },
+    ];
+    expect(Object.keys(MCP_ACTION_BY_ROUTE).sort()).toEqual(routes.map((route) => route.action).sort());
+    for (const route of routes) {
+      expect(isConfigRouteAuthorized(route, GUILD_MANAGER)).toBe(true);
+      expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
+      expect(isConfigRouteAuthorized(route, DM_OWNER)).toBe(true);
+    }
+  });
+
   it("refuses a forged manager-owned route replayed by a guild member", () => {
     for (const route of personaWriteRoutes) {
       expect(isConfigRouteAuthorized(route, GUILD_MEMBER)).toBe(false);
@@ -881,6 +904,7 @@ describe("isConfigRouteAuthorized", () => {
       ...Object.keys(PERMISSIONS_CAPABILITIES_ACTION_BY_ROUTE),
       ...Object.keys(PERMISSIONS_PRIVACY_ACTION_BY_ROUTE),
       ...Object.keys(PLUGINS_CONTEXT_ADDITIONS_ACTION_BY_ROUTE),
+      ...Object.keys(MCP_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_DESTINATIONS_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_AUTO_TRIGGER_ACTION_BY_ROUTE),
       ...Object.keys(CHANNELS_RULES_ACTION_BY_ROUTE),

@@ -62,6 +62,18 @@ export type ConfigBehaviorMemoryAction = "memory-tagging" | "stm-parameters" | "
 export type ConfigPermissionsCapabilitiesAction = "tool-use" | "manage";
 export type ConfigPermissionsPrivacyAction = "privacy-bypass";
 export type ConfigPluginsContextAdditionsAction = "self-debug";
+export type ConfigMcpAction =
+  | "select"
+  | "range"
+  | "retry"
+  | "refresh"
+  | "add-open"
+  | "add-type"
+  | "add-submit"
+  | "set-enabled"
+  | "remove-prompt"
+  | "remove-cancel"
+  | "remove-confirm";
 export type ConfigChannelsDestinationsAction = "log" | "welcome";
 export type ConfigChannelsAutoTriggerAction = "auto-trigger" | "threshold";
 export type ConfigChannelsRulesAction = "private" | "roleplay" | "blocklist";
@@ -457,6 +469,20 @@ export const PLUGINS_CONTEXT_ADDITIONS_ACTION_BY_ROUTE: Partial<
   "behavior-self-debug-set": "self-debug",
 };
 
+export const MCP_ACTION_BY_ROUTE: Partial<Record<ConfigPanelRoute["action"], ConfigMcpAction>> = {
+  "mcp-select": "select",
+  "mcp-range": "range",
+  "mcp-retry": "retry",
+  "mcp-refresh": "refresh",
+  "mcp-add-open": "add-open",
+  "mcp-add-type": "add-type",
+  "mcp-add-submit": "add-submit",
+  "mcp-set-enabled": "set-enabled",
+  "mcp-remove-prompt": "remove-prompt",
+  "mcp-remove-cancel": "remove-cancel",
+  "mcp-remove-confirm": "remove-confirm",
+};
+
 export const CHANNELS_DESTINATIONS_ACTION_BY_ROUTE: Partial<
   Record<ConfigPanelRoute["action"], ConfigChannelsDestinationsAction>
 > = {
@@ -574,6 +600,11 @@ export function resolvePluginsContextAdditionsActionState(
   _action: ConfigPluginsContextAdditionsAction,
   actor: ConfigActor,
 ): ConfigSurfaceState {
+  if (actor.workspaceKind === "dm") return "enabled";
+  return actor.isManager ? "enabled" : "disabled";
+}
+
+export function resolveMcpActionState(_action: ConfigMcpAction, actor: ConfigActor): ConfigSurfaceState {
   if (actor.workspaceKind === "dm") return "enabled";
   return actor.isManager ? "enabled" : "disabled";
 }
@@ -761,6 +792,12 @@ export function isConfigRouteAuthorized(route: ConfigPanelRoute, actor: ConfigAc
   const permissionsPrivacyAction = PERMISSIONS_PRIVACY_ACTION_BY_ROUTE[route.action];
   if (permissionsPrivacyAction) {
     return resolvePermissionsPrivacyActionState(permissionsPrivacyAction, actor) === "enabled";
+  }
+
+  const mcpAction = MCP_ACTION_BY_ROUTE[route.action];
+  if (mcpAction) {
+    if (resolveConfigPageState("plugins", "mcp-servers", actor) === "omitted") return false;
+    return resolveMcpActionState(mcpAction, actor) === "enabled";
   }
 
   const channelsDestinationsAction = CHANNELS_DESTINATIONS_ACTION_BY_ROUTE[route.action];

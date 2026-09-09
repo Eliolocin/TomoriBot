@@ -311,16 +311,24 @@ describe("config panel shell", () => {
     ]);
   });
 
-  it("renders both Plugins pages for DM and guild managers", () => {
+  it("renders all Plugins pages for DM and guild managers", () => {
     const dmPageSelect = walk(build(DM_OWNER, { category: "plugins", page: "available-tools" })).find(
       (component) => component.type === STRING_SELECT && component.placeholder === "Choose a page...",
     );
-    expect(dmPageSelect?.options?.map((option) => option.value)).toEqual(["available-tools", "context-additions"]);
+    expect(dmPageSelect?.options?.map((option) => option.value)).toEqual([
+      "available-tools",
+      "context-additions",
+      "mcp-servers",
+    ]);
 
     const managerPageSelect = walk(build(GUILD_MANAGER, { category: "plugins", page: "available-tools" })).find(
       (component) => component.type === STRING_SELECT && component.placeholder === "Choose a page...",
     );
-    expect(managerPageSelect?.options?.map((option) => option.value)).toEqual(["available-tools", "context-additions"]);
+    expect(managerPageSelect?.options?.map((option) => option.value)).toEqual([
+      "available-tools",
+      "context-additions",
+      "mcp-servers",
+    ]);
   });
 
   it("lists only pages the actor may open in the page selector", () => {

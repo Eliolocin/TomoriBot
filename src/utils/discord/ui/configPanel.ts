@@ -16,6 +16,7 @@ import {
   type TopLevelComponentData,
 } from "discord.js";
 import { CooldownType, type LlmRow, type PersonaSpriteRow, type TomoriState } from "@/types/db/schema";
+import type { GuildMcpConfigReadResult } from "@/utils/cache/guildMcpConfigCache";
 import type { PanelReadStatus, PanelReceipt } from "@/types/discord/panel";
 import type { AddressingStyle } from "@/types/personaNaming";
 import {
@@ -29,6 +30,7 @@ import {
   DEFAULT_PAGE_FOR_CONFIG_CATEGORY,
   buildConfigRouteId,
   buildConfigRouteSegments,
+  CONFIG_MCP_PANEL_ROUTE_ADAPTER,
   computeAttributeFingerprint,
   computeChannelOverridesFingerprint,
   computeDialogueFingerprint,
@@ -121,8 +123,10 @@ import {
   type ConfigPersonaVoiceRemoteView,
   type ConfigPersonaVoiceRenderView,
 } from "@/utils/discord/ui/configVoicePanel";
+import { buildMcpsPanelComponents, type McpsPanelPage } from "@/utils/discord/ui/mcpsPanel";
 
 const RANDOM_TRIGGER_PAGE_SIZE = CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY;
+export const CONFIG_MCP_PANEL_PAGE_SIZE = 4;
 
 export interface ConfigPanelPayload {
   components: TopLevelComponentData[];
@@ -195,6 +199,7 @@ const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
   plugins: {
     "available-tools": "commands.config.panel.page_plugins_available_tools",
     "context-additions": "commands.config.panel.page_plugins_context_additions",
+    "mcp-servers": "commands.mcps.title",
   },
   models: {
     switch: "commands.config.panel.page_models_switch",
@@ -264,6 +269,8 @@ export interface ConfigPanelRenderInput {
   behaviorView?: ConfigBehaviorView;
   permissionsView?: ConfigPermissionsView;
   channelsView?: ConfigChannelsView;
+  mcpRead?: GuildMcpConfigReadResult;
+  mcpPage?: McpsPanelPage;
   channelsSelectedChannelId?: string | null;
   channelsAutoTriggerRangeIndex?: number;
   channelsPrivateRangeIndex?: number;
@@ -4340,6 +4347,25 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "plugins" && page === "context-additions") {
     components.push(...buildPluginsContextAdditionsBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "plugins" && page === "mcp-servers") {
+    const mcpRead =
+      resolveConfigPageState(category, page, actor) === "omitted"
+        ? { status: "unavailable" as const, configs: [] }
+        : (input.mcpRead ?? { status: "fresh" as const, configs: [] });
+    components.push(
+      ...buildMcpsPanelComponents({
+        locale,
+        scope: actor.workspaceKind,
+        configs: mcpRead.configs,
+        readStatus: mcpRead.status,
+        page: input.mcpPage ?? { kind: "collection" },
+        pageSize: CONFIG_MCP_PANEL_PAGE_SIZE,
+        routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
+      }),
+    );
     return buildPayload(components, receipt);
   }
 
