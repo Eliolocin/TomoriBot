@@ -70,6 +70,7 @@ export interface StPresetsPanelRenderInput {
   rangeIndex?: number;
   receipt?: PanelReceipt;
   routes?: StPresetsPanelRouteAdapter;
+  headingLevel?: 2 | 3;
 }
 
 export type StPresetsAddModalField = "file" | "name" | "description";
@@ -137,7 +138,7 @@ export function buildStPresetsPanelComponents(input: StPresetsPanelRenderInput):
   const components: ComponentInContainerData[] = [
     {
       type: ComponentType.TextDisplay,
-      content: `## ${localizer(locale, "commands.st-presets.title")}\n${localizer(
+      content: `${"#".repeat(input.headingLevel ?? 2)} ${localizer(locale, "commands.st-presets.title")}\n${localizer(
         locale,
         "commands.st-presets.selector_guidance",
       )}`,

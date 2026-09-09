@@ -4,9 +4,8 @@ sidebar:
   order: 3
 ---
 
-TomoriBot keeps its adult-only features — uncensored output and certain media generation —
-behind Discord's built-in age gate, hidden until you opt in. This page explains how to turn
-them on and where they work.
+TomoriBot keeps its adult-only `/nsfw` command category behind Discord's built-in age gate,
+hidden until you opt in. This page explains how to access it and where it works.
 
 ## Enabling Age-Restricted Commands
 
@@ -19,11 +18,12 @@ If a command is restricted and the channel isn't marked NSFW, it simply won't ap
 
 ## What's Gated
 
-- **Uncensored output** — `/nsfw jailbreaks` toggles workarounds for overly strict
+- **NSFW content settings** — `/nsfw jailbreaks` toggles workarounds for overly strict
   *provider-side* content filters (TomoriBot itself adds no safety rails of its own). See
   [Behavior Tweaking](/features/chatting-personality/behavior-tweaking/#uncensored-output).
-- **Certain media generation** — some image and video generation options; see
-  [Media Generation](/features/capabilities/media-generation/).
+
+Image and video generation are controlled separately by their configured provider and the
+server's capability settings; they are not gated by the `/nsfw` command category.
 
 Age-restricted content is for adult users only — use responsibly and follow Discord's
 [Community Guidelines](https://discord.com/guidelines). In `/help`, choose **Behavior**, then **Age-Restricted Commands**, for the same

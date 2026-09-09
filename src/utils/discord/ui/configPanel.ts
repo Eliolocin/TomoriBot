@@ -3259,13 +3259,13 @@ ${localizer(locale, "commands.config.panel.self_debug_description")}`,
 
 function buildPluginsNsfwJailbreaksBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
   const { locale } = input;
-  const jailbreaksCommand = commandRegistry.getCommandMention("nsfw", "jailbreaks", undefined, true);
+  const nsfwCommand = commandRegistry.getCommandMention("nsfw", undefined, undefined, true);
 
   return [
     {
       type: ComponentType.TextDisplay,
       content: `### ${localizer(locale, "commands.config.panel.plugins_nsfw_jailbreaks_title")}
-${localizer(locale, "commands.config.panel.plugins_nsfw_jailbreaks_description", { command: jailbreaksCommand })}`,
+${localizer(locale, "commands.config.panel.plugins_nsfw_jailbreaks_description", { command: nsfwCommand })}`,
     },
     {
       type: ComponentType.TextDisplay,
@@ -4392,6 +4392,7 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
         page: input.mcpPage ?? { kind: "collection" },
         pageSize: CONFIG_MCP_PANEL_PAGE_SIZE,
         routes: CONFIG_MCP_PANEL_ROUTE_ADAPTER,
+        headingLevel: 3,
       }),
     );
     return buildPayload(components, receipt);
@@ -4402,6 +4403,7 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
       ...buildStPresetsPanelComponents({
         locale,
         routes: CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER,
+        headingLevel: 3,
         ...(input.stPresetsView ?? {
           scope: actor.workspaceKind,
           presets: [],

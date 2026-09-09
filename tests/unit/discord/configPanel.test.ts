@@ -335,7 +335,7 @@ describe("config panel shell", () => {
     ]);
   });
 
-  it("renders NSFW Jailbreaks as a read-only direction page", () => {
+  it("renders NSFW Content as a read-only direction page", () => {
     const managerPayload = build(GUILD_MANAGER, {
       category: "plugins",
       page: "nsfw-jailbreaks",
@@ -354,8 +354,9 @@ describe("config panel shell", () => {
       const customIds = walk(payload)
         .map((component) => component.customId)
         .filter((customId): customId is string => customId !== undefined);
-      expect(serialized).toContain("NSFW Jailbreaks");
-      expect(serialized).toContain("`/nsfw jailbreaks`");
+      expect(serialized).toContain("NSFW Content");
+      expect(serialized).toContain("`/nsfw`");
+      expect(serialized).toContain("NSFW-marked channels");
       expect(serialized).toContain("users of legal age");
       expect(serialized).toContain("https://docs.tomoribot.app/features/setup-administration/age-restricted-commands/");
       expect(customIds).toContain(
@@ -366,7 +367,7 @@ describe("config panel shell", () => {
       expect(serialized).not.toContain("st-presets:v1");
       expect(() => validateComponentsV2MessageLimits(payload)).not.toThrow();
     }
-    expect(JSON.stringify(build(GUILD_MEMBER))).not.toContain("NSFW Jailbreaks");
+    expect(JSON.stringify(build(GUILD_MEMBER))).not.toContain("NSFW Content");
   });
 
   it("embeds the ST panel with config routes and stays within the Components V2 budget", () => {

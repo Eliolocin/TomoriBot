@@ -55,6 +55,7 @@ export interface McpsPanelRenderInput {
   receipt?: PanelReceipt;
   pageSize?: number;
   routes?: McpsPanelRouteAdapter;
+  headingLevel?: 2 | 3;
 }
 
 function rowId(row: GuildMcpServerRow): number {
@@ -167,7 +168,7 @@ export function buildMcpsPanelComponents(input: McpsPanelRenderInput): Component
   const components: ComponentInContainerData[] = [
     {
       type: ComponentType.TextDisplay,
-      content: `## ${localizer(input.locale, "commands.mcps.title")}`,
+      content: `${"#".repeat(input.headingLevel ?? 2)} ${localizer(input.locale, "commands.mcps.title")}`,
     },
   ];
 

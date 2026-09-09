@@ -23,7 +23,7 @@ export default {
       videogen_option: `Video Generation`,
       hiderespondembed_option: `Hide Response Embeds`,
       hideimpersonationembeds_option: `Hide Impersonation Embeds`,
-      voicemessage_option: `Voice Messages (ElevenLabs)`,
+      voicemessage_option: `Voice Messages`,
       shorttermmemory_option: `Automatic STM Summarization`,
       selfteaching_desc: `Learn from server conversations`,
       personalization_desc: `Personal memories & nicknames`,

@@ -64,7 +64,7 @@ export default {
       page_channels_overrides: `Channel Overrides`,
       page_plugins_available_tools: `Available Tools`,
       page_plugins_context_additions: `Context Additions`,
-      page_plugins_nsfw_jailbreaks: `NSFW Jailbreaks`,
+      page_plugins_nsfw_jailbreaks: `NSFW Content`,
       channels_destinations_title: `Logs & Welcome`,
       channels_destinations_description: `Choose where logs and welcome messages are sent.`,
       channels_logs_title: `Logs`,
@@ -288,8 +288,10 @@ channel.`,
       plugins_context_additions_group_label_continued: `Context additions to enable (continued)`,
       plugins_manage_group_description: `Check each item I may use. Uncheck items to disable them.`,
       plugins_manage_button: `Manage`,
-      plugins_nsfw_jailbreaks_title: `NSFW Jailbreaks`,
-      plugins_nsfw_jailbreaks_description: `Jailbreak strategy management remains under {command}.
+      plugins_nsfw_jailbreaks_title: `NSFW Content`,
+      plugins_nsfw_jailbreaks_description: `Find optional NSFW content settings under {command}.
+Discord only allows {command} in NSFW-marked channels.
+Use it only in ways permitted by the selected provider.
 This feature is intended only for users of legal age.`,
       plugins_nsfw_jailbreaks_docs_label: `Read the age-restricted command guide`,
       behavior_general_title: `General Behavior`,

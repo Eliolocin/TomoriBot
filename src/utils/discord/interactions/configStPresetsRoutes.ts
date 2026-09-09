@@ -159,7 +159,7 @@ export async function handleConfigStPresetsRoute(
         ? stPresetOperations.deactivateAllStPresets(input)
         : false,
     importStPreset: async (input) =>
-      (await authorizeMutation({ action: "add-submit", locale: route.locale, nonce: "guarded" }))
+      (await authorizeMutation({ action: "add-submit", locale: route.locale, nonce: "guarded00" }))
         ? stPresetOperations.importStPreset(input)
         : { status: "insert_failed" },
     updateStPresetNodes: async (input) =>
@@ -167,7 +167,7 @@ export async function handleConfigStPresetsRoute(
         action: "nodes-submit",
         locale: route.locale,
         presetId: input.presetId,
-        nonce: "guarded",
+        nonce: "guarded00",
       }))
         ? stPresetOperations.updateStPresetNodes(input)
         : false,
