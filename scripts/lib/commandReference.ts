@@ -46,6 +46,14 @@ function humanizeCommandName(value: string): string {
 }
 
 function formatGroupDescription(group: CommandGroup): string {
+  if (group.name === "mcps") {
+    return "The primary management page is `/config` > Plugins > MCP Servers. The `/mcps` root remains functional during coexistence for adding, listing, enabling, disabling, and removing remote MCP tool servers.";
+  }
+
+  if (group.name === "st-presets") {
+    return "The primary management page is `/config` > Plugins > SillyTavern Presets. The `/st-presets` root remains functional during coexistence for managing and switching SillyTavern chat completion presets.";
+  }
+
   if (group.description) {
     return group.description;
   }

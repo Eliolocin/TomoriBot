@@ -1127,8 +1127,10 @@ combinations while a fence breakout and an unbounded body both went undetected.
 
 ## Legacy Message Component Behavior
 
-TomoriBot's `/mcps` collection panel is a persistent-routing example. Its `mcps:v1` custom IDs carry
-only locale, navigation state, stable row IDs, and bounded enum values. Each interaction reloads the
+TomoriBot's `/config` > Plugins > MCP Servers page is a persistent-routing example. It uses `config:v1`
+custom IDs; the standalone `/mcps` collection root remains a functional coexistence entry point using
+`mcps:v1` IDs. Both route families carry only locale, navigation state, stable row IDs, and bounded enum
+values. Each interaction reloads the
 current workspace and durable registration state when it needs panel state; the Add opener performs
 only its permission check before showing the form, and the globally routed submit performs the full
 reload. Names, endpoints, credentials, and permission bits are never trusted from the route. The panel

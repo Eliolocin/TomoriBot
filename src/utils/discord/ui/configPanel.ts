@@ -119,6 +119,7 @@ import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 import { formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { getCapabilitiesManagePermissionDefinitions } from "@/utils/discord/manageConfigMapping";
 import { buildDocsUrl, DOCS_PATHS } from "@/utils/discord/docsLinks";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import {
   buildConfigVoiceBody,
   type ConfigPersonaVoiceRemoteView,
@@ -203,6 +204,7 @@ const PAGE_LOCALE_KEYS: Record<ConfigCategory, Record<string, string>> = {
     "context-additions": "commands.config.panel.page_plugins_context_additions",
     "mcp-servers": "commands.mcps.title",
     "sillytavern-presets": "commands.st-presets.title",
+    "nsfw-jailbreaks": "commands.config.panel.page_plugins_nsfw_jailbreaks",
   },
   models: {
     switch: "commands.config.panel.page_models_switch",
@@ -3255,6 +3257,23 @@ ${localizer(locale, "commands.config.panel.self_debug_description")}`,
   return components;
 }
 
+function buildPluginsNsfwJailbreaksBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
+  const { locale } = input;
+  const jailbreaksCommand = commandRegistry.getCommandMention("nsfw", "jailbreaks", undefined, true);
+
+  return [
+    {
+      type: ComponentType.TextDisplay,
+      content: `### ${localizer(locale, "commands.config.panel.plugins_nsfw_jailbreaks_title")}
+${localizer(locale, "commands.config.panel.plugins_nsfw_jailbreaks_description", { command: jailbreaksCommand })}`,
+    },
+    {
+      type: ComponentType.TextDisplay,
+      content: `[${localizer(locale, "commands.config.panel.plugins_nsfw_jailbreaks_docs_label")}](${buildDocsUrl(DOCS_PATHS.AGE_RESTRICTED_COMMANDS)})`,
+    },
+  ];
+}
+
 export interface PersonaRangeEntryInput {
   locale: string;
   personas: readonly TomoriState[];
@@ -4351,6 +4370,11 @@ export function buildConfigPanelPayload(input: ConfigPanelRenderInput): ConfigPa
 
   if (category === "plugins" && page === "context-additions") {
     components.push(...buildPluginsContextAdditionsBody(input));
+    return buildPayload(components, receipt);
+  }
+
+  if (category === "plugins" && page === "nsfw-jailbreaks") {
+    components.push(...buildPluginsNsfwJailbreaksBody(input));
     return buildPayload(components, receipt);
   }
 

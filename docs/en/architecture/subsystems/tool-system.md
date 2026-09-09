@@ -47,7 +47,9 @@ Successful `safe_http` results place the formatted URL and Markdown in `ToolResu
 
 ## Guild MCP Replacements
 
-Remote registrations are managed through the ephemeral Components V2 `/mcps` collection panel.
+Remote registrations are managed primarily through the ephemeral Components V2 `/config` > Plugins
+> MCP Servers collection panel. The standalone `/mcps` collection root remains functional during
+coexistence.
 The panel reloads durable configuration on every global interaction, addresses writes by
 `guild_mcp_id` within the current workspace, and reports configured Enabled/Disabled state rather
 than live health. Add still validates the URL and tests a temporary connection before the encrypted

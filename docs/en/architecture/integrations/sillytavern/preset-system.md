@@ -18,7 +18,7 @@ This is distinct from [SillyTavern Card Import](/architecture/integrations/silly
 
 ## How It Works (User Perspective)
 
-1. User imports an ST preset JSON via `/st-presets`
+1. User imports an ST preset JSON via `/config` > Plugins > SillyTavern Presets (or `/st-presets`)
 2. The preset becomes active for that server
 3. On every LLM call, the context builder detects the active preset and rearranges blocks accordingly
 4. The `/sysprompt` and personality settings still apply — the preset controls *where* they appear, not *whether* they exist
@@ -30,16 +30,19 @@ This is distinct from [SillyTavern Card Import](/architecture/integrations/silly
 - **Phase 1: Import & Visualization** — implemented
 - **Phase 2: Template Engine** — implemented
 - **Phase 3: Context Assembly Override** — implemented
-- **Phase 4: Management UI**, implemented as the `/st-presets` collection panel
+- **Phase 4: Management UI**, implemented as the `/config` > Plugins > SillyTavern Presets page;
+  the standalone `/st-presets` collection root remains functional during coexistence
 
 ## Commands
 
 For a user-facing explanation of behavior, surprises, and limitations in SillyTavern terms, open `/help`, choose **Integrations**, then **SillyTavern Presets**.
 
-### `/st-presets`
+### `/config` > Plugins > SillyTavern Presets
 
-The `/st-presets` command opens an interactive collection panel for managing SillyTavern presets.
-Its selector keeps **Add new Preset** first, followed by the disable choice and imported presets.
+The `/config` > Plugins > SillyTavern Presets page opens an interactive collection panel for
+managing SillyTavern presets. The standalone `/st-presets` root remains functional during
+coexistence. Its selector keeps **Add new Preset** first, followed by the disable choice and
+imported presets.
 
 **Capabilities:**
 - **Add preset**: Upload a SillyTavern preset `.json` file with an optional author-written description.

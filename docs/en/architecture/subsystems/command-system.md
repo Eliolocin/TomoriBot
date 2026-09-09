@@ -987,8 +987,9 @@ Rules:
 
 ## Representative Command Groups
 
-`/mcps` is a bare, manager-only, DM-capable root backed by globally routed `mcps:v1` Components V2
-IDs. Its navigation is reconstructable and performs no writes. Routed navigation and mutation
+The primary MCP management surface is `/config` > Plugins > MCP Servers. The standalone `/mcps`
+root remains a bare, manager-only, DM-capable coexistence entry point backed by globally routed
+`mcps:v1` Components V2 IDs. Its navigation is reconstructable and performs no writes. Routed navigation and mutation
 submissions derive guild or DM-workspace scope again and recheck Manage Server in guilds. The Add
 opener rechecks permission before showing the form; its submit repeats the full scope and permission
 checks. Entity mutations resolve stable MCP row IDs inside that scope before a write. Known unsupported

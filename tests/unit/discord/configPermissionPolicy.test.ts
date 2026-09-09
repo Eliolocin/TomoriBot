@@ -127,12 +127,16 @@ describe("config page filtering", () => {
     expect(resolveConfigPageState("behavior", "memory", DM_OWNER)).toBe("omitted");
     expect(resolveConfigPageState("plugins", "available-tools", DM_OWNER)).toBe("enabled");
     expect(resolveConfigPageState("plugins", "context-additions", DM_OWNER)).toBe("enabled");
+    expect(resolveConfigPageState("plugins", "nsfw-jailbreaks", DM_OWNER)).toBe("enabled");
+    expect(resolveConfigPageState("plugins", "nsfw-jailbreaks", GUILD_MANAGER)).toBe("enabled");
+    expect(resolveConfigPageState("plugins", "nsfw-jailbreaks", GUILD_MEMBER)).toBe("omitted");
     expect(resolveConfigPageState("models", "image", DM_OWNER)).toBe("omitted");
     expect(visibleConfigPages("plugins", DM_OWNER)).toEqual([
       "available-tools",
       "context-additions",
       "mcp-servers",
       "sillytavern-presets",
+      "nsfw-jailbreaks",
     ]);
     expect(visibleConfigPages("models", DM_OWNER)).toEqual(["switch", "parameters", "fallbacks", "voices"]);
   });

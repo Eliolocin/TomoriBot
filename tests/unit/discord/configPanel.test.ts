@@ -320,6 +320,7 @@ describe("config panel shell", () => {
       "context-additions",
       "mcp-servers",
       "sillytavern-presets",
+      "nsfw-jailbreaks",
     ]);
 
     const managerPageSelect = walk(build(GUILD_MANAGER, { category: "plugins", page: "available-tools" })).find(
@@ -330,7 +331,42 @@ describe("config panel shell", () => {
       "context-additions",
       "mcp-servers",
       "sillytavern-presets",
+      "nsfw-jailbreaks",
     ]);
+  });
+
+  it("renders NSFW Jailbreaks as a read-only direction page", () => {
+    const managerPayload = build(GUILD_MANAGER, {
+      category: "plugins",
+      page: "nsfw-jailbreaks",
+      personas: [],
+      selectedPersonaId: null,
+    });
+    const dmPayload = build(DM_OWNER, {
+      category: "plugins",
+      page: "nsfw-jailbreaks",
+      personas: [],
+      selectedPersonaId: null,
+    });
+
+    for (const payload of [managerPayload, dmPayload]) {
+      const serialized = JSON.stringify(payload);
+      const customIds = walk(payload)
+        .map((component) => component.customId)
+        .filter((customId): customId is string => customId !== undefined);
+      expect(serialized).toContain("NSFW Jailbreaks");
+      expect(serialized).toContain("`/nsfw jailbreaks`");
+      expect(serialized).toContain("users of legal age");
+      expect(serialized).toContain("https://docs.tomoribot.app/features/setup-administration/age-restricted-commands/");
+      expect(customIds).toContain(
+        buildConfigRouteId({ action: "page", locale: "en-US", category: "plugins", page: "nsfw-jailbreaks" }),
+      );
+      expect(customIds.every((customId) => !customId.includes(":action:"))).toBe(true);
+      expect(serialized).not.toContain("mcps:v1");
+      expect(serialized).not.toContain("st-presets:v1");
+      expect(() => validateComponentsV2MessageLimits(payload)).not.toThrow();
+    }
+    expect(JSON.stringify(build(GUILD_MEMBER))).not.toContain("NSFW Jailbreaks");
   });
 
   it("embeds the ST panel with config routes and stays within the Components V2 budget", () => {

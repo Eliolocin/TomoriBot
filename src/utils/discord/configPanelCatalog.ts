@@ -38,7 +38,7 @@ type PersonaPage =
   | "voice"
   | "naming";
 type BehaviorPage = "general" | "trigger" | "experimental" | "notices" | "memory";
-type PluginsPage = "available-tools" | "context-additions" | "mcp-servers" | "sillytavern-presets";
+type PluginsPage = "available-tools" | "context-additions" | "mcp-servers" | "sillytavern-presets" | "nsfw-jailbreaks";
 type ChannelsPage = "destinations" | "auto-trigger" | "rules" | "overrides";
 type ModelsPage = "switch" | "parameters" | "fallbacks" | "image" | "voices";
 
@@ -52,7 +52,7 @@ export type ConfigPage = PersonaPage | BehaviorPage | PluginsPage | ChannelsPage
 export const CONFIG_PAGES_BY_CATEGORY: Record<ConfigCategory, readonly ConfigPage[]> = {
   persona: ["general", "triggers", "memories", "naming", "sprites", "appearance", "voice", "overrides", "advanced"],
   behavior: ["general", "trigger", "notices", "experimental", "memory"],
-  plugins: ["available-tools", "context-additions", "mcp-servers", "sillytavern-presets"],
+  plugins: ["available-tools", "context-additions", "mcp-servers", "sillytavern-presets", "nsfw-jailbreaks"],
   channels: ["destinations", "auto-trigger", "rules", "overrides"],
   models: ["switch", "parameters", "image", "fallbacks", "voices"],
 };

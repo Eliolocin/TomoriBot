@@ -26,7 +26,7 @@ export default {
     server_page6_title: `Server Status: NAI Image`,
     server_page6_description: `Manage these under /config > Models.`,
     server_page7_title: `Server Status: Integrations and Endpoints`,
-    server_page7_description: `Manage these under /providers and /mcps.`,
+    server_page7_description: `Manage these under /providers, /config > Plugins > MCP Servers, or /mcps.`,
     server_page9_title: `Server Status: Moderation and Access`,
     server_page9_description: `Manage these under /moderation and /config > Permissions.`,
     server_page10_title: `Server Status: Quotas`,

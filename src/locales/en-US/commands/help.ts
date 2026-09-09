@@ -441,7 +441,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
     "st-preset": {
       description: `Learn how SillyTavern presets behave here`,
       embed1_title: `SillyTavern Presets`,
-      embed1_description: `Use {stPresets} to load Prompt Manager presets, inspect enabled nodes, and switch or disable active presets.`,
+      embed1_description: `Use {configPlugins} to load Prompt Manager presets, inspect enabled nodes, and switch or disable active presets. The standalone {stPresets} root remains functional during coexistence.`,
       embed1_controls_title: `What A Preset Controls`,
       embed1_controls_description: `- Prompt order and marker placement
 - Custom prompt nodes
@@ -970,20 +970,20 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 **Using Smithery.ai:**
 **1.** Visit [smithery.ai](https://smithery.ai), create an account, and generate an API key from your profile.
 **2.** Browse the catalog and open an MCP you want. Copy the **connection URL** shown on its page (e.g. \`https://youtube.run.tools\`).
-**3.** Run {mcpsCommand} and choose **+ Add MCP**. In the form, paste the connection URL into **URL**, paste your Smithery API key into **Auth Token**, and choose the required **Server Type**. **General Purpose** is selected by default.
+**3.** Open {configPlugins} (or {mcpsCommand}) and choose **+ Add MCP**. In the form, paste the connection URL into **URL**, paste your Smithery API key into **Auth Token**, and choose the required **Server Type**. **General Purpose** is selected by default.
 
 **Using other sources:**
 If an MCP server requires no authentication, leave the **Auth Token** field blank. Some servers may use a different auth format. Check the server's documentation for details.
 
 Your auth token is encrypted at rest and never shown in plain text after saving.`,
-      online_summary_description: `Open {mcpsCommand} and choose **+ Add MCP** to register a publicly reachable HTTPS MCP server. Auth tokens are encrypted after saving; check the docs for provider-specific connection URL notes.`,
+      online_summary_description: `Open {configPlugins} (or {mcpsCommand}) and choose **+ Add MCP** to register a publicly reachable HTTPS MCP server. Auth tokens are encrypted after saving; check the docs for provider-specific connection URL notes.`,
       local_title: `Adding a Local MCP (Self-Hosted Only)`,
       local_description: `Local MCP servers are **only supported on self-hosted TomoriBot instances**. The public hosted bot requires HTTPS and blocks local/private addresses for security.
 
 If you are running your own instance, point the URL to your local server (e.g. \`http://localhost:3000/sse\`). No auth token is needed for local servers.`,
       local_summary_description: `Local MCP servers are self-host only because the public bot blocks local/private addresses. The docs explain how to run a local MCP and register its URL.`,
       removing_title: `Removing an MCP Server`,
-      removing_description: `Open {mcpsCommand}, select the server, and choose **Remove**. Confirming immediately disconnects the server and frees a slot for a new one.`,
+      removing_description: `Open {configPlugins} (or {mcpsCommand}), select the server, and choose **Remove**. Confirming immediately disconnects the server and frees a slot for a new one.`,
       security_title: `Security Warning`,
       security_description: `**Only add MCP servers you trust.**
 

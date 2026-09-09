@@ -616,7 +616,10 @@ const integrationPages: readonly HelpPageDefinition[] = [
       { titleKey: "commands.help.mcp.security_title", bodyKey: "commands.help.mcp.security_description" },
     ],
     footerKey: "commands.help.mcp.footer",
-    variables: () => ({ mcpsCommand: mention("mcps") }),
+    variables: () => ({
+      mcpsCommand: mention("mcps"),
+      configPlugins: configPage("Plugins > MCP Servers"),
+    }),
   },
   {
     id: "sillytavern-presets",
@@ -644,6 +647,7 @@ const integrationPages: readonly HelpPageDefinition[] = [
       personaPromptSet: configPage("Persona > Advanced"),
       personaAttributeAdd: configPage("Persona > General"),
       personaSampleDialogueAdd: configPage("Persona > General"),
+      configPlugins: configPage("Plugins > SillyTavern Presets"),
     }),
   },
 ] as const;

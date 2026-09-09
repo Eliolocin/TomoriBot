@@ -136,7 +136,7 @@ Link Discord channels to Matrix rooms for bidirectional relay.
 
 ## `/mcps`
 
-Add, list, enable, disable, and remove remote MCP tool servers.
+The primary management page is `/config` > Plugins > MCP Servers. The `/mcps` root remains functional during coexistence for adding, listing, enabling, disabling, and removing remote MCP tool servers.
 
 | Command | Summary |
 |---|---|
@@ -326,7 +326,7 @@ Start the initial setup process. Configure AI provider and personality.
 
 ## `/st-presets`
 
-Manage and switch SillyTavern chat completion presets.
+The primary management page is `/config` > Plugins > SillyTavern Presets. The `/st-presets` root remains functional during coexistence for managing and switching SillyTavern chat completion presets.
 
 | Command | Summary |
 |---|---|
