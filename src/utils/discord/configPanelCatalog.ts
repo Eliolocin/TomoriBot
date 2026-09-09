@@ -519,6 +519,7 @@ export type ConfigPanelRoute =
   | { action: "behavior-random-remove-open"; locale: string; start?: number }
   | { action: "behavior-random-remove-select"; locale: string }
   | { action: "behavior-random-remove-page"; locale: string; start: number }
+  | { action: "behavior-random-remove-cancel"; locale: string; start?: number }
   | { action: "behavior-random-remove-submit"; locale: string; start: number; fp: string; nonce: string }
   | { action: "behavior-limits-open"; locale: string }
   | { action: "behavior-limits-submit"; locale: string; nonce: string }
@@ -940,6 +941,7 @@ export const CONFIG_ROUTE_CODECS: ConfigRouteCodecs = {
   "behavior-random-remove-open": { wireToken: "beh-random-rem-open", fields: [optionalStartField] },
   "behavior-random-remove-select": { wireToken: "beh-random-rem-select", fields: [] },
   "behavior-random-remove-page": { wireToken: "beh-random-rem-page", fields: [startField] },
+  "behavior-random-remove-cancel": { wireToken: "beh-random-rem-cancel", fields: [optionalStartField] },
   "behavior-random-remove-submit": { wireToken: "beh-random-rem-sub", fields: [startField, fpField, nonceField] },
   "behavior-limits-open": { wireToken: "beh-limits-open", fields: [] },
   "behavior-limits-submit": { wireToken: "beh-limits-sub", fields: [nonceField] },

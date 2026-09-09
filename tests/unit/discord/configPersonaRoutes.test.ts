@@ -690,6 +690,11 @@ const WIRE_CONTRACT_V1: ReadonlyArray<readonly [string, ConfigPanelRoute]> = [
   ["config:v1:beh-random-rem-open:en-US", { action: "behavior-random-remove-open", locale: "en-US" }],
   ["config:v1:beh-random-rem-select:en-US", { action: "behavior-random-remove-select", locale: "en-US" }],
   ["config:v1:beh-random-rem-page:en-US:1250", { action: "behavior-random-remove-page", locale: "en-US", start: 1250 }],
+  ["config:v1:beh-random-rem-cancel:en-US", { action: "behavior-random-remove-cancel", locale: "en-US" }],
+  [
+    "config:v1:beh-random-rem-cancel:en-US:1250",
+    { action: "behavior-random-remove-cancel", locale: "en-US", start: 1250 },
+  ],
   [
     "config:v1:beh-random-rem-sub:en-US:50:abcd1234:nonce1234567",
     { action: "behavior-random-remove-submit", locale: "en-US", start: 50, fp: "abcd1234", nonce: "nonce1234567" },

@@ -1,9 +1,9 @@
 import { ButtonStyle, ComponentType, type ActionRowData, type ButtonComponentData, type Guild } from "discord.js";
-import type { LlmRow } from "@/types/db/schema";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import {
   MODEL_OVERRIDE_MODAL_CAPACITY,
   buildModelOverrideRouteId,
+  formatModelOverrideModelSummary,
   type ModelOverrideEntry,
 } from "@/utils/discord/modelOverrideCatalog";
 import { buildConfigModalFieldId } from "@/utils/discord/ui/configModals";
@@ -16,16 +16,8 @@ export const MODEL_OVERRIDE_PAGE_SELECT_MAX_BUTTONS = DISCORD_ACTION_ROW_BUTTONS
 export const MODEL_OVERRIDE_PAGE_SELECT_MAX_ENTRIES =
   MODEL_OVERRIDE_PAGE_SELECT_MAX_BUTTONS * MODEL_OVERRIDE_MODAL_CAPACITY;
 
-// Independent preview bounds guarantee that localized scope, target preview, model preview, and canonical editor destination stay within Discord 100-character option description limit without clipping destination text.
-export const MODEL_OVERRIDE_TARGET_PREVIEW_MAX_LENGTH = 25;
-export const MODEL_OVERRIDE_MODEL_PREVIEW_MAX_LENGTH = 28;
-
 export function buildModelOverrideCheckboxGroupId(groupIndex: number, nonce: string): string {
   return buildConfigModalFieldId(`model_override_${groupIndex}`, nonce);
-}
-
-function formatLlmSummary(llm: LlmRow): string {
-  return `${llm.llm_codename} (${llm.llm_provider})`;
 }
 
 export function buildModelOverrideRemoveModal(
@@ -93,38 +85,27 @@ export function buildModelOverrideRemoveModal(
         required: false,
         options: chunk.map((entry, indexInChunk) => {
           const positionalIndex = String(offset + indexInChunk);
+          // Each row names its target and prints only the effective model. Scope stays in the
+          // group label above the rows, so identical models never make same-scope targets
+          // indistinguishable and the option description never repeats the editor destination.
           if (entry.scope === "channel") {
             const channel = guild?.channels.cache.get(entry.channelDiscId);
             const unknownTarget = localizer(locale, "commands.model.override.remove.channel_unknown");
             const label = channel?.isTextBased()
               ? `#${channel.name}`
               : (channel?.name ?? `${unknownTarget} (${entry.channelDiscId.substring(0, 10)}...)`);
-            const destination = "/config > Channels > Overrides";
-            const scope = localizer(locale, "commands.model.override.remove.channel_scope");
-            const targetPreview = safeSelectOptionText(label, MODEL_OVERRIDE_TARGET_PREVIEW_MAX_LENGTH);
-            const modelPreview = safeSelectOptionText(
-              formatLlmSummary(entry.llm),
-              MODEL_OVERRIDE_MODEL_PREVIEW_MAX_LENGTH,
-            );
             return {
               label: safeSelectOptionText(label, 100),
               value: positionalIndex,
-              description: `${scope} • ${targetPreview} • ${modelPreview} • ${destination}`,
+              description: formatModelOverrideModelSummary(entry.llm),
               default: true,
             };
           }
 
-          const destination = "/config > Persona > Overrides";
-          const scope = localizer(locale, "commands.model.override.remove.persona_scope");
-          const targetPreview = safeSelectOptionText(entry.persona_nickname, MODEL_OVERRIDE_TARGET_PREVIEW_MAX_LENGTH);
-          const modelPreview = safeSelectOptionText(
-            formatLlmSummary(entry.persona_llm),
-            MODEL_OVERRIDE_MODEL_PREVIEW_MAX_LENGTH,
-          );
           return {
             label: safeSelectOptionText(entry.persona_nickname, 100),
             value: positionalIndex,
-            description: `${scope} • ${targetPreview} • ${modelPreview} • ${destination}`,
+            description: formatModelOverrideModelSummary(entry.persona_llm),
             default: true,
           };
         }),

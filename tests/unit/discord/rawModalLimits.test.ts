@@ -20,7 +20,9 @@ import {
   WELCOME_PERSONA_PAGE_SIZE,
 } from "@/utils/discord/ui/configChannelModals";
 import {
+  BEHAVIOR_RANDOM_SETTINGS_FIELD,
   buildBehaviorNoticeVisibilityModal,
+  buildBehaviorRandomAddModal,
   buildBehaviorWorkaroundsModal,
 } from "@/utils/discord/ui/configBehaviorModals";
 import {
@@ -44,7 +46,8 @@ import {
   getDiscordTextLength,
   validateRawModalLimits,
 } from "@/utils/discord/ui/componentsV2Limits";
-import { initializeLocalizer } from "@/utils/text/localizer";
+import { buildConfigModalFieldId } from "@/utils/discord/ui/configModals";
+import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 import type { WorkaroundDefinition } from "@/utils/discord/workaroundConfigMapping";
 
 const STRING_SELECT = 3;
@@ -239,6 +242,50 @@ describe("raw config modal limits", () => {
       const payload = buildBehaviorWorkaroundsModal(locale, "nonce", { verbatim_tool_calling: true });
       assertWithinDiscordLimits(payload, `workarounds/${locale}`);
       expect(payload.components.length).toBe(1);
+    }
+  });
+
+  it("keeps the Random Trigger Add modal within Discord limits across all runtime locales", () => {
+    for (const locale of RUNTIME_LOCALES) {
+      const payload = buildBehaviorRandomAddModal(locale, "nonce", makePersonas(3));
+      assertWithinDiscordLimits(payload, `random-add/${locale}`);
+    }
+  });
+
+  it("names the Random Trigger channel picker and keeps the timing example a non-submitted placeholder", () => {
+    for (const locale of RUNTIME_LOCALES) {
+      const payload = buildBehaviorRandomAddModal(locale, "nonce", [makePersona(55)]);
+      const channelWrapper = payload.components[0];
+      const channelInner = channelWrapper.component as { type: number } | undefined;
+      expect(channelWrapper.type).toBe(LABEL);
+      expect(channelInner?.type).toBe(8); // Channel Select
+      expect(channelWrapper.label).toBe(localizer(locale, "commands.config.random-trigger.add.channel_label"));
+      expect(channelWrapper.description).toBe(
+        localizer(locale, "commands.config.random-trigger.add.channel_description"),
+      );
+
+      const settingsWrapper = payload.components.find(
+        (component) =>
+          component.component?.custom_id === buildConfigModalFieldId(BEHAVIOR_RANDOM_SETTINGS_FIELD, "nonce"),
+      );
+      expect(settingsWrapper).toBeDefined();
+      const settingsInput = settingsWrapper?.component as
+        | { type: number; value?: string; placeholder?: string }
+        | undefined;
+      expect(settingsInput?.type).toBe(4); // Text Input
+      expect(settingsWrapper?.description).toBe(
+        localizer(locale, "commands.config.panel.random_trigger_settings_description"),
+      );
+      expect(settingsWrapper?.description).toContain("/help");
+      expect(getDiscordTextLength(settingsWrapper?.description ?? "")).toBeLessThanOrEqual(
+        DISCORD_MODAL_FIELD_DESCRIPTION_MAX,
+      );
+      // The old opaque `1,100,,,` prefill must not resubmit as a real value.
+      expect(settingsInput?.value).toBeUndefined();
+      expect(settingsInput?.placeholder).toBe(
+        localizer(locale, "commands.config.panel.random_trigger_settings_placeholder"),
+      );
+      expect(getDiscordTextLength(settingsInput?.placeholder ?? "")).toBeLessThanOrEqual(100);
     }
   });
 

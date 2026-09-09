@@ -391,6 +391,7 @@ export const BEHAVIOR_TRIGGER_ACTION_BY_ROUTE: Partial<
   "behavior-random-remove-open": "random-remove",
   "behavior-random-remove-select": "random-remove",
   "behavior-random-remove-page": "random-remove",
+  "behavior-random-remove-cancel": "random-remove",
   "behavior-random-remove-submit": "random-remove",
   "behavior-limits-open": "matching-limits",
   "behavior-limits-submit": "matching-limits",

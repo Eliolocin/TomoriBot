@@ -899,6 +899,7 @@ Exaggeration: **{exaggeration}**`,
     "random-trigger": {
       add: {
         description: `チャンネルに確率的なタイマーベースの自動トリガーを追加します。`,
+        channel_label: `チャンネル`,
         channel_description: `自発的なメッセージを送信するチャンネル。`,
         timer_hours_description: `サイコロを振る頻度（時間単位、最低1時間）。`,
         random_offset_range_description: `タイマーがリセットされるたびに加算/減算するランダムオフセット範囲（時間、任意、最小0）。`,

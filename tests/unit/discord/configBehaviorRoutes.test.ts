@@ -41,7 +41,7 @@ import {
   buildBehaviorRandomAddModal,
   buildBehaviorRandomRemoveModal,
 } from "@/utils/discord/ui/configBehaviorModals";
-import { initializeLocalizer } from "@/utils/text/localizer";
+import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 import { TOOL_NOTICE_DEFINITIONS } from "@/constants/toolNotices";
 
 beforeAll(async () => initializeLocalizer());
@@ -275,6 +275,11 @@ const D9_WIRE_CONTRACT: ReadonlyArray<readonly [string, Parameters<typeof buildC
   ["config:v1:beh-random-rem-open:en-US:1250", { action: "behavior-random-remove-open", locale: "en-US", start: 1250 }],
   ["config:v1:beh-random-rem-select:en-US", { action: "behavior-random-remove-select", locale: "en-US" }],
   ["config:v1:beh-random-rem-page:en-US:1250", { action: "behavior-random-remove-page", locale: "en-US", start: 1250 }],
+  ["config:v1:beh-random-rem-cancel:en-US", { action: "behavior-random-remove-cancel", locale: "en-US" }],
+  [
+    "config:v1:beh-random-rem-cancel:en-US:1250",
+    { action: "behavior-random-remove-cancel", locale: "en-US", start: 1250 },
+  ],
   [
     "config:v1:beh-random-rem-sub:en-US:1250:abcd1234:nonce1234567",
     { action: "behavior-random-remove-submit", locale: "en-US", start: 1250, fp: "abcd1234", nonce: "nonce1234567" },
@@ -324,6 +329,7 @@ describe("config Behavior routes", () => {
       "behavior-random-remove-open": { wireToken: "beh-random-rem-open", fields: ["start"] },
       "behavior-random-remove-select": { wireToken: "beh-random-rem-select", fields: [] },
       "behavior-random-remove-page": { wireToken: "beh-random-rem-page", fields: ["start"] },
+      "behavior-random-remove-cancel": { wireToken: "beh-random-rem-cancel", fields: ["start"] },
       "behavior-random-remove-submit": { wireToken: "beh-random-rem-sub", fields: ["start", "fp", "nonce"] },
       "behavior-limits-open": { wireToken: "beh-limits-open", fields: [] },
       "behavior-limits-submit": { wireToken: "beh-limits-sub", fields: ["nonce"] },
@@ -774,6 +780,29 @@ describe("config Behavior routes", () => {
     upsert.mockRestore();
   });
 
+  it("refuses a blank Timing and Chance field instead of writing the retired 1,100,,, default", async () => {
+    const harness = makeHarness(true);
+    const nonce = "nonce1234567";
+    harness.dependencies.takeSelectValue = (_interactionId, fieldId) =>
+      fieldId === buildConfigModalFieldId(BEHAVIOR_RANDOM_CHANNEL_FIELD, nonce) ? "channel-1" : undefined;
+    harness.dependencies.takeCheckboxValues = () => [];
+    const insert = spyOn(serverScheduleRepository, "insertTrigger").mockResolvedValue(makeRandomTrigger());
+    const upsert = spyOn(serverScheduleRepository, "upsertTrigger").mockResolvedValue(makeRandomTrigger());
+    await dispatch(
+      harness,
+      makeInteraction(harness, buildConfigRouteId({ action: "behavior-random-add-submit", locale: "en-US", nonce }), {
+        kind: "modal",
+        // No settings value is submitted; the prefill was removed in favour of a placeholder.
+        fields: {},
+      }),
+    );
+    expect(insert).not.toHaveBeenCalled();
+    expect(upsert).not.toHaveBeenCalled();
+    expect(JSON.stringify(harness.edits)).toContain("Enter valid comma-separated timing values.");
+    insert.mockRestore();
+    upsert.mockRestore();
+  });
+
   it("re-reads random triggers and removes checked-list omissions, including an explicit empty selection", async () => {
     const harness = makeHarness(true);
     const trigger = makeRandomTrigger();
@@ -909,6 +938,123 @@ describe("config Behavior routes", () => {
     expect((harness.modals[0] as { components: unknown[] }).components).toHaveLength(1);
   });
 
+  it("opens the removal modal directly when all schedules fit one modal", async () => {
+    for (const scheduleCount of [1, 50]) {
+      const harness = makeHarness(true);
+      const first = makeRandomTrigger();
+      const triggers = Array.from({ length: scheduleCount }, (_entry, index) => ({ ...first, trigger_id: index + 1 }));
+      harness.dependencies.loadBehaviorView = async (current) => ({
+        general: {
+          systemPrompt: current.config.system_prompt ?? null,
+          contextNote: current.config.context_note ?? null,
+          contextNoteDepth: current.config.context_note_depth ?? 0,
+          humanizerDegree: current.config.humanizer_degree ?? 1,
+          messageFetchLimit: current.config.message_fetch_limit ?? 80,
+          timezoneOffset: current.config.timezone_offset ?? 0,
+        },
+        trigger: {
+          randomTriggers: triggers,
+          cascadeLimit: current.config.cascade_limit ?? 3,
+          matchLimit: current.config.match_limit ?? 3,
+          deliberateTriggerMode: current.config.deliberate_trigger_mode ?? false,
+          alwaysReplyEnabled: current.config.always_reply_enabled ?? false,
+          cooldownType: current.config.cooldown_type ?? 0,
+          cooldownLength: current.config.cooldown_length ?? 5,
+        },
+      });
+      await dispatch(
+        harness,
+        makeInteraction(harness, buildConfigRouteId({ action: "behavior-random-remove-open", locale: "en-US" })),
+      );
+      expect(harness.modals, `${scheduleCount} schedules`).toHaveLength(1);
+      expect(harness.edits).toHaveLength(0);
+      expect((harness.modals[0] as { custom_id: string }).custom_id).toContain("beh-random-rem-sub");
+    }
+  });
+
+  it("reports no schedules when Remove opens with zero random triggers", async () => {
+    const harness = makeHarness(true);
+    await dispatch(
+      harness,
+      makeInteraction(harness, buildConfigRouteId({ action: "behavior-random-remove-open", locale: "en-US" })),
+    );
+    expect(harness.modals).toHaveLength(0);
+    expect(harness.replies).toHaveLength(1);
+    expect(JSON.stringify(harness.replies[0])).toContain(
+      localizer("en-US", "commands.config.random-trigger.remove.none_description"),
+    );
+  });
+
+  it("repaints into the removal-range state instead of refusing when Remove exceeds one modal", async () => {
+    const harness = makeHarness(true);
+    const first = makeRandomTrigger();
+    const triggers = Array.from({ length: 51 }, (_entry, index) => ({ ...first, trigger_id: index + 1 }));
+    harness.dependencies.loadBehaviorView = async (current) => ({
+      general: {
+        systemPrompt: current.config.system_prompt ?? null,
+        contextNote: current.config.context_note ?? null,
+        contextNoteDepth: current.config.context_note_depth ?? 0,
+        humanizerDegree: current.config.humanizer_degree ?? 1,
+        messageFetchLimit: current.config.message_fetch_limit ?? 80,
+        timezoneOffset: current.config.timezone_offset ?? 0,
+      },
+      trigger: {
+        randomTriggers: triggers,
+        cascadeLimit: current.config.cascade_limit ?? 3,
+        matchLimit: current.config.match_limit ?? 3,
+        deliberateTriggerMode: current.config.deliberate_trigger_mode ?? false,
+        alwaysReplyEnabled: current.config.always_reply_enabled ?? false,
+        cooldownType: current.config.cooldown_type ?? 0,
+        cooldownLength: current.config.cooldown_length ?? 5,
+      },
+    });
+    await dispatch(
+      harness,
+      makeInteraction(harness, buildConfigRouteId({ action: "behavior-random-remove-open", locale: "en-US" })),
+    );
+    expect(harness.modals).toHaveLength(0);
+    expect(harness.replies).toHaveLength(0);
+    expect(harness.edits).toHaveLength(1);
+    const edit = JSON.stringify(harness.edits[0]);
+    expect(edit).toContain(buildConfigRouteId({ action: "behavior-random-remove-select", locale: "en-US" }));
+    expect(edit).toContain(buildConfigRouteId({ action: "behavior-random-remove-cancel", locale: "en-US" }));
+    expect(edit).not.toContain(buildConfigRouteId({ action: "behavior-random-add-open", locale: "en-US" }));
+  });
+
+  it("returns from the removal-range state to the ordinary Trigger page through Cancel", async () => {
+    const harness = makeHarness(true);
+    const first = makeRandomTrigger();
+    const triggers = Array.from({ length: 51 }, (_entry, index) => ({ ...first, trigger_id: index + 1 }));
+    harness.dependencies.loadBehaviorView = async (current) => ({
+      general: {
+        systemPrompt: current.config.system_prompt ?? null,
+        contextNote: current.config.context_note ?? null,
+        contextNoteDepth: current.config.context_note_depth ?? 0,
+        humanizerDegree: current.config.humanizer_degree ?? 1,
+        messageFetchLimit: current.config.message_fetch_limit ?? 80,
+        timezoneOffset: current.config.timezone_offset ?? 0,
+      },
+      trigger: {
+        randomTriggers: triggers,
+        cascadeLimit: current.config.cascade_limit ?? 3,
+        matchLimit: current.config.match_limit ?? 3,
+        deliberateTriggerMode: current.config.deliberate_trigger_mode ?? false,
+        alwaysReplyEnabled: current.config.always_reply_enabled ?? false,
+        cooldownType: current.config.cooldown_type ?? 0,
+        cooldownLength: current.config.cooldown_length ?? 5,
+      },
+    });
+    await dispatch(
+      harness,
+      makeInteraction(harness, buildConfigRouteId({ action: "behavior-random-remove-cancel", locale: "en-US" })),
+    );
+    expect(harness.edits).toHaveLength(1);
+    const edit = JSON.stringify(harness.edits[0]);
+    expect(edit).toContain(buildConfigRouteId({ action: "behavior-random-add-open", locale: "en-US" }));
+    expect(edit).not.toContain(buildConfigRouteId({ action: "behavior-random-remove-select", locale: "en-US" }));
+    expect(edit).toContain(buildConfigRouteId({ action: "behavior-random-remove-open", locale: "en-US" }));
+  });
+
   it("pages the removal selector beyond 25 page ranges through the real route registry", async () => {
     const harness = makeHarness(true);
     const first = makeRandomTrigger();
@@ -946,11 +1092,59 @@ describe("config Behavior routes", () => {
     );
 
     expect(harness.edits).toHaveLength(1);
-    expect(JSON.stringify(harness.edits[0])).toContain(
-      buildConfigRouteId({ action: "behavior-random-remove-select", locale: "en-US" }),
+    const edit = JSON.stringify(harness.edits[0]);
+    expect(edit).toContain(buildConfigRouteId({ action: "behavior-random-remove-select", locale: "en-US" }));
+    expect(edit).toContain(String(CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY));
+    // Window paging keeps the page inside the removal-range state rather than the ordinary page.
+    expect(edit).toContain(buildConfigRouteId({ action: "behavior-random-remove-cancel", locale: "en-US" }));
+    expect(edit).not.toContain(buildConfigRouteId({ action: "behavior-random-add-open", locale: "en-US" }));
+  });
+
+  it("returns from a later removal window to the first schedule page instead of stranding the summary", async () => {
+    const harness = makeHarness(true);
+    const first = makeRandomTrigger();
+    const triggers = Array.from({ length: 1300 }, (_entry, index) => ({ ...first, trigger_id: index + 1 }));
+    harness.dependencies.loadBehaviorView = async (current) => ({
+      general: {
+        systemPrompt: current.config.system_prompt ?? null,
+        contextNote: current.config.context_note ?? null,
+        contextNoteDepth: current.config.context_note_depth ?? 0,
+        humanizerDegree: current.config.humanizer_degree ?? 1,
+        messageFetchLimit: current.config.message_fetch_limit ?? 80,
+        timezoneOffset: current.config.timezone_offset ?? 0,
+      },
+      trigger: {
+        randomTriggers: triggers,
+        cascadeLimit: current.config.cascade_limit ?? 3,
+        matchLimit: current.config.match_limit ?? 3,
+        deliberateTriggerMode: current.config.deliberate_trigger_mode ?? false,
+        alwaysReplyEnabled: current.config.always_reply_enabled ?? false,
+        cooldownType: current.config.cooldown_type ?? 0,
+        cooldownLength: current.config.cooldown_length ?? 5,
+      },
+    });
+
+    await dispatch(
+      harness,
+      makeInteraction(
+        harness,
+        buildConfigRouteId({
+          action: "behavior-random-remove-page",
+          locale: "en-US",
+          start: CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
+        }),
+      ),
     );
-    expect(JSON.stringify(harness.edits[0])).toContain(
-      String(CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY),
+    await dispatch(
+      harness,
+      makeInteraction(harness, buildConfigRouteId({ action: "behavior-random-remove-cancel", locale: "en-US" })),
     );
+
+    expect(harness.edits).toHaveLength(2);
+    const ordinary = JSON.stringify(harness.edits[1]);
+    expect(ordinary).toContain(buildConfigRouteId({ action: "behavior-random-add-open", locale: "en-US" }));
+    expect(ordinary).not.toContain(buildConfigRouteId({ action: "behavior-random-remove-select", locale: "en-US" }));
+    // Cancel lands back on the first schedule page, where the summary still reports the overflow.
+    expect(ordinary).toContain("more trigger(s) are on later pages.");
   });
 });

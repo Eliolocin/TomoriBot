@@ -611,7 +611,7 @@ Implemented examples:
   registration at a time behind an explicit confirmation, so selection never becomes destructive
   consent.
 - `/config` > Models > Fallbacks & Randomizer manages the fallback chain in one modal, and each slot can be cleared directly with the built-in `None` option.
-- `/config` > Engine > Trigger manages random triggers in one modal when the set fits, with paginated fallback beyond modal limits.
+- `/config` > Behavior > Trigger removes random triggers in one modal when the set fits; beyond 50 schedules, Remove first repaints the page into an explicit removal-range state whose selector opens each batch.
 - `/server trigger remove` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
 
 ---

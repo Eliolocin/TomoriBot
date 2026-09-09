@@ -93,6 +93,7 @@ function textField(
   required: boolean,
   maxLength: number,
   value?: string,
+  placeholderKey?: string,
 ): RawDiscordComponent {
   return {
     type: LABEL,
@@ -105,6 +106,7 @@ function textField(
       required,
       max_length: maxLength,
       value,
+      placeholder: placeholderKey ? safeSelectOptionText(localizer(locale, placeholderKey), 100) : undefined,
     },
   };
 }
@@ -854,7 +856,7 @@ export function buildBehaviorRandomAddModal(
     components: [
       {
         type: LABEL,
-        label: label(locale, "commands.config.random-trigger.add.channel_description"),
+        label: label(locale, "commands.config.random-trigger.add.channel_label"),
         description: description(locale, "commands.config.random-trigger.add.channel_description"),
         component: {
           type: CHANNEL_SELECT,
@@ -890,7 +892,8 @@ export function buildBehaviorRandomAddModal(
         TextInputStyle.Short,
         true,
         100,
-        "1,100,,,",
+        undefined,
+        "commands.config.panel.random_trigger_settings_placeholder",
       ),
       {
         type: LABEL,

@@ -1710,7 +1710,7 @@ describe("config Behavior pages", () => {
     expect(walk(memory).some((component) => component.content?.includes("memory/#stm-configuration"))).toBe(true);
   });
 
-  it("offers a page selector when random-trigger removal exceeds one modal", () => {
+  it("keeps the overflow removal selector off the ordinary Trigger page", () => {
     const first = behaviorView.trigger.randomTriggers[0];
     const overflowingView = {
       ...behaviorView,
@@ -1726,11 +1726,40 @@ describe("config Behavior pages", () => {
     expect(buttonFor(payload, { action: "behavior-random-remove-open", locale: "en-US" })).toMatchObject({
       disabled: false,
     });
-    expect(buttonFor(payload, { action: "behavior-random-remove-select", locale: "en-US" })).toBeDefined();
-    expect(walk(payload).some((component) => component.options?.some((option) => option.value === "50"))).toBe(true);
+    expect(buttonFor(payload, { action: "behavior-random-remove-select", locale: "en-US" })).toBeUndefined();
+    expect(walk(payload).some((component) => component.customId?.includes("beh-random-rem-page") === true)).toBe(false);
+    expect(walk(payload).some((component) => component.content?.includes("more trigger(s) are on later pages"))).toBe(
+      true,
+    );
   });
 
-  it("reaches random-trigger page ranges beyond the 25-option selector limit", () => {
+  it("shows the removal-range selector and Cancel only inside the explicit removal-range state", () => {
+    const first = behaviorView.trigger.randomTriggers[0];
+    const overflowingView = {
+      ...behaviorView,
+      trigger: {
+        ...behaviorView.trigger,
+        randomTriggers: Array.from({ length: 51 }, (_entry, index) => ({
+          ...first,
+          trigger_id: index + 1,
+        })),
+      },
+    };
+    const mode = build(GUILD_MANAGER, {
+      category: "behavior",
+      page: "trigger",
+      behaviorView: overflowingView,
+      randomTriggerRemoveMode: true,
+    });
+    expect(buttonFor(mode, { action: "behavior-random-remove-select", locale: "en-US" })).toBeDefined();
+    expect(buttonFor(mode, { action: "behavior-random-remove-cancel", locale: "en-US" })).toBeDefined();
+    expect(buttonFor(mode, { action: "behavior-random-remove-open", locale: "en-US" })).toBeUndefined();
+    expect(buttonFor(mode, { action: "behavior-random-add-open", locale: "en-US" })).toBeUndefined();
+    expect(walk(mode).some((component) => component.content?.includes("**Remove Random Triggers**"))).toBe(true);
+    expect(walk(mode).some((component) => component.options?.some((option) => option.value === "50"))).toBe(true);
+  });
+
+  it("pages removal ranges beyond the 25-option selector limit inside the removal-range state only", () => {
     const first = behaviorView.trigger.randomTriggers[0];
     const triggers = Array.from({ length: 1300 }, (_entry, index) => ({ ...first, trigger_id: index + 1 }));
     const triggerView = {
@@ -1741,6 +1770,7 @@ describe("config Behavior pages", () => {
       category: "behavior",
       page: "trigger",
       behaviorView: triggerView,
+      randomTriggerRemoveMode: true,
     });
     const firstSelector = walk(firstGroup).find(
       (component) =>
@@ -1765,6 +1795,7 @@ describe("config Behavior pages", () => {
       category: "behavior",
       page: "trigger",
       behaviorView: triggerView,
+      randomTriggerRemoveMode: true,
       randomTriggerPageStart: CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
     });
     const secondSelector = walk(secondGroup).find(
@@ -1775,13 +1806,36 @@ describe("config Behavior pages", () => {
     expect(secondSelector?.options?.map((option) => option.value)).toEqual([
       String(CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY),
     ]);
+    // Cancel never carries a window start: leaving the removal state always restores the first
+    // schedule page, since the ordinary page has no paging controls to leave a later range with.
+    expect(buttonFor(secondGroup, { action: "behavior-random-remove-cancel", locale: "en-US" })?.disabled).toBe(false);
     expect(
       buttonFor(secondGroup, {
+        action: "behavior-random-remove-cancel",
+        locale: "en-US",
+        start: CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
+      }),
+    ).toBeUndefined();
+
+    // Even a page position that reaches the renderer directly must not reintroduce removal chrome
+    // on the ordinary page or a start-carrying Remove button.
+    const ordinaryAtRange = build(GUILD_MANAGER, {
+      category: "behavior",
+      page: "trigger",
+      behaviorView: triggerView,
+      randomTriggerPageStart: CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
+    });
+    expect(buttonFor(ordinaryAtRange, { action: "behavior-random-remove-select", locale: "en-US" })).toBeUndefined();
+    expect(buttonFor(ordinaryAtRange, { action: "behavior-random-remove-open", locale: "en-US" })?.disabled).toBe(
+      false,
+    );
+    expect(
+      buttonFor(ordinaryAtRange, {
         action: "behavior-random-remove-open",
         locale: "en-US",
         start: CONFIG_PERSONA_SELECT_PAGE_SIZE * CONFIG_RANDOM_TRIGGER_CHECKBOX_CAPACITY,
-      })?.disabled,
-    ).toBe(false);
+      }),
+    ).toBeUndefined();
   });
 
   describe("configModelsPanel image tags fence guard convergence", () => {

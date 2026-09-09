@@ -65,6 +65,7 @@ import {
 import type {
   ConfigChannelsView,
   ConfigChannelsOverridesView,
+  ConfigBehaviorTriggerView,
   ConfigBehaviorView,
   ConfigPermissionsView,
   ConfigPersonaMemoryView,
@@ -257,6 +258,7 @@ export interface ConfigPanelRenderInput {
   imageGenerationView?: ConfigImageGenerationView;
   voicesView?: ConfigVoicesView;
   randomTriggerPageStart?: number;
+  randomTriggerRemoveMode?: boolean;
   behaviorView?: ConfigBehaviorView;
   permissionsView?: ConfigPermissionsView;
   channelsView?: ConfigChannelsView;
@@ -2433,6 +2435,101 @@ function cooldownLabel(locale: string, value: number): string {
   return localizer(locale, key);
 }
 
+/**
+ * The explicit removal-range state: only this state offers the range selector and its window
+ * navigation, so an overflow server keeps the ordinary Trigger page free of removal chrome until
+ * Remove is pressed. Cancel returns to the ordinary page at the position this state was reached.
+ */
+function buildRandomTriggerRemoveRangeComponents(
+  locale: string,
+  view: ConfigBehaviorTriggerView,
+  start: number,
+  writesDisabled: boolean,
+): ComponentInContainerData[] {
+  const components: ComponentInContainerData[] = [
+    {
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.config.panel.random_trigger_remove_mode_title")}**\n${localizer(
+        locale,
+        "commands.config.panel.random_trigger_remove_mode_description",
+      )}`,
+    },
+  ];
+  const triggerPageCount = Math.ceil(view.randomTriggers.length / RANDOM_TRIGGER_PAGE_SIZE);
+  if (triggerPageCount > 0) {
+    const selectedTriggerPage = Math.min(
+      Math.max(Math.floor(start / RANDOM_TRIGGER_PAGE_SIZE), 0),
+      triggerPageCount - 1,
+    );
+    const selectWindowStart =
+      Math.floor(selectedTriggerPage / CONFIG_PERSONA_SELECT_PAGE_SIZE) * CONFIG_PERSONA_SELECT_PAGE_SIZE;
+    components.push({
+      type: ComponentType.ActionRow,
+      components: [
+        {
+          type: ComponentType.StringSelect,
+          customId: buildConfigRouteId({ action: "behavior-random-remove-select", locale }),
+          placeholder: localizer(locale, "commands.config.panel.random_trigger_page_placeholder"),
+          options: Array.from(
+            {
+              length: Math.min(triggerPageCount - selectWindowStart, CONFIG_PERSONA_SELECT_PAGE_SIZE),
+            },
+            (_page, offset) => {
+              const page = selectWindowStart + offset;
+              const rangeStart = page * RANDOM_TRIGGER_PAGE_SIZE;
+              const rangeEnd = Math.min(rangeStart + RANDOM_TRIGGER_PAGE_SIZE, view.randomTriggers.length);
+              return {
+                label: safeSelectOptionText(
+                  localizer(locale, "commands.config.panel.random_trigger_page_option", {
+                    first: rangeStart + 1,
+                    last: rangeEnd,
+                  }),
+                  100,
+                ),
+                value: String(rangeStart),
+                default: page === selectedTriggerPage,
+              };
+            },
+          ),
+          disabled: writesDisabled,
+        } satisfies StringSelectMenuComponentData,
+      ],
+    } satisfies ActionRowData<StringSelectMenuComponentData>);
+
+    const rangeCount = Math.max(1, Math.ceil(triggerPageCount / CONFIG_PERSONA_SELECT_PAGE_SIZE));
+    const paginationRow = buildPaginationRow({
+      locale,
+      rangeIndex: Math.floor(selectedTriggerPage / CONFIG_PERSONA_SELECT_PAGE_SIZE),
+      rangeCount,
+      namespace: CONFIG_ROUTE_NAMESPACE,
+      version: CONFIG_ROUTE_VERSION,
+      buildSegments: {
+        page: (targetRangeIndex) =>
+          buildConfigRouteSegments({
+            action: "behavior-random-remove-page",
+            locale,
+            start: targetRangeIndex * CONFIG_PERSONA_SELECT_PAGE_SIZE * RANDOM_TRIGGER_PAGE_SIZE,
+          }),
+      },
+      disabled: writesDisabled,
+    });
+    if (paginationRow) components.push(paginationRow);
+  }
+  components.push({
+    type: ComponentType.ActionRow,
+    components: [
+      {
+        type: ComponentType.Button,
+        style: ButtonStyle.Secondary,
+        customId: buildConfigRouteId({ action: "behavior-random-remove-cancel", locale }),
+        label: localizer(locale, "commands.config.panel.cancel_button"),
+        disabled: writesDisabled,
+      },
+    ],
+  });
+  return components;
+}
+
 function buildBehaviorTriggerBody(input: ConfigPanelRenderInput): ComponentInContainerData[] {
   const { locale } = input;
   const view = input.behaviorView?.trigger;
@@ -2452,6 +2549,13 @@ function buildBehaviorTriggerBody(input: ConfigPanelRenderInput): ComponentInCon
     return components;
   }
   if (!view) return components;
+
+  if (input.randomTriggerRemoveMode) {
+    components.push(
+      ...buildRandomTriggerRemoveRangeComponents(locale, view, input.randomTriggerPageStart ?? 0, writesDisabled),
+    );
+    return components;
+  }
 
   const personaById = new Map(
     input.personas.flatMap((persona) =>
@@ -2487,72 +2591,13 @@ function buildBehaviorTriggerBody(input: ConfigPanelRenderInput): ComponentInCon
           })}`
         : "")
     : `> ${localizer(locale, "commands.config.panel.none_label")}`;
-  const triggerPageNavigation: ComponentInContainerData[] = [];
-  if (triggerPageCount > 1) {
-    triggerPageNavigation.push({
-      type: ComponentType.ActionRow,
-      components: [
-        {
-          type: ComponentType.StringSelect,
-          customId: buildConfigRouteId({ action: "behavior-random-remove-select", locale }),
-          placeholder: localizer(locale, "commands.config.panel.random_trigger_page_placeholder"),
-          options: Array.from(
-            {
-              length: Math.min(
-                triggerPageCount -
-                  Math.floor(selectedTriggerPage / CONFIG_PERSONA_SELECT_PAGE_SIZE) * CONFIG_PERSONA_SELECT_PAGE_SIZE,
-                CONFIG_PERSONA_SELECT_PAGE_SIZE,
-              ),
-            },
-            (_page, offset) => {
-              const page =
-                Math.floor(selectedTriggerPage / CONFIG_PERSONA_SELECT_PAGE_SIZE) * CONFIG_PERSONA_SELECT_PAGE_SIZE +
-                offset;
-              const start = page * RANDOM_TRIGGER_PAGE_SIZE;
-              const end = Math.min(start + RANDOM_TRIGGER_PAGE_SIZE, view.randomTriggers.length);
-              return {
-                label: safeSelectOptionText(
-                  localizer(locale, "commands.config.panel.random_trigger_page_option", {
-                    first: start + 1,
-                    last: end,
-                  }),
-                  100,
-                ),
-                value: String(start),
-                default: page === selectedTriggerPage,
-              };
-            },
-          ),
-          disabled: writesDisabled,
-        } satisfies StringSelectMenuComponentData,
-      ],
-    } satisfies ActionRowData<StringSelectMenuComponentData>);
-
-    const paginationRow = buildPaginationRow({
-      locale,
-      rangeIndex: Math.floor(selectedTriggerPage / CONFIG_PERSONA_SELECT_PAGE_SIZE),
-      rangeCount: Math.max(1, Math.ceil(triggerPageCount / CONFIG_PERSONA_SELECT_PAGE_SIZE)),
-      namespace: CONFIG_ROUTE_NAMESPACE,
-      version: CONFIG_ROUTE_VERSION,
-      buildSegments: {
-        page: (targetRangeIndex) =>
-          buildConfigRouteSegments({
-            action: "behavior-random-remove-page",
-            locale,
-            start: targetRangeIndex * CONFIG_PERSONA_SELECT_PAGE_SIZE * RANDOM_TRIGGER_PAGE_SIZE,
-          }),
-      },
-      disabled: writesDisabled,
-    });
-    if (paginationRow) triggerPageNavigation.push(paginationRow);
-  }
   components.push(
     {
       type: ComponentType.TextDisplay,
       content: `**${localizer(locale, "commands.config.panel.random_triggers_title")}**\n${localizer(
         locale,
         "commands.config.panel.random_triggers_description",
-      )}\n${triggerSummary}`,
+      )}\n${withLinePrefix("-# ", localizer(locale, "commands.config.panel.random_triggers_help_hint"))}\n${triggerSummary}`,
     },
     {
       type: ComponentType.ActionRow,
@@ -2567,17 +2612,12 @@ function buildBehaviorTriggerBody(input: ConfigPanelRenderInput): ComponentInCon
         {
           type: ComponentType.Button,
           style: ButtonStyle.Danger,
-          customId: buildConfigRouteId({
-            action: "behavior-random-remove-open",
-            locale,
-            ...(selectedTriggerPage > 0 ? { start: selectedTriggerPage * RANDOM_TRIGGER_PAGE_SIZE } : {}),
-          }),
+          customId: buildConfigRouteId({ action: "behavior-random-remove-open", locale }),
           label: localizer(locale, "commands.config.panel.remove_random_trigger_button"),
           disabled: writesDisabled || view.randomTriggers.length === 0,
         },
       ],
     },
-    ...triggerPageNavigation,
     {
       type: ComponentType.TextDisplay,
       content: `**${localizer(locale, "commands.config.panel.trigger_matching_title")}**\n${localizer(

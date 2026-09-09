@@ -69,8 +69,8 @@ Auto-trigger lets her join the conversation without being named at all.
 
 - `/server autotrigger channels` — set the channels where she responds without a mention.
 - `/server autotrigger threshold` — set how many messages accumulate before she chimes in.
-- `/config` > Engine > Trigger: add a probabilistic timer-based auto-trigger to a channel.
-- `/config` > Engine > Trigger: remove an existing random trigger.
+- `/config` > Behavior > Trigger: add a probabilistic timer-based auto-trigger to a channel.
+- `/config` > Behavior > Trigger: remove an existing random trigger.
 - ~~`/natres` — humanlike timing for autonomous responses~~ to be implemented
 
 Use this in a dedicated chat channel where you want her to feel like a participant rather

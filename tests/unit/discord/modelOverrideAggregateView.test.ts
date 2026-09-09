@@ -15,6 +15,7 @@ import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
 import {
   buildModelOverrideRouteId,
   computeModelOverrideBatchFingerprint,
+  formatModelOverrideModelSummary,
   parseModelOverridePanelRoute,
   sortModelOverrideEntries,
   type ChannelOverrideEntry,
@@ -926,7 +927,7 @@ describe("setTextModelOverride cache invalidation behavior", () => {
 });
 
 describe("buildModelOverrideRemoveModal option descriptions and mixed chunk contract", () => {
-  it("formats channel and persona option descriptions stating scope, target, provider/model, and exact editor destinations", () => {
+  it("labels each row with its target and describes only the effective model", () => {
     const channelEntry = makeChannelEntry("channel-1", LLM_A);
     const personaEntry = makePersonaEntry(55, "Sparrow", LLM_A);
 
@@ -949,15 +950,45 @@ describe("buildModelOverrideRemoveModal option descriptions and mixed chunk cont
     const options = (modal.components[0].component as { options: Array<{ label: string; description: string }> })
       .options;
 
-    expect(options[0].description).toBe(
-      "Channel • #general • gemini-2.5-flash (google) • /config > Channels > Overrides",
-    );
-    expect(options[0].description.length).toBeLessThanOrEqual(100);
+    expect(options[0].label).toBe("#general");
+    expect(options[0].description).toBe("gemini-2.5-flash (google)");
 
-    expect(options[1].description).toBe(
-      "Persona • Sparrow • gemini-2.5-flash (google) • /config > Persona > Overrides",
+    expect(options[1].label).toBe("Sparrow");
+    expect(options[1].description).toBe("gemini-2.5-flash (google)");
+  });
+
+  it("keeps scope and editor destination in the group context instead of every option", () => {
+    const channelModal = buildModelOverrideRemoveModal(
+      "en-US",
+      0,
+      "abcd1234",
+      "nonce123",
+      [makeChannelEntry("channel-1")],
+      null,
     );
-    expect(options[1].description.length).toBeLessThanOrEqual(100);
+    expect(channelModal.components[0].label).toBe(
+      localizer("en-US", "commands.model.override.remove.channel_checkbox_label"),
+    );
+    expect(channelModal.components[0].description).toBe(
+      localizer("en-US", "commands.model.override.remove.channel_checkbox_description"),
+    );
+    expect(channelModal.components[0].description).toContain("/config > Channels > Overrides");
+
+    const personaModal = buildModelOverrideRemoveModal(
+      "en-US",
+      0,
+      "abcd1234",
+      "nonce123",
+      [makePersonaEntry(55, "Sparrow")],
+      null,
+    );
+    expect(personaModal.components[0].label).toBe(
+      localizer("en-US", "commands.model.override.remove.persona_checkbox_label"),
+    );
+    expect(personaModal.components[0].description).toBe(
+      localizer("en-US", "commands.model.override.remove.persona_checkbox_description"),
+    );
+    expect(personaModal.components[0].description).toContain("/config > Persona > Overrides");
   });
 
   it("labels mixed chunk with mixed checkbox label and description instead of lying about contents", () => {
@@ -972,7 +1003,7 @@ describe("buildModelOverrideRemoveModal option descriptions and mixed chunk cont
     );
   });
 
-  it("bounds oversized target and model previews independently while preserving scope, previews, and canonical destinations", () => {
+  it("bounds oversized targets in the label and model summaries in the description without scope or destination repetition", () => {
     const oversizedLlm: LlmRow = {
       llm_id: 88,
       llm_provider: "oversized-provider-name-that-exceeds-bounds",
@@ -1007,18 +1038,20 @@ describe("buildModelOverrideRemoveModal option descriptions and mixed chunk cont
     const options = (modal.components[0].component as { options: Array<{ label: string; description: string }> })
       .options;
 
-    const channelDesc = options[0].description;
-    expect(channelDesc.length).toBeLessThanOrEqual(100);
-    expect(channelDesc.startsWith(localizer("en-US", "commands.model.override.remove.channel_scope"))).toBe(true);
-    expect(channelDesc.includes("#oversized-channel")).toBe(true);
-    expect(channelDesc.includes("oversized-model")).toBe(true);
-    expect(channelDesc.endsWith("/config > Channels > Overrides")).toBe(true);
+    const channelLabel = options[0].label;
+    expect(channelLabel.length).toBeLessThanOrEqual(100);
+    expect(channelLabel).toContain("#oversized-channel");
+    expect(channelLabel).not.toContain("/config");
+    expect(options[0].description).toBe(formatModelOverrideModelSummary(oversizedLlm));
+    expect(options[0].description.length).toBeLessThanOrEqual(100);
+    expect(options[0].description).not.toContain("•");
 
-    const personaDesc = options[1].description;
-    expect(personaDesc.length).toBeLessThanOrEqual(100);
-    expect(personaDesc.startsWith(localizer("en-US", "commands.model.override.remove.persona_scope"))).toBe(true);
-    expect(personaDesc.includes("oversized-persona")).toBe(true);
-    expect(personaDesc.includes("oversized-model")).toBe(true);
-    expect(personaDesc.endsWith("/config > Persona > Overrides")).toBe(true);
+    const personaLabel = options[1].label;
+    expect(personaLabel.length).toBeLessThanOrEqual(100);
+    expect(personaLabel).toContain("oversized-persona");
+    expect(personaLabel).not.toContain("/config");
+    expect(options[1].description).toBe(formatModelOverrideModelSummary(oversizedLlm));
+    expect(options[1].description.length).toBeLessThanOrEqual(100);
+    expect(options[1].description).not.toContain("•");
   });
 });

@@ -225,7 +225,14 @@ async function repaintBehavior(
           : "general",
     selectedPersonaId: null,
     receipt: receiptValue,
-    randomTriggerPageStart: "start" in route ? route.start : undefined,
+    // Only removal-range window paging positions the page. Every ordinary repaint lands on the
+    // first schedule page, because the ordinary page has no paging controls: carrying a batch
+    // start out of the removal state would strand its summary on a range it cannot leave.
+    randomTriggerPageStart: route.action === "behavior-random-remove-page" ? route.start : undefined,
+    // Only the removal-range state renders the range selector and its window paging. Remove-open
+    // repaints only on overflow entry, and remove-page exists only inside that state.
+    randomTriggerRemoveMode:
+      route.action === "behavior-random-remove-page" || route.action === "behavior-random-remove-open",
     dependencies,
   });
 }
@@ -248,9 +255,14 @@ function parseRandomSettings(raw: string): {
   silenceThresholdHours: number | null;
   failureThreshold: number | null;
 } | null {
-  const [timerRaw, chanceRaw, offsetRaw = "", silenceRaw = "", failureRaw = ""] = raw
-    .split(",")
-    .map((value) => value.trim());
+  // A trailing optional position left out of a short entry is an empty value, never undefined, so
+  // blank and partial timing input lands in the invalid receipt instead of throwing.
+  const parts = raw.split(",").map((value) => value.trim());
+  const timerRaw = parts[0] ?? "";
+  const chanceRaw = parts[1] ?? "";
+  const offsetRaw = parts[2] ?? "";
+  const silenceRaw = parts[3] ?? "";
+  const failureRaw = parts[4] ?? "";
   const timerHours = parseInteger(timerRaw, 1, Number.MAX_SAFE_INTEGER);
   const chancePercent = parseInteger(chanceRaw, 1, 100);
   if (timerHours === null || chancePercent === null) return null;
@@ -377,15 +389,12 @@ export async function handleConfigBehaviorModalOpen(
       });
       return true;
     }
-    if (
-      route.action === "behavior-random-remove-open" &&
-      rows.length > RANDOM_TRIGGER_PAGE_SIZE &&
-      route.start === undefined
-    ) {
-      await interaction.reply({
-        content: localizer(route.locale, "commands.config.panel.random_trigger_page_required_detail"),
-        flags: MessageFlags.Ephemeral,
-      });
+    if (route.action === "behavior-random-remove-open" && rows.length > RANDOM_TRIGGER_PAGE_SIZE) {
+      // Overflow no longer refuses inline: Remove repaints the Trigger page into an explicit
+      // removal-range state whose selector and pagination only exist there. The button must be
+      // acknowledged first because this branch sits in the modal-open path, which never defers.
+      await interaction.deferUpdate();
+      await repaintBehavior(interaction, scope, route, dependencies);
       return true;
     }
     const requestedStart =
@@ -1446,7 +1455,7 @@ export interface ConfigBehaviorRouteContext {
 
 export async function handleConfigBehaviorRoutes(context: ConfigBehaviorRouteContext): Promise<boolean> {
   const route = context.route;
-  if (route.action === "behavior-random-remove-page") {
+  if (route.action === "behavior-random-remove-page" || route.action === "behavior-random-remove-cancel") {
     await repaintBehavior(context.interaction, context.scope, route, context.dependencies);
     return true;
   }

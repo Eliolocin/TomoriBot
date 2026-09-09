@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { LlmRow } from "@/types/db/schema";
 import { buildInteractionRouteId, type ParsedInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import { truncateDiscordText } from "@/utils/discord/ui/componentsV2Limits";
 import {
   buildRouteSegments,
   decodeRouteSegments,
@@ -15,6 +16,21 @@ import { parseLocale } from "@/utils/discord/panelRouteTokens";
 export const MODEL_OVERRIDE_ROUTE_NAMESPACE = "model-overrides";
 export const MODEL_OVERRIDE_ROUTE_VERSION = "v1";
 export const MODEL_OVERRIDE_MODAL_CAPACITY = 50;
+
+/**
+ * Model summaries stay compact across every override surface so a long codename cannot crowd a
+ * checkbox row or preview line. Bounded here once so the remove picker and the Models preview
+ * adopt the same shape.
+ */
+export const MODEL_OVERRIDE_MODEL_SUMMARY_MAX_LENGTH = 28;
+
+export function formatModelOverrideModelSummary(llm: LlmRow): string {
+  return truncateDiscordText(
+    `${llm.llm_codename} (${llm.llm_provider})`,
+    MODEL_OVERRIDE_MODEL_SUMMARY_MAX_LENGTH,
+    "...",
+  );
+}
 
 export type ChannelOverrideEntry = {
   scope: "channel";

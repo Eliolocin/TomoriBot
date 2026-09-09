@@ -405,6 +405,7 @@ export interface ConfigRepaintOptions {
   channelsRoleplayRangeIndex?: number;
   channelsBlocklistRangeIndex?: number;
   randomTriggerPageStart?: number;
+  randomTriggerRemoveMode?: boolean;
   parametersProvider?: string;
   logitBiasPageStart?: number;
   naiPresetPageStart?: number;
@@ -595,6 +596,7 @@ export async function repaint(
         imageGenerationView,
         voicesView,
         randomTriggerPageStart: options.randomTriggerPageStart,
+        randomTriggerRemoveMode: options.randomTriggerRemoveMode,
         behaviorView,
         permissionsView,
         channelsView,
