@@ -38,7 +38,7 @@ import { formatCustomModelDisplay } from "@/utils/provider/customProviderUtils";
 import { generateOpenRouterImage } from "@/providers/openrouter/openrouterImageGeneration";
 import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
-import { execute as executeAutoImage } from "../tool/visualize";
+import { execute as executeAutoImage } from "@/utils/image/autoImageCommand";
 
 const MODAL_CUSTOM_ID = "generate_image_modal";
 const PROMPT_INPUT_ID = "prompt_input";
