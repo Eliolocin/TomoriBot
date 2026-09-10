@@ -131,7 +131,7 @@ Link Discord channels to Matrix rooms for bidirectional relay.
 
 | Command | Summary |
 |---|---|
-| `/matrix link` | Link a Discord channel to Matrix room for bidirectional relay |
+| `/matrix link` | Link a Discord channel to a Matrix room for bidirectional relay |
 | `/matrix unlink` | Remove the Matrix bridge link from a Discord channel |
 
 ## `/memories`
