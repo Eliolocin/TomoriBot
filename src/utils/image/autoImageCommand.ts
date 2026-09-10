@@ -5,7 +5,6 @@ import {
   type BaseGuildTextChannel,
   type ChatInputCommandInteraction,
   type Client,
-  type SlashCommandSubcommandBuilder,
   type TextChannel,
 } from "discord.js";
 import { sendCooldownDM } from "@/utils/discord/cooldownDM";
@@ -26,11 +25,11 @@ import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
 import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
 import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/persona/personaAccess";
 
-const MODAL_CUSTOM_ID = "tool_visualize_modal";
-const PROMPT_INPUT_ID = "tool_visualize_prompt";
-const SETTING_INPUT_ID = "tool_visualize_setting";
-const BACKEND_INPUT_ID = "tool_visualize_backend";
-const PERSONA_INPUT_ID = "tool_visualize_persona";
+const MODAL_CUSTOM_ID = "generate_image_auto_modal";
+const PROMPT_INPUT_ID = "generate_image_auto_prompt";
+const SETTING_INPUT_ID = "generate_image_auto_setting";
+const BACKEND_INPUT_ID = "generate_image_auto_backend";
+const PERSONA_INPUT_ID = "generate_image_auto_persona";
 
 type SceneSettingId = "storybeat" | "character" | "snapshot" | "vertical";
 type SceneImageBackend = "current_provider" | "novelai";
@@ -100,9 +99,6 @@ interface PersonaSummary {
 }
 
 type ImageQuotaCheckResult = Awaited<ReturnType<typeof checkImageQuota>>;
-
-export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("visualize").setDescription(localizer("en-US", "commands.tool.visualize.description"));
 
 function getSettingOptions(locale: string) {
   return [
@@ -233,7 +229,8 @@ async function replyQuotaExceeded(
   });
 }
 
-export async function execute(
+/** Execute the contextual scene-image path exposed by `/generate image` Auto mode. */
+export async function executeAutoImageCommand(
   client: Client,
   interaction: ChatInputCommandInteraction,
   userData: UserRow,
@@ -572,16 +569,13 @@ export async function execute(
             senderPersonaAvatarUrl = identity.avatarUrl ?? identity.avatarDataUri;
           }
         } catch (webhookError) {
-          log.warn(
-            "[/tool visualize] Failed to resolve persona webhook; image will post as bot",
-            webhookError as Error,
-          );
+          log.warn("[/generate image:auto] Failed to resolve persona webhook; image will post as bot", webhookError as Error);
         }
       }
     }
 
     log.info(
-      `[/tool visualize] Starting hidden image agent for channel ${interaction.channel.id} — backend=${selectedBackend}, preset=${settingPreset.plannerLabel}, sender=${selectedPersona?.persona_nickname ?? "active"}`,
+      `[/generate image:auto] Starting hidden image agent for channel ${interaction.channel.id} — backend=${selectedBackend}, preset=${settingPreset.plannerLabel}, sender=${selectedPersona?.persona_nickname ?? "active"}`,
     );
 
     // Invoke the hidden image agent turn.
@@ -633,7 +627,7 @@ export async function execute(
     }
 
     log.success(
-      `[/tool visualize] Hidden image agent completed for channel ${interaction.channel.id} — backend=${selectedBackend}`,
+      `[/generate image:auto] Hidden image agent completed for channel ${interaction.channel.id} — backend=${selectedBackend}`,
     );
 
     // Acknowledge the modal submit interaction with an ephemeral success notice.
@@ -653,8 +647,8 @@ export async function execute(
       invokingMember,
     );
   } catch (error) {
-    log.error("Error in /tool visualize", error as Error, {
-      errorType: "ToolVisualizeCommandError",
+    log.error("Error in /generate image:auto", error as Error, {
+      errorType: "GenerateImageAutoCommandError",
       metadata: {
         userId: interaction.user.id,
         guildId: interaction.guild?.id ?? "DM",
