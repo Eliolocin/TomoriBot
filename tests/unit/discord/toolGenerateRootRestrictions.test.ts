@@ -1,16 +1,16 @@
 /**
- * Locks in /tool's and /generate's registration restrictions ahead of the /bot dissolution.
+ * Locks in /tool's and /generate's registration restrictions across the command modernization.
  *
  * Both roots are members of neither GUILD_ONLY_CATEGORIES nor MANAGER_ONLY_CATEGORIES
- * (commandLoader.ts), so both are DM-capable and unrestricted today. The dissolution moves
- * `/bot generate image` in as `/tool visualize` and `/bot generate scene` in as
- * `/generate scene`, and both arrivals are meant to work in DMs. A move that silently added
- * a context or permission default to either root would take DM support away from the
- * members already there, and nothing in check, lint, or check-locales would notice.
+ * (commandLoader.ts), so both are DM-capable and unrestricted today. `/generate` now owns both
+ * direct prompt image generation and the contextual Auto image flow alongside `/generate scene`;
+ * those capabilities are meant to remain available in DMs. A move that silently added a context
+ * or permission default to either root would take DM support away from the members already there,
+ * and nothing in check, lint, or check-locales would notice.
  *
  * Keep this file separate from the per-command registration tests the dissolution edits, so
- * the slice adding the new members cannot also own the assertions proving it left the roots'
- * restrictions alone.
+ * command-surface changes cannot also own the assertions proving they left the roots' restrictions
+ * alone.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { loadCommandData } from "@/utils/discord/commandLoader";
