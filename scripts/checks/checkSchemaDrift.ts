@@ -247,6 +247,26 @@ function extractComposedZodObjectKeys(content: string, exportName: string, seen:
     statement.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\.omit\(_sharedOmit\)/g),
     (match) => match[1],
   );
+  const omittedInlineKeysBySchema = new Map<string, Set<string>>();
+  for (const match of statement.matchAll(/\.omit\(\s*\{([\s\S]*?)\}\s*\)/g)) {
+    const schemaStart = statement.slice(0, match.index).match(/([A-Za-z_][A-Za-z0-9_]*)\s*$/)?.[1];
+    if (!schemaStart) continue;
+    const omittedInlineKeys = omittedInlineKeysBySchema.get(schemaStart) ?? new Set<string>();
+    for (const key of match[1].matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g)) {
+      omittedInlineKeys.add(key[1]);
+    }
+    omittedInlineKeysBySchema.set(schemaStart, omittedInlineKeys);
+  }
+  const pickedInlineKeysBySchema = new Map<string, Set<string>>();
+  for (const match of statement.matchAll(/\.pick\(\s*\{([\s\S]*?)\}\s*\)/g)) {
+    const schemaStart = statement.slice(0, match.index).match(/([A-Za-z_][A-Za-z0-9_]*)\s*$/)?.[1];
+    if (!schemaStart) continue;
+    const pickedInlineKeys = pickedInlineKeysBySchema.get(schemaStart) ?? new Set<string>();
+    for (const key of match[1].matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g)) {
+      pickedInlineKeys.add(key[1]);
+    }
+    pickedInlineKeysBySchema.set(schemaStart, pickedInlineKeys);
+  }
   const directSchemaRefs = [
     ...Array.from(statement.matchAll(/=\s*([A-Za-z_][A-Za-z0-9_]*)\b/g), (match) => match[1]),
     ...Array.from(statement.matchAll(/\.merge\(\s*([A-Za-z_][A-Za-z0-9_]*)\b/g), (match) => match[1]),
@@ -257,15 +277,25 @@ function extractComposedZodObjectKeys(content: string, exportName: string, seen:
   const keys = new Set<string>();
   for (const schemaRef of directSchemaRefs) {
     const schemaKeys = extractZodObjectKeys(content, schemaRef, seen);
+    const omittedInlineKeys = omittedInlineKeysBySchema.get(schemaRef) ?? new Set<string>();
+    const pickedInlineKeys = pickedInlineKeysBySchema.get(schemaRef);
     for (const key of schemaKeys) {
-      keys.add(key);
+      if (!omittedInlineKeys.has(key) && (!pickedInlineKeys || pickedInlineKeys.has(key))) keys.add(key);
     }
   }
 
   for (const schemaRef of omittedSchemaRefs) {
     const schemaKeys = extractZodObjectKeys(content, schemaRef, seen);
+    const omittedInlineKeys = omittedInlineKeysBySchema.get(schemaRef) ?? new Set<string>();
+    const pickedInlineKeys = pickedInlineKeysBySchema.get(schemaRef);
     for (const key of schemaKeys) {
-      if (!omittedSharedKeys.has(key)) keys.add(key);
+      if (
+        !omittedSharedKeys.has(key) &&
+        !omittedInlineKeys.has(key) &&
+        (!pickedInlineKeys || pickedInlineKeys.has(key))
+      ) {
+        keys.add(key);
+      }
     }
   }
 
@@ -297,6 +327,50 @@ function extractZodObjectKeys(content: string, exportName: string, seen = new Se
 
   addIssue("zod-schema", `Could not find Zod object ${exportName}`);
   return new Set();
+}
+
+function extractMethodBody(content: string, methodName: string): string | null {
+  const declaration = new RegExp(`\\basync\\s+${methodName}\\s*\\(`).exec(content);
+  if (!declaration) return null;
+
+  const openIndex = content.indexOf("{", declaration.index);
+  if (openIndex === -1) {
+    addIssue("v2-config-export", `Could not find method body for ${methodName}`);
+    return "";
+  }
+
+  const closeIndex = findMatchingBrace(content, openIndex);
+  if (closeIndex === -1) {
+    addIssue("v2-config-export", `Could not find closing method brace for ${methodName}`);
+    return "";
+  }
+
+  return content.slice(openIndex + 1, closeIndex);
+}
+
+function extractConfigExclusionReasons(content: string): Map<string, string> {
+  const declarationIndex = findConstDeclarationIndex(content, "V2_CONFIG_EXCLUSIONS");
+  if (declarationIndex === -1) {
+    addIssue("v2-config-export", "Could not find V2_CONFIG_EXCLUSIONS");
+    return new Map();
+  }
+
+  const openIndex = content.indexOf("{", declarationIndex);
+  const closeIndex = openIndex === -1 ? -1 : findMatchingBrace(content, openIndex);
+  if (openIndex === -1 || closeIndex === -1) {
+    addIssue("v2-config-export", "Could not parse V2_CONFIG_EXCLUSIONS");
+    return new Map();
+  }
+
+  const reasons = new Map<string, string>();
+  const body = content.slice(openIndex + 1, closeIndex);
+  const entries = body.matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\{([\s\S]*?)^\s*\},?/gm);
+  for (const entry of entries) {
+    const reason = entry[2].match(/\breason\s*:\s*"([^"]*)"/)?.[1];
+    if (reason) reasons.set(entry[1], reason);
+  }
+
+  return reasons;
 }
 
 function countTopLevelListItems(list: string): number {
@@ -637,6 +711,184 @@ const SERVER_CONFIG_EXPORT_COVERAGE_TARGETS: ServerConfigExportCoverageTarget[] 
   },
 ];
 
+type ConfigProjectionScope = "workspace" | "personal";
+
+type ConfigProjectionCoverageTarget = {
+  scope: ConfigProjectionScope;
+  tableName: string;
+  rowSchemaName?: string;
+  exportSchemaName: string;
+  sourceKeys?: string[];
+  supplementalSourceKeys?: string[];
+  sourceToExportKey?: Record<string, string>;
+  excludedKeys?: string[];
+};
+
+const V2_CONFIG_SECTION_SCHEMA_NAMES: Record<ConfigProjectionScope, Record<string, string>> = {
+  workspace: {
+    chat: "workspaceChatConfigSectionSchema",
+    triggers: "workspaceTriggersConfigSectionSchema",
+    capabilities: "workspaceCapabilitiesConfigSectionSchema",
+    memory: "workspaceMemoryConfigSectionSchema",
+    media: "workspaceMediaConfigSectionSchema",
+    speech: "workspaceSpeechConfigSectionSchema",
+    access: "workspaceAccessConfigSectionSchema",
+  },
+  personal: {
+    profile: "personalProfileConfigSectionSchema",
+    privacy: "personalPrivacyConfigSectionSchema",
+    appearance: "personalAppearanceConfigSectionSchema",
+    response_modes: "personalResponseModesConfigSectionSchema",
+  },
+};
+
+const V1_CONFIG_SCHEMA_NAMES: Record<ConfigProjectionScope, string[]> = {
+  workspace: [
+    "serverModelConfigExportSchema",
+    "serverChatConfigExportSchema",
+    "serverMemberPermissionsConfigExportSchema",
+    "serverCapabilitiesConfigExportSchema",
+    "serverNoticeEmbedsConfigExportSchema",
+    "serverNsfwConfigExportSchema",
+    "serverSpeechConfigExportSchema",
+    "serverAutoTriggerConfigExportSchema",
+    "serverChannelScopeConfigExportSchema",
+    "serverTriggerBehaviorConfigExportSchema",
+    "serverNovelaiImagegenConfigExportSchema",
+    "serverByokConfigExportSchema",
+    "serverMemoryConfigExportSchema",
+    "serverWelcomeConfigExportSchema",
+    "serverStmConfigExportSchema",
+  ],
+  personal: ["personalSettingsExportDataSchema"],
+};
+
+const CONFIG_PROJECTION_TARGETS: ConfigProjectionCoverageTarget[] = [
+  ...SERVER_CONFIG_EXPORT_COVERAGE_TARGETS.map((target) => ({
+    scope: "workspace" as const,
+    tableName: target.tableName,
+    rowSchemaName: target.rowSchemaName,
+    exportSchemaName: target.exportSchemaName,
+    sourceKeys: target.sourceKeys,
+    excludedKeys: target.excludedKeys,
+  })),
+  {
+    scope: "workspace",
+    tableName: "server_stm_configs",
+    rowSchemaName: "serverStmConfigSchema",
+    exportSchemaName: "serverStmConfigExportSchema",
+    sourceToExportKey: {
+      refresh_cadence: "stm_config",
+      render_mode: "stm_config",
+      crude_message_count: "stm_config",
+      tool_description_override: "stm_config",
+      update_nudge_override: "stm_config",
+      nudge_injection_depth: "stm_config",
+      content_injection_depth: "stm_config",
+    },
+  },
+  {
+    scope: "workspace",
+    tableName: "stm_categories",
+    rowSchemaName: "stmCategorySchema",
+    exportSchemaName: "serverStmConfigExportSchema",
+    sourceToExportKey: {
+      position: "stm_categories",
+      label: "stm_categories",
+      description: "stm_categories",
+    },
+  },
+  {
+    scope: "personal",
+    tableName: "user_personalization_configs",
+    rowSchemaName: "userPersonalizationConfigsSchema",
+    exportSchemaName: "personalSettingsExportDataSchema",
+    supplementalSourceKeys: ["language_pref", "privacy_level"],
+  },
+];
+
+const CONFIG_COLUMN_EXCLUSION_REASONS: Record<string, string> = {
+  "server_model_configs.server_id": "The database key identifies the source workspace.",
+  "server_model_configs.llm_id": "The selected model is deployment-specific.",
+  "server_model_configs.embedding_model_id": "The selected embedding model is deployment-specific.",
+  "server_model_configs.diffusion_model_id": "The selected diffusion model is deployment-specific.",
+  "server_model_configs.video_model_id": "The selected video model is deployment-specific.",
+  "server_model_configs.vision_llm_id": "The selected vision model is deployment-specific.",
+  "server_model_configs.api_key": "Encrypted credentials are never portable.",
+  "server_model_configs.key_version": "Credential metadata has no portable meaning.",
+  "server_model_configs.custom_endpoint_url": "Custom endpoints are deployment-specific.",
+  "server_model_configs.custom_model_name": "Custom model names are deployment-specific.",
+  "server_model_configs.custom_num_ctx": "Custom context settings belong to a deployment-specific model.",
+  "server_model_configs.fallback_llm_ids": "Fallback model identifiers are deployment-specific.",
+  "server_model_configs.other_model_codename": "The legacy model codename is deployment-specific.",
+  "server_model_configs.other_model_capabilities": "Legacy model capabilities describe a deployment-specific model.",
+  "server_model_configs.other_model_capabilities_fetched_at": "Legacy model capability timestamps are runtime metadata.",
+  "server_model_configs.hide_respond_embed": "The legacy response flag is not portable configuration.",
+  "server_model_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_model_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_chat_configs.server_id": "The database key identifies the source workspace.",
+  "server_chat_configs.fallback_model_refs": "Fallback model references are deployment-specific.",
+  "server_chat_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_chat_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_member_permissions_configs.server_id": "The database key identifies the source workspace.",
+  "server_member_permissions_configs.hide_impersonation_embeds": "The legacy notice flag was superseded by the notice table.",
+  "server_member_permissions_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_member_permissions_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_capabilities_configs.server_id": "The database key identifies the source workspace.",
+  "server_capabilities_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_capabilities_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_notice_embeds_configs.server_id": "The database key identifies the source workspace.",
+  "server_notice_embeds_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_notice_embeds_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_nsfw_configs.server_id": "The database key identifies the source workspace.",
+  "server_nsfw_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_nsfw_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_speech_configs.server_id": "The database key identifies the source workspace.",
+  "server_speech_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_speech_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_auto_trigger_configs.server_id": "The database key identifies the source workspace.",
+  "server_auto_trigger_configs.autoch_disc_ids": "Discord channel identifiers are source-workspace specific.",
+  "server_auto_trigger_configs.autoch_persona_overrides": "Persona and channel references are source-workspace specific.",
+  "server_auto_trigger_configs.autoch_threshold": "Automatic trigger thresholds are coupled to source channels.",
+  "server_auto_trigger_configs.autoch_threshold_max": "Automatic trigger thresholds are coupled to source channels.",
+  "server_auto_trigger_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_auto_trigger_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_channel_scope_configs.server_id": "The database key identifies the source workspace.",
+  "server_channel_scope_configs.rp_channel_ids": "Discord channel identifiers are source-workspace specific.",
+  "server_channel_scope_configs.private_channel_ids": "Discord channel identifiers are source-workspace specific.",
+  "server_channel_scope_configs.crosschannel_blocklist_ids": "Discord channel identifiers are source-workspace specific.",
+  "server_channel_scope_configs.thought_log_channel_disc_id": "Discord channel identifiers are source-workspace specific.",
+  "server_channel_scope_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_channel_scope_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_trigger_behavior_configs.server_id": "The database key identifies the source workspace.",
+  "server_trigger_behavior_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_trigger_behavior_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_novelai_imagegen_configs.server_id": "The database key identifies the source workspace.",
+  "server_novelai_imagegen_configs.nai_diffusion_model_id": "The selected diffusion model is deployment-specific.",
+  "server_novelai_imagegen_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_novelai_imagegen_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_byok_configs.server_id": "The database key identifies the source workspace.",
+  "server_byok_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_byok_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_memory_configs.server_id": "The database key identifies the source workspace.",
+  "server_memory_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_memory_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_welcome_configs.server_id": "The database key identifies the source workspace.",
+  "server_welcome_configs.welcome_channel_disc_id": "Discord channel identifiers are source-workspace specific.",
+  "server_welcome_configs.welcome_persona_id": "Persona identifiers are source-workspace specific.",
+  "server_welcome_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_welcome_configs.updated_at": "Update timestamps are runtime metadata.",
+  "server_stm_configs.server_id": "The database key identifies the source workspace.",
+  "server_stm_configs.created_at": "Creation timestamps are runtime metadata.",
+  "server_stm_configs.updated_at": "Update timestamps are runtime metadata.",
+  "stm_categories.stm_category_id": "The database key identifies the source category row.",
+  "stm_categories.server_id": "The database key identifies the source workspace.",
+  "user_personalization_configs.user_id": "The database key identifies the source user.",
+  "user_personalization_configs.nai_char_ref_url": "The reference URL depends on the source deployment.",
+  "user_personalization_configs.created_at": "Creation timestamps are runtime metadata.",
+  "user_personalization_configs.updated_at": "Update timestamps are runtime metadata.",
+};
+
 function checkServerConfigExportComposition(
   schemaContent: string,
   dataExportContent: string,
@@ -696,6 +948,151 @@ function checkServerConfigExportComposition(
         "server-config-export-composition",
         `${key} is in serverConfigExportSchema but not in any per-table export schema`,
       );
+    }
+  }
+}
+
+function checkV2ConfigProjectionCoverage(
+  schemaContent: string,
+  dataExportSchemaContent: string,
+  dataExportImplementationContent: string,
+): void {
+  const exclusionReasons = extractConfigExclusionReasons(dataExportSchemaContent);
+  const exclusionKeys = new Set(exclusionReasons.keys());
+  const sectionFields = new Map<ConfigProjectionScope, Map<string, Set<string>>>();
+
+  for (const scope of ["workspace", "personal"] as const) {
+    const fieldsBySection = new Map<string, Set<string>>();
+    for (const [section, schemaName] of Object.entries(V2_CONFIG_SECTION_SCHEMA_NAMES[scope])) {
+      fieldsBySection.set(section, extractZodObjectKeys(dataExportSchemaContent, schemaName));
+    }
+    sectionFields.set(scope, fieldsBySection);
+  }
+
+  const sectionOwners = (scope: ConfigProjectionScope, field: string): string[] => {
+    const fieldsBySection = sectionFields.get(scope);
+    if (!fieldsBySection) return [];
+    return [...fieldsBySection.entries()]
+      .filter(([, fields]) => fields.has(field))
+      .map(([section]) => section);
+  };
+
+  const allV1FieldsByScope = new Map<ConfigProjectionScope, Set<string>>();
+  for (const scope of ["workspace", "personal"] as const) {
+    const fields = new Set<string>();
+    for (const schemaName of V1_CONFIG_SCHEMA_NAMES[scope]) {
+      const schemaFields = extractZodObjectKeys(dataExportSchemaContent, schemaName);
+      for (const field of schemaFields) {
+        fields.add(field);
+        const owners = sectionOwners(scope, field);
+        if (exclusionKeys.has(field)) {
+          if (owners.length > 0) {
+            addIssue(
+              "v2-config-ownership",
+              `${schemaName}.${field} is explicitly excluded but owned by v2 section(s): ${owners.join(", ")}`,
+            );
+          }
+        } else if (owners.length !== 1) {
+          addIssue(
+            "v2-config-ownership",
+            `${schemaName}.${field} must be owned by exactly one v2 section, found ${owners.length}`,
+          );
+        }
+      }
+    }
+    allV1FieldsByScope.set(scope, fields);
+
+    for (const [section, sectionKeys] of sectionFields.get(scope) ?? []) {
+      for (const field of sectionKeys) {
+        if (!fields.has(field)) {
+          addIssue(
+            "v2-config-ownership",
+            `${scope} v2 section ${section} owns ${field}, but no v1 config schema declares it`,
+          );
+        }
+      }
+    }
+  }
+
+  for (const [field, reason] of exclusionReasons) {
+    if (!reason.trim()) {
+      addIssue("v2-config-exclusion", `${field} has an empty exclusion reason`);
+    }
+
+    const sourceScopes = [...allV1FieldsByScope.entries()]
+      .filter(([, fields]) => fields.has(field))
+      .map(([scope]) => scope);
+    if (sourceScopes.length === 0) {
+      addIssue("v2-config-exclusion", `${field} is excluded but is not declared by a v1 config schema`);
+    }
+  }
+
+  const workspaceProjection = extractMethodBody(dataExportImplementationContent, "exportWorkspaceConfig");
+  const personalProjection = extractMethodBody(dataExportImplementationContent, "exportPersonalConfig");
+  const projectionBodies: Record<ConfigProjectionScope, string> = {
+    workspace: workspaceProjection ?? "",
+    personal: personalProjection ?? "",
+  };
+  if (workspaceProjection === null) addIssue("v2-config-export", "ExportRepository.ts has no exportWorkspaceConfig method");
+  if (personalProjection === null) addIssue("v2-config-export", "ExportRepository.ts has no exportPersonalConfig method");
+
+  for (const target of CONFIG_PROJECTION_TARGETS) {
+    const sourceKeys = new Set([
+      ...(target.sourceKeys ?? (target.rowSchemaName ? extractZodObjectKeys(schemaContent, target.rowSchemaName) : [])),
+      ...(target.supplementalSourceKeys ?? []),
+    ]);
+    const exportKeys = extractZodObjectKeys(dataExportSchemaContent, target.exportSchemaName);
+    const projection = projectionBodies[target.scope];
+
+    for (const sourceKey of sourceKeys) {
+      const reasonKey = `${target.tableName}.${sourceKey}`;
+      const isIdentity =
+        sourceKey === "server_id" ||
+        sourceKey === "user_id" ||
+        sourceKey === "stm_category_id" ||
+        sourceKey === "created_at" ||
+        sourceKey === "updated_at";
+      const isExcluded = isIdentity || target.excludedKeys?.includes(sourceKey) || exclusionKeys.has(sourceKey);
+      if (isExcluded) {
+        const reason = exclusionKeys.has(sourceKey) ? exclusionReasons.get(sourceKey) : CONFIG_COLUMN_EXCLUSION_REASONS[reasonKey];
+        if (!reason?.trim()) {
+          addIssue("v2-config-exclusion", `${reasonKey} is excluded but has no named reason`);
+        }
+        continue;
+      }
+
+      const exportKey = target.sourceToExportKey?.[sourceKey] ?? sourceKey;
+      if (!exportKeys.has(exportKey)) {
+        addIssue(
+          "v2-config-export-coverage",
+          `${reasonKey} is portable but ${target.exportSchemaName} does not declare ${exportKey}`,
+        );
+      }
+
+      if (!projection.match(new RegExp(`\\bas\\s+${sourceKey}\\b`, "i"))) {
+        addIssue("v2-config-read", `${reasonKey} is portable but exportWorkspaceConfig/exportPersonalConfig does not SELECT it`);
+      }
+      if (!projection.match(new RegExp(`\\b${sourceKey}\\s*:`, "i"))) {
+        addIssue("v2-config-projection", `${reasonKey} is portable but its v2 projection does not emit it`);
+      }
+
+      const owners = sectionOwners(target.scope, exportKey);
+      if (owners.length !== 1) {
+        addIssue(
+          "v2-config-ownership",
+          `${reasonKey} maps to ${exportKey}, which must be owned by exactly one v2 section, found ${owners.length}`,
+        );
+      }
+    }
+  }
+
+  for (const field of exclusionKeys) {
+    const owners = [
+      ...sectionOwners("workspace", field),
+      ...sectionOwners("personal", field),
+    ];
+    if (owners.length > 0) {
+      addIssue("v2-config-ownership", `${field} is excluded but appears in v2 section(s): ${owners.join(", ")}`);
     }
   }
 }
@@ -828,6 +1225,7 @@ async function main(): Promise<void> {
   const serverConfigExportKeys = extractZodObjectKeys(dataExportTs, "serverConfigExportSchema");
 
   checkServerConfigExportComposition(schemaTs, dataExportTs, serverConfigExportKeys);
+  checkV2ConfigProjectionCoverage(schemaTs, dataExportTs, dataExportImpl);
   checkExportImportMappings(serverConfigExportKeys, dataExportImpl, dataImportImpl);
   checkInsertCounts(allRepositories, "saved_provider_configs");
   checkInsertCounts(allRepositories, "user_saved_provider_configs");
