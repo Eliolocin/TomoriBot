@@ -100,7 +100,7 @@ const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   model: ["override.remove"],
   server: ["config.export", "config.import"],
   conditioning: ["manage", "remove"],
-  tool: ["delete.turn", "estimate.cost", "prompt.snapshot", "visualize"],
+  tool: ["delete.turn", "estimate.cost", "prompt.snapshot"],
   memory: ["personal.export", "personal.import", "server.export", "server.import"],
   novelai: ["generate.image"],
 };

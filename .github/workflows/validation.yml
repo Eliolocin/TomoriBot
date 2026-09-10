@@ -95,6 +95,9 @@ jobs:
       - name: Check command reference is current
         run: bun run check-command-reference
 
+      - name: Check command mentions are current
+        run: bun run check-command-mentions
+
       - name: Check tracked media size
         run: bun run check-media-size
 
