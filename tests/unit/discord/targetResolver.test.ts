@@ -1,7 +1,9 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { resolveUserTarget } from "@/utils/discord/targetResolver";
 import { ContextItemTag, type ConversationUserReference, type StructuredContextItem } from "@/types/misc/context";
+import { EMPTY_PERSONA_NAMING_CONFIG, type PersonaNamingConfig } from "@/types/personaNaming";
 import type { ToolContext } from "@/types/tool/interfaces";
+import { userNamingRepository, userRepository } from "@/utils/db/repositories";
 import { createParticipantAlias } from "@/utils/text/participants/aliases";
 import { createDiscordUserKey, serializeParticipantKey } from "@/utils/text/participants/identity";
 
@@ -140,5 +142,208 @@ describe("resolveUserTarget — conversation stage primary-name precedence", () 
     if (result.status === "resolved") {
       expect(result.targetId).toBe("111");
     }
+  });
+});
+
+interface FakeGuildMember {
+  id: string;
+  displayName: string;
+  globalName?: string;
+  username: string;
+}
+
+/**
+ * Builds a ToolContext whose guild answers the two calls the post-conversation
+ * stages make: a prefix search (what Discord's member search actually does) and a
+ * fetch by ID. Members absent from the map reject, matching a left server.
+ */
+function buildGuildContext(
+  members: FakeGuildMember[],
+  options?: { namingConfig?: PersonaNamingConfig; personaLineageId?: number },
+): ToolContext {
+  const memberObjects = new Map(
+    members.map((member) => [
+      member.id,
+      {
+        id: member.id,
+        displayName: member.displayName,
+        user: { globalName: member.globalName ?? null, username: member.username, bot: false },
+      },
+    ]),
+  );
+
+  const guild = {
+    id: "guild-1",
+    members: {
+      search: async ({ query }: { query: string }) => {
+        const normalizedQuery = query.trim().toLowerCase();
+        return new Map(
+          [...memberObjects].filter(([, member]) =>
+            [member.displayName, member.user.globalName, member.user.username].some((value) =>
+              value ? value.toLowerCase().startsWith(normalizedQuery) : false,
+            ),
+          ),
+        );
+      },
+      fetch: async (discordId: string) => {
+        const member = memberObjects.get(discordId);
+        if (!member) throw new Error(`Unknown member ${discordId}`);
+        return member;
+      },
+    },
+  };
+
+  return {
+    guildId: "guild-1",
+    client: { guilds: { cache: new Map([["guild-1", guild]]) } },
+    contextItems: [],
+    tomoriState: {
+      persona_lineage_id: options?.personaLineageId ?? 7,
+      naming_config: options?.namingConfig ?? EMPTY_PERSONA_NAMING_CONFIG,
+    },
+  } as unknown as ToolContext;
+}
+
+function stubNamingLookups(overrides?: {
+  personaNicknames?: Array<{ userId: number; userDiscId: string }>;
+  composedCandidates?: Parameters<typeof buildComposedCandidate>[0][];
+  dbNicknames?: Array<{ user_disc_id: string }>;
+}): void {
+  spyOn(userNamingRepository, "findByPersonaNickname").mockResolvedValue(overrides?.personaNicknames ?? []);
+  spyOn(userNamingRepository, "findComposedNameCandidates").mockResolvedValue(
+    (overrides?.composedCandidates ?? []).map(buildComposedCandidate),
+  );
+  spyOn(userRepository, "findByNormalizedNickname").mockResolvedValue(
+    (overrides?.dbNicknames ?? []) as unknown as Awaited<ReturnType<typeof userRepository.findByNormalizedNickname>>,
+  );
+}
+
+function buildComposedCandidate(overrides: {
+  userDiscId: string;
+  globalNickname?: string | null;
+  globalPrefixOverride?: string | null;
+  globalSuffixOverride?: string | null;
+  personaNicknameOverride?: string | null;
+  personaPrefixOverride?: string | null;
+}) {
+  return {
+    userId: 1,
+    userDiscId: overrides.userDiscId,
+    globalNickname: overrides.globalNickname ?? null,
+    globalPrefixOverride: overrides.globalPrefixOverride ?? null,
+    globalSuffixOverride: overrides.globalSuffixOverride ?? null,
+    addressingStyle: null,
+    personaNicknameOverride: overrides.personaNicknameOverride ?? null,
+    personaPrefixOverride: overrides.personaPrefixOverride ?? null,
+    personaSuffixOverride: null,
+  };
+}
+
+describe("resolveUserTarget - persona-scoped and affixed names", () => {
+  afterEach(() => {
+    mock.restore();
+  });
+
+  const bredrumb: FakeGuildMember = { id: "222", displayName: "Bredrumb", username: "bredrumb" };
+
+  it("resolves a persona-scoped nickname that no Discord name matches", async () => {
+    stubNamingLookups({ personaNicknames: [{ userId: 1, userDiscId: "222" }] });
+
+    const result = await resolveUserTarget("Papa", buildGuildContext([bredrumb]));
+
+    expect(result.status).toBe("resolved");
+    if (result.status === "resolved") {
+      expect(result.targetId).toBe("222");
+      expect(result.source).toBe("persona_nickname");
+    }
+  });
+
+  it("reports ambiguity when two accounts share a persona-scoped nickname", async () => {
+    stubNamingLookups({
+      personaNicknames: [
+        { userId: 1, userDiscId: "222" },
+        { userId: 2, userDiscId: "333" },
+      ],
+    });
+
+    const result = await resolveUserTarget(
+      "Papa",
+      buildGuildContext([bredrumb, { id: "333", displayName: "Sparrow", username: "sparrow" }]),
+    );
+
+    expect(result.status).toBe("ambiguous");
+    if (result.status === "ambiguous") {
+      expect(result.candidates.map((candidate) => candidate.targetId)).toEqual(["222", "333"]);
+    }
+  });
+
+  it("strips a persona prefix so the bare name reaches the guild ladder", async () => {
+    stubNamingLookups();
+
+    const result = await resolveUserTarget(
+      "Master Bredrumb",
+      buildGuildContext([bredrumb], {
+        namingConfig: { prefixes: { neutral: "Master" }, suffixes: {}, addressTerms: {} },
+      }),
+    );
+
+    expect(result.status).toBe("resolved");
+    if (result.status === "resolved") {
+      expect(result.targetId).toBe("222");
+      expect(result.source).toBe("guild_display_name");
+    }
+  });
+
+  it("strips a persona suffix joined without a space", async () => {
+    stubNamingLookups();
+
+    const result = await resolveUserTarget(
+      "Bredrumb-chan",
+      buildGuildContext([bredrumb], {
+        namingConfig: { prefixes: {}, suffixes: { neutral: "-chan" }, addressTerms: {} },
+      }),
+    );
+
+    expect(result.status).toBe("resolved");
+    if (result.status === "resolved") {
+      expect(result.targetId).toBe("222");
+    }
+  });
+
+  it("rebuilds a name composed from a user's own prefix override", async () => {
+    stubNamingLookups({
+      composedCandidates: [{ userDiscId: "222", globalNickname: "Bred", globalPrefixOverride: "Master" }],
+    });
+
+    const result = await resolveUserTarget("Master Bred", buildGuildContext([bredrumb]));
+
+    expect(result.status).toBe("resolved");
+    if (result.status === "resolved") {
+      expect(result.targetId).toBe("222");
+      expect(result.source).toBe("composed_name");
+    }
+  });
+
+  it("rejects a containment hit whose composed name does not rebuild", async () => {
+    stubNamingLookups({
+      composedCandidates: [{ userDiscId: "222", globalNickname: "Bred" }],
+    });
+
+    const result = await resolveUserTarget("Master Bred", buildGuildContext([bredrumb]));
+
+    expect(result.status).toBe("not_found");
+  });
+
+  it("does not invent a match when stripping leaves an unrelated name", async () => {
+    stubNamingLookups();
+
+    const result = await resolveUserTarget(
+      "Master Sparrow",
+      buildGuildContext([bredrumb], {
+        namingConfig: { prefixes: { neutral: "Master" }, suffixes: {}, addressTerms: {} },
+      }),
+    );
+
+    expect(result.status).toBe("not_found");
   });
 });

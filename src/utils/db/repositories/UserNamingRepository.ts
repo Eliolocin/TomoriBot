@@ -1,13 +1,55 @@
 import type { SQL } from "bun";
 import {
+  type AddressingStyle,
+  addressingStyleSchema,
   EMPTY_PERSONA_NAMING_CONFIG,
   type PersonaNamingConfig,
   personaNamingConfigRowSchema,
   type UserPersonaNamingPreference,
   userPersonaNamingPreferenceSchema,
 } from "@/types/personaNaming";
-import { sql } from "@/utils/db/client";
+import { sql, withTransientDbRetry } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
+
+/**
+ * Caps the containment scan in {@link UserNamingRepository.findComposedNameCandidates}.
+ * Rows are ordered longest-nickname-first, so the cap drops the least specific
+ * containment hits rather than an arbitrary slice.
+ */
+const COMPOSED_NAME_CANDIDATE_LIMIT = 50;
+
+export interface NamedUserMatch {
+  userId: number;
+  userDiscId: string;
+}
+
+/**
+ * One account whose stored nickname appears inside the requested name, carrying
+ * every naming layer unresolved so the caller can rebuild the composed label with
+ * `resolveEffectiveUserNaming` instead of duplicating the layering rules in SQL.
+ */
+export interface ComposedNameCandidate extends NamedUserMatch {
+  globalNickname: string | null;
+  globalPrefixOverride: string | null;
+  globalSuffixOverride: string | null;
+  addressingStyle: AddressingStyle | null;
+  personaNicknameOverride: string | null;
+  personaPrefixOverride: string | null;
+  personaSuffixOverride: string | null;
+}
+
+function normalizeLookupValue(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/gu, " ");
+}
+
+function parseAddressingStyle(value: unknown): AddressingStyle | null {
+  const parsed = addressingStyleSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function isTargetableLineage(personaLineageId: number): boolean {
+  return Number.isInteger(personaLineageId) && personaLineageId >= 0;
+}
 
 export interface UserPersonaNamingPair {
   userId: number;
@@ -196,6 +238,101 @@ class UserNamingRepository {
       if (!configs.has(personaId)) configs.set(personaId, EMPTY_PERSONA_NAMING_CONFIG);
     }
     return configs;
+  }
+
+  /**
+   * Matches a persona-scoped nickname the way the participant context renders it.
+   * Scoped by lineage rather than `persona_id` so a forked persona keeps the names
+   * its users configured before the fork.
+   */
+  async findByPersonaNickname(normalizedNickname: string, personaLineageId: number): Promise<NamedUserMatch[]> {
+    const nickname = normalizeLookupValue(normalizedNickname);
+    if (!nickname || !isTargetableLineage(personaLineageId)) return [];
+
+    try {
+      return await withTransientDbRetry(async () => {
+        const rows = await sql`
+          SELECT u.user_id, u.user_disc_id
+          FROM user_persona_naming_preferences upnp
+          JOIN users u ON u.user_id = upnp.user_id
+          WHERE upnp.persona_lineage_id = ${personaLineageId}
+            AND regexp_replace(lower(trim(upnp.nickname_override)), '[[:space:]]+', ' ', 'g') = ${nickname}
+        `;
+        return rows.map((row: { user_id: number; user_disc_id: string }) => ({
+          userId: row.user_id,
+          userDiscId: row.user_disc_id,
+        }));
+      }, `load users for persona nickname ${nickname}`);
+    } catch (error) {
+      log.error(`Failed to load users for persona nickname "${nickname}"`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Narrows the accounts worth rebuilding to those whose stored nickname appears
+   * somewhere inside the requested name, which is the only part of a composed label
+   * ("Master Sparrow") that survives an unknown affix. Verification belongs to the
+   * caller: the join rules for affixes live in `formatUserName`, and reimplementing
+   * them here would let the two drift apart silently.
+   */
+  async findComposedNameCandidates(
+    normalizedInput: string,
+    personaLineageId: number,
+  ): Promise<ComposedNameCandidate[]> {
+    const target = normalizeLookupValue(normalizedInput);
+    if (!target || !isTargetableLineage(personaLineageId)) return [];
+
+    try {
+      return await withTransientDbRetry(async () => {
+        const rows = await sql`
+          WITH naming_layers AS (
+            SELECT
+              u.user_id,
+              u.user_disc_id,
+              NULLIF(trim(upc.user_nickname), '') AS global_nickname,
+              upc.prefix_override AS global_prefix_override,
+              upc.suffix_override AS global_suffix_override,
+              upc.addressing_style,
+              upnp.nickname_override AS persona_nickname_override,
+              upnp.prefix_override AS persona_prefix_override,
+              upnp.suffix_override AS persona_suffix_override,
+              COALESCE(
+                NULLIF(trim(upnp.nickname_override), ''),
+                NULLIF(trim(upc.user_nickname), '')
+              ) AS effective_nickname
+            FROM users u
+            JOIN user_personalization_configs upc ON upc.user_id = u.user_id
+            LEFT JOIN user_persona_naming_preferences upnp
+              ON upnp.user_id = u.user_id
+              AND upnp.persona_lineage_id = ${personaLineageId}
+          )
+          SELECT *
+          FROM naming_layers
+          WHERE effective_nickname IS NOT NULL
+            AND position(
+              regexp_replace(lower(effective_nickname), '[[:space:]]+', ' ', 'g') IN ${target}
+            ) > 0
+          ORDER BY length(effective_nickname) DESC
+          LIMIT ${COMPOSED_NAME_CANDIDATE_LIMIT}
+        `;
+
+        return rows.map((row: Record<string, unknown>) => ({
+          userId: row.user_id as number,
+          userDiscId: row.user_disc_id as string,
+          globalNickname: (row.global_nickname as string | null) ?? null,
+          globalPrefixOverride: (row.global_prefix_override as string | null) ?? null,
+          globalSuffixOverride: (row.global_suffix_override as string | null) ?? null,
+          addressingStyle: parseAddressingStyle(row.addressing_style),
+          personaNicknameOverride: (row.persona_nickname_override as string | null) ?? null,
+          personaPrefixOverride: (row.persona_prefix_override as string | null) ?? null,
+          personaSuffixOverride: (row.persona_suffix_override as string | null) ?? null,
+        }));
+      }, `load composed-name candidates for ${target}`);
+    } catch (error) {
+      log.error(`Failed to load composed-name candidates for "${target}"`, error);
+      return [];
+    }
   }
 
   async savePersonaConfig(personaId: number, config: PersonaNamingConfig, client: SQL = sql): Promise<void> {

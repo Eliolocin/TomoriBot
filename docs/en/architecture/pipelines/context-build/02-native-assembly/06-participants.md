@@ -240,13 +240,31 @@ After this stage runs:
   `output_mention`, `tool_target`, and `copied_identity` purposes. Guild display names are
   likewise lookup-only input aliases unless another visible source supplies the same value.
 - Each entry's `aliases` (server nickname, global name, username, custom
-  nickname) plus its `displayLabel` are emitted as `conversationUsers` metadata
-  for tool-side user resolution (`resolveUserTarget`). The conversation stage of
-  that resolver matches input against the full alias set, but breaks ties by
+  nickname, the persona-relative effective nickname, and the composed
+  `formattedName`) plus its `displayLabel` are emitted as `conversationUsers`
+  metadata for tool-side user resolution (`resolveUserTarget`). The conversation
+  stage of that resolver matches input against the full alias set, but breaks ties by
   preferring a single candidate whose `displayLabel` (primary name) equals the
   input over candidates that only matched a secondary alias — so one user's
   server-nickname alias colliding with another user's actual name no longer
   forces a needless clarify round-trip.
+- When the conversation stage finds nothing, the resolver walks a guild ladder against
+  the same normalized input: guild display name, persona-scoped nickname
+  (`user_persona_naming_preferences` rows for the active `persona_lineage_id`), global
+  saved nickname (`user_personalization_configs.user_nickname`), global name, then
+  username. Persona names outrank the global nickname because both are user-authored,
+  but only the persona one was rendered to the model in this conversation.
+- A composed label such as "Master Sparrow" exists as an alias only while its owner sits
+  in the participant context, so two fallbacks run once the ladder misses. The resolver
+  first peels one persona-configured prefix and suffix off the input (every addressing
+  variant, longest first, since the target's own style is unknown until the account
+  resolves) and walks the ladder again; that reaches accounts carrying no stored nickname
+  at all. It then asks `findComposedNameCandidates()` for accounts whose stored nickname
+  appears somewhere inside the input, rebuilds each candidate's name through
+  `resolveEffectiveUserNaming()`, and accepts only an exact match. The second pass is what
+  covers affixes a user set for themselves (`prefix_override` / `suffix_override`), which
+  the persona-only strip cannot see. Both fallbacks preserve the ladder's ambiguity
+  behavior: two surviving candidates still return `ambiguous`.
 - Personal memories are filtered by privacy (`PrivacyLevel.MINIMAL`
   required) AND blacklist AND `personal_memories_enabled` AND
   conversation-corpus tag match (if `memory_tagging_enabled`).

@@ -1,7 +1,9 @@
 import { ChannelType, type Guild, type GuildMember, type GuildTextBasedChannel } from "discord.js";
 import { ContextItemTag, type ConversationUserReference, type StructuredContextItem } from "@/types/misc/context";
+import type { AddressingStyle, PersonaNamingConfig } from "@/types/personaNaming";
 import type { ToolContext } from "@/types/tool/interfaces";
-import { userRepository } from "@/utils/db/repositories";
+import { userNamingRepository, userRepository } from "@/utils/db/repositories";
+import { resolveEffectiveUserNaming } from "@/utils/text/userNaming";
 import { isBridgeUserId } from "@/utils/bridges";
 import { normalizeParticipantAlias } from "@/utils/text/participants/aliases";
 import {
@@ -14,7 +16,15 @@ type ResolvedUserTarget = {
   targetId: string;
   displayLabel: string;
   isBridgeUser: boolean;
-  source: "legacy_id" | "conversation" | "guild_display_name" | "db_nickname" | "global_name" | "username";
+  source:
+    | "legacy_id"
+    | "conversation"
+    | "guild_display_name"
+    | "persona_nickname"
+    | "db_nickname"
+    | "composed_name"
+    | "global_name"
+    | "username";
 };
 
 type AmbiguousUserTarget = {
@@ -396,6 +406,172 @@ function resolveGuildMemberStage(
   };
 }
 
+async function resolveMembersById(
+  guild: Guild,
+  discordIds: readonly string[],
+  rawInput: string,
+  source: "persona_nickname" | "db_nickname" | "composed_name",
+): Promise<UserTargetResolution | null> {
+  if (discordIds.length === 0) {
+    return null;
+  }
+
+  const members = (
+    await Promise.all(discordIds.map(async (discordId) => guild.members.fetch(discordId).catch(() => null)))
+  ).filter((member): member is GuildMember => member !== null && !member.user.bot);
+
+  const dedupedMatches = dedupeUserCandidates(
+    members.map((member) => ({
+      label: formatDiscordUserLabel(member),
+      targetId: member.id,
+      isBridgeUser: false,
+    })),
+  );
+
+  if (dedupedMatches.length === 0) {
+    return null;
+  }
+
+  if (dedupedMatches.length === 1) {
+    const match = dedupedMatches[0];
+    return {
+      status: "resolved",
+      targetId: match.targetId,
+      displayLabel: match.label,
+      isBridgeUser: false,
+      source,
+    };
+  }
+
+  return {
+    status: "ambiguous",
+    input: rawInput,
+    candidates: dedupedMatches.slice(0, 3),
+  };
+}
+
+function affixVariants(values: Partial<Record<AddressingStyle, string>>): string[] {
+  const unique = new Set<string>();
+  for (const value of Object.values(values)) {
+    const trimmed = value?.trim();
+    if (trimmed) unique.add(trimmed);
+  }
+  // Longest first, so a two-word affix is not half-consumed by a shorter variant
+  // that shares its opening word.
+  return [...unique].sort((left, right) => right.length - left.length);
+}
+
+/**
+ * Peels one persona-configured prefix and suffix off a requested name. Every
+ * addressing variant is tried because the target's own style is known only once the
+ * account resolves, which is what this strip exists to make possible.
+ */
+function stripNamingAffixes(rawInput: string, namingConfig: PersonaNamingConfig | undefined): string | null {
+  if (!namingConfig) {
+    return null;
+  }
+
+  const trimmedInput = rawInput.trim();
+  let stripped = trimmedInput;
+
+  for (const prefix of affixVariants(namingConfig.prefixes)) {
+    if (stripped.length > prefix.length && stripped.toLowerCase().startsWith(prefix.toLowerCase())) {
+      stripped = stripped.slice(prefix.length).trim();
+      break;
+    }
+  }
+
+  for (const suffix of affixVariants(namingConfig.suffixes)) {
+    if (stripped.length > suffix.length && stripped.toLowerCase().endsWith(suffix.toLowerCase())) {
+      stripped = stripped.slice(0, stripped.length - suffix.length).trim();
+      break;
+    }
+  }
+
+  return stripped && stripped !== trimmedInput ? stripped : null;
+}
+
+async function resolveComposedNameStage(
+  guild: Guild,
+  rawInput: string,
+  normalizedInput: string,
+  personaLineageId: number,
+  namingConfig: PersonaNamingConfig | undefined,
+): Promise<UserTargetResolution | null> {
+  const candidates = await userNamingRepository.findComposedNameCandidates(normalizedInput, personaLineageId);
+  const matchedDiscordIds = candidates
+    .filter((candidate) => {
+      const naming = resolveEffectiveUserNaming({
+        global: {
+          userNickname: candidate.globalNickname,
+          prefixOverride: candidate.globalPrefixOverride,
+          suffixOverride: candidate.globalSuffixOverride,
+          addressingStyle: candidate.addressingStyle,
+        },
+        // The repository returns only rows carrying a stored nickname, so the live
+        // display name is never the layer that wins here.
+        liveDisplayName: "",
+        persona: namingConfig,
+        preference: {
+          nickname_override: candidate.personaNicknameOverride,
+          prefix_override: candidate.personaPrefixOverride,
+          suffix_override: candidate.personaSuffixOverride,
+        },
+      });
+      return normalizeUserTargetInput(naming.formattedName) === normalizedInput;
+    })
+    .map((candidate) => candidate.userDiscId);
+
+  return resolveMembersById(guild, matchedDiscordIds, rawInput, "composed_name");
+}
+
+async function resolveByNameLadder(
+  guild: Guild,
+  rawInput: string,
+  normalizedInput: string,
+  personaLineageId: number | undefined,
+): Promise<UserTargetResolution | null> {
+  const guildSearchMatches = await searchGuildMembers(guild, rawInput);
+
+  const guildDisplayMatch = resolveGuildMemberStage(normalizedInput, guildSearchMatches, "guild_display_name");
+  if (guildDisplayMatch) {
+    return guildDisplayMatch;
+  }
+
+  // Persona names outrank the global nickname: both are user-authored, but only the
+  // persona one was rendered to the model in this conversation.
+  if (personaLineageId !== undefined) {
+    const personaRows = await userNamingRepository.findByPersonaNickname(normalizedInput, personaLineageId);
+    const personaMatch = await resolveMembersById(
+      guild,
+      personaRows.map((row) => row.userDiscId),
+      rawInput,
+      "persona_nickname",
+    );
+    if (personaMatch) {
+      return personaMatch;
+    }
+  }
+
+  const dbNicknameRows = await userRepository.findByNormalizedNickname(normalizedInput);
+  const dbNicknameMatch = await resolveMembersById(
+    guild,
+    dbNicknameRows.map((row) => row.user_disc_id),
+    rawInput,
+    "db_nickname",
+  );
+  if (dbNicknameMatch) {
+    return dbNicknameMatch;
+  }
+
+  const globalNameMatch = resolveGuildMemberStage(normalizedInput, guildSearchMatches, "global_name");
+  if (globalNameMatch) {
+    return globalNameMatch;
+  }
+
+  return resolveGuildMemberStage(normalizedInput, guildSearchMatches, "username");
+}
+
 export async function resolveUserTarget(input: string, context: ToolContext): Promise<UserTargetResolution> {
   const rawInput = input.trim();
   const normalizedInput = normalizeUserTargetInput(input);
@@ -466,55 +642,43 @@ export async function resolveUserTarget(input: string, context: ToolContext): Pr
     };
   }
 
-  const guildSearchMatches = await searchGuildMembers(guild, rawInput);
+  const personaLineageId = context.tomoriState?.persona_lineage_id;
+  const namingConfig = context.tomoriState?.naming_config;
 
-  const guildDisplayMatch = resolveGuildMemberStage(normalizedInput, guildSearchMatches, "guild_display_name");
-  if (guildDisplayMatch) {
-    return guildDisplayMatch;
+  const ladderMatch = await resolveByNameLadder(guild, rawInput, normalizedInput, personaLineageId);
+  if (ladderMatch) {
+    return ladderMatch;
   }
 
-  const dbNicknameRows = await userRepository.findByNormalizedNickname(normalizedInput);
-  if (dbNicknameRows.length > 0) {
-    const dbNicknameMembers = (
-      await Promise.all(dbNicknameRows.map(async (row) => guild.members.fetch(row.user_disc_id).catch(() => null)))
-    ).filter((member): member is GuildMember => member !== null && !member.user.bot);
-
-    const dedupedMatches = dedupeUserCandidates(
-      dbNicknameMembers.map((member) => ({
-        label: formatDiscordUserLabel(member),
-        targetId: member.id,
-        isBridgeUser: false,
-      })),
+  // A composed label only exists as an alias while its owner sits in the participant
+  // context. Outside it every stage above compares against bare names, so the affix
+  // has to come off before the ladder can match anything.
+  const strippedInput = stripNamingAffixes(rawInput, namingConfig);
+  if (strippedInput) {
+    const strippedMatch = await resolveByNameLadder(
+      guild,
+      strippedInput,
+      normalizeUserTargetInput(strippedInput),
+      personaLineageId,
     );
-
-    if (dedupedMatches.length === 1) {
-      const match = dedupedMatches[0];
-      return {
-        status: "resolved",
-        targetId: match.targetId,
-        displayLabel: match.label,
-        isBridgeUser: false,
-        source: "db_nickname",
-      };
-    }
-
-    if (dedupedMatches.length > 1) {
-      return {
-        status: "ambiguous",
-        input: rawInput,
-        candidates: dedupedMatches.slice(0, 3),
-      };
+    if (strippedMatch) {
+      return strippedMatch;
     }
   }
 
-  const globalNameMatch = resolveGuildMemberStage(normalizedInput, guildSearchMatches, "global_name");
-  if (globalNameMatch) {
-    return globalNameMatch;
-  }
-
-  const usernameMatch = resolveGuildMemberStage(normalizedInput, guildSearchMatches, "username");
-  if (usernameMatch) {
-    return usernameMatch;
+  // Affixes a user set for themselves are invisible to the strip above, which only
+  // knows the persona's own. Rebuilding each candidate's composed name covers those.
+  if (personaLineageId !== undefined) {
+    const composedMatch = await resolveComposedNameStage(
+      guild,
+      rawInput,
+      normalizedInput,
+      personaLineageId,
+      namingConfig,
+    );
+    if (composedMatch) {
+      return composedMatch;
+    }
   }
 
   return {

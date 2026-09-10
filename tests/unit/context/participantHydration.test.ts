@@ -16,6 +16,7 @@ import {
   type ParticipantHydrationDependencies,
   type ParticipantHydrationParams,
 } from "@/utils/text/participants/hydration";
+import { aliasesForPurpose } from "@/utils/text/participants/aliases";
 import { createBotKey, createDiscordUserKey, type ParticipantSeed } from "@/utils/text/participants/identity";
 import type { PersonaNamingConfig } from "@/types/personaNaming";
 
@@ -451,6 +452,19 @@ describe("participant hydration", () => {
     expect(naming?.lines[0]).toBe(
       '- Tomori calls Alice Saved "Master Alice Saved-san" (prefix "Master", suffix "-san")',
     );
+  });
+
+  it("exposes the composed name and the effective nickname as tool targets", async () => {
+    const fixture = createFixture({
+      userRow: createUserRow({ suffix_override: "-san" }),
+      namingConfig: { prefixes: { neutral: "Master" }, suffixes: {}, addressTerms: {} },
+    });
+
+    const result = await hydrateParticipantProfiles(fixture.params, fixture.dependencies);
+    const toolTargets = aliasesForPurpose(result.profiles[0]?.aliases ?? [], "tool_target").map((alias) => alias.value);
+
+    expect(toolTargets).toContain("Master Alice Saved-san");
+    expect(toolTargets).toContain("Alice Saved");
   });
 
   it("omits the naming line entirely when no affix resolves", async () => {
