@@ -13,6 +13,7 @@ import {
 import { statusInteractionRoute } from "@/utils/discord/interactions/statusRoutes";
 import { statsInteractionRoute } from "@/utils/discord/interactions/statsRoutes";
 import { modelOverrideInteractionRoute } from "@/utils/discord/interactions/modelOverrideRoutes";
+import { transferInteractionRoute } from "@/utils/discord/interactions/transferRoutes";
 import { InteractionRouteRegistry, type GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
@@ -30,6 +31,7 @@ const registry = new InteractionRouteRegistry([
   providersInteractionRoute,
   statusInteractionRoute,
   statsInteractionRoute,
+  transferInteractionRoute,
 ]);
 
 // An unregistered namespace dispatches as unmatched, so rendered controls would otherwise fail silently.
@@ -88,7 +90,9 @@ export async function dispatchGlobalInteraction(
                 ? "/conditioning remove"
                 : namespace === "model-overrides"
                   ? "/model override remove"
-                  : `/${namespace}`;
+                  : namespace === "transfer"
+                    ? "/import"
+                    : `/${namespace}`;
       await interaction.reply({
         content: localizer(interaction.locale ?? interaction.guildLocale ?? "en-US", key, { command }),
         flags: MessageFlags.Ephemeral,

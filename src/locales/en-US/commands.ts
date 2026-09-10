@@ -52,10 +52,12 @@ import quota from "./commands/quota";
 import providers from "./commands/providers";
 import memories from "./commands/memories";
 import reset from "./commands/reset";
+import transfer from "./commands/transfer";
 
 export default {
   commands: {
     ...reset,
+    ...transfer,
     ...memories,
     ...providers,
     ...quota,

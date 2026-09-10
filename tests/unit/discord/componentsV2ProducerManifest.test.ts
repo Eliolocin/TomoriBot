@@ -82,6 +82,11 @@ export const COMPONENTS_V2_PRODUCER_MANIFEST: readonly ProducerManifestEntry[] =
     builderName: "buildHelpDashboardPayload",
     coverage: { kind: "suite", suites: ["tests/unit/discord/helpDashboardLimits.test.ts"] },
   },
+  {
+    modulePath: "src/utils/discord/ui/transferPanel.ts",
+    builderName: "buildConfigTransferPreviewPayload",
+    coverage: { kind: "suite", suites: ["tests/unit/discord/transferPanelLimits.test.ts"] },
+  },
 
   // --- Tier 2: Declared tier (19 non-panel or one-shot producers) ---
   {
