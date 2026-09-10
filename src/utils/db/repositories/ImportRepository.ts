@@ -1,20 +1,30 @@
 import { sql } from "@/utils/db/client";
+import type { SQL } from "bun";
 import { log } from "@/utils/misc/logger";
 import {
   EXPORT_VERSION,
+  personalConfigExportDataSchema,
+  personalConfigExportSchema,
   personalMemoriesExportSchema,
   globalPersonalMemoriesExportSchema,
   personalSettingsExportSchema,
   serverMemoriesExportSchema,
   serverConfigOnlyExportSchema,
+  V2_CONFIG_SECTION_SCHEMAS,
+  workspaceConfigExportDataSchema,
+  workspaceConfigExportSchema,
   getPersonalExportSchema,
   getServerExportSchema,
   type PersonalExportData,
+  type PersonalConfigExport,
+  type PersonalConfigExportData,
   type ServerExportData,
   type PersonalMemoriesExportData,
   type ServerMemoriesExportData,
   type PersonalSettingsExportData,
   type ServerConfigExport,
+  type WorkspaceConfigExport,
+  type WorkspaceConfigExportData,
   type ImportResult,
   type MemoryItem,
   type ExportResult,
@@ -25,6 +35,7 @@ import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCacheStore"
 import { invalidateUserCache } from "@/utils/cache/userCache";
 import { configRepository } from "@/utils/db/repositories/ConfigRepository";
 import { shortTermMemoryRepository } from "@/utils/db/repositories/ShortTermMemoryRepository";
+import type { SqlParameterArray } from "@/types/db/sqlOperations";
 import type { ServerChatConfigRow, ServerNoticeEmbedsConfigRow } from "@/types/db/schema";
 
 type ImportFileType =
@@ -49,6 +60,250 @@ interface ImportValidationResult {
   error?: string;
 }
 
+export type WorkspaceConfigSection = keyof WorkspaceConfigExportData;
+export type PersonalConfigSection = keyof PersonalConfigExportData;
+
+type ConfigPatch = Record<string, unknown>;
+
+interface ConfigTablePatch {
+  tableName: string;
+  idColumn: "server_id" | "user_id";
+  id: number;
+  patch: ConfigPatch;
+}
+
+interface SectionTableDefinition {
+  tableName: string;
+  fields: readonly string[];
+  sourceKey?: string;
+}
+
+interface PreparedConfigImport {
+  tablePatches: ConfigTablePatch[];
+  stmCategories?: Array<{ position: number; label: string; description: string }>;
+  configFieldsCount: number;
+}
+
+const WORKSPACE_SECTION_TABLES: Record<WorkspaceConfigSection, readonly SectionTableDefinition[]> = {
+  chat: [
+    {
+      tableName: "server_model_configs",
+      fields: ["llm_temperature", "thinking_level", "llm_disabled_params"],
+    },
+    {
+      tableName: "server_chat_configs",
+      fields: [
+        "llm_top_p",
+        "llm_top_k",
+        "llm_frequency_penalty",
+        "llm_presence_penalty",
+        "llm_min_p",
+        "llm_max_output_tokens",
+        "llm_logit_biases",
+        "llm_stop_strings",
+        "llm_stop_speaker_pattern_enabled",
+        "humanizer_degree",
+        "timezone_offset",
+        "message_fetch_limit",
+        "system_prompt",
+        "cascade_limit",
+        "match_limit",
+        "send_message_limit",
+        "context_note",
+        "context_note_depth",
+      ],
+    },
+    { tableName: "server_welcome_configs", fields: ["welcome_prompt"] },
+  ],
+  triggers: [
+    {
+      tableName: "server_trigger_behavior_configs",
+      fields: [
+        "always_reply_enabled",
+        "deliberate_trigger_mode",
+        "deliberate_tool_mode",
+        "deliberate_tool_context_turns",
+        "deliberate_tool_triggers",
+        "cooldown_type",
+        "cooldown_length",
+      ],
+    },
+  ],
+  capabilities: [
+    {
+      tableName: "server_capabilities_configs",
+      fields: [
+        "web_search_enabled",
+        "emoji_usage_enabled",
+        "sticker_usage_enabled",
+        "imagegen_enabled",
+        "manage_message_enabled",
+        "videogen_enabled",
+        "voice_message_enabled",
+        "thread_creation_enabled",
+        "user_blocking_enabled",
+        "time_awareness_enabled",
+        "tool_use_enabled",
+        "short_term_memory_enabled",
+        "verbatim_tool_calling_enabled",
+        "user_info_updates_enabled",
+      ],
+    },
+    { tableName: "server_notice_embeds_configs", fields: ["tool_notice_hidden_keys"] },
+    {
+      tableName: "server_nsfw_configs",
+      fields: ["uncensor_injection_enabled", "uncensor_unicode_space_enabled", "uncensor_sanitize_enabled"],
+    },
+    { tableName: "server_chat_configs", fields: ["self_debug_enabled"] },
+  ],
+  memory: [
+    {
+      tableName: "server_member_permissions_configs",
+      fields: [
+        "server_memteaching_enabled",
+        "attribute_memteaching_enabled",
+        "sampledialogue_memteaching_enabled",
+        "self_teaching_enabled",
+        "personal_memories_enabled",
+        "prompt_snapshot_enabled",
+      ],
+    },
+    { tableName: "server_channel_scope_configs", fields: ["stm_privacy_bypass"] },
+    { tableName: "server_memory_configs", fields: ["memory_tagging_enabled", "channel_memory_enabled"] },
+    {
+      tableName: "server_stm_configs",
+      sourceKey: "stm_config",
+      fields: [
+        "refresh_cadence",
+        "render_mode",
+        "crude_message_count",
+        "tool_description_override",
+        "update_nudge_override",
+        "nudge_injection_depth",
+        "content_injection_depth",
+      ],
+    },
+  ],
+  media: [
+    {
+      tableName: "server_novelai_imagegen_configs",
+      fields: [
+        "image_default_positive_tags",
+        "image_default_negative_tags",
+        "nai_sampler",
+        "nai_steps",
+        "nai_scale",
+        "nai_noise_schedule",
+        "nai_cfg_rescale",
+      ],
+    },
+  ],
+  speech: [
+    {
+      tableName: "server_speech_configs",
+      fields: [
+        "voice_transcript_chat_mode",
+        "chatterbox_turbo_enabled",
+        "chatterbox_cfg_weight",
+        "chatterbox_exaggeration",
+      ],
+    },
+  ],
+  access: [{ tableName: "server_byok_configs", fields: ["user_byok_mode"] }],
+};
+
+const PERSONAL_SECTION_TABLES: Record<PersonalConfigSection, readonly SectionTableDefinition[]> = {
+  profile: [
+    { tableName: "users", fields: ["language_pref"] },
+    {
+      tableName: "user_personalization_configs",
+      fields: [
+        "user_nickname",
+        "timezone_offset",
+        "prefix_override",
+        "suffix_override",
+        "gender_identity",
+        "pronouns",
+        "addressing_style",
+      ],
+    },
+  ],
+  privacy: [
+    { tableName: "users", fields: ["privacy_level"] },
+    { tableName: "user_personalization_configs", fields: ["shortterm_cache_crossserver_opt_in"] },
+  ],
+  appearance: [{ tableName: "user_personalization_configs", fields: ["physical_appearance_tags"] }],
+  response_modes: [
+    {
+      tableName: "user_personalization_configs",
+      fields: ["impersonation_prompt", "personal_dtm", "personal_deliberate_tool_mode"],
+    },
+  ],
+};
+
+const TEXT_ARRAY_CONFIG_COLUMNS = new Set([
+  "llm_disabled_params",
+  "llm_stop_strings",
+  "tool_notice_hidden_keys",
+  "image_default_positive_tags",
+  "image_default_negative_tags",
+  "physical_appearance_tags",
+]);
+
+const JSONB_CONFIG_COLUMNS = new Set(["llm_logit_biases", "deliberate_tool_triggers"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toPostgresTextArrayLiteral(values: readonly unknown[]): string {
+  return `{${values.map((value) => `"${String(value).replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+}
+
+function getDefinedPatch(source: unknown, fields: readonly string[]): ConfigPatch {
+  if (!isRecord(source)) return {};
+  return Object.fromEntries(
+    fields
+      .filter((field) => Object.hasOwn(source, field) && source[field] !== undefined)
+      .map((field) => [field, source[field]]),
+  );
+}
+
+function getSelectedSections<TSection extends string>(
+  selectedSections: readonly TSection[] | undefined,
+  presentSections: readonly TSection[],
+  allowedSections: readonly TSection[],
+): TSection[] | null {
+  const selected = selectedSections ?? presentSections;
+  if (selected.some((section) => !allowedSections.includes(section))) return null;
+  return [...new Set(selected)].filter((section) => presentSections.includes(section));
+}
+
+function buildTablePatches(
+  sectionValue: unknown,
+  definitions: readonly SectionTableDefinition[],
+  idColumn: ConfigTablePatch["idColumn"],
+  id: number,
+): ConfigTablePatch[] {
+  return definitions.flatMap((definition) => {
+    const source = definition.sourceKey && isRecord(sectionValue) ? sectionValue[definition.sourceKey] : sectionValue;
+    const patch = getDefinedPatch(source, definition.fields);
+    return Object.keys(patch).length > 0 ? [{ tableName: definition.tableName, idColumn, id, patch }] : [];
+  });
+}
+
+function getStmCategories(value: unknown): Array<{ position: number; label: string; description: string }> | undefined {
+  if (!isRecord(value) || !Array.isArray(value.stm_categories)) return undefined;
+  return value.stm_categories.map((category) => {
+    if (!isRecord(category)) throw new Error("Invalid STM category patch");
+    const { position, label, description } = category;
+    if (typeof position !== "number" || typeof label !== "string" || typeof description !== "string") {
+      throw new Error("Invalid STM category patch");
+    }
+    return { position, label, description };
+  });
+}
+
 /**
  * ImportRepository: owns all data import operations.
  *
@@ -60,6 +315,263 @@ interface ImportValidationResult {
  * SQL sub-methods directly to avoid double cache invalidation.
  */
 class ImportRepository {
+  private prepareWorkspaceConfig(
+    input: unknown,
+    selectedSections?: readonly WorkspaceConfigSection[],
+  ): { success: true; prepared: PreparedConfigImport } | { success: false; error: string } {
+    const rawData =
+      isRecord(input) && input.type === "workspace_config"
+        ? workspaceConfigExportSchema.safeParse(input)
+        : workspaceConfigExportDataSchema.safeParse(input);
+    if (!rawData.success) return { success: false, error: "commands.data.import.error_invalid_server_config_format" };
+
+    const data = "data" in rawData.data ? rawData.data.data : rawData.data;
+    const presentSections = (Object.keys(data) as WorkspaceConfigSection[]).filter(
+      (section) => data[section] !== undefined,
+    );
+    const selected = getSelectedSections(
+      selectedSections,
+      presentSections,
+      Object.keys(WORKSPACE_SECTION_TABLES) as WorkspaceConfigSection[],
+    );
+    if (!selected) return { success: false, error: "commands.data.import.error_invalid_config" };
+
+    const tablePatches: ConfigTablePatch[] = [];
+    let stmCategories: PreparedConfigImport["stmCategories"];
+    let configFieldsCount = 0;
+
+    for (const section of presentSections) {
+      const sectionValidation = V2_CONFIG_SECTION_SCHEMAS[section].safeParse(data[section]);
+      if (!sectionValidation.success) return { success: false, error: "commands.data.import.error_invalid_config" };
+      if (!selected.includes(section)) continue;
+
+      const sectionPatches = buildTablePatches(
+        sectionValidation.data,
+        WORKSPACE_SECTION_TABLES[section],
+        "server_id",
+        0,
+      );
+      tablePatches.push(...sectionPatches);
+      configFieldsCount += sectionPatches.reduce(
+        (count, tablePatch) => count + Object.keys(tablePatch.patch).length,
+        0,
+      );
+
+      if (section === "memory" && isRecord(sectionValidation.data)) {
+        const categories = getStmCategories(sectionValidation.data);
+        if (categories !== undefined) {
+          stmCategories = categories;
+          configFieldsCount += categories.length;
+        }
+      }
+    }
+
+    return { success: true, prepared: { tablePatches, stmCategories, configFieldsCount } };
+  }
+
+  private preparePersonalConfig(
+    input: unknown,
+    selectedSections?: readonly PersonalConfigSection[],
+  ): { success: true; prepared: PreparedConfigImport } | { success: false; error: string } {
+    const rawData =
+      isRecord(input) && input.type === "personal_config"
+        ? personalConfigExportSchema.safeParse(input)
+        : personalConfigExportDataSchema.safeParse(input);
+    if (!rawData.success)
+      return { success: false, error: "commands.data.import.error_invalid_personal_settings_format" };
+
+    const data = "data" in rawData.data ? rawData.data.data : rawData.data;
+    const presentSections = (Object.keys(data) as PersonalConfigSection[]).filter(
+      (section) => data[section] !== undefined,
+    );
+    const selected = getSelectedSections(
+      selectedSections,
+      presentSections,
+      Object.keys(PERSONAL_SECTION_TABLES) as PersonalConfigSection[],
+    );
+    if (!selected) return { success: false, error: "commands.data.import.error_invalid_config" };
+
+    const tablePatches: ConfigTablePatch[] = [];
+    let configFieldsCount = 0;
+    for (const section of presentSections) {
+      const sectionValidation = V2_CONFIG_SECTION_SCHEMAS[section].safeParse(data[section]);
+      if (!sectionValidation.success) return { success: false, error: "commands.data.import.error_invalid_config" };
+      if (!selected.includes(section)) continue;
+
+      const sectionPatches = buildTablePatches(sectionValidation.data, PERSONAL_SECTION_TABLES[section], "user_id", 0);
+      tablePatches.push(...sectionPatches);
+      configFieldsCount += sectionPatches.reduce(
+        (count, tablePatch) => count + Object.keys(tablePatch.patch).length,
+        0,
+      );
+    }
+
+    return { success: true, prepared: { tablePatches, configFieldsCount } };
+  }
+
+  private async hasConfigRow(tableName: string, idColumn: ConfigTablePatch["idColumn"], id: number): Promise<boolean> {
+    const rows = await sql.unsafe(`SELECT ${idColumn} FROM ${tableName} WHERE ${idColumn} = $1 LIMIT 1`, [
+      id,
+    ] as SqlParameterArray);
+    return rows.length > 0;
+  }
+
+  private async validateWorkspaceConfigTarget(
+    serverDiscId: string,
+    tablePatches: readonly ConfigTablePatch[],
+    hasStmCategories: boolean,
+  ): Promise<number | null> {
+    const serverId = await this.resolveServerId(serverDiscId);
+    if (!serverId) return null;
+
+    const requiredRows = new Map<string, ConfigTablePatch["idColumn"]>();
+    for (const tablePatch of tablePatches) requiredRows.set(tablePatch.tableName, tablePatch.idColumn);
+    if (hasStmCategories) requiredRows.set("servers", "server_id");
+
+    for (const [tableName, idColumn] of requiredRows) {
+      if (!(await this.hasConfigRow(tableName, idColumn, serverId))) return null;
+    }
+    return serverId;
+  }
+
+  private async validatePersonalConfigTarget(
+    userDiscId: string,
+    tablePatches: readonly ConfigTablePatch[],
+  ): Promise<number | null> {
+    const userRows = await sql<Array<{ user_id: number }>>`
+      SELECT user_id
+      FROM users
+      WHERE user_disc_id = ${userDiscId}
+      LIMIT 1
+    `;
+    const userId = userRows[0]?.user_id;
+    if (!userId) return null;
+
+    const requiredRows = new Set(tablePatches.map((tablePatch) => tablePatch.tableName));
+    for (const tableName of requiredRows) {
+      if (!(await this.hasConfigRow(tableName, "user_id", userId))) return null;
+    }
+    return userId;
+  }
+
+  private async updateConfigRow(tx: SQL, tablePatch: ConfigTablePatch): Promise<void> {
+    const entries = Object.entries(tablePatch.patch);
+    if (entries.length === 0) return;
+
+    const setParts: string[] = [];
+    const values: SqlParameterArray = [];
+    for (const [field, value] of entries) {
+      const placeholder = `$${values.length + 1}`;
+      if (TEXT_ARRAY_CONFIG_COLUMNS.has(field)) {
+        if (!Array.isArray(value)) throw new Error(`Expected string array for ${field}`);
+        setParts.push(`${field} = ${placeholder}::TEXT[]`);
+        values.push(toPostgresTextArrayLiteral(value));
+      } else if (JSONB_CONFIG_COLUMNS.has(field)) {
+        setParts.push(`${field} = ${placeholder}::JSONB`);
+        values.push(JSON.stringify(value));
+      } else {
+        setParts.push(`${field} = ${placeholder}`);
+        values.push(value);
+      }
+    }
+
+    values.push(tablePatch.id);
+    const idPlaceholder = `$${values.length}`;
+    // Identifiers come from fixed section definitions. Values remain bound parameters so a portable field cannot alter the statement.
+    const result = await tx.unsafe(
+      `UPDATE ${tablePatch.tableName} SET ${setParts.join(", ")} WHERE ${tablePatch.idColumn} = ${idPlaceholder} RETURNING ${tablePatch.idColumn}`,
+      values,
+    );
+    if (result.length === 0) {
+      throw new Error(`Config row not found in ${tablePatch.tableName}`);
+    }
+  }
+
+  private async updateStmCategories(
+    tx: SQL,
+    serverId: number,
+    categories: readonly { position: number; label: string; description: string }[],
+  ): Promise<void> {
+    await tx`DELETE FROM stm_categories WHERE server_id = ${serverId}`;
+    for (const category of categories) {
+      await tx`
+        INSERT INTO stm_categories (server_id, position, label, description)
+        VALUES (${serverId}, ${category.position}, ${category.label}, ${category.description})
+      `;
+    }
+  }
+
+  /**
+   * Imports selected workspace config sections as one database operation.
+   * Validation and target-row checks happen before the transaction so a failed patch cannot follow a committed patch.
+   */
+  async importWorkspaceConfig(
+    serverDiscId: string,
+    input: WorkspaceConfigExportData | WorkspaceConfigExport,
+    selectedSections?: readonly WorkspaceConfigSection[],
+  ): Promise<ImportResult> {
+    try {
+      const preparedResult = this.prepareWorkspaceConfig(input, selectedSections);
+      if (!preparedResult.success) return preparedResult;
+      const { prepared } = preparedResult;
+      if (prepared.tablePatches.length === 0 && prepared.stmCategories === undefined) {
+        return { success: true, itemsImported: { configFieldsCount: 0 } };
+      }
+
+      const serverId = await this.validateWorkspaceConfigTarget(
+        serverDiscId,
+        prepared.tablePatches,
+        prepared.stmCategories !== undefined,
+      );
+      if (!serverId) return { success: false, error: "commands.data.import.error_no_server_data" };
+
+      const tablePatches = prepared.tablePatches.map((tablePatch) => ({ ...tablePatch, id: serverId }));
+      await sql.begin(async (tx: SQL) => {
+        for (const tablePatch of tablePatches) await this.updateConfigRow(tx, tablePatch);
+        if (prepared.stmCategories !== undefined) await this.updateStmCategories(tx, serverId, prepared.stmCategories);
+      });
+
+      invalidateTomoriStateCache(serverDiscId);
+      return { success: true, itemsImported: { configFieldsCount: prepared.configFieldsCount } };
+    } catch (error) {
+      log.error(`Error importing workspace config for server ${serverDiscId}:`, error);
+      return { success: false, error: "commands.data.import.error_import_failed" };
+    }
+  }
+
+  /**
+   * Imports selected personal config sections as one database operation.
+   * Validation and target-row checks happen before the transaction so a failed patch cannot follow a committed patch.
+   */
+  async importPersonalConfig(
+    userDiscId: string,
+    input: PersonalConfigExportData | PersonalConfigExport,
+    selectedSections?: readonly PersonalConfigSection[],
+  ): Promise<ImportResult> {
+    try {
+      const preparedResult = this.preparePersonalConfig(input, selectedSections);
+      if (!preparedResult.success) return preparedResult;
+      const { prepared } = preparedResult;
+      if (prepared.tablePatches.length === 0) {
+        return { success: true, itemsImported: { configFieldsCount: 0 } };
+      }
+
+      const userId = await this.validatePersonalConfigTarget(userDiscId, prepared.tablePatches);
+      if (!userId) return { success: false, error: "commands.data.import.error_update_failed" };
+
+      const tablePatches = prepared.tablePatches.map((tablePatch) => ({ ...tablePatch, id: userId }));
+      await sql.begin(async (tx: SQL) => {
+        for (const tablePatch of tablePatches) await this.updateConfigRow(tx, tablePatch);
+      });
+
+      invalidateUserCache(userDiscId);
+      return { success: true, itemsImported: { configFieldsCount: prepared.configFieldsCount } };
+    } catch (error) {
+      log.error(`Error importing personal config for user ${userDiscId}:`, error);
+      return { success: false, error: "commands.data.import.error_import_failed" };
+    }
+  }
+
   /** Upserts a user row by Discord ID and returns the internal user_id. */
   private async ensureUserId(userDiscId: string): Promise<number | null> {
     const upserted = await sql.begin(async (tx) => {
