@@ -1,24 +1,48 @@
 import type { GuildMember } from "discord.js";
 
+/** Discord's authoritative "this user is not in the guild" rejection. */
+const UNKNOWN_MEMBER_ERROR_CODE = 10007;
+
 /**
- * Fetch the current guild membership from Discord and verify it is the same
- * membership instance that originally triggered the welcome flow.
+ * Outcome of re-checking a pending welcome's membership.
  *
- * A user can leave and rejoin with the same Discord user ID while a delayed
- * welcome is still pending. Comparing joinedTimestamp prevents the old welcome
- * from being delivered to the new membership instance.
+ * `unverified` is deliberately distinct from `ended`: a rate limit or outage means the membership
+ * could not be read, not that the member left, and the caller must not report it as a departure.
+ */
+export type WelcomeMembershipCheck =
+  | { status: "active" }
+  | { status: "ended" }
+  | { status: "unverified"; error: unknown };
+
+/**
+ * Re-reads a pending welcome's membership straight from Discord.
+ *
+ * A user can leave and rejoin with the same Discord user ID while a delayed welcome is still
+ * pending, so a matching user ID is not enough: joinedTimestamp is what distinguishes the original
+ * membership from a new one. The fetch is forced because the cache goes stale around
+ * guildMemberRemove and Tomori also sweeps guild members from it.
+ *
+ * The fetched member is not returned. Both call sites run after the work that reads member state,
+ * so nothing downstream can act on the fresher copy.
  *
  * @param originalMember - Membership instance that started the welcome flow
- * @returns Fresh member data when the original membership is still active
  */
-export async function fetchCurrentWelcomeMember(originalMember: GuildMember): Promise<GuildMember | null> {
-  const currentMember = await originalMember.guild.members
-    .fetch({ user: originalMember.id, force: true })
-    .catch(() => null);
+export async function checkWelcomeMembership(originalMember: GuildMember): Promise<WelcomeMembershipCheck> {
+  let currentMember: GuildMember;
 
-  if (!currentMember || currentMember.joinedTimestamp !== originalMember.joinedTimestamp) {
-    return null;
+  try {
+    currentMember = await originalMember.guild.members.fetch({ user: originalMember.id, force: true });
+  } catch (error) {
+    const code = (error as { code?: number | string })?.code;
+    if (code === UNKNOWN_MEMBER_ERROR_CODE || code === String(UNKNOWN_MEMBER_ERROR_CODE)) {
+      return { status: "ended" };
+    }
+    return { status: "unverified", error };
   }
 
-  return currentMember;
+  if (currentMember.joinedTimestamp !== originalMember.joinedTimestamp) {
+    return { status: "ended" };
+  }
+
+  return { status: "active" };
 }

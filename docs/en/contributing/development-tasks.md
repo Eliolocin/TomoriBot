@@ -33,6 +33,10 @@ bun run check-locales   # locale key parity (when locale keys or command metadat
 bun run db:lifecycle    # schema lifecycle test (when schema.sql changed; needs local PostgreSQL)
 ```
 
+`bun run lint` applies fixes in place, so it can leave your working tree changed after it reports
+success. Commit whatever it rewrites: CI runs `bun run lint:ci`, which is the same Biome check
+without `--fix`, and that one fails on formatting instead of silently correcting it.
+
 `bun run db:lifecycle` requires a local disposable PostgreSQL target with CREATE/DROP database
 permission. It creates and drops its own temporary database, then tests fresh initialization plus
 backup/restore and DB maintenance scripts.

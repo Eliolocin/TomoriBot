@@ -223,3 +223,7 @@ terraform.tfvars
 !terraform/azure/.terraform.lock.hcl
 *.tfplan
 *.tfplan.*
+
+# Throwaway baseline written inside the repo by checkCommandMentions.test.ts. It is removed in a
+# finally block, but the name carries Date.now(), so a `git add` racing a test run would commit it.
+tests/unit/checks/tmp-baseline-*.json

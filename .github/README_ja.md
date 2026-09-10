@@ -7,7 +7,7 @@
 <div align="center">
 
   <a href="https://github.com/Bredrumb/TomoriBot">
-    <img src="assets/img/icons/tomoricon.svg" alt="Logo" width="80" height="80">
+    <img src="../assets/img/icons/tomoricon.svg" alt="Logo" width="80" height="80">
   </a>
 
 <h3 align="center">TomoriBot</h3>
@@ -44,7 +44,7 @@ Discord向けの自ホスト可能でカスタマイズ自在な個人AIアシ�
 
 
 <!-- PROJECT LOGO -->
-![TomoriBot Banner](assets/img/tomobanner.png)
+![TomoriBot Banner](../assets/img/tomobanner.png)
 [![Bun][Bun.sh]][Bun-url][![Discord.js][Discord.js]][Discord-url][![TypeScript][TypeScript.js]][TypeScript-url][![PostgreSQL][PostgreSQL.org]][PostgreSQL-url]
 
   
@@ -66,39 +66,39 @@ TomoriBotは長期メモリー、マルチペルソナ動作、WebおよびMCP�
 ## 機能紹介
 
 
-![Screenshots 1](assets/img/scs/1.png)
+![Screenshots 1](../assets/img/scs/1.png)
 <h3 align="center"><a href="https://docs.tomoribot.app/ja/features/capabilities/tools-and-extensions/">エージェント型AI駆動の会話</a></h3>
 <p align="center">TomoriBotはチャットするだけにとどまらない多彩なツールを備えています。Web検索、繰り返しタスク/リマインダーの設定、サーバーの絵文字/スタンプの活用、そしてチャンネルやサーバーをまたいでコンテキストを記憶できるRAGやSTMなどのメモリー機能が使えます。</p>
 
 <br />
 
 
-![Screenshots 2](assets/img/scs/2.png)
+![Screenshots 2](../assets/img/scs/2.png)
 <h3 align="center"><a href="https://docs.tomoribot.app/ja/features/capabilities/media-generation/">完全なマルチモーダル入出力</a></h3>
 <p align="center">TomoriBotはDiscordで直接送信された画像・音声・動画を処理し、あなた自身のローカルモデルエンドポイントやAPIキーを使ってそれらを生成して返せます。これらはすべて暗号化され、永続的なデータベースに安全に保存されます。すぐに使えるComfyUIワークフローは<code>assets/comfyui-workflows/</code>に、ローカル音声推論サーバーは<code>servers/</code>にあります！</p>
 
 <br />
 
-![Screenshots 3](assets/img/scs/3.png)
+![Screenshots 3](../assets/img/scs/3.png)
 <h3 align="center"><a href="https://docs.tomoribot.app/ja/features/chatting-personality/multiple-personas/">マルチペルソナサポート</a></h3>
 <p align="center">TomoriBotのサーバー内でのパーソナリティ、行動、アバターは簡単に変更・作成でき、ペルソナとして他のユーザーへエクスポートすることもできます（共有可能なAIキャラクターカードのようなもの）。<code>/persona generate</code>でお気に入りのSillyTavernカードをインポート・変換することも可能です。1つのサーバーに無制限のペルソナを持たせることができ、それぞれが独自のメモリーとアジェンダを持ちます。さらに、複数のペルソナを連携させてサーバー内で協働させる（あるいはただじゃれ合わせる）こともできます。</p>
 
 <br />
 
 
-![Screenshots 4](assets/img/scs/4.png)
+![Screenshots 4](../assets/img/scs/4.png)
 <h3 align="center"><a href="https://docs.tomoribot.app/ja/features/command-reference/">200以上のネイティブ設定コマンド</a></h3>
 <p align="center">すべてDiscordのネイティブなスラッシュコマンドとインタラクティブUIで管理できます。ペルソナやプロンプトの完全な管理、モデルパラメータの調整、MCPツールサーバーの設定、権限の調整、メモリーの設定、サーバーメンバーのレート制限など、さらに多くのことが可能です。TomoriBotに、彼女ができることやスラッシュコマンドを直接尋ねることもできます。現在、さらに簡単な管理のためにWebダッシュボードを開発中です。</p>
 
 <br />
 
 
-![Screenshots 6](assets/img/scs/6.png)
+![Screenshots 6](../assets/img/scs/6.png)
 
 <h3 align="center"><a href="https://docs.tomoribot.app/ja/features/integrations/sillytavern-support/">SillyTavern統合（ベータ）</a></h3>
 <p align="center">お気に入りのSillyTavernプリセットをTomoriBotを通じてDiscordで直接使用でき、彼女のプロンプトを丸ごと調整します。<code>st-preset</code>で.jsonをそのまま入れるだけです。Discordの新しいモーダル用ネイティブチェックボックスグループにより、SillyTavernのようにノードのオン/オフを簡単に切り替えられます。<code>/persona import</code>でSillyTavernキャラクターカードを直接インポートするか、<code>/persona generate</code>で先に手を加えることもできます。</p>
 
-![Screenshots 5](assets/img/scs/5.png)
+![Screenshots 5](../assets/img/scs/5.png)
 <h3 align="center"><a href="https://docs.tomoribot.app/ja/features/">さらに多くの機能が続々追加中！</a></h3>
 <p align="center">新しいサーバーメンバーへの自動挨拶やチャンネル間の移動など実用的なものから、ユーザーのなりきりでちょっとしたおふざけをするものまで、簡単に設定できる楽しい機能が揃っています。新機能は常に開発中ですので、バグ（や楽しい提案）はGitHub Issuesまたは公式Discordで報告してください。</p>
 
@@ -283,7 +283,7 @@ bun run update
 TomoriBotへのコントリビュートは大歓迎です！プルリクエストを作成する前に、以下のリソースをご確認ください：
 
 - **[コントリビュートドキュメント](https://docs.tomoribot.app/ja/contributing/)**: スラッシュコマンド、ツール、イベントハンドラ、新しいAIプロバイダー、およびロケールの追加に関する包括的なステップバイステップガイド。
-- **[コントリビュートガイドライン](.github/CONTRIBUTING.md)**: ブランチ運用、品質ゲートのチェック、そして事前相談なしで歓迎されるコントリビュートの範囲がまとめられたリポジトリルール。
+- **[コントリビュートガイドライン](CONTRIBUTING.md)**: ブランチ運用、品質ゲートのチェック、そして事前相談なしで歓迎されるコントリビュートの範囲がまとめられたリポジトリルール。
 
 <!-- LEGAL -->
 ## 法的事項とライセンス

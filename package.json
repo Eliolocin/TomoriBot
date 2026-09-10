@@ -24,6 +24,7 @@
     "restore-backup": "bun run scripts/devtools/backupData.ts --restore",
     "backup:personas": "bun run scripts/devtools/backupPersonas.ts",
     "lint": "biome check --fix",
+    "lint:ci": "biome check",
     "check": "bunx tsc --noEmit",
     "check-locales": "bun run scripts/checks/checkLocalizationKeys.ts",
     "check-locale-lengths": "bun run scripts/checks/checkLocalizationKeys.ts --strict-lengths",

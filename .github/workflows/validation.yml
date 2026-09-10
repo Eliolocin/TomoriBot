@@ -57,7 +57,10 @@ jobs:
         run: bun run check-mock-module-surfaces
 
       - name: Run linting and type checks
-        run: bun run lint && bun run check
+        # lint:ci is `biome check` without --fix. The local `lint` script applies fixes and still
+        # exits 0, so running it here would rewrite files in the runner and report success while
+        # the committed source stays unformatted.
+        run: bun run lint:ci && bun run check
 
       - name: Audit dependencies
         # bun audit has no working workspace filter — it always audits the whole
