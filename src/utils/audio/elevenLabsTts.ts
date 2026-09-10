@@ -4,7 +4,12 @@ import {
   sanitizeElevenLabsTaggedScript,
 } from "@/utils/audio/elevenLabsShared";
 
-type ElevenLabsTtsErrorKind = "missing_api_key" | "invalid_request" | "timeout" | "request_failed" | "invalid_response";
+export type ElevenLabsTtsErrorKind =
+  | "missing_api_key"
+  | "invalid_request"
+  | "timeout"
+  | "request_failed"
+  | "invalid_response";
 
 export interface ElevenLabsTtsRequest {
   apiKey: string;

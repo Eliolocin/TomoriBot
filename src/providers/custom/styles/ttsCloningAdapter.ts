@@ -112,39 +112,47 @@ function isIrodoriTtsEndpoint(endpoint: CustomEndpointRow): boolean {
 }
 
 /**
- * Calls a local TTS clone server that implements the /synthesize spec.
+ * Label sniff for Chatterbox deployments, mirroring `isIrodoriTtsEndpoint`.
  *
- * 1. Loads voice sample metadata from DB.
- * 2. Reads the WAV file from disk and base64-encodes it.
- * 3. Strips markup from script if script_markup = "plain".
- * 4. POSTs to {endpoint_url}/synthesize.
- * 5. Returns the raw audio buffer and content-type.
+ * The endpoint schema carries no engine identifier, so the only available signal is what the
+ * server manager typed into `/config`. Callers that expose a Chatterbox-only control gate on
+ * this: a control that silently changes nothing is worse than an absent one, and the absence
+ * is recoverable by renaming the endpoint.
  */
-export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Promise<TtsCloneResult> {
-  const { endpoint, voiceSampleId, script, apiKey, chatterbox } = request;
+export function isChatterboxEndpoint(endpoint: CustomEndpointRow | null | undefined): boolean {
+  if (!endpoint) return false;
+  return [endpoint.label, endpoint.model_name, endpoint.endpoint_url].some((value) =>
+    value?.toLowerCase().includes("chatterbox"),
+  );
+}
 
-  const voiceSample = await loadVoiceSampleById(voiceSampleId);
+export interface TtsCloneBufferRequest {
+  endpoint: CustomEndpointRow;
+  /** Reference audio bytes, already normalized by the caller. */
+  refAudio: Buffer;
+  refText: string | null;
+  script: string;
+  /** Empty string for local endpoints that don't require auth. */
+  apiKey: string;
+  chatterbox?: {
+    turboEnabled: boolean;
+    cfgWeight: number;
+    exaggeration: number;
+  };
+}
 
-  if (!voiceSample) {
-    log.warn(`[TtsClone] Voice sample ${voiceSampleId} not found in DB`);
-    return {
-      success: false,
-      errorKind: "missing_sample",
-      details: `Voice sample ${voiceSampleId} not found in database.`,
-    };
-  }
-
-  const sample = voiceSample;
-
-  const refAudioBuffer = await loadStoredVoiceSampleBuffer(sample.file_path);
-  if (!refAudioBuffer) {
-    log.warn(`[TtsClone] Failed to read voice sample ${voiceSampleId} from ${sample.file_path}`);
-    return {
-      success: false,
-      errorKind: "sample_read_failed",
-      details: `Could not read voice sample ${voiceSampleId} from storage.`,
-    };
-  }
+/**
+ * Calls a local TTS clone server with reference audio supplied directly.
+ *
+ * This is the core path: `/generate voice-message` synthesizes from an ad-hoc upload that has
+ * no `voice_samples` row, so it cannot go through the sample-loading wrapper below.
+ *
+ * 1. Strips markup from script according to the endpoint's `script_markup`.
+ * 2. POSTs to {endpoint_url}/synthesize with the base64 reference audio.
+ * 3. Returns the raw audio buffer and content-type.
+ */
+export async function synthesizeSpeechViaTtsCloneBuffer(request: TtsCloneBufferRequest): Promise<TtsCloneResult> {
+  const { endpoint, refAudio, refText, script, apiKey, chatterbox } = request;
 
   const scriptMarkup = (endpoint.extra_config.script_markup as string | undefined) ?? "plain";
   const supportsInstruct = Boolean(endpoint.extra_config.supports_instruct);
@@ -181,8 +189,8 @@ export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Pro
 
   const body: Record<string, unknown> = {
     text: processedScript,
-    ref_audio: refAudioBuffer.toString("base64"),
-    ref_text: sample.ref_text ?? null,
+    ref_audio: refAudio.toString("base64"),
+    ref_text: refText,
     language: null,
   };
 
@@ -262,4 +270,49 @@ export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Pro
     extension: resolveExtensionFromContentType(contentType),
     cleanedCaptionText: captionText,
   };
+}
+
+/**
+ * Calls a local TTS clone server that implements the /synthesize spec.
+ *
+ * 1. Loads voice sample metadata from DB.
+ * 2. Reads the WAV file from disk and base64-encodes it.
+ * 3. Strips markup from script if script_markup = "plain".
+ * 4. POSTs to {endpoint_url}/synthesize.
+ * 5. Returns the raw audio buffer and content-type.
+ */
+export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Promise<TtsCloneResult> {
+  const { endpoint, voiceSampleId, script, apiKey, chatterbox } = request;
+
+  const voiceSample = await loadVoiceSampleById(voiceSampleId);
+
+  if (!voiceSample) {
+    log.warn(`[TtsClone] Voice sample ${voiceSampleId} not found in DB`);
+    return {
+      success: false,
+      errorKind: "missing_sample",
+      details: `Voice sample ${voiceSampleId} not found in database.`,
+    };
+  }
+
+  const sample = voiceSample;
+
+  const refAudioBuffer = await loadStoredVoiceSampleBuffer(sample.file_path);
+  if (!refAudioBuffer) {
+    log.warn(`[TtsClone] Failed to read voice sample ${voiceSampleId} from ${sample.file_path}`);
+    return {
+      success: false,
+      errorKind: "sample_read_failed",
+      details: `Could not read voice sample ${voiceSampleId} from storage.`,
+    };
+  }
+
+  return synthesizeSpeechViaTtsCloneBuffer({
+    endpoint,
+    refAudio: refAudioBuffer,
+    refText: sample.ref_text ?? null,
+    script,
+    apiKey,
+    ...(chatterbox ? { chatterbox } : {}),
+  });
 }
