@@ -1,6 +1,7 @@
 /**
  * Image Generation Command
  * Allows users to generate AI images using the configured provider
+ * Supports manual prompting and automatic scene visualization
  * Supports text-to-image and image-to-image generation with up to 3 reference images
  * (Discord modal limit: 5 components total)
  */
@@ -37,6 +38,7 @@ import { formatCustomModelDisplay } from "@/utils/provider/customProviderUtils";
 import { generateOpenRouterImage } from "@/providers/openrouter/openrouterImageGeneration";
 import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
+import { execute as executeAutoImage } from "../tool/visualize";
 
 const MODAL_CUSTOM_ID = "generate_image_modal";
 const PROMPT_INPUT_ID = "prompt_input";
@@ -47,7 +49,19 @@ const REFERENCE_IMAGE_INPUT_IDS = ["image_upload_1", "image_upload_2", "image_up
  * Configure the subcommand
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("image").setDescription(localizer("en-US", "commands.generate.image.description"));
+  subcommand
+    .setName("image")
+    .setDescription(localizer("en-US", "commands.generate.image.description"))
+    .addStringOption((option) =>
+      option
+        .setName("mode")
+        .setDescription("Choose whether to write the prompt yourself or derive it from the current scene")
+        .setRequired(true)
+        .addChoices(
+          { name: "Manual", value: "manual" },
+          { name: "Auto", value: "auto" },
+        ),
+    );
 
 /**
  * @param diffusionModelId - Database ID of the diffusion model
@@ -94,11 +108,17 @@ async function convertAttachmentToBase64(attachment: APIAttachment): Promise<{ m
  * Execute the image generation command
  */
 export async function execute(
-  _client: Client,
+  client: Client,
   interaction: ChatInputCommandInteraction,
   userData: UserRow,
   locale: string,
 ): Promise<void> {
+  const mode = interaction.options.getString("mode", true);
+  if (mode === "auto") {
+    await executeAutoImage(client, interaction, userData, locale);
+    return;
+  }
+
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.channel_only_title",
