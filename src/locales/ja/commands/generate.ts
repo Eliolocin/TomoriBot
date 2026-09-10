@@ -1,7 +1,10 @@
 export default {
   generate: {
     image: {
-      description: `Google GeminiまたはOpenRouterを使用してAI画像を生成する`,
+      description: `自分で入力したプロンプトまたは現在のチャンネルのシーンからAI画像を生成します`,
+      mode_description: `画像の作り方を選択します`,
+      mode_choice_manual: `自分でプロンプトを書く`,
+      mode_choice_auto: `今のシーンを描く`,
       modal: {
         title: `画像生成のリクエスト`,
         prompt_label: `画像プロンプト`,
@@ -82,7 +85,7 @@ export default {
       no_api_key_description: `設定済みの動画プロバイダー認証情報がありません。\`/providers\` を使用してください。`,
       api_key_decrypt_failed_title: `🔴 APIキーエラー`,
       api_key_decrypt_failed_description: `設定済みの動画プロバイダー認証情報の復号に失敗しました。\`/providers\` で再設定してください。`,
-      no_video_model_title: `🔴 動画モデルがありません`,
+      no_video_model_title: `🔴 画像モデルがありません`,
       no_video_model_description: `プロバイダーに動画モデルが設定されていません。\`/config\` > Models > Switch Models で設定してください。`,
       error_title: `🔴 動画生成に失敗しました`,
       unsupported_provider_description: `プロバイダー **{provider}** では動画生成がサポートされていません。`,
@@ -98,8 +101,8 @@ export default {
       generic_error_description: `動画生成中に予期しないエラーが発生しました。後でもう一度お試しください。`,
       quota_exceeded_title: `🔴 動画クォータ超過`,
       quota_exceeded_description: `動画生成クォータに達しました。{reset_info}`,
-      user_quota_exceeded_description: `日次動画生成クォータに達しました。{reset_info}`,
-      serverwide_quota_exceeded_description: `このサーバーはこの期間の動画生成クォータに達しました。{reset_info}`,
+      user_quota_exceeded_description: `日次画像生成クォータに達しました。{reset_info}`,
+      serverwide_quota_exceeded_description: `このサーバーはこの期間の画像生成クォータに達しました。{reset_info}`,
       quota_resets_in_hours: `クォータは {hours} 時間後にリセットされます。`,
       quota_resets_in_days: `クォータは {days} 日後にリセットされます。`,
       quota_exceeded_footer: `このクォータは、このサーバーの管理者が \`/moderation\` で設定しています。`,
