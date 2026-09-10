@@ -38,7 +38,7 @@ import { formatCustomModelDisplay } from "@/utils/provider/customProviderUtils";
 import { generateOpenRouterImage } from "@/providers/openrouter/openrouterImageGeneration";
 import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
-import { execute as executeAutoImage } from "@/utils/image/autoImageCommand";
+import { executeAutoImageCommand } from "@/utils/image/autoImageCommand";
 
 const MODAL_CUSTOM_ID = "generate_image_modal";
 const PROMPT_INPUT_ID = "prompt_input";
@@ -55,11 +55,11 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .addStringOption((option) =>
       option
         .setName("mode")
-        .setDescription("Choose whether to write the prompt yourself or derive it from the current scene")
+        .setDescription(localizer("en-US", "commands.generate.image.mode_description"))
         .setRequired(true)
         .addChoices(
-          { name: "Manual", value: "manual" },
-          { name: "Auto", value: "auto" },
+          { name: localizer("en-US", "commands.generate.image.mode_choice_manual"), value: "manual" },
+          { name: localizer("en-US", "commands.generate.image.mode_choice_auto"), value: "auto" },
         ),
     );
 
@@ -115,7 +115,7 @@ export async function execute(
 ): Promise<void> {
   const mode = interaction.options.getString("mode", true);
   if (mode === "auto") {
-    await executeAutoImage(client, interaction, userData, locale);
+    await executeAutoImageCommand(client, interaction, userData, locale);
     return;
   }
 
