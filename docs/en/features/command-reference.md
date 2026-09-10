@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **39**. Runnable slash commands: **76**.
+Top-level command groups: **39**. Runnable slash commands: **75**.
 
 ## `/comment`
 
@@ -352,7 +352,6 @@ Utility actions for conversation context, prompts, and diagnostics.
 | `/tool delete turn` | Delete the last persona's turn from the channel. |
 | `/tool estimate cost` | Estimate API costs for paid AI providers |
 | `/tool prompt snapshot` | Dump the exact LLM prompt for a persona to a file for debugging. |
-| `/tool visualize` | Generate a quick scene image from the ongoing channel context. |
 
 ## `/update`
 
