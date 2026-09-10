@@ -569,13 +569,16 @@ export async function executeAutoImageCommand(
             senderPersonaAvatarUrl = identity.avatarUrl ?? identity.avatarDataUri;
           }
         } catch (webhookError) {
-          log.warn("[/generate image:auto] Failed to resolve persona webhook; image will post as bot", webhookError as Error);
+          log.warn(
+            "[/generate image:auto] Failed to resolve persona webhook; image will post as bot",
+            webhookError as Error,
+          );
         }
       }
     }
 
     log.info(
-      `[/generate image:auto] Starting hidden image agent for channel ${interaction.channel.id} — backend=${selectedBackend}, preset=${settingPreset.plannerLabel}, sender=${selectedPersona?.persona_nickname ?? "active"}`,
+      `[/generate image:auto] Starting hidden image agent for channel ${interaction.channel.id}, backend=${selectedBackend}, preset=${settingPreset.plannerLabel}, sender=${selectedPersona?.persona_nickname ?? "active"}`,
     );
 
     // Invoke the hidden image agent turn.
@@ -627,7 +630,7 @@ export async function executeAutoImageCommand(
     }
 
     log.success(
-      `[/generate image:auto] Hidden image agent completed for channel ${interaction.channel.id} — backend=${selectedBackend}`,
+      `[/generate image:auto] Hidden image agent completed for channel ${interaction.channel.id}, backend=${selectedBackend}`,
     );
 
     // Acknowledge the modal submit interaction with an ephemeral success notice.
