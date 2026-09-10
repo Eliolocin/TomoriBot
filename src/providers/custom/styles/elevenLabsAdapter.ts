@@ -5,6 +5,11 @@ export interface ElevenLabsAdapterRequest {
   apiKey: string;
   voiceId: string;
   script: string;
+  /**
+   * Per-invocation overrides merged into the request's `voice_settings`.
+   * Omit entirely to keep the request body byte-identical to the provider defaults.
+   */
+  voiceSettings?: Record<string, unknown>;
 }
 
 /**
@@ -18,5 +23,6 @@ export async function synthesizeSpeechViaElevenLabsAdapter(
     apiKey: request.apiKey,
     voiceId: request.voiceId,
     script: request.script,
+    ...(request.voiceSettings ? { voiceSettings: request.voiceSettings } : {}),
   });
 }
