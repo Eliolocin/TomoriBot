@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **39**. Runnable slash commands: **76**.
+Top-level command groups: **39**. Runnable slash commands: **75**.
 
 ## `/comment`
 
@@ -77,7 +77,7 @@ Generate AI images and videos.
 
 | Command | Summary |
 |---|---|
-| `/generate image` | Generate an AI image using Google Gemini or OpenRouter |
+| `/generate image` | Generate an AI image from your own prompt or the current channel scene |
 | `/generate scene` | Generate a short scripted text scene between selected personas. |
 | `/generate video` | Generate an AI video using Google Veo, OpenRouter, or Z.ai |
 
@@ -352,7 +352,6 @@ Utility actions for conversation context, prompts, and diagnostics.
 | `/tool delete turn` | Delete the last persona's turn from the channel. |
 | `/tool estimate cost` | Estimate API costs for paid AI providers |
 | `/tool prompt snapshot` | Dump the exact LLM prompt for a persona to a file for debugging. |
-| `/tool visualize` | Generate a quick scene image from the ongoing channel context. |
 
 ## `/update`
 

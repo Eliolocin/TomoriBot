@@ -2,7 +2,10 @@ export default {
   generate: {
     description: `Generate AI images and videos.`,
     image: {
-      description: `Generate an AI image using Google Gemini or OpenRouter`,
+      description: `Generate an AI image from your own prompt or the current channel scene`,
+      mode_description: `Choose how to create the image`,
+      mode_choice_manual: `Write my own prompt`,
+      mode_choice_auto: `Draw what's happening now`,
       modal: {
         title: `Generate Image`,
         prompt_label: `Image Prompt`,

@@ -1,7 +1,10 @@
 export default {
   generate: {
     image: {
-      description: `Google GeminiまたはOpenRouterを使用してAI画像を生成する`,
+      description: `自分で入力したプロンプトまたは現在のチャンネルのシーンからAI画像を生成します`,
+      mode_description: `画像の作り方を選択します`,
+      mode_choice_manual: `自分でプロンプトを書く`,
+      mode_choice_auto: `今のシーンを描く`,
       modal: {
         title: `画像生成のリクエスト`,
         prompt_label: `画像プロンプト`,
