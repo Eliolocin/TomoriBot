@@ -1,12 +1,7 @@
 /**
- * Proves the /bot dissolution landed: both leaves reachable at their new paths, the root gone,
- * and both relocated locale namespaces resolving.
- *
- * Neither command declares slash options (both collect input through a modal), so membership
- * plus description resolution is the whole registered surface. The description assertions are
- * the ones that matter: a namespace relocation that missed a tree would register the literal
- * key string as the Discord description, which check-locales cannot see because the loader
- * assembles subcommand description keys from tree position rather than referencing them.
+ * Proves the /bot dissolution still holds after scene visualization is consolidated into
+ * /generate image: /tool visualize is gone, /generate image and /generate scene remain reachable,
+ * the /bot root stays dissolved, and the relocated locale namespaces still resolve.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { loadCommandData } from "@/utils/discord/commandLoader";
@@ -17,12 +12,15 @@ beforeAll(async () => initializeLocalizer());
 const RELOCATED_DESCRIPTION_KEYS = ["commands.tool.visualize.description", "commands.generate.scene.description"];
 
 describe("Dissolved /bot subcommand registration", () => {
-  it("registers /tool visualize as a subcommand under /tool", async () => {
+  it("removes /tool visualize while retaining /generate image", async () => {
     const { executionMap } = await loadCommandData();
     const toolCommands = executionMap.get("tool");
+    const generateCommands = executionMap.get("generate");
 
     expect(toolCommands).toBeDefined();
-    expect(toolCommands?.has("visualize")).toBe(true);
+    expect(toolCommands?.has("visualize")).toBe(false);
+    expect(generateCommands).toBeDefined();
+    expect(generateCommands?.has("image")).toBe(true);
   }, 30000);
 
   it("registers /generate scene as a subcommand under /generate", async () => {
@@ -54,7 +52,7 @@ describe("Dissolved /bot subcommand registration", () => {
     }
   });
 
-  it("registers both relocated descriptions as real text rather than a locale key", async () => {
+  it("registers generate descriptions as real text and leaves visualize unregistered", async () => {
     const { registrationData } = await loadCommandData();
 
     const registeredDescription = (rootName: string, subcommandName: string): string | undefined => {
@@ -65,8 +63,10 @@ describe("Dissolved /bot subcommand registration", () => {
       return (subcommand as { description?: string } | undefined)?.description;
     };
 
+    expect(registeredDescription("tool", "visualize")).toBeUndefined();
+
     for (const description of [
-      registeredDescription("tool", "visualize"),
+      registeredDescription("generate", "image"),
       registeredDescription("generate", "scene"),
     ]) {
       expect(description).toBeDefined();
