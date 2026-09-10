@@ -237,15 +237,16 @@ describe("GenerateVoiceMessageTool refusals", () => {
     expect(error).toContain("does not support instruct-based voice design");
   });
 
-  it("reports a shape mismatch, not a design-endpoint mismatch, on an auto endpoint without the sentinel", async () => {
-    // The endpoint does accept `instruct`, so the design-endpoint message would be a lie. What is
-    // actually wrong is that nothing selectable remains: the sentinel is absent, so the design
-    // prompt is not the tool's branch, and the persona holds no sample or voice id to fall to.
+  it("names the VoiceDesign sentinel on an auto endpoint without it", async () => {
+    // The endpoint does accept `instruct`, so the design-endpoint message would be a lie, and the
+    // shape-mismatch message would send the manager to swap an endpoint that is already right.
+    // The sentinel is the entry condition that is actually missing, so the message has to say so.
     const { source, error } = await runTool({ ...DESIGN_PROMPT, speech_voice_name: "Millie" }, makeEndpoint("auto"));
 
     expect(source).toBeNull();
-    expect(error).toContain("cannot be used with the active speech endpoint");
+    expect(error).toContain("VoiceDesign");
     expect(error).not.toContain("does not support instruct");
+    expect(error).not.toContain("cannot be used with the active speech endpoint");
   });
 
   it("reports a shape mismatch when the endpoint takes only design bodies and the persona has only a sample", async () => {

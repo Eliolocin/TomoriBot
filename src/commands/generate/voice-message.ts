@@ -396,17 +396,18 @@ export async function execute(
   const speechEndpoint = await resolveActiveSpeechEndpoint(mainPersona.server_id);
   const endpointIsElevenLabs = speechEndpoint?.endpoint.api_style === "elevenlabs";
 
-  // Mirror the tool's credential precedence: an endpoint-scoped key wins over the legacy
-  // opt_api_keys entry, which only survives for deployments that predate the endpoint pathway. A
-  // server whose ElevenLabs key lives on its endpoint has no opt_api_keys row at all.
+  // An endpoint-scoped key wins over the legacy opt_api_keys entry, which survives only for
+  // deployments that predate the endpoint pathway, but it counts only when that endpoint is
+  // itself ElevenLabs: the tool forwards any active endpoint's key here, which on a `tts-clone`
+  // server hands a local endpoint's credential to ElevenLabs.
   //
-  // The key is fetched whenever the endpoint is ElevenLabs or absent, regardless of which source
-  // ends up selected: on an ElevenLabs endpoint a persona with a sample and a voice id resolves to
-  // the voice id only after the sample is discarded, so the endpoint can need this key for a
-  // persona whose sample looked like the obvious choice.
-  const needsElevenLabsKey = usesElevenLabsVoice(persona) && (endpointIsElevenLabs || !speechEndpoint);
-  const elevenLabsApiKey = needsElevenLabsKey
-    ? speechEndpoint?.apiKey || ((await getOptApiKey(mainPersona.server_id, ELEVENLABS_SERVICE_NAME)) ?? "")
+  // The lookup is keyed on the persona holding a voice id rather than on the endpoint, because
+  // the endpoint does not determine whether the id is reachable: a persona with a sample and a
+  // voice id on an ElevenLabs endpoint resolves to the voice id only after the sample is
+  // discarded, and a voice-id-only persona on a `tts-clone` server falls back to it as well.
+  const elevenLabsApiKey = usesElevenLabsVoice(persona)
+    ? (endpointIsElevenLabs ? speechEndpoint?.apiKey : "") ||
+      ((await getOptApiKey(mainPersona.server_id, ELEVENLABS_SERVICE_NAME)) ?? "")
     : "";
 
   const usesElevenLabs = !speechEndpoint && Boolean(elevenLabsApiKey) && usesElevenLabsVoice(persona);

@@ -267,10 +267,20 @@ export class GenerateVoiceMessageTool extends BaseTool {
 
     const source = designSource ?? usableFallbacks[0] ?? null;
     if (!source) {
+      // Reachable only on `auto`, where the sentinel is the entry condition: a dedicated
+      // voice-design endpoint always selects the design branch once a prompt exists. The other two
+      // messages would both send the manager to change a setting that is already correct, so this
+      // one names the voice name, which is the only thing standing between here and synthesis.
+      if (voiceDesignPrompt && capabilities.acceptsDesignShape) {
+        return {
+          success: false,
+          error:
+            "The active persona has a voice design prompt and the active speech endpoint accepts one, but the endpoint is in auto mode, where a persona uses voice design only when its voice name is VoiceDesign. A server manager can set that name in /config under Persona > Voice, or assign a voice sample to use the clone path instead.",
+        };
+      }
+
       // The persona does have a voice; it is the endpoint that cannot take its shape. Saying "no
-      // voice is configured" here would send the manager to the wrong settings page, and naming
-      // the design-endpoint fix would be wrong too: this endpoint does accept `instruct`, the
-      // persona just has nothing usable to send it.
+      // voice is configured" here would send the manager to the wrong settings page.
       const hasMisroutedVoice = this.resolveFallbackCandidates(context).length > 0 || Boolean(voiceDesignPrompt);
       return {
         success: false,
