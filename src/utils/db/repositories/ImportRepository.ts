@@ -28,8 +28,9 @@ import {
   type ImportResult,
   type MemoryItem,
   type ExportResult,
+  normalizeMemoryItem,
 } from "@/types/db/dataExport";
-import { validateMemoryContent } from "@/utils/misc/memoryLimits";
+import { getMemoryLimits, validateMemoryContent } from "@/utils/misc/memoryLimits";
 import { validateTomoriConfigFields } from "@/utils/db/sqlSecurity";
 import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCacheStore";
 import { invalidateUserCache } from "@/utils/cache/userCache";
@@ -58,6 +59,13 @@ interface ImportValidationResult {
     | PersonalExportData
     | ServerExportData;
   error?: string;
+}
+
+type MemoryRow = { content: string; tags: string[] | null };
+
+function memoryKey(memory: MemoryItem): string {
+  const normalized = normalizeMemoryItem(memory);
+  return `${normalized.content}\u0000${normalized.tags.join("\u0000")}`;
 }
 
 export type WorkspaceConfigSection = keyof WorkspaceConfigExportData;
@@ -1223,6 +1231,252 @@ class ImportRepository {
     const result = await this.sqlImportPersonalMemories(userDiscId, memories, personaLineageId);
     if (result.success) invalidateUserCache(userDiscId);
     return result;
+  }
+
+  async importWorkspaceMemoryBundle(
+    serverDiscId: string,
+    importerUserDiscId: string,
+    mappings: ReadonlyArray<{ bucketName: string; personaId: number; memories: MemoryItem[] }>,
+    strategy: "merge" | "replace",
+  ): Promise<ImportResult> {
+    try {
+      if (mappings.length === 0) return { success: false, error: "commands.data.import.error_update_failed" };
+
+      const serverId = await this.resolveServerId(serverDiscId);
+      if (!serverId) return { success: false, error: "commands.data.import.error_no_server_data" };
+
+      const importerUserId = await this.ensureUserId(importerUserDiscId);
+      if (!importerUserId) return { success: false, error: "commands.data.import.error_update_failed" };
+
+      const limits = getMemoryLimits();
+      const destinations = new Set<number>();
+      const preparedMappings: Array<{
+        personaId: number;
+        personaLineageId: number;
+        memories: MemoryItem[];
+      }> = [];
+      let memoriesInserted = 0;
+      let memoriesSkipped = 0;
+
+      for (const mapping of mappings) {
+        const [persona] = await sql<Array<{ persona_id: number; persona_lineage_id: number | string | bigint }>>`
+          SELECT persona_id, persona_lineage_id
+          FROM personas
+          WHERE persona_id = ${mapping.personaId}
+            AND server_id = ${serverId}
+          LIMIT 1
+        `;
+        const personaLineageId = this.coerceLineageId(persona?.persona_lineage_id);
+        if (!persona || personaLineageId === null || !Number.isFinite(personaLineageId)) {
+          log.error("Workspace memory bundle persona lookup failed", undefined, {
+            metadata: { bucketName: mapping.bucketName },
+          });
+          return {
+            success: false,
+            error: "commands.data.import.error_no_server_data",
+          };
+        }
+        if (destinations.has(personaLineageId)) {
+          log.error("Workspace memory bundle contains a duplicate destination", undefined, {
+            metadata: { bucketName: mapping.bucketName },
+          });
+          return {
+            success: false,
+            error: "commands.data.import.error_update_failed",
+          };
+        }
+        destinations.add(personaLineageId);
+
+        for (const memory of mapping.memories) {
+          const validation = validateMemoryContent(memory.content);
+          if (!validation.isValid) {
+            return {
+              success: false,
+              error: `commands.data.import.error_invalid_server_memory|${validation.error}`,
+            };
+          }
+        }
+
+        let memoriesToInsert = mapping.memories;
+        let existingRows: MemoryRow[] = [];
+        if (strategy === "merge") {
+          existingRows = await sql<MemoryRow[]>`
+            SELECT content, tags
+            FROM server_memories
+            WHERE server_id = ${serverId}
+              AND persona_lineage_id = ${personaLineageId}
+          `;
+          const existingMemories = new Set(
+            existingRows.map((row) => memoryKey({ content: row.content, tags: row.tags ?? [] })),
+          );
+          const incomingMemories = new Set<string>();
+          memoriesToInsert = mapping.memories.filter((memory) => {
+            const key = memoryKey(memory);
+            if (existingMemories.has(key) || incomingMemories.has(key)) return false;
+            incomingMemories.add(key);
+            return true;
+          });
+          memoriesSkipped += mapping.memories.length - memoriesToInsert.length;
+        }
+
+        if (
+          (strategy === "merge" ? existingRows.length + memoriesToInsert.length : memoriesToInsert.length) >
+          limits.maxServerMemories
+        ) {
+          log.error("Workspace memory bundle exceeds the memory limit", undefined, {
+            metadata: { bucketName: mapping.bucketName },
+          });
+          return {
+            success: false,
+            error: "commands.data.import.error_update_failed",
+          };
+        }
+
+        memoriesInserted += memoriesToInsert.length;
+        preparedMappings.push({
+          personaId: persona.persona_id,
+          personaLineageId,
+          memories: memoriesToInsert,
+        });
+      }
+
+      let memoriesDeleted = 0;
+      await sql.begin(async (tx: SQL) => {
+        for (const mapping of preparedMappings) {
+          if (strategy === "replace") {
+            const deletedRows = await tx<Array<{ server_memory_id: number }>>`
+              DELETE FROM server_memories
+              WHERE server_id = ${serverId}
+                AND persona_lineage_id = ${mapping.personaLineageId}
+              RETURNING server_memory_id
+            `;
+            memoriesDeleted += deletedRows.length;
+          }
+          for (const memory of mapping.memories) {
+            await tx`
+              INSERT INTO server_memories (server_id, persona_id, persona_lineage_id, user_id, content, tags)
+              VALUES (${serverId}, ${mapping.personaId}, ${mapping.personaLineageId}, ${importerUserId}, ${memory.content}, ${sql.array(memory.tags, "TEXT")})
+            `;
+          }
+        }
+      });
+
+      invalidateTomoriStateCache(serverDiscId);
+      return {
+        success: true,
+        itemsImported: { memoriesInserted, memoriesSkipped, memoriesDeleted, memoriesCount: memoriesInserted },
+      };
+    } catch (error) {
+      log.error(`Error importing workspace memory bundle for server ${serverDiscId}:`, error);
+      return { success: false, error: "commands.data.import.error_import_failed" };
+    }
+  }
+
+  async importPersonalMemoryBundle(
+    userDiscId: string,
+    mappings: ReadonlyArray<{ bucketName: string; personaLineageId: number; memories: MemoryItem[] }>,
+    strategy: "merge" | "replace",
+  ): Promise<ImportResult> {
+    try {
+      if (mappings.length === 0) return { success: false, error: "commands.data.import.error_update_failed" };
+
+      const userId = await this.ensureUserId(userDiscId);
+      if (!userId) return { success: false, error: "commands.data.import.error_update_failed" };
+
+      const limits = getMemoryLimits();
+      const destinations = new Set<number>();
+      const preparedMappings: Array<{ personaLineageId: number; memories: MemoryItem[] }> = [];
+      let memoriesInserted = 0;
+      let memoriesSkipped = 0;
+
+      for (const mapping of mappings) {
+        if (!Number.isFinite(mapping.personaLineageId) || destinations.has(mapping.personaLineageId)) {
+          log.error("Personal memory bundle contains an invalid or duplicate destination", undefined, {
+            metadata: { bucketName: mapping.bucketName },
+          });
+          return {
+            success: false,
+            error: "commands.data.import.error_update_failed",
+          };
+        }
+        destinations.add(mapping.personaLineageId);
+
+        for (const memory of mapping.memories) {
+          const validation = validateMemoryContent(memory.content);
+          if (!validation.isValid) {
+            return { success: false, error: `commands.data.import.error_invalid_memory|${validation.error}` };
+          }
+        }
+
+        let memoriesToInsert = mapping.memories;
+        let existingRows: MemoryRow[] = [];
+        if (strategy === "merge") {
+          existingRows = await sql<MemoryRow[]>`
+            SELECT content, tags
+            FROM personal_memories
+            WHERE user_id = ${userId}
+              AND persona_lineage_id = ${mapping.personaLineageId}
+          `;
+          const existingMemories = new Set(
+            existingRows.map((row) => memoryKey({ content: row.content, tags: row.tags ?? [] })),
+          );
+          const incomingMemories = new Set<string>();
+          memoriesToInsert = mapping.memories.filter((memory) => {
+            const key = memoryKey(memory);
+            if (existingMemories.has(key) || incomingMemories.has(key)) return false;
+            incomingMemories.add(key);
+            return true;
+          });
+          memoriesSkipped += mapping.memories.length - memoriesToInsert.length;
+        }
+
+        if (
+          (strategy === "merge" ? existingRows.length + memoriesToInsert.length : memoriesToInsert.length) >
+          limits.maxPersonalMemories
+        ) {
+          log.error("Personal memory bundle exceeds the memory limit", undefined, {
+            metadata: { bucketName: mapping.bucketName },
+          });
+          return {
+            success: false,
+            error: "commands.data.import.error_update_failed",
+          };
+        }
+
+        memoriesInserted += memoriesToInsert.length;
+        preparedMappings.push({ personaLineageId: mapping.personaLineageId, memories: memoriesToInsert });
+      }
+
+      let memoriesDeleted = 0;
+      await sql.begin(async (tx: SQL) => {
+        for (const mapping of preparedMappings) {
+          if (strategy === "replace") {
+            const deletedRows = await tx<Array<{ personal_memory_id: number }>>`
+              DELETE FROM personal_memories
+              WHERE user_id = ${userId}
+                AND persona_lineage_id = ${mapping.personaLineageId}
+              RETURNING personal_memory_id
+            `;
+            memoriesDeleted += deletedRows.length;
+          }
+          for (const memory of mapping.memories) {
+            await tx`
+              INSERT INTO personal_memories (user_id, persona_lineage_id, content, tags)
+              VALUES (${userId}, ${mapping.personaLineageId}, ${memory.content}, ${sql.array(memory.tags, "TEXT")})
+            `;
+          }
+        }
+      });
+
+      invalidateUserCache(userDiscId);
+      return {
+        success: true,
+        itemsImported: { memoriesInserted, memoriesSkipped, memoriesDeleted, memoriesCount: memoriesInserted },
+      };
+    } catch (error) {
+      log.error(`Error importing personal memory bundle for user ${userDiscId}:`, error);
+      return { success: false, error: "commands.data.import.error_import_failed" };
+    }
   }
 
   /**

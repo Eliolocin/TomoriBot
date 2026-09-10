@@ -3,6 +3,7 @@ import { log } from "@/utils/misc/logger";
 import {
   EXPORT_VERSION,
   EXPORT_V2_VERSION,
+  EXPORT_BUCKET_LABEL_MAX_LENGTH,
   personalMemoriesExportSchema,
   globalPersonalMemoriesExportSchema,
   personalSettingsExportSchema,
@@ -10,6 +11,8 @@ import {
   serverConfigOnlyExportSchema,
   personalConfigExportSchema,
   workspaceConfigExportSchema,
+  getPersonalMemoriesV2ExportSchema,
+  getWorkspaceMemoriesExportSchema,
   getPersonalExportSchema,
   getServerExportSchema,
   type PersonalMemoriesExport,
@@ -129,6 +132,23 @@ interface PersonalConfigProjectionRow {
   addressing_style: "masculine" | "feminine" | "neutral" | null;
 }
 
+type DatabaseId = number | string | bigint;
+
+interface MemoryProjectionRow {
+  content: string;
+  tags: string[] | null;
+  persona_lineage_id?: DatabaseId;
+}
+
+interface PersonaLabelProjectionRow {
+  persona_lineage_id: DatabaseId;
+  persona_nickname: string | null;
+}
+
+interface PersonaMemoryScopeRow extends PersonaLabelProjectionRow {
+  persona_id: DatabaseId;
+}
+
 /**
  * ExportRepository: owns all data export operations.
  *
@@ -162,6 +182,24 @@ export class ExportRepository {
       if (wasSanitized) log.warn(`Sanitized ${contextLabel} at index ${index}: removed control characters`);
       return { content: sanitized, tags: item.tags };
     });
+  }
+
+  private coerceDatabaseId(value: DatabaseId): number | null {
+    const id = Number(value);
+    return Number.isFinite(id) ? id : null;
+  }
+
+  private bucketLabel(nickname: string | null | undefined, fallback: string): string {
+    const trimmedNickname = nickname?.trim();
+    const label = trimmedNickname || fallback;
+    return label.slice(0, EXPORT_BUCKET_LABEL_MAX_LENGTH).trim() || fallback;
+  }
+
+  private memoryItems(rows: MemoryProjectionRow[]): MemoryItem[] {
+    return this.sanitizeMemoryItems(
+      rows.map((row) => ({ content: row.content, tags: row.tags ?? [] })),
+      "memory bundle",
+    );
   }
 
   /**
@@ -1034,6 +1072,269 @@ export class ExportRepository {
       return { success: true, data: validated.data };
     } catch (error) {
       log.error(`Error exporting personal config for user ${userDiscId}:`, error);
+      return { success: false, error: "commands.data.export.error_export_failed" };
+    }
+  }
+
+  async exportWorkspaceMemories(
+    serverDiscId: string,
+    scope: { mode: "main" } | { mode: "persona"; personaId: number } | { mode: "all" },
+  ): Promise<ExportResult> {
+    try {
+      const serverRows = await this.database<Array<{ server_id: DatabaseId }>>`
+        SELECT server_id
+        FROM servers
+        WHERE server_disc_id = ${serverDiscId}
+        LIMIT 1
+      `;
+      const serverId = serverRows[0] ? this.coerceDatabaseId(serverRows[0].server_id) : null;
+      if (serverId === null) {
+        return { success: false, error: "commands.data.export.error_no_server_data" };
+      }
+
+      let buckets: Array<{ name: string; label: string; memories: MemoryItem[] }>;
+      if (scope.mode === "all") {
+        const memoryRows = await this.database<MemoryProjectionRow[]>`
+          SELECT persona_lineage_id, content, tags
+          FROM server_memories
+          WHERE server_id = ${serverId}
+          ORDER BY persona_lineage_id ASC, created_at DESC NULLS LAST, server_memory_id DESC
+        `;
+        if (!memoryRows.length) {
+          return { success: false, error: "commands.data.export.error_no_server_data" };
+        }
+
+        const groupedRows = new Map<number, MemoryProjectionRow[]>();
+        for (const row of memoryRows) {
+          if (row.persona_lineage_id === undefined) {
+            return { success: false, error: "commands.data.export.error_validation_failed" };
+          }
+          const lineageId = this.coerceDatabaseId(row.persona_lineage_id);
+          if (lineageId === null) {
+            return { success: false, error: "commands.data.export.error_validation_failed" };
+          }
+          const lineageRows = groupedRows.get(lineageId) ?? [];
+          lineageRows.push(row);
+          groupedRows.set(lineageId, lineageRows);
+        }
+
+        const lineageIds = [...groupedRows.keys()].sort((left, right) => left - right);
+        const labelRows = await this.database<PersonaLabelProjectionRow[]>`
+          SELECT persona_lineage_id, persona_nickname
+          FROM personas
+          WHERE server_id = ${serverId}
+            AND persona_lineage_id = ANY(${sql.array(lineageIds, "int8")})
+          ORDER BY persona_lineage_id ASC, updated_at DESC NULLS LAST, persona_id DESC
+        `;
+        const labels = new Map<number, string>();
+        for (const row of labelRows) {
+          const lineageId = this.coerceDatabaseId(row.persona_lineage_id);
+          if (lineageId !== null && !labels.has(lineageId)) {
+            labels.set(lineageId, row.persona_nickname ?? "");
+          }
+        }
+
+        buckets = lineageIds.map((lineageId, index) => ({
+          name: `persona-${index + 1}`,
+          label: this.bucketLabel(labels.get(lineageId), `Persona ${index + 1}`),
+          memories: this.memoryItems(groupedRows.get(lineageId) ?? []),
+        }));
+      } else {
+        const personaRows =
+          scope.mode === "main"
+            ? await this.database<PersonaMemoryScopeRow[]>`
+                SELECT persona_id, persona_lineage_id, persona_nickname
+                FROM personas
+                WHERE server_id = ${serverId}
+                  AND is_alter = false
+                ORDER BY updated_at DESC NULLS LAST, persona_id DESC
+                LIMIT 1
+              `
+            : await this.database<PersonaMemoryScopeRow[]>`
+                SELECT persona_id, persona_lineage_id, persona_nickname
+                FROM personas
+                WHERE persona_id = ${scope.personaId}
+                  AND server_id = ${serverId}
+                LIMIT 1
+              `;
+        const persona = personaRows[0];
+        if (!persona) {
+          return { success: false, error: "commands.data.export.error_no_server_data" };
+        }
+        const lineageId = this.coerceDatabaseId(persona.persona_lineage_id);
+        if (lineageId === null) {
+          return { success: false, error: "commands.data.export.error_validation_failed" };
+        }
+
+        const memoryRows = await this.database<MemoryProjectionRow[]>`
+          SELECT content, tags
+          FROM server_memories
+          WHERE server_id = ${serverId}
+            AND persona_lineage_id = ${lineageId}
+          ORDER BY created_at DESC, server_memory_id DESC
+        `;
+        buckets = [
+          {
+            name: scope.mode,
+            label: this.bucketLabel(
+              persona.persona_nickname,
+              scope.mode === "main" ? "Main Persona" : "Selected Persona",
+            ),
+            memories: this.memoryItems(memoryRows),
+          },
+        ];
+      }
+
+      const exportCandidate = {
+        version: EXPORT_V2_VERSION,
+        type: "workspace_memories",
+        exported_at: new Date().toISOString(),
+        data: { buckets },
+      };
+      const validated = getWorkspaceMemoriesExportSchema().safeParse(exportCandidate);
+      if (!validated.success) {
+        log.error(`Workspace memory bundle export validation failed for server ${serverDiscId}:`, validated.error);
+        return { success: false, error: "commands.data.export.error_validation_failed" };
+      }
+
+      return { success: true, data: validated.data };
+    } catch (error) {
+      log.error(`Error exporting workspace memory bundle for server ${serverDiscId}:`, error);
+      return { success: false, error: "commands.data.export.error_export_failed" };
+    }
+  }
+
+  async exportPersonalMemories(
+    userDiscId: string,
+    scope: { mode: "global" } | { mode: "persona"; personaLineageId: number } | { mode: "all" },
+  ): Promise<ExportResult> {
+    try {
+      const userRows = await this.database<Array<{ user_id: DatabaseId }>>`
+        SELECT user_id
+        FROM users
+        WHERE user_disc_id = ${userDiscId}
+        LIMIT 1
+      `;
+      const userId = userRows[0] ? this.coerceDatabaseId(userRows[0].user_id) : null;
+      if (userId === null) {
+        return { success: false, error: "commands.data.export.error_no_user_data" };
+      }
+
+      let buckets: Array<{ name: string; label: string; memories: MemoryItem[] }>;
+      if (scope.mode === "all") {
+        const memoryRows = await this.database<MemoryProjectionRow[]>`
+          SELECT persona_lineage_id, content, tags
+          FROM personal_memories
+          WHERE user_id = ${userId}
+          ORDER BY persona_lineage_id ASC, created_at DESC NULLS LAST, personal_memory_id DESC
+        `;
+        if (!memoryRows.length) {
+          return { success: false, error: "commands.data.export.error_no_user_data" };
+        }
+
+        const groupedRows = new Map<number, MemoryProjectionRow[]>();
+        for (const row of memoryRows) {
+          if (row.persona_lineage_id === undefined) {
+            return { success: false, error: "commands.data.export.error_validation_failed" };
+          }
+          const lineageId = this.coerceDatabaseId(row.persona_lineage_id);
+          if (lineageId === null) {
+            return { success: false, error: "commands.data.export.error_validation_failed" };
+          }
+          const lineageRows = groupedRows.get(lineageId) ?? [];
+          lineageRows.push(row);
+          groupedRows.set(lineageId, lineageRows);
+        }
+
+        const lineageIds = [...groupedRows.keys()].sort((left, right) => {
+          if (left === 0) return -1;
+          if (right === 0) return 1;
+          return left - right;
+        });
+        const nonGlobalLineageIds = lineageIds.filter((lineageId) => lineageId !== 0);
+        const labelRows = nonGlobalLineageIds.length
+          ? await this.database<PersonaLabelProjectionRow[]>`
+              SELECT persona_lineage_id, persona_nickname
+              FROM personas
+              WHERE persona_lineage_id = ANY(${sql.array(nonGlobalLineageIds, "int8")})
+              ORDER BY persona_lineage_id ASC, updated_at DESC NULLS LAST, persona_id DESC
+            `
+          : [];
+        const labels = new Map<number, string>();
+        for (const row of labelRows) {
+          const lineageId = this.coerceDatabaseId(row.persona_lineage_id);
+          if (lineageId !== null && !labels.has(lineageId)) {
+            labels.set(lineageId, row.persona_nickname ?? "");
+          }
+        }
+
+        buckets = [];
+        let personaOrdinal = 0;
+        for (const lineageId of lineageIds) {
+          if (lineageId === 0) {
+            buckets.push({
+              name: "global",
+              label: "Global",
+              memories: this.memoryItems(groupedRows.get(lineageId) ?? []),
+            });
+            continue;
+          }
+          personaOrdinal += 1;
+          buckets.push({
+            name: `persona-${personaOrdinal}`,
+            label: this.bucketLabel(labels.get(lineageId), `Persona ${personaOrdinal}`),
+            memories: this.memoryItems(groupedRows.get(lineageId) ?? []),
+          });
+        }
+      } else {
+        const lineageId = scope.mode === "global" ? 0 : this.coerceDatabaseId(scope.personaLineageId);
+        if (lineageId === null) {
+          return { success: false, error: "commands.data.export.error_validation_failed" };
+        }
+
+        let label = scope.mode === "global" ? "Global" : "Selected Persona";
+        if (scope.mode === "persona") {
+          const labelRows = await this.database<PersonaLabelProjectionRow[]>`
+            SELECT persona_lineage_id, persona_nickname
+            FROM personas
+            WHERE persona_lineage_id = ${lineageId}
+            ORDER BY updated_at DESC NULLS LAST, persona_id DESC
+            LIMIT 1
+          `;
+          label = this.bucketLabel(labelRows[0]?.persona_nickname, "Selected Persona");
+        }
+
+        const memoryRows = await this.database<MemoryProjectionRow[]>`
+          SELECT content, tags
+          FROM personal_memories
+          WHERE user_id = ${userId}
+            AND persona_lineage_id = ${lineageId}
+          ORDER BY created_at DESC, personal_memory_id DESC
+        `;
+        buckets = [
+          {
+            name: scope.mode,
+            label,
+            memories: this.memoryItems(memoryRows),
+          },
+        ];
+      }
+
+      const exportCandidate = {
+        version: EXPORT_V2_VERSION,
+        type: "personal_memories",
+        exported_at: new Date().toISOString(),
+        data: { buckets },
+      };
+      const validated = getPersonalMemoriesV2ExportSchema().safeParse(exportCandidate);
+      if (!validated.success) {
+        log.error(`Personal memory bundle export validation failed for user ${userDiscId}:`, validated.error);
+        return { success: false, error: "commands.data.export.error_validation_failed" };
+      }
+
+      return { success: true, data: validated.data };
+    } catch (error) {
+      log.error(`Error exporting personal memory bundle for user ${userDiscId}:`, error);
       return { success: false, error: "commands.data.export.error_export_failed" };
     }
   }

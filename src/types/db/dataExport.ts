@@ -572,15 +572,6 @@ function getMemoryBundleDataSchema(maxMemories: number) {
     })
     .strict()
     .superRefine((data, context) => {
-      const memoryCount = data.buckets.reduce((count, bucket) => count + bucket.memories.length, 0);
-      if (memoryCount > maxMemories) {
-        context.addIssue({
-          code: "custom",
-          path: ["buckets"],
-          message: `Memory bundle contains ${memoryCount} entries, but the limit is ${maxMemories}.`,
-        });
-      }
-
       const names = new Set<string>();
       data.buckets.forEach((bucket, index) => {
         if (names.has(bucket.name)) {
@@ -1130,6 +1121,9 @@ export interface ImportResult {
   itemsImported?: {
     memoriesCount?: number;
     configFieldsCount?: number;
+    memoriesInserted?: number;
+    memoriesSkipped?: number;
+    memoriesDeleted?: number;
   };
   error?: string;
 }

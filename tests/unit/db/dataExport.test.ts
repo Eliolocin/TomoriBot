@@ -388,6 +388,24 @@ describe("v2 memory bundles", () => {
     expect(memoryId.success).toBe(false);
   });
 
+  it("accepts one full bucket per workspace persona lineage", () => {
+    const fullBucket = Array.from({ length: getMemoryLimits().maxServerMemories }, () => "memory");
+    const result = workspaceMemoriesExportSchema.safeParse({
+      version: EXPORT_V2_VERSION,
+      type: "workspace_memories",
+      exported_at: "2026-01-01T00:00:00.000Z",
+      data: {
+        buckets: [
+          { name: "persona-1", label: "Persona 1", memories: fullBucket },
+          { name: "persona-2", label: "Persona 2", memories: fullBucket },
+          { name: "persona-3", label: "Persona 3", memories: fullBucket },
+        ],
+      },
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("compares normalized content and tag sets", () => {
     expect(
       areMemoryItemsEqual(
