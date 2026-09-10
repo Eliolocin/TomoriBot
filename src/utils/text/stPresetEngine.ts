@@ -168,7 +168,7 @@ function processVarDeclarations(
  * Find unsupported `{{...}}` macros that remain after stripping the subset of
  * SillyTavern syntax TomoriBot actually resolves.
  *
- * Used by `/st-presets` preset import to warn users when enabled nodes still reference
+ * Used by `/config` > Plugins > SillyTavern Presets import to warn users when enabled nodes still reference
  * macros that will not behave like they do in SillyTavern.
  *
  * @param text - Raw preset node content

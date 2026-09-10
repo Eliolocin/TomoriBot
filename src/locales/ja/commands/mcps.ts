@@ -1,13 +1,9 @@
 export default {
   mcps: {
-    description: `リモートMCPツールサーバーの追加・一覧・有効化・無効化・削除を行います。`,
     title: `MCPサーバー`,
     count: `登録済みMCP \`({count}/{max})\``,
     empty_guild: `このサーバーにはまだMCPが登録されていません。`,
     empty_dm: `このDMワークスペースにはまだMCPが登録されていません。`,
-    outdated_panel: `このMCPパネルは古くなっています。/mcps をもう一度実行してください。`,
-    permission_denied: `このMCPパネルを使うには「サーバー管理」権限が必要です。`,
-    not_setup: `このワークスペースではTomoriBotがまだ設定されていません。先に /setup を実行してください。`,
     unavailable: `MCP登録を読み込めませんでした。「再試行」で読み込み直してください。`,
     stale_warning: `読み込みに失敗したため、表示中のデータは古い可能性があります。最新データを取得できるまで書き込み操作は利用できません。`,
     read_unavailable: `現在のMCP登録を安全に読み込めませんでした。`,
@@ -27,7 +23,6 @@ export default {
     tools_empty: `ツール: 検出なし`,
     tools_unknown: `ツール: 検出状況不明`,
     endpoint_unavailable: `利用不可`,
-    overflow_warning: `このワークスペースにはMCP登録が{count}件ありますが、このパネルで安全に表示できるのは{shown}件までです。不要な登録を削除して、表示できる件数まで減らしてください。`,
     enable: `有効にする`,
     disable: `無効にする`,
     remove: `削除`,

@@ -176,7 +176,6 @@ handler.
 - `generate`
 - `help`
 - `legal`
-- `mcps`
 - `memory`
 - `model`
 - `novelai`
@@ -189,7 +188,6 @@ handler.
 - `scheduled-task`
 - `server`
 - `speech`
-- `st-preset`
 - `stats`
 - `support`
 - `tool`
@@ -987,9 +985,8 @@ Rules:
 
 ## Representative Command Groups
 
-The primary MCP management surface is `/config` > Plugins > MCP Servers. The standalone `/mcps`
-root remains a bare, manager-only, DM-capable coexistence entry point backed by globally routed
-`mcps:v1` Components V2 IDs. Its navigation is reconstructable and performs no writes. Routed navigation and mutation
+The primary MCP management surface is `/config` > Plugins > MCP Servers. The page's navigation is
+reconstructable and performs no writes. Routed navigation and mutation
 submissions derive guild or DM-workspace scope again and recheck Manage Server in guilds. The Add
 opener rechecks permission before showing the form; its submit repeats the full scope and permission
 checks. Entity mutations resolve stable MCP row IDs inside that scope before a write. Known unsupported
@@ -1004,7 +1001,6 @@ Receipts render in a separate top-level container below the authoritative collec
 General Purpose/Web Search/URL Fetcher Radio Group, with General Purpose selected by default. Its modal
 and field IDs carry bounded random nonces, and submission returns through the global router rather
 than an invocation-scoped modal collector, so a supported open modal can survive a process restart.
-Bare `/mcps` is the only registered MCP path; the legacy `mcp` subcommand tree no longer exists.
 
 - `config`: setup, model(text/image/embedding/video/vision/speech/transcription), api-key(rotation), provider(add/remove), custom-endpoint(add/edit/remove), image-tags(default-positive/default-negative), system-prompt(set/remove/preset), context-note(set), params(*), timezone, message-fetch-limit, self-debug, model-randomizer, workarounds, bot-permissions -> tool-use(toggle/manage), notice-embeds(visibility)
 - `speech`: elevenlabs, voice-assign, transcripts, voice-design(set/remove)

@@ -17,7 +17,9 @@ import { afterEach, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { AttachmentBuilder, ComponentType, MessageFlags } from "discord.js";
 import type { ChatInputCommandInteraction, Message } from "discord.js";
 import * as componentsV2Limits from "@/utils/discord/ui/componentsV2Limits";
-import { createMcpsInteractionRoute } from "@/utils/discord/interactions/mcpsRoutes";
+import { parseConfigPanelRoute } from "@/utils/discord/configPanelCatalog";
+import { handleConfigMcpRoutes } from "@/utils/discord/interactions/configMcpRoutes";
+import type { ConfigRouteDependencies } from "@/utils/discord/interactions/configRouteContext";
 import { createMemoriesInteractionRoute } from "@/utils/discord/interactions/memoriesRoutes";
 import { createModerationInteractionRoute } from "@/utils/discord/interactions/moderationRoutes";
 import { createPersonalMemoriesInteractionRoute } from "@/utils/discord/interactions/personalMemoriesRoutes";
@@ -38,7 +40,7 @@ import {
   type GuardedPanelWorkflowController,
 } from "@/utils/discord/ui/interactionCore";
 import { log } from "@/utils/misc/logger";
-import { parseInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
+import { parseInteractionRoute, type GlobalInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
@@ -84,6 +86,36 @@ const infoOptions = {
   descriptionKey: "general.errors.unknown_error_description",
   color: "#E74C3C",
 } as const;
+
+const configMcpTerminalRoute: GlobalInteractionRoute = {
+  namespace: "config",
+  version: "v2",
+  execute: async (_client, interaction, parsed) => {
+    const route = parseConfigPanelRoute(parsed);
+    if (!route || route.action !== "mcp-add-submit") {
+      throw new Error("Config MCP terminal test route did not parse");
+    }
+
+    await handleConfigMcpRoutes(
+      interaction,
+      route,
+      {
+        serverDiscId: "user-1",
+        guildId: null,
+        internalServerId: null,
+        userId: 1,
+        actor: { workspaceKind: "dm", isManager: true },
+        personas: [],
+        readStatus: "fresh",
+      },
+      {
+        resolveScope: async () => null,
+        takeSelectValue: () => undefined,
+      } as unknown as ConfigRouteDependencies,
+      { workspaceKind: "dm", isManager: true },
+    );
+  },
+};
 
 describe("Components V2 reply guard", () => {
   it("emits a legacy embed when the interaction is NOT marked (control)", async () => {
@@ -558,10 +590,10 @@ describe("delivery-tier construction validation", () => {
     const validationSpy = spyOn(componentsV2Limits, "validateComponentsV2MessageLimits");
     const cases = [
       {
-        name: "mcps",
-        route: createMcpsInteractionRoute({ resolveScope: async () => null }),
-        customId: "mcps:v1:retry:en-US:none",
-        interactionKind: "button" as const,
+        name: "config MCP",
+        route: configMcpTerminalRoute,
+        customId: "config:v2:mcp-add-submit:en-US:abcdefgh",
+        interactionKind: "modal" as const,
         guildId: undefined,
       },
       {

@@ -1127,16 +1127,16 @@ combinations while a fence breakout and an unbounded body both went undetected.
 
 ## Legacy Message Component Behavior
 
-TomoriBot's `/config` > Plugins > MCP Servers page is a persistent-routing example. It uses `config:v1`
-custom IDs; the standalone `/mcps` collection root remains a functional coexistence entry point using
-`mcps:v1` IDs. Both route families carry only locale, navigation state, stable row IDs, and bounded enum
+TomoriBot's `/config` > Plugins > MCP Servers page is a persistent-routing example. It uses `config:v2`
+custom IDs. The route family carries only locale, navigation state, stable row IDs, and bounded enum
 values. Each interaction reloads the
 current workspace and durable registration state when it needs panel state; the Add opener performs
 only its permission check before showing the form, and the globally routed submit performs the full
 reload. Names, endpoints, credentials, and permission bits are never trusted from the route. The panel
 renders the complete supported collection in deterministic order, with stable-ID Enable/Disable and
-Remove actions on each row. Already-issued version-one selector and range routes remain accepted as
-read-only compatibility repaints but are not emitted by current panels. Receipts use their own top-level
+Remove actions on each row. The structural rewrite registered no `config:v1` decoder, so an
+already-issued version-one route resolves to the localized outdated-panel response instead of a
+silent repaint. Receipts use their own top-level
 Container below the authoritative collection Container, keeping status color separate from the panel.
 Healthy views omit a routine refresh button because transactions reload and repaint automatically. Only stale or
 unavailable reads expose **Retry**, which performs a configuration read without testing or connecting

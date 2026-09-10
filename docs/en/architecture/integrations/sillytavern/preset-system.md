@@ -18,7 +18,7 @@ This is distinct from [SillyTavern Card Import](/architecture/integrations/silly
 
 ## How It Works (User Perspective)
 
-1. User imports an ST preset JSON via `/config` > Plugins > SillyTavern Presets (or `/st-presets`)
+1. User imports an ST preset JSON via `/config` > Plugins > SillyTavern Presets
 2. The preset becomes active for that server
 3. On every LLM call, the context builder detects the active preset and rearranges blocks accordingly
 4. The `/sysprompt` and personality settings still apply — the preset controls *where* they appear, not *whether* they exist
@@ -30,8 +30,7 @@ This is distinct from [SillyTavern Card Import](/architecture/integrations/silly
 - **Phase 1: Import & Visualization** — implemented
 - **Phase 2: Template Engine** — implemented
 - **Phase 3: Context Assembly Override** — implemented
-- **Phase 4: Management UI**, implemented as the `/config` > Plugins > SillyTavern Presets page;
-  the standalone `/st-presets` collection root remains functional during coexistence
+- **Phase 4: Management UI**, implemented as the `/config` > Plugins > SillyTavern Presets page.
 
 ## Commands
 
@@ -40,9 +39,8 @@ For a user-facing explanation of behavior, surprises, and limitations in SillyTa
 ### `/config` > Plugins > SillyTavern Presets
 
 The `/config` > Plugins > SillyTavern Presets page opens an interactive collection panel for
-managing SillyTavern presets. The standalone `/st-presets` root remains functional during
-coexistence. Its selector keeps **Add new Preset** first, followed by the disable choice and
-imported presets.
+managing SillyTavern presets. The selector keeps **Add new Preset** first, followed by the
+disable choice and imported presets.
 
 **Capabilities:**
 - **Add preset**: Upload a SillyTavern preset `.json` file with an optional author-written description.
@@ -454,6 +452,5 @@ This section documents what our implementation supports versus what native Silly
 | `src/utils/text/stPresetEngine.ts` | Template macro engine (two-pass resolution) |
 | `src/utils/text/presetContextBuilder.ts` | Preset-driven context rearrangement |
 | `src/utils/text/contextBuilder.ts` | Routing wrapper and native context assembly |
-| `src/commands/st-presets.ts` | `/st-presets` bare root slash command |
 | `src/utils/discord/interactions/stPresetsRoutes.ts` | Panel route registry and interaction adapter |
 | `src/utils/discord/ui/stPresetsPanel.ts` | Components V2 panel rendering |

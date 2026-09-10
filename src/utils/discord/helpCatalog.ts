@@ -617,7 +617,7 @@ const integrationPages: readonly HelpPageDefinition[] = [
     ],
     footerKey: "commands.help.mcp.footer",
     variables: () => ({
-      mcpsCommand: mention("mcps"),
+      mcpsCommand: configPage("Plugins > MCP Servers"),
       configPlugins: configPage("Plugins > MCP Servers"),
     }),
   },
@@ -639,10 +639,10 @@ const integrationPages: readonly HelpPageDefinition[] = [
     ],
     footerKey: "commands.help.st-preset.embed1_footer",
     variables: () => ({
-      stPresets: mention("st-presets"),
-      stPresetImport: mention("st-presets"),
-      stPresetToggle: mention("st-presets"),
-      stPresetRemove: mention("st-presets"),
+      stPresets: configPage("Plugins > SillyTavern Presets"),
+      stPresetImport: configPage("Plugins > SillyTavern Presets"),
+      stPresetToggle: configPage("Plugins > SillyTavern Presets"),
+      stPresetRemove: configPage("Plugins > SillyTavern Presets"),
       configSystemPromptSet: configPage("Behavior > General"),
       personaPromptSet: configPage("Persona > Advanced"),
       personaAttributeAdd: configPage("Persona > General"),

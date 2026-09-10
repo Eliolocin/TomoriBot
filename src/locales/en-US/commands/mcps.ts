@@ -1,13 +1,9 @@
 export default {
   mcps: {
-    description: `Add, list, enable, disable, and remove remote MCP tool servers.`,
     title: `MCP Servers`,
     count: `Registered MCPs \`({count}/{max})\``,
     empty_guild: `This server has no MCPs yet.`,
     empty_dm: `This DM workspace has no MCPs yet.`,
-    outdated_panel: `This MCP panel is outdated. Run /mcps again.`,
-    permission_denied: `You need Manage Server permission to use this MCP panel.`,
-    not_setup: `TomoriBot is not set up in this workspace yet. Run /setup first.`,
     unavailable: `MCP registrations could not be loaded. Retry to try again.`,
     stale_warning: `Saved data may be out of date because the read failed.\nWrite actions are unavailable until a fresh read succeeds.`,
     read_unavailable: `Current MCP registrations could not be loaded safely.`,
@@ -27,7 +23,6 @@ export default {
     tools_empty: `Tools: None discovered`,
     tools_unknown: `Tools: Discovery unknown`,
     endpoint_unavailable: `Unavailable`,
-    overflow_warning: `This workspace has {count} MCP registrations, but this\npanel can safely show only {shown}. Remove registrations\nyou no longer need until the collection fits.`,
     enable: `Enable`,
     disable: `Disable`,
     remove: `Remove`,

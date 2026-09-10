@@ -48,14 +48,12 @@ Successful `safe_http` results place the formatted URL and Markdown in `ToolResu
 ## Guild MCP Replacements
 
 Remote registrations are managed primarily through the ephemeral Components V2 `/config` > Plugins
-> MCP Servers collection panel. The standalone `/mcps` collection root remains functional during
-coexistence.
+> MCP Servers collection panel.
 The panel reloads durable configuration on every global interaction, addresses writes by
 `guild_mcp_id` within the current workspace, and reports configured Enabled/Disabled state rather
 than live health. Add still validates the URL and tests a temporary connection before the encrypted
 registration is saved. Disable and Remove retain database write, post-success cache invalidation,
-then pooled-connection disconnect ordering. Bare `/mcps` is the only registered MCP management
-path, and every mutation runs through the canonical operations in
+then pooled-connection disconnect ordering. Every mutation runs through the canonical operations in
 `src/utils/mcp/mcpConfigOperations.ts`.
 The panel renders the complete supported collection in deterministic order. Each row is a compact
 name-and-safe-endpoint bullet followed by a localized configured-state/type blockquote, then its

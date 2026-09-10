@@ -1,20 +1,11 @@
 import { beforeAll, describe, expect, it } from "bun:test";
-import type {
-  ButtonInteraction,
-  ChatInputCommandInteraction,
-  Client,
-  ModalSubmitInteraction,
-  StringSelectMenuInteraction,
-} from "discord.js";
+import type { ButtonInteraction, Client, ModalSubmitInteraction, StringSelectMenuInteraction } from "discord.js";
 import type { StPresetNodeRow, StPresetRow } from "@/types/db/schema";
 import { CONFIG_ST_PRESETS_PANEL_ROUTE_ADAPTER } from "@/utils/discord/configPanelCatalog";
 import {
-  buildInitialStPresetsPanel,
   createStPresetsInteractionRoute,
-  stPresetsInteractionRoute,
   type StPresetsRouteDependencies,
 } from "@/utils/discord/interactions/stPresetsRoutes";
-import { InteractionRouteRegistry } from "@/utils/discord/interactions/routeRegistry";
 import { initializeLocalizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
@@ -994,48 +985,6 @@ describe("ST Presets interaction routes", () => {
     });
 
     expect(calls).toEqual(["deferUpdate", "resolveScope", "activate:2", "resolveScope-fresh", "editReply"]);
-  });
-
-  it("dispatches through InteractionRouteRegistry and handles stale-version", async () => {
-    const registry = new InteractionRouteRegistry([stPresetsInteractionRoute]);
-
-    const validInteraction = makeButtonInteraction("st-presets:v1:retry:en-US", []);
-
-    const result = await registry.dispatchDetailed({} as Client, validInteraction);
-    expect(result).toBe("handled");
-
-    const staleInteraction = makeButtonInteraction("st-presets:v99:retry:en-US", []);
-
-    const staleResult = await registry.dispatchDetailed({} as Client, staleInteraction);
-    expect(staleResult).toBe("stale-version");
-  });
-
-  it("buildInitialStPresetsPanel gates by manager permissions in guild and allows in DMs", async () => {
-    // Non-manager in guild is denied
-    const nonManagerGuild = {
-      guildId: "guild-1",
-      user: { id: "user-1" },
-      memberPermissions: { has: () => false },
-    } as unknown as ChatInputCommandInteraction;
-    const deniedPayload = await buildInitialStPresetsPanel(nonManagerGuild, "en-US");
-    expect(JSON.stringify(deniedPayload)).toContain("Manage Server");
-
-    // Manager in guild with nonexistent state returns unavailable
-    const managerGuild = {
-      guildId: "nonexistent-guild-12345",
-      user: { id: "user-123" },
-      memberPermissions: { has: () => true },
-    } as unknown as ChatInputCommandInteraction;
-    const managerPayload = await buildInitialStPresetsPanel(managerGuild, "en-US");
-    expect(JSON.stringify(managerPayload)).toContain("Preset data could not be loaded");
-
-    // DM with nonexistent state returns unavailable without permission check failure
-    const dmInteraction = {
-      guildId: null,
-      user: { id: "nonexistent-dm-user-12345" },
-    } as unknown as ChatInputCommandInteraction;
-    const dmPayload = await buildInitialStPresetsPanel(dmInteraction, "en-US");
-    expect(JSON.stringify(dmPayload)).toContain("Preset data could not be loaded");
   });
 
   it("records panel_action telemetry on ST preset operations", async () => {

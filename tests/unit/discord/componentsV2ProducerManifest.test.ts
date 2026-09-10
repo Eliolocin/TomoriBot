@@ -137,14 +137,6 @@ export const COMPONENTS_V2_PRODUCER_MANIFEST: readonly ProducerManifestEntry[] =
     },
   },
   {
-    modulePath: "src/utils/discord/interactions/mcpsRoutes.ts",
-    reason: "Route ephemeral acknowledgement and notice messages for MCPs",
-    coverage: {
-      kind: "delivery",
-      note: "Payloads are validated at construction by validateAndFallbackPanelPayload in terminalPayload; the route exports no terminal payload builder for a fixture to drive.",
-    },
-  },
-  {
     modulePath: "src/utils/discord/interactions/memoriesRoutes.ts",
     reason: "Route ephemeral acknowledgement and notice messages for memories",
     coverage: {

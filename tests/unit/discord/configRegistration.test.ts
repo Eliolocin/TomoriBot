@@ -92,7 +92,7 @@ const ABSORBED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
 };
 
 /** Roots the cutover removed outright, rather than reducing to a retained remainder. */
-const DISSOLVED_ROOTS = ["capabilities", "speech"];
+const DISSOLVED_ROOTS = ["capabilities", "speech", "mcps", "st-presets"];
 
 /** Explicitly retained leaves, including the aggregate views the panel deliberately does not absorb. */
 const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {

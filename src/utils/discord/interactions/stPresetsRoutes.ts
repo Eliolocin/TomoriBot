@@ -10,7 +10,7 @@ import {
 } from "discord.js";
 import type { StPresetNodeRow, StPresetRow, TomoriState } from "@/types/db/schema";
 import type { PanelReceipt } from "@/types/discord/panel";
-import { getCachedTomoriState, getLastDbError } from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import {
   beginPanelInteraction,
@@ -1026,46 +1026,3 @@ export function createStPresetsInteractionRoute(
     },
   };
 }
-
-export const stPresetsInteractionRoute = createStPresetsInteractionRoute();
-
-export async function buildInitialStPresetsPanel(
-  interaction: ChatInputCommandInteraction,
-  locale: string,
-): Promise<StPresetsPanelPayloadOrTerminal> {
-  if (!isAuthorized(interaction)) {
-    return terminalPayload(locale, "general.errors.permission_denied_description") as StPresetsPanelPayloadOrTerminal;
-  }
-
-  const discordId = interaction.guildId ?? interaction.user.id;
-  const state = await getCachedTomoriState(discordId);
-  if (!state) {
-    const lastError = getLastDbError(discordId);
-    if (lastError) {
-      return buildStPresetsPanelPayload({
-        locale,
-        scope: interaction.guildId ? "guild" : "dm",
-        presets: [],
-        activePresetId: null,
-        readStatus: "unavailable",
-        page: { kind: "none" },
-      });
-    }
-    return terminalPayload(locale, "commands.st-presets.not_setup") as StPresetsPanelPayloadOrTerminal;
-  }
-
-  const data = await stPresetOperations.loadStPresetScopeData(discordId);
-  if (!data) return terminalPayload(locale, "commands.st-presets.not_setup") as StPresetsPanelPayloadOrTerminal;
-
-  return buildStPresetsPanelPayload({
-    locale,
-    scope: interaction.guildId ? "guild" : "dm",
-    presets: data.presets,
-    activePresetId: data.activePresetId,
-    activeNodeCounts: data.activeNodeCounts,
-    readStatus: data.readStatus,
-    page: resolveActiveOrNonePage(data),
-  });
-}
-
-type StPresetsPanelPayloadOrTerminal = ReturnType<typeof buildStPresetsPanelPayload> | InteractionEditReplyOptions;

@@ -608,8 +608,8 @@ Implemented examples:
 - `/config` > Engine > Notices manages visible notice embed types in one modal.
 - `/model override remove` remains a combined aggregate managing channel and persona overrides together, opening direct raw modal batches up to 50, and offering page selection above that.
 - MCP registrations are deliberately excluded from this pattern: the `/config` > Plugins > MCP
-  Servers page, also available through the functional `/mcps` root, removes one registration at a
-  time behind an explicit confirmation, so selection never becomes destructive consent.
+  Servers page removes one registration at a time behind an explicit confirmation, so selection
+  never becomes destructive consent.
 - `/config` > Models > Fallbacks & Randomizer manages the fallback chain in one modal, and each slot can be cleared directly with the built-in `None` option.
 - `/config` > Behavior > Trigger removes random triggers in one modal when the set fits; beyond 50 schedules, Remove first repaints the page into an explicit removal-range state whose selector opens each batch.
 - `/config` > Behavior > Trigger adds a random trigger for any persona page: past 24 selectable personas the Add button becomes a range select that opens the modal on the chosen page, because the modal repeats its fixed Random entry on every page and that entry spends one of Discord's 25 option slots.
@@ -631,7 +631,7 @@ These modals use a String Select with a small, fixed, mutually exclusive option 
 | `/setup`           | `setup.ts`            | `humanizer_degree`     | String Select | 4 (none/light/default/heavy)              | Same fixed humanizer degree set as above            |
 | `/personal config`       | `utils/discord/ui/personalConfigPanel.ts` | `privacy_select`       | String Select | 3 (minimal/partial/full)                  | Fixed set of 3 mutually exclusive levels            |
 | `/generate image`         | `generate/image.ts`          | `aspect_ratio_select`  | String Select | 10 (1:1, 2:3, 3:2, 3:4, 4:3, etc.)      | Fixed set of 10 aspect ratios — at the limit        |
-| `/config` > Plugins > MCP Servers Add form (also `/mcps`) | `discord/ui/mcpsPanel.ts` | `server-type_{nonce}` | Radio Group | 3 (General Purpose/Web Search/URL Fetcher) | Already migrated: required routed field with General Purpose selected by default |
+| `/config` > Plugins > MCP Servers Add form | `discord/ui/mcpsPanel.ts` | `server-type_{nonce}` | Radio Group | 3 (General Purpose/Web Search/URL Fetcher) | Already migrated: required routed field with General Purpose selected by default |
 | `/compact`           | `compact.ts`                 | `summary_type`         | String Select | 2 (conversation/roleplay)                 | Fixed binary mode selection                         |
 
 ### Strong Candidates — Checkbox / Checkbox Group (Boolean Selects)
@@ -770,7 +770,7 @@ The current discord.js builder/data surface does not model every one of these in
 Label-wrapped raw modal payloads through Discord REST and intercepts the gateway submission before
 discord.js parsing, preserving Radio Group, Checkbox Group, Checkbox, select, and file-upload values.
 Most command-local flows use `promptWithRawModal()` and its bounded collector. The persistent MCP
-Add form, reached from `/config` > Plugins > MCP Servers or the functional `/mcps` root, reuses the
-raw send and value interception without that collector: nonce-bounded `mcps:v1` modal submissions
-go through the global interaction router, and interception is installed during
-startup so an already-open supported modal remains routable after a process restart.
+Add form, reached from `/config` > Plugins > MCP Servers, reuses the raw send and value interception
+without that collector: nonce-bounded `config:v2` modal submissions go through the global interaction
+router, and interception is installed during startup so an already-open supported modal remains
+routable after a process restart.

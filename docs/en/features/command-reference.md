@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **41**. Runnable slash commands: **78**.
+Top-level command groups: **39**. Runnable slash commands: **76**.
 
 ## `/comment`
 
@@ -133,14 +133,6 @@ Link Discord channels to Matrix rooms for bidirectional relay.
 |---|---|
 | `/matrix link` | Link a Discord channel to a Matrix room for bidirectional relay |
 | `/matrix unlink` | Remove the Matrix bridge link from a Discord channel |
-
-## `/mcps`
-
-The primary management page is `/config` > Plugins > MCP Servers. The `/mcps` root remains functional during coexistence for adding, listing, enabling, disabling, and removing remote MCP tool servers.
-
-| Command | Summary |
-|---|---|
-| `/mcps` | Add, list, enable, disable, and remove remote MCP tool servers. |
 
 ## `/memories`
 
@@ -323,14 +315,6 @@ Start the initial setup process. Configure AI provider and personality.
 | Command | Summary |
 |---|---|
 | `/setup` | Start the initial setup process. Configure AI provider and personality. |
-
-## `/st-presets`
-
-The primary management page is `/config` > Plugins > SillyTavern Presets. The `/st-presets` root remains functional during coexistence for managing and switching SillyTavern chat completion presets.
-
-| Command | Summary |
-|---|---|
-| `/st-presets` | Manage and switch SillyTavern chat completion presets. |
 
 ## `/stats`
 

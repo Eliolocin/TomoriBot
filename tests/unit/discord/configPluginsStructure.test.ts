@@ -67,11 +67,13 @@ describe("W6-18 Config Plugins structure", () => {
     ).toEqual(pluginPages);
   });
 
-  it("keeps both absorbed roots registered throughout the coexistence slices", async () => {
-    const { registrationData } = await loadCommandData();
+  it("dissolves both absorbed roots once Plugins owns their pages", async () => {
+    const { registrationData, executionMap } = await loadCommandData();
     const names = registrationData.map((command) => command.name);
 
-    expect(names).toContain("mcps");
-    expect(names).toContain("st-presets");
+    expect(names).not.toContain("mcps");
+    expect(names).not.toContain("st-presets");
+    expect(executionMap.has("mcps")).toBe(false);
+    expect(executionMap.has("st-presets")).toBe(false);
   });
 });

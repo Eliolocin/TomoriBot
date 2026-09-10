@@ -40,7 +40,7 @@ mapping, see the [card-support architecture](/architecture/integrations/sillytav
 
 A SillyTavern Prompt Manager preset controls the **layout** of the prompt. Use `/config` > Plugins
 > SillyTavern Presets to import presets, inspect enabled nodes, switch between presets, or return
-to the normal layout. The standalone `/st-presets` root remains functional during coexistence.
+to the normal layout.
 
 ### What a Preset Controls
 
@@ -78,7 +78,7 @@ your own with `/config` > Engine > General, it's still sent.
 Common surprises when a preset seems ignored:
 
 - Imported ≠ sent: nodes disabled in `prompt_order` stay off until you enable them with
-  `/config` > Plugins > SillyTavern Presets (or `/st-presets`). Comment-only and empty nodes are never sent; unknown markers are
+  `/config` > Plugins > SillyTavern Presets. Comment-only and empty nodes are never sent; unknown markers are
   skipped.
 - Order is literal — placing `chatHistory` before `dialogueExamples` sends live chat first.
 - Post-history/depth injections merge into existing chat-history entries rather than becoming

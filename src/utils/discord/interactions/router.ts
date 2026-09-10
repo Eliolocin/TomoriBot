@@ -2,7 +2,6 @@ import { MessageFlags, type Client, type Interaction } from "discord.js";
 import { conditioningInteractionRoute } from "@/utils/discord/interactions/conditioningRoutes";
 import { configInteractionRoute } from "@/utils/discord/interactions/configRoutes";
 import { helpInteractionRoute } from "@/utils/discord/interactions/helpRoutes";
-import { mcpsInteractionRoute } from "@/utils/discord/interactions/mcpsRoutes";
 import { memoriesInteractionRoute } from "@/utils/discord/interactions/memoriesRoutes";
 import { moderationInteractionRoute } from "@/utils/discord/interactions/moderationRoutes";
 import { personalConfigInteractionRoute } from "@/utils/discord/interactions/personalConfigRoutes";
@@ -11,7 +10,6 @@ import {
   personalProvidersInteractionRoute,
   providersInteractionRoute,
 } from "@/utils/discord/interactions/providersRoutes";
-import { stPresetsInteractionRoute } from "@/utils/discord/interactions/stPresetsRoutes";
 import { statusInteractionRoute } from "@/utils/discord/interactions/statusRoutes";
 import { statsInteractionRoute } from "@/utils/discord/interactions/statsRoutes";
 import { modelOverrideInteractionRoute } from "@/utils/discord/interactions/modelOverrideRoutes";
@@ -23,7 +21,6 @@ const registry = new InteractionRouteRegistry([
   conditioningInteractionRoute,
   configInteractionRoute,
   helpInteractionRoute,
-  mcpsInteractionRoute,
   memoriesInteractionRoute,
   modelOverrideInteractionRoute,
   moderationInteractionRoute,
@@ -31,10 +28,15 @@ const registry = new InteractionRouteRegistry([
   personalMemoriesInteractionRoute,
   personalProvidersInteractionRoute,
   providersInteractionRoute,
-  stPresetsInteractionRoute,
   statusInteractionRoute,
   statsInteractionRoute,
 ]);
+
+// An unregistered namespace dispatches as unmatched, so rendered controls would otherwise fail silently.
+const RETIRED_PANEL_COMMANDS: Readonly<Record<string, string>> = {
+  mcps: "/config",
+  "st-presets": "/config",
+};
 
 export function isGlobalRoutableInteraction(interaction: Interaction): interaction is GlobalRoutableInteraction {
   return interaction.isMessageComponent() || interaction.isModalSubmit();
@@ -46,27 +48,35 @@ export async function dispatchGlobalInteraction(
 ): Promise<boolean> {
   try {
     const result = await registry.dispatchDetailed(client, interaction);
-    if (result === "unmatched") return false;
+    if (result === "unmatched") {
+      const namespace = interaction.customId.split(":", 1)[0] ?? "";
+      const command = RETIRED_PANEL_COMMANDS[namespace];
+      if (!command) return false;
+
+      await interaction.reply({
+        content: localizer(interaction.locale ?? interaction.guildLocale ?? "en-US", "general.errors.outdated_panel", {
+          command,
+        }),
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
     if (result === "stale-version") {
       const namespace = interaction.customId.split(":", 1)[0] ?? "panel";
       const key =
         namespace === "config"
           ? "commands.config.panel.outdated_panel"
-          : namespace === "mcps"
-            ? "commands.mcps.outdated_panel"
-            : namespace === "memories"
-              ? "commands.memories.outdated_panel"
-              : namespace === "moderation"
-                ? "commands.moderation.outdated_panel"
-                : namespace === "st-presets"
-                  ? "commands.st-presets.outdated_panel"
-                  : namespace === "providers" || namespace === "personal-providers"
-                    ? "commands.providers.outdated_panel"
-                    : namespace === "personal-memories"
-                      ? "commands.personal.memories.outdated_panel"
-                      : namespace === "personal-config"
-                        ? "commands.personal.config.outdated_panel"
-                        : "general.errors.outdated_panel";
+          : namespace === "memories"
+            ? "commands.memories.outdated_panel"
+            : namespace === "moderation"
+              ? "commands.moderation.outdated_panel"
+              : namespace === "providers" || namespace === "personal-providers"
+                ? "commands.providers.outdated_panel"
+                : namespace === "personal-memories"
+                  ? "commands.personal.memories.outdated_panel"
+                  : namespace === "personal-config"
+                    ? "commands.personal.config.outdated_panel"
+                    : "general.errors.outdated_panel";
       const command =
         namespace === "personal-providers"
           ? "/personal providers"
