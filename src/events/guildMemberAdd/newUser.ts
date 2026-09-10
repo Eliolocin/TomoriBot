@@ -23,6 +23,7 @@ import {
   ZAI_GENERAL_CHAT_COMPLETIONS_URL,
 } from "@/providers/zai/zaiShared";
 import { resolveWelcomeDelayMs, waitForWelcomeDelay } from "@/events/guildMemberAdd/helpers/welcomeDelay";
+import { fetchCurrentWelcomeMember } from "@/events/guildMemberAdd/helpers/welcomeMembership";
 
 /**
  * Provider-to-chat-completions-URL mapping for vision model routing.
@@ -231,8 +232,7 @@ async function triggerWelcomeMessage(client: Client, member: GuildMember): Promi
     log.info(`Waiting ${welcomeDelayMs}ms before welcoming ${member.user.tag}`);
     await waitForWelcomeDelay(welcomeDelayMs);
 
-    const currentMember = member.guild.members.cache.get(member.id);
-    if (!currentMember || currentMember.joinedTimestamp !== member.joinedTimestamp) {
+    if (!(await fetchCurrentWelcomeMember(member))) {
       log.info(`Skipping welcome for ${member.user.tag}: original membership ended during the onboarding grace period`);
       return;
     }
@@ -307,6 +307,12 @@ async function triggerWelcomeMessage(client: Client, member: GuildMember): Promi
     avatarDescription,
   });
   const forcedMentions = await buildForcedMentionsForUser(member.id, client, member.guild);
+
+  if (!(await fetchCurrentWelcomeMember(member))) {
+    log.info(`Skipping welcome for ${member.user.tag}: original membership ended before welcome generation`);
+    return;
+  }
+
   const welcomeStartTime = Date.now();
 
   suppressNextSelfReply(welcomeChannel.id);
