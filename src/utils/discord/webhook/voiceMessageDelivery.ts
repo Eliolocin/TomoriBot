@@ -8,7 +8,14 @@
  * erroring, so none of it may be simplified away.
  */
 
-import { AttachmentBuilder, Routes, type TextChannel, type BaseGuildTextChannel, type Webhook } from "discord.js";
+import {
+  AttachmentBuilder,
+  Routes,
+  type AnyThreadChannel,
+  type BaseGuildTextChannel,
+  type TextChannel,
+  type Webhook,
+} from "discord.js";
 import type { VoiceMessageMetadata } from "@/utils/audio/voiceMessageMetadata";
 import { log } from "@/utils/misc/logger";
 import { runWithWebhookIdentity, sendWebhookMessageWithIdentity } from "@/utils/discord/webhook/personaDispatch";
@@ -29,10 +36,11 @@ const DISCORD_API_BASE = "https://discord.com/api/v10";
  */
 export interface VoiceDeliveryTarget {
   /**
-   * Any channel the delivery paths can send to. Kept broad because the tool's own context types
-   * its channel more loosely than Discord's guild-text-channel union.
+   * Where the bot-identity paths post. A thread is a valid target: both of them address the
+   * channel by id, which Discord routes to the thread itself, so this must be the channel the
+   * message belongs in rather than a thread's webhook-hosting parent.
    */
-  channel: TextChannel | BaseGuildTextChannel;
+  channel: TextChannel | BaseGuildTextChannel | AnyThreadChannel;
   webhook?: Webhook | null;
   threadId?: string;
   personaUsername?: string;

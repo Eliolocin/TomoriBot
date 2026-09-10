@@ -590,38 +590,48 @@ export async function execute(
     return;
   }
 
-  // Persona identity is the point of this command, so a webhook failure is an error rather than a
-  // silent fall back to posting as the bot.
-  const webhookTargetChannel = resolveGuildWebhookTargetChannel(channel);
-  const webhookThreadId = resolveGuildWebhookThreadId(channel);
-  if (!webhookTargetChannel) {
-    await replyInfoEmbed(modalInteraction, locale, {
-      titleKey: "commands.generate.voice-message.webhook_error_title",
-      descriptionKey: "commands.generate.voice-message.webhook_error_description",
-      descriptionVars: { error: "channel cannot host a webhook" },
-      color: ColorCode.ERROR,
-    });
-    return;
-  }
+  // The main persona is the bot, so it posts under the bot's own name and avatar and needs no
+  // webhook at all. Only an alter needs an identity override, which is the same main-versus-alter
+  // split `resolveResponseTarget` makes on the chat path. Resolving a webhook here anyway would
+  // demand Manage Webhooks for a message that never uses one.
+  let target: VoiceDeliveryTarget = { channel };
 
-  const { webhook, errorReason } = await getOrCreateWebhook(webhookTargetChannel);
-  if (!webhook) {
-    await replyInfoEmbed(modalInteraction, locale, {
-      titleKey: "commands.generate.voice-message.webhook_error_title",
-      descriptionKey: "commands.generate.voice-message.webhook_error_description",
-      descriptionVars: { error: errorReason || "Failed to create webhook" },
-      color: ColorCode.ERROR,
-    });
-    return;
-  }
+  if (persona.is_alter) {
+    // Persona identity is the point of this command, so a webhook failure is an error rather than
+    // a silent fall back to posting as the bot under the wrong name.
+    const webhookTargetChannel = resolveGuildWebhookTargetChannel(channel);
+    if (!webhookTargetChannel) {
+      await replyInfoEmbed(modalInteraction, locale, {
+        titleKey: "commands.generate.voice-message.webhook_error_title",
+        descriptionKey: "commands.generate.voice-message.webhook_error_description",
+        descriptionVars: { error: "channel cannot host a webhook" },
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
 
-  const target: VoiceDeliveryTarget = {
-    channel: webhookTargetChannel,
-    webhook,
-    threadId: webhookThreadId,
-    personaUsername: persona.persona_nickname,
-    personaAvatarUrl: (await resolvePersonaWebhookIdentity(persona, interaction.guild)).avatarUrl ?? null,
-  };
+    const { webhook, errorReason } = await getOrCreateWebhook(webhookTargetChannel);
+    if (!webhook) {
+      await replyInfoEmbed(modalInteraction, locale, {
+        titleKey: "commands.generate.voice-message.webhook_error_title",
+        descriptionKey: "commands.generate.voice-message.webhook_error_description",
+        descriptionVars: { error: errorReason || "Failed to create webhook" },
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const identity = await resolvePersonaWebhookIdentity(persona, interaction.guild);
+    target = {
+      channel,
+      webhook,
+      threadId: resolveGuildWebhookThreadId(channel),
+      personaUsername: identity.username ?? persona.persona_nickname,
+      // A locally stored avatar resolves to a data URI with no URL form, so reading `avatarUrl`
+      // alone drops it and the webhook silently posts with the bot's default picture.
+      personaAvatarUrl: identity.avatarDataUri ?? identity.avatarUrl ?? null,
+    };
+  }
 
   log.info(
     `[/generate voice-message] Synthesizing | server=${serverDiscId} persona=${persona.persona_id} source=${selectedSource.id} backend=${selectedSource.shape}`,

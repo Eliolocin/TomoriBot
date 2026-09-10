@@ -499,7 +499,7 @@ export function buildProviderModelModal(
         type: 4,
         custom_id: buildProviderModelModalFieldId("num-ctx", nonce),
         style: TextInputStyle.Short,
-        placeholder: "8192",
+        placeholder: "16384",
         value: defaults?.text?.numCtx ? String(defaults.text.numCtx) : undefined,
         max_length: 8,
         required: false,

@@ -47,6 +47,29 @@ The tool and `/generate voice-message` converge on the same three modules, so a 
 
 `voiceMessageDelivery.ts` is deliberately not a generic attachment sender. Discord silently degrades rather than erroring on each of its quirks: `flags: 8192` with `waveform` and `duration_secs` has to be sent as raw multipart because `MessagePayload` drops unknown attachment fields, the bot REST path needs `passThroughBody` so the REST manager does not JSON-serialize the `FormData`, the webhook URL needs `wait=true` to return a message ID instead of a 204, and the content type has to be stripped to its bare MIME form because Discord rejects waveform metadata when it carries parameters.
 
+### Delivery Identity
+
+Who a voice message appears to be from follows the same main-versus-alter split `resolveResponseTarget`
+makes on the chat path:
+
+| Persona | Transport | Identity |
+|---|---|---|
+| Main | Bot REST | The bot's own name and avatar |
+| Alter | Persona webhook | `resolvePersonaWebhookIdentity`, with `avatarDataUri` preferred over `avatarUrl` |
+
+The main persona is the bot, so it needs no webhook and the command never asks for Manage Webhooks
+on its behalf. For an alter, a webhook failure is surfaced as an error rather than posting under
+the bot's identity, because the persona identity is the point of the request.
+
+Reading `avatarUrl` alone is a live trap: a locally stored avatar (the `presets/` sprite pipeline,
+and any alter outside production) resolves to `avatarDataUri` with no URL form, so an
+`avatarUrl`-only read leaves the webhook posting with the bot's default picture and no error
+anywhere.
+
+The delivery target's `channel` is the channel the message belongs in, including a thread, never a
+thread's webhook-hosting parent: the bot REST paths address the channel by id, so a parent here
+posts the audio in the wrong place.
+
 ## Voice Source Resolution
 
 Any invocation can see up to four candidate sources, gated by what the active endpoint accepts:
