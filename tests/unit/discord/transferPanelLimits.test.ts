@@ -16,10 +16,12 @@ import {
   buildMemoryMappingPayload,
   buildMemoryReplaceConfirmationPayload,
   buildMemoryTransferPreviewPayload,
+  buildTransferNoticePayload,
   type MemoryTransferDestination,
 } from "@/utils/discord/ui/transferPanel";
 import { validateComponentsV2MessageLimits, validateRawModalLimits } from "@/utils/discord/ui/componentsV2Limits";
-import { initializeLocalizer } from "@/utils/text/localizer";
+import { ColorCode } from "@/utils/misc/logger";
+import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
 beforeAll(async () => initializeLocalizer());
 
@@ -244,6 +246,107 @@ describe("transfer panel Components V2 limits", () => {
         }
       }
     }
+  });
+
+  it("renders both config previews as one compact block of quoted rows", () => {
+    // Exact shape per kind: a bold lead line, then each heading immediately followed by its own quote rows. A blank
+    // line between a heading and its rows reads as a separate panel, and the marker applies per line. Both kinds
+    // share one builder, so each gets its own pinned block rather than one standing in for the other.
+    const expectedBlocks: Record<keyof typeof SECTION_NAMES, string[]> = {
+      workspace_config: [
+        "### Review Configuration Import",
+        "**Detected data is ready to import as a workspace configuration.**",
+        "Detected sections",
+        "> • Chat",
+        "> • Triggers",
+        "> • Capabilities",
+        "> • Memory",
+        "> • Media",
+        "> • Speech",
+        "> • Access",
+        "Excluded or nonportable data",
+        "> No excluded data was found.",
+      ],
+      personal_config: [
+        "### Review Configuration Import",
+        "**Detected data is ready to import as a personal configuration.**",
+        "Detected sections",
+        "> • Profile",
+        "> • Privacy",
+        "> • Appearance",
+        "> • Response Modes",
+        "Excluded or nonportable data",
+        "> No excluded data was found.",
+      ],
+    };
+
+    for (const kind of ["workspace_config", "personal_config"] as const) {
+      const payload = buildConfigTransferPreviewPayload({
+        locale: "en-US",
+        kind,
+        detectedSections: SECTION_NAMES[kind],
+        droppedFields: [],
+        nonce: `nonce-format-${kind}`,
+      });
+      const [content] = textDisplays(payload);
+      if (content === undefined) throw new Error(`Preview payload for ${kind} carries no TextDisplay`);
+
+      expect({ kind, content }).toEqual({ kind, content: expectedBlocks[kind].join("\n") });
+      expect({ kind, blankLines: content.split("\n").filter((line) => line.length === 0).length }).toEqual({
+        kind,
+        blankLines: 0,
+      });
+
+      const droppedContent = textDisplays(
+        buildConfigTransferPreviewPayload({
+          locale: "en-US",
+          kind,
+          detectedSections: SECTION_NAMES[kind],
+          droppedFields: ["nai_preset_name", "nai_char_ref_url"],
+          nonce: `nonce-format-dropped-${kind}`,
+        }),
+      )[0];
+      if (droppedContent === undefined) throw new Error(`Preview payload for ${kind} carries no TextDisplay`);
+      const droppedLines = droppedContent.split("\n");
+      for (const field of ["nai_preset_name", "nai_char_ref_url"] as const) {
+        expect({
+          kind,
+          field,
+          quoted: droppedLines.includes(`> ${field}: ${V2_CONFIG_EXCLUSIONS[field].reason}`),
+        }).toEqual({ kind, field, quoted: true });
+      }
+    }
+  });
+
+  it("renders a terminal notice as a panel with no leftover controls", () => {
+    const cancelled = buildTransferNoticePayload({
+      locale: "en-US",
+      titleKey: "commands.transfer.cancelled_title",
+      descriptionKey: "commands.transfer.cancelled_description",
+      color: ColorCode.INFO,
+    });
+
+    expect(validateComponentsV2MessageLimits(cancelled).valid).toBe(true);
+    expect(textDisplays(cancelled).join("\n")).toBe(
+      [
+        `### ${localizer("en-US", "commands.transfer.cancelled_title")}`,
+        localizer("en-US", "commands.transfer.cancelled_description"),
+      ].join("\n"),
+    );
+    // The point of replacing the panel is that no stale button survives it.
+    expect(buttonIds(cancelled)).toEqual([]);
+
+    const success = buildTransferNoticePayload({
+      locale: "en-US",
+      titleKey: "commands.transfer.config_import_success_title",
+      descriptionKey: "commands.transfer.config_import_success_description",
+      descriptionVars: { sections: "Triggers", fields: 4 },
+      color: ColorCode.SUCCESS,
+    });
+    const successText = textDisplays(success).join("\n");
+    expect(successText).toContain("Sections applied: Triggers");
+    expect(successText).toContain("Configuration fields updated: 4");
+    expect(buttonIds(success)).toEqual([]);
   });
 
   it("uses the intended button styles and section values", () => {

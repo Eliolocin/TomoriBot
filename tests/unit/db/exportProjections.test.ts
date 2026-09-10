@@ -212,6 +212,30 @@ describe("v2 config export projections", () => {
     expect(queryLog.join("\n")).toContain("FROM stm_categories");
   });
 
+  it("tolerates jsonb columns that hold a JSON string instead of the value", async () => {
+    // Both columns really are string-typed in deployed data: an older writer handed the driver a value it encoded a
+    // second time, so jsonb_typeof is 'string' and the driver returns that string. The export must still produce the
+    // record and array shapes its own schema promises, because the bot reads those same rows without complaint.
+    const originalTriggers = workspaceRow.deliberate_tool_triggers;
+    const originalBiases = workspaceRow.llm_logit_biases;
+    workspaceRow.deliberate_tool_triggers = JSON.stringify(originalTriggers);
+    workspaceRow.llm_logit_biases = JSON.stringify(originalBiases);
+
+    try {
+      const result = await freshRepository().exportWorkspaceConfig("workspace-disc-id");
+
+      expect(result.success).toBe(true);
+      if (!result.success || !result.data || result.data.type !== "workspace_config") return;
+      expect(result.data.data.triggers?.deliberate_tool_triggers).toEqual({ memory: ["remember this"] });
+      expect(result.data.data.chat?.llm_logit_biases).toEqual([
+        { id: "bias-1", kind: "text", text: "hello", value: 2, tokenizations: [] },
+      ]);
+    } finally {
+      workspaceRow.deliberate_tool_triggers = originalTriggers;
+      workspaceRow.llm_logit_biases = originalBiases;
+    }
+  });
+
   it("round-trips a complete workspace projection without schema changes", async () => {
     const result = await freshRepository().exportWorkspaceConfig("workspace-disc-id");
 

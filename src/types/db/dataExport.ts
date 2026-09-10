@@ -147,6 +147,22 @@ export function getPersonalExportSchema() {
 export type PersonalExport = z.infer<ReturnType<typeof getPersonalExportSchema>>;
 
 /**
+ * A jsonb column can hold a JSON string rather than the value it describes, because an older writer handed the
+ * driver a value it encoded a second time. Both DB row schemas in `schema.ts` normalize their jsonb fields for that
+ * reason, so the portable schemas must too: a workspace whose stored value is string-typed otherwise fails its own
+ * export with "expected record, received string" while the bot reads that same row without complaint.
+ */
+function normalizeJsonColumn(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    // Kept as the raw string so the field's own schema reports the problem instead of the preprocess throwing.
+    return value;
+  }
+}
+
+/**
  * Portable server_model_configs export fields.
  * Excludes model-selection FKs and encrypted credential mirrors.
  */
@@ -167,10 +183,7 @@ export const serverChatConfigExportSchema = z.object({
   llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0),
   llm_min_p: z.number().min(0.0).max(1.0).default(0.05),
   llm_max_output_tokens: z.number().int().min(1).nullable().optional(),
-  llm_logit_biases: z.preprocess(
-    (val) => (typeof val === "string" ? JSON.parse(val) : val),
-    z.array(logitBiasEntrySchema).default([]),
-  ),
+  llm_logit_biases: z.preprocess(normalizeJsonColumn, z.array(logitBiasEntrySchema).default([])),
   llm_stop_strings: z.array(z.string()).default([]),
   llm_stop_speaker_pattern_enabled: z.boolean().default(false),
   humanizer_degree: z.number().int().min(0).max(3),
@@ -254,7 +267,9 @@ export const serverTriggerBehaviorConfigExportSchema = z.object({
   deliberate_trigger_mode: z.boolean().optional(),
   deliberate_tool_mode: z.boolean().optional(), // Added May 2026
   deliberate_tool_context_turns: z.number().int().min(0).max(10).nullable().optional(), // Added May 2026
-  deliberate_tool_triggers: z.record(z.string(), z.array(deliberateToolTriggerEntrySchema)).optional(), // Added May 2026 - keyed by tool target, values are literal strings or {type, value} entries (regex). Shared schema with DB row to prevent drift.
+  deliberate_tool_triggers: z
+    .preprocess(normalizeJsonColumn, z.record(z.string(), z.array(deliberateToolTriggerEntrySchema)))
+    .optional(), // Added May 2026 - keyed by tool target, values are literal strings or {type, value} entries (regex). Shared schema with DB row to prevent drift. The optional sits outside the preprocess because a pipe rejects an absent key before its transform runs.
   cooldown_type: z.number().int().min(0).max(4).optional(),
   cooldown_length: z.number().int().min(1).max(86400).optional(),
 });

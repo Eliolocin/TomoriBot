@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **39**. Runnable slash commands: **76**.
+Top-level command groups: **41**. Runnable slash commands: **80**.
 
 ## `/comment`
 
@@ -62,6 +62,15 @@ Support TomoriBot's development and hosting costs.
 |---|---|
 | `/donate kofi` | Support TomoriBot development through Ko-fi donations. |
 
+## `/export`
+
+Export your configuration as a portable file.
+
+| Command | Summary |
+|---|---|
+| `/export config` | Export this workspace configuration as a portable file. |
+| `/export personal config` | Export your personal configuration as a portable file. |
+
 ## `/expressions`
 
 Teach TomoriBot when to use this server's custom emojis and stickers.
@@ -99,6 +108,15 @@ Impersonate personas, users, or inject system prompts.
 | `/impersonate persona` | Send a message as one of this server's personas. |
 | `/impersonate system` | Inject a system message into the conversation context. |
 | `/impersonate user` | Have the bot write and send a message as if it were that member. |
+
+## `/import`
+
+Import configuration from a portable file.
+
+| Command | Summary |
+|---|---|
+| `/import config` | Import a workspace configuration file. |
+| `/import personal config` | Import a personal configuration file. |
 
 ## `/kill`
 

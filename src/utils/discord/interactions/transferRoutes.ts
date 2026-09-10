@@ -5,8 +5,16 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from "discord.js";
-import type { MemoryBucket } from "@/types/db/dataExport";
+import {
+  personalConfigExportDataSchema,
+  workspaceConfigExportDataSchema,
+  type ImportResult,
+  type MemoryBucket,
+} from "@/types/db/dataExport";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
+import { importRepository } from "@/utils/db/repositories";
+import type { PersonalConfigSection, WorkspaceConfigSection } from "@/utils/db/repositories/ImportRepository";
+import { isWorkspaceTransferAuthorized } from "@/utils/discord/interactions/transferAuthorization";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import {
   consumeTransferSnapshot,
@@ -30,6 +38,8 @@ import {
   buildMemoryMappingPayload,
   buildConfigSectionCheckboxGroupId,
   buildConfigSectionChecklistModal,
+  buildTransferNoticePayload,
+  formatConfigSectionLabels,
   getPresentedConfigSections,
   type ConfigTransferKind,
   type MemoryTransferDestination,
@@ -68,6 +78,48 @@ export interface TransferRouteDependencies {
   ): Promise<void>;
   takeConfigSectionValues(interactionId: string, fieldId: string): string[] | undefined;
   getMemoryDestinations(guildId: string): Promise<MemoryTransferDestination[]>;
+  applyConfigImport(
+    snapshot: TransferSnapshotRecord,
+    selectedSections: readonly string[],
+    destinationKey: string,
+  ): Promise<ImportResult>;
+}
+
+const WORKSPACE_CONFIG_SECTION_NAMES = new Set(Object.keys(workspaceConfigExportDataSchema.shape));
+const PERSONAL_CONFIG_SECTION_NAMES = new Set(Object.keys(personalConfigExportDataSchema.shape));
+
+// The submitted values arrive from a client-rendered modal, so every section reaching the repository is narrowed
+// against the schema that owns it rather than trusted for being present in the snapshot.
+function isWorkspaceConfigSection(section: string): section is WorkspaceConfigSection {
+  return WORKSPACE_CONFIG_SECTION_NAMES.has(section);
+}
+
+function isPersonalConfigSection(section: string): section is PersonalConfigSection {
+  return PERSONAL_CONFIG_SECTION_NAMES.has(section);
+}
+
+async function defaultApplyConfigImport(
+  snapshot: TransferSnapshotRecord,
+  selectedSections: readonly string[],
+  destinationKey: string,
+): Promise<ImportResult> {
+  if (snapshot.kind === "workspace_config") {
+    const parsed = workspaceConfigExportDataSchema.safeParse(snapshot.exportResult.payload);
+    if (!parsed.success) return { success: false, error: "commands.data.import.error_invalid_config" };
+    return importRepository.importWorkspaceConfig(
+      destinationKey,
+      parsed.data,
+      selectedSections.filter(isWorkspaceConfigSection),
+    );
+  }
+
+  const parsed = personalConfigExportDataSchema.safeParse(snapshot.exportResult.payload);
+  if (!parsed.success) return { success: false, error: "commands.data.import.error_invalid_config" };
+  return importRepository.importPersonalConfig(
+    destinationKey,
+    parsed.data,
+    selectedSections.filter(isPersonalConfigSection),
+  );
 }
 
 export type ConfigSectionSelectionResult =
@@ -147,16 +199,6 @@ async function defaultGetMemoryDestinations(guildId: string): Promise<MemoryTran
   return destinations;
 }
 
-function isAuthorized(interaction: GlobalRoutableInteraction): boolean {
-  // A DM-backed workspace is keyed on the invoking account, so reaching the DM at all is the ownership proof.
-  // This must discriminate on guildId, not guild: guild is a cache lookup that returns null for an uncached
-  // guild, while findSnapshot keys its workspace candidate on guildId. Reading guild here would authorize a
-  // real guild's snapshot through the DM branch on a cache miss. memberPermissions is payload-derived, so it
-  // stays available exactly when guildId does.
-  if (!interaction.guildId) return true;
-  return interaction.memberPermissions?.has("ManageGuild") ?? false;
-}
-
 function replyInteraction(interaction: GlobalRoutableInteraction): ButtonInteraction | ModalSubmitInteraction {
   // replyInfoEmbed's signature predates select-menu callers. Its body uses only
   // members shared by select menus: guild, user, deferred, replied, id, webhook, and reply methods.
@@ -169,10 +211,12 @@ async function replyTransferInfo(
   titleKey: string,
   descriptionKey: string,
   color: ColorCode,
+  descriptionVars?: Record<string, string | number>,
 ): Promise<void> {
   await replyInfoEmbed(replyInteraction(interaction), locale, {
     titleKey,
     descriptionKey,
+    descriptionVars,
     color,
     flags: MessageFlags.Ephemeral,
   });
@@ -410,6 +454,7 @@ export function createTransferInteractionRoute(
       showRoutedRawModal(interaction, buildConfigSectionChecklistModal({ locale, kind, detectedSections, nonce })),
     takeConfigSectionValues: takeRawModalCheckboxGroupValues,
     getMemoryDestinations: defaultGetMemoryDestinations,
+    applyConfigImport: defaultApplyConfigImport,
     ...overrides,
   };
 
@@ -447,7 +492,7 @@ export function createTransferInteractionRoute(
       }
 
       const { snapshot, candidate } = snapshotResult;
-      if (snapshot.ownership === "workspace" && !isAuthorized(interaction)) {
+      if (snapshot.ownership === "workspace" && !isWorkspaceTransferAuthorized(interaction)) {
         await replyTransferInfo(
           interaction,
           route.locale,
@@ -824,12 +869,16 @@ export function createTransferInteractionRoute(
           return;
         }
 
-        await replyTransferInfo(
+        // A terminal outcome replaces the panel it was clicked on, so no stale controls are left behind.
+        await deliverGuardedPanel(
           interaction,
-          route.locale,
-          "commands.transfer.cancelled_title",
-          "commands.transfer.cancelled_description",
-          ColorCode.INFO,
+          buildTransferNoticePayload({
+            locale: route.locale,
+            titleKey: "commands.transfer.cancelled_title",
+            descriptionKey: "commands.transfer.cancelled_description",
+            color: ColorCode.INFO,
+          }),
+          { method: "update", locale: route.locale },
         );
         return;
       }
@@ -918,12 +967,48 @@ export function createTransferInteractionRoute(
           return;
         }
 
-        await replyTransferInfo(
+        // Acknowledge as an update before the transaction, so the receipt can replace the checklist's parent panel.
+        // A plain defer would open a new ephemeral message and leave the panel, and its buttons, on screen.
+        await interaction.deferUpdate();
+
+        const importResult = await dependencies.applyConfigImport(
+          snapshot,
+          selection.sections,
+          candidate.destinationKey,
+        );
+        if (!importResult.success) {
+          // The import is one transaction, so a failed result left no partially applied section behind. The snapshot
+          // is deliberately left unconsumed: a failed apply is not a reason to destroy the pending import.
+          await deliverGuardedPanel(
+            interaction,
+            buildTransferNoticePayload({
+              locale: route.locale,
+              titleKey: "commands.transfer.config_import_failed_title",
+              descriptionKey: importResult.error ?? "commands.transfer.config_import_failed_description",
+              color: ColorCode.ERROR,
+            }),
+            { locale: route.locale },
+          );
+          return;
+        }
+
+        // The write is committed, so the snapshot is consumed whether or not this read still finds it. Consuming
+        // before the write would destroy a pending import that then failed to apply.
+        dependencies.consumeSnapshot(route.nonce, interaction.user.id, candidate.ownership, candidate.destinationKey);
+
+        await deliverGuardedPanel(
           interaction,
-          route.locale,
-          "commands.transfer.unavailable_title",
-          "commands.transfer.unavailable_description",
-          ColorCode.INFO,
+          buildTransferNoticePayload({
+            locale: route.locale,
+            titleKey: "commands.transfer.config_import_success_title",
+            descriptionKey: "commands.transfer.config_import_success_description",
+            descriptionVars: {
+              sections: formatConfigSectionLabels(route.locale, selection.sections),
+              fields: importResult.itemsImported?.configFieldsCount ?? 0,
+            },
+            color: ColorCode.SUCCESS,
+          }),
+          { locale: route.locale },
         );
         return;
       }

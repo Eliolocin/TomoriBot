@@ -11,6 +11,13 @@ export default {
     config_no_importable_sections_title: "No Importable Sections",
     config_no_importable_sections_description:
       "This file contained no importable sections for this destination. Nothing was changed.",
+    config_wrong_file_title: "Wrong Configuration File",
+    config_wrong_file_description:
+      "That file is not a configuration export this command can import. Nothing was changed.",
+    config_import_success_title: "Configuration Imported",
+    config_import_success_description: "Sections applied: {sections}\nConfiguration fields updated: {fields}",
+    config_import_failed_title: "Import Failed",
+    config_import_failed_description: "The configuration was not applied.",
     config_preview_title: "Review Configuration Import",
     config_preview_description: "Detected data is ready to import as a {ownership}.",
     workspace_config_label: "workspace configuration",

@@ -11,9 +11,9 @@ import {
   TRANSFER_ROUTE_NAMESPACE,
   TRANSFER_ROUTE_VERSION,
 } from "@/utils/discord/transferCatalog";
-import { validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
+import { buildNoticeContainer, validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
-import { buildPaginationRow, buildPanelContainer } from "@/utils/discord/ui/panel";
+import { buildPaginationRow, buildPanelContainer, withLinePrefix } from "@/utils/discord/ui/panel";
 import { neutralizeFenceRuns, truncateDiscordText } from "@/utils/text/discordTextLimits";
 import { localizer } from "@/utils/text/localizer";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
@@ -117,6 +117,22 @@ function sectionDescription(locale: string, section: ConfigSectionName): string 
   return safeSelectOptionText(localizer(locale, SECTION_LOCALE_KEYS[section].description), 100);
 }
 
+const SECTION_LOCALE_KEYS_BY_NAME = new Map(Object.entries(SECTION_LOCALE_KEYS));
+
+/**
+ * The localized names of config sections, for an import receipt. Bounded by construction: every label is truncated
+ * to a select option's 100 characters and the permitted vocabulary is eleven sections. An unrecognized name falls
+ * back to its raw text, which keeps a receipt honest rather than empty if the vocabulary ever widens.
+ */
+export function formatConfigSectionLabels(locale: string, sections: readonly string[]): string {
+  return sections
+    .map((section) => {
+      const keys = SECTION_LOCALE_KEYS_BY_NAME.get(section);
+      return keys ? safeSelectOptionText(localizer(locale, keys.label), 100) : safeUserText(section, 100);
+    })
+    .join(", ");
+}
+
 function configKindLabelKey(kind: ConfigTransferKind): string {
   return kind === "workspace_config"
     ? "commands.transfer.workspace_config_label"
@@ -151,27 +167,23 @@ export function buildConfigTransferPreviewPayload(input: {
     sections.length > 0
       ? sections.map((section) => `• ${sectionLabel(input.locale, section)}`).join("\n")
       : localizer(input.locale, "commands.transfer.detected_sections_none");
-  const sectionContent = `${safeUserText(
-    localizer(input.locale, "commands.transfer.detected_sections_heading"),
-    100,
-  )}\n${safeUserText(sectionList, 1500)}`;
-  const droppedContent = `${safeUserText(
-    localizer(input.locale, "commands.transfer.excluded_fields_heading"),
-    100,
-  )}\n${safeUserText(formatDroppedFields(input.locale, input.droppedFields), 1500)}`;
   const description = safeUserText(
     localizer(input.locale, "commands.transfer.config_preview_description", {
       ownership: localizer(input.locale, configKindLabelKey(input.kind)),
     }),
     500,
   );
+  // One line per block, with quote rows for the values each heading introduces. Blank lines between a heading and
+  // its own rows read as unrelated panels, and the blockquote marker applies per line, so every row carries one.
   const content = safeUserText(
     [
       `### ${safeUserText(localizer(input.locale, "commands.transfer.config_preview_title"), 100)}`,
-      description,
-      sectionContent,
-      droppedContent,
-    ].join("\n\n"),
+      `**${description}**`,
+      safeUserText(localizer(input.locale, "commands.transfer.detected_sections_heading"), 100),
+      withLinePrefix("> ", safeUserText(sectionList, 1500)),
+      safeUserText(localizer(input.locale, "commands.transfer.excluded_fields_heading"), 100),
+      withLinePrefix("> ", safeUserText(formatDroppedFields(input.locale, input.droppedFields), 1500)),
+    ].join("\n"),
     3900,
   );
 
@@ -208,6 +220,34 @@ export function buildConfigTransferPreviewPayload(input: {
 
 export function buildConfigSectionCheckboxGroupId(nonce: string): string {
   return `${CONFIG_SECTION_CHECKBOX_GROUP_PREFIX}_${nonce}`;
+}
+
+/**
+ * A terminal transfer state, rendered as a Components V2 notice so the routed action can replace the panel it was
+ * clicked on instead of replying with a second ephemeral message. The panel is a V2 message, and Discord rejects
+ * legacy `embeds` on one, so a receipt built for `replyInfoEmbed` cannot be edited onto it.
+ */
+export function buildTransferNoticePayload(input: {
+  locale: string;
+  titleKey: string;
+  descriptionKey: string;
+  descriptionVars?: Record<string, string | number>;
+  color: string;
+}): ComponentsV2MessagePayload & { attachments: readonly [] } {
+  return validateAndFallbackPanelPayload(
+    {
+      components: buildNoticeContainer({
+        locale: input.locale,
+        color: input.color,
+        titleKey: input.titleKey,
+        descriptionKey: input.descriptionKey,
+        descriptionVars: input.descriptionVars,
+      }),
+      attachments: [],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    input.locale,
+  );
 }
 
 export function buildConfigSectionChecklistModal(input: {

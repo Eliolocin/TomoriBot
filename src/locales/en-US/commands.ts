@@ -53,11 +53,15 @@ import providers from "./commands/providers";
 import memories from "./commands/memories";
 import reset from "./commands/reset";
 import transfer from "./commands/transfer";
+import exportCommands from "./commands/export";
+import importCommands from "./commands/import";
 
 export default {
   commands: {
     ...reset,
     ...transfer,
+    ...exportCommands,
+    ...importCommands,
     ...memories,
     ...providers,
     ...quota,

@@ -117,6 +117,44 @@ function validChatSection(): Record<string, unknown> {
   };
 }
 
+describe("portable jsonb column tolerance", () => {
+  it("reads a jsonb value that arrives as a JSON string", () => {
+    const parsed = workspaceConfigExportSchema.safeParse({
+      version: EXPORT_V2_VERSION,
+      type: "workspace_config",
+      exported_at: "2026-01-01T00:00:00.000Z",
+      data: {
+        chat: { ...validChatSection(), llm_logit_biases: "[]" },
+        triggers: { deliberate_tool_triggers: JSON.stringify({ memory: ["remember this"] }) },
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.data.triggers?.deliberate_tool_triggers).toEqual({ memory: ["remember this"] });
+    expect(parsed.data.data.chat?.llm_logit_biases).toEqual([]);
+  });
+
+  it("reports a malformed string at its own path instead of throwing out of the parse", () => {
+    const parsed = workspaceConfigExportSchema.safeParse({
+      version: EXPORT_V2_VERSION,
+      type: "workspace_config",
+      exported_at: "2026-01-01T00:00:00.000Z",
+      data: {
+        chat: { ...validChatSection(), llm_logit_biases: "not json" },
+        triggers: { deliberate_tool_triggers: "{not json" },
+      },
+    });
+
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+    expect(parsed.error.issues.map((issue) => issue.path.join(".")).sort()).toEqual([
+      "data.chat.llm_logit_biases",
+      "data.triggers.deliberate_tool_triggers",
+    ]);
+  });
+});
+
 describe("v1 export characterization", () => {
   it("normalizes string and object memory items exactly as the v1 schema does", () => {
     expect(memoryItemSchema.parse("  plain memory  ")).toEqual({ content: "  plain memory  ", tags: [] });
