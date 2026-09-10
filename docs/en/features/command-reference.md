@@ -77,7 +77,7 @@ Generate AI images and videos.
 
 | Command | Summary |
 |---|---|
-| `/generate image` | Generate an AI image using Google Gemini or OpenRouter |
+| `/generate image` | Generate an AI image from your own prompt or the current channel scene |
 | `/generate scene` | Generate a short scripted text scene between selected personas. |
 | `/generate video` | Generate an AI video using Google Veo, OpenRouter, or Z.ai |
 
@@ -131,7 +131,7 @@ Link Discord channels to Matrix rooms for bidirectional relay.
 
 | Command | Summary |
 |---|---|
-| `/matrix link` | Link a Discord channel to a Matrix room for bidirectional relay |
+| `/matrix link` | Link a Discord channel to Matrix room for bidirectional relay |
 | `/matrix unlink` | Remove the Matrix bridge link from a Discord channel |
 
 ## `/memories`
