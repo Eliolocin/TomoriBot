@@ -11,7 +11,7 @@
  *   on success via the `endTurnAfterTools` mechanism, stopping the loop immediately.
  * - STM writes are disabled (`disableShortTermMemoryUpdate: true`), because a hidden turn
  *   should not pollute the short-term memory log.
- * - No webhook / persona avatar: the image is posted directly by the tool.
+ * - The caller may supply webhook/persona identity so the generated image posts as the selected persona.
  */
 
 import type { Client, Guild, Webhook } from "discord.js";
@@ -71,7 +71,7 @@ export interface HiddenImageTurnParams {
   guild: Guild | null;
   tomoriState: TomoriState;
   locale: string;
-  /** Discord ID of the user who invoked the /tool visualize command. */
+  /** Discord ID of the user who invoked `/generate image` in Auto mode. */
   interactingUserId: string;
   /** Internal database user ID of the invoking user, if known. */
   internalUserId?: number | null;
@@ -368,7 +368,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
     provider: provider.getInfo().name,
     streamContext: streamingContext,
     suppressProgressNotices: true, // Keep the hidden turn quiet
-    // Persona identity for webhook-based image posting (set by /tool visualize).
+    // Persona identity for webhook-based image posting (set by /generate image Auto mode).
     // When absent, the image tool falls back to a direct bot message.
     webhook,
     personaUsername,
