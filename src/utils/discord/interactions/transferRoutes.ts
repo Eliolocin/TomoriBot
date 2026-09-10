@@ -10,16 +10,20 @@ import {
   workspaceConfigExportDataSchema,
   type ImportResult,
   type MemoryBucket,
+  type MemoryItem,
 } from "@/types/db/dataExport";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
-import { importRepository } from "@/utils/db/repositories";
+import { importRepository, personalMemoryRepository, userRepository } from "@/utils/db/repositories";
 import type { PersonalConfigSection, WorkspaceConfigSection } from "@/utils/db/repositories/ImportRepository";
 import { isWorkspaceTransferAuthorized } from "@/utils/discord/interactions/transferAuthorization";
 import type { GlobalInteractionRoute, GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import {
+  claimTransferSnapshot,
   consumeTransferSnapshot,
   readTransferSnapshot,
+  releaseTransferSnapshotClaim,
   updateTransferSnapshotState,
+  type TransferSnapshotClaimResult,
   type TransferSnapshotReadResult,
   type TransferSnapshotRecord,
   type TransferSnapshotStatePatch,
@@ -30,12 +34,14 @@ import {
   parseTransferPanelRoute,
   type TransferPanelRoute,
 } from "@/utils/discord/transferCatalog";
+import { readMemoryBundleBuckets } from "@/utils/discord/transferMemoryBundle";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import {
   MEMORY_BUCKETS_PER_PAGE,
   MEMORY_DESTINATIONS_PER_PAGE,
   MEMORY_SKIP_VALUE,
   buildMemoryMappingPayload,
+  buildMemoryReplaceConfirmationPayload,
   buildConfigSectionCheckboxGroupId,
   buildConfigSectionChecklistModal,
   buildTransferNoticePayload,
@@ -43,11 +49,33 @@ import {
   getPresentedConfigSections,
   type ConfigTransferKind,
   type MemoryTransferDestination,
+  type MemoryTransferKind,
   type MemoryTransferMapping,
 } from "@/utils/discord/ui/transferPanel";
 import { deliverGuardedPanel } from "@/utils/discord/interactions/panelController";
 import { showRoutedRawModal, takeRawModalCheckboxGroupValues } from "@/utils/discord/ui/modals";
 import { ColorCode } from "@/utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
+
+type WorkspaceMemoryImportMapping = { bucketName: string; personaId: number; memories: MemoryItem[] };
+type PersonalMemoryImportMapping = {
+  bucketName: string;
+  personaLineageId: number;
+  memories: MemoryItem[];
+};
+
+export interface WorkspaceMemoryImportInput {
+  destinationKey: string;
+  actorDiscId: string;
+  strategy: "merge" | "replace";
+  mappings: ReadonlyArray<WorkspaceMemoryImportMapping>;
+}
+
+export interface PersonalMemoryImportInput {
+  destinationKey: string;
+  strategy: "merge" | "replace";
+  mappings: ReadonlyArray<PersonalMemoryImportMapping>;
+}
 
 export interface TransferRouteDependencies {
   readSnapshot(
@@ -69,6 +97,18 @@ export interface TransferRouteDependencies {
     destinationKey: string,
     patch: TransferSnapshotStatePatch,
   ): TransferSnapshotReadResult;
+  claimSnapshot(
+    nonce: string,
+    actorDiscId: string,
+    ownership: TransferSnapshotRecord["ownership"],
+    destinationKey: string,
+  ): TransferSnapshotClaimResult;
+  releaseSnapshotClaim(
+    nonce: string,
+    actorDiscId: string,
+    ownership: TransferSnapshotRecord["ownership"],
+    destinationKey: string,
+  ): TransferSnapshotReadResult;
   showConfigChecklistModal(
     interaction: ButtonInteraction,
     locale: string,
@@ -77,12 +117,15 @@ export interface TransferRouteDependencies {
     nonce: string,
   ): Promise<void>;
   takeConfigSectionValues(interactionId: string, fieldId: string): string[] | undefined;
-  getMemoryDestinations(guildId: string): Promise<MemoryTransferDestination[]>;
+  getWorkspaceMemoryDestinations(guildId: string): Promise<MemoryTransferDestination[]>;
+  getPersonalMemoryDestinations(userDiscId: string, locale: string): Promise<MemoryTransferDestination[]>;
   applyConfigImport(
     snapshot: TransferSnapshotRecord,
     selectedSections: readonly string[],
     destinationKey: string,
   ): Promise<ImportResult>;
+  applyWorkspaceMemoryImport(input: WorkspaceMemoryImportInput): Promise<ImportResult>;
+  applyPersonalMemoryImport(input: PersonalMemoryImportInput): Promise<ImportResult>;
 }
 
 const WORKSPACE_CONFIG_SECTION_NAMES = new Set(Object.keys(workspaceConfigExportDataSchema.shape));
@@ -186,17 +229,93 @@ export function resolveMemoryMappingPlan(
   return { status: "ok", plan };
 }
 
-async function defaultGetMemoryDestinations(guildId: string): Promise<MemoryTransferDestination[]> {
+type MemoryImportMappingsResult =
+  | { status: "ok"; kind: "workspace_memories"; mappings: WorkspaceMemoryImportMapping[] }
+  | { status: "ok"; kind: "personal_memories"; mappings: PersonalMemoryImportMapping[] }
+  | { status: "refused" };
+
+/**
+ * Binds every confirmed bucket to the key the repository call for its kind takes. A workspace destination carries
+ * the persona the destination list offered, because that list is what the user saw and mapped against; a personal
+ * destination is already the lineage. A bucket whose destination is missing, or a workspace destination that is
+ * not one of the offered personas, refuses the whole write rather than importing part of the bundle.
+ */
+export function buildMemoryImportMappings(
+  kind: MemoryTransferKind,
+  buckets: readonly MemoryBucket[],
+  plan: readonly MemoryMappingPlanEntry[],
+  destinations: readonly MemoryTransferDestination[],
+): MemoryImportMappingsResult {
+  const bucketsByName = new Map(buckets.map((bucket) => [bucket.name, bucket]));
+  const destinationsByLineage = new Map(destinations.map((destination) => [destination.lineageId, destination]));
+  const workspaceMappings: WorkspaceMemoryImportMapping[] = [];
+  const personalMappings: PersonalMemoryImportMapping[] = [];
+
+  for (const entry of plan) {
+    if (entry.destinationLineageId === "skip") continue;
+
+    const bucket = bucketsByName.get(entry.bucketName);
+    if (!bucket) return { status: "refused" };
+
+    if (kind === "personal_memories") {
+      personalMappings.push({
+        bucketName: bucket.name,
+        personaLineageId: entry.destinationLineageId,
+        memories: bucket.memories,
+      });
+      continue;
+    }
+
+    const destination = destinationsByLineage.get(entry.destinationLineageId);
+    if (!destination || destination.ownership !== "workspace") return { status: "refused" };
+    workspaceMappings.push({ bucketName: bucket.name, personaId: destination.personaId, memories: bucket.memories });
+  }
+
+  return kind === "personal_memories"
+    ? { status: "ok", kind: "personal_memories", mappings: personalMappings }
+    : { status: "ok", kind: "workspace_memories", mappings: workspaceMappings };
+}
+
+async function defaultGetWorkspaceMemoryDestinations(guildId: string): Promise<MemoryTransferDestination[]> {
   const personas = await getCachedAllPersonas(guildId);
   const seenLineages = new Set<number>();
   const destinations: MemoryTransferDestination[] = [];
   for (const persona of personas) {
     const lineageId = persona.persona_lineage_id;
+    const personaId = persona.persona_id;
     if (!Number.isSafeInteger(lineageId) || lineageId < 0 || seenLineages.has(lineageId)) continue;
+    // A persona the write cannot address is left out rather than offered as a destination that then refuses.
+    if (typeof personaId !== "number" || !Number.isSafeInteger(personaId) || personaId <= 0) continue;
     seenLineages.add(lineageId);
-    destinations.push({ lineageId, label: persona.persona_nickname });
+    destinations.push({ ownership: "workspace", lineageId, personaId, label: persona.persona_nickname });
   }
   return destinations;
+}
+
+async function defaultGetPersonalMemoryDestinations(
+  userDiscId: string,
+  locale: string,
+): Promise<MemoryTransferDestination[]> {
+  const userId = (await userRepository.loadByDiscordId(userDiscId))?.user_id;
+  if (typeof userId !== "number" || !Number.isSafeInteger(userId)) return [];
+
+  const lineages = await personalMemoryRepository.destinationLineages(userId);
+  return [
+    {
+      ownership: "personal",
+      lineageId: 0,
+      label: localizer(locale, "commands.transfer.memory_destination_global_label"),
+    },
+    ...lineages.map((lineage, index) => ({
+      ownership: "personal" as const,
+      lineageId: lineage.lineageId,
+      // A lineage with no matching persona row still needs a recognizable slot, so it takes the same ordinal
+      // fallback the exporter uses when it has no nickname to show either.
+      label:
+        lineage.nickname ??
+        localizer(locale, "commands.transfer.memory_destination_persona_label", { index: index + 1 }),
+    })),
+  ];
 }
 
 function replyInteraction(interaction: GlobalRoutableInteraction): ButtonInteraction | ModalSubmitInteraction {
@@ -274,19 +393,13 @@ function findSnapshot(
 type MemoryRouteSnapshot = {
   snapshot: TransferSnapshotRecord;
   buckets: MemoryBucket[];
+  kind: MemoryTransferKind;
+  strategy: "merge" | "replace";
 };
 
 type MemoryPanelContext = MemoryRouteSnapshot & {
   destinations: MemoryTransferDestination[];
 };
-
-function getMemoryBuckets(snapshot: TransferSnapshotRecord): MemoryBucket[] | null {
-  const payload = snapshot.exportResult.payload;
-  if (!payload || typeof payload !== "object" || !("buckets" in payload) || !Array.isArray(payload.buckets)) {
-    return null;
-  }
-  return payload.buckets;
-}
 
 async function requireMemorySnapshot(
   interaction: GlobalRoutableInteraction,
@@ -303,16 +416,6 @@ async function requireMemorySnapshot(
     );
     return null;
   }
-  if (snapshot.kind === "personal_memories") {
-    await replyTransferInfo(
-      interaction,
-      locale,
-      "commands.transfer.memory_personal_unavailable_title",
-      "commands.transfer.memory_personal_unavailable_description",
-      ColorCode.INFO,
-    );
-    return null;
-  }
 
   if (!snapshot.strategy) {
     await replyTransferInfo(
@@ -325,7 +428,7 @@ async function requireMemorySnapshot(
     return null;
   }
 
-  const buckets = getMemoryBuckets(snapshot);
+  const buckets = readMemoryBundleBuckets(snapshot.exportResult.payload);
   if (!buckets || buckets.length === 0) {
     await replyTransferInfo(
       interaction,
@@ -336,7 +439,7 @@ async function requireMemorySnapshot(
     );
     return null;
   }
-  return { snapshot, buckets };
+  return { snapshot, buckets, kind: snapshot.kind, strategy: snapshot.strategy };
 }
 
 async function loadMemoryPanelContext(
@@ -347,7 +450,7 @@ async function loadMemoryPanelContext(
 ): Promise<MemoryPanelContext | null> {
   const memorySnapshot = await requireMemorySnapshot(interaction, locale, snapshot);
   if (!memorySnapshot) return null;
-  const destinations = await loadMemoryDestinations(dependencies, interaction, locale);
+  const destinations = await loadMemoryDestinations(dependencies, interaction, locale, snapshot);
   if (!destinations) return null;
   return { ...memorySnapshot, destinations };
 }
@@ -356,20 +459,15 @@ async function loadMemoryDestinations(
   dependencies: TransferRouteDependencies,
   interaction: GlobalRoutableInteraction,
   locale: string,
+  snapshot: TransferSnapshotRecord,
 ): Promise<MemoryTransferDestination[] | null> {
-  const guildId = interaction.guildId;
-  if (!guildId) {
-    await replyTransferInfo(
-      interaction,
-      locale,
-      "commands.transfer.memory_destinations_unavailable_title",
-      "commands.transfer.memory_destinations_unavailable_description",
-      ColorCode.WARN,
-    );
-    return null;
-  }
+  // The snapshot's own destination key addresses the workspace, so a DM-backed workspace lists its personas rather
+  // than answering nothing for want of a guild. A personal import addresses the importing account instead.
+  const destinations =
+    snapshot.ownership === "personal"
+      ? await dependencies.getPersonalMemoryDestinations(snapshot.destinationKey, locale)
+      : await dependencies.getWorkspaceMemoryDestinations(snapshot.destinationKey);
 
-  const destinations = await dependencies.getMemoryDestinations(guildId);
   if (destinations.length === 0) {
     await replyTransferInfo(
       interaction,
@@ -437,7 +535,7 @@ async function renderMemoryMapping(
       selectedBucketIndex,
       bucketPage,
       destPage,
-      strategy: context.snapshot.strategy as "merge" | "replace",
+      strategy: context.strategy,
     }),
     { method: "update", locale },
   );
@@ -450,11 +548,23 @@ export function createTransferInteractionRoute(
     readSnapshot: readTransferSnapshot,
     consumeSnapshot: consumeTransferSnapshot,
     updateSnapshotState: updateTransferSnapshotState,
+    claimSnapshot: claimTransferSnapshot,
+    releaseSnapshotClaim: releaseTransferSnapshotClaim,
     showConfigChecklistModal: (interaction, locale, kind, detectedSections, nonce) =>
       showRoutedRawModal(interaction, buildConfigSectionChecklistModal({ locale, kind, detectedSections, nonce })),
     takeConfigSectionValues: takeRawModalCheckboxGroupValues,
-    getMemoryDestinations: defaultGetMemoryDestinations,
+    getWorkspaceMemoryDestinations: defaultGetWorkspaceMemoryDestinations,
+    getPersonalMemoryDestinations: defaultGetPersonalMemoryDestinations,
     applyConfigImport: defaultApplyConfigImport,
+    applyWorkspaceMemoryImport: (input) =>
+      importRepository.importWorkspaceMemoryBundle(
+        input.destinationKey,
+        input.actorDiscId,
+        input.mappings,
+        input.strategy,
+      ),
+    applyPersonalMemoryImport: (input) =>
+      importRepository.importPersonalMemoryBundle(input.destinationKey, input.mappings, input.strategy),
     ...overrides,
   };
 
@@ -543,12 +653,26 @@ export function createTransferInteractionRoute(
           return;
         }
 
-        await replyTransferInfo(
+        // The strategy is what the mapping surface renders, so choosing one opens it in place of the preview. The
+        // controls that reach this action exist only on the preview, which is why a placeholder here left the whole
+        // mapping flow unreachable.
+        const memorySnapshot = await requireMemorySnapshot(interaction, route.locale, updated.snapshot);
+        if (!memorySnapshot) return;
+        const destinations = await loadMemoryDestinations(dependencies, interaction, route.locale, updated.snapshot);
+        if (!destinations) return;
+
+        const storedBucketIndex = updated.snapshot.selectedBucket
+          ? memorySnapshot.buckets.findIndex((bucket) => bucket.name === updated.snapshot.selectedBucket)
+          : 0;
+        const selectedBucketIndex = storedBucketIndex >= 0 ? storedBucketIndex : 0;
+        await renderMemoryMapping(
           interaction,
           route.locale,
-          "commands.transfer.unavailable_title",
-          "commands.transfer.unavailable_description",
-          ColorCode.INFO,
+          route.nonce,
+          { ...memorySnapshot, destinations },
+          selectedBucketIndex,
+          Math.floor(selectedBucketIndex / MEMORY_BUCKETS_PER_PAGE),
+          0,
         );
         return;
       }
@@ -588,7 +712,7 @@ export function createTransferInteractionRoute(
           return;
         }
 
-        const destinations = await loadMemoryDestinations(dependencies, interaction, route.locale);
+        const destinations = await loadMemoryDestinations(dependencies, interaction, route.locale, snapshot);
         if (!destinations) return;
         const context: MemoryPanelContext = { ...memorySnapshot, destinations };
         const updated = dependencies.updateSnapshotState(
@@ -668,7 +792,7 @@ export function createTransferInteractionRoute(
           );
           return;
         }
-        const destinations = await loadMemoryDestinations(dependencies, interaction, route.locale);
+        const destinations = await loadMemoryDestinations(dependencies, interaction, route.locale, snapshot);
         if (!destinations) return;
         const context: MemoryPanelContext = { ...memorySnapshot, destinations };
         const destinationPages = memoryPageCount(context.destinations.length, MEMORY_DESTINATIONS_PER_PAGE);
@@ -752,7 +876,7 @@ export function createTransferInteractionRoute(
           );
           return;
         }
-        const destinations = await loadMemoryDestinations(dependencies, interaction, route.locale);
+        const destinations = await loadMemoryDestinations(dependencies, interaction, route.locale, snapshot);
         if (!destinations) return;
         const context: MemoryPanelContext = { ...memorySnapshot, destinations };
         const destinationPages = memoryPageCount(context.destinations.length, MEMORY_DESTINATIONS_PER_PAGE);
@@ -788,7 +912,7 @@ export function createTransferInteractionRoute(
         return;
       }
 
-      if (route.action === "memory-confirm") {
+      if (route.action === "memory-confirm" || route.action === "memory-replace-confirm") {
         const memorySnapshot = await requireMemorySnapshot(interaction, route.locale, snapshot);
         if (!memorySnapshot) return;
         const plan = resolveMemoryMappingPlan(memorySnapshot.buckets, snapshot.mapping ?? {});
@@ -823,25 +947,179 @@ export function createTransferInteractionRoute(
           return;
         }
 
-        const updated = dependencies.updateSnapshotState(
+        const destinations = await loadMemoryDestinations(dependencies, interaction, route.locale, snapshot);
+        if (!destinations) return;
+
+        if (memorySnapshot.strategy === "replace" && route.action === "memory-confirm") {
+          // The mapping panel's Confirm only ever opens the destructive preview. It is deliberately not the control
+          // that writes, so a repeated or duplicated click on it re-renders the preview instead of committing the
+          // Replace the preview exists to gate.
+          const updated = dependencies.updateSnapshotState(
+            route.nonce,
+            interaction.user.id,
+            candidate.ownership,
+            candidate.destinationKey,
+            { replaceConfirmed: true },
+          );
+          if (!(await replyMemoryStateFailure(interaction, route.locale, updated))) return;
+
+          await deliverGuardedPanel(
+            interaction,
+            buildMemoryReplaceConfirmationPayload({
+              locale: route.locale,
+              nonce: route.nonce,
+              buckets: memorySnapshot.buckets,
+              destinations,
+              mapping: snapshot.mapping ?? {},
+            }),
+            { method: "update", locale: route.locale },
+          );
+          return;
+        }
+
+        // Only the destructive preview renders the confirm control, so reaching it without the recorded preview, or
+        // on a snapshot whose strategy is no longer the Replace that preview described, means a forged or stale
+        // control rather than a reader who was shown what Replace clears.
+        if (
+          (route.action === "memory-replace-confirm" && memorySnapshot.strategy !== "replace") ||
+          (memorySnapshot.strategy === "replace" && snapshot.replaceConfirmed !== true)
+        ) {
+          await replyTransferInfo(
+            interaction,
+            route.locale,
+            "commands.transfer.memory_replace_confirmation_stale_title",
+            "commands.transfer.memory_replace_confirmation_stale_description",
+            ColorCode.WARN,
+          );
+          return;
+        }
+
+        const built = buildMemoryImportMappings(memorySnapshot.kind, memorySnapshot.buckets, plan.plan, destinations);
+        if (built.status === "refused") {
+          await replyTransferInfo(
+            interaction,
+            route.locale,
+            "commands.transfer.memory_mapping_invalid_title",
+            "commands.transfer.memory_mapping_invalid_description",
+            ColorCode.WARN,
+          );
+          return;
+        }
+
+        // The claim is taken before anything is awaited, so a duplicate confirmation arriving during the write
+        // cannot also pass validation and import the same memories a second time.
+        const claimed = dependencies.claimSnapshot(
           route.nonce,
           interaction.user.id,
           candidate.ownership,
           candidate.destinationKey,
-          { mapping: { ...(snapshot.mapping ?? {}) } },
         );
-        if (!(await replyMemoryStateFailure(interaction, route.locale, updated))) return;
-        await replyTransferInfo(
-          interaction,
-          route.locale,
-          "commands.transfer.unavailable_title",
-          "commands.transfer.unavailable_description",
-          ColorCode.INFO,
-        );
+        if (claimed.status === "in-flight") {
+          await replyTransferInfo(
+            interaction,
+            route.locale,
+            "commands.transfer.memory_import_in_progress_title",
+            "commands.transfer.memory_import_in_progress_description",
+            ColorCode.WARN,
+          );
+          return;
+        }
+        if (claimed.status !== "claimed") {
+          await replyMemoryStateFailure(interaction, route.locale, claimed);
+          return;
+        }
+
+        let snapshotConsumed = false;
+        try {
+          // Acknowledge as an update before the transaction, so the receipt replaces the panel it was confirmed on.
+          // A plain defer would open a new ephemeral and leave the mapping controls on screen.
+          await interaction.deferUpdate();
+
+          const importResult =
+            built.kind === "workspace_memories"
+              ? await dependencies.applyWorkspaceMemoryImport({
+                  destinationKey: candidate.destinationKey,
+                  actorDiscId: interaction.user.id,
+                  strategy: memorySnapshot.strategy,
+                  mappings: built.mappings,
+                })
+              : await dependencies.applyPersonalMemoryImport({
+                  destinationKey: candidate.destinationKey,
+                  strategy: memorySnapshot.strategy,
+                  mappings: built.mappings,
+                });
+
+          if (!importResult.success) {
+            // Each bundle write is one transaction, so a failed result left no partially imported destination
+            // behind. The snapshot is deliberately left unconsumed: a failed apply is not a reason to destroy the
+            // pending import.
+            await deliverGuardedPanel(
+              interaction,
+              buildTransferNoticePayload({
+                locale: route.locale,
+                titleKey: "commands.transfer.memory_import_failed_title",
+                descriptionKey: importResult.error ?? "commands.transfer.memory_import_failed_description",
+                color: ColorCode.ERROR,
+              }),
+              { locale: route.locale },
+            );
+            return;
+          }
+
+          // The write is committed, so the snapshot is consumed whether or not this read still finds it.
+          dependencies.consumeSnapshot(route.nonce, interaction.user.id, candidate.ownership, candidate.destinationKey);
+          snapshotConsumed = true;
+
+          await deliverGuardedPanel(
+            interaction,
+            buildTransferNoticePayload({
+              locale: route.locale,
+              titleKey: "commands.transfer.memory_import_success_title",
+              descriptionKey: "commands.transfer.memory_import_success_description",
+              descriptionVars: {
+                strategy: localizer(
+                  route.locale,
+                  memorySnapshot.strategy === "merge"
+                    ? "commands.transfer.memory_merge_label"
+                    : "commands.transfer.memory_replace_label",
+                ),
+                inserted: importResult.itemsImported?.memoriesInserted ?? 0,
+                skipped: importResult.itemsImported?.memoriesSkipped ?? 0,
+                deleted: importResult.itemsImported?.memoriesDeleted ?? 0,
+              },
+              color: ColorCode.SUCCESS,
+            }),
+            { locale: route.locale },
+          );
+        } finally {
+          // A write that did not commit releases its claim, so a failed import stays retryable. A committed one has
+          // already consumed the snapshot, which this release then simply fails to find.
+          if (!snapshotConsumed) {
+            dependencies.releaseSnapshotClaim(
+              route.nonce,
+              interaction.user.id,
+              candidate.ownership,
+              candidate.destinationKey,
+            );
+          }
+        }
         return;
       }
 
       if (route.action === "cancel") {
+        // Cancelling a write that is already running cannot stop its transaction, and it would delete the snapshot
+        // that the failed write needs to stay retryable.
+        if (snapshot.writeClaimed) {
+          await replyTransferInfo(
+            interaction,
+            route.locale,
+            "commands.transfer.memory_import_in_progress_title",
+            "commands.transfer.memory_import_in_progress_description",
+            ColorCode.WARN,
+          );
+          return;
+        }
+
         const consumed = dependencies.consumeSnapshot(
           route.nonce,
           interaction.user.id,

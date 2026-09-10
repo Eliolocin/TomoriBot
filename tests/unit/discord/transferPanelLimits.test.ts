@@ -20,6 +20,7 @@ import {
   type MemoryTransferDestination,
 } from "@/utils/discord/ui/transferPanel";
 import { validateComponentsV2MessageLimits, validateRawModalLimits } from "@/utils/discord/ui/componentsV2Limits";
+import { withLinePrefix } from "@/utils/discord/ui/panel";
 import { ColorCode } from "@/utils/misc/logger";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
@@ -84,7 +85,9 @@ function makeMemoryBuckets(count: number, labelPrefix = "Bucket"): MemoryBucket[
 
 function makeMemoryDestinations(count: number, labelPrefix = "Persona"): MemoryTransferDestination[] {
   return Array.from({ length: count }, (_unused, index) => ({
+    ownership: "workspace" as const,
     lineageId: index + 100,
+    personaId: index + 1,
     label: `${labelPrefix} ${index}`,
   }));
 }
@@ -255,7 +258,7 @@ describe("transfer panel Components V2 limits", () => {
     const expectedBlocks: Record<keyof typeof SECTION_NAMES, string[]> = {
       workspace_config: [
         "### Review Configuration Import",
-        "**Detected data is ready to import as a workspace configuration.**",
+        "**Detected data is ready to import as a server configuration.**",
         "Detected sections",
         "> • Chat",
         "> • Triggers",
@@ -440,7 +443,9 @@ describe("transfer panel Components V2 limits", () => {
       memories: [{ content: "memory", tags: [] }],
     }));
     const destinations = [3, 4, 5, 6, 8].map((runLength, index) => ({
+      ownership: "workspace" as const,
       lineageId: index + 200,
+      personaId: index + 1,
       label: `Persona ${"`".repeat(runLength)} 🌟 \uD800 ${index}`,
     }));
     const mapping = Object.fromEntries(
@@ -511,6 +516,185 @@ describe("transfer panel Components V2 limits", () => {
       });
       expect(confirmationStyles).toEqual([ButtonStyle.Danger, ButtonStyle.Secondary]);
     }
+  });
+
+  it("routes each memory surface's controls to the action that surface owns", () => {
+    const buckets = makeMemoryBuckets(2);
+    const destinations = makeMemoryDestinations(2);
+    const firstDestination = destinations[0];
+    if (!firstDestination) throw new Error("Action fixture requires a destination");
+    const mapping = { "bucket-0": firstDestination.lineageId, "bucket-1": "skip" };
+
+    const previewActions = parsedTransferRoutes(
+      buildMemoryTransferPreviewPayload({
+        locale: "en-US",
+        kind: "workspace_memories",
+        buckets,
+        nonce: "nonce-surface-actions",
+      }),
+    ).map((route) => route.action);
+    expect(previewActions).toEqual(["memory-strategy", "memory-strategy", "cancel"]);
+
+    const mappingActions = parsedTransferRoutes(
+      buildMemoryMappingPayload({
+        locale: "en-US",
+        nonce: "nonce-surface-actions",
+        buckets,
+        destinations,
+        mapping,
+        selectedBucketIndex: 0,
+        bucketPage: 0,
+        destPage: 0,
+        strategy: "replace",
+      }),
+    ).map((route) => route.action);
+    expect(mappingActions).toContain("memory-confirm");
+    expect(mappingActions).not.toContain("memory-replace-confirm");
+
+    // The destructive preview's confirm control is the only control that commits a Replace, so it must carry its
+    // own action: sharing the mapping panel's action is what let a duplicated click commit the Replace.
+    const confirmationActions = parsedTransferRoutes(
+      buildMemoryReplaceConfirmationPayload({
+        locale: "en-US",
+        nonce: "nonce-surface-actions",
+        buckets,
+        destinations,
+        mapping,
+      }),
+    ).map((route) => route.action);
+    expect(confirmationActions).toEqual(["memory-replace-confirm", "cancel"]);
+  });
+
+  it("renders the ownership notice only when the file's ownership differs from the destination's", () => {
+    const buckets = makeMemoryBuckets(2);
+    const noticeVars = {
+      source: localizer("en-US", "commands.transfer.personal_memories_label"),
+      destination: localizer("en-US", "commands.transfer.workspace_memories_label"),
+    };
+
+    const sameOwnership = buildMemoryTransferPreviewPayload({
+      locale: "en-US",
+      kind: "workspace_memories",
+      buckets,
+      nonce: "nonce-notice-own",
+    });
+    const crossOwnership = buildMemoryTransferPreviewPayload({
+      locale: "en-US",
+      kind: "workspace_memories",
+      buckets,
+      nonce: "nonce-notice-cross",
+      crossOwnership: true,
+    });
+
+    const notice = [
+      localizer("en-US", "commands.transfer.memory_cross_ownership_heading"),
+      withLinePrefix("> ", localizer("en-US", "commands.transfer.memory_cross_ownership_source_line", noticeVars)),
+      withLinePrefix("> ", localizer("en-US", "commands.transfer.memory_cross_ownership_destination_line", noticeVars)),
+    ].join("\n");
+    expect(textDisplays(sameOwnership).join("\n")).not.toContain(notice);
+    expect(textDisplays(crossOwnership).join("\n")).toContain(notice);
+    assertMemoryPayload(crossOwnership, "cross-ownership preview");
+  });
+
+  it("renders the memory surfaces as compact single-spaced blocks, not blank-line paragraphs", () => {
+    // The config preview's shape, applied to memory: a bold lead line, then each heading immediately above its own
+    // quoted rows. Both are pinned literally, because the compactness is the point and a reinstated blank line is
+    // exactly what this test exists to catch.
+    const buckets = makeMemoryBuckets(2);
+    const destinations = makeMemoryDestinations(2);
+    const firstDestination = destinations[0];
+    if (!firstDestination) throw new Error("Compact block fixture requires a destination");
+
+    const previewBlock = textDisplays(
+      buildMemoryTransferPreviewPayload({
+        locale: "en-US",
+        kind: "workspace_memories",
+        buckets,
+        nonce: "nonce-compact-preview",
+      }),
+    ).join("\n");
+    expect(previewBlock).toBe(
+      [
+        "### Review Memory Import",
+        "**This server memories import contains memories only.**",
+        "Documents and personas are excluded.",
+        "Detected memory groups",
+        "> • Bucket 0: 1 memory",
+        "> • Bucket 1: 1 memory",
+      ].join("\n"),
+    );
+
+    const mappingBlock = textDisplays(
+      buildMemoryMappingPayload({
+        locale: "en-US",
+        nonce: "nonce-compact-mapping",
+        buckets,
+        destinations,
+        mapping: { "bucket-0": firstDestination.lineageId, "bucket-1": "skip" },
+        selectedBucketIndex: 0,
+        bucketPage: 0,
+        destPage: 0,
+        strategy: "replace",
+      }),
+    ).join("\n");
+    expect(mappingBlock).toBe(
+      [
+        "### Map Memory Buckets",
+        "**Strategy: Replace**",
+        "Bucket mappings",
+        `> • Bucket 0 -> ${firstDestination.label}`,
+        "> • Bucket 1 -> (skipped)",
+      ].join("\n"),
+    );
+
+    const confirmationBlock = textDisplays(
+      buildMemoryReplaceConfirmationPayload({
+        locale: "en-US",
+        nonce: "nonce-compact-confirm",
+        buckets,
+        destinations,
+        mapping: { "bucket-0": firstDestination.lineageId, "bucket-1": "skip" },
+      }),
+    ).join("\n");
+    expect(confirmationBlock).toBe(
+      [
+        "### Confirm Replace",
+        "**Replace clears each selected destination scope first.**",
+        "This cannot be undone.",
+        "Destination scopes to clear",
+        `> • ${firstDestination.label}`,
+        "Buckets that will be skipped",
+        "> • Memories from Bucket 1 will not be imported.",
+      ].join("\n"),
+    );
+
+    // A heading with nothing under it reads as a rendering fault, so the empty group says so instead.
+    const emptySkippedBlock = textDisplays(
+      buildMemoryReplaceConfirmationPayload({
+        locale: "en-US",
+        nonce: "nonce-compact-confirm-none",
+        buckets,
+        destinations,
+        mapping: { "bucket-0": firstDestination.lineageId, "bucket-1": destinations[1]?.lineageId ?? 101 },
+      }),
+    ).join("\n");
+    expect(emptySkippedBlock).toContain(
+      `Buckets that will be skipped\n> ${localizer("en-US", "commands.transfer.memory_skipped_buckets_none")}`,
+    );
+  });
+
+  it("counts a single memory in the singular", () => {
+    const previewBlock = textDisplays(
+      buildMemoryTransferPreviewPayload({
+        locale: "en-US",
+        kind: "workspace_memories",
+        buckets: makeMemoryBuckets(1),
+        nonce: "nonce-singular-count",
+      }),
+    ).join("\n");
+
+    expect(previewBlock).toContain("> • Bucket 0: 1 memory");
+    expect(previewBlock).not.toContain("1 memories");
   });
 
   it("throws instead of emitting a zero-option memory select", () => {

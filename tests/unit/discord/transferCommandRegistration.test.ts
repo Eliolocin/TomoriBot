@@ -11,6 +11,8 @@ type CommandOption = {
   name?: string;
   type?: number;
   required?: boolean;
+  autocomplete?: boolean;
+  choices?: Array<{ name?: string; value?: string }>;
   options?: CommandOption[];
 };
 
@@ -18,11 +20,21 @@ type Leaf = { path: string; option: CommandOption };
 
 const SUBCOMMAND_TYPE = 1;
 const SUBCOMMAND_GROUP_TYPE = 2;
+const STRING_TYPE = 3;
 const ATTACHMENT_TYPE = 11;
 const BOT_DM_CONTEXT = 1;
 
-/** The four leaves the fixed Wave 7 product boundary names. */
-const EXPECTED_PATHS = ["export config", "export personal config", "import config", "import personal config"];
+/** The eight leaves the fixed Wave 7 product boundary names. */
+const EXPECTED_PATHS = [
+  "export config",
+  "export memories",
+  "export personal config",
+  "export personal memories",
+  "import config",
+  "import memories",
+  "import personal config",
+  "import personal memories",
+];
 
 function findRoot(registrationData: ApplicationCommandData[], name: string): ApplicationCommandData | undefined {
   return registrationData.find((command) => command.name === name);
@@ -44,6 +56,12 @@ function collectLeaves(root: ApplicationCommandData): Leaf[] {
   return leaves;
 }
 
+function findLeaf(leaves: Leaf[], path: string): Leaf {
+  const leaf = leaves.find((candidate) => candidate.path === path);
+  if (!leaf) throw new Error(`Leaf ${path} is not registered`);
+  return leaf;
+}
+
 let commandData: LoadCommandDataResult;
 
 beforeAll(async () => {
@@ -52,7 +70,7 @@ beforeAll(async () => {
 });
 
 describe("transfer command registration", () => {
-  it("registers both roots with exactly the four portable config leaves", () => {
+  it("registers both roots with exactly the eight portable transfer leaves", () => {
     const exportRoot = findRoot(commandData.registrationData, "export");
     const importRoot = findRoot(commandData.registrationData, "import");
     expect(exportRoot).toBeDefined();
@@ -81,14 +99,13 @@ describe("transfer command registration", () => {
     }
   });
 
-  it("requires the attachment on both import leaves and on neither export leaf", () => {
+  it("requires the attachment on every import leaf and on neither export config leaf", () => {
     const exportRoot = findRoot(commandData.registrationData, "export");
     const importRoot = findRoot(commandData.registrationData, "import");
     if (!exportRoot || !importRoot) throw new Error("Transfer roots are not registered");
 
-    const importLeaves = collectLeaves(importRoot);
     const exportLeaves = collectLeaves(exportRoot);
-    expect(importLeaves.map((leaf) => leaf.path).sort()).toEqual(["import config", "import personal config"]);
+    const importLeaves = collectLeaves(importRoot);
 
     for (const leaf of importLeaves) {
       expect({ path: leaf.path, options: leaf.option.options }).toEqual({
@@ -96,22 +113,85 @@ describe("transfer command registration", () => {
         options: [expect.objectContaining({ name: "file", type: ATTACHMENT_TYPE, required: true })],
       });
     }
-    for (const leaf of exportLeaves) {
-      expect({ path: leaf.path, options: leaf.option.options }).toEqual({ path: leaf.path, options: [] });
+    for (const path of ["export config", "export personal config"]) {
+      expect({ path, options: findLeaf(exportLeaves, path).option.options }).toEqual({ path, options: [] });
+    }
+  });
+
+  it("declares a required scope choice and an optional autocomplete persona on both memory export leaves", () => {
+    const exportRoot = findRoot(commandData.registrationData, "export");
+    if (!exportRoot) throw new Error("/export is not registered");
+    const leaves = collectLeaves(exportRoot);
+
+    const expectedChoiceValues: Record<string, string[]> = {
+      "export memories": ["main", "persona", "all"],
+      "export personal memories": ["global", "persona", "all"],
+    };
+
+    for (const [path, choiceValues] of Object.entries(expectedChoiceValues)) {
+      const options = findLeaf(leaves, path).option.options ?? [];
+      expect({ path, options: options.map((option) => option.name) }).toEqual({ path, options: ["scope", "persona"] });
+
+      const [scopeOption, personaOption] = options;
+      expect({ path, type: scopeOption?.type, required: scopeOption?.required }).toEqual({
+        path,
+        type: STRING_TYPE,
+        required: true,
+      });
+      expect({ path, choices: (scopeOption?.choices ?? []).map((choice) => choice.value) }).toEqual({
+        path,
+        choices: choiceValues,
+      });
+      // A missing choice label would register the locale key itself as the option's name.
+      for (const choice of scopeOption?.choices ?? []) {
+        expect({ path, value: choice.value, unresolved: choice.name?.startsWith("commands.") ?? false }).toEqual({
+          path,
+          value: choice.value,
+          unresolved: false,
+        });
+      }
+      expect({ path, type: personaOption?.type, required: personaOption?.required ?? false }).toEqual({
+        path,
+        type: STRING_TYPE,
+        required: false,
+      });
+      expect({ path, autocomplete: personaOption?.autocomplete }).toEqual({ path, autocomplete: true });
     }
   });
 
   it("maps both roots onto their execution keys", () => {
     const exportMap = commandData.executionMap.get("export");
     const importMap = commandData.executionMap.get("import");
-    expect([...(exportMap?.keys() ?? [])].sort()).toEqual(["config", "personal.config"]);
-    expect([...(importMap?.keys() ?? [])].sort()).toEqual(["config", "personal.config"]);
+    expect([...(exportMap?.keys() ?? [])].sort()).toEqual([
+      "config",
+      "memories",
+      "personal.config",
+      "personal.memories",
+    ]);
+    expect([...(importMap?.keys() ?? [])].sort()).toEqual([
+      "config",
+      "memories",
+      "personal.config",
+      "personal.memories",
+    ]);
   });
 
-  it("excludes both shared operation helpers from registration", async () => {
+  it("registers the persona autocomplete handler under both memory export leaves", () => {
+    const exportHandlers = commandData.autocompleteMap.get("export");
+    expect(exportHandlers).toBeDefined();
+    expect(typeof exportHandlers?.get("memories")).toBe("function");
+    expect(typeof exportHandlers?.get("personal.memories")).toBe("function");
+    // The config leaves declare no autocomplete option, so a handler there would be unreachable wiring.
+    expect(exportHandlers?.get("config")).toBeUndefined();
+    expect(exportHandlers?.get("personal.config")).toBeUndefined();
+  });
+
+  it("excludes every shared operation helper from registration", async () => {
     const helperFiles = [
       { commandFile: "src/commands/export/configExportOperation.ts", categoryName: "export" },
+      { commandFile: "src/commands/export/memoriesExportOperation.ts", categoryName: "export" },
       { commandFile: "src/commands/import/configImportOperation.ts", categoryName: "import" },
+      { commandFile: "src/commands/import/memoriesImportOperation.ts", categoryName: "import" },
     ];
 
     for (const helper of helperFiles) {

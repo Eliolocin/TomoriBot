@@ -127,6 +127,44 @@ class PersonalMemoryRepository implements IRepository<PersonalMemoryExportShape>
   }
 
   /**
+   * Destination candidates for a personal memory import: every non-zero lineage holding a memory, with the
+   * nickname the account most recently used for that lineage.
+   *
+   * The nickname join is deliberately unscoped by server. A personal lineage is account-global and may match
+   * personas in workspaces the account has left, so there is no single authoritative server to scope to; the label
+   * is untrusted display data and nothing keys off it. Lineage `0` is excluded here for the same reason
+   * {@link lineageIdsWithMemories} excludes it and is offered by the caller as its own account-wide destination.
+   *
+   * @param userId - Internal user DB ID
+   * @returns Destination lineages in ascending order, each with a nickname or null when no persona row matches.
+   */
+  async destinationLineages(userId: number): Promise<Array<{ lineageId: number; nickname: string | null }>> {
+    try {
+      const rows = await sql<Array<{ persona_lineage_id: number | string; persona_nickname: string | null }>>`
+        SELECT pm.persona_lineage_id,
+          (
+            SELECT p.persona_nickname
+            FROM personas p
+            WHERE p.persona_lineage_id = pm.persona_lineage_id
+            ORDER BY p.updated_at DESC NULLS LAST, p.persona_id DESC
+            LIMIT 1
+          ) AS persona_nickname
+        FROM personal_memories pm
+        WHERE pm.user_id = ${userId}
+          AND pm.persona_lineage_id <> 0
+        GROUP BY pm.persona_lineage_id
+      `;
+      return rows
+        .map((row) => ({ lineageId: Number(row.persona_lineage_id), nickname: row.persona_nickname ?? null }))
+        .filter((row) => Number.isSafeInteger(row.lineageId) && row.lineageId > 0)
+        .sort((left, right) => left.lineageId - right.lineageId);
+    } catch (error) {
+      log.error(`Error loading personal memory destination lineages for user ${userId}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Returns the total count of personal memories for a user across all personas and global scope.
    *
    * @param userId - Internal user DB ID

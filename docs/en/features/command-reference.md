@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **41**. Runnable slash commands: **80**.
+Top-level command groups: **41**. Runnable slash commands: **84**.
 
 ## `/comment`
 
@@ -64,12 +64,14 @@ Support TomoriBot's development and hosting costs.
 
 ## `/export`
 
-Export your configuration as a portable file.
+Export your configuration or memories as a portable file.
 
 | Command | Summary |
 |---|---|
-| `/export config` | Export this workspace configuration as a portable file. |
+| `/export config` | Export this server configuration as a portable file. |
+| `/export memories` | Export memories as a portable file. |
 | `/export personal config` | Export your personal configuration as a portable file. |
+| `/export personal memories` | Export the memories your account owns as a portable file. |
 
 ## `/expressions`
 
@@ -111,12 +113,14 @@ Impersonate personas, users, or inject system prompts.
 
 ## `/import`
 
-Import configuration from a portable file.
+Import configuration or memories from a portable file.
 
 | Command | Summary |
 |---|---|
-| `/import config` | Import a workspace configuration file. |
+| `/import config` | Import a server configuration file. |
+| `/import memories` | Import a server memory file. |
 | `/import personal config` | Import a personal configuration file. |
+| `/import personal memories` | Import a personal memory file. |
 
 ## `/kill`
 

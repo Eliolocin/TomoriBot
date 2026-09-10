@@ -4,7 +4,7 @@ import type { MemoryBucket } from "@/types/db/dataExport";
 import { personalConfigExportDataSchema, workspaceConfigExportDataSchema } from "@/types/db/dataExport";
 import type { TomoriState } from "@/types/db/schema";
 import { cache } from "@/utils/cache/tomoriStateCacheStore";
-import { importRepository } from "@/utils/db/repositories";
+import { importRepository, personalMemoryRepository, userRepository } from "@/utils/db/repositories";
 import {
   buildTransferRouteId,
   parseTransferPanelRoute,
@@ -18,12 +18,20 @@ import {
   type TransferSnapshotRecordInput,
 } from "@/utils/discord/interactions/transferSnapshotStore";
 import {
+  buildMemoryImportMappings,
   createTransferInteractionRoute,
   resolveMemoryMappingPlan,
   resolveSelectedConfigSections,
   transferInteractionRoute,
+  type PersonalMemoryImportInput,
+  type WorkspaceMemoryImportInput,
 } from "@/utils/discord/interactions/transferRoutes";
-import { buildConfigSectionChecklistModal, buildConfigSectionCheckboxGroupId } from "@/utils/discord/ui/transferPanel";
+import {
+  buildConfigSectionChecklistModal,
+  buildConfigSectionCheckboxGroupId,
+  buildMemoryTransferPreviewPayload,
+  type MemoryTransferDestination,
+} from "@/utils/discord/ui/transferPanel";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
 import { parseInteractionRoute } from "@/utils/discord/interactions/routeRegistry";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
@@ -135,6 +143,27 @@ function seedMemoryDestinations(count = 2): void {
   cache.set("guild-1", { personas, mainPersona, cachedAt: Date.now() });
 }
 
+const WORKSPACE_DESTINATIONS: MemoryTransferDestination[] = [
+  { ownership: "workspace", lineageId: 100, personaId: 1, label: "Persona 0" },
+  { ownership: "workspace", lineageId: 101, personaId: 2, label: "Persona 1" },
+];
+
+const PERSONAL_DESTINATIONS: MemoryTransferDestination[] = [
+  { ownership: "personal", lineageId: 0, label: "Global" },
+  { ownership: "personal", lineageId: 55, label: "Sparrow" },
+];
+
+/** W7e-1's marker for a surface a later slice still owed. No control a user can press may still reach it. */
+const PLACEHOLDER_TEXT_KEY = "commands.transfer.unavailable_title";
+
+/**
+ * Resolved per call, never at module load: the localizer is initialized in `beforeAll`, so a module-level
+ * `localizer(...)` returns the key itself and every comparison against it silently passes.
+ */
+function placeholderText(): string {
+  return localizer("en-US", PLACEHOLDER_TEXT_KEY);
+}
+
 afterEach(() => {
   cache.delete("guild-1");
   resetTransferSnapshots();
@@ -183,6 +212,54 @@ function collectText(payload: unknown): string {
   };
   walk(payload);
   return parts.join("\n");
+}
+
+/**
+ * Every rendered string in a payload, whether it travels as a Components V2 `content` or as a legacy embed title or
+ * description. A check for "this text was not shown" has to read both, because a refusal replies with an embed while
+ * a surface render edits a V2 panel, so a `content`-only walk silently sees nothing at all for every refusal.
+ */
+function collectRenderedText(payload: unknown): string {
+  const parts: string[] = [];
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const record = node as Record<string, unknown>;
+    for (const key of ["content", "title", "description"]) {
+      if (typeof record[key] === "string") parts.push(record[key]);
+    }
+    for (const value of Object.values(record)) walk(value);
+  };
+  walk(payload);
+  return parts.join("\n");
+}
+
+/**
+ * Every rendered control, parsed back into a route. A test that dispatches one of these drives the exact custom ID
+ * the panel emitted, which is what makes the panel-to-route seam observable rather than assumed.
+ */
+function renderedTransferRoutes(payload: unknown): TransferPanelRoute[] {
+  const routes: TransferPanelRoute[] = [];
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const record = node as Record<string, unknown>;
+    const customId = record.customId ?? record.custom_id;
+    if (typeof customId === "string") {
+      const parsed = parseInteractionRoute(customId);
+      const route = parsed ? parseTransferPanelRoute(parsed) : null;
+      if (route) routes.push(route);
+    }
+    for (const value of Object.values(record)) walk(value);
+  };
+  walk(payload);
+  return routes;
 }
 
 /**
@@ -553,7 +630,7 @@ describe("transfer interaction routes", () => {
     if (result.status === "ok") expect(result.snapshot.mapping).toEqual({ "bucket-0": 100, "bucket-1": "skip" });
   });
 
-  it("refuses mapping without a chosen strategy and refuses personal mappings", async () => {
+  it("refuses mapping without a chosen strategy and still maps a personal snapshot", async () => {
     const noStrategyNonce = "nonce-memory-no-strategy";
     storeTransferSnapshot(noStrategyNonce, makeMemoryRecord({ strategy: undefined }));
     seedMemoryDestinations();
@@ -580,41 +657,65 @@ describe("transfer interaction routes", () => {
     const personalNonce = "nonce-personal-memory-mapping";
     storeTransferSnapshot(
       personalNonce,
-      makeMemoryRecord({ kind: "personal_memories", ownership: "personal", destinationKey: "actor-1" }),
+      makeMemoryRecord({
+        kind: "personal_memories",
+        ownership: "personal",
+        destinationKey: "actor-1",
+        mapping: { "bucket-0": 0, "bucket-1": 55 },
+      }),
     );
     const personalInteraction = makeInteraction({
-      customId: makeRouteId({ action: "memory-bucket-select", locale: "en-US", nonce: personalNonce, bucketPage: 0 }),
+      customId: makeRouteId({
+        action: "memory-map",
+        locale: "en-US",
+        nonce: personalNonce,
+        bucketIndex: 1,
+        destPage: 0,
+      }),
       kind: "string",
-      values: ["0"],
+      values: ["55"],
     });
-    const personalReply = spyOn(personalInteraction, "reply");
-    await expect(dispatchGlobalInteraction({} as Client, personalInteraction)).resolves.toBe(true);
-    expect(
-      (personalReply.mock.calls[0]?.[0] as { embeds: Array<{ data: { description?: string } }> }).embeds[0]?.data
-        .description,
-    ).toBe(localizer("en-US", "commands.transfer.memory_personal_unavailable_description"));
+    const personalUpdate = spyOn(personalInteraction, "update");
+    const personalRoute = createTransferInteractionRoute({
+      getPersonalMemoryDestinations: async () => PERSONAL_DESTINATIONS,
+    });
+    const personalParsed = parseInteractionRoute(personalInteraction.customId);
+    if (!personalParsed) throw new Error("Personal memory mapping route did not parse");
+
+    await personalRoute.execute({} as Client, personalInteraction, personalParsed);
+
+    const personalPanel = collectText(personalUpdate.mock.calls[0]?.[0]);
+    expect(personalPanel).toContain(localizer("en-US", "commands.transfer.memory_mapping_title"));
+    expect(personalPanel).toContain("Sparrow");
   });
 
-  it("keeps every memory mapping action non-terminal", async () => {
+  it("keeps every non-terminal memory mapping action from consuming the snapshot", async () => {
     const actions: Array<{
       action: TransferPanelRoute["action"];
       kind: InteractionKind;
       values?: string[];
       buckets?: MemoryBucket[];
       mapping?: Record<string, number | "skip">;
+      strategy?: "merge" | "replace";
     }> = [
       { action: "memory-bucket-select", kind: "string", values: ["1"] },
       { action: "memory-bucket-page", kind: "button", buckets: makeMemoryBuckets(26) },
       { action: "memory-map", kind: "string", values: ["101"] },
       { action: "memory-map-page", kind: "button" },
-      { action: "memory-confirm", kind: "button", mapping: { "bucket-0": 100, "bucket-1": 101 } },
+      // A Replace confirm renders the destructive preview on its first click, so that click is not terminal.
+      {
+        action: "memory-confirm",
+        kind: "button",
+        strategy: "replace",
+        mapping: { "bucket-0": 100, "bucket-1": 101 },
+      },
     ];
 
     for (const [index, action] of actions.entries()) {
       const nonce = `nonce-memory-nonterminal-${index}`;
       const buckets = action.buckets ?? makeMemoryBuckets();
       const mapping = action.mapping ?? {};
-      storeTransferSnapshot(nonce, makeMemoryRecord({ buckets, mapping }));
+      storeTransferSnapshot(nonce, makeMemoryRecord({ buckets, mapping, strategy: action.strategy ?? "merge" }));
       seedMemoryDestinations(26);
       const route =
         action.action === "memory-bucket-select"
@@ -633,12 +734,871 @@ describe("transfer interaction routes", () => {
         canManageGuild: true,
         values: action.values,
       });
-      if (action.action === "memory-confirm") spyOn(interaction, "reply");
-      else spyOn(interaction, "update");
+      // Every one of these renders in place, so the panel it was clicked on is the one it edits.
+      spyOn(interaction, "update");
 
       await expect(dispatchGlobalInteraction({} as Client, interaction)).resolves.toBe(true);
       expect(readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1").status).toBe("ok");
     }
+  });
+
+  it("binds a confirmed Merge to the persona the destination list offered and consumes the snapshot", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-merge-write";
+    storeTransferSnapshot(nonce, makeMemoryRecord({ mapping: { "bucket-0": 100, "bucket-1": 101 } }));
+    seedMemoryDestinations();
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const editSpy = spyOn(interaction, "editReply");
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true, itemsImported: { memoriesInserted: 2, memoriesSkipped: 1, memoriesDeleted: 0 } };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Merge confirm route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(applied).toEqual([
+      {
+        destinationKey: "guild-1",
+        actorDiscId: "actor-1",
+        strategy: "merge",
+        mappings: [
+          { bucketName: "bucket-0", personaId: 1, memories: [{ content: "Memory 0", tags: [] }] },
+          { bucketName: "bucket-1", personaId: 2, memories: [{ content: "Memory 1", tags: [] }] },
+        ],
+      },
+    ]);
+    expect(readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1").status).toBe("missing");
+    const panelText = collectText(editSpy.mock.calls[0]?.[0]);
+    expect(panelText).toContain(localizer("en-US", "commands.transfer.memory_import_success_title"));
+    expect(panelText).toContain(
+      localizer("en-US", "commands.transfer.memory_import_success_description", {
+        strategy: localizer("en-US", "commands.transfer.memory_merge_label"),
+        inserted: 2,
+        skipped: 1,
+        deleted: 0,
+      }),
+    );
+  });
+
+  it("acknowledges the confirm as an update before running the memory transaction", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-write-order";
+    storeTransferSnapshot(nonce, makeMemoryRecord({ mapping: { "bucket-0": 100, "bucket-1": 101 } }));
+    seedMemoryDestinations();
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const deferUpdateSpy = spyOn(interaction, "deferUpdate");
+    spyOn(interaction, "editReply");
+    const acknowledged: boolean[] = [];
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async () => {
+        acknowledged.push(interaction.deferred || interaction.replied);
+        return { success: true, itemsImported: { memoriesInserted: 2 } };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Merge ordering route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(acknowledged).toEqual([true]);
+    // An update, not a defer: a plain defer would open a new ephemeral and leave the mapping controls on screen.
+    expect(deferUpdateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the snapshot when the memory write fails and reports the repository error", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-write-failure";
+    storeTransferSnapshot(nonce, makeMemoryRecord({ mapping: { "bucket-0": 100, "bucket-1": 101 } }));
+    seedMemoryDestinations();
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const editSpy = spyOn(interaction, "editReply");
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async () => ({
+        success: false,
+        error: "commands.data.import.error_update_failed",
+      }),
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Failed memory write route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1").status).toBe("ok");
+    const panelText = collectText(editSpy.mock.calls[0]?.[0]);
+    expect(panelText).toContain(localizer("en-US", "commands.transfer.memory_import_failed_title"));
+    expect(panelText).toContain(localizer("en-US", "commands.data.import.error_update_failed"));
+  });
+
+  it("refuses a mapping whose destination the current destination list no longer offers", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-stale-destination";
+    // The mapping was made earlier; by confirm time the persona it named is no longer among the offered ones.
+    storeTransferSnapshot(nonce, makeMemoryRecord({ mapping: { "bucket-0": 999, "bucket-1": 101 } }));
+    seedMemoryDestinations();
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const replySpy = spyOn(interaction, "reply");
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Stale destination route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(applied).toEqual([]);
+    expect(readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1").status).toBe("ok");
+    const payload = replySpy.mock.calls[0]?.[0] as { embeds: Array<{ data: { description?: string } }> };
+    expect(payload.embeds[0]?.data.description).toBe(
+      localizer("en-US", "commands.transfer.memory_mapping_invalid_description"),
+    );
+  });
+
+  it("renders the destructive Replace preview on the first confirm and writes nothing", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-replace-preview";
+    storeTransferSnapshot(
+      nonce,
+      makeMemoryRecord({ strategy: "replace", mapping: { "bucket-0": 100, "bucket-1": "skip" } }),
+    );
+    seedMemoryDestinations();
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const updateSpy = spyOn(interaction, "update");
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Replace preview route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(applied).toEqual([]);
+    const stored = readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1");
+    expect(stored.status).toBe("ok");
+    if (stored.status === "ok") expect(stored.snapshot.replaceConfirmed).toBe(true);
+
+    const panelText = collectText(updateSpy.mock.calls[0]?.[0]);
+    expect(panelText).toContain(localizer("en-US", "commands.transfer.memory_replace_confirmation_title"));
+    expect(panelText).toContain("Persona 0");
+    expect(panelText).toContain(
+      localizer("en-US", "commands.transfer.memory_skip_confirmation_line", { bucket: "Bucket 1" }),
+    );
+  });
+
+  it("never writes from the mapping panel's Confirm, which only opens the Replace preview", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-replace-replay";
+    // The state a duplicated click on the first Confirm leaves behind: the preview was shown, so the flag is set.
+    storeTransferSnapshot(
+      nonce,
+      makeMemoryRecord({
+        strategy: "replace",
+        mapping: { "bucket-0": 100, "bucket-1": "skip" },
+        replaceConfirmed: true,
+      }),
+    );
+    seedMemoryDestinations();
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const updateSpy = spyOn(interaction, "update");
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Replayed Replace confirm route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    // Only the control the preview itself renders commits a Replace, so a repeated or duplicated click on the
+    // mapping panel's Confirm re-renders the preview instead of destroying the destination scope.
+    expect(applied).toEqual([]);
+    expect(readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1").status).toBe("ok");
+    expect(collectText(updateSpy.mock.calls[0]?.[0])).toContain(
+      localizer("en-US", "commands.transfer.memory_replace_confirmation_title"),
+    );
+  });
+
+  it("refuses the destructive Replace action when the preview was never recorded", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-replace-forged";
+    storeTransferSnapshot(
+      nonce,
+      makeMemoryRecord({ strategy: "replace", mapping: { "bucket-0": 100, "bucket-1": "skip" } }),
+    );
+    seedMemoryDestinations();
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-replace-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const replySpy = spyOn(interaction, "reply");
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Forged Replace confirm route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(applied).toEqual([]);
+    const payload = replySpy.mock.calls[0]?.[0] as { embeds: Array<{ data: { description?: string } }> };
+    expect(payload.embeds[0]?.data.description).toBe(
+      localizer("en-US", "commands.transfer.memory_replace_confirmation_stale_description"),
+    );
+  });
+
+  it("commits a Replace only on the recorded confirmation and reports the deleted count", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-replace-write";
+    storeTransferSnapshot(
+      nonce,
+      makeMemoryRecord({
+        strategy: "replace",
+        mapping: { "bucket-0": 100, "bucket-1": "skip" },
+        replaceConfirmed: true,
+      }),
+    );
+    seedMemoryDestinations();
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-replace-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const editSpy = spyOn(interaction, "editReply");
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true, itemsImported: { memoriesInserted: 1, memoriesSkipped: 0, memoriesDeleted: 4 } };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Replace write route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(applied).toEqual([
+      {
+        destinationKey: "guild-1",
+        actorDiscId: "actor-1",
+        strategy: "replace",
+        mappings: [{ bucketName: "bucket-0", personaId: 1, memories: [{ content: "Memory 0", tags: [] }] }],
+      },
+    ]);
+    expect(readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1").status).toBe("missing");
+    const panelText = collectText(editSpy.mock.calls[0]?.[0]);
+    expect(panelText).toContain(
+      localizer("en-US", "commands.transfer.memory_import_success_description", {
+        strategy: localizer("en-US", "commands.transfer.memory_replace_label"),
+        inserted: 1,
+        skipped: 0,
+        deleted: 4,
+      }),
+    );
+  });
+
+  it("refuses a second confirmation that arrives while the first write is still in flight", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-in-flight";
+    storeTransferSnapshot(nonce, makeMemoryRecord({ mapping: { "bucket-0": 100, "bucket-1": 101 } }));
+    seedMemoryDestinations();
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    spyOn(interaction, "editReply");
+    let duplicateDescription: string | undefined;
+    let nestedDispatchStarted = false;
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        // One duplicate click lands while this write is still awaiting its transaction. The nested dispatch is not
+        // repeated further, so a missing guard shows up as a second write rather than as unbounded recursion.
+        if (nestedDispatchStarted) return { success: true, itemsImported: { memoriesInserted: 2 } };
+        nestedDispatchStarted = true;
+        const duplicate = makeInteraction({
+          customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+          kind: "button",
+          guildId: "guild-1",
+          canManageGuild: true,
+        });
+        const duplicateReply = spyOn(duplicate, "reply");
+        const duplicateParsed = parseInteractionRoute(duplicate.customId);
+        if (!duplicateParsed) throw new Error("Duplicate confirm route did not parse");
+        await route.execute({} as Client, duplicate, duplicateParsed);
+        duplicateDescription = (
+          duplicateReply.mock.calls[0]?.[0] as { embeds: Array<{ data: { description?: string } }> } | undefined
+        )?.embeds[0]?.data.description;
+        return { success: true, itemsImported: { memoriesInserted: 2 } };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("In-flight confirm route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    // Without the claim the nested confirmation would validate against the same snapshot and write the bundle a
+    // second time, so this count is the property under test rather than a restatement of it.
+    expect(applied).toHaveLength(1);
+    expect(duplicateDescription).toBe(localizer("en-US", "commands.transfer.memory_import_in_progress_description"));
+    expect(readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1").status).toBe("missing");
+  });
+
+  it("releases the write claim when the import fails so the same file stays retryable", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-claim-release";
+    storeTransferSnapshot(nonce, makeMemoryRecord({ mapping: { "bucket-0": 100, "bucket-1": 101 } }));
+    seedMemoryDestinations();
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    spyOn(interaction, "editReply");
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async () => ({ success: false, error: "commands.data.import.error_update_failed" }),
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Claim release route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    const stored = readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1");
+    expect(stored.status).toBe("ok");
+    if (stored.status === "ok") expect(stored.snapshot.writeClaimed).toBe(false);
+
+    // The retry is what proves the release: a still-claimed snapshot would refuse here instead of writing.
+    const retried: WorkspaceMemoryImportInput[] = [];
+    const retryInteraction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    spyOn(retryInteraction, "editReply");
+    const retryRoute = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        retried.push(input);
+        return { success: true, itemsImported: { memoriesInserted: 2 } };
+      },
+    });
+    const retryParsed = parseInteractionRoute(retryInteraction.customId);
+    if (!retryParsed) throw new Error("Retry confirm route did not parse");
+
+    await retryRoute.execute({} as Client, retryInteraction, retryParsed);
+
+    expect(retried).toHaveLength(1);
+    expect(readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1").status).toBe("missing");
+  });
+
+  it("releases the write claim when the transaction throws", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-claim-throw";
+    storeTransferSnapshot(nonce, makeMemoryRecord({ mapping: { "bucket-0": 100, "bucket-1": 101 } }));
+    seedMemoryDestinations();
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    spyOn(interaction, "editReply");
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async () => {
+        throw new Error("injected transaction failure");
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Claim throw route did not parse");
+
+    await expect(route.execute({} as Client, interaction, parsed)).rejects.toThrow("injected transaction failure");
+
+    const stored = readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1");
+    expect(stored.status).toBe("ok");
+    if (stored.status === "ok") expect(stored.snapshot.writeClaimed).toBe(false);
+  });
+
+  it("commits a Replace from the control the destructive preview itself renders", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-replace-seam";
+    storeTransferSnapshot(
+      nonce,
+      makeMemoryRecord({ strategy: "replace", mapping: { "bucket-0": 100, "bucket-1": "skip" } }),
+    );
+    seedMemoryDestinations();
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true, itemsImported: { memoriesInserted: 1 } };
+      },
+    });
+
+    const firstInteraction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const updateSpy = spyOn(firstInteraction, "update");
+    const firstParsed = parseInteractionRoute(firstInteraction.customId);
+    if (!firstParsed) throw new Error("Preview seam route did not parse");
+
+    await route.execute({} as Client, firstInteraction, firstParsed);
+
+    expect(applied).toEqual([]);
+    const confirmRoute = renderedTransferRoutes(updateSpy.mock.calls[0]?.[0]).find(
+      (rendered) => rendered.action === "memory-replace-confirm",
+    );
+    // A preview whose own confirm control carried the mapping panel's action would never commit anything, and a
+    // route test that hard-codes the action instead of reading it could not tell the difference.
+    expect(confirmRoute).toBeDefined();
+    if (!confirmRoute) throw new Error("The destructive preview rendered no Replace confirm control");
+
+    const secondInteraction = makeInteraction({
+      customId: buildTransferRouteId(confirmRoute),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    spyOn(secondInteraction, "editReply");
+    const secondParsed = parseInteractionRoute(secondInteraction.customId);
+    if (!secondParsed) throw new Error("Rendered Replace confirm route did not parse");
+
+    await route.execute({} as Client, secondInteraction, secondParsed);
+
+    expect(applied).toHaveLength(1);
+    expect(applied[0]?.strategy).toBe("replace");
+    expect(readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1").status).toBe("missing");
+  });
+
+  it("refuses the destructive Replace action after the mapping moved on from the preview", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-replace-moved";
+    storeTransferSnapshot(
+      nonce,
+      makeMemoryRecord({
+        strategy: "replace",
+        mapping: { "bucket-0": 100, "bucket-1": "skip" },
+        replaceConfirmed: true,
+      }),
+    );
+    seedMemoryDestinations();
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true };
+      },
+    });
+
+    // A delayed destination change lands after the destructive preview listed destination 100.
+    const mappingInteraction = makeInteraction({
+      customId: makeRouteId({ action: "memory-map", locale: "en-US", nonce, bucketIndex: 0, destPage: 0 }),
+      kind: "string",
+      guildId: "guild-1",
+      canManageGuild: true,
+      values: ["101"],
+    });
+    spyOn(mappingInteraction, "update");
+    const mappingParsed = parseInteractionRoute(mappingInteraction.customId);
+    if (!mappingParsed) throw new Error("Delayed mapping route did not parse");
+    await route.execute({} as Client, mappingInteraction, mappingParsed);
+
+    const confirmInteraction = makeInteraction({
+      customId: makeRouteId({ action: "memory-replace-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const replySpy = spyOn(confirmInteraction, "reply");
+    const confirmParsed = parseInteractionRoute(confirmInteraction.customId);
+    if (!confirmParsed) throw new Error("Moved-plan confirm route did not parse");
+    await route.execute({} as Client, confirmInteraction, confirmParsed);
+
+    // Destination 101 was never named in a preview this reader confirmed, so the write must not happen.
+    expect(applied).toEqual([]);
+    const payload = replySpy.mock.calls[0]?.[0] as { embeds: Array<{ data: { description?: string } }> };
+    expect(payload.embeds[0]?.data.description).toBe(
+      localizer("en-US", "commands.transfer.memory_replace_confirmation_stale_description"),
+    );
+  });
+
+  it("refuses the destructive Replace action on a Merge snapshot", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-replace-on-merge";
+    storeTransferSnapshot(
+      nonce,
+      makeMemoryRecord({ strategy: "merge", mapping: { "bucket-0": 100, "bucket-1": 101 } }),
+    );
+    seedMemoryDestinations();
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-replace-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    const replySpy = spyOn(interaction, "reply");
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Merge snapshot Replace route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(applied).toEqual([]);
+    const payload = replySpy.mock.calls[0]?.[0] as { embeds: Array<{ data: { description?: string } }> };
+    expect(payload.embeds[0]?.data.description).toBe(
+      localizer("en-US", "commands.transfer.memory_replace_confirmation_stale_description"),
+    );
+  });
+
+  it("refuses to cancel a write that is already running", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-memory-cancel-inflight";
+    storeTransferSnapshot(nonce, makeMemoryRecord({ mapping: { "bucket-0": 100, "bucket-1": 101 } }));
+    seedMemoryDestinations();
+    let cancelDescription: string | undefined;
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async () => {
+        // A queued Cancel arrives while this write is still awaiting its transaction.
+        const cancel = makeInteraction({
+          customId: makeRouteId({ action: "cancel", locale: "en-US", nonce }),
+          kind: "button",
+          guildId: "guild-1",
+          canManageGuild: true,
+        });
+        const cancelReply = spyOn(cancel, "reply");
+        const cancelParsed = parseInteractionRoute(cancel.customId);
+        if (!cancelParsed) throw new Error("In-flight cancel route did not parse");
+        await route.execute({} as Client, cancel, cancelParsed);
+        cancelDescription = (
+          cancelReply.mock.calls[0]?.[0] as { embeds: Array<{ data: { description?: string } }> } | undefined
+        )?.embeds[0]?.data.description;
+        // The write then fails, and the snapshot has to still be there for a retry.
+        return { success: false, error: "commands.data.import.error_update_failed" };
+      },
+    });
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    spyOn(interaction, "editReply");
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("In-flight write route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(cancelDescription).toBe(localizer("en-US", "commands.transfer.memory_import_in_progress_description"));
+    const stored = readTransferSnapshot(nonce, "actor-1", "workspace", "guild-1");
+    expect(stored.status).toBe("ok");
+    if (stored.status === "ok") expect(stored.snapshot.writeClaimed).toBe(false);
+  });
+
+  it("imports a personal bundle keyed on the lineage the plan carries", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-personal-memory-write";
+    storeTransferSnapshot(
+      nonce,
+      makeMemoryRecord({
+        kind: "personal_memories",
+        ownership: "personal",
+        destinationKey: "actor-1",
+        mapping: { "bucket-0": 0, "bucket-1": 55 },
+      }),
+    );
+    const applied: PersonalMemoryImportInput[] = [];
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+    });
+    const editSpy = spyOn(interaction, "editReply");
+    const route = createTransferInteractionRoute({
+      getPersonalMemoryDestinations: async () => PERSONAL_DESTINATIONS,
+      applyPersonalMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true, itemsImported: { memoriesInserted: 2, memoriesSkipped: 0, memoriesDeleted: 0 } };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Personal memory write route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(applied).toEqual([
+      {
+        destinationKey: "actor-1",
+        strategy: "merge",
+        mappings: [
+          { bucketName: "bucket-0", personaLineageId: 0, memories: [{ content: "Memory 0", tags: [] }] },
+          { bucketName: "bucket-1", personaLineageId: 55, memories: [{ content: "Memory 1", tags: [] }] },
+        ],
+      },
+    ]);
+    expect(readTransferSnapshot(nonce, "actor-1", "personal", "actor-1").status).toBe("missing");
+    expect(collectText(editSpy.mock.calls[0]?.[0])).toContain(
+      localizer("en-US", "commands.transfer.memory_import_success_title"),
+    );
+  });
+
+  it("addresses a DM-backed workspace snapshot by its own destination key", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-dm-workspace-write";
+    storeTransferSnapshot(
+      nonce,
+      makeMemoryRecord({
+        ownership: "workspace",
+        destinationKey: "actor-1",
+        mapping: { "bucket-0": 100, "bucket-1": 101 },
+      }),
+    );
+    const destinationReads: string[] = [];
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+    });
+    spyOn(interaction, "editReply");
+    const route = createTransferInteractionRoute({
+      getWorkspaceMemoryDestinations: async (key) => {
+        destinationReads.push(key);
+        return WORKSPACE_DESTINATIONS;
+      },
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true, itemsImported: { memoriesInserted: 2 } };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("DM workspace route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(destinationReads).toEqual(["actor-1"]);
+    expect(applied[0]?.destinationKey).toBe("actor-1");
+  });
+
+  it("drives the default workspace destination read through the real persona cache", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-default-destinations";
+    storeTransferSnapshot(nonce, makeMemoryRecord({ mapping: { "bucket-0": 100, "bucket-1": 101 } }));
+    seedMemoryDestinations();
+    const applied: WorkspaceMemoryImportInput[] = [];
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    spyOn(interaction, "editReply");
+    const route = createTransferInteractionRoute({
+      applyWorkspaceMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true, itemsImported: { memoriesInserted: 2 } };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Default destination route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    // The default read offers one destination per lineage and carries the persona id the write needs, so a
+    // regression to a lineage-only destination would leave the mapping homeless.
+    expect(applied[0]?.mappings.map((mapping) => mapping.personaId)).toEqual([1, 2]);
+  });
+
+  it("drives the default personal destination read through the repositories", async () => {
+    resetTransferSnapshots();
+    const nonce = "nonce-default-personal-dest";
+    storeTransferSnapshot(
+      nonce,
+      makeMemoryRecord({
+        kind: "personal_memories",
+        ownership: "personal",
+        destinationKey: "actor-1",
+        mapping: { "bucket-0": 0, "bucket-1": 55 },
+      }),
+    );
+    const userSpy = spyOn(userRepository, "loadByDiscordId").mockResolvedValue({ user_id: 9 } as never);
+    const lineageSpy = spyOn(personalMemoryRepository, "destinationLineages").mockResolvedValue([
+      { lineageId: 55, nickname: "Sparrow" },
+      { lineageId: 60, nickname: null },
+    ]);
+    activeSpies.push(userSpy, lineageSpy);
+    const applied: PersonalMemoryImportInput[] = [];
+    const interaction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce }),
+      kind: "button",
+    });
+    spyOn(interaction, "editReply");
+    const route = createTransferInteractionRoute({
+      applyPersonalMemoryImport: async (input) => {
+        applied.push(input);
+        return { success: true, itemsImported: { memoriesInserted: 2 } };
+      },
+    });
+    const parsed = parseInteractionRoute(interaction.customId);
+    if (!parsed) throw new Error("Default personal destination route did not parse");
+
+    await route.execute({} as Client, interaction, parsed);
+
+    expect(userSpy).toHaveBeenCalledWith("actor-1");
+    expect(lineageSpy).toHaveBeenCalledWith(9);
+    expect(applied[0]?.mappings.map((mapping) => mapping.personaLineageId)).toEqual([0, 55]);
+  });
+
+  it("defaults each memory kind onto its own repository seam", async () => {
+    resetTransferSnapshots();
+    const workspaceNonce = "nonce-default-workspace-seam";
+    storeTransferSnapshot(workspaceNonce, makeMemoryRecord({ mapping: { "bucket-0": 100, "bucket-1": 101 } }));
+    seedMemoryDestinations();
+    const workspaceSpy = spyOn(importRepository, "importWorkspaceMemoryBundle").mockResolvedValue({
+      success: true,
+      itemsImported: { memoriesInserted: 2 },
+    });
+    const personalBundleSpy = spyOn(importRepository, "importPersonalMemoryBundle");
+    activeSpies.push(workspaceSpy, personalBundleSpy);
+    const workspaceInteraction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce: workspaceNonce }),
+      kind: "button",
+      guildId: "guild-1",
+      canManageGuild: true,
+    });
+    spyOn(workspaceInteraction, "editReply");
+
+    await dispatchGlobalInteraction({} as Client, workspaceInteraction);
+
+    expect(personalBundleSpy).not.toHaveBeenCalled();
+    expect(workspaceSpy).toHaveBeenCalledTimes(1);
+    const [serverDiscId, importerDiscId, mappings, strategy] = workspaceSpy.mock.calls[0] ?? [];
+    expect(serverDiscId).toBe("guild-1");
+    // The imported rows are attributed to the invoking manager, not to an arbitrary users row.
+    expect(importerDiscId).toBe("actor-1");
+    expect(strategy).toBe("merge");
+    expect(mappings).toEqual([
+      { bucketName: "bucket-0", personaId: 1, memories: [{ content: "Memory 0", tags: [] }] },
+      { bucketName: "bucket-1", personaId: 2, memories: [{ content: "Memory 1", tags: [] }] },
+    ]);
+
+    resetTransferSnapshots();
+    const personalNonce = "nonce-default-personal-seam";
+    storeTransferSnapshot(
+      personalNonce,
+      makeMemoryRecord({
+        kind: "personal_memories",
+        ownership: "personal",
+        destinationKey: "actor-1",
+        mapping: { "bucket-0": 0, "bucket-1": 55 },
+      }),
+    );
+    const personalSpy = spyOn(importRepository, "importPersonalMemoryBundle").mockResolvedValue({
+      success: true,
+      itemsImported: { memoriesInserted: 2 },
+    });
+    activeSpies.push(personalSpy);
+    const personalInteraction = makeInteraction({
+      customId: makeRouteId({ action: "memory-confirm", locale: "en-US", nonce: personalNonce }),
+      kind: "button",
+    });
+    spyOn(personalInteraction, "editReply");
+    const personalRoute = createTransferInteractionRoute({
+      getPersonalMemoryDestinations: async () => PERSONAL_DESTINATIONS,
+    });
+
+    await personalRoute.execute(
+      {} as Client,
+      personalInteraction,
+      parseInteractionRoute(personalInteraction.customId) as never,
+    );
+
+    expect(personalSpy).toHaveBeenCalledTimes(1);
+    expect(personalSpy.mock.calls[0]?.[0]).toBe("actor-1");
+    expect(personalSpy.mock.calls[0]?.[2]).toBe("merge");
+  });
+
+  it("omits skipped buckets from the bundle and refuses a destination the plan cannot key", () => {
+    const buckets = makeMemoryBuckets();
+    const destinations = WORKSPACE_DESTINATIONS;
+    const plan = resolveMemoryMappingPlan(buckets, { "bucket-0": 100, "bucket-1": "skip" });
+    if (plan.status !== "ok") throw new Error("Skip fixture must resolve");
+
+    expect(buildMemoryImportMappings("workspace_memories", buckets, plan.plan, destinations)).toMatchObject({
+      status: "ok",
+      kind: "workspace_memories",
+      mappings: [{ bucketName: "bucket-0", personaId: 1 }],
+    });
+
+    // A personal destination can never satisfy a workspace write, so the whole bundle is refused rather than
+    // silently importing part of it.
+    expect(buildMemoryImportMappings("workspace_memories", buckets, plan.plan, PERSONAL_DESTINATIONS)).toEqual({
+      status: "refused",
+    });
+    // A bucket the plan names but the snapshot no longer carries is refused for the same reason.
+    expect(buildMemoryImportMappings("personal_memories", [], plan.plan, PERSONAL_DESTINATIONS)).toEqual({
+      status: "refused",
+    });
   });
 
   it("rejects both interaction-kind directions for every memory mapping action", async () => {
@@ -691,23 +1651,107 @@ describe("transfer interaction routes", () => {
     }
   });
 
-  it("records both memory strategies without consuming the snapshot", async () => {
-    for (const strategy of ["merge", "replace"] as const) {
+  it("records a chosen memory strategy, opens the mapping surface, and consumes nothing", async () => {
+    const cases: Array<{
+      strategy: "merge" | "replace";
+      record: TransferSnapshotRecordInput;
+      dependencies: Parameters<typeof createTransferInteractionRoute>[0];
+    }> = [
+      { strategy: "merge", record: makeMemoryRecord({ strategy: undefined }), dependencies: {} },
+      { strategy: "replace", record: makeMemoryRecord({ strategy: undefined }), dependencies: {} },
+      {
+        strategy: "merge",
+        record: makeMemoryRecord({
+          strategy: undefined,
+          kind: "personal_memories",
+          ownership: "personal",
+          destinationKey: "actor-1",
+        }),
+        dependencies: { getPersonalMemoryDestinations: async () => PERSONAL_DESTINATIONS },
+      },
+    ];
+
+    for (const testCase of cases) {
       resetTransferSnapshots();
-      const nonce = `nonce-${strategy}`;
-      storeTransferSnapshot(nonce, makeRecord({ kind: "personal_memories" }));
+      const nonce = `nonce-strategy-${testCase.strategy}-${testCase.record.ownership}`;
+      storeTransferSnapshot(nonce, testCase.record);
+      seedMemoryDestinations();
       const interaction = makeInteraction({
-        customId: makeRouteId({ action: "memory-strategy", locale: "en-US", nonce, strategy }),
+        customId: makeRouteId({ action: "memory-strategy", locale: "en-US", nonce, strategy: testCase.strategy }),
         kind: "button",
+        guildId: testCase.record.ownership === "workspace" ? "guild-1" : null,
+        canManageGuild: true,
       });
+      const updateSpy = spyOn(interaction, "update");
       const replySpy = spyOn(interaction, "reply");
+      const parsed = parseInteractionRoute(interaction.customId);
+      if (!parsed) throw new Error("Memory strategy route did not parse");
 
-      await expect(dispatchGlobalInteraction({} as Client, interaction)).resolves.toBe(true);
+      await createTransferInteractionRoute(testCase.dependencies).execute({} as Client, interaction, parsed);
 
-      const result = readTransferSnapshot(nonce, "actor-1", "personal", "actor-1");
+      const result = readTransferSnapshot(nonce, "actor-1", testCase.record.ownership, testCase.record.destinationKey);
       expect(result.status).toBe("ok");
-      if (result.status === "ok") expect(result.snapshot.strategy).toBe(strategy);
-      expect(replySpy).toHaveBeenCalledTimes(1);
+      if (result.status === "ok") expect(result.snapshot.strategy).toBe(testCase.strategy);
+      // Choosing a strategy has to open the mapping surface: its controls exist only there, so replying anything
+      // else would leave the flow with no way forward.
+      expect({ strategy: testCase.strategy, replies: replySpy.mock.calls.length }).toEqual({
+        strategy: testCase.strategy,
+        replies: 0,
+      });
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      const panelText = collectText(updateSpy.mock.calls[0]?.[0]);
+      expect(panelText).toContain(localizer("en-US", "commands.transfer.memory_mapping_title"));
+      expect(panelText).toContain(
+        localizer("en-US", "commands.transfer.memory_mapping_strategy", {
+          strategy: localizer(
+            "en-US",
+            testCase.strategy === "merge"
+              ? "commands.transfer.memory_merge_label"
+              : "commands.transfer.memory_replace_label",
+          ),
+        }),
+      );
+      expect(panelText).not.toContain(placeholderText());
+    }
+  });
+
+  it("leaves no control on the memory preview without a destination", async () => {
+    const nonce = "nonce-preview-controls";
+    const previewPayload = buildMemoryTransferPreviewPayload({
+      locale: "en-US",
+      kind: "workspace_memories",
+      buckets: makeMemoryBuckets(),
+      nonce,
+    });
+    const rendered = renderedTransferRoutes(previewPayload);
+    expect(rendered.length).toBeGreaterThan(0);
+
+    for (const renderedRoute of rendered) {
+      resetTransferSnapshots();
+      // The strategy is already recorded, so this exercises each control's own destination rather than the
+      // strategy gate in front of the mapping surface.
+      storeTransferSnapshot(nonce, makeMemoryRecord({ strategy: "merge" }));
+      seedMemoryDestinations();
+      const interaction = makeInteraction({
+        customId: buildTransferRouteId(renderedRoute),
+        kind: "button",
+        guildId: "guild-1",
+        canManageGuild: true,
+      });
+      const updateSpy = spyOn(interaction, "update");
+      const replySpy = spyOn(interaction, "reply");
+      const parsed = parseInteractionRoute(interaction.customId);
+      if (!parsed) throw new Error(`Rendered preview control ${renderedRoute.action} did not parse`);
+
+      await createTransferInteractionRoute().execute({} as Client, interaction, parsed);
+
+      // The placeholder is the marker for a surface a later slice still owed. Every control the preview renders has
+      // to reach a real destination, whether by replying with a refusal or by rendering the next surface.
+      const reachedText = `${collectRenderedText(replySpy.mock.calls[0]?.[0])}\n${collectRenderedText(updateSpy.mock.calls[0]?.[0])}`;
+      expect({ route: renderedRoute, placeholder: reachedText.includes(placeholderText()) }).toEqual({
+        route: renderedRoute,
+        placeholder: false,
+      });
     }
   });
 

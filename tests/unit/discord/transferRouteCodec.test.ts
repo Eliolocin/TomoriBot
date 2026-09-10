@@ -59,6 +59,7 @@ describe("transfer route catalog and codecs", () => {
       destPage: 9007199254740991,
     },
     { action: "memory-confirm", locale: "en-US", nonce: "nonce-0123" },
+    { action: "memory-replace-confirm", locale: "en-US", nonce: "nonce-0abc" },
     { action: "cancel", locale: "en-US", nonce: "nonce-123a" },
   ];
 
@@ -86,10 +87,20 @@ describe("transfer route catalog and codecs", () => {
       Number.MAX_SAFE_INTEGER,
       Number.MAX_SAFE_INTEGER,
     ]);
-    expect(TRANSFER_ROUTE_CODECS["memory-map-page"].wireToken.length).toBe(
+    expect(buildTransferRouteId(maxLengthRoute).length).toBeLessThanOrEqual(100);
+
+    // The ceiling has to be measured against the longest wire token carrying the longest nonce, not only against
+    // the action with the most fields, so both worst cases are named here.
+    expect(TRANSFER_ROUTE_CODECS["memory-replace-confirm"].wireToken.length).toBe(
       Math.max(...Object.values(TRANSFER_ROUTE_CODECS).map((codec) => codec.wireToken.length)),
     );
-    expect(buildTransferRouteId(maxLengthRoute).length).toBeLessThanOrEqual(100);
+    expect(
+      buildTransferRouteId({
+        action: "memory-replace-confirm",
+        locale: "en-US",
+        nonce: "12345678901234567890123456789012",
+      }).length,
+    ).toBeLessThanOrEqual(100);
   });
 
   it("rejects forged and malformed route values", () => {

@@ -26,6 +26,16 @@ export interface TransferSnapshotRecord {
   strategy?: "merge" | "replace";
   mapping?: Record<string, number | "skip">;
   selectedBucket?: string;
+  /**
+   * Records that the destructive Replace preview has been shown for this snapshot. The write path requires it, so
+   * a Replace cannot be committed by a client that skipped the confirmation screen.
+   */
+  replaceConfirmed?: boolean;
+  /**
+   * Records that one interaction has claimed this snapshot to write it. A claimed snapshot is never consumed by a
+   * failed write, so the claim is what keeps a repeated confirmation from writing the imported memories twice.
+   */
+  writeClaimed?: boolean;
 }
 
 export type TransferSnapshotRecordInput = Omit<TransferSnapshotRecord, "expiresAt">;
@@ -34,12 +44,19 @@ export type TransferSnapshotStatePatch = {
   strategy?: "merge" | "replace";
   mapping?: Record<string, number | "skip">;
   selectedBucket?: string;
+  replaceConfirmed?: boolean;
 };
 
 export type TransferSnapshotReadResult =
   | { status: "missing" }
   | { status: "forbidden" }
   | { status: "ok"; snapshot: TransferSnapshotRecord };
+
+export type TransferSnapshotClaimResult =
+  | { status: "missing" }
+  | { status: "forbidden" }
+  | { status: "in-flight" }
+  | { status: "claimed"; snapshot: TransferSnapshotRecord };
 
 export interface TransferSnapshotStore {
   storeTransferSnapshot(nonce: string, record: TransferSnapshotRecordInput): void;
@@ -61,6 +78,18 @@ export interface TransferSnapshotStore {
     ownership: TransferSnapshotRecord["ownership"],
     destinationKey: string,
     patch: TransferSnapshotStatePatch,
+  ): TransferSnapshotReadResult;
+  claimTransferSnapshot(
+    nonce: string,
+    actorDiscId: string,
+    ownership: TransferSnapshotRecord["ownership"],
+    destinationKey: string,
+  ): TransferSnapshotClaimResult;
+  releaseTransferSnapshotClaim(
+    nonce: string,
+    actorDiscId: string,
+    ownership: TransferSnapshotRecord["ownership"],
+    destinationKey: string,
   ): TransferSnapshotReadResult;
   resetTransferSnapshots(): void;
   getTransferSnapshotCount(): number;
@@ -128,8 +157,52 @@ export function createTransferSnapshotStore(now: () => number = Date.now): Trans
 
     // State updates never extend expiresAt, so an active mapping session still ends at its original deadline.
     const updatedSnapshot = { ...result.snapshot, ...patch };
+    // The destructive preview describes one exact plan, so any patch that moves the strategy or the mapping on
+    // invalidates a recorded confirmation. Enforcing it here rather than at each call site is what keeps a future
+    // mapping action from re-opening a Replace whose confirmation the reader gave for different destinations.
+    if (patch.strategy !== undefined || patch.mapping !== undefined) {
+      updatedSnapshot.replaceConfirmed = false;
+    }
     snapshots.set(nonce, updatedSnapshot);
     return { status: "ok", snapshot: updatedSnapshot };
+  };
+
+  /**
+   * Claims the snapshot for the interaction that is about to write it.
+   *
+   * The read and the write happen in one synchronous step, so no second interaction can pass the check in between:
+   * that is the whole point of the claim, because the import transaction itself is awaited and a duplicate
+   * confirmation arriving during it would otherwise validate against the same unclaimed snapshot and import the
+   * same memories again.
+   */
+  const claim = (
+    nonce: string,
+    actorDiscId: string,
+    ownership: TransferSnapshotRecord["ownership"],
+    destinationKey: string,
+  ): TransferSnapshotClaimResult => {
+    const result = read(nonce, actorDiscId, ownership, destinationKey);
+    if (result.status !== "ok") return result;
+    if (result.snapshot.writeClaimed) return { status: "in-flight" };
+
+    const claimedSnapshot = { ...result.snapshot, writeClaimed: true };
+    snapshots.set(nonce, claimedSnapshot);
+    return { status: "claimed", snapshot: claimedSnapshot };
+  };
+
+  /** Releases a claim whose write did not commit, so the pending import stays retryable. */
+  const releaseClaim = (
+    nonce: string,
+    actorDiscId: string,
+    ownership: TransferSnapshotRecord["ownership"],
+    destinationKey: string,
+  ): TransferSnapshotReadResult => {
+    const result = read(nonce, actorDiscId, ownership, destinationKey);
+    if (result.status !== "ok") return result;
+
+    const releasedSnapshot = { ...result.snapshot, writeClaimed: false };
+    snapshots.set(nonce, releasedSnapshot);
+    return { status: "ok", snapshot: releasedSnapshot };
   };
 
   return {
@@ -147,6 +220,8 @@ export function createTransferSnapshotStore(now: () => number = Date.now): Trans
     readTransferSnapshot: read,
     consumeTransferSnapshot: consume,
     updateTransferSnapshotState: update,
+    claimTransferSnapshot: claim,
+    releaseTransferSnapshotClaim: releaseClaim,
     resetTransferSnapshots: () => snapshots.clear(),
     getTransferSnapshotCount: () => snapshots.size,
   };
@@ -158,4 +233,6 @@ export const storeTransferSnapshot = defaultTransferSnapshotStore.storeTransferS
 export const readTransferSnapshot = defaultTransferSnapshotStore.readTransferSnapshot;
 export const consumeTransferSnapshot = defaultTransferSnapshotStore.consumeTransferSnapshot;
 export const updateTransferSnapshotState = defaultTransferSnapshotStore.updateTransferSnapshotState;
+export const claimTransferSnapshot = defaultTransferSnapshotStore.claimTransferSnapshot;
+export const releaseTransferSnapshotClaim = defaultTransferSnapshotStore.releaseTransferSnapshotClaim;
 export const resetTransferSnapshots = defaultTransferSnapshotStore.resetTransferSnapshots;

@@ -23,10 +23,14 @@ export type ConfigTransferKind = "workspace_config" | "personal_config";
 export type MemoryTransferKind = "workspace_memories" | "personal_memories";
 export type MemoryTransferMapping = Readonly<Record<string, number | "skip">>;
 
-export interface MemoryTransferDestination {
-  lineageId: number;
-  label: string;
-}
+/**
+ * One destination a source bucket may be bound to. A workspace destination addresses a persona, which the importer
+ * resolves back to its current lineage; a personal destination addresses the lineage itself, because personal
+ * memories have no persona row in the workspace that happens to be open at import time.
+ */
+export type MemoryTransferDestination =
+  | { ownership: "workspace"; lineageId: number; personaId: number; label: string }
+  | { ownership: "personal"; lineageId: number; label: string };
 
 type ConfigSectionName = keyof typeof V2_CONFIG_SECTION_SCHEMAS;
 
@@ -304,7 +308,14 @@ function memoryDestinationLabel(destination: MemoryTransferDestination): string 
 }
 
 function memoryBucketCount(locale: string, count: number): string {
-  return safeUserText(localizer(locale, "commands.transfer.memory_bucket_count", { count }), 100);
+  return safeUserText(
+    localizer(
+      locale,
+      count === 1 ? "commands.transfer.memory_bucket_count_one" : "commands.transfer.memory_bucket_count",
+      { count },
+    ),
+    100,
+  );
 }
 
 function memoryStrategyLabel(locale: string, strategy: "merge" | "replace"): string {
@@ -364,29 +375,60 @@ export function buildMemoryTransferPreviewPayload(input: {
   kind: MemoryTransferKind;
   buckets: readonly MemoryBucket[];
   nonce: string;
+  /** Set when the file's own ownership differs from the destination's, which the reader must be told about. */
+  crossOwnership?: boolean;
 }): ComponentsV2MessagePayload & { attachments: readonly [] } {
   if (input.buckets.length === 0) {
     throw new Error("Cannot build a memory transfer preview without buckets");
   }
 
-  const bucketSummary = input.buckets
-    .map((bucket) => `${safeUserText(bucket.label, 100)}: ${memoryBucketCount(input.locale, bucket.memories.length)}`)
+  const bucketRows = input.buckets
+    .map((bucket) => `• ${safeUserText(bucket.label, 80)}: ${memoryBucketCount(input.locale, bucket.memories.length)}`)
     .join("\n");
-  const content = [
-    `### ${safeUserText(localizer(input.locale, "commands.transfer.memory_preview_title"), 100)}`,
-    safeUserText(
-      localizer(input.locale, "commands.transfer.memory_preview_description", {
-        ownership: localizer(
-          input.locale,
-          input.kind === "workspace_memories"
-            ? "commands.transfer.workspace_memories_label"
-            : "commands.transfer.personal_memories_label",
-        ),
-      }),
-      500,
-    ),
-    bucketSummary,
-  ].join("\n\n");
+  const ownershipLabelKey =
+    input.kind === "workspace_memories"
+      ? "commands.transfer.workspace_memories_label"
+      : "commands.transfer.personal_memories_label";
+  const description = safeUserText(
+    localizer(input.locale, "commands.transfer.memory_preview_description", {
+      ownership: localizer(input.locale, ownershipLabelKey),
+    }),
+    500,
+  );
+  const crossOwnershipRows = input.crossOwnership
+    ? [
+        localizer(input.locale, "commands.transfer.memory_cross_ownership_source_line", {
+          // The file's own ownership is the other one, so the destination label names the change.
+          source: localizer(
+            input.locale,
+            input.kind === "workspace_memories"
+              ? "commands.transfer.personal_memories_label"
+              : "commands.transfer.workspace_memories_label",
+          ),
+        }),
+        localizer(input.locale, "commands.transfer.memory_cross_ownership_destination_line", {
+          destination: localizer(input.locale, ownershipLabelKey),
+        }),
+      ].join("\n")
+    : null;
+  // One block of single-spaced lines in the config preview's shape: a heading line immediately above its own quoted
+  // rows, and a bold lead line. Blank lines between a heading and its rows read as unrelated panels.
+  const content = safeUserText(
+    [
+      `### ${safeUserText(localizer(input.locale, "commands.transfer.memory_preview_title"), 100)}`,
+      `**${description}**`,
+      safeUserText(localizer(input.locale, "commands.transfer.memory_preview_exclusions"), 200),
+      ...(crossOwnershipRows
+        ? [
+            safeUserText(localizer(input.locale, "commands.transfer.memory_cross_ownership_heading"), 100),
+            withLinePrefix("> ", safeUserText(crossOwnershipRows, 400)),
+          ]
+        : []),
+      safeUserText(localizer(input.locale, "commands.transfer.memory_preview_groups_heading"), 100),
+      withLinePrefix("> ", safeUserText(bucketRows, 1500)),
+    ].join("\n"),
+    3900,
+  );
 
   return buildMemoryPayload(input.locale, [
     { type: ComponentType.TextDisplay, content },
@@ -454,8 +496,8 @@ export function buildMemoryMappingPayload(input: {
 
   const selectedBucket = input.buckets[input.selectedBucketIndex];
   if (!selectedBucket) throw new Error("Cannot build a memory mapping payload without a selected bucket");
-  const mappingSummary = input.buckets
-    .map((bucket) => memorySummaryLine(input.locale, bucket, input.destinations, input.mapping))
+  const mappingRows = input.buckets
+    .map((bucket) => `• ${memorySummaryLine(input.locale, bucket, input.destinations, input.mapping)}`)
     .join("\n");
   const bucketStart = input.bucketPage * MEMORY_BUCKETS_PER_PAGE;
   const bucketOptions = input.buckets
@@ -530,16 +572,20 @@ export function buildMemoryMappingPayload(input: {
   const components: Parameters<typeof buildPanelContainer>[0] = [
     {
       type: ComponentType.TextDisplay,
-      content: [
-        `### ${safeUserText(localizer(input.locale, "commands.transfer.memory_mapping_title"), 100)}`,
-        safeUserText(
-          localizer(input.locale, "commands.transfer.memory_mapping_strategy", {
-            strategy: memoryStrategyLabel(input.locale, input.strategy),
-          }),
-          200,
-        ),
-        mappingSummary,
-      ].join("\n\n"),
+      content: safeUserText(
+        [
+          `### ${safeUserText(localizer(input.locale, "commands.transfer.memory_mapping_title"), 100)}`,
+          `**${safeUserText(
+            localizer(input.locale, "commands.transfer.memory_mapping_strategy", {
+              strategy: memoryStrategyLabel(input.locale, input.strategy),
+            }),
+            200,
+          )}**`,
+          safeUserText(localizer(input.locale, "commands.transfer.memory_mapping_summary_heading"), 100),
+          withLinePrefix("> ", safeUserText(mappingRows, 1500)),
+        ].join("\n"),
+        3900,
+      ),
     },
     {
       type: ComponentType.ActionRow,
@@ -634,12 +680,23 @@ export function buildMemoryReplaceConfirmationPayload(input: {
         250,
       ),
     );
-  const content = [
-    `### ${safeUserText(localizer(input.locale, "commands.transfer.memory_replace_confirmation_title"), 100)}`,
-    safeUserText(localizer(input.locale, "commands.transfer.memory_replace_confirmation_description"), 500),
-    `${safeUserText(localizer(input.locale, "commands.transfer.memory_cleared_destinations_heading"), 100)}\n${clearedDestinations.join("\n")}`,
-    `${safeUserText(localizer(input.locale, "commands.transfer.memory_skipped_buckets_heading"), 100)}\n${skippedBuckets.join("\n")}`,
-  ].join("\n\n");
+  // A heading with no rows under it reads as a rendering fault, so an empty group says so instead.
+  const skippedRows =
+    skippedBuckets.length > 0
+      ? skippedBuckets.map((line) => `• ${line}`).join("\n")
+      : localizer(input.locale, "commands.transfer.memory_skipped_buckets_none");
+  const content = safeUserText(
+    [
+      `### ${safeUserText(localizer(input.locale, "commands.transfer.memory_replace_confirmation_title"), 100)}`,
+      `**${safeUserText(localizer(input.locale, "commands.transfer.memory_replace_confirmation_description"), 300)}**`,
+      safeUserText(localizer(input.locale, "commands.transfer.memory_replace_confirmation_irreversible"), 200),
+      safeUserText(localizer(input.locale, "commands.transfer.memory_cleared_destinations_heading"), 100),
+      withLinePrefix("> ", safeUserText(clearedDestinations.map((label) => `• ${label}`).join("\n"), 1500)),
+      safeUserText(localizer(input.locale, "commands.transfer.memory_skipped_buckets_heading"), 100),
+      withLinePrefix("> ", safeUserText(skippedRows, 1500)),
+    ].join("\n"),
+    3900,
+  );
 
   return buildMemoryPayload(input.locale, [
     { type: ComponentType.TextDisplay, content },
@@ -649,7 +706,11 @@ export function buildMemoryReplaceConfirmationPayload(input: {
         {
           type: ComponentType.Button,
           style: ButtonStyle.Danger,
-          customId: buildTransferRouteId({ action: "memory-confirm", locale: input.locale, nonce: input.nonce }),
+          customId: buildTransferRouteId({
+            action: "memory-replace-confirm",
+            locale: input.locale,
+            nonce: input.nonce,
+          }),
           label: safeSelectOptionText(localizer(input.locale, "commands.transfer.memory_replace_confirm_label"), 80),
         },
         {

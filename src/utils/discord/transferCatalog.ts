@@ -22,6 +22,7 @@ export type TransferPanelRoute =
   | { action: "memory-map"; locale: string; nonce: string; bucketIndex: number; destPage: number }
   | { action: "memory-map-page"; locale: string; nonce: string; bucketIndex: number; destPage: number }
   | { action: "memory-confirm"; locale: string; nonce: string }
+  | { action: "memory-replace-confirm"; locale: string; nonce: string }
   | { action: "cancel"; locale: string; nonce: string };
 
 type TransferAction = TransferPanelRoute["action"];
@@ -102,6 +103,12 @@ export const TRANSFER_ROUTE_CODECS: TransferRouteCodecs = {
   },
   "memory-confirm": {
     wireToken: "memory-confirm",
+    fields: [nonceField],
+  },
+  // The destructive Replace confirmation carries its own action so a repeated or duplicated click on the mapping
+  // panel's Confirm cannot be mistaken for a click on the preview the action exists to gate.
+  "memory-replace-confirm": {
+    wireToken: "memory-replace-confirm",
     fields: [nonceField],
   },
   cancel: {

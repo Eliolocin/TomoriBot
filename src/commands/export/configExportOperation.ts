@@ -2,16 +2,20 @@ import { AttachmentBuilder, EmbedBuilder, MessageFlags, type ChatInputCommandInt
 import type { ExportResult } from "@/types/db/dataExport";
 import type { StandardEmbedOptions } from "@/types/discord/embed";
 import { exportRepository } from "@/utils/db/repositories";
-import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import {
   isWorkspaceTransferAuthorized,
   resolveWorkspaceTransferKey,
 } from "@/utils/discord/interactions/transferAuthorization";
+import {
+  buildTransferExportFileName,
+  resolveTransferExportSubject,
+  type TransferExportScope,
+} from "@/utils/discord/transferExportFileName";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-export type ConfigExportScope = "workspace" | "personal";
+export type ConfigExportScope = TransferExportScope;
 
 /** Keeps this helper out of slash-command registration; the loader scans every file in a command directory. */
 export const isCommandEnabled = () => false;
@@ -38,31 +42,7 @@ const defaultDependencies: ConfigExportDependencies = {
   replyInfoEmbed,
 };
 
-/** The scope's word in the filename. The internal scope stays `workspace`, which may be a DM-backed workspace. */
-const EXPORT_FILE_SCOPE_NAMES: Record<ConfigExportScope, string> = {
-  workspace: "server",
-  personal: "personal",
-};
-
-/**
- * `tomori-<name>-<scope>-config-<timestamp>.json`, the shape `/persona export` uses. The name is the workspace or
- * account the file belongs to, so two exports are told apart by sight rather than by a snowflake, and it is passed
- * through the same sanitizer `/persona export` uses: that is what keeps an arbitrary guild or account name from
- * carrying a path separator, a reserved character, or a control character into the attachment name. A name that
- * sanitizes away entirely still yields a name, because the sanitizer appends a short hash of the original.
- */
-function buildExportFileName(scope: ConfigExportScope, interaction: ChatInputCommandInteraction): string {
-  const scopeName = EXPORT_FILE_SCOPE_NAMES[scope];
-  const subject =
-    scope === "workspace" ? (interaction.guild?.name ?? interaction.user.username) : interaction.user.username;
-  const sanitizedSubject = sanitizeAttachmentFilenamePart(subject, {
-    fallback: scopeName,
-    maxLength: 50,
-  });
-
-  return `tomori-${sanitizedSubject}-${scopeName}-config-${Date.now()}.json`;
-}
-
+/** The receipt and DM name the exported scope by this word, so it reads as the thing the reader asked for. */
 const EXPORT_TYPE_LABEL_KEYS: Record<ConfigExportScope, string> = {
   workspace: "commands.data.export.type_choice_server_config",
   personal: "commands.data.export.type_choice_personal_settings",
@@ -112,7 +92,11 @@ export async function runConfigExport(
     }
 
     const attachment = new AttachmentBuilder(Buffer.from(JSON.stringify(exportResult.data, null, 2), "utf-8"), {
-      name: buildExportFileName(scope, interaction),
+      name: buildTransferExportFileName({
+        scope,
+        category: "config",
+        subject: resolveTransferExportSubject(scope, interaction),
+      }),
     });
 
     try {
