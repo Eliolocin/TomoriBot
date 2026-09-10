@@ -16,10 +16,8 @@ import {
   synthesizeSpeechViaTtsCloneBuffer,
   type TtsCloneErrorKind,
 } from "@/providers/custom/styles/ttsCloningAdapter";
-import {
-  isVoiceDesignEndpoint,
-  synthesizeSpeechViaTtsVoiceDesign,
-} from "@/providers/custom/styles/ttsVoiceDesignAdapter";
+import { synthesizeSpeechViaTtsVoiceDesign } from "@/providers/custom/styles/ttsVoiceDesignAdapter";
+import { resolveVoiceSourceCapabilities } from "@/utils/speech/voiceSourceCapabilities";
 
 /** Metric key recorded against the `audio_generated` stat. */
 export type VoiceBackendKey = "elevenlabs" | "tts-clone" | "tts-voice-design";
@@ -94,9 +92,19 @@ export async function synthesizeVoiceMessage(
   request: VoiceMessageSynthesisRequest,
 ): Promise<VoiceMessageSynthesisResult> {
   const { endpoint, endpointApiKey, elevenLabsApiKey, source, script, chatterbox } = request;
+  // Single source of truth for which request shapes the endpoint takes, shared with the modal's
+  // source table so the two can never disagree about what an `auto` endpoint accepts.
+  const capabilities = resolveVoiceSourceCapabilities(endpoint);
 
   if (source.kind === "design") {
-    if (endpoint?.api_style !== "tts-clone" || !isVoiceDesignEndpoint(endpoint)) {
+    if (!endpoint) {
+      return failure("tts-voice-design", "No active speech endpoint is configured for this server.");
+    }
+
+    // `auto` accepts design bodies too. Gating this on the dedicated-endpoint check instead is what
+    // silently disables voice design on every mixed deployment, which is the one mode the modal's
+    // voice-source radio exists to serve.
+    if (!capabilities.acceptsDesignShape) {
       return failure(
         "tts-voice-design",
         "The active persona has a voice design prompt, but the active speech endpoint does not support instruct-based voice design. Select a VoiceDesign speech endpoint or assign a different voice.",
@@ -123,7 +131,17 @@ export async function synthesizeVoiceMessage(
   }
 
   if (source.kind === "clone" || source.kind === "clone-buffer") {
-    if (endpoint?.api_style !== "tts-clone") {
+    if (!endpoint) {
+      return failure(
+        "tts-clone",
+        "No speech clone endpoint is configured for this server. A server manager can add one with /providers.",
+      );
+    }
+
+    // Capability, not `api_style` alone: a voice-design-only endpoint rejects a clone body even
+    // though it is still a `tts-clone` endpoint, so posting one would reach the server and fail
+    // there instead of here.
+    if (!capabilities.acceptsCloneShape) {
       return failure(
         "tts-clone",
         "No speech clone endpoint is configured for this server. A server manager can add one with /providers.",

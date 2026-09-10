@@ -35,6 +35,7 @@ import { handlePersonaAutocomplete } from "@/utils/discord/autocomplete/personaA
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { safeSelectOptionText } from "@/utils/discord/ui/interactionCore";
 import { promptWithRawModal } from "@/utils/discord/ui/modals";
+import type { ModalComponent } from "@/types/discord/modal";
 import { getOrCreateWebhook } from "@/utils/discord/webhook/lifecycle";
 import { resolvePersonaWebhookIdentity } from "@/utils/discord/webhook/identity";
 import {
@@ -57,8 +58,6 @@ import {
   validateVoiceSampleUpload,
 } from "@/utils/speech/voiceSampleAddOperation";
 import {
-  formatVoiceSourceOptionDescription,
-  resolveVoiceSourceCapabilities,
   resolveVoiceSourceCandidates,
   selectDefaultVoiceSource,
   type VoiceSourceCandidate,
@@ -178,6 +177,11 @@ function describeBackend(locale: string, backendKey: VoiceBackendKey): string {
   return localizer(locale, `commands.generate.voice-message.backend_${backendKey.replace(/-/g, "_")}`);
 }
 
+/** True when the persona holds an ElevenLabs voice id the fallback path could use. */
+function usesElevenLabsVoice(persona: TomoriState): boolean {
+  return Boolean(persona.speech_voice_id?.trim());
+}
+
 /**
  * Picks the delivery-knob radio for the resolved endpoint, or null when that endpoint has no knob.
  *
@@ -218,10 +222,9 @@ function resolveSourceDisplayText(input: {
     return input.personaSampleName ?? localizer(locale, "commands.generate.voice-message.source_sample_fallback");
   }
   if (candidate.shape === "design") {
-    return formatVoiceSourceOptionDescription(
-      localizer(locale, "commands.generate.voice-message.modal.mode_design"),
-      candidate.designPrompt ?? "",
-    );
+    // Bare, without the radio's `Design | ` prefix: this field is titled "Voice Used", so the mode
+    // prefix would be noise rather than the request-shape signal it carries in the modal.
+    return candidate.designPrompt ?? "";
   }
   return localizer(locale, "commands.generate.voice-message.source_elevenlabs");
 }
@@ -391,16 +394,33 @@ export async function execute(
   const persona = personaResolution.persona;
 
   const speechEndpoint = await resolveActiveSpeechEndpoint(mainPersona.server_id);
-  // The legacy optional key only matters for the ElevenLabs fallback, and the tool only consults it
-  // once the persona is known to have a voice id, so skip the lookup otherwise.
-  const elevenLabsApiKey = persona.speech_voice_id?.trim()
-    ? ((await getOptApiKey(mainPersona.server_id, ELEVENLABS_SERVICE_NAME)) ?? "")
+  const endpointIsElevenLabs = speechEndpoint?.endpoint.api_style === "elevenlabs";
+
+  // Mirror the tool's credential precedence: an endpoint-scoped key wins over the legacy
+  // opt_api_keys entry, which only survives for deployments that predate the endpoint pathway. A
+  // server whose ElevenLabs key lives on its endpoint has no opt_api_keys row at all.
+  const needsElevenLabsKey = usesElevenLabsVoice(persona) && (endpointIsElevenLabs || !speechEndpoint);
+  const elevenLabsApiKey = needsElevenLabsKey
+    ? speechEndpoint?.apiKey || ((await getOptApiKey(mainPersona.server_id, ELEVENLABS_SERVICE_NAME)) ?? "")
     : "";
-  const usesElevenLabs = !speechEndpoint && Boolean(elevenLabsApiKey) && Boolean(persona.speech_voice_id?.trim());
+
+  const usesElevenLabs = !speechEndpoint && Boolean(elevenLabsApiKey) && usesElevenLabsVoice(persona);
   if (!speechEndpoint && !usesElevenLabs) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.generate.voice-message.no_endpoint_title",
       descriptionKey: "commands.generate.voice-message.no_endpoint_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // An ElevenLabs endpoint without a usable key would otherwise pass the gate above and only fail
+  // at synthesis, after the user has typed a whole script into the modal.
+  if (endpointIsElevenLabs && !elevenLabsApiKey) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.generate.voice-message.no_api_key_title",
+      descriptionKey: "commands.generate.voice-message.no_api_key_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -453,7 +473,6 @@ export async function execute(
   }
 
   const defaultSource = selectDefaultVoiceSource(candidates);
-  const capabilities = resolveVoiceSourceCapabilities(effectiveEndpoint);
   const anyDesignShape = candidates.some((candidate) => candidate.shape === "design");
   const expressiveness = resolveExpressivenessBackend({
     endpoint: effectiveEndpoint,
@@ -461,18 +480,36 @@ export async function execute(
     cloneShapeSelected: defaultSource?.shape === "clone",
   });
 
-  const modalComponents = buildVoiceMessageModalComponents({
-    locale,
-    candidates,
-    scriptMarkup: effectiveEndpoint?.extra_config.script_markup as string | undefined,
-    designShapeAvailable: anyDesignShape || capabilities.acceptsDesignShape,
-    uploadShapeSelected: defaultSource?.id === "upload",
-    expressiveness,
-    chatterboxDefaults: {
-      cfgWeight: mainPersona.config.chatterbox_cfg_weight ?? 0.5,
-      exaggeration: mainPersona.config.chatterbox_exaggeration ?? 0.5,
-    },
-  });
+  let modalComponents: ModalComponent[];
+  try {
+    modalComponents = buildVoiceMessageModalComponents({
+      locale,
+      candidates,
+      scriptMarkup: effectiveEndpoint?.extra_config.script_markup as string | undefined,
+      // A design-shaped source, not merely a design-capable endpoint: on an `auto` endpoint whose
+      // only candidates are clone-shaped, a Delivery Direction field would render and then be
+      // dropped by the dispatcher.
+      designShapeAvailable: anyDesignShape,
+      uploadShapeSelected: defaultSource?.id === "upload",
+      expressiveness,
+      chatterboxDefaults: {
+        cfgWeight: mainPersona.config.chatterbox_cfg_weight ?? 0.5,
+        exaggeration: mainPersona.config.chatterbox_exaggeration ?? 0.5,
+      },
+    });
+  } catch (error) {
+    // The builder's component-cap assertion is a programming guard, but it runs before anything
+    // has been acknowledged, so an escaped throw would surface as "The application did not
+    // respond" rather than anything a user or a log reader could act on.
+    log.error("[/generate voice-message] Failed to build the modal components", error as Error);
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.unknown_error_title",
+      descriptionKey: "general.errors.unknown_error_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
   log.info(
     `[/generate voice-message] Showing modal | server=${serverDiscId} persona=${persona.persona_id} sources=${candidates.map((candidate) => candidate.id).join(",")} components=${modalComponents.length}/${VOICE_MESSAGE_MODAL_COMPONENT_LIMIT}`,
@@ -609,11 +646,12 @@ export async function execute(
   }
 
   const audioBuffer = synthesisResult.audioBuffer;
-  const mimeType = (synthesisResult.contentType ?? "audio/wav").split(";")[0].trim();
-  const filename = `voice-message.${synthesisResult.extension ?? "wav"}`;
+  const isElevenLabs = synthesisResult.backendKey === "elevenlabs";
+  const mimeType = (synthesisResult.contentType ?? (isElevenLabs ? "audio/mpeg" : "audio/wav")).split(";")[0].trim();
+  const filename = `voice-message.${synthesisResult.extension ?? (isElevenLabs ? "mp3" : "wav")}`;
   const voiceMeta = await generateVoiceMessageMetadata(audioBuffer, mimeType);
   if (!voiceMeta) {
-    log.warn("[VoiceMessage] Waveform generation returned null — delivering a plain attachment");
+    log.warn("[VoiceMessage] Waveform generation returned null: delivering a plain attachment");
   }
 
   const sentMessageId = await deliverVoiceMessage({

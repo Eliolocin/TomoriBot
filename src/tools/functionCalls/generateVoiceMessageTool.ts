@@ -18,8 +18,10 @@ import {
   type VoiceDeliveryTarget,
 } from "@/utils/discord/webhook/voiceMessageDelivery";
 import { resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
-import { isVoiceDesignEndpoint, shouldUseVoiceDesignForPersona } from "@/providers/custom/styles/ttsVoiceDesignAdapter";
+import { shouldUseVoiceDesignForPersona } from "@/providers/custom/styles/ttsVoiceDesignAdapter";
+import { resolveVoiceSourceCapabilities } from "@/utils/speech/voiceSourceResolution";
 import { synthesizeVoiceMessage, type ResolvedVoiceSource } from "@/utils/speech/voiceMessageSynthesis";
+import type { CustomEndpointRow } from "@/types/db/schema";
 import { statRepository } from "@/utils/db/repositories";
 import { log } from "@/utils/misc/logger";
 
@@ -167,24 +169,34 @@ export class GenerateVoiceMessageTool extends BaseTool {
     return `${safeBaseName}.${extension}`;
   }
 
-  /** Maps the active persona's stored voice fields onto a synthesis source. */
-  private resolveStoredVoiceSource(context: ToolContext): ResolvedVoiceSource | null {
+  /**
+   * The persona's design prompt, when the endpoint is configured to receive one.
+   *
+   * The `shouldUseVoiceDesignForPersona` sentinel check is part of the branch's entry condition,
+   * not an optimization: on an `auto` endpoint a persona that also holds a sample must keep using
+   * that sample unless its voice name is the `VoiceDesign` sentinel.
+   */
+  private resolveDesignSource(context: ToolContext, endpoint: CustomEndpointRow | null): ResolvedVoiceSource | null {
     const voiceDesignPrompt = context.tomoriState.speech_voice_design_prompt?.trim() ?? "";
-    const voiceSampleId = context.tomoriState.speech_voice_sample_id ?? null;
-    const voiceId = context.tomoriState.speech_voice_id?.trim() ?? "";
+    if (!voiceDesignPrompt) return null;
 
-    if (voiceDesignPrompt) return { kind: "design", designPrompt: voiceDesignPrompt };
+    const shouldUseDesign = shouldUseVoiceDesignForPersona(
+      endpoint,
+      voiceDesignPrompt,
+      context.tomoriState.speech_voice_name,
+    );
+    return shouldUseDesign ? { kind: "design", designPrompt: voiceDesignPrompt } : null;
+  }
+
+  /** The clone or ElevenLabs voice to fall back on when design does not apply. */
+  private resolveFallbackSource(context: ToolContext): ResolvedVoiceSource | null {
+    const voiceSampleId = context.tomoriState.speech_voice_sample_id ?? null;
     if (voiceSampleId) return { kind: "clone", voiceSampleId };
+
+    const voiceId = context.tomoriState.speech_voice_id?.trim() ?? "";
     if (voiceId) return { kind: "elevenlabs", voiceId };
 
     return null;
-  }
-
-  /** True when the persona has a voice the clone or ElevenLabs path could use instead. */
-  private hasFallbackVoice(context: ToolContext): boolean {
-    const voiceSampleId = context.tomoriState.speech_voice_sample_id ?? null;
-    const voiceId = context.tomoriState.speech_voice_id?.trim() ?? "";
-    return Boolean(voiceSampleId) || Boolean(voiceId);
   }
 
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
@@ -206,29 +218,35 @@ export class GenerateVoiceMessageTool extends BaseTool {
       };
     }
 
-    const source = this.resolveStoredVoiceSource(context);
-    if (!source) {
-      return {
-        success: false,
-        error:
-          "No voice is configured for the active persona. A server manager can set one in /config under Persona > Voice.",
-      };
-    }
-
     const speechEndpoint = await resolveActiveSpeechEndpoint(context.tomoriState.server_id);
+    const activeEndpoint = speechEndpoint?.endpoint ?? null;
+    const { acceptsCloneShape, acceptsDesignShape } = resolveVoiceSourceCapabilities(activeEndpoint);
 
-    // A design prompt with nowhere to send it is a configuration mismatch, not a missing
-    // voice, so it gets its own message. Personas that also hold a sample or an ElevenLabs
-    // voice id are left alone: the dispatcher falls through to that voice instead.
-    if (
-      source.kind === "design" &&
-      !isVoiceDesignEndpoint(speechEndpoint?.endpoint) &&
-      !this.hasFallbackVoice(context)
-    ) {
+    const designSource = acceptsDesignShape ? this.resolveDesignSource(context, activeEndpoint) : null;
+    const fallbackSource = this.resolveFallbackSource(context);
+    const voiceDesignPrompt = context.tomoriState.speech_voice_design_prompt?.trim() ?? "";
+
+    // A design prompt on an endpoint that cannot receive `instruct` is a configuration mismatch
+    // rather than a missing voice, so it keeps the message that names the fix. A persona that also
+    // holds a sample or an ElevenLabs voice id is not stuck, because the fallback below still runs.
+    if (voiceDesignPrompt && !acceptsDesignShape && !fallbackSource) {
       return {
         success: false,
         error:
           "The active persona has a voice design prompt, but the active speech endpoint does not support instruct-based voice design. Select a VoiceDesign speech endpoint or assign a different voice.",
+      };
+    }
+
+    const source = designSource ?? (acceptsCloneShape ? fallbackSource : null);
+    if (!source) {
+      // The persona does have a voice; it is the endpoint that cannot take that shape. Saying "no
+      // voice is configured" here would send the manager to the wrong settings page.
+      const hasMisroutedVoice = Boolean(fallbackSource || voiceDesignPrompt);
+      return {
+        success: false,
+        error: hasMisroutedVoice
+          ? "The active persona's voice cannot be used with the active speech endpoint. A server manager can point /providers at an endpoint matching that voice type, or assign a different voice in /config under Persona > Voice."
+          : "No voice is configured for the active persona. A server manager can set one in /config under Persona > Voice.",
       };
     }
 
@@ -242,7 +260,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
     const endpointApiKey = speechEndpoint?.apiKey ?? "";
 
     const synthesisResult = await synthesizeVoiceMessage({
-      endpoint: speechEndpoint?.endpoint ?? null,
+      endpoint: activeEndpoint,
       endpointApiKey,
       elevenLabsApiKey,
       source,
@@ -262,11 +280,12 @@ export class GenerateVoiceMessageTool extends BaseTool {
       };
     }
 
-    const attachmentName = this.buildAttachmentName(title, synthesisResult.extension ?? "wav");
+    const isElevenLabs = synthesisResult.backendKey === "elevenlabs";
+    const attachmentName = this.buildAttachmentName(title, synthesisResult.extension ?? (isElevenLabs ? "mp3" : "wav"));
     const threadId = this.resolveThreadId(context);
     const captionText = synthesisResult.cleanedCaptionText ?? "";
     // Strip MIME parameters, so Discord rejects waveform/duration_secs for non-bare types.
-    const mimeType = (synthesisResult.contentType ?? "audio/wav").split(";")[0].trim();
+    const mimeType = (synthesisResult.contentType ?? (isElevenLabs ? "audio/mpeg" : "audio/wav")).split(";")[0].trim();
     const voiceMeta = await generateVoiceMessageMetadata(synthesisResult.audioBuffer, mimeType);
 
     if (!voiceMeta) {

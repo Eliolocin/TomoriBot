@@ -40,6 +40,7 @@ The tool and `/generate voice-message` converge on the same three modules, so a 
 
 | Module | Responsibility |
 |---|---|
+| `src/utils/speech/voiceSourceCapabilities.ts` | Which request shapes the active endpoint accepts. |
 | `src/utils/speech/voiceMessageSynthesis.ts` | Picks the backend for a resolved source and returns the `audio_generated` metric key with the audio. |
 | `src/utils/speech/voiceSourceResolution.ts` | Pure source table: which voices an invocation may use, and in what pre-selection order. |
 | `src/utils/discord/webhook/voiceMessageDelivery.ts` | Sends the native voice message and the transcript caption. |
@@ -59,11 +60,24 @@ Any invocation can see up to four candidate sources, gated by what the active en
 
 "Accepts the clone shape" means `api_style === "tts-clone"` with `voice_mode` of `clone` or `auto`; "accepts the design shape" means `tts-clone` with `voice_mode` of `voice-design` or `auto`. ElevenLabs is the degenerate case and accepts neither, so its only source is the persona's stored voice id.
 
+`resolveVoiceSourceCapabilities()` is the single implementation of that table, and both the modal and the synthesis dispatcher read it. The dispatcher refuses any source whose shape the endpoint does not accept, and it does so before reaching a backend, so a mismatch surfaces as a configuration error rather than as a request a TTS server has to reject.
+
+Two predicates in `ttsVoiceDesignAdapter.ts` are easy to confuse, and confusing them once already disabled voice design on every `auto` deployment:
+
+- `isVoiceDesignEndpoint()` is true only for a **dedicated** voice-design endpoint.
+- `acceptsDesignShape()` is true for a dedicated voice-design endpoint **and** for `auto`.
+
+Anywhere the question is "can this endpoint receive a design body", the answer is `acceptsDesignShape()` or the capability table, never `isVoiceDesignEndpoint()`.
+
 Pre-selection order is upload, typed design prompt, persona sample, persona design prompt: intent expressed on this invocation outranks stored persona configuration, and between the two user-supplied sources the uploaded clip wins because clone output is the more deterministic of the two.
 
 ### `auto` Endpoint Disambiguation
 
-An `auto` endpoint accepts both request shapes on one URL, distinguished by which fields are present. The chat tool has no user to ask, so it relies on the persona sentinel `speech_voice_name === "VoiceDesign"` to decide whether a persona's design prompt should be sent as `instruct`. `/generate voice-message` does not need the sentinel at all: it offers every source the endpoint accepts as a modal radio option, and the choice itself selects the request shape. A manager who registers an `auto` endpoint therefore does not have to set the sentinel for manual invocations to reach voice design, though the sentinel is still what lets the model pick that path mid-conversation.
+An `auto` endpoint accepts both request shapes on one URL, distinguished by which fields are present.
+
+For the chat tool, the persona sentinel `speech_voice_name === "VoiceDesign"` picks the shape: a persona on an `auto` endpoint that holds both a sample and a design prompt keeps using its sample unless its voice name is the sentinel. That sentinel is part of the tool's branch condition, not a hint, so it has to stay in whatever selects the source.
+
+`/generate voice-message` needs no sentinel, because the user is present and can be asked: it offers every source the endpoint accepts as a modal radio option, and the choice itself selects the request shape. A manager registering an `auto` endpoint therefore does not have to set the sentinel to reach voice design manually, though the sentinel is still what lets the model pick that path mid-conversation. Both paths converge on the dispatcher, which decides purely from the resolved source shape and the capability table.
 
 Local setup guides:
 

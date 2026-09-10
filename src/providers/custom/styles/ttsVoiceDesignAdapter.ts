@@ -40,6 +40,21 @@ export function isVoiceDesignEndpoint(endpoint: CustomEndpointRow | null | undef
   return endpoint?.api_style === "tts-clone" && getTtsVoiceMode(endpoint) === "voice-design";
 }
 
+/**
+ * True when the endpoint accepts a design-shaped `/synthesize` body (`instruct`).
+ *
+ * `isVoiceDesignEndpoint` answers a narrower question: whether the endpoint is dedicated to voice
+ * design. An `auto` endpoint accepts design bodies too, distinguished by which fields are present,
+ * so anything gating a design request on the dedicated-endpoint check alone silently disables
+ * voice design on every mixed deployment.
+ */
+export function acceptsDesignShape(endpoint: CustomEndpointRow | null | undefined): boolean {
+  if (endpoint?.api_style !== "tts-clone") return false;
+
+  const mode = getTtsVoiceMode(endpoint);
+  return mode === "voice-design" || mode === "auto";
+}
+
 export function shouldUseVoiceDesignForPersona(
   endpoint: CustomEndpointRow | null | undefined,
   voiceDesignPrompt: string | null | undefined,

@@ -165,6 +165,8 @@ export default {
       persona_access_blocked: `現在のホワイトリスト権限と個人スポットライト設定では、そのペルソナはこのチャンネルで発話できないため、ボイスメッセージは生成されませんでした。`,
       no_endpoint_title: `🔴 音声エンドポイントがありません`,
       no_endpoint_description: `このサーバーには有効な音声エンドポイントも、保存された ElevenLabs キーもありません。サーバー管理者が \`/providers\` から設定できます。`,
+      no_api_key_title: `🔴 音声APIキーがありません`,
+      no_api_key_description: `有効な ElevenLabs 音声エンドポイントに、このサーバーの認証情報が保存されていません。サーバー管理者が \`/providers\` から追加できます。`,
       upload_invalid_format_title: `🔴 対応していない音声形式です`,
       upload_invalid_format_description: `WAV、MP3、OGG、FLAC、M4A、AAC などの音声ファイルを添付してください。`,
       upload_too_large_title: `🔴 音声サンプルが大きすぎます`,

@@ -8,6 +8,12 @@
 
 import type { CustomEndpointRow } from "@/types/db/schema";
 import { safeSelectOptionText } from "@/utils/discord/ui/interactionCore";
+import { resolveVoiceSourceCapabilities } from "@/utils/speech/voiceSourceCapabilities";
+
+export {
+  resolveVoiceSourceCapabilities,
+  type VoiceSourceCapabilities,
+} from "@/utils/speech/voiceSourceCapabilities";
 
 /** Identity of a voice source as it appears in the modal radio and the success embed. */
 export type VoiceSourceId = "upload" | "typed-design" | "persona-sample" | "persona-design" | "elevenlabs";
@@ -48,39 +54,6 @@ export interface VoiceSourceResolutionInput {
   uploadFilename?: string | null;
   /** Design prompt typed on the command line, when the invoker passed one. */
   typedDesignPrompt?: string | null;
-}
-
-export interface VoiceSourceCapabilities {
-  /** Endpoint accepts clone-shaped bodies (`ref_audio` + `ref_text`). */
-  acceptsCloneShape: boolean;
-  /** Endpoint accepts design-shaped bodies (`instruct`). */
-  acceptsDesignShape: boolean;
-}
-
-function getVoiceMode(endpoint: CustomEndpointRow | null | undefined): "clone" | "voice-design" | "auto" {
-  const rawMode = endpoint?.extra_config.voice_mode;
-  return rawMode === "voice-design" || rawMode === "auto" ? rawMode : "clone";
-}
-
-/**
- * Which request shapes the active endpoint accepts.
- *
- * `auto` accepts both: one URL that reads `ref_audio`/`ref_text` for clone bodies and `instruct`
- * for design bodies. ElevenLabs accepts neither, which is why its user-supplied options are
- * ignored rather than rejected.
- */
-export function resolveVoiceSourceCapabilities(
-  endpoint: CustomEndpointRow | null | undefined,
-): VoiceSourceCapabilities {
-  if (endpoint?.api_style !== "tts-clone") {
-    return { acceptsCloneShape: false, acceptsDesignShape: false };
-  }
-
-  const mode = getVoiceMode(endpoint);
-  return {
-    acceptsCloneShape: mode === "clone" || mode === "auto",
-    acceptsDesignShape: mode === "voice-design" || mode === "auto",
-  };
 }
 
 /**
