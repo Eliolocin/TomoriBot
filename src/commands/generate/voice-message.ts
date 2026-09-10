@@ -399,6 +399,11 @@ export async function execute(
   // Mirror the tool's credential precedence: an endpoint-scoped key wins over the legacy
   // opt_api_keys entry, which only survives for deployments that predate the endpoint pathway. A
   // server whose ElevenLabs key lives on its endpoint has no opt_api_keys row at all.
+  //
+  // The key is fetched whenever the endpoint is ElevenLabs or absent, regardless of which source
+  // ends up selected: on an ElevenLabs endpoint a persona with a sample and a voice id resolves to
+  // the voice id only after the sample is discarded, so the endpoint can need this key for a
+  // persona whose sample looked like the obvious choice.
   const needsElevenLabsKey = usesElevenLabsVoice(persona) && (endpointIsElevenLabs || !speechEndpoint);
   const elevenLabsApiKey = needsElevenLabsKey
     ? speechEndpoint?.apiKey || ((await getOptApiKey(mainPersona.server_id, ELEVENLABS_SERVICE_NAME)) ?? "")
@@ -409,18 +414,6 @@ export async function execute(
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.generate.voice-message.no_endpoint_title",
       descriptionKey: "commands.generate.voice-message.no_endpoint_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  // An ElevenLabs endpoint without a usable key would otherwise pass the gate above and only fail
-  // at synthesis, after the user has typed a whole script into the modal.
-  if (endpointIsElevenLabs && !elevenLabsApiKey) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.generate.voice-message.no_api_key_title",
-      descriptionKey: "commands.generate.voice-message.no_api_key_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -473,6 +466,20 @@ export async function execute(
   }
 
   const defaultSource = selectDefaultVoiceSource(candidates);
+
+  // Keyed off the resolved candidate, not off the endpoint: a persona whose only voice is an
+  // ElevenLabs id on a server with no speech endpoint is indistinguishable from a `tts-clone`
+  // server by endpoint alone, and its voice id is precisely what the source table falls back to.
+  if (defaultSource?.id === "elevenlabs" && !elevenLabsApiKey) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.generate.voice-message.no_api_key_title",
+      descriptionKey: "commands.generate.voice-message.no_api_key_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   const anyDesignShape = candidates.some((candidate) => candidate.shape === "design");
   const expressiveness = resolveExpressivenessBackend({
     endpoint: effectiveEndpoint,

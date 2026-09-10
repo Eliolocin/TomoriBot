@@ -274,28 +274,22 @@ describe("synthesizeVoiceMessage ElevenLabs sources", () => {
   });
 });
 
-describe("acceptsDesignShape", () => {
-  it("agrees with the source-capability table on every mode and api style", () => {
-    const modes: VoiceMode[] = ["clone", "voice-design", "auto"];
-    for (const mode of modes) {
-      for (const apiStyle of ["tts-clone", "elevenlabs"] as const) {
-        const endpoint = makeEndpoint({ voiceMode: mode, apiStyle });
-        expect(realTtsVoiceDesignAdapter.acceptsDesignShape(endpoint)).toBe(
-          resolveVoiceSourceCapabilities(endpoint).acceptsDesignShape,
-        );
-      }
-    }
-  });
-
+describe("design-shape capability", () => {
   it("is true for auto, exactly where the dedicated-endpoint predicate is false", () => {
+    // The pair of predicates that got swapped during extraction. This assertion is the reminder
+    // that they answer different questions and only one of them belongs in a dispatch guard.
     const auto = makeEndpoint({ voiceMode: "auto" });
 
-    expect(realTtsVoiceDesignAdapter.acceptsDesignShape(auto)).toBe(true);
+    expect(resolveVoiceSourceCapabilities(auto).acceptsDesignShape).toBe(true);
     expect(realTtsVoiceDesignAdapter.isVoiceDesignEndpoint(auto)).toBe(false);
   });
 
-  it("is false for a missing endpoint", () => {
-    expect(realTtsVoiceDesignAdapter.acceptsDesignShape(null)).toBe(false);
-    expect(realTtsVoiceDesignAdapter.acceptsDesignShape(undefined)).toBe(false);
+  it("is false for a missing endpoint on every shape", () => {
+    for (const endpoint of [null, undefined]) {
+      expect(resolveVoiceSourceCapabilities(endpoint)).toEqual({
+        acceptsCloneShape: false,
+        acceptsDesignShape: false,
+      });
+    }
   });
 });

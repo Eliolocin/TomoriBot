@@ -19,7 +19,7 @@ import {
 } from "@/utils/discord/webhook/voiceMessageDelivery";
 import { resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
 import { shouldUseVoiceDesignForPersona } from "@/providers/custom/styles/ttsVoiceDesignAdapter";
-import { resolveVoiceSourceCapabilities } from "@/utils/speech/voiceSourceResolution";
+import { resolveVoiceSourceCapabilities, type VoiceSourceCapabilities } from "@/utils/speech/voiceSourceCapabilities";
 import { synthesizeVoiceMessage, type ResolvedVoiceSource } from "@/utils/speech/voiceMessageSynthesis";
 import type { CustomEndpointRow } from "@/types/db/schema";
 import { statRepository } from "@/utils/db/repositories";
@@ -172,31 +172,54 @@ export class GenerateVoiceMessageTool extends BaseTool {
   /**
    * The persona's design prompt, when the endpoint is configured to receive one.
    *
-   * The `shouldUseVoiceDesignForPersona` sentinel check is part of the branch's entry condition,
-   * not an optimization: on an `auto` endpoint a persona that also holds a sample must keep using
-   * that sample unless its voice name is the `VoiceDesign` sentinel.
+   * `shouldUseVoiceDesignForPersona` is the ladder's entry condition for this branch, not an
+   * optimization: it carries the `VoiceDesign` sentinel rule, so on an `auto` endpoint a persona
+   * that also holds a sample keeps using that sample unless its voice name is the sentinel. It also
+   * subsumes the shape check, which is why the caller does not pre-gate on `acceptsDesignShape`.
    */
   private resolveDesignSource(context: ToolContext, endpoint: CustomEndpointRow | null): ResolvedVoiceSource | null {
     const voiceDesignPrompt = context.tomoriState.speech_voice_design_prompt?.trim() ?? "";
     if (!voiceDesignPrompt) return null;
 
-    const shouldUseDesign = shouldUseVoiceDesignForPersona(
-      endpoint,
-      voiceDesignPrompt,
-      context.tomoriState.speech_voice_name,
-    );
-    return shouldUseDesign ? { kind: "design", designPrompt: voiceDesignPrompt } : null;
+    return shouldUseVoiceDesignForPersona(endpoint, voiceDesignPrompt, context.tomoriState.speech_voice_name)
+      ? { kind: "design", designPrompt: voiceDesignPrompt }
+      : null;
   }
 
-  /** The clone or ElevenLabs voice to fall back on when design does not apply. */
-  private resolveFallbackSource(context: ToolContext): ResolvedVoiceSource | null {
+  /**
+   * The clone or ElevenLabs voices to fall back on, most preferred first.
+   *
+   * Returned as an ordered list rather than one committed choice because the two sources are gated
+   * by different capabilities: a sample is only usable on a clone-capable endpoint, while an
+   * ElevenLabs voice id is the only option on an ElevenLabs endpoint and on servers with no speech
+   * endpoint at all. Committing to the sample first would strand every persona that holds both.
+   */
+  private resolveFallbackCandidates(context: ToolContext): ResolvedVoiceSource[] {
+    const candidates: ResolvedVoiceSource[] = [];
+
     const voiceSampleId = context.tomoriState.speech_voice_sample_id ?? null;
-    if (voiceSampleId) return { kind: "clone", voiceSampleId };
+    if (voiceSampleId) candidates.push({ kind: "clone", voiceSampleId });
 
     const voiceId = context.tomoriState.speech_voice_id?.trim() ?? "";
-    if (voiceId) return { kind: "elevenlabs", voiceId };
+    if (voiceId) candidates.push({ kind: "elevenlabs", voiceId });
 
-    return null;
+    return candidates;
+  }
+
+  /**
+   * Filters the fallback list down to the shapes the active endpoint can actually receive.
+   *
+   * The guards are per member, not per list: a clone candidate asks the capability table, while an
+   * ElevenLabs candidate only asks whether a voice id is present. Asking the clone question of the
+   * list would make it false for exactly the servers where ElevenLabs is the only option.
+   */
+  private filterUsableFallbacks(
+    candidates: readonly ResolvedVoiceSource[],
+    capabilities: VoiceSourceCapabilities,
+  ): ResolvedVoiceSource[] {
+    return candidates.filter((candidate) =>
+      candidate.kind === "clone" ? capabilities.acceptsCloneShape : candidate.kind === "elevenlabs",
+    );
   }
 
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
@@ -220,16 +243,21 @@ export class GenerateVoiceMessageTool extends BaseTool {
 
     const speechEndpoint = await resolveActiveSpeechEndpoint(context.tomoriState.server_id);
     const activeEndpoint = speechEndpoint?.endpoint ?? null;
-    const { acceptsCloneShape, acceptsDesignShape } = resolveVoiceSourceCapabilities(activeEndpoint);
+    const capabilities = resolveVoiceSourceCapabilities(activeEndpoint);
 
-    const designSource = acceptsDesignShape ? this.resolveDesignSource(context, activeEndpoint) : null;
-    const fallbackSource = this.resolveFallbackSource(context);
+    // Design first, then the ladder's clone-then-ElevenLabs order, with the fallbacks filtered to
+    // the shapes this endpoint can actually receive. Filtering per candidate rather than per list
+    // is what keeps an ElevenLabs voice reachable on a server whose endpoint is ElevenLabs or
+    // absent, where no candidate is clone-shaped.
+    const designSource = this.resolveDesignSource(context, activeEndpoint);
+    const usableFallbacks = this.filterUsableFallbacks(this.resolveFallbackCandidates(context), capabilities);
     const voiceDesignPrompt = context.tomoriState.speech_voice_design_prompt?.trim() ?? "";
 
     // A design prompt on an endpoint that cannot receive `instruct` is a configuration mismatch
     // rather than a missing voice, so it keeps the message that names the fix. A persona that also
-    // holds a sample or an ElevenLabs voice id is not stuck, because the fallback below still runs.
-    if (voiceDesignPrompt && !acceptsDesignShape && !fallbackSource) {
+    // holds a usable sample or ElevenLabs voice id is not stuck, so this only fires when design is
+    // genuinely the persona's only configuration.
+    if (voiceDesignPrompt && !designSource && usableFallbacks.length === 0 && !capabilities.acceptsDesignShape) {
       return {
         success: false,
         error:
@@ -237,11 +265,13 @@ export class GenerateVoiceMessageTool extends BaseTool {
       };
     }
 
-    const source = designSource ?? (acceptsCloneShape ? fallbackSource : null);
+    const source = designSource ?? usableFallbacks[0] ?? null;
     if (!source) {
-      // The persona does have a voice; it is the endpoint that cannot take that shape. Saying "no
-      // voice is configured" here would send the manager to the wrong settings page.
-      const hasMisroutedVoice = Boolean(fallbackSource || voiceDesignPrompt);
+      // The persona does have a voice; it is the endpoint that cannot take its shape. Saying "no
+      // voice is configured" here would send the manager to the wrong settings page, and naming
+      // the design-endpoint fix would be wrong too: this endpoint does accept `instruct`, the
+      // persona just has nothing usable to send it.
+      const hasMisroutedVoice = this.resolveFallbackCandidates(context).length > 0 || Boolean(voiceDesignPrompt);
       return {
         success: false,
         error: hasMisroutedVoice
