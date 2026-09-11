@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { readFile, readdir } from "node:fs/promises";
 import { Glob } from "bun";
+import { fullOutputHint, isFullOutput } from "./lib/gateOutput";
 
 /**
  * Lightweight logger that doesn't require database connection
@@ -1609,20 +1610,47 @@ export async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
   };
 }
 
-function displayResults(results: AnalysisResult): void {
-  const hasErrors =
-    results.parityIssues.length > 0 ||
+/**
+ * The blocking half of the analysis: anything here exits 1 and must print in full.
+ *
+ * Kept as its own predicate because the exit-code branch in main() and the display
+ * branch in displayResults() have to agree on which categories are fatal. When they
+ * drifted apart, a run could print "safe to push" while exiting 1.
+ */
+function hasFatalFindings(results: AnalysisResult): boolean {
+  return (
+    results.missingKeys.length > 0 ||
     results.modalTitleViolations.length > 0 ||
     results.modalDescriptionViolations.length > 0 ||
     results.commandDescriptionViolations.length > 0 ||
     results.modalUsageViolations.length > 0 ||
-    results.messageSlotViolations.length > 0 ||
-    results.missingKeys.length > 0;
+    results.messageSlotViolations.length > 0
+  );
+}
+
+/** How much detail `displayResults` is allowed to print, and how to hint at more. */
+interface DisplayOptions {
+  fullOutput: boolean;
+  rerunCommand: string;
+}
+
+function displayResults(results: AnalysisResult, { fullOutput, rerunCommand }: DisplayOptions): void {
+  const hasErrors = hasFatalFindings(results) || results.parityIssues.length > 0;
 
   if (!hasErrors) {
     const localeNames = Array.from(results.localeKeys.keys());
     console.log(
       `✅ Locales OK (${localeNames.join(", ")} — ${results.availableKeys.size} keys, ${results.unusedKeys.length} unused)`,
+    );
+    return;
+  }
+
+  // An advisory-only run is the common state while locale coverage is incomplete, and
+  // the per-key listing behind it is ~99% of the output. Collapse it to a count plus
+  // the flag that expands it; the full report stays for anything that blocks.
+  if (!hasFatalFindings(results) && !fullOutput) {
+    console.log(
+      `ℹ️  Localization keys advisory: ${results.parityIssues.length} keys missing in some locale (advisory, exit 2). ${fullOutputHint(rerunCommand)}`,
     );
     return;
   }
@@ -1634,10 +1662,16 @@ function displayResults(results: AnalysisResult): void {
   if (results.parityIssues.length > 0) {
     console.log("\n🌐 LOCALE PARITY ISSUES (Keys missing in some locales):");
     console.log("-".repeat(60));
-    for (const { key, missingIn, presentIn } of results.parityIssues.sort((a, b) => a.key.localeCompare(b.key))) {
-      console.log(`  ⚠️  ${key}`);
-      console.log(`     ✅ Present in: ${presentIn.join(", ")}`);
-      console.log(`     ❌ Missing in: ${missingIn.join(", ")}`);
+    if (fullOutput) {
+      for (const { key, missingIn, presentIn } of results.parityIssues.sort((a, b) => a.key.localeCompare(b.key))) {
+        console.log(`  ⚠️  ${key}`);
+        console.log(`     ✅ Present in: ${presentIn.join(", ")}`);
+        console.log(`     ❌ Missing in: ${missingIn.join(", ")}`);
+      }
+    } else {
+      console.log(
+        `  ${results.parityIssues.length} keys missing in some locale (advisory, not blocking). ${fullOutputHint(rerunCommand)}`,
+      );
     }
   }
 
@@ -1789,7 +1823,7 @@ function displayUnusedKeys(unusedKeys: KeyUsage[]): void {
  * (modal titles, modal descriptions, command descriptions) block the PR gate
  * without paying for the full unused/parity source scan.
  */
-async function runStrictLengthsOnly(): Promise<void> {
+async function runStrictLengthsOnly(fullOutput: boolean): Promise<void> {
   const { localeKeys } = await loadAvailableKeys();
   const modalTitleViolations = await checkModalTitleLengths(localeKeys);
   const modalDescriptionViolations = await checkModalDescriptionLengths(localeKeys);
@@ -1814,20 +1848,24 @@ async function runStrictLengthsOnly(): Promise<void> {
   }
 
   // Reuse the same display formatting as the full report by funnelling violations
-  // through displayResults() with empty sets for the other categories.
-  displayResults({
-    missingKeys: [],
-    unusedKeys: [],
-    referencedKeys: new Set(),
-    availableKeys: new Set(),
-    localeKeys,
-    parityIssues: [],
-    modalTitleViolations,
-    modalDescriptionViolations,
-    commandDescriptionViolations,
-    modalUsageViolations,
-    messageSlotViolations,
-  });
+  // through displayResults() with empty sets for the other categories. Length
+  // violations always block, so this path never takes the quiet advisory branch.
+  displayResults(
+    {
+      missingKeys: [],
+      unusedKeys: [],
+      referencedKeys: new Set(),
+      availableKeys: new Set(),
+      localeKeys,
+      parityIssues: [],
+      modalTitleViolations,
+      modalDescriptionViolations,
+      commandDescriptionViolations,
+      modalUsageViolations,
+      messageSlotViolations,
+    },
+    { fullOutput: fullOutput, rerunCommand: "bun run check-locale-lengths" },
+  );
 
   process.exit(1);
 }
@@ -1836,9 +1874,10 @@ async function main(): Promise<void> {
   try {
     const listUnused = process.argv.includes("--list-unused");
     const strictLengths = process.argv.includes("--strict-lengths");
+    const fullOutput = isFullOutput();
 
     if (strictLengths) {
-      await runStrictLengthsOnly();
+      await runStrictLengthsOnly(fullOutput);
       return;
     }
 
@@ -1849,16 +1888,9 @@ async function main(): Promise<void> {
       return;
     }
 
-    displayResults(results);
+    displayResults(results, { fullOutput, rerunCommand: "bun run check-locales" });
 
-    if (
-      results.missingKeys.length > 0 ||
-      results.modalTitleViolations.length > 0 ||
-      results.modalDescriptionViolations.length > 0 ||
-      results.commandDescriptionViolations.length > 0 ||
-      results.modalUsageViolations.length > 0 ||
-      results.messageSlotViolations.length > 0
-    ) {
+    if (hasFatalFindings(results)) {
       process.exit(1);
     } else if (results.parityIssues.length > 0) {
       process.exit(2);
