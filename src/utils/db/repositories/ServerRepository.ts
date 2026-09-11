@@ -18,8 +18,13 @@ import type { ServerEmojiRow, ServerStickerRow, SetupConfig, SetupResult } from 
 import { serverEmojiSchema, serverStickerSchema, setupConfigSchema, setupResultSchema } from "@/types/db/schema";
 import { toolRepository } from "@/utils/db/repositories/ToolRepository";
 import { userRepository } from "@/utils/db/repositories/UserRepository";
+import { configRepository } from "./ConfigRepository";
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
+import { normalizeCustomEndpointUrlForStorage } from "@/utils/provider/customEndpointService";
+import { buildCustomProviderName, buildSyntheticCustomModelCodename } from "@/utils/provider/customProviderUtils";
+import { CUSTOM_ENDPOINT_PLACEHOLDER_KEY } from "@/utils/provider/legacyCustomProvider";
+import { encryptApiKey } from "@/utils/security/crypto";
 import { keyManager } from "@/utils/security/keyManager";
 import { getBaseTriggerWords } from "@/utils/text/localizer";
 import { dedupeTriggerWords } from "@/utils/text/triggerWords";
@@ -445,19 +450,50 @@ class ServerRepository implements IRepository<ServerExportShape> {
     const isDMChannel = guild === null;
     log.section(`Starting server setup transaction (${isDMChannel ? "DM" : "Guild"} context)`);
 
+    // Discriminated provider access: resolve from explicit providerAccess or legacy fallback flags.
+    const resolvedAccess =
+      validConfig.providerAccess ??
+      (validConfig.userByokMode
+        ? { mode: "user-byok" as const }
+        : validConfig.provider && validConfig.encryptedApiKey
+          ? {
+              mode: "catalog" as const,
+              provider: validConfig.provider,
+              encryptedApiKey: validConfig.encryptedApiKey,
+              keyVersion: validConfig.keyVersion ?? 1,
+            }
+          : null);
+
+    if (resolvedAccess?.mode === "custom-endpoint") {
+      const apiStyle = resolvedAccess.connection.apiStyle;
+      if (apiStyle !== "openai-compatible" && apiStyle !== "ollama-native") {
+        throw new Error(`Custom endpoint API style '${apiStyle}' does not support text capability`);
+      }
+      const modelCode = resolvedAccess.textModel.modelCode.trim();
+      if (!modelCode) {
+        throw new Error("Custom endpoint setup requires a non-empty text model code");
+      }
+    }
+
+    let placeholderApiKey: { encrypted: Buffer; version: number } | null = null;
+    if (resolvedAccess?.mode === "custom-endpoint" && !resolvedAccess.connection.encryptedAuthToken) {
+      placeholderApiKey = await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
+    }
+
     try {
       const result = await sql.transaction(async (tx) => {
         let selectedLlm: { llm_id: number; llm_codename: string } | null = null;
         let selectedDiffusionModel: { diffusion_model_id: number; codename: string } | null = null;
         let selectedEmbeddingModel: { embedding_model_id: number; codename: string } | null = null;
 
-        if (validConfig.provider) {
+        if (resolvedAccess?.mode === "catalog") {
+          const catalogProvider = resolvedAccess.provider;
           // Find the default model for the selected provider within the transaction
           // First try to get the default model (is_default = true), excluding deprecated
           selectedLlm = (
             await tx`
               SELECT * FROM llms
-              WHERE llm_provider = ${validConfig.provider}
+              WHERE llm_provider = ${catalogProvider}
                 AND is_default = true
                 AND is_deprecated = false
               ORDER BY llm_id ASC
@@ -470,7 +506,7 @@ class ServerRepository implements IRepository<ServerExportShape> {
             selectedLlm = (
               await tx`
                 SELECT * FROM llms
-                WHERE llm_provider = ${validConfig.provider}
+                WHERE llm_provider = ${catalogProvider}
                   AND is_deprecated = false
                 ORDER BY llm_id ASC
                 LIMIT 1
@@ -478,21 +514,21 @@ class ServerRepository implements IRepository<ServerExportShape> {
             )[0];
 
             if (!selectedLlm) {
-              throw new Error(`No available models found for provider: ${validConfig.provider}`);
+              throw new Error(`No available models found for provider: ${catalogProvider}`);
             }
 
             log.warn(
-              `No default model found for provider ${validConfig.provider}, using fallback: ${selectedLlm.llm_codename}`,
+              `No default model found for provider ${catalogProvider}, using fallback: ${selectedLlm.llm_codename}`,
             );
           } else {
-            log.info(`Using default model for ${validConfig.provider}: ${selectedLlm.llm_codename}`);
+            log.info(`Using default model for ${catalogProvider}: ${selectedLlm.llm_codename}`);
           }
 
           // Find the default diffusion model for the selected provider
           selectedDiffusionModel = (
             await tx`
               SELECT * FROM image_diffusion_models
-              WHERE provider = ${validConfig.provider}
+              WHERE provider = ${catalogProvider}
                 AND is_default = true
                 AND is_deprecated = false
               ORDER BY diffusion_model_id ASC
@@ -504,7 +540,7 @@ class ServerRepository implements IRepository<ServerExportShape> {
             selectedDiffusionModel = (
               await tx`
                 SELECT * FROM image_diffusion_models
-                WHERE provider = ${validConfig.provider}
+                WHERE provider = ${catalogProvider}
                   AND is_deprecated = false
                 ORDER BY diffusion_model_id ASC
                 LIMIT 1
@@ -513,22 +549,22 @@ class ServerRepository implements IRepository<ServerExportShape> {
 
             if (selectedDiffusionModel) {
               log.warn(
-                `No default diffusion model found for provider ${validConfig.provider}, using fallback: ${selectedDiffusionModel.codename}`,
+                `No default diffusion model found for provider ${catalogProvider}, using fallback: ${selectedDiffusionModel.codename}`,
               );
             } else {
               log.info(
-                `No diffusion models available for provider ${validConfig.provider} (image generation not supported)`,
+                `No diffusion models available for provider ${catalogProvider} (image generation not supported)`,
               );
             }
           } else {
-            log.info(`Using default diffusion model for ${validConfig.provider}: ${selectedDiffusionModel.codename}`);
+            log.info(`Using default diffusion model for ${catalogProvider}: ${selectedDiffusionModel.codename}`);
           }
 
           // Find the default embedding model for the selected provider
           selectedEmbeddingModel = (
             await tx`
               SELECT * FROM embedding_models
-              WHERE provider = ${validConfig.provider}
+              WHERE provider = ${catalogProvider}
                 AND is_default = true
                 AND is_deprecated = false
               ORDER BY embedding_model_id ASC
@@ -540,7 +576,7 @@ class ServerRepository implements IRepository<ServerExportShape> {
             selectedEmbeddingModel = (
               await tx`
                 SELECT * FROM embedding_models
-                WHERE provider = ${validConfig.provider}
+                WHERE provider = ${catalogProvider}
                   AND is_deprecated = false
                 ORDER BY embedding_model_id ASC
                 LIMIT 1
@@ -549,29 +585,23 @@ class ServerRepository implements IRepository<ServerExportShape> {
 
             if (selectedEmbeddingModel) {
               log.warn(
-                `No default embedding model found for provider ${validConfig.provider}, using fallback: ${selectedEmbeddingModel.codename}`,
+                `No default embedding model found for provider ${catalogProvider}, using fallback: ${selectedEmbeddingModel.codename}`,
               );
             } else {
               log.info(
-                `No embedding models available for provider ${validConfig.provider} (document retrieval not supported)`,
+                `No embedding models available for provider ${catalogProvider} (document retrieval not supported)`,
               );
             }
           } else {
-            log.info(`Using default embedding model for ${validConfig.provider}: ${selectedEmbeddingModel.codename}`);
+            log.info(`Using default embedding model for ${catalogProvider}: ${selectedEmbeddingModel.codename}`);
           }
+        } else if (resolvedAccess?.mode === "user-byok") {
+          log.info("Setup is bootstrapping BYOK-only mode with no server text provider");
+        } else if (resolvedAccess?.mode === "custom-endpoint") {
+          log.info("Setup is bootstrapping custom endpoint mode");
         } else {
-          if (validConfig.userByokMode) {
-            log.info("Setup is bootstrapping BYOK-only mode with no server text provider");
-          } else if (validConfig.deferredCustomEndpointSetup) {
-            log.info("Setup is bootstrapping deferred custom-endpoint mode with no server text provider");
-          } else {
-            log.info("Setup is bootstrapping with no immediate server text provider");
-          }
+          log.info("Setup is bootstrapping with no immediate server text provider");
         }
-
-        const selectedLlmId = selectedLlm ? selectedLlm.llm_id : null;
-        const selectedDiffusionModelId = selectedDiffusionModel ? selectedDiffusionModel.diffusion_model_id : null;
-        const selectedEmbeddingModelId = selectedEmbeddingModel ? selectedEmbeddingModel.embedding_model_id : null;
 
         const presetRows = await tx<
           Array<{
@@ -594,6 +624,23 @@ class ServerRepository implements IRepository<ServerExportShape> {
           dedupedPresetTriggers.length > 0 ? dedupedPresetTriggers : getBaseTriggerWords(validConfig.locale);
         const presetPersonaPrompt = presetRows[0]?.persona_preset_desc?.trim() || null;
 
+        const [existingServer] = await tx<Array<{ server_id: number }>>`
+          SELECT server_id FROM servers
+          WHERE server_disc_id = ${validConfig.serverId}
+          LIMIT 1
+        `;
+
+        let isOrphanedRecovery = false;
+        if (existingServer) {
+          const [mainPersona] = await tx<Array<{ persona_id: number }>>`
+            SELECT persona_id FROM personas
+            WHERE server_id = ${existingServer.server_id}
+              AND is_alter = false
+            LIMIT 1
+          `;
+          isOrphanedRecovery = !mainPersona;
+        }
+
         const [server] = await tx`
           INSERT INTO servers (server_disc_id, is_dm_channel, registration_locale)
           VALUES (${validConfig.serverId}, ${isDMChannel}, ${validConfig.registrationLocale})
@@ -601,6 +648,12 @@ class ServerRepository implements IRepository<ServerExportShape> {
           SET is_dm_channel = EXCLUDED.is_dm_channel
           RETURNING *
         `;
+
+        if (isOrphanedRecovery) {
+          // When a workspace exists without a main persona, wipe stale config rows before inserting
+          // replacement rows so orphaned alters survive while configs reset cleanly.
+          await configRepository.resetAllServerConfigs(server.server_id, tx);
+        }
 
         // Setup reaches here only when the server has no main persona, and it deliberately
         // preserves alters while clearing config rows. An alter can therefore already hold the
@@ -667,22 +720,148 @@ class ServerRepository implements IRepository<ServerExportShape> {
         // Format trigger words as PostgreSQL array
         const triggerWordsArrayLiteral = `{${defaultTriggers.map((t) => `"${t.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
 
+        let customLlmId: number | null = null;
+        let customApiKey: Buffer | null = null;
+        let customKeyVersion = 1;
+        let customProviderName: string | null = null;
+
+        if (resolvedAccess?.mode === "custom-endpoint") {
+          const conn = resolvedAccess.connection;
+          const normalizedUrl = normalizeCustomEndpointUrlForStorage(conn.apiStyle, conn.endpointUrl);
+          const hasAuth = Boolean(conn.encryptedAuthToken && conn.encryptedAuthToken.length > 0);
+
+          if (hasAuth && conn.encryptedAuthToken) {
+            customApiKey = conn.encryptedAuthToken;
+            customKeyVersion = conn.keyVersion ?? 1;
+          } else {
+            customApiKey = placeholderApiKey?.encrypted ?? null;
+            customKeyVersion = placeholderApiKey?.version ?? 1;
+          }
+
+          const [connRow] = await tx<Array<{ connection_id: number }>>`
+            INSERT INTO custom_endpoint_connections (
+              server_id, user_id, label, capability, api_style, endpoint_url, requires_auth
+            ) VALUES (
+              ${server.server_id}, NULL, ${conn.label}, 'text', ${conn.apiStyle}, ${normalizedUrl}, ${hasAuth}
+            )
+            ON CONFLICT (server_id, label, capability) WHERE user_id IS NULL
+            DO UPDATE SET
+              api_style = EXCLUDED.api_style,
+              endpoint_url = EXCLUDED.endpoint_url,
+              requires_auth = custom_endpoint_connections.requires_auth OR EXCLUDED.requires_auth,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING connection_id
+          `;
+
+          const connectionId = connRow.connection_id;
+          customProviderName = buildCustomProviderName(connectionId);
+          const modelCode = resolvedAccess.textModel.modelCode.trim();
+          const codename = buildSyntheticCustomModelCodename(conn.label, modelCode);
+          const displayName = modelCode;
+
+          const caps = new Set(resolvedAccess.textModel.capabilities ?? []);
+          const hasTools = caps.has("tools");
+          const seesImages = caps.has("vision");
+          const seesVideos = caps.has("video");
+          const supportsStructOutput = caps.has("structured_output") || caps.has("json");
+          const strictRoleAlternation = caps.has("strict_role_alternation");
+          const supportsPrefixCompletion = caps.has("prefix_completion");
+
+          const [syntheticLlm] = await tx<Array<{ llm_id: number }>>`
+            INSERT INTO llms (
+              llm_provider, llm_codename, has_tools, sees_images, sees_videos,
+              sees_youtube, supports_structoutput, strict_role_alternation, supports_prefix_completion,
+              is_smartest, is_default, is_reasoning, is_deprecated, is_free, is_uncensored,
+              llm_description, ja_description
+            ) VALUES (
+              ${customProviderName}, ${codename}, ${hasTools}, ${seesImages}, ${seesVideos},
+              false, ${supportsStructOutput}, ${strictRoleAlternation}, ${supportsPrefixCompletion},
+              false, true, false, false, false, false,
+              ${displayName}, ${displayName}
+            )
+            ON CONFLICT (llm_provider, llm_codename) DO UPDATE SET
+              has_tools = EXCLUDED.has_tools,
+              sees_images = EXCLUDED.sees_images,
+              sees_videos = EXCLUDED.sees_videos,
+              supports_structoutput = EXCLUDED.supports_structoutput,
+              strict_role_alternation = EXCLUDED.strict_role_alternation,
+              supports_prefix_completion = EXCLUDED.supports_prefix_completion,
+              llm_description = EXCLUDED.llm_description,
+              ja_description = EXCLUDED.ja_description,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING llm_id
+          `;
+          customLlmId = syntheticLlm.llm_id;
+
+          await tx`
+            INSERT INTO scoped_model_registrations (server_id, user_id, llm_id)
+            VALUES (${server.server_id}, NULL, ${customLlmId})
+            ON CONFLICT (server_id, llm_id) WHERE user_id IS NULL AND llm_id IS NOT NULL
+            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+          `;
+
+          await tx`
+            INSERT INTO custom_endpoints (
+              connection_id, model_name, model_ref_id, num_ctx,
+              extra_config, has_tools, sees_images, sees_videos,
+              supports_structoutput, strict_role_alternation, supports_prefix_completion, is_default
+            ) VALUES (
+              ${connectionId}, ${modelCode}, ${customLlmId}, ${resolvedAccess.textModel.numCtx ?? null},
+              '{}'::jsonb, ${hasTools}, ${seesImages}, ${seesVideos},
+              ${supportsStructOutput}, ${strictRoleAlternation}, ${supportsPrefixCompletion}, true
+            )
+            ON CONFLICT (connection_id, COALESCE(model_name, ''))
+            DO UPDATE SET
+              model_ref_id = EXCLUDED.model_ref_id,
+              num_ctx = EXCLUDED.num_ctx,
+              extra_config = EXCLUDED.extra_config,
+              has_tools = EXCLUDED.has_tools,
+              sees_images = EXCLUDED.sees_images,
+              sees_videos = EXCLUDED.sees_videos,
+              supports_structoutput = EXCLUDED.supports_structoutput,
+              strict_role_alternation = EXCLUDED.strict_role_alternation,
+              supports_prefix_completion = EXCLUDED.supports_prefix_completion,
+              is_default = EXCLUDED.is_default,
+              updated_at = CURRENT_TIMESTAMP
+          `;
+        }
+
+        let finalLlmId: number | null = null;
+        let finalDiffusionId: number | null = null;
+        let finalEmbeddingId: number | null = null;
+        let finalApiKey: Buffer | null = null;
+        let finalKeyVersion = 1;
+
+        if (resolvedAccess?.mode === "catalog") {
+          finalLlmId = selectedLlm?.llm_id ?? null;
+          finalDiffusionId = selectedDiffusionModel?.diffusion_model_id ?? null;
+          finalEmbeddingId = selectedEmbeddingModel?.embedding_model_id ?? null;
+          finalApiKey = resolvedAccess.encryptedApiKey;
+          finalKeyVersion = resolvedAccess.keyVersion ?? 1;
+        } else if (resolvedAccess?.mode === "custom-endpoint") {
+          finalLlmId = customLlmId;
+          finalDiffusionId = null;
+          finalEmbeddingId = null;
+          finalApiKey = customApiKey;
+          finalKeyVersion = customKeyVersion;
+        }
+
         // Seed the split config tables
         await tx`
           INSERT INTO server_model_configs (
             server_id, llm_id, embedding_model_id, diffusion_model_id, api_key, key_version
           ) VALUES (
-            ${server.server_id}, ${selectedLlmId}, ${selectedEmbeddingModelId}, ${selectedDiffusionModelId}, ${validConfig.encryptedApiKey}, ${validConfig.keyVersion}
+            ${server.server_id}, ${finalLlmId}, ${finalEmbeddingId}, ${finalDiffusionId}, ${finalApiKey}, ${finalKeyVersion}
           ) ON CONFLICT (server_id) DO NOTHING
         `;
-        // system_prompt stays NULL so DEFAULT_SYSTEM_PROMPT resolves at read time.
-        // Seeding it here froze every server on the constant's value at setup, which
-        // is why tuning the default needed a migration to reach anyone.
+        // system_prompt is written as NULL for built-in default so DEFAULT_SYSTEM_PROMPT
+        // resolves dynamically at read time, or as the resolved preset prompt text.
+        const resolvedSystemPrompt = validConfig.systemPrompt?.trim() || null;
         await tx`
           INSERT INTO server_chat_configs (
-            server_id, humanizer_degree, timezone_offset
+            server_id, humanizer_degree, timezone_offset, system_prompt
           ) VALUES (
-            ${server.server_id}, ${validConfig.humanizer}, ${validConfig.timezoneOffset}
+            ${server.server_id}, ${validConfig.humanizer}, ${validConfig.timezoneOffset}, ${resolvedSystemPrompt}
           ) ON CONFLICT (server_id) DO NOTHING
         `;
         await tx`
@@ -692,9 +871,10 @@ class ServerRepository implements IRepository<ServerExportShape> {
             ${server.server_id}, ${isDMChannel}, ${isDMChannel}, ${isDMChannel}
           ) ON CONFLICT (server_id) DO NOTHING
         `;
+        const isUserByok = resolvedAccess?.mode === "user-byok";
         await tx`
           INSERT INTO server_byok_configs (server_id, user_byok_mode)
-          VALUES (${server.server_id}, ${validConfig.userByokMode})
+          VALUES (${server.server_id}, ${isUserByok})
           ON CONFLICT (server_id) DO NOTHING
         `;
         await tx`INSERT INTO server_notice_embeds_configs (server_id) VALUES (${server.server_id}) ON CONFLICT (server_id) DO NOTHING`;
@@ -714,8 +894,8 @@ class ServerRepository implements IRepository<ServerExportShape> {
           ON CONFLICT (persona_id) DO NOTHING
         `;
 
-        // Seed the saved_provider_configs row for the provider registered at setup.
-        if (validConfig.provider && validConfig.encryptedApiKey && selectedLlmId) {
+        // Seed saved_provider_configs row for catalog or custom-endpoint
+        if (resolvedAccess?.mode === "catalog" && finalLlmId && finalApiKey) {
           await tx`
             INSERT INTO saved_provider_configs (
               server_id, provider, api_key, key_version,
@@ -727,8 +907,31 @@ class ServerRepository implements IRepository<ServerExportShape> {
               llm_max_output_tokens,
               llm_logit_biases, llm_disabled_params
             ) VALUES (
-              ${server.server_id}, ${validConfig.provider}, ${validConfig.encryptedApiKey}, ${validConfig.keyVersion},
-              ${selectedLlmId}, ${selectedDiffusionModelId}, ${selectedEmbeddingModelId},
+              ${server.server_id}, ${resolvedAccess.provider}, ${finalApiKey}, ${finalKeyVersion},
+              ${finalLlmId}, ${finalDiffusionId}, ${finalEmbeddingId},
+              NULL, NULL, NULL,
+              NULL, 'auto', '[]'::jsonb,
+              NULL, NULL, NULL,
+              NULL, NULL, NULL,
+              NULL,
+              '[]'::jsonb, '{}'::text[]
+            )
+            ON CONFLICT (server_id, provider) DO NOTHING
+          `;
+        } else if (resolvedAccess?.mode === "custom-endpoint" && customProviderName && customLlmId && customApiKey) {
+          await tx`
+            INSERT INTO saved_provider_configs (
+              server_id, provider, api_key, key_version,
+              llm_id, diffusion_model_id, embedding_model_id,
+              nai_diffusion_model_id, video_model_id, vision_llm_id,
+              nai_preset_name, thinking_level, fallback_model_refs,
+              llm_temperature, llm_top_p, llm_top_k,
+              llm_frequency_penalty, llm_presence_penalty, llm_min_p,
+              llm_max_output_tokens,
+              llm_logit_biases, llm_disabled_params
+            ) VALUES (
+              ${server.server_id}, ${customProviderName}, ${customApiKey}, ${customKeyVersion},
+              ${customLlmId}, NULL, NULL,
               NULL, NULL, NULL,
               NULL, 'auto', '[]'::jsonb,
               NULL, NULL, NULL,

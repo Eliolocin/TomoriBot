@@ -36,7 +36,8 @@ function findColourViolations(colour: "Primary" | "Success"): string[] {
       const isComment = /^\s*(\/\/|\/?\*)/.test(line);
       if (isTypePosition || isComment) continue;
 
-      // Primary is permitted only for active category button rows and the shared state-control primitive.
+      // Primary is permitted for active category button rows, the shared state-control primitive, and a
+      // terminal commit action that is disabled until its whole flow is valid.
       const isCategorySelection =
         (relPath === "utils/discord/ui/panel.ts" &&
           line.includes("cat.id === activeCategory ? ButtonStyle.Primary : ButtonStyle.Secondary")) ||
@@ -51,7 +52,13 @@ function findColourViolations(colour: "Primary" | "Success"): string[] {
       const isStateControlSelection =
         relPath === "utils/discord/ui/panel.ts" &&
         line.includes("isSelected ? ButtonStyle.Primary : ButtonStyle.Secondary");
-      if (line.includes(needle) && !isCategorySelection && !isStateControlSelection) {
+      // A terminal commit action earns Primary only while it is also gated: the setup wizard's Finish button is
+      // disabled until every rendered requirement is complete, so Primary marks a state the actor can act on
+      // rather than advertising an action that would fail. An ungated action button does not qualify.
+      const isGatedCommitAction =
+        relPath === "utils/discord/ui/setupPanel.ts" &&
+        line.includes("isComplete ? ButtonStyle.Primary : ButtonStyle.Secondary");
+      if (line.includes(needle) && !isCategorySelection && !isStateControlSelection && !isGatedCommitAction) {
         violations.push(`${relPath}:${index + 1}`);
       }
     }

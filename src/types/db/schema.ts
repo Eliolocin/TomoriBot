@@ -1472,24 +1472,99 @@ export const tomoriStateSchema = tomoriSchema.merge(personaScopedConfigStateSche
 });
 
 /**
+ * Discriminated provider access input for server setup.
+ */
+export const setupProviderAccessCatalogSchema = z
+  .object({
+    mode: z.literal("catalog"),
+    provider: z.string(),
+    encryptedApiKey: z.instanceof(Buffer),
+    keyVersion: z.number().int().default(1),
+  })
+  .strict();
+export type SetupProviderAccessCatalog = z.infer<typeof setupProviderAccessCatalogSchema>;
+
+/**
+ * Capability tokens the setup transaction maps onto `llms` capability columns.
+ *
+ * Enumerated rather than free strings because the mapping is by exact token: an unrecognized spelling would
+ * otherwise validate, insert, and register the model with that capability silently switched off, surfacing much
+ * later as the endpoint ignoring images or tools.
+ */
+export const setupCustomEndpointCapabilitySchema = z.enum([
+  "tools",
+  "vision",
+  "video",
+  "structured_output",
+  "json",
+  "strict_role_alternation",
+  "prefix_completion",
+]);
+export type SetupCustomEndpointCapability = z.infer<typeof setupCustomEndpointCapabilitySchema>;
+
+export const setupProviderAccessCustomEndpointSchema = z
+  .object({
+    mode: z.literal("custom-endpoint"),
+    connection: z
+      .object({
+        label: z.string(),
+        apiStyle: customEndpointApiStyleSchema,
+        endpointUrl: z.string(),
+        encryptedAuthToken: z.instanceof(Buffer).nullable(),
+        keyVersion: z.number().int().default(1),
+      })
+      .strict(),
+    textModel: z
+      .object({
+        modelCode: z.string(),
+        numCtx: z.number().int().nullable().optional(),
+        capabilities: z.array(setupCustomEndpointCapabilitySchema).optional(),
+      })
+      .strict(),
+  })
+  .strict();
+export type SetupProviderAccessCustomEndpoint = z.infer<typeof setupProviderAccessCustomEndpointSchema>;
+
+export const setupProviderAccessUserByokSchema = z
+  .object({
+    mode: z.literal("user-byok"),
+  })
+  .strict();
+export type SetupProviderAccessUserByok = z.infer<typeof setupProviderAccessUserByokSchema>;
+
+export const setupProviderAccessSchema = z.discriminatedUnion("mode", [
+  setupProviderAccessCatalogSchema,
+  setupProviderAccessCustomEndpointSchema,
+  setupProviderAccessUserByokSchema,
+]);
+export type SetupProviderAccess = z.infer<typeof setupProviderAccessSchema>;
+
+/**
  * Configuration data needed for server setup
  */
 export const setupConfigSchema = z
   .object({
     serverId: z.string(),
-    encryptedApiKey: z.instanceof(Buffer).nullable(),
+    encryptedApiKey: z.instanceof(Buffer).nullable().optional(),
     keyVersion: z.number().int().default(1), // Encryption key version
-    provider: z.string().nullable(), // Null when bootstrapping without an immediate server text provider
+    provider: z.string().nullable().optional(), // Null when bootstrapping without an immediate server text provider
     presetId: z.number(),
     humanizer: z.number().default(1),
     tomoriName: z.string(),
     timezoneOffset: z.number().int().min(-12).max(14).default(0), // Timezone offset in hours
     locale: z.string(),
     registrationLocale: z.string().nullable(), // Analytics-only locale captured at setup; not used for functionality
+    // Legacy provider fields, kept only until the setup command stops building this shape. `providerAccess` wins
+    // wherever both are present, so these must be deleted in the same change that migrates the last caller.
     userByokMode: z.boolean().default(false),
     deferredCustomEndpointSetup: z.boolean().default(false),
+    providerAccess: setupProviderAccessSchema.optional(),
+    systemPrompt: z.string().nullable().optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.providerAccess) {
+      return;
+    }
     if (!value.userByokMode && !value.deferredCustomEndpointSetup && (!value.provider || !value.encryptedApiKey)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
