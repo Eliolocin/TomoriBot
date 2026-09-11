@@ -135,7 +135,7 @@ export async function execute(
             })
           : "";
       // For Matrix-originated reminders (created_by_user_id = null, user_discord_id
-      // is a Matrix ID like "@bred:localhost"), show who the reminder is for so
+      // is a Matrix ID like "@obonya:localhost"), show who the reminder is for so
       // server managers can identify and clean up "orphan" reminders.
       const isMatrixReminder = reminder.created_by_user_id === null && isBridgeUserId(reminder.user_discord_id);
       const creatorName = isMatrixReminder

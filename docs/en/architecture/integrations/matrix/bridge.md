@@ -252,12 +252,12 @@ Bridge relay messages in Discord use a structured webhook username format:
 [Matrix|@user:host] DisplayName
 ```
 
-Example: `[Matrix|@bred:localhost] bred`
+Example: `[Matrix|@obonya:localhost] obonya`
 
 This format serves three purposes:
 1. `startsWith("[Matrix|")` — fast detection of Matrix relay messages in `tomoriChat.ts`
-2. `extractBridgeUserId()` — extracts `@bred:localhost` for the `matrixUserMap` (used by `contextBuilder.ts` to inject Matrix users into the AI's context)
-3. `stripBridgePrefix()` — extracts `bred` as the display name for history formatting and persona matching
+2. `extractBridgeUserId()` — extracts `@obonya:localhost` for the `matrixUserMap` (used by `contextBuilder.ts` to inject Matrix users into the AI's context)
+3. `stripBridgePrefix()` — extracts `obonya` as the display name for history formatting and persona matching
 
 When building context, Matrix users are listed with both display name and bridge ID (`User ID: @user:host`) so memory/reminder tools can target them using an explicit identifier.
 
@@ -288,21 +288,21 @@ An in-memory cache (`provisionedIntents`) prevents redundant provisioning API ca
 
 ## Matrix Mentions
 
-TomoriBot's AI uses the `@{displayName}` placeholder format for mentioning users in responses (e.g., `@{bred}`). When relaying to Matrix, `matrixRelay.ts` resolves these placeholders to proper Matrix mention links:
+TomoriBot's AI uses the `@{displayName}` placeholder format for mentioning users in responses (e.g., `@{obonya}`). When relaying to Matrix, `matrixRelay.ts` resolves these placeholders to proper Matrix mention links:
 
 **Plain text body:**
 ```
-@bred:localhost
+@obonya:localhost
 ```
 
 **Formatted HTML body:**
 ```html
-<a href="https://matrix.to/#/@bred:localhost">bred</a>
+<a href="https://matrix.to/#/@obonya:localhost">obonya</a>
 ```
 
 **MSC3952 m.mentions field:**
 ```json
-{ "user_ids": ["@bred:localhost"] }
+{ "user_ids": ["@obonya:localhost"] }
 ```
 
 The `m.mentions` field tells the homeserver to notify the mentioned user even if the client doesn't parse HTML — a more reliable notification mechanism than content-based detection.
@@ -374,9 +374,9 @@ LLMs occasionally mangle Matrix user IDs. `resolveBridgeUserId()` in `userMappin
 
 | Failure mode | Example | Recovery |
 |---|---|---|
-| Dropped `@` prefix | `bred:localhost` | Prepend `@`, re-validate |
-| Plain display name | `bred` | Look up in `matrixDisplayNameToId` session map |
-| Valid ID | `@bred:localhost` | No-op, returned unchanged |
+| Dropped `@` prefix | `obonya:localhost` | Prepend `@`, re-validate |
+| Plain display name | `obonya` | Look up in `matrixDisplayNameToId` session map |
+| Valid ID | `@obonya:localhost` | No-op, returned unchanged |
 | Discord snowflake | `123456789012345678` | No-op, returned unchanged |
 
 This function is called by both `reminderTool.ts` and `memoryTool.ts` before any ID-dependent logic runs.
