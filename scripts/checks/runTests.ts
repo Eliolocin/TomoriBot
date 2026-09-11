@@ -294,10 +294,14 @@ async function runTestFiles(files: string[], extraEnv: Record<string, string> = 
   const results = await Promise.all(lanes.map((lane) => runLane(lane, extraEnv, requestedOutfile)));
 
   // Replay buffered output in fixed lane order so concurrent runs stay readable.
-  for (const result of results) {
-    const fileCount = result.lane.batches.reduce((total, batch) => total + batch.files.length, 0);
-    process.stdout.write(`\n──── lane: ${result.lane.id} (${fileCount} files) ────\n`);
-    process.stdout.write(result.output);
+  // TOMORI_TEST_QUIET is set by `vl` on the full-suite run, where it re-reports each
+  // failing file through the JUnit results instead of replaying every lane's output.
+  if (process.env.TOMORI_TEST_QUIET !== "true") {
+    for (const result of results) {
+      const fileCount = result.lane.batches.reduce((total, batch) => total + batch.files.length, 0);
+      process.stdout.write(`\n──── lane: ${result.lane.id} (${fileCount} files) ────\n`);
+      process.stdout.write(result.output);
+    }
   }
 
   const allOutfiles = results.flatMap((result) => result.junitOutfiles);

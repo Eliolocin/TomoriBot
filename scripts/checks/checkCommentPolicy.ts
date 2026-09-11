@@ -1,6 +1,7 @@
 ﻿import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import * as ts from "typescript";
+import { isVerboseOutput } from "./lib/gateOutput";
 
 const DEFAULT_PATHS = ["src", "scripts", "tests", "apps"];
 const DEFAULT_EXCEPTIONS_PATH = "scripts/checks/comment-policy-exceptions.json";
@@ -156,6 +157,7 @@ interface CommentToken {
 interface ParsedArguments {
   auditNarration: boolean;
   baseRef?: string;
+  verboseOutput: boolean;
   paths: string[];
   staged: boolean;
 }
@@ -942,6 +944,7 @@ async function collectChangedLines(
 function parseArguments(args: string[]): ParsedArguments {
   const parsed: ParsedArguments = {
     auditNarration: false,
+    verboseOutput: isVerboseOutput(),
     paths: [],
     staged: false,
   };
@@ -949,6 +952,13 @@ function parseArguments(args: string[]): ParsedArguments {
     const value = args[index];
     if (value === "--audit") {
       parsed.auditNarration = true;
+      continue;
+    }
+    // Detail level, shared with the other gates so `vl` can forward one flag. Any other
+    // dash-prefixed value is a mistake, and accepting it as a path would silently
+    // replace the default roots with a nonexistent one and scan nothing at all.
+    if (value === "--verbose" || value === "--no-verbose") {
+      parsed.verboseOutput = value === "--verbose";
       continue;
     }
     if (value === "--staged") {
@@ -963,6 +973,9 @@ function parseArguments(args: string[]): ParsedArguments {
       parsed.baseRef = baseRef;
       index += 1;
       continue;
+    }
+    if (value.startsWith("--")) {
+      throw new Error(`Unknown flag: ${value}`);
     }
     parsed.paths.push(value);
   }
@@ -995,20 +1008,27 @@ async function main(): Promise<void> {
     repoRoot,
   });
 
-  console.log(`Comment policy guide: ${POLICY_DOC_PATH}`);
-
-  for (const finding of result.findings) {
-    const label = finding.severity === "error" ? "ERROR" : "WARN";
-    console.log(
-      `${label} ${finding.file}:${finding.line} [${finding.rule}] ${finding.message}`,
-    );
-    console.log(`  ${finding.text}`);
-  }
-
   const errors = result.findings.filter(
     (finding) => finding.severity === "error",
   );
   const warnings = result.findings.length - errors.length;
+
+  // Errors print in full under either mode: they are why anyone runs this. Warnings do
+  // not change the exit code, so under quiet mode their count is the whole report and
+  // the per-finding listing would be detail nobody can act on yet.
+  const printsDetail = errors.length > 0 || warnings === 0 || args.verboseOutput;
+  if (printsDetail) {
+    console.log(`Comment policy guide: ${POLICY_DOC_PATH}`);
+
+    for (const finding of result.findings) {
+      const label = finding.severity === "error" ? "ERROR" : "WARN";
+      console.log(
+        `${label} ${finding.file}:${finding.line} [${finding.rule}] ${finding.message}`,
+      );
+      console.log(`  ${finding.text}`);
+    }
+  }
+
   if (errors.length > 0) {
     console.error(
       `Comment policy failed: ${errors.length} error(s), ` +
@@ -1019,7 +1039,10 @@ async function main(): Promise<void> {
   }
   console.log(
     `Comment policy passed: ${result.filesChecked} file(s), ` +
-      `${result.usedExceptions.length} exception(s), ${warnings} warning(s).`,
+      `${result.usedExceptions.length} exception(s), ${warnings} warning(s).` +
+      (warnings > 0 && !args.verboseOutput
+        ? ` Re-run with \`bun run audit-comments --verbose\` to list them.`
+        : ""),
   );
 }
 

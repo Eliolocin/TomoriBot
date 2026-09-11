@@ -48,6 +48,46 @@ the test script:
 bun run test tests/regression/db/llm.regression.test.ts
 ```
 
+### One command for every gate
+
+`bun run vl` runs the whole check suite and prints one verdict per gate, so it is the fastest way to
+answer "is this branch green" without remembering each script name:
+
+```bash
+bun run vl
+```
+
+Its last line is machine readable, which matters when a wrapper or an agent reads the result rather
+than a person:
+
+```
+vl-status: PASS exit=0 pass=<n> warn=<n> fail=<n> skip=<n>
+```
+
+**Output is quiet by default.** No flag means quiet; `--verbose` is opt-in. A gate that passes prints
+nothing, and its row in the results block carries the verdict. A gate that fails always prints its full
+detail, so quiet mode can never hide a finding; it only removes the passing noise around one. Advisory
+detail, such as locale parity or the lockfile-wide `bun audit` listing, collapses to a count or to the
+entries that changed the verdict.
+
+Pass `--verbose` to restore every line each gate would otherwise print:
+
+```bash
+bun run vl --verbose
+```
+
+`--no-verbose` is the explicit spelling of the default rather than a mode of its own: it produces the
+same output as passing nothing. It exists so `vl` can force quiet onto the checks it invokes, and it
+wins over `--verbose` regardless of the order the two appear in. It is never required.
+
+Individual gates accept both flags, and `vl` forwards one to them. Redirect the output to a file
+if you want to keep the exit code while reading selectively, and never pipe a gate through `grep` or
+`tail`: the pipeline reports the filter's exit status instead of the gate's.
+
+```bash
+bun run vl > /tmp/vl.log 2>&1; echo "VL_EXIT=$?" >> /tmp/vl.log
+```
+
 ---
 
 ## Coding Conventions
