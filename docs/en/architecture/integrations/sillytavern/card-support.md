@@ -43,13 +43,19 @@ A `.charx` file is a zip containing a Character Card V3 object as `card.json`, p
 tree referenced by `embeded://` URIs. The reader:
 
 - loads the archive with `JSZip.loadAsync`, returning a typed failure rather than throwing;
-- locates `card.json` case-insensitively, tolerating a wrapping folder;
-- checks the entry's **declared** uncompressed size before decompressing it, then checks the real
-  length, so a compressed bomb cannot spend memory by declaring a small size;
-- accepts any `spec` beginning with `chara_card` and never rejects on `spec_version`, matching both
-  the V3 specification's backward-compatibility rule and the shipped converter's own recognition;
-- counts the card's declared assets and sums their declared sizes from the zip central directory,
-  refusing a hostile tree without opening a single asset entry.
+- resolves `card.json` by exact path first, falling back to a case-insensitive basename search so a
+  wrapping folder still works. The exact-path preference matters: without it a decoy
+  `assets/card.json` would shadow the root card the specification mandates;
+- checks the entry's **declared** uncompressed size before decompressing it, then measures the
+  decompressed bytes. The declared-size check is the load-bearing one: an archive honestly
+  declaring a huge card is refused before any decompression, while an entry that delivers more
+  than it declared is refused by jszip's own consistency check;
+- accepts a card with no `spec`, or any `spec` beginning with `chara_card`, and never rejects on
+  `spec_version`. The converter owns card recognition and a root-level V2 card has no `spec` at
+  all, so the container only refuses a card that names a different format;
+- bounds the declared asset list by its raw length before examining any entry, then counts the
+  assets the archive actually carries and sums their declared sizes from the zip central
+  directory, refusing a hostile tree without opening a single asset entry.
 
 Failure reasons are `invalid_zip`, `missing_card`, `invalid_card`, `not_character_card`,
 `card_too_large`, and `assets_too_large`, each mapped to its own localized reply. The last two are
@@ -67,8 +73,10 @@ guidance and no mapping onto that key.
 
 An archive whose card declares one or more assets therefore imports successfully and states the
 omission in the success embed (`commands.persona.import.charx_assets_ignored_description`), pointing
-at `/server avatar` and `/config` > Persona > Sprites. This is a stated limitation rather than a
-silent one.
+at `/server avatar` and `/config` > Persona > Sprites. The notice counts only assets the archive
+actually carries: a remote URL or the specification's `ccdefault:` default is a reference rather
+than bundled media, so a card that shipped nothing but its own text is not told its media was
+dropped. This is a stated limitation rather than a silent one.
 
 ## Metadata Detection
 
@@ -178,13 +186,13 @@ So SillyTavern placeholders can be kept as-is.
 
 If SillyTavern card data is detected but conversion fails:
 
-- `/persona import` returns an ephemeral warning embed
+- `/persona import` returns an ephemeral warning embed naming where the payload came from
 - attaches the decoded / parsed payload as `.txt` for inspection
 
-The `.charx` path fails the same way rather than inventing its own: the embed title is shared, the
-attachment is named `sillytavern-charx-decode-<timestamp>.txt`, and its body names `CHARX card.json`
-as the source. A `.charx` that never reaches conversion, because the container itself is unreadable,
-replies through the container's own failure reasons instead.
+All three card formats (PNG metadata, JSON, and `.charx` `card.json`) share one reply, one
+attachment convention (`<format>-decode-<timestamp>.txt`), and one localized message. A `.charx`
+that never reaches conversion, because the container itself is unreadable, replies through the
+container's own failure reasons instead.
 
 ## Avatar Fallback for JSON and Archive Cards
 

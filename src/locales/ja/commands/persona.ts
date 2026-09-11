@@ -355,6 +355,8 @@ export default {
       download_failed_description: `添付ファイルのダウンロードに失敗しました。もう一度お試しください。`,
       invalid_charx_title: `🔴 無効なキャラクターカードアーカイブ`,
       invalid_charx_description: `この.charxファイルはCharacter Card V3アーカイブとして読み取れませんでした。配布元のサイトからカードを再ダウンロードするか、.png形式でエクスポートしたカードを使用してください。`,
+      card_conversion_failed_title: `🟡 キャラクターカードを検出しましたが変換に失敗しました`,
+      card_conversion_failed_description: `**{source}**からカードをデコードしましたが、Tomori形式への変換に失敗しました。デコードされた内容を検査用に添付しています。\`/support discord\`から、添付ファイルを付けて報告してください。`,
       charx_not_card_description: `この.charxアーカイブは開けましたが、中のカードはキャラクターカードではありません。同じダウンロードに含まれる別のアーカイブではなく、キャラクターカード本体であることを確認してください。`,
       charx_too_large_description: `このアーカイブ内のカードはインポートするには大きすぎます。カードの最大サイズは{max_size}MBです。`,
       charx_assets_too_large_description: `このカードはインポートで確認できる量を超えるメディアを同梱しています。画像、音声、動画のアセットを含めずにエクスポートしたカードをお試しください。`,

@@ -68,12 +68,27 @@ describe("import dropped-field reporting", () => {
     expect(report).toBe("2 disabled character_book entr(ies)");
   });
 
-  it("reports a depth prompt that carries no text", () => {
-    const report = describeUnmappedCardFields({
-      spec: "chara_card_v3",
-      data: { name: "Sparrow", extensions: { depth_prompt: { prompt: "", depth: 4 } } },
-    });
-    expect(report).toBe("extensions.depth_prompt (no prompt text)");
+  it("does not report a depth prompt that carries settings but no text", () => {
+    // SillyTavern writes exactly this shape into its default export, so reporting
+    // it would put noise at the front of every log line for cards where the user
+    // set nothing.
+    expect(
+      describeUnmappedCardFields({
+        spec: "chara_card_v3",
+        data: { name: "Sparrow", extensions: { depth_prompt: { prompt: "", depth: 4, role: "system" } } },
+      }),
+    ).toBeNull();
+  });
+
+  it("still reports a depth prompt when it carries actual text", () => {
+    // The text is mapped into attributes, so this reports nothing either: guard
+    // against a future edit that starts flagging a field the converter uses.
+    expect(
+      describeUnmappedCardFields({
+        spec: "chara_card_v3",
+        data: { name: "Sparrow", extensions: { depth_prompt: { prompt: "Keep replies short.", depth: 4 } } },
+      }),
+    ).toBeNull();
   });
 
   it("collects several losses into one report", () => {

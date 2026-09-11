@@ -61,12 +61,14 @@ function v3Card(overrides: Record<string, unknown> = {}): Record<string, unknown
 /** Builds a `.charx`-shaped zip: a card manifest plus an asset tree. */
 async function buildCharx(options: {
   card?: unknown;
+  /** Hand-written card payload, for bodies a fixture object cannot express. */
+  rawCardJson?: string;
   cardName?: string;
   assets?: Array<{ path: string; bytes: Buffer }>;
   extraRootFiles?: Record<string, string | Buffer>;
 }): Promise<Buffer> {
   const zip = new JSZip();
-  zip.file(options.cardName ?? "card.json", JSON.stringify(options.card ?? v3Card()));
+  zip.file(options.cardName ?? "card.json", options.rawCardJson ?? JSON.stringify(options.card ?? v3Card()));
   for (const asset of options.assets ?? []) {
     zip.file(asset.path, asset.bytes);
   }
@@ -158,11 +160,124 @@ describe("charx archive reader", () => {
     expect(result).toEqual({ ok: false, reason: "not_character_card" });
   });
 
-  it("rejects a card payload that is not an object with a spec", async () => {
-    const buffer = await buildCharx({ card: { spec_version: "3.0" } });
+  it("accepts any JSON object and lets the converter judge its contents", async () => {
+    // The reader no longer owns recognition: an envelope without a `spec` is a
+    // root-level V2 card's normal shape, so rejecting it here would refuse cards
+    // the converter imports. What it still rejects is a body that is not an object.
+    const envelopeWithoutSpec = await buildCharx({ card: { spec_version: "3.0" } });
+    expect((await readCharxCard(envelopeWithoutSpec, LIMITS)).ok).toBe(true);
+
+    const notAnObject = await buildCharx({ rawCardJson: "[1,2,3]" });
+    expect(await readCharxCard(notAnObject, LIMITS)).toEqual({ ok: false, reason: "invalid_card" });
+  });
+
+  it("does not count a remote URI or the spec default as bundled media", async () => {
+    const buffer = await buildCharx({
+      card: v3Card({
+        assets: [
+          { type: "icon", uri: "https://example.invalid/icon.png", name: "main", ext: "png" },
+          { type: "icon", uri: "ccdefault:", name: "main", ext: "png" },
+        ],
+      }),
+    });
 
     const result = await readCharxCard(buffer, LIMITS);
-    expect(result).toEqual({ ok: false, reason: "invalid_card" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    // Nothing is bundled, so telling the user their media was dropped would be
+    // false. The spec's own default for a missing `assets` is exactly this icon.
+    expect(result.ignoredAssetCount).toBe(0);
+  });
+
+  it("does not count an embedded URI whose entry is missing or escapes the root", async () => {
+    const buffer = await buildCharx({
+      card: v3Card({
+        assets: [
+          { type: "icon", uri: "embeded://../../../etc/passwd", name: "main", ext: "png" },
+          { type: "icon", uri: "embeded://assets/icon/images/absent.png", name: "main", ext: "png" },
+        ],
+      }),
+    });
+
+    const result = await readCharxCard(buffer, LIMITS);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.ignoredAssetCount).toBe(0);
+  });
+
+  it("prefers the root card over a decoy buried in the asset tree", async () => {
+    const buffer = await buildCharx({
+      card: v3Card({ name: "REAL" }),
+      extraRootFiles: { "assets/card.json": JSON.stringify(v3Card({ name: "DECOY" })) },
+    });
+
+    const result = await readCharxCard(buffer, LIMITS);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    // The spec puts the card at the archive root, so a same-named file in the
+    // asset tree must never shadow it.
+    expect((result.card as { data: { name: string } }).data.name).toBe("REAL");
+  });
+
+  it("refuses a huge asset list without scanning it", async () => {
+    // Each entry is one byte of JSON and fails shape validation, so a counter that
+    // only advanced on valid entries would never reach the cap and the loop would
+    // run to completion on the main thread.
+    // Sized to land between the two bounds: well over the 500-asset cap, and well
+    // under the 4 MB card cap, so only the asset bound can refuse this. A counter
+    // that advanced only on valid entries would never reach the cap, because every
+    // `null` fails shape validation, and the loop would run to completion on the
+    // main thread.
+    const junkCount = 400_000;
+    const assets = `[${"null,".repeat(junkCount - 1)}null]`;
+    const rawCardJson = `{"spec":"chara_card_v3","spec_version":"3.0","data":{"name":"Sparrow","assets":${assets}}}`;
+    const buffer = await buildCharx({ rawCardJson });
+
+    const started = Date.now();
+    // A card cap raised above the payload, so the asset bound is the only thing
+    // that can refuse this archive.
+    const result = await readCharxCard(buffer, { ...LIMITS, maxCardBytes: 8 * 1024 * 1024 });
+    const elapsed = Date.now() - started;
+
+    expect(result).toEqual({ ok: false, reason: "assets_too_large" });
+    // The upload is a few KB; the bound is what keeps this from being a second of
+    // blocked event loop rather than the loop itself.
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  it("accepts a card whose spec is absent, leaving recognition to the converter", async () => {
+    // A root-level V2 card has no `spec` at all, and the converter accepts one.
+    const noSpec = { name: "Sparrow", description: "An archivist.", first_mes: "Hello.", personality: "Curious." };
+    const buffer = await buildCharx({ card: noSpec });
+
+    const result = await readCharxCard(buffer, LIMITS);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const conversion = presetRepository.convertSillyTavernJsonToPresetData(result.card);
+    expect(conversion.success).toBe(true);
+  });
+
+  it("is not fooled by a directory whose name matches the card", async () => {
+    const zip = new JSZip();
+    zip.folder("card.json");
+    zip.file("data/card.json", JSON.stringify(v3Card({ name: "NESTED" })));
+    const buffer = (await zip.generateAsync({ type: "nodebuffer" })) as Buffer;
+
+    const result = await readCharxCard(buffer, LIMITS);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect((result.card as { data: { name: string } }).data.name).toBe("NESTED");
   });
 
   it("rejects a card whose decompressed payload exceeds the card byte budget", async () => {
@@ -222,9 +337,9 @@ describe("charx archive reader", () => {
     if (!result.ok) {
       return;
     }
-    // All four are counted as declared assets; none is resolvable, so the byte
-    // budget stays untouched and the import is not refused.
-    expect(result.ignoredAssetCount).toBe(4);
+    // None of the four is present in the archive, so the byte budget stays
+    // untouched, the import is not refused, and nothing is reported as dropped.
+    expect(result.ignoredAssetCount).toBe(0);
   });
 });
 

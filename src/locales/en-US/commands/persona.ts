@@ -355,6 +355,8 @@ Please edit the import file to use a different name, or remove the existing pers
       download_failed_description: `Failed to download the attached file. Please try again.`,
       invalid_charx_title: `🔴 Invalid Character Card Archive`,
       invalid_charx_description: `This .charx file could not be read as a Character Card V3 archive. Download the card again from the site that hosts it, or export the card as a .png instead.`,
+      card_conversion_failed_title: `🟡 Character Card Detected, Conversion Failed`,
+      card_conversion_failed_description: `A card was decoded from **{source}**, but converting it to Tomori format failed. The decoded payload is attached for inspection. Please report this through \`/support discord\` and include the attached file.`,
       charx_not_card_description: `This .charx archive opened, but the card inside is not a character card. Make sure the file is the character card itself and not another archive from the same download.`,
       charx_too_large_description: `The card inside this archive is too large to import. Maximum card size is {max_size}MB.`,
       charx_assets_too_large_description: `This card bundles more media than an import can inspect. Try a card exported without its image, audio, or video assets.`,

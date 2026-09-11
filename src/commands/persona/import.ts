@@ -46,6 +46,12 @@ type ResolvedImportFile = {
    * in the success embed so the omission is stated rather than discovered.
    */
   ignoredAssetCount?: number;
+  /**
+   * Card fields the conversion had no destination for. Carried to the single
+   * convergence point below so every converter path reports its losses the same
+   * way, rather than only the path that happened to be written last.
+   */
+  unmappedCardFields?: string | null;
 };
 
 function truncateBufferForAttachment(buffer: Buffer, maxBytes: number, noticeText: string): Buffer {
@@ -102,6 +108,56 @@ function parseJsonAttachment(buffer: Buffer): unknown {
 
 function parseCommaSeparatedTriggers(input: string): string[] {
   return parseTriggerWordListInput(input, { lowercase: false });
+}
+
+/**
+ * Replies when a card was decoded but could not be converted.
+ *
+ * Shared by all three card formats so the reply, the attachment name, and the
+ * prose stay identical across them. `sourceLabel` naming where the payload came
+ * from is what distinguishes the three, and it is the operator-facing half of
+ * the reply, so the visible text is localized like every other reply.
+ */
+async function replyCardConversionFailure(options: {
+  interaction: ChatInputCommandInteraction;
+  locale: string;
+  parsedJson: unknown;
+  conversionError: string;
+  sourceLabel: string;
+  attachmentName: string;
+  debugContext?: {
+    metadataKey: string;
+    rawValueLength: number;
+    decodedValueLength: number;
+    decodedFromBase64: boolean;
+  };
+}): Promise<void> {
+  const debugText = buildSillyTavernDebugText({
+    conversionError: options.conversionError,
+    parsedJson: options.parsedJson,
+    sourceLabel: options.sourceLabel,
+    ...options.debugContext,
+  });
+  const debugBuffer = truncateBufferForAttachment(
+    Buffer.from(debugText, "utf8"),
+    MAX_SILLY_TAVERN_DEBUG_BYTES,
+    "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
+  );
+  const debugFilename = `${options.attachmentName}-${Date.now()}.txt`;
+
+  await options.interaction.editReply({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle(localizer(options.locale, "commands.persona.import.card_conversion_failed_title"))
+        .setDescription(
+          localizer(options.locale, "commands.persona.import.card_conversion_failed_description", {
+            source: options.sourceLabel,
+          }),
+        )
+        .setColor(ColorCode.WARN),
+    ],
+    files: [new AttachmentBuilder(debugBuffer, { name: debugFilename })],
+  });
 }
 
 /**
@@ -171,6 +227,10 @@ function hasItems(container: Record<string, unknown>, key: string): boolean {
  * `nickname` is the name the card's own text addresses, and `group_only_greetings`
  * is content that must not be dropped when the card has no other first message.
  * Reporting them is what keeps a successful import from reading as a faithful one.
+ *
+ * An unset field is not a lost field, so a `depth_prompt` carrying settings but
+ * no text is left alone: SillyTavern writes exactly that shape into its default
+ * export, and reporting it would put noise at the front of every log line.
  */
 export function describeUnmappedCardFields(card: unknown): string | null {
   const root = asPlainObject(card);
@@ -192,12 +252,6 @@ export function describeUnmappedCardFields(card: unknown): string | null {
   }
   if (scopes.some((scope) => hasItems(scope, "group_only_greetings"))) {
     dropped.push("group_only_greetings");
-  }
-
-  const extensions = scopes.map((scope) => asPlainObject(scope.extensions)).find(Boolean);
-  const depthPrompt = extensions ? asPlainObject(extensions.depth_prompt) : null;
-  if (depthPrompt && !hasText(depthPrompt, "prompt")) {
-    dropped.push("extensions.depth_prompt (no prompt text)");
   }
 
   const characterBook = scopes.map((scope) => asPlainObject(scope.character_book)).find(Boolean);
@@ -522,31 +576,13 @@ export async function execute(
 
       const conversion = presetRepository.convertSillyTavernJsonToPresetData(archive.card);
       if (!conversion.success) {
-        const debugText = buildSillyTavernDebugText({
-          conversionError: conversion.error,
+        await replyCardConversionFailure({
+          interaction,
+          locale,
           parsedJson: archive.card,
+          conversionError: conversion.error,
           sourceLabel: "CHARX card.json",
-        });
-        const debugBuffer = truncateBufferForAttachment(
-          Buffer.from(debugText, "utf8"),
-          MAX_SILLY_TAVERN_DEBUG_BYTES,
-          "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
-        );
-        const debugFilename = `sillytavern-charx-decode-${Date.now()}.txt`;
-        const debugAttachment = new AttachmentBuilder(debugBuffer, {
-          name: debugFilename,
-        });
-
-        await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("SillyTavern card detected (conversion failed)")
-              .setDescription(
-                "SillyTavern-style `card.json` was decoded from the archive, but conversion to Tomori format failed. The decoded payload is attached for inspection.",
-              )
-              .setColor(ColorCode.WARN),
-          ],
-          files: [debugAttachment],
+          attachmentName: "sillytavern-charx-decode",
         });
         return;
       }
@@ -556,16 +592,11 @@ export async function execute(
         presetData: conversion.data,
         source: "charx",
         ignoredAssetCount: archive.ignoredAssetCount,
+        unmappedCardFields: describeUnmappedCardFields(archive.card),
       };
-      const unmappedFields = describeUnmappedCardFields(archive.card);
       log.info(
         `[Persona Import] Converted Character Card V3 archive to preset format for "${conversion.data.tomori_nickname}" (ignored ${archive.ignoredAssetCount} embedded asset(s))`,
       );
-      if (unmappedFields) {
-        // A successful conversion still loses fields, so name them once here
-        // rather than letting a drop-in card look identical to a faithful one.
-        log.info(`[Persona Import] Card fields with no destination: ${unmappedFields}`);
-      }
     } else if (isPngImport) {
       const pngValidation = validatePNGBuffer(importFileBuffer, MAX_FILE_SIZE);
       if (!pngValidation.isValid) {
@@ -622,35 +653,19 @@ export async function execute(
 
         const conversion = presetRepository.convertSillyTavernMetadataToPresetData(sillyTavernData);
         if (!conversion.success) {
-          const debugText = buildSillyTavernDebugText({
-            conversionError: conversion.error,
-            decodedFromBase64: sillyTavernData.decodedFromBase64,
-            decodedValueLength: sillyTavernData.decodedValue.length,
-            metadataKey: sillyTavernData.metadataKey,
+          await replyCardConversionFailure({
+            interaction,
+            locale,
             parsedJson: sillyTavernData.parsedJson,
-            rawValueLength: sillyTavernData.rawValue.length,
+            conversionError: conversion.error,
             sourceLabel: "PNG metadata",
-          });
-          const debugBuffer = truncateBufferForAttachment(
-            Buffer.from(debugText, "utf8"),
-            MAX_SILLY_TAVERN_DEBUG_BYTES,
-            "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
-          );
-          const debugFilename = `sillytavern-decode-${Date.now()}.txt`;
-          const debugAttachment = new AttachmentBuilder(debugBuffer, {
-            name: debugFilename,
-          });
-
-          await interaction.editReply({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("SillyTavern card detected (conversion failed)")
-                .setDescription(
-                  "SillyTavern-style `chara` metadata was decoded, but conversion to Tomori format failed. The decoded payload is attached for inspection.",
-                )
-                .setColor(ColorCode.WARN),
-            ],
-            files: [debugAttachment],
+            attachmentName: "sillytavern-decode",
+            debugContext: {
+              metadataKey: sillyTavernData.metadataKey,
+              rawValueLength: sillyTavernData.rawValue.length,
+              decodedValueLength: sillyTavernData.decodedValue.length,
+              decodedFromBase64: sillyTavernData.decodedFromBase64,
+            },
           });
           return;
         }
@@ -659,6 +674,7 @@ export async function execute(
           avatarImageBuffer: importFileBuffer,
           presetData: conversion.data,
           source: "sillytavern-png",
+          unmappedCardFields: describeUnmappedCardFields(sillyTavernData.parsedJson),
         };
         log.info(
           `[Persona Import] Converted SillyTavern PNG card to preset format for "${conversion.data.tomori_nickname}"`,
@@ -691,31 +707,13 @@ export async function execute(
       } else if (presetRepository.looksLikeSillyTavernCardJson(parsedJson)) {
         const conversion = presetRepository.convertSillyTavernJsonToPresetData(parsedJson);
         if (!conversion.success) {
-          const debugText = buildSillyTavernDebugText({
-            conversionError: conversion.error,
+          await replyCardConversionFailure({
+            interaction,
+            locale,
             parsedJson,
+            conversionError: conversion.error,
             sourceLabel: "JSON attachment",
-          });
-          const debugBuffer = truncateBufferForAttachment(
-            Buffer.from(debugText, "utf8"),
-            MAX_SILLY_TAVERN_DEBUG_BYTES,
-            "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
-          );
-          const debugFilename = `sillytavern-json-decode-${Date.now()}.txt`;
-          const debugAttachment = new AttachmentBuilder(debugBuffer, {
-            name: debugFilename,
-          });
-
-          await interaction.editReply({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("SillyTavern JSON card detected (conversion failed)")
-                .setDescription(
-                  "SillyTavern-style JSON was detected, but conversion to Tomori format failed. The parsed payload is attached for inspection.",
-                )
-                .setColor(ColorCode.WARN),
-            ],
-            files: [debugAttachment],
+            attachmentName: "sillytavern-json-decode",
           });
           return;
         }
@@ -724,6 +722,7 @@ export async function execute(
           avatarImageBuffer: null,
           presetData: conversion.data,
           source: "sillytavern-json",
+          unmappedCardFields: describeUnmappedCardFields(parsedJson),
         };
         log.info(
           `[Persona Import] Converted SillyTavern JSON card to preset format for "${conversion.data.tomori_nickname}"`,
@@ -758,6 +757,15 @@ export async function execute(
         ],
       });
       return;
+    }
+
+    // Reported once here rather than inside each converter branch: every card
+    // format loses the same fields, so a per-branch call would silently cover
+    // only whichever format was written most recently.
+    if (resolvedImport.unmappedCardFields) {
+      log.info(
+        `[Persona Import] Fields with no destination in this ${resolvedImport.source} card: ${resolvedImport.unmappedCardFields}`,
+      );
     }
 
     const additionalTriggers = additionalTriggersInput ? parseCommaSeparatedTriggers(additionalTriggersInput) : [];
