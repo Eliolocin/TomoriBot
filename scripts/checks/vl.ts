@@ -1,4 +1,4 @@
-﻿import { rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "bun";
@@ -73,13 +73,39 @@ async function runCheck(
   return { name, exitCode, fatal };
 }
 
+/** How one advisory-graded check reports itself, and what its non-zero exit means. */
+interface WarningCheckOptions {
+  /** True when the child's output contains advisory findings that cannot change the exit code. */
+  outputHasWarnings?: (output: string) => boolean;
+  /** Counts advisory findings, so a passing run can collapse them to a number. */
+  summarizeWarnings?: (output: string) => string;
+  /** One extra line shown under a non-zero row, for a check that fails as a whole. */
+  summarizeFailure?: (output: string) => string | undefined;
+  /** Forwards the detail flag, for a child under scripts/checks/ that reads it. */
+  acceptsDetailFlag?: boolean;
+  /**
+   * Whether a non-zero exit is a real failure rather than a finding.
+   *
+   * This is the one thing `runWarningCheck` cannot infer, and getting it wrong is how a
+   * gate goes silent: `knip` reports "found unused things" with exit 1 and `vl` grades it
+   * a warning, so a count is the whole report. `audit-comments` reports unactionable
+   * counts the same way but exits 1 only for errors that are entirely file and line
+   * specific, so its listing is the report. Defaults to true, because silence is the
+   * failure mode that hides bugs.
+   */
+  failureNeedsDetail?: boolean;
+}
+
 async function runWarningCheck(
   name: string,
   argv: string[],
-  outputHasWarnings: (output: string) => boolean = () => false,
-  summarizeWarnings?: (output: string) => string,
-  acceptsDetailFlag: boolean = false,
-  summarizeFailure?: (output: string) => string | undefined,
+  {
+    outputHasWarnings = () => false,
+    summarizeWarnings,
+    summarizeFailure,
+    acceptsDetailFlag = false,
+    failureNeedsDetail = true,
+  }: WarningCheckOptions = {},
 ): Promise<ResultItem> {
   console.log(`> Running ${name}...`);
   const proc = spawn(resolveArgv({ argv, acceptsDetailFlag }), { stdout: "pipe", stderr: "pipe" });
@@ -87,11 +113,13 @@ async function runWarningCheck(
   const exitCode = await proc.exited;
   const output = stdout + stderr;
   const isWarning = exitCode !== 0 || outputHasWarnings(output);
-  // `runCheck` grades the exit code; `runWarningCheck` never does, so a non-zero exit
-  // here is advisory enough for the caller's summary to speak for it instead.
   const summary = isWarning ? summarizeWarnings?.(output) || undefined : undefined;
   const subItems = exitCode !== 0 ? summarizeFailure?.(output) : undefined;
-  const detailIsReported = isWarning && !summary && !subItems;
+
+  // A failure prints its detail. The exception is a check whose non-zero exit is a
+  // finding the caller has already counted, which is a state the caller has to declare
+  // rather than one inferred from the output having matched a summary.
+  const detailIsReported = (failureNeedsDetail && exitCode !== 0) || (isWarning && !summary && !subItems);
   if (detailIsReported || fullOutput) {
     console.log(output);
   }
@@ -379,7 +407,13 @@ function parseConsoleOutput(output: string, exitCode: number): ResultItem[] {
 /**
  * Runs all tests and returns one ResultItem per test file. Prefers bun's JUnit
  * reporter (reliable per-file enumeration) and falls back to console parsing.
- * On any failure the full bun test output is printed before returning.
+ *
+ * On failure the runner's own output is reprinted rather than a per-file subset of it.
+ * The runner prints each lane as one buffered block, so extracting only the failing
+ * files would mean re-running them, and a targeted re-run in this environment surfaces
+ * the application logger's DB and cache chatter instead of a clean assertion diff. The
+ * red per-file rows below already name each failing file and the command to reproduce
+ * it, so the full output is kept as the backstop it has always been.
  */
 async function runTests(): Promise<ResultItem[]> {
   console.log(`> Running Tests (bun run test)...`);
@@ -389,7 +423,9 @@ async function runTests(): Promise<ResultItem[]> {
   const proc = spawn(["bun", "run", "test"], {
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, BUN_TEST_JUNIT_OUTFILE: junitOutfile },
+    // TOMORI_TEST_QUIET suppresses the runner's lane replay, which the per-file rows
+    // below replace. Under --full the replay is wanted, so the flag is not set.
+    env: { ...process.env, BUN_TEST_JUNIT_OUTFILE: junitOutfile, ...(fullOutput ? {} : { TOMORI_TEST_QUIET: "true" }) },
   });
   const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
   const exitCode = await proc.exited;
@@ -423,12 +459,10 @@ async function runTests(): Promise<ResultItem[]> {
     });
   }
 
-  // When a batch fails but its file never reported, the console output is the only
-  // evidence of what killed it, so it prints even in quiet mode: that anomaly is the
-  // failure, and quiet mode is not allowed to make a failure unreadable. An ordinary
-  // failing file is already named by its own red row below, so the wall of per-test
-  // console output is not reprinted for it.
-  if (fullOutput || unaccountedFailure) {
+  // A failing suite prints the runner's output, which is what today's run shows and the
+  // only evidence available when a batch died before any file could report. The quiet
+  // gain is in the green case, where this and the ~360 per-file rows both stay silent.
+  if (fullOutput || unaccountedFailure || exitCode !== 0) {
     console.log(output);
   }
 
@@ -536,6 +570,9 @@ async function runAudit(): Promise<ResultItem> {
   // A timed-out audit proves nothing either way, so report it as a warning rather
   // than a pass or a failure, so the advisory state is simply unknown this run.
   if (timedOut) {
+    // Killed mid-flight, so whatever it managed to print is the only evidence of how
+    // far it got, and it is small because the timeout bounds it.
+    console.log(output);
     return {
       name: "Dependency Audit (bun audit)",
       exitCode: 1,
@@ -550,12 +587,18 @@ async function runAudit(): Promise<ResultItem> {
   if (/(\d+)\s+critical/i.test(output) && !output.match(/0\s+critical/i)) hasHighOrCritical = true;
   if (/(\d+)\s+high/i.test(output) && !output.match(/0\s+high/i)) hasHighOrCritical = true;
 
+  // The tally line is the only proof that the audit ran to completion. Without it a
+  // non-zero exit could be a transport error or a changed output format, in which case
+  // claiming "no high or critical advisories" would assert something never established.
+  const parsedTally = /\d+\s+vulnerabilit/i.test(output);
+
   // bun audit prints every advisory in the lockfile, transitive ones included, which
   // runs to five figures of lines on this repo while the verdict is one word. Print
   // only the blocks that carry an advisory at or above the blocking threshold, so the
   // listing stays proportional to what actually moved the verdict. Low and moderate
   // advisories still grade yellow below, so suppressing their text cannot hide them.
-  if (fullOutput) {
+  // An unparsed run prints in full, because its output is the only clue to what failed.
+  if (fullOutput || !parsedTally) {
     console.log(output);
   } else if (hasHighOrCritical) {
     console.log(selectBlockingAuditBlocks(output));
@@ -567,7 +610,9 @@ async function runAudit(): Promise<ResultItem> {
     // Audit issues are never contributor-caused; warn locally, block only in the deploy pipeline
     fatal: false,
     isWarning: hasHighOrCritical || exitCode !== 0,
-    summary: hasHighOrCritical ? undefined : "(no high or critical advisories)",
+    // Only a completed run may claim absence, and only a completed clean one has nothing
+    // else to say. Any other state already printed its output above.
+    summary: parsedTally && exitCode === 0 ? "(no high or critical advisories)" : undefined,
   };
 }
 
@@ -655,37 +700,36 @@ async function main() {
     runCheck("Type Check (bun run check)", ["bun", "run", "check"], true),
     runLint(),
     runCheck("Runtime Imports (bun run check-runtime-imports)", ["bun", "run", "check-runtime-imports"], true, true),
-    runWarningCheck(
-      "Knip (bun run knip)",
-      ["bun", "run", "knip"],
-      // knip signals "unused things found" with exit 1, but `vl` grades it a warning
-      // either way, so its three-figure listing is advisory detail. Count what it found
+    runWarningCheck("Knip (bun run knip)", ["bun", "run", "knip"], {
+      // knip signals "unused things found" with exit 1 while `vl` grades it a warning, so
+      // its three-figure listing is a finding rather than a failure. Count what it found
       // so the yellow row stays explained without the listing.
-      (output) => /\(\d+\)$/.test(output),
-      (output) => {
+      outputHasWarnings: (output) => /\(\d+\)$/.test(output),
+      summarizeWarnings: (output) => {
         const counts = [...output.matchAll(/^(\S[^\n]*?) \((\d+)\)$/gm)].map(([, label, count]) => {
           return `${count} ${label.toLowerCase()}`;
         });
         return counts.length > 0 ? `(${counts.join(", ")})` : "";
       },
-    ),
+      failureNeedsDetail: false,
+    }),
 
-    // The only check whose argument parser rejects an unknown flag, because it treats
-    // an unrecognised argument as a scan path and would otherwise scan nothing.
-    runWarningCheck(
-      "Comment Audit (bun run audit-comments)",
-      ["bun", "run", "audit-comments"],
-      (output) => /^WARN /m.test(output),
-      (output) => {
+    runWarningCheck("Comment Audit (bun run audit-comments)", ["bun", "run", "audit-comments"], {
+      outputHasWarnings: (output) => /^WARN /m.test(output),
+      // Only meaningful on a clean run. A failing audit prints its own listing plus the
+      // severity line below, and "0 warnings" next to a failure caused by an error
+      // reports the wrong thing.
+      summarizeWarnings: (output) => {
         const warningCount = output.match(/^WARN /gm)?.length ?? 0;
-        return `(${warningCount} warning${warningCount === 1 ? "" : "s"})`;
+        return warningCount > 0 ? `(${warningCount} warning${warningCount === 1 ? "" : "s"})` : "";
       },
-      false,
       // Read from the check's own verdict line rather than re-counting severities here,
       // so the two counts cannot drift apart.
-      (output) => output.match(/\d+ error\(s\), \d+ warning\(s\), \d+ file\(s\) checked/)?.[0],
-      true,
-    ),
+      summarizeFailure: (output) => output.match(/\d+ error\(s\), \d+ warning\(s\), \d+ file\(s\) checked/)?.[0],
+      // A failing audit is entirely file-and-line findings, so the listing is the report.
+      failureNeedsDetail: true,
+      acceptsDetailFlag: true,
+    }),
     runAudit(),
 
     runCheck("SQL Audit (bun run audit-sql)", ["bun", "run", "audit-sql"], true, true),

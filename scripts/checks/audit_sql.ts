@@ -11,6 +11,7 @@
  * Run via `bun run audit-sql`.
  */
 
+import { isFullOutput } from "./lib/gateOutput";
 import { auditRawSqlBoundary, normalizePath } from "./lib/sqlAudit";
 
 async function run() {
@@ -21,7 +22,8 @@ async function run() {
 
   // Listings are proportional to findings: empty sections print nothing, and the
   // exemption list is detail a reader only needs when deciding whether a violation is
-  // already covered, so a clean run reports its counts and stops.
+  // already covered, so a clean run reports its counts and stops. `--full` restores it
+  // for the times the exemption inventory is itself the question being asked.
   if (writes.length > 0) {
     console.log("=== WRITES ===");
     writes.forEach((w) => console.log(`${normalizePath(w.file)}:${w.line}`));
@@ -30,10 +32,12 @@ async function run() {
     console.log("=== READS ===");
     reads.forEach((r) => console.log(`${normalizePath(r.file)}:${r.line}`));
   }
-
-  if (violations.length > 0) {
+  if (exemptions.length > 0 && (violations.length > 0 || isFullOutput())) {
     console.log("=== EXEMPTIONS ===");
     exemptions.forEach((e) => console.log(`exempt: ${normalizePath(e.file)}:${e.line} (${e.kind}; ${e.reason})`));
+  }
+
+  if (violations.length > 0) {
     console.error(
       `\n❌ Found ${violations.length} raw SQL ${violations.length === 1 ? "query" : "queries"} outside ` +
         "src/utils/db/repositories/. Move them into a repository method, or add a justified exemption " +

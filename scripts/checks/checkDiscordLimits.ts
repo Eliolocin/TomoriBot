@@ -266,12 +266,14 @@ function displayResults(results: AnalysisResult): void {
     return;
   }
 
-  console.log(`\n${"=".repeat(80)}`);
-  console.log("🔍 DISCORD API LIMITS ANALYSIS RESULTS");
-  console.log("=".repeat(80));
+  // This gate runs in CI, where nobody can add a flag after the fact, so everything a
+  // failing run needs prints unconditionally. Only the banner framing it is optional.
+  if (fullOutput) {
+    console.log(`\n${"=".repeat(80)}`);
+    console.log("🔍 DISCORD API LIMITS ANALYSIS RESULTS");
+    console.log("=".repeat(80));
+  }
 
-  // Violations are blocking, so their listing always prints. Only the summary that
-  // follows it is collapsed, because the reader already has the detail above.
   console.log("\n❌ VIOLATIONS FOUND:");
   console.log("-".repeat(60));
 
@@ -292,12 +294,12 @@ function displayResults(results: AnalysisResult): void {
   }
 
   console.log(`\n📊 ${results.filesScanned} files scanned, ${violations.length} violations.`);
+  console.log("\n  Breakdown by type:");
+  for (const [type, count] of results.violationsByType) {
+    console.log(`    - ${formatViolationType(type)}: ${count}`);
+  }
+  console.log("\n⚠️  Please fix the violations above to ensure Discord API compliance.");
   if (fullOutput) {
-    console.log("\n  Breakdown by type:");
-    for (const [type, count] of results.violationsByType) {
-      console.log(`    - ${formatViolationType(type)}: ${count}`);
-    }
-    console.log("\n⚠️  Please fix the violations above to ensure Discord API compliance.");
     console.log(`\n${"=".repeat(80)}`);
   }
 }
