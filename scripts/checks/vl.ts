@@ -670,8 +670,8 @@ async function main() {
       },
     ),
 
-    // No detail flag: checkCommentPolicy.ts treats an unrecognised argument as a scan
-    // path, so forwarding one would replace its default roots and scan zero files.
+    // The only check whose argument parser rejects an unknown flag, because it treats
+    // an unrecognised argument as a scan path and would otherwise scan nothing.
     runWarningCheck(
       "Comment Audit (bun run audit-comments)",
       ["bun", "run", "audit-comments"],
@@ -684,6 +684,7 @@ async function main() {
       // Read from the check's own verdict line rather than re-counting severities here,
       // so the two counts cannot drift apart.
       (output) => output.match(/\d+ error\(s\), \d+ warning\(s\), \d+ file\(s\) checked/)?.[0],
+      true,
     ),
     runAudit(),
 

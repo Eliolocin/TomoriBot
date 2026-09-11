@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { Glob } from "bun";
 import { log } from "@/utils/misc/logger";
+import { isFullOutput } from "./lib/gateOutput";
 
 /**
  * Discord API Limits
@@ -255,52 +256,50 @@ function formatViolationType(type: ViolationType): string {
  * Displays analysis results in a formatted way
  */
 function displayResults(results: AnalysisResult): void {
+  const fullOutput = isFullOutput();
+  const violations = results.violations;
+
+  // A clean run gets one line. The banner, the summary block, and the closing
+  // encouragement are all scaffolding around "no violations", which is the whole report.
+  if (violations.length === 0) {
+    console.log(`✅ Discord API limits OK (${results.filesScanned} files scanned, 0 violations)`);
+    return;
+  }
+
   console.log(`\n${"=".repeat(80)}`);
   console.log("🔍 DISCORD API LIMITS ANALYSIS RESULTS");
   console.log("=".repeat(80));
 
-  if (results.violations.length > 0) {
-    console.log("\n❌ VIOLATIONS FOUND:");
-    console.log("-".repeat(60));
+  // Violations are blocking, so their listing always prints. Only the summary that
+  // follows it is collapsed, because the reader already has the detail above.
+  console.log("\n❌ VIOLATIONS FOUND:");
+  console.log("-".repeat(60));
 
-    const violationsByType = new Map<ViolationType, Violation[]>();
-    for (const violation of results.violations) {
-      if (!violationsByType.has(violation.type)) {
-        violationsByType.set(violation.type, []);
-      }
-      violationsByType.get(violation.type)?.push(violation);
+  const violationsByType = new Map<ViolationType, Violation[]>();
+  for (const violation of violations) {
+    if (!violationsByType.has(violation.type)) {
+      violationsByType.set(violation.type, []);
     }
-
-    for (const [type, violations] of violationsByType) {
-      console.log(`\n⚠️  ${formatViolationType(type)} (${violations.length}):`);
-      for (const violation of violations.sort((a, b) => a.file.localeCompare(b.file))) {
-        console.log(`  ❌ ${violation.file}:${violation.line}`);
-        console.log(`     ${violation.description}`);
-      }
-    }
-  } else {
-    console.log("\n✅ No violations found!");
+    violationsByType.get(violation.type)?.push(violation);
   }
 
-  console.log("\n📊 SUMMARY:");
-  console.log("-".repeat(60));
-  console.log(`  • ${results.filesScanned} files scanned`);
-  console.log(`  • ${results.violations.length} total violations found`);
+  for (const [type, typedViolations] of violationsByType) {
+    console.log(`\n⚠️  ${formatViolationType(type)} (${typedViolations.length}):`);
+    for (const violation of typedViolations.sort((a, b) => a.file.localeCompare(b.file))) {
+      console.log(`  ❌ ${violation.file}:${violation.line}`);
+      console.log(`     ${violation.description}`);
+    }
+  }
 
-  if (results.violationsByType.size > 0) {
+  console.log(`\n📊 ${results.filesScanned} files scanned, ${violations.length} violations.`);
+  if (fullOutput) {
     console.log("\n  Breakdown by type:");
     for (const [type, count] of results.violationsByType) {
       console.log(`    - ${formatViolationType(type)}: ${count}`);
     }
-  }
-
-  if (results.violations.length === 0) {
-    console.log("\n🎉 Perfect! All Discord API limits are respected!");
-  } else {
     console.log("\n⚠️  Please fix the violations above to ensure Discord API compliance.");
+    console.log(`\n${"=".repeat(80)}`);
   }
-
-  console.log(`\n${"=".repeat(80)}`);
 }
 
 /**
