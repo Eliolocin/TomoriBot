@@ -43,7 +43,8 @@ async function run() {
   }
 
   console.log(
-    `✅ No raw SQL outside the repository layer (${writes.length} writes, ${reads.length} reads, ${exemptions.length} exemptions).`,
+    "✅ No raw SQL outside the repository layer " +
+      `(${writes.length} writes, ${reads.length} reads, ${exemptions.length} exemptions).`,
   );
 }
 

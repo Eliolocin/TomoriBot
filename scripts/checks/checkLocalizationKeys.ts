@@ -1650,7 +1650,8 @@ function displayResults(results: AnalysisResult, { fullOutput, rerunCommand }: D
   // the flag that expands it; the full report stays for anything that blocks.
   if (!hasFatalFindings(results) && !fullOutput) {
     console.log(
-      `ℹ️  Localization keys advisory: ${results.parityIssues.length} keys missing in some locale (advisory, exit 2). ${fullOutputHint(rerunCommand)}`,
+      `ℹ️  Localization keys advisory: ${results.parityIssues.length} keys missing in some locale ` +
+        `(advisory, exit 2). ${fullOutputHint(rerunCommand)}`,
     );
     return;
   }
@@ -1670,7 +1671,8 @@ function displayResults(results: AnalysisResult, { fullOutput, rerunCommand }: D
       }
     } else {
       console.log(
-        `  ${results.parityIssues.length} keys missing in some locale (advisory, not blocking). ${fullOutputHint(rerunCommand)}`,
+        `  ${results.parityIssues.length} keys missing in some locale ` +
+          `(advisory, not blocking). ${fullOutputHint(rerunCommand)}`,
       );
     }
   }

@@ -909,7 +909,8 @@ async function main() {
 
   const exitCode = allFatalPassed ? 0 : 1;
   console.log(
-    `\nvl-status: ${exitCode === 0 ? "PASS" : "FAIL"} exit=${exitCode} pass=${tally.pass} warn=${tally.warn} fail=${tally.fail} skip=${tally.skip}\n`,
+    `\nvl-status: ${exitCode === 0 ? "PASS" : "FAIL"} exit=${exitCode}` +
+      ` pass=${tally.pass} warn=${tally.warn} fail=${tally.fail} skip=${tally.skip}\n`,
   );
 
   if (allFatalPassed) {
