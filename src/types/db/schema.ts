@@ -1545,34 +1545,20 @@ export type SetupProviderAccess = z.infer<typeof setupProviderAccessSchema>;
 export const setupConfigSchema = z
   .object({
     serverId: z.string(),
-    encryptedApiKey: z.instanceof(Buffer).nullable().optional(),
-    keyVersion: z.number().int().default(1), // Encryption key version
-    provider: z.string().nullable().optional(), // Null when bootstrapping without an immediate server text provider
     presetId: z.number(),
     humanizer: z.number().default(1),
     tomoriName: z.string(),
     timezoneOffset: z.number().int().min(-12).max(14).default(0), // Timezone offset in hours
     locale: z.string(),
     registrationLocale: z.string().nullable(), // Analytics-only locale captured at setup; not used for functionality
-    // Legacy provider fields, kept only until the setup command stops building this shape. `providerAccess` wins
-    // wherever both are present, so these must be deleted in the same change that migrates the last caller.
-    userByokMode: z.boolean().default(false),
-    deferredCustomEndpointSetup: z.boolean().default(false),
-    providerAccess: setupProviderAccessSchema.optional(),
+    // The sole provider-selection field, and the only place a credential and its key version live.
+    // The legacy `provider`, `encryptedApiKey`, `keyVersion`, `userByokMode`, and
+    // `deferredCustomEndpointSetup` fields are gone with the pre-wizard `/setup` modal: the booleans
+    // could describe contradictory provider states, and the union cannot.
+    providerAccess: setupProviderAccessSchema,
     systemPrompt: z.string().nullable().optional(),
   })
-  .superRefine((value, ctx) => {
-    if (value.providerAccess) {
-      return;
-    }
-    if (!value.userByokMode && !value.deferredCustomEndpointSetup && (!value.provider || !value.encryptedApiKey)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Standard setup requires both provider and encrypted API key.",
-        path: ["provider"],
-      });
-    }
-  });
+  .strict();
 export type SetupConfig = z.infer<typeof setupConfigSchema>;
 
 /**

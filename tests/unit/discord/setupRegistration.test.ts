@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it, spyOn } from "bun:test";
+import { PermissionsBitField, type ChatInputCommandInteraction } from "discord.js";
 import { loadCommandData, ROOT_COMMAND_EXECUTION_KEY } from "@/utils/discord/commandLoader";
 import { resolveCommandCooldown } from "@/events/interactionCreate/handleCommands";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
-import { PermissionsBitField, MessageFlags } from "discord.js";
 import { execute } from "@/commands/setup";
-import * as interactionHelper from "@/utils/discord/interactionHelper";
+import type { UserRow } from "@/types/db/schema";
 import { serverRepository } from "@/utils/db/repositories";
 
 beforeAll(async () => initializeLocalizer());
@@ -69,70 +69,73 @@ describe("/setup registration", () => {
 });
 
 describe("/setup execution authorization", () => {
-  it("denies access to non-managers in guilds", async () => {
-    const replyInfoEmbedSpy = spyOn(interactionHelper, "replyInfoEmbed").mockResolvedValue(undefined);
-    const serverRepoSpy = spyOn(serverRepository, "loadServerIdByDiscId").mockResolvedValue(null);
-
-    const mockInteraction = {
-      guildId: "guild-1",
+  /**
+   * The command is now only an entry point: it resolves the workspace key and delegates to
+   * `startSetupWizard`, which owns the permission check and the workspace-health guard. These
+   * assertions therefore read the wizard's own surface, which is the deferred ephemeral reply.
+   */
+  function makeCommandInteraction(options: { guildId: string | null; canManageGuild: boolean }): {
+    interaction: ChatInputCommandInteraction;
+    replies: Array<{ content?: string }>;
+    state: { deferred: boolean };
+  } {
+    const replies: Array<{ content?: string }> = [];
+    const state = { deferred: false };
+    const interaction = {
+      locale: "en-US",
+      guildLocale: "en-US",
+      guildId: options.guildId,
+      user: { id: "user-1" },
+      channel: { isDMBased: () => options.guildId === null },
+      guild: options.guildId ? { id: options.guildId } : null,
       memberPermissions: {
-        has: () => false,
+        has: (perm: unknown) =>
+          (perm === "ManageGuild" || perm === PermissionsBitField.Flags.ManageGuild) && options.canManageGuild,
       },
-      channel: {
-        isDMBased: () => false,
+      replied: false,
+      deferred: false,
+      deferReply: async () => {
+        state.deferred = true;
       },
-      guild: { id: "guild-1" },
-    };
+      reply: async (payload: { content?: string }) => {
+        replies.push(payload);
+      },
+      editReply: async (payload: { content?: string }) => {
+        replies.push(payload);
+      },
+    } as unknown as ChatInputCommandInteraction;
 
-    await execute(
-      {} as unknown as import("discord.js").Client,
-      mockInteraction as unknown as import("discord.js").ChatInputCommandInteraction,
-      {} as unknown as import("@/types/db/schema").UserRow,
-      "en-US",
-    );
+    return { interaction, replies, state };
+  }
 
-    expect(replyInfoEmbedSpy).toHaveBeenCalled();
-    // Pins the guard ahead of every read: a denial that still touched the database would pass
-    // the assertions below while leaking that the workspace exists.
-    expect(serverRepoSpy).not.toHaveBeenCalled();
-    const args = replyInfoEmbedSpy.mock.calls[0];
-    expect(args[2].titleKey).toBe("general.errors.permission_denied_title");
-    expect(args[2].descriptionKey).toBe("general.errors.permission_denied_description");
-    expect(args[2].flags).toBe(MessageFlags.Ephemeral);
+  it("denies access to non-managers in guilds before any database read", async () => {
+    const repoSpy = spyOn(serverRepository, "loadServerIdByDiscId").mockResolvedValue(null);
+    const { interaction, replies, state } = makeCommandInteraction({ guildId: "guild-1", canManageGuild: false });
 
-    replyInfoEmbedSpy.mockRestore();
-    serverRepoSpy.mockRestore();
+    await execute({} as unknown as import("discord.js").Client, interaction, {} as unknown as UserRow, "en-US");
+
+    // Pins the guard ahead of every read: a denial that still touched the database would pass the
+    // content assertion below while leaking that the workspace exists.
+    expect(repoSpy).not.toHaveBeenCalled();
+    expect(state.deferred).toBe(true);
+    expect(replies[0]?.content).toBe(localizer("en-US", "commands.setup.wizard.permission_denied"));
+
+    repoSpy.mockRestore();
   });
 
-  it("allows access in DMs", async () => {
-    const replyInfoEmbedSpy = spyOn(interactionHelper, "replyInfoEmbed").mockResolvedValue(undefined);
-
-    const mockInteraction = {
-      guildId: null, // DM
-      memberPermissions: null,
-      channel: {
-        isDMBased: () => true,
-      },
-      user: { id: "user-1" },
-      reply: async () => {},
-    };
-
-    const serverRepoSpy = spyOn(serverRepository, "loadServerIdByDiscId").mockResolvedValue(null);
+  it("allows access in DMs and reaches the workspace-health read", async () => {
+    const repoSpy = spyOn(serverRepository, "loadServerIdByDiscId").mockResolvedValue(null);
+    const { interaction, state } = makeCommandInteraction({ guildId: null, canManageGuild: false });
 
     try {
-      await execute(
-        {} as unknown as import("discord.js").Client,
-        mockInteraction as unknown as import("discord.js").ChatInputCommandInteraction,
-        {} as unknown as import("@/types/db/schema").UserRow,
-        "en-US",
-      );
+      await execute({} as unknown as import("discord.js").Client, interaction, {} as unknown as UserRow, "en-US");
     } catch (_e) {
-      // It might throw later on, we just care that it bypassed the auth guard.
+      // Later reads may fail without a live database; the guard bypass is what this pins.
     }
 
-    expect(serverRepoSpy).toHaveBeenCalledWith("user-1");
+    expect(state.deferred).toBe(true);
+    expect(repoSpy).toHaveBeenCalledWith("user-1");
 
-    replyInfoEmbedSpy.mockRestore();
-    serverRepoSpy.mockRestore();
+    repoSpy.mockRestore();
   });
 });

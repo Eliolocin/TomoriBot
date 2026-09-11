@@ -450,19 +450,9 @@ class ServerRepository implements IRepository<ServerExportShape> {
     const isDMChannel = guild === null;
     log.section(`Starting server setup transaction (${isDMChannel ? "DM" : "Guild"} context)`);
 
-    // Discriminated provider access: resolve from explicit providerAccess or legacy fallback flags.
-    const resolvedAccess =
-      validConfig.providerAccess ??
-      (validConfig.userByokMode
-        ? { mode: "user-byok" as const }
-        : validConfig.provider && validConfig.encryptedApiKey
-          ? {
-              mode: "catalog" as const,
-              provider: validConfig.provider,
-              encryptedApiKey: validConfig.encryptedApiKey,
-              keyVersion: validConfig.keyVersion ?? 1,
-            }
-          : null);
+    // Provider access is a discriminated union with no legacy fallback: the pre-wizard `/setup` modal
+    // was the last caller to build the boolean flags this used to resolve from.
+    const resolvedAccess = validConfig.providerAccess;
 
     if (resolvedAccess?.mode === "custom-endpoint") {
       const apiStyle = resolvedAccess.connection.apiStyle;

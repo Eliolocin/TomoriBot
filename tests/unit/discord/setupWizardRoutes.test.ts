@@ -15,7 +15,12 @@ import {
   type SetupDraftRecord,
 } from "@/types/discord/setupWizard";
 import { setupCustomEndpointCapabilitySchema } from "@/types/db/schema";
-import { readSetupDraft, resetSetupDrafts, storeSetupDraft } from "@/utils/discord/interactions/setupDraftStore";
+import {
+  readSetupDraft,
+  resetSetupDrafts,
+  storeSetupDraft,
+  updateSetupDraft,
+} from "@/utils/discord/interactions/setupDraftStore";
 import * as setupDraftStoreModule from "@/utils/discord/interactions/setupDraftStore";
 import {
   buildSetupCancelRouteId,
@@ -55,7 +60,7 @@ import {
   getSetupCatalogProviderChoices,
 } from "@/utils/discord/ui/setupPanel";
 import { buildLegalDocUrl } from "@/utils/misc/docsUrl";
-import { configRepository } from "@/utils/db/repositories";
+import { configRepository, llmModelRepo, personaRepository, serverRepository } from "@/utils/db/repositories";
 import type { SystemPromptPresetRow, TomoriPresetRow } from "@/types/db/schema";
 import { dispatchGlobalInteraction } from "@/utils/discord/interactions/router";
 import type { GlobalRoutableInteraction } from "@/utils/discord/interactions/routeRegistry";
@@ -64,6 +69,11 @@ import { ProviderFactory } from "@/utils/provider/providerFactory";
 import * as cryptoModule from "@/utils/security/crypto";
 import * as customEndpointService from "@/utils/provider/customEndpointService";
 import * as modalModule from "@/utils/discord/ui/modals";
+import * as cacheStore from "@/utils/cache/tomoriStateCache";
+import * as avatarHelper from "@/utils/image/avatarHelper";
+import * as emojiLazySync from "@/utils/cache/emojiLazySync";
+import * as stickerLazySync from "@/utils/cache/stickerLazySync";
+import * as panelActionMetrics from "@/utils/stats/panelActionMetrics";
 
 function makeDraft(overrides: Partial<SetupDraftRecord> = {}): SetupDraftRecord {
   return {
@@ -88,6 +98,11 @@ interface MockInteractionOptions {
   values?: string[];
   fields?: Record<string, string>;
   interactionId?: string;
+  /**
+   * A guild object for the flows that reach the post-commit effects. The wizard's own arms never
+   * read it, which is why the default stays absent.
+   */
+  guild?: unknown;
 }
 
 function makeMockInteraction({
@@ -99,6 +114,7 @@ function makeMockInteraction({
   values = [],
   fields = {},
   interactionId,
+  guild,
 }: MockInteractionOptions): GlobalRoutableInteraction & {
   replyCalls: unknown[];
   updateCalls: unknown[];
@@ -116,6 +132,7 @@ function makeMockInteraction({
     guildLocale: "en-US",
     user: { id: actorDiscId },
     guildId,
+    guild,
     memberPermissions: {
       has: (perm: unknown) =>
         (perm === "ManageGuild" || perm === PermissionsBitField.Flags.ManageGuild) && canManageGuild,
@@ -295,7 +312,7 @@ describe("setupWizardRoutes", () => {
     } as unknown as ChatInputCommandInteraction;
 
     await startSetupWizard(interaction, {
-      checkExistingSetup: async () => false,
+      checkExistingSetup: async () => "ready",
       storeSetupDraft: mockStore as typeof storeSetupDraft,
     });
 
@@ -328,7 +345,7 @@ describe("setupWizardRoutes", () => {
     } as unknown as ChatInputCommandInteraction;
 
     await startSetupWizard(interaction, {
-      checkExistingSetup: async () => false,
+      checkExistingSetup: async () => "ready",
       storeSetupDraft: mockStore as typeof storeSetupDraft,
     });
 
@@ -339,7 +356,7 @@ describe("setupWizardRoutes", () => {
 
   it("acknowledges before refusing an already-configured workspace in startSetupWizard", async () => {
     const mockStore = mock(() => {});
-    let editedContent = "";
+    let editedPayload: { embeds?: unknown[]; content?: string } | null = null;
     const interaction = {
       locale: "en-US",
       guildLocale: "en-US",
@@ -356,18 +373,89 @@ describe("setupWizardRoutes", () => {
       reply: async () => {
         interaction.replied = true;
       },
-      editReply: async (payload: { content?: string }) => {
-        editedContent = payload.content ?? "";
+      editReply: async (payload: { embeds?: unknown[]; content?: string }) => {
+        editedPayload = payload;
       },
     } as unknown as ChatInputCommandInteraction;
 
     await startSetupWizard(interaction, {
-      checkExistingSetup: async () => true,
+      checkExistingSetup: async () => "already-setup",
+      storeSetupDraft: mockStore as typeof storeSetupDraft,
+    });
+
+    // A healthy workspace is answered with its current provider state and the commands that change
+    // it, which is a summary embed rather than the wizard's one-line notice.
+    expect(interaction.deferred).toBe(true);
+    expect(editedPayload?.embeds?.length).toBe(1);
+    expect(mockStore).not.toHaveBeenCalled();
+  });
+
+  it("refuses a broken workspace with repair guidance instead of starting a second setup", async () => {
+    const mockStore = mock(() => {});
+    let editedPayload: { embeds?: Array<{ data?: { title?: string } }> } | null = null;
+    const interaction = {
+      locale: "en-US",
+      guildLocale: "en-US",
+      guildId: "guild-1",
+      user: { id: "actor-1" },
+      memberPermissions: {
+        has: () => true,
+      },
+      replied: false,
+      deferred: false,
+      deferReply: async () => {
+        interaction.deferred = true;
+      },
+      reply: async () => {
+        interaction.replied = true;
+      },
+      editReply: async (payload: { embeds?: Array<{ data?: { title?: string } }> }) => {
+        editedPayload = payload;
+      },
+    } as unknown as ChatInputCommandInteraction;
+
+    await startSetupWizard(interaction, {
+      checkExistingSetup: async () => "broken",
+      storeSetupDraft: mockStore as typeof storeSetupDraft,
+    });
+
+    // A main persona with no loadable state is recoverable in place, so setup must not clear it.
+    expect(interaction.deferred).toBe(true);
+    expect(editedPayload?.embeds?.[0]?.data?.title).toBe(localizer("en-US", "commands.setup.broken_state_title"));
+    expect(mockStore).not.toHaveBeenCalled();
+  });
+
+  it("still reads a bare boolean health result as the pre-wizard already-setup answer", async () => {
+    const mockStore = mock(() => {});
+    let editedPayload: { embeds?: unknown[] } | null = null;
+    const interaction = {
+      locale: "en-US",
+      guildLocale: "en-US",
+      guildId: "guild-1",
+      user: { id: "actor-1" },
+      memberPermissions: {
+        has: () => true,
+      },
+      replied: false,
+      deferred: false,
+      deferReply: async () => {
+        interaction.deferred = true;
+      },
+      reply: async () => {
+        interaction.replied = true;
+      },
+      editReply: async (payload: { embeds?: unknown[] }) => {
+        editedPayload = payload;
+      },
+    } as unknown as ChatInputCommandInteraction;
+
+    await startSetupWizard(interaction, {
+      checkExistingSetup: async () => "already-setup",
       storeSetupDraft: mockStore as typeof storeSetupDraft,
     });
 
     expect(interaction.deferred).toBe(true);
-    expect(editedContent).toBe(localizer("en-US", "commands.setup.already_setup_description"));
+    expect(editedPayload?.embeds?.length).toBe(1);
     expect(mockStore).not.toHaveBeenCalled();
   });
 
@@ -535,28 +623,36 @@ describe("setupWizardRoutes", () => {
     }
   });
 
-  it("builds byok modal with literal types 10 and 21 and yes/no options", () => {
+  it("nests the byok radio group in a label wrapper inside the text display modal", () => {
     const nonce = "nonce-byok-modal-layout";
     const modal = buildSetupByokModal("en-US", nonce);
 
     expect(modal.custom_id).toBe(buildSetupProviderByokSubmitRouteId({ locale: "en-US", nonce }));
     expect(modal.components.length).toBe(2);
 
-    const first = modal.components[0];
-    const second = modal.components[1];
+    const notice = modal.components[0];
+    const wrapper = modal.components[1];
 
-    expect(first.type).toBe(10);
-    expect(typeof first.content).toBe("string");
-    expect(first.content).toContain("/personal providers");
+    expect(notice.type).toBe(10);
+    expect(typeof notice.content).toBe("string");
+    expect(notice.content).toContain("/personal providers");
 
-    expect(second.type).toBe(21);
-    expect(second.custom_id).toBe(buildSetupByokModalFieldId("confirm", nonce));
-    expect(second.required).toBe(true);
-    expect(second.min_values).toBe(1);
-    expect(second.max_values).toBe(1);
-    expect(second.options?.length).toBe(2);
-    expect(second.options?.[0].value).toBe("yes");
-    expect(second.options?.[1].value).toBe("no");
+    // 18 is Label, and the group has to sit inside one: the type-18 walk in interactionCore is the
+    // only path that records a modal value, so a root-level group renders, submits, and reads back as
+    // no selection at all, which is exactly how this path was unreachable before.
+    expect(wrapper.type).toBe(18);
+    expect(typeof wrapper.label).toBe("string");
+
+    const group = wrapper.component;
+    expect(group).toBeDefined();
+    expect(group?.type).toBe(21);
+    expect(group?.custom_id).toBe(buildSetupByokModalFieldId("confirm", nonce));
+    expect(group?.required).toBe(true);
+    expect(group?.min_values).toBe(1);
+    expect(group?.max_values).toBe(1);
+    expect(group?.options?.length).toBe(2);
+    expect(group?.options?.[0].value).toBe("yes");
+    expect(group?.options?.[1].value).toBe("no");
   });
 
   it("stores user-byok mode and marks provider access complete on yes submission", async () => {
@@ -2596,6 +2692,415 @@ describe("setupWizardRoutes", () => {
     } finally {
       personaSpy.mockRestore();
       promptSpy.mockRestore();
+    }
+  });
+});
+
+/**
+ * The final commit path.
+ *
+ * These drive the real registry dispatch rather than the exported commit helper, so the assertions
+ * cover the seam a button press actually travels: route parse, draft read, the routed guards, the
+ * commit, and the receipt the actor ends up looking at.
+ */
+describe("setupWizardFinish", () => {
+  beforeAll(async () => {
+    await initializeLocalizer();
+  });
+
+  beforeEach(() => {
+    resetSetupDrafts();
+    previousRunEnv = process.env.RUN_ENV;
+  });
+
+  afterEach(() => {
+    if (previousRunEnv === undefined) delete process.env.RUN_ENV;
+    else process.env.RUN_ENV = previousRunEnv;
+  });
+
+  const COMMIT_NONCE = "nonce-finish-commit-1";
+  const COMMIT_CATALOGS = {
+    persona: PERSONA_PRESET_ROWS[0],
+    prompt: SYSTEM_PROMPT_ROWS[0],
+  };
+
+  /** A guild object reached only by the post-commit expression sync, which is stubbed out. */
+  const COMMIT_GUILD = {
+    id: "guild-1",
+    name: "Wizard Guild",
+    emojis: { cache: new Map() },
+    stickers: { cache: new Map() },
+  };
+
+  function makeCompleteDraft(overrides: Partial<SetupDraftRecord> = {}): SetupDraftRecord {
+    return makeDraft({
+      providerAccess: {
+        mode: "catalog",
+        // A real member of the curated catalog, which the commit re-reads before writing.
+        provider: "anthropic",
+        encryptedApiKey: Buffer.from("encrypted-key"),
+        keyVersion: 1,
+      },
+      startingSettings: {
+        presetId: COMMIT_CATALOGS.persona.persona_preset_id,
+        humanizer: 2,
+        timezoneOffset: 9,
+        systemPrompt: { kind: "preset", presetName: COMMIT_CATALOGS.prompt.system_prompt_preset_name },
+      },
+      ...overrides,
+    });
+  }
+
+  /**
+   * Every read the commit path makes outside the transaction, so a test only states the one it is
+   * varying. Returns the spies for assertions and a restore for the caller's finally block.
+   */
+  function stubCommitDependencies() {
+    const spies = [
+      spyOn(serverRepository, "loadServerIdByDiscId").mockResolvedValue(null),
+      spyOn(personaRepository, "hasMainPersona").mockResolvedValue(false as never),
+      spyOn(personaRepository, "loadState").mockResolvedValue({
+        server_id: 42,
+        is_alter: false,
+        config: { llm_id: 7, user_byok_mode: false, tool_use_enabled: true },
+        llm: { has_tools: true },
+      } as never),
+      spyOn(configRepository, "loadPresetRowsByLocale").mockResolvedValue([COMMIT_CATALOGS.persona] as never),
+      spyOn(configRepository, "loadSystemPromptPresets").mockResolvedValue([COMMIT_CATALOGS.prompt] as never),
+      spyOn(llmModelRepo, "loadDefaultModel").mockResolvedValue({ llm_codename: "gpt-4o" } as never),
+      spyOn(serverRepository, "setup").mockResolvedValue({
+        server: { server_id: 42 },
+        tomori: {},
+        emojis: [],
+        stickers: [],
+      } as never),
+      spyOn(cacheStore, "invalidateTomoriStateCache").mockImplementation(() => {}),
+      spyOn(avatarHelper, "getCachedPresetAvatar").mockReturnValue(null),
+      spyOn(personaRepository, "markServerMainAvatarSynced").mockResolvedValue(undefined as never),
+      spyOn(emojiLazySync, "lazySyncGuildEmojis").mockResolvedValue(undefined as never),
+      spyOn(stickerLazySync, "lazySyncGuildStickers").mockResolvedValue(undefined as never),
+      spyOn(panelActionMetrics, "recordPanelActionStat").mockResolvedValue(undefined),
+      spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 })),
+    ];
+
+    return {
+      setupSpy: spies[6],
+      invalidateSpy: spies[7],
+      loadStateSpy: spies[2],
+      panelActionSpy: spies[12],
+      fetchSpy: spies[13],
+      restore: () => {
+        for (const spy of spies) spy.mockRestore();
+      },
+    };
+  }
+
+  it("commits once, renders the receipt in place, and records exactly one panel action", async () => {
+    const stubs = stubCommitDependencies();
+
+    try {
+      storeSetupDraft(COMMIT_NONCE, makeCompleteDraft());
+      const customId = buildSetupFinishRouteId({ locale: "en-US", nonce: COMMIT_NONCE });
+      const interaction = makeMockInteraction({ customId, guild: COMMIT_GUILD });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(stubs.setupSpy).toHaveBeenCalledTimes(1);
+      const [, writtenConfig] = stubs.setupSpy.mock.calls[0] as unknown as [unknown, Record<string, unknown>];
+      expect(writtenConfig.serverId).toBe("guild-1");
+      expect(writtenConfig.presetId).toBe(COMMIT_CATALOGS.persona.persona_preset_id);
+      expect(writtenConfig.humanizer).toBe(2);
+      expect(writtenConfig.timezoneOffset).toBe(9);
+      // The prompt is re-read from the live catalog at commit rather than copied into the draft.
+      expect(writtenConfig.systemPrompt).toBe(COMMIT_CATALOGS.prompt.preset_prompt_text);
+      expect(writtenConfig.providerAccess).toMatchObject({ mode: "catalog", provider: "anthropic" });
+
+      // The receipt replaces the wizard's own message: an editReply, never a second message.
+      expect(interaction.editReplyCalls.length).toBe(1);
+      expect(interaction.replyCalls.length).toBe(0);
+      const receipt = JSON.stringify(interaction.editReplyCalls[0]);
+      expect(receipt).toContain(localizer("en-US", "commands.setup.wizard.receipt_title"));
+      expect(receipt).toContain("gpt-4o");
+      expect(receipt).toContain(COMMIT_CATALOGS.persona.persona_preset_name);
+      // The terminal panel carries no controls at all: a stale Finish button must not survive it.
+      expect(receipt).not.toContain(buildSetupFinishRouteId({ locale: "en-US", nonce: COMMIT_NONCE }));
+      expect(receipt).not.toContain(buildSetupCancelRouteId({ locale: "en-US", nonce: COMMIT_NONCE }));
+      // No credential reaches the receipt, in plaintext or as a re-encoded buffer.
+      expect(receipt).not.toContain("encrypted-key");
+      expect(receipt).not.toContain(COMMIT_NONCE);
+
+      expect(stubs.invalidateSpy).toHaveBeenCalledWith("guild-1");
+      expect(stubs.panelActionSpy).toHaveBeenCalledTimes(1);
+      expect(stubs.panelActionSpy.mock.calls[0]?.[0]).toMatchObject({
+        action: "setup.workspace.setup.complete",
+        serverId: 42,
+        userDiscId: "actor-1",
+      });
+
+      // Consumed, so nothing can replay the transaction through this nonce.
+      expect(readSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild").status).toBe("missing");
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  it("acknowledges the button before the first write of the commit", async () => {
+    const stubs = stubCommitDependencies();
+    let acknowledgedAtWrite: boolean | null = null;
+    stubs.setupSpy.mockImplementation((async () => {
+      acknowledgedAtWrite = interactionAcknowledged;
+      return { server: { server_id: 42 }, tomori: {}, emojis: [], stickers: [] };
+    }) as never);
+
+    let interactionAcknowledged = false;
+
+    try {
+      storeSetupDraft(COMMIT_NONCE, makeCompleteDraft());
+      const customId = buildSetupFinishRouteId({ locale: "en-US", nonce: COMMIT_NONCE });
+      const interaction = makeMockInteraction({ customId, guild: COMMIT_GUILD });
+      interaction.deferUpdate = async () => {
+        interactionAcknowledged = true;
+        interaction.deferred = true;
+      };
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      // Discord drops an unacknowledged component interaction at three seconds, and the commit path
+      // is a claim, several catalog reads, a transaction, a cache invalidation, an expression sync,
+      // and a REST avatar update before the receipt is edited in. Sampling the flag from inside the
+      // write is the only way to see the ordering, because the ordering is invisible in what is
+      // called: every delivery method here is editReply either way.
+      expect(acknowledgedAtWrite).toBe(true);
+      expect(interaction.editReplyCalls.length).toBe(1);
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  it("refuses an edit that lands while the draft is claimed, keeping the credential live", async () => {
+    const stubs = stubCommitDependencies();
+    const originalBuffer = Buffer.from("live-credential");
+
+    try {
+      storeSetupDraft(COMMIT_NONCE, {
+        ...makeCompleteDraft({
+          providerAccess: {
+            mode: "catalog",
+            provider: "anthropic",
+            encryptedApiKey: originalBuffer,
+            keyVersion: 1,
+          },
+        }),
+        writeClaimed: true,
+      });
+
+      // The same authorized actor saves a different provider mode while the commit that claimed the
+      // draft is still running. Without a freeze this mutation reaches
+      // wipeDisplacedProviderAccessSecrets, which zero-fills the buffer the running commit is about
+      // to write, and the setup succeeds with a key that cannot authenticate.
+      const customId = buildSetupProviderModeRouteId({ locale: "en-US", nonce: COMMIT_NONCE });
+      const interaction = makeMockInteraction({ customId, kind: "string", values: ["custom-endpoint"] });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(JSON.stringify(interaction.updateCalls[0])).toContain(
+        localizer("en-US", "commands.setup.wizard.commit_in_progress_title"),
+      );
+      expect(originalBuffer.equals(Buffer.from("live-credential"))).toBe(true);
+      // Refused at the read, so the mode never changed and no arm ran against the frozen draft.
+      const stored = readSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild");
+      expect(stored.status).toBe("in-flight");
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  it("freezes the draft at the store, so a save cannot zero the credential being committed", async () => {
+    // The route-level refusal above is the outer half of this guard. This is the inner half: the
+    // store itself refuses a mutation on a claimed draft, because a caller reaching it by any other
+    // path would otherwise wipe the displaced buffer and hand the commit a zeroed key.
+    const liveBuffer = Buffer.from("live-credential");
+    storeSetupDraft(COMMIT_NONCE, {
+      ...makeCompleteDraft({
+        providerAccess: { mode: "catalog", provider: "anthropic", encryptedApiKey: liveBuffer, keyVersion: 1 },
+      }),
+      writeClaimed: true,
+    });
+
+    const result = updateSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild", {
+      providerAccess: { mode: "user-byok" },
+    });
+
+    expect(result.status).toBe("in-flight");
+    // The refused mutation did not reach the wipe, so the buffer the commit holds is intact.
+    expect(liveBuffer.equals(Buffer.from("live-credential"))).toBe(true);
+
+    // The freeze covers reads, which is what makes the dispatcher's refusal reachable at all.
+    expect(readSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild").status).toBe("in-flight");
+  });
+
+  it("drains the claim when receipt delivery fails after the transaction commits", async () => {
+    const stubs = stubCommitDependencies();
+
+    try {
+      storeSetupDraft(COMMIT_NONCE, makeCompleteDraft());
+
+      const customId = buildSetupFinishRouteId({ locale: "en-US", nonce: COMMIT_NONCE });
+      const interaction = makeMockInteraction({ customId, guild: COMMIT_GUILD });
+      // The row is already committed when this runs, which is exactly the window that used to skip
+      // the draft cleanup and leave a claimed draft holding a live encrypted credential.
+      interaction.editReply = async (payload: unknown) => {
+        interaction.editReplyCalls.push(payload);
+        throw new Error("receipt delivery failed after the commit");
+      };
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(stubs.setupSpy).toHaveBeenCalledTimes(1);
+      // Drained rather than left frozen, so a later press reads the terminal state instead of
+      // "already being saved" until the TTL expires with the credential still held in memory.
+      expect(readSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild").status).toBe("missing");
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  it("drains the claim when an unexpected error escapes between the commit and the receipt", async () => {
+    const stubs = stubCommitDependencies();
+
+    try {
+      storeSetupDraft(COMMIT_NONCE, makeCompleteDraft());
+
+      const customId = buildSetupFinishRouteId({ locale: "en-US", nonce: COMMIT_NONCE });
+      const interaction = makeMockInteraction({ customId, guild: COMMIT_GUILD });
+      // The transaction has landed by the time the commit path re-reads the workspace to report on
+      // it, so throwing on that read is the window that used to leave the draft claimed with its
+      // credential still in memory. The first read is the pre-commit health check.
+      let loadStateCalls = 0;
+      stubs.loadStateSpy.mockImplementation((async () => {
+        loadStateCalls += 1;
+        if (loadStateCalls > 1) throw new Error("workspace read exploded after the commit");
+        return {
+          server_id: 42,
+          is_alter: false,
+          config: { llm_id: 7, user_byok_mode: false, tool_use_enabled: true },
+          llm: { has_tools: true },
+        };
+      }) as never);
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(stubs.setupSpy).toHaveBeenCalledTimes(1);
+      // Drained rather than left frozen: a later press reads the terminal state instead of
+      // "already being saved" until the TTL expires.
+      expect(readSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild").status).toBe("missing");
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  it("answers a repeated final submit with the expired state and commits nothing", async () => {
+    const stubs = stubCommitDependencies();
+
+    try {
+      storeSetupDraft(COMMIT_NONCE, makeCompleteDraft());
+      const customId = buildSetupFinishRouteId({ locale: "en-US", nonce: COMMIT_NONCE });
+
+      await dispatchGlobalInteraction({} as Client, makeMockInteraction({ customId, guild: COMMIT_GUILD }));
+      expect(stubs.setupSpy).toHaveBeenCalledTimes(1);
+
+      const second = makeMockInteraction({ customId, guild: COMMIT_GUILD });
+      await dispatchGlobalInteraction({} as Client, second);
+
+      expect(stubs.setupSpy).toHaveBeenCalledTimes(1);
+      // A consumed nonce is a missing draft, which the route answers by editing the anchor in place.
+      expect(JSON.stringify(second.updateCalls[0])).toContain(
+        localizer("en-US", "commands.setup.wizard.expired_title"),
+      );
+      expect(stubs.panelActionSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  it("re-pends only the settings step and commits nothing when the stored persona left the catalog", async () => {
+    const stubs = stubCommitDependencies();
+    const personaSpy = spyOn(configRepository, "loadPresetRowsByLocale").mockResolvedValue([
+      PERSONA_PRESET_ROWS[1],
+    ] as never);
+
+    try {
+      storeSetupDraft(COMMIT_NONCE, makeCompleteDraft());
+      const customId = buildSetupFinishRouteId({ locale: "en-US", nonce: COMMIT_NONCE });
+      const interaction = makeMockInteraction({ customId, guild: COMMIT_GUILD });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(stubs.setupSpy).not.toHaveBeenCalled();
+      const repainted = JSON.stringify(interaction.editReplyCalls[0]);
+      expect(repainted).toContain(localizer("en-US", "commands.setup.wizard.settings_button_start"));
+      // A disabled Finish is the visible form of the refusal.
+      expect(repainted).toContain(
+        `"label":"${localizer("en-US", "commands.setup.wizard.finish_label")}","disabled":true`,
+      );
+
+      // The provider half of the draft survives: only the drifted step is cleared.
+      const stored = readSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild");
+      expect(stored.status).toBe("ok");
+      if (stored.status === "ok") {
+        expect(stored.draft.providerAccess).not.toBeNull();
+        expect(stored.draft.startingSettings).toBeNull();
+      }
+    } finally {
+      personaSpy.mockRestore();
+      stubs.restore();
+    }
+  });
+
+  it("consumes the draft and shows a retry notice when the transaction throws", async () => {
+    const stubs = stubCommitDependencies();
+    stubs.setupSpy.mockRejectedValue(new Error("transaction exploded"));
+
+    try {
+      storeSetupDraft(COMMIT_NONCE, makeCompleteDraft());
+      const customId = buildSetupFinishRouteId({ locale: "en-US", nonce: COMMIT_NONCE });
+      const interaction = makeMockInteraction({ customId, guild: COMMIT_GUILD });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      const notice = JSON.stringify(interaction.editReplyCalls[0]);
+      expect(notice).toContain(localizer("en-US", "commands.setup.wizard.commit_failed_title"));
+      // Never a receipt for a setup that did not land.
+      expect(notice).not.toContain(localizer("en-US", "commands.setup.wizard.receipt_title"));
+      expect(stubs.panelActionSpy).not.toHaveBeenCalled();
+      expect(readSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild").status).toBe("missing");
+    } finally {
+      stubs.restore();
+    }
+  });
+
+  it("refuses a second press while the first commit is still in flight", async () => {
+    const stubs = stubCommitDependencies();
+
+    try {
+      // writeClaimed is what the atomic claim sets for the duration of the transaction, so this is
+      // the state a duplicate confirmation arriving mid-commit actually reads.
+      storeSetupDraft(COMMIT_NONCE, { ...makeCompleteDraft(), writeClaimed: true });
+      const customId = buildSetupFinishRouteId({ locale: "en-US", nonce: COMMIT_NONCE });
+      const interaction = makeMockInteraction({ customId, guild: COMMIT_GUILD });
+
+      await dispatchGlobalInteraction({} as Client, interaction);
+
+      expect(stubs.setupSpy).not.toHaveBeenCalled();
+      // The dispatcher refuses every action on a claimed draft, so this press never reaches the finish
+      // arm at all: it is answered in place with the in-flight notice.
+      expect(JSON.stringify(interaction.updateCalls[0])).toContain(
+        localizer("en-US", "commands.setup.wizard.commit_in_progress_title"),
+      );
+      // The claim is not stolen: the in-flight commit still owns its draft.
+      expect(readSetupDraft(COMMIT_NONCE, "actor-1", "guild-1", "guild").status).toBe("in-flight");
+    } finally {
+      stubs.restore();
     }
   });
 });

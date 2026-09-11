@@ -32,6 +32,67 @@ function makeDraft(overrides: Partial<SetupDraftRecordInput> = {}): SetupDraftRe
 }
 
 describe("setup draft store", () => {
+  it("refuses to mutate a claimed draft, so the credential a commit holds stays live", () => {
+    const store = createSetupDraftStore(() => 1000);
+    const liveBuffer = Buffer.from("secret-api-key");
+    store.storeSetupDraft(
+      "nonce-claimed",
+      makeDraft({
+        providerAccess: { mode: "catalog", provider: "openai", encryptedApiKey: liveBuffer, keyVersion: 1 },
+      }),
+    );
+    store.claimSetupDraft("nonce-claimed", "actor-1", "workspace-1", "guild");
+
+    // A save landing inside the commit window would otherwise reach
+    // wipeDisplacedProviderAccessSecrets and zero the buffer the running commit is about to write.
+    const result = store.updateSetupDraft("nonce-claimed", "actor-1", "workspace-1", "guild", {
+      providerAccess: { mode: "user-byok" },
+    });
+
+    expect(result.status).toBe("in-flight");
+    expect(liveBuffer.equals(Buffer.from("secret-api-key"))).toBe(true);
+    // The freeze covers reads too, which is what makes the route dispatcher's refusal reachable:
+    // any action other than the commit's own would otherwise find a normal-looking draft.
+    expect(store.readSetupDraft("nonce-claimed", "actor-1", "workspace-1", "guild").status).toBe("in-flight");
+  });
+
+  it("refuses to consume a claimed draft, so Cancel cannot zero the credential mid-commit", () => {
+    const store = createSetupDraftStore(() => 1000);
+    const liveBuffer = Buffer.from("secret-api-key");
+    store.storeSetupDraft(
+      "nonce-claimed",
+      makeDraft({
+        providerAccess: { mode: "catalog", provider: "openai", encryptedApiKey: liveBuffer, keyVersion: 1 },
+      }),
+    );
+    store.claimSetupDraft("nonce-claimed", "actor-1", "workspace-1", "guild");
+
+    // Cancel is a consume, and a consume landing in the commit window zero-fills the same buffer.
+    expect(store.consumeSetupDraft("nonce-claimed", "actor-1", "workspace-1", "guild").status).toBe("in-flight");
+    expect(liveBuffer.equals(Buffer.from("secret-api-key"))).toBe(true);
+    expect(store.readSetupDraft("nonce-claimed", "actor-1", "workspace-1", "guild").status).toBe("in-flight");
+
+    // The commit's own exit drains it: release the claim, then consume.
+    store.releaseSetupDraftClaim("nonce-claimed", "actor-1", "workspace-1", "guild");
+    expect(store.consumeSetupDraft("nonce-claimed", "actor-1", "workspace-1", "guild").status).toBe("ok");
+    expect(store.readSetupDraft("nonce-claimed", "actor-1", "workspace-1", "guild").status).toBe("missing");
+  });
+
+  it("accepts the mutation again once the claim is released", () => {
+    const store = createSetupDraftStore(() => 1000);
+    store.storeSetupDraft("nonce-claimed", makeDraft());
+    store.claimSetupDraft("nonce-claimed", "actor-1", "workspace-1", "guild");
+    store.releaseSetupDraftClaim("nonce-claimed", "actor-1", "workspace-1", "guild");
+
+    // The freeze is scoped to the claim: a released claim has to leave the draft editable, which is
+    // what the drift path depends on to clear one step and re-pend it.
+    const result = store.updateSetupDraft("nonce-claimed", "actor-1", "workspace-1", "guild", {
+      startingSettings: null,
+    });
+
+    expect(result.status).toBe("ok");
+  });
+
   it("reads a stored record under matching bindings", () => {
     const store = createSetupDraftStore(() => 1000);
     const draft = makeDraft();
@@ -141,7 +202,8 @@ describe("setup draft store", () => {
     expect(store.claimSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild")).toEqual({
       status: "in-flight",
     });
-    expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild").status).toBe("ok");
+    // The freeze extends to reads, so nothing but the claim's own release can see this record.
+    expect(store.readSetupDraft("nonce-1234", "actor-1", "workspace-1", "guild").status).toBe("in-flight");
   });
 
   it("releases a claim so the same draft can be claimed again", () => {

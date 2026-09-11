@@ -7,10 +7,15 @@ import {
   type ContainerComponentData,
   type StringSelectMenuComponentData,
 } from "discord.js";
-import { SETUP_DRAFT_SCHEMA_VERSION, type SetupDraftRecord } from "@/types/discord/setupWizard";
+import {
+  SETUP_DRAFT_SCHEMA_VERSION,
+  type SetupDraftProviderAccess,
+  type SetupDraftRecord,
+} from "@/types/discord/setupWizard";
 import {
   buildSetupCancelledPayload,
   buildSetupExpiredPayload,
+  buildSetupSuccessPayload,
   buildSetupWizardPayload,
 } from "@/utils/discord/ui/setupPanel";
 import { validateComponentsV2MessageLimits } from "@/utils/discord/ui/componentsV2Limits";
@@ -27,6 +32,9 @@ const TEST_NONCE = "nonce-abc-12345";
 const COMPLETE_DRAFT_CATALOGS = {
   personas: [{ id: 1, name: "Lighthouse", description: "A steady, watchful companion." }],
   prompts: [{ name: "Tomori Default", description: "The standard reply style." }],
+  // Only the commit path reads this, but the editor fixtures travel with the whole shape so a
+  // catalog object built here can be handed to either without a cast.
+  promptTexts: new Map([["Tomori Default", "You are Tomori."]]),
 };
 
 function createDraft(overrides: Partial<SetupDraftRecord> = {}): SetupDraftRecord {
@@ -493,5 +501,114 @@ describe("setupPanel Components V2 layout and limits", () => {
     const expired = buildSetupExpiredPayload("en-US");
     const expiredValidation = validateComponentsV2MessageLimits(expired);
     expect(expiredValidation.valid).toBe(true);
+  });
+
+  it("renders the receipt as text displays inside the budget for every provider mode", () => {
+    const maxEndpointLabel = "e".repeat(40);
+    const maxModelCode = "m".repeat(200);
+
+    const cases = [
+      {
+        label: "catalog with model",
+        input: {
+          providerAccess: {
+            mode: "catalog",
+            provider: "anthropic",
+            encryptedApiKey: Buffer.from(SECRET_KEY_STRING),
+            keyVersion: 1,
+          } satisfies SetupDraftProviderAccess,
+          modelName: "claude-sonnet-4",
+          providerLabel: "Anthropic",
+        },
+      },
+      {
+        label: "catalog without a resolvable model",
+        input: {
+          providerAccess: {
+            mode: "catalog",
+            provider: "anthropic",
+            encryptedApiKey: Buffer.from(SECRET_KEY_STRING),
+            keyVersion: 1,
+          } satisfies SetupDraftProviderAccess,
+          modelName: null,
+          providerLabel: "Anthropic",
+        },
+      },
+      {
+        label: "custom endpoint at maximum label and model length",
+        input: {
+          providerAccess: {
+            mode: "custom-endpoint",
+            connection: {
+              label: maxEndpointLabel,
+              apiStyle: "openai-compatible",
+              endpointUrl: "https://example.invalid/v1",
+              encryptedAuthToken: Buffer.from(SECRET_KEY_STRING),
+              keyVersion: 1,
+            },
+            textModel: { modelCode: maxModelCode, numCtx: 131072, capabilities: ["tools"] },
+          } satisfies SetupDraftProviderAccess,
+          modelName: maxModelCode,
+          providerLabel: maxEndpointLabel,
+        },
+      },
+      {
+        label: "user byok",
+        input: {
+          providerAccess: { mode: "user-byok" } satisfies SetupDraftProviderAccess,
+          modelName: null,
+          providerLabel: "",
+        },
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      for (const context of ["guild", "dm"] as const) {
+        const payload = buildSetupSuccessPayload({
+          locale: "en-US",
+          context,
+          providerAccess: testCase.input.providerAccess,
+          modelName: testCase.input.modelName,
+          providerLabel: testCase.input.providerLabel,
+          personaName: "Lighthouse",
+          notes: [
+            { label: "Expressions Disabled", detail: "Emoji and sticker usage have been automatically disabled." },
+          ],
+          learnMore: localizer("en-US", "commands.setup.wizard.receipt_learn_more", { help: "/help" }),
+          footerKey: context === "dm" ? "commands.setup.wizard.receipt_footer_avatar_skipped_dm" : undefined,
+        });
+
+        const validation = validateComponentsV2MessageLimits(payload);
+        expect(`${testCase.label}/${context}: ${JSON.stringify(validation.violations)}`).toBe(
+          `${testCase.label}/${context}: []`,
+        );
+        expect(validation.valid).toBe(true);
+
+        // The receipt is the terminal state, so it carries no components a stale press could reach.
+        const json = JSON.stringify(payload);
+        expect(json).not.toContain("setup:v1:");
+        expect(json).not.toContain(SECRET_KEY_STRING);
+      }
+    }
+  });
+
+  it("flattens the receipt into text displays rather than embeds, because the anchor is V2", () => {
+    const payload = buildSetupSuccessPayload({
+      locale: "en-US",
+      context: "guild",
+      providerAccess: { mode: "user-byok" },
+      modelName: null,
+      providerLabel: "",
+      personaName: "Lighthouse",
+      notes: [],
+      learnMore: "Learn more",
+    });
+
+    expect("embeds" in payload).toBe(false);
+    const texts = extractAllText(payload as unknown as ReturnType<typeof buildSetupWizardPayload>);
+    expect(texts.length).toBeGreaterThan(0);
+    expect(texts[0]).toContain(localizer("en-US", "commands.setup.wizard.receipt_title"));
+    expect(texts.join("\n")).toContain(localizer("en-US", "commands.setup.next_steps_title"));
+    expect(texts.join("\n")).toContain(localizer("en-US", "commands.setup.learn_more_title"));
   });
 });

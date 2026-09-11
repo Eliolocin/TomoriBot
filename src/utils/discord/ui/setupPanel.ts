@@ -9,8 +9,10 @@ import {
 import {
   isSetupDraftComplete,
   isSetupDraftProviderAccessComplete,
+  type SetupDraftContext,
   type SetupDraftEndpointConnection,
   type SetupDraftEndpointModel,
+  type SetupDraftProviderAccess,
   type SetupDraftRecord,
   type SetupDraftStartingSettings,
   type SetupDraftSystemPrompt,
@@ -40,6 +42,7 @@ import {
   getProviderDisplayName,
 } from "@/utils/provider/providerInfoRegistry";
 import { safeSelectOptionText } from "@/utils/discord/ui/modals";
+import { truncateDiscordText } from "@/utils/text/discordTextLimits";
 import type { RawDiscordComponent } from "@/types/discord/rawApiTypes";
 import { ColorCode } from "@/utils/misc/logger";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
@@ -68,6 +71,14 @@ export interface SetupWizardPayloadInput {
 export interface SetupSettingsCatalogs {
   personas: Array<{ id: number; name: string; description: string }>;
   prompts: Array<{ name: string; description: string }>;
+  /**
+   * Preset name to current prompt text, for the final commit only.
+   *
+   * The editor offers the names and the draft stores an identity, so the text written at commit has
+   * to come from the same read that proved the identity still resolves. A preset edited since the
+   * save is therefore written in its current form rather than in a copy the draft carried.
+   */
+  promptTexts: Map<string, string>;
 }
 
 /** Discord's maximum option count for a single modal string select. */
@@ -125,6 +136,7 @@ export function toSetupSettingsCatalogs(
       name: preset.system_prompt_preset_name,
       description: locale === "ja" && preset.ja_description ? preset.ja_description : preset.system_prompt_preset_desc,
     })),
+    promptTexts: new Map(promptPresets.map((preset) => [preset.system_prompt_preset_name, preset.preset_prompt_text])),
   };
 }
 
@@ -459,6 +471,186 @@ export function buildSetupCancelledPayload(locale: string): ComponentsV2MessageP
   );
 }
 
+/**
+ * Terminal replacement for a workspace whose commit transaction failed.
+ *
+ * It reads as a refusal rather than a receipt: the draft is consumed at this point, so the actor
+ * has to run `/setup` again and the copy has to say that instead of implying a setup that never
+ * reached the database.
+ */
+export function buildSetupCommitFailedPayload(
+  locale: string,
+): ComponentsV2MessagePayload & { attachments: readonly [] } {
+  return validateAndFallbackPanelPayload(
+    {
+      components: buildNoticeContainer({
+        locale,
+        color: ColorCode.ERROR,
+        titleKey: "commands.setup.wizard.commit_failed_title",
+        descriptionKey: "commands.setup.wizard.commit_failed_description",
+      }),
+      attachments: [],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    locale,
+  );
+}
+
+/**
+ * Answer for a control pressed while this draft is being committed.
+ *
+ * It is not the expired state: the draft still exists and the commit in progress is about to replace
+ * this message, so the copy tells the actor to wait rather than to start over.
+ */
+export function buildSetupInFlightPayload(locale: string): ComponentsV2MessagePayload & { attachments: readonly [] } {
+  return validateAndFallbackPanelPayload(
+    {
+      components: buildNoticeContainer({
+        locale,
+        color: ColorCode.INFO,
+        titleKey: "commands.setup.wizard.commit_in_progress_title",
+        descriptionKey: "commands.setup.wizard.commit_in_progress",
+      }),
+      attachments: [],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    locale,
+  );
+}
+
+/** One conditional `A Few Things to Note` entry: a bold label line over an indented detail line. */
+interface SetupReceiptNote {
+  label: string;
+  detail: string;
+}
+
+interface SetupReceiptInput {
+  locale: string;
+  /** Guild or DM workspace, which selects the DM-specific copy variants. */
+  context: SetupDraftContext;
+  providerAccess: SetupDraftProviderAccess;
+  /** The resolved default model codename for a catalog provider, or the custom model code. */
+  modelName: string | null;
+  /** Provider display name for a catalog provider, endpoint label for a custom endpoint. */
+  providerLabel: string;
+  personaName: string;
+  notes: readonly SetupReceiptNote[];
+  /** Pre-composed body for the Learn More field, built by the caller from its live command mentions. */
+  learnMore: string;
+  /** Footer locale key for the skipped or failed avatar update, when one applies. */
+  footerKey?: string;
+}
+
+function resolveReceiptDescriptionKey(input: SetupReceiptInput): string {
+  const isDm = input.context === "dm";
+  const { providerAccess } = input;
+
+  if (providerAccess.mode === "user-byok") {
+    return isDm ? "commands.setup.wizard.receipt_desc_byok_dm" : "commands.setup.wizard.receipt_desc_byok";
+  }
+  if (providerAccess.mode === "custom-endpoint") {
+    return isDm
+      ? "commands.setup.wizard.receipt_desc_custom_endpoint_dm"
+      : "commands.setup.wizard.receipt_desc_custom_endpoint";
+  }
+  if (!input.modelName) {
+    return isDm ? "commands.setup.wizard.receipt_desc_dm" : "commands.setup.wizard.receipt_desc";
+  }
+  return isDm ? "commands.setup.wizard.receipt_desc_dm_with_model" : "commands.setup.wizard.receipt_desc_with_model";
+}
+
+/**
+ * Shortens a stored value this panel only names, so a composed sentence stays inside the column.
+ *
+ * Endpoint labels and custom model codes are stored at lengths that would push a receipt line past
+ * the 65-character panel budget, and a Components V2 container draws a longer run of unbroken text
+ * wider than the column it sits in. Truncation here is display-only: the stored value is untouched,
+ * it stays editable in the provider editors, and the receipt is a terminal notice rather than a
+ * field the actor reads back.
+ */
+function truncateReceiptValue(value: string, maxLength: number): string {
+  return truncateDiscordText(value, maxLength);
+}
+
+/**
+ * The terminal success receipt, rendered as Components V2 text displays onto the wizard's own
+ * message.
+ *
+ * The wizard anchor is a V2 message and Discord never lets one carry legacy embeds afterwards, so
+ * the receipt is the same flattening the shared legacy sinks already apply to a marked interaction
+ * rather than a freshly posted embed.
+ */
+export function buildSetupSuccessPayload(
+  input: SetupReceiptInput,
+): ComponentsV2MessagePayload & { attachments: readonly [] } {
+  const { locale } = input;
+  const components: ComponentInContainerData[] = [];
+
+  components.push({
+    type: ComponentType.TextDisplay,
+    content: `### ${localizer(locale, "commands.setup.wizard.receipt_title")}`,
+  });
+
+  components.push({
+    type: ComponentType.TextDisplay,
+    content: localizer(locale, resolveReceiptDescriptionKey(input), {
+      model_name: truncateReceiptValue(input.modelName ?? "", 30),
+      provider: truncateReceiptValue(input.providerLabel, 28),
+      endpoint: truncateReceiptValue(input.providerLabel, 28),
+      persona: truncateReceiptValue(input.personaName, 25),
+    }),
+  });
+
+  if (input.context === "dm") {
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.setup.dm_context_explanation_title")}**\n${localizer(locale, "commands.setup.dm_context_explanation")}`,
+    });
+  }
+
+  components.push({
+    type: ComponentType.TextDisplay,
+    content: `**${localizer(locale, "commands.setup.next_steps_title")}**\n${localizer(
+      locale,
+      input.context === "dm"
+        ? "commands.setup.wizard.receipt_next_steps_dm"
+        : "commands.setup.wizard.receipt_next_steps",
+    )}`,
+  });
+
+  components.push({
+    type: ComponentType.TextDisplay,
+    content: `**${localizer(locale, "commands.setup.learn_more_title")}**\n${input.learnMore}`,
+  });
+
+  if (input.notes.length > 0) {
+    components.push({ type: ComponentType.Separator, divider: true, spacing: 1 });
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: `**${localizer(locale, "commands.setup.heads_up_title")}**\n${input.notes
+        .map((note) => `- **${note.label}**\n  - ${note.detail}`)
+        .join("\n")}`,
+    });
+  }
+
+  if (input.footerKey) {
+    components.push({ type: ComponentType.Separator, divider: true, spacing: 1 });
+    components.push({
+      type: ComponentType.TextDisplay,
+      content: withLinePrefix("-# ", localizer(locale, input.footerKey)),
+    });
+  }
+
+  return validateAndFallbackPanelPayload(
+    {
+      components: [buildPanelContainer(components)],
+      attachments: [],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    locale,
+  );
+}
+
 export function buildSetupExpiredPayload(locale: string): ComponentsV2MessagePayload & { attachments: readonly [] } {
   return validateAndFallbackPanelPayload(
     {
@@ -764,21 +956,29 @@ export function buildSetupByokModal(
         }),
       },
       {
-        type: 21,
-        custom_id: buildSetupByokModalFieldId("confirm", nonce),
-        required: true,
-        min_values: 1,
-        max_values: 1,
-        options: [
-          {
-            label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.byok_confirm_yes"), 100),
-            value: "yes",
-          },
-          {
-            label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.byok_confirm_no"), 100),
-            value: "no",
-          },
-        ],
+        // 18 is Label, and it is the only path by which a routed modal value is recorded: the
+        // type-18 walk in interactionCore is what reads a submission back, so the same group at
+        // the modal root would render, submit, and read back as no selection at all.
+        type: 18,
+        label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.byok_confirm_label"), 45),
+        component: {
+          // 21 is RadioGroup, whose submitted value lands in the modal select-value store.
+          type: 21,
+          custom_id: buildSetupByokModalFieldId("confirm", nonce),
+          required: true,
+          min_values: 1,
+          max_values: 1,
+          options: [
+            {
+              label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.byok_confirm_yes"), 100),
+              value: "yes",
+            },
+            {
+              label: safeSelectOptionText(localizer(locale, "commands.setup.wizard.byok_confirm_no"), 100),
+              value: "no",
+            },
+          ],
+        },
       },
     ],
   };

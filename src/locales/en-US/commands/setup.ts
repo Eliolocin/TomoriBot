@@ -58,9 +58,13 @@ export default {
     learn_more_value: `Read the [Official Wiki](https://docs.tomoribot.app/en/features/) or open {helpFeatures} (then Features) to learn more about what I can do!\n- [Multiple Personas](https://docs.tomoribot.app/en/features/chatting-personality/multiple-personas/) = Give me different looks, voices, and triggers\n- [Chatting & Triggers](https://docs.tomoribot.app/en/features/chatting-personality/chatting-and-triggers/) = Decide when and how I join conversations\n- [Memory](https://docs.tomoribot.app/en/features/knowledge/memory/) = I remember people, facts, and context\n- [Personalization](https://docs.tomoribot.app/en/features/knowledge/personalization/) = Teach me about you so I can treat you how you like to be treated\n- [Media Generation](https://docs.tomoribot.app/en/features/capabilities/media-generation/) = I can make images, video, and voice\n- [Tools & Extensions](https://docs.tomoribot.app/en/features/capabilities/tools-and-extensions/) = Web search, link reading, and custom tools`,
     heads_up_title: `⚠️ A Few Things to Note`,
     novelai_expressions_warning_field: `Expressions Disabled`,
-    novelai_expressions_warning_value: `Emoji and sticker usage have been automatically disabled to keep NovelAI's context lean and stable. You can re-enable them anytime with \`/config\` > Permissions.`,
+    novelai_expressions_warning_value: `Emoji and sticker usage have been automatically
+disabled to keep NovelAI's context lean and stable. You can
+re-enable them anytime with \`/config\` > Permissions.`,
     zai_tos_warning_field: `Z.ai Terms of Service`,
-    zai_tos_warning_value: `Z.ai's ToS have been updated to only permit coding/agent use cases. Using Z.ai for general chat is at your own risk and may violate their terms.`,
+    zai_tos_warning_value: `Z.ai's ToS have been updated to only permit
+coding/agent use cases. Using Z.ai for general chat is at
+your own risk and may violate their terms.`,
     custom_bearer_hint_field: `Bearer Token`,
     custom_bearer_hint_value: `If your endpoint requires authentication, use {apiKeySet} to add a Bearer token.`,
     preset_field: `Personality Preset`,
@@ -70,7 +74,11 @@ export default {
     custom_endpoint_bootstrap_field: `Custom Endpoint`,
     custom_endpoint_bootstrap_value: `Next: register the endpoint with {custom_models_add_command}, then activate it with {model_text_command} or the matching model command. Use {help_custom_models_command} (then Features > Custom Endpoints, Speech, or Transcription) for setup guides.`,
     dm_context_explanation_title: `About Direct Messages`,
-    dm_context_explanation: `I will still refer to this Direct Message as a "server". Meaning all "server" features work the same way, just privately here between us! Think of this Direct Message as a 1-on-1 server with me, therefore its server memories are my memories within here only.`,
+    dm_context_explanation: `I will still refer to this Direct Message as a "server".
+Meaning all "server" features work the same way, just
+privately here between us! Think of this Direct Message as
+a 1-on-1 server with me, therefore its server memories are
+my memories within here only.`,
     already_setup_title: `Already Set Up`,
     already_setup_summary_description: `This server is already configured. Here is the current text-provider state and the quickest way to change it.`,
     current_provider_field: `Current Text Provider`,
@@ -146,11 +154,55 @@ Try {model_text_command} to assign a working model, or {provider_add_command} to
       settings_summary_system_prompt: `System prompt: {prompt}`,
       finish_label: `Finish Setup`,
       cancel_label: `Cancel`,
-      step_unavailable: `This setup step is not yet available in this preview.`,
       cancelled_title: `Setup Cancelled`,
       cancelled_description: `Setup was cancelled. Any entered credentials were removed.`,
       expired_title: `Setup Session Expired`,
       expired_description: `This setup session expired. Run /setup again to start over.`,
+      commit_failed_title: `Setup Not Completed`,
+      commit_failed_description: `Nothing was saved. Run /setup again to start over.`,
+      commit_in_progress: `This setup is already being saved. Give it a moment.`,
+      commit_in_progress_title: `Setup Is Being Saved`,
+      receipt_footer_avatar_skipped_dm: `Avatar updates are not available in Direct
+Messages, so the preset avatar was skipped.`,
+      receipt_footer_avatar_failed: `The preset avatar could not be updated in this
+server. You can set it again later.`,
+      receipt_title: `🟢 Setup Complete!`,
+      receipt_desc: `I'm all set up for this server as \`{persona}\`!`,
+      receipt_desc_with_model: `I'm all set up for this server! I'll answer with
+the \`{model_name}\` model (\`{provider}\`'s default) as \`{persona}\`.`,
+      receipt_desc_custom_endpoint: `I'm all set up for this server! I'll answer with
+\`{model_name}\` through your
+\`{endpoint}\` endpoint as \`{persona}\`.`,
+      receipt_desc_byok: `I'm all set up for this server in User BYOK mode
+as \`{persona}\`! Each member answers with their own provider
+until BYOK is turned off.`,
+      receipt_desc_dm: `I'm all set up for our DM as \`{persona}\`!`,
+      receipt_desc_dm_with_model: `I'm all set up for our DM as \`{persona}\`!
+I'll answer with the \`{model_name}\` model through \`{provider}\`.`,
+      receipt_desc_custom_endpoint_dm: `I'm all set up for our DM! I'll answer with
+\`{model_name}\` through your
+\`{endpoint}\` endpoint as \`{persona}\`.`,
+      receipt_desc_byok_dm: `I'm all set up for our DM in User BYOK mode
+as \`{persona}\`! Each of your messages uses your own provider
+until BYOK is turned off.`,
+      receipt_next_steps: `- **Mention me in chat** to start talking!
+- Use \`/persona\` to change my name, look, and personality.
+- Use \`/config\` to adjust how I act and what I can do.
+- Use \`/memories\` to teach me things about you and this server.
+- Use \`/expressions initialize\` to let me use this
+  server's emoji and stickers.`,
+      receipt_next_steps_dm: `- **Just message me here** to start talking!
+- Use \`/persona\` to change my name, look, and personality.
+- Use \`/config\` to adjust how I act and what I can do.
+- Use \`/memories\` to teach me things about you.`,
+      receipt_learn_more: `Read the [Official Wiki](https://docs.tomoribot.app/en/features/) or open {help}
+(then Features) for more on what I can do.
+- [Multiple Personas](https://docs.tomoribot.app/en/features/chatting-personality/multiple-personas/) = looks, voices, and triggers
+- [Chatting & Triggers](https://docs.tomoribot.app/en/features/chatting-personality/chatting-and-triggers/) = when and how I join in
+- [Memory](https://docs.tomoribot.app/en/features/knowledge/memory/) = people, facts, and context
+- [Personalization](https://docs.tomoribot.app/en/features/knowledge/personalization/) = how you like to be treated
+- [Media Generation](https://docs.tomoribot.app/en/features/capabilities/media-generation/) = images, video, and voice
+- [Tools & Extensions](https://docs.tomoribot.app/en/features/capabilities/tools-and-extensions/) = web search and custom tools`,
       permission_denied: `You must have the Manage Server permission to set up.`,
       env_mismatch: `Environment configuration changed. Please restart setup.`,
       forbidden: `This setup session belongs to another user or channel.`,
@@ -218,6 +270,7 @@ Try {model_text_command} to assign a working model, or {provider_add_command} to
 that member's own saved text provider.
 The workspace will not supply a fallback.
 Members configure theirs in {command}.`,
+      byok_confirm_label: `Enable User BYOK`,
       byok_confirm_yes: `Yes, enable User BYOK`,
       byok_confirm_no: `No, keep previous configuration`,
       byok_choice_invalid: `That selection is not valid. Reopen the menu and choose an option.`,

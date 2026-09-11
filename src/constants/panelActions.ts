@@ -92,6 +92,9 @@ export const PANEL_ACTIONS = [
   "personal-config.personal.spotlight.set",
   "personal-config.personal.spotlight.remove",
 
+  // setup wizard
+  "setup.workspace.setup.complete",
+
   // server config panel; the surface avoids a bare "config" prefix because `check-locales` treats
   // that as a locale namespace root and would read these identifiers as missing locale keys
   "server-config.workspace.persona-avatar.set",

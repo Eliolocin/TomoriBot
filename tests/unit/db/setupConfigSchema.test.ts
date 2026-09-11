@@ -66,40 +66,29 @@ describe("setupConfigSchema", () => {
     expect(parsed.systemPrompt).toBe("You are a helpful assistant.");
   });
 
-  it("preserves backward compatibility with legacy provider and encryptedApiKey fields", () => {
-    const parsed = setupConfigSchema.parse({
-      ...baseConfig,
-      provider: "anthropic",
-      encryptedApiKey: Buffer.from("key"),
-      keyVersion: 2,
-    });
-
-    expect(parsed.provider).toBe("anthropic");
-    expect(parsed.providerAccess).toBeUndefined();
-  });
-
-  it("preserves backward compatibility with legacy userByokMode flag", () => {
-    const parsed = setupConfigSchema.parse({
-      ...baseConfig,
-      provider: null,
-      encryptedApiKey: null,
-      userByokMode: true,
-    });
-
-    expect(parsed.userByokMode).toBe(true);
-    expect(parsed.providerAccess).toBeUndefined();
-  });
-
-  it("rejects when providerAccess is omitted and legacy credentials are missing", () => {
+  it("rejects a config with no provider access at all", () => {
+    // providerAccess is the only provider-selection field: the legacy `provider`/`encryptedApiKey`
+    // pair and the `userByokMode`/`deferredCustomEndpointSetup` booleans are gone, so omitting it is
+    // a missing field rather than a shape the refinement has to reason about.
     expect(() =>
       setupConfigSchema.parse({
         ...baseConfig,
-        provider: null,
-        encryptedApiKey: null,
-        userByokMode: false,
-        deferredCustomEndpointSetup: false,
+        provider: "anthropic",
+        encryptedApiKey: Buffer.from("key"),
       }),
-    ).toThrow("Standard setup requires both provider and encrypted API key.");
+    ).toThrow();
+  });
+
+  it("rejects a credential supplied outside provider access", () => {
+    // Strict object: a caller still building the pre-wizard shape fails loudly instead of having its
+    // credential silently dropped on the floor by a schema that no longer models it.
+    expect(() =>
+      setupConfigSchema.parse({
+        ...baseConfig,
+        providerAccess: { mode: "user-byok" },
+        encryptedApiKey: Buffer.from("key"),
+      }),
+    ).toThrow();
   });
 
   it("rejects contradictory shapes in discriminated providerAccess", () => {

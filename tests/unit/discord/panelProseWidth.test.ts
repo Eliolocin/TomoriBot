@@ -11,6 +11,7 @@ import {
   type PersonalConfigModelDisplayInfo,
 } from "@/utils/discord/ui/personalConfigPanel";
 import { buildPersonalMemoriesPanelPayload } from "@/utils/discord/ui/personalMemoriesPanel";
+import { buildSetupSuccessPayload } from "@/utils/discord/ui/setupPanel";
 import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 
 await initializeLocalizer();
@@ -511,5 +512,74 @@ describe("panel prose width", () => {
       view: { kind: "promote-confirm", personaId: 56, nonce: "nonce1234567" },
     });
     expect(collectProseWidthViolations(confirm)).toEqual([]);
+  });
+
+  /**
+   * The setup receipt is the terminal panel of `/setup`, and most of its prose is composed at
+   * runtime from a locale key plus a stored name, so the static scan above measures the template
+   * rather than the rendered line. The completion explanation names a model and an endpoint, both of
+   * which reach their documented maximum before truncation, and the DM explanation is a paragraph
+   * that has to carry its own line breaks to stay inside the column.
+   */
+  it("holds the setup receipt to 65 characters for every provider mode and context", () => {
+    const maxEndpointLabel = "e".repeat(40);
+    const maxModelCode = "m".repeat(200);
+
+    const build = (
+      providerAccess: Parameters<typeof buildSetupSuccessPayload>[0]["providerAccess"],
+      modelName: string | null,
+      providerLabel: string,
+      context: "guild" | "dm",
+    ) =>
+      buildSetupSuccessPayload({
+        locale: "en-US",
+        context,
+        providerAccess,
+        modelName,
+        providerLabel,
+        personaName: "Lighthouse",
+        notes: [
+          {
+            label: localizer("en-US", "commands.setup.novelai_expressions_warning_field"),
+            detail: localizer("en-US", "commands.setup.novelai_expressions_warning_value"),
+          },
+        ],
+        learnMore: localizer("en-US", "commands.setup.wizard.receipt_learn_more", { help: "</help:123456>" }),
+        footerKey: context === "dm" ? "commands.setup.wizard.receipt_footer_avatar_skipped_dm" : undefined,
+      });
+
+    const catalogAccess = {
+      mode: "catalog",
+      provider: "anthropic",
+      encryptedApiKey: Buffer.from("k"),
+      keyVersion: 1,
+    } as const;
+
+    const cases = [
+      build(catalogAccess, "claude-sonnet-4", "Anthropic", "guild"),
+      build(catalogAccess, "claude-sonnet-4", "Anthropic", "dm"),
+      build(catalogAccess, null, "Anthropic", "guild"),
+      build(
+        {
+          mode: "custom-endpoint",
+          connection: {
+            label: maxEndpointLabel,
+            apiStyle: "openai-compatible",
+            endpointUrl: "https://example.invalid/v1",
+            encryptedAuthToken: null,
+            keyVersion: 1,
+          },
+          textModel: { modelCode: maxModelCode, numCtx: 8192, capabilities: ["tools"] },
+        },
+        maxModelCode,
+        maxEndpointLabel,
+        "guild",
+      ),
+      build({ mode: "user-byok" }, null, "", "guild"),
+    ];
+
+    for (const payload of cases) {
+      expect(collectProseWidthViolations(payload)).toEqual([]);
+    }
   });
 });

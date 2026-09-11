@@ -25,6 +25,7 @@ export type SetupDraftPatch = {
 export type SetupDraftReadResult =
   | { status: "missing" }
   | { status: "forbidden" }
+  | { status: "in-flight" }
   | { status: "ok"; draft: SetupDraftStoreEntry };
 
 export type SetupDraftClaimResult =
@@ -122,11 +123,24 @@ export function createSetupDraftStore(now: () => number = Date.now): SetupDraftS
     context: SetupDraftContext,
   ): boolean => draft.actorDiscId === actorDiscId && draft.workspaceKey === workspaceKey && draft.context === context;
 
+  /**
+   * Reads a draft, refusing one that a commit has claimed.
+   *
+   * The claim is enforced at the store rather than at each route arm because the commit's snapshot is
+   * a shallow copy: any other mutation landing in its window reaches
+   * `wipeDisplacedProviderAccessSecrets` (or `consume`'s wipe) and zero-fills the credential buffer
+   * the running transaction is about to write, so the setup would succeed with a dead key. Refusing
+   * every action, including Cancel, is the only shape that closes every one of those windows.
+   *
+   * The claim's own transitions are the exception, and they say so with `allowClaimed`: the commit
+   * has to be able to release its own claim and then consume the record it owns.
+   */
   const read = (
     nonce: string,
     actorDiscId: string,
     workspaceKey: string,
     context: SetupDraftContext,
+    options: { allowClaimed?: boolean } = {},
   ): SetupDraftReadResult => {
     const draft = drafts.get(nonce);
     if (!draft) return { status: "missing" };
@@ -137,9 +151,9 @@ export function createSetupDraftStore(now: () => number = Date.now): SetupDraftS
       return { status: "missing" };
     }
 
-    return matchesBinding(draft, actorDiscId, workspaceKey, context)
-      ? { status: "ok", draft }
-      : { status: "forbidden" };
+    if (!matchesBinding(draft, actorDiscId, workspaceKey, context)) return { status: "forbidden" };
+    if (draft.writeClaimed && !options.allowClaimed) return { status: "in-flight" };
+    return { status: "ok", draft };
   };
 
   const consume = (
@@ -148,7 +162,8 @@ export function createSetupDraftStore(now: () => number = Date.now): SetupDraftS
     workspaceKey: string,
     context: SetupDraftContext,
   ): SetupDraftReadResult => {
-    // A refusal never removes a record, so a wrong actor cannot destroy the legitimate actor's pending draft.
+    // A refusal never removes a record, so a wrong actor cannot destroy the legitimate actor's pending
+    // draft, and neither can a Cancel pressed while a commit holds the claim.
     const result = read(nonce, actorDiscId, workspaceKey, context);
     if (result.status === "ok") {
       wipeProviderAccessSecrets(result.draft.providerAccess);
@@ -190,9 +205,10 @@ export function createSetupDraftStore(now: () => number = Date.now): SetupDraftS
     workspaceKey: string,
     context: SetupDraftContext,
   ): SetupDraftClaimResult => {
+    // A claimed draft reads as in-flight, which is exactly the answer this returns for it, so the
+    // claim does not need to look past its own freeze.
     const result = read(nonce, actorDiscId, workspaceKey, context);
     if (result.status !== "ok") return result;
-    if (result.draft.writeClaimed) return { status: "in-flight" };
 
     const claimedDraft: SetupDraftStoreEntry = { ...result.draft, writeClaimed: true };
     drafts.set(nonce, claimedDraft);
@@ -206,7 +222,8 @@ export function createSetupDraftStore(now: () => number = Date.now): SetupDraftS
     workspaceKey: string,
     context: SetupDraftContext,
   ): SetupDraftReadResult => {
-    const result = read(nonce, actorDiscId, workspaceKey, context);
+    // The one transition that has to see through the freeze it is undoing.
+    const result = read(nonce, actorDiscId, workspaceKey, context, { allowClaimed: true });
     if (result.status !== "ok") return result;
 
     const releasedDraft: SetupDraftStoreEntry = { ...result.draft, writeClaimed: false };
