@@ -30,7 +30,7 @@ import {
   NAI_DEFAULT_NEGATIVE_PROMPT,
   classifyNaiImageError,
   generateNovelAiImage,
-  isNaiV4Model,
+  usesNaiStructuredPromptFormat,
   type NaiGenerationCharacterPayload,
 } from "@/utils/image/naiImageGeneration";
 
@@ -279,7 +279,7 @@ export async function execute(
       return;
     }
 
-    if (characterReference && !isNaiV4Model(resolvedModel.codename)) {
+    if (characterReference && !usesNaiStructuredPromptFormat(resolvedModel.codename)) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.novelai.image.generate.character_reference_requires_v4_title",
         descriptionKey: "commands.novelai.image.generate.character_reference_requires_v4_description",

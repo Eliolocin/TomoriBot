@@ -33,6 +33,18 @@ export default {
         success_description: `Sampling preset **{preset_name}** has been applied. Temperature, top-K, top-P, and min-P have been updated in your server config.`,
       },
     },
+    usage: {
+      description: `Show this server's NovelAI Opus generation usage meter (Manage Server required).`,
+      title: `NovelAI Opus Generation Usage`,
+      status_label: `Status`,
+      status_available: `Available`,
+      status_unavailable: `Currently unavailable`,
+      next_percent_label: `Next +1%`,
+      no_api_key_title: `NovelAI API Key Required`,
+      no_api_key_description: `No NovelAI provider credentials are available for this server. Save them with \`/provider add\`, or switch your main provider to NovelAI.`,
+      unavailable_title: `NovelAI Usage Meter Unavailable`,
+      unavailable_description: `NovelAI did not return an Opus generation usage meter for this account. Check the API key and subscription, then try again.`,
+    },
     image: {
       description: `Manage server-wide NovelAI image generation model and parameter overrides.`,
       generate: {

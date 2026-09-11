@@ -700,6 +700,17 @@ interface NovelAISubscriptionPerks {
 }
 
 /**
+ * Opus image-generation usage status returned with a subscription.
+ * `percent` is the API's meter value and `timeUntilNextPercent` is the time
+ * until its next one-percent recovery.
+ */
+export interface NovelAIUsageLimitStatus {
+  isNegative: boolean;
+  percent: number;
+  timeUntilNextPercent: number;
+}
+
+/**
  * Shape of the response returned by GET /user/subscription.
  */
 export interface NovelAISubscription {
@@ -708,6 +719,7 @@ export interface NovelAISubscription {
   expiresAt: number;
   perks: NovelAISubscriptionPerks;
   isGracePeriod: boolean;
+  usage?: NovelAIUsageLimitStatus;
 }
 
 /**

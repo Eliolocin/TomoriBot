@@ -33,6 +33,18 @@ export default {
         success_description: `サンプリングプリセット **{preset_name}** を適用しました。温度、トップK、トップP、ミンPがサーバー設定に反映されました。`,
       },
     },
+    usage: {
+      description: `このサーバーのNovelAI Opus生成利用状況メーターを表示します（サーバー管理権限が必要です）。`,
+      title: `NovelAI Opus生成利用状況`,
+      status_label: `ステータス`,
+      status_available: `利用可能`,
+      status_unavailable: `現在利用できません`,
+      next_percent_label: `次の+1%まで`,
+      no_api_key_title: `NovelAI APIキーが必要です`,
+      no_api_key_description: `このサーバーではNovelAIプロバイダーの認証情報を利用できません。\`/provider add\`で保存するか、メインプロバイダーをNovelAIに切り替えてください。`,
+      unavailable_title: `NovelAI利用状況メーターを取得できません`,
+      unavailable_description: `NovelAIからこのアカウントのOpus生成利用状況メーターが返されませんでした。APIキーとサブスクリプションを確認してから、もう一度お試しください。`,
+    },
     image: {
       description: `このサーバーのNovelAI画像生成モデルとパラメータ上書きを管理します。`,
       generate: {

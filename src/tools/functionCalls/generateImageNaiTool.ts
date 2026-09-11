@@ -38,7 +38,7 @@ import {
   NAI_DEFAULT_NEGATIVE_PROMPT,
   classifyNaiImageError,
   generateNovelAiImage,
-  isNaiV4Model,
+  usesNaiStructuredPromptFormat,
   type NaiGenerationCharacterPayload,
 } from "@/utils/image/naiImageGeneration";
 import { loadCharRefAsBase64 } from "@/utils/storage/charrefStorage";
@@ -728,7 +728,7 @@ export class GenerateImageNaiTool extends BaseTool {
 
     let requestPayload: Record<string, unknown>;
 
-    if (isNaiV4Model(model)) {
+    if (usesNaiStructuredPromptFormat(model)) {
       requestPayload = {
         action: "infill",
         input: prompt,
@@ -985,7 +985,7 @@ export class GenerateImageNaiTool extends BaseTool {
         `Using NAI diffusion model: ${baseModelCodename} (source: ${resolvedModel.source}) for ${isInpaintMode ? "inpainting" : "image generation"}`,
       );
 
-      if (characters.length > 0 && !isNaiV4Model(baseModelCodename)) {
+      if (characters.length > 0 && !usesNaiStructuredPromptFormat(baseModelCodename)) {
         return {
           success: false,
           error: localizer(context.locale, "tools.generate_image_nai.characters_require_v4"),
@@ -1167,7 +1167,7 @@ export class GenerateImageNaiTool extends BaseTool {
           sourceImage.mimeType,
           editTarget,
           googleApiKey,
-          isNaiV4Model(baseModelCodename),
+          usesNaiStructuredPromptFormat(baseModelCodename),
         );
 
         log.info(

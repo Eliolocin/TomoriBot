@@ -51,8 +51,10 @@ export interface NaiGenerationCharacterPayload {
   referenceInfoExtracted?: number[];
 }
 
-export function isNaiV4Model(model: string): boolean {
-  return /nai-diffusion-4/.test(model);
+/** Whether a model uses NovelAI's V4+ structured prompt schema. */
+export function usesNaiStructuredPromptFormat(model: string): boolean {
+  // V5 retains the V4 structured prompt schema (v4_prompt/v4_negative_prompt).
+  return /nai-diffusion-[45]/.test(model);
 }
 
 export function classifyNaiImageError(error: unknown): NaiImageErrorKind {
@@ -128,7 +130,7 @@ export async function generateNovelAiImage(options: {
 
   let requestPayload: Record<string, unknown>;
 
-  if (isNaiV4Model(model)) {
+  if (usesNaiStructuredPromptFormat(model)) {
     const buildDirectorReferenceDescriptions = (count: number) =>
       Array.from({ length: count }, () => ({
         caption: {
