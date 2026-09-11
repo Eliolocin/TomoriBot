@@ -292,7 +292,7 @@ describe("setupPanel Components V2 layout and limits", () => {
           textModel: {
             modelCode: maxModelCode,
             numCtx: 131072,
-            capabilities: ["tools", "images"],
+            capabilities: ["tools", "vision"],
           },
         },
         startingSettings: {
@@ -339,6 +339,108 @@ describe("setupPanel Components V2 layout and limits", () => {
 
     const catalogValidation = validateComponentsV2MessageLimits(catalogPayload);
     expect(catalogValidation.valid).toBe(true);
+  });
+
+  it("holds text and component budgets under user-byok provider mode", () => {
+    const byokPayload = buildSetupWizardPayload({
+      draft: {
+        schemaVersion: SETUP_DRAFT_SCHEMA_VERSION,
+        actorDiscId: "123456789012345678",
+        workspaceKey: "123456789012345678",
+        context: "guild",
+        policiesAccepted: true,
+        requiresPolicies: true,
+        providerAccess: {
+          mode: "user-byok",
+        },
+        startingSettings: {
+          presetId: 1,
+          humanizer: 1,
+          timezoneOffset: 0,
+          systemPrompt: { kind: "built-in" },
+        },
+      },
+      locale: "en-US",
+      isHosted: true,
+      nonce: TEST_NONCE,
+    });
+
+    const byokValidation = validateComponentsV2MessageLimits(byokPayload);
+    expect(byokValidation.valid).toBe(true);
+    expect(byokValidation.violations).toEqual([]);
+  });
+
+  it("holds text and component budgets for custom-endpoint sub-area under pending and configured states", () => {
+    const maxEndpointLabel = "e".repeat(40);
+    const maxModelCode = "m".repeat(40);
+
+    const pendingPayload = buildSetupWizardPayload({
+      draft: {
+        schemaVersion: SETUP_DRAFT_SCHEMA_VERSION,
+        actorDiscId: "123456789012345678",
+        workspaceKey: "123456789012345678",
+        context: "guild",
+        policiesAccepted: true,
+        requiresPolicies: true,
+        providerAccess: {
+          mode: "custom-endpoint",
+          connection: null,
+          textModel: null,
+        },
+        startingSettings: {
+          presetId: 1,
+          humanizer: 1,
+          timezoneOffset: 0,
+          systemPrompt: { kind: "built-in" },
+        },
+      },
+      locale: "en-US",
+      isHosted: true,
+      nonce: TEST_NONCE,
+    });
+
+    const pendingValidation = validateComponentsV2MessageLimits(pendingPayload);
+    expect(pendingValidation.valid).toBe(true);
+    expect(pendingValidation.violations).toEqual([]);
+
+    const configuredPayload = buildSetupWizardPayload({
+      draft: {
+        schemaVersion: SETUP_DRAFT_SCHEMA_VERSION,
+        actorDiscId: "123456789012345678",
+        workspaceKey: "123456789012345678",
+        context: "guild",
+        policiesAccepted: true,
+        requiresPolicies: true,
+        providerAccess: {
+          mode: "custom-endpoint",
+          connection: {
+            label: maxEndpointLabel,
+            apiStyle: "openai-compatible",
+            endpointUrl: "https://example.invalid/v1",
+            encryptedAuthToken: Buffer.from(SECRET_KEY_STRING),
+            keyVersion: 1,
+          },
+          textModel: {
+            modelCode: maxModelCode,
+            numCtx: 131072,
+            capabilities: ["tools", "vision"],
+          },
+        },
+        startingSettings: {
+          presetId: 1,
+          humanizer: 1,
+          timezoneOffset: 0,
+          systemPrompt: { kind: "built-in" },
+        },
+      },
+      locale: "en-US",
+      isHosted: true,
+      nonce: TEST_NONCE,
+    });
+
+    const configuredValidation = validateComponentsV2MessageLimits(configuredPayload);
+    expect(configuredValidation.valid).toBe(true);
+    expect(configuredValidation.violations).toEqual([]);
   });
 
   it("never leaks secrets, encrypted buffers, or nonces into rendered text", () => {

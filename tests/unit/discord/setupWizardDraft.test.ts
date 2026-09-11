@@ -63,7 +63,7 @@ describe("setup wizard draft schemas and invariants", () => {
       mode: "custom-endpoint",
       connection: {
         label: "Local Ollama",
-        apiStyle: "ollama",
+        apiStyle: "ollama-native",
         endpointUrl: "http://localhost:11434",
         encryptedAuthToken: null,
         keyVersion: 1,
@@ -71,7 +71,7 @@ describe("setup wizard draft schemas and invariants", () => {
       textModel: {
         modelCode: "llama3",
         numCtx: 4096,
-        capabilities: ["chat"],
+        capabilities: ["tools"],
       },
     };
     expect(setupDraftCustomEndpointAccessSchema.safeParse(custom).success).toBe(true);
@@ -111,7 +111,7 @@ describe("setup wizard draft schemas and invariants", () => {
     const validModel = {
       modelCode: "gpt-4o",
       numCtx: null,
-      capabilities: ["streaming"],
+      capabilities: ["tools"],
     };
     expect(setupDraftEndpointModelSchema.safeParse(validModel).success).toBe(true);
   });
@@ -190,7 +190,7 @@ describe("setup wizard draft schemas and invariants", () => {
       mode: "custom-endpoint",
       connection: {
         label: "Local Ollama",
-        apiStyle: "ollama",
+        apiStyle: "ollama-native",
         endpointUrl: "http://localhost:11434",
         encryptedAuthToken: null,
         keyVersion: 1,
@@ -205,7 +205,7 @@ describe("setup wizard draft schemas and invariants", () => {
       textModel: {
         modelCode: "llama3",
         numCtx: null,
-        capabilities: ["chat"],
+        capabilities: ["tools"],
       },
     };
     expect(isSetupDraftProviderAccessComplete(modelOnly)).toBe(false);

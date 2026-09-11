@@ -287,7 +287,7 @@ export type EmbeddingModelRow = z.infer<typeof embeddingModelSchema>;
 const customEndpointCapabilitySchema = z.enum(["text", "embedding", "image", "video", "speech", "transcription"]);
 export type CustomEndpointCapability = z.infer<typeof customEndpointCapabilitySchema>;
 
-const customEndpointApiStyleSchema = z.enum([
+export const customEndpointApiStyleSchema = z.enum([
   "openai-compatible",
   "comfyui",
   "ollama-native",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { customEndpointApiStyleSchema, setupCustomEndpointCapabilitySchema } from "@/types/db/schema";
 
 export const SETUP_DRAFT_SCHEMA_VERSION = 1;
 
@@ -8,7 +9,7 @@ export type SetupDraftContext = z.infer<typeof setupDraftContextSchema>;
 export const setupDraftEndpointConnectionSchema = z
   .object({
     label: z.string(),
-    apiStyle: z.string(),
+    apiStyle: customEndpointApiStyleSchema,
     endpointUrl: z.string(),
     encryptedAuthToken: z.instanceof(Buffer).nullable(),
     keyVersion: z.number().int(),
@@ -20,7 +21,7 @@ export const setupDraftEndpointModelSchema = z
   .object({
     modelCode: z.string(),
     numCtx: z.number().int().nullable(),
-    capabilities: z.array(z.string()),
+    capabilities: z.array(setupCustomEndpointCapabilitySchema),
   })
   .strict();
 export type SetupDraftEndpointModel = z.infer<typeof setupDraftEndpointModelSchema>;

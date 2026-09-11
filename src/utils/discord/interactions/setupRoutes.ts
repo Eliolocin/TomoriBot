@@ -3,7 +3,6 @@ import {
   SETUP_DRAFT_SCHEMA_VERSION,
   isSetupDraftComplete,
   type SetupDraftContext,
-  type SetupDraftProviderMode,
   type SetupDraftRecord,
 } from "@/types/discord/setupWizard";
 import {
@@ -20,17 +19,52 @@ import {
   type ParsedInteractionRoute,
 } from "@/utils/discord/interactions/routeRegistry";
 import {
+  SETUP_ENDPOINT_API_STYLES,
+  buildSetupByokModal,
+  buildSetupByokModalFieldId,
   buildSetupCancelledPayload,
+  buildSetupCatalogModal,
+  buildSetupCatalogModalFieldId,
+  buildSetupEndpointConnectionModal,
+  buildSetupEndpointConnectionModalFieldId,
+  buildSetupEndpointModelModal,
+  buildSetupEndpointModelModalFieldId,
   buildSetupExpiredPayload,
   buildSetupWizardPayload,
+  getSetupCatalogProviderChoices,
 } from "@/utils/discord/ui/setupPanel";
 import { deliverGuardedPanel } from "@/utils/discord/interactions/panelController";
+import {
+  acknowledgeModalSubmitForRefresh,
+  showRoutedRawModal,
+  takeRawModalCheckboxGroupValues,
+  takeRawModalSelectValue,
+} from "@/utils/discord/ui/modals";
+import {
+  setupCustomEndpointCapabilitySchema,
+  type CustomEndpointApiStyle,
+  type SetupCustomEndpointCapability,
+} from "@/types/db/schema";
+import {
+  normalizeCustomEndpointUrlForStorage,
+  validateCustomEndpointReachability,
+} from "@/utils/provider/customEndpointService";
+import { ProviderFactory } from "@/utils/provider/providerFactory";
+import { encryptApiKey } from "@/utils/security/crypto";
 import { parseNonce } from "@/utils/discord/panelRouteCodec";
 import { createNonce, parseLocale } from "@/utils/discord/panelRouteTokens";
 import { isHostedPolicyEnvironment } from "@/utils/misc/hostedPolicy";
 import { serverRepository } from "@/utils/db/repositories";
 import { getCachedMainPersona } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
+
+function parseNumCtxField(value: string | undefined): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "-") return null;
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isNaN(parsed) || parsed < 512 ? null : parsed;
+}
 
 export const SETUP_ROUTE_NAMESPACE = "setup";
 export const SETUP_ROUTE_VERSION = "v1";
@@ -42,6 +76,12 @@ export type SetupWizardAction =
   | "provider"
   | "settings"
   | "provider-mode"
+  | "provider-catalog-submit"
+  | "provider-byok-submit"
+  | "endpoint-connection"
+  | "endpoint-connection-submit"
+  | "endpoint-model"
+  | "endpoint-model-submit"
   | "finish";
 
 const SETUP_WIZARD_ACTIONS = new Set<SetupWizardAction>([
@@ -51,6 +91,12 @@ const SETUP_WIZARD_ACTIONS = new Set<SetupWizardAction>([
   "provider",
   "settings",
   "provider-mode",
+  "provider-catalog-submit",
+  "provider-byok-submit",
+  "endpoint-connection",
+  "endpoint-connection-submit",
+  "endpoint-model",
+  "endpoint-model-submit",
   "finish",
 ]);
 
@@ -134,6 +180,62 @@ export function buildSetupProviderModeRouteId(input: { locale: string; nonce: st
 export function parseSetupProviderModeRoute(route: ParsedInteractionRoute | string): SetupWizardRoute | null {
   const parsed = parseSetupRoute(route);
   return parsed?.action === "provider-mode" ? parsed : null;
+}
+
+export function buildSetupProviderCatalogSubmitRouteId(input: { locale: string; nonce: string }): string {
+  return buildSetupRouteId({ action: "provider-catalog-submit", locale: input.locale, nonce: input.nonce });
+}
+
+export function parseSetupProviderCatalogSubmitRoute(route: ParsedInteractionRoute | string): SetupWizardRoute | null {
+  const parsed = parseSetupRoute(route);
+  return parsed?.action === "provider-catalog-submit" ? parsed : null;
+}
+
+export function buildSetupProviderByokSubmitRouteId(input: { locale: string; nonce: string }): string {
+  return buildSetupRouteId({ action: "provider-byok-submit", locale: input.locale, nonce: input.nonce });
+}
+
+export function parseSetupProviderByokSubmitRoute(route: ParsedInteractionRoute | string): SetupWizardRoute | null {
+  const parsed = parseSetupRoute(route);
+  return parsed?.action === "provider-byok-submit" ? parsed : null;
+}
+
+export function buildSetupEndpointConnectionRouteId(input: { locale: string; nonce: string }): string {
+  return buildSetupRouteId({ action: "endpoint-connection", locale: input.locale, nonce: input.nonce });
+}
+
+export function parseSetupEndpointConnectionRoute(route: ParsedInteractionRoute | string): SetupWizardRoute | null {
+  const parsed = parseSetupRoute(route);
+  return parsed?.action === "endpoint-connection" ? parsed : null;
+}
+
+export function buildSetupEndpointConnectionSubmitRouteId(input: { locale: string; nonce: string }): string {
+  return buildSetupRouteId({ action: "endpoint-connection-submit", locale: input.locale, nonce: input.nonce });
+}
+
+export function parseSetupEndpointConnectionSubmitRoute(
+  route: ParsedInteractionRoute | string,
+): SetupWizardRoute | null {
+  const parsed = parseSetupRoute(route);
+  return parsed?.action === "endpoint-connection-submit" ? parsed : null;
+}
+
+export function buildSetupEndpointModelRouteId(input: { locale: string; nonce: string }): string {
+  return buildSetupRouteId({ action: "endpoint-model", locale: input.locale, nonce: input.nonce });
+}
+
+export function parseSetupEndpointModelRoute(route: ParsedInteractionRoute | string): SetupWizardRoute | null {
+  const parsed = parseSetupRoute(route);
+  return parsed?.action === "endpoint-model" ? parsed : null;
+}
+
+export function buildSetupEndpointModelSubmitRouteId(input: { locale: string; nonce: string }): string {
+  return buildSetupRouteId({ action: "endpoint-model-submit", locale: input.locale, nonce: input.nonce });
+}
+
+export function parseSetupEndpointModelSubmitRoute(route: ParsedInteractionRoute | string): SetupWizardRoute | null {
+  const parsed = parseSetupRoute(route);
+  return parsed?.action === "endpoint-model-submit" ? parsed : null;
 }
 
 export function buildSetupFinishRouteId(input: { locale: string; nonce: string }): string {
@@ -306,19 +408,15 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
         if (!interaction.isStringSelectMenu()) {
           return;
         }
-        const selectedMode = interaction.values[0] as SetupDraftProviderMode;
-        if (selectedMode === "user-byok") {
-          if (context === "dm") {
-            if (!interaction.replied && !interaction.deferred) {
-              await interaction.reply({
-                content: localizer(locale, "commands.setup.wizard.step_unavailable"),
-                flags: MessageFlags.Ephemeral,
-              });
-            }
-            return;
-          }
+        const selectedMode = interaction.values[0];
+        if (selectedMode === "catalog") {
+          const modalPayload = buildSetupCatalogModal(locale, nonce);
+          await showRoutedRawModal(interaction, modalPayload);
+          return;
+        }
+        if (selectedMode === "custom-endpoint") {
           updateSetupDraft(nonce, actorDiscId, workspaceKey, context, {
-            providerAccess: { mode: "user-byok" },
+            providerAccess: { mode: "custom-endpoint", connection: null, textModel: null },
           });
           const updated = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
           if (updated.status === "ok") {
@@ -330,13 +428,359 @@ export const setupInteractionRoute: GlobalInteractionRoute = {
             });
             await deliverGuardedPanel(interaction, payload, { locale, method: "update" });
           }
-        } else {
-          if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-              content: localizer(locale, "commands.setup.wizard.step_unavailable"),
-              flags: MessageFlags.Ephemeral,
-            });
+          return;
+        }
+        if (selectedMode === "user-byok") {
+          if (context === "dm") {
+            if (!interaction.replied && !interaction.deferred) {
+              await interaction.reply({
+                content: localizer(locale, "commands.setup.wizard.provider_byok_guild_only"),
+                flags: MessageFlags.Ephemeral,
+              });
+            }
+            return;
           }
+          const modalPayload = buildSetupByokModal(locale, nonce);
+          await showRoutedRawModal(interaction, modalPayload);
+          return;
+        }
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({
+            content: localizer(locale, "commands.setup.wizard.provider_invalid"),
+            flags: MessageFlags.Ephemeral,
+          });
+        }
+        break;
+      }
+
+      case "provider-catalog-submit": {
+        if (!interaction.isModalSubmit()) {
+          return;
+        }
+        await acknowledgeModalSubmitForRefresh(interaction);
+
+        const providerFieldId = buildSetupCatalogModalFieldId("provider", nonce);
+        const apiKeyFieldId = buildSetupCatalogModalFieldId("api-key", nonce);
+
+        const selectedProvider = takeRawModalSelectValue(interaction.id, providerFieldId);
+        const apiKey = interaction.fields.getTextInputValue(apiKeyFieldId);
+
+        const curatedProviders = new Set(getSetupCatalogProviderChoices().map((choice) => choice.value));
+
+        if (!selectedProvider || !curatedProviders.has(selectedProvider)) {
+          const payload = buildSetupWizardPayload({
+            draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+            notice: localizer(locale, "commands.setup.wizard.provider_invalid"),
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+          return;
+        }
+
+        let providerInstance: Awaited<ReturnType<typeof ProviderFactory.getProviderByName>>;
+        try {
+          providerInstance = await ProviderFactory.getProviderByName(selectedProvider);
+        } catch {
+          const payload = buildSetupWizardPayload({
+            draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+            notice: localizer(locale, "commands.setup.wizard.provider_validation_failed"),
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+          return;
+        }
+
+        const validation = await providerInstance.validateApiKey(apiKey);
+        if (!validation.valid) {
+          const payload = buildSetupWizardPayload({
+            draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+            notice: localizer(locale, "commands.setup.wizard.provider_validation_failed"),
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+          return;
+        }
+
+        const encryption = await encryptApiKey(apiKey);
+        updateSetupDraft(nonce, actorDiscId, workspaceKey, context, {
+          providerAccess: {
+            mode: "catalog",
+            provider: selectedProvider,
+            encryptedApiKey: encryption.encrypted,
+            keyVersion: encryption.version,
+          },
+        });
+
+        const updated = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
+        if (updated.status === "ok") {
+          const payload = buildSetupWizardPayload({
+            draft: updated.draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+        }
+        break;
+      }
+
+      case "provider-byok-submit": {
+        if (!interaction.isModalSubmit()) {
+          return;
+        }
+        await acknowledgeModalSubmitForRefresh(interaction);
+
+        if (context === "dm") {
+          const payload = buildSetupWizardPayload({
+            draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+            notice: localizer(locale, "commands.setup.wizard.provider_byok_guild_only"),
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+          return;
+        }
+
+        const confirmFieldId = buildSetupByokModalFieldId("confirm", nonce);
+        const selectedConfirm = takeRawModalSelectValue(interaction.id, confirmFieldId);
+
+        if (selectedConfirm !== "yes" && selectedConfirm !== "no") {
+          const payload = buildSetupWizardPayload({
+            draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+            notice: localizer(locale, "commands.setup.wizard.byok_choice_invalid"),
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+          return;
+        }
+
+        if (selectedConfirm === "yes") {
+          updateSetupDraft(nonce, actorDiscId, workspaceKey, context, {
+            providerAccess: { mode: "user-byok" },
+          });
+          const updated = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
+          if (updated.status === "ok") {
+            const payload = buildSetupWizardPayload({
+              draft: updated.draft,
+              locale,
+              isHosted: draft.requiresPolicies,
+              nonce,
+            });
+            await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+          }
+          return;
+        }
+
+        // On no, repaint without updating the draft so any prior access stays intact.
+        const payload = buildSetupWizardPayload({
+          draft,
+          locale,
+          isHosted: draft.requiresPolicies,
+          nonce,
+        });
+        await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+        return;
+      }
+
+      case "endpoint-connection": {
+        if (interaction.isModalSubmit()) {
+          return;
+        }
+        if (draft.providerAccess?.mode !== "custom-endpoint") {
+          return;
+        }
+        const modalPayload = buildSetupEndpointConnectionModal(locale, nonce, draft.providerAccess.connection);
+        await showRoutedRawModal(interaction, modalPayload);
+        return;
+      }
+
+      case "endpoint-connection-submit": {
+        if (!interaction.isModalSubmit()) {
+          return;
+        }
+        await acknowledgeModalSubmitForRefresh(interaction);
+
+        if (draft.providerAccess?.mode !== "custom-endpoint") {
+          return;
+        }
+
+        const apiStyleFieldId = buildSetupEndpointConnectionModalFieldId("api-style", nonce);
+        const selectedApiStyle = takeRawModalSelectValue(interaction.id, apiStyleFieldId);
+        const validStyles = new Set<string>(SETUP_ENDPOINT_API_STYLES);
+
+        if (!selectedApiStyle || !validStyles.has(selectedApiStyle)) {
+          const payload = buildSetupWizardPayload({
+            draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+            notice: localizer(locale, "commands.setup.wizard.custom_endpoint_api_style_invalid"),
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+          return;
+        }
+
+        const labelFieldId = buildSetupEndpointConnectionModalFieldId("label", nonce);
+        const urlFieldId = buildSetupEndpointConnectionModalFieldId("url", nonce);
+        const authTokenFieldId = buildSetupEndpointConnectionModalFieldId("auth-token", nonce);
+
+        const label = interaction.fields.getTextInputValue(labelFieldId)?.trim() ?? "";
+        const rawUrl = interaction.fields.getTextInputValue(urlFieldId)?.trim() ?? "";
+        let rawToken: string | undefined;
+        try {
+          rawToken = interaction.fields.getTextInputValue(authTokenFieldId)?.trim();
+        } catch {
+          rawToken = undefined;
+        }
+
+        const normalizedUrl = normalizeCustomEndpointUrlForStorage(selectedApiStyle as CustomEndpointApiStyle, rawUrl);
+
+        const probe = await validateCustomEndpointReachability({
+          apiStyle: selectedApiStyle as CustomEndpointApiStyle,
+          endpointUrl: normalizedUrl,
+          apiKey: rawToken || null,
+        });
+
+        if (!probe.ok) {
+          const payload = buildSetupWizardPayload({
+            draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+            notice: localizer(locale, "commands.setup.wizard.custom_endpoint_unreachable"),
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+          return;
+        }
+
+        let encryptedAuthToken: Buffer | null = null;
+        let keyVersion = 1;
+        if (rawToken) {
+          const encryption = await encryptApiKey(rawToken);
+          encryptedAuthToken = encryption.encrypted;
+          keyVersion = encryption.version;
+        }
+
+        // Saving a connection voids any prior text model because compatibility declarations depend on the API style.
+        updateSetupDraft(nonce, actorDiscId, workspaceKey, context, {
+          providerAccess: {
+            mode: "custom-endpoint",
+            connection: {
+              label,
+              apiStyle: selectedApiStyle as CustomEndpointApiStyle,
+              endpointUrl: normalizedUrl,
+              encryptedAuthToken,
+              keyVersion,
+            },
+            textModel: null,
+          },
+        });
+
+        const updated = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
+        if (updated.status === "ok") {
+          const payload = buildSetupWizardPayload({
+            draft: updated.draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+        }
+        break;
+      }
+
+      case "endpoint-model": {
+        if (interaction.isModalSubmit()) {
+          return;
+        }
+        if (draft.providerAccess?.mode !== "custom-endpoint" || !draft.providerAccess.connection) {
+          return;
+        }
+        const modalPayload = buildSetupEndpointModelModal(locale, nonce, draft.providerAccess.textModel);
+        await showRoutedRawModal(interaction, modalPayload);
+        return;
+      }
+
+      case "endpoint-model-submit": {
+        if (!interaction.isModalSubmit()) {
+          return;
+        }
+        await acknowledgeModalSubmitForRefresh(interaction);
+
+        if (draft.providerAccess?.mode !== "custom-endpoint" || !draft.providerAccess.connection) {
+          return;
+        }
+
+        const modelCodeFieldId = buildSetupEndpointModelModalFieldId("model-code", nonce);
+        const numCtxFieldId = buildSetupEndpointModelModalFieldId("num-ctx", nonce);
+        const capabilitiesFieldId = buildSetupEndpointModelModalFieldId("capabilities", nonce);
+
+        const modelCode = interaction.fields.getTextInputValue(modelCodeFieldId)?.trim();
+        if (!modelCode) {
+          const payload = buildSetupWizardPayload({
+            draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+            notice: localizer(locale, "commands.setup.wizard.custom_endpoint_model_invalid"),
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+          return;
+        }
+
+        let rawNumCtx: string | undefined;
+        try {
+          rawNumCtx = interaction.fields.getTextInputValue(numCtxFieldId);
+        } catch {
+          rawNumCtx = undefined;
+        }
+        const numCtx = parseNumCtxField(rawNumCtx);
+
+        const rawCapabilities = takeRawModalCheckboxGroupValues(interaction.id, capabilitiesFieldId) ?? [];
+        for (const cap of rawCapabilities) {
+          if (!setupCustomEndpointCapabilitySchema.safeParse(cap).success) {
+            const payload = buildSetupWizardPayload({
+              draft,
+              locale,
+              isHosted: draft.requiresPolicies,
+              nonce,
+              notice: localizer(locale, "commands.setup.wizard.custom_endpoint_model_invalid"),
+            });
+            await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
+            return;
+          }
+        }
+
+        updateSetupDraft(nonce, actorDiscId, workspaceKey, context, {
+          providerAccess: {
+            mode: "custom-endpoint",
+            connection: draft.providerAccess.connection,
+            textModel: {
+              modelCode,
+              numCtx,
+              capabilities: rawCapabilities as SetupCustomEndpointCapability[],
+            },
+          },
+        });
+
+        const updated = readSetupDraft(nonce, actorDiscId, workspaceKey, context);
+        if (updated.status === "ok") {
+          const payload = buildSetupWizardPayload({
+            draft: updated.draft,
+            locale,
+            isHosted: draft.requiresPolicies,
+            nonce,
+          });
+          await deliverGuardedPanel(interaction, payload, { locale, method: "editReply" });
         }
         break;
       }
