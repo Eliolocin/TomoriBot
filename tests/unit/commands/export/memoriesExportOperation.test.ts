@@ -21,7 +21,7 @@ import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 import { callMethods, type FakeInteraction, makeFakeInteraction } from "../../../helpers/fakeInteraction";
 
 const GUILD_ID = "guild-111111111111111111";
-const GUILD_NAME = "lighthouse_lounge";
+const GUILD_NAME = "juno_lounge";
 const ACTOR_ID = "actor-222222222222222222";
 const ACTOR_HANDLE = "bau_h";
 const LOCALE = "en-US";
@@ -188,7 +188,7 @@ describe("memory export operation", () => {
     expect(calls.workspaceReads).toEqual([{ serverDiscId: GUILD_ID, scope: { mode: "main" } }]);
     expect(calls.personalReads).toEqual([]);
     const deliveredFile = calls.deliveries[0]?.files[0];
-    expect(deliveredFile?.name).toMatch(/^tomori-lighthouse_lounge-server-memories-\d{13}\.json$/);
+    expect(deliveredFile?.name).toMatch(/^tomori-juno_lounge-server-memories-\d{13}\.json$/);
     expect(deliveredFile?.name).not.toContain(GUILD_ID);
     expect(deliveredFile?.name).not.toContain(ACTOR_ID);
     expect(JSON.parse(deliveredFile?.attachment.toString("utf8") ?? "{}")).toEqual(WORKSPACE_MEMORIES_EXPORT);

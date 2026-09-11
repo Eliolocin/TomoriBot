@@ -16,7 +16,7 @@ import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 import { callMethods, type FakeInteraction, makeFakeInteraction } from "../../../helpers/fakeInteraction";
 
 const GUILD_ID = "guild-111111111111111111";
-const GUILD_NAME = "lighthouse_lounge";
+const GUILD_NAME = "juno_lounge";
 const ACTOR_ID = "actor-222222222222222222";
 const ACTOR_HANDLE = "bau_h";
 const LOCALE = "en-US";
@@ -165,7 +165,7 @@ describe("config export operation", () => {
     const deliveredFiles = calls.deliveries[0]?.files ?? [];
     expect(deliveredFiles).toHaveLength(1);
     // `/persona export`'s shape: the workspace name, the scope, and an epoch-millisecond stamp for uniqueness.
-    expect(deliveredFiles[0]?.name).toMatch(/^tomori-lighthouse_lounge-server-config-\d{13}\.json$/);
+    expect(deliveredFiles[0]?.name).toMatch(/^tomori-juno_lounge-server-config-\d{13}\.json$/);
     expect(deliveredFiles[0]?.name).not.toContain(GUILD_ID);
     expect(deliveredFiles[0]?.name).not.toContain(ACTOR_ID);
     expect(JSON.parse(deliveredFiles[0]?.attachment.toString("utf8") ?? "{}")).toEqual(WORKSPACE_CONFIG_EXPORT);

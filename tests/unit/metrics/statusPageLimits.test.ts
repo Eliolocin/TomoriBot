@@ -168,8 +168,8 @@ describe("status Components V2 limits and redaction", () => {
     const endpointText = formatCustomEndpoints(
       [
         {
-          label: "Lighthouse",
-          model_name: "lighthouse-model",
+          label: "Juno",
+          model_name: "juno-model",
           capability: "text",
           api_style: "openai",
           requires_auth: true,
@@ -203,7 +203,7 @@ describe("status Components V2 limits and redaction", () => {
 
     expect(serialized).not.toContain(endpointSecret);
     expect(serialized).not.toContain(mcpToken);
-    expect(serialized).toContain("lighthouse-model");
+    expect(serialized).toContain("juno-model");
     expect(serialized).toContain("Sparrow MCP");
   });
 

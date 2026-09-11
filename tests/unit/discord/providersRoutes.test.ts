@@ -606,7 +606,7 @@ describe("providers routes", () => {
           {
             id: "endpoint:73",
             kind: "endpoint",
-            displayName: "lighthouse",
+            displayName: "juno",
             savedAt: null,
             connectionIds: [73],
             connectionDetails: [
@@ -648,7 +648,7 @@ describe("providers routes", () => {
     });
 
     await route.execute({} as Client, interaction as never, parsed(customId));
-    expect(calls).toEqual(["load", "show:lighthouse:https://models.example.com/v1"]);
+    expect(calls).toEqual(["load", "show:juno:https://models.example.com/v1"]);
   });
 
   it("reauthorizes, writes, and reloads after Edit Provider submit", async () => {
@@ -959,7 +959,7 @@ describe("providers routes", () => {
             {
               id: "endpoint:73",
               kind: "endpoint" as const,
-              displayName: "lighthouse",
+              displayName: "juno",
               savedAt: null,
               connectionIds: [73],
               connectionDetails: [
@@ -1039,7 +1039,7 @@ describe("providers routes", () => {
             {
               id: "endpoint:73",
               kind: "endpoint" as const,
-              displayName: "lighthouse",
+              displayName: "juno",
               savedAt: null,
               connectionIds: [73],
               connectionDetails: [
@@ -1212,7 +1212,7 @@ describe("providers routes", () => {
             {
               id: "endpoint:73",
               kind: "endpoint" as const,
-              displayName: "lighthouse",
+              displayName: "juno",
               savedAt: null,
               connectionIds: [73],
               connectionDetails: [
@@ -1436,7 +1436,7 @@ describe("providers routes", () => {
             {
               id: "endpoint:73",
               kind: "endpoint" as const,
-              displayName: "lighthouse",
+              displayName: "juno",
               savedAt: null,
               connectionIds: [73],
               connectionDetails: [

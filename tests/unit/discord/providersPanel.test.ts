@@ -228,7 +228,7 @@ describe("providers panel rendering", () => {
     const endpoint: ProviderPanelEntry = {
       id: "endpoint:41",
       kind: "endpoint",
-      displayName: "lighthouse",
+      displayName: "juno",
       savedAt: null,
       connectionIds: [41],
       isPreset: false,
@@ -284,7 +284,7 @@ describe("providers panel rendering", () => {
     expect(endpointPayload).toContain("llama3.1:8b-instruct-q4_K_M");
     expect(endpointPayload).not.toContain("connectionIds");
     expect(endpointPayload).not.toContain("custom:41");
-    expect(endpointPayload).not.toContain("### lighthouse");
+    expect(endpointPayload).not.toContain("### juno");
     expect(endpointPayload).toContain("Remove Endpoint");
     expect(bravePayload).toContain("API key configured");
     expect(bravePayload).toContain("Remove Key");
@@ -691,7 +691,7 @@ describe("providers panel rendering", () => {
 
   it("prefills an edit modal from the model the selector names", () => {
     const editModal = buildProviderModelModal("en-US", "endpoint", "73", "text", 91, "abcdefgh", {
-      codeName: "lighthouse/model",
+      codeName: "juno/model",
       text: {
         numCtx: 4096,
         hasTools: true,
@@ -707,7 +707,7 @@ describe("providers panel rendering", () => {
       (entry) => entry.component?.custom_id === "compat_abcdefgh",
     )?.component;
 
-    expect(codeInput?.value).toBe("lighthouse/model");
+    expect(codeInput?.value).toBe("juno/model");
     // The prefill has to reach the group each flag now lives in, not just the modal.
     expect(flagsField?.options?.filter((option) => option.default).map((option) => option.value)).toEqual(["tools"]);
     expect(compatField?.options?.filter((option) => option.default).map((option) => option.value)).toEqual(["prefix"]);
@@ -760,7 +760,7 @@ describe("providers panel rendering", () => {
       "en-US",
       {
         connectionId: 41,
-        label: "lighthouse",
+        label: "juno",
         endpointUrl: "https://models.example.com/v1",
         apiStyles: ["openai-compatible"],
         isPreset: false,
@@ -769,7 +769,7 @@ describe("providers panel rendering", () => {
     );
     const json = JSON.stringify(modal);
 
-    expect(json).toContain('"value":"lighthouse"');
+    expect(json).toContain('"value":"juno"');
     expect(json).toContain('"value":"https://models.example.com/v1"');
     expect(json).toContain("Endpoint Label");
     expect(json).toContain("It is not sent to the service.");

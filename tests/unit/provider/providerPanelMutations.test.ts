@@ -172,7 +172,7 @@ describe("provider panel mutations", () => {
       {
         serverDiscId: "guild",
         state: state(),
-        label: " Lighthouse ",
+        label: " Juno ",
         endpointUrl: "https://models.example.com/",
         apiStyle: "openai-compatible",
         authToken: "valid-api-key",
@@ -180,7 +180,7 @@ describe("provider panel mutations", () => {
       endpointDependencies,
     );
 
-    expect(result).toEqual({ status: "success", entryId: "endpoint:73", label: "lighthouse" });
+    expect(result).toEqual({ status: "success", entryId: "endpoint:73", label: "juno" });
     expect(calls).toEqual([
       "validate",
       "encrypt",
@@ -206,7 +206,7 @@ describe("provider panel mutations", () => {
       {
         serverDiscId: "guild",
         state: state(),
-        label: "lighthouse",
+        label: "juno",
         endpointUrl: "https://images.example.com",
         apiStyle: "comfyui",
         authToken: "",
@@ -217,7 +217,7 @@ describe("provider panel mutations", () => {
             connection_id: 72,
             server_id: 1,
             user_id: null,
-            label: "lighthouse",
+            label: "juno",
             capability: "text",
             api_style: "openai-compatible",
             endpoint_url: "https://models.example.com",
@@ -240,7 +240,7 @@ describe("provider panel mutations", () => {
       {
         serverDiscId: "guild",
         state: state(),
-        label: "lighthouse",
+        label: "juno",
         endpointUrl: "http://localhost:11434",
         apiStyle: "ollama-native",
         authToken: "",
@@ -260,7 +260,7 @@ describe("provider panel mutations", () => {
       {
         serverDiscId: "guild",
         state: state(),
-        label: "lighthouse",
+        label: "juno",
         endpointUrl: "https://models.example.com",
         apiStyle: "elevenlabs" as never,
         authToken: "",
@@ -302,7 +302,7 @@ describe("provider panel mutations", () => {
   it("persists declared image capabilities on the endpoint row", async () => {
     const connection = {
       connection_id: 73,
-      label: "lighthouse",
+      label: "juno",
       capability: "image" as const,
       api_style: "comfyui" as const,
       endpoint_url: "https://comfy.example.com",

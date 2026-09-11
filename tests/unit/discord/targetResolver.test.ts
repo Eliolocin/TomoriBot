@@ -312,10 +312,10 @@ describe("resolveUserTarget - persona-scoped and affixed names", () => {
 
   it("rebuilds a name composed from a user's own prefix override", async () => {
     stubNamingLookups({
-      composedCandidates: [{ userDiscId: "222", globalNickname: "Bred", globalPrefixOverride: "Master" }],
+      composedCandidates: [{ userDiscId: "222", globalNickname: "Obo", globalPrefixOverride: "Master" }],
     });
 
-    const result = await resolveUserTarget("Master Bred", buildGuildContext([obonya]));
+    const result = await resolveUserTarget("Master Obo", buildGuildContext([obonya]));
 
     expect(result.status).toBe("resolved");
     if (result.status === "resolved") {
@@ -326,10 +326,10 @@ describe("resolveUserTarget - persona-scoped and affixed names", () => {
 
   it("rejects a containment hit whose composed name does not rebuild", async () => {
     stubNamingLookups({
-      composedCandidates: [{ userDiscId: "222", globalNickname: "Bred" }],
+      composedCandidates: [{ userDiscId: "222", globalNickname: "Obo" }],
     });
 
-    const result = await resolveUserTarget("Master Bred", buildGuildContext([obonya]));
+    const result = await resolveUserTarget("Master Obo", buildGuildContext([obonya]));
 
     expect(result.status).toBe("not_found");
   });

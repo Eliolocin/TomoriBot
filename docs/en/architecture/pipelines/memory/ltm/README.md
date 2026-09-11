@@ -32,7 +32,7 @@ tool calls during the tool-loop. Two tools cover the full CRUD surface:
   `user_id + persona_lineage_id`).
 - **Template placeholders** — content must use `{user}` and `{bot}` tokens
   instead of hardcoded names. Both tools strip unknown brace-wrapped tokens
-  (e.g. `{Obonya}`) via `sanitizeUnknownTemplatePlaceholders()` before the
+  (e.g. `{obonya}`) via `sanitizeUnknownTemplatePlaceholders()` before the
   DB write.
 
 ## Cross-references

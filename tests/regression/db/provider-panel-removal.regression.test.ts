@@ -62,13 +62,13 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Provider panel durable removal", () => {
     const [textConnection] = await testSql<[{ connection_id: number }]>`
       INSERT INTO custom_endpoint_connections (
         server_id, label, capability, api_style, endpoint_url, requires_auth
-      ) VALUES (${serverId}, 'lighthouse', 'text', 'openai-compatible', 'https://example.invalid/v1', true)
+      ) VALUES (${serverId}, 'juno', 'text', 'openai-compatible', 'https://example.invalid/v1', true)
       RETURNING connection_id
     `;
     const [imageConnection] = await testSql<[{ connection_id: number }]>`
       INSERT INTO custom_endpoint_connections (
         server_id, label, capability, api_style, endpoint_url, requires_auth
-      ) VALUES (${serverId}, 'lighthouse', 'image', 'openai-compatible', 'https://example.invalid/v1', true)
+      ) VALUES (${serverId}, 'juno', 'image', 'openai-compatible', 'https://example.invalid/v1', true)
       RETURNING connection_id
     `;
     const textProvider = `custom:${textConnection.connection_id}`;
@@ -127,7 +127,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Provider panel durable removal", () => {
     const [connection] = await testSql<[{ connection_id: number }]>`
       INSERT INTO custom_endpoint_connections (
         user_id, label, capability, api_style, endpoint_url, requires_auth
-      ) VALUES (${userId}, 'personal-lighthouse', 'text', 'openai-compatible', 'https://example.invalid/v1', true)
+      ) VALUES (${userId}, 'personal-juno', 'text', 'openai-compatible', 'https://example.invalid/v1', true)
       RETURNING connection_id
     `;
     const provider = `custom:${connection.connection_id}`;
