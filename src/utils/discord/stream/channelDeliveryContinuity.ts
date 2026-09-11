@@ -1,5 +1,6 @@
 import type { ResolvedWebhookIdentity } from "@/utils/discord/webhook/identity";
 import { log } from "@/utils/misc/logger";
+import { parseIntegerEnvFlag } from "@/utils/misc/envFlags";
 
 /**
  * Cross-turn Discord delivery continuity, keyed by channel.
@@ -20,13 +21,6 @@ import { log } from "@/utils/misc/logger";
  * Entries expire once messages are far enough apart that Discord would not group them anyway.
  * Runtime-authoritative state with no database behind it: mirrors `utils/chat/selfReplyState.ts`.
  */
-
-function parseIntegerEnvFlag(value: string | undefined, defaultValue: number, minimum: number): number {
-  if (typeof value !== "string") return defaultValue;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) return defaultValue;
-  return Math.max(minimum, parsed);
-}
 
 // Discord stops grouping consecutive same-author messages after a few minutes, so continuity
 // beyond that window is pointless, so an expired entry is equivalent to a fresh channel.

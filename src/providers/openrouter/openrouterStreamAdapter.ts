@@ -17,6 +17,7 @@
 import type { FunctionCall, FunctionResponseImageMetadata, ThoughtLogEntry } from "../../types/provider/interfaces";
 import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
+import { tryRepairIncompleteJson } from "@/utils/text/jsonRepair";
 import { localizer } from "../../utils/text/localizer";
 import { truncateBeforeGenericSpeakerLine } from "@/utils/text/processors/llmOutputProcessor";
 import { escapeRegExp } from "@/utils/text/processors/regexUtils";
@@ -1790,15 +1791,32 @@ export class OpenrouterStreamAdapter extends BaseStreamAdapter {
       );
 
       let parsedArgs: Record<string, unknown> = {};
+      // Set when the endpoint cut the argument payload short. The recovered keys are real,
+      // but the call itself is incomplete, so the flag travels with it to the tool loop.
+      let argumentsTruncated = false;
       if (accumulated.functionArguments) {
         try {
           parsedArgs = JSON.parse(accumulated.functionArguments);
           log.info(`OpenRouter: Successfully parsed tool call arguments: ${JSON.stringify(parsedArgs)}`);
         } catch (parseError) {
-          log.error(
-            `OpenRouter: Failed to parse accumulated arguments as JSON: "${accumulated.functionArguments}"`,
-            parseError,
-          );
+          const repaired = tryRepairIncompleteJson(accumulated.functionArguments);
+          if (repaired) {
+            parsedArgs = repaired;
+            argumentsTruncated = true;
+            // A metric rather than a warning: `log.warn` is filtered out whenever
+            // RUN_ENV=production, the only environment this truncation happens in.
+            log.metric("tool_arguments_truncated", {
+              adapter: "OpenRouterStreamAdapter",
+              tool_name: accumulated.functionName,
+              recovered_keys: Object.keys(repaired).length,
+              argument_chars: accumulated.functionArguments.length,
+            });
+          } else {
+            log.error(
+              `OpenRouter: Failed to parse accumulated arguments as JSON: "${accumulated.functionArguments}"`,
+              parseError,
+            );
+          }
         }
       }
 
@@ -1806,6 +1824,9 @@ export class OpenrouterStreamAdapter extends BaseStreamAdapter {
         name: accumulated.functionName,
         args: parsedArgs,
       };
+      if (argumentsTruncated) {
+        functionCall.argumentsTruncated = true;
+      }
 
       // Include thought_signature if present (required for Gemini models)
       if (accumulated.thought_signature) {

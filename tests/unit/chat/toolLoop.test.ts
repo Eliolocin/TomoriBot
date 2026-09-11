@@ -34,6 +34,7 @@ let hasStopRequest = false;
 let isFollowUpRequest = false;
 let clearStopRequestCalls = 0;
 let standardEmbedCalls: Array<{ titleKey?: string; descriptionKey?: string }> = [];
+let hiddenToolNotices: string[] = [];
 
 // Module mocks: all must appear before the first lazy import of toolLoop.ts
 
@@ -72,7 +73,9 @@ scopedMock.module("@/utils/discord/embedHelper", () => ({
 
 scopedMock.module("@/utils/discord/toolProgressNotice", () => ({
   ...realToolProgressNotice,
-  routeHiddenToolNotice: async () => undefined,
+  routeHiddenToolNotice: async (_context: unknown, embed: { description?: string }) => {
+    hiddenToolNotices.push(embed.description ?? "");
+  },
 }));
 
 scopedMock.module("@/utils/discord/streamOrchestrator", () => ({
@@ -330,6 +333,7 @@ describe("runToolLoop — contract tests", () => {
     isFollowUpRequest = false;
     clearStopRequestCalls = 0;
     standardEmbedCalls = [];
+    hiddenToolNotices = [];
   });
 
   it("executes tool with correct args and delivers result to next provider call", async () => {
@@ -910,5 +914,90 @@ describe("runToolLoop — contract tests", () => {
     expect(result.status).toBe("stopped_by_user");
     expect(toolExecuteCalls).toHaveLength(0);
     expect(clearStopRequestCalls).toBe(0);
+  });
+
+  it("does not dispatch a tool whose arguments the provider truncated", async () => {
+    const { runToolLoop } = await import("@/utils/chat/toolLoop");
+
+    // A tool whose arguments replace stored state would write only the recovered keys and
+    // silently drop the rest, so the call is refused outright.
+    const truncatedCall: StreamResult = {
+      status: "function_call",
+      data: { name: "update_short_term_memory", args: { scene_state: "bedroom" }, argumentsTruncated: true },
+    };
+    const { provider, capturedHistories } = makeProvider([
+      truncatedCall,
+      { status: "completed", accumulatedText: "retried" },
+    ]);
+    toolExecuteQueue.push({ success: true, data: { saved: true } });
+
+    const context = makeContext();
+    const result = await runToolLoop(makeParams(context, provider));
+
+    expect(toolExecuteCalls).toHaveLength(0);
+    expect(result.status).toBe("completed");
+
+    const history = capturedHistories[1] as Array<{
+      functionCall: { name: string; args?: Record<string, unknown> };
+      functionResponse: {
+        functionResponse: { response: { result: { status: string; tool_name: string; reason: string } } };
+      };
+    }>;
+    expect(history).toHaveLength(1);
+    expect(history[0]?.functionCall?.name).toBe("update_short_term_memory");
+    // The recovered subset is dropped, so the model is not shown a call it did not make.
+    expect(history[0]?.functionCall?.args).toBeUndefined();
+    const synthetic = history[0]?.functionResponse?.functionResponse?.response?.result;
+    expect(synthetic?.status).toBe("tool_execution_failed");
+    expect(synthetic?.tool_name).toBe("update_short_term_memory");
+    expect(synthetic?.reason).toContain("truncated");
+
+    // The ordinary failure path emits a thought-log notice, so the refusal has to as well or
+    // the truncation leaves no trace a user can see.
+    expect(hiddenToolNotices).toHaveLength(1);
+    expect(hiddenToolNotices[0]).toContain("truncated");
+  });
+
+  it("refuses a truncated call before the deliberate-mode allowlist can report it", async () => {
+    const { runToolLoop } = await import("@/utils/chat/toolLoop");
+
+    // Both gates would fire here. The refusal runs first, so the model is told the payload was
+    // cut short rather than that deliberate mode hid the tool, which is the actionable cause.
+    const truncatedCall: StreamResult = {
+      status: "function_call",
+      data: { name: "hidden_tool", args: {}, argumentsTruncated: true },
+    };
+    const { provider, capturedHistories } = makeProvider([
+      truncatedCall,
+      { status: "completed", accumulatedText: "retried" },
+    ]);
+
+    const context = makeContext();
+    context.deliberateToolModeActive = true;
+    context.streamingContext.deliberateToolAllowedNames = ["allowed_tool"];
+    await runToolLoop(makeParams(context, provider));
+
+    const history = capturedHistories[1] as Array<{
+      functionResponse: { functionResponse: { response: { result: { reason: string } } } };
+    }>;
+    const reason = history[0]?.functionResponse?.functionResponse?.response?.result?.reason ?? "";
+    expect(reason).toContain("truncated");
+    expect(reason).not.toContain("not exposed");
+  });
+
+  it("counts a refused truncated call toward the consecutive tool error cap", async () => {
+    const { runToolLoop } = await import("@/utils/chat/toolLoop");
+
+    // A model that keeps reissuing a truncated call must not loop forever.
+    const truncatedCall: StreamResult = {
+      status: "function_call",
+      data: { name: "update_short_term_memory", args: {}, argumentsTruncated: true },
+    };
+    const { provider } = makeProvider(Array.from({ length: 10 }, () => truncatedCall));
+
+    const result = await runToolLoop(makeParams(makeContext(), provider));
+
+    expect(result.status).toBe("error");
+    expect(toolExecuteCalls).toHaveLength(0);
   });
 });

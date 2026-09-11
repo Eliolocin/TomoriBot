@@ -78,7 +78,31 @@ Steps in execution order:
      Tools that forward this to their `fetch` calls get true HTTP-level
      cancellation when `/kill` fires.
 
-4. **Deliberate-tool-mode allowlist gate** — if
+4. **Truncated-argument refusal**: when the adapter recovered `functionCall.args` from an
+   incomplete provider payload it sets `FunctionCall.argumentsTruncated`. The tool is *not*
+   dispatched. A recovered payload holds only the keys that arrived whole, and for a tool whose
+   arguments replace stored state (the short-term memory category map, for example) writing
+   that subset silently drops everything else. No tool's semantics survive a partial call, so
+   the stage returns `{kind: "history"}` with a synthetic failure response:
+   ```
+   { status: "tool_execution_failed", tool_name, reason }
+   ```
+   The `reason` names the cause and the outcome, so the model retries with a complete call
+   instead of assuming the update landed. The recovered subset is cleared from
+   `functionCall.args` before the history entry is built, so the replayed assistant turn does
+   not show the model arguments it never finished writing. The visit counts toward
+   `MAX_CONSECUTIVE_TOOL_ERRORS`, which is what bounds a model that keeps reissuing a truncated
+   call. Unlike the other exits above, this one still emits the hidden thought-log notice the
+   ordinary failure path emits, and logs at `error` level: `log.warn` is filtered out whenever
+   `RUN_ENV=production`, which is the only environment a provider truncation happens in. See
+   [stage 03 of the provider pipeline](../provider/03-chunk-normalization.md) for the repair
+   itself.
+
+   This refusal precedes the allowlist gate below, so a truncated call to a tool deliberate
+   mode also hides reports the truncation rather than the allowlist rejection: the payload
+   being cut short is the cause the model can act on.
+
+5. **Deliberate-tool-mode allowlist gate** — if
    `context.deliberateToolModeActive` is true and `deliberateToolAllowedNames`
    is set and the requested tool is not in the allowed set, the tool is *not*
    dispatched. A synthetic failure response is produced instead:
@@ -88,7 +112,7 @@ Steps in execution order:
    This is model-visible (returned as a tool response) so the model can adapt
    its next turn without a user-facing error.
 
-5. **`ToolRegistry.executeTool` with timeout + kill race** — actual dispatch,
+6. **`ToolRegistry.executeTool` with timeout + kill race** — actual dispatch,
    wrapped in a `Promise.race` against two cancellation promises:
 
    Before dispatch, the registry runs two separate availability gates whose
@@ -119,38 +143,38 @@ Steps in execution order:
      message?: string; endTurn?: boolean; imageMetadata?: … }
    ```
 
-6. **`retainSuccessfulToolAffordance`** — on success, extends the deliberate-
+7. **`retainSuccessfulToolAffordance`** — on success, extends the deliberate-
    tool-mode affordance window for this channel so short follow-up turns
    ("do it again") keep the tool exposed for `deliberateToolContextTurns`
    additional turns. No-op when deliberate-tool-mode is inactive.
 
-7. **Deliberate-trigger hidden notice** — if `deliberateToolTriggerMatchByToolName`
+8. **Deliberate-trigger hidden notice** — if `deliberateToolTriggerMatchByToolName`
    has an entry for this tool and mode is active, sends a hidden embed via
    `routeHiddenToolNotice` (thought-log only; not shown to users) describing
    which trigger phrase caused deliberate mode to expose the tool.
 
-8. **Enhanced-context restart check** — calls
+9. **Enhanced-context restart check** — calls
    [`handleEnhancedContextRestart`](03-enhanced-context-restart.md)
    (`toolLoop.ts:537-568`) with `toolResult.data`. If it returns `true`,
    returns `{kind: "restart"}`.
 
-9. **Reactivate one-shot STM guard** — a successful
+10. **Reactivate one-shot STM guard** — a successful
    `update_short_term_memory` sets
    `streamingContext.disableShortTermMemoryUpdate = true`, so the tool's own
    availability and execution guards reject a second update in this turn.
 
-10. **Capture sticker selection** — `select_sticker_for_response` maps a
+11. **Capture sticker selection** — `select_sticker_for_response` maps a
     successful `sticker_id` through the guild sticker cache and returns it as
     `stickerSelection`. Any other result from that tool returns `null`, so the
     latest sticker call wins and a miss clears an earlier selection.
 
-11. **Build function response** — wraps `toolResult.data` (success) or a
+12. **Build function response** — wraps `toolResult.data` (success) or a
    standardized error object (failure) into the `functionResponse` shape:
    ```ts
    { functionResponse: { name, response: { result: … } } }
    ```
 
-12. **Preserve pre-tool text** — `buildPreToolCallTextParts` converts
+13. **Preserve pre-tool text** — `buildPreToolCallTextParts` converts
     `streamResult.accumulatedText` (the visible text this stream iteration
     already delivered to Discord before the function call) into
     `preToolCallTextParts` on the history entry. Whitespace-only text yields
@@ -162,7 +186,7 @@ Steps in execution order:
     clears the same text from `accumulatedModelParts`; otherwise OpenAI-style
     providers would also append it as a trailing assistant prefill.
 
-13. **Return `{kind: "history"}`** with `historyEntry` (the paired
+14. **Return `{kind: "history"}`** with `historyEntry` (the paired
     `functionCall` + `functionResponse` + optional `imageMetadata` +
     optional `preToolCallTextParts`).
 
@@ -171,7 +195,10 @@ Steps in execution order:
 After this stage runs:
 
 - A tool was dispatched at most once per call (the deliberate-mode synthetic
-  failure short-circuits before `executeTool`).
+  failure and the truncated-argument refusal both short-circuit before
+  `executeTool`).
+- A call whose provider payload was truncated is never dispatched, and its
+  recovered argument subset is never replayed to the model as the call it made.
 - If `kind === "restart"` is returned, `functionHistory` will **not** receive
   an entry for this tool call — the restart mechanism replaces the tool
   response with enriched context.

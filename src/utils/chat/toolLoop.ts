@@ -24,6 +24,7 @@ import {
   buildTailDirectiveMessage,
 } from "@/utils/chat/contextAnnotations";
 import { takeEnhancedContextItem } from "@/utils/chat/pendingEnhancedContext";
+import { parseIntegerEnvFlag } from "@/utils/misc/envFlags";
 import type { ChatTurnContext, GenerationTurnResult, ToolHistoryEntry } from "@/utils/chat/types";
 import { neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { redactToolParametersForStorage } from "@/utils/tools/toolParameterRedaction";
@@ -42,6 +43,13 @@ const STREAM_ABANDONED_SETTLE_TIMEOUT_MS = parseIntegerEnvFlag(process.env.STREA
 const TOOL_EXECUTION_TIMEOUT_MS = parseIntegerEnvFlag(process.env.TOOL_EXECUTION_TIMEOUT_MS, 300000, 10000);
 const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set(["update_short_term_memory"]);
 const TOOL_FAILURE_NOTICE_LIMIT = 1800;
+/**
+ * Fed back to the model when a provider cut a tool call's arguments short. It names the
+ * cause and the outcome so the retry is a fresh attempt rather than a repeat of the same
+ * call, and so the model does not assume the update landed.
+ */
+const TOOL_ARGUMENTS_TRUNCATED_REASON =
+  "The provider truncated this tool call's arguments mid-payload, so the call was not executed and nothing was updated. Reissue the call with the complete arguments in one message.";
 
 export interface ToolLoopParams {
   context: ChatTurnContext;
@@ -500,6 +508,59 @@ async function executeToolCall(
   const isBlockedByDeliberateAllowlist =
     params.context.deliberateToolModeActive && deliberateAllowedSet !== null && !deliberateAllowedSet.has(functionName);
 
+  // A truncated argument payload recovered by the adapter holds only the keys that arrived
+  // whole. Dispatching with that subset is worse than not dispatching at all: a tool whose
+  // arguments replace stored state (a category map, for instance) would write the surviving
+  // keys and silently drop the rest. No tool's semantics survive a partial call, so the
+  // model gets a synthetic failure instead and can retry with a complete one.
+  if (functionCall.argumentsTruncated) {
+    // `log.error` rather than `log.warn`, which is filtered out whenever RUN_ENV=production,
+    // the only environment this truncation happens in. The error sink is also how the
+    // incident that prompted this path was found.
+    await log.error(
+      `Tool call "${functionName}" was not dispatched: the provider truncated its argument payload`,
+      undefined,
+      {
+        serverId: params.tomoriState.server_id,
+        errorType: "TOOL_ARGUMENTS_TRUNCATED",
+        metadata: {
+          channelId: params.context.channel.id,
+          recoveredKeys: Object.keys(functionCall.args ?? {}).length,
+        },
+      },
+    );
+    // The recovered subset is not a meaningful call, so it is dropped from the replayed
+    // assistant turn rather than shown to the model as the arguments it produced.
+    functionCall.args = undefined;
+    const refusal: ToolResult = { success: false, error: TOOL_ARGUMENTS_TRUNCATED_REASON };
+    // The ordinary failure path emits this notice, and a refusal that returns before it
+    // would otherwise leave the truncation invisible in the thought log.
+    await emitFailedToolCallThoughtLog(toolContext, functionName, {}, refusal);
+    return {
+      kind: "history",
+      functionName,
+      success: false,
+      endTurn: false,
+      responseDelivered: false,
+      historyEntry: {
+        functionCall,
+        functionResponse: {
+          functionResponse: {
+            name: functionName,
+            response: {
+              result: {
+                status: "tool_execution_failed",
+                tool_name: functionName,
+                reason: TOOL_ARGUMENTS_TRUNCATED_REASON,
+              },
+            },
+          },
+        },
+        preToolCallTextParts: buildPreToolCallTextParts(streamResult),
+      },
+    };
+  }
+
   const startedAt = Date.now();
 
   const killPromise: Promise<ToolResult> | null = turnAbortSignal
@@ -933,11 +994,4 @@ function resolveThoughtLogOwner(context: ChatTurnContext): GenerationTurnResult[
 function mergeDetails(existing: string, incoming: string | undefined): string {
   if (!incoming?.trim()) return existing;
   return existing ? `${existing}\n\n${incoming}` : incoming;
-}
-
-function parseIntegerEnvFlag(value: string | undefined, defaultValue: number, minimum: number): number {
-  if (typeof value !== "string") return defaultValue;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) return defaultValue;
-  return Math.max(minimum, parsed);
 }
