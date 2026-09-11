@@ -85,9 +85,11 @@ const charxAssetSchema = z
 /**
  * Parses an untrusted `.charx` buffer down to its character card.
  *
- * Guard order matters: the card's declared uncompressed size is checked before
- * it is decompressed, and the real length is re-checked afterwards, so a zip
- * bomb cannot spend memory merely by declaring a small size.
+ * The declared-size check below is the load-bearing zip-bomb guard, not a
+ * best-effort optimization: an archive that honestly declares a huge card is
+ * refused before anything is decompressed. The post-read check that follows
+ * only covers an entry declaring a size smaller than it delivers, and that case
+ * jszip already refuses on its own consistency check.
  *
  * @param charxBuffer - Raw archive bytes (already size-capped by the downloader)
  * @returns The parsed card plus the ignored asset count, or a typed failure reason
@@ -106,6 +108,7 @@ export async function readCharxCard(charxBuffer: Buffer, limits: CharxReadLimits
     return { ok: false, reason: "missing_card" };
   }
 
+  // Measured before decompression: this is what refuses an honest zip bomb.
   const declaredSize = getDeclaredUncompressedSize(cardFile);
   if (declaredSize !== null && declaredSize > limits.maxCardBytes) {
     return { ok: false, reason: "card_too_large" };
@@ -127,7 +130,8 @@ export async function readCharxCard(charxBuffer: Buffer, limits: CharxReadLimits
     return { ok: false, reason: "not_character_card" };
   }
 
-  // The declared size can be wrong or absent, so the real payload is measured too.
+  // Backstop for an entry that declared less than it delivered: jszip rejects
+  // that mismatch itself, so this covers a declared size that was simply absent.
   if (Buffer.byteLength(JSON.stringify(cardJson) ?? "", "utf8") > limits.maxCardBytes) {
     return { ok: false, reason: "card_too_large" };
   }
