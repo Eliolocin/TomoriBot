@@ -55,6 +55,7 @@ import { isParamDisabled } from "@/utils/provider/samplingControl";
 import { isProviderModelErrorMessage } from "@/utils/provider/providerErrorClassification";
 import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 import { localizer } from "@/utils/text/localizer";
+import { tryRepairIncompleteJson } from "@/utils/text/jsonRepair";
 import { truncateBeforeGenericSpeakerLine } from "@/utils/text/processors/llmOutputProcessor";
 import { escapeRegExp } from "@/utils/text/processors/regexUtils";
 import {
@@ -680,14 +681,33 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
       }
 
       let parsedArgs: Record<string, unknown> = {};
+      // Set when the endpoint cut the argument payload short. The recovered keys are real,
+      // but the call itself is incomplete, so the flag travels with it to the tool loop.
+      let argumentsTruncated = false;
       if (accumulated.functionArguments) {
         try {
           parsedArgs = JSON.parse(accumulated.functionArguments);
         } catch (parseError) {
-          log.error(
-            `${this.options.adapterName}: Failed to parse tool arguments "${accumulated.functionArguments}"`,
-            parseError as Error,
-          );
+          const repaired = tryRepairIncompleteJson(accumulated.functionArguments);
+          if (repaired) {
+            parsedArgs = repaired;
+            argumentsTruncated = true;
+            log.warn(
+              `${this.options.adapterName}: Recovered ${Object.keys(repaired).length} argument key(s) from a truncated tool call to "${accumulated.functionName}"`,
+              undefined,
+              {
+                metadata: {
+                  argumentLength: accumulated.functionArguments.length,
+                  toolName: accumulated.functionName,
+                },
+              },
+            );
+          } else {
+            log.error(
+              `${this.options.adapterName}: Failed to parse tool arguments "${accumulated.functionArguments}"`,
+              parseError as Error,
+            );
+          }
         }
       }
 
@@ -695,6 +715,9 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
         name: accumulated.functionName,
         args: parsedArgs,
       };
+      if (argumentsTruncated) {
+        functionCall.argumentsTruncated = true;
+      }
       if (this.options.preserveReasoningContent && this.accumulatedReasoningContent.length > 0) {
         functionCall.deepseekReasoningContent = this.accumulatedReasoningContent;
         log.info(

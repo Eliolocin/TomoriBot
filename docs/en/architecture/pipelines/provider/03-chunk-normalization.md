@@ -24,7 +24,7 @@ interface ProcessedChunk {
 }
 ```
 
-The method also handles two additional responsibilities:
+The method also handles three additional responsibilities:
 
 - **Error normalisation** — raw SDK errors (HTTP status codes, provider-specific error objects)
   are converted to the shared `ProviderError` shape via `handleProviderError()`. This includes
@@ -89,6 +89,20 @@ The method also handles two additional responsibilities:
   `functionCall` is present, the parser emits any preceding prose first (call unresolved) and resolves
   the call on a later chunk or at stream flush.
 
+- **Truncated tool-call recovery**: an OpenAI-compatible endpoint streams tool arguments as
+  text deltas, so a proxy timeout, a socket reset, or one dropped delta can end the payload
+  mid-token. `JSON.parse` rejects such a payload whole, which would discard every argument key
+  the model had already emitted in full. `openaiCompatibleStreamAdapter` therefore falls back to
+  `tryRepairIncompleteJson` (`src/utils/text/jsonRepair.ts`) when the parse throws. The repair
+  is structural: it removes the one incomplete trailing fragment (an unterminated string, a
+  half-written keyword, a dangling key) and closes the containers still open, then proves the
+  result with its own `JSON.parse` probe. It never fabricates a value, never edits a complete
+  string, and refuses a payload that is malformed rather than truncated, so a caller keeps the
+  original failure path. A repaired call is marked `FunctionCall.argumentsTruncated`, because
+  the recovered keys are a subset of what the model was writing rather than the call it
+  intended. The tool loop refuses to dispatch such a call (see
+  [tool-loop stage 02](../tool-loop/02-execute-tool-call.md)).
+
 ## Input
 
 `chunk: RawStreamChunk` — the provider-native envelope yielded by stage 02.
@@ -121,6 +135,9 @@ After this stage:
   `retryable`, and `code` set. `originalError` preserves the raw SDK error for logging.
 - If `type === "function_call"`, `chunk.functionCall` is a provider-agnostic `FunctionCall`
   `{ name, args, thoughtSignature? }`.
+- `chunk.functionCall.argumentsTruncated` is true only when the provider delivered an
+  incomplete argument payload and the repair recovered part of it. The flag is never set for a
+  payload that parsed directly, so its absence means `args` is exactly what the model produced.
 - Content-blocked responses (e.g., Gemini `promptFeedback.blockReason`, safety
   `finishReason`) are normalised to `type: "error"` with `error.type === "content_blocked"` and
   `retryable: false`.
@@ -181,7 +198,7 @@ server-scoped form, which is the correct default for configuration a member does
 | `BaseStreamAdapter.processChunk()` abstract method | **A new provider adapter implements this to map its SDK chunk shapes to `ProcessedChunk`.** The contract is at `src/types/stream/interfaces.ts:184`. The implementation must be synchronous. |
 | `BaseStreamAdapter.handleProviderError()` abstract method | **A new provider adapter implements this to classify its SDK errors.** The `ProviderError.retryable` flag is consumed by the key-rotation loop in `runGenerationTurn`; the `type` field drives user-facing error embed formatting. Model-name and model-availability failures should become `model_error` or carry a message that the shared model-error classifier can recognize. Contract at `src/types/stream/interfaces.ts:201`. |
 | `BaseStreamAdapter.createErrorDescription()` abstract method | **A new provider adapter implements this to produce localized, provider-specific error text** for the error embed shown in Discord when `retryable: false` and user errors are not suppressed. For `model_error`, preserve the provider's actionable details, such as supported model IDs. Contract at `src/types/stream/interfaces.ts:207`. |
-| `FunctionCall` shape (`name`, `args`, `thoughtSignature`) | The provider-agnostic function call format — `src/types/provider/interfaces.ts:145`. Fields like `thoughtSignature`, `reasoning_details`, and `deepseekReasoningContent` are provider-specific optional fields that must be preserved when passing tool results back to the provider in stage 01. |
+| `FunctionCall` shape (`name`, `args`, `thoughtSignature`) | The provider-agnostic function call format, at `src/types/provider/interfaces.ts:167`. Fields like `thoughtSignature`, `reasoning_details`, and `deepseekReasoningContent` are provider-specific optional fields that must be preserved when passing tool results back to the provider in stage 01. `argumentsTruncated` is a core field: any adapter that recovers arguments from an incomplete payload must set it, because the tool loop uses it to refuse the dispatch. |
 
 ## Related docs
 

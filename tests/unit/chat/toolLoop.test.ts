@@ -911,4 +911,57 @@ describe("runToolLoop — contract tests", () => {
     expect(toolExecuteCalls).toHaveLength(0);
     expect(clearStopRequestCalls).toBe(0);
   });
+
+  it("does not dispatch a tool whose arguments the provider truncated", async () => {
+    const { runToolLoop } = await import("@/utils/chat/toolLoop");
+
+    // A tool whose arguments replace stored state would write only the recovered keys and
+    // silently drop the rest, so the call is refused outright.
+    const truncatedCall: StreamResult = {
+      status: "function_call",
+      data: { name: "update_short_term_memory", args: { scene_state: "bedroom" }, argumentsTruncated: true },
+    };
+    const { provider, capturedHistories } = makeProvider([
+      truncatedCall,
+      { status: "completed", accumulatedText: "retried" },
+    ]);
+    toolExecuteQueue.push({ success: true, data: { saved: true } });
+
+    const context = makeContext();
+    const result = await runToolLoop(makeParams(context, provider));
+
+    expect(toolExecuteCalls).toHaveLength(0);
+    expect(result.status).toBe("completed");
+
+    const history = capturedHistories[1] as Array<{
+      functionCall: { name: string; args?: Record<string, unknown> };
+      functionResponse: {
+        functionResponse: { response: { result: { status: string; tool_name: string; reason: string } } };
+      };
+    }>;
+    expect(history).toHaveLength(1);
+    expect(history[0]?.functionCall?.name).toBe("update_short_term_memory");
+    // The recovered subset is dropped, so the model is not shown a call it did not make.
+    expect(history[0]?.functionCall?.args).toBeUndefined();
+    const synthetic = history[0]?.functionResponse?.functionResponse?.response?.result;
+    expect(synthetic?.status).toBe("tool_execution_failed");
+    expect(synthetic?.tool_name).toBe("update_short_term_memory");
+    expect(synthetic?.reason).toContain("truncated");
+  });
+
+  it("counts a refused truncated call toward the consecutive tool error cap", async () => {
+    const { runToolLoop } = await import("@/utils/chat/toolLoop");
+
+    // A model that keeps reissuing a truncated call must not loop forever.
+    const truncatedCall: StreamResult = {
+      status: "function_call",
+      data: { name: "update_short_term_memory", args: {}, argumentsTruncated: true },
+    };
+    const { provider } = makeProvider(Array.from({ length: 10 }, () => truncatedCall));
+
+    const result = await runToolLoop(makeParams(makeContext(), provider));
+
+    expect(result.status).toBe("error");
+    expect(toolExecuteCalls).toHaveLength(0);
+  });
 });
