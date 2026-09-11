@@ -11,7 +11,7 @@
  * Run via `bun run audit-sql`.
  */
 
-import { isFullOutput } from "./lib/gateOutput";
+import { isVerboseOutput } from "./lib/gateOutput";
 import { auditRawSqlBoundary, normalizePath } from "./lib/sqlAudit";
 
 async function run() {
@@ -22,7 +22,7 @@ async function run() {
 
   // Listings are proportional to findings: empty sections print nothing, and the
   // exemption list is detail a reader only needs when deciding whether a violation is
-  // already covered, so a clean run reports its counts and stops. `--full` restores it
+  // already covered, so a clean run reports its counts and stops. `--verbose` restores it
   // for the times the exemption inventory is itself the question being asked.
   if (writes.length > 0) {
     console.log("=== WRITES ===");
@@ -32,7 +32,7 @@ async function run() {
     console.log("=== READS ===");
     reads.forEach((r) => console.log(`${normalizePath(r.file)}:${r.line}`));
   }
-  if (exemptions.length > 0 && (violations.length > 0 || isFullOutput())) {
+  if (exemptions.length > 0 && (violations.length > 0 || isVerboseOutput())) {
     console.log("=== EXEMPTIONS ===");
     exemptions.forEach((e) => console.log(`exempt: ${normalizePath(e.file)}:${e.line} (${e.kind}; ${e.reason})`));
   }

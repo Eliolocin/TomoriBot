@@ -129,7 +129,7 @@ bun run compress-media
 
 `bun run vl` runs every validation gate and prints one verdict per gate, ending with a machine
 readable `vl-status:` line. It is quiet by default: a passing gate prints no output, and a failing
-gate prints its full detail. Pass `--full` to see everything each gate would print on its own. See
+gate prints its full detail. Pass `--verbose` to see everything each gate would print on its own. See
 [`development-tasks.md`](./development-tasks) for the full behavior and for the redirect pattern that
 keeps the exit code intact.
 

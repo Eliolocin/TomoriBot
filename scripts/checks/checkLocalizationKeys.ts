@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { readFile, readdir } from "node:fs/promises";
 import { Glob } from "bun";
-import { fullOutputHint, isFullOutput } from "./lib/gateOutput";
+import { isVerboseOutput, verboseOutputHint } from "./lib/gateOutput";
 
 /**
  * Lightweight logger that doesn't require database connection
@@ -1630,11 +1630,11 @@ function hasFatalFindings(results: AnalysisResult): boolean {
 
 /** How much detail `displayResults` is allowed to print, and how to hint at more. */
 interface DisplayOptions {
-  fullOutput: boolean;
+  verboseOutput: boolean;
   rerunCommand: string;
 }
 
-function displayResults(results: AnalysisResult, { fullOutput, rerunCommand }: DisplayOptions): void {
+function displayResults(results: AnalysisResult, { verboseOutput, rerunCommand }: DisplayOptions): void {
   const hasErrors = hasFatalFindings(results) || results.parityIssues.length > 0;
 
   if (!hasErrors) {
@@ -1648,10 +1648,10 @@ function displayResults(results: AnalysisResult, { fullOutput, rerunCommand }: D
   // An advisory-only run is the common state while locale coverage is incomplete, and
   // the per-key listing behind it is ~99% of the output. Collapse it to a count plus
   // the flag that expands it; the full report stays for anything that blocks.
-  if (!hasFatalFindings(results) && !fullOutput) {
+  if (!hasFatalFindings(results) && !verboseOutput) {
     console.log(
       `ℹ️  Localization keys advisory: ${results.parityIssues.length} keys missing in some locale ` +
-        `(advisory, exit 2). ${fullOutputHint(rerunCommand)}`,
+        `(advisory, exit 2). ${verboseOutputHint(rerunCommand)}`,
     );
     return;
   }
@@ -1663,7 +1663,7 @@ function displayResults(results: AnalysisResult, { fullOutput, rerunCommand }: D
   if (results.parityIssues.length > 0) {
     console.log("\n🌐 LOCALE PARITY ISSUES (Keys missing in some locales):");
     console.log("-".repeat(60));
-    if (fullOutput) {
+    if (verboseOutput) {
       for (const { key, missingIn, presentIn } of results.parityIssues.sort((a, b) => a.key.localeCompare(b.key))) {
         console.log(`  ⚠️  ${key}`);
         console.log(`     ✅ Present in: ${presentIn.join(", ")}`);
@@ -1672,7 +1672,7 @@ function displayResults(results: AnalysisResult, { fullOutput, rerunCommand }: D
     } else {
       console.log(
         `  ${results.parityIssues.length} keys missing in some locale ` +
-          `(advisory, not blocking). ${fullOutputHint(rerunCommand)}`,
+          `(advisory, not blocking). ${verboseOutputHint(rerunCommand)}`,
       );
     }
   }
@@ -1825,7 +1825,7 @@ function displayUnusedKeys(unusedKeys: KeyUsage[]): void {
  * (modal titles, modal descriptions, command descriptions) block the PR gate
  * without paying for the full unused/parity source scan.
  */
-async function runStrictLengthsOnly(fullOutput: boolean): Promise<void> {
+async function runStrictLengthsOnly(verboseOutput: boolean): Promise<void> {
   const { localeKeys } = await loadAvailableKeys();
   const modalTitleViolations = await checkModalTitleLengths(localeKeys);
   const modalDescriptionViolations = await checkModalDescriptionLengths(localeKeys);
@@ -1866,7 +1866,7 @@ async function runStrictLengthsOnly(fullOutput: boolean): Promise<void> {
       modalUsageViolations,
       messageSlotViolations,
     },
-    { fullOutput: fullOutput, rerunCommand: "bun run check-locale-lengths" },
+    { verboseOutput: verboseOutput, rerunCommand: "bun run check-locale-lengths" },
   );
 
   process.exit(1);
@@ -1876,10 +1876,10 @@ async function main(): Promise<void> {
   try {
     const listUnused = process.argv.includes("--list-unused");
     const strictLengths = process.argv.includes("--strict-lengths");
-    const fullOutput = isFullOutput();
+    const verboseOutput = isVerboseOutput();
 
     if (strictLengths) {
-      await runStrictLengthsOnly(fullOutput);
+      await runStrictLengthsOnly(verboseOutput);
       return;
     }
 
@@ -1890,7 +1890,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    displayResults(results, { fullOutput, rerunCommand: "bun run check-locales" });
+    displayResults(results, { verboseOutput, rerunCommand: "bun run check-locales" });
 
     if (hasFatalFindings(results)) {
       process.exit(1);

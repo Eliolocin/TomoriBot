@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { spawn } from "bun";
 import { config } from "dotenv";
 import { AUDIT_IGNORED_ADVISORIES } from "./lib/auditIgnores";
-import { isFullOutput } from "./lib/gateOutput";
+import { isVerboseOutput } from "./lib/gateOutput";
 
 /** Shape of every item pushed into the results array */
 type ResultItem = {
@@ -29,21 +29,21 @@ type ResultItem = {
  * the reason anyone runs the gate at all. Quiet mode must never be able to hide a
  * finding, only the passing noise around it.
  */
-let fullOutput = false;
+let verboseOutput = false;
 
-/** First-party checks in scripts/checks/ that understand `--full` / `--no-full`. */
+/** First-party checks in scripts/checks/ that understand `--verbose` / `--no-verbose`. */
 type Command = { argv: string[]; acceptsDetailFlag: boolean };
 
 /**
  * The flag to forward to a first-party check so it picks its own detail level.
  *
- * Always explicit rather than only sent when true, because `--no-full` is what lets
- * this process override a `--full` it forwards for a sibling. Only our own scripts in
+ * Always explicit rather than only sent when true, because `--no-verbose` is what lets
+ * this process override a `--verbose` it forwards for a sibling. Only our own scripts in
  * scripts/checks/ may receive it: `bun run lint`, `knip`, `bunx tsc` and `bun audit`
  * are third-party CLIs whose argument parsers would reject an unknown flag.
  */
 function detailFlag(): string {
-  return fullOutput ? "--full" : "--no-full";
+  return verboseOutput ? "--verbose" : "--no-verbose";
 }
 
 /**
@@ -67,7 +67,7 @@ async function runCheck(
   const proc = spawn(resolveArgv({ argv, acceptsDetailFlag }), { stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
   const exitCode = await proc.exited;
-  if (exitCode !== 0 || fullOutput) {
+  if (exitCode !== 0 || verboseOutput) {
     console.log(stdout + stderr);
   }
   return { name, exitCode, fatal };
@@ -120,7 +120,7 @@ async function runWarningCheck(
   // finding the caller has already counted, which is a state the caller has to declare
   // rather than one inferred from the output having matched a summary.
   const detailIsReported = (failureNeedsDetail && exitCode !== 0) || (isWarning && !summary && !subItems);
-  if (detailIsReported || fullOutput) {
+  if (detailIsReported || verboseOutput) {
     console.log(output);
   }
 
@@ -148,7 +148,7 @@ async function runLocalesCheck(
   // child collapses its five-figure per-key listing to a count. The `summary` below is
   // what surfaces that count: echoing the child's text here too would say it twice.
   // Exit code 1 is a real failure and prints its full detail.
-  if (exitCode !== 2 || fullOutput) {
+  if (exitCode !== 2 || verboseOutput) {
     console.log(output);
   }
 
@@ -158,8 +158,8 @@ async function runLocalesCheck(
     exitCode,
     fatal: exitCode === 1 || (exitCode !== 0 && exitCode !== 2),
     summary:
-      advisoryCount && !fullOutput
-        ? `(${advisoryCount} keys missing in some locale, re-run with --full to list)`
+      advisoryCount && !verboseOutput
+        ? `(${advisoryCount} keys missing in some locale, re-run with --verbose to list)`
         : undefined,
   };
 }
@@ -424,8 +424,8 @@ async function runTests(): Promise<ResultItem[]> {
     stdout: "pipe",
     stderr: "pipe",
     // TOMORI_TEST_QUIET suppresses the runner's lane replay, which the per-file rows
-    // below replace. Under --full the replay is wanted, so the flag is not set.
-    env: { ...process.env, BUN_TEST_JUNIT_OUTFILE: junitOutfile, ...(fullOutput ? {} : { TOMORI_TEST_QUIET: "true" }) },
+    // below replace. Under --verbose the replay is wanted, so the flag is not set.
+    env: { ...process.env, BUN_TEST_JUNIT_OUTFILE: junitOutfile, ...(verboseOutput ? {} : { TOMORI_TEST_QUIET: "true" }) },
   });
   const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
   const exitCode = await proc.exited;
@@ -462,7 +462,7 @@ async function runTests(): Promise<ResultItem[]> {
   // A failing suite prints the runner's output, which is what today's run shows and the
   // only evidence available when a batch died before any file could report. The quiet
   // gain is in the green case, where this and the ~360 per-file rows both stay silent.
-  if (fullOutput || unaccountedFailure || exitCode !== 0) {
+  if (verboseOutput || unaccountedFailure || exitCode !== 0) {
     console.log(output);
   }
 
@@ -476,7 +476,7 @@ async function runLint(): Promise<ResultItem> {
   const exitCode = await proc.exited;
 
   const output = stdout + stderr;
-  if (exitCode !== 0 || fullOutput) {
+  if (exitCode !== 0 || verboseOutput) {
     console.log(output);
   }
 
@@ -598,7 +598,7 @@ async function runAudit(): Promise<ResultItem> {
   // listing stays proportional to what actually moved the verdict. Low and moderate
   // advisories still grade yellow below, so suppressing their text cannot hide them.
   // An unparsed run prints in full, because its output is the only clue to what failed.
-  if (fullOutput || !parsedTally) {
+  if (verboseOutput || !parsedTally) {
     console.log(output);
   } else if (hasHighOrCritical) {
     console.log(selectBlockingAuditBlocks(output));
@@ -670,13 +670,13 @@ const CATEGORIES = {
 async function main() {
   // Load .env here rather than at module scope so importing this file is side-effect free.
   config({ quiet: true });
-  fullOutput = isFullOutput();
+  verboseOutput = isVerboseOutput();
   const dbConfigured = isDbConfigured();
 
   console.log(
-    fullOutput
+    verboseOutput
       ? "Running Validation Checks (full detail)...\n"
-      : "Running Validation Checks... (quiet: passing checks print no output; pass --full for detail)\n",
+      : "Running Validation Checks... (quiet: passing checks print no output; pass --verbose for detail)\n",
   );
 
   // Run the checks that do not load the complete command graph concurrently.
@@ -881,7 +881,7 @@ async function main() {
    * mistaken for a section that did not run.
    */
   const printTestSection = (title: string, items: ResultItem[], emptyMessage: string) => {
-    if (fullOutput) {
+    if (verboseOutput) {
       printSection(title, items, emptyMessage);
       return;
     }
@@ -897,7 +897,7 @@ async function main() {
       if (!passing.includes(item)) printItem(item);
     }
     if (passing.length > 0) {
-      console.log(`  [🟢] ${passing.length} test files passed (pass --full to list them)`);
+      console.log(`  [🟢] ${passing.length} test files passed (pass --verbose to list them)`);
     }
   };
 

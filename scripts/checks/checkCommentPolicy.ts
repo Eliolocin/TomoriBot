@@ -1,7 +1,7 @@
 ﻿import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import * as ts from "typescript";
-import { isFullOutput } from "./lib/gateOutput";
+import { isVerboseOutput } from "./lib/gateOutput";
 
 const DEFAULT_PATHS = ["src", "scripts", "tests", "apps"];
 const DEFAULT_EXCEPTIONS_PATH = "scripts/checks/comment-policy-exceptions.json";
@@ -157,7 +157,7 @@ interface CommentToken {
 interface ParsedArguments {
   auditNarration: boolean;
   baseRef?: string;
-  fullOutput: boolean;
+  verboseOutput: boolean;
   paths: string[];
   staged: boolean;
 }
@@ -944,7 +944,7 @@ async function collectChangedLines(
 function parseArguments(args: string[]): ParsedArguments {
   const parsed: ParsedArguments = {
     auditNarration: false,
-    fullOutput: isFullOutput(),
+    verboseOutput: isVerboseOutput(),
     paths: [],
     staged: false,
   };
@@ -957,8 +957,8 @@ function parseArguments(args: string[]): ParsedArguments {
     // Detail level, shared with the other gates so `vl` can forward one flag. Any other
     // dash-prefixed value is a mistake, and accepting it as a path would silently
     // replace the default roots with a nonexistent one and scan nothing at all.
-    if (value === "--full" || value === "--no-full") {
-      parsed.fullOutput = value === "--full";
+    if (value === "--verbose" || value === "--no-verbose") {
+      parsed.verboseOutput = value === "--verbose";
       continue;
     }
     if (value === "--staged") {
@@ -1016,7 +1016,7 @@ async function main(): Promise<void> {
   // Errors print in full under either mode: they are why anyone runs this. Warnings do
   // not change the exit code, so under quiet mode their count is the whole report and
   // the per-finding listing would be detail nobody can act on yet.
-  const printsDetail = errors.length > 0 || warnings === 0 || args.fullOutput;
+  const printsDetail = errors.length > 0 || warnings === 0 || args.verboseOutput;
   if (printsDetail) {
     console.log(`Comment policy guide: ${POLICY_DOC_PATH}`);
 
@@ -1040,8 +1040,8 @@ async function main(): Promise<void> {
   console.log(
     `Comment policy passed: ${result.filesChecked} file(s), ` +
       `${result.usedExceptions.length} exception(s), ${warnings} warning(s).` +
-      (warnings > 0 && !args.fullOutput
-        ? ` Re-run with \`bun run audit-comments --full\` to list them.`
+      (warnings > 0 && !args.verboseOutput
+        ? ` Re-run with \`bun run audit-comments --verbose\` to list them.`
         : ""),
   );
 }

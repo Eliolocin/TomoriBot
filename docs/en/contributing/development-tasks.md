@@ -69,10 +69,10 @@ carries the verdict. A gate that fails always prints its full detail, so quiet m
 finding; it only removes the passing noise around one. Advisory detail, such as locale parity or the
 lockfile-wide `bun audit` listing, collapses to a count or to the entries that changed the verdict.
 
-Pass `--full` to restore every line each gate would otherwise print:
+Pass `--verbose` to restore every line each gate would otherwise print:
 
 ```bash
-bun run vl --full
+bun run vl --verbose
 ```
 
 Individual gates accept the same flag, and `vl` forwards it to them. Redirect the output to a file

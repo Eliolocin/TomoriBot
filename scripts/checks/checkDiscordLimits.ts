@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { Glob } from "bun";
 import { log } from "@/utils/misc/logger";
-import { isFullOutput } from "./lib/gateOutput";
+import { isVerboseOutput } from "./lib/gateOutput";
 
 /**
  * Discord API Limits
@@ -256,7 +256,7 @@ function formatViolationType(type: ViolationType): string {
  * Displays analysis results in a formatted way
  */
 function displayResults(results: AnalysisResult): void {
-  const fullOutput = isFullOutput();
+  const verboseOutput = isVerboseOutput();
   const violations = results.violations;
 
   // A clean run gets one line. The banner, the summary block, and the closing
@@ -268,7 +268,7 @@ function displayResults(results: AnalysisResult): void {
 
   // This gate runs in CI, where nobody can add a flag after the fact, so everything a
   // failing run needs prints unconditionally. Only the banner framing it is optional.
-  if (fullOutput) {
+  if (verboseOutput) {
     console.log(`\n${"=".repeat(80)}`);
     console.log("🔍 DISCORD API LIMITS ANALYSIS RESULTS");
     console.log("=".repeat(80));
@@ -299,7 +299,7 @@ function displayResults(results: AnalysisResult): void {
     console.log(`    - ${formatViolationType(type)}: ${count}`);
   }
   console.log("\n⚠️  Please fix the violations above to ensure Discord API compliance.");
-  if (fullOutput) {
+  if (verboseOutput) {
     console.log(`\n${"=".repeat(80)}`);
   }
 }
