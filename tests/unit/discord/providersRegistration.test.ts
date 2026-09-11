@@ -36,7 +36,7 @@ function hasCommandPath(registration: RegistrationPayload | undefined, ...segmen
   return true;
 }
 
-describe("Wave 4 provider panel registration", () => {
+describe("/providers registration", () => {
   it("registers /providers as one DM-capable manager-only bare root", async () => {
     const { executionMap, registrationData } = await loadCommandData();
     const providers = findRegistration(registrationData, "providers");

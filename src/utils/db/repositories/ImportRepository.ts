@@ -1217,22 +1217,6 @@ class ImportRepository {
     };
   }
 
-  /**
-   * Imports personal memories for a user from an export payload.
-   * @param userDiscId - Discord user snowflake
-   * @param memories - Array of memory items to import
-   * @param personaLineageId - Persona lineage namespace to import into (default 0)
-   */
-  async importPersonalMemories(
-    userDiscId: string,
-    memories: MemoryItem[],
-    personaLineageId = 0,
-  ): Promise<ImportResult> {
-    const result = await this.sqlImportPersonalMemories(userDiscId, memories, personaLineageId);
-    if (result.success) invalidateUserCache(userDiscId);
-    return result;
-  }
-
   async importWorkspaceMemoryBundle(
     serverDiscId: string,
     importerUserDiscId: string,
@@ -1487,32 +1471,6 @@ class ImportRepository {
   async importPersonalSettings(userDiscId: string, importData: PersonalSettingsExportData): Promise<ImportResult> {
     const result = await this.sqlImportPersonalSettings(userDiscId, importData);
     if (result.success) invalidateUserCache(userDiscId);
-    return result;
-  }
-
-  /**
-   * Imports server configuration from an export payload.
-   * @param serverDiscId - Discord server snowflake
-   * @param config - ServerConfigExport payload
-   */
-  async importServerConfig(serverDiscId: string, config: ServerConfigExport): Promise<ImportResult> {
-    const result = await this.sqlImportServerConfig(serverDiscId, config);
-    if (result.success) invalidateTomoriStateCache(serverDiscId);
-    return result;
-  }
-
-  /**
-   * @param serverDiscId - Discord server snowflake
-   * @param memories - Array of memory items to import
-   * @param target - Target scope: persona (with optional personaId) or global
-   */
-  async importServerMemories(
-    serverDiscId: string,
-    memories: MemoryItem[],
-    target: { mode: "persona"; personaId?: number } | { mode: "global" },
-  ): Promise<ImportResult> {
-    const result = await this.sqlImportServerMemories(serverDiscId, memories, target);
-    if (result.success) invalidateTomoriStateCache(serverDiscId);
     return result;
   }
 

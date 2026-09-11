@@ -125,22 +125,6 @@
         success_title: `個人記憶を更新しました`,
         success_description: `個人記憶を正常に更新しました: "{memory}"`,
       },
-      export: {
-        description: `個人記憶をJSONでエクスポートします。`,
-        scope_description: `ペルソナ記憶かグローバル記憶かを選択します。`,
-        scope_choice_persona: `ペルソナ`,
-        scope_choice_global: `グローバル`,
-      },
-      import: {
-        description: `個人記憶をJSONからインポートします。`,
-        file_description: `個人記憶のJSONファイル。`,
-        target_description: `ペルソナ記憶に入れるか、グローバル記憶に入れるかを選択します。`,
-        target_choice_global: `グローバル`,
-        target_choice_persona: `ペルソナ`,
-        confirmation_description: `警告：選択したスコープの既存の個人メモリが置き換えられる場合があります。続行しますか？`,
-        confirmation_choice_yes: `はい、インポートする`,
-        confirmation_choice_no: `いいえ、キャンセル`,
-      },
       remove: {
         description: `個人記憶を削除します。`,
         scope_description: `ペルソナ記憶かグローバル記憶かを選択します。`,
@@ -174,16 +158,6 @@
         duplicate_description: `この記憶 '{memory}' は既にこのサーバーの私の記憶にあります。`,
         success_title: `サーバー記憶を更新しました`,
         success_description: `サーバー記憶を正常に更新しました: "{memory}"`,
-      },
-      export: {
-        description: `サーバー記憶をJSONでエクスポートします。`,
-      },
-      import: {
-        description: `サーバー記憶をJSONからインポートします。`,
-        file_description: `サーバー記憶のJSONファイル。`,
-        confirmation_description: `警告：選択したペルソナスコープの既存のサーバーメモリが置き換えられる場合があります。続行しますか？`,
-        confirmation_choice_yes: `はい、インポートする`,
-        confirmation_choice_no: `いいえ、キャンセル`,
       },
       remove: {
         description: `サーバー記憶を削除します。`,

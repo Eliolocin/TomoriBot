@@ -202,13 +202,13 @@ describe("memory export operation", () => {
 
     expect(calls.deliveries[0]?.embeds[0]?.data.description).toBe(
       localizer(LOCALE, "commands.transfer.memory_export_dm_description", {
-        type: localizer(LOCALE, "commands.transfer.workspace_memories_label"),
+        type: localizer(LOCALE, "commands.transfer.server_memories_label"),
       }),
     );
     expect(calls.deliveries[0]?.embeds[0]?.data.description).toContain("Documents and personas are not included");
     expect(calls.replies[0]).toMatchObject({
       titleKey: "commands.data.export.success_title",
-      descriptionVars: { type: localizer(LOCALE, "commands.transfer.workspace_memories_label") },
+      descriptionVars: { type: localizer(LOCALE, "commands.transfer.server_memories_label") },
     });
   });
 

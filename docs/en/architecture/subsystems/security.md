@@ -143,16 +143,16 @@ presence, roles, timezone, or physical appearance.
 ## Data Export and Deletion (Current Behavior)
 
 Primary files:
-- `src/commands/memory/personal/export.ts`
+- `src/commands/export/personal/memories.ts`
 - `src/commands/personal/memories.ts`
 - `src/utils/discord/ui/personalMemoriesPanel.ts`
 - `src/utils/discord/interactions/personalMemoriesOperations.ts`
-- `src/commands/memory/server/export.ts`
+- `src/commands/export/memories.ts`
 - `src/commands/memories.ts`
 - `src/utils/discord/ui/memoriesPanel.ts`
 - `src/utils/discord/interactions/memoriesRoutes.ts`
 - `src/utils/discord/interactions/memoriesDocumentOperations.ts`
-- `src/commands/server/config/export.ts`
+- `src/commands/export/config.ts`
 - `src/commands/reset/config.ts`
 - `src/utils/db/repositories/ImportExportRepository.ts`
 - `src/utils/db/repositoryExportSql.ts`

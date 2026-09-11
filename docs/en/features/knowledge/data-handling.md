@@ -41,19 +41,20 @@ privacy policies. Never share sensitive personal information with any AI.
 
 Everything exportable is sent to your DMs as a JSON file:
 
-- `/memory personal export` — your personal memories (one persona scope, or your global scope).
-- `/memory server export` — server memories for a selected persona.
-- `/server config export` — server configuration values (no API keys or triggers).
+- `/export config` — server configuration values (no API keys, credentials, or provider settings).
+- `/export personal config` — your personal settings (profile, privacy, appearance, response modes).
+- `/export memories` — server memories, scoped to the main persona, one selected persona, or every persona separately.
+- `/export personal memories` — your personal memories, scoped globally, to one persona, or to every persona separately.
 - `/persona export` — full persona definitions.
 
 ## Import Your Data
 
 Attach a previously exported file to restore it:
 
-- `/memory personal import`, `/memory server import` — file type is auto-detected; you choose
-  a target persona or global scope.
-- `/server config import` — server imports require **Manage
-  Server**.
+- `/import config` — server configuration; requires **Manage Server**. Choose which detected sections to apply.
+- `/import personal config` — your personal settings. Choose which detected sections to apply.
+- `/import memories` — server memories; requires **Manage Server**. Merge or replace, and map each source persona if the file has more than one.
+- `/import personal memories` — your personal memories. Merge or replace, and map each source persona if the file has more than one.
 - `/persona import` — restore a persona (also imports SillyTavern cards — see
   [SillyTavern Support](/features/integrations/sillytavern-support/)).
 

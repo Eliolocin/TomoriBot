@@ -112,7 +112,7 @@ export default {
       provider_overloaded_wait: `プロバイダーが現在高負荷状態です。しばらくしてから再試行するか、別のプロバイダーに切り替えてください。`,
       nsfw_jailbreaks: `\`/nsfw jailbreaks\` を有効にすると、このフィルターを回避しやすくなります。`,
       review_messages: `最近のメッセージを確認するか、\`/refresh\` でクリアしてください。`,
-      review_memories: `メモリーと設定を確認してください（\`/memory personal export\`、\`/memory server export\`、\`/server config export\`）。`,
+      review_memories: `メモリーと設定を確認してください（\`/export personal memories\`、\`/export memories\`、\`/export config\`）。`,
       blacklist_member: `問題のあるメンバーは \`/moderation\` でブラックリストに追加できます。`,
     },
     google: {
@@ -221,10 +221,10 @@ export default {
 \`\`\`
 {memory_content}
 \`\`\``,
-      server_memory_footer: `サーバー管理者は\`/memory server\`でこの記憶を管理できます。`,
+      server_memory_footer: `サーバー管理者は\`/memories\`でこの記憶を管理できます。`,
       personal_memory_footer_manage: `個人記憶は\`/personal memories\`で管理できます。`,
-      personal_memory_footer_personalization_disabled: `この記憶は保存されましたが、現在このサーバーではパーソナライズ機能が無効になっているため、すぐには効果がありません。全文は\`/memory personal export\`で確認できます。\`/personal config\`でオプトアウトできます。`,
-      personal_memory_footer_user_blacklisted: `この記憶は保存されましたが、対象のユーザーは現在このサーバーのパーソナライズ機能のブラックリストに登録されているため、すぐには効果がありません。全文は\`/memory personal export\`で確認できます。\`/personal config\`でオプトアウトできます。`,
+      personal_memory_footer_personalization_disabled: `この記憶は保存されましたが、現在このサーバーではパーソナライズ機能が無効になっているため、すぐには効果がありません。全文は\`/export personal memories\`で確認できます。\`/personal config\`でオプトアウトできます。`,
+      personal_memory_footer_user_blacklisted: `この記憶は保存されましたが、対象のユーザーは現在このサーバーのパーソナライズ機能のブラックリストに登録されているため、すぐには効果がありません。全文は\`/export personal memories\`で確認できます。\`/personal config\`でオプトアウトできます。`,
       expand_memory_button: `全文を表示`,
       expand_memory_title: `記憶の全文`,
     },

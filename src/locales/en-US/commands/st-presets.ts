@@ -22,7 +22,7 @@ export default {
     retry: `Retry`,
     stale_warning: `Saved data may be out of date because the read failed.\nWrite actions are unavailable until a fresh read succeeds.`,
     unavailable: `Preset data could not be loaded. Retry to try again.`,
-    not_setup: `This workspace is not set up yet. Run /setup first.`,
+    not_setup: `This server is not set up yet. Run /setup first.`,
     add_modal_title: `Add New Preset`,
     file_label: `Preset File (.json)`,
     file_description: `Upload a SillyTavern JSON preset file`,

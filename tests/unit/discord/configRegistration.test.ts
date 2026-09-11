@@ -92,16 +92,14 @@ const ABSORBED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
 };
 
 /** Roots the cutover removed outright, rather than reducing to a retained remainder. */
-const DISSOLVED_ROOTS = ["capabilities", "speech", "mcps", "st-presets"];
+const DISSOLVED_ROOTS = ["capabilities", "speech", "mcps", "st-presets", "memory", "server"];
 
 /** Explicitly retained leaves, including the aggregate views the panel deliberately does not absorb. */
 const RETAINED_KEYS_BY_ROOT: Record<string, readonly string[]> = {
   persona: ["create", "default", "export", "generate", "import", "remove"],
   model: ["override.remove"],
-  server: ["config.export", "config.import"],
   conditioning: ["manage", "remove"],
   tool: ["delete.turn", "estimate.cost", "prompt.snapshot"],
-  memory: ["personal.export", "personal.import", "server.export", "server.import"],
   novelai: ["generate.image"],
 };
 

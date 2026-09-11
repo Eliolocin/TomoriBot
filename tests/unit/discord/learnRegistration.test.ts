@@ -16,7 +16,7 @@ beforeAll(async () => {
   await initializeLocalizer();
 }, 30000);
 
-describe("/learn and /memory registration", () => {
+describe("/learn registration", () => {
   it("registers /learn as an unrestricted root with exactly one history subcommand", async () => {
     const { registrationData, executionMap } = await loadCommandData();
 
@@ -47,16 +47,7 @@ describe("/learn and /memory registration", () => {
     expect(executionMap.get("learn")?.has("history")).toBe(true);
   }, 30000);
 
-  it("/memory history is no longer present under /memory", async () => {
-    const { registrationData, executionMap } = await loadCommandData();
-
-    const memoryCommand = registrationData.find((cmd) => cmd.name === "memory") as unknown as RegistrationPayload;
-    expect(memoryCommand).toBeDefined();
-
-    const historyGroup = memoryCommand.options?.find((opt: RegistrationPayload) => opt.name === "history");
-    expect(historyGroup).toBeUndefined();
-
-    expect(executionMap.get("memory")?.has("history.remove")).toBe(false);
-    expect(executionMap.get("memory")?.has("history.import")).toBe(false);
-  }, 30000);
+  // The former "/memory history is gone" check here is gone: /memory itself dissolved once its own
+  // last leaves moved to /export and /import, and that dissolution is asserted once, for every fully
+  // dissolved root, by configRegistration.test.ts's DISSOLVED_ROOTS list.
 });

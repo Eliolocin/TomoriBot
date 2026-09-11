@@ -198,7 +198,7 @@
   events: {
     addBot: {
       rejoin_title: `TomoriBotが戻ってきました！`,
-      rejoin_description: `このサーバーに再追加されたようです。既存の設定とペルソナはそのまま残っています。\`/config\`、\`/persona\`、\`/memory\`、\`/server\`、\`/providers\` で確認や変更ができます。{legalNotice}`,
+      rejoin_description: `このサーバーに再追加されたようです。既存の設定とペルソナはそのまま残っています。\`/config\`、\`/persona\`、\`/memories\`、\`/providers\` で確認や変更ができます。{legalNotice}`,
       setup_prompt_title: `TomoriBotの追加が完了しました`,
       setup_prompt_description: `追加してくれてありがとうございます。始めるには、**サーバー管理**権限を持つメンバーが \`/setup\` を実行して、初期ペルソナとプロバイダーを選択してください。短い案内は \`/help\` の **セットアップ** から **ステップ1：APIキーを取得** を開くか、https://docs.tomoribot.app/ja/introduction/quickstart/ で確認できます。
 

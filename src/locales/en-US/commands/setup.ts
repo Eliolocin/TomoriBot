@@ -52,8 +52,8 @@ export default {
     success_desc_dm: `I'm all set up for our DM as \`{persona}\`!`,
     success_desc_dm_with_model: `I'm all set up for our DM as \`{persona}\`! I'll answer with the \`{model_name}\` model (\`{provider}\`'s default).`,
     next_steps_title: `➡️ Recommended Next Steps`,
-    next_steps_value: `- **Mention me in chat** to start talking!\n- Use \`/persona\` to change my name, look, and personality.\n- Use \`/config\` to adjust how I act and what I can do.\n- Use \`/memory\` to teach me things about you and this server.\n- Use \`/expressions initialize\` to let me use this server's emoji and stickers.`,
-    next_steps_value_dm: `- **Just message me here** to start talking!\n- Use \`/persona\` to change my name, look, and personality.\n- Use \`/config\` to adjust how I act and what I can do.\n- Use \`/memory\` to teach me things about you.`,
+    next_steps_value: `- **Mention me in chat** to start talking!\n- Use \`/persona\` to change my name, look, and personality.\n- Use \`/config\` to adjust how I act and what I can do.\n- Use \`/memories\` to teach me things about you and this server.\n- Use \`/expressions initialize\` to let me use this server's emoji and stickers.`,
+    next_steps_value_dm: `- **Just message me here** to start talking!\n- Use \`/persona\` to change my name, look, and personality.\n- Use \`/config\` to adjust how I act and what I can do.\n- Use \`/memories\` to teach me things about you.`,
     learn_more_title: `📖 Learn More`,
     learn_more_value: `Read the [Official Wiki](https://docs.tomoribot.app/en/features/) or open {helpFeatures} (then Features) to learn more about what I can do!\n- [Multiple Personas](https://docs.tomoribot.app/en/features/chatting-personality/multiple-personas/) = Give me different looks, voices, and triggers\n- [Chatting & Triggers](https://docs.tomoribot.app/en/features/chatting-personality/chatting-and-triggers/) = Decide when and how I join conversations\n- [Memory](https://docs.tomoribot.app/en/features/knowledge/memory/) = I remember people, facts, and context\n- [Personalization](https://docs.tomoribot.app/en/features/knowledge/personalization/) = Teach me about you so I can treat you how you like to be treated\n- [Media Generation](https://docs.tomoribot.app/en/features/capabilities/media-generation/) = I can make images, video, and voice\n- [Tools & Extensions](https://docs.tomoribot.app/en/features/capabilities/tools-and-extensions/) = Web search, link reading, and custom tools`,
     heads_up_title: `⚠️ A Few Things to Note`,
@@ -83,7 +83,7 @@ export default {
     broken_state_description: `This server has a persona but its configuration is incomplete. The server config or AI model reference is missing or was removed.
 
 Try {model_text_command} to assign a working model, or {provider_add_command} to register a new provider.`,
-    already_setup_description: `I am already set up for this server. To modify my configuration, please use other commands like \`/config\`, \`/persona\`, \`/memory\`, and \`/server\`.
+    already_setup_description: `I am already set up for this server. To modify my configuration, please use other commands like \`/config\`, \`/persona\`, and \`/memories\`.
 
 				If you wish to change my provider, use \`/providers\` to register and activate a new default text provider.`,
   },

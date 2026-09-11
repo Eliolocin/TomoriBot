@@ -52,8 +52,8 @@ export default {
     success_desc_dm: `このDMでは \`{persona}\` として準備が整いました！`,
     success_desc_dm_with_model: `このDMでは \`{persona}\` として準備が整いました！\`{provider}\` のデフォルトモデル \`{model_name}\` で応答します。`,
     next_steps_title: `➡️ おすすめの次のステップ`,
-    next_steps_value: `- **チャットでメンションして** 話しかけてください！\n- \`/persona\` で私の名前・見た目・性格を変えられます。\n- \`/config\` で私のふるまいや使える機能を調整できます。\n- \`/memory\` であなたやこのサーバーについて覚えてほしいことを教えられます。\n- \`/expressions initialize\` を実行すると、このサーバーの絵文字やスタンプを使えるようになります。`,
-    next_steps_value_dm: `- **ここで直接メッセージを送れば** 話しかけられます！\n- \`/persona\` で私の名前・見た目・性格を変えられます。\n- \`/config\` で私のふるまいや使える機能を調整できます。\n- \`/memory\` で私に覚えてほしいことを教えられます。`,
+    next_steps_value: `- **チャットでメンションして** 話しかけてください！\n- \`/persona\` で私の名前・見た目・性格を変えられます。\n- \`/config\` で私のふるまいや使える機能を調整できます。\n- \`/memories\` であなたやこのサーバーについて覚えてほしいことを教えられます。\n- \`/expressions initialize\` を実行すると、このサーバーの絵文字やスタンプを使えるようになります。`,
+    next_steps_value_dm: `- **ここで直接メッセージを送れば** 話しかけられます！\n- \`/persona\` で私の名前・見た目・性格を変えられます。\n- \`/config\` で私のふるまいや使える機能を調整できます。\n- \`/memories\` で私に覚えてほしいことを教えられます。`,
     learn_more_title: `📖 もっと詳しく`,
     learn_more_value: `[公式Wiki](https://docs.tomoribot.app/ja/features/)を読むか、{helpFeatures} を使って、私にできることをもっと知ってください！\n- [マルチペルソナ](https://docs.tomoribot.app/ja/features/chatting-personality/multiple-personas/) = 見た目・話し方・トリガーを自由に設定\n- [チャットとトリガー](https://docs.tomoribot.app/ja/features/chatting-personality/chatting-and-triggers/) = いつ・どう会話に入るかを制御\n- [メモリー](https://docs.tomoribot.app/ja/features/knowledge/memory/) = 人・事実・文脈を覚えます\n- [パーソナライゼーション](https://docs.tomoribot.app/ja/features/knowledge/personalization/) = あなたのことを教えると、あなたの望む形で接します\n- [メディア生成](https://docs.tomoribot.app/ja/features/capabilities/media-generation/) = 画像・動画・音声を作れます\n- [ツールと拡張](https://docs.tomoribot.app/ja/features/capabilities/tools-and-extensions/) = ウェブ検索・リンク読み取り・カスタムツール`,
     heads_up_title: `⚠️ いくつかの注意点`,
@@ -83,7 +83,7 @@ export default {
     broken_state_description: `このサーバーにはペルソナが存在しますが、設定が不完全です。サーバー設定またはAIモデルの参照が見つからないか、削除されています。
 
 {model_text_command} で有効なモデルを割り当てるか、{provider_add_command} で新しいプロバイダーを登録してください。`,
-    already_setup_description: `このサーバーでは既に設定が完了しています。設定を変更するには、\`/config\`、\`/persona\`、\`/memory\`、\`/server\`などの他のコマンドを使用してください。
+    already_setup_description: `このサーバーでは既に設定が完了しています。設定を変更するには、\`/config\`、\`/persona\`、\`/memories\`などの他のコマンドを使用してください。
 
 				プロバイダーを変更したい場合は、\`/providers\`で新しいデフォルトのテキストプロバイダーを登録して有効化してください。`,
   },

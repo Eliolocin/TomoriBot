@@ -20,19 +20,6 @@ export default {
         disabled_description: `個人プロバイダーが有効でない場合でも、ユーザー発言でサーバープロバイダーを使えるようになりました。`,
       },
     },
-    config: {
-      description: `サーバー設定データを管理します。`,
-      export: {
-        description: `サーバー設定をエクスポートします（記憶、ペルソナ、個人設定を除く）。`,
-      },
-      import: {
-        description: `サーバー設定をインポートします（記憶、ペルソナ、個人設定を除く）。`,
-        file_description: `サーバー設定のJSONファイル。`,
-        confirmation_description: `警告：インポートするファイルの内容に応じて、既存のサーバー設定が置き換えられる場合があります。続行しますか？`,
-        confirmation_choice_yes: `はい、インポートする`,
-        confirmation_choice_no: `いいえ、キャンセル`,
-      },
-    },
     stm: {
       description: `全ペルソナのサーバー共有STMを管理`,
       "privacy-bypass": {

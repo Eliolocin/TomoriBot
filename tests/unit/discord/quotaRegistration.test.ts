@@ -1,7 +1,11 @@
 /**
  * `/quota reset` replaced the legacy `/server quota reset` scope option with two direct leaves. This gate lives
  * outside the implementation slices so a command that clears other members' usage counters cannot lose its
- * guild and manager restrictions, and so quota work cannot drift back under `/server`.
+ * guild and manager restrictions.
+ *
+ * The former "no quota command survives under /server" check here is gone: /server itself dissolved
+ * once its own last leaves moved to /export and /import, and that dissolution is asserted once, for
+ * every fully dissolved root, by configRegistration.test.ts's DISSOLVED_ROOTS list.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { PermissionsBitField } from "discord.js";
@@ -34,15 +38,5 @@ describe("/quota registration restrictions", () => {
     expect(quota.contexts).toEqual([0]);
     expect(quota.default_member_permissions).toBe(String(PermissionsBitField.Flags.ManageGuild));
     expect([...(executionMap.get("quota")?.keys() ?? [])].sort()).toEqual(["reset.global", "reset.user"]);
-  });
-
-  it("leaves no quota command under /server", async () => {
-    const { executionMap } = await loadCommandData();
-    const server = executionMap.get("server");
-
-    expect(server).toBeDefined();
-    if (!server) return;
-
-    expect([...server.keys()].filter((key) => key.startsWith("quota"))).toEqual([]);
   });
 });

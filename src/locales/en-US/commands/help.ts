@@ -289,7 +289,7 @@ Transcription supports ~100 languages (auto-detected).`,
 - Personal memories persist across servers (try talking to me in another server!)
 - I also keep [STM (short-term memory)](https://docs.tomoribot.app/en/features/knowledge/memory/#short-term-memory-stm) of recent conversations for channel and server awareness (opt into cross-server sharing with \`/personal config\`)
 - Change what I call you using \`/personal config\`
-- Use \`/memory\` and \`/persona\` commands to manually add or remove memories and persona data
+- Use \`/memories\` and \`/persona\` commands to manually add or remove memories and persona data
 - I can use server emojis and stickers more accurately after registration with \`/expressions initialize\`
 - Full invisibility is available via \`/personal config\` if you want to be completely unseen by me
 - Learn more on the **Persistent Memory** page in \`/help\``,
@@ -356,7 +356,7 @@ For first-time setup, *Google Gemini* is recommended because it has a generous f
 - Set up auto-trigger with {serverAutotrigger} to chat without mentioning me`,
       step4_title: `Step 4: Customize TomoriBot (Optional)`,
       step4_description: `- Use {persona} commands to completely change my personality (including alter personas!)
-- Configure my settings with {server}, {personal}, {memory}, and {config} commands
+- Configure my settings with {personal}, {memory}, and {config} commands
 - Use {memory} for memories/documents and {persona} for behavior shaping
 - Explore advanced features like document uploads, API key rotation, and uncensored mode`,
       need_help_title: `Need Help?`,

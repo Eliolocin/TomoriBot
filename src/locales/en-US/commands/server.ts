@@ -21,19 +21,6 @@ export default {
         disabled_description: `User-triggered messages can use the server provider again when no personal provider is enabled.`,
       },
     },
-    config: {
-      description: `Manage server configuration data.`,
-      export: {
-        description: `Export this server's settings, excluding memories, personas, and personal settings.`,
-      },
-      import: {
-        description: `Import server settings. Does not import memories, personas, or personal settings.`,
-        file_description: `Server configuration JSON file.`,
-        confirmation_description: `WARNING: This may replace existing server settings based on the imported file. Continue?`,
-        confirmation_choice_yes: `Yes, import it`,
-        confirmation_choice_no: `No, cancel`,
-      },
-    },
     stm: {
       description: `Manage server-shared STM entries for all personas`,
       "privacy-bypass": {

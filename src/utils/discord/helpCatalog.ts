@@ -142,9 +142,8 @@ const setupPages: readonly HelpPageDefinition[] = [
     titleHeadingLevel: 3,
     variables: (locale) => ({
       persona: mention("persona"),
-      server: mention("server"),
       personal: mention("personal"),
-      memory: mention("memory"),
+      memory: mention("memories"),
       config: mention("config"),
       helpFeatures: buildHelpPageReference(locale, "commands.help.dashboard.pages.features"),
       helpMemory: buildHelpPageReference(locale, "commands.help.dashboard.pages.persistent_memory"),
@@ -393,10 +392,10 @@ const memoryPages: readonly HelpPageDefinition[] = [
     variables: (locale) => ({
       memoryPersonalAdd: mention("personal", "memories"),
       memoryPersonalRemove: mention("personal", "memories"),
-      memoryPersonalExport: mention("memory", "personal", "export"),
+      memoryPersonalExport: mention("export", "personal", "memories"),
       memoryServerAdd: mention("memories"),
       memoryServerRemove: mention("memories"),
-      memoryServerExport: mention("memory", "server", "export"),
+      memoryServerExport: mention("export", "memories"),
       status: mention("status"),
       helpCustomization: buildHelpPageReference(locale, "commands.help.dashboard.pages.customization"),
       personalStm: mention("personal", "config"),

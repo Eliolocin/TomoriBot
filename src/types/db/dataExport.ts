@@ -1016,8 +1016,6 @@ const serverConfigOnlyExportDataSchema = z.object({
   config: serverConfigExportSchema,
 });
 
-export type ServerConfigOnlyExportData = z.infer<typeof serverConfigOnlyExportDataSchema>;
-
 /**
  * Get server data export schema with dynamic memory limits from environment
  * Includes configuration and server memories
@@ -1056,7 +1054,7 @@ export const personalMemoriesExportSchema = z.object({
   data: getPersonalMemoriesExportDataSchema(),
 });
 
-export type PersonalMemoriesExport = z.infer<typeof personalMemoriesExportSchema>;
+type PersonalMemoriesExport = z.infer<typeof personalMemoriesExportSchema>;
 
 export const globalPersonalMemoriesExportSchema = z.object({
   version: z.literal(EXPORT_VERSION),
@@ -1065,7 +1063,7 @@ export const globalPersonalMemoriesExportSchema = z.object({
   data: getPersonalMemoriesExportDataSchema(),
 });
 
-export type GlobalPersonalMemoriesExport = z.infer<typeof globalPersonalMemoriesExportSchema>;
+type GlobalPersonalMemoriesExport = z.infer<typeof globalPersonalMemoriesExportSchema>;
 
 export const personalSettingsExportSchema = z.object({
   version: z.literal(EXPORT_VERSION),
@@ -1083,7 +1081,7 @@ export const serverMemoriesExportSchema = z.object({
   data: getServerMemoriesExportDataSchema(),
 });
 
-export type ServerMemoriesExport = z.infer<typeof serverMemoriesExportSchema>;
+type ServerMemoriesExport = z.infer<typeof serverMemoriesExportSchema>;
 
 export const serverConfigOnlyExportSchema = z.object({
   version: z.literal(EXPORT_VERSION),
@@ -1092,7 +1090,7 @@ export const serverConfigOnlyExportSchema = z.object({
   data: serverConfigOnlyExportDataSchema,
 });
 
-export type ServerConfigOnlyExport = z.infer<typeof serverConfigOnlyExportSchema>;
+type ServerConfigOnlyExport = z.infer<typeof serverConfigOnlyExportSchema>;
 
 /**
  * Union type for all export formats

@@ -256,9 +256,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 
 ### Server config export/import
 
-`/server config export` and the legacy full-server export keep the historical flat JSON payload for file compatibility, but `serverConfigExportSchema` is now composed from per-table export slices in `src/types/db/dataExport.ts`. Each slice maps to one split config table, with explicit exclusions for non-portable Discord IDs, server-local model/provider pointers, encrypted credentials, legacy migration fields, and runtime state.
-
-`ExportRepository.exportServerData()` reads the split tables directly and emits the flat composed shape. `ImportRepository.importServerConfig()` partitions that same flat payload back into split-table patch objects and writes through the typed `ConfigRepository.update*Config()` methods; all required and optional split-table update results must succeed before the import reports success and invalidates the Tomori state cache.
+The v1 flat JSON shape described here survives only as compatibility input accepted by the new `/import config` command's v1 adapter; no command emits it directly. `serverConfigExportSchema` is composed from per-table export slices in `src/types/db/dataExport.ts`. Each slice maps to one split config table, with explicit exclusions for non-portable Discord IDs, server-local model/provider pointers, encrypted credentials, legacy migration fields, and runtime state.
 
 `scripts/checks/checkSchemaDrift.ts` validates export coverage per split config table rather than comparing against a `tomori_configs` mirror. It also verifies that `serverConfigExportSchema` is exactly the union of the per-table export slices and that every exported key is selected, emitted, and restored. Runtime-state tables such as `api_key_rotation_runtime_state` and `persona_autoch_runtime_state` remain explicitly excluded from export/import.
 

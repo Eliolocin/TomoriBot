@@ -1,6 +1,10 @@
 /**
  * `/server nuke` becomes the bare root `/nuke`. Since `server` restricts to guilds and requires
  * ManageGuild, `/nuke` must manually assert both restrictions.
+ *
+ * The former "/server still exists and doesn't have a nuke subcommand" checks here are gone: /server
+ * itself dissolved once its own last leaves moved to /export and /import, and that dissolution is
+ * asserted once, for every fully dissolved root, by configRegistration.test.ts's DISSOLVED_ROOTS list.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { loadCommandData, ROOT_COMMAND_EXECUTION_KEY } from "@/utils/discord/commandLoader";
@@ -31,30 +35,6 @@ describe("/nuke registration", () => {
     expect(nukeCommand.contexts).toEqual([0]); // InteractionContextType.Guild only, never a DM context
     expect(nukeCommand.default_member_permissions).toBe(String(PermissionsBitField.Flags.ManageGuild));
     expect(executionMap.get("nuke")?.has(ROOT_COMMAND_EXECUTION_KEY)).toBe(true);
-  });
-
-  it("does not register /server nuke as a subcommand", async () => {
-    const { executionMap } = await loadCommandData();
-
-    const serverCommands = executionMap.get("server");
-    expect(serverCommands).toBeDefined();
-    if (!serverCommands) return;
-
-    expect(serverCommands.has("nuke")).toBe(false);
-  });
-
-  it("does not disturb the parent /server root", async () => {
-    const { registrationData } = await loadCommandData();
-
-    const serverCommand = registrationData.find((cmd) => cmd.name === "server") as unknown as
-      | RegistrationPayload
-      | undefined;
-
-    expect(serverCommand).toBeDefined();
-    if (!serverCommand) return;
-
-    expect(serverCommand.contexts).toEqual([0]);
-    expect(serverCommand.default_member_permissions).toBe(String(PermissionsBitField.Flags.ManageGuild));
   });
 
   it("resolves the description correctly in both en-US and ja", () => {

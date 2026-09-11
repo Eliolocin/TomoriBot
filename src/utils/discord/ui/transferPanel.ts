@@ -139,7 +139,7 @@ export function formatConfigSectionLabels(locale: string, sections: readonly str
 
 function configKindLabelKey(kind: ConfigTransferKind): string {
   return kind === "workspace_config"
-    ? "commands.transfer.workspace_config_label"
+    ? "commands.transfer.server_config_label"
     : "commands.transfer.personal_config_label";
 }
 
@@ -387,7 +387,7 @@ export function buildMemoryTransferPreviewPayload(input: {
     .join("\n");
   const ownershipLabelKey =
     input.kind === "workspace_memories"
-      ? "commands.transfer.workspace_memories_label"
+      ? "commands.transfer.server_memories_label"
       : "commands.transfer.personal_memories_label";
   const description = safeUserText(
     localizer(input.locale, "commands.transfer.memory_preview_description", {
@@ -403,7 +403,7 @@ export function buildMemoryTransferPreviewPayload(input: {
             input.locale,
             input.kind === "workspace_memories"
               ? "commands.transfer.personal_memories_label"
-              : "commands.transfer.workspace_memories_label",
+              : "commands.transfer.server_memories_label",
           ),
         }),
         localizer(input.locale, "commands.transfer.memory_cross_ownership_destination_line", {

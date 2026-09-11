@@ -5,8 +5,8 @@ sidebar:
 ---
 
 TomoriBot gives server admins controls over how she behaves in your server — who can use her,
-where, and how much she costs — through the `/server` commands. Most require the **Manage
-Server** permission. This page covers the highlights; every command is in the
+where, and how much she costs — through the `/config` panel and its related commands. Most require
+the **Manage Server** permission. This page covers the highlights; every command is in the
 [Command Reference](/features/command-reference/).
 
 ## Cost Control: Quotas

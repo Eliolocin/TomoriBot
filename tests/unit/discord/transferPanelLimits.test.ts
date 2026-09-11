@@ -569,7 +569,7 @@ describe("transfer panel Components V2 limits", () => {
     const buckets = makeMemoryBuckets(2);
     const noticeVars = {
       source: localizer("en-US", "commands.transfer.personal_memories_label"),
-      destination: localizer("en-US", "commands.transfer.workspace_memories_label"),
+      destination: localizer("en-US", "commands.transfer.server_memories_label"),
     };
 
     const sameOwnership = buildMemoryTransferPreviewPayload({

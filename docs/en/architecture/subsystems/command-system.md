@@ -121,7 +121,7 @@ Root command modules export:
 
 Grouped commands are represented by folders:
 
-- `src/commands/server/config/export.ts` -> `/server config export`
+- `src/commands/export/personal/config.ts` -> `/export personal config`
 
 Model and provider flows that still call `promptForSavedProvider()` use one shared initial
 provider-selection embed. Model-selection callers pass the effective slot selection so
@@ -217,8 +217,8 @@ Key pattern:
 
 Example path:
 
-- file: `src/commands/memory/server/export.ts`
-- command path: `memory.server.export`
+- file: `src/commands/export/personal/config.ts`
+- command path: `export.personal.config`
 
 Root command example:
 
@@ -1010,7 +1010,9 @@ than an invocation-scoped modal collector, so a supported open modal can survive
 - `novelai`: generate(image)
 - `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove, image-tags, sprites(add/edit/remove/export/import), attribute(add/edit/remove), sample-dialogue(add/edit/remove), prompt(set/remove), history(import/remove)
-- `memory`: document(add/remove), personal(add/edit/remove/import/export), server(add/edit/remove/import/export)
+- `memory`: document(add/remove)
+- `export`: config, memories, personal(config/memories)
+- `import`: config, memories, personal(config/memories)
 - `personal`: privacy, language, nickname, image-tags, cache, config(import/export/remove), provider(add/remove/model-text/model-embedding/model-image/model-video/model-vision/toggle-models), model(fallback), parameters, impersonate(prompt), spotlight(set/manage)
 - `scheduled-task`: edit, remove
 - `conditioning`: manage, reward(headpat/hug/kiss/tickle), punish(spank/pinch/bite/squeeze)

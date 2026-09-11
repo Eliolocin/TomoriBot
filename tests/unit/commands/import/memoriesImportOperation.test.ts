@@ -470,7 +470,7 @@ describe("memory import operation", () => {
     );
     expect(previewText).toContain(
       localizer(LOCALE, "commands.transfer.memory_cross_ownership_destination_line", {
-        destination: localizer(LOCALE, "commands.transfer.workspace_memories_label"),
+        destination: localizer(LOCALE, "commands.transfer.server_memories_label"),
       }),
     );
 
@@ -487,7 +487,7 @@ describe("memory import operation", () => {
     const personalPreviewText = collectText(personalDeps.calls.previews[0]);
     expect(personalPreviewText).toContain(
       localizer(LOCALE, "commands.transfer.memory_cross_ownership_source_line", {
-        source: localizer(LOCALE, "commands.transfer.workspace_memories_label"),
+        source: localizer(LOCALE, "commands.transfer.server_memories_label"),
       }),
     );
     expect(personalPreviewText).toContain(
@@ -534,7 +534,7 @@ describe("memory import operation", () => {
     expect(ownLeafDeps.calls.snapshots).toHaveLength(1);
     expect(collectText(ownLeafDeps.calls.previews[0])).not.toContain(
       localizer(LOCALE, "commands.transfer.memory_cross_ownership_notice", {
-        source: localizer(LOCALE, "commands.transfer.workspace_memories_label"),
+        source: localizer(LOCALE, "commands.transfer.server_memories_label"),
         destination: localizer(LOCALE, "commands.transfer.personal_memories_label"),
       }),
     );
@@ -590,7 +590,7 @@ describe("memory import operation", () => {
     });
     expect(collectText(crossScopeDeps.calls.previews[0])).toContain(
       localizer(LOCALE, "commands.transfer.memory_cross_ownership_source_line", {
-        source: localizer(LOCALE, "commands.transfer.workspace_memories_label"),
+        source: localizer(LOCALE, "commands.transfer.server_memories_label"),
       }),
     );
 

@@ -115,7 +115,7 @@ export default {
       provider_overloaded_wait: `The provider is under heavy load right now. Try again shortly or switch providers.`,
       nsfw_jailbreaks: `Turn on \`/nsfw jailbreaks\` to help prevent this filter.`,
       review_messages: `Review recent messages, or clear them with \`/refresh\`.`,
-      review_memories: `Check your memories and config (\`/memory personal export\`, \`/memory server export\`, \`/server config export\`).`,
+      review_memories: `Check your memories and config (\`/export personal memories\`, \`/export memories\`, \`/export config\`).`,
       blacklist_member: `Blacklist a problematic member with \`/moderation\`.`,
     },
     google: {
@@ -225,10 +225,10 @@ The selected model requires allowing data for paid model training, but your Open
 \`\`\`
 {memory_content}
 \`\`\``,
-      server_memory_footer: `Server managers can manage this memory using \`/memory server\`.`,
+      server_memory_footer: `Server managers can manage this memory using \`/memories\`.`,
       personal_memory_footer_manage: `You can manage your personal memories using \`/personal memories\`.`,
-      personal_memory_footer_personalization_disabled: `This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Use \`/memory personal export\` to view it. You can opt out with \`/personal config\`.`,
-      personal_memory_footer_user_blacklisted: `This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here. Use \`/memory personal export\` to view it. You can opt out with \`/personal config\`.`,
+      personal_memory_footer_personalization_disabled: `This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Use \`/export personal memories\` to view it. You can opt out with \`/personal config\`.`,
+      personal_memory_footer_user_blacklisted: `This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here. Use \`/export personal memories\` to view it. You can opt out with \`/personal config\`.`,
       expand_memory_button: `Show Full Memory`,
       expand_memory_title: `Full Memory Content`,
     },

@@ -943,7 +943,7 @@ describe("config Persona General collections", () => {
       })?.disabled,
     ).toBe(true);
     expect(
-      seen.filter((component) => component.content === "-# Member teaching is disabled in this workspace."),
+      seen.filter((component) => component.content === "-# Member teaching is disabled in this server."),
     ).toHaveLength(2);
   });
 
@@ -1098,7 +1098,7 @@ describe("config Persona General collections", () => {
         fp: dialogueFingerprint,
       })?.disabled,
     ).toBe(false);
-    expect(seen.some((component) => component.content === "-# Member teaching is disabled in this workspace.")).toBe(
+    expect(seen.some((component) => component.content === "-# Member teaching is disabled in this server.")).toBe(
       false,
     );
   });

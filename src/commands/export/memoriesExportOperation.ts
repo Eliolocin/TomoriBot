@@ -83,7 +83,7 @@ function memoryExportSelectionValues(scope: MemoryExportScope): readonly string[
 
 function memoryExportTypeLabelKey(scope: MemoryExportScope): string {
   return scope === "workspace"
-    ? "commands.transfer.workspace_memories_label"
+    ? "commands.transfer.server_memories_label"
     : "commands.transfer.personal_memories_label";
 }
 

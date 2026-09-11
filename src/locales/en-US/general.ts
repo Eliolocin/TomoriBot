@@ -198,7 +198,7 @@
   events: {
     addBot: {
       rejoin_title: `I'm Back!`,
-      rejoin_description: `Looks like I was re-added to this server. Existing settings and personas are still intact. Use \`/config\`, \`/persona\`, \`/memory\`, \`/server\`, and \`/providers\` to review or change them.{legalNotice}`,
+      rejoin_description: `Looks like I was re-added to this server. Existing settings and personas are still intact. Use \`/config\`, \`/persona\`, \`/memories\`, and \`/providers\` to review or change them.{legalNotice}`,
       setup_prompt_title: `Successfully Added`,
       setup_prompt_description: `Thanks for adding me. To start, someone with **Manage Server** permission should run \`/setup\` to choose the initial persona and provider. Open \`/help\` to **Setup**, then **Step 1: Get an API Key**, or read the official [short guide](https://docs.tomoribot.app/en/introduction/quickstart/).
 

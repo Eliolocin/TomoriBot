@@ -35,17 +35,17 @@ TomoriBotはデータに対して透明性を持つように設計されてい�
 
 エクスポート可能なすべてのデータは、JSONファイルとしてDMに送信されます。
 
-- `/memory personal export`：個人のメモリー（1つのペルソナのスコープ、またはグローバルスコープ）。
-- `/memory server export`：選択したペルソナのサーバーメモリー。
-- `/server config export`：サーバーの設定値（APIキーやトリガーは含まれません）。
+- `/export personal memories`：個人のメモリー（1つのペルソナのスコープ、またはグローバルスコープ）。
+- `/export memories`：選択したペルソナのサーバーメモリー。
+- `/export config`：サーバーの設定値（APIキーやトリガーは含まれません）。
 - `/persona export`：完全なペルソナの定義。
 
 ## データのインポート
 
 以前にエクスポートしたファイルを添付して復元します。
 
-- `/memory personal import`, `/memory server import`：ファイルタイプは自動的に検出されます。ターゲットのペルソナまたはグローバルスコープを選択します。
-- `/server config import`：サーバーのインポートには**サーバー管理**権限が必要です。
+- `/import personal memories`, `/import memories`：ファイルタイプは自動的に検出されます。ターゲットのペルソナまたはグローバルスコープを選択します。
+- `/import config`：サーバーのインポートには**サーバー管理**権限が必要です。
 - `/persona import`：ペルソナを復元します（SillyTavernカードのインポートも可能です。[SillyTavernサポート](/ja/features/integrations/sillytavern-support/)を参照）。
 
 ## データの削除

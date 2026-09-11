@@ -14,7 +14,7 @@ export const managerOnly = true;
  * Completely wipes a server's settings and data, optionally preserving personas.
  *
  * Options:
- *  - `confirmation` (required, yes/no): mirrors the `/server config import` safety gate.
+ *  - `confirmation` (required, yes/no): mirrors the `/import config` safety gate.
  *  - `preserve_personas` (optional, default false): keep personas + their subtree.
  */
 export const configureCommand = (command: SlashCommandBuilder) =>

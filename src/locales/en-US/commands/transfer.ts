@@ -20,7 +20,7 @@ export default {
     config_import_failed_description: "The configuration was not applied.",
     config_preview_title: "Review Configuration Import",
     config_preview_description: "Detected data is ready to import as a {ownership}.",
-    workspace_config_label: "server configuration",
+    server_config_label: "server configuration",
     personal_config_label: "personal configuration",
     detected_sections_heading: "Detected sections",
     detected_sections_none: "No portable sections were detected.",
@@ -60,7 +60,7 @@ export default {
     section_appearance_description: "Personal appearance settings.",
     section_response_modes_label: "Response Modes",
     section_response_modes_description: "Personal response mode settings.",
-    workspace_memories_label: "server memories",
+    server_memories_label: "server memories",
     personal_memories_label: "personal memories",
     memory_export_dm_description:
       "Your {type} export is attached.\nDocuments and personas are not included in this file.",

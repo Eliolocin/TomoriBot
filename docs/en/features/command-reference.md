@@ -11,7 +11,7 @@ sidebar:
 
 Every slash command currently registered by TomoriBot, generated from the same command builders and English locale descriptions used for Discord registration.
 
-Top-level command groups: **41**. Runnable slash commands: **84**.
+Top-level command groups: **39**. Runnable slash commands: **78**.
 
 ## `/comment`
 
@@ -165,17 +165,6 @@ Inspect and manage server memories, documents, and short-term memory.
 |---|---|
 | `/memories` | Inspect and manage server memories, documents, and short-term memory. |
 
-## `/memory`
-
-Manage stored memories and documents.
-
-| Command | Summary |
-|---|---|
-| `/memory personal export` | Export personal memories to JSON. |
-| `/memory personal import` | Import personal memories from JSON. |
-| `/memory server export` | Export server memories to JSON. |
-| `/memory server import` | Import server memories from JSON. |
-
 ## `/model`
 
 Manage this server's default AI models.
@@ -321,15 +310,6 @@ Manage scheduled tasks and reminders.
 |---|---|
 | `/scheduled-task edit` | Edit a scheduled task or reminder. |
 | `/scheduled-task remove` | Remove a scheduled task or reminder. |
-
-## `/server`
-
-Manage server-wide settings, channels, permissions, and integrations.
-
-| Command | Summary |
-|---|---|
-| `/server config export` | Export this server's settings, excluding memories, personas, and personal settings. |
-| `/server config import` | Import server settings. Does not import memories, personas, or personal settings. |
 
 ## `/setup`
 

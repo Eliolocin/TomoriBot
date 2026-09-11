@@ -1,11 +1,15 @@
 /**
  * Asserts that the four migrated roots (/expressions, /matrix, /punish, /reward)
  * carry the restrictions they inherited from their old categories, and that the
- * old paths are gone from /server and /conditioning.
+ * old paths are gone from /conditioning.
  *
  * Note: setContexts establishes a hard platform boundary (where Discord shows the command),
  * while setDefaultMemberPermissions is an admin-overridable authorization default.
  * These assertions test what is REGISTERED, not what is strictly enforced.
+ *
+ * The former /server check here (expressions/matrix not leaking into it) is gone: /server itself
+ * dissolved once its own last leaves moved to /export and /import, and that dissolution is asserted
+ * once, for every fully dissolved root, by configRegistration.test.ts's DISSOLVED_ROOTS list.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
 import { loadCommandData } from "@/utils/discord/commandLoader";
@@ -19,7 +23,7 @@ type RegistrationPayload = {
   default_member_permissions?: string;
 };
 
-describe("Wave 1 slice 2 command registration restrictions", () => {
+describe("/expressions, /matrix, /punish, /reward, /conditioning registration restrictions", () => {
   it("registers /expressions and /matrix as guild-only and manager-only", async () => {
     const { registrationData } = await loadCommandData();
 
@@ -61,28 +65,6 @@ describe("Wave 1 slice 2 command registration restrictions", () => {
     // NO manager default on /punish and /reward
     expect(punishCommand.default_member_permissions).toBeUndefined();
     expect(rewardCommand.default_member_permissions).toBeUndefined();
-  });
-
-  it("registers /server with correct restrictions and without expressions or matrix paths", async () => {
-    const { registrationData, executionMap } = await loadCommandData();
-    const serverCommand = registrationData.find((cmd) => cmd.name === "server") as unknown as
-      | RegistrationPayload
-      | undefined;
-
-    expect(serverCommand).toBeDefined();
-    if (!serverCommand) return;
-
-    expect(serverCommand.contexts).toEqual([0]);
-    expect(serverCommand.default_member_permissions).toBe("32");
-
-    const serverExec = executionMap.get("server");
-    expect(serverExec).toBeDefined();
-    if (!serverExec) return;
-
-    const hasExpressions = Array.from(serverExec.keys()).some((k) => k.startsWith("expressions."));
-    const hasMatrix = Array.from(serverExec.keys()).some((k) => k.startsWith("matrix."));
-    expect(hasExpressions).toBe(false);
-    expect(hasMatrix).toBe(false);
   });
 
   it("registers /conditioning with correct restrictions and without punish or reward paths", async () => {

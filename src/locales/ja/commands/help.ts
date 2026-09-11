@@ -289,7 +289,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - 個人的な記憶は全サーバーで保持されます（他のサーバーでも私に話しかけてみて！）
 - 最近の会話は[STM（短期記憶）](https://docs.tomoribot.app/ja/features/knowledge/memory/#short-term-memory-stm)として保持し、チャンネルやサーバーをまたいで文脈を把握します（クロスサーバー共有は\`/personal config\`でオプトインできます）
 - \`/personal config\`であなたを呼ぶ名前を変更できます
-- \`/memory\` と \`/persona\` コマンドで手動で記憶やペルソナ情報を追加・削除できます
+- \`/memories\` と \`/persona\` コマンドで手動で記憶やペルソナ情報を追加・削除できます
 - \`/expressions initialize\`で絵文字やステッカーを登録すると、より適切な場面で使えるようになります
 - \`/personal config\`で完全に見えなくなるオプションが利用可能です
 - 詳しくは\`/help\`内の **永続メモリ** ページをご覧ください`,
@@ -356,7 +356,7 @@ GPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM
 - {serverAutotrigger}で自動トリガーを設定し、メンションなしでチャットできます`,
       step4_title: `ステップ4：TomoriBotをカスタマイズ（任意）`,
       step4_description: `- {persona}コマンドで私のパーソナリティを完全に変更（アルターペルソナも含む！）
-- {server}、{personal}、{memory}、{config}コマンドで設定を調整
+- {personal}、{memory}、{config}コマンドで設定を調整
 - {memory}で記憶やドキュメント、{persona}で振る舞いを調整できます
 - ドキュメントアップロード、APIキーローテーション、検閲なしモードなどの高度な機能も探してみてください`,
       need_help_title: `ヘルプが必要ですか？`,
@@ -898,7 +898,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 
 ---
 
-## サーバー設定（\`/server\`）
+## サーバー設定
 サーバー全体の設定と動作：
 
 **学習＆プライバシー：**

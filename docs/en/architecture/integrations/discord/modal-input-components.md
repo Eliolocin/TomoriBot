@@ -701,7 +701,7 @@ These modals collect free-form text and have no structured option set:
 | `/server trigger add`      | `server/trigger/add.ts`       | Free-form text fields (word, response, cooldown)        |
 | `/server avatar`           | `server/avatar.ts`            | Persona select + optional file upload                   |
 | `/comment`                 | `comment.ts`                  | Free-form paragraph text                                |
-| `/memory personal import`  | `memory/personal/import.ts`   | File upload only                                        |
+| `/import personal memories` | `import/personal/memories.ts` | File upload only                                      |
 
 ### Provider Select To Model Modal
 

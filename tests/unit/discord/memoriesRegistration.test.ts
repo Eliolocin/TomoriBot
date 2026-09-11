@@ -31,7 +31,7 @@ function findRegistration(
   return registrationData.find((command) => command.name === name) as unknown as RegistrationPayload | undefined;
 }
 
-describe("Wave 5 /memories registration restrictions", () => {
+describe("/memories registration restrictions", () => {
   it("registers /memories with no manager default and no context restriction", async () => {
     const { registrationData } = await loadCommandData();
     const memories = findRegistration(registrationData, "memories");
@@ -49,30 +49,10 @@ describe("Wave 5 /memories registration restrictions", () => {
     expect([...(executionMap.get("memories")?.keys() ?? [])]).toEqual([ROOT_COMMAND_EXECUTION_KEY]);
   }, 30000);
 
-  it("dissolves legacy workspace memory leaves while retaining the transfer leaves", async () => {
-    const { executionMap } = await loadCommandData();
-    const memory = executionMap.get("memory");
-    const server = executionMap.get("server");
-
-    expect(memory).toBeDefined();
-    expect(server).toBeDefined();
-    if (!memory || !server) return;
-
-    for (const key of ["server.add", "server.edit", "server.remove", "server.vectorize"]) {
-      expect(memory.has(key)).toBe(false);
-    }
-    for (const key of ["document.add", "document.remove", "document.view", "history.remove"]) {
-      expect(memory.has(key)).toBe(false);
-    }
-    expect(server.has("stm.manage")).toBe(false);
-
-    for (const key of ["personal.export", "personal.import", "server.export", "server.import"]) {
-      expect(memory.has(key)).toBe(true);
-    }
-    // `memory tagging set` and the four `server stm` leaves were absorbed into the `/config` panel by
-    // the Wave 6 cutover. Their dissolution is asserted in configRegistration.test.ts, which owns
-    // loader topology, so this Wave 5 file no longer claims they are retained.
-  }, 30000);
+  // The legacy `/memory` root this Wave 5 slice partially dissolved (CRUD gone, transfer leaves kept)
+  // is now gone outright: the transfer leaves it retained moved to /export and /import in Wave 7,
+  // leaving no enabled subcommand behind. Full dissolution of a root is asserted once, for every such
+  // root, by configRegistration.test.ts's DISSOLVED_ROOTS list, so this file no longer restates it.
 });
 
 /**
@@ -80,7 +60,7 @@ describe("Wave 5 /memories registration restrictions", () => {
  * covers it is one a later sub-slice may edit. This copy sits in the planner-owned file so the
  * permission cannot be relaxed by the same change that rewrites its assertion.
  */
-describe("Wave 5 /memories Short-Term manager gate", () => {
+describe("/memories Short-Term manager gate", () => {
   const entries = [
     { channelId: "12345678901234567", personaId: 10, personaName: "Sparrow", lastUpdated: 2 },
     { channelId: "12345678901234568", personaId: null, personaName: "Unscoped", lastUpdated: 1 },
