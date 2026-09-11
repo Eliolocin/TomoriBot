@@ -17,6 +17,7 @@ import { z } from "zod";
 import type { PersonaSpriteRow } from "@/types/db/schema";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import { log } from "@/utils/misc/logger";
+import { getDeclaredUncompressedSize, resolveZipEntryFile } from "@/utils/zip/zipEntryGuards";
 
 /** Current archive format version. Bump when the manifest shape changes. */
 const SPRITE_ARCHIVE_VERSION = 1;
@@ -234,7 +235,7 @@ export async function readSpriteArchive(
   const entries: SpriteArchiveReadEntry[] = [];
   let totalBytes = 0;
   for (const meta of manifest.sprites) {
-    const imageFile = resolveImageFile(zip, meta.file);
+    const imageFile = resolveZipEntryFile(zip, meta.file);
     if (!imageFile) {
       return { ok: false, reason: "missing_image" };
     }
@@ -291,63 +292,5 @@ function buildUniqueImageFilename(sprite: PersonaSpriteRow, index: number, used:
 
 /** Finds the manifest file regardless of casing or a wrapping folder. */
 function findManifestFile(zip: JSZip): JSZip.JSZipObject | null {
-  const direct = zip.file(SPRITE_ARCHIVE_MANIFEST_NAME);
-  if (direct) {
-    return direct;
-  }
-
-  const lowerTarget = SPRITE_ARCHIVE_MANIFEST_NAME.toLowerCase();
-  for (const [name, file] of Object.entries(zip.files)) {
-    if (file.dir) {
-      continue;
-    }
-    const basename = name.split("/").pop()?.toLowerCase();
-    if (basename === lowerTarget) {
-      return file;
-    }
-  }
-  return null;
-}
-
-/**
- * Resolves a manifest-declared image path to its zip entry.
- * Rejects path-traversal-style references defensively (we never write these to
- * disk, but a malformed path should fail cleanly rather than mis-resolve).
- */
-function resolveImageFile(zip: JSZip, declaredPath: string): JSZip.JSZipObject | null {
-  if (declaredPath.includes("..") || declaredPath.startsWith("/") || declaredPath.includes("\\")) {
-    return null;
-  }
-
-  const direct = zip.file(declaredPath);
-  if (direct && !direct.dir) {
-    return direct;
-  }
-
-  const lowerTarget = declaredPath.split("/").pop()?.toLowerCase();
-  if (!lowerTarget) {
-    return null;
-  }
-  for (const [name, file] of Object.entries(zip.files)) {
-    if (file.dir) {
-      continue;
-    }
-    if (name.split("/").pop()?.toLowerCase() === lowerTarget) {
-      return file;
-    }
-  }
-  return null;
-}
-
-/**
- * Reads JSZip's declared uncompressed size for an entry without decompressing.
- * This is an internal JSZip field, so it is accessed defensively and returns
- * null when unavailable (callers then fall back to a post-read size check).
- */
-function getDeclaredUncompressedSize(file: JSZip.JSZipObject): number | null {
-  const internal = file as unknown as {
-    _data?: { uncompressedSize?: number };
-  };
-  const size = internal._data?.uncompressedSize;
-  return typeof size === "number" && Number.isFinite(size) ? size : null;
+  return resolveZipEntryFile(zip, SPRITE_ARCHIVE_MANIFEST_NAME);
 }

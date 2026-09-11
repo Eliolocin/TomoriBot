@@ -55,7 +55,8 @@ Attach a previously exported file to restore it:
 - `/import personal config` — your personal settings. Choose which detected sections to apply.
 - `/import memories` — server memories; requires **Manage Server**. Merge or replace, and map each source persona if the file has more than one.
 - `/import personal memories` — your personal memories. Merge or replace, and map each source persona if the file has more than one.
-- `/persona import` — restore a persona (also imports SillyTavern cards — see
+- `/persona import` — restore a persona. It also accepts PNG and JSON SillyTavern cards and
+  `.charx` Character Card V3 archives, which import the character text only (see
   [SillyTavern Support](/features/integrations/sillytavern-support/)).
 
 ## Delete Your Data

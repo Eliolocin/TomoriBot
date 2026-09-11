@@ -22,23 +22,36 @@ import { dedupeTriggerWords, parseTriggerWordListInput } from "@/utils/text/trig
 import { uploadPersonaAvatarToStorage } from "../../utils/storage/avatarStorage";
 import { isAvatarUpdateRateLimited } from "@/utils/discord/avatarRateLimit";
 import { importAlterPreset } from "@/utils/persona/importAlterPreset";
+import { readCharxCard, type CharxReadFailureReason } from "@/utils/persona/charxArchive";
 import {
   cleanupMainPersonaSpritesAfterImport,
   snapshotMainPersonaSprites,
 } from "@/utils/persona/mainImportSpriteCleanup";
 
-/**
- * Maximum file size for imports (uses centralized constant)
- */
+/** Maximum file size for imports (uses centralized constant). */
 const MAX_FILE_SIZE = IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB * 1024 * 1024;
+/**
+ * A `.charx` archive gets its own, separately configured bound: its compressed
+ * size says nothing about the asset tree it expands to, so the reader's own
+ * declared-size guards are what hold that line.
+ */
+const MAX_ARCHIVE_FILE_SIZE = IMPORT_LIMITS.MAX_CHARX_IMPORT_SIZE_MB * 1024 * 1024;
+/** Byte budget for the `card.json` payload the archive reader will decompress. */
+const MAX_CHARX_CARD_BYTES = IMPORT_LIMITS.MAX_CHARX_CARD_SIZE_MB * 1024 * 1024;
+const MAX_CHARX_ASSET_TOTAL_BYTES = IMPORT_LIMITS.MAX_CHARX_ASSET_TOTAL_MB * 1024 * 1024;
 const MAX_SILLY_TAVERN_DEBUG_BYTES = 1_000_000;
 
-type PersonaImportSource = "tomori-png" | "tomori-json" | "sillytavern-png" | "sillytavern-json";
+type PersonaImportSource = "tomori-png" | "tomori-json" | "sillytavern-png" | "sillytavern-json" | "charx";
 
 type ResolvedImportFile = {
   avatarImageBuffer: Buffer | null;
   presetData: PresetExportData;
   source: PersonaImportSource;
+  /**
+   * Embedded assets the archive carried but the import does not read. Reported
+   * in the success embed so the omission is stated rather than discovered.
+   */
+  ignoredAssetCount?: number;
 };
 
 function truncateBufferForAttachment(buffer: Buffer, maxBytes: number, noticeText: string): Buffer {
@@ -95,6 +108,45 @@ function parseJsonAttachment(buffer: Buffer): unknown {
 
 function parseCommaSeparatedTriggers(input: string): string[] {
   return parseTriggerWordListInput(input, { lowercase: false });
+}
+
+/**
+ * Maps a `.charx` container failure to its reply text.
+ *
+ * The two unreadable-container reasons share one message: from the reader's
+ * side they are the same problem, and the distinction is a detail of the zip.
+ */
+function localizeCharxFailure(locale: string, reason: CharxReadFailureReason): string {
+  switch (reason) {
+    case "invalid_zip":
+    case "missing_card":
+    case "invalid_card":
+      return localizer(locale, "commands.persona.import.invalid_charx_description");
+    case "not_character_card":
+      return localizer(locale, "commands.persona.import.charx_not_card_description");
+    case "card_too_large":
+      return localizer(locale, "commands.persona.import.charx_too_large_description", {
+        max_size: IMPORT_LIMITS.MAX_CHARX_CARD_SIZE_MB,
+      });
+    case "assets_too_large":
+      return localizer(locale, "commands.persona.import.charx_assets_too_large_description");
+  }
+}
+
+/** Replies with the `.charx` container failure that stopped the import. */
+async function replyInvalidCharx(
+  interaction: ChatInputCommandInteraction,
+  locale: string,
+  reason: CharxReadFailureReason,
+): Promise<void> {
+  await interaction.editReply({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle(localizer(locale, "commands.persona.import.invalid_charx_title"))
+        .setDescription(localizeCharxFailure(locale, reason))
+        .setColor(ColorCode.ERROR),
+    ],
+  });
 }
 
 /**
@@ -276,8 +328,9 @@ export async function execute(
     const normalizedAttachmentName = attachment.name.toLowerCase();
     const isPngImport = normalizedAttachmentName.endsWith(".png");
     const isJsonImport = normalizedAttachmentName.endsWith(".json");
+    const isCharxImport = normalizedAttachmentName.endsWith(".charx");
 
-    if (!isPngImport && !isJsonImport) {
+    if (!isPngImport && !isJsonImport && !isCharxImport) {
       await replyInfoEmbed(
         interaction,
         locale,
@@ -291,7 +344,8 @@ export async function execute(
       return;
     }
 
-    if (attachment.size > MAX_FILE_SIZE) {
+    const maxFileSize = isCharxImport ? MAX_ARCHIVE_FILE_SIZE : MAX_FILE_SIZE;
+    if (attachment.size > maxFileSize) {
       await replyInfoEmbed(
         interaction,
         locale,
@@ -345,7 +399,7 @@ export async function execute(
 
     try {
       const response = await safeDownload(attachment.url, {
-        maxSizeMB: IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB,
+        maxSizeMB: isCharxImport ? IMPORT_LIMITS.MAX_CHARX_IMPORT_SIZE_MB : IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB,
         timeoutMs: 15_000,
         knownSize: attachment.size,
       });
@@ -382,7 +436,63 @@ export async function execute(
 
     let resolvedImport: ResolvedImportFile | null = null;
 
-    if (isPngImport) {
+    if (isCharxImport) {
+      // A `.charx` is a zip around a card that is already V2-shaped in every
+      // field this converter reads, so unwrapping the container is the whole
+      // job and the existing converter stays untouched.
+      const archive = await readCharxCard(importFileBuffer, {
+        maxCardBytes: MAX_CHARX_CARD_BYTES,
+        maxAssets: IMPORT_LIMITS.MAX_CHARX_ASSETS,
+        maxTotalAssetBytes: MAX_CHARX_ASSET_TOTAL_BYTES,
+      });
+
+      if (!archive.ok) {
+        log.warn(`Persona import rejected a .charx archive: ${archive.reason}`);
+        await replyInvalidCharx(interaction, locale, archive.reason);
+        return;
+      }
+
+      const conversion = presetRepository.convertSillyTavernJsonToPresetData(archive.card);
+      if (!conversion.success) {
+        const debugText = buildSillyTavernDebugText({
+          conversionError: conversion.error,
+          parsedJson: archive.card,
+          sourceLabel: "CHARX card.json",
+        });
+        const debugBuffer = truncateBufferForAttachment(
+          Buffer.from(debugText, "utf8"),
+          MAX_SILLY_TAVERN_DEBUG_BYTES,
+          "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
+        );
+        const debugFilename = `sillytavern-charx-decode-${Date.now()}.txt`;
+        const debugAttachment = new AttachmentBuilder(debugBuffer, {
+          name: debugFilename,
+        });
+
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("SillyTavern card detected (conversion failed)")
+              .setDescription(
+                "SillyTavern-style `card.json` was decoded from the archive, but conversion to Tomori format failed. The decoded payload is attached for inspection.",
+              )
+              .setColor(ColorCode.WARN),
+          ],
+          files: [debugAttachment],
+        });
+        return;
+      }
+
+      resolvedImport = {
+        avatarImageBuffer: null,
+        presetData: conversion.data,
+        source: "charx",
+        ignoredAssetCount: archive.ignoredAssetCount,
+      };
+      log.info(
+        `[Persona Import] Converted Character Card V3 archive to preset format for "${conversion.data.tomori_nickname}" (ignored ${archive.ignoredAssetCount} embedded asset(s))`,
+      );
+    } else if (isPngImport) {
       const pngValidation = validatePNGBuffer(importFileBuffer, MAX_FILE_SIZE);
       if (!pngValidation.isValid) {
         log.warn(`Invalid PNG buffer during preset import: ${pngValidation.error}`);
@@ -795,6 +905,10 @@ export async function execute(
         );
       }
 
+      if ((resolvedImport.ignoredAssetCount ?? 0) > 0) {
+        descriptionLines.push(localizer(locale, "commands.persona.import.charx_assets_ignored_description"));
+      }
+
       if (nicknameUpdateRateLimited || nicknameUpdateFailed) {
         descriptionLines.push(localizer(locale, "commands.persona.import.nickname_update_failed"));
       } else if (nicknameUpdateSucceeded) {
@@ -961,6 +1075,11 @@ export async function execute(
       }
       if (alterResult.hasNoTriggers) {
         alterDescriptionParts.push(`\n\n${localizer(locale, "commands.persona.import.alter_no_triggers_warning")}`);
+      }
+      if ((resolvedImport.ignoredAssetCount ?? 0) > 0) {
+        alterDescriptionParts.push(
+          `\n\n${localizer(locale, "commands.persona.import.charx_assets_ignored_description")}`,
+        );
       }
 
       const alterSuccessEmbed = new EmbedBuilder()
