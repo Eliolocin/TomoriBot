@@ -25,7 +25,13 @@ accepts:
 
 - **PNG cards** with embedded `chara` / `char` metadata,
 - **v2-style JSON** cards (root-level `name`, `description`, `first_mes`, …),
-- **v3 JSON** cards (`spec: "chara_card_v3"` with a nested `data` object).
+- **v3 JSON** cards (`spec: "chara_card_v3"` with a nested `data` object),
+- **`.charx` archives** (Character Card V3, the format card sites hand out by default).
+
+A `.charx` file is a zip whose `card.json` holds the character. TomoriBot reads that card and
+ignores everything else in the archive: bundled icons, emotion sprites, audio, and video are not
+imported, and the import reply says so. Set an avatar with `/server avatar` and add sprites under
+`/config` > Persona > Sprites.
 
 If the file has no TomoriBot metadata but is a valid ST v2/v3 card, import automatically runs
 it through the SillyTavern conversion flow. You can also feed a card to `/persona generate` to
@@ -33,8 +39,10 @@ transform it into a fresh persona.
 
 Imports pass through a validation schema before anything is saved (default caps: 5,000
 characters per string, 200 attributes, 100 sample dialogues per side, 100 trigger words —
-self-hosters can tune the `PRESET_MAX_*` env vars). For the exact conversion and field
-mapping, see the [card-support architecture](/architecture/integrations/sillytavern/card-support/).
+self-hosters can tune the `PRESET_MAX_*` env vars). Archive reads are separately bounded by the
+`MAX_CHARX_*` env vars, because an archive's compressed size says nothing about what it expands
+to. For the exact conversion and field mapping, see the
+[card-support architecture](/architecture/integrations/sillytavern/card-support/).
 
 ## Prompt Presets
 

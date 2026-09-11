@@ -89,6 +89,37 @@ export const IMPORT_LIMITS = {
    * @default 10 MB
    */
   MAX_PERSONA_IMPORT_SIZE_MB: Number.parseInt(process.env.MAX_PERSONA_IMPORT_SIZE_MB || "10", 10),
+
+  /**
+   * Maximum compressed size for a Character Card V3 (`.charx`) archive. An
+   * archive carries an asset tree whose expanded size the download bound cannot
+   * describe, so this value is a separate knob from the PNG/JSON bound.
+   * @default 10 MB
+   */
+  MAX_CHARX_IMPORT_SIZE_MB: Number.parseInt(process.env.MAX_CHARX_IMPORT_SIZE_MB || "10", 10),
+
+  /**
+   * Maximum decompressed size of the `card.json` payload inside a `.charx`
+   * archive. Only the card is decompressed; this bound is what stops a
+   * compressed bomb from spending memory on the one entry that is read.
+   * @default 4 MB
+   */
+  MAX_CHARX_CARD_SIZE_MB: Number.parseInt(process.env.MAX_CHARX_CARD_SIZE_MB || "4", 10),
+
+  /**
+   * Maximum number of assets a `.charx` card may declare before the import is
+   * refused. Assets are not imported, so this only bounds the header scan.
+   * @default 500
+   */
+  MAX_CHARX_ASSETS: Number.parseInt(process.env.MAX_CHARX_ASSETS || "500", 10),
+
+  /**
+   * Maximum declared total size of a `.charx` card's embedded assets. Sizes come
+   * from the zip central directory, so a hostile tree is refused without being
+   * decompressed.
+   * @default 256 MB
+   */
+  MAX_CHARX_ASSET_TOTAL_MB: Number.parseInt(process.env.MAX_CHARX_ASSET_TOTAL_MB || "256", 10),
 } as const;
 
 export const PERSONA_RATE_LIMITS = {
@@ -770,6 +801,8 @@ export function logGuardConfiguration(): void {
   log.info("\n--- Import Limits ---");
   log.info(`Max Data Import Size: ${IMPORT_LIMITS.MAX_DATA_IMPORT_SIZE_MB} MB`);
   log.info(`Max Persona Import Size: ${IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB} MB`);
+  log.info(`Max Character Card Archive Size: ${IMPORT_LIMITS.MAX_CHARX_IMPORT_SIZE_MB} MB`);
+  log.info(`Max Character Card Payload Size: ${IMPORT_LIMITS.MAX_CHARX_CARD_SIZE_MB} MB`);
   log.info("\n--- Upload Quota Limits (24h) ---");
   log.info(`Max Persona Operations: ${PERSONA_RATE_LIMITS.MAX_OPERATIONS_PER_DAY} per user`);
   log.info(`Max Import Operations: ${IMPORT_RATE_LIMITS.MAX_OPERATIONS_PER_DAY} per user`);

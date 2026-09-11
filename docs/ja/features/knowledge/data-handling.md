@@ -46,7 +46,7 @@ TomoriBotはデータに対して透明性を持つように設計されてい�
 
 - `/import personal memories`, `/import memories`：ファイルタイプは自動的に検出されます。ターゲットのペルソナまたはグローバルスコープを選択します。
 - `/import config`：サーバーのインポートには**サーバー管理**権限が必要です。
-- `/persona import`：ペルソナを復元します（SillyTavernカードのインポートも可能です。[SillyTavernサポート](/ja/features/integrations/sillytavern-support/)を参照）。
+- `/persona import`：ペルソナを復元します。PNGとJSONのSillyTavernカード、および`.charx`のCharacter Card V3アーカイブにも対応しており、いずれもキャラクターのテキストのみがインポートされます（[SillyTavernサポート](/ja/features/integrations/sillytavern-support/)を参照）。
 
 ## データの削除
 
