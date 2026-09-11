@@ -321,7 +321,7 @@ describe("v1 adaptation", () => {
 
   it("maps personal settings across sections and names both dropped personal fields", () => {
     const result = adaptV1PersonalConfig({
-      user_nickname: "Jordan",
+      user_nickname: "Bau",
       language_pref: "en-US",
       impersonation_prompt: "Use first person",
       physical_appearance_tags: ["short hair"],
@@ -344,7 +344,7 @@ describe("v1 adaptation", () => {
     if (!result.success) return;
 
     expect(result.detectedSections).toEqual(["profile", "privacy", "appearance", "response_modes"]);
-    expect(result.payload.profile?.user_nickname).toBe("Jordan");
+    expect(result.payload.profile?.user_nickname).toBe("Bau");
     expect(result.payload.privacy?.privacy_level).toBe(1);
     expect(result.payload.appearance?.physical_appearance_tags).toEqual(["short hair"]);
     expect(result.payload.response_modes?.personal_deliberate_tool_mode).toBe("on");

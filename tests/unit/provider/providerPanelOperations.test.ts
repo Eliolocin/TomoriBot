@@ -28,7 +28,7 @@ function dependencies(
           connection_id: 7,
           server_id: 12,
           user_id: null,
-          label: "lighthouse",
+          label: "juno",
           capability: "text",
           api_style: "openai-compatible",
           endpoint_url: "https://example.invalid/v1",
@@ -51,7 +51,7 @@ describe("provider panel read operations", () => {
     expect(result?.data.entries).toHaveLength(1);
     expect(result?.data.entries[0]).toMatchObject({
       kind: "endpoint",
-      displayName: "lighthouse",
+      displayName: "juno",
       connectionIds: [7],
     });
   });

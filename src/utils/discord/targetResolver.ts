@@ -326,7 +326,7 @@ function resolveConversationUserMatch(
   }
 
   // Identify targets the input matched on their PRIMARY/display name (e.g. the
-  //    rendered "Misuzu"/"Bredrumb" label) rather than only on a secondary alias
+  //    rendered "Misuzu"/"Obonya" label) rather than only on a secondary alias
   //    (server nickname, global name, username). The conversation stage flattens
   //    all alias types into one set, so without this distinction a user's
   //    secondary alias can collide with another user's actual name and force a

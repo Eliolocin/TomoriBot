@@ -56,7 +56,7 @@ describe("stream buffer parenthesis balance", () => {
   });
 
   it("keeps the multi-message label boundary flushable when a line ends in an emoticon", () => {
-    const buffer = "@bredrumb bet sending the vibes right now B)\ntomori (silly): double message combo";
+    const buffer = "@Obonya bet sending the vibes right now B)\ntomori (silly): double message combo";
 
     expect(hasIncompleteSemanticMarkers(buffer)).toBe(false);
   });

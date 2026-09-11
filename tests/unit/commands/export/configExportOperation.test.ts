@@ -16,14 +16,14 @@ import { initializeLocalizer, localizer } from "@/utils/text/localizer";
 import { callMethods, type FakeInteraction, makeFakeInteraction } from "../../../helpers/fakeInteraction";
 
 const GUILD_ID = "guild-111111111111111111";
-const GUILD_NAME = "lighthouse_lounge";
+const GUILD_NAME = "juno_lounge";
 const ACTOR_ID = "actor-222222222222222222";
-const ACTOR_HANDLE = "jordan_h";
+const ACTOR_HANDLE = "bau_h";
 const LOCALE = "en-US";
 const ACTOR = {
   id: ACTOR_ID,
-  displayName: "Jordan",
-  globalName: "Jordan",
+  displayName: "Bau",
+  globalName: "Bau",
   username: ACTOR_HANDLE,
   displayAvatarURL: () => "https://cdn.example.com/avatar.png",
 };
@@ -165,7 +165,7 @@ describe("config export operation", () => {
     const deliveredFiles = calls.deliveries[0]?.files ?? [];
     expect(deliveredFiles).toHaveLength(1);
     // `/persona export`'s shape: the workspace name, the scope, and an epoch-millisecond stamp for uniqueness.
-    expect(deliveredFiles[0]?.name).toMatch(/^tomori-lighthouse_lounge-server-config-\d{13}\.json$/);
+    expect(deliveredFiles[0]?.name).toMatch(/^tomori-juno_lounge-server-config-\d{13}\.json$/);
     expect(deliveredFiles[0]?.name).not.toContain(GUILD_ID);
     expect(deliveredFiles[0]?.name).not.toContain(ACTOR_ID);
     expect(JSON.parse(deliveredFiles[0]?.attachment.toString("utf8") ?? "{}")).toEqual(WORKSPACE_CONFIG_EXPORT);
@@ -196,7 +196,7 @@ describe("config export operation", () => {
 
     const firstFile = first.calls.deliveries[0]?.files[0];
     const secondFile = second.calls.deliveries[0]?.files[0];
-    expect(firstFile?.name).toMatch(/^tomori-jordan_h-personal-config-\d{13}\.json$/);
+    expect(firstFile?.name).toMatch(/^tomori-bau_h-personal-config-\d{13}\.json$/);
     expect(secondFile?.name).not.toBe(firstFile?.name);
   });
 
@@ -241,7 +241,7 @@ describe("config export operation", () => {
 
     await runConfigExport(interaction as never, LOCALE, "workspace", deps);
 
-    expect(calls.deliveries[0]?.files[0]?.name).toMatch(/^tomori-jordan_h-server-config-\d{13}\.json$/);
+    expect(calls.deliveries[0]?.files[0]?.name).toMatch(/^tomori-bau_h-server-config-\d{13}\.json$/);
   });
 
   it("acknowledges the interaction before reading the configuration", async () => {

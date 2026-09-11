@@ -52,20 +52,20 @@ describe("StreamMessageDelivery copied-render options", () => {
       } as StreamUiUpdater,
     });
 
-    // Copied identities flip the Discord display name ("bredrumb (Ren)") while
+    // Copied identities flip the Discord display name ("Obonya (Ren)") while
     // the accumulated-text prefix stays source-persona-first for the model.
     await delivery.sendSegment("hi", "period", textConfig(), typingConfig, context, createDefaultStreamState(), {
       identityOverride: {
-        username: "bredrumb (Ren)",
+        username: "Obonya (Ren)",
         avatarUrl: "https://example.com/avatar.png",
       },
-      accumulatedTextPrefix: "Ren (bredrumb): ",
+      accumulatedTextPrefix: "Ren (Obonya): ",
     });
 
     expect(sentPayloads).toHaveLength(1);
-    expect(sentPayloads[0].payload.identityOverride?.username).toBe("bredrumb (Ren)");
+    expect(sentPayloads[0].payload.identityOverride?.username).toBe("Obonya (Ren)");
     expect(sentPayloads[0].payload.identityOverride?.avatarUrl).toBe("https://example.com/avatar.png");
-    expect(sentPayloads[0].payload.accumulatedTextPrefix).toBe("Ren (bredrumb): ");
+    expect(sentPayloads[0].payload.accumulatedTextPrefix).toBe("Ren (Obonya): ");
     expect(sentPayloads[0].textForState).toBe("hi");
   });
 
@@ -122,9 +122,9 @@ describe("StreamMessageDelivery copied-render options", () => {
       state,
       {
         identityOverride: {
-          username: "bredrumb (Ren)",
+          username: "Obonya (Ren)",
         },
-        accumulatedTextPrefix: "Ren (bredrumb): ",
+        accumulatedTextPrefix: "Ren (Obonya): ",
       },
     );
 
@@ -133,8 +133,8 @@ describe("StreamMessageDelivery copied-render options", () => {
     expect(sentPayloads[0].identityOverride).toBeUndefined();
     expect(sentPayloads[1]).toMatchObject({
       content: "copied text",
-      accumulatedTextPrefix: "Ren (bredrumb): ",
+      accumulatedTextPrefix: "Ren (Obonya): ",
     });
-    expect(sentPayloads[1].identityOverride?.username).toBe("bredrumb (Ren)");
+    expect(sentPayloads[1].identityOverride?.username).toBe("Obonya (Ren)");
   });
 });

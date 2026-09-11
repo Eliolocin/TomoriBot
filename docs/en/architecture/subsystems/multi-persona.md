@@ -81,7 +81,7 @@ Reminders are tied to a persona to preserve the identity that set them:
 - **Reply to bot** (main persona messages) → main persona responds.
 - **Reply to alter webhook message** → the matching alter responds.
   - Matching is done by webhook `author.username` → persona nickname (case-insensitive).
-  - Copied-render webhook names like `Ren (bredrumb)` route replies back to the source persona
+  - Copied-render webhook names like `Ren (Obonya)` route replies back to the source persona
     (`Ren`) while preserving the full visible label in prompt history.
   - Ensure persona nicknames are unique.
 - **Bot mention** → main persona responds.
@@ -172,7 +172,7 @@ tool-user target.
 
 `/impersonate persona` accepts the same sprite grammar in its `message` option, resolved directly against `persona_sprites` rather than through the stream pipeline (`parseLeadingImpersonationSpriteModifier` in `renderModifierParser.ts`). Because the `persona` autocomplete option already fixes the persona, the source name is optional there: both `Tomori (shocked): message` and the bare `(shocked): message` match, provided `shocked` is an actual `sprite_key` on the selected persona. A match resolves the sprite's avatar with the shared `resolveSpriteIdentity` helper, strips the modifier prefix, and sends through the managed webhook (forcing the webhook path even for the main, non-alter persona, since only a webhook send carries a per-message avatar override) with the same `persona_sprite_messages` bookkeeping as a normal streamed sprite. When the modifier does not match a real sprite, the text is sent exactly as typed, parentheses included; copied-identity resolution does not apply to this command.
 
-Attribution, quota, self-reply bookkeeping, STM ownership, and reply routing remain attached to `SourcePersona`. History reconstruction (`resolveRenderModifierSourcePersona`) accepts both webhook-name orientations: flipped copied identities like `bredrumb (Ren)` (persona inside the parens, current format) and legacy `Ren (bredrumb)` decorations, always rebuilding the source-first `Ren (bredrumb)` label for prompt history. When *both* parts match personas (persona impersonating another persona), the flipped interpretation wins; legacy persona-on-persona messages are misattributed until they age out of the fetch window. Sprite messages are visually identical to plain `Ren` messages in Discord; their decorated prompt label is recovered from the `persona_sprite_messages` mapping (cache-primed per context build), and a missing mapping degrades to the plain persona name.
+Attribution, quota, self-reply bookkeeping, STM ownership, and reply routing remain attached to `SourcePersona`. History reconstruction (`resolveRenderModifierSourcePersona`) accepts both webhook-name orientations: flipped copied identities like `Obonya (Ren)` (persona inside the parens, current format) and legacy `Ren (Obonya)` decorations, always rebuilding the source-first `Ren (Obonya)` label for prompt history. When *both* parts match personas (persona impersonating another persona), the flipped interpretation wins; legacy persona-on-persona messages are misattributed until they age out of the fetch window. Sprite messages are visually identical to plain `Ren` messages in Discord; their decorated prompt label is recovered from the `persona_sprite_messages` mapping (cache-primed per context build), and a missing mapping degrades to the plain persona name.
 
 ### Personal spotlight
 

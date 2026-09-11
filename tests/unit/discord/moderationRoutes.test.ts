@@ -3195,8 +3195,8 @@ describe("moderation bulk removal routes", () => {
         }),
       resolveUser: async () => ({
         id: "123456789012345678",
-        username: "jordan_h",
-        displayName: "Jordan",
+        username: "bau_h",
+        displayName: "Bau",
         bot: false,
       }),
       createNonce: () => "bulk_nonce",
@@ -3210,10 +3210,7 @@ describe("moderation bulk removal routes", () => {
       version: "v1",
       segments: ["user-blacklist-remove-open", "en-US"],
     });
-    expect(events).toEqual([
-      "snapshot:bulk_nonce:u:123456789012345678",
-      "modal:bulk_nonce:user-blacklist:Jordan (jordan_h)",
-    ]);
+    expect(events).toEqual(["snapshot:bulk_nonce:u:123456789012345678", "modal:bulk_nonce:user-blacklist:Bau (bau_h)"]);
   });
 
   it("removes only unchecked entries from the modal snapshot", async () => {

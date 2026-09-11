@@ -87,7 +87,7 @@ const workspaceRow: Record<string, unknown> = {
 };
 
 const personalRow: Record<string, unknown> = {
-  user_nickname: "Jordan",
+  user_nickname: "Bau",
   language_pref: "en-US",
   privacy_level: 1,
   shortterm_cache_crossserver_opt_in: true,
@@ -166,7 +166,7 @@ describe("v2 config export projections", () => {
     if (!result.success || !result.data || result.data.type !== "personal_config") return;
 
     expect(Object.keys(result.data.data)).toEqual(["profile", "privacy", "appearance", "response_modes"]);
-    expect(result.data.data.profile?.user_nickname).toBe("Jordan");
+    expect(result.data.data.profile?.user_nickname).toBe("Bau");
     expect(result.data.data.privacy?.privacy_level).toBe(1);
     expect(result.data.data.appearance?.physical_appearance_tags).toEqual(["short hair"]);
     expect(result.data.data.response_modes?.personal_deliberate_tool_mode).toBe("on");

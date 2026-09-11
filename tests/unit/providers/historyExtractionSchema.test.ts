@@ -13,7 +13,7 @@ import {
  * import. The collapsed form is unambiguous, so the schema repairs it.
  */
 describe("history extraction schema", () => {
-  const restatement = "Eli configured the embedding model to gemini-embedding-2 on this server.";
+  const restatement = "Eri configured the embedding model to gemini-embedding-2 on this server.";
 
   test("accepts the documented object form", () => {
     const parsed = HistoryExtractionResultSchema.parse({

@@ -157,7 +157,7 @@ describe("UpdateUserInfoTool", () => {
     const row = {
       user_id: 47,
       user_disc_id: "123456789012345678",
-      user_nickname: "Bredrumb",
+      user_nickname: "Obonya",
       privacy_level: PrivacyLevel.MINIMAL,
       addressing_style: null,
     };
@@ -186,7 +186,7 @@ describe("UpdateUserInfoTool", () => {
         makeContext(true, nerine),
       );
       expect(styleChange.success).toBe(true);
-      expect(styleChange.message).toContain('now calls Bredrumb "Mistress Bredrumb"');
+      expect(styleChange.message).toContain('now calls Obonya "Mistress Obonya"');
     } finally {
       loadSpy.mockRestore();
       writeSpy.mockRestore();
@@ -214,19 +214,19 @@ describe("UpdateUserInfoTool", () => {
 
 describe("update_user_info affix de-duplication", () => {
   it("removes a prefix the caller re-typed into the nickname", () => {
-    expect(stripRedundantAffixes("Master Bred", "Master", "")).toBe("Bred");
+    expect(stripRedundantAffixes("Master Obo", "Master", "")).toBe("Obo");
   });
 
   it("removes a suffix the caller re-typed into the nickname", () => {
-    expect(stripRedundantAffixes("Bred-san", "", "-san")).toBe("Bred");
+    expect(stripRedundantAffixes("Obo-san", "", "-san")).toBe("Obo");
   });
 
   it("removes both affixes at once", () => {
-    expect(stripRedundantAffixes("Master Bred-san", "Master", "-san")).toBe("Bred");
+    expect(stripRedundantAffixes("Master Obo-san", "Master", "-san")).toBe("Obo");
   });
 
   it("never splits a nickname that does not contain the resolved affix", () => {
-    expect(stripRedundantAffixes("Big Bred", "Master", "")).toBe("Big Bred");
+    expect(stripRedundantAffixes("Big Obo", "Master", "")).toBe("Big Obo");
   });
 
   it("keeps a nickname that is exactly the affix rather than emptying it", () => {
@@ -234,7 +234,7 @@ describe("update_user_info affix de-duplication", () => {
   });
 
   it("does nothing when no affix is in effect", () => {
-    expect(stripRedundantAffixes("Master Bred", "", "")).toBe("Master Bred");
+    expect(stripRedundantAffixes("Master Obo", "", "")).toBe("Master Obo");
   });
 });
 

@@ -3895,7 +3895,7 @@ describe("Operations that own their cache invalidation", () => {
             userId: 1,
             userDiscId: "u1",
             personaLineageId: 7,
-            nickname: "Lighthouse",
+            nickname: "Juno",
             prefix: null,
             suffix: null,
           }),

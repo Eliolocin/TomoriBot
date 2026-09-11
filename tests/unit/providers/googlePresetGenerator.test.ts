@@ -24,7 +24,7 @@ describe("Google preset generation", () => {
     const result = await generatePresetFromPrompt(
       "test-api-key",
       {
-        characterName: "Lighthouse",
+        characterName: "Juno",
         characterDescription: "A helpful guide.",
         speechExamples: "Calm and clear.",
         useWebSearch: true,
@@ -53,7 +53,7 @@ describe("Google preset generation", () => {
     const result = await generatePresetFromPrompt(
       "test-api-key",
       {
-        characterName: "Lighthouse",
+        characterName: "Juno",
         characterDescription: "A helpful guide.",
         speechExamples: "Calm and clear.",
         useWebSearch: true,
@@ -82,7 +82,7 @@ describe("Google preset generation", () => {
     const result = await generatePresetFromPrompt(
       "test-api-key",
       {
-        characterName: "Lighthouse",
+        characterName: "Juno",
         characterDescription: "A helpful guide.",
         speechExamples: "Calm and clear.",
         useWebSearch: false,

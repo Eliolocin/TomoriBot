@@ -27,7 +27,7 @@ describe("update_user_info notice visibility", () => {
   });
 
   it("classifies the tool's success title the same way a memory-learning title is classified", () => {
-    const title = localizer("en-US", "tools.user_info_update.success_title", { target_user: "Jordan" });
+    const title = localizer("en-US", "tools.user_info_update.success_title", { target_user: "Bau" });
     expect(checkTargetEmbedTitle(title)).toEqual({ isTarget: true, type: "user_info_update" });
 
     const memoryTitle = localizer("en-US", "genai.self_teach.personal_memory_learned_title");
@@ -35,21 +35,19 @@ describe("update_user_info notice visibility", () => {
   });
 
   it("renders the notice into the [System: ...] block for a later turn", () => {
-    const title = localizer("en-US", "tools.user_info_update.success_title", { target_user: "Jordan" });
-    const body =
-      'Updated the following:\n1. Naming prefix: `none` → `Master`\n\nSparrow now calls Jordan "Master Jordan".';
+    const title = localizer("en-US", "tools.user_info_update.success_title", { target_user: "Bau" });
+    const body = 'Updated the following:\n1. Naming prefix: `none` → `Master`\n\nSparrow now calls Bau "Master Bau".';
 
     const content = buildContext(makeEmbed(title, body));
 
     expect(content).toContain("[System:");
     expect(content).toContain(title);
-    expect(content).toContain("Master Jordan");
+    expect(content).toContain("Master Bau");
   });
 
   it("survives the Components V2 round trip the tool actually sends through", () => {
-    const targetLabel = "Jordan";
-    const body =
-      'Updated the following:\n1. Naming prefix: `none` → `Master`\n\nSparrow now calls Jordan "Master Jordan".';
+    const targetLabel = "Bau";
+    const body = 'Updated the following:\n1. Naming prefix: `none` → `Master`\n\nSparrow now calls Bau "Master Bau".';
     const components = buildNoticeContainer({
       locale: "en-US",
       color: ColorCode.SUCCESS,
@@ -71,18 +69,18 @@ describe("update_user_info notice visibility", () => {
     }).content;
 
     expect(content).toContain("[System:");
-    expect(content).toContain("Updated Jordan's Profile");
-    expect(content).toContain("Master Jordan");
+    expect(content).toContain("Updated Bau's Profile");
+    expect(content).toContain("Master Bau");
   });
 
   it("separates the footer from the body with a real divider component", () => {
     const components = buildNoticeContainer({
       locale: "en-US",
       titleKey: "tools.user_info_update.success_title",
-      titleVars: { target_user: "Jordan" },
+      titleVars: { target_user: "Bau" },
       description: "body",
       footerKey: "tools.user_info_update.success_footer",
-      footerVars: { target_user: "Jordan" },
+      footerVars: { target_user: "Bau" },
     }) as Array<{ components: Array<{ type: number; divider?: boolean }> }>;
 
     const inner = components[0].components;
@@ -92,14 +90,14 @@ describe("update_user_info notice visibility", () => {
   it("also recognizes user block and unblock notices", () => {
     const blockTitle = localizer("en-US", "tools.user_block.block_block_title", {
       persona_name: "Sparrow",
-      user_name: "Jordan",
+      user_name: "Bau",
       duration_hours: 2,
     });
     expect(checkTargetEmbedTitle(blockTitle)).toEqual({ isTarget: true, type: "user_moderation" });
 
     const unblockTitle = localizer("en-US", "tools.user_block.unblock_success_title", {
       persona_name: "Sparrow",
-      user_name: "Jordan",
+      user_name: "Bau",
     });
     expect(checkTargetEmbedTitle(unblockTitle)).toEqual({ isTarget: true, type: "user_moderation" });
   });

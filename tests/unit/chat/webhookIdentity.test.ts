@@ -34,7 +34,7 @@ describe("resolveReferencedWebhookTarget", () => {
     const ren = persona("Ren", 123);
     const personaByNickname = new Map([["ren", ren]]);
 
-    const result = resolveReferencedWebhookTarget(webhookMessage("Ren (bredrumb)"), personaByNickname, null);
+    const result = resolveReferencedWebhookTarget(webhookMessage("Ren (Obonya)"), personaByNickname, null);
 
     expect(result.replyPersona).toBe(ren);
     expect(result.impersonatedUserId).toBeNull();
@@ -55,7 +55,7 @@ describe("resolvePersonaForMessage", () => {
     const ren = persona("Ren", 2);
     ren.is_alter = true;
 
-    expect(resolvePersonaForMessage(webhookMessage("Ren (bredrumb)"), [main, ren], "bot_1")).toBe(ren);
+    expect(resolvePersonaForMessage(webhookMessage("Ren (Obonya)"), [main, ren], "bot_1")).toBe(ren);
   });
 
   it("ignores non-persona bridge webhook messages", () => {

@@ -266,7 +266,7 @@ export class UpdateShortTermMemoryTool extends BaseTool {
       }
 
       // Validate summary length (use configured max from env)
-      // Sanitize unknown {word} placeholders the LLM may have written (e.g. {bredrumb})
+      // Sanitize unknown {word} placeholders the LLM may have written (e.g. {obonya})
       const trimmedSummary = sanitizeUnknownTemplatePlaceholders(summary.trim());
 
       if (trimmedSummary.length > MAX_SUMMARY_LENGTH) {

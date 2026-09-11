@@ -45,7 +45,7 @@ describe("formatMessagesForExtraction persona detection", () => {
   test("detects the main persona from messages the bot posted directly", () => {
     const messages = [
       makeMessage({ content: "Hello there!", authorId: BOT_USER_ID, username: "TomoriBot" }),
-      makeMessage({ content: "Hi Tomori", authorId: "5", username: "Eli" }),
+      makeMessage({ content: "Hi Tomori", authorId: "5", username: "Eri" }),
     ];
 
     const result = formatMessagesForExtraction(messages, personas, BOT_USER_ID);
@@ -75,7 +75,7 @@ describe("formatMessagesForExtraction persona detection", () => {
   });
 
   test("does not attribute ordinary user messages to a persona", () => {
-    const messages = [makeMessage({ content: "Just a human talking", authorId: "5", username: "Eli" })];
+    const messages = [makeMessage({ content: "Just a human talking", authorId: "5", username: "Eri" })];
 
     const result = formatMessagesForExtraction(messages, personas, BOT_USER_ID);
 
