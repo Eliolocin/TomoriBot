@@ -64,10 +64,11 @@ than a person:
 vl-status: PASS exit=0 pass=<n> warn=<n> fail=<n> skip=<n>
 ```
 
-**Output is quiet by default.** A gate that passes prints nothing, and its row in the results block
-carries the verdict. A gate that fails always prints its full detail, so quiet mode can never hide a
-finding; it only removes the passing noise around one. Advisory detail, such as locale parity or the
-lockfile-wide `bun audit` listing, collapses to a count or to the entries that changed the verdict.
+**Output is quiet by default.** No flag means quiet; `--verbose` is opt-in. A gate that passes prints
+nothing, and its row in the results block carries the verdict. A gate that fails always prints its full
+detail, so quiet mode can never hide a finding; it only removes the passing noise around one. Advisory
+detail, such as locale parity or the lockfile-wide `bun audit` listing, collapses to a count or to the
+entries that changed the verdict.
 
 Pass `--verbose` to restore every line each gate would otherwise print:
 
@@ -75,7 +76,11 @@ Pass `--verbose` to restore every line each gate would otherwise print:
 bun run vl --verbose
 ```
 
-Individual gates accept the same flag, and `vl` forwards it to them. Redirect the output to a file
+`--no-verbose` is the explicit spelling of the default rather than a mode of its own: it produces the
+same output as passing nothing. It exists so `vl` can force quiet onto the checks it invokes, and it
+wins over `--verbose` regardless of the order the two appear in. It is never required.
+
+Individual gates accept both flags, and `vl` forwards one to them. Redirect the output to a file
 if you want to keep the exit code while reading selectively, and never pipe a gate through `grep` or
 `tail`: the pipeline reports the filter's exit status instead of the gate's.
 

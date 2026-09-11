@@ -675,8 +675,8 @@ async function main() {
 
   console.log(
     verboseOutput
-      ? "Running Validation Checks (full detail)...\n"
-      : "Running Validation Checks... (quiet: passing checks print no output; pass --verbose for detail)\n",
+      ? "Running Validation Checks (verbose: every check prints its full output)...\n"
+      : "Running Validation Checks... (quiet is the default; pass --verbose for full detail, --no-verbose to force quiet)\n",
   );
 
   // Run the checks that do not load the complete command graph concurrently.
