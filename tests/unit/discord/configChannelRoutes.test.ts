@@ -1034,7 +1034,7 @@ describe("Channels Auto-Trigger routes", () => {
   });
 
   it("preserves retained persona overrides and prunes removed ones", async () => {
-    const alterPersona = makePersona({ persona_id: 56, persona_nickname: "Lighthouse", is_alter: true });
+    const alterPersona = makePersona({ persona_id: 56, persona_nickname: "Juno", is_alter: true });
     const state = makePersona({
       config: {
         autoch_disc_ids: [CHANNEL_ONE, CHANNEL_TWO],
@@ -1073,7 +1073,7 @@ describe("Channels Auto-Trigger routes", () => {
   });
 
   it("deletes a single-channel override when returning to main or disabling", async () => {
-    const alterPersona = makePersona({ persona_id: 56, persona_nickname: "Lighthouse", is_alter: true });
+    const alterPersona = makePersona({ persona_id: 56, persona_nickname: "Juno", is_alter: true });
     const state = makePersona({
       config: {
         autoch_disc_ids: [CHANNEL_ONE],

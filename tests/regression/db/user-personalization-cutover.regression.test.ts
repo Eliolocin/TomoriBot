@@ -201,7 +201,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User personalization config cutover", () =
     const registered = await userRepository.register(userDiscId, "Sparrow", "en-US");
     if (!registered?.user_id) throw new Error("Expected migration fixture user to have a user_id");
     await userRepository.update(registered.user_id, {
-      user_nickname: "Lighthouse",
+      user_nickname: "Juno",
       timezone_offset: 8,
       personal_deliberate_tool_mode: "on",
     });
@@ -216,7 +216,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User personalization config cutover", () =
         WHERE user_id = ${registered.user_id}
       `;
       expect(legacy).toMatchObject({
-        user_nickname: "Lighthouse",
+        user_nickname: "Juno",
         timezone_offset: 8,
         personal_deliberate_tool_mode: "on",
       });
@@ -228,7 +228,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User personalization config cutover", () =
         WHERE user_id = ${registered.user_id}
       `;
       expect(moved).toMatchObject({
-        user_nickname: "Lighthouse",
+        user_nickname: "Juno",
         timezone_offset: 8,
         personal_deliberate_tool_mode: "on",
       });
@@ -270,7 +270,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User personalization config cutover", () =
     });
     expect(updated?.physical_appearance_tags).toEqual(["blue hair", "round glasses"]);
     const savedPreference = await userNamingRepository.savePreference(source.user_id, refs.personaLineageId, {
-      nickname_override: "Lighthouse",
+      nickname_override: "Juno",
       prefix_override: "",
       suffix_override: "-senpai",
     });
@@ -310,7 +310,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("User personalization config cutover", () =
         global: { pronouns: "they/them" },
         persona: {
           personaLineageId: refs.personaLineageId,
-          patch: { nickname_override: "Lighthouse" },
+          patch: { nickname_override: "Juno" },
         },
       }),
     ).rejects.toThrow();

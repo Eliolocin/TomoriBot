@@ -157,7 +157,7 @@ describe("UpdateUserInfoTool", () => {
     const row = {
       user_id: 47,
       user_disc_id: "123456789012345678",
-      user_nickname: "Bredrumb",
+      user_nickname: "Obonya",
       privacy_level: PrivacyLevel.MINIMAL,
       addressing_style: null,
     };
@@ -186,7 +186,7 @@ describe("UpdateUserInfoTool", () => {
         makeContext(true, nerine),
       );
       expect(styleChange.success).toBe(true);
-      expect(styleChange.message).toContain('now calls Bredrumb "Mistress Bredrumb"');
+      expect(styleChange.message).toContain('now calls Obonya "Mistress Obonya"');
     } finally {
       loadSpy.mockRestore();
       writeSpy.mockRestore();

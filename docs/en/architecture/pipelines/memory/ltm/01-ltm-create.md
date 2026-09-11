@@ -26,7 +26,7 @@ string and a `memory_scope` of either `server_wide` or `target_user`.
    for the stage ladder.
 3. **Sanitize content** — `sanitizeUnknownTemplatePlaceholders()` strips
    brace-wrapped tokens that don't match `{user}` or `{bot}` (e.g. the LLM
-   writing `{bredrumb}` instead of the correct template token).
+   writing `{Obonya}` instead of the correct template token).
 4. **Guard lineage** — blocks if `persona_lineage_id === 0` (reserved; signals
    an un-run schema migration).
 5. **Check limits** — `serverMemoryRepository.checkServerMemoryLimit()` or

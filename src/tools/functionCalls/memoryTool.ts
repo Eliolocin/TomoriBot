@@ -227,7 +227,7 @@ export class MemoryTool extends BaseTool {
       }
     }
 
-    // Sanitize unknown {word} placeholders (e.g. {bredrumb}), so the LLM sometimes wraps
+    // Sanitize unknown {word} placeholders (e.g. {Obonya}), so the LLM sometimes wraps
     // usernames in braces imitating {user}. Strip the braces so the name appears plainly.
     const memoryContent = sanitizeUnknownTemplatePlaceholders(memoryContentArg.trim());
 

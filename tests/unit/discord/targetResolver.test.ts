@@ -61,34 +61,34 @@ function buildIndexedContext(conversationUsers: ConversationUserReference[]): To
 
 describe("resolveUserTarget — conversation stage primary-name precedence", () => {
   // Reproduces the real collision: the asking user is rendered as their DB
-  // nickname "Misuzu" but carries server nickname "Bredrumb" as a secondary
-  // alias, while a different account's actual name is "Bredrumb".
+  // nickname "Misuzu" but carries server nickname "Obonya" as a secondary
+  // alias, while a different account's actual name is "Obonya".
   const misuzu: ConversationUserReference = {
     targetId: "111",
     displayLabel: "Misuzu",
-    aliases: ["Misuzu", "Bredrumb"],
+    aliases: ["Misuzu", "Obonya"],
     mentionable: true,
   };
-  const bredrumb: ConversationUserReference = {
+  const obonya: ConversationUserReference = {
     targetId: "222",
-    displayLabel: "Bredrumb",
-    aliases: ["Bredrumb"],
+    displayLabel: "Obonya",
+    aliases: ["Obonya"],
     mentionable: true,
   };
 
   it("prefers the primary-name match over a colliding secondary alias", async () => {
-    const result = await resolveUserTarget("Bredrumb", buildIndexedContext([misuzu, bredrumb]));
+    const result = await resolveUserTarget("Obonya", buildIndexedContext([misuzu, obonya]));
 
     expect(result.status).toBe("resolved");
     if (result.status === "resolved") {
       expect(result.targetId).toBe("222");
-      expect(result.displayLabel).toBe("Bredrumb");
+      expect(result.displayLabel).toBe("Obonya");
       expect(result.source).toBe("conversation");
     }
   });
 
   it("still resolves the asking user by their primary (DB) name", async () => {
-    const result = await resolveUserTarget("Misuzu", buildContext([misuzu, bredrumb]));
+    const result = await resolveUserTarget("Misuzu", buildContext([misuzu, obonya]));
 
     expect(result.status).toBe("resolved");
     if (result.status === "resolved") {
@@ -97,7 +97,7 @@ describe("resolveUserTarget — conversation stage primary-name precedence", () 
   });
 
   it("is case- and whitespace-insensitive for the primary-name tie-break", async () => {
-    const result = await resolveUserTarget("  bReDrUmB  ", buildContext([misuzu, bredrumb]));
+    const result = await resolveUserTarget("  oBoNyA  ", buildContext([misuzu, obonya]));
 
     expect(result.status).toBe("resolved");
     if (result.status === "resolved") {
@@ -106,13 +106,13 @@ describe("resolveUserTarget — conversation stage primary-name precedence", () 
   });
 
   it("stays ambiguous when two users share the same primary display name", async () => {
-    const bredrumbTwo: ConversationUserReference = {
+    const obonyaTwo: ConversationUserReference = {
       targetId: "333",
-      displayLabel: "Bredrumb",
-      aliases: ["Bredrumb"],
+      displayLabel: "Obonya",
+      aliases: ["Obonya"],
       mentionable: true,
     };
-    const result = await resolveUserTarget("Bredrumb", buildContext([bredrumb, bredrumbTwo]));
+    const result = await resolveUserTarget("Obonya", buildContext([obonya, obonyaTwo]));
 
     expect(result.status).toBe("ambiguous");
     if (result.status === "ambiguous") {
@@ -124,10 +124,10 @@ describe("resolveUserTarget — conversation stage primary-name precedence", () 
     const ellen: ConversationUserReference = {
       targetId: "444",
       displayLabel: "Ellen",
-      aliases: ["Ellen", "Bredrumb"],
+      aliases: ["Ellen", "Obonya"],
       mentionable: true,
     };
-    const result = await resolveUserTarget("Bredrumb", buildContext([misuzu, ellen]));
+    const result = await resolveUserTarget("Obonya", buildContext([misuzu, ellen]));
 
     expect(result.status).toBe("ambiguous");
     if (result.status === "ambiguous") {
@@ -136,7 +136,7 @@ describe("resolveUserTarget — conversation stage primary-name precedence", () 
   });
 
   it("resolves a unique secondary-alias match (no regression in the common case)", async () => {
-    const result = await resolveUserTarget("Bredrumb", buildContext([misuzu]));
+    const result = await resolveUserTarget("Obonya", buildContext([misuzu]));
 
     expect(result.status).toBe("resolved");
     if (result.status === "resolved") {
@@ -244,12 +244,12 @@ describe("resolveUserTarget - persona-scoped and affixed names", () => {
     mock.restore();
   });
 
-  const bredrumb: FakeGuildMember = { id: "222", displayName: "Bredrumb", username: "bredrumb" };
+  const obonya: FakeGuildMember = { id: "222", displayName: "Obonya", username: "obonya" };
 
   it("resolves a persona-scoped nickname that no Discord name matches", async () => {
     stubNamingLookups({ personaNicknames: [{ userId: 1, userDiscId: "222" }] });
 
-    const result = await resolveUserTarget("Papa", buildGuildContext([bredrumb]));
+    const result = await resolveUserTarget("Papa", buildGuildContext([obonya]));
 
     expect(result.status).toBe("resolved");
     if (result.status === "resolved") {
@@ -268,7 +268,7 @@ describe("resolveUserTarget - persona-scoped and affixed names", () => {
 
     const result = await resolveUserTarget(
       "Papa",
-      buildGuildContext([bredrumb, { id: "333", displayName: "Sparrow", username: "sparrow" }]),
+      buildGuildContext([obonya, { id: "333", displayName: "Sparrow", username: "sparrow" }]),
     );
 
     expect(result.status).toBe("ambiguous");
@@ -281,8 +281,8 @@ describe("resolveUserTarget - persona-scoped and affixed names", () => {
     stubNamingLookups();
 
     const result = await resolveUserTarget(
-      "Master Bredrumb",
-      buildGuildContext([bredrumb], {
+      "Master Obonya",
+      buildGuildContext([obonya], {
         namingConfig: { prefixes: { neutral: "Master" }, suffixes: {}, addressTerms: {} },
       }),
     );
@@ -298,8 +298,8 @@ describe("resolveUserTarget - persona-scoped and affixed names", () => {
     stubNamingLookups();
 
     const result = await resolveUserTarget(
-      "Bredrumb-chan",
-      buildGuildContext([bredrumb], {
+      "Obonya-chan",
+      buildGuildContext([obonya], {
         namingConfig: { prefixes: {}, suffixes: { neutral: "-chan" }, addressTerms: {} },
       }),
     );
@@ -315,7 +315,7 @@ describe("resolveUserTarget - persona-scoped and affixed names", () => {
       composedCandidates: [{ userDiscId: "222", globalNickname: "Bred", globalPrefixOverride: "Master" }],
     });
 
-    const result = await resolveUserTarget("Master Bred", buildGuildContext([bredrumb]));
+    const result = await resolveUserTarget("Master Bred", buildGuildContext([obonya]));
 
     expect(result.status).toBe("resolved");
     if (result.status === "resolved") {
@@ -329,7 +329,7 @@ describe("resolveUserTarget - persona-scoped and affixed names", () => {
       composedCandidates: [{ userDiscId: "222", globalNickname: "Bred" }],
     });
 
-    const result = await resolveUserTarget("Master Bred", buildGuildContext([bredrumb]));
+    const result = await resolveUserTarget("Master Bred", buildGuildContext([obonya]));
 
     expect(result.status).toBe("not_found");
   });
@@ -339,7 +339,7 @@ describe("resolveUserTarget - persona-scoped and affixed names", () => {
 
     const result = await resolveUserTarget(
       "Master Sparrow",
-      buildGuildContext([bredrumb], {
+      buildGuildContext([obonya], {
         namingConfig: { prefixes: { neutral: "Master" }, suffixes: {}, addressTerms: {} },
       }),
     );

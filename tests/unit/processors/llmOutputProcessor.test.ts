@@ -563,7 +563,7 @@ describe("truncateBeforeGenericSpeakerLine", () => {
 
   describe("allowed speaker labels", () => {
     it("does not stop on active render-modifier syntax", () => {
-      const text = "Ren (bredrumb): hi\nOther: stop here";
+      const text = "Ren (Obonya): hi\nOther: stop here";
       const result = truncateBeforeGenericSpeakerLine(text, {
         includeStart: true,
         isAllowedSpeakerLabel: (label) => isAllowedRenderModifierSpeakerLabel(label, ["Ren"]),
@@ -571,17 +571,17 @@ describe("truncateBeforeGenericSpeakerLine", () => {
 
       expect(result.stopTriggered).toBe(true);
       expect(result.matchedSpeaker).toBe("Other");
-      expect(result.text).toBe("Ren (bredrumb): hi");
+      expect(result.text).toBe("Ren (Obonya): hi");
     });
 
     it("still stops on render-modifier syntax from another speaker", () => {
-      const result = truncateBeforeGenericSpeakerLine("Other (bredrumb): hi", {
+      const result = truncateBeforeGenericSpeakerLine("Other (Obonya): hi", {
         includeStart: true,
         isAllowedSpeakerLabel: (label) => isAllowedRenderModifierSpeakerLabel(label, ["Ren"]),
       });
 
       expect(result.stopTriggered).toBe(true);
-      expect(result.matchedSpeaker).toBe("Other (bredrumb)");
+      expect(result.matchedSpeaker).toBe("Other (Obonya)");
     });
   });
 });

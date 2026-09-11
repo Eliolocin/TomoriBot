@@ -23,12 +23,12 @@ import { callMethods, type FakeInteraction, makeFakeInteraction } from "../../..
 const GUILD_ID = "guild-111111111111111111";
 const GUILD_NAME = "lighthouse_lounge";
 const ACTOR_ID = "actor-222222222222222222";
-const ACTOR_HANDLE = "jordan_h";
+const ACTOR_HANDLE = "bau_h";
 const LOCALE = "en-US";
 const ACTOR = {
   id: ACTOR_ID,
-  displayName: "Jordan",
-  globalName: "Jordan",
+  displayName: "Bau",
+  globalName: "Bau",
   username: ACTOR_HANDLE,
   displayAvatarURL: () => "https://cdn.example.com/avatar.png",
 };
@@ -51,7 +51,7 @@ const USER_DATA = { user_id: 1, user_disc_id: ACTOR_ID, language_pref: LOCALE } 
 
 const WORKSPACE_PERSONAS = [
   { persona_id: 7, persona_lineage_id: 70, persona_nickname: "Sparrow" },
-  { persona_id: 8, persona_lineage_id: 80, persona_nickname: "Lighthouse" },
+  { persona_id: 8, persona_lineage_id: 80, persona_nickname: "Juno" },
 ] as unknown as TomoriState[];
 
 interface DeliveredMessage {
@@ -291,7 +291,7 @@ describe("memory export operation", () => {
   });
 
   it("refuses a personal persona whose lineage is unusable", async () => {
-    const personas = [{ persona_id: 8, persona_nickname: "Lighthouse" }] as unknown as TomoriState[];
+    const personas = [{ persona_id: 8, persona_nickname: "Juno" }] as unknown as TomoriState[];
     const interaction = makeInteraction({ inGuild: true, canManageGuild: false, scope: "persona", persona: "8" });
     const { deps, calls } = makeDependencies({ personas });
 
