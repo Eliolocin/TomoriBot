@@ -1,9 +1,10 @@
-﻿import { rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "bun";
 import { config } from "dotenv";
 import { AUDIT_IGNORED_ADVISORIES } from "./lib/auditIgnores";
+import { isFullOutput } from "./lib/gateOutput";
 
 /** Shape of every item pushed into the results array */
 type ResultItem = {
@@ -20,12 +21,53 @@ type ResultItem = {
   _category?: "unit-test" | "regression-test";
 };
 
-async function runCheck(name: string, command: string[], fatal: boolean = true): Promise<ResultItem> {
+/**
+ * Detail level for this run, resolved once in main().
+ *
+ * Quiet and full differ in exactly one place: whether a check that PASSED prints its
+ * output. A failing check prints its full detail under both, because that detail is
+ * the reason anyone runs the gate at all. Quiet mode must never be able to hide a
+ * finding, only the passing noise around it.
+ */
+let fullOutput = false;
+
+/** First-party checks in scripts/checks/ that understand `--full` / `--no-full`. */
+type Command = { argv: string[]; acceptsDetailFlag: boolean };
+
+/**
+ * The flag to forward to a first-party check so it picks its own detail level.
+ *
+ * Always explicit rather than only sent when true, because `--no-full` is what lets
+ * this process override a `--full` it forwards for a sibling. Only our own scripts in
+ * scripts/checks/ may receive it: `bun run lint`, `knip`, `bunx tsc` and `bun audit`
+ * are third-party CLIs whose argument parsers would reject an unknown flag.
+ */
+function detailFlag(): string {
+  return fullOutput ? "--full" : "--no-full";
+}
+
+/**
+ * Builds the argv to spawn, forwarding the detail flag only to checks that read it.
+ *
+ * The `--` separator is what delivers the flag to the script itself rather than to
+ * bun's own argument parser, which normalizes the two forms inconsistently across
+ * platforms.
+ */
+function resolveArgv({ argv, acceptsDetailFlag }: Command): string[] {
+  return acceptsDetailFlag ? [...argv, "--", detailFlag()] : argv;
+}
+
+async function runCheck(
+  name: string,
+  argv: string[],
+  fatal: boolean = true,
+  acceptsDetailFlag: boolean = false,
+): Promise<ResultItem> {
   console.log(`> Running ${name}...`);
-  const proc = spawn(command, { stdout: "pipe", stderr: "pipe" });
+  const proc = spawn(resolveArgv({ argv, acceptsDetailFlag }), { stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
   const exitCode = await proc.exited;
-  if (exitCode !== 0) {
+  if (exitCode !== 0 || fullOutput) {
     console.log(stdout + stderr);
   }
   return { name, exitCode, fatal };
@@ -33,23 +75,35 @@ async function runCheck(name: string, command: string[], fatal: boolean = true):
 
 async function runWarningCheck(
   name: string,
-  command: string[],
+  argv: string[],
   outputHasWarnings: (output: string) => boolean = () => false,
   summarizeWarnings?: (output: string) => string,
+  acceptsDetailFlag: boolean = false,
+  summarizeFailure?: (output: string) => string | undefined,
 ): Promise<ResultItem> {
   console.log(`> Running ${name}...`);
-  const proc = spawn(command, { stdout: "pipe", stderr: "pipe" });
+  const proc = spawn(resolveArgv({ argv, acceptsDetailFlag }), { stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
   const exitCode = await proc.exited;
   const output = stdout + stderr;
   const isWarning = exitCode !== 0 || outputHasWarnings(output);
-  const summary = exitCode === 0 && isWarning ? summarizeWarnings?.(output) : undefined;
-
-  if (isWarning && !summary) {
+  // `runCheck` grades the exit code; `runWarningCheck` never does, so a non-zero exit
+  // here is advisory enough for the caller's summary to speak for it instead.
+  const summary = isWarning ? summarizeWarnings?.(output) || undefined : undefined;
+  const subItems = exitCode !== 0 ? summarizeFailure?.(output) : undefined;
+  const detailIsReported = isWarning && !summary && !subItems;
+  if (detailIsReported || fullOutput) {
     console.log(output);
   }
 
-  return { name, exitCode, fatal: false, isWarning, summary };
+  return {
+    name,
+    exitCode,
+    fatal: false,
+    isWarning,
+    summary,
+    subItems: subItems ? [subItems] : undefined,
+  };
 }
 
 async function runLocalesCheck(
@@ -57,21 +111,28 @@ async function runLocalesCheck(
   command: string[],
 ): Promise<ResultItem> {
   console.log(`> Running ${name}...`);
-  const proc = spawn(command, { stdout: "pipe", stderr: "pipe" });
+  const proc = spawn(resolveArgv({ argv: command, acceptsDetailFlag: true }), { stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
   const exitCode = await proc.exited;
   const output = stdout + stderr;
-  
-  if (exitCode !== 0) {
+
+  // Exit code 2 means only locale parity issues were found. Those are advisory, so the
+  // child collapses its five-figure per-key listing to a count. The `summary` below is
+  // what surfaces that count: echoing the child's text here too would say it twice.
+  // Exit code 1 is a real failure and prints its full detail.
+  if (exitCode !== 2 || fullOutput) {
     console.log(output);
   }
-  
-  // Exit code 2 means only ja-parity issues were found. These are advisory.
-  // Exit code 1 means missing keys or other critical issues. These block.
-  return { 
-    name, 
-    exitCode, 
-    fatal: exitCode === 1 || (exitCode !== 0 && exitCode !== 2)
+
+  const advisoryCount = output.match(/(\d+) keys missing in some locale/)?.[1];
+  return {
+    name,
+    exitCode,
+    fatal: exitCode === 1 || (exitCode !== 0 && exitCode !== 2),
+    summary:
+      advisoryCount && !fullOutput
+        ? `(${advisoryCount} keys missing in some locale, re-run with --full to list)`
+        : undefined,
   };
 }
 
@@ -335,10 +396,6 @@ async function runTests(): Promise<ResultItem[]> {
 
   const output = stdout + stderr;
 
-  if (exitCode !== 0) {
-    console.log(output);
-  }
-
   // Prefer the JUnit XML because it lists every file regardless of console logging.
   let items: ResultItem[] | null = null;
   try {
@@ -354,7 +411,8 @@ async function runTests(): Promise<ResultItem[]> {
   // The runner can exit non-zero without any individual file reporting a failure
   //    (segfault, OOM, harness error, a batch dying before it emits results). Those
   //    runs must never read as green just because the parsed items all look clean.
-  if (exitCode !== 0 && resolved.every((item) => item.exitCode === 0)) {
+  const unaccountedFailure = exitCode !== 0 && resolved.every((item) => item.exitCode === 0);
+  if (unaccountedFailure) {
     resolved.push({
       name: "Test Runner (bun run test)",
       exitCode: 1,
@@ -363,6 +421,15 @@ async function runTests(): Promise<ResultItem[]> {
       hint: "Run `bun run test` directly — a file likely crashed before reporting results.",
       _category: "unit-test",
     });
+  }
+
+  // When a batch fails but its file never reported, the console output is the only
+  // evidence of what killed it, so it prints even in quiet mode: that anomaly is the
+  // failure, and quiet mode is not allowed to make a failure unreadable. An ordinary
+  // failing file is already named by its own red row below, so the wall of per-test
+  // console output is not reprinted for it.
+  if (fullOutput || unaccountedFailure) {
+    console.log(output);
   }
 
   return resolved;
@@ -375,7 +442,9 @@ async function runLint(): Promise<ResultItem> {
   const exitCode = await proc.exited;
 
   const output = stdout + stderr;
-  console.log(output);
+  if (exitCode !== 0 || fullOutput) {
+    console.log(output);
+  }
 
   const warningsMatch = output.match(/Found (\d+) warning/i);
   const fixedMatch = output.match(/Fixed (\d+) file/i);
@@ -432,8 +501,6 @@ async function runAudit(): Promise<ResultItem> {
   clearTimeout(timer);
 
   const output = stdout + stderr;
-  console.log(output);
-
   // A timed-out audit proves nothing either way, so report it as a warning rather
   // than a pass or a failure, so the advisory state is simply unknown this run.
   if (timedOut) {
@@ -451,12 +518,22 @@ async function runAudit(): Promise<ResultItem> {
   if (/(\d+)\s+critical/i.test(output) && !output.match(/0\s+critical/i)) hasHighOrCritical = true;
   if (/(\d+)\s+high/i.test(output) && !output.match(/0\s+high/i)) hasHighOrCritical = true;
 
+  // bun audit prints every advisory in the lockfile, transitive ones included, which
+  // runs to five figures of lines on this repo while the verdict is one word. Print
+  // that listing only when it changes the verdict (a high or critical advisory) or
+  // when the caller asked for it. Low and moderate advisories still grade yellow
+  // below, so suppressing their text cannot hide them.
+  if (hasHighOrCritical || fullOutput) {
+    console.log(output);
+  }
+
   return {
     name: "Dependency Audit (bun audit)",
     exitCode: hasHighOrCritical ? 1 : exitCode !== 0 ? 1 : 0,
     // Audit issues are never contributor-caused; warn locally, block only in the deploy pipeline
     fatal: false,
     isWarning: hasHighOrCritical || exitCode !== 0,
+    summary: hasHighOrCritical ? undefined : "(no high or critical advisories)",
   };
 }
 
@@ -514,9 +591,14 @@ const CATEGORIES = {
 async function main() {
   // Load .env here rather than at module scope so importing this file is side-effect free.
   config({ quiet: true });
+  fullOutput = isFullOutput();
   const dbConfigured = isDbConfigured();
 
-  console.log("Running Validation Checks...\n");
+  console.log(
+    fullOutput
+      ? "Running Validation Checks (full detail)...\n"
+      : "Running Validation Checks... (quiet: passing checks print no output; pass --full for detail)\n",
+  );
 
   // Run the checks that do not load the complete command graph concurrently.
   const [
@@ -538,8 +620,24 @@ async function main() {
   ] = await Promise.all([
     runCheck("Type Check (bun run check)", ["bun", "run", "check"], true),
     runLint(),
-    runCheck("Runtime Imports (bun run check-runtime-imports)", ["bun", "run", "check-runtime-imports"], true),
-    runWarningCheck("Knip (bun run knip)", ["bun", "run", "knip"]),
+    runCheck("Runtime Imports (bun run check-runtime-imports)", ["bun", "run", "check-runtime-imports"], true, true),
+    runWarningCheck(
+      "Knip (bun run knip)",
+      ["bun", "run", "knip"],
+      // knip signals "unused things found" with exit 1, but `vl` grades it a warning
+      // either way, so its three-figure listing is advisory detail. Count what it found
+      // so the yellow row stays explained without the listing.
+      (output) => /\(\d+\)$/.test(output),
+      (output) => {
+        const counts = [...output.matchAll(/^(\S[^\n]*?) \((\d+)\)$/gm)].map(([, label, count]) => {
+          return `${count} ${label.toLowerCase()}`;
+        });
+        return counts.length > 0 ? `(${counts.join(", ")})` : "";
+      },
+    ),
+
+    // No detail flag: checkCommentPolicy.ts treats an unrecognised argument as a scan
+    // path, so forwarding one would replace its default roots and scan zero files.
     runWarningCheck(
       "Comment Audit (bun run audit-comments)",
       ["bun", "run", "audit-comments"],
@@ -548,20 +646,25 @@ async function main() {
         const warningCount = output.match(/^WARN /gm)?.length ?? 0;
         return `(${warningCount} warning${warningCount === 1 ? "" : "s"})`;
       },
+      false,
+      // Read from the check's own verdict line rather than re-counting severities here,
+      // so the two counts cannot drift apart.
+      (output) => output.match(/\d+ error\(s\), \d+ warning\(s\), \d+ file\(s\) checked/)?.[0],
     ),
     runAudit(),
-    runCheck("SQL Audit (bun run audit-sql)", ["bun", "run", "audit-sql"], true),
-    runCheck("Media Size (bun run check-media-size)", ["bun", "run", "check-media-size"], true),
-    runCheck("Seed Catalog (bun run check-seed-catalogs)", ["bun", "run", "check-seed-catalogs"], true),
+
+    runCheck("SQL Audit (bun run audit-sql)", ["bun", "run", "audit-sql"], true, true),
+    runCheck("Media Size (bun run check-media-size)", ["bun", "run", "check-media-size"], true, true),
+    runCheck("Seed Catalog (bun run check-seed-catalogs)", ["bun", "run", "check-seed-catalogs"], true, true),
     // Filesystem-only (no DB): verifies rollback pairing + numbering uniqueness,
     // so it runs unconditionally regardless of local DB configuration.
-    runCheck("Migration Files (bun run check-migrations)", ["bun", "run", "check-migrations"], true),
+    runCheck("Migration Files (bun run check-migrations)", ["bun", "run", "check-migrations"], true, true),
     runTests(),
     dbConfigured
-      ? runCheck("Schema Drift Check (bun run check-schema)", ["bun", "run", "check-schema"], true)
+      ? runCheck("Schema Drift Check (bun run check-schema)", ["bun", "run", "check-schema"], true, true)
       : Promise.resolve<ResultItem>({ name: "Schema Drift Check", exitCode: null, fatal: true, skippedReason: "No local DB configured" }),
     dbConfigured
-      ? runCheck("DB Lifecycle Validation (bun run db:lifecycle)", ["bun", "run", "db:lifecycle"], true)
+      ? runCheck("DB Lifecycle Validation (bun run db:lifecycle)", ["bun", "run", "db:lifecycle"], true, true)
       : Promise.resolve<ResultItem>({ name: "DB Lifecycle Validation", exitCode: null, fatal: true, skippedReason: "No local DB configured" }),
     runLocalesCheck("Localization Keys (bun run check-locales)", ["bun", "run", "check-locales"]),
     // Discord length limits are a hard blocker: modal placeholders/descriptions and command
@@ -572,6 +675,7 @@ async function main() {
       "Localization Discord Limits (bun run check-locale-lengths)",
       ["bun", "run", "check-locale-lengths"],
       true,
+      true,
     ),
   ]);
 
@@ -581,12 +685,14 @@ async function main() {
     "Command Reference Freshness (bun run check-command-reference)",
     ["bun", "run", "check-command-reference"],
     true,
+    true,
   );
 
   // Also loads the complete command graph, so it stays serialized alongside the check above.
   const commandMentionsResult = await runCheck(
     "Command Mentions (bun run check-command-mentions)",
     ["bun", "run", "check-command-mentions"],
+    true,
     true,
   );
 
@@ -687,19 +793,48 @@ async function main() {
     for (const item of items) printItem(item);
   };
 
+  /**
+   * Test-file sections, where one row per file is detail rather than a verdict.
+   *
+   * There are roughly 360 test files, so listing every green one buries the handful
+   * that matter. Only the non-green rows are printed under quiet mode, with the green
+   * count that replaces them stated explicitly so a silent section can never be
+   * mistaken for a section that did not run.
+   */
+  const printTestSection = (title: string, items: ResultItem[], emptyMessage: string) => {
+    if (fullOutput) {
+      printSection(title, items, emptyMessage);
+      return;
+    }
+
+    console.log(title);
+    if (items.length === 0) {
+      console.log(`  [⚪] ${emptyMessage}`);
+      return;
+    }
+
+    const passing = items.filter((r) => r.exitCode === 0 && !r.isWarning && r.skippedReason === undefined);
+    for (const item of items) {
+      if (!passing.includes(item)) printItem(item);
+    }
+    if (passing.length > 0) {
+      console.log(`  [🟢] ${passing.length} test files passed (pass --full to list them)`);
+    }
+  };
+
   printSection("Code Quality", results.filter((r) => CATEGORIES.CODE(r)));
 
   printSection("\nContent Guards", results.filter((r) => CATEGORIES.CONTENT(r)));
 
   printSection("\nProject Security", results.filter((r) => CATEGORIES.SECURITY(r)));
 
-  printSection(
+  printTestSection(
     "\nUnit Tests (bun run test)",
     results.filter((r) => CATEGORIES.UNIT_TESTS(r)),
     "No unit test files reported by runner",
   );
 
-  printSection(
+  printTestSection(
     "\nRegression Tests (bun run test)",
     results.filter((r) => CATEGORIES.REGRESSION_TESTS(r)),
     "No regression test files reported by runner",
@@ -723,11 +858,30 @@ async function main() {
   }
 
   console.log("\n====================================");
+
+  // A machine-readable final line, because a caller (agent harness, background job
+  // wrapper, CI step) otherwise has to infer the outcome from the narrative above or
+  // write its own exit marker into the log. Printed last so that a reader who trusts
+  // only the tail of the output still gets the verdict and the counts behind it.
+  const grade = (r: ResultItem): "skip" | "pass" | "warn" | "fail" => {
+    if (r.skippedReason !== undefined) return "skip";
+    if (r.isWarning) return "warn";
+    if (r.exitCode === 0) return "pass";
+    return r.fatal ? "fail" : "warn";
+  };
+  const tally = { pass: 0, warn: 0, fail: 0, skip: 0 };
+  for (const r of results) tally[grade(r)]++;
+
+  const exitCode = allFatalPassed ? 0 : 1;
+  console.log(
+    `\nvl-status: ${exitCode === 0 ? "PASS" : "FAIL"} exit=${exitCode} pass=${tally.pass} warn=${tally.warn} fail=${tally.fail} skip=${tally.skip}\n`,
+  );
+
   if (allFatalPassed) {
-    console.log("\n✅ All required checks passed.\n");
+    console.log("✅ All required checks passed.\n");
     process.exit(0);
   } else {
-    console.log("\n❌ Some required checks failed. Please fix the errors above before opening a PR.\n");
+    console.log("❌ Some required checks failed. Please fix the errors above before opening a PR.\n");
     process.exit(1);
   }
 }
