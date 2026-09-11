@@ -13,6 +13,7 @@ import { type FallbackNoticeAttempt, sendFallbackModelUsageNotice } from "@/util
 import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
 import { deleteSupersededStreamMessages } from "@/utils/discord/stream/supersededMessageCleanup";
 import { log } from "@/utils/misc/logger";
+import { parseIntegerEnvFlag } from "@/utils/misc/envFlags";
 import { buildCustomProviderName } from "@/utils/provider/customProviderUtils";
 import { getProviderForTomori, ProviderFactory } from "@/utils/provider/providerFactory";
 import { getProviderErrorDetail } from "@/utils/provider/providerErrorClassification";
@@ -737,11 +738,4 @@ function shouldApplyLengthEmptyRetryTrim(
   retryCount: number,
 ): boolean {
   return emptyResponseFinishReason === "length" && retryCount > 0 && providerIsApiFamily(providerName, "openrouter");
-}
-
-function parseIntegerEnvFlag(value: string | undefined, defaultValue: number, minimum: number): number {
-  if (typeof value !== "string") return defaultValue;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) return defaultValue;
-  return Math.max(minimum, parsed);
 }

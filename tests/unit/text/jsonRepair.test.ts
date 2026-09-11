@@ -37,6 +37,35 @@ describe("tryRepairIncompleteJson", () => {
     expect(tryRepairIncompleteJson('{"a": 1, "b": nul')).toEqual({ a: 1 });
   });
 
+  it("drops a number that ends at the end of the payload", () => {
+    // `12345` cut out of `123456` parses as a different number and reads as exact, so a
+    // number ending at the last delta goes the same way a dangling string does.
+    expect(tryRepairIncompleteJson('{"count": 12345')).toEqual({});
+    expect(tryRepairIncompleteJson('{"x": 1e1')).toEqual({});
+    expect(tryRepairIncompleteJson('{"count": 12345 ')).toEqual({});
+    expect(tryRepairIncompleteJson('{"a": "kept", "count": 12345')).toEqual({ a: "kept" });
+  });
+
+  it("keeps a number that a following token proves complete", () => {
+    expect(tryRepairIncompleteJson('{"a": 1,')).toEqual({ a: 1 });
+    expect(tryRepairIncompleteJson('{"a": 1, "b": "cut')).toEqual({ a: 1 });
+    expect(tryRepairIncompleteJson('{"list": [1, 2')).toEqual({ list: [1] });
+    expect(tryRepairIncompleteJson('{"a": 1}')).toBeNull();
+  });
+
+  it("drops the entry whose number was cut short without losing earlier entries", () => {
+    const raw = '{"scene": "hallway", "objects": [{"id": 1}, {"id": 2}, {"id": 3';
+
+    // The third element is the ambiguous one, so it goes. The first two are complete: the
+    // array survives with the entries the token stream actually finished.
+    expect(tryRepairIncompleteJson(raw)).toEqual({ scene: "hallway", objects: [{ id: 1 }, { id: 2 }] });
+  });
+
+  it("keeps a nested array whose numbers a following token proves complete", () => {
+    expect(tryRepairIncompleteJson('{"list": [{"id": 1}]')).toEqual({ list: [{ id: 1 }] });
+    expect(tryRepairIncompleteJson('{"a": "kept", "count": 12345}')).toBeNull();
+  });
+
   it("preserves escaped quotes when scanning past string boundaries", () => {
     const raw = String.raw`{"quoted": "she said \"hi\" and left", "next": "cut`;
 

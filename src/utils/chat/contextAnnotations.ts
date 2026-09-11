@@ -9,6 +9,7 @@ import { resolvePreferredDiscordDisplayName } from "@/utils/discord/displayName"
 import { normalizeRenderModifierName, resolveRenderModifierSourcePersona } from "@/utils/discord/renderModifierParser";
 import { resolveSpriteMessageDisplayName } from "@/utils/discord/spriteMessageLabel";
 import { log } from "@/utils/misc/logger";
+import { parseIntegerEnvFlag } from "@/utils/misc/envFlags";
 import { compactWhitespace, normalizeTailDirective } from "@/utils/chat/contextDirectives";
 import type { SimplifiedMessageForContext } from "@/utils/text/contextBuilder";
 import { formatTimestampInline } from "@/utils/text/contextBuilder";
@@ -533,13 +534,6 @@ function parseBooleanEnvFlag(value: string | undefined, defaultValue: boolean): 
     return false;
   }
   return defaultValue;
-}
-
-function parseIntegerEnvFlag(value: string | undefined, defaultValue: number, minimum: number): number {
-  if (typeof value !== "string") return defaultValue;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) return defaultValue;
-  return Math.max(minimum, parsed);
 }
 
 function buildRecentMessageMetadataInline(createdAt: number): string {

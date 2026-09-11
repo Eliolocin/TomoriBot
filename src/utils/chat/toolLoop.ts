@@ -24,6 +24,7 @@ import {
   buildTailDirectiveMessage,
 } from "@/utils/chat/contextAnnotations";
 import { takeEnhancedContextItem } from "@/utils/chat/pendingEnhancedContext";
+import { parseIntegerEnvFlag } from "@/utils/misc/envFlags";
 import type { ChatTurnContext, GenerationTurnResult, ToolHistoryEntry } from "@/utils/chat/types";
 import { neutralizeFenceRuns } from "@/utils/text/discordTextLimits";
 import { redactToolParametersForStorage } from "@/utils/tools/toolParameterRedaction";
@@ -513,17 +514,28 @@ async function executeToolCall(
   // keys and silently drop the rest. No tool's semantics survive a partial call, so the
   // model gets a synthetic failure instead and can retry with a complete one.
   if (functionCall.argumentsTruncated) {
-    log.warn(`Tool call "${functionName}" was not dispatched: the provider truncated its argument payload`, undefined, {
-      serverId: params.tomoriState.server_id,
-      errorType: "TOOL_ARGUMENTS_TRUNCATED",
-      metadata: {
-        channelId: params.context.channel.id,
-        recoveredKeys: Object.keys(functionCall.args ?? {}).length,
+    // `log.error` rather than `log.warn`, which is filtered out whenever RUN_ENV=production,
+    // the only environment this truncation happens in. The error sink is also how the
+    // incident that prompted this path was found.
+    await log.error(
+      `Tool call "${functionName}" was not dispatched: the provider truncated its argument payload`,
+      undefined,
+      {
+        serverId: params.tomoriState.server_id,
+        errorType: "TOOL_ARGUMENTS_TRUNCATED",
+        metadata: {
+          channelId: params.context.channel.id,
+          recoveredKeys: Object.keys(functionCall.args ?? {}).length,
+        },
       },
-    });
+    );
     // The recovered subset is not a meaningful call, so it is dropped from the replayed
     // assistant turn rather than shown to the model as the arguments it produced.
     functionCall.args = undefined;
+    const refusal: ToolResult = { success: false, error: TOOL_ARGUMENTS_TRUNCATED_REASON };
+    // The ordinary failure path emits this notice, and a refusal that returns before it
+    // would otherwise leave the truncation invisible in the thought log.
+    await emitFailedToolCallThoughtLog(toolContext, functionName, {}, refusal);
     return {
       kind: "history",
       functionName,
@@ -982,11 +994,4 @@ function resolveThoughtLogOwner(context: ChatTurnContext): GenerationTurnResult[
 function mergeDetails(existing: string, incoming: string | undefined): string {
   if (!incoming?.trim()) return existing;
   return existing ? `${existing}\n\n${incoming}` : incoming;
-}
-
-function parseIntegerEnvFlag(value: string | undefined, defaultValue: number, minimum: number): number {
-  if (typeof value !== "string") return defaultValue;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) return defaultValue;
-  return Math.max(minimum, parsed);
 }

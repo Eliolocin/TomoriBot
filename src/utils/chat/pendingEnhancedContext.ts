@@ -1,5 +1,6 @@
 import type { StructuredContextItem } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
+import { parseIntegerEnvFlag } from "@/utils/misc/envFlags";
 
 /**
  * Side channel for enhanced-context payloads that are too heavy to travel inside
@@ -60,11 +61,4 @@ function evictStaleEntries(now: number): void {
       stash.delete(key);
     }
   }
-}
-
-function parseIntegerEnvFlag(value: string | undefined, defaultValue: number, minimum: number): number {
-  if (typeof value !== "string") return defaultValue;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) return defaultValue;
-  return Math.max(minimum, parsed);
 }

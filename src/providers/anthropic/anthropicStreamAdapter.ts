@@ -15,6 +15,7 @@
 import type { FunctionCall, FunctionResponseImageMetadata, ThoughtLogEntry } from "../../types/provider/interfaces";
 import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
+import { tryRepairIncompleteJson } from "@/utils/text/jsonRepair";
 import { localizer } from "../../utils/text/localizer";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
 import { isParamDisabled, selectAnthropicSamplingParams } from "@/utils/provider/samplingControl";
@@ -492,18 +493,40 @@ export class AnthropicStreamAdapter extends BaseStreamAdapter {
 
         if (accumulated?.name) {
           let parsedArgs: Record<string, unknown> = {};
-          try {
-            if (accumulated.argumentsJson) {
+          // Set when the endpoint cut the argument payload short. The recovered keys are
+          // real, but the call itself is incomplete, so the flag reaches the tool loop.
+          let argumentsTruncated = false;
+          if (accumulated.argumentsJson) {
+            try {
               parsedArgs = JSON.parse(accumulated.argumentsJson);
+            } catch (parseErr) {
+              const repaired = tryRepairIncompleteJson(accumulated.argumentsJson);
+              if (repaired) {
+                parsedArgs = repaired;
+                argumentsTruncated = true;
+                // A metric rather than a warning: `log.warn` is filtered out whenever
+                // RUN_ENV=production, the only environment this truncation happens in.
+                log.metric("tool_arguments_truncated", {
+                  adapter: "AnthropicStreamAdapter",
+                  tool_name: accumulated.name,
+                  recovered_keys: Object.keys(repaired).length,
+                  argument_chars: accumulated.argumentsJson.length,
+                });
+              } else {
+                log.error(
+                  `AnthropicStreamAdapter: Failed to parse tool arguments for ${accumulated.name}: ${parseErr}`,
+                );
+              }
             }
-          } catch (parseErr) {
-            log.warn(`AnthropicStreamAdapter: Failed to parse tool arguments for ${accumulated.name}: ${parseErr}`);
           }
 
           const functionCall: FunctionCall = {
             name: accumulated.name,
             args: parsedArgs,
           };
+          if (argumentsTruncated) {
+            functionCall.argumentsTruncated = true;
+          }
 
           log.info(
             `AnthropicStreamAdapter: Tool call finalized: ${accumulated.name} (id: ${accumulated.id}) args: ${JSON.stringify(parsedArgs)}`,

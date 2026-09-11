@@ -89,19 +89,23 @@ The method also handles three additional responsibilities:
   `functionCall` is present, the parser emits any preceding prose first (call unresolved) and resolves
   the call on a later chunk or at stream flush.
 
-- **Truncated tool-call recovery**: an OpenAI-compatible endpoint streams tool arguments as
-  text deltas, so a proxy timeout, a socket reset, or one dropped delta can end the payload
-  mid-token. `JSON.parse` rejects such a payload whole, which would discard every argument key
-  the model had already emitted in full. `openaiCompatibleStreamAdapter` therefore falls back to
-  `tryRepairIncompleteJson` (`src/utils/text/jsonRepair.ts`) when the parse throws. The repair
-  is structural: it removes the one incomplete trailing fragment (an unterminated string, a
-  half-written keyword, a dangling key) and closes the containers still open, then proves the
-  result with its own `JSON.parse` probe. It never fabricates a value, never edits a complete
-  string, and refuses a payload that is malformed rather than truncated, so a caller keeps the
-  original failure path. A repaired call is marked `FunctionCall.argumentsTruncated`, because
-  the recovered keys are a subset of what the model was writing rather than the call it
-  intended. The tool loop refuses to dispatch such a call (see
-  [tool-loop stage 02](../tool-loop/02-execute-tool-call.md)).
+- **Truncated tool-call recovery**: every adapter that receives tool arguments as a stream of
+  text deltas faces the same failure. A proxy timeout, a socket reset, or one dropped delta can
+  end the payload mid-token, and `JSON.parse` then rejects it whole, which would discard every
+  argument key the model had already emitted in full. The openai-compatible adapter
+  (`openaiCompatibleStreamAdapter`, which the Custom endpoint also extends), the OpenRouter
+  adapter, and the Anthropic adapter each fall back to `tryRepairIncompleteJson`
+  (`src/utils/text/jsonRepair.ts`) when the parse throws. The repair is structural: it removes
+  the incomplete trailing fragment and closes the containers still open, then proves the result
+  with its own `JSON.parse` probe. It never fabricates content, never edits a complete token,
+  and refuses a payload that is malformed rather than truncated, so a caller keeps the original
+  failure path. A value cut mid-token is dropped rather than closed, and that covers numbers as
+  well as strings: `12345` cut out of `123456` parses as a different number and reads as exact,
+  so a number ending the payload goes with the entry that carried it. A repaired call is marked
+  `FunctionCall.argumentsTruncated`, because the recovered keys are a subset of what the model
+  was writing rather than the call it intended. The tool loop refuses to dispatch such a call
+  (see [tool-loop stage 02](../tool-loop/02-execute-tool-call.md)), and each recovery emits a
+  `tool_arguments_truncated` metric: `log.warn` is filtered out whenever `RUN_ENV=production`.
 
 ## Input
 
@@ -206,5 +210,5 @@ server-scoped form, which is the correct default for configuration a member does
 - Stage 04 (routes the `ProcessedChunk` produced here): → [`04-orchestrator-state-machine.md`](04-orchestrator-state-machine.md)
 - `ProcessedChunk` type: `src/types/stream/interfaces.ts:36`
 - `ProviderError` type: `src/types/stream/interfaces.ts:47`
-- `FunctionCall` type: `src/types/provider/interfaces.ts:145`
+- `FunctionCall` type: `src/types/provider/interfaces.ts:167`
 - Error embed formatting: `src/utils/discord/stream/errorUi.ts`

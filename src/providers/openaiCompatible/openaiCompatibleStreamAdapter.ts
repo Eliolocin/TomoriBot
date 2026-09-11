@@ -692,16 +692,14 @@ export class OpenAICompatibleStreamAdapter extends BaseStreamAdapter {
           if (repaired) {
             parsedArgs = repaired;
             argumentsTruncated = true;
-            log.warn(
-              `${this.options.adapterName}: Recovered ${Object.keys(repaired).length} argument key(s) from a truncated tool call to "${accumulated.functionName}"`,
-              undefined,
-              {
-                metadata: {
-                  argumentLength: accumulated.functionArguments.length,
-                  toolName: accumulated.functionName,
-                },
-              },
-            );
+            // A metric rather than a warning: `log.warn` is filtered out whenever
+            // RUN_ENV=production, which is the only environment this truncation happens in.
+            log.metric("tool_arguments_truncated", {
+              adapter: this.options.adapterName,
+              tool_name: accumulated.functionName,
+              recovered_keys: Object.keys(repaired).length,
+              argument_chars: accumulated.functionArguments.length,
+            });
           } else {
             log.error(
               `${this.options.adapterName}: Failed to parse tool arguments "${accumulated.functionArguments}"`,

@@ -2,19 +2,8 @@ import { SQL } from "bun";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "@/utils/misc/logger";
+import { parseIntegerEnvFlag } from "@/utils/misc/envFlags";
 import { recordPoolEvent, recordPoolRetryExhausted, recordPoolRetryRecovered } from "@/utils/db/poolEvents";
-
-/**
- * Parse an integer environment flag with a default and enforced minimum.
- * Mirrors the local helper used across the chat modules for consistency.
- *
- */
-function parseIntegerEnvFlag(value: string | undefined, defaultValue: number, minimum: number): number {
-  if (typeof value !== "string") return defaultValue;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) return defaultValue;
-  return Math.max(minimum, parsed);
-}
 
 export interface PostgresPoolOptions {
   idleTimeout: number;

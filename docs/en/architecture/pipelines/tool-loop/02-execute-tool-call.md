@@ -78,17 +78,7 @@ Steps in execution order:
      Tools that forward this to their `fetch` calls get true HTTP-level
      cancellation when `/kill` fires.
 
-4. **Deliberate-tool-mode allowlist gate** — if
-   `context.deliberateToolModeActive` is true and `deliberateToolAllowedNames`
-   is set and the requested tool is not in the allowed set, the tool is *not*
-   dispatched. A synthetic failure response is produced instead:
-   ```
-   { status: "blocked_by_deliberate_tool_mode", functionName, allowedToolNames }
-   ```
-   This is model-visible (returned as a tool response) so the model can adapt
-   its next turn without a user-facing error.
-
-5. **Truncated-argument refusal**: when the adapter recovered `functionCall.args` from an
+4. **Truncated-argument refusal**: when the adapter recovered `functionCall.args` from an
    incomplete provider payload it sets `FunctionCall.argumentsTruncated`. The tool is *not*
    dispatched. A recovered payload holds only the keys that arrived whole, and for a tool whose
    arguments replace stored state (the short-term memory category map, for example) writing
@@ -102,8 +92,25 @@ Steps in execution order:
    `functionCall.args` before the history entry is built, so the replayed assistant turn does
    not show the model arguments it never finished writing. The visit counts toward
    `MAX_CONSECUTIVE_TOOL_ERRORS`, which is what bounds a model that keeps reissuing a truncated
-   call. See [stage 03 of the provider pipeline](../provider/03-chunk-normalization.md) for the
-   repair itself.
+   call. Unlike the other exits above, this one still emits the hidden thought-log notice the
+   ordinary failure path emits, and logs at `error` level: `log.warn` is filtered out whenever
+   `RUN_ENV=production`, which is the only environment a provider truncation happens in. See
+   [stage 03 of the provider pipeline](../provider/03-chunk-normalization.md) for the repair
+   itself.
+
+   This refusal precedes the allowlist gate below, so a truncated call to a tool deliberate
+   mode also hides reports the truncation rather than the allowlist rejection: the payload
+   being cut short is the cause the model can act on.
+
+5. **Deliberate-tool-mode allowlist gate** — if
+   `context.deliberateToolModeActive` is true and `deliberateToolAllowedNames`
+   is set and the requested tool is not in the allowed set, the tool is *not*
+   dispatched. A synthetic failure response is produced instead:
+   ```
+   { status: "blocked_by_deliberate_tool_mode", functionName, allowedToolNames }
+   ```
+   This is model-visible (returned as a tool response) so the model can adapt
+   its next turn without a user-facing error.
 
 6. **`ToolRegistry.executeTool` with timeout + kill race** — actual dispatch,
    wrapped in a `Promise.race` against two cancellation promises:

@@ -6,18 +6,21 @@
  * closes its last string, object, or array. Plain `JSON.parse` rejects that payload
  * whole, which discards every key the model already emitted in full.
  *
- * The repair is structural: it drops the one incomplete trailing fragment and closes the
- * containers still open. It never invents content and never edits a complete string, so
- * the result stays faithful to what the model generated. A half-written value is dropped
- * rather than quote-closed, because a fabricated closing quote hands the caller a
- * truncated value it cannot tell apart from a real one.
+ * The repair is structural: it drops the incomplete trailing fragment and closes the
+ * containers still open. It never invents content and never edits a complete token, so the
+ * result stays faithful to what the model generated. A value that was cut mid-token is
+ * dropped rather than closed, because a fabricated ending hands the caller a value it cannot
+ * tell apart from a real one. That applies to numbers as much as to strings: `12345` cut out
+ * of `123456` is a different number, not a prefix a caller can recognise as damaged.
  *
  * A payload the scan cannot balance exactly returns `null`, so the caller keeps its
  * existing failure path.
  */
 
+import { parseIntegerEnvFlag } from "@/utils/misc/envFlags";
+
 /** Runaway-input ceiling; a larger argument blob is a caller bug, not a truncation. */
-const MAX_REPAIR_INPUT_CHARS = Number.parseInt(process.env.BOT_JSON_REPAIR_MAX_CHARS ?? "1048576", 10);
+const MAX_REPAIR_INPUT_CHARS = parseIntegerEnvFlag(process.env.BOT_JSON_REPAIR_MAX_CHARS, 1048576, 1024);
 /** Bounds the retry loop so a pathological payload can never spin. */
 const MAX_REPAIR_PASSES = 64;
 
@@ -38,6 +41,15 @@ interface RepairFrame {
   state: FrameState;
   /** End offset of the last value that finished inside this frame. */
   completeEnd: number;
+  /**
+   * End offset of the last entry that finished, or the frame's opening delimiter when that
+   * entry is the frame's first. An entry ends where its value does, so this is the boundary
+   * a pending entry is dropped at: everything after it belongs to the entry that never
+   * arrived.
+   */
+  lastEntryEnd: number;
+  /** End offset of the value being read, once that value is the one completing its entry. */
+  entryCompletedEnd: number;
   /** Whether any entry or key was read here, which is what separates `{}` from `{`. */
   hasAnyEntry: boolean;
   /** Whether any value finished here, which is what makes the frame safe to close. */
@@ -56,6 +68,12 @@ interface RepairScan {
    * Such a fragment is removable and everything before it is still structurally sound.
    */
   stoppedInValue: boolean;
+  /**
+   * Offset just past a number that may have been the last token the stream delivered. A
+   * number cut at a delta boundary is indistinguishable from a complete one, so it is kept
+   * only when something follows it that proves it ended.
+   */
+  trailingNumberEnd: number | null;
   /** True when the whole input was consumed, so the break is exhaustion, not malformation. */
   scanComplete: boolean;
 }
@@ -86,6 +104,7 @@ function scanTruncatedJson(input: string): RepairScan {
   let topLevelValueComplete = false;
   let breakOffset = input.length;
   let sawBreak = false;
+  let lastNumberEnd: number | null = null;
   let literal = "";
   let literalIndex = 0;
 
@@ -97,10 +116,23 @@ function scanTruncatedJson(input: string): RepairScan {
       topLevelValueComplete = true;
       return;
     }
+    // The frame's own delimiter is its floor until an entry ends here, which is what keeps
+    // the drop offset of a frame holding nothing from pointing into an entry it never had.
+    frame.entryCompletedEnd = Math.max(frame.entryCompletedEnd, end);
     frame.completeEnd = end;
     frame.hasAnyEntry = true;
     frame.hasCompleteEntry = true;
     frame.state = "separator";
+  };
+
+  /**
+   * Records where the entry that just finished closed. An array element is always an entry
+   * of its own; an object entry only counts once its value is in.
+   */
+  const settleEntry = (frame: RepairFrame): void => {
+    if (frame.state === "separator" || (!frame.isObject && frame.state === "value")) {
+      frame.lastEntryEnd = Math.max(frame.lastEntryEnd, frame.entryCompletedEnd);
+    }
   };
 
   const markInvalid = (offset: number): void => {
@@ -108,12 +140,26 @@ function scanTruncatedJson(input: string): RepairScan {
     sawBreak = true;
   };
 
-  const stop = (): RepairScan => ({ frames, breakOffset, stoppedInValue: false, scanComplete: false });
+  const stop = (): RepairScan => ({
+    frames,
+    breakOffset,
+    stoppedInValue: false,
+    trailingNumberEnd: null,
+    scanComplete: false,
+  });
 
   /** Reports a value that never finished, whose fragment is removable from the input. */
   const stopInValue = (offset: number): RepairScan => {
     sawBreak = true;
-    return { frames, breakOffset: offset, stoppedInValue: true, scanComplete: false };
+    return { frames, breakOffset: offset, stoppedInValue: true, trailingNumberEnd: null, scanComplete: false };
+  };
+
+  /**
+   * Any structural character after a number proves the number ended where its digits say,
+   * so only another value or the end of the input may follow one for it to stay ambiguous.
+   */
+  const observesStructuralCharacter = (): void => {
+    lastNumberEnd = null;
   };
 
   for (let i = 0; i < input.length; i++) {
@@ -164,6 +210,8 @@ function scanTruncatedJson(input: string): RepairScan {
       if (!frame) {
         topLevelValueComplete = true;
       } else if (isKey) {
+        // A key opens the next entry, so the value before it is the last one that finished.
+        settleEntry(frame);
         frame.hasAnyEntry = true;
         frame.state = "colon";
       } else {
@@ -171,6 +219,9 @@ function scanTruncatedJson(input: string): RepairScan {
       }
 
       i = cursor;
+      // A string read as a value proves an earlier number ended; one read as a key starts a
+      // new entry instead, so the number before it stays the last value seen.
+      if (!isKey) observesStructuralCharacter();
       continue;
     }
 
@@ -181,6 +232,7 @@ function scanTruncatedJson(input: string): RepairScan {
         return stop();
       }
       frame.state = "value";
+      observesStructuralCharacter();
       continue;
     }
 
@@ -191,7 +243,9 @@ function scanTruncatedJson(input: string): RepairScan {
         markInvalid(i);
         return stop();
       }
+      settleEntry(frame);
       frame.state = frame.isObject ? "key" : "value";
+      observesStructuralCharacter();
       continue;
     }
 
@@ -206,9 +260,12 @@ function scanTruncatedJson(input: string): RepairScan {
         isObject: char === "{",
         state: char === "{" ? "key" : "value",
         completeEnd: i,
+        lastEntryEnd: i,
+        entryCompletedEnd: i,
         hasAnyEntry: false,
         hasCompleteEntry: false,
       });
+      observesStructuralCharacter();
       continue;
     }
 
@@ -230,8 +287,11 @@ function scanTruncatedJson(input: string): RepairScan {
         return stop();
       }
       frames.pop();
-      // A closer consumes the entry before it, so that value completes in the parent frame.
+      // A closer consumes the entry before it, so that entry ended where the value did. The
+      // closer's own position then completes the parent entry carrying this container.
+      settleEntry(frame);
       recordValue(i + 1);
+      observesStructuralCharacter();
       continue;
     }
 
@@ -253,6 +313,7 @@ function scanTruncatedJson(input: string): RepairScan {
       }
       i += numeric.length - 1;
       recordValue(i + 1);
+      lastNumberEnd = i + 1;
       continue;
     }
 
@@ -265,6 +326,7 @@ function scanTruncatedJson(input: string): RepairScan {
       }
       literal = keyword;
       literalIndex = 1;
+      observesStructuralCharacter();
       continue;
     }
 
@@ -280,7 +342,13 @@ function scanTruncatedJson(input: string): RepairScan {
     breakOffset = input.length;
   }
 
-  return { frames, breakOffset, stoppedInValue: false, scanComplete };
+  return {
+    frames,
+    breakOffset,
+    stoppedInValue: false,
+    trailingNumberEnd: lastNumberEnd,
+    scanComplete,
+  };
 }
 
 /** An object takes a value only after its colon; an array takes one between separators. */
@@ -334,6 +402,22 @@ function closeOpenContainers(input: string, scan: RepairScan, passes: number): s
     return null;
   }
 
+  // A number at the very end of the payload cannot be told apart from a number the provider
+  // cut short, and its digits read as exact. Its frame goes back to waiting for a value, so
+  // the walk below drops the entry that carried it exactly as it drops a key whose value
+  // never arrived, while the entries before it stay in the frame.
+  if (scan.trailingNumberEnd !== null) {
+    for (const frame of scan.frames) {
+      if (frame.completeEnd !== scan.trailingNumberEnd) {
+        continue;
+      }
+      frame.state = "value";
+      frame.completeEnd = frame.lastEntryEnd;
+      frame.hasAnyEntry = frame.lastEntryEnd > frame.start;
+      frame.hasCompleteEntry = frame.lastEntryEnd > frame.start;
+    }
+  }
+
   // Walk outward until the frame can be closed without inventing anything. A frame with a
   // finished value that nothing is waiting on is clean, and so is one whose last entry can
   // simply be dropped: either it never started (an object holding only its opening brace)
@@ -343,24 +427,40 @@ function closeOpenContainers(input: string, scan: RepairScan, passes: number): s
   let closingFrom = scan.frames.length;
   while (closingFrom > 0) {
     const frame = scan.frames[closingFrom - 1];
-    if (isFrameClean(frame) || (isEntryPending(frame) && (frame.isObject || frame.hasCompleteEntry))) {
+    // A pending frame is closeable only when it has a finished entry to fall back on: the
+    // entry waiting for a value is dropped, which needs an earlier one to close around.
+    const emptyObject = !frame.hasCompleteEntry && frame.isObject;
+    if (isFrameClean(frame) || (isEntryPending(frame) && (emptyObject || frame.hasCompleteEntry))) {
       break;
     }
     closingFrom -= 1;
   }
 
   if (closingFrom === 0) {
-    // No frame has anything to close around, so a brand-new empty container is all the
-    // payload can support.
+    // Nothing finished inside any frame, so an empty container is all the payload can close.
+    // A truncated payload nested one level down held no value at all, which makes an empty
+    // read a worse answer than reporting that the repair could not help.
+    if (scan.trailingNumberEnd !== null && scan.frames.length > 1) {
+      return null;
+    }
     const empty = assemblePrefix(input, scan.frames[0].start + 1, [scan.frames[0].isObject ? "}" : "]"]);
     return tryParseCandidate(empty) ? empty : null;
   }
 
   const anchor = scan.frames[closingFrom - 1];
-  // A pending entry is dropped wholesale, so the offset is the last value the frame
-  // finished; a fresh empty object has none, and closes at its opening brace instead.
-  const resumeOffset = anchor.hasCompleteEntry ? anchor.completeEnd : anchor.start + 1;
+  // A pending entry is dropped whole, so the offset is the last entry that finished before
+  // it. A fresh empty object has none, and closes at its opening brace instead.
+  const resumeOffset = emptyFrameResumeOffset(anchor);
+
   return finishRepair(input, scan, closingFrom, resumeOffset, passes);
+}
+
+/** Where a frame closes when the entry it is waiting on has to be dropped. */
+function emptyFrameResumeOffset(frame: RepairFrame): number {
+  if (!frame.hasCompleteEntry) {
+    return frame.start + 1;
+  }
+  return isEntryPending(frame) ? frame.lastEntryEnd : frame.completeEnd;
 }
 
 /**
