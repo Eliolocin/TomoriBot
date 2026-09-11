@@ -7,6 +7,7 @@ import {
 } from "discord.js";
 import type { TomoriState, UserRow } from "@/types/db/schema";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import { llmProviderRepo } from "@/utils/db/repositories";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { fetchNovelAISubscription } from "@/providers/novelai/novelaiService";
@@ -20,8 +21,9 @@ async function resolveNovelAiApiKey(tomoriState: TomoriState): Promise<string | 
   const optionalKey = await getOptApiKey(tomoriState.server_id, "novelai");
   if (optionalKey) return optionalKey;
 
-  if (!tomoriState.config.api_key) return null;
-  return decryptApiKey(tomoriState.config.api_key, tomoriState.config.key_version || 1);
+  const savedConfig = await llmProviderRepo.loadSavedProviderConfig(tomoriState.server_id, "novelai");
+  if (!savedConfig?.api_key) return null;
+  return decryptApiKey(savedConfig.api_key, savedConfig.key_version || 1);
 }
 
 export function renderUsageMeter(percent: number): string {
