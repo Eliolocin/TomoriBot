@@ -1,13 +1,18 @@
 export default {
   legal: {
     description: `View TomoriBot's terms of service, privacy policy, and license.`,
-    privacy: {
+    // The two policy leaves register only on the hosted instance, so a self-hosted bot advertises
+    // the license alone rather than a document set it does not expose.
+    "license-only": {
+      description: `View TomoriBot's open-source license.`,
+    },
+    "privacy-policy": {
       description: `View TomoriBot's Privacy Policy`,
       title: `Privacy Policy`,
       description_text: `View TomoriBot's Privacy Policy to understand how I handle your data. This applies to the official hosted instance. Self-hosted instances control their own data handling.`,
       link_title: `Full Privacy Policy`,
     },
-    terms: {
+    "terms-of-service": {
       description: `View TomoriBot's Terms of Service`,
       title: `Terms of Service`,
       description_text: `View TomoriBot's Terms of Service to understand the rules and guidelines for using the bot. This applies to the official hosted instance. Self-hosted instances are governed by the AGPLv3 license.`,

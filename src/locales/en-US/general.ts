@@ -14,10 +14,10 @@
       open_button_label: `Learn More`,
     },
     legal: {
-      policy_reference: `View the active Terms of Service and Privacy Policy anytime with \`/legal terms\` and \`/legal privacy\`.`,
-      setup_agreement: `Setting up TomoriBot means that you and your server members agree to its \`/legal terms\` and \`/legal privacy\` notices`,
-      provider_policy_reference: `For full details, see \`/legal privacy\` and \`/legal terms\``,
-      data_handling_reference: `**Privacy:** See \`/legal privacy\` for full data handling details`,
+      policy_reference: `View the active Terms of Service and Privacy Policy anytime with \`/legal terms-of-service\` and \`/legal privacy-policy\`.`,
+      setup_agreement: `Setting up TomoriBot means that you and your server members agree to its \`/legal terms-of-service\` and \`/legal privacy-policy\` notices`,
+      provider_policy_reference: `For full details, see \`/legal privacy-policy\` and \`/legal terms-of-service\``,
+      data_handling_reference: `**Privacy:** See \`/legal privacy-policy\` for full data handling details`,
     },
     api_styles: {
       openai_compatible: `OpenAI-Compatible`,

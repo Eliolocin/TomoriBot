@@ -292,7 +292,7 @@ TomoriBotへのコントリビュートは大歓迎です！プルリクエス�
 - **[利用規約](https://docs.tomoribot.app/ja/legal/terms-of-service/)** - ボット使用のルールとガイドライン
 - **[プライバシーポリシー](https://docs.tomoribot.app/ja/legal/privacy-policy/)** - データの取り扱いについて
 
-これらのドキュメントは、Discord内で`/legal terms`および`/legal privacy`コマンドを使用してもアクセスできます。
+これらのドキュメントは、Discord内で`/legal terms-of-service`および`/legal privacy-policy`コマンドを使用してもアクセスできます。
 
 ### セルフホスティングまたはフォークを使用するユーザー向け
 あなたは自分自身のデータを管理し、[**GNU Affero General Public License v3.0**](https://github.com/Bredrumb/TomoriBot/blob/main/LICENSE)の下でのデプロイのコンプライアンスに責任を負います。

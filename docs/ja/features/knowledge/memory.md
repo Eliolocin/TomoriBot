@@ -175,4 +175,4 @@ TomoriBot は発言中の現在のチャンネルのメッセージを容易に�
 
 ## プライバシー
 
-彼女が何を保存し、それをどのようにエクスポートまたは削除するかについては、[データの取り扱い](/ja/features/knowledge/data-handling/) および `/legal privacy` を参照してください。`/personal config` でメモリー機能を完全にオプトアウトすることもできます。
+彼女が何を保存し、それをどのようにエクスポートまたは削除するかについては、[データの取り扱い](/ja/features/knowledge/data-handling/) および `/legal privacy-policy` を参照してください。`/personal config` でメモリー機能を完全にオプトアウトすることもできます。

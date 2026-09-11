@@ -242,5 +242,5 @@ These STM commands are for advanced users only, it is recommended to keep the de
 
 ## Privacy 
 For exactly what she stores and how to export or delete it, see
-[Data Handling](/features/knowledge/data-handling/) and `/legal privacy`. You can opt out of memory
+[Data Handling](/features/knowledge/data-handling/) and `/legal privacy-policy`. You can opt out of memory
 entirely with `/personal config`.

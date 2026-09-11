@@ -14,10 +14,10 @@
       open_button_label: `詳しく見る`,
     },
     legal: {
-      policy_reference: `現在の利用規約とプライバシーポリシーは、いつでも \`/legal terms\` と \`/legal privacy\` で確認できます。`,
-      setup_agreement: `TomoriBotをセットアップすることで、あなたとサーバーメンバーは\`/legal terms\`と\`/legal privacy\`の通知に同意したことになります`,
-      provider_policy_reference: `詳細は\`/legal privacy\`と\`/legal terms\`をご覧ください`,
-      data_handling_reference: `**プライバシー:** データ処理の詳細は\`/legal privacy\`をご覧ください`,
+      policy_reference: `現在の利用規約とプライバシーポリシーは、いつでも \`/legal terms-of-service\` と \`/legal privacy-policy\` で確認できます。`,
+      setup_agreement: `TomoriBotをセットアップすることで、あなたとサーバーメンバーは\`/legal terms-of-service\`と\`/legal privacy-policy\`の通知に同意したことになります`,
+      provider_policy_reference: `詳細は\`/legal privacy-policy\`と\`/legal terms-of-service\`をご覧ください`,
+      data_handling_reference: `**プライバシー:** データ処理の詳細は\`/legal privacy-policy\`をご覧ください`,
     },
     api_styles: {
       openai_compatible: `OpenAI互換`,

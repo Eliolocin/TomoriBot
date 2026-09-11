@@ -365,6 +365,33 @@ function applyRootCommandRestrictions(command: RootCommandBuilder, commandModule
   }
 }
 
+/**
+ * Resolves the description key for a directory-backed root, or an empty string to keep the
+ * conventional `commands.<root>.description`.
+ *
+ * `/legal` is the only root whose leaf set depends on the environment, and its wording names the
+ * documents those leaves link to. Advertising terms and a privacy policy on a self-hosted bot that
+ * registers neither would promise two commands the client cannot resolve, so its wording follows
+ * the leaf set rather than re-deriving the environment decision.
+ *
+ * Scoped by name rather than derived from "some leaves were gated out", because other roots narrow
+ * for unrelated reasons: `/reset` lists two direct leaf files while only one of them is a
+ * registered leaf, the other being a gate-disabled operation module.
+ *
+ * @param leafFileNames - Direct subcommand files found in the root's directory
+ * @param enabledLeafFileNames - The subset whose gate returned true
+ */
+function resolveRootDescriptionKey(
+  categoryName: string,
+  leafFileNames: readonly string[],
+  enabledLeafFileNames: readonly string[],
+): string {
+  if (categoryName !== "legal") return "";
+  if (enabledLeafFileNames.length >= leafFileNames.length) return "";
+
+  return `commands.${categoryName}.license-only.description`;
+}
+
 export async function isCommandModuleEnabledForRegistration(
   commandModule: LoadedCommandModule,
   context: CommandAvailabilityContext,
@@ -436,6 +463,17 @@ export function loadCommandData(): Promise<LoadCommandDataResult> {
 }
 
 /**
+ * Drops the memoized load so the next caller re-imports and re-gates every command module.
+ *
+ * A module-level `isCommandEnabled` gate reads the environment, so a test that has to observe
+ * both environments would otherwise read whichever one happened to run first. Nothing in the
+ * running bot calls this: production loads the graph exactly once.
+ */
+export function resetCommandDataCache(): void {
+  cachedCommandDataPromise = null;
+}
+
+/**
  * Flattens the execution map into the full list of registered command paths.
  *
  * Produces exactly the space-joined format `handleCommands.ts` records for the
@@ -488,15 +526,58 @@ async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
       const categoryName = path.basename(categoryDir);
       log.info(`Processing category: ${categoryName}`);
 
+      // Get all items (files and directories) in this category
+      const items = await readVisibleDirectory(categoryDir);
+
+      /**
+       * Direct subcommand files that passed their own gate, keyed by absolute path.
+       *
+       * Collected before the category builder exists because the root's description depends on
+       * which leaves survive, and a builder's description cannot be changed once applied. Each
+       * file is gated exactly once here; the loop below reuses these modules rather than
+       * re-importing and re-gating them.
+       */
+      const enabledLeafModules = new Map<string, LoadedCommandModule>();
+      const leafFileNames: string[] = [];
+
+      for (const item of items) {
+        const itemPath = path.join(categoryDir, item.name);
+        if (!item.isFile || !itemPath.endsWith(".ts")) continue;
+
+        leafFileNames.push(item.name);
+
+        try {
+          const commandModule = (await import(itemPath)) as LoadedCommandModule;
+          const commandEnabled = await isCommandModuleEnabledForRegistration(commandModule, {
+            commandFile: itemPath,
+            commandKind: "flat",
+            categoryName,
+          });
+          if (!commandEnabled) {
+            log.info(`Skipping disabled command module: ${itemPath}`);
+            continue;
+          }
+          enabledLeafModules.set(itemPath, commandModule);
+        } catch (error) {
+          const context: ErrorContext = {
+            errorType: "CommandLoadingError",
+            metadata: { commandFile: itemPath, categoryName },
+          };
+          await log.error(`Failed to load command from ${itemPath}:`, error, context);
+        }
+      }
+
       let categoryBuilder = builders.get(categoryName) as SlashCommandBuilder | undefined;
       if (!categoryBuilder) {
-        const categoryDescription =
-          localizeWithAliases("en-US", `commands.${categoryName}.description`) || `${categoryName} commands`; // Fallback if no localization exists
+        const categoryDescriptionKey =
+          resolveRootDescriptionKey(categoryName, leafFileNames, [...enabledLeafModules.keys()]) ||
+          `commands.${categoryName}.description`;
+        const categoryDescription = localizeWithAliases("en-US", categoryDescriptionKey) || `${categoryName} commands`; // Fallback if no localization exists
 
         const categoryLocalizationsMap: { [key: string]: string } = {};
         for (const locale of availableLocales) {
-          const localizedDesc = localizeWithAliases(locale, `commands.${categoryName}.description`);
-          if (localizedDesc && localizedDesc !== `commands.${categoryName}.description`) {
+          const localizedDesc = localizeWithAliases(locale, categoryDescriptionKey);
+          if (localizedDesc && localizedDesc !== categoryDescriptionKey) {
             categoryLocalizationsMap[locale] = localizedDesc;
           }
         }
@@ -525,9 +606,6 @@ async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
         executionMap.set(categoryName, new Map()); // Initialize subcommand map
         autocompleteMap.set(categoryName, new Map()); // Initialize autocomplete map
       }
-
-      // Get all items (files and directories) in this category
-      const items = await readVisibleDirectory(categoryDir);
 
       // Process each item (file or directory)
       for (const item of items) {
@@ -668,20 +746,11 @@ async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
         // Handle flat subcommands (direct .ts files)
         else if (item.isFile && itemPath.endsWith(".ts")) {
           const commandFile = itemPath;
+          // Already imported and gated by this category's leaf pre-pass.
+          const commandModule = enabledLeafModules.get(commandFile);
+          if (!commandModule) continue;
 
           try {
-            // Import the command module
-            const commandModule = (await import(commandFile)) as LoadedCommandModule;
-            const commandEnabled = await isCommandModuleEnabledForRegistration(commandModule, {
-              commandFile,
-              commandKind: "flat",
-              categoryName,
-            });
-            if (!commandEnabled) {
-              log.info(`Skipping disabled command module: ${commandFile}`);
-              continue;
-            }
-
             // Validate exports: must have configureSubcommand and execute
             if (!commandModule.configureSubcommand || !commandModule.execute) {
               log.warn(`Command at ${commandFile} is missing required exports (configureSubcommand or execute)`);

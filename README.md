@@ -293,7 +293,7 @@ Contributions to TomoriBot are greatly appreciated! Please review the following 
 - **[Terms of Service](https://docs.tomoribot.app/en/legal/terms-of-service/)** - Rules and guidelines for using the bot
 - **[Privacy Policy](https://docs.tomoribot.app/en/legal/privacy-policy/)** - How we handle your data
 
-These documents are also accessible within Discord using `/legal terms` and `/legal privacy` commands.
+These documents are also accessible within Discord using `/legal terms-of-service` and `/legal privacy-policy` commands.
 
 ### For users self-hosting or using forks
 You control your own data and are responsible for your deployment's compliance under the [**GNU Affero General Public License v3.0**](https://github.com/Bredrumb/TomoriBot/blob/main/LICENSE).

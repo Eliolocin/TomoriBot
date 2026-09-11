@@ -145,8 +145,8 @@ View TomoriBot's terms of service, privacy policy, and license.
 | Command | Summary |
 |---|---|
 | `/legal license` | View TomoriBot's open-source license |
-| `/legal privacy` | View TomoriBot's Privacy Policy |
-| `/legal terms` | View TomoriBot's Terms of Service |
+| `/legal privacy-policy` | View TomoriBot's Privacy Policy |
+| `/legal terms-of-service` | View TomoriBot's Terms of Service |
 
 ## `/matrix`
 
