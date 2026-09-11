@@ -469,6 +469,38 @@ async function runLint(): Promise<ResultItem> {
   };
 }
 
+/**
+ * Keeps only the `bun audit` package blocks holding a high or critical advisory.
+ *
+ * `bun audit` groups its output into blocks: an unindented package line, then an
+ * indented dependency path per line, then an indented severity line per advisory. A
+ * block is kept whole rather than filtered line by line, because a severity line only
+ * means something next to the dependency path that reaches it. The trailing counts
+ * line and anything after it are unindented and pass through untouched.
+ */
+function selectBlockingAuditBlocks(output: string): string {
+  const blocks: string[][] = [];
+  let current: string[] = [];
+
+  for (const line of output.split("\n")) {
+    if (line.length > 0 && !/^\s/.test(line) && current.length > 0) {
+      blocks.push(current);
+      current = [];
+    }
+    current.push(line);
+  }
+  if (current.length > 0) blocks.push(current);
+
+  return blocks
+    .filter((block, index) => {
+      // The final block is the vulnerability tally and the fix hints, never a package.
+      if (index === blocks.length - 1) return true;
+      return block.some((line) => /\b(?:high|critical):/i.test(line));
+    })
+    .map((block) => block.join("\n"))
+    .join("\n");
+}
+
 async function runAudit(): Promise<ResultItem> {
   console.log(`> Running Dependency Audit (bun audit)...`);
 
@@ -520,11 +552,13 @@ async function runAudit(): Promise<ResultItem> {
 
   // bun audit prints every advisory in the lockfile, transitive ones included, which
   // runs to five figures of lines on this repo while the verdict is one word. Print
-  // that listing only when it changes the verdict (a high or critical advisory) or
-  // when the caller asked for it. Low and moderate advisories still grade yellow
-  // below, so suppressing their text cannot hide them.
-  if (hasHighOrCritical || fullOutput) {
+  // only the blocks that carry an advisory at or above the blocking threshold, so the
+  // listing stays proportional to what actually moved the verdict. Low and moderate
+  // advisories still grade yellow below, so suppressing their text cannot hide them.
+  if (fullOutput) {
     console.log(output);
+  } else if (hasHighOrCritical) {
+    console.log(selectBlockingAuditBlocks(output));
   }
 
   return {

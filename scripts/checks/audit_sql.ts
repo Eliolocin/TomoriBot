@@ -19,14 +19,21 @@ async function run() {
   const writes = violations.filter((v) => v.kind === "WRITE");
   const reads = violations.filter((v) => v.kind === "READ");
 
-  console.log("=== WRITES ===");
-  writes.forEach((w) => console.log(`${normalizePath(w.file)}:${w.line}`));
-  console.log("\n=== READS ===");
-  reads.forEach((r) => console.log(`${normalizePath(r.file)}:${r.line}`));
-  console.log("\n=== EXEMPTIONS ===");
-  exemptions.forEach((e) => console.log(`exempt: ${normalizePath(e.file)}:${e.line} (${e.kind}; ${e.reason})`));
+  // Listings are proportional to findings: empty sections print nothing, and the
+  // exemption list is detail a reader only needs when deciding whether a violation is
+  // already covered, so a clean run reports its counts and stops.
+  if (writes.length > 0) {
+    console.log("=== WRITES ===");
+    writes.forEach((w) => console.log(`${normalizePath(w.file)}:${w.line}`));
+  }
+  if (reads.length > 0) {
+    console.log("=== READS ===");
+    reads.forEach((r) => console.log(`${normalizePath(r.file)}:${r.line}`));
+  }
 
   if (violations.length > 0) {
+    console.log("=== EXEMPTIONS ===");
+    exemptions.forEach((e) => console.log(`exempt: ${normalizePath(e.file)}:${e.line} (${e.kind}; ${e.reason})`));
     console.error(
       `\n❌ Found ${violations.length} raw SQL ${violations.length === 1 ? "query" : "queries"} outside ` +
         "src/utils/db/repositories/. Move them into a repository method, or add a justified exemption " +
@@ -35,7 +42,9 @@ async function run() {
     process.exit(1);
   }
 
-  console.log("\n✅ No raw SQL outside the repository layer.");
+  console.log(
+    `✅ No raw SQL outside the repository layer (${writes.length} writes, ${reads.length} reads, ${exemptions.length} exemptions).`,
+  );
 }
 
 run().catch((err) => {
