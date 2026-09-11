@@ -350,7 +350,7 @@ export default {
       invalid_file_type_title: `🔴 無効なファイル形式`,
       invalid_file_type_description: `ペルソナデータを含む有効な.png、.json、または.charxファイルをアップロードしてください。`,
       file_too_large_title: `🔴 ファイルが大きすぎます`,
-      file_too_large_description: `ファイルが大きすぎます。最大ファイルサイズは10MBです。`,
+      file_too_large_description: `ファイルが大きすぎます。最大ファイルサイズは{max_size}MBです。`,
       download_failed_title: `🔴 ダウンロードに失敗しました`,
       download_failed_description: `添付ファイルのダウンロードに失敗しました。もう一度お試しください。`,
       invalid_charx_title: `🔴 無効なキャラクターカードアーカイブ`,

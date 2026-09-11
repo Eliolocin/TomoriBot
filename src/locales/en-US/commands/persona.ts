@@ -350,7 +350,7 @@ Please edit the import file to use a different name, or remove the existing pers
       invalid_file_type_title: `🔴 Invalid File Type`,
       invalid_file_type_description: `Please upload a valid .png, .json, or .charx file containing persona data.`,
       file_too_large_title: `🔴 File Too Large`,
-      file_too_large_description: `The file is too large. Maximum file size is 10MB.`,
+      file_too_large_description: `The file is too large. Maximum file size is {max_size}MB.`,
       download_failed_title: `🔴 Download Failed`,
       download_failed_description: `Failed to download the attached file. Please try again.`,
       invalid_charx_title: `🔴 Invalid Character Card Archive`,

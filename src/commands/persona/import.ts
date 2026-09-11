@@ -30,12 +30,6 @@ import {
 
 /** Maximum file size for imports (uses centralized constant). */
 const MAX_FILE_SIZE = IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB * 1024 * 1024;
-/**
- * A `.charx` archive gets its own, separately configured bound: its compressed
- * size says nothing about the asset tree it expands to, so the reader's own
- * declared-size guards are what hold that line.
- */
-const MAX_ARCHIVE_FILE_SIZE = IMPORT_LIMITS.MAX_CHARX_IMPORT_SIZE_MB * 1024 * 1024;
 /** Byte budget for the `card.json` payload the archive reader will decompress. */
 const MAX_CHARX_CARD_BYTES = IMPORT_LIMITS.MAX_CHARX_CARD_SIZE_MB * 1024 * 1024;
 const MAX_CHARX_ASSET_TOTAL_BYTES = IMPORT_LIMITS.MAX_CHARX_ASSET_TOTAL_MB * 1024 * 1024;
@@ -147,6 +141,75 @@ async function replyInvalidCharx(
         .setColor(ColorCode.ERROR),
     ],
   });
+}
+
+/** Narrows an unknown value to a plain object, or null. */
+function asPlainObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+/** True when the field holds non-blank text. */
+function hasText(container: Record<string, unknown>, key: string): boolean {
+  const value = container[key];
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/** True when the field holds at least one array element. */
+function hasItems(container: Record<string, unknown>, key: string): boolean {
+  const value = container[key];
+  return Array.isArray(value) && value.length > 0;
+}
+
+/**
+ * Names the card fields an import cannot carry anywhere.
+ *
+ * A conversion that succeeds is not the same as a conversion that lost nothing,
+ * and the fields below change how a card reads rather than merely annotating it:
+ * `nickname` is the name the card's own text addresses, and `group_only_greetings`
+ * is content that must not be dropped when the card has no other first message.
+ * Reporting them is what keeps a successful import from reading as a faithful one.
+ */
+export function describeUnmappedCardFields(card: unknown): string | null {
+  const root = asPlainObject(card);
+  if (!root) {
+    return null;
+  }
+
+  // V3 nests the card under `data`; a root-level V2 card does not. Either may
+  // carry the fields, so both scopes are checked.
+  const scopes = [root];
+  const cardData = asPlainObject(root.data);
+  if (cardData) {
+    scopes.push(cardData);
+  }
+
+  const dropped: string[] = [];
+  if (scopes.some((scope) => hasText(scope, "nickname"))) {
+    dropped.push("nickname");
+  }
+  if (scopes.some((scope) => hasItems(scope, "group_only_greetings"))) {
+    dropped.push("group_only_greetings");
+  }
+
+  const extensions = scopes.map((scope) => asPlainObject(scope.extensions)).find(Boolean);
+  const depthPrompt = extensions ? asPlainObject(extensions.depth_prompt) : null;
+  if (depthPrompt && !hasText(depthPrompt, "prompt")) {
+    dropped.push("extensions.depth_prompt (no prompt text)");
+  }
+
+  const characterBook = scopes.map((scope) => asPlainObject(scope.character_book)).find(Boolean);
+  const entries = characterBook?.entries;
+  if (Array.isArray(entries)) {
+    const disabledCount = entries.filter((entry) => asPlainObject(entry)?.enabled === false).length;
+    if (disabledCount > 0) {
+      dropped.push(`${disabledCount} disabled character_book entr(ies)`);
+    }
+  }
+
+  return dropped.length > 0 ? dropped.join(", ") : null;
 }
 
 /**
@@ -344,7 +407,11 @@ export async function execute(
       return;
     }
 
-    const maxFileSize = isCharxImport ? MAX_ARCHIVE_FILE_SIZE : MAX_FILE_SIZE;
+    const maxFileSizeMB = isCharxImport
+      ? IMPORT_LIMITS.MAX_CHARX_IMPORT_SIZE_MB
+      : IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB;
+    const maxFileSize = maxFileSizeMB * 1024 * 1024;
+
     if (attachment.size > maxFileSize) {
       await replyInfoEmbed(
         interaction,
@@ -352,6 +419,7 @@ export async function execute(
         {
           titleKey: "commands.persona.import.file_too_large_title",
           descriptionKey: "commands.persona.import.file_too_large_description",
+          descriptionVars: { max_size: maxFileSizeMB },
           color: ColorCode.ERROR,
         },
         MessageFlags.Ephemeral,
@@ -399,7 +467,7 @@ export async function execute(
 
     try {
       const response = await safeDownload(attachment.url, {
-        maxSizeMB: isCharxImport ? IMPORT_LIMITS.MAX_CHARX_IMPORT_SIZE_MB : IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB,
+        maxSizeMB: maxFileSizeMB,
         timeoutMs: 15_000,
         knownSize: attachment.size,
       });
@@ -489,9 +557,15 @@ export async function execute(
         source: "charx",
         ignoredAssetCount: archive.ignoredAssetCount,
       };
+      const unmappedFields = describeUnmappedCardFields(archive.card);
       log.info(
         `[Persona Import] Converted Character Card V3 archive to preset format for "${conversion.data.tomori_nickname}" (ignored ${archive.ignoredAssetCount} embedded asset(s))`,
       );
+      if (unmappedFields) {
+        // A successful conversion still loses fields, so name them once here
+        // rather than letting a drop-in card look identical to a faithful one.
+        log.info(`[Persona Import] Card fields with no destination: ${unmappedFields}`);
+      }
     } else if (isPngImport) {
       const pngValidation = validatePNGBuffer(importFileBuffer, MAX_FILE_SIZE);
       if (!pngValidation.isValid) {
