@@ -52,7 +52,7 @@ export const persona: PersonaInput = {
   triggerWords: ["tomori", "nerine"],
   lineageId: 50,
   namingConfig: {
-    prefixes: { masculine: "Master", feminine: "Mistress" },
+    prefixes: { masculine: "Master", feminine: "Mistress", neutral: "Master" },
     suffixes: {},
     addressTerms: {},
   },

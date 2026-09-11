@@ -16,7 +16,7 @@ describe("official persona naming catalog", () => {
       },
       "4:ja": { prefixes: {}, suffixes: {}, addressTerms: {} },
       "50:en-US": {
-        prefixes: { masculine: "Master", feminine: "Mistress" },
+        prefixes: { masculine: "Master", feminine: "Mistress", neutral: "Master" },
         suffixes: {},
         addressTerms: {},
       },
